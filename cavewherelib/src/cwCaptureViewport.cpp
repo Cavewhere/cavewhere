@@ -195,10 +195,10 @@ void cwCaptureViewport::capture()
 
             IdToOrigin[id] = origin;
 
-            connect(command, SIGNAL(createdImage(QImage,int)),
-                    this, SLOT(capturedImage(QImage,int)),
-                    Qt::QueuedConnection);
-            scene->addSceneCommand(command);
+            // connect(command, SIGNAL(createdImage(QImage,int)),
+            //         this, SLOT(capturedImage(QImage,int)),
+            //         Qt::QueuedConnection);
+            // scene->addSceneCommand(command);
         }
     }
 

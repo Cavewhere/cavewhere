@@ -14,9 +14,9 @@ cwSettings::cwSettings(QObject *parent) : QObject(parent)
 {
 }
 
-cwOpenGLSettings* cwSettings::renderingSettings() const {
-    return cwOpenGLSettings::instance();
-}
+// cwOpenGLSettings* cwSettings::renderingSettings() const {
+//     return cwOpenGLSettings::instance();
+// }
 
 void cwSettings::initialize()
 {
@@ -27,7 +27,7 @@ void cwSettings::initialize()
     QLocale::setDefault(QLocale::c());
 
     //Keep these here because cwOpenGLSetting can be deallocated in cleanup()
-    cwOpenGLSettings::initialize(); //Init's a singleton
+    // cwOpenGLSettings::initialize(); //Init's a singleton
     cwJobSettings::initialize();
     cwPDFSettings::initialize();
 }

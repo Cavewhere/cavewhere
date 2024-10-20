@@ -92,7 +92,7 @@ void cwGLScraps::draw() {
  */
 void cwGLScraps::updateData()
 {
-    cwGLObject::updateData();
+    // cwGLObject::updateData();
 
     if(geometryItersecter() == nullptr) { return; }
 
@@ -223,7 +223,7 @@ void cwGLScraps::initializeShaders() {
         qDebug() << "Linking errors:" << Program->log();
     }
 
-    shaderDebugger()->addShaderProgram(Program);
+    // shaderDebugger()->addShaderProgram(Program);
 
 //    Program->bind();
     UniformScaleTexCoords = Program->uniformLocation("vTexCoordsScale");

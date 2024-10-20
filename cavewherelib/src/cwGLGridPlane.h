@@ -26,9 +26,9 @@ class cwGLGridPlane : public cwGLObject {
 public:
     cwGLGridPlane(QObject *parent = nullptr);
 
-    virtual void initialize() override;
-    virtual void releaseResources() override;
-    virtual void draw() override;
+    // virtual void initialize() override;
+    // virtual void releaseResources() override;
+    // virtual void draw() override;
 
     QPlane3D plane() const;
     void setPlane(QPlane3D plane);
@@ -36,24 +36,30 @@ public:
     double extent() const;
     void setExtent(double extent);
 
+    QMatrix4x4 modelMatrix() const { return m_modelMatrix; }
+
+protected:
+    virtual cwRHIObject* createRHIObject() override;
+
 private:
     QPlane3D Plane;
     double Extent; //!< The max rendering area of the plane
 
-    QOpenGLShaderProgram* Program;
-    QOpenGLBuffer TriangleVertexBuffer;
-
-    QMatrix4x4 ModelMatrix;
-
-    //Shader attributes
-    int vVertex;
-    int UniformModelViewProjectionMatrix;
-    int UniformModelMatrix;
-    int UniformDevicePixelRatio;
-
-    void initializeGeometry();
-    void initializeShaders();
     void updateModelMatrix();
+
+    // QOpenGLShaderProgram* Program;
+    // QOpenGLBuffer TriangleVertexBuffer;
+
+    QMatrix4x4 m_modelMatrix;
+
+    // //Shader attributes
+    // int vVertex;
+    // int UniformModelViewProjectionMatrix;
+    // int UniformModelMatrix;
+    // int UniformDevicePixelRatio;
+
+    // void initializeGeometry();
+    // void initializeShaders();
 
 signals:
     void extentChanged();

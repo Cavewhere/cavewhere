@@ -11,6 +11,8 @@
 //Qt includes
 #include <QObject>
 #include <QOpenGLFunctions>
+#include <QPointer>
+#include <rhi/qrhi.h>
 class QOpenGLShaderProgram;
 
 //Our includes
@@ -19,32 +21,38 @@ class cwShaderDebugger;
 class cwGLViewer;
 class cwScene;
 class cwUpdateDataCommand;
+class cwRHIObject;
+class cwRhiItemRenderer;
 #include "cwGeometryItersecter.h"
 
 class cwGLObject : public QObject, protected QOpenGLFunctions
 {
+    friend class cwSceneRenderer;
+
 public:
     cwGLObject(QObject* parent = nullptr);
     ~cwGLObject();
 
     //These methods should only be called in the rendering thread
-    void initilizeGLFunctions();
-    virtual void initialize() = 0;
-    virtual void releaseResources() = 0;
-    virtual void draw() = 0;
-    virtual void updateData();
+    // void initilizeGLFunctions();
+    virtual void initialize() {}
+    virtual void releaseResources() {}
+    virtual void draw() {}
+    // virtual void updateData();
 
     void setScene(cwScene *scene);
     cwScene *scene() const;
 
     cwGeometryItersecter* geometryItersecter() const;
     cwCamera* camera() const;
-    cwShaderDebugger* shaderDebugger() const;
+    // cwShaderDebugger* shaderDebugger() const;
 
     void markDataAsDirty();
 
     static void deleteShaders(QOpenGLShaderProgram* program);
 
+protected:
+    virtual cwRHIObject* createRHIObject() { return nullptr; }
 
 private:
     cwScene* Scene;
@@ -57,6 +65,39 @@ protected:
 
 };
 
+class cwRHIObject {
+
+public:
+    virtual ~cwRHIObject() {}
+
+    struct RenderData {
+        QRhiCommandBuffer* cb;
+        cwRhiItemRenderer* renderer;
+    };
+
+    struct ResourceUpdateData {
+        QRhiResourceUpdateBatch* resourceUpdateBatch;
+        RenderData renderData;
+    };
+
+    struct SynchronizeData {
+        cwGLObject* object;
+        cwRhiItemRenderer* renderer;
+    };
+
+    virtual void initialize(const ResourceUpdateData& data) = 0;
+    virtual void synchronize(const SynchronizeData& data) = 0;
+    virtual void updateResources(const ResourceUpdateData& data) = 0;
+    virtual void render(const RenderData& data) = 0;
+
+private:
+    // QPointer<cwGLObject> m_guiObject;
+
+protected:
+    static QShader loadShader(const QString& name);
+
+};
+
 /**
  * @brief cwGLObject::scene
  * @returns The scene that is resposible for this object
@@ -65,5 +106,7 @@ inline cwScene *cwGLObject::scene() const
 {
     return Scene;
 }
+
+
 
 #endif // CWGLOBJECT_H

@@ -59,7 +59,7 @@ void cwGLTerrain::initialize() {
         qDebug() << "Linking errors:" << TileProgram->log();
     }
 
-    shaderDebugger()->addShaderProgram(TileProgram);
+    // shaderDebugger()->addShaderProgram(TileProgram);
     UniformModelViewProjectionMatrix = TileProgram->uniformLocation("ModelViewProjectionMatrix");
     UniformModelMatrix = TileProgram->uniformLocation("ModelMatrix");
     TileProgram->setUniformValue("colorBG", Qt::gray);

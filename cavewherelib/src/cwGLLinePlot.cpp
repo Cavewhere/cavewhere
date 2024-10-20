@@ -57,7 +57,7 @@ void cwGLLinePlot::initializeShaders() {
         qDebug() << "Linking errors:" << ShaderProgram->log();
     }
 
-    shaderDebugger()->addShaderProgram(ShaderProgram);
+    // shaderDebugger()->addShaderProgram(ShaderProgram);
 
     vVertex = ShaderProgram->attributeLocation("vVertex");
     UniformModelViewProjectionMatrix = ShaderProgram->uniformLocation("ModelViewProjectionMatrix");
@@ -143,7 +143,7 @@ void cwGLLinePlot::setIndexes(QVector<unsigned int> indexData) {
  * This is called in updateScene and is thread safe
  */
 void cwGLLinePlot::updateData() {
-    cwGLObject::updateData();
+    // cwGLObject::updateData();
 
     if(ShaderProgram == nullptr) { return; }
 

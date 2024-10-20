@@ -12,6 +12,7 @@
 #include "cwGlobalDirectory.h"
 #include "cwShaderDebugger.h"
 #include "cwCamera.h"
+#include "cwRHIGridPlane.h"
 
 //Qt includes
 #include <QVector3D>
@@ -22,46 +23,52 @@
 cwGLGridPlane::cwGLGridPlane(QObject* parent) :
     cwGLObject(parent),
     Plane(QPlane3D(QVector3D(0.0, 0.0, -75.0), QVector3D(0.0, 0.0, 1.0))),
-    Extent(3000.0), //3km in the negitive and positive direction from origin
-    Program(nullptr)
+    Extent(3000.0) //3km in the negitive and positive direction from origin
+    //Extent(1.0)
+    // Program(nullptr)
 {
     updateModelMatrix();
 }
 
-void cwGLGridPlane::initialize()
+cwRHIObject* cwGLGridPlane::createRHIObject()
 {
-    initializeShaders();
-    initializeGeometry();
-
-    vVertex = Program->attributeLocation("vVertex");
-
+    return new cwRHIGridPlane();
 }
 
-void cwGLGridPlane::releaseResources()
-{
-    deleteShaders(Program);
-    TriangleVertexBuffer.destroy();
-}
+// void cwGLGridPlane::initialize()
+// {
+//     initializeShaders();
+//     initializeGeometry();
 
-void cwGLGridPlane::draw() {
-    Program->bind();
+//     vVertex = Program->attributeLocation("vVertex");
 
-    Program->setUniformValue(UniformModelViewProjectionMatrix, camera()->viewProjectionMatrix() * ModelMatrix);
-    Program->setUniformValue(UniformModelMatrix, ModelMatrix);
-    Program->setUniformValue(UniformDevicePixelRatio, static_cast<GLfloat>(camera()->devicePixelRatio()));
+// }
 
-    TriangleVertexBuffer.bind();
+// void cwGLGridPlane::releaseResources()
+// {
+//     deleteShaders(Program);
+//     TriangleVertexBuffer.destroy();
+// }
 
-    Program->setAttributeArray(vVertex, GL_FLOAT, nullptr, 3);
-    Program->enableAttributeArray(vVertex);
+// void cwGLGridPlane::draw() {
+//     Program->bind();
 
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+//     Program->setUniformValue(UniformModelViewProjectionMatrix, camera()->viewProjectionMatrix() * ModelMatrix);
+//     Program->setUniformValue(UniformModelMatrix, ModelMatrix);
+//     Program->setUniformValue(UniformDevicePixelRatio, static_cast<GLfloat>(camera()->devicePixelRatio()));
 
-    TriangleVertexBuffer.release();
+//     TriangleVertexBuffer.bind();
 
-    Program->disableAttributeArray(vVertex);
-    Program->release();
-}
+//     Program->setAttributeArray(vVertex, GL_FLOAT, nullptr, 3);
+//     Program->enableAttributeArray(vVertex);
+
+//     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+//     TriangleVertexBuffer.release();
+
+//     Program->disableAttributeArray(vVertex);
+//     Program->release();
+// }
 
 
 void cwGLGridPlane::setPlane(QPlane3D plane) {
@@ -91,51 +98,51 @@ void cwGLGridPlane::setExtent(double extent) {
  * This should be classed after the opengl context has been initiziled
  * and should be called by the rendering thread
  */
-void cwGLGridPlane::initializeGeometry() {
-    QVector<QVector3D> points;
-    points.resize(4);
-    points[0] = QVector3D(-1.0, -1.0, 0.0);
-    points[1] = QVector3D(-1.0, 1.0, 0.0);
-    points[2] = QVector3D(1.0, -1.0, 0.0);
-    points[3] = QVector3D(1.0, 1.0, 0.0);
+// void cwGLGridPlane::initializeGeometry() {
+//     QVector<QVector3D> points;
+//     points.resize(4);
+//     points[0] = QVector3D(-1.0, -1.0, 0.0);
+//     points[1] = QVector3D(-1.0, 1.0, 0.0);
+//     points[2] = QVector3D(1.0, -1.0, 0.0);
+//     points[3] = QVector3D(1.0, 1.0, 0.0);
 
-    Q_ASSERT(points.size() == 4); //If this fails make sure you date draw with the correct number of points
+//     Q_ASSERT(points.size() == 4); //If this fails make sure you date draw with the correct number of points
 
-    TriangleVertexBuffer.create();
-    TriangleVertexBuffer.bind();
-    TriangleVertexBuffer.setUsagePattern(QOpenGLBuffer::StaticDraw);
-    TriangleVertexBuffer.allocate(points.data(), points.size() * sizeof(QVector3D));
-    TriangleVertexBuffer.release();
-}
+//     TriangleVertexBuffer.create();
+//     TriangleVertexBuffer.bind();
+//     TriangleVertexBuffer.setUsagePattern(QOpenGLBuffer::StaticDraw);
+//     TriangleVertexBuffer.allocate(points.data(), points.size() * sizeof(QVector3D));
+//     TriangleVertexBuffer.release();
+// }
 
 /**
   This initializes all the shaders for the line plot
   */
-void cwGLGridPlane::initializeShaders() {
-    cwGLShader* vertexShader = new cwGLShader(QOpenGLShader::Vertex);
-    vertexShader->setSourceFile(":/shaders/grid.vert");
+// void cwGLGridPlane::initializeShaders() {
+//     cwGLShader* vertexShader = new cwGLShader(QOpenGLShader::Vertex);
+//     vertexShader->setSourceFile(":/shaders/grid.vert");
 
-    cwGLShader* fragmentShader = new cwGLShader(QOpenGLShader::Fragment);
-    fragmentShader->setSourceFile(":/shaders/grid.frag");
+//     cwGLShader* fragmentShader = new cwGLShader(QOpenGLShader::Fragment);
+//     fragmentShader->setSourceFile(":/shaders/grid.frag");
 
-    Program = new QOpenGLShaderProgram();
-    Program->addShader(vertexShader);
-    Program->addShader(fragmentShader);
+//     Program = new QOpenGLShaderProgram();
+//     Program->addShader(vertexShader);
+//     Program->addShader(fragmentShader);
 
-    bool success = Program->link();
-    if(!success) {
-        qDebug() << "Linking errors:" << Program->log();
-    }
+//     bool success = Program->link();
+//     if(!success) {
+//         qDebug() << "Linking errors:" << Program->log();
+//     }
 
-    shaderDebugger()->addShaderProgram(Program);
+//     shaderDebugger()->addShaderProgram(Program);
 
-    vVertex = Program->attributeLocation("vVertex");
-    UniformModelViewProjectionMatrix = Program->uniformLocation("ModelViewProjectionMatrix");
-    UniformModelMatrix = Program->uniformLocation("ModelMatrix");
-    UniformDevicePixelRatio = Program->uniformLocation("devicePixelRatio");
+//     vVertex = Program->attributeLocation("vVertex");
+//     UniformModelViewProjectionMatrix = Program->uniformLocation("ModelViewProjectionMatrix");
+//     UniformModelMatrix = Program->uniformLocation("ModelMatrix");
+//     UniformDevicePixelRatio = Program->uniformLocation("devicePixelRatio");
 
-//    Program->setUniformValue("colorBG", Qt::gray);
-}
+// //    Program->setUniformValue("colorBG", Qt::gray);
+// }
 
 /**
  * @brief cwGLGridPlane::updateModelMatrix
@@ -164,5 +171,5 @@ void cwGLGridPlane::updateModelMatrix() {
 
 //    modelMatrix.rotate(rotation, cross);
 
-    ModelMatrix = modelMatrix;
+    m_modelMatrix = modelMatrix;
 }

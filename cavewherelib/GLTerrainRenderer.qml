@@ -72,7 +72,7 @@ RegionViewer {
             height: width
             camera: renderer.camera
             rotation: turnTableInteractionId.rotation
-            shaderDebugger: renderer.scene.shaderDebugger
+            // shaderDebugger: renderer.scene.shaderDebugger
             antialiasing: false
         }
     }

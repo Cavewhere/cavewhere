@@ -172,10 +172,10 @@ TEST_CASE("Load project with no images for scraps", "[CavewhereMainWindow]") {
         CHECK(true);
     }
 
-    SECTION("Disable DXT1 Compression") {
-        REQUIRE(cwOpenGLSettings::instance());
-        cwOpenGLSettings::instance()->setUseDXT1Compression(false);
-    }
+    // SECTION("Disable DXT1 Compression") {
+    //     REQUIRE(cwOpenGLSettings::instance());
+    //     cwOpenGLSettings::instance()->setUseDXT1Compression(false);
+    // }
 
     QEventLoop loop;
     QTimer::singleShot(2000, [rootData, filename, firstAppEngine, &loop]() {

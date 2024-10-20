@@ -42,7 +42,7 @@ cwImageItem::cwImageItem(QQuickItem *parent) :
 //    setAntialiasing(true);
 //#endif
 
-    setOpaquePainting(false);
+    // setOpaquePainting(false);
 }
 
 cwImageItem::~cwImageItem()

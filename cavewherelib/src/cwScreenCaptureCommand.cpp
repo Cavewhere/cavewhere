@@ -81,7 +81,7 @@ void cwScreenCaptureCommand::excute()
     glViewport(0, 0, size.width(), size.height());
 
     Scene->setCamera(Camera);
-    Scene->paint();
+    // Scene->paint();
 
     framebuffer.release();
     QImage image = cwMappedQImage::createDiskImageWithTempFile(QString("cw-capture-%1").arg(Id), framebuffer.toImage());

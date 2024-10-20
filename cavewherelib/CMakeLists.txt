@@ -19,6 +19,7 @@ find_package(Qt6
     Concurrent
     Svg
     Test
+    ShaderTools
     REQUIRED)
 
 qt_add_library(cavewherelib SHARED)
@@ -40,6 +41,7 @@ target_link_libraries(cavewherelib
     Qt::Xml
     Qt::Concurrent
     Qt::Svg
+    Qt::GuiPrivate
     QtQmlModels
     asyncfuture
     dewalls
@@ -142,6 +144,14 @@ qt_add_qml_module(cavewherelib
 )
 
 target_sources(cavewherelib PRIVATE ${cavewherelib_CPP_FILES} ${cavewherelib_H_FILES})
+
+# Handle shaders
+qt_add_shaders(cavewherelib "cavewherelib_shaders"
+    PREFIX "/"
+    FILES
+        "shaders/grid.frag"
+        "shaders/grid.vert"
+    )
 
 # Protobuf files
 file(GLOB protobuf_FILES "src/*.proto")

@@ -16,7 +16,7 @@
 #include <QWheelEvent>
 #include <QOpenGLShaderProgram>
 #include <QOpenGLFramebufferObject>
-#include <QQuickPaintedItem>
+#include <QQuickRhiItem>
 #include <QPointer>
 
 //Our includes
@@ -33,7 +33,7 @@ class cwScene;
 #include "cwCollisionRectKdTree.h"
 
 
-class cwGLViewer : public QQuickPaintedItem
+class cwGLViewer : public QQuickRhiItem
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(GLViewer)
@@ -50,8 +50,12 @@ public:
     cwScene* scene() const;
     void setScene(cwScene* scene);
 
-    void paint(QPainter *painter) override;
-    void releaseResources() override;
+    // void paint(QPainter *painter) override;
+    // void releaseResources() override;
+
+protected:
+    // QSGNode *updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *data) override;
+
 signals:
     void glWidgetChanged();
     void cameraChanged();
@@ -66,6 +70,8 @@ protected:
     //For Painting
     QPointer<cwScene> Scene;
 
+    //The backend reneder
+
 //    bool Initialized;
 
 //    virtual QSGNode * updatePaintNode(QSGNode * oldNode, UpdatePaintNodeData *data);
@@ -75,8 +81,12 @@ protected slots:
     void updateRenderer();
 
 private slots:
-    void privateResizeGL();
+    void privateResize();
 
+
+    // QQuickRhiItem interface
+protected:
+    QQuickRhiItemRenderer *createRenderer() override;
 };
 
 inline cwCamera* cwGLViewer::camera() const { return Camera; }

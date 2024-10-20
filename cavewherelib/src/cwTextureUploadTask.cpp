@@ -119,8 +119,8 @@ bool cwTextureUploadTask::isDivisibleBy4(QSize size)
  */
 cwTextureUploadTask::Format cwTextureUploadTask::format()
 {
-    if(cwOpenGLSettings::instance()->useDXT1Compression()) {
-        return cwTextureUploadTask::DXT1Mipmaps;
-    }
+    // if(cwOpenGLSettings::instance()->useDXT1Compression()) {
+    //     return cwTextureUploadTask::DXT1Mipmaps;
+    // }
     return cwTextureUploadTask::OpenGL_RGBA;
 }

@@ -21,7 +21,7 @@ void cwUpdateDataCommand::setGLObject(cwGLObject *object)
 
 void cwUpdateDataCommand::excute()
 {
-    if(!Object.isNull()) {
-        Object->updateData();
-    }
+    // if(!Object.isNull()) {
+    //     Object->updateData();
+    // }
 }

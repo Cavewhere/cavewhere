@@ -28,7 +28,7 @@ void cwInitCommand::setGLObject(cwGLObject *glObject)
 void cwInitCommand::excute()
 {
     if(!GLObject.isNull()) {
-        GLObject->initilizeGLFunctions();
+        // GLObject->initilizeGLFunctions();
         GLObject->initialize();
     }
 }

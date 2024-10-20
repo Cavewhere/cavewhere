@@ -13,6 +13,7 @@
 
 //Qt includes
 #include <QOpenGLShaderProgram>
+#include <QFile>
 
 cwGLObject::cwGLObject(QObject* parent) :
     QObject(parent),
@@ -26,10 +27,10 @@ cwGLObject::~cwGLObject()
 
 }
 
-void cwGLObject::initilizeGLFunctions()
-{
-    initializeOpenGLFunctions();
-}
+// void cwGLObject::initilizeGLFunctions()
+// {
+//     initializeOpenGLFunctions();
+// }
 
 /**
  * @brief cwGLObject::updateData
@@ -37,10 +38,10 @@ void cwGLObject::initilizeGLFunctions()
  * You should reimplement this function but call this function from the sub class
  * This function is called from the rendering thread and updates openGL data.
  */
-void cwGLObject::updateData()
-{
-    QueuedDataCommand = nullptr;
-}
+// void cwGLObject::updateData()
+// {
+//     QueuedDataCommand = nullptr;
+// }
 
 void cwGLObject::setScene(cwScene *scene)
 {
@@ -54,9 +55,9 @@ void cwGLObject::setScene(cwScene *scene)
         if(Scene != nullptr) {
             Scene->addItem(this);
 
-            cwInitCommand* initCommand = new cwInitCommand();
-            initCommand->setGLObject(this);
-            Scene->addSceneCommand(initCommand);
+            // cwInitCommand* initCommand = new cwInitCommand();
+            // initCommand->setGLObject(this);
+            // Scene->addSceneCommand(initCommand);
 
             markDataAsDirty();
         }
@@ -67,9 +68,9 @@ void cwGLObject::setScene(cwScene *scene)
     return Scene == nullptr ? nullptr : Scene->camera();
 }
 
- cwShaderDebugger* cwGLObject::shaderDebugger() const {
-     return Scene == nullptr ? nullptr : Scene->shaderDebugger();
- }
+ // cwShaderDebugger* cwGLObject::shaderDebugger() const {
+ //     return Scene == nullptr ? nullptr : Scene->shaderDebugger();
+ // }
 
  /**
   * @brief cwGLObject::markDataAsDirty
@@ -87,9 +88,9 @@ void cwGLObject::setScene(cwScene *scene)
      if(QueuedDataCommand != nullptr) { return; }
      if(Scene == nullptr) { return; }
 
-     QueuedDataCommand = new cwUpdateDataCommand();
-     QueuedDataCommand->setGLObject(this);
-     Scene->addSceneCommand(QueuedDataCommand);
+     // QueuedDataCommand = new cwUpdateDataCommand();
+     // QueuedDataCommand->setGLObject(this);
+     // Scene->addSceneCommand(QueuedDataCommand);
  }
 
  void cwGLObject::deleteShaders(QOpenGLShaderProgram *program)
@@ -109,4 +110,13 @@ void cwGLObject::setScene(cwScene *scene)
  cwGeometryItersecter *cwGLObject::geometryItersecter() const
 {
     return Scene == nullptr ? nullptr : Scene->geometryItersecter();
+}
+
+QShader cwRHIObject::loadShader(const QString &name)
+{
+    QFile f(name);
+    if (f.open(QIODevice::ReadOnly))
+        return QShader::fromSerialized(f.readAll());
+
+    return QShader();
 }

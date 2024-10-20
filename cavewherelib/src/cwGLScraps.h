@@ -44,7 +44,7 @@ public:
     void initialize() override;
     void releaseResources() override;
     void draw() override;
-    void updateData() override;
+    void updateData();
 
     void addScrapToUpdate(cwScrap* scrap);
     void removeScrap(cwScrap* scrap);

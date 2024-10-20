@@ -29,8 +29,8 @@ cwRegionSceneManager::cwRegionSceneManager(QObject *parent) :
     Plane = new cwGLGridPlane();
 
 //    Terrain->setScene(scene());
-    LinePlot->setScene(scene());
-    Scraps->setScene(scene());
+    // LinePlot->setScene(scene());
+    // Scraps->setScene(scene());
     Plane->setScene(scene());
 
 }

@@ -41,13 +41,13 @@ int main(int argc, char *argv[])
     QApplication::setApplicationName("CaveWhere");
     QApplication::setApplicationVersion(CAVEWHERE_VERSION);
 
-    cwOpenGLSettings::setApplicationRenderer();
+    // cwOpenGLSettings::setApplicationRenderer();
     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
 
     cwApplication a(argc, argv);
 
     // Set the default graphics API to OpenGL
-    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+    // QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
 
     cwRootData* rootData = new cwRootData();
 
@@ -64,7 +64,7 @@ int main(int argc, char *argv[])
     //TODO: Add rendering dialog, for checking bad text
     //Fixes text rendering issues on windows for bad graphics cards
     //https://stackoverflow.com/questions/29733711/blurred-qt-quick-text
-    QQuickWindow::setTextRenderType(cwOpenGLSettings::instance()->useNativeTextRendering() ? QQuickWindow::NativeTextRendering : QQuickWindow::QtTextRendering);
+    // QQuickWindow::setTextRenderType(cwOpenGLSettings::instance()->useNativeTextRendering() ? QQuickWindow::NativeTextRendering : QQuickWindow::QtTextRendering);
 
     // cwGlobalDirectory::setupBaseDirectory();
 

@@ -12,6 +12,7 @@ cwCamera::cwCamera(QObject *parent) :
     QObject(parent),
     ZoomScale(1.0)
 {
+    // ViewMatrix.translate(QVector3D(0.0, 0.0, -1000.0));
     ViewProjectionMatrixIsDirty = true;
     connect(this, &cwCamera::projectionChanged, this, &cwCamera::pixelsPerMeterChanged);
 }
@@ -81,6 +82,7 @@ void cwCamera::setCustomProjection(QMatrix4x4 matrix)
   Sets the projection matrix for the camera
   */
 void cwCamera::setProjection(cwProjection projection) {
+    qDebug() << "Setting projection" << projection.matrix();
     Projection = projection;
     ViewProjectionMatrixIsDirty = true;
     emit projectionChanged();
@@ -193,7 +195,7 @@ QVector3D cwCamera::mapNormalizeScreenToGLViewport(const QVector3D& point) const
      projection.setOrtho(-viewport.width() / 2.0 * ZoomScale,
                          viewport.width() / 2.0 * ZoomScale,
                          -viewport.height() / 2.0 * ZoomScale,
-                         viewport.height() / 2.0 * ZoomScale, -10000, 10000);
+                         viewport.height() / 2.0 * ZoomScale, -10000.0, 10000.0);
      return projection;
  }
 

@@ -112,16 +112,16 @@ QQuaternion cwCompassItem::modelView() const
 
 void cwCompassItem::paint(QPainter *painter)
 {
-    painter->beginNativePainting();
+    // painter->beginNativePainting();
 
-    if(!Initialized) {
-        initialize();
-        Initialized = true;
-    }
+    // if(!Initialized) {
+    //     initialize();
+    //     Initialized = true;
+    // }
 
-    draw();
+    // draw();
 
-    painter->endNativePainting();
+    // painter->endNativePainting();
 }
 
 void cwCompassItem::releaseResources()

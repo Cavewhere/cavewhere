@@ -126,7 +126,7 @@ ColumnLayout {
             QQ.Loader {
                 sourceComponent: exportTabComponentId
                 onLoaded: {
-                    (item as ExportViewTab).viewer = rootLayout.viewer
+                    (item as ExportViewTab).view = rootLayout.viewer
                 }
             }
         }

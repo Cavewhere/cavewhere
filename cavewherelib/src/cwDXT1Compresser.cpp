@@ -29,12 +29,12 @@ cwDXT1Compresser::~cwDXT1Compresser()
 
 QFuture<cwDXT1Compresser::CompressedImage> cwDXT1Compresser::compress(const QList<QImage> &images)
 {
-    switch(cwOpenGLSettings::instance()->dxt1Algorithm()) {
-    case cwOpenGLSettings::DXT1_GPU:
-        return openglCompression(images, true);
-    case cwOpenGLSettings::DXT1_Squish:
-        return squishCompression(images, true);
-    }
+    // switch(cwOpenGLSettings::instance()->dxt1Algorithm()) {
+    // case cwOpenGLSettings::DXT1_GPU:
+    //     return openglCompression(images, true);
+    // case cwOpenGLSettings::DXT1_Squish:
+    //     return squishCompression(images, true);
+    // }
 
     return squishCompression(images, true);
 }

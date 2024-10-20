@@ -14,10 +14,10 @@
 
 cwImageCompressionUpdater::cwImageCompressionUpdater(QObject *parent) : QObject(parent)
 {
-    Q_ASSERT(cwOpenGLSettings::instance());
+    // Q_ASSERT(cwOpenGLSettings::instance());
 
-    connect(cwOpenGLSettings::instance(), &cwOpenGLSettings::useDXT1CompressionChanged,
-            this, &cwImageCompressionUpdater::updateAllImages);
+    // connect(cwOpenGLSettings::instance(), &cwOpenGLSettings::useDXT1CompressionChanged,
+    //         this, &cwImageCompressionUpdater::updateAllImages);
 }
 
 cwRegionTreeModel* cwImageCompressionUpdater::regionTreeModel() const {
@@ -99,7 +99,7 @@ QString cwImageCompressionUpdater::filename() const
 
 void cwImageCompressionUpdater::recompressNotes(QList<cwNote *> notes)
 {
-    bool usingCompression = cwOpenGLSettings::instance()->useDXT1Compression();
+    bool usingCompression = false; //cwOpenGLSettings::instance()->useDXT1Compression();
 
     if(isSetup() && !notes.isEmpty()) {
         QString filename = this->filename();
@@ -144,7 +144,7 @@ void cwImageCompressionUpdater::recompressNotes(QList<cwNote *> notes)
 
 void cwImageCompressionUpdater::recompressScraps(const QList<cwScrap *>& scraps)
 {
-    bool usingCompression = cwOpenGLSettings::instance()->useDXT1Compression();
+    bool usingCompression = false; //cwOpenGLSettings::instance()->useDXT1Compression();
     if(isSetup() && !scraps.isEmpty()) {
         cwImageDatabase database(filename());
         for(auto scrap : scraps) {
