@@ -140,7 +140,7 @@ ApplicationWindow {
         anchors.centerIn: parent
     }
 
-    onClosing: {
+    onClosing: (close) => {
         askToSaveDialogId.taskName = "quiting"
         askToSaveDialogId.afterSaveFunc = function() {
             Qt.quit();
