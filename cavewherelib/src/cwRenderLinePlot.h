@@ -9,7 +9,7 @@
 #define CWRENDERLINEPLOT_H
 
 // Our includes
-#include "cwGLObject.h"
+#include "cwRenderObject.h"
 #include "cwTracked.h"
 
 // Qt includes

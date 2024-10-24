@@ -1,10 +1,17 @@
 #include "cwRhiItemRenderer.h"
-#include "cwGLViewer.h"
+#include "cwRhiViewer.h"
+
+//Qt include
+#include <QThread>
+#include <QDebug>
 
 cwRhiItemRenderer::cwRhiItemRenderer() :
     m_sceneRenderer(new cwSceneRenderer())
 {
+}
 
+cwRhiItemRenderer::~cwRhiItemRenderer() {
+    delete m_sceneRenderer;
 }
 
 void cwRhiItemRenderer::initialize(QRhiCommandBuffer *cb) {
@@ -13,8 +20,8 @@ void cwRhiItemRenderer::initialize(QRhiCommandBuffer *cb) {
 
 void cwRhiItemRenderer::synchronize(QQuickRhiItem *item){
     //Call synchronize for all elements
-    auto viewerItem = static_cast<cwGLViewer*>(item);
-    Q_ASSERT(dynamic_cast<cwGLViewer*>(item) != nullptr);
+    auto viewerItem = static_cast<cwRhiViewer*>(item);
+    Q_ASSERT(dynamic_cast<cwRhiViewer*>(item) != nullptr);
 
     m_sceneRenderer->synchroize(viewerItem->scene(), this);
 }

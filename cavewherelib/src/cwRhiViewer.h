@@ -33,28 +33,23 @@ class cwScene;
 #include "cwCollisionRectKdTree.h"
 
 
-class cwGLViewer : public QQuickRhiItem
+class cwRhiViewer : public QQuickRhiItem
 {
     Q_OBJECT
-    QML_NAMED_ELEMENT(GLViewer)
+    QML_NAMED_ELEMENT(RhiViewer)
     Q_PROPERTY(cwCamera* camera READ camera NOTIFY cameraChanged)
     Q_PROPERTY(cwScene* scene READ scene WRITE setScene NOTIFY sceneChanged)
 
 public:
-    explicit cwGLViewer(QQuickItem *parent = 0);
-    ~cwGLViewer();
+    explicit cwRhiViewer(QQuickItem *parent = 0);
+    ~cwRhiViewer();
 
-//    cwGeometryItersecter* geometryItersecter() const;
     cwCamera* camera() const;
 
     cwScene* scene() const;
     void setScene(cwScene* scene);
 
-    // void paint(QPainter *painter) override;
-    // void releaseResources() override;
-
 protected:
-    // QSGNode *updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *data) override;
 
 signals:
     void glWidgetChanged();
@@ -62,19 +57,11 @@ signals:
     void sceneChanged();
 
 protected:
-//    virtual void initializeGL() {}
-
     //The main camera for the viewer
     cwCamera* Camera;
 
     //For Painting
     QPointer<cwScene> Scene;
-
-    //The backend reneder
-
-//    bool Initialized;
-
-//    virtual QSGNode * updatePaintNode(QSGNode * oldNode, UpdatePaintNodeData *data);
 
 protected slots:
     virtual void resizeGL() {}
@@ -89,13 +76,8 @@ protected:
     QQuickRhiItemRenderer *createRenderer() override;
 };
 
-inline cwCamera* cwGLViewer::camera() const { return Camera; }
-inline void cwGLViewer::updateRenderer() { update(); }
-
-//inline cwGeometryItersecter *cwGLRenderer::geometryItersecter() const
-//{
-//    return GeometryItersecter;
-//}
+inline cwCamera* cwRhiViewer::camera() const { return Camera; }
+inline void cwRhiViewer::updateRenderer() { update(); }
 
 
 

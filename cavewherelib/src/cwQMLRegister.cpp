@@ -103,7 +103,7 @@ void cwQMLRegister::registerQML()
     // qmlRegisterType<cwRegionSceneManager>("Cavewhere", 1, 0, "RegionSceneManager");
     // qmlRegisterType<cwCaptureManager>("Cavewhere", 1, 0, "CaptureManager");
     // qmlRegisterType<cwScene>("Cavewhere", 1, 0, "Scene");
-    // qmlRegisterType<cwGLViewer>("Cavewhere", 1, 0, "GLViewer");
+    // qmlRegisterType<cwRhiViewer>("Cavewhere", 1, 0, "RhiViewer");
     // qmlRegisterType<QQuickView>("Cavewhere", 1, 0, "QQuickView");
     // qmlRegisterAnonymousType<QScreen>("Cavewhere", 1);
     // qmlRegisterType<cwScale>("Cavewhere", 1, 0, "Scale");

@@ -6,7 +6,7 @@
 **************************************************************************/
 
 //Our includes
-#include "cwGLViewer.h"
+#include "cwRhiViewer.h"
 #include "cw3dRegionViewer.h"
 #include "cwOrthogonalProjection.h"
 #include "cwPerspectiveProjection.h"
@@ -28,7 +28,7 @@
 //const float cw3dRegionViewer::DefaultAzimuth = 0.0f;
 
 cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
-    cwGLViewer(parent)
+    cwRhiViewer(parent)
 {
     //TODO: Not all Mac and Windows support multi-sampling
 //#ifndef Q_OS_WIN

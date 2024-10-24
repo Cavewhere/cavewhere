@@ -23,7 +23,7 @@
 #include <QPainter>
 
 cwImageItem::cwImageItem(QQuickItem *parent) :
-    cwGLViewer(parent),
+    cwRhiViewer(parent),
     ImageProperties(new cwImageProperties(this)),
     Rotation(0.0),
     RotationCenter(0.5, 0.5),
@@ -316,7 +316,7 @@ QSGNode *cwImageItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintN
     if(GLResources != nullptr) {
         GLResources->NoteTexture->updateData();
     }
-    QSGNode* node = cwGLViewer::updatePaintNode(oldNode, data);
+    QSGNode* node = cwRhiViewer::updatePaintNode(oldNode, data);
     return node;
 }
 

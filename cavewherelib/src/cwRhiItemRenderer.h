@@ -8,7 +8,7 @@ class cwRhiItemRenderer : public QQuickRhiItemRenderer
 {
 public:
     cwRhiItemRenderer();
-    ~cwRhiItemRenderer() override = default;
+    ~cwRhiItemRenderer() override;
 
 
     // Public pass-through functions

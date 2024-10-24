@@ -14,7 +14,7 @@
 #include <QPlane3D>
 
 //Our includes
-#include "cwGLViewer.h"
+#include "cwRhiViewer.h"
 //class cwGLTerrain;
 //class cwGLLinePlot;
 //class cwGLScraps;
@@ -23,7 +23,7 @@ class cwGeometryItersecter;
 #include "cwOrthogonalProjection.h"
 #include "cwPerspectiveProjection.h"
 
-class cw3dRegionViewer : public cwGLViewer
+class cw3dRegionViewer : public cwRhiViewer
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(RegionViewer)

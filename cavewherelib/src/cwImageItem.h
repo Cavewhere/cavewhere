@@ -15,14 +15,14 @@
 #include <QQmlEngine>
 
 //Our includes
-#include "cwGLViewer.h"
+#include "cwRhiViewer.h"
 #include "cwImage.h"
 #include "cwFutureManagerToken.h"
 #include "cwImageProperties.h"
 class cwGLImageItemResources;
 class cwImageTexture;
 
-class cwImageItem : public cwGLViewer, protected QOpenGLFunctions
+class cwImageItem : public cwRhiViewer, protected QOpenGLFunctions
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(ImageItem)

@@ -17,7 +17,7 @@ class QOpenGLShaderProgram;
 //Our includes
 class cwCamera;
 class cwShaderDebugger;
-class cwGLViewer;
+class cwRhiViewer;
 class cwScene;
 class cwUpdateDataCommand;
 class cwRHIObject;
