@@ -8,7 +8,10 @@
 
 cwRhiScene::~cwRhiScene()
 {
-
+    for(auto rhiObject : m_rhiObjects) {
+        delete rhiObject;
+    }
+    delete m_globalUniformBuffer;
 }
 
 void cwRhiScene::initialize(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
