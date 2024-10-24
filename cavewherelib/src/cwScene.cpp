@@ -8,7 +8,7 @@
 
 //Our includes
 #include "cwScene.h"
-#include "cwGLObject.h"
+#include "cwRenderObject.h"
 #include "cwDebug.h"
 #include "cwRHIObject.h"
 #include "cwCamera.h"

@@ -6,12 +6,12 @@
 #include "cwScene.h"
 #include "cwCamera.h"
 
-cwSceneRenderer::~cwSceneRenderer()
+cwRhiScene::~cwRhiScene()
 {
 
 }
 
-void cwSceneRenderer::initialize(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
+void cwRhiScene::initialize(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
 {
     //This function is called multiple times, make sure bufferes that are initilized
     //here are done so only once, or shaders will not update correctly.
@@ -24,7 +24,7 @@ void cwSceneRenderer::initialize(QRhiCommandBuffer *cb, cwRhiItemRenderer *rende
     }
 }
 
-void cwSceneRenderer::synchroize(cwScene *scene, cwRhiItemRenderer *renderer)
+void cwRhiScene::synchroize(cwScene *scene, cwRhiItemRenderer *renderer)
 {
     m_updateFlags = scene->m_updateFlags;
     scene->m_updateFlags = cwSceneUpdate::Flag::None;
@@ -92,7 +92,7 @@ void cwSceneRenderer::synchroize(cwScene *scene, cwRhiItemRenderer *renderer)
 
 }
 
-void cwSceneRenderer::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
+void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
 {
     auto renderData = cwRHIObject::RenderData({cb, renderer, m_updateFlags});
 
@@ -132,7 +132,7 @@ void cwSceneRenderer::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
     cb->endPass();
 }
 
-void cwSceneRenderer::updateGlobalUniformBuffer(QRhiResourceUpdateBatch* batch, QRhi* rhi)
+void cwRhiScene::updateGlobalUniformBuffer(QRhiResourceUpdateBatch* batch, QRhi* rhi)
 {
     if(needsUpdate(cwSceneUpdate::Flag::ProjectionMatrix) || needsUpdate(cwSceneUpdate::Flag::ViewMatrix)) {
         m_projectionCorrectedMatrix = rhi->clipSpaceCorrMatrix() * m_projectionMatrix;

@@ -7,7 +7,7 @@
 
 
 #include "cwInitCommand.h"
-#include "cwGLObject.h"
+#include "cwRenderObject.h"
 
 cwInitCommand::cwInitCommand()
 {

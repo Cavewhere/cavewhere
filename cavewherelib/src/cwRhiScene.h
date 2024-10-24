@@ -12,13 +12,15 @@ class cwRHIObject;
 class cwRenderObject;
 
 /**
- * @brief The cwSceneRenderer class
+ * @brief The cwRhiScene class
  *
  * The backend renderer for the scene object. Renders to Qt RHI
  */
-class cwSceneRenderer {
+class cwRhiScene {
 public:
     friend class cwRhiItemRenderer;
+
+    ~cwRhiScene();
 
     QMatrix4x4 viewMatrix() const { return m_viewMatrix; }
     QMatrix4x4 projectionMatrix() const { return m_projectionCorrectedMatrix; }
@@ -38,8 +40,6 @@ private:
     //Should only be used in synchroize
     QHash<cwRenderObject*, cwRHIObject*> m_rhiObjectLookup;
 
-    //     cwScene* scene;
-
     struct GlobalUniform {
         float viewProjectionMatrix[16];
         float viewMatrix[16];
@@ -55,7 +55,6 @@ private:
     float m_devicePixelRatio;
 
     QRhiBuffer* m_globalUniformBuffer = nullptr;
-    // QRhiShaderResourceBindings* m_srb = nullptr;
 
     void updateGlobalUniformBuffer(QRhiResourceUpdateBatch* batch, QRhi* rhi);
     bool needsUpdate(cwSceneUpdate::Flag flag) const { return (m_updateFlags & flag) == flag; }

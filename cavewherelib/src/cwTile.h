@@ -9,7 +9,7 @@
 #define CWGLTILE_H
 
 //Our includes
-#include "cwGLObject.h"
+#include "cwRenderObject.h"
 
 //Qt includes
 #include <QVector>

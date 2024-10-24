@@ -17,6 +17,7 @@
 #include <QHash>
 
 //Our includes
+#include "cwSceneUpdate.h"
 class cwRenderObject;
 class cwCamera;
 class cwShaderDebugger;
@@ -30,7 +31,7 @@ class cwRhiItemRenderer;
  */
 class cwScene : public QObject
 {
-    friend class cwSceneRenderer;
+    friend class cwRhiScene;
 
     Q_OBJECT
     QML_NAMED_ELEMENT(Scene)

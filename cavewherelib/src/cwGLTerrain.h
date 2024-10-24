@@ -9,7 +9,7 @@
 #define CWGLTERRAIN_H
 
 //Our includes
-#include "cwGLObject.h"
+#include "cwRenderObject.h"
 class cwEdgeTile;
 class cwRegularTile;
 class cwShaderDebugger;

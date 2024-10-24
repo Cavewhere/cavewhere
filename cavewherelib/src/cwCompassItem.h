@@ -9,7 +9,7 @@
 #define CWGLCOMPASS_H
 
 //Our includes
-#include "cwGLObject.h"
+#include "cwRenderObject.h"
 #include "cwCamera.h"
 #include "cwShaderDebugger.h"
 class cwCamera;

@@ -29,7 +29,7 @@ class cwRenderObject : public QObject, protected QOpenGLFunctions
 {
     Q_OBJECT
 
-    friend class cwSceneRenderer;
+    friend class cwRhiScene;
 
 public:
     cwRenderObject(QObject* parent = nullptr);

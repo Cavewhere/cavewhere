@@ -6,7 +6,7 @@
 **************************************************************************/
 
 //Our includes
-#include "cwGLObject.h"
+#include "cwRenderObject.h"
 #include "cwScene.h"
 #include "cwInitCommand.h"
 #include "cwUpdateDataCommand.h"

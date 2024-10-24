@@ -6,7 +6,7 @@
 #include <QDebug>
 
 cwRhiItemRenderer::cwRhiItemRenderer() :
-    m_sceneRenderer(new cwSceneRenderer())
+    m_sceneRenderer(new cwRhiScene())
 {
 }
 

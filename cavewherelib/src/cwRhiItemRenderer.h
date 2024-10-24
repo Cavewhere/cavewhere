@@ -1,7 +1,10 @@
 #ifndef CWRHIITEMRENDERER_H
 #define CWRHIITEMRENDERER_H
 
-#include "cwScene.h"
+//Our includes
+#include "cwRhiScene.h"
+
+//Qt includes
 #include <QQuickRhiItemRenderer>
 
 class cwRhiItemRenderer : public QQuickRhiItemRenderer
@@ -48,7 +51,7 @@ protected:
     void render(QRhiCommandBuffer *cb) override;
 
 private:
-    cwSceneRenderer* m_sceneRenderer;
+    cwRhiScene* m_sceneRenderer;
 };
 
 #endif // CWRHIITEMRENDERER_H

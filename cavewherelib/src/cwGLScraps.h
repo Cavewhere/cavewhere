@@ -9,7 +9,7 @@
 #define CWGLSCRAPS_H
 
 //Our includes
-#include "cwGLObject.h"
+#include "cwRenderObject.h"
 #include "cwTriangulatedData.h"
 #include "cwImageTexture.h"
 #include "cwGeometryItersecter.h"

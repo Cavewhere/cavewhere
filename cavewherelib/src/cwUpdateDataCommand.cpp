@@ -8,7 +8,7 @@
 
 //Our includes
 #include "cwUpdateDataCommand.h"
-#include "cwGLObject.h"
+#include "cwRenderObject.h"
 
 cwUpdateDataCommand::cwUpdateDataCommand()
 {
