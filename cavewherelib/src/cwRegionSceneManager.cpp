@@ -11,7 +11,8 @@
 #include "cwGLTerrain.h"
 #include "cwGLScraps.h"
 #include "cwGLGridPlane.h"
-#include "cwGLLinePlot.h"
+#include "cwRenderLinePlot.h"
+
 #include "cwCavingRegion.h"
 
 cwRegionSceneManager::cwRegionSceneManager(QObject *parent) :
@@ -24,12 +25,12 @@ cwRegionSceneManager::cwRegionSceneManager(QObject *parent) :
 //    Terrain->setNumberOfLevels(10);
     //    connect(Terrain, SIGNAL(redraw()), SLOT(updateGL()));
 
-    LinePlot = new cwGLLinePlot();
+    m_linePlot = new cwRenderLinePlot();
     Scraps = new cwGLScraps();
-    Plane = new cwGLGridPlane();
+    Plane = new cwRenderGridPlane();
 
 //    Terrain->setScene(scene());
-    // LinePlot->setScene(scene());
+    m_linePlot->setScene(scene());
     // Scraps->setScene(scene());
     Plane->setScene(scene());
 

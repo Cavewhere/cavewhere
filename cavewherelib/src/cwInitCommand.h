@@ -11,7 +11,7 @@
 
 //Our includes
 #include "cwSceneCommand.h"
-class cwGLObject;
+class cwRenderObject;
 
 //Qt includes
 #include <QPointer>
@@ -26,12 +26,12 @@ class cwInitCommand : public cwSceneCommand
 public:
     cwInitCommand();
 
-    void setGLObject(cwGLObject* glObject);
+    void setGLObject(cwRenderObject* glObject);
 
     void excute();
 
 private:
-    QPointer<cwGLObject> GLObject;
+    QPointer<cwRenderObject> GLObject;
 
 };
 

@@ -36,10 +36,16 @@ public:
         return QQuickRhiItemRenderer::rhi();
     }
 
+    QMatrix4x4 viewMatrix() const { return m_sceneRenderer->viewMatrix(); }
+    QMatrix4x4 projectionMatrix() const { return m_sceneRenderer->projectionMatrix(); }
+    QMatrix4x4 viewProjectionMatrix() const { return m_sceneRenderer->viewProjectionMatrix(); }
+    float devicePixelRatio() const { return m_sceneRenderer->devicePixelRatio(); }
+    QRhiBuffer* globalUniformBuffer() const { return m_sceneRenderer->globalUniformBuffer(); }
+
 protected:
-    void initialize(QRhiCommandBuffer *cb);
-    void synchronize(QQuickRhiItem *item);
-    void render(QRhiCommandBuffer *cb);
+    void initialize(QRhiCommandBuffer *cb) override;
+    void synchronize(QQuickRhiItem *item) override;
+    void render(QRhiCommandBuffer *cb) override;
 
 private:
     cwSceneRenderer* m_sceneRenderer;

@@ -15,7 +15,7 @@
 #include <QBox3D>
 
 //Our includes
-class cwGLObject;
+class cwRenderObject;
 
 class cwGeometryItersecter
 {
@@ -30,7 +30,7 @@ public:
     class Object {
     public:
         Object() : Parent(nullptr), Id(-1), Type(None) { }
-        Object(cwGLObject* parent, uint id, QVector<QVector3D> points, QVector<uint> indexes, PrimitiveType type) :
+        Object(cwRenderObject* parent, uint id, QVector<QVector3D> points, QVector<uint> indexes, PrimitiveType type) :
             Parent(parent),
             Id(id),
             Points(points),
@@ -38,7 +38,7 @@ public:
             Type(type)
         {}
 
-        cwGLObject* parent() const { return Parent; }
+        cwRenderObject* parent() const { return Parent; }
         uint id() const { return Id; }
         const QVector<QVector3D>& points() const { return Points; }
         const QVector<uint>& indexes() const { return Indexes; }
@@ -46,7 +46,7 @@ public:
 
     private:
 
-        cwGLObject* Parent;
+        cwRenderObject* Parent;
         uint Id;
         QVector<QVector3D> Points;
         QVector<uint> Indexes;
@@ -56,8 +56,8 @@ public:
     cwGeometryItersecter();
 
     void addObject(const cwGeometryItersecter::Object& object);
-    void clear(cwGLObject* parentObject = nullptr);
-    void removeObject(cwGLObject* parentObject, uint id);
+    void clear(cwRenderObject* parentObject = nullptr);
+    void removeObject(cwRenderObject* parentObject, uint id);
 
     double intersects(const QRay3D& ray) const;
 

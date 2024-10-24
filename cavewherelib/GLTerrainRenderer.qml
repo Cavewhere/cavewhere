@@ -18,6 +18,7 @@ RegionViewer {
 
     clip: true
     camera.devicePixelRatio: Screen.devicePixelRatio
+    // sampleCount: 4
 
     TurnTableInteraction {
         id: turnTableInteractionId

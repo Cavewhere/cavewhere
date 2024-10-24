@@ -126,10 +126,10 @@ void cwCompassItem::paint(QPainter *painter)
 
 void cwCompassItem::releaseResources()
 {
-    cwGLObject::deleteShaders(Program);
-    cwGLObject::deleteShaders(XShadowProgram);
-    cwGLObject::deleteShaders(YShadowProgram);
-    cwGLObject::deleteShaders(ShadowOutputProgram);
+    // cwRenderObject::deleteShaders(Program);
+    // cwRenderObject::deleteShaders(XShadowProgram);
+    // cwRenderObject::deleteShaders(YShadowProgram);
+    // cwRenderObject::deleteShaders(ShadowOutputProgram);
 
     CompassVertexBuffer.destroy();
     TextureGeometryBuffer.destroy();

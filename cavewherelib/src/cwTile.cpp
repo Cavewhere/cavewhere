@@ -28,7 +28,7 @@ void cwTile::initialize() {
 
 void cwTile::releaseResources()
 {
-    deleteShaders(Program);
+    // deleteShaders(Program);
     TriangleIndexBuffer.destroy();
     TriangleVertexBuffer.destroy();
 }

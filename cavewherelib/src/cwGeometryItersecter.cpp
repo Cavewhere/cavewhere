@@ -49,7 +49,7 @@ void cwGeometryItersecter::addObject(const cwGeometryItersecter::Object &object)
  *
  * If parentObject is null, this will clear objects
  */
-void cwGeometryItersecter::clear(cwGLObject *parentObject)
+void cwGeometryItersecter::clear(cwRenderObject *parentObject)
 {
     if(parentObject == nullptr) {
         Nodes.clear();
@@ -74,7 +74,7 @@ void cwGeometryItersecter::clear(cwGLObject *parentObject)
  *
  * Removes the geometry that makes up parentObject and id
  */
-void cwGeometryItersecter::removeObject(cwGLObject *parentObject, uint id)
+void cwGeometryItersecter::removeObject(cwRenderObject *parentObject, uint id)
 {
     QList<Node>::iterator iter = Nodes.begin();
     while(iter != Nodes.end()) {

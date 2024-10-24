@@ -12,7 +12,6 @@
 #include <QObject>
 #include <QOpenGLFunctions>
 #include <QPointer>
-#include <rhi/qrhi.h>
 class QOpenGLShaderProgram;
 
 //Our includes
@@ -24,88 +23,61 @@ class cwUpdateDataCommand;
 class cwRHIObject;
 class cwRhiItemRenderer;
 #include "cwGeometryItersecter.h"
+#include "cwScene.h"
 
-class cwGLObject : public QObject, protected QOpenGLFunctions
+class cwRenderObject : public QObject, protected QOpenGLFunctions
 {
+    Q_OBJECT
+
     friend class cwSceneRenderer;
 
 public:
-    cwGLObject(QObject* parent = nullptr);
-    ~cwGLObject();
+    cwRenderObject(QObject* parent = nullptr);
+    ~cwRenderObject();
 
     //These methods should only be called in the rendering thread
-    // void initilizeGLFunctions();
+    [[deprecated("Should be remove. No longer used.")]]
     virtual void initialize() {}
+    [[deprecated("Should be remove. No longer used.")]]
     virtual void releaseResources() {}
+    [[deprecated("Should be remove. No longer used.")]]
     virtual void draw() {}
-    // virtual void updateData();
 
     void setScene(cwScene *scene);
     cwScene *scene() const;
 
     cwGeometryItersecter* geometryItersecter() const;
+
     cwCamera* camera() const;
-    // cwShaderDebugger* shaderDebugger() const;
 
+    [[deprecated("Use update instead.")]]
     void markDataAsDirty();
+    void update();
 
-    static void deleteShaders(QOpenGLShaderProgram* program);
+signals:
+    void sceneChange();
 
 protected:
     virtual cwRHIObject* createRHIObject() { return nullptr; }
+    // virtual cwSceneUpdate::Flag updateOnFlags() const { return cwSceneUpdate::Flag::None; }
 
 private:
-    cwScene* Scene;
+    cwScene* m_scene;
 
-    //This is the last QueuedDataCommand, if this isn't nullptr
-    //Then this command
-    cwUpdateDataCommand* QueuedDataCommand;
-
-protected:
 
 };
 
-class cwRHIObject {
 
-public:
-    virtual ~cwRHIObject() {}
-
-    struct RenderData {
-        QRhiCommandBuffer* cb;
-        cwRhiItemRenderer* renderer;
-    };
-
-    struct ResourceUpdateData {
-        QRhiResourceUpdateBatch* resourceUpdateBatch;
-        RenderData renderData;
-    };
-
-    struct SynchronizeData {
-        cwGLObject* object;
-        cwRhiItemRenderer* renderer;
-    };
-
-    virtual void initialize(const ResourceUpdateData& data) = 0;
-    virtual void synchronize(const SynchronizeData& data) = 0;
-    virtual void updateResources(const ResourceUpdateData& data) = 0;
-    virtual void render(const RenderData& data) = 0;
-
-private:
-    // QPointer<cwGLObject> m_guiObject;
-
-protected:
-    static QShader loadShader(const QString& name);
-
-};
 
 /**
- * @brief cwGLObject::scene
+ * @brief cwRenderObject::scene
  * @returns The scene that is resposible for this object
  */
-inline cwScene *cwGLObject::scene() const
+inline cwScene *cwRenderObject::scene() const
 {
-    return Scene;
+    return m_scene;
 }
+
 
 
 

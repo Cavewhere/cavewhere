@@ -24,13 +24,13 @@ cwSurveyChunkViewComponents::cwSurveyChunkViewComponents(QQmlContext* context, Q
 {
     QQmlEngine* engine = context->engine();
 
-    DataBoxDelegate = new QQmlComponent(engine, "qrc:/cavewherelib/DataBox.qml", this);
-    StationDelegate = new QQmlComponent(engine, "qrc:/cavewherelib/StationBox.qml", this);
-    TitleDelegate = new QQmlComponent(engine, "qrc:/cavewherelib/TitleLabel.qml", this);
-    FrontSiteDelegate = new QQmlComponent(engine, "qrc:/cavewherelib/FrontSightReadingBox.qml", this);
-    BackSiteDelegate = new QQmlComponent(engine, "qrc:/cavewherelib/BackSightReadingBox.qml", this);
-    ShotDistanceDelegate = new QQmlComponent(engine, "qrc:/cavewherelib/ShotDistanceDataBox.qml", this);
-    ErrorDelegate = new QQmlComponent(engine, "qrc:/cavewherelib/SurveyChunkErrorDelegate.qml", this);
+    DataBoxDelegate = new QQmlComponent(engine, "qrc:/cavewherelib/cavewherelib/DataBox.qml", this);
+    StationDelegate = new QQmlComponent(engine, "qrc:/cavewherelib/cavewherelib/StationBox.qml", this);
+    TitleDelegate = new QQmlComponent(engine, "qrc:/cavewherelib/cavewherelib/TitleLabel.qml", this);
+    FrontSiteDelegate = new QQmlComponent(engine, "qrc:/cavewherelib/cavewherelib/FrontSightReadingBox.qml", this);
+    BackSiteDelegate = new QQmlComponent(engine, "qrc:/cavewherelib/cavewherelib/BackSightReadingBox.qml", this);
+    ShotDistanceDelegate = new QQmlComponent(engine, "qrc:/cavewherelib/cavewherelib/ShotDistanceDataBox.qml", this);
+    ErrorDelegate = new QQmlComponent(engine, "qrc:/cavewherelib/cavewherelib/SurveyChunkErrorDelegate.qml", this);
 
     //Print error if there are any
     cwDebug::printErrors(DataBoxDelegate);

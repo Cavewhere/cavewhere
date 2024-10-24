@@ -24,7 +24,7 @@ class cwScrap;
 #include <QSharedPointer>
 #include <QQmlEngine>
 
-class cwGLScraps : public cwGLObject
+class cwGLScraps : public cwRenderObject
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(GLScraps)

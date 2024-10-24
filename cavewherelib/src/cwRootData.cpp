@@ -89,7 +89,7 @@ cwRootData::cwRootData(QObject *parent) :
     RegionSceneManager->setCavingRegion(Region);
 
     ScrapManager->setGLScraps(RegionSceneManager->scraps());
-    LinePlotManager->setGLLinePlot(RegionSceneManager->linePlot());
+    LinePlotManager->setRenderLinePlot(RegionSceneManager->linePlot());
 
     PageSelectionModel = new cwPageSelectionModel(this);
 

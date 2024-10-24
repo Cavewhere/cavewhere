@@ -18,10 +18,11 @@
 class cwScene;
 class cwGLLinePlot;
 class cwGLScraps;
-class cwGLGridPlane;
+class cwRenderGridPlane;
 class cwCavingRegion;
 class cwGLTerrain;
-class cwGLObject;
+class cwRenderObject;
+class cwRenderLinePlot;
 
 class cwRegionSceneManager : public QObject
 {
@@ -29,14 +30,14 @@ class cwRegionSceneManager : public QObject
     QML_NAMED_ELEMENT(RegionSceneManager)
 
     Q_PROPERTY(cwCavingRegion* cavingRegion READ cavingRegion WRITE setCavingRegion NOTIFY cavingRegionChanged)
-    Q_PROPERTY(cwGLLinePlot* linePlot READ linePlot NOTIFY linePlotChanged)
+    Q_PROPERTY(cwRenderLinePlot* linePlot READ linePlot NOTIFY linePlotChanged)
     Q_PROPERTY(cwGLScraps* scraps READ scraps NOTIFY scrapsChanged)
     Q_PROPERTY(cwScene* scene READ scene NOTIFY sceneChanged)
 
 public:
     explicit cwRegionSceneManager(QObject *parent = 0);
 
-    cwGLLinePlot* linePlot();
+    cwRenderLinePlot* linePlot();
     cwGLScraps* scraps() const;
 
     void setCavingRegion(cwCavingRegion* region);
@@ -57,9 +58,9 @@ private:
 
     //The terrain that's rendered
     cwGLTerrain* Terrain;
-    cwGLLinePlot* LinePlot;
+    cwRenderLinePlot* m_linePlot;
     cwGLScraps* Scraps;
-    cwGLGridPlane* Plane;
+    cwRenderGridPlane* Plane;
 
     //For rendering label
     QPointer<cwCavingRegion> Region;
@@ -76,7 +77,7 @@ inline cwScene* cwRegionSceneManager::scene() const {
 /**
   \brief Returns the object that renderes the line plot
   */
-inline cwGLLinePlot* cwRegionSceneManager::linePlot() { return LinePlot; }
+inline cwRenderLinePlot* cwRegionSceneManager::linePlot() { return m_linePlot; }
 
 /**
  * @brief cwScene::scraps

@@ -6,7 +6,6 @@
 #include "cwJobSettings.h"
 #include "cwScrapManager.h"
 #include "cwLinePlotManager.h"
-#include "cwGLLinePlot.h"
 
 TEST_CASE("cwRootData should update the managers with auto update correctly", "[cwRootData]") {
 

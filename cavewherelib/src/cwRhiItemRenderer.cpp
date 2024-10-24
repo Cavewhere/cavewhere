@@ -8,7 +8,7 @@ cwRhiItemRenderer::cwRhiItemRenderer() :
 }
 
 void cwRhiItemRenderer::initialize(QRhiCommandBuffer *cb) {
-
+    m_sceneRenderer->initialize(cb, this);
 }
 
 void cwRhiItemRenderer::synchronize(QQuickRhiItem *item){

@@ -17,7 +17,7 @@ cwInitCommand::cwInitCommand()
  * @brief cwInitCommand::setGLObject
  * @param glObject
  */
-void cwInitCommand::setGLObject(cwGLObject *glObject)
+void cwInitCommand::setGLObject(cwRenderObject *glObject)
 {
     GLObject = glObject;
 }

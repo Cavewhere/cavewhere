@@ -1,7 +1,17 @@
 #ifndef CWRHIGRIDPLANE_H
 #define CWRHIGRIDPLANE_H
 
-#include "cwGLObject.h"
+//Our includes
+#include "cwRHIObject.h"
+#include "cwGLGridPlane.h"
+
+//Qt includes
+class QRhi;
+class QRhiBuffer;
+class QRhiGraphicsPipeline;
+class QRhiShaderResourceBindings;
+#include <QMatrix4x4>
+
 
 class cwRHIGridPlane : public cwRHIObject {
 public:
@@ -14,16 +24,20 @@ public:
     virtual void render(const RenderData& data) override;
 
 private:
+    //Shader layout
+    struct UniformData {
+        float mvpMatrix[16];
+        float modelMatrix[16];
+    };
+
     QRhi* m_rhi = nullptr;
     QRhiBuffer* m_vertexBuffer = nullptr;
     QRhiBuffer* m_uniformBuffer = nullptr;
     QRhiGraphicsPipeline* m_pipeline = nullptr;
     QRhiShaderResourceBindings* m_srb = nullptr;
 
-    QMatrix4x4 m_modelMatrix;
+    cwTracked<QMatrix4x4> m_modelMatrix;
     QMatrix4x4 m_mvpMatrix;
-
-    // QPointer<cwGLGridPlane> m_guiObject; // Pointer to the GUI object
 
     bool m_resourcesInitialized = false;
 

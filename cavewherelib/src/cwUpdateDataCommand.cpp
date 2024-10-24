@@ -14,7 +14,7 @@ cwUpdateDataCommand::cwUpdateDataCommand()
 {
 }
 
-void cwUpdateDataCommand::setGLObject(cwGLObject *object)
+void cwUpdateDataCommand::setGLObject(cwRenderObject *object)
 {
     Object = object;
 }

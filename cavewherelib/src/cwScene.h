@@ -14,43 +14,73 @@
 #include <QObject>
 #include <QList>
 #include <QQueue>
-#include <QOpenGLFunctions>
 #include <QQmlEngine>
+#include <QHash>
+#include <rhi/qrhi.h>
 class QRhiCommandBuffer;
 class QPainter;
 
 //Our includes
-class cwGLObject;
+class cwRenderObject;
 class cwCamera;
 class cwShaderDebugger;
 class cwSceneCommand;
 class cwGeometryItersecter;
 class cwRhiItemRenderer;
+class QRhiBuffer;
+class QRhiShaderResourceBindings;
+
+namespace cwSceneUpdate {
+enum class Flag : int {
+    None = 0,
+    ViewMatrix = 0x1,
+    ProjectionMatrix = 0x2,
+    DevicePixelRatio = 0x4,
+};
+
+inline Flag operator|(Flag lhs, Flag rhs) {
+    return static_cast<cwSceneUpdate::Flag>(static_cast<int>(lhs) | static_cast<int>(rhs));
+}
+inline Flag operator&(Flag lhs, Flag rhs) {
+    return static_cast<cwSceneUpdate::Flag>(static_cast<int>(lhs) & static_cast<int>(rhs));
+}
+inline Flag& operator|=(Flag& lhs, Flag rhs) {
+    lhs = lhs | rhs;
+    return lhs;
+}
+
+inline bool isFlagSet(cwSceneUpdate::Flag combinedFlags, cwSceneUpdate::Flag flagToTest) {
+    return (combinedFlags & flagToTest) == flagToTest;
+}
+
+// Helper function to convert the enum to a readable string
+QString flagToString(Flag flag);
+
+// Overload operator<< for QDebug to handle cwSceneUpdate::Flag
+inline QDebug operator<<(QDebug dbg, Flag flag) {
+    dbg.nospace() << flagToString(flag);
+    return dbg.space();
+}
+
+};
 
 /**
  * @brief The cwScene class
- *
- * This class manages OpenGL scene resources.
  */
-class cwScene : public QObject, public QOpenGLFunctions
+class cwScene : public QObject
 {
     friend class cwSceneRenderer;
 
     Q_OBJECT
     QML_NAMED_ELEMENT(Scene)
 
-    // Q_PROPERTY(cwShaderDebugger* shaderDebugger READ shaderDebugger NOTIFY shaderDebuggerChanged)
-
 public:
     explicit cwScene(QObject *parent = 0);
     virtual ~cwScene();
 
-    // void paint();
-
-    void addItem(cwGLObject* item);
-    void removeItem(cwGLObject* item);
-
-    // void addSceneCommand(cwSceneCommand* command);
+    void addItem(cwRenderObject* item);
+    void removeItem(cwRenderObject* item);
+    void updateItem(cwRenderObject* item);
 
     void setCamera(cwCamera* camera);
     cwCamera *camera() const;
@@ -58,66 +88,85 @@ public:
     //For doing intersection tests
     cwGeometryItersecter* geometryItersecter() const;
 
-    // cwShaderDebugger* shaderDebugger() const;
-
     void update();
-
-    // void checkForGLError(const QByteArray &location);
 
     void releaseResources();
 
 signals:
-    void shaderDebuggerChanged();
+    void cameraChanged();
     void needsRendering();
 
 public slots:
 
 private:
     //Items to render
-    QList<cwGLObject*> m_renderingObjects;
-    QList<cwGLObject*> m_newRenderObjects;
-    QList<cwGLObject*> m_toDeleteRenderObjects;
+    QList<cwRenderObject*> m_renderingObjects;
+    QList<cwRenderObject*> m_newRenderObjects;
+    QList<cwRenderObject*> m_toDeleteRenderObjects;
+    QSet<cwRenderObject*> m_toUpdateRenderObjects;
 
     //For interaction
     cwGeometryItersecter* GeometryItersecter;
 
-    //Shaders for testing
-    cwShaderDebugger* ShaderDebugger;
-
     //The main camera for the viewer
     cwCamera* Camera;
 
-    //All the Queued scene command
-    QQueue<cwSceneCommand*> CommandQueue;
-    bool ExcutingCommands;
-
-    void excuteSceneCommands();
+    //cwSceneUpdate::Flag flags
+    cwSceneUpdate::Flag m_updateFlags = cwSceneUpdate::Flag::None;
 
 };
 
+/**
+ * @brief The cwSceneRenderer class
+ *
+ * The backend renderer for the scene object. Renders to Qt RHI
+ */
 class cwSceneRenderer {
 public:
-    void initialize();
+    friend class cwRhiItemRenderer;
+
+    QMatrix4x4 viewMatrix() const { return m_viewMatrix; }
+    QMatrix4x4 projectionMatrix() const { return m_projectionCorrectedMatrix; }
+    QMatrix4x4 viewProjectionMatrix() const { return m_viewProjectionMatrix; }
+    float devicePixelRatio() const { return m_devicePixelRatio; }
+    QRhiBuffer* globalUniformBuffer() const { return m_globalUniformBuffer; }
+
+private:
+    void initialize(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer);
     void synchroize(cwScene* scene, cwRhiItemRenderer* renderer);
     void render(QRhiCommandBuffer *cb, cwRhiItemRenderer* renderer);
 
-private:
-    struct RenderObject {
-        cwGLObject* glObject;
-        cwRHIObject* rhiObject;
+    QList<cwRHIObject*> m_rhiObjectsToInitilize;
+    QList<cwRHIObject*> m_rhiObjects;
+    QList<cwRHIObject*> m_rhiNeedResourceUpdate;
+
+    //Should only be used in synchroize
+    QHash<cwRenderObject*, cwRHIObject*> m_rhiObjectLookup;
+
+    //     cwScene* scene;
+
+    struct GlobalUniform {
+        float viewProjectionMatrix[16];
+        float viewMatrix[16];
+        float projectionMatrix[16];
+        float devicePixelRatio;
     };
 
-    QList<RenderObject> m_rhiObjectsToInitilize;
-    QList<RenderObject> m_rhiObjects;
-    QList<RenderObject> m_rhiNeedResourceUpdate;
-//     cwScene* scene;
+    cwSceneUpdate::Flag m_updateFlags = cwSceneUpdate::Flag::None;
+    QMatrix4x4 m_projectionMatrix;
+    QMatrix4x4 m_projectionCorrectedMatrix;
+    QMatrix4x4 m_viewProjectionMatrix;
+    QMatrix4x4 m_viewMatrix;
+    float m_devicePixelRatio;
+
+    QRhiBuffer* m_globalUniformBuffer = nullptr;
+    // QRhiShaderResourceBindings* m_srb = nullptr;
+
+    void updateGlobalUniformBuffer(QRhiResourceUpdateBatch* batch, QRhi* rhi);
+    bool needsUpdate(cwSceneUpdate::Flag flag) const { return (m_updateFlags & flag) == flag; }
+
 
 };
-
-// inline cwShaderDebugger *cwScene::shaderDebugger() const
-// {
-//     return ShaderDebugger;
-// }
 
 
 

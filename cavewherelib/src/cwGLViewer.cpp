@@ -66,6 +66,8 @@ cwGLViewer::cwGLViewer(QQuickItem *parent)
     connect(Camera, SIGNAL(viewMatrixChanged()), SLOT(updateRenderer()));
     connect(Camera, SIGNAL(projectionChanged()), SLOT(updateRenderer()));
 
+    setSampleCount(4);
+
     // setRenderTarget(QQuickPaintedItem::InvertedYFramebufferObject);
     // setAntialiasing(false);
     // setOpaquePainting(false);

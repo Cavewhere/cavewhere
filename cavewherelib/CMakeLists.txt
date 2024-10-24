@@ -132,7 +132,7 @@ set_source_files_properties(${qml_singletons} PROPERTIES QT_QML_SINGLETON_TYPE T
 qt_add_qml_module(cavewherelib
     URI cavewherelib
     VERSION 1.0
-    # RESOURCE_PREFIX /cavewherelib
+    RESOURCE_PREFIX /cavewherelib
     NO_CACHEGEN
     DEPENDENCIES
         QtQuick
@@ -151,6 +151,8 @@ qt_add_shaders(cavewherelib "cavewherelib_shaders"
     FILES
         "shaders/grid.frag"
         "shaders/grid.vert"
+        "shaders/LinePlot.frag"
+        "shaders/LinePlot.vert"
     )
 
 # Protobuf files

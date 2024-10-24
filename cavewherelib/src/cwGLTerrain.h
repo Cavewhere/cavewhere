@@ -18,7 +18,7 @@ class cwShaderDebugger;
 #include <QOpenGLShaderProgram>
 #include <QTimer>
 
-class cwGLTerrain : public cwGLObject
+class cwGLTerrain : public cwRenderObject
 {
     Q_OBJECT
 public:

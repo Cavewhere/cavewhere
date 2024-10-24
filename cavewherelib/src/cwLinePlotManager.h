@@ -16,7 +16,7 @@ class cwSurveyChunk;
 class cwShot;
 class cwScrap;
 class cwStationReference;
-class cwGLLinePlot;
+class cwRenderLinePlot;
 class cwSurveyChunkSignaler;
 class cwErrorListModel;
 #include "cwLinePlotTask.h"
@@ -39,7 +39,7 @@ public:
     ~cwLinePlotManager();
 
     void setRegion(cwCavingRegion* region);
-    Q_INVOKABLE void setGLLinePlot(cwGLLinePlot* linePlot);
+    Q_INVOKABLE void setRenderLinePlot(cwRenderLinePlot* linePlot);
 
     bool automaticUpdate() const;
     void setAutomaticUpdate(bool automaticUpdate);
@@ -60,7 +60,7 @@ private:
 
     cwLinePlotTask* LinePlotTask;
 
-    cwGLLinePlot* GLLinePlot;
+    cwRenderLinePlot* m_linePlot;
 
     cwSurveyChunkSignaler* SurveySignaler;
 
@@ -80,6 +80,9 @@ private slots:
 
     void updateLinePlot();
 };
+
+//This needs to be here for moc to generate correctly and we can forward declare cwRenderLinePlot
+#include "cwRenderLinePlot.h"
 
 inline bool cwLinePlotManager::automaticUpdate() const {
     return AutomaticUpdate;

@@ -2,8 +2,6 @@
 #include "cwGLGridPlane.h"
 #include "cwRhiItemRenderer.h"
 #include "cwScene.h"
-#include "cwCamera.h"
-#include <QFile>
 
 cwRHIGridPlane::cwRHIGridPlane()
 {
@@ -46,7 +44,8 @@ void cwRHIGridPlane::initializeResources(const ResourceUpdateData& data)
     initialUpdates->uploadStaticBuffer(m_vertexBuffer, vertices);
 
     // Create uniform buffer
-    m_uniformBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, sizeof(QMatrix4x4) * 2);
+    const auto uniformBufferSize = rhi->ubufAligned(sizeof(UniformData));
+    m_uniformBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, uniformBufferSize);
     m_uniformBuffer->create();
 
     // Load shaders
@@ -87,87 +86,52 @@ void cwRHIGridPlane::initializeResources(const ResourceUpdateData& data)
     m_pipeline->setShaderResourceBindings(m_srb);
     m_pipeline->setRenderPassDescriptor(data.renderData.renderer->renderTarget()->renderPassDescriptor()); // You need to provide the render pass descriptor
     m_pipeline->create();
-
-    updateResources(data);
-
-    // Schedule initial resource updates
-    // data.cb->resourceUpdate(initialUpdates);
 }
 
 void cwRHIGridPlane::synchronize(const SynchronizeData& data)
 {
-    Q_ASSERT(dynamic_cast<cwGLGridPlane*>(data.object) != nullptr);
-    cwGLGridPlane* gridPlane = static_cast<cwGLGridPlane*>(data.object);
+    Q_ASSERT(dynamic_cast<cwRenderGridPlane*>(data.object) != nullptr);
+    cwRenderGridPlane* gridPlane = static_cast<cwRenderGridPlane*>(data.object);
 
-    m_modelMatrix = gridPlane->modelMatrix();
-
-    cwCamera* camera = gridPlane->scene()->camera();
-    m_mvpMatrix = camera->viewProjectionMatrix() * m_modelMatrix;
-
-    //Should schedule update to the resources
+    m_modelMatrix = gridPlane->m_modelMatrix;
+    gridPlane->m_modelMatrix.resetChanged();
 }
 
 void cwRHIGridPlane::updateResources(const ResourceUpdateData & data)
 {
-    //Shader layout
-    struct UniformData {
-        float mvpMatrix[16];
-        float modelMatrix[16];
-    };
+    if(cwSceneUpdate::isFlagSet(data.renderData.updateFlag, cwSceneUpdate::Flag::ViewMatrix)
+        || cwSceneUpdate::isFlagSet(data.renderData.updateFlag, cwSceneUpdate::Flag::ProjectionMatrix)
+        || m_modelMatrix.isChanged()
+        )
+    {
+        auto mvp = data.renderData.renderer->viewProjectionMatrix() * m_modelMatrix.value();
 
-    //Fixes clipping issues with directx vs opengl
-    auto mvp = data.renderData.cb->rhi()->clipSpaceCorrMatrix() * m_mvpMatrix;
+        // Update the buffer with m_mvpMatrix
+        data.resourceUpdateBatch->updateDynamicBuffer(
+            m_uniformBuffer,
+            offsetof(UniformData, mvpMatrix),
+            sizeof(UniformData::mvpMatrix),
+            mvp.constData()
+            );
 
-    // Update the buffer with m_mvpMatrix
-    data.resourceUpdateBatch->updateDynamicBuffer(
-        m_uniformBuffer,
-        offsetof(UniformData, mvpMatrix),
-        sizeof(UniformData::mvpMatrix),
-        mvp.constData()
-        );
-
-    // Update the buffer with m_modelMatrix
-    data.resourceUpdateBatch->updateDynamicBuffer(
-        m_uniformBuffer,
-        offsetof(UniformData, modelMatrix),
-        sizeof(UniformData::modelMatrix),
-        m_modelMatrix.constData()
-        );
-}
-
-
-void cwRHIGridPlane::updateUniforms(QRhiResourceUpdateBatch* resourceUpdates)
-{
-
+        if(m_modelMatrix.isChanged()) {
+            // Update the buffer with m_modelMatrix
+            data.resourceUpdateBatch->updateDynamicBuffer(
+                m_uniformBuffer,
+                offsetof(UniformData, modelMatrix),
+                sizeof(UniformData::modelMatrix),
+                m_modelMatrix.value().constData()
+                );
+            m_modelMatrix.resetChanged();
+        }
+    }
 }
 
 void cwRHIGridPlane::render(const RenderData& data)
 {
-    // if (!m_resourcesInitialized) {
-    //     initialize(cb);
-    // }
-
-    // auto rhi = data.cb->rhi();
-
-    // QRhiResourceUpdateBatch* resourceUpdates = m_rhi->nextResourceUpdateBatch();
-    // updateUniforms(resourceUpdates);
-
-    // qDebug() << "Draw!";
-
-    // data.cb->resourceUpdate(resourceUpdates);
     data.cb->setGraphicsPipeline(m_pipeline);
     data.cb->setShaderResources();
     const QRhiCommandBuffer::VertexInput vertexInput(m_vertexBuffer, 0);
     data.cb->setVertexInput(0, 1, &vertexInput);
     data.cb->draw(4);
-}
-
-QByteArray loadShader(const QString& filename)
-{
-    QFile file(filename);
-    if (!file.open(QIODevice::ReadOnly)) {
-        qWarning() << "Failed to load shader:" << filename;
-        return QByteArray();
-    }
-    return file.readAll();
 }

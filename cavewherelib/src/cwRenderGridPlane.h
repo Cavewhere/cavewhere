@@ -10,6 +10,7 @@
 
 //Our includes
 #include "cwGLObject.h"
+#include "cwTracked.h"
 
 //Qt includes
 #include <QPlane3D>
@@ -17,18 +18,19 @@
 #include <QOpenGLBuffer>
 
 
-class cwGLGridPlane : public cwGLObject {
+class cwRenderGridPlane : public cwRenderObject {
     Q_OBJECT
 
     Q_PROPERTY(double extent READ extent WRITE setExtent NOTIFY extentChanged)
-
+    friend class cwRHIGridPlane;
 
 public:
-    cwGLGridPlane(QObject *parent = nullptr);
+    enum class UpdateFlag {
+        None = 0,
+        ModelMatrix = 0x1,
+    };
 
-    // virtual void initialize() override;
-    // virtual void releaseResources() override;
-    // virtual void draw() override;
+    cwRenderGridPlane(QObject *parent = nullptr);
 
     QPlane3D plane() const;
     void setPlane(QPlane3D plane);
@@ -36,30 +38,22 @@ public:
     double extent() const;
     void setExtent(double extent);
 
-    QMatrix4x4 modelMatrix() const { return m_modelMatrix; }
+    // QMatrix4x4 modelMatrix() const { return m_modelMatrix.value(); }
 
 protected:
     virtual cwRHIObject* createRHIObject() override;
 
 private:
-    QPlane3D Plane;
-    double Extent; //!< The max rendering area of the plane
+    QPlane3D m_plane;
+    double m_extent; //!< The max rendering area of the plane
+    cwTracked<QMatrix4x4> m_modelMatrix;
+
+    //Camera connection
+    QMetaObject::Connection m_sceneConnection;
+    QMetaObject::Connection m_viewMatrixConnection;
+    QMetaObject::Connection m_projectionConnection;
 
     void updateModelMatrix();
-
-    // QOpenGLShaderProgram* Program;
-    // QOpenGLBuffer TriangleVertexBuffer;
-
-    QMatrix4x4 m_modelMatrix;
-
-    // //Shader attributes
-    // int vVertex;
-    // int UniformModelViewProjectionMatrix;
-    // int UniformModelMatrix;
-    // int UniformDevicePixelRatio;
-
-    // void initializeGeometry();
-    // void initializeShaders();
 
 signals:
     void extentChanged();
@@ -69,16 +63,16 @@ signals:
 /**
     Gets extent, the max rendering geometry of the plane
 */
-inline double cwGLGridPlane::extent() const {
-    return Extent;
+inline double cwRenderGridPlane::extent() const {
+    return m_extent;
 }
 
 /**
- * @brief cwGLGridPlane::plane
+ * @brief cwRenderGridPlane::plane
  * @return The plane that this class is rendering
  */
-inline QPlane3D cwGLGridPlane::plane() const {
-    return Plane;
+inline QPlane3D cwRenderGridPlane::plane() const {
+    return m_plane;
 }
 
 #endif // CWGLPLANE_H

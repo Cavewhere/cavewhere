@@ -96,9 +96,9 @@ QUrl cwScrapLeadView::qmlSource() const
 {
     switch(positionRole()) {
     case cwScrap::LeadPosition:
-        return QUrl(QStringLiteral("qrc:/cavewherelib/LeadPoint.qml"));
+        return QUrl(QStringLiteral("qrc:/cavewherelib/cavewherelib/LeadPoint.qml"));
     case cwScrap::LeadPositionOnNote:
-        return QUrl(QStringLiteral("qrc:/cavewherelib/NoteLead.qml"));
+        return QUrl(QStringLiteral("qrc:/cavewherelib/cavewherelib/NoteLead.qml"));
     default:
         break;
     }

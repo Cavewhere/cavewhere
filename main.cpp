@@ -33,8 +33,31 @@
 #define CAVEWHERE_VERSION "Sauce-Release"
 #endif
 
+void customMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg) {
+    switch (type) {
+    case QtWarningMsg:
+        qDebug() << "QWarning triggered: " << msg;
+        if (msg.contains("No module named \"cavewherelib\" found")) {
+            // Breakpoint here for the debugger
+            qDebug() << "Breaking on QWarning...";
+#ifdef Q_OS_WIN
+            __debugbreak(); // Windows
+#else
+            __builtin_trap(); // macOS/Linux
+#endif
+        }
+        break;
+    case QtCriticalMsg:
+    case QtFatalMsg:
+        // Handle other types of messages if necessary
+        break;
+    default:
+        break;
+    }
+}
+
 int main(int argc, char *argv[])
-{    
+{
     //This needs to be first for QSettings
     QApplication::setOrganizationName("Vadose Solutions");
     QApplication::setOrganizationDomain("cavewhere.com");
@@ -46,6 +69,9 @@ int main(int argc, char *argv[])
 
     cwApplication a(argc, argv);
 
+    // Install the custom message handler
+    // qInstallMessageHandler(customMessageHandler);
+
     // Set the default graphics API to OpenGL
     // QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
 
@@ -53,6 +79,7 @@ int main(int argc, char *argv[])
 
     if(argc >= 2) {
         QByteArray filenameByteArray(argv[1]);
+        qDebug() << "Loading file:" << filenameByteArray;
         rootData->project()->loadFile(QString::fromLocal8Bit(filenameByteArray));
     }
 

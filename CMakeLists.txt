@@ -84,26 +84,6 @@ set_target_properties(CaveWhere PROPERTIES
     RESOURCE "${CMAKE_CURRENT_SOURCE_DIR}/cavewhereIcon.icns"
 )
 
-# file(GLOB cavewhere_QML_FILES "qml/*.qml" "qml/*.js")
-# # target_sources(CaveWhere PRIVATE ${cavewhere_QML_FILES})
-
-# # Make the file paths relative to the project directory
-# set(cavewhere_RELATIVE_QML_FILES "")
-# foreach(file ${cavewhere_QML_FILES})
-#     file(RELATIVE_PATH relFile "${CMAKE_SOURCE_DIR}" "${file}")
-#     list(APPEND cavewhere_RELATIVE_QML_FILES "${relFile}")
-# endforeach()
-
-# qt_add_qml_module(cavewherelib
-#     URI Cavewhere
-#     VERSION 1.0
-#     RESOURCE_PREFIX /cavewhere
-#     SOURCES
-
-#     QML_FILES
-#         ${cavewhere_RELATIVE_QML_FILES}
-#     )
-
 target_link_libraries(CaveWhere
     PRIVATE
     Qt::Core

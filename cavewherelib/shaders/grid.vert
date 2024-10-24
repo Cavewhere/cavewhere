@@ -14,6 +14,14 @@ layout(location = 0) in vec3 vVertex;
 layout(location = 0) out vec4 vPosition;
 layout(location = 1) out vec4 projectedPosition;
 
+//Not used
+// layout(std140, binding = 0) uniform Global {
+//     mat4 viewProjectionMatrix;
+//     mat4 viewMatrix;
+//     mat4 projectionMatrix;
+//     float devicePixelRatio;
+// };
+
 layout(std140, binding = 0) uniform Matrices {
     mat4 ModelViewProjectionMatrix;
     mat4 ModelMatrix;

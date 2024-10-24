@@ -15,65 +15,40 @@
 #include <QOpenGLShaderProgram>
 #include <QFile>
 
-cwGLObject::cwGLObject(QObject* parent) :
+cwRenderObject::cwRenderObject(QObject* parent) :
     QObject(parent),
-    Scene(nullptr),
-    QueuedDataCommand(nullptr)
+    m_scene(nullptr)
 {
 }
 
-cwGLObject::~cwGLObject()
+cwRenderObject::~cwRenderObject()
 {
 
 }
 
-// void cwGLObject::initilizeGLFunctions()
-// {
-//     initializeOpenGLFunctions();
-// }
-
-/**
- * @brief cwGLObject::updateData
- *
- * You should reimplement this function but call this function from the sub class
- * This function is called from the rendering thread and updates openGL data.
- */
-// void cwGLObject::updateData()
-// {
-//     QueuedDataCommand = nullptr;
-// }
-
-void cwGLObject::setScene(cwScene *scene)
+void cwRenderObject::setScene(cwScene *scene)
 {
-    if(Scene != scene) {
-        if(Scene != nullptr) {
-            Scene->removeItem(this);
+    if(m_scene != scene) {
+        if(m_scene != nullptr) {
+            m_scene->removeItem(this);
         }
 
-        Scene = scene;
+        m_scene = scene;
 
-        if(Scene != nullptr) {
-            Scene->addItem(this);
-
-            // cwInitCommand* initCommand = new cwInitCommand();
-            // initCommand->setGLObject(this);
-            // Scene->addSceneCommand(initCommand);
-
-            markDataAsDirty();
+        if(m_scene != nullptr) {
+            m_scene->addItem(this);
         }
+
+        emit sceneChange();
     }
 }
 
- cwCamera* cwGLObject::camera() const {
-    return Scene == nullptr ? nullptr : Scene->camera();
+ cwCamera* cwRenderObject::camera() const {
+    return m_scene == nullptr ? nullptr : m_scene->camera();
 }
 
- // cwShaderDebugger* cwGLObject::shaderDebugger() const {
- //     return Scene == nullptr ? nullptr : Scene->shaderDebugger();
- // }
-
  /**
-  * @brief cwGLObject::markDataAsDirty
+  * @brief cwRenderObject::markDataAsDirty
   *
   * This will push a cwUpdateDataCommand to the scene. The cwUpdateDataCommand will
   * call this classes or a sub classes updateData() function on the rendering
@@ -83,40 +58,26 @@ void cwGLObject::setScene(cwScene *scene)
   * updateData() function is called by the sub class or subsquent calls to this
   * function will do nothing.
   */
- void cwGLObject::markDataAsDirty()
+ void cwRenderObject::markDataAsDirty()
  {
-     if(QueuedDataCommand != nullptr) { return; }
-     if(Scene == nullptr) { return; }
-
-     // QueuedDataCommand = new cwUpdateDataCommand();
-     // QueuedDataCommand->setGLObject(this);
-     // Scene->addSceneCommand(QueuedDataCommand);
+     update();
  }
 
- void cwGLObject::deleteShaders(QOpenGLShaderProgram *program)
+
+ void cwRenderObject::update()
  {
-     if(program) {
-         for(auto shader : program->shaders()) {
-             delete shader;
-         }
-         delete program;
-     }
+     if(m_scene == nullptr) { return; }
+     m_scene->updateItem(this);
  }
+
 
 /**
- * @brief cwGLObject::geometryItersecter
+ * @brief cwRenderObject::geometryItersecter
  * @return The current geometry intersector
  */
- cwGeometryItersecter *cwGLObject::geometryItersecter() const
+ cwGeometryItersecter *cwRenderObject::geometryItersecter() const
 {
-    return Scene == nullptr ? nullptr : Scene->geometryItersecter();
+    return m_scene == nullptr ? nullptr : m_scene->geometryItersecter();
 }
 
-QShader cwRHIObject::loadShader(const QString &name)
-{
-    QFile f(name);
-    if (f.open(QIODevice::ReadOnly))
-        return QShader::fromSerialized(f.readAll());
 
-    return QShader();
-}

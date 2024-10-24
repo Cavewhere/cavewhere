@@ -22,7 +22,7 @@
 #include "cwScene.h"
 
 cwGLScraps::cwGLScraps(QObject *parent) :
-    cwGLObject(parent),
+    cwRenderObject(parent),
     Project(nullptr),
     MaxScrapId(0),
     Visible(true)
@@ -35,7 +35,7 @@ void cwGLScraps::initialize() {
 
 void cwGLScraps::releaseResources()
 {
-    deleteShaders(Program);
+    // deleteShaders(Program);
 
     for(auto scrap : Scraps) {
         scrap.releaseResources();

@@ -20,7 +20,7 @@
 //3rd party utils
 #include "Forsyth.h"
 
-class cwTile : public cwGLObject
+class cwTile : public cwRenderObject
 {
 public:
     cwTile();

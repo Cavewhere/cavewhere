@@ -13,7 +13,7 @@
 #include "cwShot.h"
 #include "cwSurveyChunk.h"
 #include "cwLinePlotTask.h"
-#include "cwGLLinePlot.h"
+#include "cwRenderLinePlot.h"
 #include "cwTripCalibration.h"
 #include "cwSurveyNoteModel.h"
 #include "cwScrap.h"
@@ -28,7 +28,7 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
     QObject(parent)
 {
     Region = nullptr;
-    GLLinePlot = nullptr;
+    m_linePlot = nullptr;
 
     SurveySignaler = new cwSurveyChunkSignaler(this);
 
@@ -80,8 +80,8 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
     runSurvex();
 }
 
-void cwLinePlotManager::setGLLinePlot(cwGLLinePlot* linePlot) {
-    GLLinePlot = linePlot;
+void cwLinePlotManager::setRenderLinePlot(cwRenderLinePlot* linePlot) {
+    m_linePlot = linePlot;
     updateLinePlot();
 }
 
@@ -285,9 +285,8 @@ void cwLinePlotManager::updateLinePlot() {
     }
 
     //Update the 3D plot
-    if(GLLinePlot != nullptr) {
-        GLLinePlot->setPoints(resultData.stationPositions());
-        GLLinePlot->setIndexes(resultData.linePlotIndexData());
+    if(m_linePlot != nullptr) {
+        m_linePlot->setGeometry(resultData.stationPositions(), resultData.linePlotIndexData());
     }
 
     //Mark all caves as up todate

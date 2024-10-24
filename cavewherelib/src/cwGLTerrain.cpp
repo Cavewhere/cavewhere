@@ -16,7 +16,7 @@
 #include "cwMath.h"
 
 cwGLTerrain::cwGLTerrain(QObject *parent) :
-    cwGLObject(parent)
+    cwRenderObject(parent)
 {
     EdgeTile = new cwEdgeTile();
     RegularTile = new cwRegularTile();

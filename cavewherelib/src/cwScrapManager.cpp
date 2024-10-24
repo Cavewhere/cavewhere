@@ -218,7 +218,7 @@ bool cwScrapManager::scrapImagesOkay(cwScrap *scrap)
 {
     auto image = scrap->triangulationData().croppedImage();
     return cwImageDatabase(Project->filename()).mipmapsValid(image,
-                                                             cwOpenGLSettings::instance()->useDXT1Compression());
+                                                             false);
 }
 
 bool cwScrapManager::isScrapGeometryValid(const cwScrap *scrap) const
