@@ -3,7 +3,7 @@
 
 //Our includes
 #include "cwRHIObject.h"
-#include "cwGLGridPlane.h"
+#include "cwRenderGridPlane.h"
 
 //Qt includes
 class QRhi;

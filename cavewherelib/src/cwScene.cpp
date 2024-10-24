@@ -233,8 +233,6 @@ void cwSceneRenderer::synchroize(cwScene *scene, cwRhiItemRenderer *renderer)
 
 void cwSceneRenderer::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
 {
-    // qDebug() << "Render:" << m_updateFlags;
-
     auto renderData = cwRHIObject::RenderData({cb, renderer, m_updateFlags});
 
     auto rhi = cb->rhi();

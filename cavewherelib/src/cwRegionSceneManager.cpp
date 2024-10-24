@@ -10,7 +10,7 @@
 #include "cwScene.h"
 #include "cwGLTerrain.h"
 #include "cwGLScraps.h"
-#include "cwGLGridPlane.h"
+#include "cwRenderGridPlane.h"
 #include "cwRenderLinePlot.h"
 
 #include "cwCavingRegion.h"

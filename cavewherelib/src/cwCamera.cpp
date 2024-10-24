@@ -82,7 +82,6 @@ void cwCamera::setCustomProjection(QMatrix4x4 matrix)
   Sets the projection matrix for the camera
   */
 void cwCamera::setProjection(cwProjection projection) {
-    qDebug() << "Setting projection" << projection.matrix();
     Projection = projection;
     ViewProjectionMatrixIsDirty = true;
     emit projectionChanged();

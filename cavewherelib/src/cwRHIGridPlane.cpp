@@ -1,5 +1,5 @@
 #include "cwRHIGridPlane.h"
-#include "cwGLGridPlane.h"
+#include "cwRenderGridPlane.h"
 #include "cwRhiItemRenderer.h"
 #include "cwScene.h"
 
@@ -71,6 +71,9 @@ void cwRHIGridPlane::initializeResources(const ResourceUpdateData& data)
         { QRhiShaderStage::Vertex, vs },
         { QRhiShaderStage::Fragment, fs }
     });
+
+    m_pipeline->setDepthTest(true);
+    m_pipeline->setDepthWrite(true);
 
     // Input layout
     QRhiVertexInputLayout inputLayout;

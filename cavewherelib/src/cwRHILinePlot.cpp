@@ -66,6 +66,9 @@ void cwRHILinePlot::initializeResources(const ResourceUpdateData& data)
         { QRhiShaderStage::Fragment, fs }
     });
 
+    m_pipeline->setDepthTest(true);
+    m_pipeline->setDepthWrite(true);
+
     // Input layout
     QRhiVertexInputLayout inputLayout;
     inputLayout.setBindings({

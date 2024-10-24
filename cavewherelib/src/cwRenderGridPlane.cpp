@@ -6,7 +6,7 @@
 **************************************************************************/
 
 //Our includes
-#include "cwGLGridPlane.h"
+#include "cwRenderGridPlane.h"
 #include "cwCamera.h"
 #include "cwRHIGridPlane.h"
 
