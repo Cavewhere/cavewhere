@@ -30,11 +30,6 @@
 cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
     cwRhiViewer(parent)
 {
-    //TODO: Not all Mac and Windows support multi-sampling
-//#ifndef Q_OS_WIN
-//    setAntialiasing(true);
-//#endif
-
     OrthognalProjection = new cwOrthogonalProjection(this);
     OrthognalProjection->setViewer(this);
     OrthognalProjection->setEnabled(true);

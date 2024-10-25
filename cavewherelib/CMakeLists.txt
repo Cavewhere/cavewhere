@@ -153,6 +153,8 @@ qt_add_shaders(cavewherelib "cavewherelib_shaders"
         "shaders/grid.vert"
         "shaders/LinePlot.frag"
         "shaders/LinePlot.vert"
+        "shaders/scrap.vert"
+        "shaders/scrap.frag"
     )
 
 # Protobuf files

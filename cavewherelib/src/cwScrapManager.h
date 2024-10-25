@@ -31,6 +31,7 @@ class cwRemoveImageTask;
 class cwLinePlotManager;
 class cwTaskManagerModel;
 class cwRegionTreeModel;
+class cwRenderScraps;
 #include "cwNoteStation.h"
 #include "cwTriangulateInData.h"
 #include "cwImageProvider.h"
@@ -58,7 +59,7 @@ public:
     void setLinePlotManager(cwLinePlotManager* linePlotManager);
     void setFutureManagerToken(cwFutureManagerToken token);
 
-    Q_INVOKABLE void setGLScraps(cwGLScraps* glScraps);
+    Q_INVOKABLE void setRenderScraps(cwRenderScraps* glScraps);
 
     bool automaticUpdate() const;
     void setAutomaticUpdate(bool automaticUpdate);
@@ -84,8 +85,8 @@ private:
 //    QFuture<void> TriangulateFuture;
     cwFutureManagerToken FutureManagerToken;
 
-    //The gl scraps that need updating
-    cwGLScraps* GLScraps;
+    //The render scraps that need updating
+    cwRenderScraps* m_renderScraps;
 
     bool AutomaticUpdate; //!<
 
@@ -146,6 +147,9 @@ private slots:
                       const QList<cwTriangulatedData>& scrapDataset);
 
 };
+
+//This enable moc to work with forward declaration
+#include "cwRenderScraps.h"
 
 /**
  * @brief qHash

@@ -26,6 +26,7 @@
 #include "cwImageDatabase.h"
 #include "cwAsyncFuture.h"
 #include "cwAbstractScrapViewMatrix.h"
+#include "cwRenderScraps.h"
 
 //Async future
 #include "asyncfuture.h"
@@ -35,7 +36,7 @@ cwScrapManager::cwScrapManager(QObject *parent) :
     LinePlotManager(nullptr),
     Project(nullptr),
     TriangulateRestarter(this),
-    GLScraps(nullptr),
+    m_renderScraps(nullptr),
     AutomaticUpdate(true)
 {
     TriangulateRestarter.onFutureChanged([this](){
@@ -112,8 +113,8 @@ void cwScrapManager::setLinePlotManager(cwLinePlotManager *linePlotManager)
 void cwScrapManager::setFutureManagerToken(cwFutureManagerToken token)
 {
     FutureManagerToken = token;
-    if(GLScraps) {
-        GLScraps->setFutureManagerToken(token);
+    if(m_renderScraps) {
+        m_renderScraps->setFutureManagerToken(token);
     }
 }
 
@@ -509,7 +510,7 @@ void cwScrapManager::scrapInsertedHelper(cwNote *parentNote, int begin, int end)
         connectScrap(scrap);
 
         //Add the scrap data that's already in it
-        GLScraps->addScrapToUpdate(scrap);
+        m_renderScraps->addScrapToUpdate(scrap);
 
         //Make sure the scrap's previously calculated data is okay.
         if((scrap->triangulationData().isStale() ||
@@ -542,7 +543,7 @@ void cwScrapManager::scrapRemovedHelper(cwNote *parentNote, int begin, int end)
         //Connect the scrap
         disconnectScrap(scrap);
 
-        GLScraps->removeScrap(scrap);
+        m_renderScraps->removeScrap(scrap);
     }
 }
 
@@ -794,18 +795,18 @@ void cwScrapManager::taskFinished(const QList<cwScrap*>& scrapsToUpdate,
         triangleData.croppedImagePtr()->take();
 
         scrap->setTriangulationData(triangleData);
-        GLScraps->addScrapToUpdate(scrap);
+        m_renderScraps->addScrapToUpdate(scrap);
     }
 }
 
 /**
   \brief Sets the gl scraps for the manager
   */
-void cwScrapManager::setGLScraps(cwGLScraps *glScraps)
+void cwScrapManager::setRenderScraps(cwRenderScraps *scraps)
 {
-    GLScraps = glScraps;
-    GLScraps->setProject(Project);
-    GLScraps->setFutureManagerToken(FutureManagerToken);
+    m_renderScraps = scraps;
+    m_renderScraps->setProject(Project);
+    m_renderScraps->setFutureManagerToken(FutureManagerToken);
 }
 
 /**

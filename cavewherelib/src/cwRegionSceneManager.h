@@ -17,12 +17,12 @@
 //Our includes
 class cwScene;
 class cwGLLinePlot;
-class cwGLScraps;
 class cwRenderGridPlane;
 class cwCavingRegion;
 class cwGLTerrain;
 class cwRenderObject;
 class cwRenderLinePlot;
+class cwRenderScraps;
 
 class cwRegionSceneManager : public QObject
 {
@@ -31,14 +31,14 @@ class cwRegionSceneManager : public QObject
 
     Q_PROPERTY(cwCavingRegion* cavingRegion READ cavingRegion WRITE setCavingRegion NOTIFY cavingRegionChanged)
     Q_PROPERTY(cwRenderLinePlot* linePlot READ linePlot NOTIFY linePlotChanged)
-    Q_PROPERTY(cwGLScraps* scraps READ scraps NOTIFY scrapsChanged)
+    Q_PROPERTY(cwRenderScraps* scraps READ scraps NOTIFY scrapsChanged)
     Q_PROPERTY(cwScene* scene READ scene NOTIFY sceneChanged)
 
 public:
     explicit cwRegionSceneManager(QObject *parent = 0);
 
     cwRenderLinePlot* linePlot();
-    cwGLScraps* scraps() const;
+    cwRenderScraps* scraps() const;
 
     void setCavingRegion(cwCavingRegion* region);
     cwCavingRegion* cavingRegion() const;
@@ -59,12 +59,15 @@ private:
     //The terrain that's rendered
     cwGLTerrain* Terrain;
     cwRenderLinePlot* m_linePlot;
-    cwGLScraps* Scraps;
+    cwRenderScraps* m_scraps;
     cwRenderGridPlane* Plane;
 
     //For rendering label
     QPointer<cwCavingRegion> Region;
 };
+
+//This enable moc to work with forward declaration
+#include "cwRenderScraps.h"
 
 /**
  * @brief cwRegionSceneManager::scene
@@ -83,9 +86,9 @@ inline cwRenderLinePlot* cwRegionSceneManager::linePlot() { return m_linePlot; }
  * @brief cwScene::scraps
  * @return Returns the GL scraps of the scene
  */
-inline cwGLScraps* cwRegionSceneManager::scraps() const
+inline cwRenderScraps* cwRegionSceneManager::scraps() const
 {
-    return Scraps;
+    return m_scraps;
 }
 
 

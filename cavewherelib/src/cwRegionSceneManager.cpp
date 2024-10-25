@@ -9,7 +9,7 @@
 #include "cwRegionSceneManager.h"
 #include "cwScene.h"
 #include "cwGLTerrain.h"
-#include "cwGLScraps.h"
+#include "cwRenderScraps.h"
 #include "cwRenderGridPlane.h"
 #include "cwRenderLinePlot.h"
 
@@ -26,12 +26,12 @@ cwRegionSceneManager::cwRegionSceneManager(QObject *parent) :
     //    connect(Terrain, SIGNAL(redraw()), SLOT(updateGL()));
 
     m_linePlot = new cwRenderLinePlot();
-    Scraps = new cwGLScraps();
+    m_scraps = new cwRenderScraps();
     Plane = new cwRenderGridPlane();
 
 //    Terrain->setScene(scene());
     m_linePlot->setScene(scene());
-    // Scraps->setScene(scene());
+    m_scraps->setScene(scene());
     Plane->setScene(scene());
 
 }
