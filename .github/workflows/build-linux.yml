@@ -1,0 +1,54 @@
+name: Build on Linux
+
+on:
+  push:
+    branches:
+      - WIP-qt6
+  pull_request:
+    branches:
+      - '*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            conan
+
+      - name: Check Conan Version
+        run: conan --version
+
+      - name: Cache Conan Packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.conan
+          key: ${{ runner.os }}-conan-${{ hashFiles('**/conanfile.*') }}
+
+      - name: Configure Conan Profile
+        run: |
+          conan profile detect --force
+          conan profile update settings.compiler.cppstd=17 default
+
+      - name: Install Dependencies with Conan
+        run: |
+          conan install . --build=missing -o CaveWhere/*:system_qt=False --output-folder=build
+
+      - name: Configure the Project with CMake
+        run: |
+          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_PDF=OFF \
+          -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake -S . -B build
+
+      - name: Build the Project
+        run: cmake --build build
