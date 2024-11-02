@@ -43,7 +43,7 @@ jobs:
       - name: Configure Conan Profile
         run: |
           conan profile detect --force
-          conan profile set settings.compiler.cppstd=17 --profile default
+          #conan profile set settings.compiler.cppstd=17 --profile default
 
       - name: Install Dependencies with Conan
         run: |
