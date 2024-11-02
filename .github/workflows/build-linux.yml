@@ -25,11 +25,12 @@ jobs:
             build-essential \
             cmake \
             ninja-build \
-            snapd
+            pipx
 
       - name: Installing Conan
         run: |
-            sudo snap install conan --classic
+            pipx ensurepath \
+            pipx install conan
 
       - name: Check Conan Version
         run: conan --version
