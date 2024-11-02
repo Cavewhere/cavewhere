@@ -46,7 +46,7 @@ jobs:
             -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True
 
       - name: Cache Conan Packages
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
             path: ~/.conan
             key: ${{ runner.os }}-conan-${{ hashFiles('**/conanfile.*') }}
