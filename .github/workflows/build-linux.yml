@@ -25,17 +25,17 @@ jobs:
             build-essential \
             cmake \
             ninja-build \
-            pipx \
-            libgtk2.0-dev \
-            libgl-dev \
-            libgl1-mesa-dev \
-            libx11-dev\
-            libx11-xcb-dev \
-            libfontenc-dev \
-            libice-dev \
-            libsm-dev \
-            libxau-dev \
-            libxaw7-dev
+            pipx
+            # libgtk2.0-dev \
+            # libgl-dev \
+            # libgl1-mesa-dev \
+            # libx11-dev \
+            # libx11-xcb-dev \
+            # libfontenc-dev \
+            # libice-dev \
+            # libsm-dev \
+            # libxau-dev \
+            # libxaw7-dev
 
 
       - name: Installing Conan
@@ -58,7 +58,8 @@ jobs:
 
       - name: Install Dependencies with Conan
         run: |
-          conan install . --build=missing -o CaveWhere/*:system_qt=False --output-folder=build -s compiler.cppstd=gnu17
+          conan install . --build=missing -o CaveWhere/*:system_qt=False --output-folder=build \
+          -s compiler.cppstd=gnu17 -c tools.system.package_manager:mode=install
 
       - name: Configure the Project with CMake
         run: |
