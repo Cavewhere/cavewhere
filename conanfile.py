@@ -58,7 +58,7 @@ class CaveWhereConan(ConanFile):
 
 #        self.version = "{0}".format(sha)
 
-#    def configure(self):
+    def configure(self):
         # if not self.options.system_qt:
         #     self.options["qt"].shared = True
         #     self.options["qt"].qtshadertools = True
@@ -67,6 +67,8 @@ class CaveWhereConan(ConanFile):
         #     self.options["qt"].qttools = True
         #     self.options["qt"].qttranslations = True
         #     self.options["qt"].qtimageformats = True
+
+        self.options["gdal"].with_arrow = False
 
 
         #This prevents protoc from needing zlib which adds a failing rpath protoc
