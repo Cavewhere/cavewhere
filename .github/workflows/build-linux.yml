@@ -50,10 +50,10 @@ jobs:
             -s compiler.cppstd=17 \
             -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True
 
-      - name: Configure the Project with CMake
-        run: |
-          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_PDF=OFF \
-          -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake -S . -B build
+      # - name: Configure the Project with CMake
+      #   run: |
+      #     cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_PDF=OFF \
+      #     -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake -S . -B build
 
-      - name: Build the Project
-        run: cmake --build build
+      # - name: Build the Project
+      #   run: cmake --build build

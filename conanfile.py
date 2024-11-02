@@ -25,7 +25,7 @@ class CaveWhereConan(ConanFile):
     ("proj/9.3.1"),
     # ("zlib/[>=1.2.13]"),
     ("libtiff/[>=4.5.1]"),
-    ("gdal/[>=3.4.3]"),
+    ("gdal/3.7.3"),
     ]
 
     options = {"system_qt": [True, False]}
