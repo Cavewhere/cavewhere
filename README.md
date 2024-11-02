@@ -1,6 +1,6 @@
 # CaveWhere
 
-![CaveWhere Logo](/icons/githubPage.png)
+![CaveWhere Logo](/cavewhereLib/icons/githubPage.png)
 
 ## Cave Mapping software
 
