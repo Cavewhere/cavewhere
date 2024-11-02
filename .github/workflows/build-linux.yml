@@ -28,7 +28,15 @@ jobs:
             pipx \
             libgtk2.0-dev \
             libgl-dev \
-            libgl1-mesa-dev
+            libgl1-mesa-dev \
+            libx11-dev\
+            libx11-xcb-dev \
+            libfontenc-dev \
+            libice-dev \
+            libsm-dev \
+            libxau-dev \
+            libxaw7-dev
+
 
       - name: Installing Conan
         run: |
