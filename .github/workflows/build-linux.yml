@@ -25,7 +25,11 @@ jobs:
             build-essential \
             cmake \
             ninja-build \
-            conan
+            snapd
+
+      - name: Installing Conan
+        run: |
+            sudo snap install conan --classic
 
       - name: Check Conan Version
         run: conan --version
