@@ -31,11 +31,18 @@ class CAVEWHERE_LIB_EXPORT cwCavingRegion : public QAbstractListModel, public cw
 
     Q_PROPERTY(int caveCount READ caveCount NOTIFY caveCountChanged)
 
-    Q_ENUMS(Roles)
 public:
     enum Roles {
         CaveObjectRole
     };
+    Q_ENUM(Roles)
+
+    // enum class Columns : int {
+    //     Name,
+    //     Length,
+    //     Depth,
+
+    // }
 
     explicit cwCavingRegion(QObject *parent = nullptr);
     cwCavingRegion(const cwCavingRegion& object);
