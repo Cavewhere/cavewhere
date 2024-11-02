@@ -58,7 +58,7 @@ class CaveWhereConan(ConanFile):
 
 #        self.version = "{0}".format(sha)
 
-    def configure(self):
+#    def configure(self):
         # if not self.options.system_qt:
         #     self.options["qt"].shared = True
         #     self.options["qt"].qtshadertools = True
@@ -79,4 +79,3 @@ class CaveWhereConan(ConanFile):
 #        self.options["tiff"].shared=True
 #        self.options["proj"].with_tiff=False
         # self.options["zlib"].shared=True
-
