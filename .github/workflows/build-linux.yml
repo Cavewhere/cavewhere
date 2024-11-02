@@ -34,11 +34,6 @@ jobs:
       - name: Check Conan Version
         run: conan --version
 
-      - name: Cache Conan Packages
-        uses: actions/cache@v3
-        with:
-          path: ~/.conan
-          key: ${{ runner.os }}-conan-${{ hashFiles('**/conanfile.*') }}
 
       - name: Configure Conan Profile
         run: |
@@ -49,6 +44,12 @@ jobs:
             conan install . --build=missing -o CaveWhere/*:system_qt=False --output-folder=build \
             -s compiler.cppstd=17 \
             -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True
+
+    - name: Cache Conan Packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.conan
+        key: ${{ runner.os }}-conan-${{ hashFiles('**/conanfile.*') }}
 
       # - name: Configure the Project with CMake
       #   run: |

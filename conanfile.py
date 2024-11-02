@@ -25,7 +25,7 @@ class CaveWhereConan(ConanFile):
     ("proj/9.3.1"),
     # ("zlib/[>=1.2.13]"),
     ("libtiff/[>=4.5.1]"),
-    ("gdal/3.7.3"),
+    ("gdal/3.8.3"),
     ]
 
     options = {"system_qt": [True, False]}
@@ -35,28 +35,12 @@ class CaveWhereConan(ConanFile):
     def requirements(self):
         self.requires("expat/2.6.2", override=True)
         self.requires("sqlite3/3.46.1", override=True)
-        # self.requires("proj/9.5.0", override=True)
         self.requires("libpng/1.6.44", override=True)
 
         # Or add a new requirement!
         # if not self.options.system_qt:
             # self.requires("qt/6.7.3")
             # self.requires("xkbcommon/1.6.0", override=True)
-        #    self.requires("libpng/1.6.40"),
-        #    self.requires("libjpeg/9e"),
-
-#    def set_version(self):
-#        git = tools.Git()
-#        refStr = git.run("ls-remote -h https://github.com/Cavewhere/dewalls.git")
-#        refs = refStr.split("\n")
-
-#        sha = "unknown-sha"
-#        for ref in refs:
-#            print("ref:{0}".format(ref))
-#            if "refs/heads/master" in ref:
-#                sha = ref.split()[0]
-
-#        self.version = "{0}".format(sha)
 
     def configure(self):
         # if not self.options.system_qt:
@@ -68,6 +52,7 @@ class CaveWhereConan(ConanFile):
         #     self.options["qt"].qttranslations = True
         #     self.options["qt"].qtimageformats = True
 
+        #Arrow fails on linux
         self.options["gdal"].with_arrow = False
 
 
