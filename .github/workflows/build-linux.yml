@@ -26,7 +26,9 @@ jobs:
             cmake \
             ninja-build \
             pipx \
-            libgtk2.0-dev
+            libgtk2.0-dev \
+            libgl-dev \
+            libgl1-mesa-dev
 
       - name: Installing Conan
         run: |
