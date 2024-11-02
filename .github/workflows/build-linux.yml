@@ -26,17 +26,6 @@ jobs:
             cmake \
             ninja-build \
             pipx
-            # libgtk2.0-dev \
-            # libgl-dev \
-            # libgl1-mesa-dev \
-            # libx11-dev \
-            # libx11-xcb-dev \
-            # libfontenc-dev \
-            # libice-dev \
-            # libsm-dev \
-            # libxau-dev \
-            # libxaw7-dev
-
 
       - name: Installing Conan
         run: |
@@ -54,12 +43,11 @@ jobs:
       - name: Configure Conan Profile
         run: |
           conan profile detect --force
-          #conan profile set settings.compiler.cppstd=gnu20 --profile default
 
       - name: Install Dependencies with Conan
         run: |
             conan install . --build=missing -o CaveWhere/*:system_qt=False --output-folder=build \
-            -s compiler.cppstd=gnu17 \
+            -s compiler.cppstd=17 \
             -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True
 
       - name: Configure the Project with CMake
