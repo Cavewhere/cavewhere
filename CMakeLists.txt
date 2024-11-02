@@ -20,6 +20,14 @@ add_subdirectory(dewalls)
 add_subdirectory(cavewherelib)
 
 set(SURVEX_CONAN OFF CACHE BOOL "Use survex Conan to manage dependencies" FORCE)
+
+if(${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
+    # macOS
+    set(SURVEX_OUTPUT_DIR "${CMAKE_BINARY_DIR}/CaveWhere.app/Contents/MacOS/survex" CACHE PATH "" FORCE)
+# else()
+#     # Other systems (e.g., Linux, Windows)
+#     set(SURVEX_OUTPUT_DIR "${CMAKE_BINARY_DIR}/survex")
+endif()
 add_subdirectory(survex)
 
 # All packages we need to find
@@ -56,7 +64,7 @@ file(GLOB cavewhere_test_H_FILES "testcases/*.h")
 target_sources(cavewhere-test PRIVATE ${cavewhere_test_CPP_FILES} ${cavewhere_test_H_FILES})
 
 file(GLOB cavewhere_test_qrc_FILES "testcases/*.qrc")
-qt_add_resources(cavewhere_test_QT_RESOURCES ${cavewhere_test_qrc_FILES})
+qt_add_resources(cavewhere_test_QT_RESOURCES ${cavewhere_test_qrc_FILkS})
 target_sources(cavewhere-test PRIVATE ${cavewhere_test_QT_RESOURCES})
 
 target_link_libraries(cavewhere-test

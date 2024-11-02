@@ -1,7 +1,7 @@
 function(update_git_version TARGET_NAME VERSION_IN_FILE)
     add_custom_command(
         OUTPUT always_rebuild
-        COMMAND cmake -E echo
+        COMMAND ${CMAKE_COMMAND} -E echo
     )
 
     add_custom_target(

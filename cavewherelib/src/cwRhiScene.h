@@ -10,6 +10,7 @@ class QRhiCommandBuffer;
 class cwScene;
 class cwRHIObject;
 class cwRenderObject;
+class cwRhiItemRenderer;
 
 /**
  * @brief The cwRhiScene class

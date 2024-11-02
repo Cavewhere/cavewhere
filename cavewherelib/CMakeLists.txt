@@ -24,6 +24,9 @@ find_package(Qt6
 
 qt_add_library(cavewherelib SHARED)
 
+#RESOURCE_PREFIX defaults to /qt/qml/ which is the default import path of the QML engine
+# qmake_policy(SET QTP0001 NEW)
+
 set_target_properties(cavewherelib PROPERTIES
     AUTOMOC ON
     AUTORCC ON
@@ -129,10 +132,19 @@ endforeach()
 set_source_files_properties(${qml_singletons} PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 # Add QML module with the regular QML files and the singleton files
+if(${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
+    # macOS
+    set(cavewherelib_ouput_dir "${CMAKE_BINARY_DIR}/CaveWhere.app/Contents/MacOS/cavewherelib")
+else()
+    # Other systems (e.g., Linux, Windows)
+    set(cavewherelib_ouput_dir "${CMAKE_BINARY_DIR}/cavewherelib")
+endif()
+
 qt_add_qml_module(cavewherelib
     URI cavewherelib
     VERSION 1.0
     RESOURCE_PREFIX /cavewherelib
+    OUTPUT_DIRECTORY ${cavewherelib_ouput_dir}
     NO_CACHEGEN
     DEPENDENCIES
         QtQuick

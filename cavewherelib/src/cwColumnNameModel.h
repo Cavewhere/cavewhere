@@ -3,6 +3,7 @@
 
 //Qt includes
 #include <QAbstractListModel>
+#include <QQmlEngine>
 
 //Our inculdes
 #include "cwGlobals.h"
