@@ -13,7 +13,7 @@ class CaveWhereConan(ConanFile):
     settings = "os", "compiler", "build_type", "arch"
     requires = [
     ("catch2/[>=2.13.10]"),
-    ("protobuf/[>=3.12.4]"),
+    ("protobuf/5.27.0"),
 #    ("survex/1.2.44@cave-software/dev"),
 #    ("dewalls/7e97092a144f153cb9ed7d318808208e9b35c74f@cave-software/dev"),
 #   ("sqlite3/[>=3.42.0]"}),
@@ -33,16 +33,16 @@ class CaveWhereConan(ConanFile):
     generators = "CMakeDeps", "CMakeToolchain", "VirtualBuildEnv", "VirtualRunEnv"
 
     def requirements(self):
-        self.requires("expat/2.6.2", override=True)
-        self.requires("sqlite3/3.46.1", override=True)
-        self.requires("libpng/1.6.44", override=True)
+        self.requires("expat/2.5.0", override=True)
+        #self.requires("sqlite3/3.46.1", override=True)
+        self.requires("libpng/1.6.40", override=True)
 
         # Or add a new requirement!
         # if not self.options.system_qt:
             # self.requires("qt/6.7.3")
             # self.requires("xkbcommon/1.6.0", override=True)
 
-    def configure(self):
+    #def configure(self):
         # if not self.options.system_qt:
         #     self.options["qt"].shared = True
         #     self.options["qt"].qtshadertools = True
@@ -53,7 +53,7 @@ class CaveWhereConan(ConanFile):
         #     self.options["qt"].qtimageformats = True
 
         #Arrow fails on linux
-        self.options["gdal"].with_arrow = False
+        #self.options["gdal"].with_arrow = False
 
 
         #This prevents protoc from needing zlib which adds a failing rpath protoc
