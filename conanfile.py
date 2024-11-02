@@ -38,19 +38,19 @@ class CaveWhereConan(ConanFile):
         self.requires("libpng/1.6.44", override=True)
 
         # Or add a new requirement!
-        # if not self.options.system_qt:
-            # self.requires("qt/6.7.3")
-            # self.requires("xkbcommon/1.6.0", override=True)
+        if not self.options.system_qt:
+            self.requires("qt/6.7.3")
+            self.requires("xkbcommon/1.6.0", override=True)
 
     def configure(self):
-        # if not self.options.system_qt:
-        #     self.options["qt"].shared = True
-        #     self.options["qt"].qtshadertools = True
-        #     self.options["qt"].qtdeclarative = True
-        #     self.options["qt"].qtsvg = True
-        #     self.options["qt"].qttools = True
-        #     self.options["qt"].qttranslations = True
-        #     self.options["qt"].qtimageformats = True
+        if not self.options.system_qt:
+            self.options["qt"].shared = True
+            self.options["qt"].qtshadertools = True
+            self.options["qt"].qtdeclarative = True
+            self.options["qt"].qtsvg = True
+            self.options["qt"].qttools = True
+            self.options["qt"].qttranslations = True
+            self.options["qt"].qtimageformats = True
 
         #Arrow fails on github linux build, disable
         self.options["gdal"].with_arrow = False
