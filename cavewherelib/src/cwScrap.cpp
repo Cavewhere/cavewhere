@@ -1252,7 +1252,7 @@ void cwScrap::setTriangulationData(cwTriangulatedData data) {
     QList<int> roles;
     roles.append(cwScrap::LeadPosition);
 
-    leadsDataChanged(0, leads().size() - 1, roles);
+    emit leadsDataChanged(0, leads().size() - 1, roles);
 }
 
 void cwScrap::updateImage()

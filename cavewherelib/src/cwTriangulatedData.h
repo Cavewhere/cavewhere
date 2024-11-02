@@ -10,6 +10,7 @@
 
 //Our includes
 #include "cwTrackedImage.h"
+#include "cwTextureUploadTask.h"
 
 //Qt includes
 #include <QSharedData>
@@ -25,6 +26,9 @@ public:
     cwImage croppedImage() const;
     cwTrackedImagePtr croppedImagePtr() const;
     void setCroppedImage(cwTrackedImagePtr croppedImage);
+
+    cwTextureUploadTask::UploadResult croppedImageData() const;
+    void setCroppedImageData(const cwTextureUploadTask::UploadResult& imageData);
 
     QVector<QVector3D> points() const;
     void setPoints(QVector<QVector3D> points);
@@ -51,6 +55,7 @@ private:
         {}
 
         cwTrackedImagePtr croppedImage = cwTrackedImagePtr::create();
+        cwTextureUploadTask::UploadResult croppedImageData;
         QVector<QVector3D> points;
         QVector<QVector2D> texCoords;
         QVector<uint> indices;
@@ -78,6 +83,16 @@ Sets variableName
 */
 inline void cwTriangulatedData::setCroppedImage(cwTrackedImagePtr croppedImage) {
     Data->croppedImage = croppedImage;
+}
+
+inline cwTextureUploadTask::UploadResult cwTriangulatedData::croppedImageData() const
+{
+    return Data->croppedImageData;
+}
+
+inline void cwTriangulatedData::setCroppedImageData(const cwTextureUploadTask::UploadResult &imageData)
+{
+    Data->croppedImageData = imageData;
 }
 
 /**

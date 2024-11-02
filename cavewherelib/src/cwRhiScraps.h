@@ -26,6 +26,11 @@ public:
     void render(const RenderData& data) override;
 
 private:
+    struct SharedScrapData {
+        QRhiSampler* m_sampler = nullptr;
+        QRhiTexture* m_loadingTexture = nullptr;
+    };
+
     struct RhiScrap {
         RhiScrap();
         ~RhiScrap();
@@ -47,9 +52,11 @@ private:
 
         cwTriangulatedData geometry;
         bool resourcesInitialized = false;
+        bool geometryNeedsUpdate = false;
+        bool textureNeedsUpdate = false;
 
-        void initializeResources(const ResourceUpdateData &data);
-        void releaseResources();
+        void initializeResources(const ResourceUpdateData &data, const SharedScrapData &sharedData);
+        void createShadeResourceBindings(const ResourceUpdateData& data, const SharedScrapData &sharedData);
     };
 
 
@@ -65,7 +72,8 @@ private:
     QPointer<cwRenderScraps> m_renderScraps;
 
     QRhiShaderResourceBindings* m_globalSrb = nullptr;
-    QRhiSampler* m_sampler = nullptr;
+
+    SharedScrapData m_sharedScrapData;
 
     QRhiGraphicsPipeline* m_pipeline = nullptr;
 

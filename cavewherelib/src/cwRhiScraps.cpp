@@ -3,8 +3,11 @@
 #include "cwRhiItemRenderer.h"
 #include "cwScrap.h"
 #include "cwScene.h"
+
+//Our includes
 #include <QFile>
 #include <QDebug>
+#include <QPainter>
 
 cwRhiScraps::cwRhiScraps()
 {
@@ -17,7 +20,8 @@ cwRhiScraps::~cwRhiScraps()
         delete scrap;
     }
     delete m_pipeline;
-    delete m_sampler;
+    delete m_sharedScrapData.m_sampler;
+    delete m_sharedScrapData.m_loadingTexture;
     delete m_globalSrb;
     // delete m_globalSrb;
 }
@@ -49,16 +53,39 @@ void cwRhiScraps::initializePipeline(const ResourceUpdateData& data)
     m_pipeline->setDepthWrite(true);
 
     // Create sampler
-    m_sampler = rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
+    m_sharedScrapData.m_sampler = rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
                                 QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge);
-    m_sampler->create();
+    m_sharedScrapData.m_sampler->create();
+
+    // Create the loading texture here
+    // Create the loading texture
+    auto createLoadingTexture = [this, rhi, &data]() {
+        // Create an image with text "Loading"
+        QImage image(256, 256, QImage::Format_RGBA8888);
+        image.fill(Qt::transparent);
+
+        QPainter painter(&image);
+        painter.setPen(Qt::white);
+        painter.setFont(QFont("Arial", 48));
+        painter.drawText(image.rect(), Qt::AlignCenter, "Loading");
+        painter.end();
+
+        // Create QRhiTexture
+        m_sharedScrapData.m_loadingTexture = rhi->newTexture(QRhiTexture::RGBA8, image.size(), 1, QRhiTexture::UsedWithGenerateMips);
+        m_sharedScrapData.m_loadingTexture->create();
+
+        // Upload the texture data
+        data.resourceUpdateBatch->uploadTexture(m_sharedScrapData.m_loadingTexture, image);
+    };
+    createLoadingTexture();
+
 
     //Shader binding layout, this will be update for each scrap
     m_globalSrb = rhi->newShaderResourceBindings();
     m_globalSrb->setBindings({
         QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, nullptr), //Global uniform buffer
         // QRhiShaderResourceBinding::uniformBuffer(1, QRhiShaderResourceBinding::VertexStage, nullptr), //Scrap uniform buffer
-        // QRhiShaderResourceBinding::sampledTexture(0, QRhiShaderResourceBinding::FragmentStage, nullptr, nullptr) //Texture and sampler
+        QRhiShaderResourceBinding::sampledTexture(0, QRhiShaderResourceBinding::FragmentStage, nullptr, nullptr) //Texture and sampler
     });
     m_globalSrb->create();
 
@@ -97,20 +124,21 @@ void cwRhiScraps::synchronize(const SynchronizeData& data)
         switch (command.type()) {
         case cwRenderScraps::PendingScrapCommand::AddScrap: {
             cwScrap* scrap = command.scrap();
-            cwTriangulatedData geometry = command.triangulatedData();
 
-            // int scrapId = -1;
-            if (m_scraps.contains(scrap)) {
-                RhiScrap* rhiScrap = m_scraps[scrap];
-                rhiScrap->geometry = geometry;
-                rhiScrap->resourcesInitialized = false; // Mark for resource update
-            } else {
-                RhiScrap* rhiScrap = new RhiScrap;
-                rhiScrap->geometry = geometry;
-                rhiScrap->sampler = m_sampler;
-                m_scraps.insert(scrap, rhiScrap);
-            }
-            // Update geometry intersector if needed
+            RhiScrap* rhiScrap = [this, scrap](){
+                if (m_scraps.contains(scrap)) {
+                    return m_scraps[scrap];
+                } else {
+                    auto rhiScrap = new RhiScrap;
+                    m_scraps.insert(scrap, rhiScrap);
+                    return rhiScrap;
+                }
+            }();
+
+            // Update the data
+            rhiScrap->geometry = command.triangulatedData();
+            rhiScrap->geometryNeedsUpdate = true;
+            rhiScrap->textureNeedsUpdate = true;
 
             break;
         }
@@ -122,6 +150,14 @@ void cwRhiScraps::synchronize(const SynchronizeData& data)
                 delete rhiScrap;
             }
             break;
+        }
+        case cwRenderScraps::PendingScrapCommand::UpdateScrapTexture: {
+            cwScrap* scrap = command.scrap();
+            if(m_scraps.contains(scrap)) {
+                RhiScrap* rhiScrap = m_scraps[scrap];
+                rhiScrap->geometry = command.triangulatedData();
+                rhiScrap->textureNeedsUpdate = true;
+            }
         }
         default:
             break;
@@ -138,36 +174,77 @@ void cwRhiScraps::updateResources(const ResourceUpdateData& data)
     for (auto it = m_scraps.begin(); it != m_scraps.end(); ++it) {
         RhiScrap* scrap = it.value();
         if (!scrap->resourcesInitialized) {
-            scrap->initializeResources(data);
-            scrap->resourcesInitialized = true;
+            scrap->initializeResources(data, m_sharedScrapData);
         }
 
-        // Update buffers
-        const cwTriangulatedData& td = scrap->geometry;
+        if(scrap->geometryNeedsUpdate) {
+            // Update buffers
+            const cwTriangulatedData& td = scrap->geometry;
 
-        int vertexBufferSize = td.points().size() * sizeof(QVector3D);
-        int texCoordBufferSize = td.texCoords().size() * sizeof(QVector2D);
-        int indexBufferSize = td.indices().size() * sizeof(uint);
+            int vertexBufferSize = td.points().size() * sizeof(QVector3D);
+            int texCoordBufferSize = td.texCoords().size() * sizeof(QVector2D);
+            int indexBufferSize = td.indices().size() * sizeof(uint);
 
-        if (scrap->vertexBuffer->size() != vertexBufferSize) {
-            scrap->vertexBuffer->setSize(vertexBufferSize);
-            scrap->vertexBuffer->create();
+            if (scrap->vertexBuffer->size() != vertexBufferSize) {
+                scrap->vertexBuffer->setSize(vertexBufferSize);
+                scrap->vertexBuffer->create();
+            }
+            batch->updateDynamicBuffer(scrap->vertexBuffer, 0, vertexBufferSize, td.points().constData());
+
+            if (scrap->texCoordBuffer->size() != texCoordBufferSize) {
+                scrap->texCoordBuffer->setSize(texCoordBufferSize);
+                scrap->texCoordBuffer->create();
+            }
+            batch->updateDynamicBuffer(scrap->texCoordBuffer, 0, texCoordBufferSize, td.texCoords().constData());
+
+            if (scrap->indexBuffer->size() != indexBufferSize) {
+                scrap->indexBuffer->setSize(indexBufferSize);
+                scrap->indexBuffer->create();
+            }
+            batch->updateDynamicBuffer(scrap->indexBuffer, 0, indexBufferSize, td.indices().constData());
+
+            scrap->numberOfIndices = td.indices().size();
+            scrap->geometryNeedsUpdate = false;
         }
-        batch->updateDynamicBuffer(scrap->vertexBuffer, 0, vertexBufferSize, td.points().constData());
 
-        if (scrap->texCoordBuffer->size() != texCoordBufferSize) {
-            scrap->texCoordBuffer->setSize(texCoordBufferSize);
-            scrap->texCoordBuffer->create();
+        if(scrap->textureNeedsUpdate) {
+            const auto imageData = scrap->geometry.croppedImageData();
+
+            auto imageDataSize = [&imageData]() {
+                return imageData.image.size();
+            };
+
+            auto uploadTextureData = [batch, scrap, &imageData]() {
+                Q_ASSERT(imageData.image.size() == scrap->texture->pixelSize());
+                batch->uploadTexture(scrap->texture, imageData.image);
+            };
+
+            auto createTexture = [scrap, &data, &imageData, uploadTextureData, this](const QSize& size){
+                if(!size.isEmpty()) {
+                    scrap->texture = data.renderData.cb->rhi()->newTexture(QRhiTexture::RGBA8, size, 1, QRhiTexture::UsedWithGenerateMips);
+                    scrap->texture->create();
+                    uploadTextureData();
+
+                    //Update the bindings
+                    scrap->createShadeResourceBindings(data, m_sharedScrapData);
+                }
+            };
+
+            if(scrap->texture == nullptr) {
+                createTexture(imageDataSize());
+            } else {
+                //Texture already exists, update the texture
+                auto size = imageDataSize();
+                if(scrap->texture->pixelSize() != size) {
+                    scrap->texture->deleteLater();
+                    createTexture(size);
+                } else {
+                    //Just upload new data
+                    uploadTextureData();
+                }
+            }
+            scrap->textureNeedsUpdate = false;
         }
-        batch->updateDynamicBuffer(scrap->texCoordBuffer, 0, texCoordBufferSize, td.texCoords().constData());
-
-        if (scrap->indexBuffer->size() != indexBufferSize) {
-            scrap->indexBuffer->setSize(indexBufferSize);
-            scrap->indexBuffer->create();
-        }
-        batch->updateDynamicBuffer(scrap->indexBuffer, 0, indexBufferSize, td.indices().constData());
-
-        scrap->numberOfIndices = td.indices().size();
     }
 }
 
@@ -208,7 +285,7 @@ cwRhiScraps::RhiScrap::~RhiScrap()
     //delete sampler;
 }
 
-void cwRhiScraps::RhiScrap::initializeResources(const ResourceUpdateData& data)
+void cwRhiScraps::RhiScrap::initializeResources(const ResourceUpdateData& data, const SharedScrapData& sharedData)
 {
 
     QRhi* rhi = data.renderData.cb->rhi();
@@ -235,33 +312,27 @@ void cwRhiScraps::RhiScrap::initializeResources(const ResourceUpdateData& data)
         // uniformBuffer->create();
     // }
 
-    // // Create texture
-    // if (!texture) {
-    //     cwImage image = data.croppedImage();
-    //     if (!image.isNull()) {
-    //         texture = rhi->newTexture(QRhiTexture::RGBA8, image.size(), 1, QRhiTexture::UsedWithGenerateMips);
-    //         texture->create();
 
-    //         // Update the texture with image data
-    //         batch->uploadTexture(texture, image);
-    //     }
-    // }
+    createShadeResourceBindings(data, sharedData);
 
-
-
-    // Create srb
-    if (!srb) {
-        srb = rhi->newShaderResourceBindings();
-        srb->setBindings({
-            QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, data.renderData.renderer->globalUniformBuffer()),
-            // QRhiShaderResourceBinding::uniformBuffer(1, QRhiShaderResourceBinding::VertexStage, uniformBuffer),
-            // QRhiShaderResourceBinding::sampledTexture(0, QRhiShaderResourceBinding::FragmentStage, texture, sampler)
-        });
-        srb->create();
-    }
+    resourcesInitialized = true;
 }
 
-void cwRhiScraps::RhiScrap::releaseResources()
-{
 
+void cwRhiScraps::RhiScrap::createShadeResourceBindings(const ResourceUpdateData& data, const SharedScrapData &sharedData)
+{
+    QRhi* rhi = data.renderData.cb->rhi();
+    if(srb) {
+        srb->deleteLater();
+    }
+
+    auto currentTexture = texture ? texture : sharedData.m_loadingTexture;
+
+    srb = rhi->newShaderResourceBindings();
+    srb->setBindings({
+        QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, data.renderData.renderer->globalUniformBuffer()),
+        // QRhiShaderResourceBinding::uniformBuffer(1, QRhiShaderResourceBinding::VertexStage, uniformBuffer),
+        QRhiShaderResourceBinding::sampledTexture(0, QRhiShaderResourceBinding::FragmentStage, currentTexture, sharedData.m_sampler)
+    });
+    srb->create();
 }

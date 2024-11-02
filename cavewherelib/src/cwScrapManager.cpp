@@ -521,6 +521,28 @@ void cwScrapManager::scrapInsertedHelper(cwNote *parentNote, int begin, int end)
         {
             //Isn't okay, we need to recalculate it
             scrapsToUpdate.append(scrap);
+        } else if(scrap->triangulationData().croppedImageData().isNull()
+                   && scrap->triangulationData().croppedImage().isOriginalValid()) {
+            //Load the image data from disk, async
+            cwTextureUploadTask uploadTask;
+            uploadTask.setImage(scrap->triangulationData().croppedImage());
+            uploadTask.setProjectFilename(Project->filename());
+            uploadTask.setType(cwTextureUploadTask::OpenGL_RGBA);
+            auto future = uploadTask.mipmaps();
+            FutureManagerToken.addJob(cwFuture(QFuture<void>(future), "Updating Texture"));
+
+            QPointer<cwScrap> weakPtrScrap = scrap;
+
+            AsyncFuture::observe(future).subscribe([weakPtrScrap, future, this](){
+                if(weakPtrScrap) {
+                    auto triangleData = weakPtrScrap->triangulationData();
+                    if(triangleData.croppedImageData().isNull()) {
+                        triangleData.setCroppedImageData(future.result());
+                        weakPtrScrap->setTriangulationData(triangleData);
+                        m_renderScraps->addScrapToUpdate(weakPtrScrap);
+                    }
+                }
+            });
         }
     }
 
@@ -791,7 +813,7 @@ void cwScrapManager::taskFinished(const QList<cwScrap*>& scrapsToUpdate,
         cwTriangulatedData triangleData = validScrapTriangleDataset.at(i);
         Q_ASSERT(!triangleData.isStale());
 
-        //Remove the ownership requirements, so it doesn't ge delete from database
+        //Remove the ownership requirements, so it doesn't get delete from database
         triangleData.croppedImagePtr()->take();
 
         scrap->setTriangulationData(triangleData);

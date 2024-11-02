@@ -32,9 +32,12 @@ public:
 
     class UploadResult {
     public:
-        QList< QPair< QByteArray, QSize > > mipmaps;
-        QVector2D scaleTexCoords;
-        Format type = Unknown;
+        QImage image; //For RGB data only
+        QList< QPair< QByteArray, QSize > > mipmaps; //This isn't use
+        QVector2D scaleTexCoords; // This isn't used for RGB
+        Format type = Unknown; //This should just be RGB
+
+        bool isNull() const { return image.isNull(); }
     };
 
     explicit cwTextureUploadTask();

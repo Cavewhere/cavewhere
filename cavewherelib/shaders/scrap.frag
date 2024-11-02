@@ -1,5 +1,5 @@
 // // simple fragment shader
-// //#version 330
+//#version 440 core
 
 // #ifdef GL_ES
 // precision highp float;
@@ -14,7 +14,7 @@
 
 // //uniform float vAngle;
 // //uniform vec4 colorBG;
-// uniform sampler2D Texture;
+// layout (binding = 0) uniform sampler2D Texture;
 
 // //float amplify(float d, float scale, float offset) {
 // //  d = scale * d + offset;
@@ -44,11 +44,11 @@
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
-// layout(binding = 0) uniform sampler2D Texture;
+layout(binding = 0) uniform sampler2D Texture;
 
 void main() {
-    // vec4 textureSample = texture(Texture, vTexCoord);
-    // fragColor = textureSample;
-    fragColor = vec4(vTexCoord, 0.0, 1.0);
+    vec4 textureSample = texture(Texture, vTexCoord);
+    fragColor = textureSample;
+    // fragColor = vec4(vTexCoord, 0.0, 1.0);
 }
 

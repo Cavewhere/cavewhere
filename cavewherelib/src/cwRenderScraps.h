@@ -38,6 +38,8 @@ public:
     void addScrapToUpdate(cwScrap* scrap);
     void removeScrap(cwScrap* scrap);
 
+    void addScrapTextureToUpdate(cwScrap* scrap);
+
     cwRHIObject* createRHIObject() override;
 
 signals:
@@ -54,36 +56,39 @@ private:
         enum Type {
             AddScrap,
             RemoveScrap,
+            UpdateScrapTexture,
             Unknown
         };
 
         PendingScrapCommand() :
-            CommandType(Unknown),
-            Scrap(nullptr)
+            m_commandType(Unknown),
+            m_scrap(nullptr)
         {
 
         }
 
         PendingScrapCommand(Type type, cwScrap* scrap, cwTriangulatedData data) :
-            CommandType(type),
-            Scrap(scrap),
-            Data(data)
+            m_commandType(type),
+            m_scrap(scrap),
+            m_data(data)
         { }
 
-        Type type() const { return CommandType; }
-        cwScrap* scrap() const { return Scrap; }
-        cwTriangulatedData triangulatedData() const { return Data; }
+        Type type() const { return m_commandType; }
+        cwScrap* scrap() const { return m_scrap; }
+        cwTriangulatedData triangulatedData() const { return m_data; }
 
     private:
-        Type CommandType;
-        cwScrap* Scrap;
-        cwTriangulatedData Data;
+        Type m_commandType;
+        cwScrap* m_scrap;
+        cwTriangulatedData m_data; //We need triangle data because scrap might get delete duing a frame
 
     };
 
     QHash<cwScrap*, PendingScrapCommand> m_pendingChanges;
 
     bool m_visible = true; //!< True if the scraps are visible and false if they're not
+
+    void addCommand(const PendingScrapCommand& command);
 
     friend class cwRhiScraps;
 };

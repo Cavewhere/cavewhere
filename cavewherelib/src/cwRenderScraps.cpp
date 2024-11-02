@@ -44,17 +44,7 @@ void cwRenderScraps::addScrapToUpdate(cwScrap *scrap)
                                                           scrap,
                                                           scrap->triangulationData());
 
-        if(m_pendingChanges.contains(scrap)) {
-            PendingScrapCommand existingCommand = m_pendingChanges.value(scrap);
-            if(existingCommand.type() == PendingScrapCommand::RemoveScrap) {
-                // Replace with an add command
-                m_pendingChanges.insert(scrap, command);
-                update();
-            }
-        } else {
-            m_pendingChanges.insert(scrap, command);
-            update();
-        }
+        addCommand(command);
     }
 }
 
@@ -64,19 +54,25 @@ void cwRenderScraps::removeScrap(cwScrap *scrap)
                                                       scrap,
                                                       cwTriangulatedData());
 
-    if(m_pendingChanges.contains(scrap)) {
-        PendingScrapCommand existingCommand = m_pendingChanges.value(scrap);
-        if(existingCommand.type() == PendingScrapCommand::AddScrap) {
-            // Scrap has been removed
-            m_pendingChanges.insert(scrap, command);
-            update();
-        }
-    } else {
-        m_pendingChanges.insert(scrap, command);
-        update();
-    }
+    addCommand(command);
+}
+
+void cwRenderScraps::addScrapTextureToUpdate(cwScrap *scrap)
+{
+    PendingScrapCommand command = PendingScrapCommand(PendingScrapCommand::UpdateScrapTexture,
+                                                      scrap,
+                                                      scrap->triangulationData());
+
+    addCommand(command);
+
 }
 
 cwRHIObject* cwRenderScraps::createRHIObject() {
     return new cwRhiScraps();
+}
+
+void cwRenderScraps::addCommand(const PendingScrapCommand &command)
+{
+    m_pendingChanges.insert(command.scrap(), command);
+    update();
 }
