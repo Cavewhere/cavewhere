@@ -46,11 +46,11 @@ jobs:
       - name: Configure Conan Profile
         run: |
           conan profile detect --force
-          #conan profile set settings.compiler.cppstd=17 --profile default
+          #conan profile set settings.compiler.cppstd=gnu20 --profile default
 
       - name: Install Dependencies with Conan
         run: |
-          conan install . --build=missing -o CaveWhere/*:system_qt=False --output-folder=build -s compiler.cppstd=17
+          conan install . --build=missing -o CaveWhere/*:system_qt=False --output-folder=build -s compiler.cppstd=gnu20
 
       - name: Configure the Project with CMake
         run: |
