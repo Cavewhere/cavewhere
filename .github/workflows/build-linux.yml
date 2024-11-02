@@ -25,7 +25,8 @@ jobs:
             build-essential \
             cmake \
             ninja-build \
-            pipx
+            pipx \
+            libgtk2.0-dev
 
       - name: Installing Conan
         run: |
