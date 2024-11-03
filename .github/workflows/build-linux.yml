@@ -69,6 +69,10 @@ jobs:
 
       #conan install . --build=missing -o CaveWhere/*:system_qt=False --output-folder=build \
 
+      - name: Install Locale::PO Perl Module
+        run: |
+          cpan Locale::PO
+
       - name: Install Dependencies with Conan
         run: |
             conan install . --build=missing --output-folder=build \
