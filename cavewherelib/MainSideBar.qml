@@ -223,4 +223,13 @@ QQ.Rectangle {
             }
         }
     }
+
+    QQ.Rectangle {
+        id: verticalLine
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        width: 1
+        color: "#141414"
+    }
 }

@@ -20,11 +20,9 @@ QQ.Item {
     MainSideBar {
         id: mainSideBar;
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: -1
         anchors.left: parent.left
         anchors.leftMargin: 0
         anchors.top: linkBar.bottom
-        anchors.topMargin: -1
 
         //For animating which page is shown
         property real pageShownReal: pageShown;
@@ -34,8 +32,6 @@ QQ.Item {
                 duration: 150
             }
         }
-
-
     }
 
     QQ.Item {
@@ -50,7 +46,6 @@ QQ.Item {
         PageView {
             id: pageView
             anchors.fill: parent
-            anchors.margins: 3
             pageSelectionModel: RootData.pageSelectionModel
         }
     }
