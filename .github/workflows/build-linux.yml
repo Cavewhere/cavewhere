@@ -19,6 +19,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 0 #Fetch the tags for the versions to work correctly
 
       - name: Install System Dependencies
         run: |
