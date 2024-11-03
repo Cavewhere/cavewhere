@@ -10,7 +10,7 @@ on:
 
 jobs:
   build:
-    #CaveWhere orginization runner
+    #CaveWhere orginization
     runs-on: CaveWhereRunner
 
     steps:
