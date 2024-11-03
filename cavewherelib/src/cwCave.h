@@ -44,7 +44,6 @@ public:
     enum Roles {
         TripObjectRole
     };
-
     Q_ENUM(Roles)
 
     explicit cwCave(QObject* parent = nullptr);
@@ -73,6 +72,7 @@ public:
     cwCavingRegion* parentRegion() const;
 
     Q_INVOKABLE int rowCount(const QModelIndex &parent = QModelIndex()) const;
+
     Q_INVOKABLE QVariant data(const QModelIndex &index, int role) const;
     QHash<int, QByteArray> roleNames() const;
     Q_INVOKABLE QModelIndex index(int row, int column = 0, const QModelIndex &parent = QModelIndex()) const;

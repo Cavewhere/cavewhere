@@ -6,6 +6,7 @@
 **************************************************************************/
 
 import QtQuick as QQ
+import QtQuick.Controls as Controls
 import cavewherelib
 import "Theme.js" as Theme
 
@@ -66,7 +67,7 @@ ShadowRectangle {
             visible: removeChallenge.removeName.length !== 0
         }
 
-        Button {
+        Controls.Button {
             text: "Remove"
             onClicked: {
                 removeChallenge.remove();
@@ -74,7 +75,7 @@ ShadowRectangle {
             }
         }
 
-        Button {
+        Controls.Button {
             text: "Cancel"
             onClicked: {
                 removeChallenge.state = ""

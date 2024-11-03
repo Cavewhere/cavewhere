@@ -9,6 +9,7 @@ import QtQuick as QQ
 import cavewherelib
 import QtQuick.Controls as Controls;
 import QtQuick.Dialogs
+import QtQuick.Layouts
 
 QQ.Item {
     id: iconBar
@@ -121,12 +122,12 @@ QQ.Item {
         ]
     }
 
-    QQ.Row {
+    ColumnLayout {
         id: rowId
 
         spacing: 3
 
-        Button {
+        Controls.Button {
             id: exportButton
             text: "Export"
 
@@ -195,7 +196,7 @@ QQ.Item {
             }
         }
 
-        Button {
+        Controls.Button {
             id: importButton
 
             text: "Import"

@@ -51,92 +51,93 @@ StandardPage {
 
                     var lastIndex = RootData.region.rowCount() - 1;
                     var lastModelIndex = RootData.region.index(lastIndex);
-                    var lastCave = RootData.region.data(lastModelIndex, Cave.TripObjectRole);
+                    var lastCave = RootData.region.data(lastModelIndex, CavingRegion.CaveObjectRole);
 
                     RootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
                                                                pageId.cavePageName(lastCave));
                 }
             }
 
-            QQ.TableView {
+            QQ.ListView {
                 id: tableViewId
                 model: RootData.region
 
                 Layout.fillHeight: true
                 implicitWidth: 450
 
-                // QQ.TableViewColumn { role: "caveObjectRole" ; title: "Cave" ; width: 200 }
-                // QQ.TableViewColumn { role: "caveObjectRole" ; title: "Length" ; width: 100 }
-                // QQ.TableViewColumn { role: "caveObjectRole" ; title: "Depth" ; width: 100 }
+                delegate:
+                    QQ.Item {
+                    id: delegateId
+                    required property Cave caveObjectRole;
+                    required property int index
 
-            //     itemDelegate:
-            //         QQ.Item {
+                    implicitHeight: layoutId.height
+                    implicitWidth: layoutId.width
 
-            //         QQ.Connections {
-            //             target: tableViewId
-            //             onCurrentRowChanged: {
-            //                 exportButton.currentCave = styleData.value
-            //             }
-            //         }
+                    RowLayout {
+                        id: layoutId
 
-            //         QQ.Item {
-            //             visible: styleData.column === 0
+                        QQ.Connections {
+                            target: tableViewId
+                            function onCurrentItemChanged() {
+                                exportButton.currentCave = tableViewId.currentItem.caveObjectRole
+                            }
+                        }
 
-            //             anchors.fill: parent
+                        // RowLayout {
+                        //     id: rowLayout
+                        //     spacing: 1
 
-            //             RowLayout {
-            //                 id: rowLayout
-            //                 spacing: 1
+                        ErrorIconBar {
+                            errorModel: delegateId.caveObjectRole.errorModel
+                        }
 
-            //                 ErrorIconBar {
-            //                     errorModel: styleData.value.errorModel
-            //                 }
+                        LinkText {
+                            text: delegateId.caveObjectRole.name
+                            onClicked: {
+                                RootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
+                                                                           cavePageName(delegateId.caveObjectRole));
+                            }
+                        }
+                        // }
 
-            //                 LinkText {
-            //                     visible: styleData.column === 0
-            //                     text: styleData.value.name
-            //                     onClicked: {
-            //                         RootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
-            //                                                                    cavePageName(styleData.value));
-            //                     }
-            //                 }
-            //             }
-            //         }
+                        Text {
+                            text: "is"
+                        }
 
-            //         UnitValueInput {
-            //             visible: styleData.column === 1 || styleData.column === 2
-            //             unitValue: {
-            //                 switch(styleData.column) {
-            //                 case 1:
-            //                     return styleData.value.length
-            //                 case 2:
-            //                     return styleData.value.depth
-            //                 default:
-            //                     return null
-            //                 }
-            //             }
-            //             unitModel: {
-            //                 switch(styleData.column) {
-            //                 case 1:
-            //                     return UnitDefaults.lengthModel
-            //                 case 2:
-            //                     return UnitDefaults.depthModel
-            //                 default:
-            //                     return null
-            //                 }
-            //             }
+                        UnitValueInput {
+                            unitValue: delegateId.caveObjectRole.length
+                            unitModel: UnitDefaults.lengthModel
+                            valueReadOnly: true
+                        }
 
-            //             valueReadOnly: true
-            //         }
+                        Text {
+                            text: "long and"
+                        }
 
-            //         DataRightClickMouseMenu {
-            //             anchors.fill: parent
-            //             removeChallenge: removeChallengeId
-            //         }
-            //     }
+                        UnitValueInput {
+                            unitValue: delegateId.caveObjectRole.depth
+                            unitModel: UnitDefaults.depthModel
+                            valueReadOnly: true
+                        }
+
+                        Text {
+                            text: "deep"
+                        }
+                    }
+
+                    DataRightClickMouseMenu {
+                        anchors.fill: parent
+                        removeChallenge: removeChallengeId
+                        caveName: delegateId.caveObjectRole.name
+                        row: delegateId.index
+                    }
+                }
+
             }
         }
     }
+
 
     RemoveAskBox {
         id: removeChallengeId
@@ -148,33 +149,34 @@ StandardPage {
     Instantiator {
         model: RootData.region
         component PageDelegate : QQ.QtObject {
-                id: delegateObjectId
-                property Cave caveObjectRole
-                property Cave cave: caveObjectRole
-                property Page page
+            id: delegateObjectId
+            required property Cave caveObjectRole
+            property Page page
         }
 
         delegate: PageDelegate {}
 
 
-        onObjectAdded: {
+        onObjectAdded: function (index, object) {
             //In-ables the link
+
             let delegate = object as PageDelegate
+            console.log(`Cave page added! ${index} ${object.caveObjectRole} ${delegate.caveObjectRole}`)
             var linkId = RootData.pageSelectionModel.registerPage(pageId.PageView.page, //From
-                                                                  pageId.cavePageName(delegate.cave), //Name
+                                                                  pageId.cavePageName(delegate.caveObjectRole), //Name
                                                                   caveOverviewPageComponent,
-                                                                  {currentCave:delegate.cave}
+                                                                  {currentCave:delegate.caveObjectRole}
                                                                   )
 
             delegate.page = linkId
-            delegate.page.setNamingFunction(delegate.cave,
-                                          "nameChanged()",
-                                          pageId,
-                                          "cavePageName",
-                                          delegate.cave)
+            delegate.page.setNamingFunction(delegate.caveObjectRole,
+                                            "nameChanged()",
+                                            pageId,
+                                            "cavePageName",
+                                            delegate.caveObjectRole)
         }
 
-        onObjectRemoved: {
+        onObjectRemoved: function (index, object) {
             let delegate = object as PageDelegate
             RootData.pageSelectionModel.unregisterPage(delegate.page);
         }

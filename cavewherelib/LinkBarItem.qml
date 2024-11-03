@@ -12,7 +12,7 @@ QQ.Item {
     implicitWidth: childrenRect.width
     implicitHeight: childrenRect.height
 
-    anchors.verticalCenter: parent.verticalCenter
+    anchors.verticalCenter: parent ? parent.verticalCenter : undefined
 
     RowLayout {
         spacing: 2

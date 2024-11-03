@@ -1,5 +1,6 @@
 import QtQuick as QQ
 import QtQuick.Layouts
+import QtQuick.Controls as Controls
 
 RowLayout {
     id: controlBarId
@@ -8,10 +9,10 @@ RowLayout {
 
     signal add();
 
-    Button {
+    Controls.Button {
         id: addButtonId
 
-        iconSource: "qrc:/icons/plus.png"
+        icon.source: "qrc:/icons/plus.png"
 
         Layout.alignment: Qt.AlignLeft
 
