@@ -13,15 +13,6 @@ SplitView {
     QQ.Item {
         SplitView.preferredWidth: parent.width * .75
 
-        QQ.Rectangle {
-            id: backgroundId
-            anchors.fill: parent
-            gradient: QQ.Gradient {
-                QQ.GradientStop { position: 0.0; color: "#92D7F8" }
-                QQ.GradientStop { position: 0.95; color: "#F3F8FB" }
-            }
-        }
-
         GLTerrainRenderer {
             id: rendererId
             anchors.fill: parent

@@ -23,6 +23,7 @@ class cwGLTerrain;
 class cwRenderObject;
 class cwRenderLinePlot;
 class cwRenderScraps;
+class cwRenderRadialGradient;
 
 class cwRegionSceneManager : public QObject
 {
@@ -60,7 +61,8 @@ private:
     cwGLTerrain* Terrain;
     cwRenderLinePlot* m_linePlot;
     cwRenderScraps* m_scraps;
-    cwRenderGridPlane* Plane;
+    cwRenderGridPlane* m_plane;
+    cwRenderRadialGradient* m_background;
 
     //For rendering label
     QPointer<cwCavingRegion> Region;
