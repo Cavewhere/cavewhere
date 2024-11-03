@@ -11,7 +11,8 @@ on:
 jobs:
   build:
     #CaveWhere orginization
-    runs-on: CaveWhereRunner
+    #runs-on: CaveWhereRunner
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout code
@@ -27,6 +28,16 @@ jobs:
             cmake \
             ninja-build \
             pipx
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          aqtversion: '==3.1.*'
+          version: '6.8.0'
+          host: 'linux'
+          target: 'desktop'
+          arch: 'linux_gcc_64'
+          modules: 'qtshadertools'
 
       - name: Installing Conan
         run: |
@@ -56,9 +67,11 @@ jobs:
       #     restore-keys: |
       #       ${{ runner.os }}-apt-
 
+      #conan install . --build=missing -o CaveWhere/*:system_qt=False --output-folder=build \
+
       - name: Install Dependencies with Conan
         run: |
-            conan install . --build=missing -o CaveWhere/*:system_qt=False --output-folder=build \
+            conan install . --build=missing --output-folder=build \
             -s compiler.cppstd=17 \
             -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True
 
