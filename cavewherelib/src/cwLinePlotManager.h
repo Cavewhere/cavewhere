@@ -25,7 +25,7 @@ class cwErrorListModel;
 //Qt includes
 #include <QObject>
 #include <QPointer>
-#include <QQMlEngine>
+#include <QQmlEngine>
 
 class CAVEWHERE_LIB_EXPORT cwLinePlotManager : public QObject
 {
