@@ -90,5 +90,5 @@ jobs:
           -DCMAKE_PREFIX_PATH=${{ github.workspace }}/Qt/6.8.0/gcc_64/lib \
           -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake -S . -B build
 
-      # - name: Build the Project
-      #   run: cmake --build build
+      - name: Build the Project
+        run: cmake --build build
