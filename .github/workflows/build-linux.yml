@@ -27,7 +27,8 @@ jobs:
             build-essential \
             cmake \
             ninja-build \
-            pipx
+            pipx \
+            liblocale-po-perl
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
@@ -68,10 +69,6 @@ jobs:
       #       ${{ runner.os }}-apt-
 
       #conan install . --build=missing -o CaveWhere/*:system_qt=False --output-folder=build \
-
-      - name: Install Locale::PO Perl Module
-        run: |
-          cpan Locale::PO
 
       - name: Install Dependencies with Conan
         run: |
