@@ -10,7 +10,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: CaveWhereRunner
 
     steps:
       - name: Checkout code
