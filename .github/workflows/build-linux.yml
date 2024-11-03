@@ -91,4 +91,4 @@ jobs:
           -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake -S . -B build
 
       - name: Build the Project
-        run: cmake --build build
+        run: cmake --build build --parallel
