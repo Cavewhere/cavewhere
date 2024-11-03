@@ -4,7 +4,7 @@
 //Qt includes
 #include <QAbstractTableModel>
 #include <QPointer>
-#include <QQMLEngine>
+#include <QQmlEngine>
 
 //Our includes
 class cwColumnNameModel;
