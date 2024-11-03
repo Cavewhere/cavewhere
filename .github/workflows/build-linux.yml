@@ -44,16 +44,16 @@ jobs:
         with:
           path: ~/.conan2
           key: ${{ runner.os }}-conan-${{ hashFiles('conanfile.*') }}
-          #restore-keys: |
-          #  ${{ runner.os }}-conan-
-
-      - name: Set up cache for apt packages
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: ${{ runner.os }}-apt-${{ hashFiles('conanfile.*') }}
           restore-keys: |
-            ${{ runner.os }}-apt-
+            ${{ runner.os }}-conan-
+
+      # - name: Set up cache for apt packages
+      #   uses: actions/cache@v4
+      #   with:
+      #     path: /var/cache/apt/archives
+      #     key: ${{ runner.os }}-apt-${{ hashFiles('conanfile.*') }}
+      #     restore-keys: |
+      #       ${{ runner.os }}-apt-
 
       - name: Install Dependencies with Conan
         run: |
