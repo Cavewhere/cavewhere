@@ -28,7 +28,8 @@ jobs:
             cmake \
             ninja-build \
             pipx \
-            liblocale-po-perl
+            liblocale-po-perl \
+            git
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
