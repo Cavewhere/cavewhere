@@ -1,6 +1,6 @@
 //Our includes
 #include "cwRhiScene.h"
-#include "cwRhiObject.h"
+#include "cwRHIObject.h"
 #include "cwRenderObject.h"
 #include "cwRhiItemRenderer.h"
 #include "cwScene.h"
