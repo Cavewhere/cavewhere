@@ -78,10 +78,10 @@ jobs:
             -s compiler.cppstd=17 \
             -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True
 
-      - name: ls build dir
-        run: |
-            ls -la ${{ github.workspace }}/build
-            ls -la ${{ github.workspace }}/build/${{ github.workspace }}/build
+      # - name: ls build dir
+      #   run: |
+      #       ls -la ${{ github.workspace }}/build
+      #       ls -la ${{ github.workspace }}/build/${{ github.workspace }}/build
 
 
       - name: Configure the Project with CMake
