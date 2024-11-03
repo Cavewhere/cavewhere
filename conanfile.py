@@ -56,14 +56,16 @@ class CaveWhereConan(ConanFile):
         #Arrow fails on github linux build, disable
         self.options["gdal"].with_arrow = False
 
-
         #This prevents protoc from needing zlib which adds a failing rpath protoc
-        # self.options["protobuf"].with_zlib=False
+        self.options["protobuf"].with_zlib=False
+
+        #This prevents xcode build from failing
+        self.options["libtiff"].zstd=False
+        # self.options["gdal"].shared=True
 
         #This is survex dependancy
         #self.options["wxwidgets"].webview=False
         # self.options["wxwidgets"].shared=True
-        # self.options["proj"].shared=True
 #        self.options["tiff"].shared=True
 #        self.options["proj"].with_tiff=False
         # self.options["zlib"].shared=True
