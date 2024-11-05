@@ -35,6 +35,9 @@ class cwBaseTurnTableInteraction : public cwInteraction
     Q_PROPERTY(cwScene* scene READ scene WRITE setScene NOTIFY sceneChanged)
     Q_PROPERTY(int startDragDistance READ startDragDistance CONSTANT)
 
+    Q_PROPERTY(bool azimuthLocked READ isAzimuthLocked WRITE setAzimuthLocked BINDABLE azimuthLockedBinding)
+    Q_PROPERTY(bool pitchLocked READ isPitchLocked WRITE setPitchLocked BINDABLE pitchLockedBinding)
+
 public:
     explicit cwBaseTurnTableInteraction(QQuickItem *parent = 0);
 
@@ -42,6 +45,14 @@ public:
 
     double azimuth() const;
     void setAzimuth(double azimuth);
+
+    bool isAzimuthLocked() const { return m_azimuthLocked; }
+    void setAzimuthLocked(bool locked) { m_azimuthLocked = locked; }
+    QBindable<bool> azimuthLockedBinding() { return &m_azimuthLocked; }
+
+    bool isPitchLocked() const { return m_pitchLocked; }
+    void setPitchLocked(bool locked) { m_pitchLocked = locked; }
+    QBindable<bool> pitchLockedBinding() { return &m_pitchLocked; }
 
     double pitch() const;
     void setPitch(double pitch);
@@ -57,6 +68,8 @@ public:
     Q_INVOKABLE void centerOn(QVector3D point, bool animate = false);
 
     int startDragDistance() const;
+
+
 
 signals:
     void rotationChanged();
@@ -84,6 +97,9 @@ private slots:
 
     void updateViewMatrixFromAnimation(QVariant matrix);
 private:
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwBaseTurnTableInteraction, bool, m_azimuthLocked, false);
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwBaseTurnTableInteraction, bool, m_pitchLocked, false);
+
     QVector3D LastMouseGlobalPosition; //For panning
     QPlane3D PanPlane;
     QPointF LastMousePosition; //For rotation

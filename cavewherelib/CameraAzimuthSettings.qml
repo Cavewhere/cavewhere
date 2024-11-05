@@ -26,6 +26,7 @@ ColumnLayout {
                 azimuthAnimationId.restartRotation(0.0)
             }
             enabled: turnTableInteraction.azimuth !== 0.0
+                     && !turnTableInteraction.azimuthLocked
         }
 
         LockButton {
@@ -44,6 +45,7 @@ ColumnLayout {
                 azimuthAnimationId.restartRotation(270.0)
             }
             enabled: turnTableInteraction.azimuth !== 270.0
+                     && !turnTableInteraction.azimuthLocked
         }
 
         RowLayout {
@@ -58,6 +60,7 @@ ColumnLayout {
                     azimuthAnimationId.to = newText
                     azimuthAnimationId.restart()
                 }
+                enabled: !turnTableInteraction.azimuthLocked
             }
 
             Cavewhere.CompassValidator {
@@ -77,6 +80,7 @@ ColumnLayout {
                 azimuthAnimationId.restartRotation(90.0)
             }
             enabled: turnTableInteraction.azimuth !== 90.0
+                     && !turnTableInteraction.azimuthLocked
         }
 
         QQ.Item { width:1; height:1 }
@@ -88,12 +92,14 @@ ColumnLayout {
                 azimuthAnimationId.restartRotation(180.0)
             }
             enabled: turnTableInteraction.azimuth !== 180.0
+                     && !turnTableInteraction.azimuthLocked
         }
         QQ.Item { width:1; height:1 }
     }
 
     GroupBox {
         title: "Animate"
+        enabled: !turnTableInteraction.azimuthLocked
 
         RowLayout {
 

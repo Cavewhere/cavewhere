@@ -232,12 +232,16 @@ void cwBaseTurnTableInteraction::rotateLastPosition()
     delta /= 2.0;
 
     //Calculate the new pitch
-    Pitch = clampPitch(Pitch + delta.y());
-    emit pitchChanged();
+    if(!isPitchLocked()) {
+        Pitch = clampPitch(Pitch + delta.y());
+        emit pitchChanged();
+    }
 
     //Calculate the new azimuth
-    Azimuth = clampAzimuth(Azimuth - delta.x());
-    emit azimuthChanged();
+    if(!isAzimuthLocked()) {
+        Azimuth = clampAzimuth(Azimuth - delta.x());
+        emit azimuthChanged();
+    }
 
     updateRotationMatrix();
 }
@@ -500,7 +504,7 @@ QQuaternion cwBaseTurnTableInteraction::rotation() const {
 */
 void cwBaseTurnTableInteraction::setAzimuth(double azimuth) {
     azimuth = clampAzimuth(azimuth);
-    if(Azimuth != azimuth) {
+    if(Azimuth != azimuth && !isAzimuthLocked()) {
         Azimuth = azimuth;
         emit azimuthChanged();
 
@@ -516,7 +520,7 @@ void cwBaseTurnTableInteraction::setAzimuth(double azimuth) {
 void cwBaseTurnTableInteraction::setPitch(double pitch) {
     pitch = clampPitch(pitch);
 
-    if(Pitch != pitch) {
+    if(Pitch != pitch && !isPitchLocked()) {
         Pitch = pitch;
         emit pitchChanged();
 

@@ -19,6 +19,7 @@ ColumnLayout {
         ClickTextInput {
             text: Number(itemId.turnTableInteraction.pitch).toFixed(1)
             validator: doubleValidatorId
+            enabled: !turnTableInteraction.pitchLocked
             onFinishedEditting: (newText) => {
                 pitchAnimation.to = newText
                 pitchAnimation.restart()
@@ -34,6 +35,8 @@ ColumnLayout {
         }
 
         ColumnLayout {
+            enabled: !turnTableInteraction.pitchLocked
+
             QC.Button {
                 id: planButtonId
                 text: "Plan"
@@ -53,6 +56,13 @@ ColumnLayout {
                     pitchAnimation.restart()
                 }
                 enabled: itemId.turnTableInteraction.pitch !== 0.0
+            }
+        }
+
+        LockButton {
+            down: turnTableInteraction.pitchLocked
+            onClicked: {
+                turnTableInteraction.pitchLocked = !turnTableInteraction.pitchLocked
             }
         }
     }
