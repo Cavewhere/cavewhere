@@ -291,26 +291,14 @@ void cwRhiScraps::RhiScrap::initializeResources(const ResourceUpdateData& data, 
     QRhi* rhi = data.renderData.cb->rhi();
 
     // Create buffers if they don't exist
-    // if (!vertexBuffer) {
-        vertexBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, 0);
-        vertexBuffer->create();
-    // }
+    vertexBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, 0);
+    vertexBuffer->create();
 
-    // if (!texCoordBuffer) {
-        texCoordBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, 0);
-        texCoordBuffer->create();
-    // }
+    texCoordBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, 0);
+    texCoordBuffer->create();
 
-    // if (!indexBuffer) {
-        indexBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::IndexBuffer, 0);
-        indexBuffer->create();
-    // }
-
-    // if(!uniformBuffer) {
-        // auto uniformBufferSize = rhi->ubufAligned(sizeof(ScrapUniform));
-        // uniformBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, uniformBufferSize);
-        // uniformBuffer->create();
-    // }
+    indexBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::IndexBuffer, 0);
+    indexBuffer->create();
 
 
     createShadeResourceBindings(data, sharedData);
