@@ -85,7 +85,7 @@ void cwRhiScraps::initializePipeline(const ResourceUpdateData& data)
     m_globalSrb->setBindings({
         QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, nullptr), //Global uniform buffer
         // QRhiShaderResourceBinding::uniformBuffer(1, QRhiShaderResourceBinding::VertexStage, nullptr), //Scrap uniform buffer
-        QRhiShaderResourceBinding::sampledTexture(0, QRhiShaderResourceBinding::FragmentStage, nullptr, nullptr) //Texture and sampler
+        QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage, nullptr, nullptr) //Texture and sampler
     });
     m_globalSrb->create();
 
@@ -332,7 +332,7 @@ void cwRhiScraps::RhiScrap::createShadeResourceBindings(const ResourceUpdateData
     srb->setBindings({
         QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, data.renderData.renderer->globalUniformBuffer()),
         // QRhiShaderResourceBinding::uniformBuffer(1, QRhiShaderResourceBinding::VertexStage, uniformBuffer),
-        QRhiShaderResourceBinding::sampledTexture(0, QRhiShaderResourceBinding::FragmentStage, currentTexture, sharedData.m_sampler)
+        QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage, currentTexture, sharedData.m_sampler)
     });
     srb->create();
 }
