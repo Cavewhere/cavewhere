@@ -22,7 +22,7 @@ This guide outlines the steps to build and run CaveWhere, a cave mapping softwar
 First, update your package list and install all necessary dependencies with the following command:
 
 ```bash
-sudo apt update && sudo apt install -y ninja-build libx11-xcb-dev libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 qt5-default qtdeclarative5-dev libqt5svg5-dev libgtk2.0-dev libxmu-dev libfontenc-dev libxaw7-dev libxkbfile-dev libxmuu-dev libxpm-dev libxres-dev libxss-dev libxtst-dev libxv-dev libxxf86vm-dev libwebkit2gtk-4.0-dev qml-module-qtquick-controls qml-module-qtquick-dialogs qml-module-qtquick-window2 qml-module-qt-labs-settings qml-module-qtquick-controls2 survex
+sudo apt update && sudo apt install -y build-essential cmake ninja-build pipx liblocale-po-perl git
 ```
 
 ## Conan Package Manager Installation
@@ -30,7 +30,7 @@ sudo apt update && sudo apt install -y ninja-build libx11-xcb-dev libxcb-icccm4 
 Conan is required for managing packages and dependencies. If you have Conan installed, skip this step. Otherwise, uninstall any existing Conan versions and install the specified version using `pipx`:
 
 ```bash
-pipx install conan==1.63.0
+pipx install conan
 ```
 
 ## Building CaveWhere
@@ -42,7 +42,7 @@ pipx install conan==1.63.0
    ```bash
    git clone https://github.com/Cavewhere/cavewhere.git
    cd cavewhere
-   git checkout --track origin/WIP-cmake
+   git checkout --track origin/WIP-qt6
    git submodule update --init --recursive
    cd ..
    ```
@@ -60,18 +60,10 @@ pipx install conan==1.63.0
    Use Conan to install the project dependencies:
 
    ```bash
-   conan install ../cavewhere --build=missing
+   conan install ../cavewhere --build=missing -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True 
    ```
 
-4. **Source the Conan Environment**
-
-   Source the Conan environment script to set up necessary environment variables:
-
-   ```bash
-   source conanbuildenv-release-x86_64.sh
-   ```
-
-5. **Configure the Project with CMake**
+4. **Configure the Project with CMake**
 
    Use CMake to configure the project. Ensure the `CMAKE_BUILD_TYPE` is set to `Release`:
 
@@ -79,7 +71,7 @@ pipx install conan==1.63.0
    cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_PDF=OFF -DCMAKE_MODULE_PATH=`pwd` ../cavewhere
    ```
 
-6. **Build the Project**
+5. **Build the Project**
 
    Now, build the project using CMake:
 
