@@ -33,33 +33,33 @@ private:
     int m_vertexCount;
 
     QRhiBuffer* m_vertexBuffer = nullptr;
-    QRhiBuffer* m_textureVertexBuffer = nullptr;
+    // QRhiBuffer* m_textureVertexBuffer = nullptr;
 
-    // Textures and render targets
-    QRhiTexture* m_compassTexture = nullptr;
-    QRhiTextureRenderTarget* m_compassRenderTarget = nullptr;
-    QRhiRenderPassDescriptor* m_compassRenderPassDesc = nullptr;
+    // // Textures and render targets
+    // QRhiTexture* m_compassTexture = nullptr;
+    // QRhiTextureRenderTarget* m_compassRenderTarget = nullptr;
+    // QRhiRenderPassDescriptor* m_compassRenderPassDesc = nullptr;
 
-    QRhiTexture* m_shadowTexture = nullptr;
-    QRhiTextureRenderTarget* m_shadowRenderTarget = nullptr;
-    QRhiRenderPassDescriptor* m_shadowRenderPassDesc = nullptr;
+    // QRhiTexture* m_shadowTexture = nullptr;
+    // QRhiTextureRenderTarget* m_shadowRenderTarget = nullptr;
+    // QRhiRenderPassDescriptor* m_shadowRenderPassDesc = nullptr;
 
-    QRhiTexture* m_horizontalBlurTexture = nullptr;
-    QRhiTextureRenderTarget* m_horizontalBlurRenderTarget = nullptr;
-    QRhiRenderPassDescriptor* m_horizontalBlurRenderPassDesc = nullptr;
+    // QRhiTexture* m_horizontalBlurTexture = nullptr;
+    // QRhiTextureRenderTarget* m_horizontalBlurRenderTarget = nullptr;
+    // QRhiRenderPassDescriptor* m_horizontalBlurRenderPassDesc = nullptr;
 
     // Pipelines
     QRhiGraphicsPipeline* m_compassPipeline = nullptr;
     QRhiShaderResourceBindings* m_compassBindings = nullptr;
 
-    QRhiGraphicsPipeline* m_shadowPipeline = nullptr;
-    QRhiShaderResourceBindings* m_shadowBindings = nullptr;
+    // QRhiGraphicsPipeline* m_shadowPipeline = nullptr;
+    // QRhiShaderResourceBindings* m_shadowBindings = nullptr;
 
-    QRhiGraphicsPipeline* m_blurPipeline = nullptr;
-    QRhiShaderResourceBindings* m_blurBindings = nullptr;
+    // QRhiGraphicsPipeline* m_blurPipeline = nullptr;
+    // QRhiShaderResourceBindings* m_blurBindings = nullptr;
 
-    QRhiGraphicsPipeline* m_outputPipeline = nullptr;
-    QRhiShaderResourceBindings* m_outputBindings = nullptr;
+    // QRhiGraphicsPipeline* m_outputPipeline = nullptr;
+    // QRhiShaderResourceBindings* m_outputBindings = nullptr;
 
     // Uniforms and constants
     QRhiBuffer* m_uniformBuffer = nullptr;

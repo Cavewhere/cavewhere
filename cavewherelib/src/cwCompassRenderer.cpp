@@ -12,32 +12,32 @@ cwCompassRenderer::cwCompassRenderer()
 cwCompassRenderer::~cwCompassRenderer()
 {
     delete m_vertexBuffer;
-    delete m_textureVertexBuffer;
+    // delete m_textureVertexBuffer;
     delete m_uniformBuffer;
 
-    delete m_compassTexture;
-    delete m_compassRenderTarget;
-    delete m_compassRenderPassDesc;
+    // delete m_compassTexture;
+    // delete m_compassRenderTarget;
+    // delete m_compassRenderPassDesc;
 
-    delete m_shadowTexture;
-    delete m_shadowRenderTarget;
-    delete m_shadowRenderPassDesc;
+    // delete m_shadowTexture;
+    // delete m_shadowRenderTarget;
+    // delete m_shadowRenderPassDesc;
 
-    delete m_horizontalBlurTexture;
-    delete m_horizontalBlurRenderTarget;
-    delete m_horizontalBlurRenderPassDesc;
+    // delete m_horizontalBlurTexture;
+    // delete m_horizontalBlurRenderTarget;
+    // delete m_horizontalBlurRenderPassDesc;
 
     delete m_compassPipeline;
     delete m_compassBindings;
 
-    delete m_shadowPipeline;
-    delete m_shadowBindings;
+    // delete m_shadowPipeline;
+    // delete m_shadowBindings;
 
-    delete m_blurPipeline;
-    delete m_blurBindings;
+    // delete m_blurPipeline;
+    // delete m_blurBindings;
 
-    delete m_outputPipeline;
-    delete m_outputBindings;
+    // delete m_outputPipeline;
+    // delete m_outputBindings;
 }
 
 void cwCompassRenderer::initialize(QRhiCommandBuffer *cb)
@@ -151,20 +151,20 @@ void cwCompassRenderer::initializeGeometry(QRhiCommandBuffer *cb)
     batch->uploadStaticBuffer(m_vertexBuffer, allPoints.constData());
 
     // Texture vertex buffer for screen quad
-    struct TexVertex {
-        QVector2D position;
-    };
-    QVector<TexVertex> textureVertices = {
-                                          { QVector2D(0.0f, 0.0f) },
-                                          { QVector2D(0.0f, 1.0f) },
-                                          { QVector2D(1.0f, 0.0f) },
-                                          { QVector2D(1.0f, 1.0f) },
-                                          };
+    // struct TexVertex {
+    //     QVector2D position;
+    // };
+    // QVector<TexVertex> textureVertices = {
+    //                                       { QVector2D(0.0f, 0.0f) },
+    //                                       { QVector2D(0.0f, 1.0f) },
+    //                                       { QVector2D(1.0f, 0.0f) },
+    //                                       { QVector2D(1.0f, 1.0f) },
+    //                                       };
 
-    m_textureVertexBuffer = cb->rhi()->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(TexVertex) * textureVertices.size());
-    m_textureVertexBuffer->create();
+    // m_textureVertexBuffer = cb->rhi()->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(TexVertex) * textureVertices.size());
+    // m_textureVertexBuffer->create();
 
-    batch->uploadStaticBuffer(m_textureVertexBuffer, textureVertices.constData());
+    // batch->uploadStaticBuffer(m_textureVertexBuffer, textureVertices.constData());
     cb->resourceUpdate(batch);
 }
 
