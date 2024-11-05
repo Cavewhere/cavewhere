@@ -70,13 +70,24 @@ void cwCompassRenderer::initializeResources(QRhiCommandBuffer *cb)
 void cwCompassRenderer::generateStarGeometry(QVector<Vertex> &trianglesPoints,
                                              cwCompassRenderer::Direction direction)
 {
-    QVector<QVector3D> defaultPoints; //Draw with line strip
-    defaultPoints.append(QVector3D(0.0, 0.0, 0.15));
-    defaultPoints.append(QVector3D(-.2, 0.2, 0.0));
-    defaultPoints.append(QVector3D(0.0, 0.2, 0.15));
-    defaultPoints.append(QVector3D(-.2, 0.2, 0.0));
-    defaultPoints.append(QVector3D(0.0, 0.2, 0.15));
-    defaultPoints.append(QVector3D(0.0, 1.0, 0.0));
+    enum class EdgeClass : int {
+        Middle,
+        Outside
+    };
+
+    struct Vectex {
+        QVector3D pos;
+        EdgeClass edge;
+    };
+
+    std::array<Vectex, 6> defaultPoints = {{
+        {QVector3D(0.0, 0.0, 0.15), EdgeClass::Middle},   // Middle, small triangle
+        {QVector3D(-0.2, 0.2, 0.0), EdgeClass::Outside},  // Outside, small triangle
+        {QVector3D(0.0, 0.2, 0.15), EdgeClass::Middle},   // Middle
+        {QVector3D(-0.2, 0.2, 0.0), EdgeClass::Outside},  // Outside
+        {QVector3D(0.0, 0.2, 0.15), EdgeClass::Middle},   // Middle
+        {QVector3D(0.0, 1.0, 0.0), EdgeClass::Middle}    // Outside
+    }};
 
     QMatrix4x4 rotationMatrix;
     rotationMatrix.setToIdentity();
@@ -84,6 +95,9 @@ void cwCompassRenderer::generateStarGeometry(QVector<Vertex> &trianglesPoints,
     QVector3D black(0.0, 0.0, 0.0); //Black
     QVector3D white(1.0, 1.0, 1.0); //White
     QVector3D bottowWhite(0.5, 0.5, 0.5); //g
+
+    QVector3D fadeBlack(0.35, 0.35, 0.35);
+    QVector3D fadeWhite(0.9, 0.9, 0.9);
     QVector3D currentColor;
 
     //Which side should be black first
@@ -117,15 +131,26 @@ void cwCompassRenderer::generateStarGeometry(QVector<Vertex> &trianglesPoints,
                     QVector3D extendendNorth = QVector3D(0.0, 1.5, 0.0);
                     point = rotationMatrix.map(extendendNorth);
                 } else {
-                    point = rotationMatrix.map(defaultPoints[p]);
+                    point = rotationMatrix.map(defaultPoints[p].pos);
                 }
 
+                QVector3D finalColor = currentColor;
                 if(direction == Bottom) {
                     //The bottom of the compass rose is flat
                     point.setZ(0.0);
+                } else {
+
+                    //Apply gradient coloring on edges so the compass stands out when on it side
+                    if(defaultPoints[p].edge == EdgeClass::Outside) {
+                        if(currentColor == black) {
+                            finalColor = fadeBlack;
+                        } else {
+                            finalColor = fadeWhite;
+                        }
+                    }
                 }
 
-                trianglesPoints.append(Vertex{point, currentColor});
+                trianglesPoints.append(Vertex{point, finalColor});
             }
 
             rotationMatrix.scale(-1.0, 1.0, 1.0);
