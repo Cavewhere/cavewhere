@@ -104,7 +104,9 @@ QQ.Item {
         isEditting = true
 
         //Set the editor's position
-        var globalPosition = clickTextInput.mapToItem(GlobalShadowTextInput, 0, 0)
+        //Calling this function with just GlobalShadowTextInput cause a crash, maybe because it's a singleton?
+        //Using the parent, should be the CavewhereMainWindow
+        var globalPosition = clickTextInput.mapToItem(GlobalShadowTextInput.parent, 0, 0)
         GlobalShadowTextInput.editor.x = globalPosition.x - 3
         GlobalShadowTextInput.editor.y = globalPosition.y - 3
 

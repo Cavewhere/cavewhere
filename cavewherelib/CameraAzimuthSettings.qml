@@ -56,7 +56,7 @@ ColumnLayout {
             ClickTextInput {
                 text: Number(turnTableInteraction.azimuth).toFixed(1)
                 validator: doubleValidatorId
-                onFinishedEditting: {
+                onFinishedEditting: (newText) => {
                     azimuthAnimationId.to = newText
                     azimuthAnimationId.restart()
                 }
