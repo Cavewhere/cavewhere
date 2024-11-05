@@ -1,9 +1,9 @@
 import QtQuick as QQ
 import QtQuick.Layouts
-import cavewherelib
+import cavewherelib as Cavewhere
+import QtQuick.Controls
 
 ColumnLayout {
-    id: settingsId
 
     property TurnTableInteraction turnTableInteraction
 
@@ -25,36 +25,42 @@ ColumnLayout {
             onClicked: {
                 azimuthAnimationId.restartRotation(0.0)
             }
-            enabled: settingsId.turnTableInteraction.azimuth !== 0.0
+            enabled: turnTableInteraction.azimuth !== 0.0
         }
 
-        QQ.Item { implicitWidth: 1; implicitHeight: 1 }
+        LockButton {
+            Layout.alignment: Qt.AlignRight
+            down: turnTableInteraction.azimuthLocked
+            onClicked: {
+                turnTableInteraction.azimuthLocked = !turnTableInteraction.azimuthLocked
+            }
+        }
 
         Button {
             id: westButton
             text: "West"
-            implicitWidth: northButton.width
+            width: northButton.width
             onClicked: {
                 azimuthAnimationId.restartRotation(270.0)
             }
-            enabled: settingsId.turnTableInteraction.azimuth !== 270.0
+            enabled: turnTableInteraction.azimuth !== 270.0
         }
 
         RowLayout {
 
             Layout.alignment: Qt.AlignCenter
-            implicitWidth: northButton.width
+            width: northButton.width
 
             ClickTextInput {
-                text: Number(settingsId.turnTableInteraction.azimuth).toFixed(1)
+                text: Number(turnTableInteraction.azimuth).toFixed(1)
                 validator: doubleValidatorId
-                onFinishedEditting: (newText) => {
+                onFinishedEditting: {
                     azimuthAnimationId.to = newText
                     azimuthAnimationId.restart()
                 }
             }
 
-            CompassValidator {
+            Cavewhere.CompassValidator {
                 id: doubleValidatorId
             }
 
@@ -66,61 +72,110 @@ ColumnLayout {
         Button {
             id: eastButton
             text: "East"
-            implicitWidth: northButton.width
+            width: northButton.width
             onClicked: {
                 azimuthAnimationId.restartRotation(90.0)
             }
-            enabled: settingsId.turnTableInteraction.azimuth !== 90.0
+            enabled: turnTableInteraction.azimuth !== 90.0
         }
 
-        QQ.Item { implicitWidth: 1; implicitHeight: 1 }
+        QQ.Item { width:1; height:1 }
         Button {
             id: southButton
             text: "South"
-            implicitWidth: northButton.width
+            width: northButton.width
             onClicked: {
                 azimuthAnimationId.restartRotation(180.0)
             }
-            enabled: settingsId.turnTableInteraction.azimuth !== 180.0
+            enabled: turnTableInteraction.azimuth !== 180.0
         }
-        QQ.Item { implicitWidth: 1; implicitHeight: 1 }
+        QQ.Item { width:1; height:1 }
+    }
 
+    GroupBox {
+        title: "Animate"
+
+        RowLayout {
+
+            Button {
+                id: animateAzimuthButton
+                text: checked ? "Stop" : "Start"
+                checkable: true
+                onCheckedChanged: {
+                    if(checked) {
+                        fullRotationAnimation.startCurrentPosition()
+                    } else {
+                        fullRotationAnimation.stop()
+                    }
+                }
+            }
+
+            QQ.Item {
+                Layout.fillWidth: true
+            }
+
+            Label {
+                text: "Duration"
+            }
+
+            TextField {
+                id: durationTextField
+                implicitWidth: 50
+                text: fullRotationAnimation.duration / 1000
+                onEditingFinished: {
+                    var animationRunning = fullRotationAnimation.running
+
+                    fullRotationAnimation.duration = Number(text) * 1000
+                    fullRotationAnimation.stop();
+                    if(animationRunning) {
+                        fullRotationAnimation.startCurrentPosition()
+                    }
+                }
+
+                validator: QQ.DoubleValidator {
+                    bottom: 0
+                }
+            }
+
+            Label {
+                text: "s"
+            }
+        }
+    }
+
+    QQ.NumberAnimation {
+        id: fullRotationAnimation
+        target: turnTableInteraction
+        property: "azimuth"
+        duration: 10000
+        loops: QQ.Animation.Infinite
+
+        function startCurrentPosition() {
+            fullRotationAnimation.from = turnTableInteraction.azimuth
+            fullRotationAnimation.to = turnTableInteraction.azimuth + 359.999
+            fullRotationAnimation.start()
+        }
     }
 
     QQ.NumberAnimation {
         id: azimuthAnimationId
-        target: settingsId.turnTableInteraction;
+        target: turnTableInteraction;
         property: "azimuth";
         duration: 200;
         easing.type: QQ.Easing.InOutQuad
 
         function restartRotation(toRotation) {
-
-            if(toRotation > 180) {
-                toRotation = toRotation - 360;
-            }
-
-            var from = settingsId.turnTableInteraction.azimuth;
-            if(from > 180) {
-                from = from - 360.0;
-            }
-
-            var angle = Math.abs((toRotation - settingsId.turnTableInteraction.azimuth) % 360.0);
-            if(angle > 180) {
-                angle = 360.0 - angle;
-            }
-
-            var to = 0
-            if(from <= toRotation) {
-                //Shortest path is clockwise
-                to = from + angle
-            } else {
-                //Shortest path is counter clockwise
-                to = from - angle
+            var from = turnTableInteraction.azimuth;
+            var to = toRotation
+            if(to > 180 && from <= 0.0) {
+                from = 360
+            } else if(to <= 0.0 && from > 180 ) {
+                to = 360
             }
 
             azimuthAnimationId.from = from
             azimuthAnimationId.to = to
+
             azimuthAnimationId.restart()
         }
     }
@@ -128,8 +183,8 @@ ColumnLayout {
     HelpArea {
         id: directionHelpAreaId
         Layout.fillWidth: true
-        text: "The views azimuth (in degrees between 0.0 and 360.0) is" +
-             "the compass direction that the view is facing." +
-            "<ul><li>0.0° for North<li>90.0° for East<li>180.0° for South<li>270.0° for West</ul>";
+        text: "The views azimuth (in degrees between 0.0 and 360.0) is
+             the compass direction that the view is facing.
+            <ul><li>0.0° for North<li>90.0° for East<li>180.0° for South<li>270.0° for West</ul>";
     }
 }

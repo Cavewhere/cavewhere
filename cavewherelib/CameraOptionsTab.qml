@@ -27,46 +27,50 @@ QQ.Item {
 
             QC.GroupBox {
                 title: "Azimuth"
-                QQ.Item {
-                    width: columnLayoutId.maxWidth
-                    height: azimuthSettingsId.height
-                    CameraAzimuthSettings {
-                        id: azimuthSettingsId
-                        turnTableInteraction: itemId.viewer.turnTableInteraction
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                    }
+                CameraAzimuthSettings {
+                    id: azimuthSettingsId
+                    turnTableInteraction: itemId.viewer.turnTableInteraction
                 }
             }
 
             QC.GroupBox {
                 title: "Vertical Angle"
 
-                QQ.Item {
-                    width: columnLayoutId.maxWidth
-                    height: verticalAngleSettingsId.height
-                    CameraVerticalAngleSettings {
-                        id: verticalAngleSettingsId
-                        turnTableInteraction: itemId.viewer.turnTableInteraction
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                    }
+                CameraVerticalAngleSettings {
+                    id: verticalAngleSettingsId
+                    turnTableInteraction: itemId.viewer.turnTableInteraction
                 }
+
+                // QQ.Item {
+                //     width: columnLayoutId.maxWidth
+                //     height: verticalAngleSettingsId.height
+                    // CameraVerticalAngleSettings {
+                    //     id: verticalAngleSettingsId
+                    //     turnTableInteraction: itemId.viewer.turnTableInteraction
+                    //     anchors.left: parent.left
+                    //     anchors.right: parent.right
+                    // }
+                // }
             }
 
             QC.GroupBox {
                 title: "Projection"
 
-                QQ.Item {
-                    width: columnLayoutId.maxWidth
-                    height: projectionSettingsId.height
-                    CameraProjectionSettings {
-                        id: projectionSettingsId
-                        viewer: itemId.viewer
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                    }
+                CameraProjectionSettings {
+                    id: projectionSettingsId
+                    viewer: itemId.viewer
                 }
+
+                // QQ.Item {
+                //     width: columnLayoutId.maxWidth
+                //     height: projectionSettingsId.height
+                //     CameraProjectionSettings {
+                //         id: projectionSettingsId
+                //         viewer: itemId.viewer
+                //         anchors.left: parent.left
+                //         anchors.right: parent.right
+                //     }
+                // }
             }
         }
     }

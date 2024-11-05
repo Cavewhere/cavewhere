@@ -1,5 +1,6 @@
 import QtQuick as QQ
 import QtQuick.Layouts
+import QtQuick.Controls as QC
 import cavewherelib
 
 ColumnLayout {
@@ -33,7 +34,7 @@ ColumnLayout {
         }
 
         ColumnLayout {
-            Button {
+            QC.Button {
                 id: planButtonId
                 text: "Plan"
                 implicitWidth: profileButtonId.width
@@ -44,7 +45,7 @@ ColumnLayout {
                 enabled: itemId.turnTableInteraction.pitch !== 90.0
             }
 
-            Button {
+            QC.Button {
                 id: profileButtonId
                 text: "Profile"
                 onClicked: {

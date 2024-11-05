@@ -99,37 +99,56 @@ ColumnLayout {
         Layout.fillHeight: true
         currentIndex: tabBarId.currentIndex
 
-        QQ.Component {
-            id: cameraOptionsTabComponentId
-            CameraOptionsTab {
-                // Your CameraOptionsTab-specific logic
-            }
+        // QQ.Rectangle {
+        //     color: "red"
+        //     anchors.fill: parent
+
+        // }
+
+        CameraOptionsTab {
+            viewer: rootLayout.viewer
         }
 
-        QQ.Component {
-            id: exportTabComponentId
-            ExportViewTab {
-                view: rootLayout.viewer
-            }
+        ExportViewTab {
+            view: rootLayout.viewer
         }
 
-        QQ.Item {
-            QQ.Loader {
-                sourceComponent: cameraOptionsTabComponentId
-                onLoaded:  {
-                    (item as CameraOptionsTab).viewer = rootLayout.viewer
-                }
-            }
-        }
 
-        QQ.Item {
-            QQ.Loader {
-                sourceComponent: exportTabComponentId
-                onLoaded: {
-                    (item as ExportViewTab).view = rootLayout.viewer
-                }
-            }
-        }
+
+        // QQ.Component {
+        //     id: cameraOptionsTabComponentId
+        //     CameraOptionsTab {
+        //         QQ.Rectangle {
+        //            color: "red"
+        //             anchors.fill: parent
+        //         }
+        //     }
+        // }
+
+        // QQ.Component {
+        //     id: exportTabComponentId
+        //     ExportViewTab {
+        //         view: rootLayout.viewer
+        //     }
+        // }
+
+        // QQ.Item {
+        //     QQ.Loader {
+        //         sourceComponent: cameraOptionsTabComponentId
+        //         onLoaded:  {
+        //             (item as CameraOptionsTab).viewer = rootLayout.viewer
+        //         }
+        //     }
+        // }
+
+        // QQ.Item {
+        //     QQ.Loader {
+        //         sourceComponent: exportTabComponentId
+        //         onLoaded: {
+        //             (item as ExportViewTab).view = rootLayout.viewer
+        //         }
+        //     }
+        // }
     }
 
     // function resizeCurrentTab() {

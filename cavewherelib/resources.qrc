@@ -93,5 +93,7 @@
         <file>icons/cave512x512.png</file>
         <file>icons/dxt1TestImage.png</file>
         <file>icons/Anisotropic_filtering_en.png</file>
+        <file>icons/lock.png</file>
+        <file>icons/unlock.png</file>
     </qresource>
 </RCC>
