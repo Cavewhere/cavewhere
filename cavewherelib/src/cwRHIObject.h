@@ -38,11 +38,11 @@ public:
     virtual void updateResources(const ResourceUpdateData& data) = 0;
     virtual void render(const RenderData& data) = 0;
 
+    static QShader loadShader(const QString& name);
 private:
          // QPointer<cwGLObject> m_guiObject;
 
 protected:    
-    static QShader loadShader(const QString& name);
 
 };
 

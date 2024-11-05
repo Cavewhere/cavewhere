@@ -67,12 +67,12 @@ RegionViewer {
             minTotalWidth: renderer.height * 0.2
         }
 
-        CompassItem {
+        Compass {
             id: compassItemId
             width: 175
             height: width
-            camera: renderer.camera
-            rotation: turnTableInteractionId.rotation
+            // camera: renderer.camera
+            compassRotation: turnTableInteractionId.rotation
             // shaderDebugger: renderer.scene.shaderDebugger
             antialiasing: false
         }

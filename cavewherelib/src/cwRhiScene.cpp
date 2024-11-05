@@ -120,7 +120,7 @@ void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
         m_rhiNeedResourceUpdate.clear();
     }
 
-    //This is a very basic renderer with 1 rendering pass.
+    //This is a very basic framegraph with 1 rendering pass.
     const QColor clearColor = QColor::fromRgbF(0.33, 0.66, 1.0, 1.0);
     cb->beginPass(renderer->renderTarget(), clearColor, { 1.0f, 0 }, resources);
 

@@ -64,7 +64,6 @@ endif()
 qt_add_resources(QT_RESOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/resources.qrc
     ${CMAKE_CURRENT_SOURCE_DIR}/fonts/fonts.qrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/shaders/shaders.qrc
 )
 target_sources(cavewherelib PRIVATE ${QT_RESOURCES})
 
@@ -169,6 +168,8 @@ qt_add_shaders(cavewherelib "cavewherelib_shaders"
         "shaders/scrap.frag"
         "shaders/radial_gradient.vert"
         "shaders/radial_gradient.frag"
+        "shaders/compass/compass.vert"
+        "shaders/compass/compass.frag"
     )
 
 # Protobuf files

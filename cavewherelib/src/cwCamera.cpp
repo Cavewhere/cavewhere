@@ -144,10 +144,10 @@ QVector3D cwCamera::mapNormalizeScreenToGLViewport(const QVector3D& point) const
   */
  QPointF cwCamera::project(QVector3D point, QMatrix4x4 viewMatrix, QMatrix4x4 modelMatrix) const
  {
-      QMatrix4x4 modelViewProjectionMatrix = Projection.matrix() * viewMatrix * modelMatrix;
-      QVector3D projectedPoint = modelViewProjectionMatrix * point;
-      QVector3D viewportQt = mapNormalizeScreenToGLViewport(projectedPoint);
-      return mapToQtViewport(viewportQt.toPointF());
+     QMatrix4x4 modelViewProjectionMatrix = Projection.matrix() * viewMatrix * modelMatrix;
+     QVector3D projectedPoint = modelViewProjectionMatrix.map(point);;
+     QVector3D viewportQt = mapNormalizeScreenToGLViewport(projectedPoint);
+     return mapToQtViewport(viewportQt.toPointF());
  }
 
  /**

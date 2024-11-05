@@ -1,17 +1,16 @@
 /**************************************************************************
 **
-**    Copyright (C) 2013 by Philip Schuchardt
+**    Copyright (C) 2024 by Philip Schuchardt
 **    www.cavewhere.com
 **
 **************************************************************************/
 
-#ifdef GL_ES
-precision highp float;
-#endif
+#version 440
 
-varying vec3 color;
+layout(location = 0) in vec3 color;
+layout(location = 0) out vec4 fragColor;
 
 void main(void)
 {
-    gl_FragColor = vec4(color, 1.0);
+    fragColor = vec4(color, 1.0);
 }
