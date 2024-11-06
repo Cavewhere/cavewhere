@@ -5,6 +5,10 @@
 **
 **************************************************************************/
 
+//This cause a crash when creating the context for sub trip pages
+//cwPageView: "qrc:/cavewherelib/cavewherelib/DataMainPage.qml: Cannot instantiate bound component outside its creation context"
+// pragma ComponentBehavior: Bound
+
 import cavewherelib
 import QtQml
 import QtQuick as QQ
@@ -37,6 +41,14 @@ StandardPage {
                 currentRegion: RootData.region
                 importVisible: true
                 page: pageId.PageView.page
+                currentCave: {
+                    let currentItem = tableViewId.currentItem as CaveDelegate
+                    if(currentItem) {
+                        return currentItem.caveObjectRole
+                    } else {
+                        return null;
+                    }
+                }
             }
 
         }
@@ -65,8 +77,7 @@ StandardPage {
                 Layout.fillHeight: true
                 implicitWidth: 450
 
-                delegate:
-                    QQ.Item {
+                component CaveDelegate: QQ.Item {
                     id: delegateId
                     required property Cave caveObjectRole;
                     required property int index
@@ -74,19 +85,34 @@ StandardPage {
                     implicitHeight: layoutId.height
                     implicitWidth: layoutId.width
 
-                    RowLayout {
-                        id: layoutId
-
-                        QQ.Connections {
-                            target: tableViewId
-                            function onCurrentItemChanged() {
-                                exportButton.currentCave = tableViewId.currentItem.caveObjectRole
+                    QQ.Rectangle {
+                        anchors.fill: parent
+                        color: {
+                            if(tableViewId.currentIndex == delegateId.index) {
+                                //Selected
+                                return "#d6e6ff"
+                            } else {
+                                //Alternating color background
+                                if(delegateId.index % 2 == 1) {
+                                    return "#f2f2f2"
+                                } else {
+                                    return "white"
+                                }
                             }
                         }
+                    }
 
-                        // RowLayout {
-                        //     id: rowLayout
-                        //     spacing: 1
+                    QQ.MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.LeftButton
+
+                        onClicked: {
+                            tableViewId.currentIndex = delegateId.index
+                        }
+                    }
+
+                    RowLayout {
+                        id: layoutId
 
                         ErrorIconBar {
                             errorModel: delegateId.caveObjectRole.errorModel
@@ -96,7 +122,7 @@ StandardPage {
                             text: delegateId.caveObjectRole.name
                             onClicked: {
                                 RootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
-                                                                           cavePageName(delegateId.caveObjectRole));
+                                                                           pageId.cavePageName(delegateId.caveObjectRole));
                             }
                         }
                         // }
@@ -132,8 +158,11 @@ StandardPage {
                         caveName: delegateId.caveObjectRole.name
                         row: delegateId.index
                     }
+
+
                 }
 
+                delegate: CaveDelegate {}
             }
         }
     }

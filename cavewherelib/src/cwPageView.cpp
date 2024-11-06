@@ -214,7 +214,15 @@ QQuickItem *cwPageView::createChildItemFromComponent(QQmlComponent *component, c
     QQmlContext* context = QQmlEngine::contextForObject(this);
     QObject* object = component->beginCreate(context);
 
-    Q_ASSERT(dynamic_cast<QQuickItem*>(object) != nullptr);
+    if (!object) {
+        // If creation failed, print out the errors
+        const QList<QQmlError> errors = component->errors();
+        for (const QQmlError &error : errors) {
+            qWarning() << "cwPageView:" << error.toString();
+        }
+    }
+
+    Q_ASSERT(dynamic_cast<QQuickItem*>(object) != nullptr); //If this fails, there's a qml error
     QQuickItem* item = static_cast<QQuickItem*>(object);
     item->setParentItem(this);
     item->setParent(this);
