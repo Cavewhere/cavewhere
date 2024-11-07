@@ -60,70 +60,74 @@ QQ.MouseArea {
             }
         }
 
-        QQ.TextInput {
+        GlobalTextInputHelper {
             id: input
-            visible: shadowEditor.visible
-            anchors.centerIn: parent;
-
-            selectByMouse: activeFocus;
-            activeFocusOnPress: false
-
-            //FIXME: Revert back to orinial code
-            //This is a work around to QTBUG-27300
-            property var pressKeyEvent
-            signal pressKeyPressed; //This is emitted every time key is pressed
-
-            QQ.KeyNavigation.tab: {
-                if(globalMouseArea.coreClickInput === null) {
-                    return null
-                }
-                return globalMouseArea.coreClickInput.QQ.KeyNavigation.tab
-            }
-
-            QQ.KeyNavigation.backtab: {
-                if(globalMouseArea.coreClickInput === null) {
-                    return null
-                }
-                return globalMouseArea.coreClickInput.QQ.KeyNavigation.backtab
-            }
-
-            onFocusChanged: {
-                if(!focus && globalMouseArea.editor.visible && !globalMouseArea.coreClickInput.focus) {
-                    globalMouseArea.coreClickInput.commitChanges();
-                }
-
-                if(globalMouseArea.coreClickInput !== null && globalMouseArea.coreClickInput.focus)
-                {
-                    forceActiveFocus()
-                    selectAll()
-                }
-            }
-
-            function defaultKeyHandling() {
-                if(pressKeyEvent.key === Qt.Key_Return || pressKeyEvent.key === Qt.Key_Enter) {
-                    enterPressed()
-                    if(coreClickInput !== null) {
-                        coreClickInput.commitChanges()
-                    } else {
-                        escapePressed()
-                    }
-
-                } else if(pressKeyEvent.key === Qt.Key_Escape) {
-                    escapePressed()
-                    coreClickInput.closeEditor();
-                    pressKeyEvent.accepted = true
-                }
-            }
-
-            QQ.Keys.onPressed: (event) => {
-                pressKeyEvent = event;
-                pressKeyPressed();
-            }
-
-            onPressKeyPressed: {
-                defaultKeyHandling();
-            }
         }
+
+        // QQ.TextInput {
+        //     id: input
+        //     visible: shadowEditor.visible
+        //     anchors.centerIn: parent;
+
+        //     selectByMouse: activeFocus;
+        //     activeFocusOnPress: false
+
+        //     //FIXME: Revert back to orinial code
+        //     //This is a work around to QTBUG-27300
+        //     property var pressKeyEvent
+        //     signal pressKeyPressed; //This is emitted every time key is pressed
+
+        //     QQ.KeyNavigation.tab: {
+        //         if(globalMouseArea.coreClickInput === null) {
+        //             return null
+        //         }
+        //         return globalMouseArea.coreClickInput.QQ.KeyNavigation.tab
+        //     }
+
+        //     QQ.KeyNavigation.backtab: {
+        //         if(globalMouseArea.coreClickInput === null) {
+        //             return null
+        //         }
+        //         return globalMouseArea.coreClickInput.QQ.KeyNavigation.backtab
+        //     }
+
+        //     onFocusChanged: {
+        //         if(!focus && globalMouseArea.editor.visible && !globalMouseArea.coreClickInput.focus) {
+        //             globalMouseArea.coreClickInput.commitChanges();
+        //         }
+
+        //         if(globalMouseArea.coreClickInput !== null && globalMouseArea.coreClickInput.focus)
+        //         {
+        //             forceActiveFocus()
+        //             selectAll()
+        //         }
+        //     }
+
+        //     function defaultKeyHandling() {
+        //         if(pressKeyEvent.key === Qt.Key_Return || pressKeyEvent.key === Qt.Key_Enter) {
+        //             enterPressed()
+        //             if(coreClickInput !== null) {
+        //                 coreClickInput.commitChanges()
+        //             } else {
+        //                 escapePressed()
+        //             }
+
+        //         } else if(pressKeyEvent.key === Qt.Key_Escape) {
+        //             escapePressed()
+        //             coreClickInput.closeEditor();
+        //             pressKeyEvent.accepted = true
+        //         }
+        //     }
+
+        //     QQ.Keys.onPressed: (event) => {
+        //         pressKeyEvent = event;
+        //         pressKeyPressed();
+        //     }
+
+        //     onPressKeyPressed: {
+        //         defaultKeyHandling();
+        //     }
+        // }
 
         ErrorHelpBox {
             id: errorHelpBoxItem

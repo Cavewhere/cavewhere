@@ -25,7 +25,8 @@ QQ.Item {
     property int rowIndex: -1
     property int dataRole
 
-    property GlobalShadowTextInput _globalShadownTextInput: { return GlobalShadowTextInput; }
+    property GlobalShadowTextInput _globalShadowTextInput: GlobalShadowTextInput
+    property GlobalTextInputHelper _globalTextInput: GlobalShadowTextInput.textInput
 
     signal rightClick(var mouse);
     signal enteredPressed();
@@ -264,10 +265,10 @@ QQ.Item {
         autoResize: true
 
         onFinishedEditting: (newText) => {
-            dataBox.surveyChunk.setData(dataBox.dataRole, dataBox.rowIndex, newText)
-            dataBox.state = ""; //Go back to the default state
-            dataBox.forceActiveFocus();
-        }
+                                dataBox.surveyChunk.setData(dataBox.dataRole, dataBox.rowIndex, newText)
+                                dataBox.state = ""; //Go back to the default state
+                                dataBox.forceActiveFocus();
+                            }
 
         onStartedEditting: {
             dataBox.state = 'MiddleTyping';
@@ -331,7 +332,11 @@ QQ.Item {
             name: "MiddleTyping"
 
             QQ.PropertyChanges {
-                GlobalShadowTextInput.textInput.onPressKeyPressed: {
+                // dataBox._globalTextInput.onEnterPressed: {
+                //     console.log("sauce")
+                // }
+
+                dataBox._globalTextInput.onPressKeyPressed: {
                     if(pressKeyEvent.key === Qt.Key_Tab ||
                        pressKeyEvent.key === 1 + Qt.Key_Tab ||
                        pressKeyEvent.key === Qt.Key_Space)
@@ -362,20 +367,21 @@ QQ.Item {
                         dataBox.state = ''; //Default state
 
                     }
+
                 }
 
-                GlobalShadowTextInput.textInput.onFocusChanged: {
+                dataBox._globalTextInput.onFocusChanged: {
                     if(!focus) {
                         dataBox.state = '';
                     }
                 }
 
-                GlobalShadowTextInput.onEscapePressed: {
+                dataBox._globalShadowTextInput.onEscapePressed: {
                     dataBox.state = ''; //Default state
                     dataBox.forceActiveFocus()
                 }
 
-                GlobalShadowTextInput.onEnterPressed: {
+                dataBox._globalShadowTextInput.onEnterPressed: {
                     var commited = editor.commitChanges();
                     if(commited) {
                         dataBox.focus = true

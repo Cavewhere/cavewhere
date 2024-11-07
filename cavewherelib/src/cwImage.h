@@ -20,6 +20,7 @@ class cwProject;
 #include <QSharedData>
 #include <QSharedDataPointer>
 #include <QDebug>
+#include <QQmlEngine>
 
 /**
   \brief This class stores id's to all the images in the database
@@ -28,6 +29,10 @@ class cwProject;
   all the mipmap levels, and a icon version that's less than 512 by 512 pixels
   */
 class CAVEWHERE_LIB_EXPORT cwImage {
+    Q_GADGET
+    QML_NAMED_ELEMENT(cwImage)
+
+
 public:
     cwImage();
     virtual ~cwImage() = default;

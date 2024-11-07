@@ -66,7 +66,7 @@ public:
 
     void insertTrip(int i, cwTrip* trip);
     Q_INVOKABLE void removeTrip(int i);
-    void addTrip(cwTrip* trip = nullptr);
+    Q_INVOKABLE void addTrip(cwTrip* trip = nullptr);
     int indexOf(cwTrip* trip) const;
 
     cwCavingRegion* parentRegion() const;

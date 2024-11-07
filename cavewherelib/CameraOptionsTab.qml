@@ -21,7 +21,7 @@ QQ.Item {
                                                         projectionSettingsId.width))
 
             x: 5
-            width: childrenRect.width + x * 2
+            // width: childrenRect.width + x * 2
             anchors.top: parent.top
             anchors.margins: 5
 
@@ -40,17 +40,6 @@ QQ.Item {
                     id: verticalAngleSettingsId
                     turnTableInteraction: itemId.viewer.turnTableInteraction
                 }
-
-                // QQ.Item {
-                //     width: columnLayoutId.maxWidth
-                //     height: verticalAngleSettingsId.height
-                    // CameraVerticalAngleSettings {
-                    //     id: verticalAngleSettingsId
-                    //     turnTableInteraction: itemId.viewer.turnTableInteraction
-                    //     anchors.left: parent.left
-                    //     anchors.right: parent.right
-                    // }
-                // }
             }
 
             QC.GroupBox {
@@ -60,17 +49,6 @@ QQ.Item {
                     id: projectionSettingsId
                     viewer: itemId.viewer
                 }
-
-                // QQ.Item {
-                //     width: columnLayoutId.maxWidth
-                //     height: projectionSettingsId.height
-                //     CameraProjectionSettings {
-                //         id: projectionSettingsId
-                //         viewer: itemId.viewer
-                //         anchors.left: parent.left
-                //         anchors.right: parent.right
-                //     }
-                // }
             }
         }
     }

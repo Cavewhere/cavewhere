@@ -137,6 +137,8 @@ StandardPage {
                     var lastModelIndex = cavePageArea.currentCave.index(lastIndex);
                     var lastTrip = cavePageArea.currentCave.data(lastModelIndex, Cave.TripObjectRole);
 
+                    console.log("LastTrip:" + lastTrip + "CavePage:" + cavePageArea.PageView.page);
+
                     RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
                                                                cavePageArea.tripPageName(lastTrip));
                 }
@@ -277,8 +279,7 @@ StandardPage {
 
         component Delegate: QQ.QtObject {
             id: delegateObjectId
-            property Trip tripObjectRole
-            property alias trip: delegateObjectId.tripObjectRole
+            required property Trip tripObjectRole
             property Page page
         }
 
@@ -286,8 +287,11 @@ StandardPage {
         }
 
         onObjectAdded: (index, object) => {
+            console.log("Add trip page!" + index + " " + object)
+
+
             //In-ables the link
-            let trip = (object as Delegate).trip
+            let trip = (object as Delegate).tripObjectRole
             var page = RootData.pageSelectionModel.registerPage(cavePageArea.PageView.page, //From
                                                                 cavePageArea.tripPageName(trip), //Name
                                                                 tripPageComponent, //component

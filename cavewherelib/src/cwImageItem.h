@@ -25,7 +25,7 @@ class cwImageTexture;
 class cwImageItem : public cwRhiViewer, protected QOpenGLFunctions
 {
     Q_OBJECT
-    QML_NAMED_ELEMENT(ImageItem)
+    // QML_NAMED_ELEMENT(ImageItem)
 
     Q_PROPERTY(cwImage image READ image WRITE setImage NOTIFY imageChanged)
     Q_PROPERTY(QString projectFilename READ projectFilename WRITE setProjectFilename NOTIFY projectFilenameChanged())
