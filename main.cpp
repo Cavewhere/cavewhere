@@ -69,32 +69,6 @@ int main(int argc, char *argv[])
 
     cwApplication a(argc, argv);
 
-    // Install the custom message handler
-    // qInstallMessageHandler(customMessageHandler);
-
-    // Set the default graphics API to OpenGL
-    // QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
-
-    cwRootData* rootData = new cwRootData();
-
-    if(argc >= 2) {
-        QByteArray filenameByteArray(argv[1]);
-        qDebug() << "Loading file:" << filenameByteArray;
-        rootData->project()->loadFile(QString::fromLocal8Bit(filenameByteArray));
-    }
-
-    //Handles when the user clicks on a file in Finder(Mac OS X) or Explorer (Windows)
-    cwOpenFileEventHandler* openFileHandler = new cwOpenFileEventHandler(&a);
-    openFileHandler->setProject(rootData->project());
-    a.installEventFilter(openFileHandler);
-
-    //TODO: Add rendering dialog, for checking bad text
-    //Fixes text rendering issues on windows for bad graphics cards
-    //https://stackoverflow.com/questions/29733711/blurred-qt-quick-text
-    // QQuickWindow::setTextRenderType(cwOpenGLSettings::instance()->useNativeTextRendering() ? QQuickWindow::NativeTextRendering : QQuickWindow::QtTextRendering);
-
-    // cwGlobalDirectory::setupBaseDirectory();
-
     //Register all of the cavewhere types
     cwQMLRegister::registerQML();
 
@@ -104,9 +78,27 @@ int main(int argc, char *argv[])
 
     //This allow to extra image data from the project's image database
     cwImageProvider* imageProvider = new cwImageProvider();
+    context->engine()->addImageProvider(cwImageProvider::name(), imageProvider);
+
+    applicationEnigine->loadFromModule(QStringLiteral("cavewherelib"),
+                                       QStringLiteral("CavewhereMainWindow"));
+    auto id = qmlTypeId("cavewherelib", 1, 0, "RootData");
+    cwRootData* rootData = applicationEnigine->rootContext()->engine()->singletonInstance<cwRootData*>(id);
+
+    //Handles when the user clicks on a file in Finder(Mac OS X) or Explorer (Windows)
+    cwOpenFileEventHandler* openFileHandler = new cwOpenFileEventHandler(&a);
+    openFileHandler->setProject(rootData->project());
+    a.installEventFilter(openFileHandler);
+
+    if(argc >= 2) {
+        QByteArray filenameByteArray(argv[1]);
+        qDebug() << "Loading file:" << filenameByteArray;
+        rootData->project()->loadFile(QString::fromLocal8Bit(filenameByteArray));
+    }
+
+    //Hookup the image provider now that the rootdata is create
     imageProvider->setProjectPath(rootData->project()->filename());
     QObject::connect(rootData->project(), SIGNAL(filenameChanged(QString)), imageProvider, SLOT(setProjectPath(QString)));
-    context->engine()->addImageProvider(cwImageProvider::name(), imageProvider);
 
     auto quit = [&a, rootData, applicationEnigine]() {
         delete applicationEnigine;
@@ -118,9 +110,6 @@ int main(int argc, char *argv[])
 
     //Allow the engine to quit the application
     QObject::connect(context->engine(), &QQmlEngine::quit, &a, quit, Qt::QueuedConnection);
-
-    applicationEnigine->loadFromModule(QStringLiteral("cavewherelib"),
-                                       QStringLiteral("CavewhereMainWindow"));
 
     return a.exec();
 }
