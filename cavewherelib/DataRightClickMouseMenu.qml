@@ -8,7 +8,7 @@ QQ.MouseArea {
     property point clickPos;
     property RemoveAskBox removeChallenge
     required property int row
-    required property string caveName
+    required property string name
 
     onClicked: (mouse) => {
         clickPos = Qt.point(mouse.x, mouse.y)
@@ -19,7 +19,7 @@ QQ.MouseArea {
     Menu {
         id: rightClickMenu
         MenuItem {
-            text: "Remove " + rightClickMouseArea.caveName
+            text: "Remove " + rightClickMouseArea.name
 
             onTriggered: {
                 var pos = rightClickMouseArea.mapToItem(rightClickMouseArea.removeChallenge.parent,
@@ -29,7 +29,7 @@ QQ.MouseArea {
                 rightClickMouseArea.removeChallenge.y = pos.y
 
                 rightClickMouseArea.removeChallenge.indexToRemove = rightClickMouseArea.row
-                rightClickMouseArea.removeChallenge.removeName = rightClickMouseArea.caveName
+                rightClickMouseArea.removeChallenge.removeName = rightClickMouseArea.name
                 rightClickMouseArea.removeChallenge.show()
             }
         }

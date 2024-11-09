@@ -101,10 +101,10 @@ QQ.Item {
     QQ.Component.onCompleted: {
         pageView.unknownPageComponent = unknownPageComponent
         var viewPage = RootData.pageSelectionModel.registerPage(null, "View", renderingComponent);
-        RootData.pageSelectionModel.registerPage(null, "Data", dataMainPageComponent);
+        let dataPage = RootData.pageSelectionModel.registerPage(null, "Data", dataMainPageComponent);
         RootData.pageSelectionModel.registerPage(null, "Testcases", testcasesPageComponent);
         RootData.pageSelectionModel.registerPage(null, "About", aboutPageComponent)
         RootData.pageSelectionModel.registerPage(null, "Settings", settingsPageComponent)
-        RootData.pageSelectionModel.gotoPage(viewPage);
+        RootData.pageSelectionModel.gotoPage(dataPage);
     }
 }

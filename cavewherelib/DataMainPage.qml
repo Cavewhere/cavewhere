@@ -85,21 +85,9 @@ StandardPage {
                     implicitHeight: layoutId.height
                     implicitWidth: layoutId.width
 
-                    QQ.Rectangle {
-                        anchors.fill: parent
-                        color: {
-                            if(tableViewId.currentIndex == delegateId.index) {
-                                //Selected
-                                return "#d6e6ff"
-                            } else {
-                                //Alternating color background
-                                if(delegateId.index % 2 == 1) {
-                                    return "#f2f2f2"
-                                } else {
-                                    return "white"
-                                }
-                            }
-                        }
+                    TableRowBackground {
+                        isSelected: tableViewId.currentIndex == delegateId.index
+                        rowIndex: delegateId.index
                     }
 
                     QQ.MouseArea {
@@ -155,7 +143,7 @@ StandardPage {
                     DataRightClickMouseMenu {
                         anchors.fill: parent
                         removeChallenge: removeChallengeId
-                        caveName: delegateId.caveObjectRole.name
+                        name: delegateId.caveObjectRole.name
                         row: delegateId.index
                     }
 

@@ -9,6 +9,7 @@ import QtQuick as QQ
 import cavewherelib
 import QtQml
 import QtQuick.Layouts
+import QtQuick.Controls as QC
 
 StandardPage {
     id: cavePageArea
@@ -66,8 +67,8 @@ StandardPage {
                 font.pixelSize: 20
 
                 onFinishedEditting: (newText) => {
-                    cavePageArea.currentCave.name = newText
-                }
+                                        cavePageArea.currentCave.name = newText
+                                    }
             }
 
             QQ.Rectangle {
@@ -94,35 +95,39 @@ StandardPage {
                 id: exportButton
                 currentRegion: RootData.region
                 currentCave: cavePageArea.currentCave
+                currentTrip: {
+                    let row = (tableViewId.currentItem as RowDelegate);
+                    return row ? row.tripObjectRole : null
+                }
             }
 
-            CWButton {
+            QC.Button {
                 text: "Leads"
-                iconSource: "qrc:icons/question.png"
+                // icon.source: "qrc:icons/question.png"
                 onClicked: {
                     RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Leads");
                 }
             }
 
 
-//            QQ.Rectangle {
-//                color: "gray"
+            //            QQ.Rectangle {
+            //                color: "gray"
 
-//                width: 100
-//                height: 40
+            //                width: 100
+            //                height: 40
 
-//                Text {
-//                    anchors.centerIn: parent
-//                    text: "Leads"
-//                }
+            //                Text {
+            //                    anchors.centerIn: parent
+            //                    text: "Leads"
+            //                }
 
-//                QQ.MouseArea {
-//                    anchors.fill: parent
-//                    onClicked:  {
-//            RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Leads");
-//                    }
-//                }
-//            }
+            //                QQ.MouseArea {
+            //                    anchors.fill: parent
+            //                    onClicked:  {
+            //            RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Leads");
+            //                    }
+            //                }
+            //            }
         }
 
         ColumnLayout {
@@ -144,121 +149,222 @@ StandardPage {
                 }
             }
 
-            QQ.TableView {
-                id: tableViewId
-                model: cavePageArea.currentCave
 
-                implicitWidth: 600
+            QC.HorizontalHeaderView {
+                id: horizontalHeader
+                Layout.fillWidth: true
+                model: ListModel {
+                    id: fruitModel
 
+                    ListElement {
+                        display: "Name"
+                    }
+                    ListElement {
+                        display: "Date"
+                    }
+                    ListElement {
+                        display: "Stations"
+                    }
+                    ListElement {
+                        display: "Length"
+                    }
+                }
+                columnWidthProvider: function (column) {
+                    let columnWidth = explicitColumnWidth(column);
+                    if(columnWidth == -1) {
+                        //column width hasn't been set.
+                        switch(column) {
+                        case 0:
+                            //name column
+                            return tableViewId.nameColumnWidth
+                        case 1:
+                            return tableViewId.dateColumnWidth
+                        case 2:
+                            return tableViewId.stationColumnWidth
+                        case 3:
+                            return tableViewId.lengthColumnWidth
+                        }
+                    }
+
+                    return Math.min(300, Math.max(50, columnWidth));
+
+                }
+
+                // syncView: tableView
+                clip: true
+
+                onLayoutChanged: {
+                    // Update each ListElement's columnWidth with the current header width
+                    tableViewId.nameColumnWidth = horizontalHeader.columnWidth(0);
+                    tableViewId.dateColumnWidth = horizontalHeader.columnWidth(1);
+                    tableViewId.stationColumnWidth = horizontalHeader.columnWidth(2);
+                    tableViewId.lengthColumnWidth = horizontalHeader.columnWidth(3);
+                }
+            }
+
+            QC.ScrollView {
+                id: scrollViewId
+                implicitWidth: tableViewId.implicitWidth +
+                               QC.ScrollBar.vertical.implicitWidth
                 Layout.fillHeight: true
 
-                //            anchors.top: parent.top
-                //            anchors.bottom: parent.bottom
+                QQ.ListView {
+                    id: tableViewId
+                    model: cavePageArea.currentCave
 
-                // Controls.TableViewColumn { role: "tripObjectRole"; title: "Trip"; }
-                // Controls.TableViewColumn { role: "tripObjectRole"; title: "Date"; }
-                // Controls.TableViewColumn { role: "tripObjectRole"; title: "Survey"; width: 100 }
-                // Controls.TableViewColumn { role: "tripObjectRole"; title: "Length"; width: 100 }
+                    implicitWidth: nameColumnWidth
+                                   + dateColumnWidth
+                                   + stationColumnWidth
+                                   + lengthColumnWidth
 
-                // itemDelegate:
-                //     QQ.Item {
-                //     clip: true
+                    Layout.fillHeight: true
+                    clip: true
 
-                //     QQ.Connections {
-                //         target: tableViewId
-                //         onCurrentRowChanged: {
-                //             if(tableViewId.currentRow === styleData.row) {
-                //                 exportButton.currentTrip = styleData.value
-                //             }
-                //         }
-                //     }
+                    property int nameColumnWidth: 200
+                    property int dateColumnWidth: 75
+                    property int stationColumnWidth: 75
+                    property int lengthColumnWidth: 50
 
-                //     TripLengthTask {
-                //         id: tripLengthTask
-                //         trip: styleData.value
-                //     }
+                    component RowDelegate : QQ.Item {
+                        id: rowDelegateId
+                        required property Trip tripObjectRole
+                        required property int index
 
-                //     UsedStationTaskManager {
-                //         id: usedStationTaskManager
-                //         trip: styleData.value
-                //         bold: false
-                //         abbreviated: true
-                //         onlyLargestRange: true
-                //     }
+                        implicitWidth: layoutId.width
+                        implicitHeight: layoutId.height
 
-                //     QQ.Item {
-                //         visible: styleData.column === 0
+                        TripLengthTask {
+                            id: tripLengthTask
+                            trip: tripObjectRole
+                        }
 
-                //         anchors.fill: parent
+                        UsedStationTaskManager {
+                            id: usedStationTaskManager
+                            trip: tripObjectRole
+                            bold: false
+                            abbreviated: true
+                            onlyLargestRange: true
+                        }
 
-                //         RowLayout {
-                //             id: rowLayout
-                //             spacing: 1
+                        DataRightClickMouseMenu {
+                            anchors.fill: parent
+                            removeChallenge: removeChallengeId
+                            row: rowDelegateId.index
+                            name: tripObjectRole.name
+                        }
 
-                //             ErrorIconBar {
-                //                 errorModel: styleData.value.errorModel
-                //             }
+                        TableRowBackground {
+                            isSelected: tableViewId.currentIndex == rowDelegateId.index
+                            rowIndex: rowDelegateId.index
+                        }
 
-                //             LinkText {
-                //                 text: styleData.value.name
-                //                 elide: Text.ElideRight
+                        QQ.MouseArea {
+                            anchors.fill: parent
+                            acceptedButtons: Qt.LeftButton
 
-                //                 onClicked: {
-                //                     RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
-                //                                                                tripPageName(styleData.value));
-                //                 }
-                //             }
-                //         }
-                //     }
+                            onClicked: {
+                                tableViewId.currentIndex = rowDelegateId.index
+                            }
+                        }
 
-                //     Text {
-                //         visible: styleData.column === 1
-                //         elide: Text.ElideRight
-                //         anchors.fill: parent
-                //         text: Qt.formatDateTime(styleData.value.date, "yyyy-MM-dd")
-                //     }
+                        RowLayout {
+                            id: layoutId
 
-                //     Text {
-                //         visible: styleData.column === 2
-                //         elide: Text.ElideRight
-                //         anchors.fill: parent
-                //         text: {
-                //             if(usedStationTaskManager.usedStations.length > 0) {
-                //                 return usedStationTaskManager.usedStations[0]
-                //             }
-                //             return ""
-                //         }
-                //     }
+                            spacing: 0
 
-                //     Text {
-                //         visible: styleData.column === 3
-                //         elide: Text.ElideRight
-                //         anchors.fill: parent
-                //         text: {
-                //             var unit = ""
-                //             switch(styleData.value.calibration.distanceUnit) {
-                //             case Units.Meters:
-                //                 unit = "m"
-                //                 break;
-                //             case Units.Feet:
-                //                 unit = "ft"
-                //                 break;
-                //             }
+                            // QQ.Item {
+                            // anchors.fill: parent
 
-                //             return Utils.fixed(tripLengthTask.length, 2) + " " + unit;
-                //         }
-                //     }
+                            QQ.Item {
+                                implicitWidth: tableViewId.nameColumnWidth
+                                implicitHeight: rowLayout
+                                clip: true
 
-                //     DataRightClickMouseMenu {
-                //         anchors.fill: parent
-                //         removeChallenge: removeChallengeId
-                //     }
-                // }
+                                RowLayout {
+                                    id: rowLayout
+                                    spacing: 1
+
+                                    ErrorIconBar {
+                                        errorModel: tripObjectRole.errorModel
+                                    }
+
+                                    LinkText {
+                                        text: tripObjectRole.name
+                                        elide: Text.ElideRight
+
+                                        onClicked: {
+                                            RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
+                                                                                       tripPageName(tripObjectRole));
+                                        }
+                                    }
+                                }
+                            }
+
+                            QQ.Item {
+                                implicitWidth: tableViewId.dateColumnWidth
+                                implicitHeight: dateId.implicitHeight
+                                clip: true
+                                Text {
+                                    id: dateId
+                                    elide: Text.ElideRight
+                                    // anchors.fill: parent
+                                    text: Qt.formatDateTime(tripObjectRole.date, "yyyy-MM-dd")
+                                }
+                            }
+
+                            QQ.Item {
+                                implicitWidth: tableViewId.stationColumnWidth
+                                implicitHeight: usedStationsId.implicitHeight
+                                clip: true
+
+                                Text {
+                                    id: usedStationsId
+                                    elide: Text.ElideRight
+                                    // anchors.fill: parent
+                                    text: {
+                                        if(usedStationTaskManager.usedStations.length > 0) {
+                                            return usedStationTaskManager.usedStations[0]
+                                        }
+                                        return ""
+                                    }
+                                }
+                            }
+
+                            QQ.Item {
+                                implicitWidth: tableViewId.lengthColumnWidth
+                                implicitHeight: lengthId.implicitHeight
+                                clip: true
+
+                                Text {
+                                    id: lengthId
+                                    elide: Text.ElideRight
+                                    // anchors.fill: parent
+                                    text: {
+                                        var unit = ""
+                                        switch(tripObjectRole.calibration.distanceUnit) {
+                                        case Units.Meters:
+                                            unit = "m"
+                                            break;
+                                        case Units.Feet:
+                                            unit = "ft"
+                                            break;
+                                        }
+
+                                        return Utils.fixed(tripLengthTask.length, 2) + " " + unit;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    delegate: RowDelegate {}
+                }
             }
         }
 
         UsedStationsWidget {
             id: usedStationWidgetId
+            cave: cavePageArea.currentCave
 
             Layout.fillHeight: true
 
@@ -287,27 +393,27 @@ StandardPage {
         }
 
         onObjectAdded: (index, object) => {
-            console.log("Add trip page!" + index + " " + object)
+                           console.log("Add trip page!" + index + " " + object)
 
 
-            //In-ables the link
-            let trip = (object as Delegate).tripObjectRole
-            var page = RootData.pageSelectionModel.registerPage(cavePageArea.PageView.page, //From
-                                                                cavePageArea.tripPageName(trip), //Name
-                                                                tripPageComponent, //component
-                                                                {"currentTrip":trip}
-                                                                )
-            object.page = page;
-            page.setNamingFunction(trip, //The trip that's signaling
-                                   "nameChanged()", //Signal
-                                   cavePageArea, //The object that has renaming function
-                                   "tripPageName", //The function that will generate the name
-                                   trip) //The paramaters to tripPageName() function
-        }
+                           //In-ables the link
+                           let trip = (object as Delegate).tripObjectRole
+                           var page = RootData.pageSelectionModel.registerPage(cavePageArea.PageView.page, //From
+                                                                               cavePageArea.tripPageName(trip), //Name
+                                                                               tripPageComponent, //component
+                                                                               {"currentTrip":trip}
+                                                                               )
+                           object.page = page;
+                           page.setNamingFunction(trip, //The trip that's signaling
+                                                  "nameChanged()", //Signal
+                                                  cavePageArea, //The object that has renaming function
+                                                  "tripPageName", //The function that will generate the name
+                                                  trip) //The paramaters to tripPageName() function
+                       }
 
         onObjectRemoved: (index, object) => {
-            RootData.pageSelectionModel.unregisterPage((object as Delegate).page);
-        }
+                             RootData.pageSelectionModel.unregisterPage((object as Delegate).page);
+                         }
     }
 
     QQ.Component {
