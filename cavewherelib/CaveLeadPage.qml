@@ -1,3 +1,6 @@
+pragma ComponentBehavior: Bound
+
+
 import QtQuick as QQ
 import QtQml
 // import QtQuick.Controls as QC1
@@ -60,7 +63,7 @@ StandardPage {
             pageSelectionModel: RootData.pageSelectionModel
         }
 
-        QQ.TableView {
+        QQ.ListView {
             id: tableView
 
             property bool blockChanges: false
@@ -87,10 +90,95 @@ StandardPage {
                 // filterRole: ""
             }
 
-            // QC1.TableViewColumn { role: "leadCompleted"; title: "Completed"; width: 60 }
-            // QC1.TableViewColumn { role: "leadPosition"; title: "Goto"; width: 40 }
-            // QC1.TableViewColumn { role: "leadNearestStation"; title: "Station"; width: 65}
-            // QC1.TableViewColumn { role: "leadSizeAsString"; title: "Size"; width: 50 }
+            component RowDelegate : QQ.Item {
+                id: delegateId
+
+                required property int index
+                required property bool leadCompleted
+                required property double leadDistanceToReferanceStation
+                required property string leadNearestStation
+                required property string leadSizeAsString
+                required property string leadDescription
+                required property QQ.vector3d leadPosition
+                required property string leadTrip
+
+
+
+                RowLayout {
+                    QQ.Item {
+                        height: 30
+                        width: 40
+                        CheckBox {
+                            id: checkbox
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            Binding {
+                                target: checkbox
+                                property: "checked"
+                                value: delegateId.leadCompleted
+                            }
+
+                            onCheckedChanged: {
+                                if(delegateId.leadCompleted !== "") {
+                                    var index = tableView.model.index(delegateId.index);
+                                    tableView.model.setData(index, checked, LeadModel.LeadCompleted);
+                                }
+                            }
+                        }
+                    }
+
+                    LinkText {
+                        // anchors.verticalCenter: parent.verticalCenter
+                        text: "Goto"
+                        onClicked: {
+                            var index = tableView.model.index(delegateId.index);
+                            var scrap = tableView.model.data(index, LeadModel.LeadScrap);
+                            var leadIndex = tableView.model.data(index, LeadModel.LeadIndexInScrap);
+
+                            //This is a work around, just passing styleData.value to TurnTableInteraction.centerOn()
+                            //doesn't work, and it centerOn (0, 0, 0)
+                            // var pos = Qt.vector3d(styleData.value.x, styleData.value.y, styleData.value.z )
+
+                            //Change to the view page, animate to the lead position, and select it
+                            RootData.pageSelectionModel.currentPageAddress = "View"
+                            RootData.pageView.currentPageItem.turnTableInteraction.centerOn(leadPosition, true);
+                            RootData.pageView.currentPageItem.leadView.select(scrap, leadIndex);
+                        }
+                    }
+
+                    Text {
+                        text: delegateId.leadNearestStation
+                    }
+
+                    Text {
+                        text: delegateId.leadSizeAsString
+                    }
+
+                    Text {
+                        text: Math.round(delegateId.leadDistanceToReferanceStation) + " m"
+                    }
+
+                    LinkText {
+                        text: delegateId.leadTrip
+                        onClicked: {
+                            var modelIndex = tableView.model.index(index);
+                            var scrap = tableView.model.data(modelIndex, LeadModel.LeadScrap);
+                            linkGenerator.gotoScrap(scrap)
+                        }
+                    }
+
+                    Text {
+                        text: delegateId.leadDescription
+                    }
+                }
+            }
+
+            delegate: RowDelegate {}
+
+            // QC1.TableViewColumn { role: "leadCompleted"; title: "Completed"; width: 60 } *
+            // QC1.TableViewColumn { role: "leadPosition"; title: "Goto"; width: 40 } *
+            // QC1.TableViewColumn { role: "leadNearestStation"; title: "Station"; width: 65} *
+            // QC1.TableViewColumn { role: "leadSizeAsString"; title: "Size"; width: 50 } *
             // QC1.TableViewColumn {
             //     role: "leadDistanceToReferanceStation";
             //     title: "Distance to " + leadModel.referanceStation;

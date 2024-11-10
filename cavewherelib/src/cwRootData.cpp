@@ -193,6 +193,13 @@ cwSettings* cwRootData::settings() const {
     return cwSettings::instance();
 }
 
+void cwRootData::setPageView(cwPageView *value) {
+    if (m_pageView != value) {
+        m_pageView = value;
+        emit pageViewChanged();
+    }
+}
+
 QString cwRootData::cwRootData::supportImageFormats() const {
     return cwProject::supportedImageFormats();
 }

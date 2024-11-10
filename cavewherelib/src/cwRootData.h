@@ -35,6 +35,7 @@
 #include "cwFutureManagerModel.h"
 #include "cwPageSelectionModel.h"
 #include "cwSettings.h"
+#include "cwPageView.h"
 
 #ifndef CAVEWHERE_VERSION
 #define CAVEWHERE_VERSION "Sauce-Release" //This is automaticaly update with qmake
@@ -64,6 +65,8 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
     Q_PROPERTY(cwFutureManagerModel* futureManagerModel READ futureManagerModel CONSTANT)
 
     Q_PROPERTY(cwPageSelectionModel* pageSelectionModel READ pageSelectionModel CONSTANT)
+    Q_PROPERTY(cwPageView* pageView READ pageView WRITE setPageView NOTIFY pageViewChanged)
+
     Q_PROPERTY(cwRegionTreeModel* regionTreeModel READ regionTreeModel CONSTANT)
 
     //Settings
@@ -95,6 +98,9 @@ public:
     cwPageSelectionModel* pageSelectionModel() const;
     cwRegionTreeModel* regionTreeModel() const;
     cwSettings* settings() const;
+
+    cwPageView* pageView() const { return m_pageView; }
+    void setPageView(cwPageView* value);
 
     void setQuickView(QQuickView* quickView);
 
@@ -130,6 +136,7 @@ signals:
     void leadsVisibleChanged();
     void lastDirectoryChanged();
     void stationsVisibleChanged();
+    void pageViewChanged();
 
 public slots:
 
@@ -147,6 +154,8 @@ private:
     cwFutureManagerModel* FutureManagerModel; //!<
     cwPageSelectionModel* PageSelectionModel; //!<
     cwRegionTreeModel* RegionTreeModel; //!<
+
+    QPointer<cwPageView> m_pageView;
 
     //Default class, aren't used exept to prevent qml from complaining
     cwTrip* DefaultTrip;

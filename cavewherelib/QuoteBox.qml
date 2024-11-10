@@ -1,4 +1,5 @@
 import QtQuick as QQ
+import QtQuick.Effects
 // import QtGraphicalEffects
 
 /**
@@ -77,12 +78,18 @@ QQ.Item {
 
     QQ.Item {
         id: itemWithoutShadow
-        visible: false
+        // visible: false
 
         // width: boxOutlineColorOverlay.width + shadowPadding * 2
         // height: boxOutlineColorOverlay.height + shadowPadding * 2
         width: box.width + root.shadowPadding * 2
         height: box.height + root.shadowPadding * 2
+
+        QQ.Item {
+            id: arrowTipId
+            x: rectangleItem.width * root.triangleOffset + triangleItem.implicitWidth * 0.5 + root.shadowPadding
+            y: root.shadowPadding - 2
+        }
 
         QQ.Item {
             id: boxOutline
@@ -162,9 +169,47 @@ QQ.Item {
                 radius: rectangleItem.radius - box.borderWidth
                 x: box.borderWidth
                 y: triangleItem.height + box.borderWidth
-                color: "black"
+                color: "white"
             }
         }
+
+        // Define the inline component here
+        component ColorOverlayEffect: QQ.Item {
+            property alias sourceItem: shaderEffectSource.sourceItem
+            property QQ.color overlayColor: "white"
+
+            QQ.ShaderEffectSource {
+                id: shaderEffectSource
+                live: true
+                smooth: true
+                hideSource: true
+                anchors.fill: parent
+            }
+
+            QQ.ShaderEffect {
+                anchors.fill: shaderEffectSource
+                fragmentShader: "qrc:/shaders/colorOverlay.frag.qsb"
+                property var source: shaderEffectSource
+                property QQ.color overlayColor: parent.overlayColor
+            }
+        }
+
+        // Applying the ColorOverlayEffect to boxOutline
+        // ColorOverlayEffect {
+        //     id: boxOutlineColorOverlay
+        //     sourceItem: boxOutline
+        //     overlayColor: "darkgray"
+        //     anchors.fill: boxOutline
+        // }
+
+        // Applying the ColorOverlayEffect to box
+        ColorOverlayEffect {
+            id: boxColorOverlay
+            sourceItem: box
+            overlayColor: "white"
+            anchors.fill: box
+        }
+
 
         // ColorOverlay {
         //     id: boxOutlineColorOverlay
@@ -181,38 +226,39 @@ QQ.Item {
         //     source: box
         //     anchors.fill: box
         // }
+
     }
 
 
-    // DropShadow {
+    // MultiEffect {
     //     id: dropShadowId
 
     //     anchors.fill: itemWithoutShadow
 
     //     clip: false
-    //     cached: true
-    //     horizontalOffset: 2 * Math.cos(Math.PI / 180.0 * rotationId.angle)
+    //     // cached: true
+    //     shadowHorizontalOffset: 2 * Math.cos(Math.PI / 180.0 * rotationId.angle)
     //                       + 2 * Math.sin(Math.PI / 180.0 * rotationId.angle)
-    //     verticalOffset: 2 * Math.cos(Math.PI / 180.0 * rotationId.angle)
+    //     shadowVerticalOffset: 2 * Math.cos(Math.PI / 180.0 * rotationId.angle)
     //                     - 2 * Math.sin(Math.PI / 180.0 * rotationId.angle)
-    //     radius: 5
-    //     samples: 32
-    //     color: "#262626"
+    //     // radius: 5
+    //     // samples: 32
+    //     shadowColor: "#262626"
     //     source: itemWithoutShadow
 
     //     //This item is used to position the QuoteBox. This item is locate at the tip of the
     //     //arrow of the quotebox
     //     QQ.Item {
     //         id: arrowTipId
-    //         x: rectangleItem.width * triangleOffset + triangleItem.implicitWidth * 0.5 + shadowPadding
-    //         y: shadowPadding - 2
+    //         x: rectangleItem.width * root.triangleOffset + triangleItem.implicitWidth * 0.5 + root.shadowPadding
+    //         y: root.shadowPadding - 2
     //     }
 
     //     transform: [
     //         QQ.Rotation {
     //             id: rotationId
     //             angle:  {
-    //                 switch(triangleEdge) {
+    //                 switch(root.triangleEdge) {
     //                 case Qt.TopEdge:
     //                     return 0
     //                 case Qt.BottomEdge:
@@ -235,7 +281,7 @@ QQ.Item {
 
     //         QQ.Translate {
     //             x: {
-    //                 switch(triangleEdge) {
+    //                 switch(root.triangleEdge) {
     //                 case Qt.TopEdge:
     //                     return 0;
     //                 case Qt.BottomEdge:
@@ -250,7 +296,7 @@ QQ.Item {
     //             }
 
     //             y: {
-    //                 switch(triangleEdge) {
+    //                 switch(root.triangleEdge) {
     //                 case Qt.TopEdge:
     //                     return 0;
     //                 case Qt.BottomEdge:

@@ -360,7 +360,7 @@ void cwLeadModel::leadDataUpdated(int begin, int end, QList<int> roles)
     int offsetBegin = offset + begin;
     int offsetEnd = offset + end;
 
-    dataChanged(index(offsetBegin), index(offsetEnd), roles.toVector());
+    emit dataChanged(index(offsetBegin), index(offsetEnd), roles.toVector());
 }
 
 /**

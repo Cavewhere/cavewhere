@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick as QQ
+import QtQuick.Controls as QC
 import cavewherelib
 import QtQuick.Layouts
 
@@ -50,12 +51,6 @@ PointItem {
 
                 ColumnLayout {
                     id: columnLayout
-
-                    CWButton {
-                        Layout.alignment: Qt.AlignRight
-                        iconSource: "qrc:/icons/x.png"
-                        onClicked: pointId.selected = false
-                    }
 
                     SizeEditor {
                         readOnly: true
