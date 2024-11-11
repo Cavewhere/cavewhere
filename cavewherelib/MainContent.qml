@@ -105,8 +105,8 @@ QQ.Item {
         RootData.pageSelectionModel.registerPage(null, "Testcases", testcasesPageComponent);
         RootData.pageSelectionModel.registerPage(null, "About", aboutPageComponent)
         RootData.pageSelectionModel.registerPage(null, "Settings", settingsPageComponent)
-        // RootData.pageSelectionModel.gotoPage(dataPage);
-        RootData.pageSelectionModel.gotoPage(viewPage);
+        RootData.pageSelectionModel.gotoPage(dataPage);
+        // RootData.pageSelectionModel.gotoPage(viewPage);
         RootData.pageView = pageView
     }
 }

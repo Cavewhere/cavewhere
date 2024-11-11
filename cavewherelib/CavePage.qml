@@ -5,6 +5,8 @@
 **
 **************************************************************************/
 
+// pragma ComponentBehavior: Bound
+
 import QtQuick as QQ
 import cavewherelib
 import QtQml
@@ -108,26 +110,6 @@ StandardPage {
                     RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Leads");
                 }
             }
-
-
-            //            QQ.Rectangle {
-            //                color: "gray"
-
-            //                width: 100
-            //                height: 40
-
-            //                Text {
-            //                    anchors.centerIn: parent
-            //                    text: "Leads"
-            //                }
-
-            //                QQ.MouseArea {
-            //                    anchors.fill: parent
-            //                    onClicked:  {
-            //            RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Leads");
-            //                    }
-            //                }
-            //            }
         }
 
         ColumnLayout {
@@ -150,214 +132,172 @@ StandardPage {
             }
 
 
-            QC.HorizontalHeaderView {
-                id: horizontalHeader
-                Layout.fillWidth: true
-                model: ListModel {
-                    id: fruitModel
-
-                    ListElement {
-                        display: "Name"
-                    }
-                    ListElement {
-                        display: "Date"
-                    }
-                    ListElement {
-                        display: "Stations"
-                    }
-                    ListElement {
-                        display: "Length"
-                    }
-                }
-                columnWidthProvider: function (column) {
-                    let columnWidth = explicitColumnWidth(column);
-                    if(columnWidth == -1) {
-                        //column width hasn't been set.
-                        switch(column) {
-                        case 0:
-                            //name column
-                            return tableViewId.nameColumnWidth
-                        case 1:
-                            return tableViewId.dateColumnWidth
-                        case 2:
-                            return tableViewId.stationColumnWidth
-                        case 3:
-                            return tableViewId.lengthColumnWidth
-                        }
-                    }
-
-                    return Math.min(300, Math.max(50, columnWidth));
-
-                }
-
-                // syncView: tableView
-                clip: true
-
-                onLayoutChanged: {
-                    // Update each ListElement's columnWidth with the current header width
-                    tableViewId.nameColumnWidth = horizontalHeader.columnWidth(0);
-                    tableViewId.dateColumnWidth = horizontalHeader.columnWidth(1);
-                    tableViewId.stationColumnWidth = horizontalHeader.columnWidth(2);
-                    tableViewId.lengthColumnWidth = horizontalHeader.columnWidth(3);
-                }
-            }
-
-            QC.ScrollView {
-                id: scrollViewId
-                implicitWidth: tableViewId.implicitWidth +
-                               QC.ScrollBar.vertical.implicitWidth
+            ColumnLayout {
                 Layout.fillHeight: true
+                spacing: 0
 
-                QQ.ListView {
-                    id: tableViewId
-                    model: cavePageArea.currentCave
 
-                    implicitWidth: nameColumnWidth
-                                   + dateColumnWidth
-                                   + stationColumnWidth
-                                   + lengthColumnWidth
+                HorizontalHeaderStaticView {
+                    view: tableViewId
 
+                    Layout.fillWidth: true
+                }
+
+
+                QC.ScrollView {
+                    id: scrollViewId
+                    implicitWidth: tableViewId.implicitWidth +
+                                   QC.ScrollBar.vertical.implicitWidth
                     Layout.fillHeight: true
-                    clip: true
 
-                    property int nameColumnWidth: 200
-                    property int dateColumnWidth: 75
-                    property int stationColumnWidth: 75
-                    property int lengthColumnWidth: 50
+                    TableStaticView {
+                        id: tableViewId
+                        model: cavePageArea.currentCave
 
-                    component RowDelegate : QQ.Item {
-                        id: rowDelegateId
-                        required property Trip tripObjectRole
-                        required property int index
+                        //This will populate the HorizontalHeader
+                        columnModel.children: [
+                            TableStaticColumn { id: nameColumnId; columnWidth: 200; name: "Name" },
+                            TableStaticColumn { id: dateColumnId; columnWidth: 75; name: "Date" },
+                            TableStaticColumn { id: stationsColumnId; columnWidth: 75; name: "Stations" },
+                            TableStaticColumn { id: lengthColumnId; columnWidth: 50; name: "Length" }
+                        ]
 
-                        implicitWidth: layoutId.width
-                        implicitHeight: layoutId.height
+                        Layout.fillHeight: true
 
-                        TripLengthTask {
-                            id: tripLengthTask
-                            trip: tripObjectRole
-                        }
+                        component RowDelegate : QQ.Item {
+                            id: rowDelegateId
+                            required property Trip tripObjectRole
+                            required property int index
 
-                        UsedStationTaskManager {
-                            id: usedStationTaskManager
-                            trip: tripObjectRole
-                            bold: false
-                            abbreviated: true
-                            onlyLargestRange: true
-                        }
+                            implicitWidth: layoutId.width
+                            implicitHeight: layoutId.height
 
-                        DataRightClickMouseMenu {
-                            anchors.fill: parent
-                            removeChallenge: removeChallengeId
-                            row: rowDelegateId.index
-                            name: tripObjectRole.name
-                        }
-
-                        TableRowBackground {
-                            isSelected: tableViewId.currentIndex == rowDelegateId.index
-                            rowIndex: rowDelegateId.index
-                        }
-
-                        QQ.MouseArea {
-                            anchors.fill: parent
-                            acceptedButtons: Qt.LeftButton
-
-                            onClicked: {
-                                tableViewId.currentIndex = rowDelegateId.index
+                            TripLengthTask {
+                                id: tripLengthTask
+                                trip: rowDelegateId.tripObjectRole
                             }
-                        }
 
-                        RowLayout {
-                            id: layoutId
+                            UsedStationTaskManager {
+                                id: usedStationTaskManager
+                                trip: rowDelegateId.tripObjectRole
+                                bold: false
+                                abbreviated: true
+                                onlyLargestRange: true
+                            }
 
-                            spacing: 0
+                            DataRightClickMouseMenu {
+                                anchors.fill: parent
+                                removeChallenge: removeChallengeId
+                                row: rowDelegateId.index
+                                name: rowDelegateId.tripObjectRole.name
+                            }
 
-                            // QQ.Item {
-                            // anchors.fill: parent
+                            TableRowBackground {
+                                isSelected: tableViewId.currentIndex == rowDelegateId.index
+                                rowIndex: rowDelegateId.index
+                            }
 
-                            QQ.Item {
-                                implicitWidth: tableViewId.nameColumnWidth
-                                implicitHeight: rowLayout
-                                clip: true
+                            QQ.MouseArea {
+                                anchors.fill: parent
+                                acceptedButtons: Qt.LeftButton
 
-                                RowLayout {
-                                    id: rowLayout
-                                    spacing: 1
+                                onClicked: {
+                                    tableViewId.currentIndex = rowDelegateId.index
+                                }
+                            }
 
-                                    ErrorIconBar {
-                                        errorModel: tripObjectRole.errorModel
+                            RowLayout {
+                                id: layoutId
+
+                                spacing: 0
+
+                                // QQ.Item {
+                                // anchors.fill: parent
+
+                                QQ.Item {
+                                    implicitWidth: nameColumnId.width
+                                    implicitHeight: rowLayout
+                                    clip: true
+
+                                    RowLayout {
+                                        id: rowLayout
+                                        spacing: 1
+
+                                        ErrorIconBar {
+                                            errorModel: rowDelegateId.tripObjectRole.errorModel
+                                        }
+
+                                        LinkText {
+                                            text: tripObjectRole.name
+                                            elide: Text.ElideRight
+
+                                            onClicked: {
+                                                RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
+                                                                                           tripPageName(rowDelegateId.tripObjectRole));
+                                            }
+                                        }
                                     }
+                                }
 
-                                    LinkText {
-                                        text: tripObjectRole.name
+                                QQ.Item {
+                                    implicitWidth: dateColumnId.width
+                                    implicitHeight: dateId.implicitHeight
+                                    clip: true
+                                    Text {
+                                        id: dateId
                                         elide: Text.ElideRight
+                                        // anchors.fill: parent
+                                        text: Qt.formatDateTime(rowDelegateId.tripObjectRole.date, "yyyy-MM-dd")
+                                    }
+                                }
 
-                                        onClicked: {
-                                            RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
-                                                                                       tripPageName(tripObjectRole));
+                                QQ.Item {
+                                    implicitWidth: stationsColumnId.width
+                                    implicitHeight: usedStationsId.implicitHeight
+                                    clip: true
+
+                                    Text {
+                                        id: usedStationsId
+                                        elide: Text.ElideRight
+                                        // anchors.fill: parent
+                                        text: {
+                                            if(usedStationTaskManager.usedStations.length > 0) {
+                                                return usedStationTaskManager.usedStations[0]
+                                            }
+                                            return ""
                                         }
                                     }
                                 }
-                            }
 
-                            QQ.Item {
-                                implicitWidth: tableViewId.dateColumnWidth
-                                implicitHeight: dateId.implicitHeight
-                                clip: true
-                                Text {
-                                    id: dateId
-                                    elide: Text.ElideRight
-                                    // anchors.fill: parent
-                                    text: Qt.formatDateTime(tripObjectRole.date, "yyyy-MM-dd")
-                                }
-                            }
+                                QQ.Item {
+                                    implicitWidth: lengthColumnId.width
+                                    implicitHeight: lengthId.implicitHeight
+                                    clip: true
 
-                            QQ.Item {
-                                implicitWidth: tableViewId.stationColumnWidth
-                                implicitHeight: usedStationsId.implicitHeight
-                                clip: true
+                                    Text {
+                                        id: lengthId
+                                        elide: Text.ElideRight
+                                        // anchors.fill: parent
+                                        text: {
+                                            var unit = ""
+                                            switch(rowDelegateId.tripObjectRole.calibration.distanceUnit) {
+                                            case Units.Meters:
+                                                unit = "m"
+                                                break;
+                                            case Units.Feet:
+                                                unit = "ft"
+                                                break;
+                                            }
 
-                                Text {
-                                    id: usedStationsId
-                                    elide: Text.ElideRight
-                                    // anchors.fill: parent
-                                    text: {
-                                        if(usedStationTaskManager.usedStations.length > 0) {
-                                            return usedStationTaskManager.usedStations[0]
+                                            return Utils.fixed(tripLengthTask.length, 2) + " " + unit;
                                         }
-                                        return ""
-                                    }
-                                }
-                            }
-
-                            QQ.Item {
-                                implicitWidth: tableViewId.lengthColumnWidth
-                                implicitHeight: lengthId.implicitHeight
-                                clip: true
-
-                                Text {
-                                    id: lengthId
-                                    elide: Text.ElideRight
-                                    // anchors.fill: parent
-                                    text: {
-                                        var unit = ""
-                                        switch(tripObjectRole.calibration.distanceUnit) {
-                                        case Units.Meters:
-                                            unit = "m"
-                                            break;
-                                        case Units.Feet:
-                                            unit = "ft"
-                                            break;
-                                        }
-
-                                        return Utils.fixed(tripLengthTask.length, 2) + " " + unit;
                                     }
                                 }
                             }
                         }
-                    }
 
-                    delegate: RowDelegate {}
+                        delegate: RowDelegate {}
+                    }
                 }
             }
         }
