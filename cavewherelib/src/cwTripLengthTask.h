@@ -53,6 +53,8 @@ private slots:
 
 private:
    QPointer<cwTrip> Trip;
+
+
    double Length; //!< The length of the trip
 
    void connectChunks();

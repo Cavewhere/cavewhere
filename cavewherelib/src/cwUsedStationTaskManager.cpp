@@ -394,5 +394,10 @@ void cwUsedStationTaskManager::setOnlyLargestRange(bool onlyLargestRange) {
     }
 }
 
+void cwUsedStationTaskManager::waitForFinished()
+{
+    Task->waitToFinish();
+}
+
 
 

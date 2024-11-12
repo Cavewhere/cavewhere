@@ -79,6 +79,8 @@ public:
 
     QStringList usedStations() const;
 
+    void waitForFinished();
+
 public slots:
     void calculateUsedStations();
 
@@ -113,7 +115,6 @@ private:
 
     cwUsedStationsTask::Settings TaskSettings;
 
-    QList<QString> uoallCaveStationNames() const;
     void hookupCaveToTask();
 
     void connectCave(cwCave* cave);

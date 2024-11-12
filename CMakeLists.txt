@@ -21,11 +21,14 @@ add_subdirectory(cavewherelib)
 
 set(SURVEX_CONAN OFF CACHE BOOL "Use survex Conan to manage dependencies" FORCE)
 
+
+set(CW_BUNDLE_DIR "${CMAKE_BINARY_DIR}")
 if(${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
     # macOS
-    set(SURVEX_OUTPUT_DIR "${CMAKE_BINARY_DIR}/CaveWhere.app/Contents/MacOS/survex" CACHE PATH "" FORCE)
+    set(CW_BUNDLE_DIR "${CMAKE_BINARY_DIR}/CaveWhere.app/Contents/MacOS/survex")
+    set(SURVEX_OUTPUT_DIR "${CW_BUNDLE_DIR}" CACHE PATH "" FORCE)
 # else()
-#     # Other systems (e.g., Linux, Windows)
+    # Other systems (e.g., Linux, Windows)
 #     set(SURVEX_OUTPUT_DIR "${CMAKE_BINARY_DIR}/survex")
 endif()
 add_subdirectory(survex)
@@ -64,8 +67,14 @@ file(GLOB cavewhere_test_H_FILES "testcases/*.h")
 target_sources(cavewhere-test PRIVATE ${cavewhere_test_CPP_FILES} ${cavewhere_test_H_FILES})
 
 file(GLOB cavewhere_test_qrc_FILES "testcases/*.qrc")
-qt_add_resources(cavewhere_test_QT_RESOURCES ${cavewhere_test_qrc_FILkS})
+qt_add_resources(cavewhere_test_QT_RESOURCES ${cavewhere_test_qrc_FILES})
 target_sources(cavewhere-test PRIVATE ${cavewhere_test_QT_RESOURCES})
+
+set_target_properties(cavewhere-test PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CW_BUNDLE_DIR}
+    LIBRARY_OUTPUT_DIRECTORY ${CW_BUNDLE_DIR}
+    ARCHIVE_OUTPUT_DIRECTORY ${CW_BUNDLE_DIR}
+)
 
 target_link_libraries(cavewhere-test
     PRIVATE

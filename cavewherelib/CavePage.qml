@@ -151,14 +151,18 @@ StandardPage {
 
                     TableStaticView {
                         id: tableViewId
-                        model:  cavePageArea.currentCave
+                        model:  SortFilterProxyModel {
+                            source: CavePageModel {
+                                cave: cavePageArea.currentCave
+                            }
+                        }
 
                         //This will populate the HorizontalHeader
                         columnModel.children: [
-                            TableStaticColumn { id: nameColumnId; columnWidth: 200; text: "Name" },
-                            TableStaticColumn { id: dateColumnId; columnWidth: 75; text: "Date" },
-                            TableStaticColumn { id: stationsColumnId; columnWidth: 75; text: "Stations" },
-                            TableStaticColumn { id: lengthColumnId; columnWidth: 50; text: "Length" }
+                            TableStaticColumn { id: nameColumnId; columnWidth: 200; text: "Name"; sortRole: CavePageModel.TripNameRole},
+                            TableStaticColumn { id: dateColumnId; columnWidth: 75; text: "Date"; sortRole: CavePageModel.TripDateRole },
+                            TableStaticColumn { id: stationsColumnId; columnWidth: 75; text: "Stations"; sortRole: CavePageModel.UsedStationsRole },
+                            TableStaticColumn { id: lengthColumnId; columnWidth: 50; text: "Length"; sortRole: CavePageModel.TripDistanceRole  }
                         ]
 
                         Layout.fillHeight: true
@@ -166,29 +170,33 @@ StandardPage {
                         component RowDelegate : QQ.Item {
                             id: rowDelegateId
                             required property Trip tripObjectRole
+                            required property string tripNameRole
+                            required property date tripDateRole
+                            required property string usedStationsRole
+                            required property real tripDistanceRole
                             required property int index
 
                             implicitWidth: layoutId.width
                             implicitHeight: layoutId.height
 
-                            TripLengthTask {
-                                id: tripLengthTask
-                                trip: rowDelegateId.tripObjectRole
-                            }
+                            // TripLengthTask {
+                            //     id: tripLengthTask
+                            //     trip: rowDelegateId.tripObjectRole
+                            // }
 
-                            UsedStationTaskManager {
-                                id: usedStationTaskManager
-                                trip: rowDelegateId.tripObjectRole
-                                bold: false
-                                abbreviated: true
-                                onlyLargestRange: true
-                            }
+                            // UsedStationTaskManager {
+                            //     id: usedStationTaskManager
+                            //     trip: rowDelegateId.tripObjectRole
+                            //     bold: false
+                            //     abbreviated: true
+                            //     onlyLargestRange: true
+                            // }
 
                             DataRightClickMouseMenu {
                                 anchors.fill: parent
                                 removeChallenge: removeChallengeId
                                 row: rowDelegateId.index
-                                name: rowDelegateId.tripObjectRole.name
+                                name: rowDelegateId.tripNameRole
                             }
 
                             TableRowBackground {
@@ -215,7 +223,7 @@ StandardPage {
 
                                 QQ.Item {
                                     implicitWidth: nameColumnId.width
-                                    implicitHeight: rowLayout
+                                    implicitHeight: rowLayout.height
                                     clip: true
 
                                     RowLayout {
@@ -227,7 +235,7 @@ StandardPage {
                                         }
 
                                         LinkText {
-                                            text: tripObjectRole.name
+                                            text: rowDelegateId.tripNameRole
                                             elide: Text.ElideRight
 
                                             onClicked: {
@@ -246,7 +254,7 @@ StandardPage {
                                         id: dateId
                                         elide: Text.ElideRight
                                         // anchors.fill: parent
-                                        text: Qt.formatDateTime(rowDelegateId.tripObjectRole.date, "yyyy-MM-dd")
+                                        text: Qt.formatDateTime(rowDelegateId.tripDateRole, "yyyy-MM-dd")
                                     }
                                 }
 
@@ -259,12 +267,7 @@ StandardPage {
                                         id: usedStationsId
                                         elide: Text.ElideRight
                                         // anchors.fill: parent
-                                        text: {
-                                            if(usedStationTaskManager.usedStations.length > 0) {
-                                                return usedStationTaskManager.usedStations[0]
-                                            }
-                                            return ""
-                                        }
+                                        text: usedStationsRole
                                     }
                                 }
 
@@ -288,7 +291,7 @@ StandardPage {
                                                 break;
                                             }
 
-                                            return Utils.fixed(tripLengthTask.length, 2) + " " + unit;
+                                            return Utils.fixed(rowDelegateId.tripDistanceRole, 2) + " " + unit;
                                         }
                                     }
                                 }

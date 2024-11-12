@@ -111,3 +111,16 @@ void fuzzyCompareVector(QVector3D v1, QVector3D v2, double delta)
     CHECK_THAT(v1.y(), WithinAbs(v2.y(), delta));
     CHECK_THAT(v1.z(), WithinAbs(v2.z(), delta));
 }
+
+std::ostream &operator <<(std::ostream &os, const QList<int> &value) {
+    os << "[";
+    for(int i = 0; i < value.size(); i++) {
+        if(i < value.size() - 1) {
+            os << i << " ";
+        } else {
+            os << i;
+        }
+    }
+    os << "]";
+    return os;
+}

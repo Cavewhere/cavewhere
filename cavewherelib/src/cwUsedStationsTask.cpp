@@ -68,7 +68,7 @@ void cwUsedStationsTask::runTask() {
  * This is a threaded helper function to createSplitStationNames
  */
 cwUsedStationsTask::SplitStationName cwUsedStationsTask::splitName(cwStation station) {
-    QRegularExpression namePartRegExp("\\d+\\D*$");
+    const static QRegularExpression namePartRegExp("\\d+\\D*$");
     QRegularExpressionMatch match = namePartRegExp.match(station.name());
     int index = match.hasMatch() ? match.capturedStart(0) : 0;
 

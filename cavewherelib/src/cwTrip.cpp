@@ -279,6 +279,7 @@ void cwTrip::setChucks(QList<cwSurveyChunk*> chunks) {
 
     foreach(cwSurveyChunk* chunk, Chunks) {
         chunk->setParentTrip(this);
+        chunk->errorModel()->setParentModel(errorModel());
     }
 
     emit chunksInserted(0, chunkCount() - 1);

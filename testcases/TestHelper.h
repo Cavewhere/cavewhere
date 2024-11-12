@@ -84,6 +84,8 @@ inline std::ostream& operator << ( std::ostream& os, QList<cwImageData> const& v
     return os;
 }
 
+std::ostream& operator << ( std::ostream& os, QList<int> const& value);
+
 inline std::ostream& operator << ( std::ostream& os, const QMatrix4x4& matrix) {
     os << "[\n";
     for(int r = 0; r < 4; r++) {

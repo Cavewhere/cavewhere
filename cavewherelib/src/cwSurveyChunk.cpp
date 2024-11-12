@@ -65,6 +65,8 @@ cwSurveyChunk::cwSurveyChunk(const cwSurveyChunk& chunk) :
         Calibrations.insert(iter.key(), new cwTripCalibration(*iter.value()));
         Calibrations.value(iter.key())->setParent(this);
     }
+
+    updateErrors();
 }
 
 cwSurveyChunk::~cwSurveyChunk()
@@ -233,8 +235,7 @@ void cwSurveyChunk::setParentTrip(cwTrip* trip) {
                        this, &cwSurveyChunk::updateCompassClinoErrors);
         }
 
-        updateClinoErrors();
-        updateCompassErrors();
+        updateCompassClinoErrors();
 
         emit parentTripChanged();
     }
@@ -1483,6 +1484,7 @@ void cwSurveyChunk::updateCompassErrors()
 {
    for(int i = 0; i < shotCount(); i++) {
        checkForError(ShotCompassRole, i);
+       checkForError(ShotBackCompassRole, i);
    }
 }
 
@@ -1496,6 +1498,7 @@ void cwSurveyChunk::updateClinoErrors()
 {
     for(int i = 0; i < shotCount(); i++) {
         checkForError(ShotClinoRole, i);
+        checkForError(ShotBackClinoRole, i);
     }
 }
 

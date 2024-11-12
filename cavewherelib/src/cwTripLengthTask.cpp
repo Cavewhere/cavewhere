@@ -17,6 +17,7 @@ cwTripLengthTask::cwTripLengthTask(QObject *parent) :
     Trip(nullptr),
     Length(0.0)
 {
+    setUsingThreadPool(false); //This task isn't thread safe
 }
 
 /**
@@ -40,7 +41,7 @@ void cwTripLengthTask::setTrip(cwTrip *trip) {
             restart();
         }
 
-        tripChanged();
+        emit tripChanged();
     }
 }
 
@@ -112,6 +113,8 @@ void cwTripLengthTask::disconnectTrip() {
 
 void cwTripLengthTask::runTask()
 {
+    Q_ASSERT(isUsingThreadPool() == false); //This task is not thread safe
+
     if(Trip.isNull()) {
         Length = 0;
         done();
@@ -130,7 +133,7 @@ void cwTripLengthTask::runTask()
     double totalTapeError = Trip->calibrations()->tapeCalibration() * (double)numberOfShots;
 
     Length = distance + totalTapeError;
-    lengthChanged();
+    emit lengthChanged();
 
     done();
 }

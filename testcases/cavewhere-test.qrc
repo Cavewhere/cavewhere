@@ -26,5 +26,6 @@
         <file>datasets/test_cwSurvexport/data.svx</file>
         <file>datasets/test_cwSurvexport/cwSurvexport_data.3d.csv</file>
         <file>datasets/test_cwSurvexportCSVTask/cwSurvexport_data.3d.csv</file>
+        <file>datasets/test_cwCavePageModel/cwCavePageModel.cw</file>
     </qresource>
 </RCC>
