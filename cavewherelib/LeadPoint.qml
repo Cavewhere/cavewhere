@@ -59,7 +59,8 @@ PointItem {
                         heightText: lead.height
                     }
 
-                    CheckBox {
+                    //This is too easy for the user to mark a lead as completed
+                    QC.CheckBox {
                         id: checkBox
                         text: "Completed"
                         checked: lead.completed

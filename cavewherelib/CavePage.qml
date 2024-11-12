@@ -139,7 +139,6 @@ StandardPage {
 
                 HorizontalHeaderStaticView {
                     view: tableViewId
-
                     Layout.fillWidth: true
                 }
 
@@ -156,10 +155,10 @@ StandardPage {
 
                         //This will populate the HorizontalHeader
                         columnModel.children: [
-                            TableStaticColumn { id: nameColumnId; columnWidth: 200; name: "Name" },
-                            TableStaticColumn { id: dateColumnId; columnWidth: 75; name: "Date" },
-                            TableStaticColumn { id: stationsColumnId; columnWidth: 75; name: "Stations" },
-                            TableStaticColumn { id: lengthColumnId; columnWidth: 50; name: "Length" }
+                            TableStaticColumn { id: nameColumnId; columnWidth: 200; text: "Name" },
+                            TableStaticColumn { id: dateColumnId; columnWidth: 75; text: "Date" },
+                            TableStaticColumn { id: stationsColumnId; columnWidth: 75; text: "Stations" },
+                            TableStaticColumn { id: lengthColumnId; columnWidth: 50; text: "Length" }
                         ]
 
                         Layout.fillHeight: true

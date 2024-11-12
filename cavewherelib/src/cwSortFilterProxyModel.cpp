@@ -66,20 +66,25 @@ void cwSortFilterProxyModel::setSource(QObject *source)
     setSourceModel(qobject_cast<QAbstractItemModel *>(source));
 }
 
-QByteArray cwSortFilterProxyModel::sortRole() const
-{
-    return roleNames().value(QSortFilterProxyModel::sortRole());
-}
-
-void cwSortFilterProxyModel::setSortRole(const QByteArray &role)
-{
-    QSortFilterProxyModel::setSortRole(roleKey(role));
-}
-
-void cwSortFilterProxyModel::setSortOrder(Qt::SortOrder order)
+void cwSortFilterProxyModel::sort(Qt::SortOrder order)
 {
     QSortFilterProxyModel::sort(0, order);
 }
+
+// QByteArray cwSortFilterProxyModel::sortRole() const
+// {
+//     return roleNames().value(QSortFilterProxyModel::sortRole());
+// }
+
+// void cwSortFilterProxyModel::setSortRole(const QByteArray &role)
+// {
+//     QSortFilterProxyModel::setSortRole(roleKey(role));
+// }
+
+// void cwSortFilterProxyModel::setSortOrder(Qt::SortOrder order)
+// {
+
+// }
 
 QByteArray cwSortFilterProxyModel::filterRole() const
 {

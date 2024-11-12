@@ -54,8 +54,8 @@ class cwSortFilterProxyModel : public QSortFilterProxyModel
     Q_PROPERTY(int count READ count NOTIFY countChanged)
     Q_PROPERTY(QObject *source READ source WRITE setSource)
 
-    Q_PROPERTY(QByteArray sortRole READ sortRole WRITE setSortRole)
-    Q_PROPERTY(Qt::SortOrder sortOrder READ sortOrder WRITE setSortOrder)
+    // Q_PROPERTY(QByteArray sortRole READ sortRole WRITE setSortRole)
+    Q_PROPERTY(Qt::SortOrder sortOrder READ sortOrder) // WRITE setSortOrder)
 
     Q_PROPERTY(QByteArray filterRole READ filterRole WRITE setFilterRole)
     Q_PROPERTY(QString filterString READ filterString WRITE setFilterString)
@@ -69,10 +69,11 @@ public:
     QObject *source() const;
     void setSource(QObject *source);
 
-    QByteArray sortRole() const;
-    void setSortRole(const QByteArray &role);
+    // QByteArray sortRole() const;
+    // void setSortRole(const QByteArray &role);
 
-    void setSortOrder(Qt::SortOrder order);
+    // void setSortOrder(Qt::SortOrder order);
+    Q_INVOKABLE void sort(Qt::SortOrder order);
 
     QByteArray filterRole() const;
     void setFilterRole(const QByteArray &role);
