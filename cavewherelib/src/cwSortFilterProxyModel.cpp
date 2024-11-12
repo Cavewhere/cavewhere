@@ -103,7 +103,8 @@ QString cwSortFilterProxyModel::filterString() const
 
 void cwSortFilterProxyModel::setFilterString(const QString &filter)
 {
-    setFilterRegularExpression(QRegularExpression(filter, filterRegularExpression().patternOptions()));
+    setFilterWildcard(filter);
+    // setFilterRegularExpression(QRegularExpression(filter, filterRegularExpression().patternOptions()));
 }
 
 // cwSortFilterProxyModel::FilterSyntax cwSortFilterProxyModel::filterSyntax() const

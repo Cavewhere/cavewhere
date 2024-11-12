@@ -55,10 +55,6 @@ Rectangle {
                 rotation: delegate.sortMode == TableStaticColumn.Sort.Descending ? 0 : 180
                 sourceSize: Qt.size(8, 8)
                 smooth: true
-
-                // Behavior on rotation {
-                //     NumberAnimation { duration: 100 }
-                // }
             }
 
             Item {
@@ -69,8 +65,6 @@ Rectangle {
             Label {
                 id: textId
                 text: delegate.text
-                // horizontalAlignment: Text.AlignHCenter
-                // verticalAlignment: Text.AlignVCenter
                 color: "#ff26282a"
             }
         }
@@ -93,7 +87,6 @@ Rectangle {
 
                 //Assume that this is a sort proxy mode
                 let sortModel = delegate.model as SortFilterProxyModel
-                console.log("SortModel:" + sortModel + delegate.model)
                 if(delegate._sortModel) {
                     delegate._sortModel.sortRole = delegate.sortRole
                     switch(delegate.sortMode) {

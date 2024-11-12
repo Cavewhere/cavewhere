@@ -151,7 +151,7 @@ StandardPage {
 
                     TableStaticView {
                         id: tableViewId
-                        model: cavePageArea.currentCave
+                        model:  cavePageArea.currentCave
 
                         //This will populate the HorizontalHeader
                         columnModel.children: [
