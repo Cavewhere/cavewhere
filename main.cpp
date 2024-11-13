@@ -29,6 +29,9 @@
 #include "cwUsedStationsTask.h"
 #include "cwOpenGLSettings.h"
 
+//std includes
+#include <memory>
+
 #ifndef CAVEWHERE_VERSION
 #define CAVEWHERE_VERSION "Sauce-Release"
 #endif
@@ -53,6 +56,73 @@ void customMessageHandler(QtMsgType type, const QMessageLogContext &context, con
         break;
     default:
         break;
+    }
+}
+
+void handleCommandline(QCoreApplication& a, cwRootData* rootData) {
+    // Command-line argument parser
+    QCommandLineParser parser;
+    parser.setApplicationDescription("CaveWhere Application");
+    parser.addHelpOption();
+
+    // Adding --page option
+    QCommandLineOption pageOption(QStringList({"p", "page"}),
+                                  "Specify the page URL to open.",
+                                  "pageurl");
+    parser.addOption(pageOption);
+
+    // Adding optional filename argument
+    parser.addPositionalArgument("filename", "The optional file to open.");
+
+    // Parse the command-line arguments
+    parser.process(a);
+
+    // Check if --page was provided
+    QString pageUrl;
+    if (parser.isSet(pageOption)) {
+        pageUrl = parser.value(pageOption);
+    }
+
+    const QStringList positionalArgs = parser.positionalArguments();
+    if (!positionalArgs.isEmpty()) {
+        QString filename = positionalArgs.first();
+        qDebug() << "Loading file:" << filename;
+        rootData->project()->loadFile(filename);
+
+        if(!pageUrl.isEmpty()) {
+            QObject* obj = new QObject();
+
+            struct ShouldLoad {
+                bool isPageViewLoaded = false;
+                bool isFileLoaded = false;
+            };
+
+            auto shouldLoad = std::make_shared<ShouldLoad>();
+
+            auto loadCommandLinePage = [obj, rootData, pageUrl, shouldLoad]() {
+                if(shouldLoad->isPageViewLoaded && shouldLoad->isFileLoaded) {
+
+                    //This is pretty unrealiable, it depends on the loading spead
+                    QTimer::singleShot(500, [rootData, obj, pageUrl]() {
+                        rootData->pageSelectionModel()->setCurrentPageAddress(pageUrl);
+
+                        //This delete disconnects the connection
+                        obj->deleteLater();
+                    });
+                }
+            };
+
+            obj->connect(rootData, &cwRootData::pageViewChanged, obj, [obj, shouldLoad, loadCommandLinePage, rootData]() {
+                shouldLoad->isPageViewLoaded = true;
+                loadCommandLinePage();
+            });
+
+
+            obj->connect(rootData->project(), &cwProject::loaded, obj, [shouldLoad, loadCommandLinePage]() {
+                shouldLoad->isFileLoaded = true;
+                loadCommandLinePage();
+            });
+        }
     }
 }
 
@@ -90,11 +160,8 @@ int main(int argc, char *argv[])
     openFileHandler->setProject(rootData->project());
     a.installEventFilter(openFileHandler);
 
-    if(argc >= 2) {
-        QByteArray filenameByteArray(argv[1]);
-        qDebug() << "Loading file:" << filenameByteArray;
-        rootData->project()->loadFile(QString::fromLocal8Bit(filenameByteArray));
-    }
+    //Handle command line args
+    handleCommandline(a, rootData);
 
     //Hookup the image provider now that the rootdata is create
     imageProvider->setProjectPath(rootData->project()->filename());

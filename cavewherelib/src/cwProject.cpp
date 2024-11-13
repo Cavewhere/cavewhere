@@ -393,7 +393,8 @@ void cwProject::loadFile(QString filename) {
         setTemporaryProject(result.isTempFile());
         *Region = *(result.cavingRegion().data());
         FileVersion = result.fileVersion();
-        emit canSaveDirectly();
+        emit canSaveDirectlyChanged();
+        emit loaded();
     };
 
     LoadFuture = AsyncFuture::observe(loadFuture)

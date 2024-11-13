@@ -47,6 +47,10 @@ QQ.Item {
             id: pageView
             anchors.fill: parent
             pageSelectionModel: RootData.pageSelectionModel
+
+            QQ.Component.onCompleted: {
+                RootData.pageView = pageView
+            }
         }
     }
 
@@ -107,6 +111,5 @@ QQ.Item {
         RootData.pageSelectionModel.registerPage(null, "Settings", settingsPageComponent)
         RootData.pageSelectionModel.gotoPage(dataPage);
         // RootData.pageSelectionModel.gotoPage(viewPage);
-        RootData.pageView = pageView
     }
 }

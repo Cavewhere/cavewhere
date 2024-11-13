@@ -100,6 +100,7 @@ signals:
     void isTemporaryProjectChanged();
     void regionChanged();
     void fileSaved();
+    void loaded();
 
 public slots:
      void loadFile(QString filename);
