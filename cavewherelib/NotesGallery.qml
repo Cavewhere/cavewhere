@@ -70,9 +70,9 @@ QQ.Rectangle {
         id: container
 
         property int border: 6
-        property Note noteObject
-        property url imageIconPath
-        property int index
+        required property Note noteObject
+        required property url imageIconPath
+        required property int index
         property real maxImageWidth: galleryView.width
 
         width: maxImageWidth
