@@ -33,7 +33,7 @@ public:
     cwScrap::LeadDataRole positionRole() const;
 
 private:
-    virtual QUrl qmlSource() const;
+    virtual QString qmlSource() const;
     virtual void updateItemPosition(QQuickItem* item, int index);
 
 private slots:

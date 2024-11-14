@@ -56,7 +56,7 @@ signals:
 public slots:
     
 protected:
-    virtual QUrl qmlSource() const = 0;
+    virtual QString qmlSource() const = 0;
     virtual void updateItemData(QQuickItem* item, int pointIndex) = 0;
     virtual void updateItemPosition(QQuickItem* item, int pointIndex) = 0;
     void resizeNumberOfItems(int numberOfStations);

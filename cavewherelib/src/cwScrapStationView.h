@@ -55,7 +55,7 @@ private:
     cwTransformUpdater* OldTransformUpdater;
 
     virtual void updateItemPosition(QQuickItem* item, int index);
-    virtual QUrl qmlSource() const;
+    virtual QString qmlSource() const;
 
 
 private slots:
@@ -77,9 +77,9 @@ protected:
  * @brief cwScrapStationView::qmlSource
  * @return The qml source of the point that'll be rendered
  */
-inline QUrl cwScrapStationView::qmlSource() const
+inline QString cwScrapStationView::qmlSource() const
 {
-    return QUrl(QStringLiteral("qrc:/cavewherLib/NoteStation.qml"));
+    return QStringLiteral("qrc:/cavewherelib/cavewherelib/NoteStation.qml");
 }
 
 

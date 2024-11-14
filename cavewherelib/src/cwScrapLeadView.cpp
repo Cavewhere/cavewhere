@@ -92,16 +92,16 @@ void cwScrapLeadView::setPositionRole(cwScrap::LeadDataRole role)
  * @brief cwScrapStationView::qmlSource
  * @return The qml source of the point that'll be rendered
  */
-QUrl cwScrapLeadView::qmlSource() const
+QString cwScrapLeadView::qmlSource() const
 {
     switch(positionRole()) {
     case cwScrap::LeadPosition:
-        return QUrl(QStringLiteral("qrc:/cavewherelib/cavewherelib/LeadPoint.qml"));
+        return QStringLiteral("qrc:/cavewherelib/cavewherelib/LeadPoint.qml");
     case cwScrap::LeadPositionOnNote:
-        return QUrl(QStringLiteral("qrc:/cavewherelib/cavewherelib/NoteLead.qml"));
+        return QStringLiteral("qrc:/cavewherelib/cavewherelib/NoteLead.qml");
     default:
         break;
     }
-    return QUrl();
+    return QString();
 
 }

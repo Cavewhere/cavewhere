@@ -20,6 +20,7 @@
 #include <QSGSimpleRectNode>
 #include <QPen>
 #include <QQmlEngine>
+#include <QQmlContext>
 
 cwScrapItem::cwScrapItem(QQuickItem *parent) :
     QQuickItem(parent),

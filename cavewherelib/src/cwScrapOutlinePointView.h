@@ -27,7 +27,7 @@ public:
     void setScrap(cwScrap* scrap);
 
 protected:
-    virtual QUrl qmlSource() const;
+    virtual QString qmlSource() const;
     virtual void updateItemPosition(QQuickItem* item, int pointIndex);
     
 public slots:
@@ -42,9 +42,9 @@ private slots:
  * @brief cwScrapControlPointView::qmlSource
  * @return Returns the point's qml definition
  */
-inline QUrl cwScrapOutlinePointView::qmlSource() const
+inline QString cwScrapOutlinePointView::qmlSource() const
 {
-    return QUrl(QStringLiteral("qrc:cavewhereLib/ScrapOutlinePoint.qml"));
+    return QStringLiteral("qrc:/cavewherelib/cavewherelib/ScrapOutlinePoint.qml");
 }
 
 
