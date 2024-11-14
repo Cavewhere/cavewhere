@@ -134,9 +134,6 @@ int main(int argc, char *argv[])
     QApplication::setApplicationName("CaveWhere");
     QApplication::setApplicationVersion(CAVEWHERE_VERSION);
 
-    // cwOpenGLSettings::setApplicationRenderer();
-    QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
-
     cwApplication a(argc, argv);
 
     //Register all of the cavewhere types
@@ -169,7 +166,6 @@ int main(int argc, char *argv[])
 
     auto quit = [&a, rootData, applicationEnigine]() {
         delete applicationEnigine;
-        delete rootData;
         QThreadPool::globalInstance()->waitForDone();
         cwTask::threadPool()->waitForDone();
         a.quit();

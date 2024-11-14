@@ -1,6 +1,8 @@
 from conan import ConanFile
 from conan.tools.cmake import CMake, CMakeToolchain, CMakeDeps
 import os, sys
+from conan.errors import ConanInvalidConfiguration
+import subprocess
 
 class CaveWhereConan(ConanFile):
     name = "CaveWhere"
@@ -69,3 +71,13 @@ class CaveWhereConan(ConanFile):
 #        self.options["tiff"].shared=True
 #        self.options["proj"].with_tiff=False
         # self.options["zlib"].shared=True
+
+        self._check_perl_locale_po()
+
+    def _check_perl_locale_po(self):
+        try:
+            subprocess.check_output(["perl", "-MLocale::PO", "-e", "print 'Locale::PO is available'"])
+        except subprocess.CalledProcessError:
+            raise ConanInvalidConfiguration(
+                "Locale::PO Perl module is not installed. Install it with `cpan Locale::PO`."
+            )
