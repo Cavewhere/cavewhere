@@ -6,6 +6,7 @@
 **************************************************************************/
 
 import QtQuick as QQ
+import QtQuick.Controls as QC
 import cavewherelib
 import QtQuick.Layouts
 
@@ -88,9 +89,9 @@ StandardPage {
             anchors.top: parent.top
             anchors.margins: 3
 
-            Button {
+            QC.Button {
                 id: expandButton
-                iconSource: "qrc:/icons/moreArrow.png"
+                icon.source: "qrc:/icons/moreArrow.png"
                 onClicked: {
                     area.state = ""
                 }
@@ -106,7 +107,7 @@ StandardPage {
                     rotation: 270
                     text: area.currentTrip.name
                     x: -5
-                    y: 10
+                    y: 20
                 }
             }
         }

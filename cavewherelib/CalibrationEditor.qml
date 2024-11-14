@@ -30,7 +30,7 @@ QQ.Rectangle {
 
         QQ.Item {
             Layout.fillWidth: true;
-            // height: childrenRect.height
+            implicitHeight: childrenRect.height
 
             DeclainationEditor {
                 calibration: calibrationEditor.calibration

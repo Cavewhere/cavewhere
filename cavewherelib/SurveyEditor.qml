@@ -73,12 +73,12 @@ QQ.Item {
                             text: "Trip"
                         }
 
-                        Button {
+                        Controls.Button {
                             id: collapseButton
                             anchors.right: parent.right
                             anchors.top: parent.top
                             anchors.margins: 3
-                            iconSource: "qrc:/icons/moreArrowLeft.png"
+                            icon.source: "qrc:/icons/moreArrowLeft.png"
                             onClicked:  clipArea.collapseClicked()
                         }
                     }

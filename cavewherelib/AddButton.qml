@@ -4,9 +4,9 @@
 **    www.cavewhere.com
 **
 **************************************************************************/
+import QtQuick.Controls as QC
 
-
-Button {
+QC.Button {
     id: addButton
-    iconSource: "qrc:icons/plus.png"
+    icon.source: "qrc:icons/plus.png"
 }
