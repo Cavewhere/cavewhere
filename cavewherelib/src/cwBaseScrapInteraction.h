@@ -14,6 +14,7 @@
 #include "cwImageItem.h"
 #include "cwScrapOutlinePointView.h"
 class cwNoteTranformation;
+class cwNoteCamera;
 
 //Qt includes
 #include <QQmlEngine>
@@ -23,7 +24,10 @@ class cwBaseScrapInteraction : public cwNoteInteraction
     Q_OBJECT
     QML_NAMED_ELEMENT(BaseScrapInteraction)
 
-    Q_PROPERTY(cwImageItem* imageItem READ imageItem WRITE setImageItem NOTIFY imageItemChanged)
+    // Q_PROPERTY(cwImageItem* imageItem READ imageItem WRITE setImageItem NOTIFY imageItemChanged)
+
+    Q_PROPERTY(cwNoteCamera* noteCamera READ noteCamera WRITE setNoteCamera NOTIFY noteCameraChanged)
+
     Q_PROPERTY(cwScrapOutlinePointView* outlinePointView READ outlinePointView WRITE setOutlinePointView NOTIFY outlinePointViewChanged)
     Q_PROPERTY(cwScrap* scrap READ scrap WRITE setScrap NOTIFY scrapChanged)
 
@@ -32,8 +36,8 @@ public:
 
 //    Q_INVOKABLE void addPoint(QPoint imageCoordinate);
 
-    cwImageItem* imageItem() const;
-    void setImageItem(cwImageItem* imageItem);
+    // cwImageItem* imageItem() const;
+    // void setImageItem(cwImageItem* imageItem);
 
     cwScrapOutlinePointView* outlinePointView() const;
     void setOutlinePointView(cwScrapOutlinePointView* outlinePointView);
@@ -42,10 +46,14 @@ public:
     void setScrap(cwScrap* scrap);
     cwScrap* scrap() const;
 
+    cwNoteCamera* noteCamera() const;
+    void setNoteCamera(cwNoteCamera* noteCamera);
+
     Q_INVOKABLE QVariantMap snapToScrapLine(QPoint qtViewportPosition) const;
 
 signals:
-    void imageItemChanged();
+    // void imageItemChanged();
+    void noteCameraChanged();
     void outlinePointViewChanged();
     void scrapChanged();
 
@@ -67,7 +75,8 @@ private:
     };
 
     cwScrap* Scrap;
-    cwImageItem* ImageItem; //!< For converting viewport coordinates into note coordinates
+    cwNoteCamera* m_noteCamera;
+    // cwImageItem* ImageItem; //!< For converting viewport coordinates into note coordinates
     cwScrapOutlinePointView* OutlinePointView; //!< For testing if we clicked on a control point
 
     void closeCurrentScrap();
@@ -81,12 +90,15 @@ private slots:
     void scrapDeleted();
 
 };
+
+#include "cwNoteCamera.h"
+
 /**
 Gets imageItem
 */
-inline cwImageItem* cwBaseScrapInteraction::imageItem() const {
-    return ImageItem;
-}
+// inline cwImageItem* cwBaseScrapInteraction::imageItem() const {
+//     return ImageItem;
+// }
 
 /**
 Gets controlPointView
@@ -102,6 +114,10 @@ inline cwScrapOutlinePointView* cwBaseScrapInteraction::outlinePointView() const
 inline cwScrap *cwBaseScrapInteraction::scrap() const
 {
     return Scrap;
+}
+
+inline cwNoteCamera *cwBaseScrapInteraction::noteCamera() const {
+    return m_noteCamera;
 }
 
 /**

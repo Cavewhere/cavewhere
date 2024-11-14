@@ -31,7 +31,7 @@ DataBox {
             anchors.centerIn: parent
             anchors.verticalCenterOffset: 1
 
-            font.family: "monospace"
+            // font.family: "monospace"
             font.pixelSize: 14
             font.bold: true
             color: "#EEEEEE"

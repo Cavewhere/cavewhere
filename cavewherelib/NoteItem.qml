@@ -13,6 +13,7 @@ ImageItem {
 
     property Note note;
     property alias scrapsVisible: scrapViewId.visible
+    property NoteCamera camera;
 
     projectFilename: RootData.project.filename
 
@@ -25,8 +26,7 @@ ImageItem {
         id: panZoomInteraction
         anchors.fill: parent
 
-        //FIXME: I'm not sure were the camera went
-        // camera: noteArea.camera
+        camera: noteArea.camera
     }
 
     ScrapInteraction {
@@ -34,7 +34,8 @@ ImageItem {
         anchors.fill: parent
         note: noteArea.note
         basePanZoomInteraction: panZoomInteraction
-        imageItem: noteArea
+        noteCamera: noteArea.camera
+        // imageItem: noteArea
         outlinePointView: {
             if(scrapViewId.selectedScrapItem !== null) {
                 return scrapViewId.selectedScrapItem.outlinePointView

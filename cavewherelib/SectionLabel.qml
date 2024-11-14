@@ -11,5 +11,4 @@ Text {
     font.underline: true
     font.pixelSize: 20
     font.bold: true
-    anchors.horizontalCenter: parent.horizontalCenter
 }

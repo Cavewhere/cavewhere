@@ -25,6 +25,7 @@ QQ.Rectangle {
 
         SectionLabel {
             text: "Calibration"
+            Layout.alignment: Qt.AlignHCenter
         }
 
         QQ.Item {

@@ -30,8 +30,8 @@ cwSurveyChunkGroupView::cwSurveyChunkGroupView(QQuickItem *parent) :
     NeedChunkBelowMapper(new QSignalMapper(this)),
     ChunkTrimmer(new cwSurveyChunkTrimmer(this))
 {
-    connect(NeedChunkAboveMapper, SIGNAL(mapped(int)), SLOT(forceAllocateChunkAbove(int)));
-    connect(NeedChunkBelowMapper, SIGNAL(mapped(int)), SLOT(forceAllocateChunkBelow(int)));
+    connect(NeedChunkAboveMapper, &QSignalMapper::mappedInt, this, &cwSurveyChunkGroupView::forceAllocateChunkAbove);
+    connect(NeedChunkBelowMapper, &QSignalMapper::mappedInt, this, &cwSurveyChunkGroupView::forceAllocateChunkBelow);
 }
 
 void cwSurveyChunkGroupView::setTrip(cwTrip* trip) {

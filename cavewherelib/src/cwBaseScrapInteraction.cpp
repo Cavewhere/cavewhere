@@ -14,11 +14,12 @@
 #include "cwScrapOutlinePointView.h"
 #include "cwTrip.h"
 #include "cwSurveyNoteModel.h"
+#include "cwNoteCamera.h"
 
 cwBaseScrapInteraction::cwBaseScrapInteraction(QQuickItem *parent) :
     cwNoteInteraction(parent),
     Scrap(nullptr),
-    ImageItem(nullptr),
+    // ImageItem(nullptr),
     OutlinePointView(nullptr)
 {
     connect(this, SIGNAL(noteChanged()), SLOT(startNewScrap()));
@@ -61,7 +62,7 @@ cwBaseScrapInteraction::cwClosestPoint cwBaseScrapInteraction::calcClosestPoint(
         return cwClosestPoint();
     }
 
-    if(imageItem() == nullptr) {
+    if(m_noteCamera == nullptr) {
         return cwClosestPoint();
     }
 
@@ -69,7 +70,7 @@ cwBaseScrapInteraction::cwClosestPoint cwBaseScrapInteraction::calcClosestPoint(
         return cwClosestPoint();
     }
 
-    QPointF noteCoordinate = imageItem()->mapQtViewportToNote(qtViewportPosition);
+    QPointF noteCoordinate = m_noteCamera->mapQtViewportToNote(qtViewportPosition);
     double buffer = 7.5; //In pixels
 
     //Go through each scrap polygon's lines
@@ -86,8 +87,8 @@ cwBaseScrapInteraction::cwClosestPoint cwBaseScrapInteraction::calcClosestPoint(
         QLineF transLine = transform.map(line);
         QPointF rotatedNoteCoord = transform.map(noteCoordinate);
 
-        QPointF mappedBuffer = imageItem()->mapQtViewportToNote(QPoint(0, buffer));
-        QPointF origin = imageItem()->mapQtViewportToNote(QPoint(0, 0));
+        QPointF mappedBuffer = m_noteCamera->mapQtViewportToNote(QPoint(0, buffer));
+        QPointF origin = m_noteCamera->mapQtViewportToNote(QPoint(0, 0));
         double bufferNoteCoords = QLineF(origin, mappedBuffer).length();
 
         p1 = transLine.p1();
@@ -164,12 +165,12 @@ void cwBaseScrapInteraction::startNewScrap() {
 /**
  Sets imageItem
  */
-void cwBaseScrapInteraction::setImageItem(cwImageItem* imageItem) {
-    if(ImageItem != imageItem) {
-        ImageItem = imageItem;
-        emit imageItemChanged();
-    }
-}
+// void cwBaseScrapInteraction::setImageItem(cwImageItem* imageItem) {
+//     if(ImageItem != imageItem) {
+//         ImageItem = imageItem;
+//         emit imageItemChanged();
+//     }
+// }
 
 /**
 Sets controlPointView
@@ -202,6 +203,13 @@ void cwBaseScrapInteraction::setScrap(cwScrap *scrap)
     emit scrapChanged();
 }
 
+void cwBaseScrapInteraction::setNoteCamera(cwNoteCamera *noteCamera) {
+    if (m_noteCamera != noteCamera) {
+        m_noteCamera = noteCamera;
+        emit noteCameraChanged();
+    }
+}
+
 /**
   * @brief cwBaseScrapInteraction::mouseOver
   * @param position - The mouse is over position
@@ -227,12 +235,12 @@ QVariantMap cwBaseScrapInteraction::snapToScrapLine(QPoint qtViewportPosition) c
         //Point is snapped
         map.insert("IsSnapped", true);
         map.insert("NoteCoordsPoint", point.ClosestPoint);
-        map.insert("QtViewportPoint", imageItem()->mapNoteToQtViewport(point.ClosestPoint));
+        map.insert("QtViewportPoint", m_noteCamera->mapNoteToQtViewport(point.ClosestPoint));
         map.insert("InsertIndex", point.InsertIndex);
     } else {
         //Point isn't snapped to the line
         map.insert("IsSnapped", false);
-        map.insert("NoteCoordsPoint", imageItem()->mapQtViewportToNote(qtViewportPosition));
+        map.insert("NoteCoordsPoint", m_noteCamera->mapQtViewportToNote(qtViewportPosition));
         map.insert("qtViewportPoint", qtViewportPosition);
         if(Scrap == nullptr) {
             map.insert("InsertIndex", 0);

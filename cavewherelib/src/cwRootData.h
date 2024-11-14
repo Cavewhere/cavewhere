@@ -119,6 +119,9 @@ public:
 
     QString supportImageFormats() const;
 
+    //Helper functions for creating things
+    Q_INVOKABLE cwImage emptyImage() { return cwImage(); }
+
 signals:
     void regionChanged();
     void linePlotManagerChanged();

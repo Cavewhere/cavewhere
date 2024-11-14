@@ -2,6 +2,7 @@ import QtQuick
 import cavewherelib
 
 Image {
+    id: imageId
 
     property cwImage image
     property string projectFilename
@@ -10,4 +11,7 @@ Image {
     property futureManagerToken futureManagerToken
 
 
+    function clearImage() {
+        imageId.image = RootData.emptyImage();
+    }
 }
