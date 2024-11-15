@@ -103,7 +103,7 @@ void handleCommandline(QCoreApplication& a, cwRootData* rootData) {
                 if(shouldLoad->isPageViewLoaded && shouldLoad->isFileLoaded) {
 
                     //This is pretty unrealiable, it depends on the loading spead
-                    QTimer::singleShot(500, [rootData, obj, pageUrl]() {
+                    QTimer::singleShot(250, [rootData, obj, pageUrl]() {
                         rootData->pageSelectionModel()->setCurrentPageAddress(pageUrl);
 
                         //This delete disconnects the connection
