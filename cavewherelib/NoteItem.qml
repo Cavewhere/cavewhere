@@ -15,6 +15,8 @@ ImageItem {
     property alias scrapsVisible: scrapViewId.visible
     property NoteCamera camera;
 
+    source: RootData.cavewhereImageUrl(note.original)
+
     projectFilename: RootData.project.filename
 
     clip: true

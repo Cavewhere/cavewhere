@@ -26,6 +26,7 @@
 #include "cwImageCompressionUpdater.h"
 #include "cwAddImageTask.h"
 #include "cwJobSettings.h"
+#include "cwSurveyNoteModel.h"
 
 //Qt includes
 #include <QItemSelectionModel>
@@ -202,4 +203,9 @@ void cwRootData::setPageView(cwPageView *value) {
 
 QString cwRootData::cwRootData::supportImageFormats() const {
     return cwProject::supportedImageFormats();
+}
+
+QUrl cwRootData::cavewhereImageUrl(int id) const
+{
+    return cwImageProvider::imageUrl(id);
 }

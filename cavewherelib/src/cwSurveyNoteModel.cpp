@@ -113,12 +113,12 @@ QVariant cwSurveyNoteModel::data(const QModelIndex &index, int role) const {
     case ImageOriginalPathRole: {
         //Get's the full blown note
         cwImage imagePath = Notes[row]->image();
-        return imagePathString().arg(imagePath.original());
+        return cwImageProvider::imageUrl(imagePath.original());
     }
     case ImageIconPathRole: {
         //Get's the icon for the note
         cwImage imagePath = Notes[row]->image();
-        return imagePathString().arg(imagePath.icon());
+        return cwImageProvider::imageUrl(imagePath.icon());
     }
     case ImageRole: {
         return QVariant::fromValue(Notes[row]->image());

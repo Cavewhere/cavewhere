@@ -240,7 +240,7 @@ QVector2D cwImageProvider::scaleTexCoords(const cwImage& image) const
     }
 
     QSize originalSize = image.originalSize();
-    QSize firstMipmapSize = data(image.mipmaps().first(), true).size();
+    QSize firstMipmapSize = data(image.mipmaps().constFirst(), true).size();
     return QVector2D(originalSize.width() / (double)firstMipmapSize.width(),
                      originalSize.height() / (double)firstMipmapSize.height());
 }
@@ -252,4 +252,9 @@ cwImageData cwImageProvider::createDxt1(QSize size, const QByteArray &uncompress
 
     //Add the image to the database
     return cwImageData(size, 0, cwImageProvider::dxt1GzExtension(), outputData);
+}
+
+QString cwImageProvider::imageUrl(int id)
+{
+    return QStringLiteral("image://") + cwImageProvider::name() + QStringLiteral("/") + QString::number(id);
 }

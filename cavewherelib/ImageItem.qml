@@ -14,4 +14,5 @@ Image {
     function clearImage() {
         imageId.image = RootData.emptyImage();
     }
+
 }

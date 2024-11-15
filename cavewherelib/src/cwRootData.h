@@ -74,7 +74,6 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
     Q_PROPERTY(cwSettings* settings READ settings CONSTANT)
     Q_PROPERTY(QString supportImageFormats READ supportImageFormats CONSTANT)
 
-
     //Temporary properties that should be move to a view layer model
     Q_PROPERTY(bool leadsVisible READ leadsVisible WRITE setLeadsVisible NOTIFY leadsVisibleChanged)
     Q_PROPERTY(bool stationsVisible READ stationsVisible WRITE setStationVisible NOTIFY stationsVisibleChanged)
@@ -120,7 +119,8 @@ public:
     QString supportImageFormats() const;
 
     //Helper functions for creating things
-    Q_INVOKABLE cwImage emptyImage() { return cwImage(); }
+    Q_INVOKABLE cwImage emptyImage() const  { return cwImage(); }
+    Q_INVOKABLE QUrl cavewhereImageUrl(int id) const;
 
 signals:
     void regionChanged();

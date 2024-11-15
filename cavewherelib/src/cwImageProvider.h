@@ -47,6 +47,8 @@ public:
     static QByteArray cropHeightKey() { return QByteArrayLiteral("height"); }
     static QByteArray cropIdKey() { return QByteArrayLiteral("id"); }
 
+    static QString imageUrl(int id);
+
 public slots:
     void setProjectPath(QString projectPath);
 
