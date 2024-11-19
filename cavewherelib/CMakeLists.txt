@@ -171,6 +171,7 @@ qt_add_shaders(cavewherelib "cavewherelib_shaders"
         "shaders/compass/compass.vert"
         "shaders/compass/compass.frag"
         "shaders/colorOverlay.frag"
+        "shaders/imageItem.frag"
     )
 
 # Protobuf files

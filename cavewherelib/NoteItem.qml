@@ -13,7 +13,7 @@ ImageItem {
 
     property Note note;
     property alias scrapsVisible: scrapViewId.visible
-    property NoteCamera camera;
+    // property NoteCamera camera
 
     source: RootData.cavewhereImageUrl(note.original)
 
@@ -24,11 +24,15 @@ ImageItem {
 
     futureManagerToken: RootData.futureManagerModel.token
 
+    NoteCamera {
+        id: cameraId
+    }
+
     PanZoomInteraction {
         id: panZoomInteraction
         anchors.fill: parent
 
-        camera: noteArea.camera
+        camera: cameraId
     }
 
     ScrapInteraction {
@@ -36,7 +40,7 @@ ImageItem {
         anchors.fill: parent
         note: noteArea.note
         basePanZoomInteraction: panZoomInteraction
-        noteCamera: noteArea.camera
+        noteCamera: cameraId
         // imageItem: noteArea
         outlinePointView: {
             if(scrapViewId.selectedScrapItem !== null) {
@@ -143,7 +147,7 @@ ImageItem {
     //This allows note coordinates to be mapped to opengl coordinates
     TransformUpdater {
         id: transformUpdaterId
-        camera: noteArea.camera
+        camera: cameraId
         modelMatrix: noteArea.modelMatrix
     }
 
