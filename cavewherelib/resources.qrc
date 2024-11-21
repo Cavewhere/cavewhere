@@ -100,5 +100,7 @@
         <file>twbs-icons/icons/chat-right-text.svg</file>
         <file>twbs-icons/icons/arrow-left-square-fill.svg</file>
         <file>twbs-icons/icons/arrow-right-short.svg</file>
+        <file>twbs-icons/icons/chevron-left.svg</file>
+        <file>twbs-icons/icons/chevron-right.svg</file>
     </qresource>
 </RCC>

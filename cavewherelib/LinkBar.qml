@@ -19,16 +19,16 @@ QQ.Item {
             address: RootData.pageSelectionModel.currentPageAddress
         }
 
-        Controls.Button {
-            icon.source: "qrc:/icons/leftCircleArrow-32x32.png"
+        Controls.RoundButton {
+            icon.source: "qrc:/twbs-icons/icons/chevron-left.svg"
             enabled: RootData.pageSelectionModel.hasBackward
             onClicked: {
                 RootData.pageSelectionModel.back();
             }
         }
 
-        Controls.Button {
-            icon.source: "qrc:/icons/rightCircleArrow-32x32.png"
+        Controls.RoundButton {
+            icon.source: "qrc:/twbs-icons/icons/chevron-right.svg"
             enabled: RootData.pageSelectionModel.hasForward
             onClicked: {
                 RootData.pageSelectionModel.forward();
