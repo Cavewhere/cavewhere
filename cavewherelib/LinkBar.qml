@@ -6,7 +6,10 @@ import QtQuick.Layouts
 import cavewherelib
 
 QQ.Item {
+    id: linkBarId
     implicitHeight: rowLayoutId.height
+
+    required property int sidebarWidth
 
     RowLayout {
         id: rowLayoutId
@@ -14,24 +17,40 @@ QQ.Item {
         anchors.right: parent.right
         anchors.rightMargin: 5
 
+        spacing: 0
+
         LinkBarModel {
             id: linkBarModel
             address: RootData.pageSelectionModel.currentPageAddress
         }
 
-        Controls.RoundButton {
-            icon.source: "qrc:/twbs-icons/icons/chevron-left.svg"
-            enabled: RootData.pageSelectionModel.hasBackward
-            onClicked: {
-                RootData.pageSelectionModel.back();
-            }
-        }
+        QQ.Item {
+            implicitWidth: linkBarId.sidebarWidth
+            implicitHeight: backForwardLayoutId.implicitHeight
 
-        Controls.RoundButton {
-            icon.source: "qrc:/twbs-icons/icons/chevron-right.svg"
-            enabled: RootData.pageSelectionModel.hasForward
-            onClicked: {
-                RootData.pageSelectionModel.forward();
+            RowLayout {
+                id: backForwardLayoutId
+                anchors.centerIn: parent
+
+                Controls.RoundButton {
+                    icon.source: "qrc:/twbs-icons/icons/chevron-left.svg"
+                    enabled: RootData.pageSelectionModel.hasBackward
+                    onClicked: {
+                        RootData.pageSelectionModel.back();
+                    }
+                    implicitWidth: sizeItemId.height
+                    implicitHeight: implicitWidth
+                }
+
+                Controls.RoundButton {
+                    icon.source: "qrc:/twbs-icons/icons/chevron-right.svg"
+                    enabled: RootData.pageSelectionModel.hasForward
+                    onClicked: {
+                        RootData.pageSelectionModel.forward();
+                    }
+                    implicitWidth: sizeItemId.height
+                    implicitHeight: implicitWidth
+                }
             }
         }
 
@@ -104,8 +123,14 @@ QQ.Item {
             }
         }
 
-        DiscordChatButton {
+        QQ.Item {
+           implicitWidth: 5
+            implicitHeight: 1
+        }
 
+        DiscordChatButton {
+            implicitWidth: sizeItemId.height
+            implicitHeight: implicitWidth
         }
     }
 

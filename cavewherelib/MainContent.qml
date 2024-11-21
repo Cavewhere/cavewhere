@@ -13,8 +13,10 @@ QQ.Item {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.margins: 1
+        // anchors.margins: 1
         z: 1
+
+        sidebarWidth: mainSideBar.width - 1
     }
 
     MainSideBar {

@@ -89,5 +89,6 @@ Controls.RoundButton {
         anchors.bottom: parent.bottom
         online: DiscordStatusChecker.devsOnlineCount > 0
         yellow: DiscordStatusChecker.userCount > 0
+        z:1
     }
 }
