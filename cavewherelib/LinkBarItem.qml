@@ -15,8 +15,9 @@ QQ.Item {
     anchors.verticalCenter: parent ? parent.verticalCenter : undefined
 
     RowLayout {
-        spacing: 2
+        spacing: 0
         QQ.Rectangle {
+            id: backgroundRectId
             implicitWidth: nameTextId.width + 6
             implicitHeight: nameTextId.height + 6
 
@@ -40,8 +41,8 @@ QQ.Item {
 
         QQ.Image {
             id: moreArrowId
-            source: "qrc:icons/moreArrow.png"
-            sourceSize: Qt.size(10, 10)
+            source: "qrc:/twbs-icons/icons/arrow-right-short.svg"
+            sourceSize: Qt.size(backgroundRectId.implicitHeight, backgroundRectId.implicitHeight)
         }
     }
 }

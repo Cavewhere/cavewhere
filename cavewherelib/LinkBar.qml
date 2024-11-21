@@ -60,7 +60,7 @@ QQ.Item {
                 anchors.verticalCenter: parent.verticalCenter
                 model: linkBarModel
                 orientation: QQ.ListView.Horizontal
-                spacing: 5
+                spacing: 0
                 visible: !textFieldId.visible
 
 

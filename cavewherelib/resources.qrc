@@ -98,5 +98,7 @@
         <file>twbs-icons/icons/chat-right-dots.svg</file>
         <file>twbs-icons/icons/person-arms-up.svg</file>
         <file>twbs-icons/icons/chat-right-text.svg</file>
+        <file>twbs-icons/icons/arrow-left-square-fill.svg</file>
+        <file>twbs-icons/icons/arrow-right-short.svg</file>
     </qresource>
 </RCC>
