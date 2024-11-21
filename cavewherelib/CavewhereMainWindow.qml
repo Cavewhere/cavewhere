@@ -18,6 +18,7 @@ ApplicationWindow {
     visible: false
     width: 1024
     height: 576
+    // flags: Qt.FramelessWindowHint
 
     title: {
         var baseName = "CaveWhere - " + RootData.version

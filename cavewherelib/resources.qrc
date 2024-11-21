@@ -95,5 +95,8 @@
         <file>icons/Anisotropic_filtering_en.png</file>
         <file>icons/lock.png</file>
         <file>icons/unlock.png</file>
+        <file>twbs-icons/icons/chat-right-dots.svg</file>
+        <file>twbs-icons/icons/person-arms-up.svg</file>
+        <file>twbs-icons/icons/chat-right-text.svg</file>
     </qresource>
 </RCC>

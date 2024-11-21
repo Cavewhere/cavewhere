@@ -12,6 +12,7 @@ QQ.Item {
         id: rowLayoutId
         anchors.left: parent.left
         anchors.right: parent.right
+        anchors.rightMargin: 5
 
         LinkBarModel {
             id: linkBarModel
@@ -103,6 +104,9 @@ QQ.Item {
             }
         }
 
+        DiscordChatButton {
+
+        }
     }
 
     QQ.Rectangle {

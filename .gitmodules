@@ -16,3 +16,6 @@
 [submodule "asyncfuture"]
 	path = asyncfuture
         url = https://github.com/vpicaver/asyncfuture.git
+[submodule "cavewherelib/twbs-icons"]
+	path = cavewherelib/twbs-icons
+	url = git@github.com:twbs/icons.git
