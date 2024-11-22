@@ -78,7 +78,9 @@ QQ.Item {
                             anchors.right: parent.right
                             anchors.top: parent.top
                             anchors.margins: 3
-                            icon.source: "qrc:/icons/moreArrowLeft.png"
+                            icon.source: "qrc:/twbs-icons/icons/chevron-left.svg"
+                            icon.width: 16
+                            icon.height: icon.width
                             onClicked:  clipArea.collapseClicked()
                         }
                     }

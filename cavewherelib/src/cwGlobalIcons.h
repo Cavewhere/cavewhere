@@ -26,7 +26,7 @@ public:
     static QString caveFilename() { return QLatin1String(":/icons/cave.png");}
     static QString noImportFilename() { return QLatin1String(":/icons/dontImport.png");}
     static QString tripFilename() { return QLatin1String(":/icons/trip.png");}
-    static QString plusFilename() { return QLatin1String(":/icons/plus.png");}
+    static QString plusFilename() { return QLatin1String(":/twbs-icons/icons/plus.svg");}
 
 };
 

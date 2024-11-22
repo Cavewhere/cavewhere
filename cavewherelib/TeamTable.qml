@@ -285,7 +285,7 @@ QQ.Item {
                             spacing: 5
 
                             QQ.Image {
-                                source: "qrc:icons/plus.png"
+                                source: "qrc:twbs-icons/icons/plus.svg"
                                 anchors.verticalCenter: parent.verticalCenter
                             }
 

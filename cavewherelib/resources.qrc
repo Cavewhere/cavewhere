@@ -7,7 +7,7 @@
         <file>icons/cave.png</file>
         <file>icons/dontImport.png</file>
         <file>icons/trip.png</file>
-        <file>icons/plus.png</file>
+        <file>twbs-icons/icons/plus.svg</file>
         <file>icons/minus.png</file>
         <file>icons/logo128x128.png</file>
         <file>icons/stopSignError.png</file>
@@ -102,5 +102,7 @@
         <file>twbs-icons/icons/arrow-right-short.svg</file>
         <file>twbs-icons/icons/chevron-left.svg</file>
         <file>twbs-icons/icons/chevron-right.svg</file>
+        <file>twbs-icons/icons/plus.svg</file>
+        <file>twbs-icons/icons/plus.svg</file>
     </qresource>
 </RCC>

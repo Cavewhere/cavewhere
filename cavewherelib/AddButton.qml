@@ -8,5 +8,5 @@ import QtQuick.Controls as QC
 
 QC.Button {
     id: addButton
-    icon.source: "qrc:icons/plus.png"
+    icon.source: "qrc:twbs-icons/icons/plus.svg"
 }

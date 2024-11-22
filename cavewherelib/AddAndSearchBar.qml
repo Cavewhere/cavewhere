@@ -12,7 +12,7 @@ RowLayout {
     Controls.Button {
         id: addButtonId
 
-        icon.source: "qrc:/icons/plus.png"
+        icon.source: "qrc:/twbs-icons/icons/plus.svg"
 
         Layout.alignment: Qt.AlignLeft
 
