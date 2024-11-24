@@ -12,6 +12,7 @@
 #include <QSettings>
 #include <QApplication>
 #include <QProcessEnvironment>
+#include <QString>
 #include <QDebug>
 
 //Std includes
@@ -76,10 +77,9 @@ QString cwGlobals::findExecutable(const QStringList &executables, const QList<QD
 {
     QString execPath;
 
-    foreach(QString appName, executables) {
+    for(const QString& appName : executables) {
         for(const auto& directory : dirs) {
             QString currentPath = directory.absoluteFilePath(appName);
-
             QFileInfo fileInfo(currentPath);
             if(fileInfo.exists() && fileInfo.isExecutable()) {
                 execPath = currentPath;
@@ -133,6 +133,7 @@ QList<QDir> cwGlobals::survexPath()
 #elif defined(Q_OS_UNIX)
     QList<QDir> dirs;
     dirs.append(QDir(QCoreApplication::applicationDirPath()));
+    dirs.append(QDir(QCoreApplication::applicationDirPath() + QStringLiteral("/../Resources")));
     dirs.append(systemPaths());
     return dirs;
 #else

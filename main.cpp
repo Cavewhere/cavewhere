@@ -137,20 +137,24 @@ int main(int argc, char *argv[])
     cwApplication a(argc, argv);
 
     //Register all of the cavewhere types
-    cwQMLRegister::registerQML();
+    // cwQMLRegister::registerQML();
 
-    QQmlApplicationEngine* applicationEnigine = new QQmlApplicationEngine();
+    QQmlApplicationEngine* applicationEngine = new QQmlApplicationEngine();
 
-    QQmlContext* context = applicationEnigine->rootContext();
+    // Add the macOS Resources directory to the QML import search path
+    QString resourcePath = QCoreApplication::applicationDirPath() + "/../Resources";
+    applicationEngine->addImportPath(resourcePath);
+
+    QQmlContext* context = applicationEngine->rootContext();
 
     //This allow to extra image data from the project's image database
     cwImageProvider* imageProvider = new cwImageProvider();
     context->engine()->addImageProvider(cwImageProvider::name(), imageProvider);
 
-    applicationEnigine->loadFromModule(QStringLiteral("cavewherelib"),
+    applicationEngine->loadFromModule(QStringLiteral("cavewherelib"),
                                        QStringLiteral("CavewhereMainWindow"));
     auto id = qmlTypeId("cavewherelib", 1, 0, "RootData");
-    cwRootData* rootData = applicationEnigine->rootContext()->engine()->singletonInstance<cwRootData*>(id);
+    cwRootData* rootData = applicationEngine->rootContext()->engine()->singletonInstance<cwRootData*>(id);
 
     //Handles when the user clicks on a file in Finder(Mac OS X) or Explorer (Windows)
     cwOpenFileEventHandler* openFileHandler = new cwOpenFileEventHandler(&a);
@@ -164,8 +168,8 @@ int main(int argc, char *argv[])
     imageProvider->setProjectPath(rootData->project()->filename());
     QObject::connect(rootData->project(), SIGNAL(filenameChanged(QString)), imageProvider, SLOT(setProjectPath(QString)));
 
-    auto quit = [&a, rootData, applicationEnigine]() {
-        delete applicationEnigine;
+    auto quit = [&a, rootData, applicationEngine]() {
+        delete applicationEngine;
         QThreadPool::globalInstance()->waitForDone();
         cwTask::threadPool()->waitForDone();
         a.quit();

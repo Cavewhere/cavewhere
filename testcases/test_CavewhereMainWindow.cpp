@@ -57,7 +57,7 @@ TEST_CASE("Test that the cavewhere main window remember size and position", "[Ca
     // cwGlobalDirectory::setupBaseDirectory();
 
     //Register all of the cavewhere types
-    cwQMLRegister::registerQML();
+    // cwQMLRegister::registerQML();
 
     {
         QSettings settings;
@@ -119,7 +119,7 @@ TEST_CASE("Main window should load file and close the window", "[CavewhereMainWi
     // cwGlobalDirectory::setupBaseDirectory();
 
     //Register all of the cavewhere types
-    cwQMLRegister::registerQML();
+    // cwQMLRegister::registerQML();
 
     auto firstAppEngine = MainHelper::createApplicationEnigne();
     cwRootData* rootData = qobject_cast<cwRootData*>(firstAppEngine->rootContext()->contextProperty("rootData").value<QObject*>());
@@ -146,7 +146,7 @@ TEST_CASE("Load project with no images for scraps", "[CavewhereMainWindow]") {
     // cwGlobalDirectory::setupBaseDirectory();
 
     //Register all of the cavewhere types
-    cwQMLRegister::registerQML();
+    // cwQMLRegister::registerQML();
 
     auto firstAppEngine = MainHelper::createApplicationEnigne();
     cwRootData* rootData = qobject_cast<cwRootData*>(firstAppEngine->rootContext()->contextProperty("rootData").value<QObject*>());

@@ -21,16 +21,6 @@ add_subdirectory(cavewherelib)
 
 set(SURVEX_CONAN OFF CACHE BOOL "Use survex Conan to manage dependencies" FORCE)
 
-
-set(CW_BUNDLE_DIR "${CMAKE_BINARY_DIR}")
-if(${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
-    # macOS
-    set(CW_BUNDLE_DIR "${CMAKE_BINARY_DIR}/CaveWhere.app/Contents/MacOS/survex")
-    set(SURVEX_OUTPUT_DIR "${CW_BUNDLE_DIR}" CACHE PATH "" FORCE)
-# else()
-    # Other systems (e.g., Linux, Windows)
-#     set(SURVEX_OUTPUT_DIR "${CMAKE_BINARY_DIR}/survex")
-endif()
 add_subdirectory(survex)
 
 # All packages we need to find
@@ -51,8 +41,6 @@ find_package(Qt6
     Test
     REQUIRED)
 
-
-
 #### cavewhere-test ####
 qt_add_executable(cavewhere-test)
 
@@ -69,12 +57,6 @@ target_sources(cavewhere-test PRIVATE ${cavewhere_test_CPP_FILES} ${cavewhere_te
 file(GLOB cavewhere_test_qrc_FILES "testcases/*.qrc")
 qt_add_resources(cavewhere_test_QT_RESOURCES ${cavewhere_test_qrc_FILES})
 target_sources(cavewhere-test PRIVATE ${cavewhere_test_QT_RESOURCES})
-
-set_target_properties(cavewhere-test PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CW_BUNDLE_DIR}
-    LIBRARY_OUTPUT_DIRECTORY ${CW_BUNDLE_DIR}
-    ARCHIVE_OUTPUT_DIRECTORY ${CW_BUNDLE_DIR}
-)
 
 target_link_libraries(cavewhere-test
     PRIVATE
@@ -117,6 +99,25 @@ if(WIN32)
         $<$<AND:$<CONFIG:Release>,$<STREQUAL:${CMAKE_SYSTEM_NAME},Windows>>:/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup>
     )
 endif()
+
+if(APPLE)
+    #Post build install for APP resources
+    add_custom_command(TARGET CaveWhere POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory $<TARGET_FILE_DIR:cavewherelibplugin> $<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/Resources/cavewherelib
+        COMMENT "Copying QML module to application bundle."
+    )
+    add_custom_command(TARGET CaveWhere POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:cavewhere-test> $<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/Resources
+        COMMENT "Copying cavewhere-test."
+    )
+    add_custom_command(TARGET CaveWhere POST_BUILD
+        # COMMAND ${CMAKE_COMMOND} -E
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${SURVEX_OUTPUT_DIR} $<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/Resources/survex/
+        # COMMAND ${CMAKE_COMMAND} -E copy_directory $<TARGET_FILE:cavern> $<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/Resources/survex
+        COMMENT "Copying QML module to application bundle."
+    )
+endif()
+
 
 
 
