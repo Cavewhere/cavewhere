@@ -297,11 +297,12 @@ cwTriangulatedData cwTriangulateTask::createTriangles(const cwTriangulateTask::P
 
     //FIXME: Make this work under windows
 #ifndef Q_OS_WIN
-    Forsyth::OptimizeFaces(fullTriangleIndices.constData(),
-                           fullTriangleIndices.size(),
-                           points.size(),
-                           optimizedIndices.data(),
-                           24); //Optimize for 24 triangle count
+    //This has a memory issues and crashes on MacOS built in xcode
+    // Forsyth::OptimizeFaces(fullTriangleIndices.constData(),
+    //                        fullTriangleIndices.size(),
+    //                        points.size(),
+    //                        optimizedIndices.data(),
+    //                        24); //Optimize for 24 triangle count
 #endif
 
     //Set the output's data
