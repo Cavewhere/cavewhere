@@ -22,8 +22,8 @@ cwQMLRegister::cwQMLRegister()
 {
 }
 
-void cwQMLRegister::registerQML()
-{
+// void cwQMLRegister::registerQML()
+// {
     // qRegisterMetaType<QThread*>("QThread*");
     // qRegisterMetaType<cwCavingRegion>("cwCavingRegion");
     // qRegisterMetaType<QList <QString> >("QList<QString>");
@@ -156,4 +156,4 @@ void cwQMLRegister::registerQML()
 
 
 
-}
+// }

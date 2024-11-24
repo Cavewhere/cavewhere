@@ -20,7 +20,10 @@ BasePanZoomInteraction {
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             onPressed: (mouse) => interaction.panFirstPoint(Qt.point(mouse.x, mouse.y))
             onPositionChanged: (mouse) => interaction.panMove(Qt.point(mouse.x, mouse.y))
-            onWheel: interaction.zoom(wheel.angleDelta.y, Qt.point(wheel.x, wheel.y))
+            onWheel: (wheel) => {
+                        console.log("wheel.angleDelta.y:" + wheel.angleDelta.y)
+                         interaction.zoom(wheel.angleDelta.y, Qt.point(wheel.x, wheel.y))
+                     }
         }
     }
 }

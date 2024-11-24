@@ -5,32 +5,49 @@ Item {
     id: itemId
 
     property alias source: imageId.source
-    property cwImage image
-    property string projectFilename
-    property matrix4x4 modelMatrix
-    property ImageProperties imageProperties
-    property futureManagerToken futureManagerToken
+    property alias sourceSize: imageId.sourceSize
 
-    // mipmap: true
-    // fillMode: Image.PreserveAspectFit
+
+    // property string source
+    // property cwImage image
+    // property string projectFilename
+    // property matrix4x4 modelMatrix
+    // property ImageProperties imageProperties
+    // property futureManagerToken futureManagerToken
+    // property Camera camera
+
+    property alias imageRotation: imageId.rotation
 
     function clearImage() {
         itemId.image = RootData.emptyImage();
     }
 
-    ShaderEffect {
-        // anchors.fill: itemId
-        // width: 1000
-        // height: 1000
+    Image {
+        id: imageId
+        smooth: true
+        width: parent.width
+        height: parent.height
+        mipmap: true
+        fillMode: Image.PreserveAspectFit
 
-        width: imageId.width
-        height: imageId.height
+        rotation: itemId.noteRotation
 
-        property variant image: Image {
-            id: imageId
-            // sourceSize { width: 1000; height: 1000 }
+        WheelHandler {
+            property: "scale"
+            targetScaleMultiplier: 1.1
+            targetTransformAroundCursor: true
         }
 
-        fragmentShader: "qrc:/shaders/imageItem.frag.qsb"
+        DragHandler {
+        }
+
+        PinchHandler {
+            // rotationAxis.enabled: false
+            rotationAxis.minimum: imageId.rotation
+            rotationAxis.maximum: imageId.rotation
+            persistentRotation: imageId.rotation
+
+
+        }
     }
 }

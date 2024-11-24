@@ -16,7 +16,7 @@ Interaction {
     id: interaction
 
     property BasePanZoomInteraction basePanZoomInteraction
-    property ImageItem imageItem
+    property NoteCamera camera
     property NoteTranformation noteTransform
     property string upText: "north"
     property alias transformUpdater: northArrow.transformUpdater
@@ -31,12 +31,12 @@ Interaction {
 
     //This calculate the north angle
     function calculateNorthUp(mouse) {
-        var secondLocation = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y));
+        var secondLocation = interaction.camera.mapQtViewportToNote(Qt.point(mouse.x, mouse.y));
         return noteTransform.calculateNorth(privateData.firstLocation, secondLocation);
     }
 
     function updateArrowSecondPoint(mouse) {
-        northArrow.p2 = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y));
+        northArrow.p2 = interaction.camera.mapQtViewportToNote(Qt.point(mouse.x, mouse.y));
     }
 
 
@@ -70,7 +70,7 @@ Interaction {
 
             onClicked: (mouse) => {
                 if(mouse.button === Qt.LeftButton) {
-                    privateData.firstLocation = interaction.imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y));
+                    privateData.firstLocation = interaction.camera.mapQtViewportToNote(Qt.point(mouse.x, mouse.y));
                     northArrow.p1 = privateData.firstLocation
                     northArrow.p2 = northArrow.p1
                     interaction.state = "WaitForSecondClick"
@@ -90,7 +90,7 @@ Interaction {
         property int angle: 0
 
         function updatePosition() {
-            var point = interaction.imageItem.mapNoteToQtViewport(northArrow.p1);
+            var point = interaction.camera.mapNoteToQtViewport(northArrow.p1);
             x = point.x
             y = point.y
         }

@@ -14,7 +14,7 @@
 #include "cwScrapOutlinePointView.h"
 #include "cwTrip.h"
 #include "cwSurveyNoteModel.h"
-#include "cwNoteCamera.h"
+// #include "cwNoteCamera.h"
 
 cwBaseScrapInteraction::cwBaseScrapInteraction(QQuickItem *parent) :
     cwNoteInteraction(parent),

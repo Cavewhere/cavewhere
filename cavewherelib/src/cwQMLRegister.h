@@ -21,7 +21,7 @@ class CAVEWHERE_LIB_EXPORT cwQMLRegister
 public:
     cwQMLRegister();
 
-    static void registerQML();
+    // static void registerQML();
 };
 
 class CaveListRegistration

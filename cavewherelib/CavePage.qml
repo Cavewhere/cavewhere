@@ -335,9 +335,6 @@ StandardPage {
         }
 
         onObjectAdded: (index, object) => {
-                           console.log("Add trip page!" + index + " " + object)
-
-
                            //In-ables the link
                            let trip = (object as Delegate).tripObjectRole
                            var page = RootData.pageSelectionModel.registerPage(cavePageArea.PageView.page, //From

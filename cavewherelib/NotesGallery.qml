@@ -254,7 +254,7 @@ QQ.Rectangle {
                     noteArea.image = Qt.binding(function() { return currentItem.noteObject.image });
                 } else {
                     noteGallery.currentNote = null;
-                    noteArea.clearImage();
+                    // noteArea.clearImage();
                 }
             }
 
@@ -313,12 +313,12 @@ QQ.Rectangle {
                 sourceSize: mainToolBar.iconSize
                 text: "Rotate"
 
-                onClicked: {
-                    //Update the note's rotation
-                    noteRotationAnimation.from = noteGallery.currentNote.rotate
-                    noteRotationAnimation.to = noteGallery.currentNote.rotate + 90
-                    noteRotationAnimation.start()
-                }
+                // onClicked: {
+                //     //Update the note's rotation
+                //     noteRotationAnimation.from = noteGallery.currentNote.rotate
+                //     noteRotationAnimation.to = noteGallery.currentNote.rotate + 90
+                //     noteRotationAnimation.start()
+                // }
             }
 
             IconButton {
@@ -429,6 +429,10 @@ QQ.Rectangle {
     NoteItem {
         id: noteArea
 
+        // width: 500
+        // height: 500
+        // height: 100
+
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: galleryContainer.left
@@ -437,25 +441,37 @@ QQ.Rectangle {
         visible: true
         scrapsVisible: false
         note: noteGallery.currentNote
-    }
 
-    QQ.SequentialAnimation {
-        id: noteRotationAnimation
-
-        property alias to: subAnimation.to
-        property alias from: subAnimation.from
-
-        QQ.ScriptAction {
-            script: noteArea.updateRotationCenter()
-        }
-
-        QQ.PropertyAnimation {
-            id: subAnimation
-            target: noteGallery.currentNote
-            property: "rotate"
-            easing.type: QQ.Easing.InOutCubic
+        QQ.Rectangle {
+            anchors.fill: parent
+            color: "red"
+            opacity: 0.1
         }
     }
+
+    // QQ.Rectangle {
+    //     anchors.fill:parent
+    //     color: "green"
+    //     opacity: 0.5
+    // }
+
+    // QQ.SequentialAnimation {
+    //     id: noteRotationAnimation
+
+    //     property alias to: subAnimation.to
+    //     property alias from: subAnimation.from
+
+    //     QQ.ScriptAction {
+    //         script: noteArea.updateRotationCenter()
+    //     }
+
+    //     QQ.PropertyAnimation {
+    //         id: subAnimation
+    //         target: noteGallery.currentNote
+    //         property: "rotate"
+    //         easing.type: QQ.Easing.InOutCubic
+    //     }
+    // }
 
     states: [
 
