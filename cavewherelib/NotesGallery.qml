@@ -445,10 +445,6 @@ QQ.Rectangle {
         property alias to: subAnimation.to
         property alias from: subAnimation.from
 
-        // QQ.ScriptAction {
-        //     script: noteArea.updateRotationCenter()
-        // }
-
         QQ.PropertyAnimation {
             id: subAnimation
             target: noteGallery.currentNote

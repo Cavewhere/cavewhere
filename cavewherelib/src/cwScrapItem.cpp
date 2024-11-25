@@ -41,6 +41,8 @@ cwScrapItem::cwScrapItem(QQuickItem *parent) :
 
     setFlag(QQuickItem::ItemHasContents, true);
 
+    setAntialiasing(true);
+
     //Set the declarative context for the station view
     QQmlContext* context = QQmlEngine::contextForObject(this);
     QQmlEngine::setContextForObject(StationView, context);
@@ -71,6 +73,9 @@ cwScrapItem::cwScrapItem(QQmlContext *context, QQuickItem *parent) :
     QQmlEngine::setContextForObject(StationView, context);
     QQmlEngine::setContextForObject(LeadView, context);
     QQmlEngine::setContextForObject(OutlinePointView, context);
+
+    // setWidth(1000);
+    // setHeight(1000);
 }
 
 cwScrapItem::~cwScrapItem()
@@ -108,7 +113,19 @@ void cwScrapItem::setScrap(cwScrap* scrap) {
  * @return See qt documentation
  */
 QSGNode *cwScrapItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData *) {
-//    if(ScrapPoints.isEmpty()) { return oldNode; }
+    //    if(ScrapPoints.isEmpty()) { return oldNode; }
+
+    qDebug() << "Draw scrap!" << this << this->isVisible() << this->parentItem()->isVisible();
+
+    // QSGSimpleRectNode *n = static_cast<QSGSimpleRectNode *>(oldNode);
+    // if (!n) {
+    //     n = new QSGSimpleRectNode();
+    //     n->setColor(Qt::green);
+    // }
+    // n->setRect(boundingRect());
+    // return n;
+
+
     if(!oldNode) {
         oldNode = new QSGTransformNode();
         PolygonNode = new cwSGPolygonNode();
@@ -123,7 +140,10 @@ QSGNode *cwScrapItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintN
 
     if(transformUpdater()) {
         QSGTransformNode* transformNode = static_cast<QSGTransformNode*>(oldNode);
-        transformNode->setMatrix(transformUpdater()->matrix());
+        QMatrix4x4 scale;
+        scale.scale(10000, 10000, 1.0);
+        // transformNode->setMatrix(transformUpdater()->matrix());
+        transformNode->setMatrix(scale);
     }
 
     if(Selected) {
@@ -133,14 +153,19 @@ QSGNode *cwScrapItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintN
     } else {
         //Not selected, blue color
         PolygonNode->setColor(QColor::fromRgbF(0.0, 0.0, 1.0, 0.10));
-        OutlineNode->setLineWidth(1.0);
+        OutlineNode->setLineWidth(0.001); //1.0);
     }
 
     PolygonNode->setPolygon(ScrapPoints);
     OutlineNode->setLineStrip(ScrapPoints);
 
+
+    qDebug() << "Bounding rectangle:" << boundingRect();
+
     return oldNode;
 }
+
+
 
 /**
  * @brief cwScrapItem::updatePoints

@@ -20,6 +20,15 @@ ImageItem {
 
     clip: true
 
+
+    QQ.Rectangle {
+       color: "blue"
+       opacity: 0.1
+       width: 1000
+       height: 1000
+    }
+
+
     // PanZoomInteraction {
     //     id: panZoomInteraction
     //     anchors.fill: parent
@@ -137,11 +146,11 @@ ImageItem {
     // }
 
     // //This allows note coordinates to be mapped to opengl coordinates
-    // TransformUpdater {
-    //     id: transformUpdaterId
-    //     camera: cameraId
-    //     modelMatrix: noteArea.modelMatrix
-    // }
+    TransformUpdater {
+        id: transformUpdaterId
+        camera: cameraId
+        modelMatrix: noteArea.modelMatrix
+    }
 
     // QQ.Column {
     //     anchors.top: parent.top
@@ -182,6 +191,9 @@ ImageItem {
         id: scrapViewId
         note: noteArea.note
         transformUpdater: transformUpdaterId
+        onVisibleChanged: {
+            console.log("ScrapView:" + scrapViewId.visible)
+        }
     }
 
     // states: [

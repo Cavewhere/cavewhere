@@ -139,6 +139,11 @@ int main(int argc, char *argv[])
     //Register all of the cavewhere types
     // cwQMLRegister::registerQML();
 
+    // Configure multisample antialiasing
+    QSurfaceFormat format;
+    format.setSamples(4); // Adjust the sample count as needed
+    QSurfaceFormat::setDefaultFormat(format);
+
     QQmlApplicationEngine* applicationEngine = new QQmlApplicationEngine();
 
     // Add the macOS Resources directory to the QML import search path

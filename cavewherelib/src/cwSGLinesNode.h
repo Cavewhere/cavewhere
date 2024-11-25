@@ -22,8 +22,9 @@ public:
     void setLineWidth(float lineWidth);
 
 private:
-    float LineWidth;
-
+    float m_lineWidth;
+    QVector<QLineF> m_lines;
+    QVector<QPointF> m_lineStripPoints;
 };
 
 /**
@@ -32,7 +33,7 @@ private:
  */
 inline float cwSGLinesNode::lineWidth() const
 {
-    return LineWidth;
+    return m_lineWidth;
 }
 
 

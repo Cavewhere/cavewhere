@@ -63,6 +63,8 @@ public:
     cwSelectionManager* selectionManager() const;
     void setSelectionManager(cwSelectionManager* selectionManager);
 
+    // QRectF boundingRect() const { return QRectF(0, 0, 1000, 1000); }
+
 signals:
     void scrapChanged();
     void selectedChanged();
@@ -88,8 +90,8 @@ private:
     QVector<QPointF> ScrapPoints;
 
     //For showing all the control points around the scrap
-    QQmlComponent* OutlineControlPoints;
-    QList<QQuickItem*> OutlineStation;
+    // QQmlComponent* OutlineControlPoints;
+    // QList<QQuickItem*> OutlineStation;
 
 
     cwSelectionManager* SelectionManager; //!< For selection for control items (this is passed to child class)
