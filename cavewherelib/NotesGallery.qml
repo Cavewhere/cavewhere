@@ -251,7 +251,7 @@ QQ.Rectangle {
             function updateCurrentNote() {
                 if(currentItem != null) {
                     noteGallery.currentNote = (currentItem as ListDelegate).noteObject;
-                    noteArea.image = Qt.binding(function() { return currentItem.noteObject.image });
+                    // noteArea.image = Qt.binding(function() { return currentItem.noteObject.image });
                 } else {
                     noteGallery.currentNote = null;
                     // noteArea.clearImage();

@@ -9,6 +9,7 @@ Item {
 
     property alias imageRotation: imageId.rotation
 
+    //Repart child items to the imageId
     default property alias imageData: imageId.data
 
     function clearImage() {
@@ -21,20 +22,33 @@ Item {
         mipmap: true
         fillMode: Image.Pad //No rescaling
 
-        //For testing
-        scale: 0.1
-        x:-1956.5127411484718
-        y:-2879.1400121748447
+        function refit() {
+            x = itemId.width * 0.5 - sourceSize.width * 0.5;
+            y = itemId.height * 0.5 - sourceSize.height * 0.5;
 
-        // onScaleChanged: {
-        //     console.log("Scale changed:" + scale)
-        // }
+            let imageAspect = width / height
+            let scaleX = 0.0
+            let scaleY = 0.0
+            if(imageAspect >= 1.0) {
+                scaleX = itemId.width / sourceSize.width;
+                scaleY = itemId.height / sourceSize.height;
+            } else {
+                //Different aspect ratios, flip the scales
+                scaleX = itemId.width / sourceSize.height;
+                scaleY = itemId.height / sourceSize.width;
+            }
 
-        // onXChanged: {
-        //     console.log("X:" + x + " y:" + y);
-        // }
+            // Choose the smaller scale factor to ensure the image fits within the item
+            scale = Math.min(scaleX, scaleY);
+            pinchHandlerId.persistentScale = scale
+        }
 
-        rotation: itemId.noteRotation
+        onStatusChanged: {
+            if(status == Image.Ready) {
+                state = "AUTO_FIT"
+                refit()
+            }
+        }
 
         WheelHandler {
             property: "scale"
@@ -43,14 +57,32 @@ Item {
         }
 
         DragHandler {
+            onActiveChanged: {
+                //Disable auto centering
+                imageId.state = ""
+            }
         }
 
         PinchHandler {
+            id: pinchHandlerId
             // rotationAxis.enabled: false
             rotationAxis.minimum: imageId.rotation
             rotationAxis.maximum: imageId.rotation
             persistentRotation: imageId.rotation
         }
+
+        states: [
+            State {
+                name: "AUTO_FIT"
+                PropertyChanges {
+                    itemId {
+                        onWidthChanged: imageId.refit()
+                        onHeightChanged: imageId.refit()
+                    }
+                }
+            }
+
+        ]
     }
 
     Rectangle {
@@ -58,7 +90,7 @@ Item {
 
         property point mappedPos: {
             let bind = imageId.rotation + imageId.scale + imageId.x + imageId.y
-            console.log("NewPos:" + itemId.mapFromItem(imageId, Qt.point(0, 0)))
+            // console.log("NewPos:" + itemId.mapFromItem(imageId, Qt.point(0, 0)))
             return itemId.mapFromItem(imageId, Qt.point(0, 0))
         }
 
