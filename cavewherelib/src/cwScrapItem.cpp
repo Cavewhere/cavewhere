@@ -140,10 +140,20 @@ QSGNode *cwScrapItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintN
 
     if(transformUpdater()) {
         QSGTransformNode* transformNode = static_cast<QSGTransformNode*>(oldNode);
+
+        QSize imageSize(5100, 6600);
+
         QMatrix4x4 scale;
-        scale.scale(10000, 10000, 1.0);
+        scale.scale(imageSize.width(), imageSize.height(), 1.0);
+
+        QMatrix4x4 imageCoordToItemCoord;
+        imageCoordToItemCoord.scale(1.0, -1.0, 1.0);
+        imageCoordToItemCoord.translate(0.0, -1.0, 0.0);
+
+        QMatrix4x4 mat = scale * imageCoordToItemCoord;
+
         // transformNode->setMatrix(transformUpdater()->matrix());
-        transformNode->setMatrix(scale);
+        transformNode->setMatrix(mat);
     }
 
     if(Selected) {
@@ -158,9 +168,6 @@ QSGNode *cwScrapItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintN
 
     PolygonNode->setPolygon(ScrapPoints);
     OutlineNode->setLineStrip(ScrapPoints);
-
-
-    qDebug() << "Bounding rectangle:" << boundingRect();
 
     return oldNode;
 }
