@@ -105,6 +105,11 @@ inline std::ostream& operator << ( std::ostream& os, const QMatrix4x4& matrix) {
 
 std::ostream &operator << ( std::ostream& os, cwError const& error);
 
+inline std::ostream &operator << (std::ostream& os, QPointF point) {
+    os << "(" << point.x() << ", " << point.y() << ")";
+    return os;
+}
+
 void propertyCompare(QObject* tc1, QObject* tc2);
 
 double roundToDecimal(double value, int decimals);
