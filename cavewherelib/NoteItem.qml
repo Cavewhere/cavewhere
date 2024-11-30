@@ -21,14 +21,6 @@ ImageItem {
     clip: true
 
 
-    QQ.Rectangle {
-       color: "blue"
-       opacity: 0.1
-       width: 1000
-       height: 1000
-    }
-
-
     // PanZoomInteraction {
     //     id: panZoomInteraction
     //     anchors.fill: parent
@@ -146,11 +138,82 @@ ImageItem {
     // }
 
     // //This allows note coordinates to be mapped to opengl coordinates
-    TransformUpdater {
+    // TransformUpdater {
+    //     id: transformUpdaterId
+    //     camera: cameraId
+    //     modelMatrix: noteArea.modelMatrix
+    // }
+
+    TransformItemUpdater {
         id: transformUpdaterId
-        camera: cameraId
-        modelMatrix: noteArea.modelMatrix
+        watchTransformItem: noteArea.transformItem
+        targetItem: noteArea.targetItem
     }
+
+    component PositionRectangle : Positioner3D {
+        id: posId
+        // onXChanged: {
+        //     console.log("X changed:" + x + " " + y)
+        // }
+
+        QQ.Rectangle {
+            color: "green"
+            width: 5
+            height: width
+
+            Text {
+                text: "(" + posId.position3D.x + ", " + posId.position3D.y + ")"
+            }
+        }
+
+    }
+
+    PositionRectangle {
+        id: rectId0
+
+        QQ.Component.onCompleted: {
+            transformUpdaterId.addChildItem(rectId0)
+        }
+    }
+
+    PositionRectangle {
+        id: rectId1
+        position3D: Qt.vector3d(0.0, 1.0, 0.0);
+
+        QQ.Component.onCompleted: {
+            transformUpdaterId.addChildItem(rectId1)
+        }
+    }
+
+    PositionRectangle {
+        id: rectId2
+        position3D: Qt.vector3d(1.0, 0.0, 0.0);
+
+        QQ.Component.onCompleted: {
+            transformUpdaterId.addChildItem(rectId2)
+        }
+    }
+
+    PositionRectangle {
+        id: rectId3
+        position3D: Qt.vector3d(1.0, 1.0, 0.0);
+
+        QQ.Component.onCompleted: {
+            transformUpdaterId.addChildItem(rectId3)
+        }
+    }
+
+    PositionRectangle {
+        id: rectId4
+        position3D: Qt.vector3d(0.5, 0.5, 0.0);
+
+        QQ.Component.onCompleted: {
+            transformUpdaterId.addChildItem(rectId4)
+        }
+    }
+
+
+
 
     // QQ.Column {
     //     anchors.top: parent.top
@@ -189,11 +252,19 @@ ImageItem {
     //For rendering scraps onto the view
     ScrapView {
         id: scrapViewId
+        parent: noteArea.targetItem
         note: noteArea.note
+
         transformUpdater: transformUpdaterId
         onVisibleChanged: {
             console.log("ScrapView:" + scrapViewId.visible)
         }
+    }
+
+    ScrapStationView {
+        transformUpdater: transformUpdaterId
+        scrap: scrapViewId.selectedScrapItem ? scrapViewId.selectedScrapItem.scrap : null
+
     }
 
     // states: [

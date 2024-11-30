@@ -195,13 +195,13 @@ void cwScrapStationView::updateTransformUpdate() {
     if(OldTransformUpdater != transformUpdater()) {
 
         if(OldTransformUpdater != nullptr) {
-            disconnect(OldTransformUpdater, &cwTransformUpdater::matrixChanged, this, &cwScrapStationView::update);
+            disconnect(OldTransformUpdater, &cwTransformItemUpdater::matrixChanged, this, &cwScrapStationView::update);
         }
 
         OldTransformUpdater = transformUpdater();
 
         if(OldTransformUpdater != nullptr) {
-            connect(OldTransformUpdater, &cwTransformUpdater::matrixChanged, this, &cwScrapStationView::update);
+            connect(OldTransformUpdater, &cwTransformItemUpdater::matrixChanged, this, &cwScrapStationView::update);
         }
 
         update();

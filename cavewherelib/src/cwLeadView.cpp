@@ -86,7 +86,7 @@ void cwLeadView::addScrap(cwScrap *scrap)
     leadView->setWidth(width());
     leadView->setHeight(height());
     leadView->setPositionRole(cwScrap::LeadPosition);
-    leadView->setTransformUpdater(TransformUpdater);
+    // leadView->setTransformUpdater(TransformUpdater);
     leadView->setSelectionManager(SelectionMananger);
     leadView->setScrap(scrap);
 

@@ -14,7 +14,7 @@
 #include <QQuickItem>
 
 //Our includes
-#include "cwTransformUpdater.h"
+#include "cwTransformItemUpdater.h"
 #include "cwSelectionManager.h"
 
 /**
@@ -28,22 +28,22 @@ class cwAbstractPointManager : public QQuickItem
 {
     Q_OBJECT
 
-    Q_PROPERTY(cwTransformUpdater* transformUpdater READ transformUpdater WRITE setTransformUpdater NOTIFY transformUpdaterChanged)
+    Q_PROPERTY(cwTransformItemUpdater* transformUpdater READ transformUpdater WRITE setTransformUpdater NOTIFY transformUpdaterChanged)
     Q_PROPERTY(int selectedItemIndex READ selectedItemIndex WRITE setSelectedItemIndex NOTIFY selectedItemIndexChanged)
     Q_PROPERTY(cwSelectionManager* selectionManager READ selectionManager WRITE setSelectionManager NOTIFY selectionManagerChanged)
 
 public:
     explicit cwAbstractPointManager(QQuickItem *parent = 0);
     
-    cwTransformUpdater* transformUpdater() const;
-    void setTransformUpdater(cwTransformUpdater* updater);
+    cwTransformItemUpdater* transformUpdater() const;
+    void setTransformUpdater(cwTransformItemUpdater* updater);
 
     void clearSelection();
     int selectedItemIndex() const;
     void setSelectedItemIndex(int selectedItemIndex);
     Q_INVOKABLE QQuickItem* selectedItem() const;
 
-    QList<QQuickItem*> items() const;
+    QList<cwPositioner3D *> items() const;
 
     cwSelectionManager* selectionManager() const;
     void setSelectionManager(cwSelectionManager* selectionManager);
@@ -74,18 +74,18 @@ private slots:
 
 private:
     //Will keep the note stations at the correct location
-    cwTransformUpdater* TransformUpdater;
+    cwTransformItemUpdater* TransformUpdater;
 
     //All the point items
     QQmlComponent* ItemComponent; //Allows you to create point items
-    QList<QQuickItem*> Items; //A list of point items
+    QList<cwPositioner3D*> Items; //A list of point items
 
     cwSelectionManager* SelectionManager; //!< The selection manager to select point items
 
     int SelectedItemIndex; //!< The currently selected index
 
     void createComponent();
-    QQuickItem* createItem();
+    cwPositioner3D *createItem();
     void removeItem(int index);
 
     void privateUpdateItemPosition(int index);
@@ -97,7 +97,7 @@ Q_DECLARE_METATYPE(cwAbstractPointManager*)
 /**
   Gets the transform updater
   */
-inline cwTransformUpdater* cwAbstractPointManager::transformUpdater() const {
+inline cwTransformItemUpdater* cwAbstractPointManager::transformUpdater() const {
     return TransformUpdater;
 }
 

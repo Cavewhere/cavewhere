@@ -13,12 +13,16 @@ class cwTransformItemUpdater : public QObject
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(TransformItemUpdater)
+    Q_PROPERTY(QQuickItem* watchTransformItem READ watchTransformItem WRITE setWatchTransformItem NOTIFY watchTransformItemChanged)
     Q_PROPERTY(QQuickItem* targetItem READ targetItem WRITE setTargetItem NOTIFY targetItemChanged)
-    Q_PROPERTY(QMatrix4x4 matrix READ matrix BINDABLE bindableMatrix)
+    Q_PROPERTY(QMatrix4x4 matrix READ matrix BINDABLE bindableMatrix NOTIFY matrixChanged)
     Q_PROPERTY(bool enabled READ enabled WRITE setEnabled NOTIFY enabledChanged)
 
 public:
     explicit cwTransformItemUpdater(QObject *parent = nullptr);
+
+    void setWatchTransformItem(QQuickItem* item);
+    QQuickItem* watchTransformItem() const { return m_watchTransformItem; }
 
     void setTargetItem(QQuickItem* item);
     QQuickItem* targetItem() const;
@@ -29,30 +33,31 @@ public:
     bool enabled() const;
     void setEnabled(bool enabled);
 
-    void addChildItem(cwPositioner3D* item);
+    Q_INVOKABLE void addChildItem(cwPositioner3D* item);
     void removeChildItem(cwPositioner3D* item);
 
     Q_INVOKABLE QPointF mapFromItemToViewport(QPointF itemPoint) const;
     Q_INVOKABLE QPointF mapToItemFromViewport(QPointF viewportPoint) const;
 
 signals:
+    void watchTransformItemChanged();
     void targetItemChanged();
     void enabledChanged();
+    void matrixChanged();
 
 public slots:
     void update();
 
 
 private:
-    Q_OBJECT_BINDABLE_PROPERTY(cwTransformItemUpdater, QMatrix4x4, m_transformMatrix)
+    Q_OBJECT_BINDABLE_PROPERTY(cwTransformItemUpdater, QMatrix4x4, m_transformMatrix, &cwTransformItemUpdater::matrixChanged)
     QProperty<double> m_targetScale;
     QProperty<double> m_targetRotation;
-
-
-
     QPropertyNotifier m_matrixNotifier;
 
+    QQuickItem* m_watchTransformItem = nullptr;
     QQuickItem* m_targetItem = nullptr;
+
     bool m_enabled = true;
 
     QSet<QQuickItem*> m_childItems;

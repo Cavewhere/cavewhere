@@ -10,34 +10,46 @@ cwTransformItemUpdater::cwTransformItemUpdater(QObject *parent)
     });
 }
 
-void cwTransformItemUpdater::setTargetItem(QQuickItem* item)
+void cwTransformItemUpdater::setWatchTransformItem(QQuickItem *item)
 {
-    if (m_targetItem != nullptr) {
-        disconnect(m_targetItem, nullptr, this, nullptr);
+    if (m_watchTransformItem != nullptr) {
+        disconnect(m_watchTransformItem, nullptr, this, nullptr);
     }
 
-    m_targetItem = item;
+    m_watchTransformItem = item;
 
-    if (m_targetItem != nullptr) {
+    if (m_watchTransformItem != nullptr) {
         m_transformMatrix.setBinding([this](){
             QMatrix4x4 matrix;
-            matrix.translate(m_targetItem->x(), m_targetItem->y());
+            matrix.translate(m_watchTransformItem->x(), m_watchTransformItem->y());
+            matrix.scale(m_targetScale, m_targetScale, 1.0);
             matrix.rotate(m_targetRotation, 0, 0, 1); // Assuming rotation around Z-axis
-            matrix.scale(m_targetScale);
+
+            // qDebug() << "Scale:" << m_targetScale;
+            // qDebug() << "Matrix1:" << matrix;
 
             return matrix; // Use the bindable property
         });
 
-        connect(m_targetItem, &QQuickItem::scaleChanged, this, [this]() { m_targetScale.setValue(m_targetItem->scale()); });
-        connect(m_targetItem, &QQuickItem::rotationChanged, this, [this]() { m_targetRotation.setValue(m_targetItem->rotation()); });
+        connect(m_watchTransformItem, &QQuickItem::scaleChanged, this, [this]() { m_targetScale.setValue(m_watchTransformItem->scale()); });
+        connect(m_watchTransformItem, &QQuickItem::rotationChanged, this, [this]() { m_targetRotation.setValue(m_watchTransformItem->rotation()); });
 
-        m_targetScale.setValue(m_targetItem->scale());
-        m_targetRotation.setValue(m_targetItem->rotation());
+        m_targetScale.setValue(m_watchTransformItem->scale());
+        m_targetRotation.setValue(m_watchTransformItem->rotation());
 
-        emit targetItemChanged();
+        emit watchTransformItemChanged();
     } else {
         //Removes the binding
         m_transformMatrix = QMatrix4x4();
+    }
+}
+
+void cwTransformItemUpdater::setTargetItem(QQuickItem* item)
+{
+    if(m_targetItem != item) {
+        m_targetItem = item;
+        emit targetItemChanged();
+        update();
     }
 }
 
@@ -109,7 +121,12 @@ void cwTransformItemUpdater::updateChildItem(QQuickItem* item)
 
     // Assume the item has a property "position3D" which is its position relative to TargetItem
     QVector3D position3D = item->property("position3D").value<QVector3D>();
-    QVector3D transformedPos = m_transformMatrix.value().map(position3D);
+
+    QPointF transformedPos = item->parentItem()->mapFromItem(m_targetItem, position3D.x(), position3D.y());
+
+    // qDebug() << "TransformPos:" << transformedPos << m_transformMatrix.value().inverted().map(position3D);
+
+    // QVector3D transformedPos = m_transformMatrix.value().map(position3D);
     item->setPosition(QPointF(transformedPos.x(), transformedPos.y()));
 }
 

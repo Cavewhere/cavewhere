@@ -12,10 +12,11 @@
 #include <QQuickPaintedItem>
 #include <QQuickTransform>
 #include <QQmlEngine>
+#include <QPropertyNotifier>
 
 //Our includes
 #include "cwScrap.h"
-#include "cwTransformUpdater.h"
+#include "cwTransformItemUpdater.h"
 #include "cwScrapStationView.h"
 #include "cwScrapLeadView.h"
 #include "cwScrapOutlinePointView.h"
@@ -32,7 +33,7 @@ class cwScrapItem : public QQuickItem
 
     Q_PROPERTY(cwScrap* scrap READ scrap WRITE setScrap NOTIFY scrapChanged)
     Q_PROPERTY(bool selected READ isSelected WRITE setSelected NOTIFY selectedChanged)
-    Q_PROPERTY(cwTransformUpdater* transformUpdater READ transformUpdater WRITE setTransformUpdater NOTIFY transformUpdaterChanged)
+    Q_PROPERTY(cwTransformItemUpdater* transformUpdater READ transformUpdater WRITE setTransformUpdater NOTIFY transformUpdaterChanged)
     Q_PROPERTY(cwScrapStationView* stationView READ stationView CONSTANT)
     Q_PROPERTY(cwScrapLeadView* leadView READ leadView CONSTANT)
 
@@ -50,8 +51,8 @@ public:
     bool isSelected() const;
     void setSelected(bool selected);
 
-    cwTransformUpdater* transformUpdater() const;
-    void setTransformUpdater(cwTransformUpdater* transformUpdater);
+    cwTransformItemUpdater* transformUpdater() const;
+    void setTransformUpdater(cwTransformItemUpdater* transformUpdater);
 
     void setTransformNode(QSGTransformNode* node);
     QSGTransformNode* transformNode() const;
@@ -78,7 +79,9 @@ private:
     cwScrap* Scrap;
 
     //For keeping the 2D object aligned
-    cwTransformUpdater* TransformUpdater; //!<
+    cwTransformItemUpdater* TransformUpdater; //!<
+    QPropertyNotifier m_matrixChanged;
+    QMatrix4x4 m_transformMatrix;
 
     //Visual elements
     bool TransformNodeDirty;
@@ -92,6 +95,8 @@ private:
     //For showing all the control points around the scrap
     // QQmlComponent* OutlineControlPoints;
     // QList<QQuickItem*> OutlineStation;
+
+
 
 
     cwSelectionManager* SelectionManager; //!< For selection for control items (this is passed to child class)
@@ -125,7 +130,7 @@ inline bool cwScrapItem::isSelected() const {
 /**
 Gets transformUpdater
 */
-inline cwTransformUpdater* cwScrapItem::transformUpdater() const {
+inline cwTransformItemUpdater* cwScrapItem::transformUpdater() const {
     return TransformUpdater;
 }
 

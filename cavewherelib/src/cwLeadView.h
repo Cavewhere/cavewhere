@@ -16,6 +16,7 @@
 
 //Our includes
 #include "cwAbstractPointManager.h"
+#include "cwTransformUpdater.h"
 class cwRegionTreeModel;
 class cwScrap;
 class cwScrapLeadView;

@@ -141,29 +141,27 @@ QSGNode *cwScrapItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintN
     if(transformUpdater()) {
         QSGTransformNode* transformNode = static_cast<QSGTransformNode*>(oldNode);
 
-        QSize imageSize(5100, 6600);
+        // QMatrix4x4 scale;
+        // scale.scale(imageSize.width(), imageSize.height(), 1.0);
 
-        QMatrix4x4 scale;
-        scale.scale(imageSize.width(), imageSize.height(), 1.0);
+        // QMatrix4x4 imageCoordToItemCoord;
+        // imageCoordToItemCoord.scale(1.0, -1.0, 1.0);
+        // imageCoordToItemCoord.translate(0.0, -1.0, 0.0);
 
-        QMatrix4x4 imageCoordToItemCoord;
-        imageCoordToItemCoord.scale(1.0, -1.0, 1.0);
-        imageCoordToItemCoord.translate(0.0, -1.0, 0.0);
+        // QMatrix4x4 mat = scale * imageCoordToItemCoord;
+        // qDebug() << "TransformUpdater:" << m_transformMatrix * scale;
 
-        QMatrix4x4 mat = scale * imageCoordToItemCoord;
-
-        // transformNode->setMatrix(transformUpdater()->matrix());
-        transformNode->setMatrix(mat);
+        // transformNode->setMatrix(mat);
     }
 
     if(Selected) {
         //Selecet, red color
         PolygonNode->setColor(QColor::fromRgbF(1.0, 1.0, 0.0, 0.15));
-        OutlineNode->setLineWidth(2.0);
+        OutlineNode->setLineWidth(0.002);
     } else {
         //Not selected, blue color
         PolygonNode->setColor(QColor::fromRgbF(0.0, 0.0, 1.0, 0.10));
-        OutlineNode->setLineWidth(0.001); //1.0);
+        OutlineNode->setLineWidth(0.001);
     }
 
     PolygonNode->setPolygon(ScrapPoints);
@@ -200,22 +198,26 @@ void cwScrapItem::setSelected(bool selected) {
 /**
 Sets transformUpdater
 */
-void cwScrapItem::setTransformUpdater(cwTransformUpdater* transformUpdater) {
+void cwScrapItem::setTransformUpdater(cwTransformItemUpdater* transformUpdater) {
     if(TransformUpdater != transformUpdater) {
 
         if(TransformUpdater != nullptr) {
-            disconnect(TransformUpdater, &cwTransformUpdater::matrixChanged, this, &cwScrapItem::update);
+            m_matrixChanged = QPropertyNotifier();
+            // disconnect(TransformUpdater, &cwTransformItemUpdater::matrixChanged, this, &cwScrapItem::update);
         }
 
         TransformUpdater = transformUpdater;
 
         if(TransformUpdater != nullptr) {
-            connect(TransformUpdater, &cwTransformUpdater::matrixChanged, this, &cwScrapItem::update);
+            m_matrixChanged = TransformUpdater->bindableMatrix().addNotifier([this]() {
+                m_transformMatrix = TransformUpdater->matrix();
+                update();
+            });
         }
 
-        StationView->setTransformUpdater(TransformUpdater);
-        LeadView->setTransformUpdater(TransformUpdater);
-        OutlinePointView->setTransformUpdater(TransformUpdater);
+        // StationView->setTransformUpdater(TransformUpdater);
+        // LeadView->setTransformUpdater(TransformUpdater);
+        // OutlinePointView->setTransformUpdater(TransformUpdater);
 
         emit transformUpdaterChanged();
         update();

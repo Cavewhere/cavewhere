@@ -141,7 +141,7 @@ void cwScrapView::selectScrapAt(QPointF notePoint) {
 /**
   \brief Sets the transform updater
   */
-void cwScrapView::setTransformUpdater(cwTransformUpdater* updater) {
+void cwScrapView::setTransformUpdater(cwTransformItemUpdater* updater) {
     if(TransformUpdater != updater) {
         TransformUpdater = updater;
 

@@ -20,6 +20,7 @@ class cwSGLinesNode;
 
 //Qt includes
 #include <QVariantAnimation>
+#include <QQmlEngine>
 
 /**
   This class manages a list of station items that visualize all the stations in a scrap.
@@ -27,6 +28,7 @@ class cwSGLinesNode;
 class cwScrapStationView : public cwScrapPointView
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(ScrapStationView)
 
 public:
     explicit cwScrapStationView(QQuickItem *parent = 0);
@@ -52,7 +54,7 @@ private:
 
     QVariantAnimation* ScaleAnimation;
 
-    cwTransformUpdater* OldTransformUpdater;
+    cwTransformItemUpdater* OldTransformUpdater;
 
     virtual void updateItemPosition(QQuickItem* item, int index);
     virtual QString qmlSource() const;

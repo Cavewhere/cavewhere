@@ -17,10 +17,10 @@
 class cwNote;
 class cwCamera;
 class cwScrap;
-class cwTransformUpdater;
+class cwTransformItemUpdater;
 class cwScrapItem;
 class cwSelectionManager;
-#include "cwTransformUpdater.h"
+#include "cwTransformItemUpdater.h"
 
 /**
   This class visualizes scraps in NoteItem
@@ -31,7 +31,7 @@ class cwScrapView : public QQuickItem
     QML_NAMED_ELEMENT(ScrapView)
 
     Q_PROPERTY(cwNote* note READ note WRITE setNote NOTIFY noteChanged)
-    Q_PROPERTY(cwTransformUpdater* transformUpdater READ transformUpdater WRITE setTransformUpdater NOTIFY transformUpdaterChanged)
+    Q_PROPERTY(cwTransformItemUpdater* transformUpdater READ transformUpdater WRITE setTransformUpdater NOTIFY transformUpdaterChanged)
     Q_PROPERTY(cwScrapItem* selectedScrapItem READ selectedScrapItem  NOTIFY selectScrapIndexChanged)
     Q_PROPERTY(int selectScrapIndex READ selectScrapIndex WRITE setSelectScrapIndex NOTIFY selectScrapIndexChanged)
 
@@ -41,8 +41,8 @@ public:
     cwNote* note() const;
     void setNote(cwNote* note);
 
-    cwTransformUpdater* transformUpdater() const;
-    void setTransformUpdater(cwTransformUpdater* updater);
+    cwTransformItemUpdater* transformUpdater() const;
+    void setTransformUpdater(cwTransformItemUpdater* updater);
 
     cwScrapItem* selectedScrapItem() const;
     void setSelectedScrapItem(cwScrapItem* selectedScrapItem);
@@ -76,7 +76,7 @@ private:
     QList<cwScrapItem*> ScrapItems;
     int SelectScrapIndex; //!< The current select scrap, -1 if no scrapitem is selected
 
-    cwTransformUpdater* TransformUpdater;
+    cwTransformItemUpdater* TransformUpdater;
     cwSelectionManager* SelectionManager;
 };
 
@@ -90,7 +90,7 @@ inline cwNote* cwScrapView::note() const {
 /**
   Gets the transform updater
   */
-inline cwTransformUpdater* cwScrapView::transformUpdater() const {
+inline cwTransformItemUpdater* cwScrapView::transformUpdater() const {
     return TransformUpdater;
 }
 

@@ -7,7 +7,7 @@
 
 //Our includes
 #include "cwAbstractPointManager.h"
-#include "cwTransformUpdater.h"
+#include "cwTransformItemUpdater.h"
 #include "cwDebug.h"
 #include "cwSelectionManager.h"
 
@@ -30,12 +30,12 @@ cwAbstractPointManager::cwAbstractPointManager(QQuickItem *parent) :
 
   This will transform all the station in this station view
   */
-void cwAbstractPointManager::setTransformUpdater(cwTransformUpdater* updater) {
+void cwAbstractPointManager::setTransformUpdater(cwTransformItemUpdater* updater) {
     if(TransformUpdater != updater) {
         if(TransformUpdater != nullptr) {
             //Remove all previous stations
-            foreach(QQuickItem* item, Items) {
-                TransformUpdater->removePointItem(item);
+            foreach(cwPositioner3D* item, Items) {
+                TransformUpdater->removeChildItem(item);
             }
         }
 
@@ -44,8 +44,8 @@ void cwAbstractPointManager::setTransformUpdater(cwTransformUpdater* updater) {
         if(TransformUpdater != nullptr) {
             //Add station to the new transformUpdater
 
-            foreach(QQuickItem* item, Items) {
-                TransformUpdater->addPointItem(item);
+            foreach(cwPositioner3D* item, Items) {
+                TransformUpdater->addChildItem(item);
             }
         }
 
@@ -77,7 +77,7 @@ void cwAbstractPointManager::createComponent() {
 
     Returns a valid item if the item was create okay, and nullptr if it failed to be created
 */
-QQuickItem* cwAbstractPointManager::createItem() {
+cwPositioner3D *cwAbstractPointManager::createItem() {
 
     if(ItemComponent == nullptr) {
         qDebug() << "ItemComponent hasn't been created, call createComponent(). THIS IS A BUG" << LOCATION;
@@ -85,7 +85,7 @@ QQuickItem* cwAbstractPointManager::createItem() {
     }
 
     QQmlContext* context = QQmlEngine::contextForObject(this);
-    QQuickItem* item = qobject_cast<QQuickItem*>(ItemComponent->create(context));
+    cwPositioner3D* item = qobject_cast<cwPositioner3D*>(ItemComponent->create(context));
     if(item == nullptr) {
         qDebug() << "Problem creating new point item ... " << qmlSource() << "Didn't compile. THIS IS A BUG!" << LOCATION;
         qDebug() << "Compiling errors:" << ItemComponent->errorString();
@@ -94,7 +94,7 @@ QQuickItem* cwAbstractPointManager::createItem() {
 
     //Add the point to the transform updater
     if(TransformUpdater != nullptr) {
-        TransformUpdater->addPointItem(item);
+        TransformUpdater->addChildItem(item);
     } else {
         qDebug() << "No transformUpdater, point's won't be positioned correctly, this is a bug" << LOCATION;
     }
@@ -129,7 +129,7 @@ void cwAbstractPointManager::pointsInserted(int begin, int end)
     createComponent();
 
     for(int i = begin; i <= end; i++) {
-        QQuickItem* item = createItem();
+        auto item = createItem();
 
         if(item != nullptr) {
             Items.insert(i, item);
@@ -215,7 +215,7 @@ void cwAbstractPointManager::resizeNumberOfItems(int numberOfPoints)
         int notesToAdd = numberOfPoints - Items.size();
         //Add more stations to the NoteStations
         for(int i = 0; i < notesToAdd; i++) {
-            QQuickItem* item = createItem();
+            auto item = createItem();
             Items.append(item);
         }
 
@@ -225,7 +225,7 @@ void cwAbstractPointManager::resizeNumberOfItems(int numberOfPoints)
 
         //Remove stations to the NoteStations
         for(int i = 0; i < notesToRemove; i++) {
-            QQuickItem* deleteStation = Items.last();
+            auto deleteStation = Items.last();
             Items.removeLast();
             deleteStation->deleteLater();
         }
@@ -296,7 +296,7 @@ QQuickItem* cwAbstractPointManager::selectedItem() const {
  * @brief cwAbstractPointManager::items
  * @return - Returns a list of all the items in the point manager
  */
-QList<QQuickItem *> cwAbstractPointManager::items() const
+QList<cwPositioner3D *> cwAbstractPointManager::items() const
 {
     return Items;
 }
