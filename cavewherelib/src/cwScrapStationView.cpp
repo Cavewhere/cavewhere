@@ -8,16 +8,13 @@
 //Our includes
 #include "cwScrapStationView.h"
 #include "cwScrap.h"
-#include "cwTransformUpdater.h"
-#include "cwDebug.h"
-#include "cwScrapItem.h"
 #include "cwNote.h"
 #include "cwTrip.h"
-#include "cwGlobalDirectory.h"
 #include "cwCave.h"
 #include "cwSGLinesNode.h"
 #include "cwAbstractScrapViewMatrix.h"
 #include "cwRunningProfileScrapViewMatrix.h"
+#include "cwScrapView.h"
 
 //Qt includes
 #include <QQmlComponent>
@@ -312,7 +309,10 @@ QMatrix4x4 cwScrapStationView::runningProfileDirection() const
 void cwScrapStationView::updateItemPosition(QQuickItem* item, int index) {
 
     QPointF point = Scrap->stationData(cwScrap::StationPosition, index).value<QPointF>();
-    item->setProperty("position3D", QVector3D(point));
+    QPointF imagePoint = cwScrapView::toImage(Scrap->parentNote()).map(point);
+    item->setPosition(imagePoint);
+
+    // item->setProperty("position3D", QVector3D(point));
 
     if(index == selectedItemIndex()) {
         updateShotLines();

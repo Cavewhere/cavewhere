@@ -17,8 +17,8 @@ ScrapPointItem {
     function updateItem() {
         if(scrap !== null) {
             stationName.text = scrap.stationData(Scrap.StationName, pointIndex)
-            var position = scrap.stationData(Scrap.StationPosition, pointIndex);
-            position3D = Qt.vector3d(position.x, position.y, 0.0);
+            // var position = scrap.stationData(Scrap.StationPosition, pointIndex);
+            // position3D = Qt.vector3d(position.x, position.y, 0.0);
         }
     }
 
@@ -59,7 +59,9 @@ ScrapPointItem {
     QQ.Image {
         id: stationImage
         anchors.centerIn: parent
-        source: "qrc:icons/stationGood.png"
+        source: "qrc:icons/svg/station.svg"
+
+        sourceSize: Qt.size(18, 18)
 
         width: sourceSize.width
         height: sourceSize.height
@@ -68,10 +70,15 @@ ScrapPointItem {
             id: stationMouseArea
             anchors.fill: parent
 
+            scrapItem: noteStationId.scrapItem
+
             onPointSelected: noteStationId.select();
-            onPointMoved: (noteCoord) => noteStationId.scrap.setStationData(Scrap.StationPosition,
+            onPointMoved: (noteCoord) => {
+
+                              noteStationId.scrap.setStationData(Scrap.StationPosition,
                                                                             noteStationId.pointIndex,
                                                                             Qt.point(noteCoord.x, noteCoord.y));
+                          }
             onDoubleClicked: stationName.openEditor();
         }
     }

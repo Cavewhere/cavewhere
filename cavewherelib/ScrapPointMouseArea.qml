@@ -5,17 +5,19 @@
 **
 **************************************************************************/
 
-// import QtQuick as QQ // to target S60 5th Edition or Maemo 5
-import QtQuick
+import QtQuick as QQ
+import cavewherelib
 
-Item {
+QQ.Item {
     id: stationItem
 
+    required property ScrapItem scrapItem
+
     signal pointSelected()
-    signal pointMoved(point noteCoord) // Emits in image coordinates
+    signal pointMoved(point noteCoord) // Emits in note coordinates
     signal doubleClicked()
 
-    TapHandler {
+    QQ.TapHandler {
         onTapped: {
             pointSelected()
         }
@@ -23,7 +25,7 @@ Item {
         onDoubleTapped: stationItem.doubleClicked()
     }
 
-    DragHandler {
+    QQ.DragHandler {
         id: stationDragHandler
         dragThreshold: 3
 
@@ -37,7 +39,7 @@ Item {
         onCentroidChanged: {
             if (active) {
                 var parentCoord = mapToItem(parentView, centroid.position.x, centroid.position.y)
-                pointMoved(parentCoord)
+                pointMoved(scrapItem.toNoteCoordinates(parentCoord))
             }
         }
     }

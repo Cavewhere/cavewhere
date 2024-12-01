@@ -49,6 +49,8 @@ ScrapPointItem {
             anchors.bottomMargin: -3
             anchors.rightMargin: -3
 
+            scrapItem: scrapPointItem.scrapItem
+
             onPointSelected: {
                 scrapPointItem.select()
 
@@ -58,11 +60,7 @@ ScrapPointItem {
                 }
             }
 
-            onPointMoved: (noteCoord) => {
-                              let notePoint = scrapPointItem.scrapItem.toNoteCoordinates(Qt.point(noteCoord.x, noteCoord.y))
-                              scrapPointItem.scrap.setPoint(scrapPointItem.pointIndex,
-                                                            notePoint)
-                          }
+            onPointMoved: (noteCoord) => scrapPointItem.scrap.setPoint(scrapPointItem.pointIndex, noteCoord)
         }
     }
 }

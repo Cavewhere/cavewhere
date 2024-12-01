@@ -104,5 +104,6 @@
         <file>twbs-icons/icons/chevron-right.svg</file>
         <file>twbs-icons/icons/plus.svg</file>
         <file>twbs-icons/icons/plus.svg</file>
+        <file>icons/svg/station.svg</file>
     </qresource>
 </RCC>
