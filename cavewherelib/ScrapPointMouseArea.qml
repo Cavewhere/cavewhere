@@ -6,43 +6,39 @@
 **************************************************************************/
 
 // import QtQuick as QQ // to target S60 5th Edition or Maemo 5
-import QtQuick as QQ
+import QtQuick
 
-/**
-This is used for the scrap outline point and the note point to move the point around
-  */
-QQ.MouseArea {
-    id: stationMouseArea
-
-    property variant lastPoint;
-    property bool ignoreLength;
+Item {
+    id: stationItem
 
     signal pointSelected()
-    signal pointMoved(point noteCoord) //Emits in image coordinates
+    signal pointMoved(point noteCoord) // Emits in image coordinates
+    signal doubleClicked()
 
-//    onClicked: pointSelected()
-
-    onReleased: ({ })
-
-    onPressed: (mouse) => {
-        lastPoint = Qt.point(mouse.x, mouse.y);
-        ignoreLength = false;
-
-        if(!ignoreLength) {
+    TapHandler {
+        onTapped: {
             pointSelected()
         }
+
+        onDoubleTapped: stationItem.doubleClicked()
     }
 
-    onPositionChanged: {
-        //Make sure the mouse has move at least three pixel from where it's started
-        var length = Math.sqrt(Math.pow(lastPoint.x - mouse.x, 2) + Math.pow(lastPoint.y - mouse.y, 2));
-        if(length > 3 || ignoreLength) {
-            ignoreLength = true
-            var parentCoord = mapToItem(parentView, mouse.x, mouse.y);
-            // var transformer = parentView.transformUpdater;
-            // var noteCoord = transformer.mapFromViewportToModel(Qt.point(parentCoord.x, parentCoord.y));
-            console.log("Parent coord:" + parentCoord)
-            pointMoved(parentCoord);
+    DragHandler {
+        id: stationDragHandler
+        dragThreshold: 3
+
+        onActiveChanged: {
+            if (active) {
+                // Drag has started
+                pointSelected()
+            }
+        }
+
+        onCentroidChanged: {
+            if (active) {
+                var parentCoord = mapToItem(parentView, centroid.position.x, centroid.position.y)
+                pointMoved(parentCoord)
+            }
         }
     }
 }
