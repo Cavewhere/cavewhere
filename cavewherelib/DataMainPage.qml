@@ -178,7 +178,7 @@ StandardPage {
             //In-ables the link
 
             let delegate = object as PageDelegate
-            console.log(`Cave page added! ${index} ${object.caveObjectRole} ${delegate.caveObjectRole}`)
+            // console.log(`Cave page added! ${index} ${object.caveObjectRole} ${delegate.caveObjectRole}`)
             var linkId = RootData.pageSelectionModel.registerPage(pageId.PageView.page, //From
                                                                   pageId.cavePageName(delegate.caveObjectRole), //Name
                                                                   caveOverviewPageComponent,

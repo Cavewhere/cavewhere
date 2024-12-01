@@ -12,9 +12,10 @@
 #include <QObject>
 #include <QUrl>
 #include <QQuickItem>
+#include <QQmlEngine>
 
 //Our includes
-#include "cwTransformItemUpdater.h"
+// #include "cwTransformItemUpdater.h"
 #include "cwSelectionManager.h"
 
 /**
@@ -27,31 +28,39 @@
 class cwAbstractPointManager : public QQuickItem
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(AbstractPointManager)
 
-    Q_PROPERTY(cwTransformItemUpdater* transformUpdater READ transformUpdater WRITE setTransformUpdater NOTIFY transformUpdaterChanged)
+    // Q_PROPERTY(cwTransformItemUpdater* transformUpdater READ transformUpdater WRITE setTransformUpdater NOTIFY transformUpdaterChanged)
     Q_PROPERTY(int selectedItemIndex READ selectedItemIndex WRITE setSelectedItemIndex NOTIFY selectedItemIndexChanged)
     Q_PROPERTY(cwSelectionManager* selectionManager READ selectionManager WRITE setSelectionManager NOTIFY selectionManagerChanged)
+    // Q_PROPERTY(QQuickItem* pointParentItem READ pointParentItem WRITE setPointParentItem NOTIFY pointParentItemChanged)
+
 
 public:
     explicit cwAbstractPointManager(QQuickItem *parent = 0);
     
-    cwTransformItemUpdater* transformUpdater() const;
-    void setTransformUpdater(cwTransformItemUpdater* updater);
+    // cwTransformItemUpdater* transformUpdater() const;
+    // void setTransformUpdater(cwTransformItemUpdater* updater);
 
     void clearSelection();
     int selectedItemIndex() const;
     void setSelectedItemIndex(int selectedItemIndex);
     Q_INVOKABLE QQuickItem* selectedItem() const;
 
-    QList<cwPositioner3D *> items() const;
+    QList<QQuickItem *> items() const;
 
     cwSelectionManager* selectionManager() const;
     void setSelectionManager(cwSelectionManager* selectionManager);
 
+    // QQuickItem* pointParentItem() const;
+    // void setPointParentItem(QQuickItem* parentItem);
+
+
 signals:
-    void transformUpdaterChanged();
+    // void transformUpdaterChanged();
     void selectedItemIndexChanged();
     void selectionManagerChanged();
+    void pointParentItemChanged();
 
 public slots:
     
@@ -74,18 +83,21 @@ private slots:
 
 private:
     //Will keep the note stations at the correct location
-    cwTransformItemUpdater* TransformUpdater;
+    // cwTransformItemUpdater* TransformUpdater;
+
+    //The new points will have the parent of this
+    QQuickItem* m_pointParentItem = nullptr;
 
     //All the point items
-    QQmlComponent* ItemComponent; //Allows you to create point items
-    QList<cwPositioner3D*> Items; //A list of point items
+    QQmlComponent* m_itemComponent; //Allows you to create point items
+    QList<QQuickItem*> m_items; //A list of point items
 
-    cwSelectionManager* SelectionManager; //!< The selection manager to select point items
+    cwSelectionManager* m_selectionManager; //!< The selection manager to select point items
 
-    int SelectedItemIndex; //!< The currently selected index
+    int m_selectedItemIndex; //!< The currently selected index
 
     void createComponent();
-    cwPositioner3D *createItem();
+    QQuickItem *createItem();
     void removeItem(int index);
 
     void privateUpdateItemPosition(int index);
@@ -97,15 +109,15 @@ Q_DECLARE_METATYPE(cwAbstractPointManager*)
 /**
   Gets the transform updater
   */
-inline cwTransformItemUpdater* cwAbstractPointManager::transformUpdater() const {
-    return TransformUpdater;
-}
+// inline cwTransformItemUpdater* cwAbstractPointManager::transformUpdater() const {
+//     return TransformUpdater;
+// }
 
 /**
 Gets selectedStationIndex
 */
 inline int cwAbstractPointManager::selectedItemIndex() const {
-    return SelectedItemIndex;
+    return m_selectedItemIndex;
 }
 
 /**
@@ -119,7 +131,11 @@ inline void cwAbstractPointManager::clearSelection() {
 Gets selectionManager
 */
 inline cwSelectionManager* cwAbstractPointManager::selectionManager() const {
-    return SelectionManager;
+    return m_selectionManager;
 }
+
+// inline QQuickItem* cwAbstractPointManager::pointParentItem() const {
+//     return m_pointParentItem;
+// }
 
 #endif // CWABSRTACTPOINTMANAGER_H

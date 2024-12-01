@@ -33,7 +33,7 @@ class cwScrapItem : public QQuickItem
 
     Q_PROPERTY(cwScrap* scrap READ scrap WRITE setScrap NOTIFY scrapChanged)
     Q_PROPERTY(bool selected READ isSelected WRITE setSelected NOTIFY selectedChanged)
-    Q_PROPERTY(cwTransformItemUpdater* transformUpdater READ transformUpdater WRITE setTransformUpdater NOTIFY transformUpdaterChanged)
+    // Q_PROPERTY(cwTransformItemUpdater* transformUpdater READ transformUpdater WRITE setTransformUpdater NOTIFY transformUpdaterChanged)
     Q_PROPERTY(cwScrapStationView* stationView READ stationView CONSTANT)
     Q_PROPERTY(cwScrapLeadView* leadView READ leadView CONSTANT)
 
@@ -51,8 +51,10 @@ public:
     bool isSelected() const;
     void setSelected(bool selected);
 
-    cwTransformItemUpdater* transformUpdater() const;
-    void setTransformUpdater(cwTransformItemUpdater* transformUpdater);
+    void setZoom(double zoom);
+
+    // cwTransformItemUpdater* transformUpdater() const;
+    // void setTransformUpdater(cwTransformItemUpdater* transformUpdater);
 
     void setTransformNode(QSGTransformNode* node);
     QSGTransformNode* transformNode() const;
@@ -65,6 +67,8 @@ public:
     void setSelectionManager(cwSelectionManager* selectionManager);
 
     // QRectF boundingRect() const { return QRectF(0, 0, 1000, 1000); }
+
+    Q_INVOKABLE QPointF toNoteCoordinates(QPointF imageCoordinates) const;
 
 signals:
     void scrapChanged();
@@ -79,9 +83,11 @@ private:
     cwScrap* Scrap;
 
     //For keeping the 2D object aligned
+    double m_zoom = 1.0;
     cwTransformItemUpdater* TransformUpdater; //!<
     QPropertyNotifier m_matrixChanged;
     QMatrix4x4 m_transformMatrix;
+
 
     //Visual elements
     bool TransformNodeDirty;
@@ -97,10 +103,10 @@ private:
     // QList<QQuickItem*> OutlineStation;
 
 
-
-
     cwSelectionManager* SelectionManager; //!< For selection for control items (this is passed to child class)
     bool Selected; //!< True if the scrap is select and false if it isn't
+
+    void initilize(QQmlContext* context);
 
 protected:
     virtual QSGNode* updatePaintNode(QSGNode * oldNode, UpdatePaintNodeData *);
@@ -127,12 +133,12 @@ inline bool cwScrapItem::isSelected() const {
     return Selected;
 }
 
-/**
-Gets transformUpdater
-*/
-inline cwTransformItemUpdater* cwScrapItem::transformUpdater() const {
-    return TransformUpdater;
-}
+// /**
+// Gets transformUpdater
+// */
+// inline cwTransformItemUpdater* cwScrapItem::transformUpdater() const {
+//     return TransformUpdater;
+// }
 
 /**
 Gets stationView, this stores all the note station item

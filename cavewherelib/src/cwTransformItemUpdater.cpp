@@ -1,5 +1,5 @@
 #include "cwTransformItemUpdater.h"
-#include "cwPositioner3D.h"
+#include "cwBasePositioner.h"
 #include <QDebug>
 
 cwTransformItemUpdater::cwTransformItemUpdater(QObject *parent)
@@ -72,7 +72,7 @@ void cwTransformItemUpdater::setEnabled(bool enabled)
     }
 }
 
-void cwTransformItemUpdater::addChildItem(cwPositioner3D* item)
+void cwTransformItemUpdater::addChildItem(cwBasePositioner* item)
 {
     if (item == nullptr) return;
 
@@ -85,14 +85,14 @@ void cwTransformItemUpdater::addChildItem(cwPositioner3D* item)
     connect(item, &QObject::destroyed, this, [this, item]() {
         removeChildItem(item);
     });
-    connect(item, &cwPositioner3D::position3DChanged, this, [this, item]() {
+    connect(item, &cwBasePositioner::position3DChanged, this, [this, item]() {
         updateChildItem(item);
     });
 
     updateChildItem(item);
 }
 
-void cwTransformItemUpdater::removeChildItem(cwPositioner3D* item)
+void cwTransformItemUpdater::removeChildItem(cwBasePositioner* item)
 {
     if (item == nullptr) return;
 

@@ -8,6 +8,7 @@
 //Our includes
 #include "cwScrapOutlinePointView.h"
 #include "cwScrap.h"
+#include "cwScrapView.h"
 
 cwScrapOutlinePointView::cwScrapOutlinePointView(QQuickItem *parent) :
     cwScrapPointView(parent)
@@ -40,11 +41,14 @@ void cwScrapOutlinePointView::setScrap(cwScrap *scrap)
     }
 }
 
-
 void cwScrapOutlinePointView::updateItemPosition(QQuickItem *item, int pointIndex)
 {
     QPointF point = Scrap->points().at(pointIndex);
-    item->setProperty("position3D", QVector3D(point));
+    QPointF imagePoint = cwScrapView::toImage(Scrap->parentNote()).map(point);
+    qDebug() << "Set point:" << item << pointIndex << imagePoint;
+    item->setPosition(imagePoint);
+
+    // item->setProperty("position3D", QVector3D(point));
 }
 
 

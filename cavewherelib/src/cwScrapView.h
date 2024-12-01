@@ -31,9 +31,11 @@ class cwScrapView : public QQuickItem
     QML_NAMED_ELEMENT(ScrapView)
 
     Q_PROPERTY(cwNote* note READ note WRITE setNote NOTIFY noteChanged)
-    Q_PROPERTY(cwTransformItemUpdater* transformUpdater READ transformUpdater WRITE setTransformUpdater NOTIFY transformUpdaterChanged)
+    // Q_PROPERTY(cwTransformItemUpdater* transformUpdater READ transformUpdater WRITE setTransformUpdater NOTIFY transformUpdaterChanged)
     Q_PROPERTY(cwScrapItem* selectedScrapItem READ selectedScrapItem  NOTIFY selectScrapIndexChanged)
     Q_PROPERTY(int selectScrapIndex READ selectScrapIndex WRITE setSelectScrapIndex NOTIFY selectScrapIndexChanged)
+    Q_PROPERTY(double zoom READ zoom WRITE setZoom NOTIFY zoomChanged);
+
 
 public:
     explicit cwScrapView(QQuickItem *parent = 0);
@@ -41,8 +43,8 @@ public:
     cwNote* note() const;
     void setNote(cwNote* note);
 
-    cwTransformItemUpdater* transformUpdater() const;
-    void setTransformUpdater(cwTransformItemUpdater* updater);
+    // cwTransformItemUpdater* transformUpdater() const;
+    // void setTransformUpdater(cwTransformItemUpdater* updater);
 
     cwScrapItem* selectedScrapItem() const;
     void setSelectedScrapItem(cwScrapItem* selectedScrapItem);
@@ -50,17 +52,24 @@ public:
     Q_INVOKABLE void clearSelection();
     int selectScrapIndex() const;
     void setSelectScrapIndex(int selectScrapIndex);
-    Q_INVOKABLE void selectScrapAt(QPointF notePoint);
+    Q_INVOKABLE void selectScrapAt(QPointF imagePoint);
     void setSelectScrap(cwScrap* scrap);
 
     QList<cwScrapItem*> scrapItemsAt(QPointF notePoint);
     cwScrapItem* scrapItemAt(int index);
     int indexOf(cwScrapItem* item) const;
 
+    double zoom() const { return m_zoom; }
+    void setZoom(double zoom);
+
+    static QTransform toImage(cwNote* note);
+    static QTransform toNormalized(cwNote* note);
+
 signals:
     void noteChanged();
     void transformUpdaterChanged();
     void selectScrapIndexChanged();
+    void zoomChanged();
 
 public slots:
 
@@ -71,28 +80,31 @@ private slots:
     void updateRemovedScraps(int begin, int end);
 
 private:
-    cwNote* Note;
+    cwNote* m_note;
 
-    QList<cwScrapItem*> ScrapItems;
-    int SelectScrapIndex; //!< The current select scrap, -1 if no scrapitem is selected
+    QList<cwScrapItem*> m_scrapItems;
+    int m_selectScrapIndex = -1; //!< The current select scrap, -1 if no scrapitem is selected
 
-    cwTransformItemUpdater* TransformUpdater;
-    cwSelectionManager* SelectionManager;
+    cwTransformItemUpdater* m_transformUpdater;
+    cwSelectionManager* m_selectionManager;
+
+    double m_zoom;
+
 };
 
 /**
   Gets the note for the cwScrapView
   */
 inline cwNote* cwScrapView::note() const {
-    return Note;
+    return m_note;
 }
 
-/**
-  Gets the transform updater
-  */
-inline cwTransformItemUpdater* cwScrapView::transformUpdater() const {
-    return TransformUpdater;
-}
+// /**
+//   Gets the transform updater
+//   */
+// inline cwTransformItemUpdater* cwScrapView::transformUpdater() const {
+//     return m_transformUpdater;
+// }
 
 /**
   Clears the current selection
@@ -105,7 +117,7 @@ inline void cwScrapView::clearSelection() {
 Gets selectScrapIndex
 */
 inline int cwScrapView::selectScrapIndex() const {
-    return SelectScrapIndex;
+    return m_selectScrapIndex;
 }
 
 /**
@@ -115,7 +127,7 @@ inline int cwScrapView::selectScrapIndex() const {
  */
 inline int cwScrapView::indexOf(cwScrapItem *item) const
 {
-    return ScrapItems.indexOf(item);
+    return m_scrapItems.indexOf(item);
 }
 
 #endif // CWSCRAPVIEW_H

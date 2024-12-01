@@ -8,7 +8,7 @@
 //Our includes
 #include "cwNorthArrowItem.h"
 #include "cwTransformUpdater.h"
-//#include "cwPositioner3D.h"
+//#include "cwBasePositioner.h"
 #include "cwSGLinesNode.h"
 
 

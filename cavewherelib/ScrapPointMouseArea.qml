@@ -18,7 +18,7 @@ QQ.MouseArea {
     property bool ignoreLength;
 
     signal pointSelected()
-    signal pointMoved(point noteCoord)
+    signal pointMoved(point noteCoord) //Emits in image coordinates
 
 //    onClicked: pointSelected()
 
@@ -39,9 +39,10 @@ QQ.MouseArea {
         if(length > 3 || ignoreLength) {
             ignoreLength = true
             var parentCoord = mapToItem(parentView, mouse.x, mouse.y);
-            var transformer = parentView.transformUpdater;
-            var noteCoord = transformer.mapFromViewportToModel(Qt.point(parentCoord.x, parentCoord.y));
-            pointMoved(noteCoord);
+            // var transformer = parentView.transformUpdater;
+            // var noteCoord = transformer.mapFromViewportToModel(Qt.point(parentCoord.x, parentCoord.y));
+            console.log("Parent coord:" + parentCoord)
+            pointMoved(parentCoord);
         }
     }
 }

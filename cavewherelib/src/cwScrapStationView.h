@@ -54,7 +54,7 @@ private:
 
     QVariantAnimation* ScaleAnimation;
 
-    cwTransformItemUpdater* OldTransformUpdater;
+    // cwTransformItemUpdater* OldTransformUpdater;
 
     virtual void updateItemPosition(QQuickItem* item, int index);
     virtual QString qmlSource() const;

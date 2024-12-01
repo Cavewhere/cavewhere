@@ -2,7 +2,7 @@
 #define CWTRANSFORMITEMUPDATER_H
 
 //Qt includes
-#include "cwPositioner3D.h"
+#include "cwBasePositioner.h"
 #include <QObject>
 #include <QMatrix4x4>
 #include <QQuickItem>
@@ -33,8 +33,8 @@ public:
     bool enabled() const;
     void setEnabled(bool enabled);
 
-    Q_INVOKABLE void addChildItem(cwPositioner3D* item);
-    void removeChildItem(cwPositioner3D* item);
+    Q_INVOKABLE void addChildItem(cwBasePositioner* item);
+    void removeChildItem(cwBasePositioner* item);
 
     Q_INVOKABLE QPointF mapFromItemToViewport(QPointF itemPoint) const;
     Q_INVOKABLE QPointF mapToItemFromViewport(QPointF viewportPoint) const;

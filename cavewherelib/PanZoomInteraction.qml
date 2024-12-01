@@ -8,22 +8,82 @@
 import QtQuick as QQ
 import cavewherelib
 
-BasePanZoomInteraction {
-    id: interaction
+Interaction {
+    id: interactionId
+    required property QQ.Image target
+    // required property double persistentScale
 
-    PanZoomPitchArea {
-        anchors.fill: parent
-        basePanZoom: interaction
+    function refit() {
+        target.x = target.parent.width * 0.5 - target.sourceSize.width * 0.5;
+        target.y = target.parent.height * 0.5 - target.sourceSize.height * 0.5;
 
-        QQ.MouseArea {
-            anchors.fill: parent
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
-            onPressed: (mouse) => interaction.panFirstPoint(Qt.point(mouse.x, mouse.y))
-            onPositionChanged: (mouse) => interaction.panMove(Qt.point(mouse.x, mouse.y))
-            onWheel: (wheel) => {
-                        console.log("wheel.angleDelta.y:" + wheel.angleDelta.y)
-                         interaction.zoom(wheel.angleDelta.y, Qt.point(wheel.x, wheel.y))
-                     }
+        let imageAspect = target.width / target.height
+        let scaleX = 0.0
+        let scaleY = 0.0
+        if(imageAspect >= 1.0) {
+            scaleX = target.parent.width / target.sourceSize.width;
+            scaleY = target.parent.height / target.sourceSize.height;
+        } else {
+            //Different aspect ratios, flip the scales
+            scaleX = target.parent.width / target.sourceSize.height;
+            scaleY = target.parent.height / target.sourceSize.width;
+        }
+
+        // Choose the smaller scale factor to ensure the image fits within the item
+        target.scale = Math.min(scaleX, scaleY);
+        pinchHandlerId.persistentScale = target.scale
+
+            console.log("Target scale:" + target.scale)
+    }
+
+            QQ.Connections {
+                target: interactionId.target
+                function onStatusChanged() {
+                    if(interactionId.target.status == QQ.Image.Ready) {
+                        console.log("Status changed:" + interactionId.target)
+                        interactionId.state = "AUTO_FIT"
+                        interactionId.refit()
+                    }
+                }
+            }
+
+    QQ.WheelHandler {
+        id: wheelHandlerId
+        enabled: interactionId.enabled
+        target: interactionId.target
+        parent: interactionId.target
+        property: "scale"
+        targetScaleMultiplier: 1.1
+        targetTransformAroundCursor: true
+    }
+
+    QQ.DragHandler {
+        enabled: interactionId.enabled
+        target: interactionId.target
+        parent: interactionId.target
+        onActiveChanged: {
+            //Disable auto centering
+            interactionId.state = ""
         }
     }
+
+    QQ.PinchHandler {
+        id: pinchHandlerId
+        enabled: interactionId.enabled
+        target: interactionId.target
+        parent: interactionId.target
+        rotationAxis.minimum: interactionId.target.rotation
+        rotationAxis.maximum: interactionId.target.rotation
+        persistentRotation: interactionId.target.rotation
+    }
+
+    states: [
+        QQ.State {
+            name: "AUTO_FIT"
+            QQ.PropertyChanges {
+                interactionId.target.parent.onWidthChanged: interactionId.refit()
+                interactionId.target.parent.onHeightChanged: interactionId.refit()
+            }
+        }
+    ]
 }

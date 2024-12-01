@@ -35,7 +35,6 @@ void cwRenderLinePlot::setGeometry(QVector<QVector3D> pointData,
     data.points = pointData;
     data.indexes = indexData;
 
-    qDebug() << "Setting geometry!" << this;
     m_data.setValue(data);
     update();
 }

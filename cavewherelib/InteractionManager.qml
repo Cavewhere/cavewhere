@@ -22,9 +22,11 @@ QQ.Item {
             var item = interactions[i];
             //Make all interaction invisible
             item.visible = false;
+            item.enabled = false
         }
 
         interaction.visible = true;
+        interaction.enabled = true;
         activeInteraction = interaction
     }
 
@@ -69,7 +71,4 @@ QQ.Item {
 
         activeDefaultInteraction()
     }
-
-
-
 }

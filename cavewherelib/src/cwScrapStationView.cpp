@@ -31,8 +31,8 @@
 cwScrapStationView::cwScrapStationView(QQuickItem *parent) :
     cwScrapPointView(parent),
     LineDataDirty(false),
-    ScaleAnimation(new QVariantAnimation(this)),
-    OldTransformUpdater(nullptr)
+    ScaleAnimation(new QVariantAnimation(this))
+    // OldTransformUpdater(nullptr)
 {
     setFlag(QQuickItem::ItemHasContents, true);
 
@@ -42,7 +42,7 @@ cwScrapStationView::cwScrapStationView(QQuickItem *parent) :
     connect(ScaleAnimation, SIGNAL(valueChanged(QVariant)), this, SLOT(update()));
 
     connect(this, &cwScrapStationView::selectedItemIndexChanged, this, &cwScrapStationView::updateShotLinesWithAnimation);
-    connect(this, &cwScrapStationView::transformUpdaterChanged, this, &cwScrapStationView::updateTransformUpdate);
+    // connect(this, &cwScrapStationView::transformUpdaterChanged, this, &cwScrapStationView::updateTransformUpdate);
 }
 
 cwScrapStationView::~cwScrapStationView() {
@@ -101,7 +101,7 @@ void cwScrapStationView::updateShotLines() {
     if(scrap() == nullptr) { return; }
     if(scrap()->parentNote() == nullptr) { return; }
     if(scrap()->parentNote()->parentTrip() == nullptr) { return; }
-    if(transformUpdater() == nullptr) { return; }
+    // if(transformUpdater() == nullptr) { return; }
 
     cwNoteStation noteStation = scrap()->station(selectedItemIndex());
     //Get the current trip
@@ -192,20 +192,20 @@ void cwScrapStationView::updateShotLines() {
 void cwScrapStationView::updateTransformUpdate() {
    //Called when the transform updater has changed
 
-    if(OldTransformUpdater != transformUpdater()) {
+    // if(OldTransformUpdater != transformUpdater()) {
 
-        if(OldTransformUpdater != nullptr) {
-            disconnect(OldTransformUpdater, &cwTransformItemUpdater::matrixChanged, this, &cwScrapStationView::update);
-        }
+    //     if(OldTransformUpdater != nullptr) {
+    //         disconnect(OldTransformUpdater, &cwTransformItemUpdater::matrixChanged, this, &cwScrapStationView::update);
+    //     }
 
-        OldTransformUpdater = transformUpdater();
+    //     OldTransformUpdater = transformUpdater();
 
-        if(OldTransformUpdater != nullptr) {
-            connect(OldTransformUpdater, &cwTransformItemUpdater::matrixChanged, this, &cwScrapStationView::update);
-        }
+    //     if(OldTransformUpdater != nullptr) {
+    //         connect(OldTransformUpdater, &cwTransformItemUpdater::matrixChanged, this, &cwScrapStationView::update);
+    //     }
 
-        update();
-    }
+    //     update();
+    // }
 }
 
 /**
@@ -237,25 +237,25 @@ QSGNode *cwScrapStationView::updatePaintNode(QSGNode *oldNode, QQuickItem::Updat
         oldNode->appendChildNode(ShotLinesNodeForground);
     }
 
-    if(transformUpdater()) {
-        QPointF scale = ScaleAnimation->currentValue().toPointF();
-        QMatrix4x4 scaleMatrix;
-        scaleMatrix.scale(scale.x(), scale.y(), 1.0);
+    // if(transformUpdater()) {
+    //     QPointF scale = ScaleAnimation->currentValue().toPointF();
+    //     QMatrix4x4 scaleMatrix;
+    //     scaleMatrix.scale(scale.x(), scale.y(), 1.0);
 
-        cwNoteStation noteStation = scrap()->station(selectedItemIndex());
-        QPointF position = noteStation.positionOnNote();
+    //     cwNoteStation noteStation = scrap()->station(selectedItemIndex());
+    //     QPointF position = noteStation.positionOnNote();
 
-        QMatrix4x4 toOrigin;
-        toOrigin.translate(QVector3D(-position.x(), -position.y(), 0.0));
+    //     QMatrix4x4 toOrigin;
+    //     toOrigin.translate(QVector3D(-position.x(), -position.y(), 0.0));
 
-        QMatrix4x4 fromOrigin;
-        fromOrigin.translate(QVector3D(position.x(), position.y(), 0.0));
+    //     QMatrix4x4 fromOrigin;
+    //     fromOrigin.translate(QVector3D(position.x(), position.y(), 0.0));
 
-        QMatrix4x4 matrix = transformUpdater()->matrix();
+    //     QMatrix4x4 matrix = transformUpdater()->matrix();
 
-        QSGTransformNode* transformNode = static_cast<QSGTransformNode*>(oldNode);
-        transformNode->setMatrix(matrix * fromOrigin * scaleMatrix * toOrigin);
-    }
+    //     QSGTransformNode* transformNode = static_cast<QSGTransformNode*>(oldNode);
+    //     transformNode->setMatrix(matrix * fromOrigin * scaleMatrix * toOrigin);
+    // }
 
     if(LineDataDirty) {
         ShotLinesNodeBackground->setLines(ShotLines);

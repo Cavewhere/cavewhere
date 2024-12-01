@@ -14,6 +14,8 @@
 #include "cwSGPolygonNode.h"
 #include "cwSGLinesNode.h"
 #include "cwScrapLeadView.h"
+#include "cwScrapView.h"
+#include "cwNote.h"
 
 //Qt includes
 #include <QGraphicsPolygonItem>
@@ -35,19 +37,7 @@ cwScrapItem::cwScrapItem(QQuickItem *parent) :
     SelectionManager(nullptr),
     Selected(false)
 {
-    StationView->setScrapItem(this);
-    LeadView->setScrapItem(this);
-    OutlinePointView->setScrapItem(this);
-
-    setFlag(QQuickItem::ItemHasContents, true);
-
-    setAntialiasing(true);
-
-    //Set the declarative context for the station view
-    QQmlContext* context = QQmlEngine::contextForObject(this);
-    QQmlEngine::setContextForObject(StationView, context);
-    QQmlEngine::setContextForObject(LeadView, context);
-    QQmlEngine::setContextForObject(OutlinePointView, context);
+    initilize(QQmlEngine::contextForObject(this));
 }
 
 cwScrapItem::cwScrapItem(QQmlContext *context, QQuickItem *parent) :
@@ -62,24 +52,38 @@ cwScrapItem::cwScrapItem(QQmlContext *context, QQuickItem *parent) :
     OutlinePointView(new cwScrapOutlinePointView(this)),
     Selected(false)
 {
+    initilize(context);
+}
+
+cwScrapItem::~cwScrapItem()
+{
+}
+
+void cwScrapItem::initilize(QQmlContext *context)
+{
     StationView->setScrapItem(this);
     LeadView->setScrapItem(this);
     OutlinePointView->setScrapItem(this);
 
     setFlag(QQuickItem::ItemHasContents, true);
 
+    setAntialiasing(true);
+
     //Set the declarative context for the station view
-    QQmlEngine::setContextForObject(this, context);
     QQmlEngine::setContextForObject(StationView, context);
     QQmlEngine::setContextForObject(LeadView, context);
     QQmlEngine::setContextForObject(OutlinePointView, context);
 
-    // setWidth(1000);
-    // setHeight(1000);
-}
+    StationView->setParentItem(parentItem());
+    LeadView->setParentItem(parentItem());
+    OutlinePointView->setParentItem(parentItem());
 
-cwScrapItem::~cwScrapItem()
-{
+    connect(this, &cwScrapItem::parentChanged, this, [this]() {
+        qDebug() << "Updating parent in cwScrapItem:" << parentItem();
+        StationView->setParentItem(parentItem());
+        LeadView->setParentItem(parentItem());
+        OutlinePointView->setParentItem(parentItem());
+    });
 }
 
 /**
@@ -115,7 +119,7 @@ void cwScrapItem::setScrap(cwScrap* scrap) {
 QSGNode *cwScrapItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData *) {
     //    if(ScrapPoints.isEmpty()) { return oldNode; }
 
-    qDebug() << "Draw scrap!" << this << this->isVisible() << this->parentItem()->isVisible();
+    // qDebug() << "Draw scrap!" << this << this->isVisible() << this->parentItem()->isVisible();
 
     // QSGSimpleRectNode *n = static_cast<QSGSimpleRectNode *>(oldNode);
     // if (!n) {
@@ -138,30 +142,36 @@ QSGNode *cwScrapItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintN
         OutlineNode->setLineStrip(ScrapPoints);
     }
 
-    if(transformUpdater()) {
-        QSGTransformNode* transformNode = static_cast<QSGTransformNode*>(oldNode);
+    // if(transformUpdater()) {
+    //     QSGTransformNode* transformNode = static_cast<QSGTransformNode*>(oldNode);
 
-        // QMatrix4x4 scale;
-        // scale.scale(imageSize.width(), imageSize.height(), 1.0);
+    //     // QMatrix4x4 scale;
+    //     // scale.scale(imageSize.width(), imageSize.height(), 1.0);
 
-        // QMatrix4x4 imageCoordToItemCoord;
-        // imageCoordToItemCoord.scale(1.0, -1.0, 1.0);
-        // imageCoordToItemCoord.translate(0.0, -1.0, 0.0);
+    //     // QMatrix4x4 imageCoordToItemCoord;
+    //     // imageCoordToItemCoord.scale(1.0, -1.0, 1.0);
+    //     // imageCoordToItemCoord.translate(0.0, -1.0, 0.0);
 
-        // QMatrix4x4 mat = scale * imageCoordToItemCoord;
-        // qDebug() << "TransformUpdater:" << m_transformMatrix * scale;
+    //     // QMatrix4x4 mat = scale * imageCoordToItemCoord;
+    //     // qDebug() << "TransformUpdater:" << m_transformMatrix * scale;
 
-        // transformNode->setMatrix(mat);
-    }
+    //     // transformNode->setMatrix(mat);
+    // }
+
+    auto lineWidthFromZoom = [this](double lineWidth) {
+        return lineWidth / m_zoom;
+    };
 
     if(Selected) {
         //Selecet, red color
         PolygonNode->setColor(QColor::fromRgbF(1.0, 1.0, 0.0, 0.15));
-        OutlineNode->setLineWidth(0.002);
+
+        //This is pretty slow be becauce it has to update the geometry
+        OutlineNode->setLineWidth(lineWidthFromZoom(2.0));
     } else {
         //Not selected, blue color
         PolygonNode->setColor(QColor::fromRgbF(0.0, 0.0, 1.0, 0.10));
-        OutlineNode->setLineWidth(0.001);
+        OutlineNode->setLineWidth(lineWidthFromZoom(1.0));
     }
 
     PolygonNode->setPolygon(ScrapPoints);
@@ -178,7 +188,16 @@ QSGNode *cwScrapItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintN
 void cwScrapItem::updatePoints()
 {
     if(Scrap != nullptr) {
-        ScrapPoints = Scrap->points();
+        ScrapPoints.resize(Scrap->points().size());
+
+        //Translate scrap points
+        QTransform transform = cwScrapView::toImage(Scrap->parentNote());
+
+        const auto points = Scrap->points();
+        for(int i = 0; i < points.size(); ++i) {
+            ScrapPoints[i] = transform.map(points.at(i));
+        }
+
         update();
     }
 }
@@ -187,6 +206,7 @@ void cwScrapItem::updatePoints()
 Sets the scrap item as the selected scrap
 */
 void cwScrapItem::setSelected(bool selected) {
+    qDebug() << "ScrapItem:" << this << selected;
     if(Selected != selected) {
         Selected = selected;
         emit selectedChanged();
@@ -194,35 +214,41 @@ void cwScrapItem::setSelected(bool selected) {
     }
 }
 
-
-/**
-Sets transformUpdater
-*/
-void cwScrapItem::setTransformUpdater(cwTransformItemUpdater* transformUpdater) {
-    if(TransformUpdater != transformUpdater) {
-
-        if(TransformUpdater != nullptr) {
-            m_matrixChanged = QPropertyNotifier();
-            // disconnect(TransformUpdater, &cwTransformItemUpdater::matrixChanged, this, &cwScrapItem::update);
-        }
-
-        TransformUpdater = transformUpdater;
-
-        if(TransformUpdater != nullptr) {
-            m_matrixChanged = TransformUpdater->bindableMatrix().addNotifier([this]() {
-                m_transformMatrix = TransformUpdater->matrix();
-                update();
-            });
-        }
-
-        // StationView->setTransformUpdater(TransformUpdater);
-        // LeadView->setTransformUpdater(TransformUpdater);
-        // OutlinePointView->setTransformUpdater(TransformUpdater);
-
-        emit transformUpdaterChanged();
-        update();
-    }
+void cwScrapItem::setZoom(double zoom)
+{
+    m_zoom = zoom;
+    update();
 }
+
+
+// /**
+// Sets transformUpdater
+// */
+// void cwScrapItem::setTransformUpdater(cwTransformItemUpdater* transformUpdater) {
+//     if(TransformUpdater != transformUpdater) {
+
+//         if(TransformUpdater != nullptr) {
+//             m_matrixChanged = QPropertyNotifier();
+//             // disconnect(TransformUpdater, &cwTransformItemUpdater::matrixChanged, this, &cwScrapItem::update);
+//         }
+
+//         TransformUpdater = transformUpdater;
+
+//         if(TransformUpdater != nullptr) {
+//             m_matrixChanged = TransformUpdater->bindableMatrix().addNotifier([this]() {
+//                 m_transformMatrix = TransformUpdater->matrix();
+//                 update();
+//             });
+//         }
+
+//         // StationView->setTransformUpdater(TransformUpdater);
+//         // LeadView->setTransformUpdater(TransformUpdater);
+//         // OutlinePointView->setTransformUpdater(TransformUpdater);
+
+//         emit transformUpdaterChanged();
+//         update();
+//     }
+// }
 
 /**
 Sets selectionManager
@@ -238,3 +264,10 @@ void cwScrapItem::setSelectionManager(cwSelectionManager* selectionManager) {
         emit selectionManagerChanged();
     }
 }
+
+QPointF cwScrapItem::toNoteCoordinates(QPointF imageCoordinates) const
+{
+    return cwScrapView::toNormalized(Scrap->parentNote()).map(imageCoordinates);
+}
+
+

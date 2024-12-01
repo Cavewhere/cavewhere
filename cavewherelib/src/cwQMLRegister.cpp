@@ -69,7 +69,7 @@ cwQMLRegister::cwQMLRegister()
     // qmlRegisterType<cwLength>("Cavewhere", 1, 0, "Length");
     // qmlRegisterType<cwInteraction>("Cavewhere", 1, 0, "Interaction");
     // qmlRegisterType<cwNorthArrowItem>("Cavewhere", 1, 0, "NorthArrowItem");
-    // qmlRegisterType<cwPositioner3D>("Cavewhere", 1, 0, "Positioner3D");
+    // qmlRegisterType<cwBasePositioner>("Cavewhere", 1, 0, "BasePositioner");
     // qmlRegisterAnonymousType<cwAbstract2PointItem>("Cavewhere", 1);
     // qmlRegisterType<cwScaleLengthItem>("Cavewhere", 1 ,0, "ScaleLengthItem");
     // qmlRegisterType<cwImageProperties>("Cavewhere", 1, 0, "ImageProperties");

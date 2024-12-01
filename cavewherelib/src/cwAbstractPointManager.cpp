@@ -17,12 +17,21 @@
 
 cwAbstractPointManager::cwAbstractPointManager(QQuickItem *parent) :
     QQuickItem(parent),
-    TransformUpdater(nullptr),
-    ItemComponent(nullptr),
-    SelectionManager(nullptr),
-    SelectedItemIndex(-1)
+    // TransformUpdater(nullptr),
+    m_itemComponent(nullptr),
+    m_selectionManager(nullptr),
+    m_selectedItemIndex(-1)
 {
-
+    //Update the parent of the all the items so the scale and rotations
+    //work correctly.
+    connect(this, &cwAbstractPointManager::parentChanged,
+            this, [this]()
+            {
+                for(auto item : std::as_const(m_items)) {
+                    item->setParentItem(parentItem());
+                    qDebug() << "Updating parent for item:" << item << item->parentItem();
+                }
+            });
 }
 
 /**
@@ -30,44 +39,44 @@ cwAbstractPointManager::cwAbstractPointManager(QQuickItem *parent) :
 
   This will transform all the station in this station view
   */
-void cwAbstractPointManager::setTransformUpdater(cwTransformItemUpdater* updater) {
-    if(TransformUpdater != updater) {
-        if(TransformUpdater != nullptr) {
-            //Remove all previous stations
-            foreach(cwPositioner3D* item, Items) {
-                TransformUpdater->removeChildItem(item);
-            }
-        }
+// void cwAbstractPointManager::setTransformUpdater(cwTransformItemUpdater* updater) {
+//     if(TransformUpdater != updater) {
+//         if(TransformUpdater != nullptr) {
+//             //Remove all previous stations
+//             foreach(cwBasePositioner* item, Items) {
+//                 TransformUpdater->removeChildItem(item);
+//             }
+//         }
 
-        TransformUpdater = updater;
+//         TransformUpdater = updater;
 
-        if(TransformUpdater != nullptr) {
-            //Add station to the new transformUpdater
+//         if(TransformUpdater != nullptr) {
+//             //Add station to the new transformUpdater
 
-            foreach(cwPositioner3D* item, Items) {
-                TransformUpdater->addChildItem(item);
-            }
-        }
+//             foreach(cwBasePositioner* item, Items) {
+//                 TransformUpdater->addChildItem(item);
+//             }
+//         }
 
-        emit transformUpdaterChanged();
-    }
-}
+//         emit transformUpdaterChanged();
+//     }
+// }
 
 /**
   This creates the station component used generate the station symobols
   */
 void cwAbstractPointManager::createComponent() {
     //Make sure we have a note component so we can create it
-    if(ItemComponent == nullptr) {
+    if(m_itemComponent == nullptr) {
         QQmlContext* context = QQmlEngine::contextForObject(this);
         if(context == nullptr) {
             qDebug() << "Context is nullptr, did you forget to set the context? THIS IS A BUG" << LOCATION;
             return;
         }
 
-        ItemComponent = new QQmlComponent(context->engine(), qmlSource(), this);
-        if(ItemComponent->isError()) {
-            qDebug() << "Point errors:" << ItemComponent->errorString();
+        m_itemComponent = new QQmlComponent(context->engine(), qmlSource(), this);
+        if(m_itemComponent->isError()) {
+            qDebug() << "Point errors:" << m_itemComponent->errorString();
         }
     }
 }
@@ -77,27 +86,35 @@ void cwAbstractPointManager::createComponent() {
 
     Returns a valid item if the item was create okay, and nullptr if it failed to be created
 */
-cwPositioner3D *cwAbstractPointManager::createItem() {
+QQuickItem *cwAbstractPointManager::createItem() {
 
-    if(ItemComponent == nullptr) {
+    if(m_itemComponent == nullptr) {
         qDebug() << "ItemComponent hasn't been created, call createComponent(). THIS IS A BUG" << LOCATION;
         return nullptr;
     }
 
     QQmlContext* context = QQmlEngine::contextForObject(this);
-    cwPositioner3D* item = qobject_cast<cwPositioner3D*>(ItemComponent->create(context));
+    QQuickItem* item = qobject_cast<QQuickItem*>(m_itemComponent->create(context));
     if(item == nullptr) {
         qDebug() << "Problem creating new point item ... " << qmlSource() << "Didn't compile. THIS IS A BUG!" << LOCATION;
-        qDebug() << "Compiling errors:" << ItemComponent->errorString();
+        qDebug() << "Compiling errors:" << m_itemComponent->errorString();
         return nullptr;
     }
 
+    //Reparent the item so the reverse transform works correctly
+    //This will keep the item's size and rotation consistent
+    item->setParentItem(parentItem());
+
+    // if(m_pointParentItem) {
+    //     item->setParentItem(m_pointParentItem);
+    // }
+
     //Add the point to the transform updater
-    if(TransformUpdater != nullptr) {
-        TransformUpdater->addChildItem(item);
-    } else {
-        qDebug() << "No transformUpdater, point's won't be positioned correctly, this is a bug" << LOCATION;
-    }
+    // if(TransformUpdater != nullptr) {
+    //     TransformUpdater->addChildItem(item);
+    // } else {
+    //     qDebug() << "No transformUpdater, point's won't be positioned correctly, this is a bug" << LOCATION;
+    // }
 
     return item;
 }
@@ -106,7 +123,7 @@ cwPositioner3D *cwAbstractPointManager::createItem() {
   Called when a point has been added
   */
 void cwAbstractPointManager::pointAdded() {
-    int lastIndex = Items.size();
+    int lastIndex = m_items.size();
     pointsInserted(lastIndex, lastIndex);
 }
 
@@ -132,7 +149,7 @@ void cwAbstractPointManager::pointsInserted(int begin, int end)
         auto item = createItem();
 
         if(item != nullptr) {
-            Items.insert(i, item);
+            m_items.insert(i, item);
             privateUpdateItemData(item, i);
         } else {
             qDebug() << "Can't insert. Item is nullptr. THIS IS A BUG" << LOCATION;
@@ -141,8 +158,8 @@ void cwAbstractPointManager::pointsInserted(int begin, int end)
     }
 
     //Update indices for all items after end
-    for(int i = end + 1; i < Items.size(); i++) {
-        privateUpdateItemData(Items.at(i), i);
+    for(int i = end + 1; i < m_items.size(); i++) {
+        privateUpdateItemData(m_items.at(i), i);
     }
 }
 
@@ -155,10 +172,10 @@ void cwAbstractPointManager::pointsInserted(int begin, int end)
  */
 void cwAbstractPointManager::pointsRemoved(int begin, int end)
 {
-    if(Items.isEmpty()) { return; }
+    if(m_items.isEmpty()) { return; }
     if(begin > end) { return; }
     if(begin < 0) { return; }
-    if(end >= Items.size()) { return; }
+    if(end >= m_items.size()) { return; }
 
     for(int index = end; index >= begin; index--) {
         //Unselect the item that's going to be deleted
@@ -167,8 +184,8 @@ void cwAbstractPointManager::pointsRemoved(int begin, int end)
             clearSelection();
         }
 
-        Items[index]->deleteLater();
-        Items.removeAt(index);
+        m_items[index]->deleteLater();
+        m_items.removeAt(index);
     }
 
     updateAllItemData();
@@ -211,22 +228,22 @@ void cwAbstractPointManager::resizeNumberOfItems(int numberOfPoints)
     //Make sure we have a note component so we can create it
     createComponent();
 
-    if(Items.size() < numberOfPoints) {
-        int notesToAdd = numberOfPoints - Items.size();
+    if(m_items.size() < numberOfPoints) {
+        int notesToAdd = numberOfPoints - m_items.size();
         //Add more stations to the NoteStations
         for(int i = 0; i < notesToAdd; i++) {
             auto item = createItem();
-            Items.append(item);
+            m_items.append(item);
         }
 
-    } else if(Items.size() > numberOfPoints) {
+    } else if(m_items.size() > numberOfPoints) {
         //Remove stations from NoteStations
-        int notesToRemove = Items.size() - numberOfPoints;
+        int notesToRemove = m_items.size() - numberOfPoints;
 
         //Remove stations to the NoteStations
         for(int i = 0; i < notesToRemove; i++) {
-            auto deleteStation = Items.last();
-            Items.removeLast();
+            auto deleteStation = m_items.last();
+            m_items.removeLast();
             deleteStation->deleteLater();
         }
     }
@@ -241,8 +258,8 @@ void cwAbstractPointManager::resizeNumberOfItems(int numberOfPoints)
 void cwAbstractPointManager::updateAllItemData()
 {
     //Update all the station data
-    for(int i = 0; i < Items.size(); i++) {
-        privateUpdateItemData(Items.at(i), i);
+    for(int i = 0; i < m_items.size(); i++) {
+        privateUpdateItemData(m_items.at(i), i);
     }
 }
 
@@ -251,17 +268,17 @@ void cwAbstractPointManager::updateAllItemData()
  * @param selectedIndex - The item that should be selected. Set to -1 to deselect the current item
  */
 void cwAbstractPointManager::setSelectedItemIndex(int selectedIndex) {
-    if(SelectedItemIndex != selectedIndex) {
-        if(selectedIndex >= Items.size()) {
+    if(m_selectedItemIndex != selectedIndex) {
+        if(selectedIndex >= m_items.size()) {
             qDebug() << "Selected station index invalid" << selectedIndex << LOCATION;
             return;
         }
 
-        SelectedItemIndex = selectedIndex;
+        m_selectedItemIndex = selectedIndex;
 
         //Select the new station item
         if(selectedIndex >= 0) {
-            QQuickItem* newItem = Items.at(selectedIndex);
+            QQuickItem* newItem = m_items.at(selectedIndex);
             if(selectionManager() != nullptr) {
                 selectionManager()->setSelectedItem(newItem);
             } else {
@@ -281,8 +298,8 @@ void cwAbstractPointManager::setSelectedItemIndex(int selectedIndex) {
   If there's no select station item, this will return null
   */
 QQuickItem* cwAbstractPointManager::selectedItem() const {
-    if(SelectedItemIndex >= 0 && SelectedItemIndex < Items.size()) {
-        QQuickItem* item = Items.at(SelectedItemIndex);
+    if(m_selectedItemIndex >= 0 && m_selectedItemIndex < m_items.size()) {
+        QQuickItem* item = m_items.at(m_selectedItemIndex);
         if(selectionManager() != nullptr) {
             if(selectionManager()->isSelected(item)) {
                 return item;
@@ -296,9 +313,9 @@ QQuickItem* cwAbstractPointManager::selectedItem() const {
  * @brief cwAbstractPointManager::items
  * @return - Returns a list of all the items in the point manager
  */
-QList<cwPositioner3D *> cwAbstractPointManager::items() const
+QList<QQuickItem *> cwAbstractPointManager::items() const
 {
-    return Items;
+    return m_items;
 }
 
 /**
@@ -306,8 +323,8 @@ QList<cwPositioner3D *> cwAbstractPointManager::items() const
      * @param index - The index that needs to be updated
      */
 void cwAbstractPointManager::privateUpdateItemPosition(int index) {
-    if(index >= 0 && index < Items.size()) {
-        updateItemPosition(Items.at(index), index);
+    if(index >= 0 && index < m_items.size()) {
+        updateItemPosition(m_items.at(index), index);
     }
 }
 
@@ -327,10 +344,10 @@ void cwAbstractPointManager::privateUpdateItemData(QQuickItem* item, int index)
     item->setProperty("pointIndex", index);
     item->setProperty("parentView", QVariant::fromValue(this));
 
-    if(item->parentItem() != this) {
-        item->setParentItem(this);
-        item->setParent(this);
-    }
+    // if(item->parentItem() != this) {
+    //     item->setParentItem(this);
+    //     item->setParent(this);
+    // }
 
     updateItemData(item, index);
     privateUpdateItemPosition(index);
@@ -340,19 +357,30 @@ void cwAbstractPointManager::privateUpdateItemData(QQuickItem* item, int index)
 Sets selectionManager
 */
 void cwAbstractPointManager::setSelectionManager(cwSelectionManager* selectionManager) {
-    if(SelectionManager != selectionManager) {
+    if(m_selectionManager != selectionManager) {
 
-        if(SelectionManager != nullptr) {
-            disconnect(SelectionManager, &cwSelectionManager::selectedItemChanged, this, &cwAbstractPointManager::updateSelection);
+        if(m_selectionManager != nullptr) {
+            disconnect(m_selectionManager, &cwSelectionManager::selectedItemChanged, this, &cwAbstractPointManager::updateSelection);
         }
 
-        SelectionManager = selectionManager;
+        m_selectionManager = selectionManager;
 
-        if(SelectionManager != nullptr) {
-            connect(SelectionManager, &cwSelectionManager::selectedItemChanged, this, &cwAbstractPointManager::updateSelection);
+        if(m_selectionManager != nullptr) {
+            connect(m_selectionManager, &cwSelectionManager::selectedItemChanged, this, &cwAbstractPointManager::updateSelection);
         }
 
         emit selectionManagerChanged();
     }
 }
 
+// void cwAbstractPointManager::setPointParentItem(QQuickItem* parentItem) {
+//     if (m_pointParentItem != parentItem) {
+//         m_pointParentItem = parentItem;
+
+//         for(auto item : std::as_const(m_items)) {
+//             item->setParentItem(m_pointParentItem);
+//         }
+
+//         emit pointParentItemChanged();
+//     }
+// }

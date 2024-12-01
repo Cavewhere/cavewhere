@@ -5,6 +5,8 @@
 **
 **************************************************************************/
 
+pragma ComponentBehavior: Bound
+
 import QtQuick as QQ
 import cavewherelib
 
@@ -12,7 +14,7 @@ ImageItem {
     id: noteArea
 
     property Note note;
-    property alias scrapsVisible: scrapViewId.visible
+    property bool scrapsVisible: false
     // property bool scrapsVisible: false
 
     imageRotation: note ? note.rotate : 0
@@ -21,12 +23,14 @@ ImageItem {
     clip: true
 
 
-    // PanZoomInteraction {
-    //     id: panZoomInteraction
-    //     anchors.fill: parent
-    //     camera: cameraId
-    //     enabled: false
-    // }
+    PanZoomInteraction {
+        id: panZoomInteraction
+        // anchors.fill: parent
+        // camera: cameraId
+        // enabled: false
+        target: noteArea.targetItem
+        // persistentScale:
+    }
 
     // ScrapInteraction {
     //     id: addScrapInteraction
@@ -65,13 +69,23 @@ ImageItem {
     //     imageItem: noteArea
     // }
 
-    // NoteItemSelectionInteraction {
-    //     id: noteSelectionInteraction
-    //     anchors.fill: parent
-    //     scrapView: scrapViewId
-    //     imageItem: noteArea
-    //     basePanZoomInteraction: panZoomInteraction
-    // }
+    NoteItemSelectionInteraction {
+        id: noteSelectionInteraction
+        // anchors.fill: parent
+        target: noteArea.targetItem
+        scrapView: scrapViewId
+        imageItem: noteArea
+        // basePanZoomInteraction: panZoomInteraction
+        // onActivated: {
+        //     console.log("Note selection interaction activated!")
+        // }
+
+        QQ.Rectangle {
+            anchors.fill: parent
+            color: "red"
+            opacity: 0
+        }
+    }
 
     // NoteNorthInteraction {
     //     id: noteNorthUpInteraction
@@ -102,40 +116,43 @@ ImageItem {
     //     z:1
     // }
 
-    // InteractionManager {
-    //     id: interactionManagerId
-    //     interactions: [
-    //         panZoomInteraction,
-    //         addScrapInteraction,
-    //         addStationInteraction,
-    //         addLeadInteraction,
-    //         noteSelectionInteraction,
-    //         noteNorthUpInteraction,
-    //         noteScaleInteraction,
-    //         noteDPIInteraction
-    //     ]
-    //     defaultInteraction: panZoomInteraction
+    InteractionManager {
+        id: interactionManagerId
+        interactions: [
+            panZoomInteraction,
+            // addScrapInteraction,
+            // addStationInteraction,
+            // addLeadInteraction,
+            noteSelectionInteraction,
+            // noteNorthUpInteraction,
+            // noteScaleInteraction,
+            // noteDPIInteraction
+        ]
+        defaultInteraction: panZoomInteraction
+        // defaultInteraction: noteSelectionInteraction
 
-    //     onActiveInteractionChanged: {
-    //         if(activeInteraction == defaultInteraction) {
-    //             switch(noteArea.state) {
-    //             case "ADD-SCRAP":
-    //                 addScrapInteraction.activate();
-    //                 break;
-    //             case "ADD-STATION":
-    //                 addStationInteraction.activate();
-    //                 break;
-    //             case "ADD-LEAD":
-    //                 addLeadInteraction.activate();
-    //                 break;
-    //             case "SELECT":
-    //                 noteSelectionInteraction.activate();
-    //                 break;
-    //             }
-    //         }
-    //     }
+        // onActiveInteractionChanged: {
+        //     console.log("Active interaction:" + noteArea.state)
+        //     if(activeInteraction == defaultInteraction) {
+        //         switch(noteArea.state) {
+        //         case "ADD-SCRAP":
+        //             // addScrapInteraction.activate();
+        //             break;
+        //         case "ADD-STATION":
+        //             // addStationInteraction.activate();
+        //             break;
+        //         case "ADD-LEAD":
+        //             // addLeadInteraction.activate();
+        //             break;
+        //         case "SELECT":
+        //             console.log("Note selection interaction!")
+        //             noteSelectionInteraction.activate();
+        //             break;
+        //         }
+        //     }
+        // }
 
-    // }
+    }
 
     // //This allows note coordinates to be mapped to opengl coordinates
     // TransformUpdater {
@@ -144,75 +161,73 @@ ImageItem {
     //     modelMatrix: noteArea.modelMatrix
     // }
 
-    TransformItemUpdater {
-        id: transformUpdaterId
-        watchTransformItem: noteArea.transformItem
-        targetItem: noteArea.targetItem
-    }
+    // TransformItemUpdater {
+    //     id: transformUpdaterId
+    //     watchTransformItem: noteArea.transformItem
+    //     targetItem: noteArea.targetItem
+    // }
 
-    component PositionRectangle : Positioner3D {
+    component PositionRectangle : Positioner {
         id: posId
-        // onXChanged: {
-        //     console.log("X changed:" + x + " " + y)
-        // }
-
+        parent: noteArea.targetItem
         QQ.Rectangle {
             color: "green"
             width: 5
             height: width
+            anchors.centerIn: parent
+
+            onScaleChanged: {
+                console.log("Scale changed:" + scale)
+            }
 
             Text {
-                text: "(" + posId.position3D.x + ", " + posId.position3D.y + ")"
+                text: "(" + posId.x + ", " + posId.y + ")"
             }
         }
-
     }
 
     PositionRectangle {
         id: rectId0
+        parent: noteArea.targetItem
 
-        QQ.Component.onCompleted: {
-            transformUpdaterId.addChildItem(rectId0)
-        }
     }
-
     PositionRectangle {
         id: rectId1
-        position3D: Qt.vector3d(0.0, 1.0, 0.0);
-
-        QQ.Component.onCompleted: {
-            transformUpdaterId.addChildItem(rectId1)
-        }
+        x: 500
+        y: 500
+        parent: noteArea.targetItem
     }
 
     PositionRectangle {
         id: rectId2
-        position3D: Qt.vector3d(1.0, 0.0, 0.0);
-
-        QQ.Component.onCompleted: {
-            transformUpdaterId.addChildItem(rectId2)
-        }
+        x: 1000
+        y: 500
+        parent: noteArea.targetItem
     }
 
-    PositionRectangle {
-        id: rectId3
-        position3D: Qt.vector3d(1.0, 1.0, 0.0);
+    // PositionRectangle {
+    //     id: rectId1
+    //     position3D: Qt.vector3d(0.0, 1.0, 0.0);
 
-        QQ.Component.onCompleted: {
-            transformUpdaterId.addChildItem(rectId3)
-        }
-    }
+    // }
 
-    PositionRectangle {
-        id: rectId4
-        position3D: Qt.vector3d(0.5, 0.5, 0.0);
+    // PositionRectangle {
+    //     id: rectId2
+    //     position3D: Qt.vector3d(1.0, 0.0, 0.0);
 
-        QQ.Component.onCompleted: {
-            transformUpdaterId.addChildItem(rectId4)
-        }
-    }
+    // }
 
+    // PositionRectangle {
+    //     id: rectId3
+    //     position3D: Qt.vector3d(1.0, 1.0, 0.0);
 
+    // }
+
+    // PositionRectangle {
+    //     id: rectId4
+    //     position3D: Qt.vector3d(0.5, 0.5, 0.0);
+
+    // }
 
 
     // QQ.Column {
@@ -255,80 +270,88 @@ ImageItem {
         parent: noteArea.targetItem
         note: noteArea.note
 
-        transformUpdater: transformUpdaterId
+        zoom: noteArea.targetItem.scale
+        // transformUpdater: transformUpdaterId
+        visible: noteArea.scrapsVisible
+                 && noteArea.targetItem.status == QQ.Image.Ready //Only load when image is down
         onVisibleChanged: {
             console.log("ScrapView:" + scrapViewId.visible)
         }
     }
 
-    ScrapStationView {
-        transformUpdater: transformUpdaterId
-        scrap: scrapViewId.selectedScrapItem ? scrapViewId.selectedScrapItem.scrap : null
+    // ScrapStationView {
+    //     transformUpdater: transformUpdaterId
+    //     scrap: scrapViewId.selectedScrapItem ? scrapViewId.selectedScrapItem.scrap : null
 
+    // }
+
+    states: [
+        QQ.State {
+            name: "ADD-STATION"
+        },
+
+        QQ.State {
+            name: "ADD-SCRAP"
+        },
+
+        QQ.State {
+            name: "ADD-LEAD"
+        },
+
+        QQ.State {
+            name: "SELECT"
+        }
+    ]
+
+    onStateChanged: {
+        console.log("State changed note:" + state)
     }
 
-    // states: [
-    //     QQ.State {
-    //         name: "ADD-STATION"
-    //     },
+    transitions: [
+        //  QQ.Transition {
+        //     to: "ADD-SCRAP"
+        //     QQ.ScriptAction {
+        //         script: {
+        //             interactionManagerId.active(addScrapInteraction)
+        //             addScrapInteraction.startNewScrap()
+        //         }
+        //     }
+        // },
 
-    //     QQ.State {
-    //         name: "ADD-SCRAP"
-    //     },
+        //  QQ.Transition {
+        //     to: "ADD-STATION"
+        //     QQ.ScriptAction {
+        //         script: interactionManagerId.active(addStationInteraction)
+        //     }
+        // },
 
-    //     QQ.State {
-    //         name: "ADD-LEAD"
-    //     },
+        //  QQ.Transition {
+        //     to: "ADD-LEAD"
+        //     QQ.ScriptAction {
+        //         script: interactionManagerId.active(addLeadInteraction)
+        //     }
+        // },
 
-    //     QQ.State {
-    //         name: "SELECT"
-    //     }
-    // ]
+         QQ.Transition {
+            to: ""
+            QQ.ScriptAction {
+                script: {
+                    scrapViewId.clearSelection();
+                    interactionManagerId.active(panZoomInteraction)
+                }
+            }
+        },
 
-    // transitions: [
-    //      QQ.Transition {
-    //         to: "ADD-SCRAP"
-    //         QQ.ScriptAction {
-    //             script: {
-    //                 interactionManagerId.active(addScrapInteraction)
-    //                 addScrapInteraction.startNewScrap()
-    //             }
-    //         }
-    //     },
+         QQ.Transition {
+            to: "SELECT"
+            QQ.ScriptAction {
+                script: {
+                    console.log("SELECT transition!")
+                    interactionManagerId.active(noteSelectionInteraction)
+                }
+            }
+        }
 
-    //      QQ.Transition {
-    //         to: "ADD-STATION"
-    //         QQ.ScriptAction {
-    //             script: interactionManagerId.active(addStationInteraction)
-    //         }
-    //     },
-
-    //      QQ.Transition {
-    //         to: "ADD-LEAD"
-    //         QQ.ScriptAction {
-    //             script: interactionManagerId.active(addLeadInteraction)
-    //         }
-    //     },
-
-    //      QQ.Transition {
-    //         to: ""
-    //         QQ.ScriptAction {
-    //             script: {
-    //                 scrapViewId.clearSelection();
-    //                 interactionManagerId.active(panZoomInteraction)
-    //             }
-    //         }
-    //     },
-
-    //      QQ.Transition {
-    //         to: "SELECT"
-    //         QQ.ScriptAction {
-    //             script: {
-    //                 interactionManagerId.active(noteSelectionInteraction)
-    //             }
-    //         }
-    //     }
-
-    // ]
+    ]
 
 }

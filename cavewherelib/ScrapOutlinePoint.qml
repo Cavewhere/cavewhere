@@ -27,15 +27,15 @@ ScrapPointItem {
     }
 
     QQ.Keys.onPressed: (event) => {
-        if(event.key === Qt.Key_Backspace) {
-            scrap.removePoint(pointIndex);
-        }
-    }
+                           if(event.key === Qt.Key_Backspace) {
+                               scrap.removePoint(pointIndex);
+                           }
+                       }
 
     QQ.Rectangle {
         id: pointGeometry
-        width: 9
-        height: 9
+        width: 10
+        height: width
 
         anchors.centerIn: parent
 
@@ -52,16 +52,17 @@ ScrapPointItem {
             onPointSelected: {
                 scrapPointItem.select()
 
-                if(scrapPointItem.pointIndex === 0)
-                {
+                if(scrapPointItem.pointIndex === 0) {
                     //Close the scrap
                     scrapPointItem.scrap.close()
                 }
             }
 
-            onPointMoved: (noteCoord) => scrapPointItem.scrap.setPoint(scrapPointItem.pointIndex,
-                                                                       Qt.point(noteCoord.x, noteCoord.y))
+            onPointMoved: (noteCoord) => {
+                              let notePoint = scrapPointItem.scrapItem.toNoteCoordinates(Qt.point(noteCoord.x, noteCoord.y))
+                              scrapPointItem.scrap.setPoint(scrapPointItem.pointIndex,
+                                                            notePoint)
+                          }
         }
     }
-
 }
