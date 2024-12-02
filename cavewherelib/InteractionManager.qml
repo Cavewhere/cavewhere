@@ -27,6 +27,7 @@ QQ.Item {
 
         interaction.visible = true;
         interaction.enabled = true;
+        interaction.forceActiveFocus();
         activeInteraction = interaction
     }
 

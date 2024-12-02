@@ -23,8 +23,11 @@ public:
 
 private:
     float m_lineWidth;
-    QVector<QLineF> m_lines;
-    QVector<QPointF> m_lineStripPoints;
+    // QVector<QLineF> m_lines;
+    // QVector<QPointF> m_lineStripPoints;
+    QVector<QVector<QPointF>> m_lines;
+
+    void setLineStrips(const QVector<QVector<QPointF>>& lines);
 };
 
 /**

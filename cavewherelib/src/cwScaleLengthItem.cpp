@@ -30,12 +30,14 @@ QSGNode *cwScaleLengthItem::updatePaintNode(QSGNode *oldNode, QQuickItem::Update
         oldNode->appendChildNode(LinesNode);
     }
 
-    if(transformUpdater()) {
-        QSGTransformNode* transformNode = static_cast<QSGTransformNode*>(oldNode);
-        transformNode->setMatrix(transformUpdater()->matrix());
-    }
+    // if(transformUpdater()) {
+    //     QSGTransformNode* transformNode = static_cast<QSGTransformNode*>(oldNode);
+    //     transformNode->setMatrix(transformUpdater()->matrix());
+    // }
 
 
+    qDebug() << "Set lines:" << Lines;
+    LinesNode->setLineWidth(10.0);
     LinesNode->setLines(Lines);
 
     return oldNode;

@@ -40,6 +40,7 @@ PanZoomInteraction {
     QQ.TapHandler {
         id: pressId
         target: interaction.target
+        parent: interaction.target
         onTapped: (eventPoint, button) => {
                       interaction.firstMouseLocation = eventPoint.position
                       scaleLengthItem.p1 = eventPoint.position
@@ -47,6 +48,17 @@ PanZoomInteraction {
                       interaction.state = "WaitForSecondClick"
                       scaleLengthItem.visible = true;
                   }
+    }
+
+    QQ.HoverHandler {
+        id: hoverId
+        enabled: false
+        target: interaction.target
+        parent: interaction.target
+        onPointChanged: {
+            scaleLengthItem.p2 = hoverId.point.position
+            // console.log("Mouse moved:" + hoverId.point.position)
+        }
     }
 
     // PanZoomPitchArea {
@@ -170,6 +182,10 @@ PanZoomInteraction {
                                     interaction.secondMouseLocation = eventPoint.position
                                     interaction.state = "WaitForDone"
                     }
+                }
+
+                hoverId {
+                    enabled: true
                 }
 
                 // mouseAreaId {
