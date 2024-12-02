@@ -202,7 +202,7 @@ ScrollViewPage {
 
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 font.family: csvTextAreaId.font.family
-                                font.pointSize: csvTextAreaId.font.pointSize
+                                font.pixelSize: csvTextAreaId.font.pixelSize
                                 text: index + 1
                                 color: "grey"
                             }

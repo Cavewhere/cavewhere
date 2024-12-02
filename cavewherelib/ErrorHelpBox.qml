@@ -9,6 +9,6 @@
 import "Theme.js" as Theme
 
 HelpBox {
-    font.pointSize: 14
+    font.pixelSize: 14
     color: Theme.errorBackground
 }

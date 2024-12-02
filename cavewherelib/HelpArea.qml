@@ -12,7 +12,7 @@ QQ.Rectangle {
     id: helpArea
 
     property alias text: helpText.text
-    property alias pointSize: helpText.font.pointSize
+    property alias pixelSize: helpText.font.pixelSize
     property alias imageSource: icon.source
     property alias helpImageSource: helpImageId.source
     property bool animationToVisible: true

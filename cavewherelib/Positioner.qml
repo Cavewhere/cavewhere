@@ -7,7 +7,7 @@ Item {
 
     Item {
         id: contentId
-        scale: 1.0 / positioner.parent.scale
-        rotation: -positioner.parent.rotation
+        scale: positioner.parent ? 1.0 / positioner.parent.scale : 1.0
+        rotation: positioner.parent ? -positioner.parent.rotation : 0.0
     }
 }

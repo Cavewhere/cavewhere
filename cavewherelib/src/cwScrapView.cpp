@@ -115,9 +115,7 @@ QList<cwScrapItem*> cwScrapView::scrapItemsAt(QPointF notePoint) {
     QList<cwScrapItem*> items;
     foreach(cwScrapItem* scrapItem, m_scrapItems) {
         QPolygonF polygon(scrapItem->scrap()->points());
-        qDebug() << "Note:" << scrapItem->scrap() << notePoint;
         if(polygon.containsPoint(notePoint, Qt::OddEvenFill)) {
-            qDebug() << "\tScrap added:" << scrapItem->scrap();
             items.append(scrapItem);
         }
     }
@@ -261,7 +259,6 @@ void cwScrapView::setSelectScrapIndex(int selectScrapIndex) {
 
         if(selectScrapIndex >= 0) {
             cwScrapItem* newScrapItem = m_scrapItems.at(selectScrapIndex);
-            qDebug() << "\tSelecting:" << newScrapItem;
             newScrapItem->setSelected(true);
         }
 

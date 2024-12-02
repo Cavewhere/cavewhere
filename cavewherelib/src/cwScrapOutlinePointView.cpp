@@ -45,10 +45,7 @@ void cwScrapOutlinePointView::updateItemPosition(QQuickItem *item, int pointInde
 {
     QPointF point = Scrap->points().at(pointIndex);
     QPointF imagePoint = cwScrapView::toImage(Scrap->parentNote()).map(point);
-    qDebug() << "Set point:" << item << pointIndex << imagePoint;
     item->setPosition(imagePoint);
-
-    // item->setProperty("position3D", QVector3D(point));
 }
 
 

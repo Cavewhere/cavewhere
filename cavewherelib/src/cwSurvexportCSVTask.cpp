@@ -35,17 +35,19 @@ void cwSurvexportCSVTask::runTask() {
 
     StationPositions.clearStations();
 
-    QFile csvFile(CSVFileName);
-    bool okay = csvFile.open(QFile::ReadOnly);
-    if(okay) {
-        //Skip header
-        csvFile.readLine();
-        for(int lineNumber = 1; !csvFile.atEnd(); lineNumber++) {
-            try {
-                QString line = csvFile.readLine();
-                parseCSVLine(line);
-            } catch (std::runtime_error error) {
-                qWarning() << "Issue while parsing survexport csv file:" << CSVFileName << " line:" << lineNumber << error.what();
+    if(!CSVFileName.isEmpty() && QFileInfo::exists(CSVFileName)) {
+        QFile csvFile(CSVFileName);
+        bool okay = csvFile.open(QFile::ReadOnly);
+        if(okay) {
+            //Skip header
+            csvFile.readLine();
+            for(int lineNumber = 1; !csvFile.atEnd(); lineNumber++) {
+                try {
+                    QString line = csvFile.readLine();
+                    parseCSVLine(line);
+                } catch (std::runtime_error error) {
+                    qWarning() << "Issue while parsing survexport csv file:" << CSVFileName << " line:" << lineNumber << error.what();
+                }
             }
         }
     }

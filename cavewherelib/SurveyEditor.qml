@@ -80,7 +80,7 @@ QQ.Item {
                             anchors.margins: 3
                             icon.source: "qrc:/twbs-icons/icons/chevron-left.svg"
                             icon.width: 16
-                            icon.height: icon.width
+                            icon.height: 16
                             onClicked:  clipArea.collapseClicked()
                         }
                     }

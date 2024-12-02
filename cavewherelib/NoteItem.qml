@@ -19,7 +19,7 @@ ImageItem {
     // property bool scrapsVisible: false
 
     imageRotation: note ? note.rotate : 0
-    source: RootData.cavewhereImageUrl(note.original)
+    source: note ? RootData.cavewhereImageUrl(note.original) : ""
 
     clip: true
 
@@ -240,10 +240,7 @@ ImageItem {
         zoom: noteArea.targetItem.scale
         // transformUpdater: transformUpdaterId
         visible: noteArea.scrapsVisible
-                 && noteArea.targetItem.status == QQ.Image.Ready //Only load when image is down
-        onVisibleChanged: {
-            console.log("ScrapView:" + scrapViewId.visible)
-        }
+                // && noteArea.targetItem.status === QQ.Image.Ready //Only load when image is down
     }
 
     // ScrapStationView {

@@ -32,8 +32,6 @@ Interaction {
         // Choose the smaller scale factor to ensure the image fits within the item
         target.scale = Math.min(scaleX, scaleY);
         pinchHandlerId.persistentScale = target.scale
-
-            console.log("Target scale:" + target.scale)
     }
 
             QQ.Connections {

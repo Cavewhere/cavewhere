@@ -79,7 +79,6 @@ void cwScrapItem::initilize(QQmlContext *context)
     OutlinePointView->setParentItem(parentItem());
 
     connect(this, &cwScrapItem::parentChanged, this, [this]() {
-        qDebug() << "Updating parent in cwScrapItem:" << parentItem();
         StationView->setParentItem(parentItem());
         LeadView->setParentItem(parentItem());
         OutlinePointView->setParentItem(parentItem());
@@ -206,7 +205,6 @@ void cwScrapItem::updatePoints()
 Sets the scrap item as the selected scrap
 */
 void cwScrapItem::setSelected(bool selected) {
-    qDebug() << "ScrapItem:" << this << selected;
     if(Selected != selected) {
         Selected = selected;
         emit selectedChanged();

@@ -29,19 +29,14 @@ class cwAbstractPointManager : public QQuickItem
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(AbstractPointManager)
+    QML_UNCREATABLE("AbstractPointManager is a abstract class")
 
-    // Q_PROPERTY(cwTransformItemUpdater* transformUpdater READ transformUpdater WRITE setTransformUpdater NOTIFY transformUpdaterChanged)
     Q_PROPERTY(int selectedItemIndex READ selectedItemIndex WRITE setSelectedItemIndex NOTIFY selectedItemIndexChanged)
     Q_PROPERTY(cwSelectionManager* selectionManager READ selectionManager WRITE setSelectionManager NOTIFY selectionManagerChanged)
-    // Q_PROPERTY(QQuickItem* pointParentItem READ pointParentItem WRITE setPointParentItem NOTIFY pointParentItemChanged)
-
 
 public:
     explicit cwAbstractPointManager(QQuickItem *parent = 0);
     
-    // cwTransformItemUpdater* transformUpdater() const;
-    // void setTransformUpdater(cwTransformItemUpdater* updater);
-
     void clearSelection();
     int selectedItemIndex() const;
     void setSelectedItemIndex(int selectedItemIndex);
@@ -51,10 +46,6 @@ public:
 
     cwSelectionManager* selectionManager() const;
     void setSelectionManager(cwSelectionManager* selectionManager);
-
-    // QQuickItem* pointParentItem() const;
-    // void setPointParentItem(QQuickItem* parentItem);
-
 
 signals:
     // void transformUpdaterChanged();
@@ -82,9 +73,6 @@ private slots:
     void updateSelection();
 
 private:
-    //Will keep the note stations at the correct location
-    // cwTransformItemUpdater* TransformUpdater;
-
     //The new points will have the parent of this
     QQuickItem* m_pointParentItem = nullptr;
 
@@ -107,13 +95,6 @@ private:
 Q_DECLARE_METATYPE(cwAbstractPointManager*)
 
 /**
-  Gets the transform updater
-  */
-// inline cwTransformItemUpdater* cwAbstractPointManager::transformUpdater() const {
-//     return TransformUpdater;
-// }
-
-/**
 Gets selectedStationIndex
 */
 inline int cwAbstractPointManager::selectedItemIndex() const {
@@ -133,9 +114,5 @@ Gets selectionManager
 inline cwSelectionManager* cwAbstractPointManager::selectionManager() const {
     return m_selectionManager;
 }
-
-// inline QQuickItem* cwAbstractPointManager::pointParentItem() const {
-//     return m_pointParentItem;
-// }
 
 #endif // CWABSRTACTPOINTMANAGER_H

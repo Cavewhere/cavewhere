@@ -17,7 +17,6 @@
 
 cwAbstractPointManager::cwAbstractPointManager(QQuickItem *parent) :
     QQuickItem(parent),
-    // TransformUpdater(nullptr),
     m_itemComponent(nullptr),
     m_selectionManager(nullptr),
     m_selectedItemIndex(-1)
@@ -29,38 +28,9 @@ cwAbstractPointManager::cwAbstractPointManager(QQuickItem *parent) :
             {
                 for(auto item : std::as_const(m_items)) {
                     item->setParentItem(parentItem());
-                    qDebug() << "Updating parent for item:" << item << item->parentItem();
                 }
             });
 }
-
-/**
-  \brief Sets the transform updater
-
-  This will transform all the station in this station view
-  */
-// void cwAbstractPointManager::setTransformUpdater(cwTransformItemUpdater* updater) {
-//     if(TransformUpdater != updater) {
-//         if(TransformUpdater != nullptr) {
-//             //Remove all previous stations
-//             foreach(cwBasePositioner* item, Items) {
-//                 TransformUpdater->removeChildItem(item);
-//             }
-//         }
-
-//         TransformUpdater = updater;
-
-//         if(TransformUpdater != nullptr) {
-//             //Add station to the new transformUpdater
-
-//             foreach(cwBasePositioner* item, Items) {
-//                 TransformUpdater->addChildItem(item);
-//             }
-//         }
-
-//         emit transformUpdaterChanged();
-//     }
-// }
 
 /**
   This creates the station component used generate the station symobols
@@ -344,11 +314,6 @@ void cwAbstractPointManager::privateUpdateItemData(QQuickItem* item, int index)
     item->setProperty("pointIndex", index);
     item->setProperty("parentView", QVariant::fromValue(this));
 
-    // if(item->parentItem() != this) {
-    //     item->setParentItem(this);
-    //     item->setParent(this);
-    // }
-
     updateItemData(item, index);
     privateUpdateItemPosition(index);
 }
@@ -372,15 +337,3 @@ void cwAbstractPointManager::setSelectionManager(cwSelectionManager* selectionMa
         emit selectionManagerChanged();
     }
 }
-
-// void cwAbstractPointManager::setPointParentItem(QQuickItem* parentItem) {
-//     if (m_pointParentItem != parentItem) {
-//         m_pointParentItem = parentItem;
-
-//         for(auto item : std::as_const(m_items)) {
-//             item->setParentItem(m_pointParentItem);
-//         }
-
-//         emit pointParentItemChanged();
-//     }
-// }
