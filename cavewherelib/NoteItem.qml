@@ -237,17 +237,9 @@ ImageItem {
         parent: noteArea.targetItem
         note: noteArea.note
 
-        zoom: noteArea.targetItem.scale
-        // transformUpdater: transformUpdaterId
+        zoom: noteArea.targetItem.scale //Zoom is needed for keep the line width constant
         visible: noteArea.scrapsVisible
-                // && noteArea.targetItem.status === QQ.Image.Ready //Only load when image is down
     }
-
-    // ScrapStationView {
-    //     transformUpdater: transformUpdaterId
-    //     scrap: scrapViewId.selectedScrapItem ? scrapViewId.selectedScrapItem.scrap : null
-
-    // }
 
     states: [
         QQ.State {

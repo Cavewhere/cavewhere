@@ -24,15 +24,13 @@ QQ.Item {
     //     console.log("normalized:" + normalizedToLocal)
     // }
 
+
     QQ.Image {
         id: imageId
         smooth: false
         mipmap: true
         fillMode: QQ.Image.Pad //No rescaling
         asynchronous: true
-
-        QQ.Component.onCompleted: {
-            console.log("Image:" + imageId)
-        }
+        visible: status === QQ.Image.Ready
     }
 }
