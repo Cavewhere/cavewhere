@@ -223,7 +223,7 @@ void cwScrapView::updateAllScraps() {
         //Add new scrap items
         for(int i = m_scrapItems.size(); i < numberOfScraps; i++) {
             cwScrapItem* item = new cwScrapItem(context, this);
-            // item->setTransformUpdater(m_transformUpdater);
+            item->setParentItem(parentItem());
             m_scrapItems.append(item);
         }
     }
@@ -237,8 +237,6 @@ void cwScrapView::updateAllScraps() {
         scrapItem->setScrap(scrap);
         scrapItem->setZoom(m_zoom);
         qDebug() << "Setting scrapItem:" << scrapItem << parentItem();
-        scrapItem->setParentItem(parentItem());
-        // scrapItem->setTransformUpdater(m_transformUpdater);
         scrapItem->setSelectionManager(m_selectionManager);
         connect(scrapItem, SIGNAL(selectedChanged()), SLOT(updateSelection()), Qt::UniqueConnection);
     }
