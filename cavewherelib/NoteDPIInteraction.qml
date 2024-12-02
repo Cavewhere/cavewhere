@@ -19,7 +19,7 @@ DrawLengthInteraction {
 
         var p1 = firstMouseLocation;
         var p2 = secondMouseLocation;
-        var imageSize = imageItem.imageProperties.size
+        var imageSize = imageItem.sourceSize
 
         var xImage = (p2.x - p1.x) * imageSize.width
         var yImage = (p2.y - p1.y) * imageSize.height
@@ -28,7 +28,7 @@ DrawLengthInteraction {
 
         imageResolution.setResolution(lengthObject, lengthPixels)
 
-        noteScaleInteraction.done()
+        noteDPIInteraction.done()
     }
 
 }

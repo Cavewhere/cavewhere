@@ -105,5 +105,7 @@
         <file>twbs-icons/icons/plus.svg</file>
         <file>twbs-icons/icons/plus.svg</file>
         <file>icons/svg/station.svg</file>
+        <file>twbs-icons/icons/caret-down-fill.svg</file>
+        <file>icons/svg/measurement.svg</file>
     </qresource>
 </RCC>

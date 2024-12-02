@@ -8,6 +8,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick as QQ
+import QtQuick.Layouts
 import cavewherelib
 
 ImageItem {
@@ -87,34 +88,37 @@ ImageItem {
         }
     }
 
-    // NoteNorthInteraction {
-    //     id: noteNorthUpInteraction
-    //     anchors.fill: parent
-    //     camera: cameraId
-    //     basePanZoomInteraction: panZoomInteraction
-    //     transformUpdater: transformUpdaterId
-    //     z:1
-    // }
+    NoteNorthInteraction {
+        id: noteNorthUpInteraction
 
-    // NoteScaleInteraction {
-    //     id: noteScaleInteraction
-    //     anchors.fill: parent
-    //     imageItem: noteArea
-    //     basePanZoomInteraction: panZoomInteraction
-    //     transformUpdater: transformUpdaterId
-    //     note: noteArea.note
-    //     z:1
-    // }
+        // anchors.fill: parent
+        // camera: cameraId
+        // basePanZoomInteraction: panZoomInteraction
+        // transformUpdater: transformUpdaterId
+        z:1
+    }
 
-    // NoteDPIInteraction {
-    //     id: noteDPIInteraction
-    //     anchors.fill: parent
-    //     imageItem: noteArea
-    //     basePanZoomInteraction: panZoomInteraction
-    //     transformUpdater: transformUpdaterId
-    //     imageResolution: noteArea.note != null ? noteArea.note.imageResolution : null
-    //     z:1
-    // }
+    NoteScaleInteraction {
+        id: noteScaleInteraction
+        target: noteArea.targetItem
+        // anchors.fill: parent
+        imageItem: noteArea
+        // basePanZoomInteraction: panZoomInteraction
+        // transformUpdater: transformUpdaterId
+        note: noteArea.note
+        // z:1
+    }
+
+    NoteDPIInteraction {
+        id: noteDPIInteraction
+        target: noteArea.targetItem
+        anchors.fill: parent
+        imageItem: noteArea
+        // basePanZoomInteraction: panZoomInteraction
+        // transformUpdater: transformUpdaterId
+        imageResolution: noteArea.note != null ? noteArea.note.imageResolution : null
+        // z:1
+    }
 
     InteractionManager {
         id: interactionManagerId
@@ -126,7 +130,7 @@ ImageItem {
             noteSelectionInteraction,
             // noteNorthUpInteraction,
             // noteScaleInteraction,
-            // noteDPIInteraction
+            noteDPIInteraction
         ]
         defaultInteraction: panZoomInteraction
         // defaultInteraction: noteSelectionInteraction
@@ -154,115 +158,78 @@ ImageItem {
 
     }
 
-    // //This allows note coordinates to be mapped to opengl coordinates
-    // TransformUpdater {
-    //     id: transformUpdaterId
-    //     camera: cameraId
-    //     modelMatrix: noteArea.modelMatrix
+
+    // component PositionRectangle : Positioner {
+    //     id: posId
+    //     parent: noteArea.targetItem
+    //     QQ.Rectangle {
+    //         color: "green"
+    //         width: 5
+    //         height: width
+    //         anchors.centerIn: parent
+
+    //         onScaleChanged: {
+    //             console.log("Scale changed:" + scale)
+    //         }
+
+    //         Text {
+    //             text: "(" + posId.x + ", " + posId.y + ")"
+    //         }
+    //     }
     // }
-
-    // TransformItemUpdater {
-    //     id: transformUpdaterId
-    //     watchTransformItem: noteArea.transformItem
-    //     targetItem: noteArea.targetItem
-    // }
-
-    component PositionRectangle : Positioner {
-        id: posId
-        parent: noteArea.targetItem
-        QQ.Rectangle {
-            color: "green"
-            width: 5
-            height: width
-            anchors.centerIn: parent
-
-            onScaleChanged: {
-                console.log("Scale changed:" + scale)
-            }
-
-            Text {
-                text: "(" + posId.x + ", " + posId.y + ")"
-            }
-        }
-    }
-
-    PositionRectangle {
-        id: rectId0
-        parent: noteArea.targetItem
-
-    }
-    PositionRectangle {
-        id: rectId1
-        x: 500
-        y: 500
-        parent: noteArea.targetItem
-    }
-
-    PositionRectangle {
-        id: rectId2
-        x: 1000
-        y: 500
-        parent: noteArea.targetItem
-    }
 
     // PositionRectangle {
-    //     id: rectId1
-    //     position3D: Qt.vector3d(0.0, 1.0, 0.0);
+    //     id: rectId0
+    //     parent: noteArea.targetItem
 
+    // }
+    // PositionRectangle {
+    //     id: rectId1
+    //     x: 500
+    //     y: 500
+    //     parent: noteArea.targetItem
     // }
 
     // PositionRectangle {
     //     id: rectId2
-    //     position3D: Qt.vector3d(1.0, 0.0, 0.0);
-
+    //     x: 1000
+    //     y: 500
+    //     parent: noteArea.targetItem
     // }
 
-    // PositionRectangle {
-    //     id: rectId3
-    //     position3D: Qt.vector3d(1.0, 1.0, 0.0);
+    ColumnLayout {
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.leftMargin: 5
+        anchors.topMargin: 5
+        spacing: 5
+        z: 2
 
-    // }
+        NoteResolution {
+            id: noteResolutionId
+            note: noteArea.note
+            onActivateDPIInteraction: interactionManagerId.active(noteDPIInteraction)
+            visible: noteArea.scrapsVisible
+        }
 
-    // PositionRectangle {
-    //     id: rectId4
-    //     position3D: Qt.vector3d(0.5, 0.5, 0.0);
+        // NoteTransformEditor {
+        //     id: noteTransformEditorId
+        //     interactionManager: interactionManagerId
+        //     northInteraction: noteNorthUpInteraction
+        //     scaleInteraction: noteScaleInteraction
+        //     scrap: {
+        //         if(scrapViewId.selectedScrapItem !== null) {
+        //             return scrapViewId.selectedScrapItem.scrap;
+        //         }
+        //         return null;
+        //     }
+        // }
 
-    // }
-
-
-    // QQ.Column {
-    //     anchors.top: parent.top
-    //     anchors.left: parent.left
-    //     anchors.leftMargin: 5
-    //     anchors.topMargin: 5
-    //     spacing: 5
-    //     z: 2
-
-    //     NoteResolution {
-    //         id: noteResolutionId
-    //         note: noteArea.note
-    //         onActivateDPIInteraction: interactionManagerId.active(noteDPIInteraction)
-    //         visible: noteArea.scrapsVisible
-    //     }
-
-    //     NoteTransformEditor {
-    //         id: noteTransformEditorId
-    //         interactionManager: interactionManagerId
-    //         northInteraction: noteNorthUpInteraction
-    //         scaleInteraction: noteScaleInteraction
-    //         scrap: {
-    //             if(scrapViewId.selectedScrapItem !== null) {
-    //                 return scrapViewId.selectedScrapItem.scrap;
-    //             }
-    //             return null;
-    //         }
-    //     }
-
-    //     LeadInfoEditor {
-    //         id: leadInfoEditor
-    //         leadView: scrapViewId.selectedScrapItem !== null ? scrapViewId.selectedScrapItem.leadView : null
-    //     }
-    // }
+        // LeadInfoEditor {
+        //     id: leadInfoEditor
+        //     leadView: scrapViewId.selectedScrapItem !== null ? scrapViewId.selectedScrapItem.leadView : null
+        // }
+    }
 
     //For rendering scraps onto the view
     ScrapView {

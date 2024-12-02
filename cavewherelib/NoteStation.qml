@@ -17,8 +17,6 @@ ScrapPointItem {
     function updateItem() {
         if(scrap !== null) {
             stationName.text = scrap.stationData(Scrap.StationName, pointIndex)
-            // var position = scrap.stationData(Scrap.StationPosition, pointIndex);
-            // position3D = Qt.vector3d(position.x, position.y, 0.0);
         }
     }
 

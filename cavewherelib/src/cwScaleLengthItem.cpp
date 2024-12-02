@@ -74,11 +74,10 @@ void cwScaleLengthItem::updateScaleLengthPath() {
 QVector<QLineF> cwScaleLengthItem::lengthLines() const
 {
     //Create the centerLine
-    QPainterPath painterPath;
     QLineF line0(p1(), p2());
 
-    QPointF p1ViewportPosition = TransformUpdater->mapModelToViewport(p1());
-    QPointF p2ViewportPosition = TransformUpdater->mapModelToViewport(p2());
+    QPointF p1ViewportPosition = p1();
+    QPointF p2ViewportPosition = p2();
     QLineF centerLine(p1ViewportPosition, p2ViewportPosition);
 
     QLineF perpendicularLine(QPointF(0, 5), QPointF(0, -5));
@@ -89,16 +88,16 @@ QVector<QLineF> cwScaleLengthItem::lengthLines() const
     transform.rotate(rotation);
     QLineF line1 = transform.map(perpendicularLine);
 
-    line1.setP1(TransformUpdater->mapFromViewportToModel(line1.p1()).toPointF());
-    line1.setP2(TransformUpdater->mapFromViewportToModel(line1.p2()).toPointF());
+    line1.setP1(line1.p1());
+    line1.setP2(line1.p2());
 
     transform = QTransform();
     transform.translate(p2ViewportPosition.x(), p2ViewportPosition.y());
     transform.rotate(rotation);
     QLineF line2 = transform.map(perpendicularLine);
 
-    line2.setP1(TransformUpdater->mapFromViewportToModel(line2.p1()).toPointF());
-    line2.setP2(TransformUpdater->mapFromViewportToModel(line2.p2()).toPointF());
+    line2.setP1(line2.p1());
+    line2.setP2(line2.p2());
 
     QVector<QLineF> lines;
     lines.reserve(3);

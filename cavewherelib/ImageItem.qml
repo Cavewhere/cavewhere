@@ -5,7 +5,7 @@ QQ.Item {
     id: itemId
 
     property alias source: imageId.source
-    property alias sourceSize: imageId.sourceSize
+    readonly property alias sourceSize: imageId.sourceSize
 
     property alias imageRotation: imageId.rotation
     // property alias transformItem: imageId

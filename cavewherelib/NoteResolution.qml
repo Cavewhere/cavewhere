@@ -28,9 +28,9 @@ FloatingGroupBox {
     ColumnLayout {
         id: layoutId
         RowLayout {
-            Button {
+            Controls.Button {
                 id: setResolution
-                iconSource: "qrc:/icons/measurement.png"
+                icon.source: "qrc:/icons/svg/measurement.svg"
                 onClicked: floatingGroup.activateDPIInteraction()
             }
 

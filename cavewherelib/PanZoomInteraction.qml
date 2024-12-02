@@ -11,7 +11,7 @@ import cavewherelib
 Interaction {
     id: interactionId
     required property QQ.Image target
-    // required property double persistentScale
+    property alias dragAcceptedButtons: dragHandlerId.acceptedButtons
 
     function refit() {
         target.x = target.parent.width * 0.5 - target.sourceSize.width * 0.5;
@@ -58,6 +58,7 @@ Interaction {
     }
 
     QQ.DragHandler {
+        id: dragHandlerId
         enabled: interactionId.enabled
         target: interactionId.target
         parent: interactionId.target

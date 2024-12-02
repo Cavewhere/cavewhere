@@ -6,16 +6,18 @@
 **************************************************************************/
 
 import cavewherelib
+import QtQuick.Controls as QC
 
-Button {
+QC.RoundButton {
     id: moreButton
 
     default property var menu
 
-    iconSource: "qrc:/icons/moreArrowDown.png"
-    iconSize: Qt.size(8, 8)
-    height: 13
-    width: 13
+    icon.source: "qrc:/twbs-icons/icons/caret-down-fill.svg"
+    // icon.width: 15
+    // icon.height: 15
+    implicitWidth: 20
+    implicitHeight: 20
     radius: 0
 
     onClicked: {
