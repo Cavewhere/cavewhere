@@ -21,6 +21,10 @@ public:
     float lineWidth() const;
     void setLineWidth(float lineWidth);
 
+    static double lineWidthFromZoom(double zoom, double lineWidth) {
+        return lineWidth / zoom;
+    }
+
 private:
     float m_lineWidth;
     // QVector<QLineF> m_lines;

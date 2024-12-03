@@ -19,6 +19,7 @@ PanZoomInteraction {
     property alias doneTextLabel: lengthText.text
     property alias lengthObject: length
     property alias defaultLengthUnit: length.unit
+    property alias zoom: scaleLengthItem.zoom
 
     //More or less, private data
     property point firstMouseLocation;
@@ -27,7 +28,6 @@ PanZoomInteraction {
     signal doneButtonPressed;
 
     function done() {
-        console.log("Done!");
         scaleLengthItem.visible = false
         interaction.state = ""
         interaction.deactivate();
@@ -41,6 +41,7 @@ PanZoomInteraction {
         id: pressId
         target: interaction.target
         parent: interaction.target
+        enabled: interaction.enabled
         onTapped: (eventPoint, button) => {
                       interaction.firstMouseLocation = eventPoint.position
                       scaleLengthItem.p1 = eventPoint.position
@@ -61,46 +62,10 @@ PanZoomInteraction {
         }
     }
 
-    // PanZoomPitchArea {
-    //     anchors.fill: parent
-    //     basePanZoom: interaction.basePanZoomInteraction
-
-        // QQ.MouseArea {
-        //     id: mouseAreaId
-        //     anchors.fill: parent
-        //     acceptedButtons: Qt.LeftButton | Qt.RightButton
-
-        //     onPressed: (mouse) => {
-        //         if(pressedButtons == Qt.RightButton) {
-        //             interaction.basePanZoomInteraction.panFirstPoint(Qt.point(mouse.x, mouse.y))
-        //         }
-        //     }
-
-        //     onPositionChanged: (mouse) => {
-        //         if(pressedButtons == Qt.RightButton) {
-        //             interaction.basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
-        //         }
-        //     }
-
-        //     onClicked: (mouse) => {
-        //         if(mouse.button === Qt.LeftButton) {
-        //             interaction.firstMouseLocation = interaction.imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y));
-        //             scaleLengthItem.p1 = interaction.firstMouseLocation
-        //             scaleLengthItem.p2 = scaleLengthItem.p1
-        //             interaction.state = "WaitForSecondClick"
-        //             scaleLengthItem.visible = true;
-        //         }
-        //     }
-
-        //     onWheel: (wheel) => {
-        //         interaction.basePanZoomInteraction.zoom(wheel.angleDelta.y, Qt.point(wheel.x, wheel.y))
-        //     }
-        // }
-    // }
-
     ScaleLengthItem {
         id: scaleLengthItem
         anchors.fill: parent
+        visible: interaction.visible
         parent: interaction.target
     }
 
@@ -176,40 +141,19 @@ PanZoomInteraction {
             QQ.PropertyChanges {
                 pressId {
                     onTapped: (eventPoint, button) => {
-                                    lengthRect.x = eventPoint.position.x - lengthRect.width * 0.5
-                                    lengthRect.y = eventPoint.position.y + 10
+                        let pos = interaction.target.mapToItem(lengthRect.parent, eventPoint.position)
 
-                                    interaction.secondMouseLocation = eventPoint.position
-                                    interaction.state = "WaitForDone"
+                        lengthRect.x = pos.x - lengthRect.width * 0.5
+                        lengthRect.y = pos.y + 10
+
+                        interaction.secondMouseLocation = eventPoint.position
+                        interaction.state = "WaitForDone"
                     }
                 }
 
                 hoverId {
                     enabled: true
                 }
-
-                // mouseAreaId {
-
-                //     hoverEnabled: true
-
-                //     onPositionChanged: {
-                //         if(pressedButtons == Qt.RightButton) {
-                //             basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
-                //         } else {
-                //             scaleLengthItem.p2 = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y));
-                //         }
-                //     }
-
-                //     onClicked: {
-                //         if(mouse.button === Qt.LeftButton) {
-                //             lengthRect.x = mouse.x - lengthRect.width * 0.5
-                //             lengthRect.y = mouse.y + 10
-
-                //             secondMouseLocation = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y));
-                //             interaction.state = "WaitForDone"
-                //         }
-                //     }
-                // }
             }
 
             QQ.PropertyChanges {

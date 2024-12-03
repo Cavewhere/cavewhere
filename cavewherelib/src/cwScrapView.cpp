@@ -45,7 +45,6 @@ void cwScrapView::setNote(cwNote* note) {
         m_note = note;
 
         if(m_note != nullptr) {
-            qDebug() << "Note resolution:" << m_note->image().originalSize();
             connect(m_note, &cwNote::insertedScraps, this, &cwScrapView::insertScrapItem);
             connect(m_note, &cwNote::removedScraps, this, &cwScrapView::updateRemovedScraps);
         }
@@ -91,8 +90,6 @@ void cwScrapView:: insertScrapItem(int begin, int end) {
         scrapItem->setZoom(m_zoom);
         scrapItem->setParentItem(parentItem());
 
-        qDebug() << "Setting scrapItem:" << scrapItem << parentItem();
-        // scrapItem->setTransformUpdater(m_transformUpdater);
         scrapItem->setSelectionManager(m_selectionManager);
 
         m_scrapItems.insert(i, scrapItem);
@@ -234,7 +231,6 @@ void cwScrapView::updateAllScraps() {
         cwScrapItem* scrapItem = m_scrapItems[i];
         scrapItem->setScrap(scrap);
         scrapItem->setZoom(m_zoom);
-        qDebug() << "Setting scrapItem:" << scrapItem << parentItem();
         scrapItem->setSelectionManager(m_selectionManager);
         connect(scrapItem, SIGNAL(selectedChanged()), SLOT(updateSelection()), Qt::UniqueConnection);
     }

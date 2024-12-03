@@ -16,13 +16,11 @@ DrawLengthInteraction {
     defaultLengthUnit: Units.Inches
 
     onDoneButtonPressed: {
-
         var p1 = firstMouseLocation;
         var p2 = secondMouseLocation;
-        var imageSize = imageItem.sourceSize
 
-        var xImage = (p2.x - p1.x) * imageSize.width
-        var yImage = (p2.y - p1.y) * imageSize.height
+        var xImage = (p2.x - p1.x);
+        var yImage = (p2.y - p1.y);
 
         var lengthPixels = Math.sqrt(xImage * xImage + yImage * yImage)
 
@@ -30,5 +28,4 @@ DrawLengthInteraction {
 
         noteDPIInteraction.done()
     }
-
 }

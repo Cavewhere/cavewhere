@@ -158,7 +158,7 @@ QSGNode *cwScrapItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintN
     // }
 
     auto lineWidthFromZoom = [this](double lineWidth) {
-        return lineWidth / m_zoom;
+        return cwSGLinesNode::lineWidthFromZoom(m_zoom, lineWidth);
     };
 
     if(Selected) {

@@ -79,12 +79,6 @@ ImageItem {
         // onActivated: {
         //     console.log("Note selection interaction activated!")
         // }
-
-        QQ.Rectangle {
-            anchors.fill: parent
-            color: "red"
-            opacity: 0
-        }
     }
 
     NoteNorthInteraction {
@@ -113,10 +107,11 @@ ImageItem {
         target: noteArea.targetItem
         anchors.fill: parent
         imageItem: noteArea
+        zoom: noteArea.targetItem.scale
         // basePanZoomInteraction: panZoomInteraction
         // transformUpdater: transformUpdaterId
         imageResolution: noteArea.note != null ? noteArea.note.imageResolution : null
-        // z:1
+        z:1
     }
 
     InteractionManager {
@@ -134,67 +129,64 @@ ImageItem {
         defaultInteraction: panZoomInteraction
         // defaultInteraction: noteSelectionInteraction
 
-        // onActiveInteractionChanged: {
-        //     console.log("Active interaction:" + noteArea.state)
-        //     if(activeInteraction == defaultInteraction) {
-        //         switch(noteArea.state) {
-        //         case "ADD-SCRAP":
-        //             // addScrapInteraction.activate();
-        //             break;
-        //         case "ADD-STATION":
-        //             // addStationInteraction.activate();
-        //             break;
-        //         case "ADD-LEAD":
-        //             // addLeadInteraction.activate();
-        //             break;
-        //         case "SELECT":
-        //             console.log("Note selection interaction!")
-        //             noteSelectionInteraction.activate();
-        //             break;
-        //         }
-        //     }
-        // }
-
-    }
-
-
-    component PositionRectangle : Positioner {
-        id: posId
-        parent: noteArea.targetItem
-        QQ.Rectangle {
-            color: "green"
-            width: 5
-            height: width
-            anchors.centerIn: parent
-
-            onScaleChanged: {
-                console.log("Scale changed:" + scale)
-            }
-
-            Text {
-                text: "(" + posId.x + ", " + posId.y + ")"
+        onActiveInteractionChanged: {
+            if(activeInteraction == defaultInteraction) {
+                switch(noteArea.state) {
+                case "ADD-SCRAP":
+                    // addScrapInteraction.activate();
+                    break;
+                case "ADD-STATION":
+                    // addStationInteraction.activate();
+                    break;
+                case "ADD-LEAD":
+                    // addLeadInteraction.activate();
+                    break;
+                case "SELECT":
+                    noteSelectionInteraction.activate();
+                    break;
+                }
             }
         }
-    }
-
-    PositionRectangle {
-        id: rectId0
-        parent: noteArea.targetItem
 
     }
-    PositionRectangle {
-        id: rectId1
-        x: 500
-        y: 500
-        parent: noteArea.targetItem
-    }
 
-    PositionRectangle {
-        id: rectId2
-        x: 1000
-        y: 500
-        parent: noteArea.targetItem
-    }
+    // component PositionRectangle : Positioner {
+    //     id: posId
+    //     parent: noteArea.targetItem
+    //     QQ.Rectangle {
+    //         color: "green"
+    //         width: 5
+    //         height: width
+    //         anchors.centerIn: parent
+
+    //         onScaleChanged: {
+    //             console.log("Scale changed:" + scale)
+    //         }
+
+    //         Text {
+    //             text: "(" + posId.x + ", " + posId.y + ")"
+    //         }
+    //     }
+    // }
+
+    // PositionRectangle {
+    //     id: rectId0
+    //     parent: noteArea.targetItem
+
+    // }
+    // PositionRectangle {
+    //     id: rectId1
+    //     x: 500
+    //     y: 500
+    //     parent: noteArea.targetItem
+    // }
+
+    // PositionRectangle {
+    //     id: rectId2
+    //     x: 1000
+    //     y: 500
+    //     parent: noteArea.targetItem
+    // }
 
     ColumnLayout {
         anchors.top: parent.top
@@ -258,10 +250,6 @@ ImageItem {
         }
     ]
 
-    onStateChanged: {
-        console.log("State changed note:" + state)
-    }
-
     transitions: [
         //  QQ.Transition {
         //     to: "ADD-SCRAP"
@@ -301,7 +289,6 @@ ImageItem {
             to: "SELECT"
             QQ.ScriptAction {
                 script: {
-                    console.log("SELECT transition!")
                     interactionManagerId.active(noteSelectionInteraction)
                 }
             }

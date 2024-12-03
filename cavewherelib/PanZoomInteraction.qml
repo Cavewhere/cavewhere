@@ -13,6 +13,9 @@ Interaction {
     required property QQ.Image target
     property alias dragAcceptedButtons: dragHandlerId.acceptedButtons
 
+    //We need to make this false, so default state disables the interaction
+    enabled: false
+
     function refit() {
         target.x = target.parent.width * 0.5 - target.sourceSize.width * 0.5;
         target.y = target.parent.height * 0.5 - target.sourceSize.height * 0.5;
@@ -34,16 +37,15 @@ Interaction {
         pinchHandlerId.persistentScale = target.scale
     }
 
-            QQ.Connections {
-                target: interactionId.target
-                function onStatusChanged() {
-                    if(interactionId.target.status == QQ.Image.Ready) {
-                        console.log("Status changed:" + interactionId.target)
-                        interactionId.state = "AUTO_FIT"
-                        interactionId.refit()
-                    }
-                }
+    QQ.Connections {
+        target: interactionId.target
+        function onStatusChanged() {
+            if(interactionId.target.status == QQ.Image.Ready) {
+                interactionId.state = "AUTO_FIT"
+                interactionId.refit()
             }
+        }
+    }
 
     QQ.WheelHandler {
         id: wheelHandlerId

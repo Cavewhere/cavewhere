@@ -21,6 +21,16 @@ cwScaleLengthItem::cwScaleLengthItem(QQuickItem *parent) :
     setFlag(QQuickItem::ItemHasContents, true);
 }
 
+void cwScaleLengthItem::setZoom(double zoom)
+{
+    if(m_zoom != zoom) {
+        m_zoom = zoom;
+        Lines = lengthLines();
+        update();
+        emit zoomChanged();
+    }
+}
+
 QSGNode *cwScaleLengthItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData *)
 {
     if(!oldNode) {
@@ -35,9 +45,7 @@ QSGNode *cwScaleLengthItem::updatePaintNode(QSGNode *oldNode, QQuickItem::Update
     //     transformNode->setMatrix(transformUpdater()->matrix());
     // }
 
-
-    qDebug() << "Set lines:" << Lines;
-    LinesNode->setLineWidth(10.0);
+    LinesNode->setLineWidth(cwSGLinesNode::lineWidthFromZoom(m_zoom, 2.0));
     LinesNode->setLines(Lines);
 
     return oldNode;
@@ -82,7 +90,8 @@ QVector<QLineF> cwScaleLengthItem::lengthLines() const
     QPointF p2ViewportPosition = p2();
     QLineF centerLine(p1ViewportPosition, p2ViewportPosition);
 
-    QLineF perpendicularLine(QPointF(0, 5), QPointF(0, -5));
+    double tailLength = cwSGLinesNode::lineWidthFromZoom(m_zoom, 8);
+    QLineF perpendicularLine(QPointF(0, tailLength), QPointF(0, -tailLength));
     double rotation = 180.0 - centerLine.angle();
 
     QTransform transform;
