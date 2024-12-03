@@ -8,7 +8,7 @@ QQ.Rectangle {
     QQ.Item {
         id: pageItemId
         anchors.fill: parent
-        anchors.margins: 10
+        // anchors.margins: 10
     }
 
 }

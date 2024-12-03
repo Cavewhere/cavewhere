@@ -110,5 +110,14 @@
         <file>icons/svg/north.svg</file>
         <file>icons/svg/up.svg</file>
         <file>icons/svg/error.svg</file>
+        <file>icons/svg/addLead.svg</file>
+        <file>icons/svg/addNotes.svg</file>
+        <file>icons/svg/addScrap.svg</file>
+        <file>icons/svg/addStation.svg</file>
+        <file>icons/svg/carpet.svg</file>
+        <file>icons/svg/back.svg</file>
+        <file>icons/svg/select.svg</file>
+        <file>icons/svg/notes.svg</file>
+        <file>icons/svg/rotate.svg</file>
     </qresource>
 </RCC>

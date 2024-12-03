@@ -38,14 +38,15 @@ QQ.Item {
         anchors.left: parent.left
         anchors.margins: 1;
 
-        width: flickableAreaId.contentWidth
+        width: flickableAreaId.contentWidth + 20
         visible: true
+        clip: true
 
         QQ.Flickable {
             id: flickableAreaId
 
             contentHeight: column.height
-            contentWidth: Math.max(spaceAddBar.width + spaceAddBar.x, view.contentWidth + 2) + 20.0
+            contentWidth: Math.max(spaceAddBar.width + spaceAddBar.x, view.contentWidth + 2)
 
             function ensureVisible(r){
                 var contentY = flickableAreaId.contentY;

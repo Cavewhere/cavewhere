@@ -7,6 +7,7 @@
 
 import QtQuick as QQ
 import QtQuick.Controls as QC
+import QtQuick.Layouts
 import cavewherelib
 import "Utils.js" as Utils
 
@@ -24,22 +25,20 @@ QQ.Item {
     implicitHeight: childrenRect.height
     implicitWidth: inputRow.width
 
-    QQ.Row {
+    RowLayout {
         id: inputRow
         spacing: 5
 
         QC.RoundButton {
             id: setLength
-            anchors.verticalCenter: parent.verticalCenter
             radius: 2
             icon.source: "qrc:/icons/svg/measurement.svg"
             visible: !scaleInput.autoScaling && scaleInput.usingInteraction
             onClicked: scaleInput.scaleInteractionActivated()
         }
 
-        QQ.Row {
-            spacing: 3
-            anchors.verticalCenter: parent.verticalCenter
+        RowLayout {
+            spacing: 5
 
             LabelWithHelp {
                 id: scaleLabelId
@@ -48,7 +47,6 @@ QQ.Item {
             }
 
             TitledRectangle {
-                anchors.verticalCenter: parent.verticalCenter
                 title: "On Paper"
                 UnitValueInput {
                     id: onPaperLengthInput
@@ -56,16 +54,15 @@ QQ.Item {
                     valueVisible: false
                     valueReadOnly: scaleInput.autoScaling
                     defaultUnit: Units.LengthUnitless
+                    Layout.alignment: Qt.AlignHCenter
                 }
             }
 
             Text {
-                anchors.verticalCenter: parent.verticalCenter
                 text: "="
             }
 
             TitledRectangle {
-                anchors.verticalCenter: parent.verticalCenter
                 title: "In Cave"
                 UnitValueInput {
                     id: inCaveLengthInput
@@ -73,19 +70,18 @@ QQ.Item {
                     valueVisible: false
                     valueReadOnly: scaleInput.autoScaling
                     defaultUnit: Units.LengthUnitless
+                    Layout.alignment: Qt.AlignHCenter
                 }
             }
         }
 
 
         Text {
-            anchors.verticalCenter: parent.verticalCenter
             text: "="
         }
 
         Text {
             id: scaleText
-            anchors.verticalCenter: parent.verticalCenter
             visible: !errorText.visible
             text: ""
         }
@@ -93,7 +89,6 @@ QQ.Item {
         Text {
             id: errorText
             color: "red"
-            anchors.verticalCenter: parent.verticalCenter
             visible: false
             text: "Weird scaling units"
             font.italic: true

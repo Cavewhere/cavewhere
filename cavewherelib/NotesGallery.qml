@@ -171,6 +171,7 @@ QQ.Rectangle {
         anchors.top:  mainButtonArea.bottom
         anchors.right: parent.right
         anchors.topMargin: 3
+        anchors.rightMargin: mainButtonArea.anchors.rightMargin
         width: 210
         radius: 7
         visible: true
@@ -291,7 +292,8 @@ QQ.Rectangle {
 
         anchors.right: parent.right
         anchors.top:  parent.top
-        anchors.rightMargin: 5
+        anchors.topMargin: 5
+        anchors.rightMargin: 8
 
         width: mainToolBar.width + 6
         height: mainToolBar.height + 6
@@ -305,11 +307,9 @@ QQ.Rectangle {
 
             spacing: 3
 
-            //            anchors.centerIn: parent
-
             IconButton {
                 id: rotateIconButtonId
-                iconSource: "qrc:icons/rotate.png"
+                iconSource: "qrc:icons/svg/rotate.svg"
                 sourceSize: mainToolBar.iconSize
                 text: "Rotate"
 
@@ -323,7 +323,7 @@ QQ.Rectangle {
 
             IconButton {
                 id: carpetButtonId
-                iconSource: "qrc:icons/carpet.png"
+                iconSource: "qrc:icons/svg/carpet.svg"
                 sourceSize: mainToolBar.iconSize
                 text: "Carpet"
 
@@ -349,7 +349,8 @@ QQ.Rectangle {
 
         anchors.right: parent.right
         anchors.top:  parent.top
-        anchors.rightMargin: 5
+        anchors.rightMargin: mainButtonArea.anchors.rightMargin
+        anchors.topMargin: mainButtonArea.anchors.topMargin
 
         width: carpetRowId.width + 6
         height: carpetRowId.height + 6
@@ -361,7 +362,7 @@ QQ.Rectangle {
             spacing: 3
 
             IconButton {
-                iconSource: "qrc:icons/back.png"
+                iconSource: "qrc:icons/svg/back.svg"
                 sourceSize: mainToolBar.iconSize
                 text: "Back"
 
@@ -374,7 +375,7 @@ QQ.Rectangle {
 
             IconButton {
                 id: selectObjectId
-                iconSource: "qrc:icons/select.png"
+                iconSource: "qrc:icons/svg/select.svg"
                 sourceSize: mainToolBar.iconSize
                 text: "Select"
 
@@ -389,7 +390,7 @@ QQ.Rectangle {
 
                 IconButton {
                     id: addScrapId
-                    iconSource: "qrc:icons/addScrap.png"
+                    iconSource: "qrc:icons/svg/addScrap.svg"
                     sourceSize: mainToolBar.iconSize
                     text: "Scrap"
 
@@ -398,7 +399,7 @@ QQ.Rectangle {
 
                 IconButton {
                     id: addStationId
-                    iconSource: "qrc:icons/addStation.png"
+                    iconSource: "qrc:icons/svg/addStation.svg"
                     sourceSize: mainToolBar.iconSize
                     text: "Station"
 
@@ -407,7 +408,7 @@ QQ.Rectangle {
 
                 IconButton {
                     id: addLeadId
-                    iconSource: "qrc:icons/addLead.png"
+                    iconSource: "qrc:icons/svg/addLead.svg"
                     sourceSize: mainToolBar.iconSize
                     text: "Lead"
 
@@ -615,14 +616,14 @@ QQ.Rectangle {
                 target: carpetButtonArea;
                 property: "anchors.rightMargin"
                 from: carpetButtonArea.mapFromItem(carpetButtonId, carpetButtonId.width + 20, 0.0).x - carpetButtonArea.width
-                to: 0
+                to: mainButtonArea.anchors.rightMargin
             }
 
             QQ.PropertyAnimation {
                 target: carpetButtonArea;
                 property: "anchors.topMargin"
                 from: carpetButtonArea.mapFromItem(carpetButtonId, 0.0, carpetButtonId.height).y - carpetButtonArea.height
-                to: 0
+                to: mainButtonArea.anchors.topMargin
             }
 
             QQ.PropertyAction { target: mainButtonArea; property: "visible"; value: true }
@@ -643,14 +644,14 @@ QQ.Rectangle {
                 target: carpetButtonArea;
                 property: "anchors.rightMargin"
                 to: carpetButtonArea.mapFromItem(carpetButtonId, carpetButtonId.width + 20, 0.0).x - carpetButtonArea.width
-                from: 0
+                from: mainButtonArea.anchors.rightMargin
             }
 
             QQ.PropertyAnimation {
                 target: carpetButtonArea;
                 property: "anchors.topMargin"
                 to: carpetButtonArea.mapFromItem(carpetButtonId, 0.0, carpetButtonId.height).y - carpetButtonArea.height
-                from: 0
+                from: mainButtonArea.anchors.topMargin
             }
 
             QQ.PropertyAction { target: carpetButtonArea; property: "visible"; value: true }

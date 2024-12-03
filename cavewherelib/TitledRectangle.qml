@@ -8,8 +8,8 @@ QQ.Rectangle {
 
     radius: 5
 
-    width: childrenRect.width + columnOnPaper.x * 2.0
-    height: childrenRect.height
+    implicitWidth: childrenRect.width + columnOnPaper.x * 2.0
+    implicitHeight: childrenRect.height
 
     ColumnLayout {
         id: columnOnPaper
@@ -18,6 +18,7 @@ QQ.Rectangle {
 
         Text {
             id: onPaperId
+            Layout.alignment: Qt.AlignHCenter
         }
     }
 }

@@ -13,7 +13,7 @@ IconButton {
 
     signal filesSelected(list<url> images)
 
-    iconSource: "qrc:icons/addNotes.png"
+    iconSource: "qrc:icons/svg/addNotes.svg"
     text: "Load"
 
     onClicked: {

@@ -67,6 +67,7 @@ StandardPage {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.left: parent.left
+        anchors.margins: 5
         visible: true
 
         onCollapseClicked: {
