@@ -2,6 +2,11 @@ cmake_minimum_required(VERSION 3.21.1)
 
 project(cavewhere VERSION 1.0.0 LANGUAGES CXX)
 
+#Add address sanitizer for clang build only
+if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    add_compile_options($<$<CONFIG:Debug>:-fsanitize=address>)
+    add_link_options($<$<CONFIG:Debug>:-fsanitize=address>)
+endif()
 
 option(WITH_PDF "Build with PDF support" OFF)
 
