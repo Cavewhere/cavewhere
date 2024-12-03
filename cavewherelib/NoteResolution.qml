@@ -28,10 +28,11 @@ FloatingGroupBox {
     ColumnLayout {
         id: layoutId
         RowLayout {
-            Controls.Button {
+            Controls.RoundButton {
                 id: setResolution
                 icon.source: "qrc:/icons/svg/measurement.svg"
                 onClicked: floatingGroup.activateDPIInteraction()
+                radius: 2
             }
 
             LabelWithHelp {

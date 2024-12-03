@@ -6,6 +6,7 @@
 **************************************************************************/
 
 import QtQuick as QQ
+import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
 
@@ -25,18 +26,19 @@ QQ.Item {
     RowLayout {
         id: row
 
-        Button {
+        QC.RoundButton {
             id: setNorthButton
-            iconSource: {
+            radius: 2
+            icon.source: {
                 switch(itemId.scrapType) {
                 case Scrap.Plan:
-                    return "qrc:/icons/north.png"
+                    return "qrc:/icons/svg/north.svg"
                 case Scrap.RunningProfile:
-                    return "qrc:/icons/up.png"
+                    return "qrc:/icons/svg/up.svg"
                 case Scrap.ProjectedProfile:
-                    return "qrc:/icons/up.png"
+                    return "qrc:/icons/svg/up.svg"
                 default:
-                    return "qrc:/icons/error.png"
+                    return "qrc:/icons/svg/error.svg"
                 }
             }
 

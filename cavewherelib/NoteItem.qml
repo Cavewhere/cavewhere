@@ -203,18 +203,18 @@ ImageItem {
             visible: noteArea.scrapsVisible
         }
 
-        // NoteTransformEditor {
-        //     id: noteTransformEditorId
-        //     interactionManager: interactionManagerId
-        //     northInteraction: noteNorthUpInteraction
-        //     scaleInteraction: noteScaleInteraction
-        //     scrap: {
-        //         if(scrapViewId.selectedScrapItem !== null) {
-        //             return scrapViewId.selectedScrapItem.scrap;
-        //         }
-        //         return null;
-        //     }
-        // }
+        NoteTransformEditor {
+            id: noteTransformEditorId
+            interactionManager: interactionManagerId
+            northInteraction: noteNorthUpInteraction
+            scaleInteraction: noteScaleInteraction
+            scrap: {
+                if(scrapViewId.selectedScrapItem !== null) {
+                    return scrapViewId.selectedScrapItem.scrap;
+                }
+                return null;
+            }
+        }
 
         // LeadInfoEditor {
         //     id: leadInfoEditor

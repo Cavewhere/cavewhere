@@ -107,5 +107,8 @@
         <file>icons/svg/station.svg</file>
         <file>twbs-icons/icons/caret-down-fill.svg</file>
         <file>icons/svg/measurement.svg</file>
+        <file>icons/svg/north.svg</file>
+        <file>icons/svg/up.svg</file>
+        <file>icons/svg/error.svg</file>
     </qresource>
 </RCC>

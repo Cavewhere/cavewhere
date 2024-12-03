@@ -6,6 +6,7 @@
 **************************************************************************/
 
 import QtQuick as QQ
+import QtQuick.Controls as QC
 import cavewherelib
 import "Utils.js" as Utils
 
@@ -27,10 +28,11 @@ QQ.Item {
         id: inputRow
         spacing: 5
 
-        Button {
+        QC.RoundButton {
             id: setLength
             anchors.verticalCenter: parent.verticalCenter
-            iconSource: "qrc:/icons/measurement.png"
+            radius: 2
+            icon.source: "qrc:/icons/svg/measurement.svg"
             visible: !scaleInput.autoScaling && scaleInput.usingInteraction
             onClicked: scaleInput.scaleInteractionActivated()
         }
