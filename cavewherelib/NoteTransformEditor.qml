@@ -15,9 +15,9 @@ import "Theme.js" as Theme
 QQ.Item {
     id: editor
 
-    property Scrap scrap
+    required property Scrap scrap
     property NoteTranformation noteTransform
-    property NoteNorthInteraction northInteraction
+    required property NoteNorthInteraction northInteraction
     property NoteScaleInteraction scaleInteraction
     property InteractionManager interactionManager
     property int scrapType: currentScrapType()
@@ -44,13 +44,15 @@ QQ.Item {
         target: editor.northInteraction
         property: "upText"
         value: {
-            switch(editor.scrap.type) {
-            case Scrap.Plan:
-                return "north"
-            case Scrap.RunningProfile:
-                return "up"
-            case Scrap.ProjectedProfile:
-                return "up"
+            if(editor.scrap) {
+                switch(editor.scrap.type) {
+                case Scrap.Plan:
+                    return "north"
+                case Scrap.RunningProfile:
+                    return "up"
+                case Scrap.ProjectedProfile:
+                    return "up"
+                }
             }
         }
     }
@@ -169,7 +171,9 @@ QQ.Item {
                             enabled: !checkableBoxId.checked
 
                             function isValid() {
-                                return editor.scrap && editor.scrap.viewMatrix
+                                return editor.scrap
+                                        && editor.scrap.viewMatrix
+                                        && (editor.scrap.viewMatrix as ProjectedProfileScrapViewMatrix)
                             }
 
                             model: {
@@ -202,8 +206,11 @@ QQ.Item {
                         ClickTextInput {
                             id: azimuthTextInputId
                             text: {
-                                let matrix = (editor.scrap.viewMatrix as ProjectedProfileScrapViewMatrix)
-                                return matrix.azimuth.toFixed(1)
+                                if(directionComboBoxId.isValid()) {
+                                    let matrix = (editor.scrap.viewMatrix as ProjectedProfileScrapViewMatrix)
+                                    return matrix.azimuth.toFixed(1)
+                                }
+                                return 0.0
                             }
                             readOnly: checkableBoxId.checked
                             onFinishedEditting: (newText) => {

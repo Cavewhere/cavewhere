@@ -6,10 +6,13 @@
 
 //Qt includes
 #include <QObject>
+#include <QQmlEngine>
 
 class CAVEWHERE_LIB_EXPORT cwPlanScrapViewMatrix : public cwAbstractScrapViewMatrix
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(PlanScrapViewMatrix)
+
 public:
     class CAVEWHERE_LIB_EXPORT Data : public cwAbstractScrapViewMatrix::Data {
 
