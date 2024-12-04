@@ -90,12 +90,15 @@ StandardPage {
             anchors.top: parent.top
             anchors.margins: 3
 
-            QC.Button {
+            QC.RoundButton {
                 id: expandButton
-                icon.source: "qrc:/icons/moreArrow.png"
+                icon.source: "qrc:/twbs-icons/icons/chevron-right.svg"
+                implicitWidth: 20
+                implicitHeight: 20
                 onClicked: {
                     area.state = ""
                 }
+                radius: 0
             }
 
             QQ.Item {
