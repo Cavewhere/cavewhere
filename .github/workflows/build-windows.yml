@@ -48,18 +48,23 @@ jobs:
         run: |
           conan profile detect --force
 
+      - name: Output Conan Folder Location
+        run: |
+          echo Conan cache directory: %USERPROFILE%\.conan2
+          dir %USERPROFILE%\.conan2
+
       - name: Cache Conan Packages
         id: cache-conan
         uses: actions/cache@v4
         with:
-          path: C:\Users\${{ env.USERNAME }}\.conan2
+          path: ${{ env.USERPROFILE }}\.conan2
           key: ${{ runner.os }}-conan-${{ hashFiles('conanfile.*') }}
           restore-keys: |
             ${{ runner.os }}-conan-
 
-      - name: Install Dependencies with Conan
-        run: |
-          conan install . --build=missing --output-folder=build -s compiler.cppstd=17
+            - name: Install Dependencies with Conan
+              run: |
+                conan install . --build=missing --output-folder=build -s compiler.cppstd=17
 
       # - name: Configure the Project with CMake
       #   run: |
