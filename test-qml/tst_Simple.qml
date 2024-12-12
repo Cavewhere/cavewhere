@@ -1,7 +1,7 @@
 import QtQuick
 import QtTest
 import QmlTestRecorder
-import CaveWhere.Simple
+import cw.Simple
 
 Item {
     id: rootId

@@ -135,10 +135,10 @@ file(GLOB cavewhere_qml_test_H_FILES "test-qml/*.h")
 target_sources(cavewhere-qml-test PRIVATE ${cavewhere_qml_test_CPP_FILES} ${cavewhere_qml_test_CPP_FILES})
 
 qt_add_qml_module(cavewhere_simplemodule
-    URI CaveWhere.Simple
+    URI cw.Simple
     VERSION 1.0
     RESOURCE_PREFIX /qml
-    OUTPUT_DIRECTORY CaveWhere/Simple
+    OUTPUT_DIRECTORY cw/Simple
     DEPENDENCIES
         QtQuick
         QtQuick.Controls
