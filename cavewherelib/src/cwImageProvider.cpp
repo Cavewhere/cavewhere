@@ -103,6 +103,10 @@ cwImageData cwImageProvider::originalMetadata(const cwImage &image) const {
   Gets the metadata of the image at id
   */
 cwImageData cwImageProvider::data(int id, bool metaDataOnly) const {
+    if(projectPath().isEmpty()) {
+        qDebug() << "cwImageProvider: projectPath() is empty when preparing query. This will cause it to fail";
+        return cwImageData();
+    }
 
     //Needed to get around const correctness
     int connectionName = ConnectionCounter.fetchAndAddAcquire(1);
