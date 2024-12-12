@@ -48,16 +48,11 @@ jobs:
         run: |
           conan profile detect --force
 
-      - name: Output Conan Folder Location
-        run: |
-          echo Conan cache directory: .conan2
-          dir .conan2
-
       - name: Cache Conan Packages
         id: cache-conan
         uses: actions/cache@v4
         with:
-          path: .conan2
+          path: C:/Users/runneradmin/.conan2
           key: ${{ runner.os }}-conan-${{ hashFiles('conanfile.*') }}
           restore-keys: |
             ${{ runner.os }}-conan-
