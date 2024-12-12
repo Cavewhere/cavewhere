@@ -12,22 +12,16 @@
 #include <QQuickItem>
 #include <QPen>
 
-//Our includes
-#include "cwTransformUpdater.h"
-
 class cwAbstract2PointItem : public QQuickItem
 {
     Q_OBJECT
 
-    Q_PROPERTY(cwTransformUpdater* transformUpdater READ transformUpdater WRITE setTransformUpdater NOTIFY transformUpdaterChanged)
     Q_PROPERTY(QPointF p1 READ p1 WRITE setP1 NOTIFY p1Changed)
     Q_PROPERTY(QPointF p2 READ p2 WRITE setP2 NOTIFY p2Changed)
+    Q_PROPERTY(double zoom READ zoom WRITE setZoom NOTIFY zoomChanged);
 
 public:
     cwAbstract2PointItem(QQuickItem *parent);
-
-    cwTransformUpdater* transformUpdater() const;
-    void setTransformUpdater(cwTransformUpdater* transformUpdater);
 
     QPointF p1() const;
     void setP1(QPointF p1);
@@ -35,34 +29,24 @@ public:
     QPointF p2() const;
     void setP2(QPointF p2);
 
+    double zoom() const { return m_zoom; }
+    void setZoom(double zoom);
+
 protected:
-    cwTransformUpdater* TransformUpdater; //!< This updates the graphics scene objects on the 2d screen
     QPointF P1; //!< The first point in the north arrow
     QPointF P2; //!< The second point in the north arrow
-    QPen LinePen; //!< The default pen for lines
 
-    virtual void connectTransformer() = 0;
-    virtual void disconnectTransformer() = 0;
+    //For scaling the line correctly
+    double m_zoom = 1.0;
 
     virtual void p1Updated() = 0;
     virtual void p2Updated() = 0;
 
-private slots:
-    void updateTransformUpdater();
-
 signals:
-    void transformUpdaterChanged();
     void p1Changed();
     void p2Changed();
-
+    void zoomChanged();
 };
-
-/**
-Gets transformUpdater
-*/
-inline cwTransformUpdater* cwAbstract2PointItem::transformUpdater() const {
-    return TransformUpdater;
-}
 
 /**
   Gets p1

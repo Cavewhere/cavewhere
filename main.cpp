@@ -100,7 +100,7 @@ void handleCommandline(QCoreApplication& a, cwRootData* rootData) {
             auto shouldLoad = std::make_shared<ShouldLoad>();
 
             auto loadCommandLinePage = [obj, rootData, pageUrl, shouldLoad]() {
-                if(shouldLoad->isPageViewLoaded && shouldLoad->isFileLoaded) {
+                if(shouldLoad->isFileLoaded) {
 
                     //This is pretty unrealiable, it depends on the loading spead
                     QTimer::singleShot(250, [rootData, obj, pageUrl]() {
@@ -111,12 +111,6 @@ void handleCommandline(QCoreApplication& a, cwRootData* rootData) {
                     });
                 }
             };
-
-            obj->connect(rootData, &cwRootData::pageViewChanged, obj, [obj, shouldLoad, loadCommandLinePage, rootData]() {
-                shouldLoad->isPageViewLoaded = true;
-                loadCommandLinePage();
-            });
-
 
             obj->connect(rootData->project(), &cwProject::loaded, obj, [shouldLoad, loadCommandLinePage]() {
                 shouldLoad->isFileLoaded = true;
@@ -161,13 +155,14 @@ int main(int argc, char *argv[])
     auto id = qmlTypeId("cavewherelib", 1, 0, "RootData");
     cwRootData* rootData = applicationEngine->rootContext()->engine()->singletonInstance<cwRootData*>(id);
 
+    //Handle command line args
+    handleCommandline(a, rootData);
+
     //Handles when the user clicks on a file in Finder(Mac OS X) or Explorer (Windows)
     cwOpenFileEventHandler* openFileHandler = new cwOpenFileEventHandler(&a);
     openFileHandler->setProject(rootData->project());
     a.installEventFilter(openFileHandler);
 
-    //Handle command line args
-    handleCommandline(a, rootData);
 
     //Hookup the image provider now that the rootdata is create
     imageProvider->setProjectPath(rootData->project()->filename());

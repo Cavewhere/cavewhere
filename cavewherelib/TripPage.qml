@@ -13,6 +13,8 @@ import QtQuick.Layouts
 StandardPage {
     id: area
 
+    objectName: "tripPage"
+
     property alias currentTrip: surveyEditor.currentTrip
     property string viewMode: ""
     property alias currentNoteIndex: notesGallery.currentNoteIndex

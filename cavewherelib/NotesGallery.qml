@@ -14,6 +14,8 @@ import cavewherelib
 QQ.Rectangle {
     id: noteGallery
 
+    objectName: "noteGallery"
+
     property alias notesModel: galleryView.model;
     property Note currentNote
     property alias currentNoteIndex: galleryView.currentIndex
@@ -323,6 +325,7 @@ QQ.Rectangle {
 
             IconButton {
                 id: carpetButtonId
+                objectName: "carpetButtonId"
                 iconSource: "qrc:icons/svg/carpet.svg"
                 sourceSize: mainToolBar.iconSize
                 text: "Carpet"

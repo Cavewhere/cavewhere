@@ -28,6 +28,7 @@ QQ.Item {
 
         QC.RoundButton {
             id: setNorthButton
+            objectName: "setNorthButton"
             radius: 2
             icon.source: {
                 switch(itemId.scrapType) {

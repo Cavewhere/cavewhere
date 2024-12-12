@@ -9,7 +9,7 @@ import QtQuick as QQ
 import QtQuick.Controls
 import QtQuick.Window
 import QtQuick.Dialogs
-import cavewherelib;
+import cavewherelib
 
 ApplicationWindow {
     id: applicationWindowId
@@ -31,7 +31,7 @@ ApplicationWindow {
 
 //        terrainRenderer: terrainRendererId
 //        dataPage: loadAboutWindowId.item.dataPage //dataMainPageId
-        mainContentLoader: loadMainContentsId
+        // mainContentLoader: loadMainContentsId
         saveAsFileDialog: saveAsFileDialogId
         loadFileDialog: loadFileDialogId
         applicationWindow: applicationWindowId
@@ -52,41 +52,45 @@ ApplicationWindow {
         id: loadAboutWindowId
     }
 
-    QQ.Loader {
-        id: loadMainContentsId
-        source: "MainContent.qml"
+    MainContent {
         anchors.fill: parent
-        asynchronous: true
-        visible: status == QQ.Loader.Ready
-
-//        onLoaded: {
-//            fileMenuButton.dataPage = item.dataPage
-//        }
     }
 
-    QQ.Column {
-        anchors.centerIn: parent
-        visible: loadAboutWindowId.status != QQ.Loader.Ready
+//     QQ.Loader {
+//         id: loadMainContentsId
+//         source: "MainContent.qml"
+//         anchors.fill: parent
+//         asynchronous: true
+//         visible: status == QQ.Loader.Ready
 
-        Text {
-            text: {
-                switch(loadMainContentsId.status) {
-                case QQ.Loader.Error:
-                    return "QML error in " + loadMainContentsId.source + "<br> check commandline for details";
-                case QQ.Loader.Loading:
-                    return "Loading"
-                }
-                return "";
-            }
-        }
+// //        onLoaded: {
+// //            fileMenuButton.dataPage = item.dataPage
+// //        }
+//     }
 
-        ProgressBar {
-            from: 0
-            to: 100
-            value: loadMainContentsId.progress * 100.
-            visible: loadMainContentsId.status == QQ.Loader.Loading
-        }
-    }
+    // QQ.Column {
+    //     anchors.centerIn: parent
+    //     visible: loadAboutWindowId.status != QQ.Loader.Ready
+
+    //     Text {
+    //         text: {
+    //             switch(loadMainContentsId.status) {
+    //             case QQ.Loader.Error:
+    //                 return "QML error in " + loadMainContentsId.source + "<br> check commandline for details";
+    //             case QQ.Loader.Loading:
+    //                 return "Loading"
+    //             }
+    //             return "";
+    //         }
+    //     }
+
+    //     ProgressBar {
+    //         from: 0
+    //         to: 100
+    //         value: loadMainContentsId.progress * 100.
+    //         visible: loadMainContentsId.status == QQ.Loader.Loading
+    //     }
+    // }
 
     SaveAsDialog {
         id: saveAsFileDialogId

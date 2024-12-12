@@ -237,6 +237,7 @@ void cwRhiScraps::updateResources(const ResourceUpdateData& data)
                 auto size = imageDataSize();
                 if(scrap->texture->pixelSize() != size) {
                     scrap->texture->deleteLater();
+                    scrap->texture = nullptr;
                     createTexture(size);
                 } else {
                     //Just upload new data

@@ -14,6 +14,8 @@ import cavewherelib
 ImageItem {
     id: noteArea
 
+    objectName: "noteArea"
+
     property Note note;
     property bool scrapsVisible: false
     // property bool scrapsVisible: false
@@ -75,20 +77,23 @@ ImageItem {
         target: noteArea.targetItem
         scrapView: scrapViewId
         imageItem: noteArea
-        // basePanZoomInteraction: panZoomInteraction
-        // onActivated: {
-        //     console.log("Note selection interaction activated!")
-        // }
     }
 
     NoteNorthInteraction {
         id: noteNorthUpInteraction
+        anchors.fill: parent
+        target: noteArea.targetItem
+        zoom: noteArea.targetItem.scale
+        scrapItem: scrapViewId.selectedScrapItem
 
-        // anchors.fill: parent
         // camera: cameraId
         // basePanZoomInteraction: panZoomInteraction
         // transformUpdater: transformUpdaterId
         z:1
+        onActivated: {
+            console.log("Active!" + this)
+        }
+
     }
 
     NoteScaleInteraction {
@@ -122,12 +127,11 @@ ImageItem {
             // addStationInteraction,
             // addLeadInteraction,
             noteSelectionInteraction,
-            // noteNorthUpInteraction,
+            noteNorthUpInteraction,
             // noteScaleInteraction,
             noteDPIInteraction
         ]
         defaultInteraction: panZoomInteraction
-        // defaultInteraction: noteSelectionInteraction
 
         onActiveInteractionChanged: {
             if(activeInteraction == defaultInteraction) {
@@ -225,6 +229,7 @@ ImageItem {
     //For rendering scraps onto the view
     ScrapView {
         id: scrapViewId
+        objectName: "scrapViewId"
         parent: noteArea.targetItem
         note: noteArea.note
 

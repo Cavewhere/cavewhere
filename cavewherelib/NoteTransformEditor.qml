@@ -78,17 +78,13 @@ QQ.Item {
 
                 Controls.ComboBox {
                     id: typeComboBox
+                    objectName: "typeComboBox"
                     implicitWidth: 175
                     model: editor.scrap ? editor.scrap.types : null
-                    onCurrentIndexChanged: if(editor.scrap) {
-                                               editor.scrap.type = currentIndex;
-                                           }
-
-                    Binding {
-                        target: typeComboBox
-                        property: "currentIndex"
-                        value: editor.currentScrapType()
-                    }
+                    onActivated: if(editor.scrap) {
+                                     editor.scrap.type = currentIndex;
+                                 }
+                    currentIndex: editor.currentScrapType()
                 }
             }
 
@@ -119,7 +115,10 @@ QQ.Item {
                         id: upInputId
                         scrapType: editor.scrapType
                         noteTransform: editor.noteTransform
-                        onNorthUpInteractionActivated: editor.interactionManager.active(editor.northInteraction)
+                        onNorthUpInteractionActivated: {
+
+                            editor.interactionManager.active(editor.northInteraction)
+                        }
                         northUpHelp: northUpHelpArea
                         enable: !checkableBoxId.checked
                     }

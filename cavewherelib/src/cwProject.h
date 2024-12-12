@@ -79,7 +79,7 @@ public:
     static QString createTemporaryFilename();
     static QSqlDatabase createDatabaseConnection(const QString& connectionName, const QString& databasePath);
 
-    void waitLoadToFinish();
+    Q_INVOKABLE void waitLoadToFinish();
     void waitSaveToFinish();
 
     Q_INVOKABLE bool isModified() const;

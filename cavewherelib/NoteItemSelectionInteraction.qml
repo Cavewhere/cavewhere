@@ -12,6 +12,8 @@ import cavewherelib
 PanZoomInteraction {
     id: interactionId
 
+    anchors.fill: parent
+
     required property ScrapView scrapView
     required property ImageItem imageItem
 
@@ -20,8 +22,8 @@ PanZoomInteraction {
         parent: interactionId.target
         target: interactionId.target
         onTapped: (eventPoint, button) => {
-            interactionId.scrapView.selectScrapAt(eventPoint.position)
-        }
+                      interactionId.scrapView.selectScrapAt(eventPoint.position)
+                  }
     }
 
 }

@@ -28,20 +28,24 @@ QString copyToTempFolder(QString filename) {
         file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ReadGroup | QFileDevice::ReadUser);
 
         bool couldRemove = file.remove();
-        INFO("Trying to remove " << newFileLocation);
-        REQUIRE(couldRemove == true);
+        if(!couldRemove) {
+            qFatal() << "Trying to remove " << newFileLocation;
+        }
     }
 
     bool couldCopy = QFile::copy(filename, newFileLocation);
-    INFO("Trying to copy " << filename << " to " << newFileLocation);
-    REQUIRE(couldCopy == true);
+    if(!couldCopy) {
+        qFatal() << "Trying to copy " << filename << " to " << newFileLocation;
+    }
 
     bool couldPermissions = QFile::setPermissions(newFileLocation, QFile::WriteOwner | QFile::ReadOwner);
-    INFO("Trying to set permissions for " << filename);
-    REQUIRE(couldPermissions);
+    if(!couldPermissions) {
+        qFatal() << "Trying to set permissions for " << filename;
+    }
 
     return newFileLocation;
 }
+
 
 void checkStationLookup(cwStationPositionLookup lookup1, cwStationPositionLookup lookup2) {
     foreach(QString stationName, lookup1.positions().keys()) {

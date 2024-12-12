@@ -21,16 +21,6 @@ cwScaleLengthItem::cwScaleLengthItem(QQuickItem *parent) :
     setFlag(QQuickItem::ItemHasContents, true);
 }
 
-void cwScaleLengthItem::setZoom(double zoom)
-{
-    if(m_zoom != zoom) {
-        m_zoom = zoom;
-        Lines = lengthLines();
-        update();
-        emit zoomChanged();
-    }
-}
-
 QSGNode *cwScaleLengthItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData *)
 {
     if(!oldNode) {
@@ -40,33 +30,10 @@ QSGNode *cwScaleLengthItem::updatePaintNode(QSGNode *oldNode, QQuickItem::Update
         oldNode->appendChildNode(LinesNode);
     }
 
-    // if(transformUpdater()) {
-    //     QSGTransformNode* transformNode = static_cast<QSGTransformNode*>(oldNode);
-    //     transformNode->setMatrix(transformUpdater()->matrix());
-    // }
-
     LinesNode->setLineWidth(cwSGLinesNode::lineWidthFromZoom(m_zoom, 2.0));
     LinesNode->setLines(Lines);
 
     return oldNode;
-}
-
-/**
-    This is called when a new transformer is installed into this object.
-
-    We need to connect it.
-  */
-void cwScaleLengthItem::connectTransformer() {
-    connect(TransformUpdater, SIGNAL(updated()), SLOT(updateScaleLengthPath()));
-}
-
-/**
-    This is called when a transformer is removed from this object
-
-    We need to disconnect it
-  */
-void cwScaleLengthItem::disconnectTransformer() {
-    disconnect(TransformUpdater, SIGNAL(updated()), this, SLOT(updateScaleLengthPath()));
 }
 
 /**

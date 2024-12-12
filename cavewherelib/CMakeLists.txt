@@ -143,7 +143,7 @@ qt_add_qml_module(cavewherelib
     URI cavewherelib
     VERSION 1.0
     RESOURCE_PREFIX /cavewherelib
-    OUTPUT_DIRECTORY cavewherelib
+    OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/cavewherelib
     NO_CACHEGEN
     DEPENDENCIES
         QtQuick

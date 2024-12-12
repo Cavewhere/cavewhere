@@ -45,7 +45,7 @@ QImage cwImageProvider::requestImage(const QString &id, QSize *size, const QSize
     int sqlId = id.toInt(&okay);
 
     if(!okay) {
-        qDebug() << "cwProjectImageProvider:: Couldn't convert id to a number where id=" << id;
+        qDebug() << "cwImageProvider:: Couldn't convert id to a number where id=" << id;
         return QImage();
     }
 
@@ -57,7 +57,7 @@ QImage cwImageProvider::requestImage(const QString &id, QSize *size, const QSize
 
     //Make sure the image is good
     if(image.isNull()) {
-        qDebug() << "cwProjectImageProvider:: Image isn't of format " << imageData.format();
+        qDebug() << "cwImageProvider:: Image isn't of format " << imageData.format();
         return QImage();
     }
 
@@ -116,7 +116,7 @@ cwImageData cwImageProvider::data(int id, bool metaDataOnly) const {
     //Create an sql connection
     bool connected = database.open();
     if(!connected) {
-        qDebug() << "cwProjectImageProvider:: Couldn't connect to database:" << ProjectPath << database.lastError().text() << LOCATION;
+        qDebug() << "cwImageProvider:: Couldn't connect to database:" << ProjectPath << database.lastError().text() << LOCATION;
         return cwImageData();
     }
 
@@ -132,7 +132,7 @@ cwImageData cwImageProvider::data(int id, bool metaDataOnly) const {
     }
 
     if(!successful) {
-        qDebug() << "cwProjectImageProvider:: Couldn't prepare query " << requestImageSQL();
+        qDebug() << "cwImageProvider:: Couldn't prepare query " << requestImageSQL() << "error:" << query.lastError().text();
         cwSQLManager::instance()->endTransaction(database);
         database.close();
         return cwImageData();
@@ -229,7 +229,7 @@ QImage cwImageProvider::image(const cwImageData &imageData) const
 }
 
 /**
- * @brief cwProjectImageProvider::scaleTexCoords
+ * @brief cwImageProvider::scaleTexCoords
  * @param id
  * @return This returns the
  */

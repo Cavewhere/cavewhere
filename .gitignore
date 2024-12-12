@@ -1002,3 +1002,4 @@ build
 cavewherelib/.qmlls.ini
 *.user.*
 *.mo
+.qmlls.ini

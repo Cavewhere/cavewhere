@@ -27,6 +27,7 @@ QQ.Item {
 
     QQ.Image {
         id: imageId
+        objectName: "imageId"
         smooth: false
         mipmap: true
         fillMode: QQ.Image.Pad //No rescaling

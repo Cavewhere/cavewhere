@@ -23,6 +23,7 @@
 #include <QTextStream>
 #include <QVector2D>
 #include <QMatrix4x4>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwStationPositionLookup.h"
@@ -32,6 +33,8 @@
 
 //Std includes
 #include <iostream>
+
+
 
 inline std::ostream& operator << ( std::ostream& os, QVector3D const& value ) {
     os << "(" << value.x() << ", " << value.y() << ", " << value.z() << ")";
@@ -146,6 +149,18 @@ QString prependTempFolder(QString filename);
  */
 std::shared_ptr<cwProject> fileToProject(QString filename);
 void fileToProject(cwProject* project, const QString& filename);
+
+
+class TestHelper : public QObject {
+    Q_OBJECT
+    QML_ELEMENT
+    QML_SINGLETON
+
+public:
+    Q_INVOKABLE void loadProjectFromFile(cwProject* project, const QString& filename) {
+        fileToProject(project, filename);
+    }
+};
 
 #endif // STREAMOPERATOR
 

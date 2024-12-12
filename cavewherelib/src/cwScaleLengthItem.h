@@ -21,26 +21,13 @@ class cwScaleLengthItem : public cwAbstract2PointItem
     Q_OBJECT
     QML_NAMED_ELEMENT(ScaleLengthItem)
 
-    Q_PROPERTY(double zoom READ zoom WRITE setZoom NOTIFY zoomChanged);
-
 public:
     explicit cwScaleLengthItem(QQuickItem *parent = 0);
-    
-    double zoom() const { return m_zoom; }
-    void setZoom(double zoom);
-
-public slots:
-
-signals:
-    void zoomChanged();
 
 protected:
     QSGNode* updatePaintNode(QSGNode *, UpdatePaintNodeData *);
 
-
 private:
-    void connectTransformer();
-    void disconnectTransformer();
 
     void p1Updated();
     void p2Updated();
@@ -48,9 +35,6 @@ private:
     //This should only be used in the rendering thread
     cwSGLinesNode* LinesNode;
     QVector<QLineF> Lines;
-
-    //For scaling the scale bar correctly for drawing
-    double m_zoom = 1.0;
 
 private slots:
     void updateScaleLengthPath();

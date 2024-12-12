@@ -19,3 +19,6 @@
 [submodule "cavewherelib/twbs-icons"]
 	path = cavewherelib/twbs-icons
 	url = git@github.com:twbs/icons.git
+[submodule "qml-test-recorder"]
+	path = qml-test-recorder
+	url = git@github.com:vpicaver/qml-test-recorder.git

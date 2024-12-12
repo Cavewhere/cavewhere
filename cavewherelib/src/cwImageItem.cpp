@@ -9,7 +9,6 @@
 #include "cwImageItem.h"
 #include "cwGLShader.h"
 #include "cwShaderDebugger.h"
-#include "cwImageProvider.h"
 #include "cwImageProperties.h"
 #include "cwGlobalDirectory.h"
 #include "cwImageTexture.h"
