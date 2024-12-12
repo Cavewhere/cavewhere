@@ -56,32 +56,6 @@ find_package(Qt6
 set(CMAKE_AUTOMOC ON)
 
 #### cavewhere-testlib ####
-
-# qt_add_library(cavewhere-testlib)
-
-# file(GLOB cavewhere_testlib_qrc_FILES "testcases/*.qrc")
-# qt_add_resources(cavewhere_testlib_QT_RESOURCES ${cavewhere_testlib_qrc_FILES})
-# target_sources(cavewhere-testlib PRIVATE ${cavewhere_testlib_QT_RESOURCES})
-
-# file(GLOB cavewhere_testlib_CPP_FILES "testlib/*.cpp")
-# file(GLOB cavewhere_testlib_H_FILES "testlib/*.h")
-# target_sources(cavewhere-testlib PRIVATE ${cavewhere_testlib_CPP_FILES} ${cavewhere_testlib_H_FILES})
-
-# target_link_libraries(cavewhere-testlib
-#     PRIVATE
-#     Qt::Test
-#     Qt::Core
-#     Qt::Gui
-#     Qt::Widgets
-#     Qt::Quick
-#     Qt::Qml
-#     Catch2::Catch2
-#     cavewherelib
-# )
-
-# target_include_directories(cavewhere-testlib PUBLIC
-#     ${CMAKE_CURRENT_SOURCE_DIR}/testlib)
-
 qt_add_qml_module(cavewhere-testlib
     URI CaveWhere.TestLib
     VERSION 1.0
@@ -94,6 +68,13 @@ qt_add_qml_module(cavewhere-testlib
         testlib/TestHelper.cpp
         testlib/TestHelper.h
     #QML_FILES
+)
+
+# Generate the export header
+generate_export_header(cavewhere-testlib
+    BASE_NAME CAVEWHERE_TESTLIB
+    EXPORT_MACRO_NAME CAVEWHERE_TESTLIB_EXPORT
+    EXPORT_FILE_NAME CaveWhereTestLibExport.h
 )
 
 target_link_libraries(cavewhere-testlib
@@ -113,7 +94,9 @@ qt_add_resources(cavewhere_testlib_QT_RESOURCES ${cavewhere_testlib_qrc_FILES})
 target_sources(cavewhere-testlib PRIVATE ${cavewhere_testlib_QT_RESOURCES})
 
 target_include_directories(cavewhere-testlib PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/testlib)
+    ${CMAKE_CURRENT_SOURCE_DIR}/testlib
+    ${CMAKE_CURRENT_BINARY_DIR}
+)
 
 #### cavewhere-test ####
 qt_add_executable(cavewhere-test)

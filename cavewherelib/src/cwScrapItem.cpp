@@ -27,7 +27,6 @@
 cwScrapItem::cwScrapItem(QQuickItem *parent) :
     QQuickItem(parent),
     Scrap(nullptr),
-    TransformUpdater(nullptr),
     TransformNodeDirty(false),
     PolygonNode(nullptr),
     OutlineNode(nullptr),
@@ -43,7 +42,6 @@ cwScrapItem::cwScrapItem(QQuickItem *parent) :
 cwScrapItem::cwScrapItem(QQmlContext *context, QQuickItem *parent) :
     QQuickItem(parent),
     Scrap(nullptr),
-    TransformUpdater(nullptr),
     TransformNodeDirty(false),
     PolygonNode(nullptr),
     OutlineNode(nullptr),

@@ -7,7 +7,6 @@
 
 //Our includes
 #include "cwAbstractPointManager.h"
-#include "cwTransformItemUpdater.h"
 #include "cwDebug.h"
 #include "cwSelectionManager.h"
 

@@ -16,7 +16,6 @@
 
 //Our includes
 #include "cwScrap.h"
-#include "cwTransformItemUpdater.h"
 #include "cwScrapStationView.h"
 #include "cwScrapLeadView.h"
 #include "cwScrapOutlinePointView.h"
@@ -84,7 +83,6 @@ private:
 
     //For keeping the 2D object aligned
     double m_zoom = 1.0;
-    cwTransformItemUpdater* TransformUpdater; //!<
     QPropertyNotifier m_matrixChanged;
     QMatrix4x4 m_transformMatrix;
 

@@ -17,10 +17,8 @@
 class cwNote;
 class cwCamera;
 class cwScrap;
-class cwTransformItemUpdater;
 class cwScrapItem;
 class cwSelectionManager;
-#include "cwTransformItemUpdater.h"
 
 /**
   This class visualizes scraps in NoteItem
@@ -85,7 +83,6 @@ private:
     QList<cwScrapItem*> m_scrapItems;
     int m_selectScrapIndex = -1; //!< The current select scrap, -1 if no scrapitem is selected
 
-    cwTransformItemUpdater* m_transformUpdater;
     cwSelectionManager* m_selectionManager;
 
     double m_zoom;

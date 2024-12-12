@@ -6,11 +6,12 @@
 #include <QQmlEngine>
 
 #include "cwCave.h"
+#include "CaveWhereLibExport.h"
 class cwTrip;
 class cwTripLengthTask;
 class cwUsedStationTaskManager;
 
-class cwCavePageModel : public QAbstractItemModel
+class CAVEWHERE_LIB_EXPORT cwCavePageModel : public QAbstractItemModel
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(CavePageModel)

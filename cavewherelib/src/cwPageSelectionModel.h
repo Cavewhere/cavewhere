@@ -20,13 +20,14 @@
 
 //Our includes
 #include "cwPage.h"
+#include "CaveWhereLibExport.h"
 
 /**
  * @brief The cwPageSelectionModel class
  *
  * This class manages page links, current page, and history of pages.
  */
-class cwPageSelectionModel : public QObject
+class CAVEWHERE_LIB_EXPORT cwPageSelectionModel : public QObject
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(PageSelectionModel)

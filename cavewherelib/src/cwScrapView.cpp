@@ -20,7 +20,6 @@
 cwScrapView::cwScrapView(QQuickItem *parent) :
     QQuickItem(parent),
     m_note(nullptr),
-    m_transformUpdater(nullptr),
     m_selectionManager(new cwSelectionManager(this))
 {
     connect(this, &cwScrapView::parentChanged,
