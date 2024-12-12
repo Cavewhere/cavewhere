@@ -51,14 +51,12 @@ jobs:
 
       - name: Install Dependencies with Conan
         run: |
-          conan install . --build=missing --output-folder=build \
-          -s compiler.cppstd=17 \
-          -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=False
+          conan install . --build=missing --output-folder=build -s compiler.cppstd=17
 
       - name: Configure the Project with CMake
         run: |
           cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_PDF=OFF \
-          -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Qt\6.8.0\msvc2019_64\lib" \
+          -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Qt\6.8.1\msvc2022_64\lib" \
           -DCMAKE_TOOLCHAIN_FILE=build\conan_toolchain.cmake -S . -B build
 
       - name: Build the Project
