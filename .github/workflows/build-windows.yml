@@ -50,14 +50,14 @@ jobs:
 
       - name: Output Conan Folder Location
         run: |
-          echo Conan cache directory: %USERPROFILE%\.conan2
-          dir %USERPROFILE%\.conan2
+          echo Conan cache directory: .conan2
+          dir .conan2
 
       - name: Cache Conan Packages
         id: cache-conan
         uses: actions/cache@v4
         with:
-          path: ${{ env.USERPROFILE }}\.conan2
+          path: .conan2
           key: ${{ runner.os }}-conan-${{ hashFiles('conanfile.*') }}
           restore-keys: |
             ${{ runner.os }}-conan-
