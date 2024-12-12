@@ -29,6 +29,10 @@ jobs:
           arch: 'win64_msvc2022_64'
           modules: 'qtshadertools'
 
+      - name: Install Locale::PO
+        run: |
+          cpan Locale::PO
+
       - name: Installing Conan
         run: |
           pipx install conan
