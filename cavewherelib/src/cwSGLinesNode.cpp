@@ -123,10 +123,10 @@ void cwSGLinesNode::setLineStrips(const QVector<QVector<QPointF> > &potentialLin
             auto numberOfSegments = points.size();
 
             LineMetadata metadata {
-                .numberOfSegments = numberOfSegments,
-                .numberOfPoints = isClosed ? points.size() - 1 : points.size(),
-                .numberOfVertices = numberOfSegments * 2,
-                .isClosed = isClosed
+                numberOfSegments,
+                isClosed ? points.size() - 1 : points.size(),
+                numberOfSegments * 2,
+                isClosed
             };
 
             verticesCount += metadata.numberOfVertices;
