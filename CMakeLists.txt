@@ -57,10 +57,10 @@ set(CMAKE_AUTOMOC ON)
 
 #### cavewhere-testlib ####
 qt_add_qml_module(cavewhere-testlib
-    URI CaveWhere.TestLib
+    URI cw.TestLib
     VERSION 1.0
     RESOURCE_PREFIX /qml
-    OUTPUT_DIRECTORY CaveWhere/TestLib
+    OUTPUT_DIRECTORY cw/TestLib
     DEPENDENCIES
         QtQuick
         QtQuick.Controls
