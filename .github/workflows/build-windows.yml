@@ -65,7 +65,7 @@ jobs:
 
       - name: Install Dependencies with Conan
         run: |
-          conan install . --build=missing --output-folder=build -s compiler=msvc -s compiler.cppstd=20 compiler.version=193 -s compiler.update=6
+          conan install . --build=missing --output-folder=build -s compiler=msvc -s compiler.cppstd=20 -s compiler.version=193 -s compiler.update=6
 
       - name: Verify Toolchain File
         run: |
