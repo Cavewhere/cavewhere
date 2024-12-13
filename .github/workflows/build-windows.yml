@@ -67,7 +67,10 @@ jobs:
 
       - name: Verify Toolchain File
         run: |
-          if not exist build/conan_toolchain.cmake exit /b 1
+          cat build/conan_toolchain.cmake
+
+      - name: List CMake Generators
+        run: cmake --help
 
       - name: Configure the Project with CMake
         run: |
