@@ -40,7 +40,7 @@ class CaveWhereConan(ConanFile):
     #         self.requires("xkbcommon/1.6.0", override=True)
     #         self.requires("sqlite3/3.45.0", override=True)
 
-    def configure(self):
+    # def configure(self):
         # if not self.options.system_qt:
         #     self.options["qt"].shared = True
         #     self.options["qt"].qtshadertools = True
@@ -59,12 +59,12 @@ class CaveWhereConan(ConanFile):
         # #This prevents xcode build from failing
         # self.options["libtiff"].zstd=False
 
-        self._check_perl_locale_po()
+    #     self._check_perl_locale_po()
 
-    def _check_perl_locale_po(self):
-        try:
-            subprocess.check_output(["perl", "-MLocale::PO", "-e", "print 'Locale::PO is available'"])
-        except subprocess.CalledProcessError:
-            raise ConanInvalidConfiguration(
-                "Locale::PO Perl module is not installed. Install it with `cpan Locale::PO`."
-            )
+    # def _check_perl_locale_po(self):
+    #     try:
+    #         subprocess.check_output(["perl", "-MLocale::PO", "-e", "print 'Locale::PO is available'"])
+    #     except subprocess.CalledProcessError:
+    #         raise ConanInvalidConfiguration(
+    #             "Locale::PO Perl module is not installed. Install it with `cpan Locale::PO`."
+    #         )
