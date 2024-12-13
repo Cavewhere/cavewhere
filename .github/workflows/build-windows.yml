@@ -21,13 +21,13 @@ jobs:
           submodules: recursive
           fetch-depth: 0 # Fetch the tags for the versions to work correctly
 
-      # - name: Install Ninja
-      #   run: |
-      #     choco install ninja
+      - name: Install Ninja
+        run: |
+          choco install ninja
 
-      # - name: Verify Ninja Installation
-      #   run: |
-      #     where ninja
+      - name: Verify Ninja Installation
+        run: |
+          where ninja
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
@@ -65,7 +65,7 @@ jobs:
 
       - name: Install Dependencies with Conan
         run: |
-          conan install . --build=missing --output-folder=build -s compiler.cppstd=17 -s compiler.version=193
+          conan install . --build=missing --output-folder=build -s compiler.cppstd=17 -s compiler.version=193 -s tools.cmake.cmaketoolchain:generator=Ninja
 #-s compiler=msvc -s compiler.cppstd=17 -s compiler.version=193 -s compiler.update=6
 
       - name: Verify Toolchain File
