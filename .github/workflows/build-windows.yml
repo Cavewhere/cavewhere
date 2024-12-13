@@ -15,10 +15,6 @@ jobs:
     steps:
       - uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Test cl
-        run: |
-           cl.exe --version
-
       - name: Checkout code
         uses: actions/checkout@v4
         with:
