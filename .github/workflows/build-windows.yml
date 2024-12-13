@@ -23,6 +23,9 @@ jobs:
         run: |
           choco install ninja
 
+      - name: Check Ninja Installation
+        run: ninja --version
+
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
@@ -63,7 +66,7 @@ jobs:
 
       - name: Configure the Project with CMake
         run: |
-          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_PDF=OFF -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Qt\6.8.1\msvc2022_64\lib" -DCMAKE_TOOLCHAIN_FILE=build\conan_toolchain.cmake -S . -B build
+          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_PDF=OFF -DCMAKE_PREFIX_PATH="${{ github.workspace }}/Qt/6.8.1/msvc2022_64/lib" -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake -S . -B build
 
       - name: Build the Project
         run: cmake --build build --parallel
