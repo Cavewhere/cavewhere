@@ -23,8 +23,9 @@ jobs:
         run: |
           choco install ninja
 
-      - name: Check Ninja Installation
-        run: ninja --version
+      - name: Verify Ninja Installation
+        run: |
+          where ninja
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
@@ -63,6 +64,10 @@ jobs:
       - name: Install Dependencies with Conan
         run: |
           conan install . --build=missing --output-folder=build -s compiler.cppstd=17
+
+      - name: Verify Toolchain File
+        run: |
+          if not exist build/conan_toolchain.cmake exit /b 1
 
       - name: Configure the Project with CMake
         run: |
