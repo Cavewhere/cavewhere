@@ -30,15 +30,15 @@ class CaveWhereConan(ConanFile):
     default_options = {"system_qt": True}
     generators = "CMakeDeps", "CMakeToolchain", "VirtualBuildEnv", "VirtualRunEnv"
 
-    def requirements(self):
-        # self.requires("expat/2.6.2", override=True)
-        # self.requires("libpng/1.6.44", override=True)
+    # def requirements(self):
+    #     self.requires("expat/2.6.2", override=True)
+    #     self.requires("libpng/1.6.44", override=True)
 
-        # # Or add a new requirement!
-        # if not self.options.system_qt:
-        #     self.requires("qt/6.7.3")
-        #     self.requires("xkbcommon/1.6.0", override=True)
-        #     self.requires("sqlite3/3.45.0", override=True)
+    #     # Or add a new requirement!
+    #     if not self.options.system_qt:
+    #         self.requires("qt/6.7.3")
+    #         self.requires("xkbcommon/1.6.0", override=True)
+    #         self.requires("sqlite3/3.45.0", override=True)
 
     def configure(self):
         # if not self.options.system_qt:
