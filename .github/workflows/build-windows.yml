@@ -59,9 +59,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: C:/Users/runneradmin/.conan2
-          key: ${{ runner.os }}-conan-win-${{ hashFiles('conanfile.*') }}
+          key: ${{ runner.os }}-conan-win2-${{ hashFiles('conanfile.*') }}
           restore-keys: |
-            ${{ runner.os }}-conan-win-
+            ${{ runner.os }}-conan-win2-
 
       - name: Install Dependencies with Conan
         run: |
