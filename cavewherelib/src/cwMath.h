@@ -15,15 +15,15 @@
 #include <math.h>
 #include <QtGlobal>
 
-#ifdef Q_OS_WIN //Need this for x86 windows
-inline double exp2(double value) {
-    return pow(2.0, value);
-}
+// #ifdef Q_OS_WIN //Need this for x86 windows
+// inline double exp2(double value) {
+//     return pow(2.0, value);
+// }
 
-inline double log2(double value) {
-    return log(value) / log(2.0);
-}
+// inline double log2(double value) {
+//     return log(value) / log(2.0);
+// }
 
-#endif
+// #endif
 
 #endif // CWMATH_H
