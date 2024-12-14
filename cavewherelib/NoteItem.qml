@@ -84,11 +84,7 @@ ImageItem {
         anchors.fill: parent
         target: noteArea.targetItem
         zoom: noteArea.targetItem.scale
-        scrapItem: scrapViewId.selectedScrapItem
-
-        // camera: cameraId
-        // basePanZoomInteraction: panZoomInteraction
-        // transformUpdater: transformUpdaterId
+        scrapView: scrapViewId
         z:1
         onActivated: {
             console.log("Active!" + this)
@@ -99,12 +95,11 @@ ImageItem {
     NoteScaleInteraction {
         id: noteScaleInteraction
         target: noteArea.targetItem
-        // anchors.fill: parent
         imageItem: noteArea
-        // basePanZoomInteraction: panZoomInteraction
-        // transformUpdater: transformUpdaterId
+        zoom: noteArea.targetItem.scale
         note: noteArea.note
-        // z:1
+        z: 1
+        scrapView: scrapViewId
     }
 
     NoteDPIInteraction {
@@ -128,7 +123,7 @@ ImageItem {
             // addLeadInteraction,
             noteSelectionInteraction,
             noteNorthUpInteraction,
-            // noteScaleInteraction,
+            noteScaleInteraction,
             noteDPIInteraction
         ]
         defaultInteraction: panZoomInteraction

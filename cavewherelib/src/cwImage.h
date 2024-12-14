@@ -32,6 +32,8 @@ class CAVEWHERE_LIB_EXPORT cwImage {
     Q_GADGET
     QML_NAMED_ELEMENT(cwImage)
 
+    Q_PROPERTY(QSize originalSize READ originalSize WRITE setOriginalSize)
+    Q_PROPERTY(int originalDotsPerMeter READ originalDotsPerMeter WRITE setOriginalDotsPerMeter)
 
 public:
     cwImage();

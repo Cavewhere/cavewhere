@@ -12,6 +12,7 @@ QQ.Item {
     id: stationItem
 
     required property ScrapItem scrapItem
+    required property AbstractPointManager parentView
 
     signal pointSelected()
     signal pointMoved(point noteCoord) // Emits in note coordinates
@@ -19,7 +20,7 @@ QQ.Item {
 
     QQ.TapHandler {
         onTapped: {
-            pointSelected()
+            stationItem.pointSelected()
         }
 
         onDoubleTapped: stationItem.doubleClicked()
@@ -32,7 +33,7 @@ QQ.Item {
         onActiveChanged: {
             if (active) {
                 // Drag has started
-                pointSelected()
+                stationItem.pointSelected()
             }
         }
 

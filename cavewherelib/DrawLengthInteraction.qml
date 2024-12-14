@@ -13,9 +13,7 @@ import "Theme.js" as Theme
 PanZoomInteraction {
     id: interaction
 
-    // property BasePanZoomInteraction basePanZoomInteraction
     property ImageItem imageItem
-    // property alias transformUpdater: scaleLengthItem.transformUpdater
     property alias doneTextLabel: lengthText.text
     property alias lengthObject: length
     property alias defaultLengthUnit: length.unit
@@ -58,12 +56,12 @@ PanZoomInteraction {
         parent: interaction.target
         onPointChanged: {
             scaleLengthItem.p2 = hoverId.point.position
-            // console.log("Mouse moved:" + hoverId.point.position)
         }
     }
 
     ScaleLengthItem {
         id: scaleLengthItem
+        objectName: "scaleLengthItem"
         anchors.fill: parent
         visible: interaction.visible
         parent: interaction.target
@@ -118,6 +116,7 @@ PanZoomInteraction {
             }
 
             QC.Button {
+                objectName: "doneButton"
                 anchors.verticalCenter: parent.verticalCenter
 
                 text: "Done"
@@ -141,6 +140,8 @@ PanZoomInteraction {
             QQ.PropertyChanges {
                 pressId {
                     onTapped: (eventPoint, button) => {
+                        scaleLengthItem.p2 = eventPoint.position
+
                         let pos = interaction.target.mapToItem(lengthRect.parent, eventPoint.position)
 
                         lengthRect.x = pos.x - lengthRect.width * 0.5

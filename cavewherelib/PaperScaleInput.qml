@@ -31,6 +31,7 @@ QQ.Item {
 
         QC.RoundButton {
             id: setLength
+            objectName: "setLengthButton"
             radius: 2
             icon.source: "qrc:/icons/svg/measurement.svg"
             visible: !scaleInput.autoScaling && scaleInput.usingInteraction

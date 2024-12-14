@@ -63,6 +63,8 @@ public:
     static QTransform toImage(cwNote* note);
     static QTransform toNormalized(cwNote* note);
 
+    Q_INVOKABLE QPointF toNoteCoordinates(QPointF imageCoordinates) const;
+
 signals:
     void noteChanged();
     void transformUpdaterChanged();

@@ -1,35 +1,11 @@
 import QtQuick
 import QtTest
-import QmlTestRecorder
 import cavewherelib
-import CaveWhere.TestLib
+import cw.TestLib
+import QmlTestRecorder
 
-Item {
+MainWindowTest {
     id: rootId
-    objectName: "rootId"
-
-    width: 1200
-    height: 700
-
-    TestcaseRecorder {
-        id: recorderId
-        rootItem: mainWindow
-        rootItemId: "mainWindow"
-    }
-
-    MainContent {
-        id: mainWindow
-        anchors.fill: parent
-
-        Rectangle {
-            id: clickId
-            width: 5
-            height: 5
-            x: 490
-            y: 502
-            color: "red"
-        }
-    }
 
     TestCase {
         name: "NoteNorthInteraction"
@@ -44,31 +20,31 @@ Item {
 
             // wait(1000)
 
-            let _obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
+            let _obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
             mouseClick(_obj1)
 
             wait(200)
 
             //Select scrap
-            let noteItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
+            let noteItem = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
             mouseClick(noteItem, 464.938, 829.673)
 
             wait(200)
 
-            let typeComboBox = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->typeComboBox")
+            let typeComboBox = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->typeComboBox")
             verify(typeComboBox.currentText === "Project Profile")
 
             //Select North arrow up
-            let setNorthButton_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->setNorthButton")
+            let setNorthButton_obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->setNorthButton")
             mouseClick(setNorthButton_obj1)
 
-            let imageId_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
+            let imageId_obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
             mouseClick(imageId_obj1, 695, 1141)
             mouseClick(imageId_obj1, 695, 739)
 
             //Check current scrap
             //0.0
-            let noteArea = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea");
+            let noteArea = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea");
             let scrapView = findChild(noteArea, "scrapViewId")
             let scrap = scrapView.selectedScrapItem.scrap as Scrap
             fuzzyCompare(scrap.noteTransformation.northUp, 0.0, 0.001, `${scrap.noteTransformation.northUp} === 0.0`);

@@ -53,6 +53,7 @@ QQ.Row {
 
     UnitInput {
         id: unitInput
+        objectName: "unitInput"
 
         function updateUnit() {
             if(itemId.unitValue !== null && privateData.customUnitsToValue.length > 0) {

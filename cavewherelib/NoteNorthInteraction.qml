@@ -18,7 +18,7 @@ PanZoomInteraction {
     // property BasePanZoomInteraction basePanZoomInteraction
     // property NoteCamera camera
     required property NoteTranformation noteTransform
-    required property ScrapItem scrapItem
+    required property ScrapView scrapView
     property alias zoom: northArrow.zoom
     property string upText: "north"
     // property alias transformUpdater: northArrow.transformUpdater
@@ -38,8 +38,8 @@ PanZoomInteraction {
 
     //This calculate the north angle
     function calculateNorthUp(point) {
-        let firstLocation = scrapItem.toNoteCoordinates(interaction._firstLocation);
-        let secondLocation = scrapItem.toNoteCoordinates(point);
+        let firstLocation = scrapView.toNoteCoordinates(interaction._firstLocation);
+        let secondLocation = scrapView.toNoteCoordinates(point);
         return noteTransform.calculateNorth(firstLocation, secondLocation);
     }
 

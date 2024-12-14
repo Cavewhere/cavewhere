@@ -157,6 +157,11 @@ QTransform cwScrapView::toNormalized(cwNote *note)
     return toImage(note).inverted();
 }
 
+QPointF cwScrapView::toNoteCoordinates(QPointF imageCoordinates) const
+{
+    return cwScrapView::toNormalized(note()).map(imageCoordinates);
+}
+
 /**
   \brief Selects the scrap at the imagePoint. ImagePoint is in image coordinate system
   */

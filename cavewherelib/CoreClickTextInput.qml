@@ -10,6 +10,7 @@ import cavewherelib
 
 QQ.Item {
     id: clickTextInput
+    objectName: "coreTextInput"
     property alias text: textAreaId.text
     property alias font: textAreaId.font
     property alias style: textAreaId.style
@@ -120,72 +121,77 @@ QQ.Item {
     Text {
         id: textAreaId
 
-//        anchors.left: parent.left
-//        anchors.right: parent.right
-//        anchors.margins: 3
+        //        anchors.left: parent.left
+        //        anchors.right: parent.right
+        //        anchors.margins: 3
         horizontalAlignment: Qt.AlignHCenter
         anchors.verticalCenter: parent.verticalCenter
         elide: Text.ElideRight
 
 
-//        anchors.centerIn: parent
+        //        anchors.centerIn: parent
 
 
-//        onTextChanged: {
-//            textChangedAnimation.restart()
-//        }
+        //        onTextChanged: {
+        //            textChangedAnimation.restart()
+        //        }
 
-//        QQ.SequentialAnimation {
-//            id: textChangedAnimation
-//            QQ.NumberAnimation {
-//                target: textAreaId;
-//                property: "scale";
-//                easing.type: QQ.Easing.OutInElastic
-//                from: 1.0;
-//                to: 1.2
-//                duration: 100
-//            }
-//            QQ.NumberAnimation {
-//                target: textAreaId;
-//                property: "scale";
-//                easing.type: QQ.Easing.OutInElastic
-//                to: 1.0
-//                duration: 100
-//            }
-//        }
+        //        QQ.SequentialAnimation {
+        //            id: textChangedAnimation
+        //            QQ.NumberAnimation {
+        //                target: textAreaId;
+        //                property: "scale";
+        //                easing.type: QQ.Easing.OutInElastic
+        //                from: 1.0;
+        //                to: 1.2
+        //                duration: 100
+        //            }
+        //            QQ.NumberAnimation {
+        //                target: textAreaId;
+        //                property: "scale";
+        //                easing.type: QQ.Easing.OutInElastic
+        //                to: 1.0
+        //                duration: 100
+        //            }
+        //        }
     }
 
-    QQ.MouseArea {
+    QQ.TapHandler {
         id: doubleClickArea
 
-        anchors.fill: parent
         enabled:  true
+        target: clickTextInput
+        gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
+    }
 
+    states: [
+        QQ.State {
+            name: "DOUBLE-CLICK"
+            when: clickTextInput.doubleClickEdit && !clickTextInput.readOnly
 
-
-        states: [
-            QQ.State {
-                name: "DOUBLE-CLICK"
-                when: clickTextInput.doubleClickEdit && !clickTextInput.readOnly
-
-                QQ.PropertyChanges {
-                    doubleClickArea {
-                        propagateComposedEvents: !acceptMousePress
-                        onDoubleClicked: openEditor()
-                    }
-                }
-            },
-
-            QQ.State {
-                name: "SIGNLE-CLICK"
-                when: !clickTextInput.doubleClickEdit && !clickTextInput.readOnly
-
-                QQ.PropertyChanges {
-                    doubleClickArea {
-                        onClicked: openEditor()
+            QQ.PropertyChanges {
+                doubleClickArea  {
+                    onDoubleTapped: (eventPoint, button) => {
+                        openEditor()
+                        // eventPoint.accepted = true
                     }
                 }
             }
-        ]
-    }
+        },
+
+        QQ.State {
+            name: "SIGNLE-CLICK"
+            when: !clickTextInput.doubleClickEdit && !clickTextInput.readOnly
+
+            QQ.PropertyChanges {
+                doubleClickArea {
+                    onSingleTapped: (eventPoint, button) => {
+                        openEditor()
+                        // console.log("EventPoint:" + eventPoint.accepted)
+                        // eventPoint.accepted = true
+                    }
+                }
+            }
+        }
+    ]
 }

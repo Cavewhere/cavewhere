@@ -13,7 +13,8 @@ import cavewherelib
   */
 Positioner {
 
-    property var parentView; //Is an abstract point manager
+
+    property AbstractPointManager parentView; //Is an abstract point manager
     property int pointIndex; //The index in the item list
     property bool selected: false
 

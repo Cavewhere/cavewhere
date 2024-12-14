@@ -9,16 +9,20 @@ import cavewherelib
 
 DrawLengthInteraction {
     id: noteScaleInteraction
+    objectName: "noteScaleInteraction"
 
     property NoteTranformation noteTransform
-    property Note note
+    required property Note note
+    required property ScrapView scrapView
 
     doneTextLabel: "<b>In cave length</b>"
 
     onDoneButtonPressed: {
-        var imageSize = imageItem.imageProperties.size
-        var scale = noteTransform.calculateScale(firstMouseLocation,
-                                                 secondMouseLocation,
+        let imageSize = note.image.originalSize
+        let p1 = scrapView.toNoteCoordinates(firstMouseLocation);
+        let p2 = scrapView.toNoteCoordinates(secondMouseLocation);
+        let scale = noteTransform.calculateScale(p1,
+                                                 p2,
                                                  lengthObject,
                                                  imageSize,
                                                  note.imageResolution);

@@ -50,6 +50,7 @@ ScrapPointItem {
             anchors.rightMargin: -3
 
             scrapItem: scrapPointItem.scrapItem
+            parentView: scrapPointItem.parentView
 
             onPointSelected: {
                 scrapPointItem.select()

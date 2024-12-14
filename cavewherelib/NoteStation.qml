@@ -69,7 +69,7 @@ ScrapPointItem {
             anchors.fill: parent
 
             scrapItem: noteStationId.scrapItem
-
+            parentView: noteStationId.parentView
             onPointSelected: noteStationId.select();
             onPointMoved: (noteCoord) => {
 
