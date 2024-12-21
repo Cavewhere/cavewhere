@@ -18,6 +18,7 @@ QQ.Row {
     property alias valueReadOnly: clickInput.readOnly
     property int defaultUnit
     property alias unitModel: unitInput.unitModel
+    property alias validator: clickInput.validator
     //property bool useCustomUnitModel: false  //Allows you use only subsection of the units
 
     function updateMap() {

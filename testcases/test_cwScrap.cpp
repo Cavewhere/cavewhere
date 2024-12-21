@@ -10,7 +10,6 @@
 #include <catch2/catch_approx.hpp>
 
 //Cavewhere includes
-#include "cwScrap.h"
 #include "cwProject.h"
 #include "cwCave.h"
 #include "cwTrip.h"

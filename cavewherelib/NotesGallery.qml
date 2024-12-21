@@ -54,7 +54,7 @@ QQ.Rectangle {
         }
     }
 
-    signal imagesAdded(variant images)
+    signal imagesAdded(list<url> images)
     signal backClicked();
 
     anchors.margins: 3

@@ -32,7 +32,7 @@ QValidator::State cwDistanceValidator::validate( QString & input, int & pos ) co
         //Just make sure we can convert the input
         bool okay;
         double value = input.toDouble(&okay);
-        if(!okay || !check(value)) {
+        if(!okay || !rangeCheck(value)) {
             //The validator is dumb ... this handle use case input="5,5"
             return QValidator::Invalid;
         }

@@ -348,25 +348,25 @@ void cwProject::newProject() {
     UndoStack->clear();
 }
 
-/**
- * @brief cwProject::setTaskManager
- * @param manager
- *
- * When adding images to the project, this will allow the user to see the image progress
- */
-void cwProject::setTaskManager(cwTaskManagerModel *manager)
-{
-    TaskManager = manager;
-}
+// /**
+//  * @brief cwProject::setTaskManager
+//  * @param manager
+//  *
+//  * When adding images to the project, this will allow the user to see the image progress
+//  */
+// void cwProject::setTaskManager(cwTaskManagerModel *manager)
+// {
+//     TaskManager = manager;
+// }
 
-/**
- * @brief cwProject::taskManager
- * @return Return's the current taskManager
- */
-cwTaskManagerModel *cwProject::taskManager() const
-{
-    return TaskManager;
-}
+// /**
+//  * @brief cwProject::taskManager
+//  * @return Return's the current taskManager
+//  */
+// cwTaskManagerModel *cwProject::taskManager() const
+// {
+//     return TaskManager;
+// }
 
 /**
   Loads the project, loads all the files to the project

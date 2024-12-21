@@ -50,7 +50,7 @@ cwRootData::cwRootData(QObject *parent) :
 
     //Create the project, this saves and load data
     Project = new cwProject(this);
-    Project->setTaskManager(TaskManagerModel);
+    // Project->setTaskManager(TaskManagerModel);
     Project->setFutureManagerToken(FutureManagerModel);
 
     Region = Project->cavingRegion();

@@ -134,6 +134,10 @@ file(GLOB cavewhere_qml_test_CPP_FILES "test-qml/*.cpp")
 file(GLOB cavewhere_qml_test_H_FILES "test-qml/*.h")
 target_sources(cavewhere-qml-test PRIVATE ${cavewhere_qml_test_CPP_FILES} ${cavewhere_qml_test_CPP_FILES})
 
+file(GLOB cavewhere_qml_test_qrc_FILES "test-qml/*.qrc")
+qt_add_resources(cavewhere_qml_test_QT_RESOURCES ${cavewhere_qml_test_qrc_FILES})
+target_sources(cavewhere-qml-test PRIVATE ${cavewhere_qml_test_QT_RESOURCES})
+
 qt_add_qml_module(cavewhere_simplemodule
     URI cw.Simple
     VERSION 1.0

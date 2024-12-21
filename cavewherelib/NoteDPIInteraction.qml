@@ -14,6 +14,8 @@ DrawLengthInteraction {
 
     doneTextLabel: "<b>Length on the paper</b>"
     defaultLengthUnit: Units.Inches
+    doneEnabled: lengthObject.value > 0.0
+    lengthValidator: DistanceValidator {}
 
     onDoneButtonPressed: {
         var p1 = firstMouseLocation;

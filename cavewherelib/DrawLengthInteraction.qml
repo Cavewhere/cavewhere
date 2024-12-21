@@ -15,9 +15,11 @@ PanZoomInteraction {
 
     property ImageItem imageItem
     property alias doneTextLabel: lengthText.text
+    property alias doneEnabled: doneId.enabled
     property alias lengthObject: length
     property alias defaultLengthUnit: length.unit
     property alias zoom: scaleLengthItem.zoom
+    property alias lengthValidator: lengthUnitValueId.validator
 
     //More or less, private data
     property point firstMouseLocation;
@@ -110,12 +112,15 @@ PanZoomInteraction {
             }
 
             UnitValueInput {
+                id: lengthUnitValueId
+                objectName: "lengthUnitValue"
                 unitValue: length
                 defaultUnit: Units.LengthUnitless
                 anchors.verticalCenter: parent.verticalCenter
             }
 
             QC.Button {
+                id: doneId
                 objectName: "doneButton"
                 anchors.verticalCenter: parent.verticalCenter
 

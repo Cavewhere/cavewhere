@@ -7,6 +7,7 @@
 
 // import QtQuick as QQ // to target S60 5th Edition or Maemo 5
 import QtQuick.Layouts
+import QtQuick as QQ;
 import cavewherelib
 import QtQuick.Controls as Controls;
 
@@ -30,6 +31,7 @@ FloatingGroupBox {
         RowLayout {
             Controls.RoundButton {
                 id: setResolution
+                objectName: "setResolution"
                 icon.source: "qrc:/icons/svg/measurement.svg"
                 onClicked: floatingGroup.activateDPIInteraction()
                 radius: 2
@@ -42,7 +44,9 @@ FloatingGroupBox {
             }
 
             UnitValueInput {
+                objectName: "noteDPI"
                 unitValue: floatingGroup.resolution
+                validator: DPIValidator { }
             }
 
             ContextMenuButton {

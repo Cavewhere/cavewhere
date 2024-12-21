@@ -69,8 +69,8 @@ public:
 
     QString filename() const;
 
-    void setTaskManager(cwTaskManagerModel* manager);
-    cwTaskManagerModel* taskManager() const;
+    // void setTaskManager(cwTaskManagerModel* manager);
+    // cwTaskManagerModel* taskManager() const;
 
     cwFutureManagerToken futureManagerToken() const;
     void setFutureManagerToken(cwFutureManagerToken futureManagerToken);

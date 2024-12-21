@@ -622,6 +622,9 @@ cwImage cwAddImageTask::originalMetaData(const QImage &image)
     int dotsPerMeter = 0;
     if(image.dotsPerMeterX() == image.dotsPerMeterY()) {
         dotsPerMeter = image.dotsPerMeterX();
+    } else {
+        qWarning() << "image dpm isn't equal x=" << image.dotsPerMeterX() << "y=" << image.dotsPerMeterY() << "using x@" << image.dotsPerMeterX();
+        dotsPerMeter = image.dotsPerMeterX();
     }
 
     cwImage imageIdContainer;

@@ -27,7 +27,7 @@ IconButton {
         // selectMultiple: true
         currentFolder: RootData.lastDirectory
         onAccepted: {
-            RootData.lastDirectory = selectedFiles
+            RootData.lastDirectory = fileDialog.currentFolder
             buttonId.filesSelected(fileDialog.selectedFiles)
         }
     }
