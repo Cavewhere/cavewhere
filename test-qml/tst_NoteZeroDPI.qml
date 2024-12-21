@@ -12,6 +12,22 @@ MainWindowTest {
         when: windowShown
 
 
+        /**
+         * Test: NoteZeroDPI
+         *
+         * Given:
+         * - A project is loaded with the current page set to "Trip 1".
+         * - The tripPage is displayed.
+         *
+         * When:
+         * - The user interacts with the noteDPI input, attempting invalid and valid values.
+         * - The setResolution tool is used to select points and validate DPI changes.
+         *
+         * Then:
+         * - The noteDPI remains unchanged for invalid input (e.g., 0 DPI).
+         * - The noteDPI updates correctly for valid input (e.g., 500 DPI).
+         * - The doneButton prevents invalid values and updates DPI appropriately for valid inputs.
+         */
         function test_noteScaleInteraction() {
             TestHelper.loadProjectFromFile(RootData.project, "://datasets/tst_NoteZeroDPI/test.cw");
             RootData.pageSelectionModel.currentPageAddress = "Data/Cave=Cave 1/Trip=Trip 1"
@@ -47,7 +63,7 @@ MainWindowTest {
             wait(100);
             tryCompare(text, "text", "500", 100);
 
-            // //Use the DPI tool, and prevent the user from accepting invalid DPI
+            //Use the DPI tool, and prevent the user from accepting invalid DPI
             let setResolution_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->setResolution")
             mouseClick(setResolution_obj1)
 
