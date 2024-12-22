@@ -36,7 +36,7 @@ MainWindowTest {
             mouseClick(imageId_obj2, 777.563, 738.692)
 
             //Click on the text label
-            let lengthText = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteScaleInteraction->coreTextInput")
+            let lengthText = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteScaleInteraction->lengthUnitValue->coreTextInput")
             mouseClick(lengthText, 0.867188, 12.7031)
 
             //Type 10
