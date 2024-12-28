@@ -6,6 +6,7 @@
 **************************************************************************/
 
 import QtQuick as QQ
+import QtQuick.Layouts
 
 QQ.Item {
     property alias text: groupText.text
@@ -17,8 +18,8 @@ QQ.Item {
     QQ.Rectangle {
         id: buttonAreaRect
 
-        width: buttonArea.width + 5
-        height: buttonArea.height + 3 + textRect.height / 2.0
+        width: buttonArea.implicitWidth + 6
+        height: buttonArea.implicitHeight + 3 + textRect.height / 2.0
 
         border.width: 1
         border.color: "black"
@@ -27,14 +28,15 @@ QQ.Item {
 
         radius: 3
 
-        QQ.Row {
+        RowLayout {
             id: buttonArea
+            x: 3
             // anchors.horizontalCenter: buttonAreaRect.horizontalCenter
 
             y: 2
 
-            width: childrenRect.width
-            height: childrenRect.height
+            // width: childrenRect.width
+            // height: childrenRect.height
 
             spacing: 3
         }

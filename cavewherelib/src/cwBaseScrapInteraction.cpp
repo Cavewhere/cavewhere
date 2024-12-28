@@ -10,17 +10,18 @@
 #include "cwDebug.h"
 #include "cwScrap.h"
 #include "cwNote.h"
-#include "cwImageItem.h"
+// #include "cwImageItem.h"
 #include "cwScrapOutlinePointView.h"
 #include "cwTrip.h"
 #include "cwSurveyNoteModel.h"
+#include "cwScrapView.h"
 // #include "cwNoteCamera.h"
 
 cwBaseScrapInteraction::cwBaseScrapInteraction(QQuickItem *parent) :
     cwNoteInteraction(parent),
-    Scrap(nullptr),
+    m_scrap(nullptr),
     // ImageItem(nullptr),
-    OutlinePointView(nullptr)
+    m_outlinePointView(nullptr)
 {
     connect(this, SIGNAL(noteChanged()), SLOT(startNewScrap()));
     connect(this, SIGNAL(visibleChanged()), SLOT(deactivating()));
@@ -51,8 +52,8 @@ void cwBaseScrapInteraction::addScrap() {
  * Closes the current scrap geometry
  */
 void cwBaseScrapInteraction::closeCurrentScrap() {
-    if(Scrap != nullptr) {
-        Scrap->close();
+    if(m_scrap != nullptr) {
+        m_scrap->close();
     }
 }
 
@@ -62,21 +63,18 @@ cwBaseScrapInteraction::cwClosestPoint cwBaseScrapInteraction::calcClosestPoint(
         return cwClosestPoint();
     }
 
-    if(m_noteCamera == nullptr) {
+    if(m_scrap == nullptr) {
         return cwClosestPoint();
     }
 
-    if(Scrap == nullptr) {
-        return cwClosestPoint();
-    }
-
-    QPointF noteCoordinate = m_noteCamera->mapQtViewportToNote(qtViewportPosition);
+    auto toNote = cwScrapView::toNormalized(note());
+    QPointF noteCoordinate = toNote.map(qtViewportPosition.toPointF());
     double buffer = 7.5; //In pixels
 
     //Go through each scrap polygon's lines
-    for(int i = 0; i < Scrap->numberOfPoints() - 1; i++) {
-        QPointF p1 = Scrap->points().at(i);
-        QPointF p2 = Scrap->points().at(i+1);
+    for(int i = 0; i < m_scrap->numberOfPoints() - 1; i++) {
+        QPointF p1 = m_scrap->points().at(i);
+        QPointF p2 = m_scrap->points().at(i+1);
         QLineF line(p1, p2);
         float angle = line.angle();
 
@@ -87,8 +85,8 @@ cwBaseScrapInteraction::cwClosestPoint cwBaseScrapInteraction::calcClosestPoint(
         QLineF transLine = transform.map(line);
         QPointF rotatedNoteCoord = transform.map(noteCoordinate);
 
-        QPointF mappedBuffer = m_noteCamera->mapQtViewportToNote(QPoint(0, buffer));
-        QPointF origin = m_noteCamera->mapQtViewportToNote(QPoint(0, 0));
+        QPointF mappedBuffer = toNote.map(QPoint(0, buffer));
+        QPointF origin = toNote.map(QPoint(0, 0));
         double bufferNoteCoords = QLineF(origin, mappedBuffer).length();
 
         p1 = transLine.p1();
@@ -176,8 +174,8 @@ void cwBaseScrapInteraction::startNewScrap() {
 Sets controlPointView
 */
 void cwBaseScrapInteraction::setOutlinePointView(cwScrapOutlinePointView* controlPointView) {
-    if(OutlinePointView != controlPointView) {
-        OutlinePointView = controlPointView;
+    if(m_outlinePointView != controlPointView) {
+        m_outlinePointView = controlPointView;
         emit outlinePointViewChanged();
     }
 }
@@ -188,26 +186,75 @@ void cwBaseScrapInteraction::setOutlinePointView(cwScrapOutlinePointView* contro
   */
 void cwBaseScrapInteraction::setScrap(cwScrap *scrap)
 {
-    if(Scrap == scrap) { return; }
+    if(m_scrap == scrap) { return; }
 
-    if(Scrap != nullptr) {
-        disconnect(Scrap, &cwScrap::destroyed, this, &cwBaseScrapInteraction::scrapDeleted);
+    if(m_scrap != nullptr) {
+        disconnect(m_scrap, &cwScrap::destroyed, this, &cwBaseScrapInteraction::scrapDeleted);
     }
 
-    Scrap = scrap;
+    m_scrap = scrap;
 
-    if(Scrap != nullptr) {
-        connect(Scrap, &cwScrap::destroyed, this, &cwBaseScrapInteraction::scrapDeleted);
+    if(m_scrap != nullptr) {
+        connect(m_scrap, &cwScrap::destroyed, this, &cwBaseScrapInteraction::scrapDeleted);
     }
 
     emit scrapChanged();
 }
 
-void cwBaseScrapInteraction::setNoteCamera(cwNoteCamera *noteCamera) {
-    if (m_noteCamera != noteCamera) {
-        m_noteCamera = noteCamera;
-        emit noteCameraChanged();
+// void cwBaseScrapInteraction::setNote(cwNote *note)
+// {
+//     if(m_note != note) {
+//         m_note = note;
+//         emit noteChanged();
+//     }
+// }
+
+// void cwBaseScrapInteraction::setNoteCamera(cwNoteCamera *noteCamera) {
+//     if (m_noteCamera != noteCamera) {
+//         m_noteCamera = noteCamera;
+//         emit noteCameraChanged();
+//     }
+// }
+
+cwScrapInteractionPoint cwBaseScrapInteraction::snapToScrapLine(QPoint imagePos) const
+{
+    cwScrapInteractionPoint interactionPoint;
+    cwClosestPoint point = calcClosestPoint(imagePos);
+
+    if(note()) {
+        if (point.IsValid) {
+            // Point is snapped
+            interactionPoint.setIsSnapped(true);
+            interactionPoint.setNoteCoordsPoint(point.ClosestPoint);
+
+            auto toImage = cwScrapView::toImage(note());
+            interactionPoint.setImagePoint(toImage.map(point.ClosestPoint));
+
+            interactionPoint.setInsertIndex(point.InsertIndex);
+        } else {
+            // Point isn't snapped to the line
+            interactionPoint.setIsSnapped(false);
+
+            auto toNote = cwScrapView::toNormalized(note());
+            interactionPoint.setNoteCoordsPoint(toNote.map(imagePos.toPointF()));
+
+            interactionPoint.setImagePoint(imagePos);
+
+            qDebug() << "cwBaseScrapInteraction:" << interactionPoint.noteCoordsPoint() << interactionPoint.imagePoint();
+
+            if (m_scrap == nullptr) {
+                qDebug() << "Set input:" << 0;
+                interactionPoint.setInsertIndex(0);
+            } else {
+                qDebug() << "Set input:" << m_scrap->numberOfPoints();
+                interactionPoint.setInsertIndex(m_scrap->numberOfPoints());
+            }
+        }
     }
+
+    // qDebug() << "Note:" << note();
+
+    return interactionPoint;
 }
 
 /**
@@ -226,31 +273,31 @@ void cwBaseScrapInteraction::setNoteCamera(cwNoteCamera *noteCamera) {
   * InsertIndex - Where the point should be inserted into the scrap
   *
   */
-QVariantMap cwBaseScrapInteraction::snapToScrapLine(QPoint qtViewportPosition) const
-{
-    cwClosestPoint point = calcClosestPoint(qtViewportPosition);
-    QVariantMap map;
+// QVariantMap cwBaseScrapInteraction::snapToScrapLine(QPoint qtViewportPosition) const
+// {
+//     cwClosestPoint point = calcClosestPoint(qtViewportPosition);
+//     QVariantMap map;
 
-    if(point.IsValid) {
-        //Point is snapped
-        map.insert("IsSnapped", true);
-        map.insert("NoteCoordsPoint", point.ClosestPoint);
-        map.insert("QtViewportPoint", m_noteCamera->mapNoteToQtViewport(point.ClosestPoint));
-        map.insert("InsertIndex", point.InsertIndex);
-    } else {
-        //Point isn't snapped to the line
-        map.insert("IsSnapped", false);
-        map.insert("NoteCoordsPoint", m_noteCamera->mapQtViewportToNote(qtViewportPosition));
-        map.insert("qtViewportPoint", qtViewportPosition);
-        if(Scrap == nullptr) {
-            map.insert("InsertIndex", 0);
-        } else {
-            map.insert("InsertIndex", Scrap->numberOfPoints());
-        }
-    }
+//     if(point.IsValid) {
+//         //Point is snapped
+//         map.insert("IsSnapped", true);
+//         map.insert("NoteCoordsPoint", point.ClosestPoint);
+//         map.insert("QtViewportPoint", m_noteCamera->mapNoteToQtViewport(point.ClosestPoint));
+//         map.insert("InsertIndex", point.InsertIndex);
+//     } else {
+//         //Point isn't snapped to the line
+//         map.insert("IsSnapped", false);
+//         map.insert("NoteCoordsPoint", m_noteCamera->mapQtViewportToNote(qtViewportPosition));
+//         map.insert("qtViewportPoint", qtViewportPosition);
+//         if(Scrap == nullptr) {
+//             map.insert("InsertIndex", 0);
+//         } else {
+//             map.insert("InsertIndex", Scrap->numberOfPoints());
+//         }
+//     }
 
-    return map;
-}
+//     return map;
+// }
 
 ///**
 //  * @brief cwBaseScrapInteraction::mouseOver

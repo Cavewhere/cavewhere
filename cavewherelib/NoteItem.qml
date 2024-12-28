@@ -34,26 +34,22 @@ ImageItem {
         // persistentScale:
     }
 
-    // ScrapInteraction {
-    //     id: addScrapInteraction
-    //     anchors.fill: parent
-    //     note: noteArea.note
-    //     basePanZoomInteraction: panZoomInteraction
-    //     noteCamera: cameraId
-    //     // imageItem: noteArea
-    //     outlinePointView: {
-    //         if(scrapViewId.selectedScrapItem !== null) {
-    //             return scrapViewId.selectedScrapItem.outlinePointView
-    //         }
-    //         return null;
-    //     }
-    //     scrap: {
-    //         if(scrapViewId.selectedScrapItem !== null) {
-    //             return scrapViewId.selectedScrapItem.scrap
-    //         }
-    //         return null
-    //     }
-    // }
+    ScrapInteraction {
+        id: addScrapInteraction
+        anchors.fill: parent
+        target: noteArea.targetItem
+        note: noteArea.note
+        scrapView: scrapViewId
+        // basePanZoomInteraction: panZoomInteraction
+        // noteCamera: cameraId
+        // imageItem: noteArea
+        outlinePointView: {
+            if(scrapViewId.selectedScrapItem !== null) {
+                return scrapViewId.selectedScrapItem.outlinePointView
+            }
+            return null;
+        }
+    }
 
     // NoteStationInteraction {
     //     id: addStationInteraction
@@ -118,7 +114,7 @@ ImageItem {
         id: interactionManagerId
         interactions: [
             panZoomInteraction,
-            // addScrapInteraction,
+            addScrapInteraction,
             // addStationInteraction,
             // addLeadInteraction,
             noteSelectionInteraction,
@@ -132,7 +128,7 @@ ImageItem {
             if(activeInteraction == defaultInteraction) {
                 switch(noteArea.state) {
                 case "ADD-SCRAP":
-                    // addScrapInteraction.activate();
+                    addScrapInteraction.activate();
                     break;
                 case "ADD-STATION":
                     // addStationInteraction.activate();
@@ -251,15 +247,15 @@ ImageItem {
     ]
 
     transitions: [
-        //  QQ.Transition {
-        //     to: "ADD-SCRAP"
-        //     QQ.ScriptAction {
-        //         script: {
-        //             interactionManagerId.active(addScrapInteraction)
-        //             addScrapInteraction.startNewScrap()
-        //         }
-        //     }
-        // },
+         QQ.Transition {
+            to: "ADD-SCRAP"
+            QQ.ScriptAction {
+                script: {
+                    interactionManagerId.active(addScrapInteraction)
+                    addScrapInteraction.startNewScrap()
+                }
+            }
+        },
 
         //  QQ.Transition {
         //     to: "ADD-STATION"

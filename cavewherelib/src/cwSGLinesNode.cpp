@@ -76,7 +76,7 @@ void cwSGLinesNode::setLineStrips(const QVector<QVector<QPointF> > &potentialLin
             lines.begin(),
             lines.end(),
             [](const QVector<QPointF>& line) {
-                return line.isEmpty(); // Predicate: true if QVector<QPointF> is empty
+                return line.size() <= 1; // Predicate: true if isn't a line 0 or 1 points
             }
             ),
         lines.end()

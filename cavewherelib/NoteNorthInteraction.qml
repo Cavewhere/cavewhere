@@ -17,7 +17,7 @@ PanZoomInteraction {
 
     // property BasePanZoomInteraction basePanZoomInteraction
     // property NoteCamera camera
-    required property NoteTranformation noteTransform
+    property NoteTranformation noteTransform
     required property ScrapView scrapView
     property alias zoom: northArrow.zoom
     property string upText: "north"

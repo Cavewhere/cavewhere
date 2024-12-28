@@ -9,6 +9,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick as QQ
 import QtQuick.Controls as QC
+import QtQuick.Layouts
 import cavewherelib
 
 QQ.Rectangle {
@@ -360,7 +361,7 @@ QQ.Rectangle {
 
         radius: mainButtonArea.radius
         color: "#EEEEEE"
-        QQ.Row {
+        RowLayout {
             id: carpetRowId
             spacing: 3
 
@@ -393,6 +394,8 @@ QQ.Rectangle {
 
                 IconButton {
                     id: addScrapId
+                    objectName: "addScrapButton"
+
                     iconSource: "qrc:icons/svg/addScrap.svg"
                     sourceSize: mainToolBar.iconSize
                     text: "Scrap"
