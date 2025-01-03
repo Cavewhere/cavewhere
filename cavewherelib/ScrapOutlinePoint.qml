@@ -34,6 +34,9 @@ ScrapPointItem {
 
     QQ.Rectangle {
         id: pointGeometry
+
+        // objectName: "scrapPointItem" + scrapPointItem.pointIndex
+
         width: 10
         height: width
 

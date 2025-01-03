@@ -19,6 +19,7 @@ QQ.Item {
     signal doubleClicked()
 
     QQ.TapHandler {
+        gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
         onTapped: {
             stationItem.pointSelected()
         }
@@ -39,8 +40,8 @@ QQ.Item {
 
         onCentroidChanged: {
             if (active) {
-                var parentCoord = mapToItem(parentView, centroid.position.x, centroid.position.y)
-                pointMoved(scrapItem.toNoteCoordinates(parentCoord))
+                var parentCoord = stationItem.mapToItem(stationItem.parentView, centroid.position.x, centroid.position.y)
+                stationItem.pointMoved(stationItem.scrapItem.toNoteCoordinates(parentCoord))
             }
         }
     }

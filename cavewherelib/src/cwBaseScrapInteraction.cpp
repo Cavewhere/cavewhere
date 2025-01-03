@@ -20,7 +20,6 @@
 cwBaseScrapInteraction::cwBaseScrapInteraction(QQuickItem *parent) :
     cwNoteInteraction(parent),
     m_scrap(nullptr),
-    // ImageItem(nullptr),
     m_outlinePointView(nullptr)
 {
     connect(this, SIGNAL(noteChanged()), SLOT(startNewScrap()));
@@ -85,8 +84,8 @@ cwBaseScrapInteraction::cwClosestPoint cwBaseScrapInteraction::calcClosestPoint(
         QLineF transLine = transform.map(line);
         QPointF rotatedNoteCoord = transform.map(noteCoordinate);
 
-        QPointF mappedBuffer = toNote.map(QPoint(0, buffer));
-        QPointF origin = toNote.map(QPoint(0, 0));
+        QPointF mappedBuffer = toNote.map(QPointF(0, buffer));
+        QPointF origin = toNote.map(QPointF(0, 0));
         double bufferNoteCoords = QLineF(origin, mappedBuffer).length();
 
         p1 = transLine.p1();
@@ -160,15 +159,6 @@ void cwBaseScrapInteraction::startNewScrap() {
     closeCurrentScrap();
 }
 
-/**
- Sets imageItem
- */
-// void cwBaseScrapInteraction::setImageItem(cwImageItem* imageItem) {
-//     if(ImageItem != imageItem) {
-//         ImageItem = imageItem;
-//         emit imageItemChanged();
-//     }
-// }
 
 /**
 Sets controlPointView
@@ -201,21 +191,6 @@ void cwBaseScrapInteraction::setScrap(cwScrap *scrap)
     emit scrapChanged();
 }
 
-// void cwBaseScrapInteraction::setNote(cwNote *note)
-// {
-//     if(m_note != note) {
-//         m_note = note;
-//         emit noteChanged();
-//     }
-// }
-
-// void cwBaseScrapInteraction::setNoteCamera(cwNoteCamera *noteCamera) {
-//     if (m_noteCamera != noteCamera) {
-//         m_noteCamera = noteCamera;
-//         emit noteCameraChanged();
-//     }
-// }
-
 cwScrapInteractionPoint cwBaseScrapInteraction::snapToScrapLine(QPoint imagePos) const
 {
     cwScrapInteractionPoint interactionPoint;
@@ -239,74 +214,14 @@ cwScrapInteractionPoint cwBaseScrapInteraction::snapToScrapLine(QPoint imagePos)
             interactionPoint.setNoteCoordsPoint(toNote.map(imagePos.toPointF()));
 
             interactionPoint.setImagePoint(imagePos);
-
-            qDebug() << "cwBaseScrapInteraction:" << interactionPoint.noteCoordsPoint() << interactionPoint.imagePoint();
-
             if (m_scrap == nullptr) {
-                qDebug() << "Set input:" << 0;
                 interactionPoint.setInsertIndex(0);
             } else {
-                qDebug() << "Set input:" << m_scrap->numberOfPoints();
                 interactionPoint.setInsertIndex(m_scrap->numberOfPoints());
             }
         }
     }
 
-    // qDebug() << "Note:" << note();
-
     return interactionPoint;
 }
-
-/**
-  * @brief cwBaseScrapInteraction::mouseOver
-  * @param position - The mouse is over position
-  *
-  * This returns a variant map.
-  *
-  * The map, has 2 keys in it, if it's valid.  It'll have no key's if it's qtViewportPosition
-  * isn't valid.
-  *
-  * The keys are:
-  * IsSnapped - True if the point is snapped to the scrap's
-  * NoteCoordsPoint - Where the point should be placed on the line (In note coordinates)
-  * QtViewportPoint - Where the point should be placed on the line (In note coordinates)
-  * InsertIndex - Where the point should be inserted into the scrap
-  *
-  */
-// QVariantMap cwBaseScrapInteraction::snapToScrapLine(QPoint qtViewportPosition) const
-// {
-//     cwClosestPoint point = calcClosestPoint(qtViewportPosition);
-//     QVariantMap map;
-
-//     if(point.IsValid) {
-//         //Point is snapped
-//         map.insert("IsSnapped", true);
-//         map.insert("NoteCoordsPoint", point.ClosestPoint);
-//         map.insert("QtViewportPoint", m_noteCamera->mapNoteToQtViewport(point.ClosestPoint));
-//         map.insert("InsertIndex", point.InsertIndex);
-//     } else {
-//         //Point isn't snapped to the line
-//         map.insert("IsSnapped", false);
-//         map.insert("NoteCoordsPoint", m_noteCamera->mapQtViewportToNote(qtViewportPosition));
-//         map.insert("qtViewportPoint", qtViewportPosition);
-//         if(Scrap == nullptr) {
-//             map.insert("InsertIndex", 0);
-//         } else {
-//             map.insert("InsertIndex", Scrap->numberOfPoints());
-//         }
-//     }
-
-//     return map;
-// }
-
-///**
-//  * @brief cwBaseScrapInteraction::mouseOver
-//  * @param position - The mouse is over position
-//  */
-//bool cwBaseScrapInteraction::mouseOver(QPoint position) const
-//{
-//    cwClosestPoint point = calcClosestPoint(position);
-//    return point.IsValid;
-//}
-
 

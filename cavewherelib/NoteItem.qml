@@ -40,6 +40,7 @@ ImageItem {
         target: noteArea.targetItem
         note: noteArea.note
         scrapView: scrapViewId
+        zoom: noteArea.targetItem.scale
         // basePanZoomInteraction: panZoomInteraction
         // noteCamera: cameraId
         // imageItem: noteArea
