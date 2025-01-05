@@ -11,6 +11,7 @@ RowLayout {
 
     Controls.Button {
         id: addButtonId
+        objectName: "addButton"
 
         icon.source: "qrc:/twbs-icons/icons/plus.svg"
 

@@ -202,6 +202,7 @@ QQ.Item {
 
                 AddButton {
                     id: addSurveyData
+                    objectName: "addSurveyData"
                     text: "Add Survey Data"
                     anchors.horizontalCenter: view.horizontalCenter
 //                    visible: true

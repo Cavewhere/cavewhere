@@ -357,7 +357,7 @@ QQ.Item {
                     }
 
                     //Use the default keyhanding that the GlobalShadowTextInput has
-                    globalShadowTextInput.textInput.defaultKeyHandling();
+                    GlobalShadowTextInput.textInput.defaultKeyHandling();
 
                     //Handle the tabbing
                     dataBox.handleTab(pressKeyEvent);

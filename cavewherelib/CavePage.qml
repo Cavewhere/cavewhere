@@ -15,6 +15,7 @@ import QtQuick.Controls as QC
 
 StandardPage {
     id: cavePageArea
+    objectName: "cavePage"
 
     property Cave currentCave
 
@@ -117,6 +118,7 @@ StandardPage {
         ColumnLayout {
 
             AddAndSearchBar {
+                objectName: "addTrip"
                 Layout.fillWidth: true
                 addButtonText: "Add Trip"
                 onAdd: {
