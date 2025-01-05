@@ -550,38 +550,47 @@ void cwProject::addImages(QList<QUrl> noteImagePaths,
         return pdfExtention && cwPDFConverter::isSupported();
     };
 
-    //Create a new image task
-    for(QUrl url : noteImagePaths) {
+    //Sort by images and pdf, pdf's last, but heemp the same image order
+    QVector<QString> images;
+    QVector<QString> pdfs;
+    images.reserve(noteImagePaths.size());
+    pdfs.reserve(noteImagePaths.size());
+    for(const QUrl& url : noteImagePaths) {
         QString path = url.toLocalFile();
-
         if(isPDF(path)) {
-            //Convert pdf to images
-            cwPDFConverter converter;
-            converter.setSource(path);
-            converter.setResolution(cwPDFSettings::instance()->resolutionImport());
-
-            auto future = converter.convert();
-
-            FutureToken.addJob({QFuture<void>(future), "Converting PDF"});
-
-            AsyncFuture::observe(future).subscribe([this, future, outputCallBackFunc](){
-                for(auto image : future.results()) {
-                    addImageHelper(outputCallBackFunc,
-                                   [image](cwAddImageTask* task)
-                    {
-                        task->setNewImages({image});
-                    });
-                }
-            });
-
+            pdfs.append(path);
         } else {
             //Normal image
-            addImageHelper(outputCallBackFunc,
-                           [path](cwAddImageTask* task)
-            {
-                task->setNewImagesPath({path});
-            });
+            images.append(path);
         }
+    }
+
+    //Add all the images
+    addImageHelper(outputCallBackFunc,
+                   [images](cwAddImageTask* task)
+                   {
+                       task->setNewImagesPath(images);
+                   });
+
+    //Add all the PDFS
+    for(const auto& pdf : pdfs) {
+        //Convert pdf to images
+        cwPDFConverter converter;
+        converter.setSource(pdf);
+        converter.setResolution(cwPDFSettings::instance()->resolutionImport());
+
+        auto future = converter.convert();
+
+        FutureToken.addJob({QFuture<void>(future), "Converting PDF"});
+
+        AsyncFuture::observe(future).subscribe([this, future, outputCallBackFunc](){
+            auto images = future.results();
+                addImageHelper(outputCallBackFunc,
+                               [images](cwAddImageTask* task)
+                               {
+                                   task->setNewImages(images);
+                               });
+            });
     }
 }
 
