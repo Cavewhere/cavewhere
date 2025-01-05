@@ -11,7 +11,7 @@ MainWindowTest {
         name: "NoteScrapInteraction"
         when: windowShown
 
-        function test_addScrapInteraction() {
+        function addScrapOutline() {
             TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwScrapManager/ProjectProfile-test-v3.cw");
             RootData.pageSelectionModel.currentPageAddress = "Data/Cave=Cave 1/Trip=Trip 1"
 
@@ -70,8 +70,55 @@ MainWindowTest {
             // // mouseClick(imageId, 145.691, -13.3125)
             // // mouseClick(imageId, 154.125, 124.215)
             // // mouseClick(imageId, -2.42578, 127.035)
+        }
 
-            // wait(1000000);
+        function test_addScrapInteraction() {
+            addScrapOutline()
+        }
+
+        function test_addStationInteraction() {
+            addScrapOutline()
+
+            let addScrapStationButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->addScrapStation")
+            mouseClick(addScrapStationButton)
+
+            let imageId = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
+            mouseClick(imageId, 391.749, 650.222)
+            keyClick("a")
+            keyClick(51, 0) //3
+            keyClick(16777220, 0) //Return
+
+            mouseClick(imageId, 448.07, 440.733)
+
+            wait(100);
+
+            //Make sure that this is a valid scrap
+            let noteArea = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea");
+            let scrapView = findChild(noteArea, "scrapViewId")
+            let scrap = scrapView.selectedScrapItem.scrap as Scrap
+            verify(scrap !== null)
+            verify(scrap.numberOfStations() === 2);
+
+
+            let viewButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->mainSideBar->viewButton")
+            mouseClick(viewButton)
+
+            tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "viewPage" });
+
+            let renderingView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer")
+            let renderingViewCenterX = renderingView.width / 2.0;
+            let renderingViewCenterY = renderingView.height / 2.0;
+
+            for(let i = 0; i < 200; i++) {
+                mouseWheel(renderingView, renderingViewCenterX, renderingViewCenterY, 100, 100, Qt.LeftButton, Qt.NoModifier, 5)
+            }
+
+            let renderImage = grabImage(renderingView)
+            compare(renderImage.pixel(617,257), Qt.rgba(1, 1, 1, 255));
+
+            //Make sure it rendered correctly with the updated scrap
+
+            // wait(100000);
 
         }
     }

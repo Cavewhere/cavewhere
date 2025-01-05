@@ -405,6 +405,8 @@ QQ.Rectangle {
 
                 IconButton {
                     id: addStationId
+                    objectName: "addScrapStation"
+
                     iconSource: "qrc:icons/svg/addStation.svg"
                     sourceSize: mainToolBar.iconSize
                     text: "Station"

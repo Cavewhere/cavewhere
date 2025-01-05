@@ -12,6 +12,7 @@ import cavewherelib
 
 QQ.Rectangle {
     id: sidebarArea
+    objectName: "mainSideBar"
     width: 80
     color: "#ffffff"
 
@@ -114,6 +115,7 @@ QQ.Rectangle {
 
         SideBarButton {
             id: viewButton
+            objectName: "viewButton"
             text: "View"
             image: "qrc:/icons/viewIcon.png"
             troggled: 0 == parent.currentIndex
@@ -122,6 +124,7 @@ QQ.Rectangle {
 
         SideBarButton {
             id: dataEntyButton
+            objectName: "dataButton"
             text: "Data"
             image: "qrc:icons/book.png"
             troggled: 1 == parent.currentIndex

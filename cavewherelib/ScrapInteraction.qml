@@ -71,7 +71,6 @@ PanZoomInteraction {
 
             //Is the last point snapped to something
             panZoom._lastPoint = scrapInteraction.snapToScrapLine(point.position)
-            console.log("LastPoint move:" + panZoom._lastPoint.insertIndex + " " + panZoom._lastPoint.noteCoordsPoint + panZoom._lastPoint.imagePoint)
             if(panZoom._lastPoint.isSnapped) {
                 snapPoint.setPosition(panZoom._lastPoint.imagePoint)
                 snapPoint.visible = true;

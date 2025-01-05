@@ -132,7 +132,8 @@ private:
                                                 cwTextureUploadTask::Format format);
 
     static cwTriangulatedData triangulateGeometry(const cwTriangulateInData& scrap,
-                                                            cwTrackedImagePtr croppedImage);
+                                                  cwTrackedImagePtr croppedImage,
+                                                  const cwTextureUploadTask::UploadResult &imageData);
 
     static PointGrid createPointGrid(QRectF bounds, const cwTriangulateInData& scrapData);
     static QSet<int> pointsInPolygon(const PointGrid& grid, const QPolygonF& polygon);

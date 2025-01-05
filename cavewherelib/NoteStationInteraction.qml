@@ -7,15 +7,19 @@
 
 import cavewherelib
 
-BaseNoteStationInteraction {
-    id: interaction
+PanZoomInteraction {
+    id: panZoomInteraction
 
-    property alias basePanZoomInteraction: mouseArea.basePanZoomInteraction
-    property alias imageItem: mouseArea.imageItem
+    property alias scrapView: handler.scrapView
 
-    NotePointAddMouseArea {
-        id: mouseArea
-        baseNotePointInteraction: interaction
+    NotePointAddHandler {
+        id: handler
+        target: panZoomInteraction.target
+        parent: panZoomInteraction.target
+        enabled: panZoomInteraction.enabled
+        notePointInteraction: BaseNoteStationInteraction {
+            scrapView: handler.scrapView
+        }
     }
 
     HelpBox {

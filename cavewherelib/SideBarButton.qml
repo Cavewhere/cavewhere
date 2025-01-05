@@ -10,9 +10,6 @@ import QtQuick.Layouts
 
 QQ.Rectangle {
     id: button
-    height: columnLayoutId.height + 10
-    color: "#00000000"
-    clip: true;
 
     property alias text: textLabel.text;
     property alias image: icon.source;
@@ -21,6 +18,9 @@ QQ.Rectangle {
 
     anchors.left: parent.left;
     anchors.right: parent.right
+    height: columnLayoutId.height + 10
+    color: "#00000000"
+    clip: true;
 
     //Called when troggle is true
     signal buttonIsTroggled()
@@ -79,14 +79,20 @@ QQ.Rectangle {
         opacity: 1
     }
 
-    QQ.MouseArea {
-        id: mouseArea
-        anchors.fill: parent;
-        hoverEnabled: true;
+    QQ.TapHandler {
+        gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
+        onSingleTapped: button.buttonIsTroggled();
+    }
 
-        onEntered: button.state = "hoverState"
-        onExited: button.state = ""
-        onClicked: button.buttonIsTroggled();
+    QQ.HoverHandler {
+        id: hoverHandler
+        onHoveredChanged: {
+            if(hovered) {
+                button.state = "hoverState"
+            } else {
+                button.state = ""
+            }
+        }
     }
 
     QQ.Rectangle {
@@ -149,9 +155,8 @@ QQ.Rectangle {
             }
 
             QQ.PropertyChanges {
-                mouseArea {
-                    onEntered: {}
-                    onExited: {}
+                hoverHandler {
+                    onHoveredChanged: {}
                 }
             }
         },

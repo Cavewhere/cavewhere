@@ -44,18 +44,32 @@ QList<QFuture<cwTriangulatedData>> cwTriangulateTask::triangulate() const
     cwTextureUploadTask::Format format = Format;
 
     std::function<QFuture<cwTriangulatedData> (const cwTriangulateInData&)> triangulateScrap
-            = [projectFilename, format](const cwTriangulateInData& scrap)->QFuture<cwTriangulatedData>
+        = [projectFilename, format](const cwTriangulateInData& scrap)->QFuture<cwTriangulatedData>
     {
         auto cropFuture = cropScrap(scrap, projectFilename, format);
 
         return AsyncFuture::observe(cropFuture)
-                .subscribe([cropFuture, scrap]()
-        {
-            return QtConcurrent::run([scrap, cropFuture]()
-            {
-                return triangulateGeometry(scrap, cropFuture.result());
-            });
-        }).future();
+            .subscribe([cropFuture, scrap, projectFilename]()
+                       {
+                           cwTextureUploadTask uploadTask;
+                           cwImage croppedImage = *(cropFuture.result());
+                           uploadTask.setImage(croppedImage);
+                           uploadTask.setProjectFilename(projectFilename);
+                           uploadTask.setType(cwTextureUploadTask::OpenGL_RGBA);
+                           auto uploadFuture = uploadTask.mipmaps();
+
+                           return AsyncFuture::observe(uploadFuture)
+                               .subscribe(
+                                   [scrap, cropFuture, uploadFuture]() {
+                                       return QtConcurrent::run([scrap, cropFuture, uploadFuture]()
+                                                                {
+                                                                    return triangulateGeometry(scrap,
+                                                                                               cropFuture.result(),
+                                                                                               uploadFuture.result());
+                                                                });
+                                   }).future();
+
+                       }).future();
     };
 
     return cw::transform(Scraps, triangulateScrap);
@@ -77,7 +91,8 @@ QFuture<cwTrackedImagePtr> cwTriangulateTask::cropScrap(const cwTriangulateInDat
 }
 
 cwTriangulatedData cwTriangulateTask::triangulateGeometry(const cwTriangulateInData &scrap,
-                                                                   cwTrackedImagePtr croppedImage)
+                                                          cwTrackedImagePtr croppedImage,
+                                                          const cwTextureUploadTask::UploadResult& imageData)
 {
     QRectF bounds = scrap.outline().boundingRect();
 
@@ -113,6 +128,7 @@ cwTriangulatedData cwTriangulateTask::triangulateGeometry(const cwTriangulateInD
 
 
     cwTriangulatedData outputData;
+    outputData.setCroppedImageData(imageData);
     outputData.setCroppedImage(croppedImage);
     outputData.setIndices(triangleData.indices());
     outputData.setPoints(points);

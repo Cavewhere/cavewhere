@@ -27,11 +27,7 @@ ImageItem {
 
     PanZoomInteraction {
         id: panZoomInteraction
-        // anchors.fill: parent
-        // camera: cameraId
-        // enabled: false
         target: noteArea.targetItem
-        // persistentScale:
     }
 
     ScrapInteraction {
@@ -41,9 +37,6 @@ ImageItem {
         note: noteArea.note
         scrapView: scrapViewId
         zoom: noteArea.targetItem.scale
-        // basePanZoomInteraction: panZoomInteraction
-        // noteCamera: cameraId
-        // imageItem: noteArea
         outlinePointView: {
             if(scrapViewId.selectedScrapItem !== null) {
                 return scrapViewId.selectedScrapItem.outlinePointView
@@ -52,13 +45,14 @@ ImageItem {
         }
     }
 
-    // NoteStationInteraction {
-    //     id: addStationInteraction
-    //     anchors.fill: parent
-    //     scrapView: scrapViewId
-    //     basePanZoomInteraction: panZoomInteraction
-    //     imageItem: noteArea
-    // }
+    NoteStationInteraction {
+        id: addStationInteraction
+        anchors.fill: parent
+        scrapView: scrapViewId
+        // basePanZoomInteraction: panZoomInteraction
+        // imageItem: noteArea
+        target: noteArea.targetItem
+    }
 
     // NoteLeadInteraction {
     //     id: addLeadInteraction
@@ -70,7 +64,6 @@ ImageItem {
 
     NoteItemSelectionInteraction {
         id: noteSelectionInteraction
-        // anchors.fill: parent
         target: noteArea.targetItem
         scrapView: scrapViewId
         imageItem: noteArea
@@ -83,10 +76,6 @@ ImageItem {
         zoom: noteArea.targetItem.scale
         scrapView: scrapViewId
         z:1
-        onActivated: {
-            console.log("Active!" + this)
-        }
-
     }
 
     NoteScaleInteraction {
@@ -105,8 +94,6 @@ ImageItem {
         anchors.fill: parent
         imageItem: noteArea
         zoom: noteArea.targetItem.scale
-        // basePanZoomInteraction: panZoomInteraction
-        // transformUpdater: transformUpdaterId
         imageResolution: noteArea.note != null ? noteArea.note.imageResolution : null
         z:1
     }
@@ -116,7 +103,7 @@ ImageItem {
         interactions: [
             panZoomInteraction,
             addScrapInteraction,
-            // addStationInteraction,
+            addStationInteraction,
             // addLeadInteraction,
             noteSelectionInteraction,
             noteNorthUpInteraction,
@@ -258,12 +245,12 @@ ImageItem {
             }
         },
 
-        //  QQ.Transition {
-        //     to: "ADD-STATION"
-        //     QQ.ScriptAction {
-        //         script: interactionManagerId.active(addStationInteraction)
-        //     }
-        // },
+         QQ.Transition {
+            to: "ADD-STATION"
+            QQ.ScriptAction {
+                script: interactionManagerId.active(addStationInteraction)
+            }
+        },
 
         //  QQ.Transition {
         //     to: "ADD-LEAD"

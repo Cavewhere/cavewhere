@@ -3,6 +3,8 @@ import QtQuick.Controls
 import cavewherelib
 
 SplitView {
+    objectName: "viewPage"
+
     property alias scene: rendererId.scene
     property alias turnTableInteraction: rendererId.turnTableInteraction
     property alias leadView: rendererId.leadView
@@ -15,6 +17,7 @@ SplitView {
 
         GLTerrainRenderer {
             id: rendererId
+            objectName: "renderer"
             anchors.fill: parent
         }
     }

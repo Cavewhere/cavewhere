@@ -104,7 +104,7 @@ public:
     const QList<cwNoteStation>& stations() const;
     void setStations(QList<cwNoteStation> stations);
     cwNoteStation station(int stationId);
-    int numberOfStations() const;
+    Q_INVOKABLE int numberOfStations() const;
     Q_INVOKABLE QVariant stationData(StationDataRole role, int noteStationIndex) const;
     Q_INVOKABLE void setStationData(StationDataRole role, int noteStationIndex, QVariant value);
     bool hasStation(QString name) const;
