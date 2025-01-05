@@ -12,6 +12,7 @@ import "Theme.js" as Theme
 
 ShadowRectangle {
     id: removeChallenge
+    objectName: "removeChallange"
 
     property string removeName;
     property int indexToRemove
@@ -68,6 +69,7 @@ ShadowRectangle {
         }
 
         Controls.Button {
+            objectName: "removeButton"
             text: "Remove"
             onClicked: {
                 removeChallenge.remove();
@@ -76,6 +78,7 @@ ShadowRectangle {
         }
 
         Controls.Button {
+            objectName: "cancelButton"
             text: "Cancel"
             onClicked: {
                 removeChallenge.state = ""

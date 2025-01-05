@@ -71,6 +71,7 @@ QQ.Rectangle {
       */
     component ListDelegate : QQ.Item {
         id: container
+        objectName: "noteImage" + index
 
         property int border: 6
         required property Note noteObject
@@ -126,6 +127,7 @@ QQ.Rectangle {
 
         QQ.Image {
             id: removeImageId
+            objectName: "removeImageButton"
 
             source: "qrc:/icons/red-cancel.png"
 
@@ -137,14 +139,12 @@ QQ.Rectangle {
 
             visible: galleryView.currentIndex == container.index
 
-            opacity: removeImageMouseArea.containsMouse ? 1.0 : .75;
-
-            QQ.MouseArea {
-                id: removeImageMouseArea
-                anchors.fill: parent
-                hoverEnabled: true
-                onClicked: removeAskDialog.show()
+            QQ.TapHandler {
+                gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
+                onSingleTapped: removeAskDialog.show()
             }
+
+            DebugRectangle {}
         }
 
         RemoveAskBox {
@@ -159,6 +159,13 @@ QQ.Rectangle {
         QC.BusyIndicator {
             anchors.centerIn: parent
             running: imageItem.status == QQ.Image.Loading
+        }
+
+        QQ.TapHandler {
+            gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
+            onSingleTapped: {
+                galleryView.currentIndex = index
+            }
         }
     }
 
@@ -227,6 +234,7 @@ QQ.Rectangle {
 
         QQ.ListView {
             id: galleryView
+            objectName: "galleryView"
 
             anchors.left: parent.left
             anchors.right: parent.right
@@ -259,21 +267,6 @@ QQ.Rectangle {
                 } else {
                     noteGallery.currentNote = null;
                     // noteArea.clearImage();
-                }
-            }
-
-            QQ.MouseArea {
-                anchors.fill: parent
-
-                propagateComposedEvents: true
-
-                onClicked: (mouse) => {
-                    var index = galleryView.indexAt(galleryView.contentX + mouseX, galleryView.contentY + mouseY);
-                    if(index >= 0 && index < galleryView.count) {
-                        galleryView.currentIndex = index;
-                    }
-
-                    mouse.accepted = false
                 }
             }
 
