@@ -13,6 +13,7 @@ import cavewherelib
   */
 ScrapPointItem {
     id: noteStationId
+    objectName: "station" + stationName.text
 
     function updateItem() {
         if(scrap !== null) {
@@ -66,6 +67,7 @@ ScrapPointItem {
 
         ScrapPointMouseArea {
             id: stationMouseArea
+            objectName: "stationIcon"
             anchors.fill: parent
 
             scrapItem: noteStationId.scrapItem
@@ -100,10 +102,6 @@ ScrapPointItem {
             noteStationId.forceActiveFocus();
         }
 
-        QQ.MouseArea {
-            anchors.fill: parent
-            propagateComposedEvents: true
-            onClicked: noteStationId.select()
-        }
+        onClicked: noteStationId.select()
     }
 }

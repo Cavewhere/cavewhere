@@ -27,6 +27,8 @@ QQ.Item {
     signal startedEditting()
     signal finishedEditting(string newText)
 
+    signal clicked() //Emitted only when doubleClickEdit is true
+
     implicitWidth: textAreaId.width
     implicitHeight: textAreaId.height
 
@@ -158,9 +160,7 @@ QQ.Item {
 
     QQ.TapHandler {
         id: doubleClickArea
-
         enabled:  true
-        target: clickTextInput
         gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
     }
 
@@ -171,10 +171,8 @@ QQ.Item {
 
             QQ.PropertyChanges {
                 doubleClickArea  {
-                    onDoubleTapped: (eventPoint, button) => {
-                        openEditor()
-                        // eventPoint.accepted = true
-                    }
+                    onSingleTapped: { console.log("Click:"); clickTextInput.clicked() }
+                    onDoubleTapped: { console.log("Openeditor!"); clickTextInput.openEditor() }
                 }
             }
         },
@@ -185,11 +183,7 @@ QQ.Item {
 
             QQ.PropertyChanges {
                 doubleClickArea {
-                    onSingleTapped: (eventPoint, button) => {
-                        openEditor()
-                        // console.log("EventPoint:" + eventPoint.accepted)
-                        // eventPoint.accepted = true
-                    }
+                    onSingleTapped: clickTextInput.openEditor()
                 }
             }
         }

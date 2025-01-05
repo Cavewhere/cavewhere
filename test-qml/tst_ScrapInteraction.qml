@@ -99,6 +99,24 @@ MainWindowTest {
             verify(scrap !== null)
             verify(scrap.numberOfStations() === 2);
 
+            //Add a new station
+            mouseClick(imageId, 509, 630);
+            // wait(1000);
+
+            //Double click on the stations text
+            let a4Station = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId->stationA1->coreTextInput")
+            // mouseDoubleClickSequence(a4Station)
+            a4Station.openEditor() //Double clicking doesn't seem like it works through qml test
+
+            wait(50);
+
+            //Change the station to a4
+            keyClick("a")
+            keyClick(52, 0) //4
+            keyClick(16777220, 0) //Return
+            verify(scrap.numberOfStations() === 3);
+
+            wait(50);
 
             //Switch to rendering view
             let viewButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->mainSideBar->viewButton")
@@ -118,11 +136,7 @@ MainWindowTest {
 
             //Make sure the scrap is being rendered, scrap is white
             let renderImage = grabImage(renderingView)
-            compare(renderImage.pixel(617,257), Qt.rgba(1, 1, 1, 255));
-
-            //Make sure it rendered correctly with the updated scrap
-            // wait(100000);
-
+            compare(renderImage.pixel(556, 334), Qt.rgba(1, 1, 1, 255));
         }
     }
 }
