@@ -119,5 +119,9 @@
         <file>icons/svg/select.svg</file>
         <file>icons/svg/notes.svg</file>
         <file>icons/svg/rotate.svg</file>
+        <file>twbs-icons/icons/question-circle-fill.svg</file>
+        <file>twbs-icons/icons/question-circle.svg</file>
+        <file>twbs-icons/icons/file-minus-fill.svg</file>
+        <file>twbs-icons/icons/file-minus.svg</file>
     </qresource>
 </RCC>

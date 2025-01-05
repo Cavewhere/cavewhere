@@ -10,8 +10,8 @@ import QtQuick as QQ
 
 IconButton {
     property QQ.Item showItemOnClick
-    iconSource: "qrc:icons/Information.png"
-    hoverIconSource: "qrc:icons/InformationDark.png"
+    iconSource: "qrc:/twbs-icons/icons/question-circle.svg"
+    hoverIconSource: "qrc:/twbs-icons/icons/question-circle-fill.svg"
     sourceSize: Qt.size(15, 15);
     height: 15
     width: 15

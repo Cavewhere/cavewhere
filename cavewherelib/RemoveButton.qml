@@ -7,8 +7,8 @@
 
 
 IconButton {
-    iconSource: "qrc:icons/minusCircleLight.png"
-    hoverIconSource: "qrc:icons/minusCircleDark.png"
+    iconSource: "qrc:/twbs-icons/icons/file-minus.svg"
+    hoverIconSource: "qrc:/twbs-icons/icons/file-minus-fill.svg"
     sourceSize: Qt.size(15, 15);
     height: 15
     width: 15
