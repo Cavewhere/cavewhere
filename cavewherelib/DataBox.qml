@@ -273,6 +273,10 @@ QQ.Item {
         onStartedEditting: {
             dataBox.state = 'MiddleTyping';
         }
+
+        onClicked: {
+            dataBox.focus = true
+        }
     }
 
     QQ.Keys.onPressed: (event) => {
