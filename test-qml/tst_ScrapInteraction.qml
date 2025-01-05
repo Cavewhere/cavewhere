@@ -100,6 +100,7 @@ MainWindowTest {
             verify(scrap.numberOfStations() === 2);
 
 
+            //Switch to rendering view
             let viewButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->mainSideBar->viewButton")
             mouseClick(viewButton)
 
@@ -113,11 +114,13 @@ MainWindowTest {
                 mouseWheel(renderingView, renderingViewCenterX, renderingViewCenterY, 100, 100, Qt.LeftButton, Qt.NoModifier, 5)
             }
 
+            wait(100);
+
+            //Make sure the scrap is being rendered, scrap is white
             let renderImage = grabImage(renderingView)
             compare(renderImage.pixel(617,257), Qt.rgba(1, 1, 1, 255));
 
             //Make sure it rendered correctly with the updated scrap
-
             // wait(100000);
 
         }
