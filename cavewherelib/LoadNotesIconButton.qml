@@ -25,6 +25,7 @@ IconButton {
         nameFilters: [ "Images (" + RootData.supportImageFormats + ")" ];
         title: "Load Images"
         // selectMultiple: true
+        fileMode: FileDialog.OpenFiles
         currentFolder: RootData.lastDirectory
         onAccepted: {
             RootData.lastDirectory = fileDialog.currentFolder
