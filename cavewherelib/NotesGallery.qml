@@ -143,8 +143,6 @@ QQ.Rectangle {
                 gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
                 onSingleTapped: removeAskDialog.show()
             }
-
-            DebugRectangle {}
         }
 
         RemoveAskBox {
