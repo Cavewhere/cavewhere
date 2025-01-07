@@ -45,22 +45,22 @@ QFuture<QImage> cwPDFConverter::convert()
     QPdfDocument document;
     auto error = document.load(source());
 
-    if(error != QPdfDocument::NoError) {
-        auto toString = [](QPdfDocument::DocumentError error) {
+    if(error != QPdfDocument::Error::None) {
+        auto toString = [](QPdfDocument::Error error) {
             switch(error) {
-            case QPdfDocument::NoError:
+            case QPdfDocument::Error::None:
                 return QStringLiteral("No Error");
-            case QPdfDocument::UnknownError:
+            case QPdfDocument::Error::Unknown:
                 return QStringLiteral("Unknown Error :(");
-            case QPdfDocument::DataNotYetAvailableError:
+            case QPdfDocument::Error::DataNotYetAvailable:
                 return QStringLiteral("Data Not yet available error");
-            case QPdfDocument::FileNotFoundError:
+            case QPdfDocument::Error::FileNotFound:
                 return QStringLiteral("File not found");
-            case QPdfDocument::InvalidFileFormatError:
+            case QPdfDocument::Error::InvalidFileFormat:
                 return QStringLiteral("Invalid file format");
-            case QPdfDocument::IncorrectPasswordError:
+            case QPdfDocument::Error::IncorrectPassword:
                 return QStringLiteral("Incorrect password");
-            case QPdfDocument::UnsupportedSecuritySchemeError:
+            case QPdfDocument::Error::UnsupportedSecurityScheme:
                 return QStringLiteral("Unsupported Security scheme");
             default:
                 return QStringLiteral("Unhandled error, this is a bug :(");
@@ -80,7 +80,7 @@ QFuture<QImage> cwPDFConverter::convert()
     std::function<QImage (int page)> convertPage = [path, resolution](int page)->QImage {
         QPdfDocument doc;
         doc.load(path);
-        auto size = doc.pageSize(page);
+        auto size = doc.pagePointSize(page);
 
         auto scaledSize = size * 1/72.0 * resolution;
         QImage image = doc.render(page, QSize(std::round(scaledSize.width()),
