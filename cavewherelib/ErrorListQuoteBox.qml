@@ -3,13 +3,13 @@ pragma ComponentBehavior: Bound
 import QtQuick as QQ
 import cavewherelib
 import QtQuick.Layouts
-// import QtQuick.Controls as QC
+import QtQuick.Controls as QC
 
 QQ.Loader {
     id: loaderId
 
     property ErrorListModel errors
-    required property Button errorIcon
+    required property QC.RoundButton errorIcon
 
     sourceComponent: visible ? quoteBoxCompent : null
 

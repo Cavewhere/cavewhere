@@ -14,7 +14,7 @@ DataBox {
         id: readingTextObj
         anchors.top: parent.top
         anchors.left: parent.left
-        anchors.leftMargin: 2
+        anchors.leftMargin: 3
         anchors.topMargin: 1
         font.pixelSize: 12
     }

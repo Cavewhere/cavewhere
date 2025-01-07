@@ -1135,10 +1135,10 @@ void cwSurveyChunkView::positionShotRow(ShotRow row, int index) {
         backClinoY = clinoHeight - 1;
     }
 
-    positionElement(row.frontCompass(), AzimuthTitle, index, 0, QSize(AzimuthTitle->width() + 1, azimuthHeight));
+    positionElement(row.frontCompass(), AzimuthTitle, index, 0, QSize(AzimuthTitle->width(), azimuthHeight));
     positionElement(row.frontClino(), ClinoTitle, index, 0, QSize(ClinoTitle->width(), clinoHeight));
 
-    positionElement(row.backCompass(), AzimuthTitle, index, backAzimuthY, QSize(AzimuthTitle->width() + 1, azimuthHeight));
+    positionElement(row.backCompass(), AzimuthTitle, index, backAzimuthY, QSize(AzimuthTitle->width(), azimuthHeight));
     positionElement(row.backClino(), ClinoTitle, index, backClinoY, QSize(ClinoTitle->width(), clinoHeight));
 }
 

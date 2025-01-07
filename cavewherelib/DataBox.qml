@@ -77,14 +77,24 @@ QQ.Item {
     }
 
     function errorBorderColor(errorType) {
-        switch(errorType) {
-        case CwError.Fatal:
-            return "#960800";
-        case CwError.Warning:
-            return "#FF7600"
-        default:
-            return "black";
+        function errorColor(errorType) {
+            switch(errorType) {
+            case CwError.Fatal:
+                return "#960800";
+            case CwError.Warning:
+                return "#FF7600"
+            default:
+                return "black";
+            }
         }
+
+        //This simulates highlight. The error box will overdraw
+        //and cover the databox highlighting
+        let color = errorColor(errorType)
+        if(interalHighlight.visible) {
+            return Qt.darker(color);
+        }
+        return color
     }
 
     function errorAppearance(func) {
@@ -220,36 +230,6 @@ QQ.Item {
     }
 
     QQ.Rectangle {
-        id: errorBorder
-        property bool shouldBeVisible: dataBox.errorModel !== null && (dataBox.errorModel.fatalCount > 0 || dataBox.errorModel.warningCount > 0)
-
-        anchors.fill: parent
-        anchors.margins: 1
-        border.width: 1
-        border.color: dataBox.errorAppearance(dataBox.errorBorderColor)
-        color: "#00000000"
-        visible: shouldBeVisible || errorIcon.troggled
-
-        Button {
-            id: errorIcon
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            anchors.margins: 2
-            iconSource: dataBox.errorAppearance(dataBox.errorImageSource)
-            checkable: true
-            iconSize: Qt.size(10, 10);
-            globalClickToUncheck: true
-            radius: 0
-        }
-
-        ErrorListQuoteBox {
-            visible: errorIcon.troggled
-            errors:  dataBox.errorModel !== null ? dataBox.errorModel.errors : null
-            errorIcon: errorIcon
-        }
-    }
-
-    QQ.Rectangle {
         id: interalHighlight
         border.color: "black"
         anchors.fill: parent
@@ -276,6 +256,40 @@ QQ.Item {
 
         onClicked: {
             dataBox.focus = true
+        }
+    }
+
+    QQ.Rectangle {
+        id: errorBorder
+        property bool shouldBeVisible: dataBox.errorModel !== null && (dataBox.errorModel.fatalCount > 0 || dataBox.errorModel.warningCount > 0)
+
+        anchors.fill: parent
+        anchors.margins: 1
+        border.width: 1
+        border.color: dataBox.errorAppearance(dataBox.errorBorderColor)
+        color: "#00000000"
+        visible: shouldBeVisible || errorIcon.checked
+
+        Controls.RoundButton {
+            id: errorIcon
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.margins: 2
+            radius: 0
+            icon.source: dataBox.errorAppearance(dataBox.errorImageSource)
+            checkable: true
+            // icon.width: 10
+            // icon.height: 10
+            implicitWidth: 10
+            implicitHeight: 10
+            // globalClickToUncheck: true
+            // radius: 0
+        }
+
+        ErrorListQuoteBox {
+            visible: errorIcon.checked
+            errors:  dataBox.errorModel !== null ? dataBox.errorModel.errors : null
+            errorIcon: errorIcon
         }
     }
 
