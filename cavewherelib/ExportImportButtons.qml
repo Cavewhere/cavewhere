@@ -44,8 +44,8 @@ QQ.Item {
                         nameFilters: ["Survex (*.svx)"]
                         fileMode: FileDialog.SaveFile
                         onAccepted: {
-                            RootData.lastDirectory = fileUrl
-                            exportManager.exportSurvexTrip(fileUrl);
+                            RootData.lastDirectory = selectedFile
+                            exportManager.exportSurvexTrip(selectedFile);
                         }
                     }
                 }
@@ -58,8 +58,8 @@ QQ.Item {
                         nameFilters: ["Survex (*.svx)"]
                         fileMode: FileDialog.SaveFile
                         onAccepted: {
-                            RootData.lastDirectory = fileUrl
-                            exportManager.exportSurvexCave(fileUrl);
+                            RootData.lastDirectory = selectedFile
+                            exportManager.exportSurvexCave(selectedFile);
                         }
                     }
                 }
@@ -72,8 +72,8 @@ QQ.Item {
                         nameFilters: ["Survex (*.svx)"]
                         fileMode: FileDialog.SaveFile
                         onAccepted: {
-                            RootData.lastDirectory = fileUrl
-                            exportManager.exportSurvexRegion(fileUrl);
+                            RootData.lastDirectory = selectedFile
+                            exportManager.exportSurvexRegion(selectedFile);
                         }
                     }
                 }
@@ -86,8 +86,8 @@ QQ.Item {
                         nameFilters: ["Compass (*.dat)"]
                         fileMode: FileDialog.SaveFile
                         onAccepted: {
-                            RootData.lastDirectory = fileUrl
-                            exportManager.exportCaveToCompass(fileUrl);
+                            RootData.lastDirectory = selectedFile
+                            exportManager.exportCaveToCompass(selectedFile);
                         }
                     }
                 }
@@ -100,7 +100,7 @@ QQ.Item {
                         nameFilters: ["Chipdata (*.*)"]
                         fileMode: FileDialog.SaveFile
                         onAccepted: {
-                            exportManager.exportCaveToChipdata(fileUrl);
+                            exportManager.exportCaveToChipdata(selectedFile);
                         }
                     }
                 }
@@ -113,8 +113,8 @@ QQ.Item {
                         nameFilters: ["Compass (*.dat)"]
                         fileMode: FileDialog.OpenFile
                         onAccepted: {
-                            RootData.lastDirectory = fileUrl
-                            RootData.surveyImportManager.importCompassDataFile(fileUrls);
+                            RootData.lastDirectory = selectedFiles
+                            RootData.surveyImportManager.importCompassDataFile(selectedFiles);
                         }
                     }
                 }
