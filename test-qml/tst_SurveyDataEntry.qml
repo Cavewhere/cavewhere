@@ -132,7 +132,7 @@ MainWindowTest {
             keyClick(16777217, 0) //Tab
 
             //Check that we can supress the a warning
-            let databox = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->dataBox.1.1")
+            let databox = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->dataBox.1.1")
             let errors = databox.errorModel.errors;
 
             verify(errors.count == 1);
@@ -141,12 +141,12 @@ MainWindowTest {
             verify(errors.data(firstErrorIndex, ErrorListModel.ErrorTypeRole) === CwError.Warning)
             verify(errors.data(firstErrorIndex, ErrorListModel.SuppressedRole) === false)
 
-            let errorIcon_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->dataBox.1.1->errorIcon")
+            let errorIcon_obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->dataBox.1.1->errorIcon")
             mouseClick(errorIcon_obj1)
 
             // wait(1000000);
 
-            let checkbox = ObjectFinder.findObjectByChain(mainWindow, "rootId->errorBoxdataBox.1.1->suppress")
+            let checkbox = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->errorBoxdataBox.1.1->suppress")
             mouseClick(checkbox)
 
 
@@ -156,15 +156,23 @@ MainWindowTest {
             tryVerify(()=>{ return errors.data(firstErrorIndex, ErrorListModel.SuppressedRole) === true; })
 
             //Make sure error message works, click on it
-            let distanceError = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->dataBox.0.5->errorIcon")
+            let distanceError = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->dataBox.0.5->errorIcon")
             mouseClick(distanceError)
 
             //Make sure the warning message that was shown before is now hidden
             verify(errorIcon_obj1.visible === false)
 
             //Make sure the error message is correct
-            let errorText = ObjectFinder.findObjectByChain(mainWindow, "rootId->errorBoxdataBox.0.5->errorText")
+            let errorText = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->errorBoxdataBox.0.5->errorText")
             verify(errorText.text === "Missing \"distance\" from shot \"a1\" ➔ \"a2\"")
+
+            //Deselect the current message
+            mouseClick(distanceError)
+
+            //Make sure the error quote box is hidden
+            let quoteBox = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->errorBoxdataBox.0.5")
+            tryVerify(()=>{ return quoteBox === null });
+            verify(distanceError.checked === false);
         }
     }
 }

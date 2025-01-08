@@ -228,6 +228,7 @@ QQ.Item {
         id: errorBorder
         property bool shouldBeVisible: dataBox.errorModel !== null && (dataBox.errorModel.fatalCount > 0 || dataBox.errorModel.warningCount > 0)
 
+
         anchors.fill: parent
         anchors.margins: 1
         border.width: 1
@@ -238,6 +239,8 @@ QQ.Item {
         Controls.RoundButton {
             id: errorIcon
             objectName: "errorIcon"
+
+            property bool hasBeenToggled: false
 
             implicitWidth: 12
             implicitHeight: 12
@@ -250,12 +253,24 @@ QQ.Item {
             anchors.margins: 2
 
             //Make the popup go away when another error button is pressed
-            Controls.ButtonGroup.group: errorButtonGroup
+            Controls.ButtonGroup.group: dataBox.errorButtonGroup
 
             QQ.Image {
                 anchors.centerIn: parent
                 source: dataBox.errorAppearance(dataBox.errorImageSource)
                 sourceSize: Qt.size(errorIcon.implicitWidth - 4, errorIcon.implicitHeight - 4)
+            }
+            onClicked: {
+                //ButtonGroup prevents users for unchecking the button
+                //this allows the checkbox to be unchecked by the user
+                if(checked && !hasBeenToggled) {
+                    checked = false;
+                }
+                hasBeenToggled = false;
+            }
+
+            onToggled: {
+                hasBeenToggled = true;
             }
         }
 
