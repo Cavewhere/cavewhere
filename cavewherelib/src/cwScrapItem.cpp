@@ -213,6 +213,7 @@ void cwScrapItem::setSelected(bool selected) {
 void cwScrapItem::setZoom(double zoom)
 {
     m_zoom = zoom;
+    StationView->setZoom(zoom);
     update();
 }
 

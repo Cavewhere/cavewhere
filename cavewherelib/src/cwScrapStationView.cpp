@@ -77,6 +77,12 @@ void cwScrapStationView::setScrap(cwScrap* scrap) {
     }
 }
 
+void cwScrapStationView::setZoom(double zoom)
+{
+    m_zoom = zoom;
+    update();
+}
+
 /**
  * @brief cwScrapStationView::updateShotLinesWithAnimation
  *
@@ -142,6 +148,9 @@ void cwScrapStationView::updateShotLines() {
         //Only used if the scrap is in running profile
         QMatrix4x4 profileDirection = runningProfileDirection();
 
+        //Converts to qml view
+        QTransform toImageTransform = cwScrapView::toImage(note);
+
         //Go through all the neighboring stations and add the position to the line
         foreach(cwStation station, neighboringStations) {
 
@@ -170,8 +179,9 @@ void cwScrapStationView::updateShotLines() {
             }
 
             QVector3D normalizeNotePos = toNormalizedNote.map(currentPos);
+            auto noteLine = QLineF(noteStation.positionOnNote(), normalizeNotePos.toPointF());
 
-            ShotLines.append(QLineF(noteStation.positionOnNote(), normalizeNotePos.toPointF()));
+            ShotLines.append(toImageTransform.map(noteLine));
         }
     }
 
@@ -212,6 +222,9 @@ void cwScrapStationView::updateTransformUpdate() {
  */
 QSGNode *cwScrapStationView::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData *)
 {
+    const double shotBackgroundLineWidth = 3.0;
+    const double shotForgroundLineWidth = 1.0;
+
     if(!oldNode) {
         oldNode = new QSGTransformNode();
 
@@ -258,6 +271,12 @@ QSGNode *cwScrapStationView::updatePaintNode(QSGNode *oldNode, QQuickItem::Updat
         ShotLinesNodeBackground->setLines(ShotLines);
         ShotLinesNodeForground->setLines(ShotLines);
         LineDataDirty = false;
+    }
+
+    double newLineWidth = cwSGLinesNode::lineWidthFromZoom(m_zoom, shotBackgroundLineWidth);
+    if(newLineWidth != ShotLinesNodeBackground->lineWidth()) {
+        ShotLinesNodeBackground->setLineWidth(newLineWidth);
+        ShotLinesNodeForground->setLineWidth(cwSGLinesNode::lineWidthFromZoom(m_zoom, shotForgroundLineWidth));
     }
 
     return oldNode;

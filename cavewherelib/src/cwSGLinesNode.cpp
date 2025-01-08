@@ -55,7 +55,7 @@ void cwSGLinesNode::setLineStrip(const QVector<QPointF> &points)
  *
  * Regenerates the geometry with the new line width
  */
-void cwSGLinesNode::setLineWidth(float lineWidth) {
+void cwSGLinesNode::setLineWidth(double lineWidth) {
     if(m_lineWidth != lineWidth) {
         m_lineWidth = lineWidth;
         if(geometry() != nullptr) {

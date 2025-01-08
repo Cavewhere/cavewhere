@@ -79,10 +79,10 @@ MainWindowTest {
         function test_addStationInteraction() {
             addScrapOutline()
 
-            let addScrapStationButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->addScrapStation")
+            let addScrapStationButton = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->addScrapStation")
             mouseClick(addScrapStationButton)
 
-            let imageId = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
+            let imageId = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
             mouseClick(imageId, 391.749, 650.222)
             keyClick("a")
             keyClick(51, 0) //3
@@ -104,7 +104,7 @@ MainWindowTest {
             // wait(1000);
 
             //Double click on the stations text
-            let a4Station = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId->stationA1->coreTextInput")
+            let a4Station = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId->stationA1->coreTextInput")
             // mouseDoubleClickSequence(a4Station)
             a4Station.openEditor() //Double clicking doesn't seem like it works through qml test
 
@@ -118,13 +118,14 @@ MainWindowTest {
 
             wait(50);
 
+
             //Switch to rendering view
-            let viewButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->mainSideBar->viewButton")
+            let viewButton = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->mainSideBar->viewButton")
             mouseClick(viewButton)
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "viewPage" });
 
-            let renderingView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer")
+            let renderingView = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer")
             let renderingViewCenterX = renderingView.width / 2.0;
             let renderingViewCenterY = renderingView.height / 2.0;
 

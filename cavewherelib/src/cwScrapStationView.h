@@ -35,6 +35,7 @@ public:
     ~cwScrapStationView();
 
     void setScrap(cwScrap* scrap);
+    void setZoom(double zoom);
 
     cwNoteStation selectedNoteStation() const;
 
@@ -51,6 +52,7 @@ private:
     cwSGLinesNode* ShotLinesNodeBackground;
     cwSGLinesNode* ShotLinesNodeForground;
     QVector<QLineF> ShotLines;
+    double m_zoom = 1.0;
 
     QVariantAnimation* ScaleAnimation;
 

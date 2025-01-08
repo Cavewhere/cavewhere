@@ -18,15 +18,15 @@ public:
     void setLines(const QVector<QLineF>& lines);
     void setLineStrip(const QVector<QPointF>& points);
 
-    float lineWidth() const;
-    void setLineWidth(float lineWidth);
+    double lineWidth() const;
+    void setLineWidth(double lineWidth);
 
     static double lineWidthFromZoom(double zoom, double lineWidth) {
         return lineWidth / zoom;
     }
 
 private:
-    float m_lineWidth;
+    double m_lineWidth;
     // QVector<QLineF> m_lines;
     // QVector<QPointF> m_lineStripPoints;
     QVector<QVector<QPointF>> m_lines;
@@ -38,7 +38,7 @@ private:
  * @brief cwSGLinesNode::lineWidth
  * @return Get's the line width
  */
-inline float cwSGLinesNode::lineWidth() const
+inline double cwSGLinesNode::lineWidth() const
 {
     return m_lineWidth;
 }
