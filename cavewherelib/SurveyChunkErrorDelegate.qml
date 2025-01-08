@@ -31,7 +31,8 @@ QQ.Rectangle {
         anchors.topMargin: 3
 
         QQ.Image {
-            source: "qrc:icons/stopSignError.png"
+            source: "qrc:icons/svg/stopSignError.svg"
+            sourceSize: Qt.size(16,16)
         }
 
         Text {

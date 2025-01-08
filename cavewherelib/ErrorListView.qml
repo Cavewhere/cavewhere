@@ -32,9 +32,9 @@ QQ.ListView {
                 source: {
                     switch(delegateId.type) {
                     case CwError.Warning:
-                        return "qrc:icons/warning.png"
+                        return "qrc:icons/svg/warning.svg"
                     case CwError.Fatal:
-                        return "qrc:icons/stopSignError.png"
+                        return "qrc:icons/svg/stopSignError.svg"
                     case CwError.NoError:
                         return "qrc:icons/good.png"
                     }

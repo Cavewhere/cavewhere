@@ -8,22 +8,25 @@
 import QtQuick as QQ
 import cavewherelib
 import QtQuick.Controls as Controls;
+import QtQuick.Controls.Basic as BasicControls
 // import QtQuick.Layouts
 // import "Navigation.js" as NavigationHandler
 
 QQ.Item {
     id: dataBox
+    objectName: "dataBox." + rowIndex + "." + dataRole
 
     property alias dataValue: editor.text
     property alias dataValidator: editor.validator
-    property SurveyChunk surveyChunk; //For hooking up signals and slots in subclasses
-    property SurveyChunkView surveyChunkView;
-    property SurveyChunkTrimmer surveyChunkTrimmer; //For interaction
+    required property SurveyChunk surveyChunk; //For hooking up signals and slots in subclasses
+    required property SurveyChunkView surveyChunkView;
+    required property SurveyChunkTrimmer surveyChunkTrimmer; //For interaction
     property alias aboutToDelete: removeBoxId.visible
     property ErrorModel errorModel: null
+    required property Controls.ButtonGroup errorButtonGroup
 
-    property int rowIndex: -1
-    property int dataRole
+    required property int rowIndex
+    required property int dataRole
 
     property GlobalShadowTextInput _globalShadowTextInput: GlobalShadowTextInput
     property GlobalTextInputHelper _globalTextInput: GlobalShadowTextInput.textInput
@@ -35,16 +38,6 @@ QQ.Item {
 
     //    signal rightClicked(int index)
     //    signal splitOn(int index)
-
-    //color : Qt.rgba(201, 230, 245, 255);
-
-    //This causes memory leaks in qt 4.7.1!!!
-    //    QQ.Behavior on y { QQ.PropertyAnimation { duration: 250 } }
-    //    QQ.Behavior on opacity  { QQ.PropertyAnimation { duration: 250 } }
-
-    //    onDataValidatorChanged: {
-    //        dataTextInput.validator = dataValidator;
-    //    }
 
 
     function deletePressedHandler() {
@@ -68,9 +61,9 @@ QQ.Item {
     function errorImageSource(errorType) {
         switch(errorType) {
         case CwError.Fatal:
-            return "qrc:icons/stopSignError.png";
+            return "qrc:icons/svg/stopSignError.svg";
         case CwError.Warning:
-            return "qrc:icons/warning.png"
+            return "qrc:icons/svg/warning.svg"
         default:
             return "";
         }
@@ -120,34 +113,6 @@ QQ.Item {
         //Show menu
         rightClickMenu.popup();
     }
-
-    //    onErrorsChanged: {
-    //        console.log("Errors changed!" + errors)
-
-    //        var color = ""
-    //        var iconSource = ""
-    //        var errorsVisible = false;
-    //        for(var errorIndex in errors) {
-    //            var error = errors[errorIndex]
-
-    ////            console.log("Error:" + error)
-
-    //            if(!error.suppressed) {
-    //                errorsVisible = true;
-    //            }
-
-    //            color = errorBorderColor(error);
-    //            iconSource = errorImageSource(error);
-    //            if(error.type === CwError.Fatal) {
-    //                break;
-    //            }
-
-    //        }
-
-    //        errorBorder.shouldBeVisible = errorsVisible
-    //        errorBorder.border.color = color
-    //        errorIcon.iconSource = iconSource
-    //    }
 
     Controls.Menu {
         id: rightClickMenu
@@ -272,24 +237,33 @@ QQ.Item {
 
         Controls.RoundButton {
             id: errorIcon
+            objectName: "errorIcon"
+
+            implicitWidth: 12
+            implicitHeight: 12
+
+            checkable: true
+            radius: 0 //Makes it a square
+
             anchors.right: parent.right
             anchors.bottom: parent.bottom
             anchors.margins: 2
-            radius: 0
-            icon.source: dataBox.errorAppearance(dataBox.errorImageSource)
-            checkable: true
-            // icon.width: 10
-            // icon.height: 10
-            implicitWidth: 10
-            implicitHeight: 10
-            // globalClickToUncheck: true
-            // radius: 0
+
+            //Make the popup go away when another error button is pressed
+            Controls.ButtonGroup.group: errorButtonGroup
+
+            QQ.Image {
+                anchors.centerIn: parent
+                source: dataBox.errorAppearance(dataBox.errorImageSource)
+                sourceSize: Qt.size(errorIcon.implicitWidth - 4, errorIcon.implicitHeight - 4)
+            }
         }
 
         ErrorListQuoteBox {
             visible: errorIcon.checked
             errors:  dataBox.errorModel !== null ? dataBox.errorModel.errors : null
             errorIcon: errorIcon
+            quoteBoxObjectName: "errorBox" + dataBox.objectName
         }
     }
 

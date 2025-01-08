@@ -53,6 +53,8 @@ public:
 
     int rowCount(const QModelIndex &parent) const;
     QVariant data(const QModelIndex &index, int role) const;
+    bool setData(const QModelIndex &index, const QVariant &value, int role);
+
 
     // void prepend(const cwError& error);
     // void prepend(const QList<cwError>& errors);
@@ -71,7 +73,6 @@ signals:
 
 private:
     QList<cwError> m_errors;
-
 
 };
 

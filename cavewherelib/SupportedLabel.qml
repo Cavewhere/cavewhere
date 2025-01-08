@@ -8,7 +8,7 @@ RowLayout {
 
     QQ.Image {
         id: stopId
-        source: "qrc:/icons/stopSignError.png"
+        source: "qrc:/icons/svg/stopSignError.svg"
         sourceSize: Qt.size(16, 16)
         visible: !rootId.supported
     }

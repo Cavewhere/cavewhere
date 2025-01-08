@@ -30,22 +30,22 @@ QQ.Item {
 
             QQ.Image {
                 id: stopImage
-                source: "qrc:icons/stopSignError.png"
+                source: "qrc:icons/svg/stopSignError.svg"
                 visible: overviewId._numErrors > 0
+                sourceSize: Qt.size(16, 16)
             }
 
             QQ.Image {
                 id: warningImage
-                source: "qrc:icons/warning.png"
+                source: "qrc:icons/svg/warning.svg"
                 visible: overviewId._numWarnings > 0
+                sourceSize: Qt.size(16, 16)
             }
 
             Text {
                 id: errorText
             }
         }
-
-
     }
 
     states: [

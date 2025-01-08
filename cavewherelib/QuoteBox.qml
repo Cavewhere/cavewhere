@@ -1,337 +1,86 @@
-import QtQuick as QQ
-import QtQuick.Effects
-// import QtGraphicalEffects
+import QtQuick 2.15
+import QtQuick.Shapes 1.15
 
-/**
+//
+//   This will make a box around you qml elements like this.
+//      /\
+//   --/  \-------------
+//   |  Child items    |
+//   -------------------
+//
 
-  This will make a box around you qml elements like this.
-     /\
-  --/  \-------------
-  |  Child items    |
-  -------------------
-  */
-
-
-
-QQ.Item {
+Item {
     id: root
+    objectName: "quoteBox"
+
     default property alias defaultChildren: childrenContainer.children
-    property QQ.color color: "white" //boxColorOverlay.color
-    property QQ.color borderColor: "black" //boxOutlineColorOverlay.color
-    property alias borderWidth: box.borderWidth
-    property alias radius: rectangleItem.radius
-    property double margin: 5
-    property double shadowPadding: 5
-    property int triangleEdge: Qt.TopEdge //Can be TopEdge, Left, Bottom, Right
-
-    /**
-      Triangle offset positions the triangle, relative to the triangleAlignment. This parameter
-
-
-      When triangleAlignment == Qt.TopEdge, 0.0 = top left, 1.0 = top right
-      When triangleAlignment == Qt.LeftEdge, 0.0 = top left, 1.0 = bottom left
-      When triangleAlignment == Qt.RightEdge, 0.0 = top right, 1.0 = bottom right
-      When triangleAlignment == Qt.BottomEdge, 0.0 = bottom left, 1.0 = bottom right
-      */
-    property double triangleOffset: .1
-
-    //These two properties will position the QuoteBox's arrow to point to pointAtObject with
-    //and offset of pointAtObjectPosition
-    property QQ.Item pointAtObject
+    property color color: "white"
+    property color borderColor: "#727272"
+    property real borderWidth: 1.0
+    property real margin: 3.0
+    // property int triangleEdge: Qt.TopEdge
+    property real triangleOffset: 5.0
+    property Item pointAtObject
     property point pointAtObjectPosition
 
     function updatePosition() {
-        if(!visible) { return; }
-        var newPos = pointAt(pointAtObject, pointAtObjectPosition)
-        x = newPos.x
-        y = newPos.y
+        if (!visible || !pointAtObject) {
+            return;
+        }
+        const newPos = pointAt(pointAtObject, pointAtObjectPosition);
+        x = newPos.x;
+        y = newPos.y;
     }
 
-    /**
-      This points the arrow of the quote box at position relative to item
-      */
     function pointAt(item, position) {
-        if(item !== null) {
-
-            var globalPos = item.mapToItem(null, position.x, position.y)
-            var globalTrianglePos = arrowTipId.mapToItem(null, 0, 0)
-
-            var x = root.x + (globalPos.x - globalTrianglePos.x)
-            var y = root.y + (globalPos.y - globalTrianglePos.y)
-
-            return Qt.point(x, y);
+        if (item !== null) {
+            const globalPos = item.mapToItem(null, position.x, position.y);
+            const globalTrianglePos = box.mapToItem(null, 0, 0);
+            return Qt.point(
+                        root.x + (globalPos.x - globalTrianglePos.x),
+                        root.y + (globalPos.y - globalTrianglePos.y)
+                        );
         }
-        return Qt.point(0, 0)
+        return Qt.point(0, 0);
     }
 
-    onPointAtObjectChanged: {
-        updatePosition()
-    }
+    onPointAtObjectChanged: updatePosition()
+    onPointAtObjectPositionChanged: updatePosition()
+    onVisibleChanged: updatePosition()
 
-    onPointAtObjectPositionChanged: {
-        updatePosition()
-    }
+    Shape {
+        id: box
 
-    onVisibleChanged: {
-        updatePosition()
-    }
+        ShapePath {
+            id: shapePath
 
-    QQ.Item {
-        id: itemWithoutShadow
-        // visible: false
+            property size triangle: Qt.size(6, 12)
+            property real triangleOffset: 10
+            property real topEdge: triangle.height + root.triangleOffset
+            property point boxTopLeft: Qt.point(-(triangleOffset + 2 * triangle.width), topEdge)
+            property point boxBottomRight: Qt.point(childrenContainer.width + boxTopLeft.x,
+                                                    childrenContainer.height + boxTopLeft.y)
 
-        // width: boxOutlineColorOverlay.width + shadowPadding * 2
-        // height: boxOutlineColorOverlay.height + shadowPadding * 2
-        width: box.width + root.shadowPadding * 2
-        height: box.height + root.shadowPadding * 2
+            strokeColor: root.borderColor
+            strokeWidth: root.borderWidth
+            fillColor: root.color
 
-        QQ.Item {
-            id: arrowTipId
-            x: rectangleItem.width * root.triangleOffset + triangleItem.implicitWidth * 0.5 + root.shadowPadding
-            y: root.shadowPadding - 2
+            startX: 0; startY: root.triangleOffset //Pointy tip of the triangle
+            PathLine { x: shapePath.triangle.width; y: shapePath.topEdge }
+            PathLine { x: shapePath.boxBottomRight.x; y: shapePath.boxTopLeft.y } //TopRight
+            PathLine { x: shapePath.boxBottomRight.x; y: shapePath.boxBottomRight.y } //BottomRight
+            PathLine { x: shapePath.boxTopLeft.x; y: shapePath.boxBottomRight.y } //BottomLeft
+            PathLine { x: shapePath.boxTopLeft.x; y: shapePath.boxTopLeft.y } //TopLeft
+            PathLine { x: -shapePath.triangle.width; y: shapePath.boxTopLeft.y } //To the bottom of the triangle
+            PathLine { x: 0; y: root.triangleOffset } //Pointy tip of the triangle
         }
 
-        QQ.Item {
-            id: boxOutline
-
-            visible: false
-
-            width: rectangleItem.width
-            height: triangleItem.height + rectangleItem.height
-            x: root.shadowPadding
-            y: root.shadowPadding
-
-            QQ.Image {
-                id: triangleItem
-                x: rectangleItem.width * root.triangleOffset
-                source: "qrc:/icons/quoteTriangle.png"
-                sourceSize.height: 10;
-                smooth: true
-            }
-
-            QQ.Rectangle {
-                id: rectangleItem
-                width: {
-                    switch(root.triangleEdge) {
-                    case Qt.TopEdge:
-                    case Qt.BottomEdge:
-                        return childrenContainer.width + root.margin
-                    case Qt.LeftEdge:
-                    case Qt.RightEdge:
-                        return childrenContainer.height + root.margin
-                    default:
-                        return 0
-                    }
-                }
-                height: {
-                        switch(root.triangleEdge) {
-                        case Qt.TopEdge:
-                        case Qt.BottomEdge:
-                            return childrenContainer.height + root.margin
-                        case Qt.LeftEdge:
-                        case Qt.RightEdge:
-                            return childrenContainer.width + root.margin
-                        default:
-                            return 0
-                        }
-                    }
-                radius: 0
-                y: triangleItem.height
-                color: "black"
-            }
+        Item {
+            id: childrenContainer
+            x: shapePath.boxTopLeft.x + root.margin
+            y: shapePath.topEdge + root.margin
+            implicitWidth: childrenRect.width + root.margin * 2.0
+            implicitHeight: childrenRect.height + root.margin * 2.0
         }
-
-        QQ.Item {
-            id: box
-
-            property int borderWidth: 1.0
-
-            anchors.centerIn: boxOutline
-
-            width: rectangleItem.width
-            height: triangleItem.height + rectangleItem.height
-            visible: false
-
-            QQ.Image {
-                id: triangleItemBorder
-                x: triangleItem.x
-                y: box.borderWidth
-                source: "qrc:/icons/quoteTriangle.png"
-                sourceSize.height: triangleItem.sourceSize.height;
-
-                smooth: true
-            }
-
-            QQ.Rectangle {
-                id: rectangleItemBorder
-                width: rectangleItem.width - box.borderWidth * 2
-                height: rectangleItem.height - box.borderWidth * 2
-                radius: rectangleItem.radius - box.borderWidth
-                x: box.borderWidth
-                y: triangleItem.height + box.borderWidth
-                color: "white"
-            }
-        }
-
-        // Define the inline component here
-        component ColorOverlayEffect: QQ.Item {
-            property alias sourceItem: shaderEffectSource.sourceItem
-            property QQ.color overlayColor: "white"
-
-            QQ.ShaderEffectSource {
-                id: shaderEffectSource
-                live: true
-                smooth: true
-                hideSource: true
-                anchors.fill: parent
-            }
-
-            QQ.ShaderEffect {
-                anchors.fill: shaderEffectSource
-                fragmentShader: "qrc:/shaders/colorOverlay.frag.qsb"
-                property var source: shaderEffectSource
-                property QQ.color overlayColor: parent.overlayColor
-            }
-        }
-
-        // Applying the ColorOverlayEffect to boxOutline
-        // ColorOverlayEffect {
-        //     id: boxOutlineColorOverlay
-        //     sourceItem: boxOutline
-        //     overlayColor: "darkgray"
-        //     anchors.fill: boxOutline
-        // }
-
-        // Applying the ColorOverlayEffect to box
-        ColorOverlayEffect {
-            id: boxColorOverlay
-            sourceItem: box
-            overlayColor: "white"
-            anchors.fill: box
-        }
-
-
-        // ColorOverlay {
-        //     id: boxOutlineColorOverlay
-        //     cached: true
-        //     color: "darkgray"
-        //     source: boxOutline
-        //     anchors.fill: boxOutline
-        // }
-
-        // ColorOverlay {
-        //     id: boxColorOverlay
-        //     cached: true
-        //     color: "white"
-        //     source: box
-        //     anchors.fill: box
-        // }
-
-    }
-
-
-    // MultiEffect {
-    //     id: dropShadowId
-
-    //     anchors.fill: itemWithoutShadow
-
-    //     clip: false
-    //     // cached: true
-    //     shadowHorizontalOffset: 2 * Math.cos(Math.PI / 180.0 * rotationId.angle)
-    //                       + 2 * Math.sin(Math.PI / 180.0 * rotationId.angle)
-    //     shadowVerticalOffset: 2 * Math.cos(Math.PI / 180.0 * rotationId.angle)
-    //                     - 2 * Math.sin(Math.PI / 180.0 * rotationId.angle)
-    //     // radius: 5
-    //     // samples: 32
-    //     shadowColor: "#262626"
-    //     source: itemWithoutShadow
-
-    //     //This item is used to position the QuoteBox. This item is locate at the tip of the
-    //     //arrow of the quotebox
-    //     QQ.Item {
-    //         id: arrowTipId
-    //         x: rectangleItem.width * root.triangleOffset + triangleItem.implicitWidth * 0.5 + root.shadowPadding
-    //         y: root.shadowPadding - 2
-    //     }
-
-    //     transform: [
-    //         QQ.Rotation {
-    //             id: rotationId
-    //             angle:  {
-    //                 switch(root.triangleEdge) {
-    //                 case Qt.TopEdge:
-    //                     return 0
-    //                 case Qt.BottomEdge:
-    //                     return 180
-    //                 case Qt.LeftEdge:
-    //                     return 270
-    //                 case Qt.RightEdge:
-    //                     return 90
-    //                 default:
-    //                     return 0
-    //                 }
-    //             }
-    //             origin.x: 0
-    //             origin.y: 0
-
-    //             onAngleChanged:  {
-    //                 root.updatePosition()
-    //             }
-    //         },
-
-    //         QQ.Translate {
-    //             x: {
-    //                 switch(root.triangleEdge) {
-    //                 case Qt.TopEdge:
-    //                     return 0;
-    //                 case Qt.BottomEdge:
-    //                     return dropShadowId.width
-    //                 case Qt.LeftEdge:
-    //                     return -triangleItem.height
-    //                 case Qt.RightEdge:
-    //                     return dropShadowId.height
-    //                 default:
-    //                     return 0
-    //                 }
-    //             }
-
-    //             y: {
-    //                 switch(root.triangleEdge) {
-    //                 case Qt.TopEdge:
-    //                     return 0;
-    //                 case Qt.BottomEdge:
-    //                     return dropShadowId.height + triangleItem.height
-    //                 case Qt.LeftEdge:
-    //                     return dropShadowId.width + triangleItem.height
-    //                 case Qt.RightEdge:
-    //                     return triangleItem.height
-    //                 default:
-    //                     return 0
-    //                 }
-    //             }
-
-    //             onXChanged: {
-    //                 root.updatePosition()
-    //             }
-
-    //             onYChanged:  {
-    //                 root.updatePosition()
-    //             }
-    //         }
-    //     ]
-
-    // }
-
-    QQ.Item {
-        id: childrenContainer
-        width: childrenRect.width + root.margin
-        height: childrenRect.height + root.margin
-        x: root.margin + root.shadowPadding
-        y: rectangleItem.y + root.margin + root.shadowPadding
-    }
-
-    QQ.Component.onCompleted: {
-        root.updatePosition()
     }
 }
-

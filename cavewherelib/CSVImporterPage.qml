@@ -311,7 +311,7 @@ ScrollViewPage {
                         visible: csvManagerId.errorModel.errors.count > 0
                         RowLayout {
                             QQ.Image {
-                                source: "qrc:icons/stopSignError.png"
+                                source: "qrc:icons/svg/stopSignError.svg"
                             }
                             Text {
                                 text: csvManagerId.errorModel.fatalCount + " errors"
@@ -320,7 +320,7 @@ ScrollViewPage {
                             QQ.Item { implicitWidth: 1} //spacer
 
                             QQ.Image {
-                                source: "qrc:icons/warning.png"
+                                source: "qrc:icons/svg/warning.svg"
                             }
                             Text {
                                 text: csvManagerId.errorModel.warningCount + " warnings"

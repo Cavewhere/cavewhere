@@ -123,5 +123,7 @@
         <file>twbs-icons/icons/question-circle.svg</file>
         <file>twbs-icons/icons/file-minus-fill.svg</file>
         <file>twbs-icons/icons/file-minus.svg</file>
+        <file>icons/svg/stopSignError.svg</file>
+        <file>icons/svg/warning.svg</file>
     </qresource>
 </RCC>

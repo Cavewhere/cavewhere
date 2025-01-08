@@ -133,6 +133,22 @@ QVariant cwErrorListModel::data(const QModelIndex &index, int role) const
     }
 }
 
+bool cwErrorListModel::setData(const QModelIndex &index, const QVariant &value, int role)
+{
+    if(index.isValid()) {
+        switch(role) {
+        case static_cast<int>(ErrorRoles::SuppressedRole): {
+            cwError& error = m_errors[index.row()];
+            error.setSupressed(value.toBool());
+            emit dataChanged(index, index, {static_cast<int>(ErrorRoles::SuppressedRole)});
+        }
+        default:
+            return false;
+        }
+    }
+    return false;
+}
+
 // void cwErrorListModel::prepend(const QList<cwError> &errors)
 // {
 //     if (errors.isEmpty()) {

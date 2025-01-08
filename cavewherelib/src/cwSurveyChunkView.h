@@ -33,6 +33,8 @@ class cwSurveyChunkView : public QQuickItem
 
     Q_PROPERTY(cwSurveyChunk* model READ model WRITE setModel NOTIFY modelChanged)
     Q_PROPERTY(cwSurveyChunkTrimmer* chunkTrimmer READ chunkTrimmer WRITE setChunkTrimmer NOTIFY chunkTrimmerChanged)
+    Q_PROPERTY(QObject* errorButtonGroup READ errorButtonGroup WRITE setErrorButtonGroup NOTIFY errorButtonGroupChanged FINAL)
+
     Q_ENUMS(DataBoxType)
 
 public:
@@ -69,6 +71,9 @@ public:
     Q_INVOKABLE void showRemoveBoxsOnShots(int begin, int end);
     Q_INVOKABLE void hideRemoveBoxs();
 
+    QObject *errorButtonGroup() const;
+    void setErrorButtonGroup(QObject *newErrorButtonGroup);
+
 signals:
     void modelChanged();
 
@@ -79,6 +84,8 @@ signals:
     void needChunkBelow(); //Always hook up with a direct connection
 
     void chunkTrimmerChanged();
+
+    void errorButtonGroupChanged();
 
 public slots:
 
@@ -122,9 +129,11 @@ private:
         int RowIndex;
 
         static QQuickItem* setupItem(QQmlComponent* component,
-                                           QQmlContext* context,
-                                           cwSurveyChunk::DataRole,
-                                           cwValidator* validator);
+                                     QQmlContext* context,
+                                     cwSurveyChunk::DataRole role,
+                                     cwValidator *validator,
+                                     int rowIndex,
+                                     cwSurveyChunkView* view);
     };
 
     class StationRow : public Row {
@@ -210,6 +219,9 @@ private:
     //For setting the navigation for the last and first object
     const cwSurveyChunkView* ChunkBelow;
     const cwSurveyChunkView* ChunkAbove;
+
+    //For hidding and showing the error group
+    QObject *m_errorButtonGroup = nullptr;
 
     void createTitlebar();
 

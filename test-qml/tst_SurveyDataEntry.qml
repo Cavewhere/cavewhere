@@ -11,7 +11,7 @@ MainWindowTest {
         name: "SurveyDataEntry"
         when: windowShown
 
-        function test_enterSurveyData() {
+        function addSurvey() {
             TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwScrapManager/ProjectProfile-test-v3.cw");
             RootData.pageSelectionModel.currentPageAddress = "Data/Cave=Cave 1"
 
@@ -26,6 +26,10 @@ MainWindowTest {
             mouseClick(addSuveyButton)
 
             wait(200);
+        }
+
+        function test_enterSurveyData() {
+            addSurvey();
 
             //Start adding survey data
             keyClick("b")
@@ -115,6 +119,52 @@ MainWindowTest {
             keyClick(16777217, 0) //Tab
             verify(firstChunk.data(SurveyChunk.ShotClinoRole, 1) === "0")
             wait(50);
+        }
+
+        function test_errorButtonsShouldWork() {
+            addSurvey();
+
+            //Start adding survey data
+            keyClick("a")
+            keyClick(49, 0) //1
+            keyClick(16777220, 0) //Return
+            keyClick(16777217, 0) //Tab
+            keyClick(16777217, 0) //Tab
+
+            //Check that we can supress the a warning
+            let databox = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->dataBox.1.1")
+            let errors = databox.errorModel.errors;
+
+            verify(errors.count == 1);
+
+            let firstErrorIndex = errors.index(0, 0);
+            verify(errors.data(firstErrorIndex, ErrorListModel.ErrorTypeRole) === CwError.Warning)
+            verify(errors.data(firstErrorIndex, ErrorListModel.SuppressedRole) === false)
+
+            let errorIcon_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->dataBox.1.1->errorIcon")
+            mouseClick(errorIcon_obj1)
+
+            // wait(1000000);
+
+            let checkbox = ObjectFinder.findObjectByChain(mainWindow, "rootId->errorBoxdataBox.1.1->suppress")
+            mouseClick(checkbox)
+
+
+            //Make sure the warning is supressed
+            verify(errors.count == 1);
+            verify(errors.data(firstErrorIndex, ErrorListModel.ErrorTypeRole) === CwError.Warning)
+            tryVerify(()=>{ return errors.data(firstErrorIndex, ErrorListModel.SuppressedRole) === true; })
+
+            //Make sure error message works, click on it
+            let distanceError = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->dataBox.0.5->errorIcon")
+            mouseClick(distanceError)
+
+            //Make sure the warning message that was shown before is now hidden
+            verify(errorIcon_obj1.visible === false)
+
+            //Make sure the error message is correct
+            let errorText = ObjectFinder.findObjectByChain(mainWindow, "rootId->errorBoxdataBox.0.5->errorText")
+            verify(errorText.text === "Missing \"distance\" from shot \"a1\" ➔ \"a2\"")
         }
     }
 }

@@ -48,6 +48,7 @@ QQ.Rectangle {
 
         QQ.Image {
             id: icon
+            sourceSize: Qt.size(16, 16)
             // implicitWidth: sourceSize.width
             // implicitHeight: sourceSize.height
 

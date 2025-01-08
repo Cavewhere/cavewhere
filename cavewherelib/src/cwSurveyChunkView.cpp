@@ -962,37 +962,37 @@ cwSurveyChunkView::StationRow::StationRow(cwSurveyChunkView* view, int rowIndex)
     Items[StationName] = setupItem(components->stationDelegate(),
                                    context,
                                    cwSurveyChunk::StationNameRole,
-                                   components->stationValidator());
+                                   components->stationValidator(),
+                                   rowIndex,
+                                   view);
 
     Items[Left]= setupItem(components->leftDelegate(),
                            context,
                            cwSurveyChunk::StationLeftRole,
-                           components->lrudValidator());
+                           components->lrudValidator(),
+                            rowIndex,
+                            view);
 
     Items[Right] = setupItem(components->rightDelegate(),
                              context,
                              cwSurveyChunk::StationRightRole,
-                             components->lrudValidator());
+                             components->lrudValidator(),
+                             rowIndex,
+                             view);
 
     Items[Up] = setupItem(components->upDelegate(),
                           context,
                           cwSurveyChunk::StationUpRole,
-                          components->lrudValidator());
+                          components->lrudValidator(),
+                          rowIndex,
+                          view);
 
     Items[Down] = setupItem(components->downDelegate(),
                             context,
                             cwSurveyChunk::StationDownRole,
-                            components->lrudValidator());
-
-    foreach(QQuickItem* item, items()) {
-        Q_ASSERT(item != nullptr); //If this fails there's probably a qml error in databox
-        item->setProperty("rowIndex", rowIndex);
-        item->setProperty("surveyChunk", QVariant::fromValue(view->model()));
-        item->setProperty("surveyChunkView", QVariant::fromValue(view));
-        item->setProperty("surveyChunkTrimmer", QVariant::fromValue(view->chunkTrimmer()));
-        item->setParentItem(view);
-        item->setParent(view);
-    }
+                            components->lrudValidator(),
+                            rowIndex,
+                            view);
 }
 
 cwSurveyChunkView::Row::Row(int rowIndex, int numberOfItems) {
@@ -1009,17 +1009,34 @@ cwSurveyChunkView::Row::Row(int rowIndex, int numberOfItems) {
   \brief Sets up a row declarative item
   */
 QQuickItem* cwSurveyChunkView::Row::setupItem(QQmlComponent* component,
-                                                    QQmlContext* context,
-                                                    cwSurveyChunk::DataRole role,
-                                                    cwValidator *validator) {
+                                              QQmlContext* context,
+                                              cwSurveyChunk::DataRole role,
+                                              cwValidator *validator,
+                                              int rowIndex,
+                                              cwSurveyChunkView* view
+                                              ) {
     if(component->isError()) {
         qWarning() << component->errorString();
         return nullptr;
     }
 
-    QQuickItem* item = qobject_cast<QQuickItem*>(component->create(context));
-    item->setProperty("dataRole", role);
-    item->setProperty("dataValidator", QVariant::fromValue(validator));
+    QQuickItem* item = qobject_cast<QQuickItem*>(
+        component->createWithInitialProperties({{"rowIndex", rowIndex},
+                                                   {"dataRole", role},
+                                                   {"dataValidator", QVariant::fromValue(validator)},
+                                                   {"surveyChunk", QVariant::fromValue(view->model())},
+                                                   {"surveyChunkView", QVariant::fromValue(view)},
+                                                   {"surveyChunkTrimmer", QVariant::fromValue(view->chunkTrimmer())},
+                                                   {"errorButtonGroup", QVariant::fromValue(view->errorButtonGroup())}
+                                               },
+
+                                               context)
+        );
+
+    item->setParentItem(view);
+    item->setParent(view);
+
+    Q_ASSERT(item); //If this fails, item failed to create
     return item;
 }
 
@@ -1040,36 +1057,38 @@ cwSurveyChunkView::ShotRow::ShotRow(cwSurveyChunkView *view, int rowIndex) : Row
     Items[Distance] = setupItem(components->distanceDelegate(),
                                 context,
                                 cwSurveyChunk::ShotDistanceRole,
-                                components->distanceValidator());
+                                components->distanceValidator(),
+                                rowIndex,
+                                view);
 
     Items[FrontCompass] = setupItem(components->frontCompassDelegate(),
                                     context,
                                     cwSurveyChunk::ShotCompassRole,
-                                    components->compassValidator());
+                                    components->compassValidator(),
+                                    rowIndex,
+                                    view);
 
     Items[BackCompass] = setupItem(components->backCompassDelegate(),
                                    context,
                                    cwSurveyChunk::ShotBackCompassRole,
-                                   components->compassValidator());
+                                   components->compassValidator(),
+                                   rowIndex,
+                                   view);
 
     Items[FrontClino]  = setupItem(components->frontClinoDelegate(),
-                                   context,
-                                   cwSurveyChunk::ShotClinoRole,
-                                   components->clinoValidator());
+                                  context,
+                                  cwSurveyChunk::ShotClinoRole,
+                                  components->clinoValidator(),
+                                  rowIndex,
+                                  view
+                                  );
 
     Items[BackClino] = setupItem(components->backClinoDelegate(),
                                  context,
                                  cwSurveyChunk::ShotBackClinoRole,
-                                 components->clinoValidator());
-
-    foreach(QQuickItem* item, items()) {
-        item->setProperty("rowIndex", rowIndex);
-        item->setProperty("surveyChunk", QVariant::fromValue(view->model()));
-        item->setProperty("surveyChunkView", QVariant::fromValue(view));
-        item->setProperty("surveyChunkTrimmer", QVariant::fromValue(view->chunkTrimmer()));
-        item->setParentItem(view);
-        item->setParent(view);
-    }
+                                 components->clinoValidator(),
+                                 rowIndex,
+                                 view);
 }
 
 /**
@@ -1735,4 +1754,19 @@ void cwSurveyChunkView::removeBoxVisible(bool visible, cwSurveyChunkView::ShotRo
     shotRow.frontClino()->setProperty("aboutToDelete", visible);
     shotRow.backCompass()->setProperty("aboutToDelete", visible);
     shotRow.backClino()->setProperty("aboutToDelete", visible);
+}
+
+QObject *cwSurveyChunkView::errorButtonGroup() const
+{
+    return m_errorButtonGroup;
+}
+
+void cwSurveyChunkView::setErrorButtonGroup(QObject *newErrorButtonGroup)
+{
+    if (m_errorButtonGroup == newErrorButtonGroup) {
+        return;
+    }
+    m_errorButtonGroup = newErrorButtonGroup;
+
+    emit errorButtonGroupChanged();
 }

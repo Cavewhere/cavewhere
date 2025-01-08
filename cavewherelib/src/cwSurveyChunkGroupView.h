@@ -36,6 +36,9 @@ class cwSurveyChunkGroupView : public QQuickItem
     Q_PROPERTY(float viewportHeight READ viewportHeight WRITE setViewportHeight NOTIFY viewportHeightChanged)
     Q_PROPERTY(QRectF ensureVisibleRect READ ensureVisibleRect NOTIFY ensureVisibleRectChanged)
 
+    //For hidding the popup errorboxs
+    Q_PROPERTY(QObject* errorButtonGroup READ errorButtonGroup WRITE setErrorButtonGroup NOTIFY errorButtonGroupChanged FINAL REQUIRED)
+
 public:
     explicit cwSurveyChunkGroupView(QQuickItem *parent = 0);
 
@@ -62,6 +65,9 @@ public:
 
     Q_INVOKABLE void setFocus(int index);
 
+    QObject *errorButtonGroup() const;
+    void setErrorButtonGroup(QObject *newErrorButtonGroup);
+
 signals:
     void tripChanged();
     void contentHeightChanged();
@@ -73,6 +79,8 @@ signals:
     void viewportHeightChanged();
 
     void ensureVisibleRectChanged();
+
+    void errorButtonGroupChanged();
 
 public slots:
 
@@ -114,6 +122,8 @@ private:
     void updateAboveBelowAndPosition(int index);
 
     void forceAllocateChunk(int chunkIndex, int allocatedChunkIndex);
+
+    QObject *m_errorButtonGroup = nullptr;
 
 private slots:
     //void InsertRows(int start, int end);

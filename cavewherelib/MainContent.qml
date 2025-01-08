@@ -13,7 +13,6 @@ QQ.Item {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        z: 1
 
         sidebarWidth: mainSideBar.width - 1
     }
@@ -53,6 +52,11 @@ QQ.Item {
                 RootData.pageView = pageView
             }
         }
+    }
+
+    QQ.Item {
+        id: overlay
+        anchors.fill: parent
     }
 
     QQ.Component {
@@ -104,6 +108,9 @@ QQ.Item {
     }
 
     QQ.Component.onCompleted: {
+        GlobalShadowTextInput.parent = overlay;
+        RootPopupItem.parent = overlay
+
         pageView.unknownPageComponent = unknownPageComponent
         var viewPage = RootData.pageSelectionModel.registerPage(null, "View", renderingComponent);
         let dataPage = RootData.pageSelectionModel.registerPage(null, "Data", dataMainPageComponent);

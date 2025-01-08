@@ -17,13 +17,13 @@ QQ.Item {
 
         spacing: 1
         QQ.Image {
-            source: "qrc:icons/stopSignError.png"
+            source: "qrc:icons/svg/stopSignError.svg"
             sourceSize: Qt.size(16, 16)
             visible: itemId.errorModel.fatalCount > 0
         }
 
         QQ.Image {
-            source: "qrc:icons/warning.png"
+            source: "qrc:icons/svg/warning.svg"
             sourceSize: Qt.size(16, 16)
             visible: itemId.errorModel.warningCount > 0
         }

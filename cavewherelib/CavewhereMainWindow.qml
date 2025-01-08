@@ -92,6 +92,11 @@ ApplicationWindow {
     //     }
     // }
 
+    QQ.Item {
+        id: overlayItem
+        anchors.fill: parent
+    }
+
     SaveAsDialog {
         id: saveAsFileDialogId
     }
@@ -158,7 +163,6 @@ ApplicationWindow {
 
     QQ.Component.onCompleted: {
         screenSizeSaverId.resize();
-        GlobalShadowTextInput.parent = applicationWindowId.contentItem;
     }
 }
 

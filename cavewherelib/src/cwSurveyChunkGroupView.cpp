@@ -236,6 +236,8 @@ void cwSurveyChunkGroupView::CreateChunkView(int index) {
 
         //Create a chunkView object
         cwSurveyChunkView* chunkView = new cwSurveyChunkView(this);
+        chunkView->setErrorButtonGroup(m_errorButtonGroup);
+
         QQmlContext* context = QQmlEngine::contextForObject(this);
         QQmlEngine::setContextForObject(chunkView, context);
         chunkView->setQMLComponents(ChunkQMLComponents);
@@ -602,3 +604,22 @@ double cwSurveyChunkGroupView::contentWidth() {
 }
 
 
+
+QObject *cwSurveyChunkGroupView::errorButtonGroup() const
+{
+    return m_errorButtonGroup;
+}
+
+void cwSurveyChunkGroupView::setErrorButtonGroup(QObject *newErrorButtonGroup)
+{
+    if (m_errorButtonGroup == newErrorButtonGroup) {
+        return;
+    }
+    m_errorButtonGroup = newErrorButtonGroup;
+
+    for(auto chunkView : ChunkViews) {
+        chunkView->setErrorButtonGroup(m_errorButtonGroup);
+    }
+
+    emit errorButtonGroupChanged();
+}

@@ -11,6 +11,7 @@ import "Theme.js" as Theme
 HelpArea {
 
     color: Theme.errorBackground
-    imageSource: "qrc:icons/stopSignError.png"
+    imageSource: "qrc:icons/svg/stopSignError.svg"
+
 
 }

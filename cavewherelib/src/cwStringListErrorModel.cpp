@@ -32,9 +32,9 @@ QVariant  cwStringListErrorModel::data(const QModelIndex &index, int role) const
         return error;
     case Qt::DecorationRole: {
         if (error.contains(QRegularExpression("^error:", QRegularExpression::CaseInsensitiveOption))) {
-            return QIcon(":icons/stopSignError.png");
+            return QIcon(":icons/svg/stopSignError.svg");
         } else if (error.contains(QRegularExpression("^warning:", QRegularExpression::CaseInsensitiveOption))) {
-            return QIcon(":icons/warning.png");
+            return QIcon(":icons/svg/warning.svg");
         }
         return QVariant();
     }

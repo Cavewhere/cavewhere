@@ -22,8 +22,4 @@ Item {
         id: mainWindow
         anchors.fill: parent
     }
-
-    Component.onCompleted: {
-        GlobalShadowTextInput.parent = rootId
-    }
 }

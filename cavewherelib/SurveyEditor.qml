@@ -158,6 +158,8 @@ QQ.Item {
                     viewportHeight: flickableAreaId.visibleArea.heightRatio * flickableAreaId.height
 
                     onEnsureVisibleRectChanged: flickableAreaId.ensureVisible(ensureVisibleRect);
+
+                    errorButtonGroup: Controls.ButtonGroup {}
                 }
 
                 Text {
