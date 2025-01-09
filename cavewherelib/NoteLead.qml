@@ -24,6 +24,7 @@ ScrapPointItem {
             id: stationMouseArea
             anchors.fill: parent
 
+            scrapItem: scrapPointId.scrapItem
             parentView: scrapPointId.parentView
             onPointSelected: scrapPointId.select();
             onPointMoved: (noteCoord) =>

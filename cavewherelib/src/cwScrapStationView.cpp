@@ -305,7 +305,7 @@ QMatrix4x4 cwScrapStationView::runningProfileDirection() const
         int numRight = 0;
         for(int i = 1; i < scrap()->stations().size(); i++) {
             const cwNoteStation& station = scrap()->stations().at(i);
-            QVector3D rotatedNoteStation = normalizePage * QVector3D(station.positionOnNote());
+            QVector3D rotatedNoteStation = normalizePage.map(QVector3D(station.positionOnNote()));
             if(rotatedNoteStation.x() > 0) {
                 ++numRight;
             } else {

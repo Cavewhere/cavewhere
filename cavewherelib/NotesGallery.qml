@@ -162,7 +162,7 @@ QQ.Rectangle {
         QQ.TapHandler {
             gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
             onSingleTapped: {
-                galleryView.currentIndex = index
+                galleryView.currentIndex = container.index
             }
         }
     }
@@ -408,6 +408,7 @@ QQ.Rectangle {
                 IconButton {
                     id: addLeadId
                     iconSource: "qrc:icons/svg/addLead.svg"
+                    objectName: "addLeads"
                     sourceSize: mainToolBar.iconSize
                     text: "Lead"
 

@@ -49,18 +49,15 @@ ImageItem {
         id: addStationInteraction
         anchors.fill: parent
         scrapView: scrapViewId
-        // basePanZoomInteraction: panZoomInteraction
-        // imageItem: noteArea
         target: noteArea.targetItem
     }
 
-    // NoteLeadInteraction {
-    //     id: addLeadInteraction
-    //     anchors.fill: parent
-    //     scrapView: scrapViewId
-    //     basePanZoomInteraction: panZoomInteraction
-    //     imageItem: noteArea
-    // }
+    NoteLeadInteraction {
+        id: addLeadInteraction
+        anchors.fill: parent
+        scrapView: scrapViewId
+        target: noteArea.targetItem
+    }
 
     NoteItemSelectionInteraction {
         id: noteSelectionInteraction
@@ -104,7 +101,7 @@ ImageItem {
             panZoomInteraction,
             addScrapInteraction,
             addStationInteraction,
-            // addLeadInteraction,
+            addLeadInteraction,
             noteSelectionInteraction,
             noteNorthUpInteraction,
             noteScaleInteraction,
@@ -119,10 +116,10 @@ ImageItem {
                     addScrapInteraction.activate();
                     break;
                 case "ADD-STATION":
-                    // addStationInteraction.activate();
+                    addStationInteraction.activate();
                     break;
                 case "ADD-LEAD":
-                    // addLeadInteraction.activate();
+                    addLeadInteraction.activate();
                     break;
                 case "SELECT":
                     noteSelectionInteraction.activate();
@@ -199,10 +196,10 @@ ImageItem {
             }
         }
 
-        // LeadInfoEditor {
-        //     id: leadInfoEditor
-        //     leadView: scrapViewId.selectedScrapItem !== null ? scrapViewId.selectedScrapItem.leadView : null
-        // }
+        LeadInfoEditor {
+            id: leadInfoEditor
+            leadView: scrapViewId.selectedScrapItem !== null ? scrapViewId.selectedScrapItem.leadView : null
+        }
     }
 
     //For rendering scraps onto the view
@@ -252,12 +249,12 @@ ImageItem {
             }
         },
 
-        //  QQ.Transition {
-        //     to: "ADD-LEAD"
-        //     QQ.ScriptAction {
-        //         script: interactionManagerId.active(addLeadInteraction)
-        //     }
-        // },
+         QQ.Transition {
+            to: "ADD-LEAD"
+            QQ.ScriptAction {
+                script: interactionManagerId.active(addLeadInteraction)
+            }
+        },
 
          QQ.Transition {
             to: ""

@@ -8,6 +8,7 @@
 //Our includes
 #include "cwScrapLeadView.h"
 #include "cwScrap.h"
+#include "cwScrapView.h"
 
 cwScrapLeadView::cwScrapLeadView(QQuickItem *parent) :
     cwScrapPointView(parent),
@@ -47,16 +48,20 @@ void cwScrapLeadView::updateItemPosition(QQuickItem *item, int index)
 {
     QVector3D point;
     switch (positionRole()) {
-    case cwScrap::LeadPositionOnNote:
-        point = QVector3D(Scrap->leadData(positionRole(), index).value<QPointF>());
+    case cwScrap::LeadPositionOnNote: {
+        auto notePoint = Scrap->leadData(positionRole(), index).value<QPointF>();
+        QPointF imagePoint = cwScrapView::toImage(Scrap->parentNote()).map(notePoint);
+        item->setPosition(imagePoint);
         break;
+    }
     case cwScrap::LeadPosition:
         point = Scrap->leadData(positionRole(), index).value<QVector3D>();
+        //Note sure how we handle 3d view yet
         break;
     default:
         break;
     }
-    item->setProperty("position3D", point);
+    // item->setProperty("position3D", point);
 }
 
 void cwScrapLeadView::updateViewWithData(int begin, int end, QList<int> roles)

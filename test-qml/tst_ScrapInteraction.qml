@@ -139,5 +139,22 @@ MainWindowTest {
             let renderImage = grabImage(renderingView)
             compare(renderImage.pixel(556, 334), Qt.rgba(1, 1, 1, 255));
         }
+
+        function test_addLeadInteraction() {
+            addScrapOutline();
+
+            //Click on the leads button
+            let addLeads = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->addLeads")
+            mouseClick(addLeads)
+
+            let imageId_obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
+            mouseClick(imageId_obj1, 523.515, 506.278)
+
+
+
+
+
+            wait(1000000);
+        }
     }
 }
