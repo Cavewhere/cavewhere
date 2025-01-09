@@ -163,7 +163,6 @@ int main(int argc, char *argv[])
     openFileHandler->setProject(rootData->project());
     a.installEventFilter(openFileHandler);
 
-
     //Hookup the image provider now that the rootdata is create
     imageProvider->setProjectPath(rootData->project()->filename());
     QObject::connect(rootData->project(), SIGNAL(filenameChanged(QString)), imageProvider, SLOT(setProjectPath(QString)));

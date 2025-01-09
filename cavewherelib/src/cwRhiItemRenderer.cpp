@@ -31,6 +31,6 @@ void cwRhiItemRenderer::render(QRhiCommandBuffer *cb) {
     m_sceneRenderer->render(cb, this);
 
     //This cause the item to redraw ever frame
-    update();
+    // update();
 
 }

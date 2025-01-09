@@ -13,6 +13,7 @@
 #include <QQuickPaintedItem>
 #include <QPointer>
 #include <QQmlEngine>
+#include <QImage>
 class QGraphicsScene;
 
 
@@ -43,6 +44,7 @@ public slots:
 
 private:
     QPointer<QGraphicsScene> Scene; //!<
+    QImage m_image;
 
 };
 

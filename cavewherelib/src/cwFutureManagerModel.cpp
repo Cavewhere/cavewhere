@@ -18,7 +18,6 @@ cwFutureManagerModel::cwFutureManagerModel(QObject *parent) :
             emit dataChanged(index(0), index(rowCount() - 1), {RunTimeRole});
         }
     });
-    Timer->start();
 }
 
 void cwFutureManagerModel::addJob(const cwFuture &job)
@@ -67,6 +66,10 @@ void cwFutureManagerModel::addJob(const cwFuture &job)
     beginInsertRows(QModelIndex(), lastRow, lastRow);
     Watchers.append(container);
     endInsertRows();
+
+    if(!Timer->isActive()) {
+        Timer->start();
+    }
 }
 
 int cwFutureManagerModel::rowCount(const QModelIndex &parent) const
@@ -137,6 +140,10 @@ void cwFutureManagerModel::removeWatcher(QFutureWatcher<void> *watcher)
     beginRemoveRows(QModelIndex(), modelIndex.row(), modelIndex.row());
     Watchers.removeAt(modelIndex.row());
     endRemoveRows();
+
+    if(rowCount() == 0) {
+        Timer->stop();
+    }
 
     delete watcher;
 }
