@@ -12,9 +12,16 @@ MainWindowTest {
         when: windowShown
 
         function addScrapOutline() {
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwScrapManager/ProjectProfile-test-v3.cw");
-            RootData.pageSelectionModel.currentPageAddress = "Data/Cave=Cave 1/Trip=Trip 1"
+            TestHelper.loadProjectFromFile(RootData.project, "://datasets/tst_ScrapInteraction/projectedProfile.cw");
 
+            //Zoom into the data, in the 3d view
+            let renderer = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer");
+            let turnTableInteraction = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->turnTableInteraction")
+            turnTableInteraction.camera.zoomScale = 0.05;
+
+            wait(100);
+
+            RootData.pageSelectionModel.currentPageAddress = "Data/Cave=Cave 1/Trip=Trip 1"
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
             //Select carpet
@@ -32,6 +39,10 @@ MainWindowTest {
             mouseMove(imageId, 322, 392);
             mouseClick(imageId, 322, 392)
             wait(50);
+
+            let autoCalculateScrap = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->autoCalculate->checkBox")
+            mouseClick(autoCalculateScrap)
+
             mouseMove(imageId, 596, 402);
             mouseClick(imageId, 596, 402);
             wait(50)
@@ -76,6 +87,22 @@ MainWindowTest {
             addScrapOutline()
         }
 
+        function zoomIntoRenderingView() {
+            //Switch to rendering view
+            let viewButton = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->mainSideBar->viewButton")
+            mouseClick(viewButton)
+
+            tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "viewPage" });
+            wait(100);
+            // let renderingView = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer")
+            // let renderingViewCenterX = renderingView.width / 2.0;
+            // let renderingViewCenterY = renderingView.height / 2.0;
+
+            // for(let i = 0; i < 200; i++) {
+            //     mouseWheel(renderingView, renderingViewCenterX, renderingViewCenterY, 100, 100, Qt.LeftButton, Qt.NoModifier, 5)
+            // }
+        }
+
         function test_addStationInteraction() {
             addScrapOutline()
 
@@ -90,8 +117,6 @@ MainWindowTest {
 
             mouseClick(imageId, 448.07, 440.733)
 
-            wait(100);
-
             //Make sure that this is a valid scrap
             let noteArea = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea");
             let scrapView = findChild(noteArea, "scrapViewId")
@@ -101,10 +126,12 @@ MainWindowTest {
 
             //Add a new station
             mouseClick(imageId, 509, 630);
-            // wait(1000);
+
+            wait(100);
 
             //Double click on the stations text
-            let a4Station = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId->stationA1->coreTextInput")
+            let a4Station = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->stationA3->coreTextInput")
+
             // mouseDoubleClickSequence(a4Station)
             a4Station.openEditor() //Double clicking doesn't seem like it works through qml test
 
@@ -118,43 +145,153 @@ MainWindowTest {
 
             wait(50);
 
-
             //Switch to rendering view
-            let viewButton = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->mainSideBar->viewButton")
-            mouseClick(viewButton)
+            zoomIntoRenderingView()
+        }
 
-            tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "viewPage" });
+        function test_deselection() {
+            addScrapOutline();
 
-            let renderingView = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer")
-            let renderingViewCenterX = renderingView.width / 2.0;
-            let renderingViewCenterY = renderingView.height / 2.0;
 
-            for(let i = 0; i < 200; i++) {
-                mouseWheel(renderingView, renderingViewCenterX, renderingViewCenterY, 100, 100, Qt.LeftButton, Qt.NoModifier, 5)
-            }
+            let backButton = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->backButton")
+            mouseClick(backButton)
 
-            wait(100);
+            let noteGallery = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery")
+            tryVerify(() => { return noteGallery.state === "" }) ;
 
-            //Make sure the scrap is being rendered, scrap is white
-            let renderImage = grabImage(renderingView)
-            compare(renderImage.pixel(556, 334), Qt.rgba(1, 1, 1, 255));
+            let noteItem = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea")
+            tryVerify(() => { return noteItem.scrapsVisible === false });
+
+            let scrapView = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId->scrapViewId")
+            tryVerify(() => { return scrapView.visible === false });
+
         }
 
         function test_addLeadInteraction() {
             addScrapOutline();
 
+            let _obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->addScrapStation")
+            mousePress(_obj1, 28.5313, 28.1914)
+            mouseRelease(_obj1, 28.5313, 28.1914)
+
+            let imageId_obj2 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
+            mouseClick(imageId_obj2, 391.974, 651.705)
+
+            keyClick("a")
+            keyClick(51, 0) //3
+            keyClick(16777220, 0) //Return
+
+            //Add a second station
+            mouseClick(imageId_obj2, 509.277, 631.702)
+
+            let a4Station = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->stationA2->coreTextInput")
+            a4Station.openEditor() //Double clicking doesn't seem like it works through qml test
+
+            keyClick("a")
+            keyClick(52, 0) //4
+            keyClick(16777220, 0) //Return
+
             //Click on the leads button
             let addLeads = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->addLeads")
             mouseClick(addLeads)
 
-            let imageId_obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
-            mouseClick(imageId_obj1, 523.515, 506.278)
+            //Add the lead to the note
+            mouseClick(imageId_obj2, 523.515, 506.278)
 
+            //Change the dimensions
+            let widthText = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->leadEditor->widthText")
+            mouseClick(widthText, 1.78125, 9.35938)
 
+            //5 for the width
+            keyClick(53, 0) //5
 
+            let heightText = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->leadEditor->heightText")
+            mouseClick(heightText, 3, 10)
 
+            //4 for the height
+            keyClick(52, 0) //4
 
-            wait(1000000);
+            let description = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->leadEditor->description")
+            mouseClick(description)
+
+            keyClick("S")
+            keyClick("a")
+            keyClick("u")
+            keyClick("c")
+            keyClick("e")
+
+            //Make sure that this is a valid scrap and lead data has been correctly update
+            let noteArea = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea");
+            let scrapView = findChild(noteArea, "scrapViewId")
+            let scrap = scrapView.selectedScrapItem.scrap as Scrap
+            verify(scrap !== null)
+            verify(scrap.numberOfStations() === 2);
+            verify(scrap.numberOfLeads() == 1);
+            verify(scrap.leadData(Scrap.LeadSize, 0).width === 5.0)
+            verify(scrap.leadData(Scrap.LeadSize, 0).height === 4.0)
+            verify(scrap.leadData(Scrap.LeadDesciption, 0) === "Sauce")
+
+            //Make sure the lead is being displayed correctly in the 3d view
+            //Switch to rendering view
+            zoomIntoRenderingView();
+
+            let render = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer")
+
+            let leadPoint = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint0")
+            verify(leadPoint.x >= 0);
+            verify(leadPoint.y >= 0);
+            verify(leadPoint.x <= render.width)
+            verify(leadPoint.y <= render.height)
+
+            //lead is not in the center
+            tryVerify(() => { return leadPoint.x !== render.width * 0.5; })
+            tryVerify(() => { return leadPoint.y !== render.height * 0.5; })
+
+            mouseClick(leadPoint)
+
+            verify(leadPoint.selected === true)
+
+            wait(200);
+
+            //Make sure the popup box is showing the write data
+            let leadPointSizeWidth = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint0->leadQuoteBox0->widthText")
+            let leadPointSizeHeight = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint0->leadQuoteBox0->heightText")
+
+            verify(leadPointSizeWidth.text === "5")
+            verify(leadPointSizeHeight.text === "4")
+
+            let description2 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint0->leadQuoteBox0->description")
+            verify(description2.text === "Sauce")
+
+            //Use the goto notes button to go to the notes
+            let notesButton = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint0->leadQuoteBox0->gotoNotes")
+            mouseClick(notesButton)
+
+            tryVerify(() => { return RootData.pageView.currentPageItem.objectName === "tripPage" });
+
+            //Select the carpet button
+            let carpet = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
+            mouseClick(carpet);
+
+            //Select the select button
+            let select = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->selectButton")
+            mouseClick(select)
+
+            //Select the lead
+            let imageId_obj3 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
+            mouseClick(imageId_obj3, 555.655, 441.759)
+            let noteLead = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteLead0")
+            mouseClick(noteLead)
+            verify(noteLead.selected === true)
+
+            //Delete the select lead
+            keyClick(16777219, 0) //Backspace
+
+            //Switch back to the normal view
+            let viewButton = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->mainSideBar->viewButton")
+            mouseClick(viewButton)
+
+            tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "viewPage" });
         }
     }
 }

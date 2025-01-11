@@ -22,6 +22,7 @@ RegionViewer {
 
     TurnTableInteraction {
         id: turnTableInteractionId
+        objectName: "turnTableInteraction"
         anchors.fill: parent
         camera: renderer.camera
         scene: renderer.scene

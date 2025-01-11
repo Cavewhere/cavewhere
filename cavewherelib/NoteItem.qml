@@ -18,7 +18,6 @@ ImageItem {
 
     property Note note;
     property bool scrapsVisible: false
-    // property bool scrapsVisible: false
 
     imageRotation: note ? note.rotate : 0
     source: note ? RootData.cavewhereImageUrl(note.original) : ""
@@ -28,6 +27,20 @@ ImageItem {
     PanZoomInteraction {
         id: panZoomInteraction
         target: noteArea.targetItem
+    }
+
+    //We need this container to mimic the image.
+    //Scrap points are added to this container, like outline points, stations, leads
+    //They need to be hidden but the image still needs to be shown
+    QQ.Item {
+        id: scrapPointsContainer
+        x: noteArea.targetItem.x
+        y: noteArea.targetItem.y
+        scale: noteArea.targetItem.scale
+        rotation: noteArea.targetItem.rotation
+        width: noteArea.targetItem.width
+        height: noteArea.targetItem.height
+        visible: noteArea.scrapsVisible
     }
 
     ScrapInteraction {
@@ -211,6 +224,7 @@ ImageItem {
 
         zoom: noteArea.targetItem.scale //Zoom is needed for keep the line width constant
         visible: noteArea.scrapsVisible
+        targetItem: scrapPointsContainer
     }
 
     states: [

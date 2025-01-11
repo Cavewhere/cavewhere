@@ -11,7 +11,6 @@
 //Our includes
 #include "cwAbstract2PointItem.h"
 class cwTransformUpdater;
-class cwBasePositioner;
 class cwSGLinesNode;
 
 //Our includes

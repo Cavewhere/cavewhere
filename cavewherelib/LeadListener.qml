@@ -10,7 +10,7 @@ QQ.QtObject {
     property string width;
     property string height;
     property bool completed;
-    property var unitModel;
+    property list<string> unitModel;
     property int unit;
 
     //Private properties

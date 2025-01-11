@@ -29,9 +29,6 @@ public:
 
     void setScrap(cwScrap* scrap);
 
-    void setPositionRole(cwScrap::LeadDataRole role);
-    cwScrap::LeadDataRole positionRole() const;
-
 private:
     virtual QString qmlSource() const;
     virtual void updateItemPosition(QQuickItem* item, int index);
@@ -39,25 +36,11 @@ private:
 private slots:
     void updateViewWithData(int begin, int end, QList<int> roles);
 
-protected:
-//    virtual QSGNode* updatePaintNode(QSGNode * oldNode, UpdatePaintNodeData *);
 
 private:
     cwScrap::LeadDataRole PositionRole; //Should be either LeadPositionOnNote or LeadPosition
 
 };
-
-
-/**
- * @brief cwScrapLeadView::positionRole
- * @return Returns the position that this view will use to display the lead
- *
- * By default this is cwScrap::LeadPositionOnNote.
- */
-inline cwScrap::LeadDataRole cwScrapLeadView::positionRole() const
-{
-    return PositionRole;
-}
 
 
 #endif // CWSCRAPLEADVIEW_H

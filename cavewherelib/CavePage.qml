@@ -128,8 +128,6 @@ StandardPage {
                     var lastModelIndex = cavePageArea.currentCave.index(lastIndex);
                     var lastTrip = cavePageArea.currentCave.data(lastModelIndex, Cave.TripObjectRole);
 
-                    console.log("LastTrip:" + lastTrip + "CavePage:" + cavePageArea.PageView.page);
-
                     RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
                                                                cavePageArea.tripPageName(lastTrip));
                 }

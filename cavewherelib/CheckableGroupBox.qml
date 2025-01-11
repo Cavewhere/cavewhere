@@ -58,6 +58,7 @@ QQ.Item {
 
     CheckBox {
         id: checkbox
+        objectName: "checkBox"
         anchors.left: checkBoxGroup.left
         anchors.leftMargin: 6
     }

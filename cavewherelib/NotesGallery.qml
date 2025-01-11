@@ -357,6 +357,7 @@ QQ.Rectangle {
             spacing: 3
 
             IconButton {
+                objectName: "backButton"
                 iconSource: "qrc:icons/svg/back.svg"
                 sourceSize: mainToolBar.iconSize
                 text: "Back"
@@ -370,6 +371,7 @@ QQ.Rectangle {
 
             IconButton {
                 id: selectObjectId
+                objectName: "selectButton"
                 iconSource: "qrc:icons/svg/select.svg"
                 sourceSize: mainToolBar.iconSize
                 text: "Select"
@@ -655,6 +657,7 @@ QQ.Rectangle {
             }
 
             QQ.PropertyAction { target: carpetButtonArea; property: "visible"; value: true }
+            QQ.PropertyAction { target: noteArea; property: "scrapsVisible"; value: false }
             QQ.PropertyAnimation {
                 target: carpetButtonArea
                 properties: "scale"

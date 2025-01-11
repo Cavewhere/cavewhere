@@ -72,15 +72,9 @@ void cwScrapItem::initilize(QQmlContext *context)
     QQmlEngine::setContextForObject(LeadView, context);
     QQmlEngine::setContextForObject(OutlinePointView, context);
 
-    StationView->setParentItem(parentItem());
-    LeadView->setParentItem(parentItem());
-    OutlinePointView->setParentItem(parentItem());
-
-    connect(this, &cwScrapItem::parentChanged, this, [this]() {
-        StationView->setParentItem(parentItem());
-        LeadView->setParentItem(parentItem());
-        OutlinePointView->setParentItem(parentItem());
-    });
+    StationView->setParentItem(m_targetItem);
+    LeadView->setParentItem(m_targetItem);
+    OutlinePointView->setParentItem(m_targetItem);
 }
 
 /**
@@ -114,19 +108,6 @@ void cwScrapItem::setScrap(cwScrap* scrap) {
  * @return See qt documentation
  */
 QSGNode *cwScrapItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData *) {
-    //    if(ScrapPoints.isEmpty()) { return oldNode; }
-
-    // qDebug() << "Draw scrap!" << this << this->isVisible() << this->parentItem()->isVisible();
-
-    // QSGSimpleRectNode *n = static_cast<QSGSimpleRectNode *>(oldNode);
-    // if (!n) {
-    //     n = new QSGSimpleRectNode();
-    //     n->setColor(Qt::green);
-    // }
-    // n->setRect(boundingRect());
-    // return n;
-
-
     if(!oldNode) {
         oldNode = new QSGTransformNode();
         PolygonNode = new cwSGPolygonNode();
@@ -138,22 +119,6 @@ QSGNode *cwScrapItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintN
         PolygonNode->setPolygon(QPolygonF(ScrapPoints));
         OutlineNode->setLineStrip(ScrapPoints);
     }
-
-    // if(transformUpdater()) {
-    //     QSGTransformNode* transformNode = static_cast<QSGTransformNode*>(oldNode);
-
-    //     // QMatrix4x4 scale;
-    //     // scale.scale(imageSize.width(), imageSize.height(), 1.0);
-
-    //     // QMatrix4x4 imageCoordToItemCoord;
-    //     // imageCoordToItemCoord.scale(1.0, -1.0, 1.0);
-    //     // imageCoordToItemCoord.translate(0.0, -1.0, 0.0);
-
-    //     // QMatrix4x4 mat = scale * imageCoordToItemCoord;
-    //     // qDebug() << "TransformUpdater:" << m_transformMatrix * scale;
-
-    //     // transformNode->setMatrix(mat);
-    // }
 
     auto lineWidthFromZoom = [this](double lineWidth) {
         return cwSGLinesNode::lineWidthFromZoom(m_zoom, lineWidth);
@@ -217,36 +182,6 @@ void cwScrapItem::setZoom(double zoom)
     update();
 }
 
-
-// /**
-// Sets transformUpdater
-// */
-// void cwScrapItem::setTransformUpdater(cwTransformItemUpdater* transformUpdater) {
-//     if(TransformUpdater != transformUpdater) {
-
-//         if(TransformUpdater != nullptr) {
-//             m_matrixChanged = QPropertyNotifier();
-//             // disconnect(TransformUpdater, &cwTransformItemUpdater::matrixChanged, this, &cwScrapItem::update);
-//         }
-
-//         TransformUpdater = transformUpdater;
-
-//         if(TransformUpdater != nullptr) {
-//             m_matrixChanged = TransformUpdater->bindableMatrix().addNotifier([this]() {
-//                 m_transformMatrix = TransformUpdater->matrix();
-//                 update();
-//             });
-//         }
-
-//         // StationView->setTransformUpdater(TransformUpdater);
-//         // LeadView->setTransformUpdater(TransformUpdater);
-//         // OutlinePointView->setTransformUpdater(TransformUpdater);
-
-//         emit transformUpdaterChanged();
-//         update();
-//     }
-// }
-
 /**
 Sets selectionManager
 */
@@ -268,3 +203,21 @@ QPointF cwScrapItem::toNoteCoordinates(QPointF imageCoordinates) const
 }
 
 
+
+QQuickItem *cwScrapItem::targetItem() const
+{
+    return m_targetItem;
+}
+
+void cwScrapItem::setTargetItem(QQuickItem *newTargetItem)
+{
+    if (m_targetItem == newTargetItem)
+        return;
+    m_targetItem = newTargetItem;
+
+    StationView->setParentItem(m_targetItem);
+    LeadView->setParentItem(m_targetItem);
+    OutlinePointView->setParentItem(m_targetItem);
+
+    emit targetItemChanged();
+}

@@ -61,10 +61,16 @@ private:
     cwTransformUpdater* TransformUpdater;
     cwSelectionManager* SelectionMananger;
 
-    QHash<cwScrap*, cwScrapLeadView*> ScrapToView; //Each scrap will have a range of valid indexes, we mantain this database
+    QHash<cwScrap*, QVector<QQuickItem*>> m_leadItems;
+    QQmlComponent* m_itemComponent = nullptr;
 
     void addScrap(cwScrap* scrap);
     void removeScrap(cwScrap* scrap);
+
+    QQuickItem *createItem();
+    void createComponent();
+
+    QString qmlSource() const;
 
 private slots:
     void scrapsAdded(QModelIndex parent, int begin, int end);

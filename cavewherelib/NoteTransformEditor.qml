@@ -30,17 +30,17 @@ QQ.Item {
 
     visible: noteTransform !== null
 
-    height: childrenRect.height
-    width: childrenRect.width
+    implicitHeight: floatingBox.height
+    implicitWidth: floatingBox.width
 
 
-    Binding {
+    QQ.Binding {
         target: editor.northInteraction
         property: "noteTransform"
         value: editor.noteTransform
     }
 
-    Binding {
+    QQ.Binding {
         target: editor.northInteraction
         property: "upText"
         value: {
@@ -57,13 +57,14 @@ QQ.Item {
         }
     }
 
-    Binding {
+    QQ.Binding {
         target: editor.scaleInteraction
         property: "noteTransform"
         value: editor.noteTransform
     }
 
     FloatingGroupBox {
+        id: floatingBox
         title: "Scrap Info"
         borderWidth: 0
 
@@ -104,6 +105,7 @@ QQ.Item {
 
             CheckableGroupBox {
                 id: checkableBoxId
+                objectName: "autoCalculate"
                 backgroundColor: Theme.floatingWidgetColor
                 text: "Auto Calculate"
 

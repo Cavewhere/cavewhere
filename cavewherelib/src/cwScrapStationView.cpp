@@ -15,6 +15,7 @@
 #include "cwAbstractScrapViewMatrix.h"
 #include "cwRunningProfileScrapViewMatrix.h"
 #include "cwScrapView.h"
+#include "cwScrapItem.h"
 
 //Qt includes
 #include <QQmlComponent>
@@ -39,7 +40,6 @@ cwScrapStationView::cwScrapStationView(QQuickItem *parent) :
     connect(ScaleAnimation, SIGNAL(valueChanged(QVariant)), this, SLOT(update()));
 
     connect(this, &cwScrapStationView::selectedItemIndexChanged, this, &cwScrapStationView::updateShotLinesWithAnimation);
-    // connect(this, &cwScrapStationView::transformUpdaterChanged, this, &cwScrapStationView::updateTransformUpdate);
 }
 
 cwScrapStationView::~cwScrapStationView() {
@@ -74,6 +74,24 @@ void cwScrapStationView::setScrap(cwScrap* scrap) {
         }
 
         cwScrapPointView::setScrap(scrap);
+    }
+}
+
+void cwScrapStationView::setScrapItem(cwScrapItem *scrapItem)
+{
+    auto currentScrapItem =  this->scrapItem();
+    if(currentScrapItem != scrapItem) {
+        if(currentScrapItem) {
+            disconnect(currentScrapItem, nullptr, this, nullptr);
+        }
+
+        cwScrapPointView::setScrapItem(scrapItem);
+
+        if(this->scrapItem()) {
+            connect(this->scrapItem(), &cwScrapItem::selectedChanged, this, [this]() {
+                setVisible(this->scrapItem()->isSelected());
+            });
+        }
     }
 }
 
@@ -192,30 +210,6 @@ void cwScrapStationView::updateShotLines() {
 }
 
 /**
- * @brief cwScrapStationView::updateTransformUpdate
- *
- * Called when the transform update has changed
- */
-void cwScrapStationView::updateTransformUpdate() {
-   //Called when the transform updater has changed
-
-    // if(OldTransformUpdater != transformUpdater()) {
-
-    //     if(OldTransformUpdater != nullptr) {
-    //         disconnect(OldTransformUpdater, &cwTransformItemUpdater::matrixChanged, this, &cwScrapStationView::update);
-    //     }
-
-    //     OldTransformUpdater = transformUpdater();
-
-    //     if(OldTransformUpdater != nullptr) {
-    //         connect(OldTransformUpdater, &cwTransformItemUpdater::matrixChanged, this, &cwScrapStationView::update);
-    //     }
-
-    //     update();
-    // }
-}
-
-/**
  * @brief cwScrapItem::updatePaintNode
  * @param oldNode
  * @return See qt documentation
@@ -246,26 +240,6 @@ QSGNode *cwScrapStationView::updatePaintNode(QSGNode *oldNode, QQuickItem::Updat
         oldNode->appendChildNode(ShotLinesNodeBackground);
         oldNode->appendChildNode(ShotLinesNodeForground);
     }
-
-    // if(transformUpdater()) {
-    //     QPointF scale = ScaleAnimation->currentValue().toPointF();
-    //     QMatrix4x4 scaleMatrix;
-    //     scaleMatrix.scale(scale.x(), scale.y(), 1.0);
-
-    //     cwNoteStation noteStation = scrap()->station(selectedItemIndex());
-    //     QPointF position = noteStation.positionOnNote();
-
-    //     QMatrix4x4 toOrigin;
-    //     toOrigin.translate(QVector3D(-position.x(), -position.y(), 0.0));
-
-    //     QMatrix4x4 fromOrigin;
-    //     fromOrigin.translate(QVector3D(position.x(), position.y(), 0.0));
-
-    //     QMatrix4x4 matrix = transformUpdater()->matrix();
-
-    //     QSGTransformNode* transformNode = static_cast<QSGTransformNode*>(oldNode);
-    //     transformNode->setMatrix(matrix * fromOrigin * scaleMatrix * toOrigin);
-    // }
 
     if(LineDataDirty) {
         ShotLinesNodeBackground->setLines(ShotLines);
@@ -330,8 +304,6 @@ void cwScrapStationView::updateItemPosition(QQuickItem* item, int index) {
     QPointF point = Scrap->stationData(cwScrap::StationPosition, index).value<QPointF>();
     QPointF imagePoint = cwScrapView::toImage(Scrap->parentNote()).map(point);
     item->setPosition(imagePoint);
-
-    // item->setProperty("position3D", QVector3D(point));
 
     if(index == selectedItemIndex()) {
         updateShotLines();

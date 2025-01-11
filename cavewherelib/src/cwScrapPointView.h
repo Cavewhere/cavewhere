@@ -25,7 +25,7 @@ public:
     explicit cwScrapPointView(QQuickItem *parent = 0);
 
     cwScrapItem* scrapItem() const;
-    void setScrapItem(cwScrapItem* scrapItem);
+    virtual void setScrapItem(cwScrapItem* scrapItem);
 
     cwScrap* scrap() const;
     virtual void setScrap(cwScrap* scrap);

@@ -17,8 +17,8 @@ QQ.Item {
     property real borderWidth: 0
     default property alias boxGroupChildren: container.children
 
-    width: childrenRect.width
-    height: childrenRect.height
+    implicitWidth: childrenRect.width
+    implicitHeight: childrenRect.height
 
     Text {
         id: titleId

@@ -24,6 +24,7 @@ RowLayout {
 
         ClickTextInput {
             id: widthTextId
+            objectName: "widthText"
             Layout.alignment: Qt.AlignHCenter
             QQ.KeyNavigation.tab: heightTextId
             onFinishedEditting: (newText) => editor.widthFinishedEditting(newText)
@@ -40,6 +41,7 @@ RowLayout {
 
         ClickTextInput {
             id: heightTextId
+            objectName: "heightText"
             readOnly: editor.readOnly
             QQ.KeyNavigation.tab: editor.nextTab
             QQ.KeyNavigation.backtab: widthTextId

@@ -21,6 +21,7 @@ StandardPage {
 
     ColumnLayout {
         anchors.fill: parent
+        anchors.margins: 3
 
         RowLayout {
             QC.TextField {

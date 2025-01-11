@@ -39,6 +39,8 @@ class cwScrapItem : public QQuickItem
     Q_PROPERTY(cwScrapOutlinePointView* outlinePointView READ outlinePointView CONSTANT)
     Q_PROPERTY(cwSelectionManager* selectionManager READ selectionManager WRITE setSelectionManager NOTIFY selectionManagerChanged)
 
+    Q_PROPERTY(QQuickItem* targetItem READ targetItem WRITE setTargetItem NOTIFY targetItemChanged FINAL)
+
 public:
     explicit cwScrapItem(QQuickItem *parent = 0);
     explicit cwScrapItem(QQmlContext* context, QQuickItem *parent = 0);
@@ -69,11 +71,16 @@ public:
 
     Q_INVOKABLE QPointF toNoteCoordinates(QPointF imageCoordinates) const;
 
+    QQuickItem *targetItem() const;
+    void setTargetItem(QQuickItem *newTargetItem);
+
 signals:
     void scrapChanged();
     void selectedChanged();
     void transformUpdaterChanged();
     void selectionManagerChanged();
+
+    void targetItemChanged();
 
 public slots:
 
@@ -105,6 +112,8 @@ private:
     bool Selected; //!< True if the scrap is select and false if it isn't
 
     void initilize(QQmlContext* context);
+
+    QQuickItem *m_targetItem = nullptr;
 
 protected:
     virtual QSGNode* updatePaintNode(QSGNode * oldNode, UpdatePaintNodeData *);

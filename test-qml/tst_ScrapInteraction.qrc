@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/">
+        <file>datasets/tst_ScrapInteraction/projectedProfile.cw</file>
+    </qresource>
+</RCC>

@@ -5,9 +5,14 @@ import QtQuick.Controls as QC
 import cavewherelib
 import QtQuick.Layouts
 
-PointItem {
+QQ.Item {
     id: pointId
+    objectName: "leadPoint" + pointIndex
+
     property Scrap scrap;
+    property int pointIndex; //The index in the item list
+    property bool selected: false
+    property QQ.vector3d position3D;
 
     z: selected ? 1 : 0
 
@@ -31,15 +36,16 @@ PointItem {
         visible: !lead.completed || pointId.selected
         opacity: lead.completed ? 0.6 : 1.0
 
-        QQ.MouseArea {
-            anchors.fill: parent
-            onClicked: pointId.selected = !pointId.selected
+        QQ.TapHandler {
+            gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
+            onTapped: pointId.selected = !pointId.selected
         }
     }
 
     QQ.Component {
         id: quoteBoxComponent
         QuoteBox {
+            objectName: "leadQuoteBox" + pointId.pointIndex
             pointAtObject: questionImage
             pointAtObjectPosition: Qt.point(Math.floor(questionImage.width * .5),
                                             questionImage.height)
@@ -47,7 +53,6 @@ PointItem {
             QQ.Item {
                 width: columnLayout.width
                 height: columnLayout.height
-
 
                 ColumnLayout {
                     id: columnLayout
@@ -73,11 +78,13 @@ PointItem {
                     }
 
                     Text {
+                        objectName: "description"
                         visible: text.length > 0
                         text: lead.description
                     }
 
                     LinkText {
+                        objectName: "gotoNotes"
                         text: "Notes"
                         onClicked: linkGenerator.gotoScrap(pointId.scrap)
 

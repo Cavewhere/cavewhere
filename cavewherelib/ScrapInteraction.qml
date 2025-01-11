@@ -25,6 +25,12 @@ PanZoomInteraction {
         scrapInteraction.startNewScrap();
     }
 
+    onEnabledChanged: {
+        if(!enabled) {
+            snapPoint.visible = false
+        }
+    }
+
     BaseScrapInteraction {
         id: scrapInteraction
         scrap: panZoom.scrapView.selectedScrapItem !== null ? panZoom.scrapView.selectedScrapItem.scrap : null

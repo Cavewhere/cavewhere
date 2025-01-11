@@ -33,6 +33,7 @@ class cwScrapView : public QQuickItem
     Q_PROPERTY(cwScrapItem* selectedScrapItem READ selectedScrapItem  NOTIFY selectScrapIndexChanged)
     Q_PROPERTY(int selectScrapIndex READ selectScrapIndex WRITE setSelectScrapIndex NOTIFY selectScrapIndexChanged)
     Q_PROPERTY(double zoom READ zoom WRITE setZoom NOTIFY zoomChanged);
+    Q_PROPERTY(QQuickItem* targetItem READ targetItem WRITE setTargetItem NOTIFY targetItemChanged FINAL)
 
 
 public:
@@ -65,11 +66,16 @@ public:
 
     Q_INVOKABLE QPointF toNoteCoordinates(QPointF imageCoordinates) const;
 
+    QQuickItem *targetItem() const;
+    void setTargetItem(QQuickItem *newTargetItem);
+
 signals:
     void noteChanged();
     void transformUpdaterChanged();
     void selectScrapIndexChanged();
     void zoomChanged();
+
+    void targetItemChanged();
 
 public slots:
 
@@ -89,6 +95,9 @@ private:
 
     double m_zoom;
 
+    void updateParent(cwScrapItem* item);
+
+    QQuickItem *m_targetItem = nullptr;
 };
 
 /**

@@ -3,6 +3,7 @@ import cavewherelib
 
 ScrapPointItem {
     id: scrapPointId
+    objectName: "noteLead" + pointIndex
 
     width: 2
     height: 2

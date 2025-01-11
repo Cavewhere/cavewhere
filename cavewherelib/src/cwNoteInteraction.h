@@ -10,7 +10,7 @@
 
 //Our includes
 #include "cwNote.h"
-#include "cwBasePanZoomInteraction.h"
+#include "cwInteraction.h"
 
 //Qt includes
 #include <QQmlEngine>

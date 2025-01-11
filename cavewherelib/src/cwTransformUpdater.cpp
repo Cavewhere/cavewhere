@@ -111,7 +111,7 @@ void cwTransformUpdater::update() {
   */
 void cwTransformUpdater::updatePoint(QQuickItem *object) {
     QVector3D position = object->property("position3D").value<QVector3D>();
-    QVector3D position2D = TransformMatrix * position;
+    QVector3D position2D = TransformMatrix.map(position);
     auto visiblity = position2D.z() >= 0.0 && position2D.z() <= 1.0;
     object->setVisible(visiblity);
     object->setPosition(QPointF(position2D.x(), position2D.y()));
@@ -161,14 +161,14 @@ void cwTransformUpdater::handlePointItemDataChanged() {
   Maps the viewport point into the local position
   */
 QVector3D cwTransformUpdater::mapFromViewportToModel(QPointF viewport) const {
-    return matrix().inverted() * QVector3D(viewport);
+    return matrix().inverted().map(QVector3D(viewport));
 }
 
 /**
   Maps a 3d model point into a viewport position
   */
 QPointF cwTransformUpdater::mapModelToViewport(QVector3D modelPoint) const {
-    QVector3D viewportPoint = matrix() * modelPoint;
+    QVector3D viewportPoint = matrix().map(modelPoint);
     return viewportPoint.toPointF();
 }
 

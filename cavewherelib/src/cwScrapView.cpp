@@ -26,7 +26,8 @@ cwScrapView::cwScrapView(QQuickItem *parent) :
             this, [this]()
             {
                 for(auto item : std::as_const(m_scrapItems)) {
-                    item->setParentItem(parentItem());
+                    updateParent(item);
+
                 }
             });
 }
@@ -87,7 +88,8 @@ void cwScrapView:: insertScrapItem(int begin, int end) {
         cwScrapItem* scrapItem = new cwScrapItem(context, this);
         scrapItem->setScrap(m_note->scraps().last());
         scrapItem->setZoom(m_zoom);
-        scrapItem->setParentItem(parentItem());
+        scrapItem->setTargetItem(m_targetItem);
+        updateParent(scrapItem);
 
         scrapItem->setSelectionManager(m_selectionManager);
 
@@ -222,7 +224,7 @@ void cwScrapView::updateAllScraps() {
         //Add new scrap items
         for(int i = m_scrapItems.size(); i < numberOfScraps; i++) {
             cwScrapItem* item = new cwScrapItem(context, this);
-            item->setParentItem(parentItem());
+            updateParent(item);
             m_scrapItems.append(item);
         }
     }
@@ -236,6 +238,7 @@ void cwScrapView::updateAllScraps() {
         scrapItem->setScrap(scrap);
         scrapItem->setZoom(m_zoom);
         scrapItem->setSelectionManager(m_selectionManager);
+        scrapItem->setTargetItem(targetItem());
         connect(scrapItem, SIGNAL(selectedChanged()), SLOT(updateSelection()), Qt::UniqueConnection);
     }
 }
@@ -314,3 +317,25 @@ void cwScrapView::updateRemovedScraps(int begin, int end)
     updateAllScraps();
 }
 
+void cwScrapView::updateParent(cwScrapItem *item)
+{
+    item->setParentItem(this);
+    item->setParent(this);
+}
+
+
+QQuickItem *cwScrapView::targetItem() const
+{
+    return m_targetItem;
+}
+
+void cwScrapView::setTargetItem(QQuickItem *newTargetItem)
+{
+    if (m_targetItem == newTargetItem)
+        return;
+    m_targetItem = newTargetItem;
+    for(auto item : m_scrapItems) {
+        updateParent(item);
+    }
+    emit targetItemChanged();
+}

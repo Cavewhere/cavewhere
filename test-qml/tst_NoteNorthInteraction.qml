@@ -35,7 +35,7 @@ MainWindowTest {
             verify(typeComboBox.currentText === "Project Profile")
 
             //Select North arrow up
-            let setNorthButton_obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->setNorthButton")
+            let setNorthButton_obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->autoCalculate->setNorthButton")
             mouseClick(setNorthButton_obj1)
 
             let imageId_obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")

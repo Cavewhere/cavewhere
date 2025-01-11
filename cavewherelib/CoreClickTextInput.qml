@@ -171,8 +171,8 @@ QQ.Item {
 
             QQ.PropertyChanges {
                 doubleClickArea  {
-                    onSingleTapped: { console.log("Click:"); clickTextInput.clicked() }
-                    onDoubleTapped: { console.log("Openeditor!"); clickTextInput.openEditor() }
+                    onSingleTapped: { clickTextInput.clicked() }
+                    onDoubleTapped: { clickTextInput.openEditor() }
                 }
             }
         },

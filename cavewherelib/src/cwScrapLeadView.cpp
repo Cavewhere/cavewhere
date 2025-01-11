@@ -11,8 +11,7 @@
 #include "cwScrapView.h"
 
 cwScrapLeadView::cwScrapLeadView(QQuickItem *parent) :
-    cwScrapPointView(parent),
-    PositionRole(cwScrap::LeadPositionOnNote)
+    cwScrapPointView(parent)
 {
 
 }
@@ -46,50 +45,16 @@ void cwScrapLeadView::setScrap(cwScrap *scrap)
 
 void cwScrapLeadView::updateItemPosition(QQuickItem *item, int index)
 {
-    QVector3D point;
-    switch (positionRole()) {
-    case cwScrap::LeadPositionOnNote: {
-        auto notePoint = Scrap->leadData(positionRole(), index).value<QPointF>();
-        QPointF imagePoint = cwScrapView::toImage(Scrap->parentNote()).map(notePoint);
-        item->setPosition(imagePoint);
-        break;
-    }
-    case cwScrap::LeadPosition:
-        point = Scrap->leadData(positionRole(), index).value<QVector3D>();
-        //Note sure how we handle 3d view yet
-        break;
-    default:
-        break;
-    }
-    // item->setProperty("position3D", point);
+    auto notePoint = Scrap->leadData(cwScrap::LeadPositionOnNote, index).value<QPointF>();
+    QPointF imagePoint = cwScrapView::toImage(Scrap->parentNote()).map(notePoint);
+    item->setPosition(imagePoint);
+
 }
 
 void cwScrapLeadView::updateViewWithData(int begin, int end, QList<int> roles)
 {
-    foreach(int role, roles) {
-        if(positionRole() == role) {
-            updateItemsPositions(begin, end);
-            break;
-        }
-    }
-}
-
-//QSGNode *cwScrapLeadView::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData *)
-//{
-//    Q_UNUSED(oldNode);
-//    return nullptr;
-//}
-
-/**
- * @brief cwScrapLeadView::setPositionRole
- * @param role
- */
-void cwScrapLeadView::setPositionRole(cwScrap::LeadDataRole role)
-{
-    Q_ASSERT(role == cwScrap::LeadPosition || role == cwScrap::LeadPositionOnNote);
-    if(role != PositionRole) {
-        PositionRole = role;
-        updateAllItemData();;
+    if(roles.contains(cwScrap::LeadPositionOnNote)) {
+        updateItemsPositions(begin, end);
     }
 }
 
@@ -99,14 +64,5 @@ void cwScrapLeadView::setPositionRole(cwScrap::LeadDataRole role)
  */
 QString cwScrapLeadView::qmlSource() const
 {
-    switch(positionRole()) {
-    case cwScrap::LeadPosition:
-        return QStringLiteral("qrc:/cavewherelib/cavewherelib/LeadPoint.qml");
-    case cwScrap::LeadPositionOnNote:
-        return QStringLiteral("qrc:/cavewherelib/cavewherelib/NoteLead.qml");
-    default:
-        break;
-    }
-    return QString();
-
+    return QStringLiteral("qrc:/cavewherelib/cavewherelib/NoteLead.qml");
 }

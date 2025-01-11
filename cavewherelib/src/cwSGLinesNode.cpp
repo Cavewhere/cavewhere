@@ -83,6 +83,7 @@ void cwSGLinesNode::setLineStrips(const QVector<QVector<QPointF> > &potentialLin
         );
 
     if(lines.isEmpty()) {
+        geometry()->allocate(0, 0); //Clear the geometry
         return;
     }
 

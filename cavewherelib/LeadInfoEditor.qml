@@ -1,10 +1,11 @@
 import QtQuick as QQ
 import QtQuick.Layouts
-import QtQuick.Controls
+import QtQuick.Controls as QC
 import cavewherelib
 
 FloatingGroupBox {
     id: groupBox
+    objectName: "leadEditor"
 
     property ScrapLeadView leadView;
 
@@ -30,12 +31,15 @@ FloatingGroupBox {
             nextTab: leadDescriptionArea
         }
 
-        TextArea {
+        QC.TextArea {
             id: leadDescriptionArea
+            objectName: "description"
             QQ.KeyNavigation.backtab: sizeEditor.heightTextObject
             implicitHeight: 100
+            implicitWidth: 250
             onTextChanged: lead.description = text
             text: lead.description
+            placeholderText: "Lead's description"
 
             QQ.Connections {
                 target: lead
@@ -45,47 +49,47 @@ FloatingGroupBox {
             }
         }
 
-        LeadQuickComments {
-            Layout.fillWidth: true
-            category: "Passage Type"
-            keywords: ["Aven", "Borehole", "Caynon", "Dig", "Dome", "Phreatic", "Pit", "Sump",]
-            textArea: leadDescriptionArea
-        }
+        // LeadQuickComments {
+        //     Layout.fillWidth: true
+        //     category: "Passage Type"
+        //     keywords: ["Aven", "Borehole", "Caynon", "Dig", "Dome", "Phreatic", "Pit", "Sump",]
+        //     textArea: leadDescriptionArea
+        // }
 
-        LeadQuickComments {
-            category: "Passage Fill"
-            Layout.fillWidth: true
-            keywords: ["Breakdown", "Cobbles", "Muddy", "Sandy", "Water"]
-            textArea: leadDescriptionArea
-        }
+        // LeadQuickComments {
+        //     category: "Passage Fill"
+        //     Layout.fillWidth: true
+        //     keywords: ["Breakdown", "Cobbles", "Muddy", "Sandy", "Water"]
+        //     textArea: leadDescriptionArea
+        // }e
 
-        LeadQuickComments {
-            category: "Passage Traversal"
-            Layout.fillWidth: true
-            keywords: ["Crawl", "Climb", "Low", "High", "Swim", "Tight", "Traverse", "Walking"]
-            textArea: leadDescriptionArea
-        }
+        // LeadQuickComments {
+        //     category: "Passage Traversal"
+        //     Layout.fillWidth: true
+        //     keywords: ["Crawl", "Climb", "Low", "High", "Swim", "Tight", "Traverse", "Walking"]
+        //     textArea: leadDescriptionArea
+        // }
 
-        LeadQuickComments {
-            Layout.fillWidth: true
-            category: "Stream Type"
-            keywords: ["Large", "Stream", "Small", "Trickle"]
-            textArea: leadDescriptionArea
-        }
+        // LeadQuickComments {
+        //     Layout.fillWidth: true
+        //     category: "Stream Type"
+        //     keywords: ["Large", "Stream", "Small", "Trickle"]
+        //     textArea: leadDescriptionArea
+        // }
 
-        LeadQuickComments {
-            Layout.fillWidth: true
-            category: "Air"
-            keywords: ["Strong", "Air", "Weak"]
-            textArea: leadDescriptionArea
-        }
+        // LeadQuickComments {
+        //     Layout.fillWidth: true
+        //     category: "Air"
+        //     keywords: ["Strong", "Air", "Weak"]
+        //     textArea: leadDescriptionArea
+        // }
 
-        LeadQuickComments {
-            Layout.fillWidth: true
-            category: "Gear Needed"
-            keywords: ["Bolts", "Cable Ladder", "Handline", "Hammer", "Rope", "Dig Equipment"]
-            textArea: leadDescriptionArea
-        }
+        // LeadQuickComments {
+        //     Layout.fillWidth: true
+        //     category: "Gear Needed"
+        //     keywords: ["Bolts", "Cable Ladder", "Handline", "Hammer", "Rope", "Dig Equipment"]
+        //     textArea: leadDescriptionArea
+        // }
     }
 }
 

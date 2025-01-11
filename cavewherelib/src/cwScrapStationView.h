@@ -35,6 +35,7 @@ public:
     ~cwScrapStationView();
 
     void setScrap(cwScrap* scrap);
+    void setScrapItem(cwScrapItem* scrapItem);
     void setZoom(double zoom);
 
     cwNoteStation selectedNoteStation() const;
@@ -65,7 +66,6 @@ private:
 private slots:
     void updateShotLinesWithAnimation();
     void updateShotLines();
-    void updateTransformUpdate();
 
 protected:
     virtual QSGNode* updatePaintNode(QSGNode * oldNode, UpdatePaintNodeData *);

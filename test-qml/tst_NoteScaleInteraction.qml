@@ -28,7 +28,7 @@ MainWindowTest {
             mouseClick(imageId_obj2, 475.801, 600.855)
             wait(200)
 
-            let setLengthButton_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->setLengthButton")
+            let setLengthButton_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->autoCalculate->setLengthButton")
             mouseClick(setLengthButton_obj1)
 
             // let imageId_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")

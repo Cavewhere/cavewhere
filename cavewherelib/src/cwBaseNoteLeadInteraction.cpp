@@ -30,8 +30,6 @@ cwBaseNoteLeadInteraction::~cwBaseNoteLeadInteraction()
  */
 void cwBaseNoteLeadInteraction::addPoint(QPointF notePosition, cwScrapItem *scrapItem)
 {
-    qDebug() << "Note lead Position interaction:" << notePosition;
-
     cwScrap* scrap = scrapItem->scrap();
 
     cwLead lead;

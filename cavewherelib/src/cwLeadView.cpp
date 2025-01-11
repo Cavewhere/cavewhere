@@ -12,6 +12,7 @@
 #include "cwScrapLeadView.h"
 #include "cwTransformUpdater.h"
 #include "cwSelectionManager.h"
+#include "cwDebug.h"
 
 //Qt includes
 #include <QQmlEngine>
@@ -78,19 +79,121 @@ void cwLeadView::setRegionModel(cwRegionTreeModel* regionModel) {
 void cwLeadView::addScrap(cwScrap *scrap)
 {
     Q_ASSERT(scrap != nullptr);
-    Q_ASSERT(!ScrapToView.contains(scrap));
+    Q_ASSERT(!m_leadItems.contains(scrap));
 
-    QQmlContext* context = QQmlEngine::contextForObject(this);
-    cwScrapLeadView* leadView = new cwScrapLeadView(this);
-    QQmlEngine::setContextForObject(leadView, context);
-    leadView->setWidth(width());
-    leadView->setHeight(height());
-    leadView->setPositionRole(cwScrap::LeadPosition);
-    // leadView->setTransformUpdater(TransformUpdater);
-    leadView->setSelectionManager(SelectionMananger);
-    leadView->setScrap(scrap);
+    auto itemAt = [scrap](const auto& items, int i) {
+        Q_ASSERT(dynamic_cast<QQuickItem*>(items[i]));
+        return static_cast<QQuickItem*>(items[i]);
+    };
 
-    ScrapToView.insert(scrap, leadView);
+    auto updatePosition = [scrap](QQuickItem* item, int i) {
+        auto position = scrap->leadData(cwScrap::LeadPosition, i).value<QVector3D>();
+        item->setProperty("position3D", position);
+    };
+
+    auto updatePositions = [scrap, this, updatePosition, itemAt](int begin, int end) {
+        const auto& items = m_leadItems.value(scrap);
+        for(int i = begin; i <= end; i++) {
+            auto item = itemAt(items, i);
+            updatePosition(item, i);
+        }
+    };
+
+    auto resetScrap = [this, scrap, updatePosition, itemAt]() {
+        auto& items = m_leadItems[scrap];
+        if(items.size() < scrap->numberOfLeads()) {
+            //Need to add new lead items
+        } else if(items.size() > scrap->numberOfLeads()) {
+            //Need to remove lead items
+        }
+        Q_ASSERT(items.size() == scrap->numberOfLeads());
+
+        for(int i = 0; i < scrap->numberOfLeads(); i++) {
+            //Update data for the item
+            auto item = itemAt(items, i);
+
+            auto position = scrap->leadData(cwScrap::LeadPosition, i).value<QVector3D>();
+            item->setProperty("pointIndex", i);
+            updatePosition(item, i);
+        }
+    };
+
+    auto updateIndexesToEnd = [scrap, itemAt, this](int begin) {
+        auto& items = m_leadItems[scrap];
+        for(int i = begin; i < scrap->numberOfLeads(); i++) {
+            auto item = itemAt(items, i);
+            item->setProperty("pointIndex", i);
+        }
+    };
+
+    auto insert = [this, scrap, updateIndexesToEnd, updatePosition](int begin, int end) {
+        if(begin <= end) {
+            auto& items = m_leadItems[scrap];
+
+            for(int i = begin; i <= end; i++) {
+                //Create the item
+                auto item = createItem();
+                items.insert(i, item);
+            }
+
+            updateIndexesToEnd(begin);
+        }
+    };
+
+    connect(scrap, &cwScrap::leadsBeginInserted, this, insert);
+    connect(scrap, &cwScrap::leadsInserted, this, [this, scrap, updatePosition, itemAt](int begin, int end) {
+        auto& items = m_leadItems[scrap];
+        for(int i = begin; i <= end; i++) {
+            auto item = itemAt(items, i);
+            updatePosition(item, i);
+            item->setProperty("scrap", QVariant::fromValue(scrap));
+        }
+    });
+
+    connect(scrap, &cwScrap::leadsRemoved, this, [this, scrap, updateIndexesToEnd](int begin, int end) {
+        auto& items = m_leadItems[scrap];
+        if(items.isEmpty()) { return; }
+        if(begin > end) { return; }
+        if(begin < 0) { return; }
+        if(end >= items.size()) { return; }
+
+
+        for(int index = end; index >= begin; index--) {
+            //Unselect the item that's going to be deleted
+            SelectionMananger->clear();
+            TransformUpdater->removePointItem(items[index]);
+            items[index]->deleteLater();
+            items.removeAt(index);
+        }
+
+
+        updateIndexesToEnd(begin);
+    });
+
+    connect(scrap, &cwScrap::leadsDataChanged, this, [this, scrap, updatePositions](int begin, int end, const QList<int>& roles) {
+        if(roles.contains(cwScrap::LeadPosition)) {
+            updatePositions(begin, end);
+        }
+    });
+
+    connect(scrap, &cwScrap::leadsReset, this, resetScrap);
+
+    //Setup the leads
+    m_leadItems.insert(scrap, {});
+    insert(0, scrap->numberOfLeads() - 1);
+
+
+    // QQmlContext* context = QQmlEngine::contextForObject(this);
+    // cwScrapLeadView* leadView = new cwScrapLeadView(this);
+    // QQmlEngine::setContextForObject(leadView, context);
+    // leadView->setWidth(width());
+    // leadView->setHeight(height());
+    // leadView->setPositionRole(cwScrap::LeadPosition);
+    // // leadView->setTransformUpdater(TransformUpdater);
+    // leadView->setSelectionManager(SelectionMananger);
+    // leadView->setScrap(scrap);
+
+    // ScrapToView.insert(scrap, leadView);
 }
 
 /**
@@ -100,12 +203,74 @@ void cwLeadView::addScrap(cwScrap *scrap)
 void cwLeadView::removeScrap(cwScrap *scrap)
 {
     Q_ASSERT(scrap != nullptr);
+
+    auto items = m_leadItems.value(scrap);
+    for(auto item : items) {
+        item->deleteLater();
+    }
+    m_leadItems.remove(scrap);
+
+
 //    Q_ASSERT(ScrapToView.contains(scrap));
 
-    if(ScrapToView.contains(scrap)) {
-        cwScrapLeadView* view = ScrapToView.value(scrap);
-        view->deleteLater();
+    // if(ScrapToView.contains(scrap)) {
+    //     cwScrapLeadView* view = ScrapToView.value(scrap);
+    //     view->deleteLater();
+    // }
+}
+
+QQuickItem* cwLeadView::createItem()
+{
+    if(m_itemComponent == nullptr) {
+        createComponent();
+        // qDebug() << "ItemComponent hasn't been created, call createComponent(). THIS IS A BUG" << LOCATION;
+        // return nullptr;
     }
+
+    QQmlContext* context = QQmlEngine::contextForObject(this);
+    QQuickItem* item = qobject_cast<QQuickItem*>(m_itemComponent->create(context));
+    if(item == nullptr) {
+        qDebug() << "Problem creating new point item ... " << qmlSource() << "Didn't compile. THIS IS A BUG!" << LOCATION;
+        qDebug() << "Compiling errors:" << m_itemComponent->errorString();
+        return nullptr;
+    }
+
+    //Reparent the item so the reverse transform works correctly
+    //This will keep the item's size and rotation consistent
+    item->setParentItem(this);
+    item->setParent(this);
+    // Q_ASSERT(item->parent() == this);
+
+    //Add the point to the transform updater
+    if(TransformUpdater != nullptr) {
+        TransformUpdater->addPointItem(item);
+    } else {
+        qDebug() << "No transformUpdater, point's won't be positioned correctly, this is a bug" << LOCATION;
+    }
+
+    return item;
+}
+
+void cwLeadView::createComponent()
+{
+    //Make sure we have a note component so we can create it
+    if(m_itemComponent == nullptr) {
+        QQmlContext* context = QQmlEngine::contextForObject(this);
+        if(context == nullptr) {
+            qDebug() << "Context is nullptr, did you forget to set the context? THIS IS A BUG" << LOCATION;
+            return;
+        }
+
+        m_itemComponent = new QQmlComponent(context->engine(), qmlSource(), this);
+        if(m_itemComponent->isError()) {
+            qDebug() << "Point errors:" << m_itemComponent->errorString();
+        }
+    }
+}
+
+QString cwLeadView::qmlSource() const
+{
+    return QStringLiteral("qrc:/cavewherelib/cavewherelib/LeadPoint.qml");
 }
 
 /**
@@ -181,10 +346,11 @@ void cwLeadView::setCamera(cwCamera* camera) {
  */
 void cwLeadView::select(cwScrap *scrap, int index)
 {
-    if(ScrapToView.contains(scrap)) {
-        cwScrapLeadView* scrapLeadView = ScrapToView.value(scrap, nullptr);
-        if(scrapLeadView != nullptr) {
-            scrapLeadView->setSelectedItemIndex(index);
+    if(m_leadItems.contains(scrap)) {
+        auto items = m_leadItems.value(scrap);
+        if(index < items.size()) {
+            auto item = items.at(index);
+            SelectionMananger->setSelectedItem(item);
         }
     }
 }
