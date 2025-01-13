@@ -4,9 +4,11 @@
 **    www.cavewhere.com
 **
 **************************************************************************/
+pragma ComponentBehavior: Bound
 
 import QtQuick as QQ
 import QtQuick.Layouts
+import QtQuick.Effects
 
 QQ.Rectangle {
     id: button
@@ -32,8 +34,15 @@ QQ.Rectangle {
         QQ.Image {
             id: icon
             smooth: true
-        }
+            sourceSize: Qt.size(32, 32)
+            // visible: false
 
+            layer.enabled: true
+            layer.effect: QQ.ShaderEffect {
+                property QQ.color pixelColor: textLabel.color
+                fragmentShader: "qrc:/shaders/toColor.frag.qsb"
+            }
+        }
 
         Text {
             id: textLabel

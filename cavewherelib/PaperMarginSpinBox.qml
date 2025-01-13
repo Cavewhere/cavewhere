@@ -29,6 +29,7 @@ QQ.Rectangle {
                 id: spinBoxId
                 decimals: pageMarginId.unit === "in" ? 2 : 0
                 realValue: pageMarginId.unit === "in" ? .1 : 10
+                implicitWidth: 70
             }
 
             Text {

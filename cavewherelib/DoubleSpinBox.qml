@@ -8,7 +8,6 @@ SpinBox {
     to: decimalToInt(100)
     stepSize: decimalFactor
     editable: true
-    anchors.centerIn: parent
 
     property int decimals: 2
     property real realValue: value / decimalFactor

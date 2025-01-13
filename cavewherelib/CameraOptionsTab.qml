@@ -6,7 +6,7 @@ import cavewherelib
 QQ.Item {
     id: itemId
 
-    implicitWidth: columnLayoutId.width
+    implicitWidth: columnLayoutId.width + 10
 
     property GLTerrainRenderer viewer
 

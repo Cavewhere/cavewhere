@@ -32,8 +32,8 @@ GroupBox {
 
 
     QQ.Item {
-        width: marginLayoutId.width
-        height: marginLayoutId.height
+        implicitWidth: marginLayoutId.width
+        implicitHeight: marginLayoutId.height
         QQ.Rectangle {
             width: Math.round(marginLayoutId.width * 2 / 3)
             height: Math.round(marginLayoutId.height * 2 / 3)

@@ -11,9 +11,8 @@ SplitView {
 
     anchors.fill: parent
 
-
     QQ.Item {
-        SplitView.preferredWidth: parent.width * .75
+        SplitView.preferredWidth: parent.width - cameraOptionsId.implicitWidth
 
         GLTerrainRenderer {
             id: rendererId
@@ -22,7 +21,9 @@ SplitView {
         }
     }
 
-    RenderingSideBar {
+    CameraOptionsTab {
+        id: cameraOptionsId
         viewer: rendererId
+
     }
 }

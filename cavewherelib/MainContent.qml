@@ -80,6 +80,14 @@ QQ.Item {
     }
 
     QQ.Component {
+        id: mapPageComponent
+        MapPage {
+            width:  parent.width
+            height: parent.height
+        }
+    }
+
+    QQ.Component {
         id: unknownPageComponent
         UnknownPage {
             anchors.fill: parent
@@ -112,8 +120,9 @@ QQ.Item {
         RootPopupItem.parent = overlay
 
         pageView.unknownPageComponent = unknownPageComponent
-        var viewPage = RootData.pageSelectionModel.registerPage(null, "View", renderingComponent);
+        let viewPage = RootData.pageSelectionModel.registerPage(null, "View", renderingComponent);
         let dataPage = RootData.pageSelectionModel.registerPage(null, "Data", dataMainPageComponent);
+        let mapPage = RootData.pageSelectionModel.registerPage(null, "Map", mapPageComponent)
         RootData.pageSelectionModel.registerPage(null, "Testcases", testcasesPageComponent);
         RootData.pageSelectionModel.registerPage(null, "About", aboutPageComponent)
         RootData.pageSelectionModel.registerPage(null, "Settings", settingsPageComponent)

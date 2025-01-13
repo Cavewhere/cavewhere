@@ -170,6 +170,7 @@ qt_add_shaders(cavewherelib "cavewherelib_shaders"
         "shaders/radial_gradient.frag"
         "shaders/compass/compass.vert"
         "shaders/compass/compass.frag"
+        "shaders/toColor.frag"
     )
 
 # Protobuf files

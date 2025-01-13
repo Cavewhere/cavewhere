@@ -69,8 +69,6 @@ public:
 
     int startDragDistance() const;
 
-
-
 signals:
     void rotationChanged();
     void azimuthChanged();

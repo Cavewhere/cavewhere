@@ -19,8 +19,9 @@ QQ.Rectangle {
     //Pageshown is an enumerated type that is either, view, data, draft
     property alias pageShown: buttonBar.currentIndex;
 
-    readonly property string viewPage: "View"
-    readonly property string dataPage: "Data"
+    readonly property string _viewPage: "View"
+    readonly property string _dataPage: "Data"
+    readonly property string _mapPage: "Map"
 
     property bool gotoToPage: true
 
@@ -48,11 +49,14 @@ QQ.Rectangle {
         var page;
         switch(pageShown) {
         case 0:
-            page = findPage(viewPage);
+            page = findPage(_viewPage);
             break;
         case 1:
-            page = findPage(dataPage);
+            page = findPage(_dataPage);
             break;
+        case 2:
+            page = findPage(_mapPage);
+
         default:
             console.log("Don't know how to show page:" + pageShown);
         }
@@ -67,10 +71,12 @@ QQ.Rectangle {
             sidebarArea.gotoToPage = false;
             var address = RootData.pageSelectionModel.currentPageAddress;
 
-            if(address.search(sidebarArea.viewPage) == 0) {
+            if(address.search(sidebarArea._viewPage) == 0) {
                 sidebarArea.pageShown = 0;
-            } else if(address.search(sidebarArea.dataPage) == 0) {
+            } else if(address.search(sidebarArea._dataPage) == 0) {
                 sidebarArea.pageShown = 1
+            } else if(address.search(sidebarArea._mapPage) == 0) {
+                sidebarArea.pageShown = 2
             } else {
                 //Deselect both, probably in unknown page or settings page
                 sidebarArea.pageShown = -1;
@@ -117,26 +123,28 @@ QQ.Rectangle {
             id: viewButton
             objectName: "viewButton"
             text: "View"
-            image: "qrc:/icons/viewIcon.png"
-            troggled: 0 == parent.currentIndex
-            onButtonIsTroggled: parent.currentIndex = 0
+            image: "qrc:/twbs-icons/icons/box.svg"
+            troggled: 0 == buttonBar.currentIndex
+            onButtonIsTroggled: buttonBar.currentIndex = 0
         }
 
         SideBarButton {
             id: dataEntyButton
             objectName: "dataButton"
             text: "Data"
-            image: "qrc:icons/book.png"
-            troggled: 1 == parent.currentIndex
-            onButtonIsTroggled: parent.currentIndex = 1           
+            image: "qrc:/twbs-icons/icons/book.svg"
+            troggled: 1 == buttonBar.currentIndex
+            onButtonIsTroggled: buttonBar.currentIndex = 1
         }
 
-//        SideBarButton {
-//            id: draftButton
-//            text: "Draft"
-//            troggled: 2 == parent.currentIndex
-//            onButtonIsTroggled: parent.currentIndex = 2
-//        }
+        SideBarButton {
+            id: mapButton
+            objectName: "mapButton"
+            text: "Map"
+            image: "qrc:/twbs-icons/icons/map.svg"
+            troggled: 2 == buttonBar.currentIndex
+            onButtonIsTroggled: buttonBar.currentIndex = 2
+        }
     }
 
     QQ.ListView {

@@ -125,5 +125,8 @@
         <file>twbs-icons/icons/file-minus.svg</file>
         <file>icons/svg/stopSignError.svg</file>
         <file>icons/svg/warning.svg</file>
+        <file>twbs-icons/icons/map.svg</file>
+        <file>twbs-icons/icons/book.svg</file>
+        <file>twbs-icons/icons/box.svg</file>
     </qresource>
 </RCC>

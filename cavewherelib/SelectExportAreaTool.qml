@@ -1,5 +1,5 @@
 import QtQuick as QQ
-import QtQuick.Controls
+import QtQuick.Controls as QC
 import cavewherelib
 
 QQ.Item {
@@ -52,7 +52,7 @@ QQ.Item {
         selectionRectangle: selectionRectangleId
     }
 
-    Button {
+    QC.Button {
         id: toolButtonId
         anchors.top: parent.top
         anchors.right: parent.right
