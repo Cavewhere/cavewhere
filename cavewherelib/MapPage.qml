@@ -13,10 +13,8 @@ QQ.Item {
 
     // implicitWidth: quickSceneView.implicitWidth + sidebarColumnId.implicitWidth
 
-    required property GLTerrainRenderer view
     property alias hideExternalTools: selectionTool.visible
-
-
+    property GLTerrainRenderer view
 
     ErrorDialog {
         id: errorDialog
@@ -35,10 +33,10 @@ QQ.Item {
         id: paperSizeInteractionId
         parent: mapPageId.view
         visible: false; //view !== null
-        paperMarginGroupBox: paperMarginGroupBoxId
+        paperMarginGroupBox: mapOptionsId.paperMarginGroupBox
 
-        onWidthChanged: paperComboBoxId.updatePaperRectangleFromModel()
-        onHeightChanged: paperComboBoxId.updatePaperRectangleFromModel()
+        onWidthChanged: mapOptionsId.paperComboBox.updatePaperRectangleFromModel()
+        onHeightChanged: mapOptionsId.paperComboBox.updatePaperRectangleFromModel()
     }
 
     CaptureManager {
@@ -54,8 +52,6 @@ QQ.Item {
         //                                 paperSizeInteraction.paperRectangle.height)
         onFinishedCapture: Qt.openUrlExternally(filename)
     }
-
-
 
     QC.SplitView {
         id: rowLayoutId
@@ -74,6 +70,7 @@ QQ.Item {
                 anchors.fill: parent;
                 manager: screenCaptureManagerId
             }
+
         }
 
         QC.ScrollView {
@@ -90,5 +87,19 @@ QQ.Item {
                 }
             }
         }
+    }
+
+    // QQ.Rectangle {
+    //     anchors.fill: parent
+    //     RenderingView {
+    //         id: viewId
+    //         anchors.fill: parent
+    //         // visible: false;
+    //         scene: RootData.regionSceneManager.scene
+    //     }
+    // }
+
+    onViewChanged: {
+        console.log("View changed:" + view)
     }
 }

@@ -80,28 +80,7 @@ void cwPageView::loadCurrentPage()
             connect(CurrentPage.data(), &cwPage::selectionPropertiesChanged,
                     this, &cwPageView::updateSelectionOnCurrentPage);
 
-            QQuickItem* item = ComponentToItem.value(currentPage->component());
-            if(item == nullptr) {
-                item = createChildItemFromComponent(currentPage->component(), currentPage);
-                ComponentToItem.insert(currentPage->component(), item);
-            } else {
-                //Update all the properties for the page, the parent pages
-                QStack<cwPage*> parentPages;
-                cwPage* stackCurrent = currentPage;
-                while(stackCurrent != nullptr) {
-                    parentPages.push(stackCurrent);
-                    stackCurrent = stackCurrent->parentPage();
-                }
-
-                while(!parentPages.isEmpty()) {
-                    cwPage* page = parentPages.pop();
-                    QQuickItem* pageItem = ComponentToItem.value(page->component());
-
-                    if(pageItem != nullptr) {
-                        updateProperties(pageItem, page);
-                    }
-                }
-            }
+            QQuickItem* item = pageItem(CurrentPage);
 
             //Show the page
             showPage(item);
@@ -285,5 +264,32 @@ QQuickItem* cwPageView::currentPageItem() const {
         return pageItem;
     }
     return nullptr;
+}
+
+QQuickItem *cwPageView::pageItem(cwPage *page)
+{
+    QQuickItem* item = ComponentToItem.value(page->component());
+    if(item == nullptr) {
+        item = createChildItemFromComponent(page->component(), page);
+        ComponentToItem.insert(page->component(), item);
+    } else {
+        //Update all the properties for the page, the parent pages
+        QStack<cwPage*> parentPages;
+        cwPage* stackCurrent = page;
+        while(stackCurrent != nullptr) {
+            parentPages.push(stackCurrent);
+            stackCurrent = stackCurrent->parentPage();
+        }
+
+        while(!parentPages.isEmpty()) {
+            cwPage* page = parentPages.pop();
+            QQuickItem* pageItem = ComponentToItem.value(page->component());
+
+            if(pageItem != nullptr) {
+                updateProperties(pageItem, page);
+            }
+        }
+    }
+    return item;
 }
 

@@ -48,6 +48,8 @@ public:
 
     QQuickItem* currentPageItem() const;
 
+    Q_INVOKABLE QQuickItem* pageItem(cwPage* page);
+
     /**
      * @brief cwPageView::qmlAttachedProperties
      * @param object

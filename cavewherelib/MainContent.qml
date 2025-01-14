@@ -5,6 +5,8 @@ import cavewherelib
 QQ.Item {
     id: mainContentId
 
+    property GLTerrainRenderer renderer;
+
     anchors.fill: parent
 
     LinkBar {
@@ -84,6 +86,7 @@ QQ.Item {
         MapPage {
             width:  parent.width
             height: parent.height
+            view: mainContentId.renderer;
         }
     }
 
@@ -127,5 +130,7 @@ QQ.Item {
         RootData.pageSelectionModel.registerPage(null, "About", aboutPageComponent)
         RootData.pageSelectionModel.registerPage(null, "Settings", settingsPageComponent)
         RootData.pageSelectionModel.gotoPage(viewPage);
+
+        mainContentId.renderer = pageView.pageItem(viewPage).renderer;
     }
 }

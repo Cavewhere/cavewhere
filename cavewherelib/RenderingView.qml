@@ -8,8 +8,7 @@ SplitView {
     property alias scene: rendererId.scene
     property alias turnTableInteraction: rendererId.turnTableInteraction
     property alias leadView: rendererId.leadView
-
-    anchors.fill: parent
+    property alias renderer: rendererId
 
     QQ.Item {
         SplitView.preferredWidth: parent.width - cameraOptionsId.implicitWidth
@@ -24,6 +23,5 @@ SplitView {
     CameraOptionsTab {
         id: cameraOptionsId
         viewer: rendererId
-
     }
 }

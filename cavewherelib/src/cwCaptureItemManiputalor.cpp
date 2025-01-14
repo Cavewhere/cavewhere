@@ -74,7 +74,7 @@ void cwCaptureItemManiputalor::fullUpdate()
 
     if(InteractionComponent == nullptr) {
         QQmlContext* context = QQmlEngine::contextForObject(this);
-        InteractionComponent = new QQmlComponent(context->engine(), QStringLiteral(":cavewherelib/CaptureItemInteraction.qml"), this);
+        InteractionComponent = new QQmlComponent(context->engine(), QStringLiteral("qrc:/cavewherelib/cavewherelib/CaptureItemInteraction.qml"), this);
         cwDebug::printErrors(InteractionComponent);
     }
 

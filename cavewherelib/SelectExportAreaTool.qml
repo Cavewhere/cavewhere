@@ -5,8 +5,8 @@ import cavewherelib
 QQ.Item {
     id: toolId
 
-    property GLTerrainRenderer view
-    property CaptureManager manager;
+    required property GLTerrainRenderer view
+    required property CaptureManager manager;
 
     anchors.fill: parent
     visible: parent !== null

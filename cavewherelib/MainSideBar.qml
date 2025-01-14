@@ -56,7 +56,7 @@ QQ.Rectangle {
             break;
         case 2:
             page = findPage(_mapPage);
-
+            break;
         default:
             console.log("Don't know how to show page:" + pageShown);
         }

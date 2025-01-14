@@ -14,6 +14,8 @@ ColumnLayout {
     required property GLTerrainRenderer view
     required property CaptureManager screenCaptureManager
     required property ChoosePaperSizeInteraction paperSizeInteraction
+    property alias paperMarginGroupBox: paperMarginGroupBoxId
+    property alias paperComboBox: paperComboBoxId
 
     function updatePaperRectangle(paperWidth, paperHeight) {
         let i = paperSizeInteraction
