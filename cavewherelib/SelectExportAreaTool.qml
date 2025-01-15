@@ -4,6 +4,7 @@ import cavewherelib
 
 QQ.Item {
     id: toolId
+    objectName: "selectionExportAreaTool"
 
     required property GLTerrainRenderer view
     required property CaptureManager manager;
@@ -23,7 +24,7 @@ QQ.Item {
         }
 
         var viewObject = captureViewComponentId.createObject()
-        viewObject.view = view
+        viewObject.view = toolId.view
         viewObject.viewport = rectangle
         viewObject.cameraAzimuth = view.turnTableInteraction.azimuth
         viewObject.cameraPitch = view.turnTableInteraction.pitch
@@ -33,6 +34,7 @@ QQ.Item {
 
     function resetTool() {
         interactionId.deactivate()
+        toolId.visible = false
         selectionRectangleId.visible = false
         selectionRectangleId.width = 0
         selectionRectangleId.height = 0
@@ -42,22 +44,28 @@ QQ.Item {
 
     QQ.Component {
         id: captureViewComponentId
-        QQ.Rectangle {}
-        // CaptureViewport { }
+        // QQ.Rectangle {}
+        CaptureViewport { }
     }
 
     SelectExportAreaInteraction {
         id: interactionId
+        objectName: "selectAreaInteraction"
         anchors.fill: parent
         selectionRectangle: selectionRectangleId
     }
 
     QC.Button {
         id: toolButtonId
+        objectName: "selectionToolButton"
+
         anchors.top: parent.top
-        anchors.right: parent.right
-        text: "Select Area"
+        anchors.left: parent.left
+        text: " Select Area"
         enabled: true
+        icon.source: "qrc:/twbs-icons/icons/box-arrow-down-right.svg"
+        // icon.width: 10
+        // icon.height: 10
 
         onClicked: {
             interactionId.activate()
@@ -71,15 +79,21 @@ QQ.Item {
                     toolButtonId {
                         enabled: false
                     }
-                }
 
-                QQ.PropertyChanges {
                     interactionId {
                         onHasDraggedChanged: {
                             if(hasDragged) {
                                 toolButtonId.state = "CAN_DONE_STATE"
                             }
                         }
+                    }
+
+                    clickAndDragHelpBoxId {
+                        visible: true
+                    }
+
+                    quoteBoxId {
+                        visible: false
                     }
                 }
             },
@@ -88,7 +102,8 @@ QQ.Item {
                 name: "CAN_DONE_STATE"
                 QQ.PropertyChanges {
                     toolButtonId {
-                        text: "Done"
+                        text: " Done"
+                        icon.source: "qrc:/twbs-icons/icons/check-lg.svg"
                         enabled: true
                         onClicked: {
                             var caputerRect = Qt.rect(selectionRectangleId.x,
@@ -96,14 +111,15 @@ QQ.Item {
                                                       selectionRectangleId.width,
                                                       selectionRectangleId.height)
 
-                            resetTool()
 
                             toolId.addRectangle(caputerRect)
+
+                            RootData.pageSelectionModel.back()
+
+                            resetTool()
                         }
                     }
-                }
 
-                QQ.PropertyChanges {
                     interactionId {
                         onHasDraggedChanged: {
                             if(!hasDragged) {
@@ -113,9 +129,32 @@ QQ.Item {
                             }
                         }
                     }
+
+                    clickAndDragHelpBoxId {
+                        visible: false
+                    }
+
+                    quoteBoxId {
+                        visible: false
+                    }
                 }
             }
         ]
+    }
+
+    HelpQuoteBox {
+        id: quoteBoxId
+        objectName: "quoteBox"
+        pointAtObject: toolButtonId
+        pointAtObjectPosition: Qt.point(toolButtonId.width / 2.0, toolButtonId.height)
+        text: "Select the area to add a map layer"
+    }
+
+    HelpBox {
+        id: clickAndDragHelpBoxId
+        objectName: "clickAndDragHelpBox"
+        text: "Click and drag to create a map layer"
+        visible: false
     }
 
     SelectionRectangle {

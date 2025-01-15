@@ -114,7 +114,7 @@ BaseTurnTableInteraction {
                 }
             }
 
-            onWheel: {
+            onWheel: (wheel) => {
                 if(multiTouchArea.endMousePosition !== Qt.point(wheel.x, wheel.y)) {
                     interactionId.zoom(Qt.point(wheel.x, wheel.y), -wheel.angleDelta.y)
                 }

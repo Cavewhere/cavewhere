@@ -26,13 +26,13 @@ QQ.Item {
         parent: mapPageId.view
         view: mapPageId.view
         manager: screenCaptureManagerId
-        visible: mapPageId.visible
+        visible: false
     }
 
     ChoosePaperSizeInteraction {
         id: paperSizeInteractionId
         parent: mapPageId.view
-        visible: false; //view !== null
+        visible: false;
         paperMarginGroupBox: mapOptionsId.paperMarginGroupBox
 
         onWidthChanged: mapOptionsId.paperComboBox.updatePaperRectangleFromModel()
@@ -70,15 +70,26 @@ QQ.Item {
                 anchors.fill: parent;
                 manager: screenCaptureManagerId
             }
-
         }
 
         QC.ScrollView {
-            QQ.Item {
-                x: 3
-                y: 3
-                implicitWidth: mapOptionsId.implicitWidth + 3
-                implicitHeight: mapOptionsId.implicitHeight + 3
+            padding: 5
+
+            ColumnLayout {
+
+                QC.Button {
+                    id: addLayerButton
+                    objectName: "addLayerButton"
+                    text: " Add Layer"
+                    icon.source: "qrc:/twbs-icons/icons/layers.svg"
+                    onClicked: {
+                        selectionTool.visible = true
+                        RootData.pageSelectionModel.gotoPageByName(null, "View");
+                    }
+                }
+
+                BreakLine {  }
+
                 MapOptions {
                     id: mapOptionsId
                     view: mapPageId.view
@@ -99,7 +110,11 @@ QQ.Item {
     //     }
     // }
 
-    onViewChanged: {
-        console.log("View changed:" + view)
+    HelpQuoteBox {
+        pointAtObject: addLayerButton
+        pointAtObjectPosition: Qt.point(addLayerButton.width / 2.0, addLayerButton.height)
+        triangleOffset: 0.0
+        visible: screenCaptureManagerId.numberOfCaptures === 0
+        text: "Add a new layer to create a map"
     }
 }

@@ -226,12 +226,12 @@ QQ.Rectangle {
 
             QQ.PropertyChanges {
                 selectMouseAreaId {
-                    onPressed: {
+                    onPressed: (mouse) => {
                         lastPoint = Utils.mousePositionToGlobal(selectMouseAreaId)
                         positionHasChange = false;
                     }
 
-                    onPositionChanged: {
+                    onPositionChanged: (mouse) => {
                         //Translate the item
                         var newPosition = Utils.mousePositionToGlobal(selectMouseAreaId);
                         var delta = Qt.point(pixelToPaper(newPosition.x - lastPoint.x),
@@ -244,7 +244,7 @@ QQ.Rectangle {
                         positionHasChange = true
                     }
 
-                    onReleased: {
+                    onReleased: (mouse) => {
                         interactionId.selected = true
                     }
                 }

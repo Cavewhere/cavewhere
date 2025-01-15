@@ -8,6 +8,7 @@
 //Qt includes
 #include <QPen>
 #include <QUuid>
+#include <QQuickItemGrabResult>
 
 //Our includes
 #include "cwCaptureViewport.h"
@@ -194,6 +195,14 @@ void cwCaptureViewport::capture()
             QPointF origin(originX, originY);
 
             IdToOrigin[id] = origin;
+
+            qDebug() << "Catputer:" << origin << id << croppedTileSize;
+            auto grabResult = view()->grabToImage();
+            connect(grabResult.get(), &QQuickItemGrabResult::ready, this, [id, grabResult, this](){
+                capturedImage(grabResult->image(), id);
+                grabResult->saveToFile("test2.png");
+            });
+            // grabResult->
 
             // connect(command, SIGNAL(createdImage(QImage,int)),
             //         this, SLOT(capturedImage(QImage,int)),

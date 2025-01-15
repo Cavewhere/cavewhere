@@ -34,13 +34,14 @@ void cwQuickSceneView::setScene(QGraphicsScene* scene) {
             connect(Scene.data(), &QGraphicsScene::changed, this, [this](const QList<QRectF>& region) {
                 Q_UNUSED(region);
                 auto size = boundingRect().size();
-                qDebug() << "size:" << size;
+                qDebug() << "size:" << size << boundingRect() << Scene->sceneRect();
                 if(m_image.size() != size) {
                     m_image = QImage(size.toSize(), QImage::Format_ARGB32);
                 }
 
                 QPainter painter(&m_image);
-                Scene->render(&painter, boundingRect());
+                Scene->render(&painter, boundingRect(), Scene->sceneRect(), Qt::KeepAspectRatio);
+                update();
 
             });
 

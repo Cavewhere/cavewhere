@@ -18,10 +18,10 @@ cwCaptureGroup::cwCaptureGroup(QObject *parent) :
     PositionAfterScaleMapper(new QSignalMapper(this)),
     RotationMapper(new QSignalMapper(this))
 {
-    connect(ScaleMapper, SIGNAL(mapped(QObject*)), this, SLOT(updateScalesFrom(QObject*)));
-    connect(RotationMapper, SIGNAL(mapped(QObject*)), this, SLOT(updateRotationFrom(QObject*)));
-    connect(PositionMapper, SIGNAL(mapped(QObject*)), this, SLOT(updateTranslationFrom(QObject*)));
-    connect(PositionAfterScaleMapper, SIGNAL(mapped(QObject*)), this, SLOT(updateTranslationAfterScaleFrom(QObject*)));
+    connect(ScaleMapper, SIGNAL(mappedObject(QObject*)), this, SLOT(updateScalesFrom(QObject*)));
+    connect(RotationMapper, SIGNAL(mappedObject(QObject*)), this, SLOT(updateRotationFrom(QObject*)));
+    connect(PositionMapper, SIGNAL(mappedObject(QObject*)), this, SLOT(updateTranslationFrom(QObject*)));
+    connect(PositionAfterScaleMapper, SIGNAL(mappedObject(QObject*)), this, SLOT(updateTranslationAfterScaleFrom(QObject*)));
 }
 
 /**

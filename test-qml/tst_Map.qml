@@ -26,7 +26,39 @@ MainWindowTest {
             let options = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->mapOptions->opitonsButton")
             mouseClick(options)
 
+            //Click on the add layer button
+            let addLayerButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->addLayerButton")
+            mouseClick(addLayerButton)
 
+            //Make sure we're on the view page
+            tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "viewPage" });
+
+            let selectButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->selectionToolButton")
+            //Make sure the select button is visible, and help is shown correctly
+            tryVerify(() => { return selectButton.visible });
+
+            let quoteBox = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->quoteBox")
+            verify(quoteBox.visible)
+
+            mouseClick(selectButton)
+            let helpBox = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->clickAndDragHelpBox")
+            verify(!quoteBox.visible)
+            tryVerify(() => {return helpBox.visible})
+
+            //Select an area
+            let interaction = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->selectAreaInteraction")
+            mousePress(interaction, 286.152, 152.629)
+            mouseMove(interaction, 598.871, 427.344)
+            mouseRelease(interaction, 598.871, 427.344)
+            verify(!quoteBox.visible)
+            tryVerify(() => {return !helpBox.visible})
+
+            //Click done
+            mouseClick(selectButton);
+
+            let areaTool = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool");
+            tryVerify(() => { return !areaTool.visible })
+            tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "mapPage" });
 
 
 

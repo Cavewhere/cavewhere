@@ -103,7 +103,6 @@
         <file>twbs-icons/icons/chevron-left.svg</file>
         <file>twbs-icons/icons/chevron-right.svg</file>
         <file>twbs-icons/icons/plus.svg</file>
-        <file>twbs-icons/icons/plus.svg</file>
         <file>icons/svg/station.svg</file>
         <file>twbs-icons/icons/caret-down-fill.svg</file>
         <file>icons/svg/measurement.svg</file>
@@ -128,5 +127,8 @@
         <file>twbs-icons/icons/map.svg</file>
         <file>twbs-icons/icons/book.svg</file>
         <file>twbs-icons/icons/box.svg</file>
+        <file>twbs-icons/icons/box-arrow-down-right.svg</file>
+        <file>twbs-icons/icons/layers.svg</file>
+        <file>twbs-icons/icons/check-lg.svg</file>
     </qresource>
 </RCC>

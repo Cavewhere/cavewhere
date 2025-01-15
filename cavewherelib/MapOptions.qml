@@ -567,7 +567,7 @@ ColumnLayout {
 
                         QQ.PropertyChanges {
                             layerProperties {
-                                title: "Properies of " + layerObject.name
+                                title: "Properies of " + layerProperties.layerObject.name
                                 visible: true
                             }
                         }
