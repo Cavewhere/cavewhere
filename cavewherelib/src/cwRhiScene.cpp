@@ -87,6 +87,7 @@ void cwRhiScene::synchroize(cwScene *scene, cwRhiItemRenderer *renderer)
     for(auto object : std::as_const(scene->m_toUpdateRenderObjects)) {
         auto rhiObject = m_rhiObjectLookup[object];
         if(rhiObject) {
+            rhiObject->setVisible(object->isVisible());
             rhiObject->synchronize({object, renderer});
             m_rhiNeedResourceUpdate.append(rhiObject);
         }
@@ -121,7 +122,7 @@ void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
     }
 
     //This is a very basic framegraph with 1 rendering pass.
-    const QColor clearColor = QColor::fromRgbF(0.33, 0.66, 1.0, 1.0);
+    const QColor clearColor = QColor::fromRgbF(0.0, 0.0, 0.0, 0.0); //0.33, 0.66, 1.0, 1.0);
     cb->beginPass(renderer->renderTarget(), clearColor, { 1.0f, 0 }, resources);
 
     const QSize outputSize = renderer->renderTarget()->pixelSize();
@@ -129,7 +130,9 @@ void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
 
     //Render rendering objects
     for(auto object : m_rhiObjects) {
-        object->render(renderData);
+        if(object->isVisible()) {
+            object->render(renderData);
+        }
     }
 
     cb->endPass();

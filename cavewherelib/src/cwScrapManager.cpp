@@ -17,7 +17,6 @@
 #include "cwProject.h"
 #include "cwTriangulateInData.h"
 #include "cwDebug.h"
-#include "cwGLScraps.h"
 #include "cwImageResolution.h"
 #include "cwLinePlotManager.h"
 #include "cwTaskManagerModel.h"

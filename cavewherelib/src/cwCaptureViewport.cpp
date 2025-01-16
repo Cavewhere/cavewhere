@@ -160,12 +160,98 @@ void cwCaptureViewport::capture()
     Columns = columns;
     Rows = rows;
 
-    IdToOrigin.clear(); //This is used to keep track the positions of the images
-
     cwProjection croppedProjection = tileProjection(viewport,
                                                     camera->viewport().size(),
                                                     originalProj);
 
+    struct CaptureJob {
+        int id;
+        QPointF origin;
+        QRect viewport;
+        cwProjection tileProj;
+        QMatrix4x4 viewMatrix;
+    };
+
+    struct CaptuteRunData {
+        cwCamera* oldCamera;
+        cwCamera* captureCamera = new cwCamera();
+        QList<CaptureJob> CaptureJobs;
+    };
+
+    auto runData = std::make_shared<CaptuteRunData>();
+    runData->oldCamera = scene->camera();
+
+    //These are recursive lambdas, so we need to put this in a shared pointer
+    auto capturedImage = std::make_shared<std::function<void (const CaptureJob& data, const QImage& image)>>();
+
+    auto nextJob = [runData, this, capturedImage]() {
+        auto job = runData->CaptureJobs.at(NumberOfImagesProcessed);
+        runData->captureCamera->setProjection(job.tileProj);
+        runData->captureCamera->setViewMatrix(job.viewMatrix);
+        runData->captureCamera->setViewport(job.viewport);
+
+        auto grabResult = view()->grabToImage(job.viewport.size());
+        connect(grabResult.get(), &QQuickItemGrabResult::ready, this, [capturedImage, job, grabResult, this](){
+            //Call CaptureImage
+            (*capturedImage)(job, grabResult->image());
+        });
+    };
+
+    *capturedImage = [runData, nextJob, this](const CaptureJob& job, const QImage& image) {
+        Q_ASSERT(CapturingImages);
+
+        QGraphicsItemGroup* parent = previewCapture() ? PreviewItem : Item;
+
+        cwGraphicsImageItem* graphicsImage = new cwGraphicsImageItem(parent);
+        QImage correctedImage = image;
+        correctedImage.setDevicePixelRatio(1.0);
+        graphicsImage->setImage(correctedImage);
+        graphicsImage->setPos(job.origin);
+        graphicsImage->setScale(1.0 / image.devicePixelRatio());
+
+        // graphicsImage->setScale(1.0/image.devicePixelRatio());
+        parent->addToGroup(graphicsImage);
+
+        //For debugging tiles
+        double scale = 1.0  / image.devicePixelRatio();
+        QGraphicsRectItem* rectItem = new QGraphicsRectItem(parent);
+        QRectF tileRect = graphicsImage->mapToItem(rectItem, graphicsImage->boundingRect()).boundingRect();
+        rectItem->setPen(QPen(Qt::red));
+        rectItem->setRect(tileRect);
+        QGraphicsSimpleTextItem* textItem = new QGraphicsSimpleTextItem(parent);
+        textItem->setText(QString("Id:%1").arg(job.id));
+        textItem->setPen(QPen(Qt::red));
+        textItem->setPos(tileRect.center());
+
+        image.save(QString("tile-%1.png").arg(job.id));
+
+        qDebug() << "TileRect:" << tileRect << "Job:" << job.viewport << parent->boundingRect();
+
+        NumberOfImagesProcessed++;
+
+        if(NumberOfImagesProcessed == Rows * Columns) {
+            //Finished capturing images
+            NumberOfImagesProcessed = 0;
+            Rows = 0;
+            Columns = 0;
+            CapturingImages = false;
+
+            if(previewCapture()) {
+                updateBoundingBox();
+            }
+
+            //Clean up
+            m_sceneManager->setCapturing(false);
+            view()->scene()->setCamera(runData->oldCamera);
+
+            emit finishedCapture();
+        } else {
+            //Next image to capture
+            nextJob();
+        }
+    };
+
+    //Queue the jobs
     for(int column = 0; column < columns; column++) {
         for(int row = 0; row < rows; row++) {
 
@@ -177,41 +263,32 @@ void cwCaptureViewport::capture()
             QRect tileViewport(QPoint(x, y), croppedTileSize);
             cwProjection tileProj = tileProjection(tileViewport, imageSize, croppedProjection);
 
-            cwScreenCaptureCommand* command = new cwScreenCaptureCommand();
-
-            cwCamera* croppedCamera = new cwCamera(command);
-            croppedCamera->setViewport(QRect(QPoint(), croppedTileSize));
-            croppedCamera->setProjection(tileProj);
-            croppedCamera->setViewMatrix(camera->viewMatrix());
-
-            command->setCamera(croppedCamera);
-            command->setScene(scene);
-
             int id = row * columns + column;
-            command->setId(id);
 
             double originX = column * tileSize.width();
             double originY = onPaperViewport.height() - (row * tileSize.height() + croppedTileSize.height());
             QPointF origin(originX, originY);
 
-            IdToOrigin[id] = origin;
+            QRect viewport = QRect(QPoint(), croppedTileSize);
 
-            qDebug() << "Catputer:" << origin << id << croppedTileSize;
-            auto grabResult = view()->grabToImage();
-            connect(grabResult.get(), &QQuickItemGrabResult::ready, this, [id, grabResult, this](){
-                capturedImage(grabResult->image(), id);
-                grabResult->saveToFile("test2.png");
-            });
-            // grabResult->
-
-            // connect(command, SIGNAL(createdImage(QImage,int)),
-            //         this, SLOT(capturedImage(QImage,int)),
-            //         Qt::QueuedConnection);
-            // scene->addSceneCommand(command);
+            runData->CaptureJobs.append(
+                CaptureJob{
+                    id,
+                    origin,
+                    viewport,
+                    tileProj,
+                    camera->viewMatrix()
+                });
         }
     }
 
-    view()->update();
+    //Initial settings
+    m_sceneManager->setCapturing(true);
+    view()->scene()->setCamera(runData->captureCamera);
+
+    nextJob();
+
+    // view()->update();
 }
 
 /**
@@ -451,53 +528,9 @@ void cwCaptureViewport::updateBoundingBox()
     QTransform transform = previewItem()->transform();
     QRectF paperRect = previewItem()->boundingRect();
     QRectF boundingBoxRect = transform.mapRect(paperRect);
+    qDebug() << "Update bounding box:" << paperRect << boundingBoxRect;
+    boundingBoxRect.moveTopLeft(previewItem()->pos());
     setBoundingBox(boundingBoxRect);
-}
-
-/**
- * @brief cwScreenCaptureManager::capturedImage
- * @param image
- */
-void cwCaptureViewport::capturedImage(QImage image, int id)
-{
-    Q_UNUSED(id)
-
-    Q_ASSERT(CapturingImages);
-
-    QPointF origin = IdToOrigin.value(id);
-
-    QGraphicsItemGroup* parent = previewCapture() ? PreviewItem : Item;
-
-    cwGraphicsImageItem* graphicsImage = new cwGraphicsImageItem(parent);
-    graphicsImage->setImage(image);
-    graphicsImage->setPos(origin);
-    parent->addToGroup(graphicsImage);
-
-    //For debugging tiles
-//    QRectF tileRect = QRectF(origin, image.size());
-//    QGraphicsRectItem* rectItem = new QGraphicsRectItem(parent);
-//    rectItem->setPen(QPen(Qt::red));
-//    rectItem->setRect(tileRect);
-//    QGraphicsSimpleTextItem* textItem = new QGraphicsSimpleTextItem(parent);
-//    textItem->setText(QString("Id:%1").arg(id));
-//    textItem->setPen(QPen(Qt::red));
-//    textItem->setPos(tileRect.center());
-
-    NumberOfImagesProcessed++;
-
-    if(NumberOfImagesProcessed == Rows * Columns) {
-        //Finished capturing images
-        NumberOfImagesProcessed = 0;
-        Rows = 0;
-        Columns = 0;
-        CapturingImages = false;
-
-        if(previewCapture()) {
-            updateBoundingBox();
-        }
-
-        emit finishedCapture();
-    }
 }
 
 /**
@@ -593,4 +626,15 @@ QPointF cwCaptureViewport::mapToCapture(const cwCaptureViewport* viewport) const
     QPointF thisOrigin = positionOnPaper() - previewItem()->mapToScene(thisTopLeftToOriginPixels);
 
     return paperOrigin + thisOrigin;
+}
+
+
+
+void cwCaptureViewport::setSceneManager(cwRegionSceneManager *newSceneManager)
+{
+    if (m_sceneManager == newSceneManager) {
+        return;
+    }
+    m_sceneManager = newSceneManager;
+    emit sceneManagerChanged();
 }

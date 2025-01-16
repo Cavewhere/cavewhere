@@ -8,7 +8,6 @@
 
 #include "cwRegionSceneManager.h"
 #include "cwScene.h"
-#include "cwGLTerrain.h"
 #include "cwRenderScraps.h"
 #include "cwRenderGridPlane.h"
 #include "cwRenderLinePlot.h"
@@ -23,12 +22,7 @@ cwRegionSceneManager::cwRegionSceneManager(QObject *parent) :
     Region(nullptr)
 {
 
-    //    Terrain = new cwGLTerrain();
-    //    Terrain->setNumberOfLevels(10);
-    //    connect(Terrain, SIGNAL(redraw()), SLOT(updateGL()));
-
     //Renders the background, should be drawn first
-
     m_background = new cwRenderRadialGradient();
     m_linePlot = new cwRenderLinePlot();
     m_scraps = new cwRenderScraps();
@@ -58,4 +52,16 @@ void cwRegionSceneManager::setCavingRegion(cwCavingRegion* region) {
   */
 cwCavingRegion* cwRegionSceneManager::cavingRegion() const {
     return Region;
+}
+
+void cwRegionSceneManager::setCapturing(bool newCapturing)
+{
+    if (m_capturing == newCapturing) {
+        return;
+    }
+    m_capturing = newCapturing;
+    m_background->setVisible(!m_capturing);
+    m_linePlot->setVisible(!m_capturing);
+    m_plane->setVisible(!m_capturing);
+    emit capturingChanged();
 }

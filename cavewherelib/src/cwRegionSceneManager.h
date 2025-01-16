@@ -35,6 +35,9 @@ class cwRegionSceneManager : public QObject
     Q_PROPERTY(cwRenderScraps* scraps READ scraps NOTIFY scrapsChanged)
     Q_PROPERTY(cwScene* scene READ scene NOTIFY sceneChanged)
 
+    Q_PROPERTY(bool capturing READ isCapturing WRITE setCapturing NOTIFY capturingChanged FINAL)
+
+
 public:
     explicit cwRegionSceneManager(QObject *parent = 0);
 
@@ -46,11 +49,16 @@ public:
 
     cwScene* scene() const;
 
+    bool isCapturing() const;
+    void setCapturing(bool newCapturing);
+
 signals:
     void sceneChanged();
     void cavingRegionChanged();
     void linePlotChanged();
     void scrapsChanged();
+
+    void capturingChanged();
 
 public slots:
 
@@ -66,6 +74,7 @@ private:
 
     //For rendering label
     QPointer<cwCavingRegion> Region;
+    bool m_capturing;
 };
 
 //This enable moc to work with forward declaration
@@ -91,6 +100,11 @@ inline cwRenderLinePlot* cwRegionSceneManager::linePlot() { return m_linePlot; }
 inline cwRenderScraps* cwRegionSceneManager::scraps() const
 {
     return m_scraps;
+}
+
+inline bool cwRegionSceneManager::isCapturing() const
+{
+    return m_capturing;
 }
 
 

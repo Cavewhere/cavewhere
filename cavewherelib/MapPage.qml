@@ -41,7 +41,7 @@ QQ.Item {
 
     CaptureManager {
         id: screenCaptureManagerId
-        view: mapPageId.view
+        view: mapPageId.view.renderer
         viewport: Qt.rect(paperSizeInteractionId.captureRectangle.x,
                           paperSizeInteractionId.captureRectangle.y,
                           paperSizeInteractionId.captureRectangle.width,
@@ -68,6 +68,7 @@ QQ.Item {
 
             CaptureItemManiputalor {
                 anchors.fill: parent;
+                view: quickSceneView
                 manager: screenCaptureManagerId
             }
         }

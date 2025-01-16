@@ -53,8 +53,8 @@ ColumnLayout {
         onAccepted: {
             var type = mapOptionsId.screenCaptureManager.typeNameToFileType(fileTypeExportComboBox.currentText);
 
-            RootData.lastDirectory = fileUrl
-            mapOptionsId.screenCaptureManager.filename = fileUrl
+            RootData.lastDirectory = selectedFile
+            mapOptionsId.screenCaptureManager.filename = selectedFile
             mapOptionsId.screenCaptureManager.fileType = type
             mapOptionsId.screenCaptureManager.capture()
         }

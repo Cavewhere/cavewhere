@@ -19,6 +19,12 @@ MainWindowTest {
             let turnTableInteraction = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->turnTableInteraction")
             turnTableInteraction.camera.zoomScale = 0.05;
 
+            //Put it in profile mode
+            let profileButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->GroupBox->profileButton->label")
+            mouseClick(profileButton)
+
+            tryVerify(() => { return turnTableInteraction.pitch === 0.0})
+
             let mapButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->mainSideBar->mapButton")
             mouseClick(mapButton)
 
@@ -47,9 +53,9 @@ MainWindowTest {
 
             //Select an area
             let interaction = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->selectAreaInteraction")
-            mousePress(interaction, 286.152, 152.629)
-            mouseMove(interaction, 598.871, 427.344)
-            mouseRelease(interaction, 598.871, 427.344)
+            mousePress(interaction, 358.566, 251.16)
+            mouseMove(interaction, 522.047, 573.117)
+            mouseRelease(interaction, 522.047, 573.117)
             verify(!quoteBox.visible)
             tryVerify(() => {return !helpBox.visible})
 

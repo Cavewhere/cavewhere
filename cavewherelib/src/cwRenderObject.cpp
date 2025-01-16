@@ -8,11 +8,8 @@
 //Our includes
 #include "cwRenderObject.h"
 #include "cwScene.h"
-#include "cwInitCommand.h"
-#include "cwUpdateDataCommand.h"
 
 //Qt includes
-#include <QOpenGLShaderProgram>
 #include <QFile>
 
 cwRenderObject::cwRenderObject(QObject* parent) :
@@ -47,29 +44,11 @@ void cwRenderObject::setScene(cwScene *scene)
     return m_scene == nullptr ? nullptr : m_scene->camera();
 }
 
- /**
-  * @brief cwRenderObject::markDataAsDirty
-  *
-  * This will push a cwUpdateDataCommand to the scene. The cwUpdateDataCommand will
-  * call this classes or a sub classes updateData() function on the rendering
-  * thread.
-  *
-  * This class will queue the UpdateDataCommand. It is important that this classes
-  * updateData() function is called by the sub class or subsquent calls to this
-  * function will do nothing.
-  */
- void cwRenderObject::markDataAsDirty()
- {
-     update();
- }
-
-
  void cwRenderObject::update()
  {
      if(m_scene == nullptr) { return; }
      m_scene->updateItem(this);
  }
-
 
 /**
  * @brief cwRenderObject::geometryItersecter
@@ -81,3 +60,11 @@ void cwRenderObject::setScene(cwScene *scene)
 }
 
 
+void cwRenderObject::setVisible(bool newVisible)
+{
+    if (m_visible == newVisible)
+        return;
+    m_visible = newVisible;
+    update();
+    emit visibleChanged();
+}

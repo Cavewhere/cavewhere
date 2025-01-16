@@ -131,6 +131,6 @@ QQ.Item {
         RootData.pageSelectionModel.registerPage(null, "Settings", settingsPageComponent)
         RootData.pageSelectionModel.gotoPage(viewPage);
 
-        // mainContentId.renderer = pageView.pageItem(viewPage).renderer;
+        mainContentId.renderer = pageView.pageItem(viewPage).renderer;
     }
 }

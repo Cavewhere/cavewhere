@@ -9,23 +9,29 @@ import QtQuick
 import cavewherelib
 import QtQuick.Window
 
-RegionViewer {
-    id: renderer
 
+Item {
     property alias turnTableInteraction: turnTableInteractionId
     property alias interactionManager: interactionManagerId
     property alias leadView: leadViewId
+    property alias renderer: rendererId
+    property alias scene: rendererId.scene
 
-    clip: true
-    camera.devicePixelRatio: Screen.devicePixelRatio
-    // sampleCount: 4
+    RegionViewer {
+        id: rendererId
+
+        anchors.fill: parent
+        clip: true
+        camera.devicePixelRatio: Screen.devicePixelRatio
+        // sampleCount: 4
+    }
 
     TurnTableInteraction {
         id: turnTableInteractionId
         objectName: "turnTableInteraction"
         anchors.fill: parent
-        camera: renderer.camera
-        scene: renderer.scene
+        camera: rendererId.camera
+        scene: rendererId.scene
     }
 
     InteractionManager {
@@ -39,7 +45,7 @@ RegionViewer {
     LinePlotLabelView {
         id: labelView
         anchors.fill: parent
-        camera: renderer.camera
+        camera: rendererId.camera
         region: RootData.region
         visible: RootData.stationsVisible
     }
@@ -48,7 +54,7 @@ RegionViewer {
         id: leadViewId
         anchors.fill: parent
         regionModel: RootData.regionTreeModel
-        camera: renderer.camera
+        camera: rendererId.camera
         visible: RootData.leadsVisible
     }
 
@@ -61,20 +67,20 @@ RegionViewer {
 
         ScaleBar {
             id: scaleBar
-            visible: renderer.orthoProjection.enabled
-            camera: renderer.camera
+            visible: rendererId.orthoProjection.enabled
+            camera: rendererId.camera
             anchors.bottom: compassItemId.bottom
-            maxTotalWidth: renderer.width * 0.50
-            minTotalWidth: renderer.height * 0.2
+            maxTotalWidth: rendererId.width * 0.50
+            minTotalWidth: rendererId.height * 0.2
         }
 
         Compass {
             id: compassItemId
             width: 175
             height: width
-            // camera: renderer.camera
+            // camera: rendererId.camera
             compassRotation: turnTableInteractionId.rotation
-            // shaderDebugger: renderer.scene.shaderDebugger
+            // shaderDebugger: rendererId.scene.shaderDebugger
             antialiasing: false
         }
     }

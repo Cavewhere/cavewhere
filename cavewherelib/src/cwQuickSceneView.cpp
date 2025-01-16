@@ -50,6 +50,39 @@ void cwQuickSceneView::setScene(QGraphicsScene* scene) {
     }
 }
 
+QRectF cwQuickSceneView::toView(QRectF paperRect) const
+{
+    qDebug() << "PaperRect:" << paperRect;
+
+    QTransform transform;
+    // Shift target origin
+    auto boundingRect = this->boundingRect();
+    auto sceneRect = Scene->sceneRect();
+    auto topLeft = boundingRect.topLeft();
+    transform.translate(topLeft.x(), topLeft.y());
+
+    qDebug() << "Scene:" << Scene->sceneRect();
+
+    // Scale
+    qreal xratio = boundingRect.width()  / sceneRect.width();
+    qreal yratio = boundingRect.height() / sceneRect.height();
+    qreal ratio  = qMin(xratio, yratio);
+    transform.scale(ratio, ratio);
+
+    // // Offset by half “leftover” to center
+    // transform.translate((tRect.width()  - sRect.width()  * ratio) / (2.0 * ratio),
+    //                     (tRect.height() - sRect.height() * ratio) / (2.0 * ratio));
+
+
+    // Shift so (0,0) in sceneRect is at origin
+    auto sceneTopLeft = sceneRect.topLeft();
+    transform.translate(sceneTopLeft.x(), sceneTopLeft.y());
+
+    qDebug() << "Transform:" << transform.mapRect(paperRect);
+
+    return transform.mapRect(paperRect);
+}
+
 /**
 * @brief cwQuickSceneView::scene
 * @return

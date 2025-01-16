@@ -24,6 +24,7 @@ class cwCamera;
 #include "cwProjection.h"
 #include "cwCaptureItem.h"
 #include "cwUnits.h"
+#include "cwRegionSceneManager.h"
 
 class cwCaptureViewport : public cwCaptureItem
 {
@@ -34,6 +35,7 @@ class cwCaptureViewport : public cwCaptureItem
     Q_PROPERTY(QRect viewport READ viewport WRITE setViewport NOTIFY viewportChanged)
     Q_PROPERTY(cwScale* scaleOrtho READ scaleOrtho CONSTANT) //For ortho projections
     Q_PROPERTY(cw3dRegionViewer* view READ view WRITE setView NOTIFY viewChanged)
+    Q_PROPERTY(cwRegionSceneManager* sceneManager READ sceneManager WRITE setSceneManager NOTIFY sceneManagerChanged FINAL)
     Q_PROPERTY(QGraphicsItem* previewItem READ previewItem NOTIFY previewItemChanged)
     Q_PROPERTY(QGraphicsItem* fullResolutionItem READ fullResolutionItem NOTIFY fullResolutionItemChanged)
     Q_PROPERTY(double cameraAzimuth READ cameraAzimuth WRITE setCameraAzimuth NOTIFY cameraAzimuthChanged)
@@ -46,6 +48,9 @@ public:
 
     cw3dRegionViewer* view() const;
     void setView(cw3dRegionViewer* view);
+
+    cwRegionSceneManager *sceneManager() const;
+    void setSceneManager(cwRegionSceneManager *newSceneManager);
 
     int resolution() const;
     void setResolution(int resolution);
@@ -88,9 +93,12 @@ signals:
     void cameraAzimuthChanged();
     void positionAfterScaleChanged();
 
+    void sceneManagerChanged();
+
 private:
     //Properties
     QPointer<cw3dRegionViewer> View; //!<
+    QPointer<cwRegionSceneManager> m_sceneManager;
     int Resolution; //!<
     cwScale* ScaleOrtho; //!<
     double ItemScale;
@@ -106,7 +114,6 @@ private:
     int Columns;
     int Rows;
     QSize TileSize;
-    QHash<int, QPointF> IdToOrigin;
 
     //Scene state information
     cwCamera* CaptureCamera;
@@ -125,8 +132,9 @@ private:
     void updateBoundingBox();
     void deleteSceneItems();
 
+
 private slots:
-    void capturedImage(QImage image, int id);
+    // void capturedImage(QImage image, int id);
     void updateTransformForItems();
     void updateItemsPosition();
 };
@@ -202,6 +210,11 @@ inline double cwCaptureViewport::cameraPitch() const {
 */
 inline double cwCaptureViewport::cameraAzimuth() const {
     return CameraAzimuth;
+}
+
+inline cwRegionSceneManager *cwCaptureViewport::sceneManager() const
+{
+    return m_sceneManager;
 }
 
 #endif // CWVIEWPORTCAPTURE_H

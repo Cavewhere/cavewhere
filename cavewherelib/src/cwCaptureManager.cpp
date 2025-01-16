@@ -117,7 +117,6 @@ void cwCaptureManager::setPaperSize(QSizeF paperSize) {
         PaperSize = paperSize;
 
         //Update the paper rectangle
-        qDebug() << "PaperSize:" << PaperSize;
         auto paperRect = QRectF(QPointF(0, 0), PaperSize);
         PaperRectangle->setRect(paperRect);
         Scene->setSceneRect(paperRect);

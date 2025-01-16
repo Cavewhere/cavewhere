@@ -47,7 +47,7 @@ QQ.Item {
 
                 CameraProjectionSettings {
                     id: projectionSettingsId
-                    viewer: itemId.viewer
+                    viewer: itemId.viewer.renderer
                 }
             }
         }

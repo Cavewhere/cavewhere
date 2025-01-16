@@ -7,13 +7,39 @@ import "VectorMath.js" as VectorMath
 QQ.Rectangle {
     id: interactionId
 
-    property CaptureItem captureItem: null;
+    required property QuickSceneView quickSceneView
+    required property CaptureItem captureItem
     property double captureScale: 1.0
     property point captureOffset
     property bool selected: false
 
     //Private properties
-    property double _scale: captureScale
+    property double _scale: captureScale;
+    property rect _viewRect: quickSceneView.toView(captureItem.boundingBox)
+
+    onCaptureOffsetChanged: {
+        console.log("CaptureOffset:" + captureOffset + this)
+    }
+
+    // on_ScaleChanged: {
+    //     console.log("Scale changed:" + _scale);
+    // }
+
+    onXChanged: {
+        console.log("X:" + x + this)
+    }
+
+    onYChanged: {
+        console.log("Y:" + y + this)
+    }
+
+    onWidthChanged: {
+        console.log("Width:" + width + " " + this)
+    }
+
+    onHeightChanged: {
+        console.log("Height:" + height + " " + this);
+    }
 
     /**
       This find the maxium delta from the x and y.
@@ -148,10 +174,10 @@ QQ.Rectangle {
         anchors.centerIn: parent
     }
 
-    width: 0
-    height: 0
-    x: 0
-    y: 0
+    width: _viewRect.width
+    height: _viewRect.height
+    x: _viewRect.x
+    y: _viewRect.y
 
     border.width: 1
     border.color: "black"
@@ -168,6 +194,10 @@ QQ.Rectangle {
     onCaptureItemChanged: {
         state = interactionId.captureItem === null ? "" : "INIT_STATE"
     }
+
+    // QQ.TapHandler {
+
+    // }
 
     QQ.MouseArea {
         id: selectMouseAreaId
@@ -215,14 +245,14 @@ QQ.Rectangle {
         QQ.State {
             name: "INIT_STATE"
 
-            QQ.PropertyChanges {
-                interactionId {
-                    width: captureItem.boundingBox.width * _scale
-                    height: captureItem.boundingBox.height * _scale;
-                    x: ((captureItem.boundingBox.x + captureItem.positionOnPaper.x) - captureOffset.x) * _scale;
-                    y: ((captureItem.boundingBox.y + captureItem.positionOnPaper.y) - captureOffset.y) * _scale
-                }
-            }
+            // QQ.PropertyChanges {
+            //     interactionId {
+            //         width: captureItem.boundingBox.width * _scale
+            //         height: captureItem.boundingBox.height * _scale;
+            //         x: ((captureItem.boundingBox.x + captureItem.positionOnPaper.x) - captureOffset.x) * _scale;
+            //         y: ((captureItem.boundingBox.y + captureItem.positionOnPaper.y) - captureOffset.y) * _scale
+            //     }
+            // }
 
             QQ.PropertyChanges {
                 selectMouseAreaId {

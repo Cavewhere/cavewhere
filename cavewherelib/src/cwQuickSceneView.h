@@ -35,6 +35,9 @@ public:
     QGraphicsScene* scene() const;
     void setScene(QGraphicsScene* scene);
 
+    // QPointF toView(QPointF paperPoint) const;
+    Q_INVOKABLE QRectF toView(QRectF paperRect) const;
+
     virtual void paint(QPainter * painter);
 
 signals:

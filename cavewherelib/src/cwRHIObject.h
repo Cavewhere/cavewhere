@@ -38,9 +38,13 @@ public:
     virtual void updateResources(const ResourceUpdateData& data) = 0;
     virtual void render(const RenderData& data) = 0;
 
+    void setVisible(bool visible) { m_isVisible = visible; }
+    bool isVisible() const { return m_isVisible; }
+
     static QShader loadShader(const QString& name);
 private:
-         // QPointer<cwGLObject> m_guiObject;
+    bool m_isVisible = true;
+
 
 protected:    
 

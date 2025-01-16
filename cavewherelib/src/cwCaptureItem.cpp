@@ -40,6 +40,7 @@ void cwCaptureItem::setName(QString name) {
 void cwCaptureItem::setPositionOnPaper(QPointF positionOnPaper)
 {
     if(PositionOnPaper != positionOnPaper) {
+        qDebug() << "Position on paper:" << positionOnPaper;
         PositionOnPaper = positionOnPaper;
         emit positionOnPaperChanged();
     }

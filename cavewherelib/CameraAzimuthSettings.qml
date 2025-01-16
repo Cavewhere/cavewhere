@@ -4,8 +4,8 @@ import cavewherelib as Cavewhere
 import QtQuick.Controls
 
 ColumnLayout {
-
-    property TurnTableInteraction turnTableInteraction
+    id: settingsId
+    required property TurnTableInteraction turnTableInteraction
 
     implicitWidth: gridId.width
 //    height: 200
@@ -25,15 +25,15 @@ ColumnLayout {
             onClicked: {
                 azimuthAnimationId.restartRotation(0.0)
             }
-            enabled: turnTableInteraction.azimuth !== 0.0
-                     && !turnTableInteraction.azimuthLocked
+            enabled: settingsId.turnTableInteraction.azimuth !== 0.0
+                     && !settingsId.turnTableInteraction.azimuthLocked
         }
 
         LockButton {
             Layout.alignment: Qt.AlignRight
-            down: turnTableInteraction.azimuthLocked
+            down: settingsId.turnTableInteraction.azimuthLocked
             onClicked: {
-                turnTableInteraction.azimuthLocked = !turnTableInteraction.azimuthLocked
+                settingsId.turnTableInteraction.azimuthLocked = !settingsId.turnTableInteraction.azimuthLocked
             }
         }
 
@@ -44,8 +44,8 @@ ColumnLayout {
             onClicked: {
                 azimuthAnimationId.restartRotation(270.0)
             }
-            enabled: turnTableInteraction.azimuth !== 270.0
-                     && !turnTableInteraction.azimuthLocked
+            enabled: settingsId.turnTableInteraction.azimuth !== 270.0
+                     && !settingsId.turnTableInteraction.azimuthLocked
         }
 
         RowLayout {
@@ -54,13 +54,13 @@ ColumnLayout {
             width: northButton.width
 
             ClickTextInput {
-                text: Number(turnTableInteraction.azimuth).toFixed(1)
+                text: Number(settingsId.turnTableInteraction.azimuth).toFixed(1)
                 validator: doubleValidatorId
                 onFinishedEditting: (newText) => {
                     azimuthAnimationId.to = newText
                     azimuthAnimationId.restart()
                 }
-                enabled: !turnTableInteraction.azimuthLocked
+                enabled: !settingsId.turnTableInteraction.azimuthLocked
             }
 
             Cavewhere.CompassValidator {
@@ -79,8 +79,8 @@ ColumnLayout {
             onClicked: {
                 azimuthAnimationId.restartRotation(90.0)
             }
-            enabled: turnTableInteraction.azimuth !== 90.0
-                     && !turnTableInteraction.azimuthLocked
+            enabled: settingsId.turnTableInteraction.azimuth !== 90.0
+                     && !settingsId.turnTableInteraction.azimuthLocked
         }
 
         QQ.Item { width:1; height:1 }
@@ -91,15 +91,15 @@ ColumnLayout {
             onClicked: {
                 azimuthAnimationId.restartRotation(180.0)
             }
-            enabled: turnTableInteraction.azimuth !== 180.0
-                     && !turnTableInteraction.azimuthLocked
+            enabled: settingsId.turnTableInteraction.azimuth !== 180.0
+                     && !settingsId.turnTableInteraction.azimuthLocked
         }
         QQ.Item { width:1; height:1 }
     }
 
     GroupBox {
         title: "Animate"
-        enabled: !turnTableInteraction.azimuthLocked
+        enabled: !settingsId.turnTableInteraction.azimuthLocked
 
         RowLayout {
 
@@ -151,27 +151,27 @@ ColumnLayout {
 
     QQ.NumberAnimation {
         id: fullRotationAnimation
-        target: turnTableInteraction
+        target: settingsId.turnTableInteraction
         property: "azimuth"
         duration: 10000
         loops: QQ.Animation.Infinite
 
         function startCurrentPosition() {
-            fullRotationAnimation.from = turnTableInteraction.azimuth
-            fullRotationAnimation.to = turnTableInteraction.azimuth + 359.999
+            fullRotationAnimation.from = settingsId.turnTableInteraction.azimuth
+            fullRotationAnimation.to = settingsId.turnTableInteraction.azimuth + 359.999
             fullRotationAnimation.start()
         }
     }
 
     QQ.NumberAnimation {
         id: azimuthAnimationId
-        target: turnTableInteraction;
+        target: settingsId.turnTableInteraction;
         property: "azimuth";
         duration: 200;
         easing.type: QQ.Easing.InOutQuad
 
         function restartRotation(toRotation) {
-            var from = turnTableInteraction.azimuth;
+            var from = settingsId.turnTableInteraction.azimuth;
             var to = toRotation
             if(to > 180 && from <= 0.0) {
                 from = 360

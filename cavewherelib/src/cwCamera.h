@@ -98,7 +98,6 @@ Q_DECLARE_METATYPE(cwCamera*)
   */
 inline void cwCamera::setViewport(QRect viewport) {
     Viewport = viewport;
-    qDebug() << "Viewport changed:" << viewport;
     emit viewportChanged();
 }
 

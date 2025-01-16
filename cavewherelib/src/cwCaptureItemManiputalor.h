@@ -17,6 +17,7 @@
 
 //Our includes
 #include "cwCaptureManager.h"
+#include "cwQuickSceneView.h"
 class cwCaptureItem;
 
 class cwCaptureItemManiputalor : public QQuickItem
@@ -25,6 +26,7 @@ class cwCaptureItemManiputalor : public QQuickItem
     QML_NAMED_ELEMENT(CaptureItemManiputalor)
 
     Q_PROPERTY(cwCaptureManager* manager READ manager WRITE setManager NOTIFY managerChanged)
+    Q_PROPERTY(cwQuickSceneView* view READ view WRITE setView NOTIFY viewChanged FINAL)
 
 public:
     explicit cwCaptureItemManiputalor(QQuickItem *parent = 0);
@@ -32,8 +34,13 @@ public:
     cwCaptureManager* manager() const;
     void setManager(cwCaptureManager* manager);
 
+    cwQuickSceneView *view() const;
+    void setView(cwQuickSceneView *newView);
+
 signals:
     void managerChanged();
+
+    void viewChanged();
 
 public slots:
 
@@ -46,6 +53,7 @@ private slots:
 
 private:
     QPointer<cwCaptureManager> Manager; //!<
+    QPointer<cwQuickSceneView> m_view;
 
     //The lookups to convert between catpures and items
     QHash<cwCaptureItem*, QQuickItem*> CaptureToQuickItem;
@@ -56,7 +64,7 @@ private:
     double PaperToScreenScale; //Converts paper coordinates into screen coordinates
     QPointF SceneOffset;
 
-    QQuickItem* createInteractionItem();
+    QQuickItem* createInteractionItem(const QVariantMap& requiredProperties);
     void clear();
 
     void updateItemTransform(QQuickItem* item);

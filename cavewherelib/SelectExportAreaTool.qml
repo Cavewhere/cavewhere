@@ -24,7 +24,8 @@ QQ.Item {
         }
 
         var viewObject = captureViewComponentId.createObject()
-        viewObject.view = toolId.view
+        viewObject.view = toolId.view.renderer
+        viewObject.sceneManager = RootData.regionSceneManager
         viewObject.viewport = rectangle
         viewObject.cameraAzimuth = view.turnTableInteraction.azimuth
         viewObject.cameraPitch = view.turnTableInteraction.pitch
@@ -44,7 +45,6 @@ QQ.Item {
 
     QQ.Component {
         id: captureViewComponentId
-        // QQ.Rectangle {}
         CaptureViewport { }
     }
 

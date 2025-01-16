@@ -74,7 +74,9 @@ void cwCaptureItemManiputalor::fullUpdate()
 
     if(InteractionComponent == nullptr) {
         QQmlContext* context = QQmlEngine::contextForObject(this);
-        InteractionComponent = new QQmlComponent(context->engine(), QStringLiteral("qrc:/cavewherelib/cavewherelib/CaptureItemInteraction.qml"), this);
+        InteractionComponent = new QQmlComponent(context->engine(),
+                                                 QStringLiteral("qrc:/cavewherelib/cavewherelib/CaptureItemInteraction.qml"),
+                                                 this);
         cwDebug::printErrors(InteractionComponent);
     }
 
@@ -95,15 +97,20 @@ void cwCaptureItemManiputalor::insertItems(const QModelIndex &parent, int start,
 {
     Q_UNUSED(parent);
 
+    QVariantMap requiredProperties {{"quickSceneView", QVariant::fromValue(m_view.data())},
+                                   {"captureItem", QVariant::fromValue(nullptr)},
+                                   {"captureScale", PaperToScreenScale},
+                                   {"captureOffset", SceneOffset}};
+
     for(int i = start; i <= end; i++) {
         cwCaptureItem* item = captureItem(i);
 
         Q_ASSERT(item != nullptr);
 
         if(!CaptureToQuickItem.contains(item)) {
-            QQuickItem* quickItem = createInteractionItem();
-            quickItem->setProperty("captureItem", QVariant::fromValue(item));
-            updateItemTransform(quickItem);
+            requiredProperties["captureItem"] = QVariant::fromValue(item);
+            QQuickItem* quickItem = createInteractionItem(requiredProperties);
+
             CaptureToQuickItem.insert(item, quickItem);
             QuickItemToCapture.insert(quickItem, item);
         }
@@ -161,10 +168,11 @@ void cwCaptureItemManiputalor::managerDestroyed()
  * @brief cwCaptureItemManiputalor::createInteractionItem
  * @return This creates a instance of InteractionComponent
  */
-QQuickItem *cwCaptureItemManiputalor::createInteractionItem()
+QQuickItem *cwCaptureItemManiputalor::createInteractionItem(const QVariantMap& requiredProperties)
 {
     Q_ASSERT(InteractionComponent != nullptr);
-    QObject* object = InteractionComponent->create();
+    qDebug() << "Insert item:" << requiredProperties;
+    QObject* object = InteractionComponent->createWithInitialProperties(requiredProperties);
     QQuickItem* item = dynamic_cast<QQuickItem*>(object);
     Q_ASSERT(item != nullptr);
 
@@ -197,6 +205,7 @@ void cwCaptureItemManiputalor::clear()
  */
 void cwCaptureItemManiputalor::updateItemTransform(QQuickItem *item)
 {
+    qDebug() << "Update Transform:" << PaperToScreenScale << SceneOffset;
    item->setProperty("captureScale", PaperToScreenScale);
    item->setProperty("captureOffset", SceneOffset);
 }
@@ -222,4 +231,18 @@ cwCaptureItem *cwCaptureItemManiputalor::captureItem(int i) const
 */
 cwCaptureManager* cwCaptureItemManiputalor::manager() const {
     return Manager;
+}
+
+cwQuickSceneView *cwCaptureItemManiputalor::view() const
+{
+    return m_view;
+}
+
+void cwCaptureItemManiputalor::setView(cwQuickSceneView *newView)
+{
+    if (m_view == newView) {
+        return;
+    }
+    m_view = newView;
+    emit viewChanged();
 }

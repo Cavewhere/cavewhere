@@ -25,23 +25,16 @@ class cwRhiItemRenderer;
 #include "cwGeometryItersecter.h"
 #include "cwScene.h"
 
-class cwRenderObject : public QObject, protected QOpenGLFunctions
-{
+class cwRenderObject : public QObject {
     Q_OBJECT
+
+    Q_PROPERTY(bool visible READ isVisible WRITE setVisible NOTIFY visibleChanged FINAL)
 
     friend class cwRhiScene;
 
 public:
     cwRenderObject(QObject* parent = nullptr);
     ~cwRenderObject();
-
-    //These methods should only be called in the rendering thread
-    [[deprecated("Should be remove. No longer used.")]]
-    virtual void initialize() {}
-    [[deprecated("Should be remove. No longer used.")]]
-    virtual void releaseResources() {}
-    [[deprecated("Should be remove. No longer used.")]]
-    virtual void draw() {}
 
     void setScene(cwScene *scene);
     cwScene *scene() const;
@@ -50,12 +43,15 @@ public:
 
     cwCamera* camera() const;
 
-    [[deprecated("Use update instead.")]]
-    void markDataAsDirty();
     void update();
+
+    bool isVisible() const;
+    void setVisible(bool newVisible);
 
 signals:
     void sceneChange();
+
+    void visibleChanged();
 
 protected:
     virtual cwRHIObject* createRHIObject() { return nullptr; }
@@ -64,7 +60,7 @@ protected:
 private:
     cwScene* m_scene;
 
-
+    bool m_visible = true;
 };
 
 
@@ -76,6 +72,11 @@ private:
 inline cwScene *cwRenderObject::scene() const
 {
     return m_scene;
+}
+
+inline bool cwRenderObject::isVisible() const
+{
+    return m_visible;
 }
 
 
