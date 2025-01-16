@@ -4,6 +4,7 @@ import QtQuick.Layouts
 
 GroupBox {
     id: groupBoxId
+    objectName: "paperMargin"
 
     property alias leftMargin: leftId.value
     property alias rightMargin: rightId.value
@@ -54,6 +55,7 @@ GroupBox {
 
             PaperMarginSpinBox {
                 id: topId
+                objectName: "topMarginSpinBox"
                 text: "Top"
                 unit: groupBoxId.unit
             }
@@ -62,12 +64,14 @@ GroupBox {
 
             PaperMarginSpinBox {
                 id: leftId
+                objectName: "leftMarginSpinBox"
                 text: "Left"
                 unit: groupBoxId.unit
             }
 
             PaperMarginSpinBox {
                 id: allId
+                objectName: "allMarginSpinBox"
                 text: "All"
                 unit: groupBoxId.unit
 
@@ -81,6 +85,7 @@ GroupBox {
 
             PaperMarginSpinBox {
                 id: rightId
+                objectName: "rightMarginSpinBox"
                 text: "Right"
                 unit: groupBoxId.unit
             }
@@ -89,6 +94,7 @@ GroupBox {
 
             PaperMarginSpinBox {
                 id: bottomId
+                objectName: "bottomMarginSpinBox"
                 text: "Bottom"
                 unit: groupBoxId.unit
             }

@@ -32,6 +32,26 @@ MainWindowTest {
             let options = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->mapOptions->opitonsButton")
             mouseClick(options)
 
+
+            //Make sure all the margins are displayed correctly
+            let topMargin = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->mapOptions->paperMargin->PaperMarginGroupBox->topMarginSpinBox->spinBox")
+            let bottomMargin = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->mapOptions->paperMargin->PaperMarginGroupBox->bottomMarginSpinBox->spinBox")
+            let rightMargin = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->mapOptions->paperMargin->PaperMarginGroupBox->rightMarginSpinBox->spinBox")
+            let leftMargin = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->mapOptions->paperMargin->PaperMarginGroupBox->leftMarginSpinBox->spinBox")
+            let allMargin = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->mapOptions->paperMargin->PaperMarginGroupBox->allMarginSpinBox->spinBox")
+
+            verify(topMargin.realValue === 1.0)
+            verify(topMargin.displayText === "1.00")
+            verify(bottomMargin.realValue === 1.0)
+            verify(bottomMargin.displayText === "1.00")
+            verify(leftMargin.realValue === 1.0)
+            verify(leftMargin.displayText === "1.00")
+            verify(rightMargin.realValue === 1.0)
+            verify(rightMargin.displayText === "1.00")
+            verify(allMargin.realValue === 1.0)
+            verify(allMargin.displayText === "1.00")
+
+
             //Click on the add layer button
             let addLayerButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->addLayerButton")
             mouseClick(addLayerButton)

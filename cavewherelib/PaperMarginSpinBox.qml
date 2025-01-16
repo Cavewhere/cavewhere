@@ -7,7 +7,7 @@ QQ.Rectangle {
 
     property alias text: textId.text
     property alias unit: unitId.text
-    property alias value: spinBoxId.value
+    property alias value: spinBoxId.realValue
 
     radius: 3
     width: topId.width + 2 * radius
@@ -27,6 +27,7 @@ QQ.Rectangle {
 
             DoubleSpinBox {
                 id: spinBoxId
+                objectName: "spinBox"
                 decimals: pageMarginId.unit === "in" ? 2 : 0
                 realValue: pageMarginId.unit === "in" ? .1 : 10
                 implicitWidth: 70
@@ -35,7 +36,6 @@ QQ.Rectangle {
             Text {
                 id: unitId
             }
-
         }
     }
 }

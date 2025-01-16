@@ -241,6 +241,7 @@ ColumnLayout {
                         }
 
                         function updateDefaultMargins() {
+                            console.log("Update default margins!");
                             let item = paperSizeModel.get(currentIndex);
                             paperMarginGroupBoxId.setDefaultLeft(item.defaultLeftMargin)
                             paperMarginGroupBoxId.setDefaultRight(item.defaultRightMargin)
@@ -333,7 +334,10 @@ ColumnLayout {
             PaperMarginGroupBox {
                 id: paperMarginGroupBoxId
 
-                onLeftMarginChanged: mapOptionsId.screenCaptureManager.leftMargin = leftMargin
+                onLeftMarginChanged: {
+                    console.log("LeftMargin change:" + leftMargin)
+                    mapOptionsId.screenCaptureManager.leftMargin = leftMargin
+                }
                 onRightMarginChanged: mapOptionsId.screenCaptureManager.rightMargin = rightMargin
                 onTopMarginChanged: mapOptionsId.screenCaptureManager.topMargin = topMargin
                 onBottomMarginChanged: mapOptionsId.screenCaptureManager.bottomMargin = bottomMargin
