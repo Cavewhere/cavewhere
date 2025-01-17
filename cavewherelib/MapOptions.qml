@@ -172,6 +172,7 @@ ColumnLayout {
             }
 
             InformationButton {
+                objectName: "memoryHelpArea"
                 showItemOnClick: memoryHelpAreaId
             }
         }

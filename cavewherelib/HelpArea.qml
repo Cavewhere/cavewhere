@@ -19,7 +19,7 @@ QQ.Rectangle {
     property bool animationToInvisible: true
 
     color: "#BBBBBB"
-    implicitHeight: layout.height
+    implicitHeight: layout.implicitHeight
     radius: 5
     clip: true
 
@@ -43,15 +43,12 @@ QQ.Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        implicitHeight: contentId.height
+        implicitHeight: contentId.implicitHeight
 
 
         QQ.Image {
             id: icon
             sourceSize: Qt.size(16, 16)
-            // implicitWidth: sourceSize.width
-            // implicitHeight: sourceSize.height
-
         }
 
         ColumnLayout {
@@ -63,8 +60,6 @@ QQ.Rectangle {
                 Layout.fillWidth: true
                 fillMode: QQ.Image.PreserveAspectFit
                 smooth: true
-//                implicitHeight: helpImageId.paintedHeight
-//                implicitWidth: helpImageId.paintedWidth
             }
 
             Text {
@@ -92,50 +87,50 @@ QQ.Rectangle {
 
             QQ.PropertyChanges {
                 helpArea {
-                    implicitHeight: contentId.height + 10
+                    implicitHeight: contentId.implicitHeight + 10
                 }
             }
         }
     ]
 
-    transitions: [
-         QQ.Transition {
-            from: ""
-            to: "VISIBLE"
+    // transitions: [
+    //      QQ.Transition {
+    //         from: ""
+    //         to: "VISIBLE"
 
-            QQ.SequentialAnimation {
+    //         QQ.SequentialAnimation {
 
-                QQ.PropertyAction { target: privateData; property: "inTransition"; value: true }
-                QQ.PropertyAnimation {
-                    target: helpArea
-                    property: "implicitHeight"
-                    from: 0
-                    to: contentId.height
-                    duration: helpArea.animationToVisible ? 200 : 0
-                }
-                QQ.PropertyAction { target: privateData; property: "inTransition"; value: false }
-            }
-        },
+    //             QQ.PropertyAction { target: privateData; property: "inTransition"; value: true }
+    //             QQ.PropertyAnimation {
+    //                 target: helpArea
+    //                 property: "implicitHeight"
+    //                 from: 0
+    //                 to: contentId.implicitHeight
+    //                 duration: helpArea.animationToVisible ? 200 : 0
+    //             }
+    //             QQ.PropertyAction { target: privateData; property: "inTransition"; value: false }
+    //         }
+    //     },
 
-         QQ.Transition {
-            from: "VISIBLE"
-            to: ""
+    //      QQ.Transition {
+    //         from: "VISIBLE"
+    //         to: ""
 
-            QQ.SequentialAnimation {
+    //         QQ.SequentialAnimation {
 
-                QQ.PropertyAction { target: privateData; property: "inTransition"; value: true }
-                QQ.PropertyAction { target: helpArea; property: "visible"; value: true }
+    //             QQ.PropertyAction { target: privateData; property: "inTransition"; value: true }
+    //             QQ.PropertyAction { target: helpArea; property: "visible"; value: true }
 
-                QQ.NumberAnimation {
-                    target: helpArea
-                    property: "implicitHeight"
-                    to: 0
-                    duration: helpArea.animationToInvisible ? 200 : 0
-                }
+    //             QQ.NumberAnimation {
+    //                 target: helpArea
+    //                 property: "implicitHeight"
+    //                 to: 0
+    //                 duration: helpArea.animationToInvisible ? 200 : 0
+    //             }
 
-                QQ.PropertyAction { target: helpArea; property: "visible"; value: false }
-                QQ.PropertyAction { target: privateData; property: "inTransition"; value: false }
-            }
-        }
-    ]
+    //             QQ.PropertyAction { target: helpArea; property: "visible"; value: false }
+    //             QQ.PropertyAction { target: privateData; property: "inTransition"; value: false }
+    //         }
+    //     }
+    // ]
 }

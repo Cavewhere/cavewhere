@@ -86,6 +86,12 @@ MainWindowTest {
             tryVerify(() => { return !areaTool.visible })
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "mapPage" });
 
+            wait(100);
+
+            //Click on help
+            let helpMemory = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->mapOptions->memoryHelpArea")
+            mouseClick(helpMemory)
+
 
 
             // let label_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->GroupBox->profileButton->label")
