@@ -400,8 +400,8 @@ ColumnLayout {
 
                         delegate: Text {
                             id: textDelegateId
-                            property string layerNameRole
-                            property int index
+                            required property string layerNameRole
+                            required property int index
 
                             anchors.left: parent.left
                             anchors.right: parent.right
@@ -440,54 +440,54 @@ ColumnLayout {
                 }
             }
 
-            QC.GroupBox {
-                id: layerGroupsId
-                title: "Layer Groups"
+            // QC.GroupBox {
+            //     id: layerGroupsId
+            //     title: "Layer Groups"
 
-                QC.ScrollView {
-                    implicitWidth: paperMarginGroupBoxId.width
-                    implicitHeight: 100
+            //     QC.ScrollView {
+            //         implicitWidth: paperMarginGroupBoxId.width
+            //         implicitHeight: 100
 
-                    QQ.ListView {
-                        id: groupListViewId
+            //         QQ.ListView {
+            //             id: groupListViewId
 
-                        implicitWidth: paperMarginGroupBoxId.width
-                        implicitHeight: 100
+            //             implicitWidth: paperMarginGroupBoxId.width
+            //             implicitHeight: 100
 
-                        model: mapOptionsId.screenCaptureManager.groupModel
+            //             model: mapOptionsId.screenCaptureManager.groupModel
 
-                        delegate: QQ.Rectangle {
-                            id: delegateId
-                            property string captureNameRole
+            //             delegate: QQ.Rectangle {
+            //                 id: delegateId
+            //                 required property string captureNameRole
 
-                            width: 100
-                            height: 100
-                            //                                color: "red"
+            //                 width: 100
+            //                 height: 100
+            //                 //                                color: "red"
 
-                            // QQ.VisualDataModel {
-                            //     id: visualModel
-                            //     model: mapOptionsId.screenCaptureManager.groupModel
-                            //     rootIndex: mapOptionsId.screenCaptureManager.groupModel.index(index)
+            //                 // QQ.VisualDataModel {
+            //                 //     id: visualModel
+            //                 //     model: mapOptionsId.screenCaptureManager.groupModel
+            //                 //     rootIndex: mapOptionsId.screenCaptureManager.groupModel.index(index)
 
-                            //     delegate: Text {
-                            //         text: captureNameRole
-                            //     }
-                            // }
+            //                 //     delegate: Text {
+            //                 //         text: captureNameRole
+            //                 //     }
+            //                 // }
 
-                            QQ.ListView {
-                                // model: visualModel
-                                model: mapOptionsId.screenCaptureManager.groupModel
-                                anchors.fill: parent
-                                delegate: Text {
-                                    text: delegateId.captureNameRole
-                                }
+            //                 QQ.ListView {
+            //                     // model: visualModel
+            //                     model: mapOptionsId.screenCaptureManager.groupModel
+            //                     anchors.fill: parent
+            //                     delegate: Text {
+            //                         text: delegateId.captureNameRole
+            //                     }
 
 
-                            }
-                        }
-                    }
-                }
-            }
+            //                 }
+            //             }
+            //         }
+            //     }
+            // }
 
 
             QC.GroupBox {
