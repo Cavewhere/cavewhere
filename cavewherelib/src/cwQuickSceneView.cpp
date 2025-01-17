@@ -39,6 +39,8 @@ void cwQuickSceneView::setScene(QGraphicsScene* scene) {
                     m_image = QImage(size.toSize(), QImage::Format_ARGB32);
                 }
 
+                m_image.fill(Qt::transparent);
+
                 QPainter painter(&m_image);
                 Scene->render(&painter, boundingRect(), Scene->sceneRect(), Qt::KeepAspectRatio);
                 update();

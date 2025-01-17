@@ -61,7 +61,7 @@ cwCaptureManager::cwCaptureManager(QObject *parent) :
     pen.setWidthF(1.0);
 
     QBrush brush;
-    brush.setColor(Qt::white);
+    brush.setColor(Qt::transparent);
     brush.setStyle(Qt::SolidPattern);
 
     PaperRectangle->setPen(pen);
@@ -448,14 +448,14 @@ void cwCaptureManager::saveScene()
     QRectF imageRect = QRectF(QPointF(), imageSize);
     QRectF sceneRect = QRectF(QPointF(), paperSize()); //Scene->itemsBoundingRect();
 
-    auto saveToImage = [&](FileType type) {
+    auto saveToImage = [&](FileType type, const QColor& backgroundFill) {
         auto size = imageSize.toSize();
 
         auto outputImage = cwMappedQImage::createDiskImageWithTempFile(QLatin1String("capture-manager"), size);
 
         qint64 imageSizeBytes = requiredSizeInBytes();
         Q_ASSERT(outputImage.sizeInBytes() == imageSizeBytes);
-        outputImage.fill(Qt::white);
+        outputImage.fill(backgroundFill);
 
         cwImageResolution resolutionDPI(resolution(), cwUnits::DotsPerInch);
         cwImageResolution resolutionDPM = resolutionDPI.convertTo(cwUnits::DotsPerMeter);
@@ -504,8 +504,10 @@ void cwCaptureManager::saveScene()
         switch (fileType()) {
         case PNG:
         case TIF:
+            saveToImage(fileType(), Qt::transparent);
+            break;
         case JPG:
-            saveToImage(fileType());
+            saveToImage(fileType(), Qt::white);
             break;
         case SVG:
             saveToSVG();
