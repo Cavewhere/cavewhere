@@ -364,7 +364,7 @@ ColumnLayout {
                     }
 
                     Text {
-                        text: "Landscrape"
+                        text: "Landscape"
                     }
                 }
             }
