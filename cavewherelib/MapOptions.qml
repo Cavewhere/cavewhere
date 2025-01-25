@@ -20,10 +20,11 @@ ColumnLayout {
     function updatePaperRectangle(paperWidth, paperHeight) {
         let i = paperSizeInteraction
 
-        i.paperRectangle.paperWidth = i.paperRectangle.landScape ? paperHeight : paperWidth
-        i.paperRectangle.paperHeight = i.paperRectangle.landScape ? paperWidth : paperHeight
-        //        paperMarginGroupBoxId.unit = paperunits
+        let swapDim = i.paperRectangle.landScape
+            && !paperSizeModel.get(paperComboBoxId.currentIndex).sizeEdittable
 
+        i.paperRectangle.paperWidth = swapDim ? paperHeight : paperWidth
+        i.paperRectangle.paperHeight = swapDim ? paperWidth : paperHeight
 
         //Stretch the paper to the max width or height of the screen
         let paperAspect = paperWidth / paperHeight;
@@ -65,46 +66,50 @@ ColumnLayout {
 
         QQ.ListElement {
             name: "Letter"
-            width: 8.5
-            height: 11
+            width: "8.5"
+            height: "11"
             units: "in"
             defaultLeftMargin: 1.0
             defaultRightMargin: 1.0
             defaultTopMargin: 1.0
             defaultBottomMargin: 1.0
+            sizeEdittable: false
         }
 
         QQ.ListElement {
             name: "Legal"
-            width: 8.5
-            height: 14
+            width: "8.5"
+            height: "14"
             units: "in"
             defaultLeftMargin: 1.0
             defaultRightMargin: 1.0
             defaultTopMargin: 1.0
             defaultBottomMargin: 1.0
+            sizeEdittable: false
         }
 
         QQ.ListElement {
             name: "A4"
-            width: 8.26772
-            height: 11.6929
+            width: "8.26772"
+            height: "11.6929"
             units: "in"
             defaultLeftMargin: 1.0
             defaultRightMargin: 1.0
             defaultTopMargin: 1.0
             defaultBottomMargin: 1.0
+            sizeEdittable: false
         }
 
         QQ.ListElement {
             name: "Custom Size"
-            width: 8.5
-            height: 11
+            width: "8.5"
+            height: "11"
             units: "in"
             defaultLeftMargin: 1.0
             defaultRightMargin: 1.0
             defaultTopMargin: 1.0
             defaultBottomMargin: 1.0
+            sizeEdittable: true
         }
     }
 
@@ -228,6 +233,7 @@ ColumnLayout {
 
                     QC.ComboBox {
                         id: paperComboBoxId
+                        objectName: "paperComboBox"
                         model: paperSizeModel
                         textRole: "name"
 
@@ -268,8 +274,9 @@ ColumnLayout {
 
                         ClickTextInput {
                             id: paperSizeWidthInputId
+                            objectName: "paperWidthInput"
                             text: mapOptionsId.screenCaptureManager.paperSize.width
-                            readOnly: paperComboBoxId.currentIndex != 3
+                            readOnly: !paperSizeModel.get(paperComboBoxId.currentIndex).sizeEdittable
                             onFinishedEditting: (newText) => {
                                 paperSizeModel.setProperty(paperComboBoxId.currentIndex, "width", newText)
                                 paperComboBoxId.updatePaperRectangleFromModel();
@@ -286,6 +293,7 @@ ColumnLayout {
                         }
 
                         ClickTextInput {
+                            objectName: "paperHeightInput"
                             text: mapOptionsId.screenCaptureManager.paperSize.height
                             readOnly: paperSizeWidthInputId.readOnly
                             onFinishedEditting: (newText) => {
@@ -348,6 +356,7 @@ ColumnLayout {
             QC.GroupBox {
                 id: orientationId
                 title: "Orientation"
+                visible: !paperSizeModel.get(paperComboBoxId.currentIndex).sizeEdittable
 
                 RowLayout {
                     id: portraitLandscrapSwitch
@@ -357,6 +366,7 @@ ColumnLayout {
 
                     QC.Switch {
                         id: orientationSwitchId
+                        objectName: "orientaitonSwitch"
                         onCheckedChanged: {
                             mapOptionsId.paperSizeInteraction.paperRectangle.landScape = checked
                             paperComboBoxId.updatePaperRectangleFromModel()

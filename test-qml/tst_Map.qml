@@ -11,7 +11,7 @@ MainWindowTest {
         name: "Map"
         when: windowShown
 
-        function test_exportMap() {
+        function setupExport() {
             TestHelper.loadProjectFromFile(RootData.project, "://datasets/tst_ScrapInteraction/projectedProfile.cw");
 
             //Zoom into the data, in the 3d view
@@ -85,31 +85,82 @@ MainWindowTest {
             let areaTool = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool");
             tryVerify(() => { return !areaTool.visible })
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "mapPage" });
+        }
 
-            wait(100);
+        function test_exportMap() {
+            setupExport();
+        }
 
-            //Click on help
-            let helpMemory = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->mapOptions->memoryHelpArea")
-            mouseClick(helpMemory)
+        function test_paperSize() {
+            setupExport()
 
+            //Change to orientation to landscape
+            let landscapeButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->mapOptions->GroupBox->orientaitonSwitch")
+            mouseClick(landscapeButton)
 
+            let paperWidth = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->mapOptions->GroupBox->paperWidthInput")
+            let paperHeight = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->mapOptions->GroupBox->paperHeightInput")
 
-            // let label_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->GroupBox->profileButton->label")
-            // mouseClick(label_obj1, 14.5273, 14.9609)
+            verify(paperWidth.text === "11")
+            verify(paperHeight.text === "8.5")
+            verify(landscapeButton.visible === true);
 
-            // tryVerify(() => { return turnTableInteraction.pitch === 0.0})
+            //Change the paper size
+            let paperComboBox_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->mapOptions->GroupBox->paperComboBox")
+            let customPaperIndex = paperComboBox_obj1.find("Custom Size")
+            paperComboBox_obj1.currentIndex = customPaperIndex
+            verify(paperComboBox_obj1.currentText === "Custom Size")
 
-            // let exportTab = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->exportTab")
-            // mouseClick(exportTab)
+            //Make sure orientation is disabled
+            verify(landscapeButton.visible === false);
 
-            // let optionsButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->exportViewTab->opitonsButton")
-            // mouseClick(optionsButton)
+            //Change the paper height to 14
+            mouseClick(paperHeight)
+            keyClick(49, 0) //1
+            keyClick(53, 0) //5
+            keyClick(16777220, 0) //Return
 
+            //Make the paper width and height is correct
+            verify(paperHeight.text === "15")
 
+            mouseClick(paperWidth)
+            keyClick(49, 0) //1
+            keyClick(48, 0) //0
+            keyClick(16777220, 0) //Return
 
+            //Make the paper width and height is correct
+            verify(paperWidth.text === "10")
 
+            //Switch to letter
+            let legalPaperIndex = paperComboBox_obj1.find("Legal")
+            paperComboBox_obj1.currentIndex = legalPaperIndex
+            verify(paperComboBox_obj1.currentText === "Legal")
 
-            wait(1000000)
+            //Make sure orientation is disabled
+            verify(landscapeButton.visible === true);
+
+            //Verify that we're still in land scape
+            verify(paperWidth.text === "14")
+            verify(paperHeight.text === "8.5")
+
+            wait(100)
+
+            //Click on landscapeButton again to put in portrate
+            mouseClick(landscapeButton)
+
+            //Make sure we flipped
+            verify(paperWidth.text === "8.5")
+            verify(paperHeight.text === "14")
+
+            //Switch back to custom, make sure the custom numbers are remembered
+            customPaperIndex = paperComboBox_obj1.find("Custom Size")
+            paperComboBox_obj1.currentIndex = customPaperIndex
+            verify(paperComboBox_obj1.currentText === "Custom Size")
+            verify(paperHeight.text === "15")
+            verify(paperWidth.text === "10")
+
+            // wait(1000000);
+
         }
     }
 }
