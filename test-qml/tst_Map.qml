@@ -89,6 +89,35 @@ MainWindowTest {
 
         function test_exportMap() {
             setupExport();
+
+            //Test that the export works
+            verify(false)
+        }
+
+        function test_moveMapLayer() {
+            setupExport();
+
+            wait(100)
+
+            let captureItem0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0")
+            mouseClick(captureItem0_obj1)
+
+            verify(captureItem0_obj1.selected === true)
+
+            console.log("Position on paper:" + captureItem0_obj1.captureItem.positionOnPaper)
+
+            verify(captureItem0_obj1.captureItem.positionOnPaper === Qt.point(1.025, 1.025))
+
+            //Drag
+            mouseDrag(captureItem0_obj1, 82.8114, 136.675, 10, 15)
+
+            //Values have been visually verified, that the drag works
+            let delta = 0.0001
+            fuzzyCompare(captureItem0_obj1.captureItem.positionOnPaper.x, 1.37237, delta)
+            fuzzyCompare(captureItem0_obj1.captureItem.positionOnPaper.y, 1.45508, delta)
+
+            //Check that the resize works
+
         }
 
         function test_paperSize() {
@@ -158,9 +187,6 @@ MainWindowTest {
             verify(paperComboBox_obj1.currentText === "Custom Size")
             verify(paperHeight.text === "15")
             verify(paperWidth.text === "10")
-
-            // wait(1000000);
-
         }
     }
 }

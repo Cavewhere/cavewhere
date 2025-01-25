@@ -54,35 +54,14 @@ void cwQuickSceneView::setScene(QGraphicsScene* scene) {
 
 QRectF cwQuickSceneView::toView(QRectF paperRect) const
 {
-    qDebug() << "PaperRect:" << paperRect;
-
-    QTransform transform;
-    // Shift target origin
-    auto boundingRect = this->boundingRect();
-    auto sceneRect = Scene->sceneRect();
-    auto topLeft = boundingRect.topLeft();
-    transform.translate(topLeft.x(), topLeft.y());
-
-    qDebug() << "Scene:" << Scene->sceneRect();
-
-    // Scale
-    qreal xratio = boundingRect.width()  / sceneRect.width();
-    qreal yratio = boundingRect.height() / sceneRect.height();
-    qreal ratio  = qMin(xratio, yratio);
-    transform.scale(ratio, ratio);
-
-    // // Offset by half “leftover” to center
-    // transform.translate((tRect.width()  - sRect.width()  * ratio) / (2.0 * ratio),
-    //                     (tRect.height() - sRect.height() * ratio) / (2.0 * ratio));
-
-
-    // Shift so (0,0) in sceneRect is at origin
-    auto sceneTopLeft = sceneRect.topLeft();
-    transform.translate(sceneTopLeft.x(), sceneTopLeft.y());
-
-    qDebug() << "Transform:" << transform.mapRect(paperRect);
-
+    QTransform transform = toViewTransform();
     return transform.mapRect(paperRect);
+}
+
+QPointF cwQuickSceneView::toPaper(QPointF pointPixel) const
+{
+    QTransform transform = toViewTransform().inverted();
+    return transform.map(pointPixel);
 }
 
 /**
@@ -105,4 +84,33 @@ void cwQuickSceneView::paint(QPainter *painter)
     //Using the Scene here doesn't work because of threading and qtimer issue and will cause
     //high CPU usage in a QTimer that's internal to the Scene. Qt doc warns against this
     painter->drawImage(QPoint(0,0), m_image);
+}
+
+QTransform cwQuickSceneView::toViewTransform() const
+{
+    QTransform transform;
+    // Shift target origin
+    auto boundingRect = this->boundingRect();
+    auto sceneRect = Scene->sceneRect();
+    auto topLeft = boundingRect.topLeft();
+    transform.translate(topLeft.x(), topLeft.y());
+
+    // qDebug() << "Scene:" << Scene->sceneRect();
+
+    // Scale
+    qreal xratio = boundingRect.width()  / sceneRect.width();
+    qreal yratio = boundingRect.height() / sceneRect.height();
+    qreal ratio  = qMin(xratio, yratio);
+    transform.scale(ratio, ratio);
+
+    // // Offset by half “leftover” to center
+    // transform.translate((tRect.width()  - sRect.width()  * ratio) / (2.0 * ratio),
+    //                     (tRect.height() - sRect.height() * ratio) / (2.0 * ratio));
+
+
+    // Shift so (0,0) in sceneRect is at origin
+    auto sceneTopLeft = sceneRect.topLeft();
+    transform.translate(sceneTopLeft.x(), sceneTopLeft.y());
+
+    return transform;
 }

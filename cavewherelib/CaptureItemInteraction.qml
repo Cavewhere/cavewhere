@@ -167,6 +167,10 @@ QQ.Rectangle {
         captureItem.rotation += sign * angle;
     }
 
+    function updatePaperScene() {
+        captureItem.positionOnPaper = quickSceneView.toPaper(Qt.point(x, y));
+    }
+
     //This item is used to calculate the center of the interaction capture.
     //It is used for the rotation of the item
     QQ.Item {
@@ -195,27 +199,32 @@ QQ.Rectangle {
         state = interactionId.captureItem === null ? "" : "INIT_STATE"
     }
 
-    // QQ.TapHandler {
-
-    // }
-
-    QQ.MouseArea {
-        id: selectMouseAreaId
-
-        property point lastPoint;
-        property bool positionHasChange: false
-
-        /**
-          This should be called on the onReleased.
-
-          @return bool - True if the user has clicked and false if they haven't
-          */
-        function hasClicked() {
-            return !positionHasChange
-        }
-
-        anchors.fill: parent
+    QQ.TapHandler {
+        id: selectTapId
     }
+
+    QQ.DragHandler {
+        id: dragHandler
+        enabled: interactionId.selected
+    }
+
+    // QQ.MouseArea {
+    //     id: selectMouseAreaId
+
+    //     property point lastPoint;
+    //     property bool positionHasChange: false
+
+    //     /**
+    //       This should be called on the onReleased.
+
+    //       @return bool - True if the user has clicked and false if they haven't
+    //       */
+    //     function hasClicked() {
+    //         return !positionHasChange
+    //     }
+
+    //     anchors.fill: parent
+    // }
 
     RectangleHandle {
         id: topLeftHandle
@@ -255,27 +264,52 @@ QQ.Rectangle {
             // }
 
             QQ.PropertyChanges {
-                selectMouseAreaId {
-                    onPressed: (mouse) => {
-                        lastPoint = Utils.mousePositionToGlobal(selectMouseAreaId)
-                        positionHasChange = false;
-                    }
-
-                    onPositionChanged: (mouse) => {
-                        //Translate the item
-                        var newPosition = Utils.mousePositionToGlobal(selectMouseAreaId);
-                        var delta = Qt.point(pixelToPaper(newPosition.x - lastPoint.x),
-                                             pixelToPaper(newPosition.y - lastPoint.y));
-                        var origin = captureItem.positionOnPaper;
-
-                        captureItem.positionOnPaper = Qt.point(origin.x + delta.x,
-                                                               origin.y + delta.y)
-                        lastPoint = newPosition
-                        positionHasChange = true
-                    }
-
-                    onReleased: (mouse) => {
+                selectTapId {
+                    onTapped: (eventPoint, button) => {
                         interactionId.selected = true
+                    }
+                }
+
+                // selectMouseAreaId {
+                //     onPressed: (mouse) => {
+                //         lastPoint = Utils.mousePositionToGlobal(selectMouseAreaId)
+                //         positionHasChange = false;
+                //     }
+
+                //     onPositionChanged: (mouse) => {
+                //         //Translate the item
+                //         var newPosition = Utils.mousePositionToGlobal(selectMouseAreaId);
+                //         var delta = Qt.point(pixelToPaper(newPosition.x - lastPoint.x),
+                //                              pixelToPaper(newPosition.y - lastPoint.y));
+                //         var origin = captureItem.positionOnPaper;
+
+                //         captureItem.positionOnPaper = Qt.point(origin.x + delta.x,
+                //                                                origin.y + delta.y)
+                //         lastPoint = newPosition
+                //         positionHasChange = true
+                //     }
+
+                //     onReleased: (mouse) => {
+                //         interactionId.selected = true
+                //     }
+                // }
+            }
+        },
+
+        QQ.State {
+            name: "SELECTED"
+            extend: "INIT_STATE"
+            QQ.PropertyChanges {
+
+
+                interactionId {
+                    onXChanged: {
+                        console.log("Selected x changed:" + interactionId.x)
+                        interactionId.updatePaperScene();
+                    }
+                    onYChanged: {
+                        console.log("Selected y changed:" + interactionId.y)
+                        interactionId.updatePaperScene();
                     }
                 }
             }
@@ -283,17 +317,17 @@ QQ.Rectangle {
 
         QQ.State {
             name: "SELECTED_RESIZE_STATE"
-            extend: "INIT_STATE"
+            extend: "SELECTED"
 
             QQ.PropertyChanges {
-                selectMouseAreaId {
-                    onReleased: {
-                        if(hasClicked())
-                        {
-                            interactionId.state = "SELECTED_ROTATE_STATE"
-                        }
+                selectTapId {
+                    onTapped: (eventPoint, button) => {
+                        interactionId.state = "SELECTED_ROTATE_STATE"
                     }
                 }
+
+
+
             }
 
             QQ.PropertyChanges {
@@ -348,12 +382,9 @@ QQ.Rectangle {
             extend: "INIT_STATE"
 
             QQ.PropertyChanges {
-                selectMouseAreaId {
-                    onReleased: {
-                        if(hasClicked())
-                        {
-                            interactionId.state = "SELECTED_RESIZE_STATE"
-                        }
+                selectTapId {
+                    onTapped: (eventPoint, button) => {
+                        interactionId.state = "SELECTED_RESIZE_STATE"
                     }
                 }
             }

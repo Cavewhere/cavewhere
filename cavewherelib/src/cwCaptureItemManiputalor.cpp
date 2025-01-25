@@ -110,6 +110,7 @@ void cwCaptureItemManiputalor::insertItems(const QModelIndex &parent, int start,
         if(!CaptureToQuickItem.contains(item)) {
             requiredProperties["captureItem"] = QVariant::fromValue(item);
             QQuickItem* quickItem = createInteractionItem(requiredProperties);
+            quickItem->setObjectName(QString("captureItem%1").arg(i));
 
             CaptureToQuickItem.insert(item, quickItem);
             QuickItemToCapture.insert(quickItem, item);

@@ -37,6 +37,7 @@ public:
 
     // QPointF toView(QPointF paperPoint) const;
     Q_INVOKABLE QRectF toView(QRectF paperRect) const;
+    Q_INVOKABLE QPointF toPaper(QPointF pointPixels) const;
 
     virtual void paint(QPainter * painter);
 
@@ -48,6 +49,8 @@ public slots:
 private:
     QPointer<QGraphicsScene> Scene; //!<
     QImage m_image;
+
+    QTransform toViewTransform() const;
 
 };
 
