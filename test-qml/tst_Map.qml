@@ -97,7 +97,6 @@ MainWindowTest {
             // wait(100000)
 
             //Click done
-            console.log("SelectButton!")
             tryVerify(() => { return selectButton.visible === true });
             tryVerify(() => { return selectButton.enabled === true });
             tryVerify(() => { return selectButton.text === " Done" })
@@ -117,27 +116,100 @@ MainWindowTest {
             // verify(false)
         }
 
-        function test_moveResizeMapLayer() {
-            setupExport();
-
+        function moveMapLayer() {
             wait(100);
 
             let captureItem0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0")
             mouseClick(captureItem0_obj1)
 
             verify(captureItem0_obj1.selected === true)
-
-            console.log("Position on paper:" + captureItem0_obj1.captureItem.positionOnPaper)
-
             verify(captureItem0_obj1.captureItem.positionOnPaper === Qt.point(1.025, 1.025))
 
             //Drag
             mouseDrag(captureItem0_obj1, 82.8114, 136.675, 10, 15)
 
+            wait(50);
+
             //Values have been visually verified, that the drag works
             let delta = 0.0001
             fuzzyCompare(captureItem0_obj1.captureItem.positionOnPaper.x, 1.37237, delta)
             fuzzyCompare(captureItem0_obj1.captureItem.positionOnPaper.y, 1.45508, delta)
+
+            return captureItem0_obj1
+        }
+
+        function test_rotateMapLayer() {
+            setupExport()
+
+            //Select the map layer
+            let captureItem0_obj1 = moveMapLayer()
+
+            //Go into rotation mode
+            mouseClick(captureItem0_obj1)
+
+            //Do rotation on top left corner
+            let topLeftHandle_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0->topLeftHandle")
+            mouseDrag(topLeftHandle_obj1, 5, 5, 10, 7, Qt.LeftButton, Qt.NoModifier, 50)
+
+            // wait(100000);
+            let delta = 0.0001
+            //Values have been visually verified, that the drag works
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.x, 1.28957, delta)
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.y, 1.41374, delta)
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.width, 4.69619, delta)
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.height, 9.03268, delta)
+
+            wait(50);
+
+
+            let topRightHandle_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0->topRightHandle")
+            mouseDrag(topRightHandle_obj1, 5, 5, 10, 7, Qt.LeftButton, Qt.NoModifier, 50)
+
+            //Values have been visually verified, that the drag works
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.x, 1.12199, delta)
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.y, 1.3337, delta)
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.width, 5.03135, delta)
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.height, 9.19276, delta)
+
+            wait(50)
+
+            let bottomRightHandle_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0->bottomRightHandle")
+            mouseDrag(bottomRightHandle_obj1, 5, 5, 8, 10, Qt.LeftButton, Qt.NoModifier, 50)
+
+            //Values have been visually verified, that the drag works
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.x, 1.14868, delta)
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.y, 1.34611, delta)
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.width, 4.97797, delta)
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.height, 9.16793, delta)
+
+            wait(50)
+
+            let bottomLeftHandle_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0->bottomLeftHandle")
+            mouseDrag(bottomLeftHandle_obj1, 5, 5, 4, 15, Qt.LeftButton, Qt.NoModifier, 50)
+
+            //Values have been visually verified, that the drag works
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.x, 1.2889, delta)
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.y, 1.41341, delta)
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.width, 4.69753, delta)
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.height, 9.03334, delta)
+
+            wait(50)
+
+            //Move sure move the layer works in rotation
+            mouseDrag(captureItem0_obj1, 82.8114, 136.675, 50, 40)
+
+            //Values have been visually verified, that the drag works
+            fuzzyCompare(captureItem0_obj1.captureItem.positionOnPaper.x, 3.14152, delta)
+            fuzzyCompare(captureItem0_obj1.captureItem.positionOnPaper.y, 2.90212, delta)
+
+            wait(50)
+        }
+
+        function test_moveResizeMapLayer() {
+            setupExport();
+
+            let captureItem0_obj1 = moveMapLayer()
+
 
             //Check that the resize works
             wait(50);
@@ -146,6 +218,7 @@ MainWindowTest {
             mouseDrag(topLeftHandle_obj1, 5, 5, 5, 10, Qt.LeftButton, Qt.NoModifier, 50)
 
             //Values have been visually verified, that the drag works
+            let delta = 0.0001
             fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.x, 1.45507518, delta)
             fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.y, 1.6184591, delta)
             fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.width, 4.4478832, delta)
@@ -183,6 +256,7 @@ MainWindowTest {
             fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.y, 1.29169, delta)
             fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.width, 4.87123, delta)
             fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.height, 9.62292, delta)
+
         }
 
         function test_paperSize() {
@@ -252,6 +326,10 @@ MainWindowTest {
             verify(paperComboBox_obj1.currentText === "Custom Size")
             verify(paperHeight.text === "15")
             verify(paperWidth.text === "10")
+
+            customPaperIndex = paperComboBox_obj1.find("Letter")
+            paperComboBox_obj1.currentIndex = customPaperIndex
+            verify(paperComboBox_obj1.currentText === "Letter")
         }
     }
 }

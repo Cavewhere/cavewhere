@@ -10,9 +10,9 @@ QQ.Item {
     property url selectedImageSource
     property alias imageRotation: imageId.rotation
 
-    signal dragStarted()
+    signal dragStarted(QQ.point startPoint)
     signal dragDelta(QQ.vector2d delta)
-//    signal mousePositionChanged(var position)
+
 
     QQ.Image {
         id: imageId
@@ -31,48 +31,30 @@ QQ.Item {
         id: hoverHandler
     }
 
-
-
     QQ.DragHandler {
         id: dragHandler
-
-        // property QQ.vector2d oldTranslation
 
         dragThreshold: 1
         target: null
 
-        // grabPermissions: QQ.PointerHandler.CanTakeOverFromAnything | PointerHandler.TakeOverForbidden
-
-
-        // onGrabChanged: (transition, point) => {
-        //                    console.log(QQ.PointerDevice.GrabPassive + "transition:" + transition + " ponit:" + point)
-        //                }
-
         onActiveTranslationChanged: {
-            // let delta = Qt.vector2d(oldTranslation.x - activeTranslation.x, oldTranslation.y - activeTranslation.y)
-            // console.log("Delta:" + delta)
-            // handle.dragDelta(delta)
-            // oldTranslation = activeTranslation
             handle.dragDelta(activeTranslation)
         }
 
         onActiveChanged: {
             if(active) {
-                dragStarted()
+                let startPoint = handle.mapToItem(null,
+                                              handle.width / 2.0,
+                                              handle.height / 2.0);
+                handle.dragStarted(startPoint)
             }
         }
-
-        // onCentroidChanged: {
-        //     handle.dragDelta(centroid.position)
-        // }
-
     }
 
-
-    Text {
-        color: dragHandler.active ? "darkgreen" : "black"
-        text: dragHandler.activeTranslation.x.toFixed(1) + "," + dragHandler.activeTranslation.y.toFixed(1)
-        x: dragHandler.activeTranslation.x - width / 2
-        y: dragHandler.activeTranslation.y - height
-    }
+    // Text {
+    //     color: dragHandler.active ? "darkgreen" : "black"
+    //     text: dragHandler.activeTranslation.x.toFixed(1) + "," + dragHandler.activeTranslation.y.toFixed(1)
+    //     x: dragHandler.activeTranslation.x - width / 2
+    //     y: dragHandler.activeTranslation.y - height
+    // }
 }

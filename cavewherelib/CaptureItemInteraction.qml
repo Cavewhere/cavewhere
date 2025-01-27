@@ -16,100 +16,13 @@ QQ.Rectangle {
     property double _scale: captureScale;
     property rect _viewRect: quickSceneView.toView(captureItem.boundingBox)
 
+    //For position
     property size _orginialSize
 
-    // onCaptureOffsetChanged: {
-    //     console.log("CaptureOffset:" + captureOffset + this)
-    // }
+    //For rotation
+    property point _oldPoint
+    property point _startPoint
 
-    // on_ScaleChanged: {
-    //     console.log("Scale changed:" + _scale);
-    // }
-
-    // on_ViewRectChanged: {
-    //     console.log("_viewRectChanged:" + _viewRect)
-    // }
-
-    // onXChanged: {
-    //     console.log("X:" + x + this)
-    // }
-
-    // onYChanged: {
-    //     console.log("Y:" + y + this)
-    // }
-
-    // onWidthChanged: {
-    //     console.log("Width:" + width + " " + this)
-    // }
-
-    // onHeightChanged: {
-    //     console.log("Height:" + height + " " + this);
-    // }
-
-    /**
-      This find the maxium delta from the x and y.
-
-      @param delta - Qt.point() that's the mouse change in position
-      @param fixedPoint - QQ.Item.TransformOrigin (ie. QQ.Item.TopLeft for example). This will
-      control the sign of the dragLength that's returned.
-      @return The maximium drag length. This is used for resizing the CaptureItem
-      */
-    function dragLength(delta, fixedPosition) {
-
-
-
-        let sign = 1.0;
-        let originalDelta = delta;
-
-        console.log("Fix position:" + fixedPosition + " " + QQ.Item.TopLeft + " " + QQ.Item.TopRight + " " + QQ.Item.BottomLeft + " " + QQ.Item.BottomRight)
-
-        switch(fixedPosition) {
-        case QQ.Item.TopLeft:
-            sign = -1;
-            console.log("TopLeft!")
-            break;
-        case QQ.Item.TopRight:
-            console.log("TopRight!")
-            delta.y = -delta.y;
-            break;
-        case QQ.Item.BottomLeft:
-            console.log("BottomLeft")
-            delta.y = -delta.y;
-            sign = -1;
-            break;
-        case QQ.Item.BottomRight:
-            console.log("BottomRight")
-            // sign =;
-            break
-        default:
-            console.error("FixedPosition is invalid:" + fixedPosition);
-        }
-
-        console.log("Delta orig: " + originalDelta + " fixed: " + delta)
-
-        let length = 0;
-        if(delta.y >= 0 && delta.x >= 0) {
-            console.log("here1")
-            length = Math.max(delta.y, delta.x);
-        } else if(delta.y <= 0 && delta.x <= 0) {
-            console.log("here2")
-            length = Math.min(delta.y, delta.x);
-        } else {
-            if(Math.abs(delta.y) > Math.abs(delta.x)) {
-                console.log("here3")
-                length = delta.y
-            } else {
-                console.log("here4")
-                length = delta.x
-            }
-        }
-
-        console.log("Sign:" + sign + " Length:" + length)
-
-
-
-        return sign * length;
-    }
 
     /**
       This converts the fixedPoint to a Qt.Point
@@ -179,22 +92,29 @@ QQ.Rectangle {
       @param delta - Qt.Point() with the delta of the mouse movement
       @param oldPoint - Qt.Point() this is the old mouse position
       */
-    function dragRotationHandler(delta, oldPoint) {
+    function dragRotationHandler(handle, delta, oldPoint) {
         let center = interactionId.mapToItem(null, centerItemId.x, centerItemId.y);
 
-        let p1 = oldPoint
-        let p2 = Qt.point(delta.x + p1.x, delta.y + p1.y)
+        let p1 = _oldPoint
+        let p2 = Qt.point(_startPoint.x + delta.x, _startPoint.y + delta.y)
+
         let v1 = Qt.point(p1.x - center.x, p1.y - center.y)
         let v2 = Qt.point(p2.x - center.x, p2.y - center.y)
 
         let angle = VectorMath.angleBetween(v1, v2);
-        let sign = VectorMath.crossProduct(v1, v2) > 0 ? -1 : 1;
+        let sign = VectorMath.crossProduct(v1, v2) > 0 ? 1 : -1;
 
+        _oldPoint = p2;
         captureItem.rotation += sign * angle;
     }
 
     function updatePaperScene() {
         captureItem.positionOnPaper = quickSceneView.toPaper(Qt.point(x, y));
+    }
+
+    function dragOffset() {
+        let center = interactionId.mapToItem(null, centerItemId.x, centerItemId.y);
+        return Qt.vector2d(center.x, center.y)
     }
 
     //This item is used to calculate the center of the interaction capture.
@@ -209,8 +129,6 @@ QQ.Rectangle {
 
     x: _viewRect.x
     y: _viewRect.y
-
-
 
     border.width: 1
     border.color: "#151515"
@@ -240,6 +158,11 @@ QQ.Rectangle {
                 //Restore x and y bindings
                 interactionId.x = Qt.binding(function() { return interactionId._viewRect.x } );
                 interactionId.y = Qt.binding(function() { return interactionId._viewRect.y } );
+            } else {
+                //This removes the bindings by assigning the values to it self, this prevents
+                //a binding loop from happening when the drag takes over
+                interactionId.x = interactionId.x
+                interactionId.y = interactionId.y
             }
         }
     }
@@ -375,7 +298,7 @@ QQ.Rectangle {
 
         QQ.State {
             name: "SELECTED_ROTATE_STATE"
-            extend: "INIT_STATE"
+            extend: "SELECTED"
 
             QQ.PropertyChanges {
                 selectTapId {
@@ -390,7 +313,11 @@ QQ.Rectangle {
                     imageSource: "qrc:icons/dragArrow/rotateArrowBlack.png"
                     selectedImageSource: "qrc:icons/dragArrow/rotateArrow.png"
                     imageRotation: 90
-                    onDragDelta: dragRotationHandler(delta, oldPoint)
+                    onDragDelta: (delta) => {dragRotationHandler(topLeftHandle, delta)}
+                    onDragStarted: (startPoint) => {
+                        interactionId._startPoint = startPoint
+                        interactionId._oldPoint = startPoint
+                    }
                 }
             }
             QQ.PropertyChanges {
@@ -398,7 +325,10 @@ QQ.Rectangle {
                     imageSource: "qrc:icons/dragArrow/rotateArrowBlack.png"
                     selectedImageSource: "qrc:icons/dragArrow/rotateArrow.png"
                     imageRotation: 180
-                    onDragDelta: dragRotationHandler(delta, oldPoint)
+                    onDragDelta: (delta) => {dragRotationHandler(topRightHandle, delta)}
+                    onDragStarted: (startPoint) => {
+                        interactionId._startPoint = startPoint
+                        interactionId._oldPoint = startPoint }
                 }
             }
             QQ.PropertyChanges {
@@ -406,7 +336,11 @@ QQ.Rectangle {
                     imageSource: "qrc:icons/dragArrow/rotateArrowBlack.png"
                     selectedImageSource: "qrc:icons/dragArrow/rotateArrow.png"
                     imageRotation: 0
-                    onDragDelta: dragRotationHandler(delta, oldPoint)
+                    onDragDelta: (delta) => {dragRotationHandler(bottomLeftHandle, delta)}
+                    onDragStarted: (startPoint) => {
+                        interactionId._startPoint = startPoint
+                        interactionId._oldPoint = startPoint
+                    }
                 }
             }
             QQ.PropertyChanges {
@@ -414,7 +348,11 @@ QQ.Rectangle {
                     imageSource: "qrc:icons/dragArrow/rotateArrowBlack.png"
                     selectedImageSource: "qrc:icons/dragArrow/rotateArrow.png"
                     imageRotation: 270
-                    onDragDelta: dragRotationHandler(delta, oldPoint)
+                    onDragDelta: (delta) => {dragRotationHandler(bottomRightHandle, delta)}
+                    onDragStarted: (startPoint) => {
+                        interactionId._startPoint = startPoint
+                        interactionId._oldPoint = startPoint
+                    }
                 }
             }
         }

@@ -593,10 +593,8 @@ void cwCaptureViewport::updateTransformForItem(QGraphicsItem *item, double scale
 void cwCaptureViewport::updateBoundingBox()
 {
     QTransform transform = previewItem()->transform();
-    QRectF paperRect = previewItem()->boundingRect();
-    QRectF boundingBoxRect = transform.mapRect(paperRect);
-    boundingBoxRect.moveTopLeft(previewItem()->pos());
-    setBoundingBox(boundingBoxRect);
+    QRectF paperRect = previewItem()->sceneBoundingRect();
+    setBoundingBox(paperRect);
 }
 
 /**
