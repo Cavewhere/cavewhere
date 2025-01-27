@@ -145,7 +145,7 @@ void cwCaptureViewport::capture()
     QPointF previewItemPosition = PreviewItem->pos();
 
     QRectF onPaperViewport = QRectF(QPoint(previewItemPosition.x() * imageScale, previewItemPosition.y() * imageScale),
-                                  QSizeF(viewport.width() * imageScale, viewport.height() * imageScale));
+                                    QSizeF(viewport.width() * imageScale, viewport.height() * imageScale));
 
     QSize tileSize = TileSize;
     QSize imageSize = onPaperViewport.size().toSize(); //QSize(viewport.width() * imageScale, viewport.height() * imageScale);
@@ -336,6 +336,9 @@ void cwCaptureViewport::setPaperHeightOfItem(double height)
 void cwCaptureViewport::setPaperSizePreserveAspect(QSizeF size,
                                                    QQuickItem::TransformOrigin dragLocation)
 {
+    //This prevents extra signals from this function
+    QSignalBlocker blockThis(this);
+
     auto viewport = this->viewport();
     double hScale = size.height() / (double)viewport.height();
     double wScale = size.width() / (double)viewport.width();
@@ -386,11 +389,15 @@ void cwCaptureViewport::setPaperSizePreserveAspect(QSizeF size,
     }
     setImageScale(scale);
 
+    blockThis.unblock();
+
     //Make sure the opposite corner of the dragLocation stays fixed
     auto newCorner = cornerPosition(fixedCorner);
     auto positionDelta = oldCorner - newCorner;
 
     setPositionOnPaper(positionOnPaper() + positionDelta);
+    emit paperSizeOfItemChanged();
+    emit boundingBoxChanged();
 }
 
 /**
@@ -458,10 +465,10 @@ cwProjection cwCaptureViewport::tileProjection(QRectF tileViewport,
     double originalProjectionHeight = originalProjection.top() - originalProjection.bottom();
 
     double left = originalProjection.left() + originalProjectionWidth
-            * (tileViewport.left() / imageSize.width());
+                                                  * (tileViewport.left() / imageSize.width());
     double right = left + originalProjectionWidth * tileViewport.width() / imageSize.width();
     double bottom = originalProjection.bottom() + originalProjectionHeight
-            * (tileViewport.top() / imageSize.height());
+                                                      * (tileViewport.top() / imageSize.height());
     double top = bottom + originalProjectionHeight * tileViewport.height() / imageSize.height();
 
     cwProjection projection;
@@ -588,7 +595,6 @@ void cwCaptureViewport::updateBoundingBox()
     QTransform transform = previewItem()->transform();
     QRectF paperRect = previewItem()->boundingRect();
     QRectF boundingBoxRect = transform.mapRect(paperRect);
-    qDebug() << "Update bounding box:" << paperRect << boundingBoxRect;
     boundingBoxRect.moveTopLeft(previewItem()->pos());
     setBoundingBox(boundingBoxRect);
 }

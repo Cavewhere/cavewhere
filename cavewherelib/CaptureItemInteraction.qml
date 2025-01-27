@@ -1,7 +1,6 @@
 import QtQuick as QQ
 import QtQuick.Window
 import cavewherelib
-import "Utils.js" as Utils
 import "VectorMath.js" as VectorMath
 
 QQ.Rectangle {
@@ -19,29 +18,33 @@ QQ.Rectangle {
 
     property size _orginialSize
 
-    onCaptureOffsetChanged: {
-        console.log("CaptureOffset:" + captureOffset + this)
-    }
+    // onCaptureOffsetChanged: {
+    //     console.log("CaptureOffset:" + captureOffset + this)
+    // }
 
     // on_ScaleChanged: {
     //     console.log("Scale changed:" + _scale);
     // }
 
-    onXChanged: {
-        console.log("X:" + x + this)
-    }
+    // on_ViewRectChanged: {
+    //     console.log("_viewRectChanged:" + _viewRect)
+    // }
 
-    onYChanged: {
-        console.log("Y:" + y + this)
-    }
+    // onXChanged: {
+    //     console.log("X:" + x + this)
+    // }
 
-    onWidthChanged: {
-        console.log("Width:" + width + " " + this)
-    }
+    // onYChanged: {
+    //     console.log("Y:" + y + this)
+    // }
 
-    onHeightChanged: {
-        console.log("Height:" + height + " " + this);
-    }
+    // onWidthChanged: {
+    //     console.log("Width:" + width + " " + this)
+    // }
+
+    // onHeightChanged: {
+    //     console.log("Height:" + height + " " + this);
+    // }
 
     /**
       This find the maxium delta from the x and y.
@@ -137,7 +140,6 @@ QQ.Rectangle {
       @return double - in paper Units
       */
     function pixelToPaper(numberOfPixels) {
-        console.log("PixelToPaper:" + interactionId._scale)
         return numberOfPixels / (interactionId._scale)
     }
 
@@ -169,34 +171,6 @@ QQ.Rectangle {
         captureItem.setPaperSizePreserveAspect(Qt.size(interactionId._orginialSize.width + sizeDelta.x,
                                                        interactionId._orginialSize.height + sizeDelta.y),
                                                corner);
-
-
-        // let length = dragLength(delta, fixedPoint)
-
-
-
-        // let deltaOnPaper = pixelToPaper(length); //Convert maxDelta from pixels to paper units
-        // let newWidth = Math.max(interactionId.captureItem.paperSizeOfItem.width + deltaOnPaper, 0.0);
-
-        // console.log("deltaOnPaper:" + length + " " + deltaOnPaper + " " + newWidth)
-
-        // if(newWidth > 0.0) {
-        //     let position = captureItem.positionOnPaper
-        //     let size = captureItem.paperSizeOfItem
-        //     let before = fixedPositionToPoint(fixedPoint)
-
-        //     captureItem.setPaperWidthOfItem(newWidth);
-
-        //     let sizeAfter = captureItem.paperSizeOfItem
-        //     let after = fixedPositionToPoint(fixedPoint)
-
-        //     console.log("Before:" + before + " after:" + after + " position:" + position)
-        //     let diff = Qt.point(before.x - after.x, before.y - after.y)
-        //     console.log("Diff:" + diff)
-
-        //     captureItem.setPositionAfterScale(Qt.point(position.x + (before.x - after.x),
-        //                                                position.y + (before.y - after.y)));
-        // }
     }
 
     /**
@@ -236,33 +210,10 @@ QQ.Rectangle {
     x: _viewRect.x
     y: _viewRect.y
 
-    on_ViewRectChanged:{
-        console.log("ViewRect:" + _viewRect)
-    }
 
-    // QQ.Rectangle {
-    //    color: "red"
-    //    opacity: 0.5
-    //    parent: interactionId.parent
-    //    x: interactionId._viewRect.x
-    //    y: interactionId._viewRect.y
-    //    width: interactionId._viewRect.width
-    //    height: interactionId._viewRect.height
-    // }
-
-    // QQ.Binding {
-    //     // interactionId.x: interactionId._viewRect.x
-    //     interactionId.y: interactionId._viewRect.y
-    // }
-
-    // QQ.Binding {
-    //     target: interactionId
-    //     property: "x"
-    //     value: interactionId._viewRect.x
-    // }
 
     border.width: 1
-    border.color: "black"
+    border.color: "#151515"
     color: "#00000000"
 
     onSelectedChanged: {
@@ -284,25 +235,14 @@ QQ.Rectangle {
     QQ.DragHandler {
         id: dragHandler
         enabled: interactionId.selected
+        onActiveChanged: {
+            if(!active) {
+                //Restore x and y bindings
+                interactionId.x = Qt.binding(function() { return interactionId._viewRect.x } );
+                interactionId.y = Qt.binding(function() { return interactionId._viewRect.y } );
+            }
+        }
     }
-
-    // QQ.MouseArea {
-    //     id: selectMouseAreaId
-
-    //     property point lastPoint;
-    //     property bool positionHasChange: false
-
-    //     /**
-    //       This should be called on the onReleased.
-
-    //       @return bool - True if the user has clicked and false if they haven't
-    //       */
-    //     function hasClicked() {
-    //         return !positionHasChange
-    //     }
-
-    //     anchors.fill: parent
-    // }
 
     RectangleHandle {
         id: topLeftHandle
@@ -313,18 +253,21 @@ QQ.Rectangle {
 
     RectangleHandle {
         id: topRightHandle
+        objectName: "topRightHandle"
         anchors.bottom: interactionId.top
         anchors.left: interactionId.right
     }
 
     RectangleHandle {
         id: bottomLeftHandle
+        objectName: "bottomLeftHandle"
         anchors.top: interactionId.bottom
         anchors.right: interactionId.left
     }
 
     RectangleHandle {
         id: bottomRightHandle
+        objectName: "bottomRightHandle"
         anchors.top: interactionId.bottom
         anchors.left: interactionId.right
     }
@@ -333,45 +276,12 @@ QQ.Rectangle {
         QQ.State {
             name: "INIT_STATE"
 
-            // QQ.PropertyChanges {
-            //     interactionId {
-            //         width: captureItem.boundingBox.width * _scale
-            //         height: captureItem.boundingBox.height * _scale;
-            //         x: ((captureItem.boundingBox.x + captureItem.positionOnPaper.x) - captureOffset.x) * _scale;
-            //         y: ((captureItem.boundingBox.y + captureItem.positionOnPaper.y) - captureOffset.y) * _scale
-            //     }
-            // }
-
             QQ.PropertyChanges {
                 selectTapId {
                     onTapped: (eventPoint, button) => {
                         interactionId.selected = true
                     }
                 }
-
-                // selectMouseAreaId {
-                //     onPressed: (mouse) => {
-                //         lastPoint = Utils.mousePositionToGlobal(selectMouseAreaId)
-                //         positionHasChange = false;
-                //     }
-
-                //     onPositionChanged: (mouse) => {
-                //         //Translate the item
-                //         var newPosition = Utils.mousePositionToGlobal(selectMouseAreaId);
-                //         var delta = Qt.point(pixelToPaper(newPosition.x - lastPoint.x),
-                //                              pixelToPaper(newPosition.y - lastPoint.y));
-                //         var origin = captureItem.positionOnPaper;
-
-                //         captureItem.positionOnPaper = Qt.point(origin.x + delta.x,
-                //                                                origin.y + delta.y)
-                //         lastPoint = newPosition
-                //         positionHasChange = true
-                //     }
-
-                //     onReleased: (mouse) => {
-                //         interactionId.selected = true
-                //     }
-                // }
             }
         },
 
@@ -379,16 +289,18 @@ QQ.Rectangle {
             name: "SELECTED"
             extend: "INIT_STATE"
             QQ.PropertyChanges {
-
-
                 interactionId {
                     onXChanged: {
-                        console.log("Selected x changed:" + interactionId.x)
-                        interactionId.updatePaperScene();
+                        //this prevents a binding loop on x
+                        if(dragHandler.active) {
+                            interactionId.updatePaperScene();
+                        }
                     }
                     onYChanged: {
-                        console.log("Selected y changed:" + interactionId.y)
-                        interactionId.updatePaperScene();
+                        //this prevents a binding loop on y
+                        if(dragHandler.active) {
+                            interactionId.updatePaperScene();
+                        }
                     }
                 }
             }

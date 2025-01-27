@@ -102,8 +102,6 @@ void cwCaptureItemManiputalor::insertItems(const QModelIndex &parent, int start,
                                    {"captureScale", PaperToScreenScale},
                                    {"captureOffset", SceneOffset}};
 
-    qDebug() << "Add item capture scale:" << PaperToScreenScale;
-
     for(int i = start; i <= end; i++) {
         cwCaptureItem* item = captureItem(i);
 

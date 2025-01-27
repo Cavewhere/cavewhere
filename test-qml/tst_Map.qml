@@ -94,7 +94,7 @@ MainWindowTest {
             verify(false)
         }
 
-        function test_moveMapLayer() {
+        function test_moveResizeMapLayer() {
             setupExport();
 
             wait(100)
@@ -108,24 +108,61 @@ MainWindowTest {
 
             verify(captureItem0_obj1.captureItem.positionOnPaper === Qt.point(1.025, 1.025))
 
-            // //Drag
-            // mouseDrag(captureItem0_obj1, 82.8114, 136.675, 10, 15)
+            //Drag
+            mouseDrag(captureItem0_obj1, 82.8114, 136.675, 10, 15)
 
-            // //Values have been visually verified, that the drag works
-            // let delta = 0.0001
-            // fuzzyCompare(captureItem0_obj1.captureItem.positionOnPaper.x, 1.37237, delta)
-            // fuzzyCompare(captureItem0_obj1.captureItem.positionOnPaper.y, 1.45508, delta)
+            //Values have been visually verified, that the drag works
+            let delta = 0.0001
+            fuzzyCompare(captureItem0_obj1.captureItem.positionOnPaper.x, 1.37237, delta)
+            fuzzyCompare(captureItem0_obj1.captureItem.positionOnPaper.y, 1.45508, delta)
 
             //Check that the resize works
 
-            // console.log("Drag!!!!!")
-            // wait(50)
+            // wait(10000)
 
-            // let topLeftHandle_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0->topLeftHandle")
-            // mouseDrag(topLeftHandle_obj1, 5, 5, 5, 10, Qt.LeftButton, Qt.NoModifier, 50)
+            wait(50);
 
-            wait(1000000)
+            let topLeftHandle_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0->topLeftHandle")
+            mouseDrag(topLeftHandle_obj1, 5, 5, 5, 10, Qt.LeftButton, Qt.NoModifier, 50)
 
+            //Values have been visually verified, that the drag works
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.x, 1.45507518, delta)
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.y, 1.6184591, delta)
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.width, 4.4478832, delta)
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.height, 8.786616, delta)
+
+            wait(50);
+
+            let topRightHandle_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0->topRightHandle")
+            mouseDrag(topRightHandle_obj1, 5, 5, 10, 7, Qt.LeftButton, Qt.NoModifier, 50)
+
+            //Values have been visually verified, that the drag works
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.x, 1.45508, delta)
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.y, 1.29169, delta)
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.width, 4.6133, delta)
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.height, 9.11338, delta)
+
+            wait(50)
+
+            let bottomRightHandle_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0->bottomRightHandle")
+            mouseDrag(bottomRightHandle_obj1, 5, 5, 8, 10, Qt.LeftButton, Qt.NoModifier, 50)
+
+            //Values have been visually verified, that the drag works
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.x, 1.45508, delta)
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.y, 1.29169, delta)
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.width, 4.74563, delta)
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.height, 9.3748, delta)
+
+            wait(50)
+
+            let bottomLeftHandle_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0->bottomLeftHandle")
+            mouseDrag(bottomLeftHandle_obj1, 5, 5, 4, 15, Qt.LeftButton, Qt.NoModifier, 50)
+
+            //Values have been visually verified, that the drag works
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.x, 1.32947, delta)
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.y, 1.29169, delta)
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.width, 4.87123, delta)
+            fuzzyCompare(captureItem0_obj1.captureItem.boundingBox.height, 9.62292, delta)
         }
 
         function test_paperSize() {

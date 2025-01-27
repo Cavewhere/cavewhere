@@ -40,7 +40,7 @@ void cwCaptureItem::setName(QString name) {
 void cwCaptureItem::setPositionOnPaper(QPointF positionOnPaper)
 {
     if(PositionOnPaper != positionOnPaper) {
-        qDebug() << "Position on paper:" << positionOnPaper;
+        // qDebug() << "Position on paper:" << positionOnPaper;
         PositionOnPaper = positionOnPaper;
         emit positionOnPaperChanged();
     }
@@ -73,6 +73,7 @@ void cwCaptureItem::setPaperSizeOfItem(QSizeF paperSize)
 void cwCaptureItem::setBoundingBox(QRectF boundingbox)
 {
     if(boundingbox != BoundingBox) {
+        // qDebug() << "Bounding box changed:" << boundingbox << "old:" << BoundingBox;
         BoundingBox = boundingbox;
         emit boundingBoxChanged();
     }
