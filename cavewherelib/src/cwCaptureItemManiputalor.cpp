@@ -102,6 +102,8 @@ void cwCaptureItemManiputalor::insertItems(const QModelIndex &parent, int start,
                                    {"captureScale", PaperToScreenScale},
                                    {"captureOffset", SceneOffset}};
 
+    qDebug() << "Add item capture scale:" << PaperToScreenScale;
+
     for(int i = start; i <= end; i++) {
         cwCaptureItem* item = captureItem(i);
 
@@ -145,11 +147,13 @@ void cwCaptureItemManiputalor::removeItems(const QModelIndex &parent, int start,
  */
 void cwCaptureItemManiputalor::updateTransform()
 {
-   PaperToScreenScale = width() / Manager->scene()->sceneRect().width();
-   SceneOffset = Manager->scene()->sceneRect().topLeft();
-   foreach(QQuickItem* item, QuickItemToCapture.keys()) {
-       updateItemTransform(item);
-   }
+    if(m_view && Manager && Manager->scene()) {
+        PaperToScreenScale = m_view->viewScale();
+        SceneOffset = Manager->scene()->sceneRect().topLeft();
+        foreach(QQuickItem* item, QuickItemToCapture.keys()) {
+            updateItemTransform(item);
+        }
+    }
 }
 
 /**
@@ -245,5 +249,6 @@ void cwCaptureItemManiputalor::setView(cwQuickSceneView *newView)
         return;
     }
     m_view = newView;
+    updateTransform();
     emit viewChanged();
 }

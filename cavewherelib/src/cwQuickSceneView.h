@@ -39,6 +39,9 @@ public:
     Q_INVOKABLE QRectF toView(QRectF paperRect) const;
     Q_INVOKABLE QPointF toPaper(QPointF pointPixels) const;
 
+    double viewScale() const;
+    double paperScale() const { return 1.0 / viewScale(); }
+
     virtual void paint(QPainter * painter);
 
 signals:

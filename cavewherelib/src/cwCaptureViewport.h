@@ -70,6 +70,8 @@ public:
 
     Q_INVOKABLE void setPaperWidthOfItem(double width);
     Q_INVOKABLE void setPaperHeightOfItem(double height);
+    Q_INVOKABLE void setPaperSizePreserveAspect(QSizeF size,
+                                                QQuickItem::TransformOrigin dragLocation);
 
     Q_INVOKABLE void setPositionAfterScale(QPointF position);
 

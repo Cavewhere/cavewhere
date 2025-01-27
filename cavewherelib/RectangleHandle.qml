@@ -1,5 +1,4 @@
 import QtQuick as QQ
-import "Utils.js" as Utils
 
 QQ.Item {
     id: handle
@@ -10,44 +9,70 @@ QQ.Item {
     property url imageSource
     property url selectedImageSource
     property alias imageRotation: imageId.rotation
-    property alias oldPoint: mouseArea.oldPoint
 
-    signal dragDelta(var delta)
+    signal dragStarted()
+    signal dragDelta(QQ.vector2d delta)
 //    signal mousePositionChanged(var position)
 
     QQ.Image {
         id: imageId
-        visible: !mouseArea.containsMouse
+        visible: !hoverHandler.hovered
         source: handle.imageSource
     }
 
     QQ.Image {
         id: selectImageId
         rotation: imageId.rotation
-        visible: mouseArea.containsMouse
+        visible: hoverHandler.hovered
         source: handle.selectedImageSource
     }
 
-    QQ.MouseArea {
-        id: mouseArea
+    QQ.HoverHandler {
+        id: hoverHandler
+    }
 
-        property point oldPoint;
 
-        anchors.fill: parent
-        hoverEnabled: true
 
-        onPressed: function(mouse) {
-            mouse.accepted = true
-            oldPoint = Utils.mousePositionToGlobal(mouseArea)
+    QQ.DragHandler {
+        id: dragHandler
+
+        // property QQ.vector2d oldTranslation
+
+        dragThreshold: 1
+        target: null
+
+        // grabPermissions: QQ.PointerHandler.CanTakeOverFromAnything | PointerHandler.TakeOverForbidden
+
+
+        // onGrabChanged: (transition, point) => {
+        //                    console.log(QQ.PointerDevice.GrabPassive + "transition:" + transition + " ponit:" + point)
+        //                }
+
+        onActiveTranslationChanged: {
+            // let delta = Qt.vector2d(oldTranslation.x - activeTranslation.x, oldTranslation.y - activeTranslation.y)
+            // console.log("Delta:" + delta)
+            // handle.dragDelta(delta)
+            // oldTranslation = activeTranslation
+            handle.dragDelta(activeTranslation)
         }
 
-        onPositionChanged: {
-            if(pressed) {
-                var mouseToGlobal = Utils.mousePositionToGlobal(mouseArea);
-                var delta = Qt.point(oldPoint.x - mouseToGlobal.x, oldPoint.y - mouseToGlobal.y)
-                oldPoint = mouseToGlobal;
-                handle.dragDelta(delta)
+        onActiveChanged: {
+            if(active) {
+                dragStarted()
             }
         }
+
+        // onCentroidChanged: {
+        //     handle.dragDelta(centroid.position)
+        // }
+
+    }
+
+
+    Text {
+        color: dragHandler.active ? "darkgreen" : "black"
+        text: dragHandler.activeTranslation.x.toFixed(1) + "," + dragHandler.activeTranslation.y.toFixed(1)
+        x: dragHandler.activeTranslation.x - width / 2
+        y: dragHandler.activeTranslation.y - height
     }
 }

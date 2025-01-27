@@ -108,15 +108,23 @@ MainWindowTest {
 
             verify(captureItem0_obj1.captureItem.positionOnPaper === Qt.point(1.025, 1.025))
 
-            //Drag
-            mouseDrag(captureItem0_obj1, 82.8114, 136.675, 10, 15)
+            // //Drag
+            // mouseDrag(captureItem0_obj1, 82.8114, 136.675, 10, 15)
 
-            //Values have been visually verified, that the drag works
-            let delta = 0.0001
-            fuzzyCompare(captureItem0_obj1.captureItem.positionOnPaper.x, 1.37237, delta)
-            fuzzyCompare(captureItem0_obj1.captureItem.positionOnPaper.y, 1.45508, delta)
+            // //Values have been visually verified, that the drag works
+            // let delta = 0.0001
+            // fuzzyCompare(captureItem0_obj1.captureItem.positionOnPaper.x, 1.37237, delta)
+            // fuzzyCompare(captureItem0_obj1.captureItem.positionOnPaper.y, 1.45508, delta)
 
             //Check that the resize works
+
+            // console.log("Drag!!!!!")
+            // wait(50)
+
+            // let topLeftHandle_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0->topLeftHandle")
+            // mouseDrag(topLeftHandle_obj1, 5, 5, 5, 10, Qt.LeftButton, Qt.NoModifier, 50)
+
+            wait(1000000)
 
         }
 

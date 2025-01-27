@@ -333,6 +333,66 @@ void cwCaptureViewport::setPaperHeightOfItem(double height)
     }
 }
 
+void cwCaptureViewport::setPaperSizePreserveAspect(QSizeF size,
+                                                   QQuickItem::TransformOrigin dragLocation)
+{
+    auto viewport = this->viewport();
+    double hScale = size.height() / (double)viewport.height();
+    double wScale = size.width() / (double)viewport.width();
+
+    //Finds the corner that shouldn't move with the paper resize
+    QQuickItem::TransformOrigin fixedCorner = [](QQuickItem::TransformOrigin dragLocation) {
+        switch(dragLocation) {
+        case QQuickItem::TransformOrigin::TopLeft:
+            return QQuickItem::TransformOrigin::BottomRight;
+        case QQuickItem::TransformOrigin::TopRight:
+            return QQuickItem::TransformOrigin::BottomLeft;
+        case QQuickItem::TransformOrigin::BottomLeft:
+            return QQuickItem::TransformOrigin::TopRight;
+        case QQuickItem::TransformOrigin::BottomRight:
+            return QQuickItem::TransformOrigin::TopLeft;
+        default:
+            qDebug() << "DragLocation:" << dragLocation << "isn't supported" << LOCATION;
+            return QQuickItem::TransformOrigin::TopLeft;
+        }
+    }(dragLocation);
+
+    auto cornerPosition = [this](QQuickItem::TransformOrigin corner) {
+        const auto box = boundingBox();
+        switch(corner) {
+        case QQuickItem::TransformOrigin::TopLeft:
+            return box.topLeft();
+        case QQuickItem::TransformOrigin::TopRight:
+            return box.topRight();
+        case QQuickItem::TransformOrigin::BottomLeft:
+            return box.bottomLeft();
+        case QQuickItem::TransformOrigin::BottomRight:
+            return box.bottomRight();
+        default:
+            qDebug() << "Corner:" << corner << "isn't supported" << LOCATION;
+            return QPointF();
+        }
+    };
+
+    auto oldCorner = cornerPosition(fixedCorner);
+
+    double scale = qMax(wScale, hScale);
+    // QSizeF newScale = size * scale;
+
+    if(size.width() > size.height()) {
+        setPaperSizeOfItem(QSizeF(scale * viewport.width(), size.height()));
+    } else {
+        setPaperSizeOfItem(QSizeF(size.width(), scale * viewport.height()));
+    }
+    setImageScale(scale);
+
+    //Make sure the opposite corner of the dragLocation stays fixed
+    auto newCorner = cornerPosition(fixedCorner);
+    auto positionDelta = oldCorner - newCorner;
+
+    setPositionOnPaper(positionOnPaper() + positionDelta);
+}
+
 /**
  * @brief cwCaptureViewport::setPositionAfterScale
  * @param posiiton
@@ -575,6 +635,8 @@ void cwCaptureViewport::updateItemsPosition()
     if(fullResolutionItem() != nullptr) {
         fullResolutionItem()->setPos(positionOnPaper());
     }
+
+    updateBoundingBox();
 
 }
 

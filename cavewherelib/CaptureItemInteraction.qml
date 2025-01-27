@@ -8,7 +8,7 @@ QQ.Rectangle {
     id: interactionId
 
     required property QuickSceneView quickSceneView
-    required property CaptureItem captureItem
+    required property CaptureViewport captureItem
     property double captureScale: 1.0
     property point captureOffset
     property bool selected: false
@@ -16,6 +16,8 @@ QQ.Rectangle {
     //Private properties
     property double _scale: captureScale;
     property rect _viewRect: quickSceneView.toView(captureItem.boundingBox)
+
+    property size _orginialSize
 
     onCaptureOffsetChanged: {
         console.log("CaptureOffset:" + captureOffset + this)
@@ -51,38 +53,58 @@ QQ.Rectangle {
       */
     function dragLength(delta, fixedPosition) {
 
-        var sign = 1.0;
+
+
+        let sign = 1.0;
+        let originalDelta = delta;
+
+        console.log("Fix position:" + fixedPosition + " " + QQ.Item.TopLeft + " " + QQ.Item.TopRight + " " + QQ.Item.BottomLeft + " " + QQ.Item.BottomRight)
 
         switch(fixedPosition) {
         case QQ.Item.TopLeft:
             sign = -1;
+            console.log("TopLeft!")
             break;
         case QQ.Item.TopRight:
+            console.log("TopRight!")
             delta.y = -delta.y;
             break;
         case QQ.Item.BottomLeft:
+            console.log("BottomLeft")
             delta.y = -delta.y;
             sign = -1;
             break;
         case QQ.Item.BottomRight:
-            //Do nothing
+            console.log("BottomRight")
+            // sign =;
             break
         default:
             console.error("FixedPosition is invalid:" + fixedPosition);
         }
 
-        var length = 0;
+        console.log("Delta orig: " + originalDelta + " fixed: " + delta)
+
+        let length = 0;
         if(delta.y >= 0 && delta.x >= 0) {
+            console.log("here1")
             length = Math.max(delta.y, delta.x);
         } else if(delta.y <= 0 && delta.x <= 0) {
+            console.log("here2")
             length = Math.min(delta.y, delta.x);
         } else {
             if(Math.abs(delta.y) > Math.abs(delta.x)) {
+                console.log("here3")
                 length = delta.y
             } else {
+                console.log("here4")
                 length = delta.x
             }
         }
+
+        console.log("Sign:" + sign + " Length:" + length)
+
+
+
         return sign * length;
     }
 
@@ -92,8 +114,8 @@ QQ.Rectangle {
       QQ.Item.BottomLeft, and QQ.Item.TopLeft
       */
     function fixedPositionToPoint(fixedPosition) {
-        var position = Qt.point(x / _scale, y / _scale) //captureItem.positionOnPaper
-        var size = Qt.size(width / _scale, height / _scale) //captureItem.paperSizeOfItem
+        let position = Qt.point(x / _scale, y / _scale) //captureItem.positionOnPaper
+        let size = Qt.size(width / _scale, height / _scale) //captureItem.paperSizeOfItem
 
         switch(fixedPosition) {
         case QQ.Item.TopLeft:
@@ -115,36 +137,66 @@ QQ.Rectangle {
       @return double - in paper Units
       */
     function pixelToPaper(numberOfPixels) {
+        console.log("PixelToPaper:" + interactionId._scale)
         return numberOfPixels / (interactionId._scale)
+    }
+
+    function pixelToPaperVec(delta) {
+        return Qt.vector2d(pixelToPaper(delta.x), pixelToPaper(delta.y))
     }
 
     /**
       This handles the drag Resize of the catpureItem
 
       @param delta - Qt.point() with the delta of the mouse movement
-      @param fixedPoint - QQ.Item.TransformOrigin
+      @param corner - QQ.Item.TransformOrigin
       */
-    function dragResizeHandler(delta, fixedPoint) {
-        var length = dragLength(delta, fixedPoint)
+    function dragResizeHandler(delta, corner) {
 
-        var deltaOnPaper = pixelToPaper(length); //Convert maxDelta from pixels to paper units
-        var newWidth = Math.max(interactionId.captureItem.paperSizeOfItem.width + deltaOnPaper, 0.0);
-
-        if(newWidth > 0.0) {
-            var position = captureItem.positionOnPaper
-            var size = captureItem.paperSizeOfItem
-            var before = fixedPositionToPoint(fixedPoint)
-
-            //FIXME: note sure what this unknown call goes to
-            // captureItem.setPaperWidthOfItem(newWidth);
-
-            var sizeAfter = captureItem.paperSizeOfItem
-            var after = fixedPositionToPoint(fixedPoint)
-
-            //FIXME: note sure what this unknown call goes to
-            // captureItem.setPositionAfterScale(Qt.point(position.x + (before.x - after.x),
-            //                                            position.y + (before.y - after.y)));
+        let sizeDelta = pixelToPaperVec(delta);
+        switch(corner) {
+        case QQ.Item.TopLeft:
+            sizeDelta = Qt.vector2d(-sizeDelta.x, -sizeDelta.y)
+            break;
+        case QQ.Item.BottomLeft:
+            sizeDelta = Qt.vector2d(-sizeDelta.x, sizeDelta.y)
+            break;
+        case QQ.Item.TopRight:
+            sizeDelta = Qt.vector2d(sizeDelta.x, -sizeDelta.y);
+            break
         }
+
+        captureItem.setPaperSizePreserveAspect(Qt.size(interactionId._orginialSize.width + sizeDelta.x,
+                                                       interactionId._orginialSize.height + sizeDelta.y),
+                                               corner);
+
+
+        // let length = dragLength(delta, fixedPoint)
+
+
+
+        // let deltaOnPaper = pixelToPaper(length); //Convert maxDelta from pixels to paper units
+        // let newWidth = Math.max(interactionId.captureItem.paperSizeOfItem.width + deltaOnPaper, 0.0);
+
+        // console.log("deltaOnPaper:" + length + " " + deltaOnPaper + " " + newWidth)
+
+        // if(newWidth > 0.0) {
+        //     let position = captureItem.positionOnPaper
+        //     let size = captureItem.paperSizeOfItem
+        //     let before = fixedPositionToPoint(fixedPoint)
+
+        //     captureItem.setPaperWidthOfItem(newWidth);
+
+        //     let sizeAfter = captureItem.paperSizeOfItem
+        //     let after = fixedPositionToPoint(fixedPoint)
+
+        //     console.log("Before:" + before + " after:" + after + " position:" + position)
+        //     let diff = Qt.point(before.x - after.x, before.y - after.y)
+        //     console.log("Diff:" + diff)
+
+        //     captureItem.setPositionAfterScale(Qt.point(position.x + (before.x - after.x),
+        //                                                position.y + (before.y - after.y)));
+        // }
     }
 
     /**
@@ -154,15 +206,15 @@ QQ.Rectangle {
       @param oldPoint - Qt.Point() this is the old mouse position
       */
     function dragRotationHandler(delta, oldPoint) {
-        var center = interactionId.mapToItem(null, centerItemId.x, centerItemId.y);
+        let center = interactionId.mapToItem(null, centerItemId.x, centerItemId.y);
 
-        var p1 = oldPoint
-        var p2 = Qt.point(delta.x + p1.x, delta.y + p1.y)
-        var v1 = Qt.point(p1.x - center.x, p1.y - center.y)
-        var v2 = Qt.point(p2.x - center.x, p2.y - center.y)
+        let p1 = oldPoint
+        let p2 = Qt.point(delta.x + p1.x, delta.y + p1.y)
+        let v1 = Qt.point(p1.x - center.x, p1.y - center.y)
+        let v2 = Qt.point(p2.x - center.x, p2.y - center.y)
 
-        var angle = VectorMath.angleBetween(v1, v2);
-        var sign = VectorMath.crossProduct(v1, v2) > 0 ? -1 : 1;
+        let angle = VectorMath.angleBetween(v1, v2);
+        let sign = VectorMath.crossProduct(v1, v2) > 0 ? -1 : 1;
 
         captureItem.rotation += sign * angle;
     }
@@ -180,8 +232,34 @@ QQ.Rectangle {
 
     width: _viewRect.width
     height: _viewRect.height
+
     x: _viewRect.x
     y: _viewRect.y
+
+    on_ViewRectChanged:{
+        console.log("ViewRect:" + _viewRect)
+    }
+
+    // QQ.Rectangle {
+    //    color: "red"
+    //    opacity: 0.5
+    //    parent: interactionId.parent
+    //    x: interactionId._viewRect.x
+    //    y: interactionId._viewRect.y
+    //    width: interactionId._viewRect.width
+    //    height: interactionId._viewRect.height
+    // }
+
+    // QQ.Binding {
+    //     // interactionId.x: interactionId._viewRect.x
+    //     interactionId.y: interactionId._viewRect.y
+    // }
+
+    // QQ.Binding {
+    //     target: interactionId
+    //     property: "x"
+    //     value: interactionId._viewRect.x
+    // }
 
     border.width: 1
     border.color: "black"
@@ -228,6 +306,7 @@ QQ.Rectangle {
 
     RectangleHandle {
         id: topLeftHandle
+        objectName: "topLeftHandle"
         anchors.bottom: interactionId.top
         anchors.right: interactionId.left
     }
@@ -325,9 +404,6 @@ QQ.Rectangle {
                         interactionId.state = "SELECTED_ROTATE_STATE"
                     }
                 }
-
-
-
             }
 
             QQ.PropertyChanges {
@@ -335,9 +411,11 @@ QQ.Rectangle {
                     imageSource: "qrc:icons/dragArrow/arrowHighLeftBlack.png"
                     selectedImageSource: "qrc:icons/dragArrow/arrowHighLeft.png"
                     imageRotation: 0
-                    onDragDelta: {
-                        //Since we're moving to topleft, make the bottom right fixed
-                        dragResizeHandler(delta, QQ.Item.BottomRight)
+                    onDragDelta: (delta) => {
+                        dragResizeHandler(delta, QQ.Item.TopLeft)
+                    }
+                    onDragStarted: () => {
+                        interactionId._orginialSize = captureItem.paperSizeOfItem
                     }
                 }
             }
@@ -346,9 +424,11 @@ QQ.Rectangle {
                     imageSource: "qrc:icons/dragArrow/arrowHighRightBlack.png"
                     selectedImageSource: "qrc:icons/dragArrow/arrowHighRight.png"
                     imageRotation: 0
-                    onDragDelta: {
-                        //Since we're moving the top right, make the bottom left fixed
-                        dragResizeHandler(delta, QQ.Item.BottomLeft)
+                    onDragDelta: (delta) => {
+                        dragResizeHandler(delta, QQ.Item.TopRight)
+                    }
+                    onDragStarted: () => {
+                        interactionId._orginialSize = captureItem.paperSizeOfItem
                     }
                 }
             }
@@ -357,9 +437,11 @@ QQ.Rectangle {
                     imageSource: "qrc:icons/dragArrow/arrowHighRightBlack.png"
                     selectedImageSource: "qrc:icons/dragArrow/arrowHighRight.png"
                     imageRotation: 0
-                    onDragDelta: {
-                        //Since we're moving the bottom left, make the top right fixed
-                        dragResizeHandler(delta, QQ.Item.TopRight)
+                    onDragDelta: (delta) => {
+                        dragResizeHandler(delta, QQ.Item.BottomLeft)
+                    }
+                    onDragStarted: () => {
+                        interactionId._orginialSize = captureItem.paperSizeOfItem
                     }
                 }
             }
@@ -368,9 +450,11 @@ QQ.Rectangle {
                     imageSource: "qrc:icons/dragArrow/arrowHighLeftBlack.png"
                     selectedImageSource: "qrc:icons/dragArrow/arrowHighLeft.png"
                     imageRotation: 0
-                    onDragDelta: {
-                        //Since we're moving the bottom right, make the top left fixed
-                        dragResizeHandler(delta, QQ.Item.TopLeft)
+                    onDragDelta: (delta) => {
+                        dragResizeHandler(delta, QQ.Item.BottomRight)
+                    }
+                    onDragStarted: () => {
+                        interactionId._orginialSize = captureItem.paperSizeOfItem
                     }
                 }
             }

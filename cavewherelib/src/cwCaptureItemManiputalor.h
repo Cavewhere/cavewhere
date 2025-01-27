@@ -61,7 +61,7 @@ private:
 
     QQmlComponent* InteractionComponent;
 
-    double PaperToScreenScale; //Converts paper coordinates into screen coordinates
+    double PaperToScreenScale = 1.0; //Converts paper coordinates into screen coordinates
     QPointF SceneOffset;
 
     QQuickItem* createInteractionItem(const QVariantMap& requiredProperties);
