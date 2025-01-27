@@ -12,10 +12,15 @@ QQ.Item {
     anchors.fill: parent
     visible: parent !== null
 
-    onVisibleChanged: {
-        if(!visible) {
-            resetTool()
-        }
+    // onVisibleChanged: {
+    //     if(!visible) {
+    //         // quoteBoxId.visible = true
+    //         resetTool()
+    //     }
+    // }
+
+    function activate() {
+        toolButtonId.state = "INIT"
     }
 
     function addRectangle(rectangle) {
@@ -33,15 +38,15 @@ QQ.Item {
         manager.addCaptureViewport(viewObject);
     }
 
-    function resetTool() {
-        interactionId.deactivate()
-        toolId.visible = false
-        selectionRectangleId.visible = false
-        selectionRectangleId.width = 0
-        selectionRectangleId.height = 0
-        toolButtonId.enabled = true
-        state = ""
-    }
+    // function resetTool() {
+    //     interactionId.deactivate()
+    //     // toolId.visible = false
+    //     // selectionRectangleId.visible = false
+    //     // selectionRectangleId.width = 0
+    //     // selectionRectangleId.height = 0
+    //     // toolButtonId.enabled = true
+    //     // toolButtonId.state = "INIT"
+    // }
 
     QQ.Component {
         id: captureViewComponentId
@@ -64,20 +69,65 @@ QQ.Item {
         text: " Select Area"
         enabled: true
         icon.source: "qrc:/twbs-icons/icons/box-arrow-down-right.svg"
-        // icon.width: 10
-        // icon.height: 10
-
-        onClicked: {
-            interactionId.activate()
-            state = "ACTIVE_STATE"
-        }
+        state: "DEACTIVE"
+        visible: true
 
         states: [
             QQ.State {
+                name: "DEACTIVE"
+                QQ.PropertyChanges {
+                    toolId {
+                        visible: false
+                    }
+                }
+            },
+
+            QQ.State {
+                name: "INIT"
+                QQ.PropertyChanges {
+                    quoteBoxId{
+                        visible: true
+                    }
+
+                    toolId {
+                        visible: true
+                    }
+
+                    toolButtonId {
+                        enabled: true
+                        visible: true
+                        onClicked: {
+                            interactionId.activate()
+                            toolButtonId.state = "ACTIVE_STATE"
+                        }
+                    }
+
+                    selectionRectangleId {
+                        visible: false
+                        width: 0
+                        height:  0
+                    }
+                    toolButtonId {
+                        enabled: true
+                        visible: true
+                    }
+                }
+            },
+
+            QQ.State {
                 name: "ACTIVE_STATE"
                 QQ.PropertyChanges {
+                    toolId {
+                        visible: true
+                    }
+
                     toolButtonId {
                         enabled: false
+                        visible: true
+                    }
+
+                    selectionRectangleId {
+                        visible: true
                     }
 
                     interactionId {
@@ -101,10 +151,15 @@ QQ.Item {
             QQ.State {
                 name: "CAN_DONE_STATE"
                 QQ.PropertyChanges {
+                    toolId {
+                        visible: true
+                    }
+
                     toolButtonId {
                         text: " Done"
                         icon.source: "qrc:/twbs-icons/icons/check-lg.svg"
                         enabled: true
+                        visible: true
                         onClicked: {
                             var caputerRect = Qt.rect(selectionRectangleId.x,
                                                       selectionRectangleId.y,
@@ -116,16 +171,17 @@ QQ.Item {
 
                             RootData.pageSelectionModel.back()
 
-                            resetTool()
+                            interactionId.deactivate()
+                            toolButtonId.state = "DEACTIVE"
                         }
                     }
 
                     interactionId {
                         onHasDraggedChanged: {
-                            if(!hasDragged) {
-                                toolButtonId.state = "ACTIVE_STATE"
+                            if(hasDragged) {
+                                toolButtonId.state = "INIT"
                             } else {
-                                toolButtonId.state = ""
+                                toolButtonId.state = "ACTIVE_STATE"
                             }
                         }
                     }

@@ -41,6 +41,7 @@ QQ.Item {
 
     CaptureManager {
         id: screenCaptureManagerId
+        objectName: "screenCaptureManager"
         view: mapPageId.view.renderer
         viewport: Qt.rect(paperSizeInteractionId.captureRectangle.x,
                           paperSizeInteractionId.captureRectangle.y,
@@ -84,7 +85,7 @@ QQ.Item {
                     text: " Add Layer"
                     icon.source: "qrc:/twbs-icons/icons/layers.svg"
                     onClicked: {
-                        selectionTool.visible = true
+                        selectionTool.activate()
                         RootData.pageSelectionModel.gotoPageByName(null, "View");
                     }
                 }

@@ -174,7 +174,6 @@ void cwCaptureItemManiputalor::managerDestroyed()
 QQuickItem *cwCaptureItemManiputalor::createInteractionItem(const QVariantMap& requiredProperties)
 {
     Q_ASSERT(InteractionComponent != nullptr);
-    qDebug() << "Insert item:" << requiredProperties;
     QObject* object = InteractionComponent->createWithInitialProperties(requiredProperties);
     QQuickItem* item = dynamic_cast<QQuickItem*>(object);
     Q_ASSERT(item != nullptr);
@@ -208,7 +207,6 @@ void cwCaptureItemManiputalor::clear()
  */
 void cwCaptureItemManiputalor::updateItemTransform(QQuickItem *item)
 {
-    qDebug() << "Update Transform:" << PaperToScreenScale << SceneOffset;
    item->setProperty("captureScale", PaperToScreenScale);
    item->setProperty("captureOffset", SceneOffset);
 }

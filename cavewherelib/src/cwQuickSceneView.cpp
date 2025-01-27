@@ -94,7 +94,6 @@ QGraphicsScene* cwQuickSceneView::scene() const {
 void cwQuickSceneView::paint(QPainter *painter)
 {
     if(Scene.isNull()) { return; }
-    qDebug() << "Render!";
     //This should probably be drawn to a texture instead of copied to another QImage in the backend
     //Using the Scene here directly doesn't work because of threading and qtimer issue and will cause
     //high CPU usage in a QTimer that's internal to the Scene. Qt doc warns against this

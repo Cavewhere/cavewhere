@@ -225,7 +225,7 @@ void cwCaptureViewport::capture()
 
         image.save(QString("tile-%1.png").arg(job.id));
 
-        qDebug() << "TileRect:" << tileRect << "Job:" << job.viewport << parent->boundingRect();
+        // qDebug() << "TileRect:" << tileRect << "Job:" << job.viewport << parent->boundingRect();
 
         NumberOfImagesProcessed++;
 
