@@ -13,7 +13,7 @@ QQ.Item {
 
     // implicitWidth: quickSceneView.implicitWidth + sidebarColumnId.implicitWidth
 
-    property alias hideExternalTools: selectionTool.visible
+    // property alias hideExternalTools: selectionTool.visible
     property GLTerrainRenderer view
 
     ErrorDialog {
@@ -21,13 +21,13 @@ QQ.Item {
         model: screenCaptureManagerId.errorModel
     }
 
-    SelectExportAreaTool {
-        id: selectionTool
-        parent: mapPageId.view
-        view: mapPageId.view
-        manager: screenCaptureManagerId
-        visible: false
-    }
+    // SelectExportAreaTool {
+    //     id: selectionTool
+    //     parent: mapPageId.view
+    //     view: mapPageId.view
+    //     manager: screenCaptureManagerId
+    //     visible: false
+    // }
 
     ChoosePaperSizeInteraction {
         id: paperSizeInteractionId
@@ -61,7 +61,7 @@ QQ.Item {
 
         QuickSceneView {
             id: quickSceneView
-            QC.SplitView.preferredWidth: rowLayoutId.width * 0.7
+            QC.SplitView.preferredWidth: rowLayoutId.width * 0.5
             // implicitWidth: 300
             // Layout.fillHeight: true
             // Layout.fillWidth: true
@@ -77,20 +77,20 @@ QQ.Item {
         QC.ScrollView {
             padding: 5
 
-            ColumnLayout {
-
-                QC.Button {
-                    id: addLayerButton
-                    objectName: "addLayerButton"
-                    text: " Add Layer"
-                    icon.source: "qrc:/twbs-icons/icons/layers.svg"
-                    onClicked: {
-                        selectionTool.activate()
-                        RootData.pageSelectionModel.gotoPageByName(null, "View");
-                    }
+            RowLayout {
+                spacing: 10
+                MapLayers {
+                    id: mapLayersId
+                    Layout.alignment: Qt.AlignTop
+                    view: mapPageId.view
+                    screenCaptureManager: screenCaptureManagerId
                 }
 
-                BreakLine {  }
+                QQ.Rectangle {
+                    Layout.fillHeight: true
+                    width: 1
+                    color: "#4C4C4C"
+                }
 
                 MapOptions {
                     id: mapOptionsId
@@ -113,8 +113,8 @@ QQ.Item {
     // }
 
     HelpQuoteBox {
-        pointAtObject: addLayerButton
-        pointAtObjectPosition: Qt.point(addLayerButton.width / 2.0, addLayerButton.height)
+        pointAtObject: mapLayersId.addLayerButton
+        pointAtObjectPosition: Qt.point(mapLayersId.addLayerButton.width / 2.0, mapLayersId.addLayerButton.height)
         triangleOffset: 0.0
         visible: screenCaptureManagerId.numberOfCaptures === 0
         text: "Add a new layer to create a map"

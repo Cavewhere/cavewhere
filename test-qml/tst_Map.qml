@@ -17,7 +17,6 @@ MainWindowTest {
             while(catpureManager.numberOfCaptures > 0) {
                 let index = catpureManager.index(0);
                 let capture = catpureManager.data(index, CaptureManager.LayerObjectRole);
-                console.log() << "Deleting:" << capture
                 catpureManager.removeCaptureViewport(capture)
             }
         }
@@ -114,6 +113,8 @@ MainWindowTest {
 
             //Test that the export works
             // verify(false)
+
+            // wait(100000)
         }
 
         function moveMapLayer() {
