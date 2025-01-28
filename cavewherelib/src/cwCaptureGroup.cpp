@@ -120,7 +120,7 @@ void cwCaptureGroup::updateCaptureRotation(const cwCaptureViewport *fixedCapture
 {
     if(fixedCapture == captureToUpdate) { return; }
 
-    disconnect(RotationMapper, SIGNAL(mapped(QObject*)), this, SLOT(updateRotationFrom(QObject*)));
+    disconnect(RotationMapper, SIGNAL(mappedObject(QObject*)), this, SLOT(updateRotationFrom(QObject*)));
 
     double fixedRotation = fixedCapture->cameraAzimuth() - fixedCapture->rotation();
     double captureRotation = captureToUpdate->cameraAzimuth() - captureToUpdate->rotation();
@@ -131,7 +131,7 @@ void cwCaptureGroup::updateCaptureRotation(const cwCaptureViewport *fixedCapture
 
 //    updateViewportGroupData(captureToUpdate); //, true);
 
-    connect(RotationMapper, SIGNAL(mapped(QObject*)), this, SLOT(updateRotationFrom(QObject*)));
+    connect(RotationMapper, SIGNAL(mappedObject(QObject*)), this, SLOT(updateRotationFrom(QObject*)));
 }
 
 /**

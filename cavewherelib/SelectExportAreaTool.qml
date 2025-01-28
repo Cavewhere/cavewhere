@@ -107,6 +107,7 @@ QQ.Item {
                         width: 0
                         height:  0
                     }
+
                     toolButtonId {
                         enabled: true
                         visible: true
@@ -128,6 +129,8 @@ QQ.Item {
 
                     selectionRectangleId {
                         visible: true
+                        width: 0
+                        height: 0
                     }
 
                     interactionId {
@@ -215,6 +218,7 @@ QQ.Item {
 
     SelectionRectangle {
         id: selectionRectangleId
+        objectName: "selectionRectangle"
     }
 
     onViewChanged: {

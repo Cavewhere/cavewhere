@@ -8,6 +8,7 @@ QQ.Rectangle {
 
     required property QuickSceneView quickSceneView
     required property CaptureViewport captureItem
+    required property SelectionManager selectionManager;
     property double captureScale: 1.0
     property point captureOffset
     property bool selected: false
@@ -202,7 +203,7 @@ QQ.Rectangle {
             QQ.PropertyChanges {
                 selectTapId {
                     onTapped: (eventPoint, button) => {
-                        interactionId.selected = true
+                        interactionId.selectionManager.selectedItem = interactionId
                     }
                 }
             }

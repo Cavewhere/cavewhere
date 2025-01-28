@@ -18,6 +18,7 @@
 //Our includes
 #include "cwCaptureManager.h"
 #include "cwQuickSceneView.h"
+#include "cwSelectionManager.h"
 class cwCaptureItem;
 
 class cwCaptureItemManiputalor : public QQuickItem
@@ -52,6 +53,8 @@ private slots:
     void managerDestroyed();
 
 private:
+    cwSelectionManager* m_selectionManager;
+
     QPointer<cwCaptureManager> Manager; //!<
     QPointer<cwQuickSceneView> m_view;
 

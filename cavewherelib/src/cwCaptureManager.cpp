@@ -242,13 +242,31 @@ void cwCaptureManager::capture()
         return;
     }
 
-    NumberOfImagesProcessed = Captures.size();
+    NumberOfImagesProcessed = 0;
 
-    foreach(cwCaptureViewport* capture, Captures) {
-        connect(capture, &cwCaptureViewport::finishedCapture, this, &cwCaptureManager::saveCaptures, Qt::UniqueConnection);
-        capture->setPreviewCapture(false);
-        capture->capture();
-    }
+    //Lamba needs to be a shared pointer because it's recursive
+    auto next = std::make_shared<std::function<void ()>>();
+
+    //Because capturing in async, we need to call this in steps
+    *next = [this, next]() {
+        if(NumberOfImagesProcessed < Captures.size()) {
+            auto capture = Captures.at(NumberOfImagesProcessed);
+            connect(capture, &cwCaptureViewport::finishedCapture, this, [this, next]() {
+                NumberOfImagesProcessed++;
+
+                //Call the next capture, recursive (sorta)
+                (*next)();
+            }, Qt::SingleShotConnection);
+            capture->setPreviewCapture(false);
+            capture->capture();
+        } else if(NumberOfImagesProcessed == Captures.size()) {
+            //Finished
+            saveCaptures();
+        }
+    };
+
+    //Queue the first capture
+    (*next)();
 }
 
 /**
@@ -414,9 +432,9 @@ void cwCaptureManager::addFullResultionCaptureItem()
  */
 void cwCaptureManager::saveCaptures()
 {
-    NumberOfImagesProcessed--;
+    // NumberOfImagesProcessed--;
 
-    if(NumberOfImagesProcessed == 0) {
+    if(NumberOfImagesProcessed == Captures.size()) {
         //All the images have been captured, go through all the captures add the fullImages
         //to the scene.
 

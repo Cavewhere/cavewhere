@@ -20,6 +20,7 @@
 
 cwCaptureItemManiputalor::cwCaptureItemManiputalor(QQuickItem *parent) :
     QQuickItem(parent),
+    m_selectionManager(new cwSelectionManager(this)),
     InteractionComponent(nullptr)
 {
     connect(this, &QQuickItem::xChanged,
@@ -99,6 +100,7 @@ void cwCaptureItemManiputalor::insertItems(const QModelIndex &parent, int start,
 
     QVariantMap requiredProperties {{"quickSceneView", QVariant::fromValue(m_view.data())},
                                    {"captureItem", QVariant::fromValue(nullptr)},
+                                   {"selectionManager", QVariant::fromValue(m_selectionManager)},
                                    {"captureScale", PaperToScreenScale},
                                    {"captureOffset", SceneOffset}};
 

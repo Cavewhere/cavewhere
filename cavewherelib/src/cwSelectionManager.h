@@ -10,11 +10,13 @@
 
 //Qt includes
 #include <QObject>
+#include <QtQmlIntegration>
 class QQuickItem;
 
 class cwSelectionManager : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(SelectionManager)
 
     Q_PROPERTY(QQuickItem* selectedItem READ selectedItem WRITE setSelectedItem NOTIFY selectedItemChanged)
 
