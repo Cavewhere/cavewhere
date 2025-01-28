@@ -127,7 +127,13 @@ MainWindowTest {
             wait(50);
 
             verify(captureItem0_obj1.selected === false);
+            verify(captureItem2_obj1.selected === false);
             verify(captureItem1_obj1.selected === true);
+
+            //Spot check that the elements are visually correct
+            verify(findChild(captureItem0_obj1, "topLeftHandle").visible == false);
+            verify(findChild(captureItem2_obj1, "topLeftHandle").visible == false);
+            verify(findChild(captureItem1_obj1, "topLeftHandle").visible == true); //Should be true because it's selected
 
             mouseDrag(captureItem1_obj1, 216.432, 153.995, 0, 50)
 

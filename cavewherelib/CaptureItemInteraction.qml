@@ -16,9 +16,13 @@ QQ.Rectangle {
     //Private properties
     property double _scale: captureScale;
     property rect _viewRect: quickSceneView.toView(captureItem.boundingBox)
+    property point _viewPos: quickSceneView.toView(captureItem.positionOnPaper)
 
     //For position
     property size _orginialSize
+
+    //For Drag
+    property point _oldPaperPos
 
     //For rotation
     property point _oldPoint
@@ -91,27 +95,38 @@ QQ.Rectangle {
       This handles the drag Rotation of the catpureItem
 
       @param delta - Qt.Point() with the delta of the mouse movement
-      @param oldPoint - Qt.Point() this is the old mouse position
       */
-    function dragRotationHandler(handle, delta, oldPoint) {
+    function dragRotationHandler(delta) {
         let center = interactionId.mapToItem(null, centerItemId.x, centerItemId.y);
 
         let p1 = _oldPoint
         let p2 = Qt.point(_startPoint.x + delta.x, _startPoint.y + delta.y)
 
+
         let v1 = Qt.point(p1.x - center.x, p1.y - center.y)
         let v2 = Qt.point(p2.x - center.x, p2.y - center.y)
 
-        let angle = VectorMath.angleBetween(v1, v2);
-        let sign = VectorMath.crossProduct(v1, v2) > 0 ? 1 : -1;
+        function isLengthValid(v) {
+            return v.x !== 0.0 && v.y !== 0.0
+        }
 
+        if(isLengthValid(v1) && isLengthValid(v2)) {
+            let angle = VectorMath.angleBetween(v1, v2);
+            let sign = VectorMath.crossProduct(v1, v2) > 0 ? 1 : -1;
+            console.log("Center:" + center + " p1:" + p1 + " p2:" + p2 + " sign:" + sign + " angle:" + angle + " v1:" + v1 + " v2:" + v2)
+
+            captureItem.rotation += sign * angle;
+        }
         _oldPoint = p2;
-        captureItem.rotation += sign * angle;
     }
 
-    function updatePaperScene() {
-        captureItem.positionOnPaper = quickSceneView.toPaper(Qt.point(x, y));
-    }
+    // function updatePaperScene() {
+    //     console.log("Position on paper:" + captureItem.positionOnPaper + " new Position:" + quickSceneView.toPaper(Qt.point(x, y)))
+    //     let topLeftBoundsOnPaper = quickSceneView.toPaper(Qt.point(x, y));
+    //     let diff = topLeftBoundsOnPaper.minus(interactionId._viewPos);
+
+    //     captureItem.positionOnPaper = quickSceneView.toPaper(Qt.point(x, y));
+    // }
 
     function dragOffset() {
         let center = interactionId.mapToItem(null, centerItemId.x, centerItemId.y);
@@ -132,229 +147,162 @@ QQ.Rectangle {
     y: _viewRect.y
 
     border.width: 1
-    border.color: "#151515"
+    border.color: "#d3d3d3"
     color: "#00000000"
 
-    onSelectedChanged: {
-        if(selected) {
-            interactionId.state = "SELECTED_RESIZE_STATE"
-        } else {
-            interactionId.state = "INIT_STATE"
-        }
-    }
+    // onSelectedChanged: {
+    //     if(selected) {
+    //         interactionId.state = "SELECTED"
+    //     } else {
+    //         interactionId.state = "INIT_STATE"
+    //     }
+    // }
 
-    onCaptureItemChanged: {
-        state = interactionId.captureItem === null ? "" : "INIT_STATE"
-    }
+    // onCaptureItemChanged: {
+    //     state = interactionId.captureItem === null ? "" : "INIT_STATE"
+    // }
+
+    // QQ.Rectangle {
+    //     parent: interactionId.parent
+    //     width: 10
+    //     height: 10
+    //     color: "red"
+    //     x: interactionId._viewPos.x - width * 0.5
+    //     y: interactionId._viewPos.y - height * 0.5
+    // }
 
     QQ.TapHandler {
         id: selectTapId
+
+        onTapped: (eventPoint, button) => {
+            interactionId.selectionManager.cycleSelectItem(interactionId, eventPoint.timestamp)
+        }
     }
 
     QQ.DragHandler {
         id: dragHandler
-        enabled: interactionId.selected
+        enabled: false
+        target: null
+        dragThreshold: 1
         onActiveChanged: {
-            if(!active) {
-                //Restore x and y bindings
-                interactionId.x = Qt.binding(function() { return interactionId._viewRect.x } );
-                interactionId.y = Qt.binding(function() { return interactionId._viewRect.y } );
-            } else {
-                //This removes the bindings by assigning the values to it self, this prevents
-                //a binding loop from happening when the drag takes over
-                interactionId.x = interactionId.x
-                interactionId.y = interactionId.y
+            if(active) {
+                interactionId._oldPaperPos = interactionId.captureItem.positionOnPaper
             }
+        }
+
+        onActiveTranslationChanged: {
+            let deltaOnPaper = quickSceneView.toPaper(Qt.point(activeTranslation.x, activeTranslation.y))
+            let oldPaperPos = interactionId._oldPaperPos;
+            let posOnPaper = Qt.point(oldPaperPos.x + deltaOnPaper.x, oldPaperPos.y + deltaOnPaper.y);
+            interactionId.captureItem.positionOnPaper = posOnPaper
         }
     }
 
-    RectangleHandle {
+    component ResizeHandle: RectangleHandle {
+        required property int corner
+
+        imageSource: "qrc:/twbs-icons/icons/arrows-angle-expand.svg"
+        imageSourceSize: Qt.size(20,20)
+        onDragDelta: (delta) => {
+            dragResizeHandler(delta, corner)
+        }
+        onDragStarted: () => {
+            interactionId._orginialSize = captureItem.paperSizeOfItem
+        }
+    }
+
+    ResizeHandle {
         id: topLeftHandle
         objectName: "topLeftHandle"
         anchors.bottom: interactionId.top
         anchors.right: interactionId.left
+        anchors.bottomMargin: -imageSourceSize.height * 0.5
+        anchors.rightMargin: -imageSourceSize.width * 0.5
+        imageRotation: 90
+        corner: QQ.Item.TopLeft
+        visible: false
     }
 
-    RectangleHandle {
+    ResizeHandle {
         id: topRightHandle
         objectName: "topRightHandle"
         anchors.bottom: interactionId.top
         anchors.left: interactionId.right
+        anchors.bottomMargin: -imageSourceSize.height * 0.5
+        anchors.leftMargin: -imageSourceSize.width * 0.5
+        imageRotation: 0
+        corner: QQ.Item.TopRight
+        visible: false
     }
 
-    RectangleHandle {
+    ResizeHandle {
         id: bottomLeftHandle
         objectName: "bottomLeftHandle"
         anchors.top: interactionId.bottom
         anchors.right: interactionId.left
+        anchors.topMargin: -imageSourceSize.height * 0.5
+        anchors.rightMargin: -imageSourceSize.width * 0.5
+        imageRotation: 0
+        corner: QQ.Item.BottomLeft
+        visible: false
     }
 
-    RectangleHandle {
+    ResizeHandle {
         id: bottomRightHandle
         objectName: "bottomRightHandle"
         anchors.top: interactionId.bottom
         anchors.left: interactionId.right
+        anchors.topMargin: -imageSourceSize.height * 0.5
+        anchors.leftMargin: -imageSourceSize.width * 0.5
+        imageRotation: 90
+        corner: QQ.Item.BottomRight
+        visible: false
+    }
+
+    RectangleHandle {
+        id: rotationHandle
+        objectName: "rotationHandle"
+        imageSource: "qrc:/twbs-icons/icons/arrow-repeat.svg"
+        anchors.centerIn: interactionId
+        imageSourceSize: Qt.size(40, 40)
+        onDragDelta: (delta) => {dragRotationHandler(delta)}
+        onDragStarted: (startPoint) => {
+                           interactionId._startPoint = startPoint
+                           interactionId._oldPoint = startPoint
+                       }
+        visible: false
+        QQ.Rectangle {
+            color: "#272727"
+            anchors.centerIn: parent
+            width: 8
+            height: 8
+            radius: 4
+        }
+
+        //We don't want to use a button here because this handle
+        //does dragging
+        QQ.Rectangle {
+            z: -1
+            color: "#ebebeb" //Background for button
+            anchors.centerIn: parent
+            width: rotationHandle.width
+            height: rotationHandle.height
+            radius: rotationHandle.width * 0.5
+        }
     }
 
     states: [
         QQ.State {
-            name: "INIT_STATE"
-
+            when: interactionId.selected
             QQ.PropertyChanges {
-                selectTapId {
-                    onTapped: (eventPoint, button) => {
-                        interactionId.selectionManager.cycleSelectItem(interactionId, eventPoint.timestamp)
-                    }
-                }
-            }
-        },
-
-        QQ.State {
-            name: "SELECTED"
-            extend: "INIT_STATE"
-            QQ.PropertyChanges {
-                interactionId {
-                    onXChanged: {
-                        //this prevents a binding loop on x
-                        if(dragHandler.active) {
-                            interactionId.updatePaperScene();
-                        }
-                    }
-                    onYChanged: {
-                        //this prevents a binding loop on y
-                        if(dragHandler.active) {
-                            interactionId.updatePaperScene();
-                        }
-                    }
-                }
-            }
-        },
-
-        QQ.State {
-            name: "SELECTED_RESIZE_STATE"
-            extend: "SELECTED"
-
-            // QQ.PropertyChanges {
-            //     selectTapId {
-            //         onTapped: (eventPoint, button) => {
-            //             interactionId.state = "SELECTED_ROTATE_STATE"
-            //         }
-            //     }
-            // }
-
-            QQ.PropertyChanges {
-                topLeftHandle {
-                    imageSource: "qrc:icons/dragArrow/arrowHighLeftBlack.png"
-                    selectedImageSource: "qrc:icons/dragArrow/arrowHighLeft.png"
-                    imageRotation: 0
-                    onDragDelta: (delta) => {
-                        dragResizeHandler(delta, QQ.Item.TopLeft)
-                    }
-                    onDragStarted: () => {
-                        interactionId._orginialSize = captureItem.paperSizeOfItem
-                    }
-                }
-            }
-            QQ.PropertyChanges {
-                topRightHandle {
-                    imageSource: "qrc:icons/dragArrow/arrowHighRightBlack.png"
-                    selectedImageSource: "qrc:icons/dragArrow/arrowHighRight.png"
-                    imageRotation: 0
-                    onDragDelta: (delta) => {
-                        dragResizeHandler(delta, QQ.Item.TopRight)
-                    }
-                    onDragStarted: () => {
-                        interactionId._orginialSize = captureItem.paperSizeOfItem
-                    }
-                }
-            }
-            QQ.PropertyChanges {
-                bottomLeftHandle {
-                    imageSource: "qrc:icons/dragArrow/arrowHighRightBlack.png"
-                    selectedImageSource: "qrc:icons/dragArrow/arrowHighRight.png"
-                    imageRotation: 0
-                    onDragDelta: (delta) => {
-                        dragResizeHandler(delta, QQ.Item.BottomLeft)
-                    }
-                    onDragStarted: () => {
-                        interactionId._orginialSize = captureItem.paperSizeOfItem
-                    }
-                }
-            }
-            QQ.PropertyChanges {
-                bottomRightHandle {
-                    imageSource: "qrc:icons/dragArrow/arrowHighLeftBlack.png"
-                    selectedImageSource: "qrc:icons/dragArrow/arrowHighLeft.png"
-                    imageRotation: 0
-                    onDragDelta: (delta) => {
-                        dragResizeHandler(delta, QQ.Item.BottomRight)
-                    }
-                    onDragStarted: () => {
-                        interactionId._orginialSize = captureItem.paperSizeOfItem
-                    }
-                }
-            }
-
-        },
-
-        QQ.State {
-            name: "SELECTED_ROTATE_STATE"
-            extend: "SELECTED"
-
-            // QQ.PropertyChanges {
-            //     selectTapId {
-            //         onTapped: (eventPoint, button) => {
-            //             interactionId.state = "SELECTED_RESIZE_STATE"
-            //         }
-            //     }
-            // }
-
-            QQ.PropertyChanges {
-                topLeftHandle {
-                    imageSource: "qrc:icons/dragArrow/rotateArrowBlack.png"
-                    selectedImageSource: "qrc:icons/dragArrow/rotateArrow.png"
-                    imageRotation: 90
-                    onDragDelta: (delta) => {dragRotationHandler(topLeftHandle, delta)}
-                    onDragStarted: (startPoint) => {
-                        interactionId._startPoint = startPoint
-                        interactionId._oldPoint = startPoint
-                    }
-                }
-            }
-            QQ.PropertyChanges {
-                topRightHandle {
-                    imageSource: "qrc:icons/dragArrow/rotateArrowBlack.png"
-                    selectedImageSource: "qrc:icons/dragArrow/rotateArrow.png"
-                    imageRotation: 180
-                    onDragDelta: (delta) => {dragRotationHandler(topRightHandle, delta)}
-                    onDragStarted: (startPoint) => {
-                        interactionId._startPoint = startPoint
-                        interactionId._oldPoint = startPoint }
-                }
-            }
-            QQ.PropertyChanges {
-                bottomLeftHandle {
-                    imageSource: "qrc:icons/dragArrow/rotateArrowBlack.png"
-                    selectedImageSource: "qrc:icons/dragArrow/rotateArrow.png"
-                    imageRotation: 0
-                    onDragDelta: (delta) => {dragRotationHandler(bottomLeftHandle, delta)}
-                    onDragStarted: (startPoint) => {
-                        interactionId._startPoint = startPoint
-                        interactionId._oldPoint = startPoint
-                    }
-                }
-            }
-            QQ.PropertyChanges {
-                bottomRightHandle {
-                    imageSource: "qrc:icons/dragArrow/rotateArrowBlack.png"
-                    selectedImageSource: "qrc:icons/dragArrow/rotateArrow.png"
-                    imageRotation: 270
-                    onDragDelta: (delta) => {dragRotationHandler(bottomRightHandle, delta)}
-                    onDragStarted: (startPoint) => {
-                        interactionId._startPoint = startPoint
-                        interactionId._oldPoint = startPoint
-                    }
-                }
+                topLeftHandle.visible: true
+                topRightHandle.visible: true
+                bottomLeftHandle.visible: true
+                bottomRightHandle.visible: true
+                rotationHandle.visible: interactionId.width >= rotationHandle.imageSourceSize.width &&
+                                        interactionId.height >= rotationHandle.imageSourceSize.height
+                dragHandler.enabled: true
+                interactionId.border.color: "#4a4a4a" //Selection color
             }
         }
     ]

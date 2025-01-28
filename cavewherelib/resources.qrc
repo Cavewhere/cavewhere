@@ -130,5 +130,7 @@
         <file>twbs-icons/icons/box-arrow-down-right.svg</file>
         <file>twbs-icons/icons/layers.svg</file>
         <file>twbs-icons/icons/check-lg.svg</file>
+        <file>twbs-icons/icons/arrow-repeat.svg</file>
+        <file>twbs-icons/icons/arrows-angle-expand.svg</file>
     </qresource>
 </RCC>

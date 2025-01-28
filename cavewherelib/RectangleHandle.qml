@@ -7,8 +7,9 @@ QQ.Item {
     height: imageId.height
 
     property url imageSource
-    property url selectedImageSource
+    // property url selectedImageSource
     property alias imageRotation: imageId.rotation
+    property alias imageSourceSize: imageId.sourceSize
 
     signal dragStarted(QQ.point startPoint)
     signal dragDelta(QQ.vector2d delta)
@@ -24,7 +25,14 @@ QQ.Item {
         id: selectImageId
         rotation: imageId.rotation
         visible: hoverHandler.hovered
-        source: handle.selectedImageSource
+        source: handle.imageSource
+        sourceSize: imageId.sourceSize
+
+        layer.enabled: true
+        layer.effect: QQ.ShaderEffect {
+            property QQ.color pixelColor: Qt.darker("#8dcdff") //Selection color
+            fragmentShader: "qrc:/shaders/toColor.frag.qsb"
+        }
     }
 
     QQ.HoverHandler {

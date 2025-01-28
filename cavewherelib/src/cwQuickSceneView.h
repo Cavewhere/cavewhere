@@ -37,6 +37,7 @@ public:
 
     // QPointF toView(QPointF paperPoint) const;
     Q_INVOKABLE QRectF toView(QRectF paperRect) const;
+    Q_INVOKABLE QPointF toView(QPointF paperPoint) const;
     Q_INVOKABLE QPointF toPaper(QPointF pointPixels) const;
 
     double viewScale() const;

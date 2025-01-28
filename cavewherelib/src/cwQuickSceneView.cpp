@@ -58,6 +58,12 @@ QRectF cwQuickSceneView::toView(QRectF paperRect) const
     return transform.mapRect(paperRect);
 }
 
+QPointF cwQuickSceneView::toView(QPointF paperPoint) const
+{
+    QTransform transform = toViewTransform();
+    return transform.map(paperPoint);
+}
+
 QPointF cwQuickSceneView::toPaper(QPointF pointPixel) const
 {
     QTransform transform = toViewTransform().inverted();
