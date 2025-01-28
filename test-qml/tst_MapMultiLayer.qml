@@ -49,7 +49,6 @@ MainWindowTest {
 
             let profileButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->GroupBox->profileButton->label")
             mouseClick(profileButton)
-
             tryVerify(() => { return turnTableInteraction.pitch === 0.0})
 
             // let selectionButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->selectionToolButton")
@@ -63,7 +62,7 @@ MainWindowTest {
             verify(selectionRectangle.width === 0)
             verify(selectionRectangle.height === 0)
 
-            //Select in profile
+            //Select in profile north
             interaction = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->selectAreaInteraction")
             mouseDrag(interaction, 387, 274, 337, 269)
             verify(selectionRectangle.width > 0)
@@ -73,17 +72,64 @@ MainWindowTest {
 
             wait(100);
 
-            let captureItem0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0")
-            mouseClick(captureItem0_obj1, 178.53, 118.409)
-            mouseDrag(captureItem0_obj1, 178.53, 118.409, 0, -30)
+            mouseClick(addLayerButton)
 
+            //Look east
+            let eastButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->GroupBox->eastButton->label")
+            mouseClick(eastButton)
+            tryVerify(() => { return turnTableInteraction.azimuth === 90.0})
+
+            //Select in profile east
+            mouseClick(selectionButton)
+            interaction = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->selectAreaInteraction")
+            mouseDrag(interaction, 275, 305, 279, 267)
+            mouseClick(done);
+
+            wait(100);
+
+            //Make sure cycle selection works correctly
+            let captureItem0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0")
             let captureItem1_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem1")
+            let captureItem2_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem2")
+
+            let selectedCapture = function() {
+                if(captureItem0_obj1.selected) {
+                    return captureItem0_obj1
+                } else if(captureItem1_obj1.selected) {
+                    return captureItem1_obj1
+                } else if(captureItem2_obj1.selected) {
+                    return captureItem2_obj1
+                }
+                return null
+            }
+
+            mouseClick(captureItem2_obj1, 281.029, 181.485)
+            wait(50);
+            let firstSelected = selectedCapture();
+
+            mouseClick(captureItem2_obj1, 281.029, 181.485)
+            wait(50);
+            let secondSelected = selectedCapture();
+
+            mouseClick(captureItem2_obj1, 281.029, 181.485)
+            wait(50);
+            let thirdSelected = selectedCapture();
+
+            verify(firstSelected !== secondSelected);
+            verify(firstSelected !== thirdSelected);
+            verify(secondSelected !== thirdSelected);
+
+            mouseClick(captureItem2_obj1, 281.029, 181.485)
+            wait(50);
+            verify(firstSelected === selectedCapture())
+
             mouseClick(captureItem1_obj1, 177.889, 282.772)
+            wait(50);
 
             verify(captureItem0_obj1.selected === false);
             verify(captureItem1_obj1.selected === true);
 
-            mouseDrag(captureItem1_obj1, 216.432, 153.995, 0, 55)
+            mouseDrag(captureItem1_obj1, 216.432, 153.995, 0, 50)
 
             //Export the image
             let mapPage = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage")

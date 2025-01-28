@@ -203,7 +203,7 @@ QQ.Rectangle {
             QQ.PropertyChanges {
                 selectTapId {
                     onTapped: (eventPoint, button) => {
-                        interactionId.selectionManager.selectedItem = interactionId
+                        interactionId.selectionManager.cycleSelectItem(interactionId, eventPoint.timestamp)
                     }
                 }
             }
@@ -234,13 +234,13 @@ QQ.Rectangle {
             name: "SELECTED_RESIZE_STATE"
             extend: "SELECTED"
 
-            QQ.PropertyChanges {
-                selectTapId {
-                    onTapped: (eventPoint, button) => {
-                        interactionId.state = "SELECTED_ROTATE_STATE"
-                    }
-                }
-            }
+            // QQ.PropertyChanges {
+            //     selectTapId {
+            //         onTapped: (eventPoint, button) => {
+            //             interactionId.state = "SELECTED_ROTATE_STATE"
+            //         }
+            //     }
+            // }
 
             QQ.PropertyChanges {
                 topLeftHandle {
@@ -301,13 +301,13 @@ QQ.Rectangle {
             name: "SELECTED_ROTATE_STATE"
             extend: "SELECTED"
 
-            QQ.PropertyChanges {
-                selectTapId {
-                    onTapped: (eventPoint, button) => {
-                        interactionId.state = "SELECTED_RESIZE_STATE"
-                    }
-                }
-            }
+            // QQ.PropertyChanges {
+            //     selectTapId {
+            //         onTapped: (eventPoint, button) => {
+            //             interactionId.state = "SELECTED_RESIZE_STATE"
+            //         }
+            //     }
+            // }
 
             QQ.PropertyChanges {
                 topLeftHandle {

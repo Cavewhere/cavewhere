@@ -26,6 +26,8 @@ public:
     QQuickItem* selectedItem() const;
     void setSelectedItem(QQuickItem* selectedItem);
 
+    Q_INVOKABLE void cycleSelectItem(QQuickItem* item, ulong timestamp);
+
     bool isSelected(QQuickItem* item) const;
     void clear();
 
@@ -39,6 +41,11 @@ private slots:
 
 private:
     QQuickItem* SelectedItem; //!< The currently selected item
+
+    bool m_cylceUpdateQueued = false;
+    ulong m_cycleTimestamp = 0; //Unique id that we're using from QEventPoint
+    QList<QQuickItem*> m_cycleSelects;
+    QList<QQuickItem*> m_cycleQueue;
 };
 
 /**

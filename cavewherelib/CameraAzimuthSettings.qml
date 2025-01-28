@@ -74,6 +74,7 @@ ColumnLayout {
 
         Button {
             id: eastButton
+            objectName: "eastButton"
             text: "East"
             width: northButton.width
             onClicked: {

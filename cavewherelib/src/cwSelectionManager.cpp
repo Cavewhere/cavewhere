@@ -44,6 +44,48 @@ void cwSelectionManager::setSelectedItem(QQuickItem* selectedItem) {
     }
 }
 
+void cwSelectionManager::cycleSelectItem(QQuickItem *item, ulong timestamp)
+{
+    if(m_cycleTimestamp != timestamp) {
+        m_cycleTimestamp = timestamp;
+        m_cycleSelects.clear();
+    }
+
+    m_cycleSelects.append(item);
+
+    if(!m_cylceUpdateQueued) {
+        m_cylceUpdateQueued = true;
+        QMetaObject::invokeMethod(this, [this]() {
+
+            //Remove items from the queue that don't exist in m_cycleSelects
+            m_cycleQueue.erase(
+                std::remove_if(
+                    m_cycleQueue.begin(),
+                    m_cycleQueue.end(),
+                    [this](QQuickItem* item) {
+                        // Check if the item exists in m_cycleSelects
+                        return !m_cycleSelects.contains(item);
+                    }
+                    ),
+                m_cycleQueue.end()
+                );
+
+            //Add new elements
+            for(QQuickItem* item : m_cycleSelects) {
+                if(!m_cycleQueue.contains(item)) {
+                    m_cycleQueue.append(item);
+                }
+            }
+
+            //Remove from the queue
+            auto itemToSelect = m_cycleQueue.takeFirst();
+
+            m_cylceUpdateQueued = false;
+            setSelectedItem(itemToSelect);
+        }, Qt::QueuedConnection);
+    }
+}
+
 /**
  * @brief cwSelectionManager::selectedItemDestroyed
  *
