@@ -137,6 +137,17 @@ MainWindowTest {
 
             mouseDrag(captureItem1_obj1, 216.432, 153.995, 0, 50)
 
+            let layerListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->GroupBox->layerListView")
+            verify(layerListView.currentIndex === 1) //The second layer should be selected
+
+            //Select a layer through the layer list
+            let layerDelegate0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->GroupBox->layerListView->layerDelegate0")
+            mouseClick(layerDelegate0)
+            verify(layerListView.currentIndex === 0)
+            verify(findChild(captureItem0_obj1, "topLeftHandle").visible == true);
+            verify(findChild(captureItem2_obj1, "topLeftHandle").visible == false);
+            verify(findChild(captureItem1_obj1, "topLeftHandle").visible == false);
+
             //Export the image
             let mapPage = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage")
             let screenCaptureManager = findChild(mapPage, "screenCaptureManager")

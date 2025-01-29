@@ -28,6 +28,9 @@ class cwCaptureItemManiputalor : public QQuickItem
 
     Q_PROPERTY(cwCaptureManager* manager READ manager WRITE setManager NOTIFY managerChanged)
     Q_PROPERTY(cwQuickSceneView* view READ view WRITE setView NOTIFY viewChanged FINAL)
+    Q_PROPERTY(QQuickItem* selectedItem READ selectedItem WRITE setSelectedItem NOTIFY selectedItemChanged FINAL)
+
+    // Q_PROPERTY(cwSelectionManager* selectionManager READ selectionManager NOTIFY selectionManagerChanged FINAL)
 
 public:
     explicit cwCaptureItemManiputalor(QQuickItem *parent = 0);
@@ -38,10 +41,21 @@ public:
     cwQuickSceneView *view() const;
     void setView(cwQuickSceneView *newView);
 
+    Q_INVOKABLE void select(cwCaptureItem* capture);
+
+    // cwSelectionManager *selectionManager() const { return m_selectionManager; }
+
+    // Q_INVOKABLE QQuickItem* visualItem(cwCaptureItem* capture) const { return CaptureToQuickItem.value(capture, nullptr); }
+
+    QQuickItem* selectedItem() const;
+    void setSelectedItem(QQuickItem *newSelectedItem);
+
 signals:
     void managerChanged();
-
     void viewChanged();
+    void selectionManagerChanged();
+
+    void selectedItemChanged();
 
 public slots:
 
@@ -73,7 +87,6 @@ private:
     void updateItemTransform(QQuickItem* item);
 
     cwCaptureItem* captureItem(int i) const;
-
 };
 
 #endif // CWCAPTURELAYERMANIPUTALOR_H

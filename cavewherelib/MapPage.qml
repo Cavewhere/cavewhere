@@ -68,6 +68,7 @@ QQ.Item {
             scene: screenCaptureManagerId.scene
 
             CaptureItemManiputalor {
+                id: captureItemManiputalorId
                 anchors.fill: parent;
                 view: quickSceneView
                 manager: screenCaptureManagerId
@@ -84,6 +85,7 @@ QQ.Item {
                     Layout.alignment: Qt.AlignTop
                     view: mapPageId.view
                     screenCaptureManager: screenCaptureManagerId
+                    captureItemManiputlor: captureItemManiputalorId
                 }
 
                 QQ.Rectangle {
@@ -101,16 +103,6 @@ QQ.Item {
             }
         }
     }
-
-    // QQ.Rectangle {
-    //     anchors.fill: parent
-    //     RenderingView {
-    //         id: viewId
-    //         anchors.fill: parent
-    //         // visible: false;
-    //         scene: RootData.regionSceneManager.scene
-    //     }
-    // }
 
     HelpQuoteBox {
         pointAtObject: mapLayersId.addLayerButton

@@ -10,6 +10,7 @@ ColumnLayout {
     id: mapLayersId
 
     required property CaptureManager screenCaptureManager
+    required property CaptureItemManiputalor captureItemManiputlor
     required property GLTerrainRenderer view
     property alias addLayerButton: addLayerButton
 
@@ -42,6 +43,7 @@ ColumnLayout {
 
             QQ.ListView {
                 id: layerListViewId
+                objectName: "layerListView"
 
                 implicitWidth: 200
                 implicitHeight: 100
@@ -52,18 +54,30 @@ ColumnLayout {
                 anchors.left: parent.left
                 anchors.right: parent.right
 
-                function updateLayerPropertyWidget() {
-                    if(currentIndex !== -1) {
-                        let modelIndex = mapLayersId.screenCaptureManager.index(currentIndex);
-                        let layerObject = mapLayersId.screenCaptureManager.data(modelIndex, CaptureManager.LayerObjectRole);
-                        layerProperties.layerObject = layerObject
-                    } else {
-                        layerProperties.layerObject = null;
+                function layerObject(i) {
+                    let modelIndex = mapLayersId.screenCaptureManager.index(i);
+                    let layerObject = mapLayersId.screenCaptureManager.data(modelIndex, CaptureManager.LayerObjectRole);
+                    if(layerObject === undefined) {
+                        return null;
                     }
+                    return layerObject;
+                }
+
+                function updateLayerPropertyWidget() {
+                    let layer = layerObject(currentIndex)
+                    layerProperties.layerObject = layer;
+                    // if(currentIndex !== -1) {
+                    //     let modelIndex = mapLayersId.screenCaptureManager.index(currentIndex);
+                    //     let layerObject = mapLayersId.screenCaptureManager.data(modelIndex, CaptureManager.LayerObjectRole);
+                    //     layerProperties.layerObject = layerObject
+                    // } else {
+                    //     layerProperties.layerObject = null;
+                    // }
                 }
 
                 delegate: Text {
                     id: textDelegateId
+                    objectName: "layerDelegate" + index
                     required property string layerNameRole
                     required property int index
 
@@ -93,7 +107,22 @@ ColumnLayout {
                     radius: 3
                 }
 
-                onCurrentIndexChanged: updateLayerPropertyWidget()
+                onCurrentIndexChanged: {
+                    let layer = layerObject(currentIndex)
+                    layerProperties.layerObject = layer;
+                    mapLayersId.captureItemManiputlor.select(layer);
+                }
+
+                QQ.Connections {
+                    target: mapLayersId.captureItemManiputlor
+                    function onSelectedItemChanged() {
+                        let captureInteraction = mapLayersId.captureItemManiputlor.selectedItem as CaptureItemInteraction
+                        console.log("Selected item changed:" + captureInteraction)
+                        if(captureInteraction) {
+                            layerListViewId.currentIndex = mapLayersId.screenCaptureManager.indexOf(captureInteraction.captureItem)
+                        }
+                    }
+                }
 
                 QQ.Connections {
                     target: mapLayersId.screenCaptureManager

@@ -30,6 +30,7 @@ void cwSelectionManager::setSelectedItem(QQuickItem* selectedItem) {
         }
 
         SelectedItem = selectedItem;
+        m_cycleQueue.removeOne(selectedItem);
 
         if(SelectedItem != nullptr) {
 
@@ -55,6 +56,10 @@ void cwSelectionManager::cycleSelectItem(QQuickItem *item, ulong timestamp)
 
     if(!m_cylceUpdateQueued) {
         m_cylceUpdateQueued = true;
+
+        //This has to be queued because this function can be called multiple times
+        //by a TapHandaler from multiple objects. This should only be queued once
+        //per TapEvent based on the timestamp
         QMetaObject::invokeMethod(this, [this]() {
 
             //Remove items from the queue that don't exist in m_cycleSelects

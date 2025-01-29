@@ -381,6 +381,11 @@ QModelIndex cwCaptureManager::index(int row, int column, const QModelIndex &pare
     return QAbstractListModel::index(row, column, parent);
 }
 
+int cwCaptureManager::indexOf(cwCaptureViewport *capture) const
+{
+    return Captures.indexOf(capture);
+}
+
 /**
  * @brief cwCaptureManager::roleNames
  * @return

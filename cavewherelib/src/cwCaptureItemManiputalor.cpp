@@ -31,6 +31,10 @@ cwCaptureItemManiputalor::cwCaptureItemManiputalor(QQuickItem *parent) :
             this, &cwCaptureItemManiputalor::updateTransform);
     connect(this, &QQuickItem::heightChanged,
             this, &cwCaptureItemManiputalor::updateTransform);
+
+    //Passthourgh signal
+    connect(m_selectionManager, &cwSelectionManager::selectedItemChanged,
+            this, &cwCaptureItemManiputalor::selectedItemChanged);
 }
 
 /**
@@ -249,4 +253,23 @@ void cwCaptureItemManiputalor::setView(cwQuickSceneView *newView)
     m_view = newView;
     updateTransform();
     emit viewChanged();
+}
+
+void cwCaptureItemManiputalor::select(cwCaptureItem *capture)
+{
+    auto quickItem = CaptureToQuickItem.value(capture, nullptr);
+    if(quickItem) {
+        m_selectionManager->setSelectedItem(quickItem);
+    }
+}
+
+QQuickItem *cwCaptureItemManiputalor::selectedItem() const
+{
+    return m_selectionManager->selectedItem();
+}
+
+void cwCaptureItemManiputalor::setSelectedItem(QQuickItem *newSelectedItem)
+{
+    m_selectionManager->setSelectedItem(newSelectedItem);
+
 }

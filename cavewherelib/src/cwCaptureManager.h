@@ -117,6 +117,7 @@ public:
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
     Q_INVOKABLE QVariant data(const QModelIndex &index, int role) const;
     Q_INVOKABLE QModelIndex index(int row, int column = 0, const QModelIndex& parent = QModelIndex()) const;
+    Q_INVOKABLE int indexOf(cwCaptureViewport* capture) const;
 
     QHash<int, QByteArray> roleNames() const;
 
