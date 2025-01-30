@@ -30,7 +30,7 @@ MainWindowTest {
             turnTableInteraction.camera.zoomScale = 0.05;
 
             //Put it in profile mode
-            let profileButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->GroupBox->profileButton->label")
+            let profileButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->GroupBox->profileButton")
             mouseClick(profileButton)
 
             tryVerify(() => { return turnTableInteraction.pitch === 0.0})

@@ -8,7 +8,7 @@
 import QtQuick as QQ
 import QtQuick.Controls as Controls
 import cavewherelib
-import "Theme.js" as Theme
+import "qrc:/cavewherelib/cavewherelib/Theme.js" as Theme
 
 ShadowRectangle {
     id: removeChallenge

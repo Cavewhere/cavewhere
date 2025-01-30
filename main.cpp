@@ -141,7 +141,7 @@ int main(int argc, char *argv[])
     QQmlApplicationEngine* applicationEngine = new QQmlApplicationEngine();
 
     // Add the macOS Resources directory to the QML import search path
-    QString resourcePath = QCoreApplication::applicationDirPath() + "/../Resources";
+    QString resourcePath = QCoreApplication::applicationDirPath() + "/../Resources/qml";
     applicationEngine->addImportPath(resourcePath);
 
     QQmlContext* context = applicationEngine->rootContext();

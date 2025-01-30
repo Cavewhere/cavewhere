@@ -144,14 +144,15 @@ qt_add_qml_module(cavewherelib
     VERSION 1.0
     RESOURCE_PREFIX /cavewherelib
     OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/cavewherelib
-    NO_CACHEGEN
+    NO_CACHEGEN #Make sure this is comment out for release mode
     DEPENDENCIES
         QtQuick
     SOURCES
         ${cavewhere_RELATIVE_CPP_FILES}
         ${cavewhere_RELATIVE_H_FILES}
     QML_FILES
-        ${cavewhere_RELATIVE_QML_FILES} ${qml_singletons}
+        ${cavewhere_RELATIVE_QML_FILES}
+        ${qml_singletons}
 )
 
 target_sources(cavewherelib PRIVATE ${cavewherelib_CPP_FILES} ${cavewherelib_H_FILES})

@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.21.1)
 
-project(cavewhere VERSION 1.0.0 LANGUAGES CXX)
+project(CaveWhere VERSION 1.0.0 LANGUAGES CXX)
+
+find_package(Qt6 REQUIRED COMPONENTS Core)
+qt_standard_project_setup()
 
 #Add address sanitizer for clang build only
 if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
@@ -169,10 +172,18 @@ target_link_libraries(cavewhere-qml-test
 )
 
 #### CaveWhere ####
+if(APPLE)
+    set(MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/Info.plist.in)
+    set_source_files_properties(${MACOSX_BUNDLE_INFO_PLIST} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+    set(CMAKE_MACOSX_BUNDLE_ICON_FILE "cavewhereIcon.icns")
+endif()
+
+
 qt_add_executable(CaveWhere
     main.cpp
     Cavewhere.rc
     testcases/cwSignalSpy.h testcases/cwSignalSpy.cpp
+    installer/mac/installMac.sh
 )
 
 set_target_properties(CaveWhere PROPERTIES
@@ -204,21 +215,121 @@ if(WIN32)
 endif()
 
 if(APPLE)
-    #Post build install for APP resources
-    add_custom_command(TARGET CaveWhere POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory $<TARGET_FILE_DIR:cavewherelibplugin> $<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/Resources/cavewherelib
-        COMMENT "Copying QML module to application bundle."
+
+    set(MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/Info.plist.in)
+
+    set_source_files_properties(${MACOSX_BUNDLE_INFO_PLIST} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+
+    set(CMAKE_MACOSX_BUNDLE_ICON_FILE "cavewhereIcon.icns")
+
+    set_target_properties(CaveWhere PROPERTIES
+        MACOSX_BUNDLE_INFO_PLIST ${MACOSX_BUNDLE_INFO_PLIST}
     )
+
+    #Post build install for APP resources
+    # Define paths
+    set(PLUGIN_DYLIB $<TARGET_FILE:cavewherelibplugin>)
+    set(PLUGIN_DIR $<TARGET_FILE_DIR:cavewherelibplugin>)
+    set(BUNDLE_PLUGIN_DIR $<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/Plugins/quick)
+    set(BUNDLE_QML_DIR $<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/Resources/qml/cavewherelib)
+
+    # Ensure Plugins/quick exists
     add_custom_command(TARGET CaveWhere POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:cavewhere-test> $<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/Resources
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${BUNDLE_PLUGIN_DIR}
+        COMMENT "Creating Plugins/quick directory in the app bundle."
+    )
+
+    # Copy dylib to Plugins/quick
+    add_custom_command(TARGET CaveWhere POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy ${PLUGIN_DYLIB} ${BUNDLE_PLUGIN_DIR}
+        COMMENT "Copying QML plugin dylib to Plugins/quick."
+    )
+
+    # Ensure Resources/qml exists
+    add_custom_command(TARGET CaveWhere POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${BUNDLE_QML_DIR}
+        COMMENT "Creating Resources/qml directory in the app bundle."
+    )
+
+    # Copy QML plugin metadata (qmldir, plugin.qmltypes) to Resources/qml
+    add_custom_command(TARGET CaveWhere POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy ${PLUGIN_DIR}/qmldir ${BUNDLE_QML_DIR}/qmldir
+        COMMAND ${CMAKE_COMMAND} -E copy ${PLUGIN_DIR}/cavewherelib.qmltypes ${BUNDLE_QML_DIR}/cavewherelib.qmltypes
+        COMMAND ${CMAKE_COMMAND} -E copy ${PLUGIN_DIR}/Theme.js ${BUNDLE_QML_DIR}/Theme.js
+        COMMAND ${CMAKE_COMMAND} -E copy ${PLUGIN_DIR}/Theme.js ${BUNDLE_QML_DIR}/Utils.js
+        COMMAND ${CMAKE_COMMAND} -E copy ${PLUGIN_DIR}/Theme.js ${BUNDLE_QML_DIR}/VectorMath.js
+        COMMENT "Copying qmldir and cavewherelib.qmltypes to Resources/qml."
+    )
+
+    # Create a symbolic link in Resources/qml pointing to the dylib in Plugins/quick
+    add_custom_command(TARGET CaveWhere POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E create_symlink ../../../Plugins/quick/$<TARGET_FILE_NAME:cavewherelibplugin> ${BUNDLE_QML_DIR}/$<TARGET_FILE_NAME:cavewherelibplugin>
+        COMMENT "Creating symbolic link to cavewherelibplugin dylib in Resources/qml."
+    )
+
+
+
+    # add_custom_command(TARGET CaveWhere POST_BUILD
+    #     COMMAND ${CMAKE_COMMAND} -E copy_directory $<TARGET_FILE_DIR:cavewherelibplugin> $<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/Plugins/quick/cavewherelib
+    #     COMMENT "Copying QML module to application bundle."
+    # )
+
+    add_custom_command(TARGET CaveWhere POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:cavewhere-test> $<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/MacOS
         COMMENT "Copying cavewhere-test."
     )
     add_custom_command(TARGET CaveWhere POST_BUILD
         # COMMAND ${CMAKE_COMMOND} -E
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${SURVEX_OUTPUT_DIR} $<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/Resources/survex/
-        # COMMAND ${CMAKE_COMMAND} -E copy_directory $<TARGET_FILE:cavern> $<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/Resources/survex
-        COMMENT "Copying QML module to application bundle."
+        # COMMAND ${CMAKE_COMMAND} -E copy_directory ${SURVEX_OUTPUT_DIR} $<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/MacOS/survex/
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:cavern> $<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/MacOS/cavern
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:survexport> $<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/MacOS/survexport
+
+        COMMENT "Copying survex module to application bundle."
     )
+
+    # Define the icon file
+    set(APP_ICON "${CMAKE_SOURCE_DIR}/${CMAKE_MACOSX_BUNDLE_ICON_FILE}")
+    set(DEST_ICON "${CMAKE_BINARY_DIR}/CaveWhere.app/Contents/Resources/${CMAKE_MACOSX_BUNDLE_ICON_FILE}")
+
+    # Ensure the Resources directory exists
+    add_custom_command(TARGET CaveWhere POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:CaveWhere>/../Resources"
+
+        # Copy the icon into the app bundle's Resources folder
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${APP_ICON}" "${DEST_ICON}"
+
+        COMMENT "Copying CaveWhere.icns into the app bundle..."
+    )
+
+    file(GLOB MESSAGE_FILES "${SURVEX_OUTPUT_DIR}/*.msg")
+
+    foreach(MSG_FILE ${MESSAGE_FILES})
+        get_filename_component(MSG_NAME ${MSG_FILE} NAME)
+        add_custom_command(TARGET CaveWhere POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy ${MSG_FILE} $<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/Resources/${MSG_NAME}
+            COMMENT "Copying ${MSG_NAME} to application bundle."
+        )
+    endforeach()
+
+    # # Copy installMac.sh script to the build directory
+    # add_custom_command(TARGET CaveWhere POST_BUILD
+    #     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/installer/mac/installMac.sh ${CMAKE_BINARY_DIR}
+    #     COMMENT "Copying installMac.sh to the build directory."
+    # )
+
+    # Ensure installMac.sh is copied whenever it changes
+    add_custom_command(
+        OUTPUT ${CMAKE_BINARY_DIR}/installMac.sh
+        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/installer/mac/installMac.sh ${CMAKE_BINARY_DIR}/installMac.sh
+        DEPENDS ${CMAKE_SOURCE_DIR}/installer/mac/installMac.sh
+        COMMENT "Copying installMac.sh to the build directory when modified." ${CMAKE_BINARY_DIR}/installMac.sh
+    )
+
+    add_custom_target(copy_installMac ALL DEPENDS ${CMAKE_BINARY_DIR}/installMac.sh)
+
+    # Ensure it runs as part of the post-build process
+    add_dependencies(CaveWhere copy_installMac)
+
 endif()
 
 

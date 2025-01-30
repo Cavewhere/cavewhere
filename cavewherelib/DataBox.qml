@@ -9,8 +9,6 @@ import QtQuick as QQ
 import cavewherelib
 import QtQuick.Controls as Controls;
 import QtQuick.Controls.Basic as BasicControls
-// import QtQuick.Layouts
-// import "Navigation.js" as NavigationHandler
 
 QQ.Item {
     id: dataBox

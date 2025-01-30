@@ -66,13 +66,6 @@ ColumnLayout {
                 function updateLayerPropertyWidget() {
                     let layer = layerObject(currentIndex)
                     layerProperties.layerObject = layer;
-                    // if(currentIndex !== -1) {
-                    //     let modelIndex = mapLayersId.screenCaptureManager.index(currentIndex);
-                    //     let layerObject = mapLayersId.screenCaptureManager.data(modelIndex, CaptureManager.LayerObjectRole);
-                    //     layerProperties.layerObject = layerObject
-                    // } else {
-                    //     layerProperties.layerObject = null;
-                    // }
                 }
 
                 delegate: Text {
