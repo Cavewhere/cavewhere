@@ -70,9 +70,9 @@ void cwAddImageTask::setImageTypesWithFormat(cwTextureUploadTask::Format format)
 {
     switch(format)
     {
-    case cwTextureUploadTask::DXT1Mipmaps:
-        setImageTypes(Original | Icon | Mipmaps);
-        break;
+    // case cwTextureUploadTask::DXT1Mipmaps:
+    //     setImageTypes(Original | Icon | Mipmaps);
+    //     break;
     case cwTextureUploadTask::OpenGL_RGBA:
         setImageTypes(Original | Icon);
         break;
@@ -472,12 +472,7 @@ void cwAddImageTask::copyOriginalImage(const QImage &image,
     QImageWriter writer(&buffer, format);
     writer.setQuality(100);
 
-    //FIXME: QImage doesn't support QColorSpaces correctly
-    //https://bugreports.qt.io/browse/QTBUG-82803
-    QImage colorSpaceImage = image;
-    colorSpaceImage.setColorSpace(QColorSpace());
-
-    bool writeSuccessful = writer.write(colorSpaceImage);
+    bool writeSuccessful = writer.write(image);
     Q_ASSERT(writeSuccessful);
 
     *imageIds = addImageToDatabase(image,

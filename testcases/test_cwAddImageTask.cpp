@@ -15,6 +15,7 @@
 
 //Qt includes
 #include <QImageReader>
+#include <QColorSpace>
 
 TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
 
@@ -26,23 +27,13 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
     QFuture<cwTrackedImagePtr> addImageFuture;
     QString imageFilename = "://datasets/dx1Cropping/scanCrop.png";
     auto resourceImage = QImage(imageFilename);
+    // resourceImage.setColorSpace(QColorSpace()); //Remove the color space to make the testcase pass
+
     int imageTypes = cwAddImageTask::Original | cwAddImageTask::Icon | cwAddImageTask::Mipmaps;
 
     SECTION("Load from QImage") {
         SECTION("OpenGL Format setting") {
-            // SECTION("With Squish") {
-            //     REQUIRE(cwOpenGLSettings::instance());
-            //     cwOpenGLSettings::instance()->setDXT1Algorithm(cwOpenGLSettings::DXT1_Squish);
-            // }
-
-            // SECTION("With GPU") {
-            //     REQUIRE(cwOpenGLSettings::instance());
-            //     cwOpenGLSettings::instance()->setDXT1Algorithm(cwOpenGLSettings::DXT1_GPU);
-            // }
-
             SECTION("Without compression") {
-                // REQUIRE(cwOpenGLSettings::instance());
-                // cwOpenGLSettings::instance()->setUseDXT1Compression(false);
                 imageTypes = cwAddImageTask::Original | cwAddImageTask::Icon;
             }
 
@@ -58,22 +49,22 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
                     imageTypes |= cwAddImageTask::Icon;
                 }
 
-                SECTION("Mipmap") {
-                    imageTypes |= cwAddImageTask::Mipmaps;
-                }
+                // SECTION("Mipmap") {
+                //     imageTypes |= cwAddImageTask::Mipmaps;
+                // }
             }
 
             SECTION("Icon") {
                 imageTypes = cwAddImageTask::Icon;
 
-                SECTION("Mipmap") {
-                    imageTypes |= cwAddImageTask::Mipmaps;
-                }
+                // SECTION("Mipmap") {
+                //     imageTypes |= cwAddImageTask::Mipmaps;
+                // }
             }
 
-            SECTION("Mipmap") {
-                imageTypes = cwAddImageTask::Mipmaps;
-            }
+            // SECTION("Mipmap") {
+            //     imageTypes = cwAddImageTask::Mipmaps;
+            // }
 
             SECTION("None") {
                 imageTypes = cwAddImageTask::None;
@@ -88,16 +79,6 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
 
     SECTION("Load from file") {
         SECTION("OpenGL Format setting") {
-        //     SECTION("With Squish") {
-        //         REQUIRE(cwOpenGLSettings::instance());
-        //         cwOpenGLSettings::instance()->setDXT1Algorithm(cwOpenGLSettings::DXT1_Squish);
-        //     }
-
-        //     SECTION("With GPU") {
-        //         REQUIRE(cwOpenGLSettings::instance());
-        //         cwOpenGLSettings::instance()->setDXT1Algorithm(cwOpenGLSettings::DXT1_GPU);
-        //     }
-
             addImageTask->setImageTypesWithFormat(cwTextureUploadTask::format());
         }
 
@@ -110,22 +91,22 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
                     imageTypes |= cwAddImageTask::Icon;
                 }
 
-                SECTION("Mipmap") {
-                    imageTypes |= cwAddImageTask::Mipmaps;
-                }
+                // SECTION("Mipmap") {
+                //     imageTypes |= cwAddImageTask::Mipmaps;
+                // }
             }
 
             SECTION("Icon") {
                 imageTypes = cwAddImageTask::Icon;
 
-                SECTION("Mipmap") {
-                    imageTypes |= cwAddImageTask::Mipmaps;
-                }
+                // SECTION("Mipmap") {
+                //     imageTypes |= cwAddImageTask::Mipmaps;
+                // }
             }
 
-            SECTION("Mipmap") {
-                imageTypes = cwAddImageTask::Mipmaps;
-            }
+            // SECTION("Mipmap") {
+            //     imageTypes = cwAddImageTask::Mipmaps;
+            // }
 
             addImageTask->setImageTypes(imageTypes);
         }
@@ -154,9 +135,6 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
     });
 
     REQUIRE(cwAsyncFuture::waitForFinished(addImageFuture, 20000));
-    // if(cwOpenGLSettings::instance()->dxt1Algorithm() == cwOpenGLSettings::DXT1_Squish) {
-    //     CHECK(lastProgress > 50000);
-    // }
 
     CHECK(addImageFuture.isFinished() == true);
     CHECK(addImageFuture.isCanceled() == false);
@@ -174,7 +152,9 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
         CHECK(image.originalSize() == resourceImage.size());
         CHECK(original.dotsPerMeter() == image.originalDotsPerMeter());
         CHECK(!original.data().isEmpty());
-        CHECK(QImage::fromData(original.data()) == resourceImage);
+
+        auto originalImage = QImage::fromData(original.data());
+        CHECK(originalImage == resourceImage);
     } else {
         CHECK(!image.isOriginalValid());
     }
@@ -189,39 +169,37 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
         CHECK(!image.isIconValid());
     }
 
-    if(imageTypes & cwAddImageTask::Mipmaps) {
-        //Mipmaps need to be ordered correctly
-        QSize currentSize(std::numeric_limits<int>::max(), std::numeric_limits<int>::max());
-        for(int mipmapId : image.mipmaps()) {
-            cwImageData mipmap = provider.data(mipmapId);
-            CHECK(mipmap.size().width() < currentSize.width());
-            CHECK(mipmap.size().height() < currentSize.width());
-            currentSize = mipmap.size();
-        }
+    // if(imageTypes & cwAddImageTask::Mipmaps) {
+    //     //Mipmaps need to be ordered correctly
+    //     QSize currentSize(std::numeric_limits<int>::max(), std::numeric_limits<int>::max());
+    //     for(int mipmapId : image.mipmaps()) {
+    //         cwImageData mipmap = provider.data(mipmapId);
+    //         CHECK(mipmap.size().width() < currentSize.width());
+    //         CHECK(mipmap.size().height() < currentSize.width());
+    //         currentSize = mipmap.size();
+    //     }
 
-        QList<QSize> halfSizes = {
-            {932, 872},
-            {466, 436},
-            {233, 218},
-            {116, 109},
-            {58, 54},
-            {29, 27},
-            {14, 13},
-            {7, 6},
-            {3, 3},
-            {1, 1}
-        };
+    //     QList<QSize> halfSizes = {
+    //         {932, 872},
+    //         {466, 436},
+    //         {233, 218},
+    //         {116, 109},
+    //         {58, 54},
+    //         {29, 27},
+    //         {14, 13},
+    //         {7, 6},
+    //         {3, 3},
+    //         {1, 1}
+    //     };
 
-        REQUIRE(halfSizes.size() == image.mipmaps().size());
-        for(int i = 0; i < halfSizes.size(); i++) {
-            cwImageData mipmap = provider.data(image.mipmaps().at(i));
-            CHECK(halfSizes.at(i) == mipmap.size());
-        }
-    } else {
+    //     REQUIRE(halfSizes.size() == image.mipmaps().size());
+    //     for(int i = 0; i < halfSizes.size(); i++) {
+    //         cwImageData mipmap = provider.data(image.mipmaps().at(i));
+    //         CHECK(halfSizes.at(i) == mipmap.size());
+    //     }
+    // } else {
         CHECK(image.mipmaps().isEmpty());
-    }
-
-    // cwOpenGLSettings::instance()->setUseDXT1Compression(true);
+    // }
 }
 
 TEST_CASE("cwAddImageTask should return invalid future", "[cwAddImageTask]") {

@@ -39,9 +39,9 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
     auto loadValidMipmap = [projectFile, currentFormat](const cwTrackedImagePtr& image) {
         UploadResult results;
 
-        if(!cwImageDatabase(projectFile).mipmapsValid(*image, currentFormat == DXT1Mipmaps)) {
-            return results;
-        }
+        // if(!cwImageDatabase(projectFile).mipmapsValid(*image, currentFormat == DXT1Mipmaps)) {
+        //     return results;
+        // }
 
         cwImageProvider imageProvidor;
         imageProvidor.setProjectPath(projectFile);
@@ -84,10 +84,10 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
             results.scaleTexCoords = QVector2D(1.0, 1.0); //No extra padding
             results.image = loadRGB();
             break;
-        case DXT1Mipmaps:
-            results.scaleTexCoords = imageProvidor.scaleTexCoords(*image);
-            results.mipmaps = loadDXT1Mipmap();
-            break;
+        // case DXT1Mipmaps:
+        //     results.scaleTexCoords = imageProvidor.scaleTexCoords(*image);
+        //     results.mipmaps = loadDXT1Mipmap();
+        //     break;
         default:
             Q_ASSERT(false);
         }

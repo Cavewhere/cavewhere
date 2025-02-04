@@ -25,7 +25,6 @@ class CAVEWHERE_LIB_EXPORT cwTextureUploadTask
 
 public:
     enum Format {
-        DXT1Mipmaps,
         OpenGL_RGBA,
         Unknown,
     };

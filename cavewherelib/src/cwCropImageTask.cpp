@@ -115,9 +115,9 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
             .subscribe([cropFuture, filename, format]()
     {
         int imageTypes = cwAddImageTask::None;
-        if(format == cwTextureUploadTask::DXT1Mipmaps) {
-            imageTypes |= cwAddImageTask::Mipmaps;
-        }
+        // if(format == cwTextureUploadTask::DXT1Mipmaps) {
+        //     imageTypes |= cwAddImageTask::Mipmaps;
+        // }
 
         Image cropRGBImage = cropFuture.result();
         if(cropRGBImage.id < 0) {

@@ -45,37 +45,37 @@ TEST_CASE("cwTextureUploadTask should run correctly", "[cwTextureUploadTask]") {
         }
     };
 
-    SECTION("DXT1 extraction should work correctly") {
-        cwTextureUploadTask task;
-        task.setImage(note->image());
-        task.setProjectFilename(project->filename());
-        task.setType(cwTextureUploadTask::DXT1Mipmaps);
-        auto resultsFuture = task.mipmaps();
+    // SECTION("DXT1 extraction should work correctly") {
+    //     cwTextureUploadTask task;
+    //     task.setImage(note->image());
+    //     task.setProjectFilename(project->filename());
+    //     task.setType(cwTextureUploadTask::DXT1Mipmaps);
+    //     auto resultsFuture = task.mipmaps();
 
-        cwAsyncFuture::waitForFinished(resultsFuture);
-        REQUIRE(resultsFuture.resultCount() == 1);
-        REQUIRE(resultsFuture.isFinished());
-        auto results = resultsFuture.result();
+    //     cwAsyncFuture::waitForFinished(resultsFuture);
+    //     REQUIRE(resultsFuture.resultCount() == 1);
+    //     REQUIRE(resultsFuture.isFinished());
+    //     auto results = resultsFuture.result();
 
-        QList< QPair< int, QSize > > mipmaps({
-                                                 { 411264 , QSize(1008, 816) },
-                                                 { 102816 , QSize(504, 408) },
-                                                 { 25704 , QSize(252, 204) },
-                                                 { 6656 , QSize(126, 102) },
-                                                 { 1664 , QSize(63, 51) },
-                                                 { 448 , QSize(31, 25) },
-                                                 { 96 , QSize(15, 12) },
-                                                 { 32 , QSize(7, 6) },
-                                                 { 8 , QSize(3, 3) },
-                                                 { 8 , QSize(1, 1) },
-                                             });
+    //     QList< QPair< int, QSize > > mipmaps({
+    //                                              { 411264 , QSize(1008, 816) },
+    //                                              { 102816 , QSize(504, 408) },
+    //                                              { 25704 , QSize(252, 204) },
+    //                                              { 6656 , QSize(126, 102) },
+    //                                              { 1664 , QSize(63, 51) },
+    //                                              { 448 , QSize(31, 25) },
+    //                                              { 96 , QSize(15, 12) },
+    //                                              { 32 , QSize(7, 6) },
+    //                                              { 8 , QSize(3, 3) },
+    //                                              { 8 , QSize(1, 1) },
+    //                                          });
 
-        CHECK(results.type == cwTextureUploadTask::DXT1Mipmaps);
-        CHECK(results.scaleTexCoords.x() == Catch::Approx(0.997024));
-        CHECK(results.scaleTexCoords.y() == Catch::Approx(1.0));
+    //     CHECK(results.type == cwTextureUploadTask::DXT1Mipmaps);
+    //     CHECK(results.scaleTexCoords.x() == Catch::Approx(0.997024));
+    //     CHECK(results.scaleTexCoords.y() == Catch::Approx(1.0));
 
-        checkMipmaps(results, mipmaps);
-    }
+    //     checkMipmaps(results, mipmaps);
+    // }
 
     SECTION("RGBA extraction should work correctly") {
         cwTextureUploadTask task;
