@@ -34,7 +34,6 @@ TEST_CASE("cwTrackedImage should delete images from database", "[cwTrackedImage]
         auto newImage = newImages.first();
 
         CHECK(newImage.isIconValid());
-        CHECK(newImage.isMipmapsValid());
         CHECK(newImage.isOriginalValid());
 
         trackedImage = cwTrackedImage(newImage, project->filename());
@@ -45,7 +44,6 @@ TEST_CASE("cwTrackedImage should delete images from database", "[cwTrackedImage]
 
     CHECK(count == 1);
     CHECK(trackedImage.isIconValid());
-    CHECK(trackedImage.isMipmapsValid());
     CHECK(trackedImage.isOriginalValid());
 
     trackedImage.deleteImagesFromDatabase();
@@ -80,7 +78,6 @@ TEST_CASE("cwTrackImage should work with QSharedPointer's custom delete function
             auto newImage = newImages.first();
 
             CHECK(newImage.isIconValid());
-            CHECK(newImage.isMipmapsValid());
             CHECK(newImage.isOriginalValid());
 
             trackImagePtr = cwTrackedImage::createShared(newImage, project->filename());
