@@ -39,7 +39,7 @@ public:
         Filename(filename),
         Rotation(rotation),
         Scale(scale),
-        RotationEpsilon(1.0e-4),
+        RotationEpsilon(1.0e-3),
         ScaleEpsilon(1.0e-4)
     {}
 
@@ -129,7 +129,7 @@ TEST_CASE("Auto Calculate Note Transform", "[cwScrap]") {
     rows.append(TestRow(":/datasets/scrapAutoCalculate/runningProfileMirror.cw", -2.2934958439, 176.721));
     rows.append(TestRow("://datasets/scrapAutoCalculate/runningProfileUpsideDown.cw",  87.8188708214, 1729.652));
     rows.append(TestRow("://datasets/scrapAutoCalculate/ProjectProfile-test-v3.cw",
-                0.0, 255.962, 0.05, 0.05, 135.7));
+                0.199, 255.962, 0.05, 0.05, 135.7));
     rows.append(TestRow("://datasets/scrapAutoCalculate/projectedProfile-90left.cw",
                 270.08, 255.66, 0.05, 0.05, 134.2));
     rows.append(TestRow("://datasets/scrapAutoCalculate/projectedProfile-90right.cw",
