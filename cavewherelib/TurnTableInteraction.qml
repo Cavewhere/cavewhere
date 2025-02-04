@@ -30,7 +30,7 @@ BaseTurnTableInteraction {
             endMousePosition = Qt.point(mouseArea.mouseX, mouseArea.mouseY)
         }
 
-        onTouchUpdated: {
+        onTouchUpdated: (touchPoints) => {
             if(touchPoints.length === 1) {
                 if(touchState == "") {
                     interactionId.startPanning(Qt.point(touchPoints[0].x, touchPoints[0].y))
@@ -105,7 +105,7 @@ BaseTurnTableInteraction {
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             hoverEnabled: true
             onPressed: function(mouse) {
-                if(mouse.button == Qt.LeftButton) {
+                if(mouse.button === Qt.LeftButton) {
                     state = "panState"
                     interactionId.startPanning(Qt.point(mouse.x, mouse.y));
                 } else {

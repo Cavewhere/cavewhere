@@ -41,12 +41,14 @@ QQ.Loader {
         Controls.Dialog {
             id: errorDialogId
 
+            property int issueCount: itemId.model ? itemId.model.count : 0
+
             anchors.centerIn: parent
             modal: true
             width: 600
 
             standardButtons: Controls.Dialog.Ok
-            title: itemId.model.count + " issue" + ((itemId.model.count > 1) ? "s" : "") + " has occurred"
+            title: issueCount + " issue" + ((issueCount > 1) ? "s" : "") + " has occurred"
 
             onAccepted: {
                 itemId.model.clear()

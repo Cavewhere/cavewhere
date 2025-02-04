@@ -26,16 +26,16 @@ void cwRenderScraps::setFutureManagerToken(cwFutureManagerToken token)
     m_futureManagerToken = token;
 }
 
-bool cwRenderScraps::visible() const {
-    return m_visible;
-}
+// bool cwRenderScraps::visible() const {
+//     return m_visible;
+// }
 
-void cwRenderScraps::setVisible(bool visible) {
-    if(m_visible != visible) {
-        m_visible = visible;
-        emit visibleChanged();
-    }
-}
+// void cwRenderScraps::setVisible(bool visible) {
+//     if(m_visible != visible) {
+//         m_visible = visible;
+//         emit visibleChanged();
+//     }
+// }
 
 void cwRenderScraps::addScrapToUpdate(cwScrap *scrap)
 {

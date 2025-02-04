@@ -1,7 +1,6 @@
 //Our includes
 #include "cwImageCompressionUpdater.h"
 #include "cwRegionTreeModel.h"
-#include "cwOpenGLSettings.h"
 #include "cwScrap.h"
 #include "cwImageDatabase.h"
 #include "cwProject.h"

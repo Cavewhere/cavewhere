@@ -5,7 +5,6 @@
 #include "cwRootData.h"
 #include "cwTaskManagerModel.h"
 #include "TestHelper.h"
-#include "cwOpenGLSettings.h"
 #include "cwRegionTreeModel.h"
 #include "cwNote.h"
 #include "cwScrap.h"

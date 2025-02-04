@@ -10,7 +10,7 @@ QQ.ListView {
 
     delegate: QQ.Rectangle {
         id: delegateId
-        required property int type
+        required property int errorType
         required property int index
         required property string message
 
@@ -29,8 +29,10 @@ QQ.ListView {
             anchors.rightMargin: 10
 
             QQ.Image {
+                sourceSize: Qt.size(16, 16)
+
                 source: {
-                    switch(delegateId.type) {
+                    switch(delegateId.errorType) {
                     case CwError.Warning:
                         return "qrc:icons/svg/warning.svg"
                     case CwError.Fatal:

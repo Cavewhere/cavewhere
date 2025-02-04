@@ -27,7 +27,7 @@
 #include "cwDebug.h"
 #include "cwApplication.h"
 #include "cwUsedStationsTask.h"
-#include "cwOpenGLSettings.h"
+// #include "cwOpenGLSettings.h"
 
 //std includes
 #include <memory>

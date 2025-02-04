@@ -21,7 +21,7 @@ class cwRenderScraps : public cwRenderObject
     QML_NAMED_ELEMENT(RenderScraps)
 
     Q_PROPERTY(cwProject* project READ project WRITE setProject NOTIFY projectChanged)
-    Q_PROPERTY(bool visible READ visible WRITE setVisible NOTIFY visibleChanged)
+    // Q_PROPERTY(bool visible READ visible WRITE setVisible NOTIFY visibleChanged)
 
 public:
     explicit cwRenderScraps(QObject *parent = nullptr);
@@ -32,8 +32,8 @@ public:
     void setCavingRegion(cwCavingRegion* region);
     void setFutureManagerToken(cwFutureManagerToken token);
 
-    bool visible() const;
-    void setVisible(bool visible);
+    // bool visible() const;
+    // void setVisible(bool visible);
 
     void addScrapToUpdate(cwScrap* scrap);
     void removeScrap(cwScrap* scrap);
@@ -44,7 +44,7 @@ public:
 
 signals:
     void projectChanged();
-    void visibleChanged();
+    // void visibleChanged();
 
 private:
     cwProject* m_project = nullptr; //!< The project file for loading textures

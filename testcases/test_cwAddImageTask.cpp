@@ -6,7 +6,6 @@
 #include "cwAddImageTask.h"
 #include "cwAsyncFuture.h"
 #include "cwProject.h"
-#include "cwOpenGLSettings.h"
 #include "cwImageProvider.h"
 #include "TestHelper.h"
 #include "cwTrackedImage.h"
@@ -42,8 +41,8 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
             // }
 
             SECTION("Without compression") {
-                REQUIRE(cwOpenGLSettings::instance());
-                cwOpenGLSettings::instance()->setUseDXT1Compression(false);
+                // REQUIRE(cwOpenGLSettings::instance());
+                // cwOpenGLSettings::instance()->setUseDXT1Compression(false);
                 imageTypes = cwAddImageTask::Original | cwAddImageTask::Icon;
             }
 
@@ -89,15 +88,15 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
 
     SECTION("Load from file") {
         SECTION("OpenGL Format setting") {
-            SECTION("With Squish") {
-                REQUIRE(cwOpenGLSettings::instance());
-                cwOpenGLSettings::instance()->setDXT1Algorithm(cwOpenGLSettings::DXT1_Squish);
-            }
+        //     SECTION("With Squish") {
+        //         REQUIRE(cwOpenGLSettings::instance());
+        //         cwOpenGLSettings::instance()->setDXT1Algorithm(cwOpenGLSettings::DXT1_Squish);
+        //     }
 
-            SECTION("With GPU") {
-                REQUIRE(cwOpenGLSettings::instance());
-                cwOpenGLSettings::instance()->setDXT1Algorithm(cwOpenGLSettings::DXT1_GPU);
-            }
+        //     SECTION("With GPU") {
+        //         REQUIRE(cwOpenGLSettings::instance());
+        //         cwOpenGLSettings::instance()->setDXT1Algorithm(cwOpenGLSettings::DXT1_GPU);
+        //     }
 
             addImageTask->setImageTypesWithFormat(cwTextureUploadTask::format());
         }
@@ -155,9 +154,9 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
     });
 
     REQUIRE(cwAsyncFuture::waitForFinished(addImageFuture, 20000));
-    if(cwOpenGLSettings::instance()->dxt1Algorithm() == cwOpenGLSettings::DXT1_Squish) {
-        CHECK(lastProgress > 50000);
-    }
+    // if(cwOpenGLSettings::instance()->dxt1Algorithm() == cwOpenGLSettings::DXT1_Squish) {
+    //     CHECK(lastProgress > 50000);
+    // }
 
     CHECK(addImageFuture.isFinished() == true);
     CHECK(addImageFuture.isCanceled() == false);
@@ -222,7 +221,7 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
         CHECK(image.mipmaps().isEmpty());
     }
 
-    cwOpenGLSettings::instance()->setUseDXT1Compression(true);
+    // cwOpenGLSettings::instance()->setUseDXT1Compression(true);
 }
 
 TEST_CASE("cwAddImageTask should return invalid future", "[cwAddImageTask]") {
@@ -316,15 +315,15 @@ TEST_CASE("cwAddImageTask should not grow file size when regenerating mipmaps", 
     auto addImageTask = std::make_unique<cwAddImageTask>();
     addImageTask->setDatabaseFilename(filename);
 
-    SECTION("Without compression") {
-        REQUIRE(cwOpenGLSettings::instance());
-        cwOpenGLSettings::instance()->setUseDXT1Compression(false);
-    }
+    // SECTION("Without compression") {
+    //     REQUIRE(cwOpenGLSettings::instance());
+    //     cwOpenGLSettings::instance()->setUseDXT1Compression(false);
+    // }
 
-    SECTION("With compression") {
-        REQUIRE(cwOpenGLSettings::instance());
-        cwOpenGLSettings::instance()->setUseDXT1Compression(true);
-    }
+    // SECTION("With compression") {
+    //     REQUIRE(cwOpenGLSettings::instance());
+    //     cwOpenGLSettings::instance()->setUseDXT1Compression(true);
+    // }
 
     auto resourceImageFilename = copyToTempFolder("://datasets/dx1Cropping/scanCrop.png");
     addImageTask->setImageTypesWithFormat(cwTextureUploadTask::format());
@@ -358,8 +357,8 @@ TEST_CASE("cwAddImageTask should regenerate dxt1 mipmaps if in RGB", "[cwAddImag
     auto addImageTask = std::make_unique<cwAddImageTask>();
     addImageTask->setDatabaseFilename(filename);
 
-    REQUIRE(cwOpenGLSettings::instance());
-    cwOpenGLSettings::instance()->setUseDXT1Compression(false);
+    // REQUIRE(cwOpenGLSettings::instance());
+    // cwOpenGLSettings::instance()->setUseDXT1Compression(false);
 
     auto resourceImageFilename = copyToTempFolder("://datasets/dx1Cropping/scanCrop.png");
     addImageTask->setImageTypesWithFormat(cwTextureUploadTask::format());
@@ -377,7 +376,7 @@ TEST_CASE("cwAddImageTask should regenerate dxt1 mipmaps if in RGB", "[cwAddImag
     CHECK(addImageFuture.result()->isOriginalValid());
     CHECK(addImageFuture.result()->mipmaps().isEmpty());
 
-    cwOpenGLSettings::instance()->setUseDXT1Compression(true);
+    // cwOpenGLSettings::instance()->setUseDXT1Compression(true);
 
     addImageTask->setRegenerateMipmapsOn(addImageFuture.result()->take());
     addImageTask->setImageTypesWithFormat(cwTextureUploadTask::format());

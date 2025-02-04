@@ -21,7 +21,6 @@
 #include "cwLinePlotManager.h"
 #include "cwTaskManagerModel.h"
 #include "cwRegionTreeModel.h"
-#include "cwOpenGLSettings.h"
 #include "cwImageDatabase.h"
 #include "cwAsyncFuture.h"
 #include "cwAbstractScrapViewMatrix.h"

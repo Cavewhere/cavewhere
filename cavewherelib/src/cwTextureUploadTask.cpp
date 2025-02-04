@@ -12,7 +12,6 @@
 #include "cwAddImageTask.h"
 #include "cwMath.h"
 #include "cwOpenGLUtils.h"
-#include "cwOpenGLSettings.h"
 #include "cwImageDatabase.h"
 
 //Qt includes

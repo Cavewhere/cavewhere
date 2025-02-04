@@ -13,7 +13,6 @@
 #include "cwDebug.h"
 #include "cwDXT1Compresser.h"
 #include "cwAsyncFuture.h"
-#include "cwOpenGLSettings.h"
 #include "cwImageDatabase.h"
 
 //For creating compressed DXT texture maps

@@ -3,7 +3,6 @@
 #include "cwDebug.h"
 #include "cwAsyncFuture.h"
 #include "cwOpenGLUtils.h"
-#include "cwOpenGLSettings.h"
 
 //Qt includes
 #include <QPoint>

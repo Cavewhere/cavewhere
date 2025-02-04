@@ -7,10 +7,8 @@
 
 //Our includes
 #include "cwImageTexture.h"
-#include "cwImageProvider.h"
 #include "cwTextureUploadTask.h"
 #include "cwDebug.h"
-#include "cwOpenGLSettings.h"
 
 //QT includes
 #include <QtConcurrentRun>
