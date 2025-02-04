@@ -38,11 +38,6 @@ int cwErrorListModel::indexOf(const cwError &error) const
     return m_errors.indexOf(error);
 }
 
-// QVariant cwErrorListModel::get(int index) const
-// {
-//     return QVariant::fromValue(at(index));
-// }
-
 void cwErrorListModel::clear()
 {
     if (m_errors.isEmpty()) {
@@ -148,17 +143,6 @@ bool cwErrorListModel::setData(const QModelIndex &index, const QVariant &value, 
     }
     return false;
 }
-
-// void cwErrorListModel::prepend(const QList<cwError> &errors)
-// {
-//     if (errors.isEmpty()) {
-//         return;
-//     }
-
-//     beginInsertRows(QModelIndex(), 0, errors.size() - 1);
-//     m_errors.prepend(errors);
-//     endInsertRows();
-// }
 
 void cwErrorListModel::append(const cwError &error)
 {

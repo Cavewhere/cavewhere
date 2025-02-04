@@ -55,9 +55,6 @@ public:
     QVariant data(const QModelIndex &index, int role) const;
     bool setData(const QModelIndex &index, const QVariant &value, int role);
 
-
-    // void prepend(const cwError& error);
-    // void prepend(const QList<cwError>& errors);
     void append(const cwError& error);
     void append(const QList<cwError>& errors);
 

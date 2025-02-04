@@ -109,8 +109,8 @@ void cwErrorModel::checkForCountChanged(QModelIndex topLeft, QModelIndex bottomR
     Q_UNUSED(topLeft);
     Q_UNUSED(bottomRight);
     foreach(int role, roles) {
-        if(Errors->roleForName("suppressed") == role ||
-                Errors->roleForName("type") == role)
+        if(static_cast<int>(cwErrorListModel::ErrorRoles::SuppressedRole) == role ||
+            static_cast<int>(cwErrorListModel::ErrorRoles::ErrorTypeRole) == role)
         {
 
             makeCountDirty();

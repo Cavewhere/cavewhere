@@ -26,7 +26,7 @@ void checkError(const cwError& error, cwErrorListModel& model, int idx) {
     CHECK(QVariant(error.message()) == model.data(model.index(idx), model.roleForName("message")));
     CHECK(QVariant(error.errorTypeId()) == model.data(model.index(idx), model.roleForName("errorTypeId")));
     CHECK(QVariant(error.suppressed()) == model.data(model.index(idx), model.roleForName("suppressed")));
-    CHECK(QVariant(error.type()) == model.data(model.index(idx), model.roleForName("type")));
+    CHECK(QVariant(error.type()) == model.data(model.index(idx), model.roleForName("errorType")));
 
 }
 
@@ -85,45 +85,6 @@ TEST_CASE("Basic QML Gadget List operations") {
             // CHECK(model.indexOf(QVariant::fromValue(errors.last())) == errors.size() - 1);
         }
 
-        // SECTION("Check prepend") {
-        //     QList<cwError> prependErrors;
-
-        //     for(int i = 0; i < size; i++) {
-        //         cwError error;
-        //         error.setMessage(QString("Prepend Error %1").arg(i));
-        //         error.setType(cwError::Fatal);
-        //         error.setErrorTypeId(i*i);
-
-        //         prependErrors.append(error);
-        //     }
-
-        //     SECTION("Prepend list") {
-
-        //         model.prepend(prependErrors);
-
-        //         REQUIRE(model.size() == size * 2);
-
-        //         for(int i = 0; i < size; i++) {
-        //             checkError(prependErrors.at(i), model, i);
-        //         }
-        //     }
-
-        //     SECTION("Prepend element") {
-        //         model.prepend(prependErrors.first());
-
-        //         REQUIRE(model.size() == size + 1);
-
-        //         checkError(prependErrors.first(), model, 0);
-        //     }
-
-        //     SECTION("Prepend variant") {
-        //         model.prepend(QVariant::fromValue(prependErrors.first()));
-
-        //         REQUIRE(model.size() == size + 1);
-
-        //         checkError(prependErrors.first(), model, 0);
-        //     }
-        // }
 
         SECTION("Check insert") {
             QList<cwError> insertErrors;
@@ -155,14 +116,6 @@ TEST_CASE("Basic QML Gadget List operations") {
 
                 checkError(insertErrors.first(), model, 4);
             }
-
-            // SECTION("Insert variant") {
-            //     model.insert(10, QVariant::fromValue(insertErrors.first()));
-
-            //     REQUIRE(model.size() == size + 1);
-
-            //     checkError(insertErrors.first(), model, model.count() - 1);
-            // }
         }
 
         SECTION("Check remove") {
@@ -189,86 +142,36 @@ TEST_CASE("Basic QML Gadget List operations") {
                 }
             }
 
-            // SECTION("Remove by item") {
-            //     int removeIndex = 2;
-            //     model.remove(QVariant::fromValue(errors.at(removeIndex)));
-            //     CHECK(model.contains(errors.at(removeIndex)) == false);
-
-            //     for(int i = 0; i < size - 1; i++) {
-            //         int skipIndex = i < removeIndex ? i : i + 1;
-            //         checkError(errors.at(skipIndex), model, i);
-            //     }
-            // }
-
         }
-
-
-
 
         SECTION("Get / Set Data") {
             cwSignalSpy dataChangedSpy(&model, SIGNAL(dataChanged(const QModelIndex &, const QModelIndex &, QVector<int>)));
 
             for(int i = 0; i < size; i++) {
+                //Suppression is the only thing that's supported to set
                 model.setData(model.index(i), true, model.roleForName("suppressed"));
-
                 CHECK(model.data(model.index(i), model.roleForName("suppressed")) == QVariant(true));
-                // CHECK(model.data(i, "suppressed") == true);
                 CHECK(model.at(i).suppressed() == true);
 
 
-                // int errorTypeId = i*5;
-                // model.setData(i, errorTypeId, "errorTypeId");
+                int errorTypeId = i*5;
+                auto index = model.index(i);
+                CHECK(model.setData(index, errorTypeId, static_cast<int>(cwErrorListModel::ErrorRoles::ErrorTypeIdRole)) == false);
 
-                // CHECK(model.data(model.index(i), model.roleForName("errorTypeId")) == errorTypeId);
-                // CHECK(model.data(i, "errorTypeId") == errorTypeId);
-                // CHECK(model.at(i).errorTypeId() == errorTypeId);
+                CHECK(model.data(model.index(i), model.roleForName("errorTypeId")).toInt() == i);
+                CHECK(model.at(i).errorTypeId() == i);
             }
 
-            CHECK(dataChangedSpy.count() == size * 2);
+            CHECK(dataChangedSpy.count() == size);
             CHECK(dataChangedSpy.first().last().value<QVector<int>>().first() == model.roleForName("suppressed"));
         }
 
-        // SECTION("Check Replace") {
-        //     cwSignalSpy dataChangedSpy(&model, SIGNAL(dataChanged(const QModelIndex &, const QModelIndex &, QVector<int>)));
-
-        //     cwError replaceError;
-        //     replaceError.setMessage("Replace error 1");
-        //     replaceError.setType(cwError::Warning);
-
-        //     SECTION("C++ replace") {
-        //         model.replace(2, replaceError);
-
-        //         CHECK(model.at(2) == replaceError);
-        //         REQUIRE(dataChangedSpy.count() == 1);
-
-        //         auto roles = dataChangedSpy.first().last().value<QVector<int>>();
-        //         REQUIRE(roles.size() == model.roleNames().size()); //Changes to all 4 properties
-
-        //         foreach(int role, roles) {
-        //             CHECK(model.roleNames().contains(role) == true);
-        //         }
-        //     }
-
-        //     SECTION("QML replace") {
-        //         model.replace(2, QVariant::fromValue(replaceError));
-
-        //         CHECK(model.at(2) == replaceError);
-        //         REQUIRE(dataChangedSpy.count() == 1);
-        //         auto roles = dataChangedSpy.first().last().value<QVector<int>>();
-        //         REQUIRE(roles.size() == model.roleNames().size()); //Changes to all 4 properties
-
-        //         foreach(int role, roles) {
-        //             CHECK(model.roleNames().contains(role) == true);
-        //         }
-        //     }
-        // }
-
         SECTION("roleNames") {
             auto roleNames = model.roleNames().values();
-            CHECK(roleNames.contains("type") == true);
+            CHECK(roleNames.contains("suppressed") == true);
             CHECK(roleNames.contains("errorTypeId") == true);
             CHECK(roleNames.contains("message") == true);
-            CHECK(roleNames.contains("type") == true);
+            CHECK(roleNames.contains("errorType") == true);
         }
     }
 }
