@@ -29,6 +29,7 @@ TEST_CASE("cwMappedQImage should create mapped QImage", "[cwMappedQImage]") {
         };
 
         QImage bitMapFromDisk(reinterpret_cast<uchar*>(fileData.data()), refImage.width(), refImage.height(), refImage.format());
+        bitMapFromDisk.setColorSpace(refImage.colorSpace());
 
         CHECK(diskImage.size() == refImage.size());
         CHECK(diskImage == refImage);

@@ -9,7 +9,6 @@
 //Our includes
 #include "cwCaptureManager.h"
 #include "cw3dRegionViewer.h"
-#include "cwScreenCaptureCommand.h"
 #include "cwScene.h"
 #include "cwGraphicsImageItem.h"
 #include "cwDebug.h"
