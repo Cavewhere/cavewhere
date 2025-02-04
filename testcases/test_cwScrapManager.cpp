@@ -182,6 +182,9 @@ TEST_CASE("cwScrapManager should update on viewMatrix change", "[cwScrapManager]
     auto project = rootData->project();
 
     fileToProject(project, "://datasets/test_cwScrapManager/ProjectProfile-test-v3.cw");
+    if(rootData->futureManagerModel()->rowCount() >= 0) {
+        rootData->futureManagerModel()->waitForFinished();
+    }
 
     REQUIRE(project->cavingRegion()->caveCount() == 1);
     auto cave = project->cavingRegion()->cave(0);
