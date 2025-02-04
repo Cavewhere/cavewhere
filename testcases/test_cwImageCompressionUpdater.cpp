@@ -25,26 +25,22 @@ TEST_CASE("cwRootData should automatically update compression for notes", "[cwIm
 
         cwImageDatabase imageDatabase(project->filename());
         for(cwNote* note : notes) {
-            QList<int> mipmaps = note->image().mipmaps();
-            CHECK(mipmaps.size() > 0);
-            for(int id : mipmaps) {
-                CHECK(imageDatabase.imageExists(id));
-            }
+            CHECK(imageDatabase.imageExists(note->image().original()));
         }
     };
 
-    auto checkNotesAreBad = [&rootData, project]() {
-        //Test that the cwNotes have mipmaps
-        QList<cwNote*> notes = rootData->regionTreeModel()->all<cwNote*>(QModelIndex(), &cwRegionTreeModel::note);
+    // auto checkNotesAreBad = [&rootData, project]() {
+    //     //Test that the cwNotes have mipmaps
+    //     QList<cwNote*> notes = rootData->regionTreeModel()->all<cwNote*>(QModelIndex(), &cwRegionTreeModel::note);
 
-        CHECK(notes.size() == 3);
+    //     CHECK(notes.size() == 3);
 
-        cwImageDatabase imageDatabase(project->filename());
-        for(cwNote* note : notes) {
-            QList<int> mipmaps = note->image().mipmaps();
-            CHECK(mipmaps.size() == 0);
-        }
-    };
+    //     cwImageDatabase imageDatabase(project->filename());
+    //     for(cwNote* note : notes) {
+    //         QList<int> mipmaps = note->image().mipmaps();
+    //         CHECK(mipmaps.size() == 0);
+    //     }
+    // };
 
     SECTION("Update on load") {
         fileToProject(project, "://datasets/test_cwImageCompressionUpdater/NotesNeedUpdating.cw");
@@ -52,17 +48,17 @@ TEST_CASE("cwRootData should automatically update compression for notes", "[cwIm
         checkNotesAreGood();
     }
 
-    SECTION("Update on dxt1 compression changed") {
-        // cwOpenGLSettings::instance()->setUseDXT1Compression(false);
-        fileToProject(project, "://datasets/test_cwImageCompressionUpdater/NotesNeedUpdating.cw");
+    // SECTION("Update on dxt1 compression changed") {
+    //     // cwOpenGLSettings::instance()->setUseDXT1Compression(false);
+    //     fileToProject(project, "://datasets/test_cwImageCompressionUpdater/NotesNeedUpdating.cw");
 
-        checkNotesAreBad();
+    //     checkNotesAreBad();
 
-        // cwOpenGLSettings::instance()->setUseDXT1Compression(true);
-        rootData->futureManagerModel()->waitForFinished();
+    //     // cwOpenGLSettings::instance()->setUseDXT1Compression(true);
+    //     rootData->futureManagerModel()->waitForFinished();
 
-        checkNotesAreGood();
-    }
+    //     checkNotesAreGood();
+    // }
 }
 
 TEST_CASE("cwRootData should automatically update compression for scaps", "[cwImageCompressionUpdater]") {
@@ -80,26 +76,27 @@ TEST_CASE("cwRootData should automatically update compression for scaps", "[cwIm
 
         cwImageDatabase imageDatabase(project->filename());
         for(cwScrap* scrap : scraps) {
-            QList<int> mipmaps = scrap->triangulationData().croppedImage().mipmaps();
-            CHECK(mipmaps.size() > 0);
-            for(int id : mipmaps) {
-                CHECK(imageDatabase.imageExists(id));
-            }
+            CHECK(imageDatabase.imageExists(scrap->triangulationData().croppedImage().original()));
+            // QList<int> mipmaps = scrap->triangulationData().croppedImage().mipmaps();
+            // CHECK(mipmaps.size() > 0);
+            // for(int id : mipmaps) {
+            //     CHECK(imageDatabase.imageExists(id));
+            // }
         }
     };
 
-    auto checkScrapsAreBad = [&rootData, project]() {
-        //Test that the cwNotes have mipmaps
-        QList<cwScrap*> scraps = rootData->regionTreeModel()->all<cwScrap*>(QModelIndex(), &cwRegionTreeModel::scrap);
+    // auto checkScrapsAreBad = [&rootData, project]() {
+    //     //Test that the cwNotes have mipmaps
+    //     QList<cwScrap*> scraps = rootData->regionTreeModel()->all<cwScrap*>(QModelIndex(), &cwRegionTreeModel::scrap);
 
-        CHECK(scraps.size() == 1);
+    //     CHECK(scraps.size() == 1);
 
-        cwImageDatabase imageDatabase(project->filename());
-        for(cwScrap* scrap : scraps) {
-            QList<int> mipmaps = scrap->triangulationData().croppedImage().mipmaps();
-            CHECK(mipmaps.size() == 0);
-        }
-    };
+    //     cwImageDatabase imageDatabase(project->filename());
+    //     for(cwScrap* scrap : scraps) {
+    //         QList<int> mipmaps = scrap->triangulationData().croppedImage().or();
+    //         CHECK(mipmaps.size() == 0);
+    //     }
+    // };
 
     SECTION("Update on load") {
         fileToProject(project, "://datasets/test_cwImageCompressionUpdater/ScrapsNeedUpdating.cw");
@@ -108,17 +105,17 @@ TEST_CASE("cwRootData should automatically update compression for scaps", "[cwIm
         checkScrapsAreGood();
     }
 
-    SECTION("Update on dxt1 compression changed") {
-        // cwOpenGLSettings::instance()->setUseDXT1Compression(false);
-        fileToProject(project, "://datasets/test_cwImageCompressionUpdater/ScrapsNeedUpdating.cw");
+    // SECTION("Update on dxt1 compression changed") {
+    //     // cwOpenGLSettings::instance()->setUseDXT1Compression(false);
+    //     fileToProject(project, "://datasets/test_cwImageCompressionUpdater/ScrapsNeedUpdating.cw");
 
-        checkScrapsAreBad();
+    //     checkScrapsAreBad();
 
-        // cwOpenGLSettings::instance()->setUseDXT1Compression(true);
-        rootData->futureManagerModel()->waitForFinished();
-        rootData->taskManagerModel()->waitForTasks();
+    //     // cwOpenGLSettings::instance()->setUseDXT1Compression(true);
+    //     rootData->futureManagerModel()->waitForFinished();
+    //     rootData->taskManagerModel()->waitForTasks();
 
-        checkScrapsAreGood();
-    }
+    //     checkScrapsAreGood();
+    // }
 }
 

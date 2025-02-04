@@ -11,11 +11,11 @@
 #include "cwImageData.h"
 #include "cwImageProvider.h"
 #include "cwDebug.h"
-#include "cwDXT1Compresser.h"
 #include "cwAsyncFuture.h"
 #include "cwImageDatabase.h"
 
 //For creating compressed DXT texture maps
+#include <QtConcurrent/qtconcurrentrun.h>
 #include <squish.h>
 
 //Std includes
@@ -230,48 +230,48 @@ QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
     };
 
     //For creating mipmaps
-    std::function<QFuture<cwTrackedImagePtr> (const QList<Mipmap>& image)> compressAndUpload
-            = [filename](const QList<Mipmap>& mipmaps)->QFuture<cwTrackedImagePtr> {
+    // std::function<QFuture<cwTrackedImagePtr> (const QList<Mipmap>& image)> compressAndUpload
+    //         = [filename](const QList<Mipmap>& mipmaps)->QFuture<cwTrackedImagePtr> {
 
-        QList<QImage> mipmapImages = cw::transform(mipmaps,
-                                               [](const Mipmap& mipmap)
-        {
-            return mipmap.image;
-        });
+    //     QList<QImage> mipmapImages = cw::transform(mipmaps,
+    //                                            [](const Mipmap& mipmap)
+    //     {
+    //         return mipmap.image;
+    //     });
 
-        cwDXT1Compresser compresser;
-        auto compressFuture = compresser.compress(mipmapImages);
+    //     // cwDXT1Compresser compresser;
+    //     // auto compressFuture = compresser.compress(mipmapImages);
 
-        return AsyncFuture::observe(compressFuture)
-                .subscribe([compressFuture, mipmaps, filename]()
-        {
-            struct CompressedMipmap {
-                cwDXT1Compresser::CompressedImage image;
-                int id;
-            };
+    //     return AsyncFuture::observe(compressFuture)
+    //             .subscribe([compressFuture, mipmaps, filename]()
+    //     {
+    //         struct CompressedMipmap {
+    //             cwDXT1Compresser::CompressedImage image;
+    //             int id;
+    //         };
 
-            auto compressionResults = compressFuture.results();
-            Q_ASSERT(mipmaps.size() == compressionResults.size());
+    //         auto compressionResults = compressFuture.results();
+    //         Q_ASSERT(mipmaps.size() == compressionResults.size());
 
-            auto mipmapIter = mipmaps.begin();
-            QList<CompressedMipmap> mipmaps = cw::transform(compressionResults,
-                                                        [&mipmapIter](const cwDXT1Compresser::CompressedImage& compressedImage)
-            {
-                CompressedMipmap mipmap = {compressedImage, mipmapIter->id};
-                mipmapIter++;
-                return mipmap;
-            });
+    //         auto mipmapIter = mipmaps.begin();
+    //         QList<CompressedMipmap> mipmaps = cw::transform(compressionResults,
+    //                                                     [&mipmapIter](const cwDXT1Compresser::CompressedImage& compressedImage)
+    //         {
+    //             CompressedMipmap mipmap = {compressedImage, mipmapIter->id};
+    //             mipmapIter++;
+    //             return mipmap;
+    //         });
 
-            std::function<cwTrackedImagePtr (const CompressedMipmap&)> updateDatabase
-                    = [filename](const CompressedMipmap& mipmap) {
-                cwImageData imageData = cwImageProvider::createDxt1(mipmap.image.size, mipmap.image.data);
-                int imageId = cwImageDatabase(filename).addOrUpdateImage(imageData, mipmap.id);
-                return cwTrackedImage::createShared(imageId, filename);
-            };
+    //         std::function<cwTrackedImagePtr (const CompressedMipmap&)> updateDatabase
+    //                 = [filename](const CompressedMipmap& mipmap) {
+    //             cwImageData imageData = cwImageProvider::createDxt1(mipmap.image.size, mipmap.image.data);
+    //             int imageId = cwImageDatabase(filename).addOrUpdateImage(imageData, mipmap.id);
+    //             return cwTrackedImage::createShared(imageId, filename);
+    //         };
 
-            return QtConcurrent::mapped(mipmaps, updateDatabase);
-        }).future();
-    };
+    //         return QtConcurrent::mapped(mipmaps, updateDatabase);
+    //     }).future();
+    // };
 
     auto pathImagesFuture = NewImagePaths.isEmpty() ? QFuture<PrivateImageData>() : QtConcurrent::mapped(NewImagePaths, loadImagesFromPath);
     auto imagesFuture = NewImages.isEmpty() ? QFuture<PrivateImageData>() : QtConcurrent::mapped(NewImages, loadFromImages);
@@ -294,7 +294,7 @@ QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
                        regeneratedFuture,
                        imageTypes,
                        scaleImage,
-                       compressAndUpload,
+                       // compressAndUpload,
                        createIcon
                        ]()
     {
@@ -316,25 +316,25 @@ QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
 
         QFuture<QVector<QFuture<cwTrackedImagePtr>>> compressAndUploadFuture = AsyncFuture::completedWithList(QVector<QFuture<cwTrackedImagePtr>>());
 
-        if(imageTypes & Mipmaps) {
-            auto scaleFuture = QtConcurrent::mapped(filterData, scaleImage);
+        // if(imageTypes & Mipmaps) {
+        //     auto scaleFuture = QtConcurrent::mapped(filterData, scaleImage);
 
-            compressAndUploadFuture = AsyncFuture::observe(scaleFuture)
-                    .subscribe([compressAndUpload, scaleFuture]()
-            {
-                QList<QList<Mipmap>> allImages = scaleFuture.results();
-                QVector<QFuture<cwTrackedImagePtr>> ids;
-                ids.reserve(allImages.size());
+        //     compressAndUploadFuture = AsyncFuture::observe(scaleFuture)
+        //             .subscribe([compressAndUpload, scaleFuture]()
+        //     {
+        //         QList<QList<Mipmap>> allImages = scaleFuture.results();
+        //         QVector<QFuture<cwTrackedImagePtr>> ids;
+        //         ids.reserve(allImages.size());
 
-                std::transform(allImages.begin(),
-                               allImages.end(),
-                               std::back_inserter(ids),
-                               compressAndUpload);
+        //         std::transform(allImages.begin(),
+        //                        allImages.end(),
+        //                        std::back_inserter(ids),
+        //                        compressAndUpload);
 
-                return ids;
-            }
-            ).future();
-        }
+        //         return ids;
+        //     }
+        //     ).future();
+        // }
 
         auto iconFuture = QtConcurrent::mapped(filterData, createIcon);
         auto idCombine = AsyncFuture::combine() << iconFuture << compressAndUploadFuture;
