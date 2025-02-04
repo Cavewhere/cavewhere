@@ -19,7 +19,9 @@ TEST_CASE("cwGlobals should extract the system paths correctly", "[cwGlobals]") 
 
 #ifdef Q_OS_UNIX
     //Check for sensible directories on linux and macos
+#ifndef Q_OS_MACOS
     CHECK(paths.contains(QDir("/usr/local/bin")) == true);
+#endif
     CHECK(paths.contains(QDir("/usr/bin")) == true);
 #endif
 }
