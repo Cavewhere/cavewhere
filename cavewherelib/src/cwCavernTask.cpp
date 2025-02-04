@@ -93,10 +93,23 @@ QString cwCavernTask::output3dFileName() const {
      cavernProcess->start(cavernPathName, arguments);
      cavernProcess->waitForFinished();
 
-     if(cavernProcess->exitStatus() == QProcess::CrashExit
-         || cavernProcess->exitCode() > 0)
-     {
-         qDebug() << "Cavern has crashed!" << cavernProcess->readAllStandardOutput();
+     if(cavernProcess->exitStatus() == QProcess::CrashExit) {
+         qDebug() << "Cavern has crash!" << cavernProcess->readAllStandardOutput();
+         stop();
+     } else if(cavernProcess->exitCode() > 0) {
+         // qDebug() << "Cavern exitcode:" << cavernProcess->exitCode();
+         int count = 0;
+         while (cavernProcess->canReadLine()) {
+             QString line = cavernProcess->readLine().trimmed();
+             ++count;
+
+             //Skip the first two info lines
+             if (!line.contains("error: No survey data") && count > 2) {
+                 // Process or store the valid line
+                 qDebug() << "cavern:" <<line;
+             }
+         }
+
          stop();
      }
 
