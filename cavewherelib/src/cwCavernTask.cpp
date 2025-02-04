@@ -97,7 +97,6 @@ QString cwCavernTask::output3dFileName() const {
          qDebug() << "Cavern has crash!" << cavernProcess->readAllStandardOutput();
          stop();
      } else if(cavernProcess->exitCode() > 0) {
-         // qDebug() << "Cavern exitcode:" << cavernProcess->exitCode();
          int count = 0;
          while (cavernProcess->canReadLine()) {
              QString line = cavernProcess->readLine().trimmed();
