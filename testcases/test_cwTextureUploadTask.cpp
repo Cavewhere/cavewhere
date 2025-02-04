@@ -87,18 +87,13 @@ TEST_CASE("cwTextureUploadTask should run correctly", "[cwTextureUploadTask]") {
         cwAsyncFuture::waitForFinished(resultsFuture);
         auto results = resultsFuture.result();
 
-        QList< QPair< int, QSize > > mipmaps({
-                                                 { 3280320 , QSize(1005, 816) }
-                                             });
-
         CHECK(results.type == cwTextureUploadTask::OpenGL_RGBA);
         CHECK(results.scaleTexCoords.x() == Catch::Approx(1.0));
         CHECK(results.scaleTexCoords.y() == Catch::Approx(1.0));
-        checkMipmaps(results, mipmaps);
 
         QImage image("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
         image = image.convertToFormat(QImage::Format_RGBA8888).mirrored();
-        CHECK(results.mipmaps.first().first == QByteArray(reinterpret_cast<const char*>(image.bits()), image.sizeInBytes()));
+        CHECK(results.image == image);
     }
 }
 
