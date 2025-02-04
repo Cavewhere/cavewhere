@@ -38,8 +38,6 @@ private:
     QString SurvexFileName;
     QReadWriteLock SurvexFileNameLocker;
 
-    QProcess* CavernProcess;
-
     QString survexFileName() const;
 
     static QString survex3dExtension() { return QLatin1String(".3d"); };
