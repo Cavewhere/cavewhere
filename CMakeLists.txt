@@ -23,7 +23,6 @@ include(GenerateExportHeader)
 # All subdirectories
 add_subdirectory(QMath3d)
 add_subdirectory(asyncfuture)
-add_subdirectory(qt-qml-models)
 add_subdirectory(dewalls)
 add_subdirectory(cavewherelib)
 add_subdirectory(qml-test-recorder)

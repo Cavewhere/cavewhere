@@ -10,9 +10,6 @@
 [submodule "installer/mac/create-dmg"]
 	path = installer/mac/create-dmg
         url = https://github.com/Cavewhere/create-dmg.git
-[submodule "qt-qml-models"]
-	path = qt-qml-models
-        url = https://github.com/Cavewhere/qt-qml-models.git
 [submodule "asyncfuture"]
 	path = asyncfuture
         url = https://github.com/vpicaver/asyncfuture.git

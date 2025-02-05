@@ -45,7 +45,6 @@ target_link_libraries(cavewherelib
     Qt::Concurrent
     Qt::Svg
     Qt::GuiPrivate
-    QtQmlModels
     asyncfuture
     dewalls
     QMath3d

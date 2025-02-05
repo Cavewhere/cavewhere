@@ -10,15 +10,15 @@
 #define CWERRORLISTMODEL_H
 
 //Qt includes
-#include <QQmlGadgetListModel.h>
 #include <QQmlEngine>
+#include <QAbstractListModel>
 
 //Our inculdes
 #include "cwError.h"
 #include "cwGlobals.h"
 
-class CAVEWHERE_LIB_EXPORT cwErrorListModel : public QAbstractListModel //QQmlGadgetListModel<cwError>
-{
+class CAVEWHERE_LIB_EXPORT cwErrorListModel : public QAbstractListModel {
+
     Q_OBJECT
     QML_NAMED_ELEMENT(ErrorListModel)
 

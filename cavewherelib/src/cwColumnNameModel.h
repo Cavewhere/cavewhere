@@ -8,7 +8,6 @@
 //Our inculdes
 #include "cwGlobals.h"
 #include "cwColumnName.h"
-#include "QQmlGadgetListModel.h"
 
 /**
  * @brief The cwColumnNameModel class
