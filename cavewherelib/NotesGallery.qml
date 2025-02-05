@@ -639,6 +639,7 @@ QQ.Rectangle {
         },
 
         QQ.Transition {
+            objectName: "toCarpetTransition"
             to: ""
             from: "CARPET"
 

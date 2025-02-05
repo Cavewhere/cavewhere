@@ -21,7 +21,13 @@ MainWindowTest {
             //Select carpet
             let _obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
             mouseClick(_obj1);
-            wait(200)
+
+            //Wait until the carpet is Selectd
+            let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery")
+            let carpetTransition = findChild(noteGallery, "toCarpetTransition")
+            tryVerify(()=>{ return !carpetTransition.running });
+
+            wait(1000);
 
             //Select scrap
             let imageId_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
@@ -54,6 +60,8 @@ MainWindowTest {
             //press done button
             let done_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteScaleInteraction->doneButton->label")
             mouseClick(done_obj1)
+
+            wait(100);
 
             //Make sure the scale updates correctly
             fuzzyCompare(1.0 / scrap.noteTransformation.scale, 567.4924, 0.001, `1.0 / ${scrap.noteTransformation.scale} === 567.4924`);
