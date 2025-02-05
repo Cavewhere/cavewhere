@@ -16,7 +16,7 @@ class CaveWhereConan(ConanFile):
     requires = [
     ("catch2/[>=2.13.10]"),
     ("protobuf/5.27.0"),
-    ("libsquish/[>=1.15]"),
+    ("sqlite3/3.44.2"),
 
     #We handle survex dependancies here for now, since we're using conan
     ("wxwidgets/[>=3.2.5]"),

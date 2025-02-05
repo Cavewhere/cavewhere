@@ -4,9 +4,10 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/UpdateVersion.cmake)
 
 #### cavewherelib ######
 # All packages we need to find
-find_package(protobuf REQUIRED)
+find_package(Protobuf REQUIRED)
 find_package(libsquish REQUIRED)
 find_package(Catch2 REQUIRED)
+find_package(SQLite3 REQUIRED)
 find_package(Qt6
     COMPONENTS
     Core
@@ -51,6 +52,7 @@ target_link_libraries(cavewherelib
     libsquish::libsquish
     PRIVATE
     protobuf::protobuf
+    SQLite::SQLite3
 )
 
 # Conditionally find the package and include directories
