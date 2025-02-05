@@ -670,14 +670,19 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
             QMatrix4x4 toProfile = cwRunningProfileScrapViewMatrix::Data(station1RealPos, station2RealPos).matrix();
             QVector3D realProfileVector = toProfile.mapVector(realVector);
 
-            double clinoDiff = acos(QVector3D::dotProduct(realProfileVector, afterNoteVector)) * cwGlobals::radiansToDegrees();
+            //Clamp the dot product to prevent Nana
+            double clinoDotProduct = std::clamp((double)QVector3D::dotProduct(realProfileVector, afterNoteVector), -1.0, 1.0);
+            double clinoDiff = acos(clinoDotProduct) * cwGlobals::radiansToDegrees();
 
             QVector3D xAxis = profileTransform.Rotation * QVector3D(1.0, 0.0, 0.0);
 
             QQuaternion errorQuat = QQuaternion::fromAxisAndAngle(QVector3D(0.0, 0.0, 1.0), clinoDiff);
             QVector3D errorVector = errorQuat.rotatedVector(xAxis);
 
-//            qDebug() << "real:" << realProfileVector << afterNoteVector << noteVector << clinoDiff << errorVector << xAxis;
+            // if(std::isnan(clinoDiff)) {
+            //     qDebug() << "\tclineDiff is nan:" << clinoDiff << QVector3D::dotProduct(realProfileVector, afterNoteVector);
+            // }
+            // qDebug() << "real:" << realProfileVector << afterNoteVector << noteVector << clinoDiff << errorVector << xAxis;
 
             return ScrapShotTransform(scale, errorVector, clinoDiff);
 };

@@ -156,7 +156,7 @@ TEST_CASE("Auto Calculate Note Transform", "[cwScrap]") {
 TEST_CASE("Exact Auto Calculate Note Transform", "[cwScrap]") {
 
     QList<TestRow> rows;
-    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-0rot-0mirror.cw", -0.155, 5795.0, 0.05, 0.005));
+    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-0rot-0mirror.cw", -0.142, 5795.0, 0.05, 0.005));
     rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-0rot-1mirror.cw", -0.26, 5795.0, 0.06, 0.005));
     rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-90rot-0mirror.cw", 90, 5795.0, 0.05, 0.005));
     rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-90rot-1mirror.cw", 90, 5795.0, 0.05, 0.005));
@@ -259,7 +259,7 @@ TEST_CASE("Auto calculate if survey station change position", "[cwScrap]") {
 
 TEST_CASE("Auto calculate should work on projected profile azimuth", "[cwScrap]") {
     QList<TestRow> rows;
-    rows.append(TestRow("://datasets/scrapAutoCalculate/ProjectProfile-test-v3.cw", 0.0, 255.967, 0.05, 0.005, 135.7));
+    rows.append(TestRow("://datasets/scrapAutoCalculate/ProjectProfile-test-v3.cw", 0.1997, 255.967, 0.05, 0.005, 135.7));
 
     foreach(TestRow row, rows) {
         auto root = std::make_unique<cwRootData>();
