@@ -1,6 +1,6 @@
 # CaveWhere
 
-![CaveWhere Logo](/cavewhereLib/icons/githubPage.png)
+![CaveWhere Logo](cavewhere_about.png)
 
 ## Cave Mapping software
 
@@ -37,7 +37,7 @@ pipx install conan
 
 1. **Clone the Repository and Prepare the Environment**
 
-   Clone the CaveWhere repository and checkout the correct branch (assuming `WIP-cmake` in this case). Initialize and update the submodules:
+   Clone the CaveWhere repository and checkout the correct branch (assuming `master` in this case). Initialize and update the submodules:
 
    ```bash
    git clone https://github.com/Cavewhere/cavewhere.git
