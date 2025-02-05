@@ -47,7 +47,7 @@ MainWindowTest {
 
             mouseClick(addLayerButton)
 
-            let profileButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->GroupBox->profileButton->label")
+            let profileButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->cameraOptions->GroupBox->profileButton")
             mouseClick(profileButton)
             tryVerify(() => { return turnTableInteraction.pitch === 0.0})
 
@@ -75,7 +75,7 @@ MainWindowTest {
             mouseClick(addLayerButton)
 
             //Look east
-            let eastButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->GroupBox->eastButton->label")
+            let eastButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->cameraOptions->GroupBox->eastButton")
             mouseClick(eastButton)
             tryVerify(() => { return turnTableInteraction.azimuth === 90.0})
 
