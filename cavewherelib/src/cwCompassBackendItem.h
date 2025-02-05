@@ -28,7 +28,6 @@ class cwCompassBackendItem : public QQuickRhiItem
 
 public:
     explicit cwCompassBackendItem(QQuickItem* parent = nullptr);
-    ~cwCompassBackendItem() { qDebug() << "Destroyed" << (void*)this; }
 
     // compassRotation property
     QQuaternion compassRotation() const { return m_rotation; }
