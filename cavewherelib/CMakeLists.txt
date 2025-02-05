@@ -173,10 +173,16 @@ qt_add_shaders(cavewherelib "cavewherelib_shaders"
         "shaders/toColor.frag"
     )
 
+#This is a hack to find the conan protoc and not the system protoc
+#If homebrew is installed on macos conan finds the homebrew version even though
+#protoc is in the build.requirements. https://github.com/conan-io/conan-center-index/issues/21737
+set(CONAN_PROTOC "${Protobuf_INCLUDE_DIRS}/../bin/protoc${CMAKE_EXECUTABLE_SUFFIX}")
+set(Protobuf_PROTOC_EXECUTABLE ${CONAN_PROTOC} CACHE FILEPATH "The protoc compiler" FORCE)
+set_property(TARGET protobuf::protoc PROPERTY IMPORTED_LOCATION ${Protobuf_PROTOC_EXECUTABLE})
+
 # Protobuf files
 file(GLOB protobuf_FILES "src/*.proto")
 set(Protobuf_IMPORT_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/src)
-message(STATUS "CMAKE_CURRENT_SOURCE_DIR/src is set to: ${CMAKE_CURRENT_SOURCE_DIR}/src ${PROTOBUF_IMPORT_DIRS}")
 protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${protobuf_FILES})
 target_sources(cavewherelib PRIVATE ${protobuf_FILES} ${protobuf_FILES})
 

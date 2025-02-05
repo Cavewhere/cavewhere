@@ -38,7 +38,9 @@ class CaveWhereConan(ConanFile):
         if not self.options.system_qt:
             self.requires("qt/6.7.3")
             self.requires("xkbcommon/1.6.0", override=True)
-            self.requires("sqlite3/3.45.0", override=True)
+
+    def build_requirements(self):
+        self.tool_requires("protobuf/5.27.0")
 
     def configure(self):
         if not self.options.system_qt:

@@ -12,6 +12,14 @@ Loop closures re-morph effected scan scraps automatically so your map is always 
 
 [CaveWhere Downloads](https://cavewhere.com/downloads/)
 
+## Building CaveWhere from source
+
+
+GitHub Actions provide the most up-to-date instructions for building CaveWhere. 
+You can check the latest workflow file here:  
+[Linux Build Workflow](https://github.com/cavewhere/CaveWhere/blob/master/.github/workflows/build-linux.yml)
+
+[Windows Build Workflow](https://github.com/cavewhere/CaveWhere/blob/master/.github/workflows/build-windows.yml)
 
 ## Building and Running CaveWhere on Ubuntu 23
 
