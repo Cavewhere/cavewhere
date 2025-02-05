@@ -176,9 +176,24 @@ qt_add_shaders(cavewherelib "cavewherelib_shaders"
 #This is a hack to find the conan protoc and not the system protoc
 #If homebrew is installed on macos conan finds the homebrew version even though
 #protoc is in the build.requirements. https://github.com/conan-io/conan-center-index/issues/21737
-set(CONAN_PROTOC "${Protobuf_INCLUDE_DIR}/../bin/protoc${CMAKE_EXECUTABLE_SUFFIX}")
-set(Protobuf_PROTOC_EXECUTABLE ${CONAN_PROTOC} CACHE FILEPATH "The protoc compiler" FORCE)
-set_property(TARGET protobuf::protoc PROPERTY IMPORTED_LOCATION ${Protobuf_PROTOC_EXECUTABLE})
+# Get the current IMPORTED_LOCATION of protobuf::protoc
+get_target_property(CURRENT_PROTOC_EXECUTABLE protobuf::protoc IMPORTED_LOCATION)
+
+# Check if the path contains ".conan2"
+if (CURRENT_PROTOC_EXECUTABLE MATCHES "\\.conan2")
+    message(STATUS "Using Conan's protoc: ${CURRENT_PROTOC_EXECUTABLE}")
+else()
+    message(STATUS "System protoc detected. Applying Conan protoc hack.")
+
+    # Define the Conan protoc path
+    set(CONAN_PROTOC "${Protobuf_INCLUDE_DIR}/../bin/protoc${CMAKE_EXECUTABLE_SUFFIX}")
+
+    # Force the use of Conan's protoc
+    set(Protobuf_PROTOC_EXECUTABLE ${CONAN_PROTOC} CACHE FILEPATH "The protoc compiler" FORCE)
+    set_property(TARGET protobuf::protoc PROPERTY IMPORTED_LOCATION ${Protobuf_PROTOC_EXECUTABLE})
+
+    message(STATUS "Overriding protoc with: ${Protobuf_PROTOC_EXECUTABLE}")
+endif()
 
 # Protobuf files
 file(GLOB protobuf_FILES "src/*.proto")
