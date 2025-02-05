@@ -29,7 +29,8 @@ cwBaseTurnTableInteraction::cwBaseTurnTableInteraction(QQuickItem *parent) :
     ViewMatrixAnimation->setEasingCurve(QEasingCurve(QEasingCurve::InOutCubic));
     connect(ViewMatrixAnimation, &cwMatrix4x4Animation::valueChanged,
             this, &cwBaseTurnTableInteraction::updateViewMatrixFromAnimation);
-//    resetView();
+
+    resetView();
 
     setupInteractionTimers();
 }
@@ -207,9 +208,11 @@ void cwBaseTurnTableInteraction::resetView() {
 
     setCurrentRotation(defaultRotation());
 
-    QMatrix4x4 viewMatrix;
-    viewMatrix.translate(QVector3D(0.0, 0.0, -50));
-    Camera->setViewMatrix(viewMatrix);
+    if(Camera) {
+        QMatrix4x4 viewMatrix;
+        viewMatrix.translate(QVector3D(0.0, 0.0, -50));
+        Camera->setViewMatrix(viewMatrix);
+    }
 }
 
 
