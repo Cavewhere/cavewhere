@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.21.1)
+cmake_minimum_required(VERSION 3.23)
 
 project(CaveWhere VERSION 1.0.0 LANGUAGES CXX)
 
@@ -20,7 +20,7 @@ set(QT_QML_GENERATE_QMLLS_INI ON CACHE BOOL "Generate QMLLS INI file")
 # Include the GenerateExportHeader module
 include(GenerateExportHeader)
 
-# All subdirectories
+# All subdirectoriesb
 add_subdirectory(QMath3d)
 add_subdirectory(asyncfuture)
 add_subdirectory(dewalls)
@@ -37,7 +37,6 @@ set(SURVEX_CONAN OFF CACHE BOOL "Use survex Conan to manage dependencies" FORCE)
 add_subdirectory(survex)
 
 # All packages we need to find
-find_package(Protobuf REQUIRED)
 find_package(libsquish REQUIRED)
 find_package(Catch2 REQUIRED)
 find_package(Qt6
@@ -255,8 +254,8 @@ if(APPLE)
         COMMAND ${CMAKE_COMMAND} -E copy ${PLUGIN_DIR}/qmldir ${BUNDLE_QML_DIR}/qmldir
         COMMAND ${CMAKE_COMMAND} -E copy ${PLUGIN_DIR}/cavewherelib.qmltypes ${BUNDLE_QML_DIR}/cavewherelib.qmltypes
         COMMAND ${CMAKE_COMMAND} -E copy ${PLUGIN_DIR}/Theme.js ${BUNDLE_QML_DIR}/Theme.js
-        COMMAND ${CMAKE_COMMAND} -E copy ${PLUGIN_DIR}/Theme.js ${BUNDLE_QML_DIR}/Utils.js
-        COMMAND ${CMAKE_COMMAND} -E copy ${PLUGIN_DIR}/Theme.js ${BUNDLE_QML_DIR}/VectorMath.js
+        COMMAND ${CMAKE_COMMAND} -E copy ${PLUGIN_DIR}/Utils.js ${BUNDLE_QML_DIR}/Utils.js
+        COMMAND ${CMAKE_COMMAND} -E copy ${PLUGIN_DIR}/VectorMath.js ${BUNDLE_QML_DIR}/VectorMath.js
         COMMENT "Copying qmldir and cavewherelib.qmltypes to Resources/qml."
     )
 

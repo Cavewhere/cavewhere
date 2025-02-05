@@ -53,6 +53,12 @@ class CaveWhereConan(ConanFile):
         #Arrow fails on github linux build, disable
         self.options["gdal"].with_arrow = False
 
+        #These options allow on crosscompiling on arm64 -> x86_64 on windows
+        #conan doesn't support strawberryperl or msys
+        self.options["gdal"].with_curl = False
+        self.options["gdal"].with_libiconv = False
+        self.options["proj"].with_curl = False
+
         #This prevents protoc from needing zlib which adds a failing rpath protoc
         self.options["protobuf"].with_zlib=False
 

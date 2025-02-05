@@ -1,10 +1,10 @@
-cmake_minimum_required(VERSION 3.21.1)
+cmake_minimum_required(VERSION 3.23)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/UpdateVersion.cmake)
 
 #### cavewherelib ######
 # All packages we need to find
-find_package(Protobuf REQUIRED)
+find_package(protobuf REQUIRED)
 find_package(libsquish REQUIRED)
 find_package(Catch2 REQUIRED)
 find_package(Qt6
