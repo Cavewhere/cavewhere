@@ -54,7 +54,6 @@ void cwCompassRenderer::initializeResources(QRhiCommandBuffer *cb)
 
     // Create uniform buffer
     auto size = rhi->ubufAligned(sizeof(QMatrix4x4));
-    qDebug() << "m_uniformBuffer:" << size;
     m_uniformBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, size);
     m_uniformBuffer->create();
 

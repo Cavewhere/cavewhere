@@ -52,7 +52,7 @@ void cwRhiScene::synchroize(cwScene *scene, cwRhiItemRenderer *renderer)
     if(!scene->m_newRenderObjects.isEmpty()) {
         for(auto object : scene->m_newRenderObjects) {
             auto rhiObject = object->createRHIObject();
-            qDebug() << "Creating rhiObject:" << object << "->" << rhiObject;
+            // qDebug() << "Creating rhiObject:" << object << "->" << rhiObject;
             m_rhiObjects.append(rhiObject);
             m_rhiObjectsToInitilize.append(rhiObject);
             m_rhiObjectLookup[object] = rhiObject;
