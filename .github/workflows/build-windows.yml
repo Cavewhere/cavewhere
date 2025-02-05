@@ -3,7 +3,7 @@ name: Build on Windows
 on:
   push:
     branches:
-      - WIP-qt6
+      - master
   pull_request:
     branches:
       - '*'
