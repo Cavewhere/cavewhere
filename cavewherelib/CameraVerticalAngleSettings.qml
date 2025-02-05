@@ -7,16 +7,18 @@ ColumnLayout {
     id: itemId
     property TurnTableInteraction turnTableInteraction;
 
-    implicitWidth: rowLayout.width
+    anchors.fill: parent
 
     RowLayout {
         id: rowLayout
+        Layout.alignment: Qt.AlignHCenter
 
         InformationButton {
             showItemOnClick: helpAreaId
         }
 
         ClickTextInput {
+            objectName: "pitchText"
             text: Number(itemId.turnTableInteraction.pitch).toFixed(1)
             validator: doubleValidatorId
             enabled: !itemId.turnTableInteraction.pitchLocked

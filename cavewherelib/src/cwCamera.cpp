@@ -10,7 +10,7 @@
 
 cwCamera::cwCamera(QObject *parent) :
     QObject(parent),
-    ZoomScale(1.0)
+    ZoomScale(defaultZoomScale())
 {
     // ViewMatrix.translate(QVector3D(0.0, 0.0, -1000.0));
     ViewProjectionMatrixIsDirty = true;
@@ -94,6 +94,7 @@ void cwCamera::setViewMatrix(QMatrix4x4 matrix) {
     ViewMatrix = matrix;
     ViewProjectionMatrixIsDirty = true;
     emit viewMatrixChanged();
+    emit positionChanged();
 }
 
 /**
@@ -218,4 +219,9 @@ QVector3D cwCamera::mapNormalizeScreenToGLViewport(const QVector3D& point) const
          DevicePixelRatio = devicePixelRatio;
          emit devicePixelRatioChanged();
      }
+ }
+
+ QVector3D cwCamera::position() const
+ {
+     return QVector3D(ViewMatrix.column(3));
  }

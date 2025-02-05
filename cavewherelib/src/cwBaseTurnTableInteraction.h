@@ -86,12 +86,12 @@ public slots:
 
     void zoom(QPoint position, int delta);
 
+    void resetView();
+
 private slots:
     void rotateLastPosition();
     void zoomLastPosition();
     void translateLastPosition();
-
-    void resetView();
 
     void updateViewMatrixFromAnimation(QVariant matrix);
 private:

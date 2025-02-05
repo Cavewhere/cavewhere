@@ -28,6 +28,8 @@ class CAVEWHERE_LIB_EXPORT cwCamera : public QObject
     Q_PROPERTY(double zoomScale READ zoomScale WRITE setZoomScale NOTIFY zoomScaleChanged)
     Q_PROPERTY(QMatrix4x4 viewMatrix READ viewMatrix WRITE setViewMatrix NOTIFY viewMatrixChanged)
     Q_PROPERTY(double devicePixelRatio READ devicePixelRatio WRITE setDevicePixelRatio NOTIFY devicePixelRatioChanged)
+    Q_PROPERTY(QVector3D position READ position NOTIFY positionChanged FINAL)
+    Q_PROPERTY(double defaultZoomScale READ defaultZoomScale CONSTANT)
 
 public:
     explicit cwCamera(QObject *parent = 0);
@@ -69,6 +71,10 @@ public:
     cwProjection orthoProjectionDefault() const;
     cwProjection perspectiveProjectionDefault() const;
 
+    QVector3D position() const;
+
+    double defaultZoomScale() const { return 0.5; }
+
 signals:
     void viewportChanged();
     void projectionChanged();
@@ -76,6 +82,8 @@ signals:
     void pixelsPerMeterChanged();
     void zoomScaleChanged();
     void devicePixelRatioChanged();
+
+    void positionChanged();
 
 public slots:
 

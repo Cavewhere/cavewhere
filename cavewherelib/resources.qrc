@@ -132,5 +132,6 @@
         <file>twbs-icons/icons/check-lg.svg</file>
         <file>twbs-icons/icons/arrow-repeat.svg</file>
         <file>twbs-icons/icons/arrows-angle-expand.svg</file>
+        <file>twbs-icons/icons/repeat.svg</file>
     </qresource>
 </RCC>

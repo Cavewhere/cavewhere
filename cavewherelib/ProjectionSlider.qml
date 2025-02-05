@@ -32,6 +32,7 @@ QQ.Item {
 
             ToggleSlider {
                 id: sliderId
+                objectName: "slider"
                 leftText: "     "
                 rightText: "     "
 
@@ -68,8 +69,8 @@ QQ.Item {
     Matrix4x4Animation {
         id: matrix4x4AnimationId
         startValue: cameraSettingsId.viewer.orthoProjection.matrix
-        endValue: cameraSettingsId.viewer.perspectiveProjection.matrix
         duration: 1000
+        endValue: cameraSettingsId.viewer.perspectiveProjection.matrix
         currentTime: sliderId.sliderPos * 1000
 
         property real position: sliderId.sliderPos

@@ -208,10 +208,17 @@ void cwBaseTurnTableInteraction::resetView() {
 
     setCurrentRotation(defaultRotation());
 
+    emit pitchChanged();
+    emit azimuthChanged();
+
     if(Camera) {
         QMatrix4x4 viewMatrix;
         viewMatrix.translate(QVector3D(0.0, 0.0, -50));
         Camera->setViewMatrix(viewMatrix);
+
+        if(Camera->projection().type() == cwProjection::Ortho) {
+            Camera->setZoomScale(Camera->defaultZoomScale());
+        }
     }
 }
 
@@ -379,6 +386,7 @@ void cwBaseTurnTableInteraction::updateRotationMatrix()
     viewMatrix.translate(LastMouseGlobalPosition);
     viewMatrix.rotate(rotationDifferance);
     viewMatrix.translate(-LastMouseGlobalPosition);
+
     Camera->setViewMatrix(viewMatrix);
 }
 

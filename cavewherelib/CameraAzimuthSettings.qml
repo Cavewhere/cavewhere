@@ -54,6 +54,7 @@ ColumnLayout {
             width: northButton.width
 
             ClickTextInput {
+                objectName: "cameraAzimuthText"
                 text: Number(settingsId.turnTableInteraction.azimuth).toFixed(1)
                 validator: doubleValidatorId
                 onFinishedEditting: (newText) => {
@@ -101,6 +102,8 @@ ColumnLayout {
     GroupBox {
         title: "Animate"
         enabled: !settingsId.turnTableInteraction.azimuthLocked
+
+        Layout.alignment: Qt.AlignHCenter
 
         RowLayout {
 
