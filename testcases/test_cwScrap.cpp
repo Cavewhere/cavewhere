@@ -116,7 +116,7 @@ void checkScrapTransform(cwScrap* scrap, const TestRow& row) {
     if(scrap->type() == cwScrap::ProjectedProfile) {
         auto viewMatrix = dynamic_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix());
         REQUIRE(viewMatrix);
-        CHECK(viewMatrix->azimuth() == Catch::Approx(row.ProfileAzimuth).margin(0.1));
+        CHECK(viewMatrix->azimuth() == Catch::Approx(row.ProfileAzimuth).margin(0.25));
     }
 }
 

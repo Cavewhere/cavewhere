@@ -65,8 +65,8 @@ qt_add_qml_module(cavewhere-testlib
         QtQuick
         QtQuick.Controls
     SOURCES
-        testlib/TestHelper.cpp
-        testlib/TestHelper.h
+        testlib/LoadProjectHelper.cpp
+        testlib/LoadProjectHelper.h
     #QML_FILES
 )
 
