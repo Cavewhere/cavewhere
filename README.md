@@ -42,7 +42,6 @@ pipx install conan
    ```bash
    git clone https://github.com/Cavewhere/cavewhere.git
    cd cavewhere
-   git checkout --track origin/WIP-qt6
    git submodule update --init --recursive
    cd ..
    ```
