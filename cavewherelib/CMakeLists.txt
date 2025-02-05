@@ -5,7 +5,6 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/UpdateVersion.cmake)
 #### cavewherelib ######
 # All packages we need to find
 find_package(Protobuf REQUIRED)
-find_package(libsquish REQUIRED)
 find_package(Catch2 REQUIRED)
 find_package(SQLite3 REQUIRED)
 find_package(Qt6
@@ -49,7 +48,6 @@ target_link_libraries(cavewherelib
     asyncfuture
     dewalls
     QMath3d
-    libsquish::libsquish
     PRIVATE
     protobuf::protobuf
     SQLite::SQLite3

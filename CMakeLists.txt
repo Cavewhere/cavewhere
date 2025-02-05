@@ -37,7 +37,6 @@ set(SURVEX_CONAN OFF CACHE BOOL "Use survex Conan to manage dependencies" FORCE)
 add_subdirectory(survex)
 
 # All packages we need to find
-find_package(libsquish REQUIRED)
 find_package(Catch2 REQUIRED)
 find_package(Qt6
     COMPONENTS

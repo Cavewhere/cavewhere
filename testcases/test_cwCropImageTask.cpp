@@ -7,7 +7,6 @@
 #include "cwProject.h"
 #include "cwImageProvider.h"
 #include "TestHelper.h"
-#include "DXT1BlockCompare.h"
 #include "cwAsyncFuture.h"
 #include "cwImageDatabase.h"
 

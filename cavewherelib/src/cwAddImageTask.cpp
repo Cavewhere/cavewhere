@@ -16,7 +16,6 @@
 
 //For creating compressed DXT texture maps
 #include <QtConcurrent/qtconcurrentrun.h>
-#include <squish.h>
 
 //Std includes
 #include "cwMath.h"
