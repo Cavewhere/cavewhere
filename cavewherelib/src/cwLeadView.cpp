@@ -126,7 +126,7 @@ void cwLeadView::addScrap(cwScrap *scrap)
         }
     };
 
-    auto insert = [this, scrap, updateIndexesToEnd, updatePosition](int begin, int end) {
+    auto beginInsert = [this, scrap, updateIndexesToEnd, updatePosition](int begin, int end) {
         if(begin <= end) {
             auto& items = m_leadItems[scrap];
 
@@ -140,15 +140,17 @@ void cwLeadView::addScrap(cwScrap *scrap)
         }
     };
 
-    connect(scrap, &cwScrap::leadsBeginInserted, this, insert);
-    connect(scrap, &cwScrap::leadsInserted, this, [this, scrap, updatePosition, itemAt](int begin, int end) {
+    auto insert = [this, scrap, updatePosition, itemAt](int begin, int end) {
         auto& items = m_leadItems[scrap];
         for(int i = begin; i <= end; i++) {
             auto item = itemAt(items, i);
             updatePosition(item, i);
             item->setProperty("scrap", QVariant::fromValue(scrap));
         }
-    });
+    };
+
+    connect(scrap, &cwScrap::leadsBeginInserted, this, beginInsert);
+    connect(scrap, &cwScrap::leadsInserted, this, insert);
 
     connect(scrap, &cwScrap::leadsRemoved, this, [this, scrap, updateIndexesToEnd](int begin, int end) {
         auto& items = m_leadItems[scrap];
@@ -180,7 +182,10 @@ void cwLeadView::addScrap(cwScrap *scrap)
 
     //Setup the leads
     m_leadItems.insert(scrap, {});
-    insert(0, scrap->numberOfLeads() - 1);
+
+    auto lastIndex = scrap->numberOfLeads() - 1;
+    beginInsert(0, lastIndex);
+    insert(0, lastIndex);
 
 
     // QQmlContext* context = QQmlEngine::contextForObject(this);
