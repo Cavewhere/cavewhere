@@ -212,19 +212,15 @@ void cwCaptureViewport::capture()
         parent->addToGroup(graphicsImage);
 
         //For debugging tiles
-        double scale = 1.0  / image.devicePixelRatio();
-        QGraphicsRectItem* rectItem = new QGraphicsRectItem(parent);
-        QRectF tileRect = graphicsImage->mapToItem(rectItem, graphicsImage->boundingRect()).boundingRect();
-        rectItem->setPen(QPen(Qt::red));
-        rectItem->setRect(tileRect);
-        QGraphicsSimpleTextItem* textItem = new QGraphicsSimpleTextItem(parent);
-        textItem->setText(QString("Id:%1").arg(job.id));
-        textItem->setPen(QPen(Qt::red));
-        textItem->setPos(tileRect.center());
-
-        image.save(QString("tile-%1.png").arg(job.id));
-
-        // qDebug() << "TileRect:" << tileRect << "Job:" << job.viewport << parent->boundingRect();
+        // double scale = 1.0  / image.devicePixelRatio();
+        // QGraphicsRectItem* rectItem = new QGraphicsRectItem(parent);
+        // QRectF tileRect = graphicsImage->mapToItem(rectItem, graphicsImage->boundingRect()).boundingRect();
+        // rectItem->setPen(QPen(Qt::red));
+        // rectItem->setRect(tileRect);
+        // QGraphicsSimpleTextItem* textItem = new QGraphicsSimpleTextItem(parent);
+        // textItem->setText(QString("Id:%1").arg(job.id));
+        // textItem->setPen(QPen(Qt::red));
+        // textItem->setPos(tileRect.center());
 
         NumberOfImagesProcessed++;
 

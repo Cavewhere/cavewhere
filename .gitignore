@@ -694,3 +694,5 @@ cavewherelib/.qmlls.ini
 *.mo
 .qmlls.ini
 test-qml/test.svg
+test-qml/test.pdf
+test-qml/test.png

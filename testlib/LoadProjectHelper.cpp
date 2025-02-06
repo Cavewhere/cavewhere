@@ -48,3 +48,22 @@ QString prependTempFolder(QString filename)
 {
     return QStandardPaths::writableLocation(QStandardPaths::TempLocation) + "/" + filename;
 }
+
+bool TestHelper::fileExists(const QUrl &filename) const
+{
+    QFileInfo info(filename.toLocalFile());
+    return info.exists();
+}
+
+size_t TestHelper::fileSize(const QUrl &filename) const
+{
+    QFileInfo info(filename.toLocalFile());
+    return info.size();
+}
+
+void TestHelper::removeFile(const QUrl &filename) const
+{
+    QFile::remove(filename.toLocalFile());
+}
+
+

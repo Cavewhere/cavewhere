@@ -149,15 +149,29 @@ MainWindowTest {
             verify(findChild(captureItem1_obj1, "topLeftHandle").visible == false);
 
             //Export the image
-            let mapPage = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage")
-            let screenCaptureManager = findChild(mapPage, "screenCaptureManager")
-            captureManagerFinished.target = screenCaptureManager
-            screenCaptureManager.filename = Qt.resolvedUrl("test.svg")
-            screenCaptureManager.fileType = CaptureManager.SVG
-            screenCaptureManager.capture()
-            captureManagerFinished.wait(5000)
+            function exportImage(filename, fileType) {
+                let localFileUrl = Qt.resolvedUrl(filename)
+                TestHelper.removeFile(localFileUrl);
+                verify(!TestHelper.fileExistslocalFileUrl);
+
+                let mapPage = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage")
+                let screenCaptureManager = findChild(mapPage, "screenCaptureManager")
+                captureManagerFinished.target = screenCaptureManager
+                screenCaptureManager.filename = localFileUrl
+                screenCaptureManager.fileType = fileType
+                screenCaptureManager.capture()
+                captureManagerFinished.wait(5000)
+                console.log("File exists:" + localFileUrl + " " + TestHelper.fileExists(localFileUrl))
+                verify(TestHelper.fileExists(localFileUrl));
+                verify(TestHelper.fileSize(localFileUrl) > 0);
+            }
+
+            exportImage("test.svg", CaptureManager.SVG);
+            exportImage("test.pdf", CaptureManager.PDF);
+            exportImage("test.png", CaptureManager.PNG);
 
             wait(100);
+
         }
     }
 }

@@ -236,11 +236,6 @@ void cwCaptureManager::setFileType(FileType fileType) {
  */
 void cwCaptureManager::capture()
 {
-    if(NumberOfImagesProcessed != 0) {
-        qDebug() << "NumberOfImagesProcessed is not zero, but is" << NumberOfImagesProcessed << "this is a bug!" << LOCATION;
-        return;
-    }
-
     NumberOfImagesProcessed = 0;
 
     //Lamba needs to be a shared pointer because it's recursive
