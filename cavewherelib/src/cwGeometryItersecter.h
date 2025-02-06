@@ -30,7 +30,7 @@ public:
     class Object {
     public:
         Object() : Parent(nullptr), Id(-1), Type(None) { }
-        Object(cwRenderObject* parent, uint id, QVector<QVector3D> points, QVector<uint> indexes, PrimitiveType type) :
+        Object(cwRenderObject* parent, uint64_t id, QVector<QVector3D> points, QVector<uint> indexes, PrimitiveType type) :
             Parent(parent),
             Id(id),
             Points(points),
@@ -39,7 +39,7 @@ public:
         {}
 
         cwRenderObject* parent() const { return Parent; }
-        uint id() const { return Id; }
+        uint64_t id() const { return Id; }
         const QVector<QVector3D>& points() const { return Points; }
         const QVector<uint>& indexes() const { return Indexes; }
         PrimitiveType type() const { return Type; }
@@ -47,7 +47,7 @@ public:
     private:
 
         cwRenderObject* Parent;
-        uint Id;
+        uint64_t Id;
         QVector<QVector3D> Points;
         QVector<uint> Indexes;
         PrimitiveType Type;

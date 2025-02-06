@@ -51,7 +51,7 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
 
     LinePlotTask = new cwLinePlotTask();
     connect(LinePlotTask, SIGNAL(shouldRerun()), this, SLOT(rerunSurvex())); //So the task is rerun
-    connect(LinePlotTask, &cwLinePlotTask::finished, this, &cwLinePlotManager::updateLinePlot);
+    connect(LinePlotTask, &cwLinePlotTask::finished, this, &cwLinePlotManager::updateLinePlotFromTask);
 }
 
 cwLinePlotManager::~cwLinePlotManager() {
@@ -77,12 +77,16 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
     //Connect all sub data
     connectCaves(Region);
 
-    runSurvex();
+    if(Region->hasCaves()) {
+        runSurvex();
+    }
+
+    updateLinePlot(cwLinePlotTask::LinePlotResultData());
 }
 
 void cwLinePlotManager::setRenderLinePlot(cwRenderLinePlot* linePlot) {
     m_linePlot = linePlot;
-    updateLinePlot();
+    updateLinePlotFromTask();
 }
 
 /**
@@ -240,25 +244,30 @@ void cwLinePlotManager::runSurvex() {
 
 }
 
+void cwLinePlotManager::updateLinePlotFromTask()
+{
+    if(!LinePlotTask->isReady()) { return; }
+    cwLinePlotTask::LinePlotResultData resultData = LinePlotTask->linePlotData();
+    updateLinePlot(resultData);
+}
+
 /**
   \brief Updates the line plot, and all the station positions for the
   line region
   */
-void cwLinePlotManager::updateLinePlot() {
-    if(!LinePlotTask->isReady()) { return; }
+void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData results) {
+
     if(Region == nullptr) { return; }
 
     //Clear all the unconnected chunk errors from the previous run
     clearUnconnectedChunkErrors();
 
-    cwLinePlotTask::LinePlotResultData resultData = LinePlotTask->linePlotData();
-
     //Validate all the objects in resultData, remove any that were delete before the task was over
-    validateResultsData(resultData); //Modifies resultData inplace
+    validateResultsData(results); //Modifies resultData inplace
 
     //Update all the positions for all the caves that need to be updated
     //Also update the length and depth information
-    QMapIterator<cwCave*, cwLinePlotTask::LinePlotCaveData> iter(resultData.caveData());
+    QMapIterator<cwCave*, cwLinePlotTask::LinePlotCaveData> iter(results.caveData());
     while(iter.hasNext()) {
         iter.next();
         cwCave* cave = iter.key();
@@ -286,15 +295,15 @@ void cwLinePlotManager::updateLinePlot() {
 
     //Update the 3D plot
     if(m_linePlot != nullptr) {
-        m_linePlot->setGeometry(resultData.stationPositions(), resultData.linePlotIndexData());
+        m_linePlot->setGeometry(results.stationPositions(), results.linePlotIndexData());
     }
 
     //Mark all caves as up todate
     setCaveStationLookupAsStale(false);
 
-    emit stationPositionInCavesChanged(resultData.caveData().keys());
-    emit stationPositionInTripsChanged(cw::toList(resultData.trips()));
-    emit stationPositionInScrapsChanged(cw::toList(resultData.scraps()));
+    emit stationPositionInCavesChanged(results.caveData().keys());
+    emit stationPositionInTripsChanged(cw::toList(results.trips()));
+    emit stationPositionInScrapsChanged(cw::toList(results.scraps()));
 }
 
 

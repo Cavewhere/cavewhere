@@ -5,8 +5,7 @@
 
 cwRenderScraps::cwRenderScraps(QObject *parent) :
     cwRenderObject(parent),
-    m_project(nullptr),
-    m_visible(true)
+    m_project(nullptr)
 {
 }
 
@@ -21,30 +20,24 @@ void cwRenderScraps::setProject(cwProject* project) {
     }
 }
 
-void cwRenderScraps::setFutureManagerToken(cwFutureManagerToken token)
-{
-    m_futureManagerToken = token;
-}
-
-// bool cwRenderScraps::visible() const {
-//     return m_visible;
-// }
-
-// void cwRenderScraps::setVisible(bool visible) {
-//     if(m_visible != visible) {
-//         m_visible = visible;
-//         emit visibleChanged();
-//     }
-// }
-
 void cwRenderScraps::addScrapToUpdate(cwScrap *scrap)
 {
     if(!scrap->triangulationData().isNull()) {
+
+        auto triangleData = scrap->triangulationData();
+
         PendingScrapCommand command = PendingScrapCommand(PendingScrapCommand::AddScrap,
                                                           scrap,
-                                                          scrap->triangulationData());
+                                                          triangleData);
 
         addCommand(command);
+
+        uint64_t scrapId = reinterpret_cast<uint64_t>(scrap);
+        geometryItersecter()->addObject(cwGeometryItersecter::Object(this,
+                                                                     scrapId,
+                                                                     triangleData.points(),
+                                                                     triangleData.indices(),
+                                                                     cwGeometryItersecter::Triangles));
     }
 }
 
@@ -55,6 +48,9 @@ void cwRenderScraps::removeScrap(cwScrap *scrap)
                                                       cwTriangulatedData());
 
     addCommand(command);
+
+    uint64_t scrapId = reinterpret_cast<uint64_t>(scrap);
+    geometryItersecter()->removeObject(this, scrapId);
 }
 
 void cwRenderScraps::addScrapTextureToUpdate(cwScrap *scrap)
@@ -73,6 +69,6 @@ cwRHIObject* cwRenderScraps::createRHIObject() {
 
 void cwRenderScraps::addCommand(const PendingScrapCommand &command)
 {
-    m_pendingChanges.insert(command.scrap(), command);
+    m_pendingChanges.append(command);
     update();
 }

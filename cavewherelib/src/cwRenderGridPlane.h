@@ -14,14 +14,14 @@
 
 //Qt includes
 #include <QPlane3D>
-#include <QOpenGLShaderProgram>
-#include <QOpenGLBuffer>
-
+#include <QObjectBindableProperty>
 
 class cwRenderGridPlane : public cwRenderObject {
     Q_OBJECT
 
-    Q_PROPERTY(double extent READ extent WRITE setExtent NOTIFY extentChanged)
+    Q_PROPERTY(double extent READ extent WRITE setExtent NOTIFY extentChanged BINDABLE bindableExtent)
+    Q_PROPERTY(QPlane3D plane READ plane WRITE setPlane NOTIFY planeChanged BINDABLE bindablePlane)
+
     friend class cwRHIGridPlane;
 
 public:
@@ -32,47 +32,41 @@ public:
 
     cwRenderGridPlane(QObject *parent = nullptr);
 
-    QPlane3D plane() const;
-    void setPlane(QPlane3D plane);
+    double extent() const { return m_extent.value(); }
+    void setExtent(const double& extent) { m_extent = extent; }
+    QBindable<double> bindableExtent() { return &m_extent; }
 
-    double extent() const;
-    void setExtent(double extent);
+    QPlane3D plane() const { return m_plane.value(); }
+    void setPlane(const QPlane3D& plane) { m_plane = plane; }
+    QBindable<QPlane3D> bindablePlane() { return &m_plane; }
 
-    // QMatrix4x4 modelMatrix() const { return m_modelMatrix.value(); }
+signals:
+    void extentChanged();
+    void planeChanged();
 
 protected:
     virtual cwRHIObject* createRHIObject() override;
 
 private:
-    QPlane3D m_plane;
-    double m_extent; //!< The max rendering area of the plane
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(
+        cwRenderGridPlane,
+        QPlane3D, m_plane,
+        QPlane3D(QVector3D(0.0, 0.0, -75.0), QVector3D(0.0, 0.0, 1.0)),
+        &cwRenderGridPlane::planeChanged);
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwRenderGridPlane,
+                                         double, m_extent,
+                                         3000.0,
+                                         &cwRenderGridPlane::extentChanged);
+
+    QProperty<QMatrix4x4> m_modelMatrixProperty;
     cwTracked<QMatrix4x4> m_modelMatrix;
 
     //Camera connection
     QMetaObject::Connection m_sceneConnection;
     QMetaObject::Connection m_viewMatrixConnection;
     QMetaObject::Connection m_projectionConnection;
-
-    void updateModelMatrix();
-
-signals:
-    void extentChanged();
-
 };
 
-/**
-    Gets extent, the max rendering geometry of the plane
-*/
-inline double cwRenderGridPlane::extent() const {
-    return m_extent;
-}
 
-/**
- * @brief cwRenderGridPlane::plane
- * @return The plane that this class is rendering
- */
-inline QPlane3D cwRenderGridPlane::plane() const {
-    return m_plane;
-}
 
 #endif // CWGLPLANE_H

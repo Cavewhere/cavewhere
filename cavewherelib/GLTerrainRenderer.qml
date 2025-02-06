@@ -32,6 +32,7 @@ Item {
         anchors.fill: parent
         camera: rendererId.camera
         scene: rendererId.scene
+        gridPlane: RootData.regionSceneManager.gridPlane.plane
     }
 
     InteractionManager {
@@ -78,9 +79,7 @@ Item {
             id: compassItemId
             width: 175
             height: width
-            // camera: rendererId.camera
-            compassRotation: turnTableInteractionId.rotation
-            // shaderDebugger: rendererId.scene.shaderDebugger
+            compassRotation: turnTableInteractionId.cameraRotation
             antialiasing: false
         }
     }

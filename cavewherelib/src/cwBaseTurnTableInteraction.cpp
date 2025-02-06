@@ -42,10 +42,7 @@ cwBaseTurnTableInteraction::cwBaseTurnTableInteraction(QQuickItem *parent) :
  * This is for interaction. If the mouse can intersect with any
  * other geometry, this will intesect with this plane so rotation work correctly.
  */
-void cwBaseTurnTableInteraction::setGridPlane(const QPlane3D &plan)
-{
-    LastDitchRotationPlane = plan;
-}
+
 
 /**
  * @brief cwBaseTurnTableInteraction::centerOn
@@ -55,7 +52,7 @@ void cwBaseTurnTableInteraction::setGridPlane(const QPlane3D &plan)
  */
 void cwBaseTurnTableInteraction::centerOn(QVector3D point, bool animate)
 {
-    QVector3D projectPoint = Camera->projectionMatrix() * Camera->viewMatrix() * point;
+    QVector3D projectPoint = (Camera->projectionMatrix() * Camera->viewMatrix()).map(point);
     double depth = projectPoint.z();
 
     QPoint screenCenter = Camera->viewport().center();
@@ -92,17 +89,15 @@ QVector3D cwBaseTurnTableInteraction::unProject(QPoint point) {
     QVector3D direction = QVector3D(backPoint - frontPoint).normalized();
     QRay3D ray(frontPoint, direction);
 
-    //See if it hits any of the scraps
+    //See if it hits any of the scraps or objects
     double t = scene()->geometryItersecter()->intersects(ray);
 
-    if(qIsNaN(t)) {
-
+    if(std::isnan(t)) {
         //See where it intersects ground plane geometry
-        t = LastDitchRotationPlane.intersection(ray);
-        if(qIsNaN(t)) {
+        t = m_gridPlane.value().intersection(ray);
+        if(std::isnan(t)) {
             return QVector3D();
         }
-
     }
 
     return ray.point(t);
@@ -362,7 +357,7 @@ void cwBaseTurnTableInteraction::setupInteractionTimers()
 void cwBaseTurnTableInteraction::setCurrentRotation(QQuaternion rotation)
 {
     CurrentRotation = rotation;
-    emit rotationChanged();
+    emit cameraRotationChanged();
 }
 
 QQuaternion cwBaseTurnTableInteraction::defaultRotation() const
@@ -480,32 +475,10 @@ void cwBaseTurnTableInteraction::zoomOrtho()
     Camera->setViewMatrix(newTranslationMatrix);
 }
 
-///**
-// * @brief cwBaseTurnTableInteraction::orthoProjection
-// * @return This get the current ortho projection at the current zoom level
-// */
-//cwProjection cwBaseTurnTableInteraction::orthoProjectionDefault() const
-//{
-//    cwProjection projection;
-//    projection.setOrtho(-width() / 2.0 * ZoomLevel, width() / 2.0 * ZoomLevel, -height() / 2.0 * ZoomLevel, height() / 2.0 * ZoomLevel, -10000, 10000);
-//    return projection;
-//}
-
-///**
-// * @brief cwBaseTurnTableInteraction::perspectiveProjection
-// * @return The current prespective projection for the viewer
-// */
-//cwProjection cwBaseTurnTableInteraction::perspectiveProjectionDefault() const
-//{
-//    cwProjection projection;
-//    projection.setPerspective(55, width() / (float)height(), 1, 10000);
-//    return projection;
-//}
-
 /**
 Gets rotation current global rotation
 */
-QQuaternion cwBaseTurnTableInteraction::rotation() const {
+QQuaternion cwBaseTurnTableInteraction::cameraRotation() const {
     return defaultRotation().conjugated() * CurrentRotation;
 }
 

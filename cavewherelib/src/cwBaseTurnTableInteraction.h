@@ -22,13 +22,14 @@ class cwMatrix4x4Animation;
 #include <QTimer>
 #include <QPointer>
 #include <QQmlEngine>
+#include <QObjectBindableProperty>
 
 class cwBaseTurnTableInteraction : public cwInteraction
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(BaseTurnTableInteraction)
 
-    Q_PROPERTY(QQuaternion rotation READ rotation NOTIFY rotationChanged)
+    Q_PROPERTY(QQuaternion cameraRotation READ cameraRotation NOTIFY cameraRotationChanged)
     Q_PROPERTY(double azimuth READ azimuth WRITE setAzimuth NOTIFY azimuthChanged)
     Q_PROPERTY(double pitch READ pitch WRITE setPitch NOTIFY pitchChanged)
     Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)
@@ -38,10 +39,12 @@ class cwBaseTurnTableInteraction : public cwInteraction
     Q_PROPERTY(bool azimuthLocked READ isAzimuthLocked WRITE setAzimuthLocked BINDABLE azimuthLockedBinding)
     Q_PROPERTY(bool pitchLocked READ isPitchLocked WRITE setPitchLocked BINDABLE pitchLockedBinding)
 
+    Q_PROPERTY(QPlane3D gridPlane READ gridPlane WRITE setGridPlane NOTIFY gridPlaneChanged BINDABLE bindableGridPlane)
+
 public:
     explicit cwBaseTurnTableInteraction(QQuickItem *parent = 0);
 
-    QQuaternion rotation() const;
+    QQuaternion cameraRotation() const;
 
     double azimuth() const;
     void setAzimuth(double azimuth);
@@ -63,18 +66,21 @@ public:
     cwScene* scene() const;
     void setScene(cwScene* scene);
 
-    void setGridPlane(const QPlane3D& plan);
-
     Q_INVOKABLE void centerOn(QVector3D point, bool animate = false);
 
     int startDragDistance() const;
 
+    QPlane3D gridPlane() const { return m_gridPlane.value(); }
+    void setGridPlane(const QPlane3D& gridPlane) { m_gridPlane = gridPlane; }
+    QBindable<QPlane3D> bindableGridPlane() { return &m_gridPlane; }
+
 signals:
-    void rotationChanged();
+    void cameraRotationChanged();
     void azimuthChanged();
     void pitchChanged();
     void cameraChanged();
     void sceneChanged();
+    void gridPlaneChanged();
 
 public slots:
 
@@ -94,9 +100,14 @@ private slots:
     void translateLastPosition();
 
     void updateViewMatrixFromAnimation(QVariant matrix);
+
 private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwBaseTurnTableInteraction, bool, m_azimuthLocked, false);
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwBaseTurnTableInteraction, bool, m_pitchLocked, false);
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwBaseTurnTableInteraction,
+                                         QPlane3D, m_gridPlane,
+                                         QPlane3D(),
+                                         &cwBaseTurnTableInteraction::gridPlaneChanged);
 
     QVector3D LastMouseGlobalPosition; //For panning
     QPlane3D PanPlane;
@@ -104,8 +115,6 @@ private:
     QQuaternion CurrentRotation;
     float Pitch;
     float Azimuth;
-
-    QPlane3D LastDitchRotationPlane;
 
     static float defaultPitch() { return 90.0f; }
     static float defaultAzimuth() { return 0.0f; }
@@ -142,9 +151,6 @@ private:
     QVector3D unProject(QPoint point);
 
     void stopAnimation();
-
-
-
 };
 
 /**

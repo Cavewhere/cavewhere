@@ -74,11 +74,13 @@ private:
     void updateUnconnectedChunkErrors(cwCave *cave, const cwLinePlotTask::LinePlotCaveData& caveData);
     void clearUnconnectedChunkErrors();
 
+    void updateLinePlot(cwLinePlotTask::LinePlotResultData results);
+
 private slots:
     void rerunSurvex();
     void runSurvex();
 
-    void updateLinePlot();
+    void updateLinePlotFromTask();
 };
 
 //This needs to be here for moc to generate correctly and we can forward declare cwRenderLinePlot

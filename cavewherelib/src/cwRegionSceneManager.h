@@ -24,6 +24,8 @@ class cwRenderObject;
 class cwRenderLinePlot;
 class cwRenderScraps;
 class cwRenderRadialGradient;
+#include "cwRenderScraps.h"
+#include "cwRenderGridPlane.h"
 
 class cwRegionSceneManager : public QObject
 {
@@ -34,6 +36,7 @@ class cwRegionSceneManager : public QObject
     Q_PROPERTY(cwRenderLinePlot* linePlot READ linePlot NOTIFY linePlotChanged)
     Q_PROPERTY(cwRenderScraps* scraps READ scraps NOTIFY scrapsChanged)
     Q_PROPERTY(cwScene* scene READ scene NOTIFY sceneChanged)
+    Q_PROPERTY(cwRenderGridPlane* gridPlane READ gridPlane CONSTANT)
 
     Q_PROPERTY(bool capturing READ isCapturing WRITE setCapturing NOTIFY capturingChanged FINAL)
 
@@ -51,6 +54,8 @@ public:
 
     bool isCapturing() const;
     void setCapturing(bool newCapturing);
+
+    cwRenderGridPlane *gridPlane() const { return m_plane; }
 
 signals:
     void sceneChanged();
@@ -76,9 +81,6 @@ private:
     QPointer<cwCavingRegion> Region;
     bool m_capturing;
 };
-
-//This enable moc to work with forward declaration
-#include "cwRenderScraps.h"
 
 /**
  * @brief cwRegionSceneManager::scene

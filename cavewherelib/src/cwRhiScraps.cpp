@@ -115,7 +115,7 @@ void cwRhiScraps::synchronize(const SynchronizeData& data)
 
     m_renderScraps = renderScraps;
     m_project = renderScraps->project();
-    m_futureManagerToken = renderScraps->m_futureManagerToken;
+    // m_futureManagerToken = renderScraps->m_futureManagerToken;
     m_visible = renderScraps->isVisible();
 
     // Process pending changes

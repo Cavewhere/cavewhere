@@ -36,6 +36,12 @@ void cwRenderLinePlot::setGeometry(QVector<QVector3D> pointData,
     data.indexes = indexData;
 
     m_data.setValue(data);
+
+    geometryItersecter()->addObject(cwGeometryItersecter::Object(this, 0,
+                                                                 pointData,
+                                                                 indexData,
+                                                                 cwGeometryItersecter::Lines));
+
     update();
 }
 

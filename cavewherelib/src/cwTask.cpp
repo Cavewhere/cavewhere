@@ -361,7 +361,7 @@ void cwTask::waitToFinish(cwTask::WaitToFinishType type)
         {
             QReadLocker locker(&StatusLocker);
 
-            int currentStatus = CurrentStatus;
+            Status currentStatus = CurrentStatus;
             if(type == IgnoreRestart && (CurrentStatus == Restarting || CurrentStatus == Restart)) {
                 currentStatus = Ready;
             }
@@ -375,6 +375,7 @@ void cwTask::waitToFinish(cwTask::WaitToFinishType type)
             case Restarting:
             case Restart:
                 QEventLoop loop;
+                qDebug() << "currentStatus:" << currentStatus << QThread::currentThread();
                 QObject::connect(this, &cwTask::finished, &loop, &QEventLoop::quit);
                 QObject::connect(this, &cwTask::stopped, &loop, &QEventLoop::quit);
                 locker.unlock();

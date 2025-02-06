@@ -4,9 +4,7 @@
 // Our includes
 #include "cwRenderObject.h"
 #include "cwTriangulatedData.h"
-#include "cwImageTexture.h"
 #include "cwGeometryItersecter.h"
-#include "cwFutureManagerToken.h"
 #include "cwProject.h"
 class cwCavingRegion;
 class cwScrap;
@@ -21,7 +19,6 @@ class cwRenderScraps : public cwRenderObject
     QML_NAMED_ELEMENT(RenderScraps)
 
     Q_PROPERTY(cwProject* project READ project WRITE setProject NOTIFY projectChanged)
-    // Q_PROPERTY(bool visible READ visible WRITE setVisible NOTIFY visibleChanged)
 
 public:
     explicit cwRenderScraps(QObject *parent = nullptr);
@@ -30,10 +27,6 @@ public:
     void setProject(cwProject* project);
 
     void setCavingRegion(cwCavingRegion* region);
-    void setFutureManagerToken(cwFutureManagerToken token);
-
-    // bool visible() const;
-    // void setVisible(bool visible);
 
     void addScrapToUpdate(cwScrap* scrap);
     void removeScrap(cwScrap* scrap);
@@ -44,11 +37,9 @@ public:
 
 signals:
     void projectChanged();
-    // void visibleChanged();
 
 private:
     cwProject* m_project = nullptr; //!< The project file for loading textures
-    cwFutureManagerToken m_futureManagerToken;
 
     // Pending data to update
     class PendingScrapCommand {
@@ -84,9 +75,7 @@ private:
 
     };
 
-    QHash<cwScrap*, PendingScrapCommand> m_pendingChanges;
-
-    bool m_visible = true; //!< True if the scraps are visible and false if they're not
+    QVector<PendingScrapCommand> m_pendingChanges;
 
     void addCommand(const PendingScrapCommand& command);
 

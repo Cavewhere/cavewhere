@@ -17,9 +17,7 @@
 #include <math.h>
 
 cwRenderGridPlane::cwRenderGridPlane(QObject* parent) :
-    cwRenderObject(parent),
-    m_plane(QPlane3D(QVector3D(0.0, 0.0, -75.0), QVector3D(0.0, 0.0, 1.0))),
-    m_extent(3000.0) //3km in the negitive and positive direction from origin
+    cwRenderObject(parent)
 {
     connect(this, &cwRenderObject::sceneChange, this, [this]() {
         //Disconnect the scene and camera
@@ -51,61 +49,26 @@ cwRenderGridPlane::cwRenderGridPlane(QObject* parent) :
         }
     });
 
-    updateModelMatrix();
+    m_modelMatrixProperty.setBinding([this](){
+        QMatrix4x4 modelMatrix;
+
+        //Position
+        modelMatrix.translate(m_plane.value().origin());
+
+        //Scale the plane
+        modelMatrix.scale(m_extent);
+
+        return modelMatrix;
+    });
+
+    //For updating the backend, the backend get data on a seperate thread
+    m_modelMatrix.setValue(m_modelMatrixProperty.value());
+    m_modelMatrixProperty.onValueChanged([this]() {
+        m_modelMatrix.setValue(m_modelMatrixProperty.value());
+    });
 }
 
 cwRHIObject* cwRenderGridPlane::createRHIObject()
 {
     return new cwRHIGridPlane();
-}
-
-void cwRenderGridPlane::setPlane(QPlane3D plane) {
-    if(plane != m_plane) {
-        plane = m_plane;
-        updateModelMatrix();
-    }
-}
-
-
-/**
-    Sets extent, the max rendering geometry of the plane
-*/
-void cwRenderGridPlane::setExtent(double extent) {
-    if(m_extent != extent) {
-        m_extent = extent;
-        updateModelMatrix();
-        emit extentChanged();
-    }
-}
-
-
-
-/**
- * @brief cwRenderGridPlane::updateModelMatrix
- *
- * Updates the model index for the grid plane
- */
-void cwRenderGridPlane::updateModelMatrix() {
-
-    QMatrix4x4 modelMatrix;
-
-    //Position
-    modelMatrix.translate(m_plane.origin());
-
-    //Scale
-    modelMatrix.scale(m_extent);
-
-//    //Rotation
-//    QVector3D upVector(0.0, 0.0, 1.0);
-//    QVector3D planeNormal = Plane.normal().normalized();
-
-//    //Find the rotation from up vector
-//    double rotation = acos(QVector3D::dotProduct(upVector, planeNormal)) * cwGlobals::radiansToDegrees();
-
-//    //Find the cross product between the vectors
-//    QVector3D cross = QVector3D::crossProduct(upVector, planeNormal);
-
-//    modelMatrix.rotate(rotation, cross);
-
-    m_modelMatrix.setValue(modelMatrix);
 }

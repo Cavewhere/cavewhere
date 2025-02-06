@@ -111,9 +111,9 @@ void cwScrapManager::setLinePlotManager(cwLinePlotManager *linePlotManager)
 void cwScrapManager::setFutureManagerToken(cwFutureManagerToken token)
 {
     FutureManagerToken = token;
-    if(m_renderScraps) {
-        m_renderScraps->setFutureManagerToken(token);
-    }
+    // if(m_renderScraps) {
+    //     m_renderScraps->setFutureManagerToken(token);
+    // }
 }
 
 /**
@@ -386,8 +386,7 @@ void cwScrapManager::disconnectScrap(cwScrap* scrap)
   */
 void cwScrapManager::updateScrapGeometry(QList<cwScrap *> scraps) {
 
-
-    for(cwScrap* scrap : scraps) {
+    for(cwScrap* scrap : std::as_const(scraps)) {
         connect(scrap, &cwScrap::destroyed,
                 this, &cwScrapManager::scrapDeleted,
                 Qt::UniqueConnection);
@@ -798,7 +797,7 @@ void cwScrapManager::taskFinished(const QList<cwScrap*>& scrapsToUpdate,
     auto filename = Project->filename();
     auto removeFuture = QtConcurrent::run([filename, imagesToRemove](){
         cwImageDatabase imageDatabase(filename);
-        for(auto image : imagesToRemove) {
+        for(const auto& image : imagesToRemove) {
             imageDatabase.removeImages(image.ids());
         }
     });
@@ -826,7 +825,6 @@ void cwScrapManager::setRenderScraps(cwRenderScraps *scraps)
 {
     m_renderScraps = scraps;
     m_renderScraps->setProject(Project);
-    m_renderScraps->setFutureManagerToken(FutureManagerToken);
 }
 
 /**

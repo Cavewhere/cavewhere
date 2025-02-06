@@ -65,3 +65,5 @@ void cwRegionSceneManager::setCapturing(bool newCapturing)
     m_plane->setVisible(!m_capturing);
     emit capturingChanged();
 }
+
+
