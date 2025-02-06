@@ -9,14 +9,11 @@ QQ.Rectangle {
     required property QuickSceneView quickSceneView
     required property CaptureViewport captureItem
     required property SelectionManager selectionManager;
-    property double captureScale: 1.0
-    property point captureOffset
     property bool selected: false
 
     //Private properties
-    property double _scale: captureScale;
-    property rect _viewRect: quickSceneView.toView(captureItem.boundingBox)
-    property point _viewPos: quickSceneView.toView(captureItem.positionOnPaper)
+    property double _scale: quickSceneView.viewScale
+    // property rect _viewRect: quickSceneView.toView(captureItem.boundingBox)
 
     //For position
     property size _orginialSize
@@ -74,6 +71,7 @@ QQ.Rectangle {
     function dragResizeHandler(delta, corner) {
 
         let sizeDelta = pixelToPaperVec(delta);
+
         switch(corner) {
         case QQ.Item.TopLeft:
             sizeDelta = Qt.vector2d(-sizeDelta.x, -sizeDelta.y)
@@ -140,11 +138,26 @@ QQ.Rectangle {
         anchors.centerIn: parent
     }
 
-    width: _viewRect.width
-    height: _viewRect.height
+    CaptureItemViewBounds {
+        id: itemBounds
+        captureViewport: interactionId.captureItem
+        quickSceneView: interactionId.quickSceneView
+    }
 
-    x: _viewRect.x
-    y: _viewRect.y
+    width: itemBounds.captureViewRect.width
+    height: itemBounds.captureViewRect.height
+    x: itemBounds.captureViewRect.x
+    y: itemBounds.captureViewRect.y
+
+    // width: _viewRect.width
+    // height: _viewRect.height
+
+    // x: _viewRect.x
+    // y: _viewRect.y
+
+    // on_ViewRectChanged: {
+    //     console.log("_viewRect:" + _viewRect)
+    // }
 
     border.width: 1
     border.color: "#d3d3d3"

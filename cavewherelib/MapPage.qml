@@ -66,6 +66,7 @@ QQ.Item {
             // Layout.fillHeight: true
             // Layout.fillWidth: true
             scene: screenCaptureManagerId.scene
+            clip: true
 
             CaptureItemManiputalor {
                 id: captureItemManiputalorId

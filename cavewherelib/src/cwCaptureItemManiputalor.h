@@ -63,7 +63,6 @@ private slots:
     void fullUpdate();
     void insertItems(const QModelIndex& parent, int start, int end);
     void removeItems(const QModelIndex& parent, int start, int end);
-    void updateTransform();
     void managerDestroyed();
 
 private:
@@ -83,8 +82,6 @@ private:
 
     QQuickItem* createInteractionItem(const QVariantMap& requiredProperties);
     void clear();
-
-    void updateItemTransform(QQuickItem* item);
 
     cwCaptureItem* captureItem(int i) const;
 };

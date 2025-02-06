@@ -110,7 +110,6 @@ ColumnLayout {
                     target: mapLayersId.captureItemManiputlor
                     function onSelectedItemChanged() {
                         let captureInteraction = mapLayersId.captureItemManiputlor.selectedItem as CaptureItemInteraction
-                        console.log("Selected item changed:" + captureInteraction)
                         if(captureInteraction) {
                             layerListViewId.currentIndex = mapLayersId.screenCaptureManager.indexOf(captureInteraction.captureItem)
                         }
@@ -277,56 +276,45 @@ ColumnLayout {
                         title: "Properies of " + layerProperties.layerObject.name
                         visible: true
                     }
-                }
 
-                QQ.PropertyChanges {
                     paperScaleInputId {
                         scaleObject: layerProperties.layerObject.scaleOrtho
                     }
-                }
 
-                QQ.PropertyChanges {
+
                     sizeWidthInputId {
                         text: Utils.fixed(layerProperties.layerObject.paperSizeOfItem.width, 3);
-                        onFinishedEditting: {
+                        onFinishedEditting: (newText) => {
                             layerProperties.layerObject.setPaperWidthOfItem(newText)
                         }
                     }
-                }
 
-                QQ.PropertyChanges {
                     sizeHeightInputId {
                         text: Utils.fixed(layerProperties.layerObject.paperSizeOfItem.height, 3)
-                        onFinishedEditting: {
+                        onFinishedEditting: (newText) => {
                             layerProperties.layerObject.setPaperHeightOfItem(newText)
                         }
                     }
-                }
 
-                QQ.PropertyChanges {
                     posXInputId {
                         text: Utils.fixed(layerProperties.layerObject.positionOnPaper.x, 3)
-                        onFinishedEditting: {
+                        onFinishedEditting: (newText) => {
                             var y = layerProperties.layerObject.positionOnPaper.y
                             layerProperties.layerObject.positionOnPaper = Qt.point(newText, y);
                         }
                     }
-                }
 
-                QQ.PropertyChanges {
                     posYInputId {
                         text: Utils.fixed(layerProperties.layerObject.positionOnPaper.y, 3)
-                        onFinishedEditting: {
+                        onFinishedEditting: (newText) => {
                             var x = layerProperties.layerObject.positionOnPaper.x
                             layerProperties.layerObject.positionOnPaper = Qt.point(x, newText);
                         }
                     }
-                }
 
-                QQ.PropertyChanges {
                     rotationInput {
                         text: Utils.fixed(layerProperties.layerObject.rotation, 2);
-                        onFinishedEditting: {
+                        onFinishedEditting: (newText) => {
                             layerProperties.layerObject.rotation = newText
                         }
                     }

@@ -51,6 +51,7 @@ QQ.Item {
                 title: "On Paper"
                 UnitValueInput {
                     id: onPaperLengthInput
+                    objectName: "onPaperLengthInput"
                     unitValue: null
                     valueVisible: false
                     valueReadOnly: scaleInput.autoScaling
@@ -67,6 +68,7 @@ QQ.Item {
                 title: "In Cave"
                 UnitValueInput {
                     id: inCaveLengthInput
+                    objectName: "inCaveLengthInput"
                     unitValue: null
                     valueVisible: false
                     valueReadOnly: scaleInput.autoScaling

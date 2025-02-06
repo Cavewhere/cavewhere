@@ -23,14 +23,14 @@ cwCaptureItemManiputalor::cwCaptureItemManiputalor(QQuickItem *parent) :
     m_selectionManager(new cwSelectionManager(this)),
     InteractionComponent(nullptr)
 {
-    connect(this, &QQuickItem::xChanged,
-            this, &cwCaptureItemManiputalor::updateTransform);
-    connect(this, &QQuickItem::yChanged,
-            this, &cwCaptureItemManiputalor::updateTransform);
-    connect(this, &QQuickItem::widthChanged,
-            this, &cwCaptureItemManiputalor::updateTransform);
-    connect(this, &QQuickItem::heightChanged,
-            this, &cwCaptureItemManiputalor::updateTransform);
+    // connect(this, &QQuickItem::xChanged,
+    //         this, &cwCaptureItemManiputalor::updateTransform);
+    // connect(this, &QQuickItem::yChanged,
+    //         this, &cwCaptureItemManiputalor::updateTransform);
+    // connect(this, &QQuickItem::widthChanged,
+    //         this, &cwCaptureItemManiputalor::updateTransform);
+    // connect(this, &QQuickItem::heightChanged,
+    //         this, &cwCaptureItemManiputalor::updateTransform);
 
     //Passthourgh signal
     connect(m_selectionManager, &cwSelectionManager::selectedItemChanged,
@@ -47,7 +47,7 @@ void cwCaptureItemManiputalor::setManager(cwCaptureManager* manager) {
             disconnect(manager, &cwCaptureManager::modelReset, this, &cwCaptureItemManiputalor::fullUpdate);
             disconnect(manager, &cwCaptureManager::rowsInserted, this, &cwCaptureItemManiputalor::insertItems);
             disconnect(manager, &cwCaptureManager::rowsAboutToBeRemoved, this, &cwCaptureItemManiputalor::removeItems);
-            disconnect(manager->scene(), SIGNAL(sceneRectChanged(QRectF)), this, SLOT(updateTransform()));
+            // disconnect(manager->scene(), SIGNAL(sceneRectChanged(QRectF)), this, SLOT(updateTransform()));
             disconnect(manager, &cwCaptureManager::aboutToDestoryManager, this, &cwCaptureItemManiputalor::managerDestroyed);
         }
 
@@ -57,14 +57,14 @@ void cwCaptureItemManiputalor::setManager(cwCaptureManager* manager) {
             connect(manager, &cwCaptureManager::modelReset, this, &cwCaptureItemManiputalor::fullUpdate);
             connect(manager, &cwCaptureManager::rowsInserted, this, &cwCaptureItemManiputalor::insertItems);
             connect(manager, &cwCaptureManager::rowsAboutToBeRemoved, this, &cwCaptureItemManiputalor::removeItems);
-            connect(manager->scene(), SIGNAL(sceneRectChanged(QRectF)), this, SLOT(updateTransform()));
+            // connect(manager->scene(), SIGNAL(sceneRectChanged(QRectF)), this, SLOT(updateTransform()));
             connect(manager, &cwCaptureManager::aboutToDestoryManager, this, &cwCaptureItemManiputalor::managerDestroyed);
         }
 
         emit managerChanged();
 
         fullUpdate();
-        updateTransform();
+        // updateTransform();
     }
 }
 
@@ -104,9 +104,7 @@ void cwCaptureItemManiputalor::insertItems(const QModelIndex &parent, int start,
 
     QVariantMap requiredProperties {{"quickSceneView", QVariant::fromValue(m_view.data())},
                                    {"captureItem", QVariant::fromValue(nullptr)},
-                                   {"selectionManager", QVariant::fromValue(m_selectionManager)},
-                                   {"captureScale", PaperToScreenScale},
-                                   {"captureOffset", SceneOffset}};
+                                   {"selectionManager", QVariant::fromValue(m_selectionManager)}};
 
     for(int i = start; i <= end; i++) {
         cwCaptureItem* item = captureItem(i);
@@ -142,20 +140,6 @@ void cwCaptureItemManiputalor::removeItems(const QModelIndex &parent, int start,
             CaptureToQuickItem.remove(item);
             QuickItemToCapture.remove(quickItem);
             quickItem->deleteLater();
-        }
-    }
-}
-
-/**
- * @brief cwCaptureItemManiputalor::updateScale
- */
-void cwCaptureItemManiputalor::updateTransform()
-{
-    if(m_view && Manager && Manager->scene()) {
-        PaperToScreenScale = m_view->viewScale();
-        SceneOffset = Manager->scene()->sceneRect().topLeft();
-        foreach(QQuickItem* item, QuickItemToCapture.keys()) {
-            updateItemTransform(item);
         }
     }
 }
@@ -203,19 +187,6 @@ void cwCaptureItemManiputalor::clear()
     CaptureToQuickItem.clear();
 }
 
-/**
- * @brief cwCaptureItemManiputalor::updateScale
- * @param item
- *
- * This updates the scale for the item. Using the PaperToScreenScale. The item's
- * native's coordinate system is in paper units. So it must be scaled so it shows
- * up correctly over top of the cwQuickSceneView.
- */
-void cwCaptureItemManiputalor::updateItemTransform(QQuickItem *item)
-{
-   item->setProperty("captureScale", PaperToScreenScale);
-   item->setProperty("captureOffset", SceneOffset);
-}
 
 /**
  * @brief cwCaptureItemManiputalor::captureItem
@@ -251,7 +222,7 @@ void cwCaptureItemManiputalor::setView(cwQuickSceneView *newView)
         return;
     }
     m_view = newView;
-    updateTransform();
+    // updateTransform();
     emit viewChanged();
 }
 

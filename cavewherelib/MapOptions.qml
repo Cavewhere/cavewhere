@@ -179,24 +179,8 @@ ColumnLayout {
 
     BreakLine {  }
 
-    QC.Button {
-        objectName: "opitonsButton"
-        text: "Options"
-        onClicked: {
-            optionsScrollViewId.visible = !optionsScrollViewId.visible
-        }
-
-    }
-
-    QQ.Item {
-        implicitWidth: 1
-        visible: !optionsScrollViewId.visible
-        Layout.fillHeight: true
-    }
-
     QC.ScrollView {
         id: optionsScrollViewId
-        visible: false
 
         Layout.fillHeight: true
 
@@ -204,8 +188,6 @@ ColumnLayout {
 
         ColumnLayout {
             id: columnLayoutId
-
-
 
             QC.GroupBox {
                 id: paperSizeId

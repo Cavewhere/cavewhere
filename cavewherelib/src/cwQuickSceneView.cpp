@@ -16,6 +16,41 @@ cwQuickSceneView::cwQuickSceneView(QQuickItem *parent) :
     QQuickPaintedItem(parent)
 {
     setRenderTarget(FramebufferObject);
+
+    QBindable<double> widthBinding(this, "width");
+    QBindable<double> heightBinding(this, "height");
+    m_viewRect.setBinding([widthBinding, heightBinding]() {
+        return QRectF(0.0, 0.0, widthBinding.value(), heightBinding.value());
+    });
+
+    m_viewScale.setBinding([this]()->double {
+        // Scale
+        const auto viewRect = m_viewRect.value();
+        const auto sceneRect = m_sceneRect.value();
+
+        double xRatio = viewRect.width() / sceneRect.width();
+        double yRatio = viewRect.height() / sceneRect.height();
+
+        return std::min(xRatio, yRatio);
+    });
+
+    m_viewTransform.setBinding([this, widthBinding, heightBinding]() {
+        QTransform transform;
+
+        // Shift target origin
+        auto topLeft = m_viewRect.value().topLeft();
+        transform.translate(topLeft.x(), topLeft.y());
+
+        // qDebug() << "Scene:" << Scene->sceneRect();
+        double scale = m_viewScale;
+        transform.scale(scale, scale);
+
+        // Shift so (0,0) in sceneRect is at origin
+        auto sceneTopLeft = m_sceneRect.value().topLeft();
+        transform.translate(sceneTopLeft.x(), sceneTopLeft.y());
+
+        return transform;
+    });
 }
 
 /**
@@ -31,6 +66,11 @@ void cwQuickSceneView::setScene(QGraphicsScene* scene) {
         Scene = scene;
 
         if(!Scene.isNull()) {
+
+            connect(Scene.data(), &QGraphicsScene::sceneRectChanged, this, [this](const QRectF& sceneRect) {
+                m_sceneRect = sceneRect;
+            });
+
             connect(Scene.data(), &QGraphicsScene::changed, this, [this](const QList<QRectF>& region) {
                 Q_UNUSED(region);
                 auto size = boundingRect().size();
@@ -48,6 +88,8 @@ void cwQuickSceneView::setScene(QGraphicsScene* scene) {
             });
 
             emit sceneChanged();
+        } else {
+            m_sceneRect = QRectF();
         }
     }
 }
@@ -70,20 +112,11 @@ QPointF cwQuickSceneView::toPaper(QPointF pointPixel) const
     return transform.map(pointPixel);
 }
 
-double cwQuickSceneView::viewScale() const
-{
-    if(Scene) {
-        auto boundingRect = this->boundingRect();
-        auto sceneRect = Scene->sceneRect();
-
-        // Scale
-        qreal xratio = boundingRect.width()  / sceneRect.width();
-        qreal yratio = boundingRect.height() / sceneRect.height();
-        return qMin(xratio, yratio);
-    } else {
-        return 1.0;
-    }
-}
+// double cwQuickSceneView::viewScale() const
+// {
+//     qDebug() << "ViewScale:" << m_viewScale;
+//     return m_viewScale;
+// }
 
 /**
 * @brief cwQuickSceneView::scene
@@ -108,20 +141,5 @@ void cwQuickSceneView::paint(QPainter *painter)
 
 QTransform cwQuickSceneView::toViewTransform() const
 {
-    QTransform transform;
-    // Shift target origin
-    auto boundingRect = this->boundingRect();
-    auto sceneRect = Scene->sceneRect();
-    auto topLeft = boundingRect.topLeft();
-    transform.translate(topLeft.x(), topLeft.y());
-
-    // qDebug() << "Scene:" << Scene->sceneRect();
-    auto scale = viewScale();
-    transform.scale(scale, scale);
-
-    // Shift so (0,0) in sceneRect is at origin
-    auto sceneTopLeft = sceneRect.topLeft();
-    transform.translate(sceneTopLeft.x(), sceneTopLeft.y());
-
-    return transform;
+    return m_viewTransform;
 }

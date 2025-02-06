@@ -28,8 +28,6 @@ MainWindowTest {
             let description_obj1 = findChild(quoteBox, "description")
             tryVerify(() => {return description_obj1.text === "Pit"})
 
-            wait(100000);
-
         }
     }
 }

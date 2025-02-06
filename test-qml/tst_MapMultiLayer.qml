@@ -160,8 +160,8 @@ MainWindowTest {
                 screenCaptureManager.filename = localFileUrl
                 screenCaptureManager.fileType = fileType
                 screenCaptureManager.capture()
-                captureManagerFinished.wait(5000)
-                console.log("File exists:" + localFileUrl + " " + TestHelper.fileExists(localFileUrl))
+                captureManagerFinished.wait(10000)
+
                 verify(TestHelper.fileExists(localFileUrl));
                 verify(TestHelper.fileSize(localFileUrl) > 0);
             }

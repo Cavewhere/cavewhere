@@ -375,7 +375,6 @@ void cwTask::waitToFinish(cwTask::WaitToFinishType type)
             case Restarting:
             case Restart:
                 QEventLoop loop;
-                qDebug() << "currentStatus:" << currentStatus << QThread::currentThread();
                 QObject::connect(this, &cwTask::finished, &loop, &QEventLoop::quit);
                 QObject::connect(this, &cwTask::stopped, &loop, &QEventLoop::quit);
                 locker.unlock();
