@@ -144,6 +144,7 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
 
         fileToProject(root->project(), "://datasets/test_ProtoBufferSaveLoad/newerVersion.cw");
         root->project()->waitLoadToFinish();
+
         auto errorModel = root->project()->errorModel();
 
         REQUIRE(errorModel->size() == 1);
@@ -159,12 +160,18 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
         CHECK(root->project()->canSaveDirectly() == false);
 
         SECTION("Check that saveAs fails to the file") {
+            QFileInfo info(root->project()->filename());
+            auto lastModifiedTime = info.lastModified();
+
+            QThread::msleep(10);
+
             root->project()->saveAs(root->project()->filename());
             REQUIRE(errorModel->size() == 1);
             expectErrorMessage = QString("Can't overwrite %1 because file is newer that the current version of CaveWhere. To solve this, save it somewhere else").arg(root->project()->filename());
             CHECK(errorModel->at(0) == cwError(expectErrorMessage, cwError::Fatal));
 
-            CHECK(root->project()->isModified() == false);
+            //Make sure the file hasen't be modified
+            CHECK(lastModifiedTime == info.lastModified());
         }
     }
 
