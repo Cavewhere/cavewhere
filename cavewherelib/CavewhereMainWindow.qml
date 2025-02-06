@@ -29,9 +29,6 @@ ApplicationWindow {
     menuBar: FileButtonAndMenu {
         id: fileMenuButton
 
-//        terrainRenderer: terrainRendererId
-//        dataPage: loadAboutWindowId.item.dataPage //dataMainPageId
-        // mainContentLoader: loadMainContentsId
         saveAsFileDialog: saveAsFileDialogId
         loadFileDialog: loadFileDialogId
         applicationWindow: applicationWindowId
@@ -55,42 +52,6 @@ ApplicationWindow {
     MainContent {
         anchors.fill: parent
     }
-
-//     QQ.Loader {
-//         id: loadMainContentsId
-//         source: "MainContent.qml"
-//         anchors.fill: parent
-//         asynchronous: true
-//         visible: status == QQ.Loader.Ready
-
-// //        onLoaded: {
-// //            fileMenuButton.dataPage = item.dataPage
-// //        }
-//     }
-
-    // QQ.Column {
-    //     anchors.centerIn: parent
-    //     visible: loadAboutWindowId.status != QQ.Loader.Ready
-
-    //     Text {
-    //         text: {
-    //             switch(loadMainContentsId.status) {
-    //             case QQ.Loader.Error:
-    //                 return "QML error in " + loadMainContentsId.source + "<br> check commandline for details";
-    //             case QQ.Loader.Loading:
-    //                 return "Loading"
-    //             }
-    //             return "";
-    //         }
-    //     }
-
-    //     ProgressBar {
-    //         from: 0
-    //         to: 100
-    //         value: loadMainContentsId.progress * 100.
-    //         visible: loadMainContentsId.status == QQ.Loader.Loading
-    //     }
-    // }
 
     QQ.Item {
         id: overlayItem
@@ -142,9 +103,6 @@ ApplicationWindow {
         id: askToSaveDialogId
         saveAsDialog: saveAsFileDialogId
         taskName: "quiting"
-        onAfterSave: {
-            Qt.quit();
-        }
     }
 
     SaveFeedbackHelpBox {
@@ -154,6 +112,7 @@ ApplicationWindow {
     onClosing: (close) => {
         askToSaveDialogId.taskName = "quiting"
         askToSaveDialogId.afterSaveFunc = function() {
+            console.log("After save!")
             Qt.quit();
         }
 

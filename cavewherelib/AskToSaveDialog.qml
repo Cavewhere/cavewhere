@@ -13,8 +13,6 @@ QQ.Loader {
     property var afterSaveFunc: function() {}
     required property string taskName
 
-    signal afterSave;
-
     property AskToSaveInteralDialog _dialog: null
 
     function askToSave() {
@@ -38,7 +36,7 @@ QQ.Loader {
     }
 
     function _privateAfterSave() {
-        afterSave();
+        afterSaveFunc();
         closeDialog();
     }
 

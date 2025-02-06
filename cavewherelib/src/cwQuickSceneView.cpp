@@ -112,12 +112,6 @@ QPointF cwQuickSceneView::toPaper(QPointF pointPixel) const
     return transform.map(pointPixel);
 }
 
-// double cwQuickSceneView::viewScale() const
-// {
-//     qDebug() << "ViewScale:" << m_viewScale;
-//     return m_viewScale;
-// }
-
 /**
 * @brief cwQuickSceneView::scene
 * @return
