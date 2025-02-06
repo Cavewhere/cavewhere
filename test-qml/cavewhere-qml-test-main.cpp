@@ -10,6 +10,7 @@
 //Our inculdes
 #include "cwImageProvider.h"
 #include "cwRootData.h"
+#include "cwGlobals.h"
 
 class Setup : public QObject
 {
@@ -52,6 +53,8 @@ int main(int argc, char **argv) \
 {
     //This allows use to create a QGraphicsScene, without QApplication, this crashes
     QApplication app(argc, argv);
+
+    cwGlobals::loadFonts();
 
     QSurfaceFormat format;
     format.setSamples(4); // Adjust the sample count as needed

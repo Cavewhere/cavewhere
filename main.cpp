@@ -17,17 +17,12 @@
 //Our includes
 //#include "cwMainWindow.h"
 #include "cwImage.h"
-#include "cwGlobalDirectory.h"
-#include "cwQMLRegister.h"
 #include "cwRootData.h"
 #include "cwProject.h"
 #include "cwImageProvider.h"
 #include "cwOpenFileEventHandler.h"
-#include "cwQMLReload.h"
-#include "cwDebug.h"
 #include "cwApplication.h"
-#include "cwUsedStationsTask.h"
-// #include "cwOpenGLSettings.h"
+#include "cwGlobals.h"
 
 //std includes
 #include <memory>
@@ -130,8 +125,8 @@ int main(int argc, char *argv[])
 
     cwApplication a(argc, argv);
 
-    //Register all of the cavewhere types
-    // cwQMLRegister::registerQML();
+    //Load all the fonts
+    cwGlobals::loadFonts();
 
     // Configure multisample antialiasing
     QSurfaceFormat format;

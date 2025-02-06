@@ -34,6 +34,8 @@ public:
     static QString findExecutable(const QStringList& executables, const QList<QDir>& dirs);
     static QList<QDir> systemPaths();
     static QList<QDir> survexPath();
+
+    static void loadFonts();
 };
 
 namespace cw {

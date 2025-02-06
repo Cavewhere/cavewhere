@@ -14,8 +14,11 @@
 #include <QProcessEnvironment>
 #include <QString>
 #include <QDebug>
+#include <QDirIterator>
+#include <QFontDatabase>
 
 //Std includes
+#include "cwDebug.h"
 #include "math.h"
 
 cwGlobals::cwGlobals()
@@ -139,6 +142,22 @@ QList<QDir> cwGlobals::survexPath()
 #else
     return {};
 #endif
+}
+
+void cwGlobals::loadFonts()
+{
+    // Specify the resource path where your fonts are located
+    const QString fontResourcePath(":/fonts");
+
+    // Iterate over all files in the resource directory (and subdirectories)
+    QDirIterator it(fontResourcePath, QDir::Files, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        QString fontPath = it.next();
+        int fontId = QFontDatabase::addApplicationFont(fontPath);
+        if(fontId == -1) {
+            qWarning() << "Failed to load font:" << fontPath << LOCATION;
+        }
+    }
 }
 
 
