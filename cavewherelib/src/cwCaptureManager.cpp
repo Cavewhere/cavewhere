@@ -484,7 +484,6 @@ void cwCaptureManager::saveScene()
         Scene->render(&painter, imageRect, sceneRect);
 
         //This preforms a deep copy in memory!
-        qDebug() << "Writing to:" << filename().toLocalFile();
         QImageWriter imageWriter;
         imageWriter.setFileName(filename().toLocalFile());
         imageWriter.setFormat(fileTypeToExtention(type).toLocal8Bit());
