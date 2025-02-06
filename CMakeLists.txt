@@ -298,7 +298,26 @@ if(APPLE)
         COMMENT "Copying CaveWhere.icns into the app bundle..."
     )
 
-    file(GLOB MESSAGE_FILES "${SURVEX_OUTPUT_DIR}/*.msg")
+    set(MESSAGE_FILES
+        ${SURVEX_OUTPUT_DIR}/bg.msg
+        ${SURVEX_OUTPUT_DIR}/de_CH.msg
+        ${SURVEX_OUTPUT_DIR}/el.msg
+        ${SURVEX_OUTPUT_DIR}/es.msg
+        ${SURVEX_OUTPUT_DIR}/hu.msg
+        ${SURVEX_OUTPUT_DIR}/it.msg
+        ${SURVEX_OUTPUT_DIR}/pt_BR.msg
+        ${SURVEX_OUTPUT_DIR}/ro.msg
+        ${SURVEX_OUTPUT_DIR}/sk.msg
+        ${SURVEX_OUTPUT_DIR}/ca.msg
+        ${SURVEX_OUTPUT_DIR}/de.msg
+        ${SURVEX_OUTPUT_DIR}/en_US.msg
+        ${SURVEX_OUTPUT_DIR}/en.msg
+        ${SURVEX_OUTPUT_DIR}/fr.msg
+        ${SURVEX_OUTPUT_DIR}/id.msg
+        ${SURVEX_OUTPUT_DIR}/pl.msg
+        ${SURVEX_OUTPUT_DIR}/pt.msg
+        ${SURVEX_OUTPUT_DIR}/ru.msg
+        ${SURVEX_OUTPUT_DIR}/zh_CN.msg)
 
     foreach(MSG_FILE ${MESSAGE_FILES})
         get_filename_component(MSG_NAME ${MSG_FILE} NAME)
@@ -307,12 +326,6 @@ if(APPLE)
             COMMENT "Copying ${MSG_NAME} to application bundle."
         )
     endforeach()
-
-    # # Copy installMac.sh script to the build directory
-    # add_custom_command(TARGET CaveWhere POST_BUILD
-    #     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/installer/mac/installMac.sh ${CMAKE_BINARY_DIR}
-    #     COMMENT "Copying installMac.sh to the build directory."
-    # )
 
     # Ensure installMac.sh is copied whenever it changes
     add_custom_command(
@@ -326,6 +339,7 @@ if(APPLE)
 
     # Ensure it runs as part of the post-build process
     add_dependencies(CaveWhere copy_installMac)
+    add_dependencies(CaveWhere messageFiles) #Makes sure the message files get copied to bundle correctly
 
 endif()
 
