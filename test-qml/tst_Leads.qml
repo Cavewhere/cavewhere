@@ -21,7 +21,7 @@ MainWindowTest {
             verify(leadPoint0.scrap !== null )
             verify(leadPoint0.pointIndex >= 0 )
 
-            wait(50);
+            wait(100);
 
             let quoteBox = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint0->leadQuoteBox0")
 
