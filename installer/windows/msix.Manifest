@@ -1,0 +1,48 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10" xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10" xmlns:uap2="http://schemas.microsoft.com/appx/manifest/uap/windows10/2" xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3" xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10" xmlns:desktop7="http://schemas.microsoft.com/appx/manifest/desktop/windows10/7" xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities" IgnorableNamespaces="uap uap2 uap3 uap10 desktop7 rescap">
+  <!--Package created by MSIX Packaging Tool version: 1.2024.405.0-->
+  <Identity Name="CaveWhere.CaveWhere" Publisher="CN=B3D38AD2-08E8-42A1-977C-A01FFC382AD6" Version="2025.2.0.0" ProcessorArchitecture="x64" />
+  <Properties>
+    <DisplayName>CaveWhere</DisplayName>
+    <PublisherDisplayName>CaveWhere</PublisherDisplayName>
+    <Description>Cave mapping software</Description>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <uap10:PackageIntegrity>
+      <uap10:Content Enforcement="on" />
+    </uap10:PackageIntegrity>
+  </Properties>
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22000.1" />
+    <PackageDependency Name="Microsoft.WindowsAppRuntime.1.4" MinVersion="4000.1010.1349.0" Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" />
+    <PackageDependency Name="Microsoft.VCLibs.140.00" MinVersion="14.42.34433" Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"/>
+  </Dependencies>
+  <Applications>
+    <Application Id="CAVEWHERE" Executable="Cavewhere\Cavewhere.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements BackgroundColor="transparent" DisplayName="Cavewhere" Square150x150Logo="Assets\CAVEWHERE-Square150x150Logo.png" Square44x44Logo="Assets\CAVEWHERE-Square44x44Logo.png" Description="Cavewhere">
+        <uap:DefaultTile Wide310x150Logo="Assets\CAVEWHERE-Wide310x150Logo.png" Square310x310Logo="Assets\CAVEWHERE-Square310x310Logo.png" Square71x71Logo="Assets\CAVEWHERE-Square71x71Logo.png" />
+      </uap:VisualElements>
+      <Extensions>
+        <desktop7:Extension Category="windows.shortcut">
+          <desktop7:Shortcut File="[{Common Programs}]\Cavewhere\Cavewhere.lnk" Icon="[{Package}]\Cavewhere\Cavewhere.exe" />
+        </desktop7:Extension>
+        <uap3:Extension Category="windows.fileTypeAssociation">
+          <uap3:FileTypeAssociation Name="cw">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.cw</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:Logo>Assets\cw.png</uap:Logo>
+            <uap2:SupportedVerbs>
+              <uap3:Verb Id="open" Parameters="&quot;%1&quot;">open</uap3:Verb>
+            </uap2:SupportedVerbs>
+          </uap3:FileTypeAssociation>
+        </uap3:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>
