@@ -3,8 +3,8 @@ find_package(Qt6 COMPONENTS Core)
 get_target_property(QtCore_location Qt6::Core LOCATION)
 get_filename_component(Qt_bin_dir ${QtCore_location} DIRECTORY)
 
-set(conanbuildinfo ${CMAKE_BINARY_DIR}/conan-dependencies/conanbuildinfo.cmake)
-include(${conanbuildinfo})
+#set(conanbuildinfo ${CMAKE_BINARY_DIR}/conan-dependencies/conanbuildinfo.cmake)
+#include(${conanbuildinfo})
 
 # If Qt_bin_dir is empty
 if(NOT Qt_bin_dir)
@@ -26,7 +26,7 @@ if(WIN32)
     get_target_property(CAVEWHERE_SOURCE_DIR CaveWhere SOURCE_DIR)
 
     # Define the destination directory
-    set(DEPLOY_QML_DIR "${DEPLOY_DIR}/qml")
+    set(QML_DIR "${CMAKE_BINARY_DIR}/cavewherelib")
     set(DEPLOY_SURVEX_DIR "${DEPLOY_DIR}/survex")
     set(SURVEX_BIN_DIR "${BINARY_DIR}/survex")
 
@@ -35,12 +35,23 @@ if(WIN32)
     set(ROOT_FILES_TO_COPY
         "${BINARY_DIR}/${CAVEWHERE_NAME}${CMAKE_EXECUTABLE_SUFFIX}"
         "${BINARY_DIR}/cavewhere-test${CMAKE_EXECUTABLE_SUFFIX}"
-        "${BINARY_DIR}/cavewhere-test${CMAKE_EXECUTABLE_SUFFIX}"
-        "${BINARY_DIR}/cavewhere-lib${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        "${BINARY_DIR}/cavewhere-qml-test${CMAKE_EXECUTABLE_SUFFIX}"
+        "${BINARY_DIR}/cavewherelib${CMAKE_SHARED_LIBRARY_SUFFIX}"
         "${BINARY_DIR}/dewalls${CMAKE_SHARED_LIBRARY_SUFFIX}"
         "${BINARY_DIR}/QMath3d${CMAKE_SHARED_LIBRARY_SUFFIX}"
-        "${CONAN_BIN_DIRS_ZLIB}/zlib1.dll"
+        #"${CONAN_BIN_DIRS_ZLIB}/zlib1.dll"
     )
+
+    set(PLUGIN_DIR $<TARGET_FILE_DIR:cavewherelibplugin>)
+    SET(cavewherelib_FILES_TO_COPY
+        "${PLUGIN_DIR}/qmldir"
+        "${PLUGIN_DIR}/cavewherelib.qmltypes"
+        "${PLUGIN_DIR}/Theme.js"
+        "${PLUGIN_DIR}/Utils.js"
+        "${PLUGIN_DIR}/VectorMath.js"
+        "${PLUGIN_DIR}/cavewherelibplugin${CMAKE_SHARED_LIBRARY_SUFFIX}"
+    )
+
 
     if(WITH_PDF)
         list(APPEND ROOT_FILES_TO_COPY "${Qt_bin_dir}/Qt5Pdf${CMAKE_SHARED_LIBRARY_SUFFIX}")
@@ -65,12 +76,12 @@ if(WIN32)
         COMMENT "Cleaning deploy directory"
         COMMAND ${CMAKE_COMMAND} -E make_directory ${DEPLOY_DIR}
         COMMAND ${CMAKE_COMMAND} -E copy ${ROOT_FILES_TO_COPY} ${DEPLOY_DIR}
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${DEPLOY_QML_DIR}
-        COMMAND ${CMAKE_COMMAND} -E copy ${QML_FILES_TO_COPY} ${DEPLOY_QML_DIR}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${DEPLOY_DIR}/cavewherelib
+        COMMAND ${CMAKE_COMMAND} -E copy ${cavewherelib_FILES_TO_COPY} ${DEPLOY_DIR}/cavewherelib
         COMMAND ${CMAKE_COMMAND} -E make_directory ${DEPLOY_SURVEX_DIR}
         COMMAND ${CMAKE_COMMAND} -E copy ${survex_files_to_copy} ${DEPLOY_SURVEX_DIR}
         COMMAND ${CMAKE_COMMAND} -E copy ${survex_msg_files} ${DEPLOY_SURVEX_DIR}
-        COMMAND ${CMAKE_COMMAND} -E copy ${survex_dlls} ${DEPLOY_SURVEX_DIR}
+        #COMMAND ${CMAKE_COMMAND} -E copy ${survex_dlls} ${DEPLOY_SURVEX_DIR}
 
         COMMENT "Copying files to deploy directory"
         VERBATIM
@@ -83,7 +94,7 @@ if(WIN32)
 
     set(DEPLOYMENT_APP "${Qt_bin_dir}/windeployqt.exe")
     set(DEPLOYMENT_ARGS "--qmldir"
-        ${DEPLOY_QML_DIR}
+        ${QML_DIR}
         "-sql"
         "-xml"
         "-opengl"
@@ -129,8 +140,8 @@ if(WIN32)
         message(FATAL_ERROR "ARM architectures are not supported for windows installers.")
     elseif(CMAKE_SIZEOF_VOID_P EQUAL 8) # 64-bit
         set(arch "64bit")
-        set(architecturesAllowed "x64")
-        set(architecturesInstallIn64BitMode "x64")
+        set(architecturesAllowed "x64compatible")
+        set(architecturesInstallIn64BitMode "x64compatible")
         set(redist_exe "vc_redist.x64.exe")
     elseif(CMAKE_SIZEOF_VOID_P EQUAL 4) # 32-bit
         message(FATAL_ERROR "32-bit mode is not supported for windows installers.")
@@ -140,7 +151,7 @@ if(WIN32)
 
 
     # Add custom command to run InnoConfigure.cmake and generate cavewhere.iss
-    set(redist_version "v14.29.30139") #This can be queried by double clicking on the vc_redist.x64.exe
+    set(redist_version "v14.42.34433") #This can be queried by double clicking on the vc_redist.x64.exe
     set(inno_in_file "${CMAKE_SOURCE_DIR}/installer/windows/cavewhere.iss.in")
 
     add_custom_command(
@@ -148,8 +159,8 @@ if(WIN32)
         COMMAND ${CMAKE_COMMAND}
         -DISS_IN=${inno_in_file}
         -DISS=${CMAKE_BINARY_DIR}/cavewhere.iss
-        -DGET_HASH_CMAKE=${CMAKE_CURRENT_SOURCE_DIR}/GitHash.cmake
-        -DCAVEWHERE_VERSION_FILE=${BINARY_DIR}/current_git_hash.txt
+        -DGET_HASH_CMAKE=${CMAKE_CURRENT_SOURCE_DIR}/cavewherelib/GitHash.cmake
+        -DCAVEWHERE_VERSION_FILE=${BINARY_DIR}/cavewherelib/current_git_hash.txt
         -DCAVEWHERE_NAME=${CAVEWHERE_NAME}
        # -DCAVEWHER_VERSION=${CAVEWHERE_VERSION}
         -DARCH_ALLOWED=${architecturesAllowed}

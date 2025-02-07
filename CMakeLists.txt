@@ -350,6 +350,6 @@ if(WIN32 OR APPLE)
 	#### Building Installer for Windows and Mac ####
 #	set_target_properties(CaveWhere PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 #	set_target_properties(CaveWhere PROPERTIES SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
-#        include(installer/installer.cmake)
+    include(installer/installer.cmake)
 endif()
 
