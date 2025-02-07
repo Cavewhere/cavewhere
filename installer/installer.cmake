@@ -93,11 +93,12 @@ if(WIN32)
     )
 
     set(DEPLOYMENT_APP "${Qt_bin_dir}/windeployqt.exe")
-    set(DEPLOYMENT_ARGS "--qmldir"
-        ${QML_DIR}
+    set(DEPLOYMENT_ARGS
+        "--release"
+        "--compiler-runtime"
+        "--qmldir" ${QML_DIR}
         "-sql"
         "-xml"
-        "-opengl"
         "-concurrent"
         "-test"
         "${CAVEWHER_BINARY_PATH}")
@@ -189,6 +190,6 @@ if(WIN32)
         DEPENDS always_build_installer) #"${cavewhere_installer_name}")
 
     # Make sure your main target depends on this custom target
-    add_dependencies(windowsInstaller deployCavewhere CaveWhere cavewhere-test)
+    add_dependencies(windowsInstaller deployCavewhere CaveWhere cavewhere-test cavewhere-qml-test)
 
 endif()

@@ -59,7 +59,7 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 
 ; add the Parameters, WorkingDir and StatusMsg as you wish, just keep here
 ; the conditional installation Check
-Filename: "{tmp}\{#MyRedistributableExe}"; Check: not IsVCRedistInstalled
+Filename: "{tmp}\{#MyRedistributableExe}"; Parameters: "/install /quiet /norestart"; Check: not IsVCRedistInstalled
 
 [Code]
 const
