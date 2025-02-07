@@ -7,6 +7,7 @@ StandardPage {
 
     RowLayout {
         anchors.fill: parent
+        anchors.margins: 5
 
         TabViewVertical {
             id: tabBarId
@@ -15,7 +16,8 @@ StandardPage {
             Layout.maximumWidth: 200
             implicitWidth: 200
 
-            model: ["Jobs", "Rendering", "PDF"]
+            // model: ["Jobs", "Rendering", "PDF"]
+            model: ["Jobs", "PDF"]
         }
 
         QC.ScrollView {
@@ -30,9 +32,9 @@ StandardPage {
 
                 }
 
-                RenderingSettingsItem {
+                // RenderingSettingsItem {
 
-                }
+                // }
 
                 PDFSettingsItem {
 
