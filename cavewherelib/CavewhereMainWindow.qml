@@ -112,7 +112,6 @@ ApplicationWindow {
     onClosing: (close) => {
         askToSaveDialogId.taskName = "quiting"
         askToSaveDialogId.afterSaveFunc = function() {
-            console.log("After save!")
             Qt.quit();
         }
 
