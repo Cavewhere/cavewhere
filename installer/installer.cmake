@@ -21,6 +21,8 @@ set(CAVEWHERE_NAME "Cavewhere")
 if(WIN32)
     set(DEPLOY_DIR "${CMAKE_BINARY_DIR}/deploy")
 
+    include(InstallRequiredSystemLibraries)
+
     get_target_property(BINARY_DIR CaveWhere RUNTIME_OUTPUT_DIRECTORY)
     set(CAVEWHER_BINARY_PATH "${DEPLOY_DIR}/CaveWhere${CMAKE_EXECUTABLE_SUFFIX}")
     get_target_property(CAVEWHERE_SOURCE_DIR CaveWhere SOURCE_DIR)
@@ -75,21 +77,28 @@ if(WIN32)
         COMMAND ${CMAKE_COMMAND} -E remove_directory ${DEPLOY_DIR}
         COMMENT "Cleaning deploy directory"
         COMMAND ${CMAKE_COMMAND} -E make_directory ${DEPLOY_DIR}
+        COMMENT "Making deploy direcotry"
         COMMAND ${CMAKE_COMMAND} -E copy ${ROOT_FILES_TO_COPY} ${DEPLOY_DIR}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${DEPLOY_DIR}/cavewherelib
         COMMAND ${CMAKE_COMMAND} -E copy ${cavewherelib_FILES_TO_COPY} ${DEPLOY_DIR}/cavewherelib
         COMMAND ${CMAKE_COMMAND} -E make_directory ${DEPLOY_SURVEX_DIR}
         COMMAND ${CMAKE_COMMAND} -E copy ${survex_files_to_copy} ${DEPLOY_SURVEX_DIR}
         COMMAND ${CMAKE_COMMAND} -E copy ${survex_msg_files} ${DEPLOY_SURVEX_DIR}
-        #COMMAND ${CMAKE_COMMAND} -E copy ${survex_dlls} ${DEPLOY_SURVEX_DIR}
-
         COMMENT "Copying files to deploy directory"
+        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS} ${DEPLOY_DIR}
+        COMMENT "Copying system runtime libs"
+
         VERBATIM
     )
 
     # Create a custom target that depends on the copied files
     add_custom_target(prepare_deploy
-        DEPENDS ${DEPOLY_COPY_TIMESTAMP} CaveWhere cavewhere-test survex
+        DEPENDS
+        ${DEPOLY_COPY_TIMESTAMP}
+        CaveWhere
+        cavewhere-test
+        survex
+        cavewhere-qml-test
     )
 
     set(DEPLOYMENT_APP "${Qt_bin_dir}/windeployqt.exe")
@@ -125,7 +134,7 @@ add_custom_target(deployCavewhere
     DEPENDS deploy_timestamp.txt)
 
 ## Make sure your main target depends on this custom target
-add_dependencies(deployCavewhere prepare_deploy CaveWhere cavewhere-test)
+add_dependencies(deployCavewhere prepare_deploy)
 
 ## Make inno install
 
@@ -190,6 +199,6 @@ if(WIN32)
         DEPENDS always_build_installer) #"${cavewhere_installer_name}")
 
     # Make sure your main target depends on this custom target
-    add_dependencies(windowsInstaller deployCavewhere CaveWhere cavewhere-test cavewhere-qml-test)
+    add_dependencies(windowsInstaller deployCavewhere)
 
 endif()
