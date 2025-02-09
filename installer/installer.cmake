@@ -61,7 +61,6 @@ if(WIN32)
 
     set(QML_FILES_TO_COPY ${cavewhere_QML_FILES})
 
-    file(GLOB survex_msg_files "${SURVEX_BIN_DIR}/*.msg")
     file(GLOB survex_dlls "${SURVEX_BIN_DIR}/*.dll")
 
     set(survex_files_to_copy
@@ -75,19 +74,15 @@ if(WIN32)
     add_custom_command(
         OUTPUT ${DEPOLY_COPY_TIMESTAMP}
         COMMAND ${CMAKE_COMMAND} -E remove_directory ${DEPLOY_DIR}
-        COMMENT "Cleaning deploy directory"
         COMMAND ${CMAKE_COMMAND} -E make_directory ${DEPLOY_DIR}
-        COMMENT "Making deploy direcotry"
         COMMAND ${CMAKE_COMMAND} -E copy ${ROOT_FILES_TO_COPY} ${DEPLOY_DIR}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${DEPLOY_DIR}/cavewherelib
         COMMAND ${CMAKE_COMMAND} -E copy ${cavewherelib_FILES_TO_COPY} ${DEPLOY_DIR}/cavewherelib
         COMMAND ${CMAKE_COMMAND} -E make_directory ${DEPLOY_SURVEX_DIR}
         COMMAND ${CMAKE_COMMAND} -E copy ${survex_files_to_copy} ${DEPLOY_SURVEX_DIR}
-        COMMAND ${CMAKE_COMMAND} -E copy ${survex_msg_files} ${DEPLOY_SURVEX_DIR}
-        COMMENT "Copying files to deploy directory"
+        COMMAND ${CMAKE_COMMAND} -E copy ${SVX_MESSAGE_FILES} ${DEPLOY_SURVEX_DIR}
         COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS} ${DEPLOY_DIR}
-        COMMENT "Copying system runtime libs"
-
+        COMMENT "Copying files to deploy directory"
         VERBATIM
     )
 
@@ -104,7 +99,7 @@ if(WIN32)
     set(DEPLOYMENT_APP "${Qt_bin_dir}/windeployqt.exe")
     set(DEPLOYMENT_ARGS
         "--release"
-        "--compiler-runtime"
+        "--no-compiler-runtime" #we're deploying windows with vcruntime directly through cmake
         "--qmldir" ${QML_DIR}
         "-sql"
         "-xml"
@@ -172,7 +167,6 @@ if(WIN32)
         -DGET_HASH_CMAKE=${CMAKE_CURRENT_SOURCE_DIR}/cavewherelib/GitHash.cmake
         -DCAVEWHERE_VERSION_FILE=${BINARY_DIR}/cavewherelib/current_git_hash.txt
         -DCAVEWHERE_NAME=${CAVEWHERE_NAME}
-       # -DCAVEWHER_VERSION=${CAVEWHERE_VERSION}
         -DARCH_ALLOWED=${architecturesAllowed}
         -DINSTALL_64BIT=${architecturesInstallIn64BitMode}
         -DARCH=${arch}
