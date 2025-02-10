@@ -696,3 +696,6 @@ cavewherelib/.qmlls.ini
 test-qml/test.svg
 test-qml/test.pdf
 test-qml/test.png
+cavewherelib/icons/Thumbs.db
+*.autosave
+test-qml/Thumbs.db

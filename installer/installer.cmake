@@ -47,7 +47,7 @@ if(WIN32)
     set(PLUGIN_DIR $<TARGET_FILE_DIR:cavewherelibplugin>)
     SET(cavewherelib_FILES_TO_COPY
         "${PLUGIN_DIR}/qmldir"
-        "${PLUGIN_DIR}/cavewherelib.qmltypes"
+        "${PLUGIN_DIR}/cavewherelib.qmltypes"fp
         "${PLUGIN_DIR}/Theme.js"
         "${PLUGIN_DIR}/Utils.js"
         "${PLUGIN_DIR}/VectorMath.js"
@@ -109,36 +109,23 @@ if(WIN32)
         "-concurrent"
         "-test"
         "${CAVEWHER_BINARY_PATH}")
-    elseif(APPLE)
-        set(DEPLOYMENT_APP "${Qt_bin_dir}/macdeployqt")
-        set(BUNDLE_NAME "CaveWhere.app")
-        set(BUNDLE_PATH "${CMAKE_INSTALL_PREFIX}/${BUNDLE_NAME}")
-        set(DEPLOYMENT_ARGS "${BUNDLE_PATH}"
-            "-qmldir=${CMAKE_INSTALL_PREFIX}/${BUNDLE_NAME}/Contents/Resources/qml"
-            "-appstore-compliant")
-else()
- message(FATAL_ERROR "Unsupported OS")
-endif()
 
-# Custom command to run deployment app
-add_custom_command(OUTPUT deploy_timestamp.txt
-    COMMAND ${DEPLOYMENT_APP} ${DEPLOYMENT_ARGS}
-    #COMMAND ${CMAKE_COMMAND} -E touch deploy_timestamp.txt
-    COMMENT "Running ${DEPLOYMENT_APP}"
-    VERBATIM)
+    # Custom command to run deployment app
+    add_custom_command(OUTPUT deploy_timestamp.txt
+       COMMAND ${DEPLOYMENT_APP} ${DEPLOYMENT_ARGS}
+       #COMMAND ${CMAKE_COMMAND} -E touch deploy_timestamp.txt
+       COMMENT "Running ${DEPLOYMENT_APP}"
+       VERBATIM)
 
-# Custom target to trigger the custom command
-add_custom_target(deployCavewhere
-    DEPENDS deploy_timestamp.txt)
+    # Custom target to trigger the custom command
+    add_custom_target(deployCavewhere
+        DEPENDS deploy_timestamp.txt)
 
-## Make sure your main target depends on this custom target
-add_dependencies(deployCavewhere prepare_deploy)
+    ## Make sure your main target depends on this custom target
+    add_dependencies(deployCavewhere prepare_deploy)
 
-## Make inno install
+    ## Make inno install
 
-
-
-if(WIN32)
   #  include("GitHash.cmake")
   #  get_hash("${BINARY_DIR}/current_git_hash.txt" CAVEWHERE_VERSION)
   #  message(STATUS "Current git hash: ${CAVEWHERE_VERSION}")
