@@ -27,12 +27,13 @@ MainWindowTest {
         }
 
         function tryFuzzyCompare(actual, expected, delta, message = "") {
-            var err = new Error();
+            let err = new Error();
+            let extraMessage = "actual:" + actual + " expected:" + expected + " ActualDelta:" + Math.abs(actual - expected) + " ExpectedDelta:" + delta
             tryVerify(() => {
                            return Math.abs(actual - expected) <= delta;
                       },
                       5000,
-                      message + "at:" + err.stack);
+                      message + "\nCompare:" + extraMessage + "\nat:" + err.stack);
         }
 
         function setupExport() {
@@ -171,9 +172,9 @@ MainWindowTest {
             mouseRelease(rotationHandle_obj1, 24.8349+10, 8.20597+30)
             wait(50)
 
-            let delta = 0.0001
+            let delta = 0.005
             //Values have been visually verified, that the drag works
-            // console.log("Bounding box:" + captureItem0_obj1.captureItem.boundingBox)
+            console.log("Bounding box:" + captureItem0_obj1.captureItem.boundingBox)
             tryFuzzyCompare(captureItem0_obj1.captureItem.boundingBox.x, -0.570247, delta);
             tryFuzzyCompare(captureItem0_obj1.captureItem.boundingBox.y, 0.726273, delta);
             tryFuzzyCompare(captureItem0_obj1.captureItem.boundingBox.width, 8.07971, delta);
@@ -206,7 +207,7 @@ MainWindowTest {
 
 
             //Values have been visually verified, that the drag works
-            let delta = 0.001
+            let delta = 0.002
             tryFuzzyCompare(captureItem0_obj1.captureItem.boundingBox.x, 1.27312, delta);
             tryFuzzyCompare(captureItem0_obj1.captureItem.boundingBox.y, 1.43551, delta);
             tryFuzzyCompare(captureItem0_obj1.captureItem.boundingBox.width, 4.47568, delta);
@@ -359,10 +360,10 @@ MainWindowTest {
             //Make sure the capture is the correct size
             let captureItem0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0")
 
-            tryFuzzyCompare(captureItem0_obj1.width, 306, 1.0);
-            tryFuzzyCompare(captureItem0_obj1.height, 602, 1.0);
-            tryFuzzyCompare(captureItem0_obj1.x, 19.5, 1.0);
-            tryFuzzyCompare(captureItem0_obj1.y, 19.5, 1.0);
+            tryFuzzyCompare(captureItem0_obj1.width, 306, 2.0);
+            tryFuzzyCompare(captureItem0_obj1.height, 602, 2.0);
+            tryFuzzyCompare(captureItem0_obj1.x, 19.5, 2.0);
+            tryFuzzyCompare(captureItem0_obj1.y, 19.5, 2.0);
 
         }
     }

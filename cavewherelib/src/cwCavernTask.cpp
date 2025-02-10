@@ -54,7 +54,14 @@ QString cwCavernTask::output3dFileName() const {
          return;
      }
 
-     auto cavernProcess = std::make_unique<QProcess>();
+     auto qprocessDeleter = [](QProcess* process) {
+         if(process) {
+             process->deleteLater();
+         }
+     };
+
+     //If QProcess crashes, errorOccured could happen before the process finishes
+     std::unique_ptr<QProcess, decltype(qprocessDeleter)> cavernProcess(new QProcess, qprocessDeleter);
 
      //Set the process's working directory
      QFileInfo survexFileInfo(SurvexFileName);

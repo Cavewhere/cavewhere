@@ -96,7 +96,7 @@ void cwSurvexportTask::runTask() {
     SurvexportProcess->start(survexportPath, arguments);
     SurvexportProcess->waitForFinished();
 
-    delete SurvexportProcess;
+    SurvexportProcess->deleteLater();
 
     done();
 }
