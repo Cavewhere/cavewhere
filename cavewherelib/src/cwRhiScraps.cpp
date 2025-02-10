@@ -53,7 +53,7 @@ void cwRhiScraps::initializePipeline(const ResourceUpdateData& data)
     m_pipeline->setDepthWrite(true);
 
     // Create sampler
-    m_sharedScrapData.m_sampler = rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
+    m_sharedScrapData.m_sampler = rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Linear,
                                 QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge);
     m_sharedScrapData.m_sampler->create();
 
@@ -71,11 +71,12 @@ void cwRhiScraps::initializePipeline(const ResourceUpdateData& data)
         painter.end();
 
         // Create QRhiTexture
-        m_sharedScrapData.m_loadingTexture = rhi->newTexture(QRhiTexture::RGBA8, image.size(), 1, QRhiTexture::UsedWithGenerateMips);
+        m_sharedScrapData.m_loadingTexture = rhi->newTexture(QRhiTexture::RGBA8, image.size(), 1, QRhiTexture::MipMapped | QRhiTexture::UsedWithGenerateMips);
         m_sharedScrapData.m_loadingTexture->create();
 
         // Upload the texture data
         data.resourceUpdateBatch->uploadTexture(m_sharedScrapData.m_loadingTexture, image);
+        data.resourceUpdateBatch->generateMips(m_sharedScrapData.m_loadingTexture);
     };
     createLoadingTexture();
 
@@ -217,11 +218,12 @@ void cwRhiScraps::updateResources(const ResourceUpdateData& data)
             auto uploadTextureData = [batch, scrap, &imageData]() {
                 Q_ASSERT(imageData.image.size() == scrap->texture->pixelSize());
                 batch->uploadTexture(scrap->texture, imageData.image);
+                batch->generateMips(scrap->texture);
             };
 
             auto createTexture = [scrap, &data, &imageData, uploadTextureData, this](const QSize& size){
                 if(!size.isEmpty()) {
-                    scrap->texture = data.renderData.cb->rhi()->newTexture(QRhiTexture::RGBA8, size, 1, QRhiTexture::UsedWithGenerateMips);
+                    scrap->texture = data.renderData.cb->rhi()->newTexture(QRhiTexture::RGBA8, size, 1, QRhiTexture::MipMapped | QRhiTexture::UsedWithGenerateMips);
                     scrap->texture->create();
                     uploadTextureData();
 
