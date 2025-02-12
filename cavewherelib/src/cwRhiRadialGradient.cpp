@@ -50,9 +50,9 @@ void cwRhiRadialGradient::initialize(const ResourceUpdateData& data)
     m_pipeline = rhi->newGraphicsPipeline();
     m_pipeline->setShaderResourceBindings(m_srb);
     m_pipeline->setTargetBlends({ QRhiGraphicsPipeline::TargetBlend() });
-    // m_pipeline->setSampleCount(data.renderData.renderer->sampleCount());
     m_pipeline->setDepthTest(false);
     m_pipeline->setDepthWrite(false);
+    m_pipeline->setSampleCount(data.renderData.renderer->renderTarget()->sampleCount());
     m_pipeline->setCullMode(QRhiGraphicsPipeline::None);
     m_pipeline->setVertexInputLayout(m_inputLayout);
     m_pipeline->setTopology(QRhiGraphicsPipeline::TriangleStrip);

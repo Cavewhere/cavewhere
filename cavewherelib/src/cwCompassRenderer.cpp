@@ -230,6 +230,7 @@ void cwCompassRenderer::createPipelines(QRhi* rhi)
     m_compassPipeline->setTargetBlends({ blendState });
     m_compassPipeline->setDepthTest(true);
     m_compassPipeline->setDepthWrite(true);
+    m_compassPipeline->setSampleCount(renderTarget()->sampleCount());
     // m_compassPipeline->setCullMode(QRhiGraphicsPipeline::Back); //FIXME: geometry is setup correctly, culling
     m_compassPipeline->setTopology(QRhiGraphicsPipeline::Triangles);
     m_compassPipeline->create();

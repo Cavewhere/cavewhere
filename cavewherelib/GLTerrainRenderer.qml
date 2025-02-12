@@ -23,7 +23,7 @@ Item {
         anchors.fill: parent
         clip: true
         camera.devicePixelRatio: Screen.devicePixelRatio
-        // sampleCount: 4
+        sampleCount:4
     }
 
     TurnTableInteraction {
@@ -80,7 +80,7 @@ Item {
             width: 175
             height: width
             compassRotation: turnTableInteractionId.cameraRotation
-            antialiasing: false
+            sampleCount: 4
         }
     }
 }

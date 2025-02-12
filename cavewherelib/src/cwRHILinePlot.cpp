@@ -68,6 +68,7 @@ void cwRHILinePlot::initializeResources(const ResourceUpdateData& data)
 
     m_pipeline->setDepthTest(true);
     m_pipeline->setDepthWrite(true);
+    m_pipeline->setSampleCount(data.renderData.renderer->renderTarget()->sampleCount());
 
     // Input layout
     QRhiVertexInputLayout inputLayout;

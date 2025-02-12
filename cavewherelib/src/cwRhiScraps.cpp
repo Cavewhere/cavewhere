@@ -51,6 +51,7 @@ void cwRhiScraps::initializePipeline(const ResourceUpdateData& data)
     });
     m_pipeline->setDepthTest(true);
     m_pipeline->setDepthWrite(true);
+    m_pipeline->setSampleCount(data.renderData.renderer->renderTarget()->sampleCount());
 
     // Create sampler
     m_sharedScrapData.m_sampler = rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Linear,
