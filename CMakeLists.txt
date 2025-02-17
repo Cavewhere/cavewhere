@@ -225,8 +225,20 @@ if(APPLE)
 
     #Post build install for APP resources
     # Define paths
+    # get_target_property(qmlModuleDir cavewherelibplugin QML_IMPORT_FOLDER)
+    # message(STATUS "The QML module is copied to: ${qmlModuleDir}")
+
+    # # Replace 'mytarget' with your target name, e.g., cavewherelibplugin
+    # get_property(target_props TARGET cavewherelibplugin PROPERTY PROPERTIES)
+
+    # message(STATUS "Listing properties:")
+    # foreach(prop IN LISTS target_props)
+    #     get_target_property(val cavewherelibplugin ${prop})
+    #     message(STATUS "Target: ${prop} = ${val}")
+    # endforeach()
+
     set(PLUGIN_DYLIB $<TARGET_FILE:cavewherelibplugin>)
-    set(PLUGIN_DIR $<TARGET_FILE_DIR:cavewherelibplugin>)
+    set(PLUGIN_DIR ${CMAKE_BINARY_DIR}/cavewherelib) #$<TARGET_FILE_DIR:cavewherelibplugin>)
     set(BUNDLE_PLUGIN_DIR $<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/Plugins/quick)
     set(BUNDLE_QML_DIR $<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/Resources/qml/cavewherelib)
 
