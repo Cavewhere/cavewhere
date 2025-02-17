@@ -6,6 +6,7 @@
 #include "cwErrorListModel.h"
 #include "cwCSVLineModel.h"
 #include "cwAsyncFuture.h"
+#include "cwConcurrent.h"
 
 //AsyncFuture
 #include <asyncfuture.h>
@@ -154,7 +155,7 @@ void cwCSVImporterManager::startParsing()
     cwCSVImporterTask task;
     Settings.setColumns(ColumnsModel->toList());
     task.setSettings(Settings);
-    auto future = QtConcurrent::run(task);
+    auto future = cwConcurrent::run(task);
     CSVRunFuture = future;
 
     CSVFinishedFuture = AsyncFuture::observe(future).subscribe([this, future](){

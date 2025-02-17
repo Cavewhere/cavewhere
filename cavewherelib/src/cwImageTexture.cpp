@@ -11,8 +11,6 @@
 #include "cwDebug.h"
 
 //QT includes
-#include <QtConcurrentRun>
-#include <QtConcurrentMap>
 #include <QVector2D>
 #include <QFuture>
 #include <QWindow>

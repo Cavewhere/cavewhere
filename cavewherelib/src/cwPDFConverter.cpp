@@ -1,6 +1,7 @@
 //Our includes
 #include "cwPDFConverter.h"
 #include "cwDebug.h"
+#include "cwConcurrent.h"
 
 //AsyncFuture
 #include "asyncfuture.h"
@@ -88,7 +89,7 @@ QFuture<QImage> cwPDFConverter::convert()
         return image;
     };
 
-    return QtConcurrent::mapped(pages, convertPage);
+    return cwConcurrent::mapped(pages, convertPage);
 #else
     setError("PDF Renderer not enabled");
     return QFuture<QImage>();

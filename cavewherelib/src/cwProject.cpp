@@ -23,6 +23,7 @@
 #include "cwErrorListModel.h"
 #include "cwPDFConverter.h"
 #include "cwPDFSettings.h"
+#include "cwConcurrent.h"
 
 //Qt includes
 #include <QDir>
@@ -218,7 +219,7 @@ void cwProject::privateSave() {
     QString filename = this->filename();
     region->moveToThread(nullptr);
 
-    auto future = QtConcurrent::run([region, filename]() {
+    auto future = cwConcurrent::run([region, filename]() {
         cwRegionSaveTask saveTask;
         saveTask.setDatabaseFilename(filename);
         return saveTask.save(region.get());
@@ -380,7 +381,7 @@ void cwProject::loadFile(QString filename) {
     filename = cwGlobals::convertFromURL(filename);
 
     //Run the load task async
-    auto loadFuture = QtConcurrent::run([filename](){
+    auto loadFuture = cwConcurrent::run([filename](){
         cwRegionLoadTask loadTask;
         loadTask.setDatabaseFilename(filename);
         return loadTask.load();

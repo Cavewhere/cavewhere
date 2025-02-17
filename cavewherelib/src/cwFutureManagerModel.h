@@ -3,11 +3,11 @@
 
 //Qt includes
 #include <QAbstractListModel>
-#include <QtConcurrent>
 #include <QVector>
 #include <QFutureWatcher>
 #include <QElapsedTimer>
 #include <QQmlEngine>
+#include <QTimer>
 
 //Our includes
 #include "cwGlobals.h"

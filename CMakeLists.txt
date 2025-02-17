@@ -35,6 +35,7 @@ add_subdirectory(qml-test-recorder)
 set(SURVEX_CONAN OFF CACHE BOOL "Use survex Conan to manage dependencies" FORCE)
 
 add_subdirectory(survex)
+add_subdirectory(MarkScope)
 
 # All packages we need to find
 find_package(Catch2 REQUIRED)
@@ -203,6 +204,7 @@ target_link_libraries(CaveWhere
     Qt::Sql
     Qt::Test
     cavewherelib
+    MarkScope
 )
 
 if(WIN32)

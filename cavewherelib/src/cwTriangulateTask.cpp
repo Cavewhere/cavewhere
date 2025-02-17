@@ -12,6 +12,7 @@
 #include "utils/cwTriangulate.h"
 #include "cwAsyncFuture.h"
 #include "cwRunningProfileScrapViewMatrix.h"
+#include "cwConcurrent.h"
 
 //Utils includes
 #include "utils/Forsyth.h"
@@ -61,7 +62,7 @@ QList<QFuture<cwTriangulatedData>> cwTriangulateTask::triangulate() const
                            return AsyncFuture::observe(uploadFuture)
                                .subscribe(
                                    [scrap, cropFuture, uploadFuture]() {
-                                       return QtConcurrent::run([scrap, cropFuture, uploadFuture]()
+                                       return cwConcurrent::run([scrap, cropFuture, uploadFuture]()
                                                                 {
                                                                     return triangulateGeometry(scrap,
                                                                                                cropFuture.result(),

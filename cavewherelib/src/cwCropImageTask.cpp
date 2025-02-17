@@ -14,6 +14,7 @@
 #include "cwAddImageTask.h"
 #include "cwAsyncFuture.h"
 #include "cwImageDatabase.h"
+#include "cwConcurrent.h"
 
 //Qt includes
 #include <QByteArray>
@@ -109,7 +110,7 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
             return Image({-1, badImage, 0});
     };
 
-    auto cropFuture = QtConcurrent::run(cropImage);
+    auto cropFuture = cwConcurrent::run(cropImage);
 
     auto addImageFuture = AsyncFuture::observe(cropFuture)
             .subscribe([cropFuture, filename, format]()

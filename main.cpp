@@ -23,9 +23,13 @@
 #include "cwOpenFileEventHandler.h"
 #include "cwApplication.h"
 #include "cwGlobals.h"
+#include "cwConcurrent.h"
 
 //std includes
 #include <memory>
+
+//MarkScope
+#include "MarkScope/FrameProfiler.h"
 
 #ifndef CAVEWHERE_VERSION
 #define CAVEWHERE_VERSION "Sauce-Release"
@@ -125,6 +129,9 @@ int main(int argc, char *argv[])
 
     cwApplication a(argc, argv);
 
+    //Setup the concurrance
+    cwConcurrent::startThreadPool();
+
     //Load all the fonts
     cwGlobals::loadFonts();
 
@@ -149,6 +156,8 @@ int main(int argc, char *argv[])
                                        QStringLiteral("CavewhereMainWindow"));
     auto id = qmlTypeId("cavewherelib", 1, 0, "RootData");
     cwRootData* rootData = applicationEngine->rootContext()->engine()->singletonInstance<cwRootData*>(id);
+
+    MarkScope::FrameProfiler frameProfiler(applicationEngine);
 
     //Handle command line args
     handleCommandline(a, rootData);

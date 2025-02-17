@@ -13,11 +13,11 @@
 #include "cwMath.h"
 #include "cwOpenGLUtils.h"
 #include "cwImageDatabase.h"
+#include "cwConcurrent.h"
 
 //Qt includes
 #include <QDebug>
 #include <QWindow>
-#include <QtConcurrent>
 
 //Std includes
 #include <math.h>
@@ -42,6 +42,8 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
         // if(!cwImageDatabase(projectFile).mipmapsValid(*image, currentFormat == DXT1Mipmaps)) {
         //     return results;
         // }
+
+        // QThread::msleep(10000);
 
         cwImageProvider imageProvidor;
         imageProvidor.setProjectPath(projectFile);
@@ -96,7 +98,7 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
         return results;
     };
 
-    return QtConcurrent::run(std::bind(loadValidMipmap,
+    return cwConcurrent::run(std::bind(loadValidMipmap,
                                        cwTrackedImage::createShared(image,
                                                                     projectFile,
                                                                     cwTrackedImage::NoOwnership)));

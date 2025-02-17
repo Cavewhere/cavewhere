@@ -39,6 +39,8 @@ class cwRenderScraps;
 #include "cwGlobals.h"
 #include "cwAsyncFuture.h"
 
+#include "MarkScope/Profiler.h"
+
 /**
     The scrap manager listens to changes in the notes and creates all
     the geometry need to show a scrap in 3d
@@ -89,6 +91,8 @@ private:
     cwRenderScraps* m_renderScraps;
 
     bool AutomaticUpdate; //!<
+
+    MarkScope::Profiler m_profile = MarkScope::Profiler("cwScrapManager");
 
     void connectNote(cwNote* note);
     void connectScrap(cwScrap* scrap);

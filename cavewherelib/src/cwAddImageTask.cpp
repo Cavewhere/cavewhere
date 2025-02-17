@@ -13,9 +13,7 @@
 #include "cwDebug.h"
 #include "cwAsyncFuture.h"
 #include "cwImageDatabase.h"
-
-//For creating compressed DXT texture maps
-#include <QtConcurrent/qtconcurrentrun.h>
+#include "cwConcurrent.h"
 
 //Std includes
 #include "cwMath.h"
@@ -272,9 +270,9 @@ QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
     //     }).future();
     // };
 
-    auto pathImagesFuture = NewImagePaths.isEmpty() ? QFuture<PrivateImageData>() : QtConcurrent::mapped(NewImagePaths, loadImagesFromPath);
-    auto imagesFuture = NewImages.isEmpty() ? QFuture<PrivateImageData>() : QtConcurrent::mapped(NewImages, loadFromImages);
-    auto regeneratedFuture = RegenerateMipmap.isOriginalValid() ? QtConcurrent::run(std::bind(loadFromDatabaseImage, RegenerateMipmap)) : QFuture<PrivateImageData>();
+    auto pathImagesFuture = NewImagePaths.isEmpty() ? QFuture<PrivateImageData>() : cwConcurrent::mapped(NewImagePaths, loadImagesFromPath);
+    auto imagesFuture = NewImages.isEmpty() ? QFuture<PrivateImageData>() : cwConcurrent::mapped(NewImages, loadFromImages);
+    auto regeneratedFuture = RegenerateMipmap.isOriginalValid() ? cwConcurrent::run(std::bind(loadFromDatabaseImage, RegenerateMipmap)) : QFuture<PrivateImageData>();
     auto imageCombine = AsyncFuture::combine();
 
     auto addToImageCombine = [&imageCombine](QFuture<PrivateImageData> future) {
@@ -335,7 +333,7 @@ QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
         //     ).future();
         // }
 
-        auto iconFuture = QtConcurrent::mapped(filterData, createIcon);
+        auto iconFuture = cwConcurrent::mapped(filterData, createIcon);
         auto idCombine = AsyncFuture::combine() << iconFuture << compressAndUploadFuture;
 
         return AsyncFuture::observe(idCombine.future())

@@ -21,7 +21,6 @@ class cwAddImageTask;
 //Qt includes
 #include <QRectF>
 #include <QString>
-#include <QtConcurrent>
 
 /**
   \brief This will crop a cwImage using normalize coordinates of the original

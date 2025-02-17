@@ -19,3 +19,6 @@
 [submodule "qml-test-recorder"]
 	path = qml-test-recorder
 	url = git@github.com:vpicaver/qml-test-recorder.git
+[submodule "MarkScope"]
+	path = MarkScope
+	url = https://github.com/vpicaver/MarkScope.git

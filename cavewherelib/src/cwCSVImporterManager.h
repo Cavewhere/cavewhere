@@ -4,7 +4,7 @@
 //Qt includes
 #include <QObject>
 #include <QList>
-#include <QtConcurrent>
+#include <QFuture>
 
 //Our includes
 #include "cwColumnNameModel.h"

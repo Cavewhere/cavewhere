@@ -3,6 +3,7 @@
 
 //Our includes
 #include "cwAsyncFuture.h"
+#include "cwConcurrent.h"
 
 //Qt includes
 #include <QThread>
@@ -29,7 +30,7 @@ TEST_CASE("cwAsyncFuture::Restarter should restart correctly", "[cwAsyncFuture]"
                 return i;
             };
 
-            auto future = QtConcurrent::run(concurrentRun);
+            auto future = cwConcurrent::run(concurrentRun);
             return future;
         };
 
@@ -97,7 +98,7 @@ TEST_CASE("cwAsyncFuture::Restarter should not restart if parent has been delete
                 return value;
             };
 
-            auto future = QtConcurrent::run(concurrentRun);
+            auto future = cwConcurrent::run(concurrentRun);
             return future;
         };
 

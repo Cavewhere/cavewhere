@@ -25,9 +25,13 @@
 #include "cwAsyncFuture.h"
 #include "cwAbstractScrapViewMatrix.h"
 #include "cwRenderScraps.h"
+#include "cwConcurrent.h"
 
 //Async future
 #include "asyncfuture.h"
+
+//Profiling
+#include "MarkScope/Profiler.h"
 
 cwScrapManager::cwScrapManager(QObject *parent) :
     QObject(parent),
@@ -500,6 +504,7 @@ QList<cwTriangulateStation> cwScrapManager::mapNoteStationsToTriangulateStation(
 void cwScrapManager::scrapInsertedHelper(cwNote *parentNote, int begin, int end)
 {
     QList<cwScrap*> scrapsToUpdate;
+
     for(int i = begin; i <= end; i++) {
         cwScrap* scrap = parentNote->scrap(i);
 
@@ -795,7 +800,7 @@ void cwScrapManager::taskFinished(const QList<cwScrap*>& scrapsToUpdate,
     }
 
     auto filename = Project->filename();
-    auto removeFuture = QtConcurrent::run([filename, imagesToRemove](){
+    auto removeFuture = cwConcurrent::run([filename, imagesToRemove](){
         cwImageDatabase imageDatabase(filename);
         for(const auto& image : imagesToRemove) {
             imageDatabase.removeImages(image.ids());

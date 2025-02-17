@@ -19,7 +19,6 @@
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include <QDebug>
-#include <QtConcurrentMap>
 #include <QFontMetrics>
 #include <QRay3D>
 #include <QOpenGLFunctions>

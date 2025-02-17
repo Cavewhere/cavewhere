@@ -14,6 +14,7 @@
 
 //Qt includes
 #include <QDebug>
+#include <QtConcurrent/QtConcurrentRun>
 
 //Async includes
 #include "asyncfuture.h"
