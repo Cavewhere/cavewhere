@@ -188,11 +188,6 @@ set_target_properties(CaveWhere PROPERTIES
     AUTOMOC ON
     AUTORCC ON
     AUTOUIC ON
-    MACOSX_BUNDLE TRUE
-    MACOSX_BUNDLE_BUNDLE_NAME "CaveWhere"
-    MACOSX_BUNDLE_GUI_IDENTIFIER "com.cavewhere.CaveWhere"
-    # MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/Info.plist"
-    RESOURCE "${CMAKE_CURRENT_SOURCE_DIR}/cavewhereIcon.icns"
 )
 
 target_link_libraries(CaveWhere
@@ -222,7 +217,16 @@ if(APPLE)
     set(CMAKE_MACOSX_BUNDLE_ICON_FILE "cavewhereIcon.icns")
 
     set_target_properties(CaveWhere PROPERTIES
+        MACOSX_BUNDLE TRUE
         MACOSX_BUNDLE_INFO_PLIST ${MACOSX_BUNDLE_INFO_PLIST}
+        MACOSX_BUNDLE_BUNDLE_NAME "CaveWhere"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "com.cavewhere.CaveWhere"
+        #Enables instruments to run correctly in macos
+        #XCODE_ATTRIBUTE_CODE_SIGN_ENTITLEMENTS "${CMAKE_SOURCE_DIR}/entitlements.plist"
+        #XCODE_ATTRIBUTE_DEVELOPMENT_TEAM
+
+        # MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/Info.plist"
+        RESOURCE "${CMAKE_CURRENT_SOURCE_DIR}/cavewhereIcon.icns"
     )
 
     #Post build install for APP resources
@@ -328,11 +332,43 @@ if(APPLE)
         COMMENT "Copying installMac.sh to the build directory when modified." ${CMAKE_BINARY_DIR}/installMac.sh
     )
 
+
     add_custom_target(copy_installMac ALL DEPENDS ${CMAKE_BINARY_DIR}/installMac.sh)
 
     # Ensure it runs as part of the post-build process
     add_dependencies(CaveWhere copy_installMac)
     add_dependencies(CaveWhere messageFiles) #Makes sure the message files get copied to bundle correctly
+
+
+    # Query the available code signing identities.
+    execute_process(
+      COMMAND security find-identity -v -p codesigning
+      OUTPUT_VARIABLE IDENTITY_OUTPUT
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    message(STATUS "Available code signing identities:\n${IDENTITY_OUTPUT}")
+
+    # Match the first identity's hash.
+     # Expected output line example:
+     #   1) ABCDEF1234567890 "Apple Development: John Doe (TEAMID)"
+     # This regex captures the hash (the first token after the index).
+     string(REGEX MATCH "[0-9]+\\) ([A-F0-9]+) \"[^\"]+\"" dummy "${IDENTITY_OUTPUT}")
+     set(CODESIGN_IDENTITY "${CMAKE_MATCH_1}")
+
+     if(NOT CODESIGN_IDENTITY)
+       message(WARNING "No valid code signing identity found!")
+     else()
+       # Prefix with "0x" so codesign recognizes it as a certificate hash.
+       # set(CODESIGN_IDENTITY "0x${CODESIGN_KEY}")
+       message(STATUS "Using code signing identity: ${CODESIGN_IDENTITY}")
+       add_custom_command(TARGET CaveWhere POST_BUILD
+         COMMAND codesign --force --sign "${CODESIGN_IDENTITY}"
+                 --entitlements "${CMAKE_SOURCE_DIR}/entitlements.plist"
+                 "$<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/.."
+         COMMENT "Signing MyApp with get-task-allow entitlement"
+       )
+     endif()
+
 
 endif()
 
