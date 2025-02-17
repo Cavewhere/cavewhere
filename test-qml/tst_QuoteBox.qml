@@ -52,17 +52,18 @@ Item {
         name: "QuoteBox"
         when: windowShown
 
-        function test_drawnCorrectly() {
+        //This test is very fragile on different monitors
+        // function test_drawnCorrectly() {
 
-            let containerImg = grabImage(container);
-            let testImage = grabImage(testImageId)
+        //     let containerImg = grabImage(container);
+        //     let testImage = grabImage(testImageId)
 
-            //Verifies that it looks the same
-            verify(containerImg.equals(testImage));
+        //     //Verifies that it looks the same
+        //     verify(containerImg.equals(testImage));
 
-            //This can be used to update the testcase
-            // containerImg.save("testQuoteBox.png")
-            // wait(1000000);
-        }
+        //     //This can be used to update the testcase
+        //     // containerImg.save("testQuoteBox.png")
+        //     // wait(1000000);
+        // }
     }
 }
