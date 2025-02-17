@@ -30,9 +30,6 @@
 //Async future
 #include "asyncfuture.h"
 
-//Profiling
-#include "MarkScope/Profiler.h"
-
 cwScrapManager::cwScrapManager(QObject *parent) :
     QObject(parent),
     LinePlotManager(nullptr),
