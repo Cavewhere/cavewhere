@@ -33,32 +33,56 @@ MainWindowTest {
             let availableColumns = ObjectFinder.findObjectByChain(mainWindow, "rootId->csvImporterPage->GroupBox->GroupBox->availableColumns");
             let usedColumns = ObjectFinder.findObjectByChain(mainWindow, "rootId->csvImporterPage->GroupBox->GroupBox->usedColumns");
 
+            let from = ObjectFinder.findObjectByChain(mainWindow, "rootId->csvImporterPage->GroupBox->GroupBox->usedColumns->columnNameDelegate_From")
+            let clino = ObjectFinder.findObjectByChain(mainWindow, "rootId->csvImporterPage->GroupBox->GroupBox->usedColumns->columnNameDelegate_Clino")
             let length = ObjectFinder.findObjectByChain(mainWindow, "rootId->csvImporterPage->GroupBox->GroupBox->usedColumns->columnNameDelegate_Length")
-            mouseDrag(length, 1, 5, -50, 0, Qt.LeftButton, Qt.NoModifier, 100)
+            let delta = length.mapToItem(from, 5, 5);
+            mouseDrag(length, 1, 5, -delta.x, -delta.y, Qt.LeftButton, Qt.NoModifier, 100)
             tryVerify(()=>{ return usedColumns.model.get(0).name === "Length" });
 
+            wait(100)
+
             let compassBack = ObjectFinder.findObjectByChain(mainWindow, "rootId->csvImporterPage->GroupBox->GroupBox->availableColumns->columnNameDelegate_Compass Backsight")
-            mouseDrag(compassBack, 1, 10, 38, 60, Qt.LeftButton, Qt.NoModifier, 50)
+            delta = compassBack.mapToItem(from, 5, -5);
+            mouseDrag(compassBack, 1, 10, -delta.x, -delta.y, Qt.LeftButton, Qt.NoModifier, 50)
             tryVerify(()=>{ return usedColumns.model.get(1).name === "Compass Backsight" });
 
+            wait(100)
+
             let clinoBack = ObjectFinder.findObjectByChain(mainWindow, "rootId->csvImporterPage->GroupBox->GroupBox->availableColumns->columnNameDelegate_Clino Backsight")
-            mouseDrag(clinoBack, 1, 10, 141, 60, Qt.LeftButton, Qt.NoModifier, 50)
+            delta = clinoBack.mapToItem(from, 5, -5);
+            mouseDrag(clinoBack, 1, 10, -delta.x, -delta.y, Qt.LeftButton, Qt.NoModifier, 50)
             tryVerify(()=>{ return usedColumns.model.get(2).name === "Clino Backsight" });
 
+            wait(100)
+
             let left = ObjectFinder.findObjectByChain(mainWindow, "rootId->csvImporterPage->GroupBox->GroupBox->availableColumns->columnNameDelegate_Left")
-            mouseDrag(left, 1, 10, 339, 60, Qt.LeftButton, Qt.NoModifier, 50)
+            delta = left.mapToItem(clino, -clino.width, -5);
+            mouseDrag(left, 1, 10, -delta.x, -delta.y, Qt.LeftButton, Qt.NoModifier, 50)
             tryVerify(()=>{ return usedColumns.model.get(7).name === "Left" });
 
+            wait(100)
+
+            left = ObjectFinder.findObjectByChain(mainWindow, "rootId->csvImporterPage->GroupBox->GroupBox->usedColumns->columnNameDelegate_Left")
             let right = ObjectFinder.findObjectByChain(mainWindow, "rootId->csvImporterPage->GroupBox->GroupBox->availableColumns->columnNameDelegate_Right")
-            mouseDrag(right, 1, 10, 368, 60, Qt.LeftButton, Qt.NoModifier, 50)
+            delta = right.mapToItem(left, -left.width, -5);
+            mouseDrag(right, 1, 10, -delta.x, -delta.y, Qt.LeftButton, Qt.NoModifier, 50)
             tryVerify(()=>{ return usedColumns.model.get(8).name === "Right" });
 
+            wait(100)
+
+            right = ObjectFinder.findObjectByChain(mainWindow, "rootId->csvImporterPage->GroupBox->GroupBox->usedColumns->columnNameDelegate_Right")
             let up = ObjectFinder.findObjectByChain(mainWindow, "rootId->csvImporterPage->GroupBox->GroupBox->availableColumns->columnNameDelegate_Up")
-            mouseDrag(up, 1, 10, 399, 60, Qt.LeftButton, Qt.NoModifier, 50)
+            delta = up.mapToItem(right, -right.width, -5);
+            mouseDrag(up, 1, 10, -delta.x, -delta.y, Qt.LeftButton, Qt.NoModifier, 50)
             tryVerify(()=>{ return usedColumns.model.get(9).name === "Up" });
 
+            wait(100)
+
+            up = ObjectFinder.findObjectByChain(mainWindow, "rootId->csvImporterPage->GroupBox->GroupBox->usedColumns->columnNameDelegate_Up")
             let down = ObjectFinder.findObjectByChain(mainWindow, "rootId->csvImporterPage->GroupBox->GroupBox->availableColumns->columnNameDelegate_Down")
-            mouseDrag(down, 1, 10, 420, 60, Qt.LeftButton, Qt.NoModifier, 50)
+            delta = down.mapToItem(up, -up.width - 3, -5);
+            mouseDrag(down, 1, 10, -delta.x, -delta.y, Qt.LeftButton, Qt.NoModifier, 50)
             tryVerify(()=>{ return usedColumns.model.get(10).name === "Down" });
 
             compare(availableColumns.model.count, 1);
