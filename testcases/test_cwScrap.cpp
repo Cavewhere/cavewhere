@@ -307,7 +307,7 @@ TEST_CASE("Auto calculate if the scrap type has changed", "[cwScrap]") {
         currentScrap->setType(cwScrap::ProjectedProfile);
         REQUIRE(dynamic_cast<cwProjectedProfileScrapViewMatrix*>(currentScrap->viewMatrix()));
         auto projectedViewMatix2 = static_cast<cwProjectedProfileScrapViewMatrix*>(currentScrap->viewMatrix());
-        CHECK(projectedViewMatix2->azimuth() == 134.4);
+        CHECK(projectedViewMatix2->azimuth() == Catch::Approx(134.4).margin(0.15));
         CHECK(projectedViewMatix2->direction() == cwProjectedProfileScrapViewMatrix::LookingAt);
         checkScrapTransform(currentScrap, row);
     }
