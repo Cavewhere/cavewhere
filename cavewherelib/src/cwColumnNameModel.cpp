@@ -98,7 +98,7 @@ void cwColumnNameModel::clear()
 
 cwColumnName cwColumnNameModel::get(int index) const
 {
-    if(index < 0 && index >= m_columnNames.size()) {
+    if(index < 0 || index >= m_columnNames.size()) {
         return cwColumnName();
     }
 
