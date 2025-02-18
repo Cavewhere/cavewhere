@@ -21,7 +21,7 @@ StandardPage {
         Text {
             Layout.alignment: Qt.AlignHCenter
             text: {
-                return "Copyright 2024 Philip Schuchardt"
+                return "Copyright 2025 Philip Schuchardt"
             }
         }
     }
