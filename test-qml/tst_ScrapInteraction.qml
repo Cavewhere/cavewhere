@@ -127,9 +127,8 @@ MainWindowTest {
             //Add a new station
             mouseClick(imageId, 509, 630);
 
-            wait(100);
-
             //Double click on the stations text
+            tryVerify(() => { return ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->stationA3->coreTextInput") !== null; })
             let a4Station = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->stationA3->coreTextInput")
 
             // mouseDoubleClickSequence(a4Station)

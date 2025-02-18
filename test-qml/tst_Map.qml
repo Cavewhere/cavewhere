@@ -7,7 +7,7 @@ import QmlTestRecorder
 MainWindowTest {
     id: rootId
 
-    TestCase {
+    CWTestCase {
         name: "Map"
         when: windowShown
 
@@ -24,16 +24,6 @@ MainWindowTest {
             let paperComboBox_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->mapOptions->GroupBox->paperComboBox")
             let customPaperIndex = paperComboBox_obj1.find("Letter")
             paperComboBox_obj1.currentIndex = customPaperIndex
-        }
-
-        function tryFuzzyCompare(actual, expected, delta, message = "") {
-            let err = new Error();
-            let extraMessage = "actual:" + actual + " expected:" + expected + " ActualDelta:" + Math.abs(actual - expected) + " ExpectedDelta:" + delta
-            tryVerify(() => {
-                           return Math.abs(actual - expected) <= delta;
-                      },
-                      5000,
-                      message + "\nCompare:" + extraMessage + "\nat:" + err.stack);
         }
 
         function setupExport() {

@@ -7,7 +7,7 @@ import QmlTestRecorder
 MainWindowTest {
     id: rootId
 
-    TestCase {
+    CWTestCase {
         name: "NoteScaleInteraction"
         when: windowShown
 
@@ -61,10 +61,8 @@ MainWindowTest {
             let done_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteScaleInteraction->doneButton->label")
             mouseClick(done_obj1)
 
-            wait(100);
-
             //Make sure the scale updates correctly
-            fuzzyCompare(1.0 / scrap.noteTransformation.scale, 567.4924, 0.001, `1.0 / ${scrap.noteTransformation.scale} === 567.4924`);
+            tryFuzzyCompare(1.0 / scrap.noteTransformation.scale, 567.4924, 0.001, `1.0 / ${scrap.noteTransformation.scale} === 567.4924`);
         }
     }
 }
