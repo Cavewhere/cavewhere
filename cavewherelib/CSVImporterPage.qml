@@ -8,10 +8,13 @@ import cavewherelib
 
 ScrollViewPage {
     id: pageId
+    objectName: "csvImporterPage"
+
     property int defaultMinWidth: 600
 
     CSVImporterManager {
         id: csvManagerId
+        objectName: "csvManager"
         property int maxPreviewLines: 20
         previewLines: maxPreviewLines
     }
@@ -32,7 +35,7 @@ ScrollViewPage {
     ColumnLayout {
 
         RowLayout {
-            Button {
+            QC.Button {
                 text: "Open"
                 onClicked: openCSVFileDialogId.open()
             }
@@ -52,30 +55,34 @@ ScrollViewPage {
 
             QC.GroupBox {
 
-                label: RowLayout {
-                    QQ.Image {
-                        source: "qrc:/icons/svg/dragAndDrop.svg"
-                        sourceSize: Qt.size(50, 50)
-                    }
-
-                    Text {
-                        text: "<b>Drag and drop</b> columns to add and remove them"
-                    }
-                }
-
                 ColumnLayout {
+
+                    RowLayout {
+                        QQ.Image {
+                            source: "qrc:/icons/svg/dragAndDrop.svg"
+                            sourceSize: Qt.size(24, 24)
+                        }
+
+                        Text {
+                            text: "<b>Drag and drop</b> columns to add and remove them"
+                        }
+                    }
+
+
+
                     QC.GroupBox {
                         title: "Available Columns"
 
                         ColumnNameView {
                             id: availableColumnViewId
+                            objectName: "availableColumns"
                             model: csvManagerId.availableColumnsModel
                             Layout.minimumWidth: pageId.defaultMinWidth
 
                             //Custom drop function for model manipulation that prevents the skip column
                             //from being removed
                             moveFunction: function(model, oldModel, index, indexOffset, oldIndex) {
-                                var value = oldModel.get(oldIndex);
+                                let value = oldModel.get(oldIndex);
 
                                 //Remove columns that aren't skip column
                                 oldModel.remove(oldIndex);
@@ -92,10 +99,11 @@ ScrollViewPage {
                         title: "Used Columns"
 
                         ColumnNameView {
+                            objectName: "usedColumns"
                             model: csvManagerId.columnsModel
                             Layout.minimumWidth: availableColumnViewId.Layout.minimumWidth
                             moveFunction: function(model, oldModel, index, indexOffset, oldIndex) {
-                                var value = oldModel.get(oldIndex);
+                                let value = oldModel.get(oldIndex);
                                 if(value.columnId !== csvManagerId.skipColumnId || oldModel === model) {
                                     //Only add columns that aren't skip columns since multiple columns can be skipped
                                     oldModel.remove(oldIndex);
@@ -104,6 +112,8 @@ ScrollViewPage {
                                 model.insert(index, value);
                             }
                         }
+
+
                     }
                 }
             }
@@ -145,7 +155,7 @@ ScrollViewPage {
 
                     unitModel: lengthId.unitNames
                     unit: csvManagerId.distanceUnit
-                    onNewUnit: {
+                    onNewUnit: (unit) => {
                         csvManagerId.distanceUnit = unit
                     }
                 }
@@ -194,13 +204,14 @@ ScrollViewPage {
                         spacing: 0
 
                         QQ.ListView {
+                            id: csvTextListViewId
                             implicitWidth: 75
                             implicitHeight: csvTextAreaId.implicitHeight
                             model: csvTextAreaId.lineCount
                             delegate: Text {
                                 property int index;
 
-                                anchors.horizontalCenter: parent.horizontalCenter
+                                // anchors.horizontalCenter: csvTextListViewId.horizontalCenter
                                 font.family: csvTextAreaId.font.family
                                 font.pixelSize: csvTextAreaId.font.pixelSize
                                 text: index + 1
@@ -217,7 +228,7 @@ ScrollViewPage {
                         QC.TextArea {
                             id: csvTextAreaId
                             text: csvManagerId.previewText
-                            font.family: "Courier"
+                            font.family: "Courier Prime"
                             leftPadding: 0
                             topPadding: 0
                         }
@@ -239,6 +250,10 @@ ScrollViewPage {
                         QQ.TableView {
                             model: csvManagerId.lineModel
                             anchors.fill: parent
+
+                            columnSpacing: -1
+                            rowSpacing: -1
+
                             delegate: QQ.Rectangle {
                                 id: delegateId
                                 required property string displayRole
@@ -257,7 +272,7 @@ ScrollViewPage {
                         }
                     }
 
-                    Button {
+                    QC.Button {
                         id: showAllButtonId
                         anchors.right: previewScrollViewId.right
                         anchors.rightMargin: previewScrollViewId.resizeHandleSize.width + 5
@@ -265,7 +280,7 @@ ScrollViewPage {
 
                         states: [
                             QQ.State {
-                                when: csvManagerId.previewLines == CSVImporterManager.AllLines
+                                when: csvManagerId.previewLines === CSVImporterManager.AllLines
                                 QQ.PropertyChanges {
                                     showAllButtonId {
                                         text: "Less"
@@ -298,7 +313,7 @@ ScrollViewPage {
                 title: "Status"
                 ColumnLayout {
                     RowLayout {
-                        visible: csvManagerId.errorModel.errors.count == 0
+                        visible: csvManagerId.errorModel.errors.count === 0
                         QQ.Image {
                             source: "qrc:icons/good.png"
                         }
@@ -312,6 +327,7 @@ ScrollViewPage {
                         RowLayout {
                             QQ.Image {
                                 source: "qrc:icons/svg/stopSignError.svg"
+                                sourceSize: Qt.size(20, 20)
                             }
                             Text {
                                 text: csvManagerId.errorModel.fatalCount + " errors"
@@ -321,6 +337,7 @@ ScrollViewPage {
 
                             QQ.Image {
                                 source: "qrc:icons/svg/warning.svg"
+                                sourceSize: Qt.size(20, 20)
                             }
                             Text {
                                 text: csvManagerId.errorModel.warningCount + " warnings"
@@ -341,8 +358,9 @@ ScrollViewPage {
             BreakLine {}
 
             QC.Button {
+                objectName: "import"
                 text: "Import"
-                enabled: csvManagerId.errorModel.fatalCount == 0
+                enabled: csvManagerId.errorModel.fatalCount === 0
                 onClicked: {
                     //Add the caves
                     RootData.region.addCaves(csvManagerId.caves);
@@ -353,6 +371,12 @@ ScrollViewPage {
 
                 font.bold: true
             }
+
+            QQ.Item {
+                implicitHeight: 10
+            }
+
+
         }
     }
 }

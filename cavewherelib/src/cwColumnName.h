@@ -4,6 +4,7 @@
 //Qt includes
 #include <QSharedDataPointer>
 #include <QObject>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwGlobals.h"
@@ -13,6 +14,7 @@ class cwColumnNameData;
 class CAVEWHERE_LIB_EXPORT cwColumnName
 {
     Q_GADGET
+    QML_VALUE_TYPE(cwColumnName)
 
     Q_PROPERTY(QString name READ name WRITE setName)
     Q_PROPERTY(int columnId READ columnId WRITE setColumnId)

@@ -3,6 +3,8 @@ import cavewherelib
 
 QQ.Item {
     id: delegateId
+    objectName: "columnNameDelegate_" + name
+
     property point beginDrag
     property double spacing: 5
     property double dropWidth: 0

@@ -17,6 +17,8 @@ import QtQuick.Layouts
 StandardPage {
     id: pageId
 
+    objectName: "dataMainPage"
+
     function cavePageName(cave) {
         return "Cave=" + cave.name;
     }
@@ -79,6 +81,8 @@ StandardPage {
 
                 component CaveDelegate: QQ.Item {
                     id: delegateId
+                    objectName: "caveDelegate" + index
+
                     required property Cave caveObjectRole;
                     required property int index
 
@@ -120,6 +124,7 @@ StandardPage {
                         }
 
                         UnitValueInput {
+                            objectName: "length"
                             unitValue: delegateId.caveObjectRole.length
                             unitModel: UnitDefaults.lengthModel
                             valueReadOnly: true
@@ -130,6 +135,7 @@ StandardPage {
                         }
 
                         UnitValueInput {
+                            objectName: "depth"
                             unitValue: delegateId.caveObjectRole.depth
                             unitModel: UnitDefaults.depthModel
                             valueReadOnly: true

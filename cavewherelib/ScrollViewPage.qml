@@ -10,6 +10,11 @@ QQ.Rectangle {
         anchors.fill: parent
         clip: true
 
+        // This need to be defined so we can access it in qml test
+        ScrollBar.vertical: ScrollBar {
+            objectName: "verticalScrollBar"
+        }
+
         QQ.Item {
             id: itemId
             x: 10

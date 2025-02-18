@@ -199,6 +199,8 @@ QQ.Item {
         Controls.Button {
             id: importButton
 
+            objectName: "importButton"
+
             text: "Import"
             visible: false
 
@@ -234,6 +236,7 @@ QQ.Item {
 
                 Controls.MenuItem {
                     text: "CSV (.csv)"
+                    objectName: "csvMenuItem"
                     onTriggered: {
                         var oldImportExport = iconBar.page.childPage("CSV Import");
                         if(oldImportExport !== RootData.pageSelectionModel.currentPage) {

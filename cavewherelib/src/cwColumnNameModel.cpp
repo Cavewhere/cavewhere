@@ -3,7 +3,8 @@
 cwColumnNameModel::cwColumnNameModel(QObject* parent) :
     QAbstractListModel(parent)
 {
-
+    connect(this, &cwColumnNameModel::rowsInserted, this, &cwColumnNameModel::countChanged);
+    connect(this, &cwColumnNameModel::rowsRemoved, this, &cwColumnNameModel::countChanged);
 }
 
 int cwColumnNameModel::rowCount(const QModelIndex &parent) const
@@ -93,4 +94,18 @@ void cwColumnNameModel::clear()
     beginResetModel();
     m_columnNames.clear();
     endResetModel();
+}
+
+cwColumnName cwColumnNameModel::get(int index) const
+{
+    if(index < 0 && index >= m_columnNames.size()) {
+        return cwColumnName();
+    }
+
+    return m_columnNames.at(index);
+}
+
+int cwColumnNameModel::count() const
+{
+    return rowCount();
 }

@@ -154,6 +154,7 @@ void cwGlobals::loadFonts()
     while (it.hasNext()) {
         QString fontPath = it.next();
         int fontId = QFontDatabase::addApplicationFont(fontPath);
+        // qDebug() << "FontFamily:" << QFontDatabase::applicationFontFamilies(fontId);
         if(fontId == -1) {
             qWarning() << "Failed to load font:" << fontPath << LOCATION;
         }

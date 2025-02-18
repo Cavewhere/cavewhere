@@ -5,7 +5,7 @@ QQ.Item {
     id: rootItem
     default property alias scrollBarData: scrollViewId.contentData
     property size minimumSize: Qt.size(200, 100)
-    property size resizeHandleSize: Qt.size(30, 30);
+    property size resizeHandleSize: Qt.size(15, 15);
 
     ScrollView {
         id: scrollViewId

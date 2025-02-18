@@ -8,5 +8,9 @@
         <file>Vera.ttf</file>
         <file>Vera-Italic.ttf</file>
         <file>Vera-Bold.ttf</file>
+        <file>CourierPrime-Regular.ttf</file>
+        <file>CourierPrime-Italic.ttf</file>
+        <file>CourierPrime-BoldItalic.ttf</file>
+        <file>CourierPrime-Bold.ttf</file>
     </qresource>
 </RCC>

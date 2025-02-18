@@ -14,9 +14,9 @@ QQ.ListView {
         required property int index
         required property string message
 
-        anchors.left: parent.left
-        anchors.right: parent.right
-        implicitHeight: rowLayoutId.height
+        anchors.left: parent ? parent.left : undefined
+        anchors.right: parent ? parent.right : undefined
+        implicitHeight: rowLayoutId.height + 10
 
         color: index % 2 ? "lightgray" : "white"
 
@@ -27,6 +27,7 @@ QQ.ListView {
             anchors.right: parent.right
             anchors.leftMargin: 10
             anchors.rightMargin: 10
+            anchors.verticalCenter: parent.verticalCenter
 
             QQ.Image {
                 sourceSize: Qt.size(16, 16)
@@ -43,8 +44,9 @@ QQ.ListView {
                 }
             }
 
-            TextArea {
+            QQ.TextEdit {
                 Layout.fillWidth: true
+                // background: QQ.Item {}
                 text: delegateId.message
                 readOnly: true
                 selectByMouse: true

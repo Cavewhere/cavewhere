@@ -11,7 +11,7 @@ import QtQuick.Layouts
 QQ.Item {
     Layout.fillWidth: true
 
-    height: 20
+    implicitHeight: 20
 
     QQ.Rectangle {
         anchors.left: parent.left

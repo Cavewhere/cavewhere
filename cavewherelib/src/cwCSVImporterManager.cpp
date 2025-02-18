@@ -50,7 +50,7 @@ cwCSVImporterManager::cwCSVImporterManager(QObject* parent) :
 
 cwCSVImporterManager::~cwCSVImporterManager()
 {
-
+    waitToFinish();
 }
 
 /**
@@ -137,7 +137,7 @@ QList<cwCave *> cwCSVImporterManager::caves() const
  */
 void cwCSVImporterManager::deleteOldCaves()
 {
-    for(auto cave : LastCaves) {
+    for(auto cave : std::as_const(LastCaves)) {
         if(cave->parent() == this) {
             cave->deleteLater();
         }
@@ -174,7 +174,7 @@ void cwCSVImporterManager::startParsing()
         deleteOldCaves();
 
         LastCaves = output->takeCaves();
-        for(auto cave : LastCaves) {
+        for(auto cave : std::as_const(LastCaves)) {
             cave->moveToThread(thread());
             cave->setParent(this);
         }

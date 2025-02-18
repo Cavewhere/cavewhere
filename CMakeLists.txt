@@ -139,6 +139,15 @@ file(GLOB cavewhere_qml_test_qrc_FILES "test-qml/*.qrc")
 qt_add_resources(cavewhere_qml_test_QT_RESOURCES ${cavewhere_qml_test_qrc_FILES})
 target_sources(cavewhere-qml-test PRIVATE ${cavewhere_qml_test_QT_RESOURCES})
 
+# Make the remaining QML files relative to the project directory
+file(GLOB cavewhere_qmltest_QML_FILES "test-qml/*.qml")
+set(cavewhere_qmltest_RELATIVE_QML_FILES "")
+foreach(file ${cavewhere_qmltest_QML_FILES})
+    file(RELATIVE_PATH relFile "${CMAKE_CURRENT_SOURCE_DIR}" "${file}")
+    message(STATUS "Adding QML file: ${relFile}")
+    list(APPEND cavewhere_qmltest_RELATIVE_QML_FILES "${relFile}")
+endforeach()
+
 qt_add_qml_module(cavewhere_simplemodule
     URI cw.Simple
     VERSION 1.0
@@ -154,7 +163,7 @@ qt_add_qml_module(cavewhere_simplemodule
 qt_add_resources(cavewhere-qml-test "test-qmls"
     PREFIX "/test-qmls"
     FILES
-    test-qml/tst_Simple.qml)
+    ${cavewhere_qmltest_RELATIVE_QML_FILES})
 
 target_compile_definitions(cavewhere-qml-test PRIVATE QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test-qml")
 
