@@ -47,7 +47,7 @@ if(WIN32)
     set(PLUGIN_DIR $<TARGET_FILE_DIR:cavewherelibplugin>)
     SET(cavewherelib_FILES_TO_COPY
         "${PLUGIN_DIR}/qmldir"
-        "${PLUGIN_DIR}/cavewherelib.qmltypes"fp
+        "${PLUGIN_DIR}/cavewherelib.qmltypes"
         "${PLUGIN_DIR}/Theme.js"
         "${PLUGIN_DIR}/Utils.js"
         "${PLUGIN_DIR}/VectorMath.js"
