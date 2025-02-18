@@ -74,7 +74,7 @@ public:
     void addFutures(QVector<QFuture<void>> futures);
 
     static int maxThreadCount();
-    static QThreadPool* threadPool();
+    static QThreadPool* threadPool() { return ThreadPool; }
     static void initilizeThreadPool();
 
 public slots:

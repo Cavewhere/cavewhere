@@ -129,9 +129,6 @@ int main(int argc, char *argv[])
 
     cwApplication a(argc, argv);
 
-    //Setup the concurrance
-    cwConcurrent::startThreadPool();
-
     //Load all the fonts
     cwGlobals::loadFonts();
 

@@ -55,8 +55,6 @@ int main(int argc, char **argv) \
     //This allows use to create a QGraphicsScene, without QApplication, this crashes
     QApplication app(argc, argv);
 
-    cwConcurrent::startThreadPool();
-
     cwGlobals::loadFonts();
 
     QSurfaceFormat format;

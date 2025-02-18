@@ -392,10 +392,7 @@ int cwTask::maxThreadCount()
     return threadPool()->maxThreadCount();
 }
 
-QThreadPool *cwTask::threadPool()
-{
-    return ThreadPool;
-}
+
 
 void cwTask::initilizeThreadPool()
 {

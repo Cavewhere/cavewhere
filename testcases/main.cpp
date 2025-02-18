@@ -31,8 +31,6 @@ int main( int argc, char* argv[] )
   QApplication::setApplicationName("cavewhere-test");
   QApplication::setApplicationVersion("1.0");
 
-  cwConcurrent::startThreadPool();
-
   {
       QSettings settings;
       settings.clear();
