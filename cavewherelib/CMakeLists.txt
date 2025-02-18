@@ -55,10 +55,13 @@ target_link_libraries(cavewherelib
 )
 
 # Conditionally find the package and include directories
-if(WITH_PDF)
-    find_package(Qt6 COMPONENTS Pdf REQUIRED)
-    target_link_libraries(cavewherelib PRIVATE Qt::Pdf)
-    target_compile_definitions(cavewherelib PRIVATE "WITH_PDF_SUPPORT")
+find_package(Qt6 COMPONENTS Pdf QUIET)
+if(TARGET Qt6::Pdf)
+    message(STATUS "Qt Pdf supported")
+    target_link_libraries(cavewherelib PRIVATE Qt6::Pdf)
+    target_compile_definitions(cavewherelib PRIVATE WITH_PDF_SUPPORT)
+else()
+    message(STATUS "Qt Pdf not supported")
 endif()
 
 qt_add_resources(QT_RESOURCES

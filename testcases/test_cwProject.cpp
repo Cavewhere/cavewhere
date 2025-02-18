@@ -307,18 +307,15 @@ TEST_CASE("cwProject should add PDF correctly", "[cwProject]") {
         for(auto row : rows) {
             cwPDFSettings::instance()->setResolutionImport(row.resolutionPPI);
 
-            int checked = 0;
-
-            project->addImages(filenames, [&checked, row](QList<cwImage> images){
-                REQUIRE(images.size() == 1);
+            project->addImages(filenames, [row](QList<cwImage> images){
+                REQUIRE(images.size() == 2);
                 CHECK(images.at(0).isOriginalValid());
                 CHECK(images.at(0).isIconValid());
                 CHECK(row.pageSizes.contains(images.at(0).originalSize()));
-                checked++;
+                CHECK(row.pageSizes.contains(images.at(1).originalSize()));
             });
 
             rootData->futureManagerModel()->waitForFinished();
-            CHECK(checked == row.pageSizes.size());
         }
     }
 }

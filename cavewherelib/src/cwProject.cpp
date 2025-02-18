@@ -546,9 +546,11 @@ void cwProject::addImages(QList<QUrl> noteImagePaths,
                           std::function<void (QList<cwImage>)> outputCallBackFunc)
 {
     auto isPDF = [](const QString& path) {
-        QFileInfo info(path);
-        bool pdfExtention = info.completeSuffix().compare("pdf", Qt::CaseInsensitive) == 0;
-        return pdfExtention && cwPDFConverter::isSupported();
+        if(cwPDFConverter::isSupported()) {
+            QFileInfo info(path);
+            bool pdfExtention = info.suffix().compare("pdf", Qt::CaseInsensitive) == 0;
+            return pdfExtention;
+        }
     };
 
     //Sort by images and pdf, pdf's last, but heemp the same image order
