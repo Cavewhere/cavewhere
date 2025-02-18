@@ -347,35 +347,38 @@ if(APPLE)
     add_dependencies(CaveWhere messageFiles) #Makes sure the message files get copied to bundle correctly
 
 
-    # Query the available code signing identities.
-    execute_process(
-      COMMAND security find-identity -v -p codesigning
-      OUTPUT_VARIABLE IDENTITY_OUTPUT
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    message(STATUS "Available code signing identities:\n${IDENTITY_OUTPUT}")
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+        ## This allows for profiling to work correctly for macos
+        # Query the available code signing identities.
+        execute_process(
+          COMMAND security find-identity -v -p codesigning
+          OUTPUT_VARIABLE IDENTITY_OUTPUT
+          OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+        message(STATUS "Available code signing identities:\n${IDENTITY_OUTPUT}")
 
-    # Match the first identity's hash.
-     # Expected output line example:
-     #   1) ABCDEF1234567890 "Apple Development: John Doe (TEAMID)"
-     # This regex captures the hash (the first token after the index).
-     string(REGEX MATCH "[0-9]+\\) ([A-F0-9]+) \"[^\"]+\"" dummy "${IDENTITY_OUTPUT}")
-     set(CODESIGN_IDENTITY "${CMAKE_MATCH_1}")
+        # Match the first identity's hash.
+         # Expected output line example:
+         #   1) ABCDEF1234567890 "Apple Development: John Doe (TEAMID)"
+         # This regex captures the hash (the first token after the index).
+         string(REGEX MATCH "[0-9]+\\) ([A-F0-9]+) \"[^\"]+\"" dummy "${IDENTITY_OUTPUT}")
+         set(CODESIGN_IDENTITY "${CMAKE_MATCH_1}")
 
-     if(NOT CODESIGN_IDENTITY)
-       message(WARNING "No valid code signing identity found!")
-     else()
-       # Prefix with "0x" so codesign recognizes it as a certificate hash.
-       # set(CODESIGN_IDENTITY "0x${CODESIGN_KEY}")
-       message(STATUS "Using code signing identity: ${CODESIGN_IDENTITY}")
-       add_custom_command(TARGET CaveWhere POST_BUILD
-         COMMAND codesign --force --sign "${CODESIGN_IDENTITY}"
-                 --entitlements "${CMAKE_SOURCE_DIR}/entitlements.plist"
-                 "$<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/.."
-         COMMENT "Signing MyApp with get-task-allow entitlement"
-       )
-     endif()
+        if(NOT CODESIGN_IDENTITY)
+           message(WARNING "No valid code signing identity found!")
+        else()
+           # Prefix with "0x" so codesign recognizes it as a certificate hash.
+           # set(CODESIGN_IDENTITY "0x${CODESIGN_KEY}")
+           message(STATUS "Using code signing identity: ${CODESIGN_IDENTITY}")
+           add_custom_command(TARGET CaveWhere POST_BUILD
+             COMMAND codesign --force --deep --sign "${CODESIGN_IDENTITY}"
+                     --entitlements "${CMAKE_SOURCE_DIR}/entitlements.plist"
+                     "$<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/.."
+             COMMENT "Signing MyApp with get-task-allow entitlement"
+           )
+        endif()
 
+    endif()
 
 endif()
 
