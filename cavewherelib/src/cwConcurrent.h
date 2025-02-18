@@ -5,8 +5,9 @@
 #include <QtConcurrent>
 #include <QCoreApplication>
 #include <QThreadPool>
+#include "CaveWhereLibExport.h"
 
-class cwConcurrent
+class CAVEWHERE_LIB_EXPORT cwConcurrent
 {
 public:
     cwConcurrent() = delete;
