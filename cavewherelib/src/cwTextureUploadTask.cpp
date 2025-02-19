@@ -43,8 +43,6 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
         //     return results;
         // }
 
-        // QThread::msleep(10000);
-
         cwImageProvider imageProvidor;
         imageProvidor.setProjectPath(projectFile);
 
