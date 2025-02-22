@@ -113,7 +113,7 @@ QQ.Item {
                         nameFilters: ["Compass (*.dat)"]
                         fileMode: FileDialog.OpenFile
                         onAccepted: {
-                            RootData.lastDirectory = selectedFiles
+                            RootData.lastDirectory = selectedFile
                             RootData.surveyImportManager.importCompassDataFile(selectedFiles);
                         }
                     }
