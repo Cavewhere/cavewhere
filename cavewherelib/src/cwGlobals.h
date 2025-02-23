@@ -40,7 +40,7 @@ public:
 
 namespace cw {
 
-template<typename T, typename _Fn, typename R = typename std::result_of<_Fn&(T)>::type>
+template<typename T, typename _Fn, typename R = std::invoke_result_t<_Fn&, T>>
 static QList<R> transform(const QList<T>& list, _Fn func) {
     QList<R> returnList;
     returnList.reserve(list.size());

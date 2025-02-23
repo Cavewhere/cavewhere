@@ -977,8 +977,8 @@ QVector3D cwTriangulateTask::morphPoint(const QList<cwTriangulateStation> &visib
     foreach(cwTriangulateStation station, visibleStations) {
 
         //Setup the transformation
-        QVector3D stationOnNote = toWorldCoords * QVector3D(station.notePosition()); //In view coordinates
-        QVector3D stationPos = viewMatrix * station.position(); //In view coordianets
+        QVector3D stationOnNote = toWorldCoords.map(QVector3D(station.notePosition())); //In view coordinates
+        QVector3D stationPos = viewMatrix.map(station.position()); //In view coordianets
 
         QMatrix4x4 offsetToFirstStation;
         offsetToFirstStation.translate(-stationOnNote);
@@ -1002,7 +1002,7 @@ QVector3D cwTriangulateTask::morphPoint(const QList<cwTriangulateStation> &visib
     }
 
     //Put the weighted position in world coordinates
-    weightPosition = viewMatrix.inverted() * weightPosition;
+    weightPosition = viewMatrix.inverted().map(weightPosition);
 
     return weightPosition;
 }

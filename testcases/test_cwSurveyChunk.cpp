@@ -28,7 +28,7 @@ std::ostream& operator << ( std::ostream& os, QMap<int, cwTripCalibration*> cons
     os << "QMap<int, cwTripCalibration*>:[";
     for(auto iter = value.begin(); iter != value.end(); ++iter) {
         os << iter.key() << ":" << iter.value();
-        if(iter + 1 != value.end()) {
+        if(std::next(iter, 1) != value.end()) {
             os << ", ";
         }
     }

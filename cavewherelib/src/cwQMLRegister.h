@@ -24,12 +24,14 @@ public:
     // static void registerQML();
 };
 
+// typedef QList<cwCave*> CaveList;
+
 class CaveListRegistration
 {
     Q_GADGET
     QML_FOREIGN(QList<cwCave*>)
     QML_ANONYMOUS
-    // QML_SEQUENTIAL_CONTAINER(cwCave*)
+    QML_SEQUENTIAL_CONTAINER(cwCave*)
 };
 
 class cwGraphicsScene : public QGraphicsScene {

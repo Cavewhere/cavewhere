@@ -39,17 +39,17 @@ TEST_CASE("cwProjectedProfileScrapViewMatrix should create the matrix correctly"
 
     INFO("North"); //Looking North
     CHECK(view.data()->absoluteAzimuth() == 0.0);
-    fuzzyCompareVector(view.matrix() * QVector3D(0.0, 0.0, -1.0), QVector3D(0.0, -1.0, 0.0));
-    fuzzyCompareVector(view.matrix() * QVector3D(1.0, 0.0, 0.0), QVector3D(1.0, 0.0, 0.0));
-    fuzzyCompareVector(view.matrix() * QVector3D(0.0, 1.0, 0.0), QVector3D(0.0, 0.0, -1.0));
+    fuzzyCompareVector(view.matrix().map(QVector3D(0.0, 0.0, -1.0)), QVector3D(0.0, -1.0, 0.0));
+    fuzzyCompareVector(view.matrix().map(QVector3D(1.0, 0.0, 0.0)), QVector3D(1.0, 0.0, 0.0));
+    fuzzyCompareVector(view.matrix().map(QVector3D(0.0, 1.0, 0.0)), QVector3D(0.0, 0.0, -1.0));
     spyChecker.checkSpies();
 
     INFO("East");
     view.setAzimuth(90); //Looking East
     CHECK(view.data()->absoluteAzimuth() == 90.0);
-    fuzzyCompareVector(view.matrix() * QVector3D(0.0, 0.0, -1.0), QVector3D(0.0, -1.0, 0.0));
-    fuzzyCompareVector(view.matrix() * QVector3D(1.0, 0.0, 0.0), QVector3D(0.0, 0.0, -1.0));
-    fuzzyCompareVector(view.matrix() * QVector3D(0.0, 1.0, 0.0), QVector3D(-1.0, 0.0, 0.0));
+    fuzzyCompareVector(view.matrix().map(QVector3D(0.0, 0.0, -1.0)), QVector3D(0.0, -1.0, 0.0));
+    fuzzyCompareVector(view.matrix().map(QVector3D(1.0, 0.0, 0.0)), QVector3D(0.0, 0.0, -1.0));
+    fuzzyCompareVector(view.matrix().map(QVector3D(0.0, 1.0, 0.0)), QVector3D(-1.0, 0.0, 0.0));
     spyChecker[&matrixChangedSpy]++;
     spyChecker[&azimuthChangedSpy]++;
     spyChecker.checkSpies();
@@ -57,9 +57,9 @@ TEST_CASE("cwProjectedProfileScrapViewMatrix should create the matrix correctly"
     INFO("South");
     view.setAzimuth(180); //Looking South
     CHECK(view.data()->absoluteAzimuth() == 180.0);
-    fuzzyCompareVector(view.matrix() * QVector3D(0.0, 0.0, -1.0), QVector3D(0.0, -1.0, 0.0));
-    fuzzyCompareVector(view.matrix() * QVector3D(1.0, 0.0, 0.0), QVector3D(-1.0, 0.0, 0.0));
-    fuzzyCompareVector(view.matrix() * QVector3D(0.0, 1.0, 0.0), QVector3D(0.0, 0.0, 1.0));
+    fuzzyCompareVector(view.matrix().map(QVector3D(0.0, 0.0, -1.0)), QVector3D(0.0, -1.0, 0.0));
+    fuzzyCompareVector(view.matrix().map(QVector3D(1.0, 0.0, 0.0)), QVector3D(-1.0, 0.0, 0.0));
+    fuzzyCompareVector(view.matrix().map(QVector3D(0.0, 1.0, 0.0)), QVector3D(0.0, 0.0, 1.0));
     spyChecker[&matrixChangedSpy]++;
     spyChecker[&azimuthChangedSpy]++;
     spyChecker.checkSpies();
@@ -67,9 +67,9 @@ TEST_CASE("cwProjectedProfileScrapViewMatrix should create the matrix correctly"
     INFO("West");
     view.setAzimuth(270); //Looking West
     CHECK(view.data()->absoluteAzimuth() == 270.0);
-    fuzzyCompareVector(view.matrix() * QVector3D(0.0, 0.0, -1.0), QVector3D(0.0, -1.0, 0.0));
-    fuzzyCompareVector(view.matrix() * QVector3D(1.0, 0.0, 0.0), QVector3D(0.0, 0.0, 1.0));
-    fuzzyCompareVector(view.matrix() * QVector3D(0.0, 1.0, 0.0), QVector3D(1.0, 0.0, 0.0));
+    fuzzyCompareVector(view.matrix().map(QVector3D(0.0, 0.0, -1.0)), QVector3D(0.0, -1.0, 0.0));
+    fuzzyCompareVector(view.matrix().map(QVector3D(1.0, 0.0, 0.0)), QVector3D(0.0, 0.0, 1.0));
+    fuzzyCompareVector(view.matrix().map(QVector3D(0.0, 1.0, 0.0)), QVector3D(1.0, 0.0, 0.0));
     spyChecker[&matrixChangedSpy]++;
     spyChecker[&azimuthChangedSpy]++;
     spyChecker.checkSpies();
@@ -85,9 +85,9 @@ TEST_CASE("cwProjectedProfileScrapViewMatrix should create the matrix correctly"
         view.setDirection(cwProjectedProfileScrapViewMatrix::RightToLeft);
         CHECK(view.azimuth() == 0.0);
         CHECK(view.data()->absoluteAzimuth() == 90.0);
-        fuzzyCompareVector(view.matrix() * QVector3D(0.0, 0.0, -1.0), QVector3D(0.0, -1.0, 0.0));
-        fuzzyCompareVector(view.matrix() * QVector3D(1.0, 0.0, 0.0), QVector3D(0.0, 0.0, -1.0));
-        fuzzyCompareVector(view.matrix() * QVector3D(0.0, 1.0, 0.0), QVector3D(-1.0, 0.0, 0.0));
+        fuzzyCompareVector(view.matrix().map(QVector3D(0.0, 0.0, -1.0)), QVector3D(0.0, -1.0, 0.0));
+        fuzzyCompareVector(view.matrix().map(QVector3D(1.0, 0.0, 0.0)), QVector3D(0.0, 0.0, -1.0));
+        fuzzyCompareVector(view.matrix().map(QVector3D(0.0, 1.0, 0.0)), QVector3D(-1.0, 0.0, 0.0));
         spyChecker[&matrixChangedSpy]++;
         spyChecker[&directionChangedSpy]++;
         spyChecker.checkSpies();
@@ -95,9 +95,9 @@ TEST_CASE("cwProjectedProfileScrapViewMatrix should create the matrix correctly"
         view.setDirection(cwProjectedProfileScrapViewMatrix::LeftToRight);
         CHECK(view.azimuth() == 0.0);
         CHECK(view.data()->absoluteAzimuth() == -90.0);
-        fuzzyCompareVector(view.matrix() * QVector3D(0.0, 0.0, -1.0), QVector3D(0.0, -1.0, 0.0));
-        fuzzyCompareVector(view.matrix() * QVector3D(1.0, 0.0, 0.0), QVector3D(0.0, 0.0, 1.0));
-        fuzzyCompareVector(view.matrix() * QVector3D(0.0, 1.0, 0.0), QVector3D(1.0, 0.0, 0.0));
+        fuzzyCompareVector(view.matrix().map(QVector3D(0.0, 0.0, -1.0)), QVector3D(0.0, -1.0, 0.0));
+        fuzzyCompareVector(view.matrix().map(QVector3D(1.0, 0.0, 0.0)), QVector3D(0.0, 0.0, 1.0));
+        fuzzyCompareVector(view.matrix().map(QVector3D(0.0, 1.0, 0.0)), QVector3D(1.0, 0.0, 0.0));
         spyChecker[&matrixChangedSpy]++;
         spyChecker[&directionChangedSpy]++;
         spyChecker.checkSpies();

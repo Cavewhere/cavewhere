@@ -626,8 +626,8 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
 
     //Scale the normalized points into pixels
     QMatrix4x4 matrix = parentNote()->metersOnPageMatrix();
-    station1NotePos = matrix * station1NotePos; //Now in meters
-    station2NotePos = matrix * station2NotePos;
+    station1NotePos = matrix.map(station1NotePos); //Now in meters
+    station2NotePos = matrix.map(station2NotePos);
 
     QVector3D realVector = station2RealPos - station1RealPos; //In meters
     QVector3D noteVector = station2NotePos - station1NotePos; //In meters on page
@@ -665,7 +665,7 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
       */
     auto runningProfileCalcTrasnformation = [&]()->ScrapShotTransform {
             QMatrix4x4 toNoteToWorldProfile = profileTransform.Mirror * profileTransform.Rotation;
-            QVector3D afterNoteVector = toNoteToWorldProfile * noteVector;
+            QVector3D afterNoteVector = toNoteToWorldProfile.map(noteVector);
 
             QMatrix4x4 toProfile = cwRunningProfileScrapViewMatrix::Data(station1RealPos, station2RealPos).matrix();
             QVector3D realProfileVector = toProfile.mapVector(realVector);
@@ -674,7 +674,7 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
             double clinoDotProduct = std::clamp((double)QVector3D::dotProduct(realProfileVector, afterNoteVector), -1.0, 1.0);
             double clinoDiff = acos(clinoDotProduct) * cwGlobals::radiansToDegrees();
 
-            QVector3D xAxis = profileTransform.Rotation * QVector3D(1.0, 0.0, 0.0);
+            QVector3D xAxis = profileTransform.Rotation.map(QVector3D(1.0, 0.0, 0.0));
 
             QQuaternion errorQuat = QQuaternion::fromAxisAndAngle(QVector3D(0.0, 0.0, 1.0), clinoDiff);
             QVector3D errorVector = errorQuat.rotatedVector(xAxis);
