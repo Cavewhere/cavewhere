@@ -37,10 +37,12 @@ if(WIN32)
     set(ROOT_FILES_TO_COPY
         "${BINARY_DIR}/${CAVEWHERE_NAME}${CMAKE_EXECUTABLE_SUFFIX}"
         "${BINARY_DIR}/cavewhere-test${CMAKE_EXECUTABLE_SUFFIX}"
-        "${BINARY_DIR}/cavewhere-qml-test${CMAKE_EXECUTABLE_SUFFIX}"
         "${BINARY_DIR}/cavewherelib${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        "${BINARY_DIR}/cavewhere-testlib${CMAKE_SHARED_LIBRARY_SUFFIX}"
         "${BINARY_DIR}/dewalls${CMAKE_SHARED_LIBRARY_SUFFIX}"
         "${BINARY_DIR}/QMath3d${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        "${BINARY_DIR}/QmlTestRecorder${CMAKE_SHARED_LIBRARY_SUFFIX}"
+
         #"${CONAN_BIN_DIRS_ZLIB}/zlib1.dll"
     )
 
