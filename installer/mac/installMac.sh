@@ -23,7 +23,7 @@ echo "code sign id:" $codesignid
 echo "team:" $team
 
 
-$macdeployqt_path CaveWhere.app -qmldir=cavewherelib #-sign-for-notarization=$email
+$macdeployqt_path CaveWhere.app -qmldir=cavewherelib -executable=CaveWhere.app/Contents/MacOS/cavewhere-test
 
 #Code sign the bundle
 find CaveWhere.app/Contents/Plugins -type f -name "*.dylib" -exec codesign --force --options runtime --deep --sign $codesignid {} \;

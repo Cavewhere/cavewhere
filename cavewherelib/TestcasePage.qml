@@ -1,4 +1,4 @@
-import QtQuick.Controls
+import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
 
@@ -44,7 +44,7 @@ StandardPage {
         RowLayout {
             Layout.fillWidth: true
 
-            TextField {
+            QC.TextField {
                 Layout.fillWidth: true
                 text: testcases.arguments
                 placeholderText: "Arguments. Type <b>--help</b> to get full list"
@@ -57,7 +57,7 @@ StandardPage {
                 }
             }
 
-            Button {
+            QC.Button {
                 id: runButton
                 text: {
                     switch(testcases.processState) {
@@ -102,22 +102,25 @@ StandardPage {
             }
         }
 
-        TextArea {
-            id: textArea
+        QC.ScrollView {
             Layout.fillHeight: true
             Layout.fillWidth: true
 
-            HelpBox {
-                anchors.centerIn: parent
-                visible: testcases.processState === TestcaseManager.Running &&
-                         textArea.text.length === 0
+            QC.TextArea {
+                id: textArea
+                Layout.fillHeight: true
+                Layout.fillWidth: true
+
+                HelpBox {
+                    anchors.centerIn: parent
+                    visible: testcases.processState === TestcaseManager.Running &&
+                             textArea.text.length === 0
 
 
-                text: "Testcases are running! Please wait, it will be a while."
+                    text: "Testcases are running! Please wait, it will be a while."
+                }
             }
         }
-
-
     }
 }
 
