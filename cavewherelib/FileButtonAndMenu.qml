@@ -35,7 +35,7 @@ MenuBar {
                 menuBarId.askToSaveDialog.afterSaveFunc = function() {
                     RootData.pageSelectionModel.clearHistory()
                     RootData.pageSelectionModel.gotoPageByName(null, "View")
-                    project.newProject();
+                    RootData.project.newProject();
                 }
                 menuBarId.askToSaveDialog.askToSave();
             }
