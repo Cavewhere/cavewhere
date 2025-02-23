@@ -37,12 +37,12 @@ StandardPage {
         }
     }
 
-
-
     ColumnLayout {
         anchors.fill: parent
+
         RowLayout {
             Layout.fillWidth: true
+            Layout.margins: 3
 
             QC.TextField {
                 Layout.fillWidth: true
