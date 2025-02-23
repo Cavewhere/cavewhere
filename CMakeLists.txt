@@ -161,6 +161,7 @@ target_link_libraries(cavewhere-qml-test
     Qt::Qml
     Qt::QuickTest
     cavewhere-testlib
+    cavewhere_simplemodule
     cavewherelib
 )
 
