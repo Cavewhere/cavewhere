@@ -92,25 +92,25 @@ void cwLeadView::addScrap(cwScrap *scrap)
     };
 
     auto updatePositions = [scrap, this, updatePosition, itemAt](int begin, int end) {
-        const auto& items = m_leadItems.value(scrap);
+        const auto& entry = m_leadItems.value(scrap);
         for(int i = begin; i <= end; i++) {
-            auto item = itemAt(items, i);
+            auto item = itemAt(entry.items, i);
             updatePosition(item, i);
         }
     };
 
     auto resetScrap = [this, scrap, updatePosition, itemAt]() {
-        auto& items = m_leadItems[scrap];
-        if(items.size() < scrap->numberOfLeads()) {
+        auto& entry = m_leadItems[scrap];
+        if(entry.items.size() < scrap->numberOfLeads()) {
             //Need to add new lead items
-        } else if(items.size() > scrap->numberOfLeads()) {
+        } else if(entry.items.size() > scrap->numberOfLeads()) {
             //Need to remove lead items
         }
-        Q_ASSERT(items.size() == scrap->numberOfLeads());
+        Q_ASSERT(entry.items.size() == scrap->numberOfLeads());
 
         for(int i = 0; i < scrap->numberOfLeads(); i++) {
             //Update data for the item
-            auto item = itemAt(items, i);
+            auto item = itemAt(entry.items, i);
 
             auto position = scrap->leadData(cwScrap::LeadPosition, i).value<QVector3D>();
             item->setProperty("pointIndex", i);
@@ -119,21 +119,24 @@ void cwLeadView::addScrap(cwScrap *scrap)
     };
 
     auto updateIndexesToEnd = [scrap, itemAt, this](int begin) {
-        auto& items = m_leadItems[scrap];
+        auto& entry = m_leadItems[scrap];
         for(int i = begin; i < scrap->numberOfLeads(); i++) {
-            auto item = itemAt(items, i);
+            auto item = itemAt(entry.items, i);
             item->setProperty("pointIndex", i);
         }
     };
 
     auto beginInsert = [this, scrap, updateIndexesToEnd, updatePosition](int begin, int end) {
         if(begin <= end) {
-            auto& items = m_leadItems[scrap];
+            auto& entry = m_leadItems[scrap];
+            entry.scrapLeadId = ++m_currentScrapId;
 
             for(int i = begin; i <= end; i++) {
                 //Create the item
                 auto item = createItem();
-                items.insert(i, item);
+                entry.items.insert(i, item);
+
+                item->setProperty("scrapId", entry.scrapLeadId);
             }
 
             updateIndexesToEnd(begin);
@@ -141,9 +144,9 @@ void cwLeadView::addScrap(cwScrap *scrap)
     };
 
     auto insert = [this, scrap, updatePosition, itemAt](int begin, int end) {
-        auto& items = m_leadItems[scrap];
+        auto& entry = m_leadItems[scrap];
         for(int i = begin; i <= end; i++) {
-            auto item = itemAt(items, i);
+            auto item = itemAt(entry.items, i);
             updatePosition(item, i);
             item->setProperty("scrap", QVariant::fromValue(scrap));
         }
@@ -153,19 +156,19 @@ void cwLeadView::addScrap(cwScrap *scrap)
     connect(scrap, &cwScrap::leadsInserted, this, insert);
 
     connect(scrap, &cwScrap::leadsRemoved, this, [this, scrap, updateIndexesToEnd](int begin, int end) {
-        auto& items = m_leadItems[scrap];
-        if(items.isEmpty()) { return; }
+        auto& entry = m_leadItems[scrap];
+        if(entry.items.isEmpty()) { return; }
         if(begin > end) { return; }
         if(begin < 0) { return; }
-        if(end >= items.size()) { return; }
+        if(end >= entry.items.size()) { return; }
 
 
         for(int index = end; index >= begin; index--) {
             //Unselect the item that's going to be deleted
             SelectionMananger->clear();
-            TransformUpdater->removePointItem(items[index]);
-            items[index]->deleteLater();
-            items.removeAt(index);
+            TransformUpdater->removePointItem(entry.items[index]);
+            entry.items[index]->deleteLater();
+            entry.items.removeAt(index);
         }
 
 
@@ -209,8 +212,8 @@ void cwLeadView::removeScrap(cwScrap *scrap)
 {
     Q_ASSERT(scrap != nullptr);
 
-    auto items = m_leadItems.value(scrap);
-    for(auto item : items) {
+    const auto& entry = m_leadItems.value(scrap);
+    for(auto item : entry.items) {
         item->deleteLater();
     }
     m_leadItems.remove(scrap);
@@ -352,9 +355,9 @@ void cwLeadView::setCamera(cwCamera* camera) {
 void cwLeadView::select(cwScrap *scrap, int index)
 {
     if(m_leadItems.contains(scrap)) {
-        auto items = m_leadItems.value(scrap);
-        if(index < items.size()) {
-            auto item = items.at(index);
+        const auto& entry = m_leadItems.value(scrap);
+        if(index < entry.items.size()) {
+            auto item = entry.items.at(index);
             SelectionMananger->setSelectedItem(item);
         }
     }

@@ -52,7 +52,7 @@ private:
     QPointer<cwCave> m_cave;
 
     struct TripData {
-        cwTrip* trip;
+        QPointer<cwTrip> trip;
         cwTripLengthTask* lengthTask;
         cwUsedStationTaskManager* usedStationsManager;
 

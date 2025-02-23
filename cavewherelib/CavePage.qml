@@ -107,6 +107,7 @@ StandardPage {
             }
 
             QC.Button {
+                objectName: "leadsButton"
                 text: "Leads"
                 // icon.source: "qrc:icons/question.png"
                 onClicked: {

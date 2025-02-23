@@ -10,6 +10,7 @@ import cavewherelib
 
 StandardPage {
     id: leadPage
+    objectName: "leadPage"
 
     property Cave cave;
 
@@ -17,6 +18,13 @@ StandardPage {
         id: leadModel
         regionModel: RootData.regionTreeModel
         cave: leadPage.cave
+    }
+
+    HelpBox {
+        objectName: "noLeadsHelpBox"
+        anchors.centerIn: parent
+        text: "There's no leads. Add them in during carpeting"
+        visible: tableView.count === 0
     }
 
     ColumnLayout {
@@ -77,6 +85,7 @@ StandardPage {
 
             TableStaticView {
                 id: tableView
+                objectName: "leadTableView"
 
                 property bool blockChanges: false
 

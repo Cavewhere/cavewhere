@@ -33,8 +33,10 @@ void cwCavePageModel::setCave(cwCave* cave)
         data.lengthTask->deleteLater();
         data.usedStationsManager->disconnect(this);
         data.usedStationsManager->deleteLater();
-        data.trip->disconnect(this);
-        data.trip->errorModel()->disconnect(this);
+        if(data.trip) {
+            data.trip->disconnect(this);
+            data.trip->errorModel()->disconnect(this);
+        }
     };
 
     // Disconnect previous tasks and clear data
@@ -65,9 +67,14 @@ void cwCavePageModel::setCave(cwCave* cave)
         m_tripDataList.append(tripData);
 
         // Lambda to get the current index of the trip
-        auto tripIndex = [this, trip]() {
-            return m_cave->trips().indexOf(trip);
+        auto tripIndex = [this, trip]()->int {
+            if(m_cave) {
+                return m_cave->trips().indexOf(trip);
+            } else {
+                return -1;
+            }
         };
+
 
         // Connect length task to update TripDistanceRole
         connect(lengthTask, &cwTripLengthTask::finished, this, [this, tripIndex]() {

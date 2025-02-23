@@ -61,8 +61,14 @@ private:
     cwTransformUpdater* TransformUpdater;
     cwSelectionManager* SelectionMananger;
 
-    QHash<cwScrap*, QVector<QQuickItem*>> m_leadItems;
+    struct ScrapEntry {
+        int scrapLeadId;
+        QVector<QQuickItem*> items;
+    };
+
+    QHash<cwScrap*, ScrapEntry> m_leadItems;
     QQmlComponent* m_itemComponent = nullptr;
+    int m_currentScrapId = 0;
 
     void addScrap(cwScrap* scrap);
     void removeScrap(cwScrap* scrap);

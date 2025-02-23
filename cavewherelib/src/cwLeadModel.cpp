@@ -65,6 +65,7 @@ QModelIndex cwLeadModel::index(int row, int column, const QModelIndex &parent) c
  */
 QVariant cwLeadModel::data(const QModelIndex &index, int role) const
 {
+
     if(!index.isValid()) { return QVariant(); }
 
     auto scrapIndex = scrapAndIndex(index);
@@ -454,7 +455,7 @@ QString cwLeadModel::nearestStation(cwScrap *scrap, int leadIndex) const
 QPair<cwScrap *, int> cwLeadModel::scrapAndIndex(QModelIndex index) const
 {
     auto iter = OffsetToScrap.lowerBound(index.row());
-    if(iter.key() > index.row() || iter == OffsetToScrap.end()) {
+    if(iter == OffsetToScrap.end() || iter.key() > index.row()) {
         iter--;
     }
 

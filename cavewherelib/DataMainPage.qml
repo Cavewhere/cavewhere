@@ -111,6 +111,7 @@ StandardPage {
                         }
 
                         LinkText {
+                            objectName: "caveLink"
                             text: delegateId.caveObjectRole.name
                             onClicked: {
                                 RootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,

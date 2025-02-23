@@ -7,10 +7,11 @@ import QtQuick.Layouts
 
 QQ.Item {
     id: pointId
-    objectName: "leadPoint" + pointIndex
+    objectName: "leadPoint" + scrapId + "_" + pointIndex
 
     property Scrap scrap;
     property int pointIndex; //The index in the item list
+    property int scrapId; //enable the testcase to work correctly
     property bool selected: false
     property QQ.vector3d position3D;
 
@@ -45,7 +46,8 @@ QQ.Item {
     QQ.Component {
         id: quoteBoxComponent
         QuoteBox {
-            objectName: "leadQuoteBox" + pointId.pointIndex
+            id: quoteBoxId
+            objectName: "leadQuoteBox"
             pointAtObject: questionImage
             pointAtObjectPosition: Qt.point(Math.floor(questionImage.width * .5),
                                             questionImage.height)
@@ -56,6 +58,10 @@ QQ.Item {
 
                 ColumnLayout {
                     id: columnLayout
+
+                    Text {
+                        text: pointId.objectName
+                    }
 
                     SizeEditor {
                         readOnly: true
