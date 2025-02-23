@@ -40,11 +40,13 @@ public slots:
         auto id = qmlTypeId("cavewherelib", 1, 0, "RootData");
         cwRootData* rootData = engine->rootContext()->engine()->singletonInstance<cwRootData*>(id);
 
-        Q_ASSERT(rootData);
-
-        //Hookup the image provider now that the rootdata is create
-        imageProvider->setProjectPath(rootData->project()->filename());
-        QObject::connect(rootData->project(), SIGNAL(filenameChanged(QString)), imageProvider, SLOT(setProjectPath(QString)));
+        if(rootData) {
+            //Hookup the image provider now that the rootdata is create
+            imageProvider->setProjectPath(rootData->project()->filename());
+            QObject::connect(rootData->project(), SIGNAL(filenameChanged(QString)), imageProvider, SLOT(setProjectPath(QString)));
+        } else {
+            qFatal("RootData didn't load correctly, check qml import path / build setup");
+        }
     }
 };
 
@@ -64,6 +66,7 @@ int main(int argc, char **argv) \
     QTEST_SET_MAIN_SOURCE_PATH
     Setup setup;
     const char* qmlSourceDirectory = QUICK_TEST_SOURCE_DIR; //The source directory where the qml tests are located
+    qDebug() << "qmlSourceDirectory:" << qmlSourceDirectory;
     return quick_test_main_with_setup(argc, argv, "CaveWhere-qml-tests", qmlSourceDirectory, &setup); \
 }
 

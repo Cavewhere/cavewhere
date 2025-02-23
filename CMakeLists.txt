@@ -146,18 +146,6 @@ foreach(file ${cavewhere_qmltest_QML_FILES})
     list(APPEND cavewhere_qmltest_RELATIVE_QML_FILES "${relFile}")
 endforeach()
 
-qt_add_qml_module(cavewhere_simplemodule
-    URI cw.Simple
-    VERSION 1.0
-    RESOURCE_PREFIX /qml
-    OUTPUT_DIRECTORY cw/Simple
-    DEPENDENCIES
-        QtQuick
-        QtQuick.Controls
-    QML_FILES
-        test-qml/Simple.qml
-)
-
 qt_add_resources(cavewhere-qml-test "test-qmls"
     PREFIX "/test-qmls"
     FILES
@@ -175,6 +163,9 @@ target_link_libraries(cavewhere-qml-test
     cavewhere-testlib
     cavewherelib
 )
+
+# Add the cw.simple library
+add_subdirectory(test-qml)
 
 #### CaveWhere ####
 if(APPLE)
