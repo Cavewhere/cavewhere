@@ -3,7 +3,7 @@ qt_add_qml_module(cavewhere_simplemodule
     URI cw.Simple
     VERSION 1.0
     RESOURCE_PREFIX /qml
-    OUTPUT_DIRECTORY cw/Simple
+    OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/cw/Simple
     DEPENDENCIES
         QtQuick
         QtQuick.Controls
