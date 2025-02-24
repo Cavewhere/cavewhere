@@ -112,6 +112,6 @@ TEST_CASE("cwAsyncFuture::Restarter should not restart if parent has been delete
     }
 
     CHECK(latestFuture.isCanceled() == true);
-    CHECK(count == 1);
+    CHECK((count == 1 || count == 0)); //Count 0, it might not even been started
 
 }
