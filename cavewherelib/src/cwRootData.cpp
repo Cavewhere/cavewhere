@@ -209,3 +209,10 @@ QUrl cwRootData::cavewhereImageUrl(int id) const
 {
     return cwImageProvider::imageUrl(id);
 }
+
+void cwRootData::newProject()
+{
+    PageSelectionModel->clearHistory();
+    PageSelectionModel->gotoPageByName(nullptr, "View");
+    Project->newProject();
+}

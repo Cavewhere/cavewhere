@@ -59,6 +59,8 @@ void cwLeadView::setRegionModel(cwRegionTreeModel* regionModel) {
         RegionModel = regionModel;
 
         if(!RegionModel.isNull()) {
+            m_currentScrapId = 0; //Reset the scrap id, this is useful for the qml testcase to work correctly
+
             connect(RegionModel.data(), &cwRegionTreeModel::rowsInserted, this, &cwLeadView::scrapsAdded);
             connect(RegionModel.data(), &cwRegionTreeModel::rowsAboutToBeRemoved, this, &cwLeadView::scrapsRemoved);
 
@@ -217,6 +219,10 @@ void cwLeadView::removeScrap(cwScrap *scrap)
         item->deleteLater();
     }
     m_leadItems.remove(scrap);
+
+    if(m_leadItems.size() == 0) {
+        m_currentScrapId = 0; //Reset the scrap id, this is useful for the qml testcase to work correctly
+    }
 
 
 //    Q_ASSERT(ScrapToView.contains(scrap));

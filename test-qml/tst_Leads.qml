@@ -12,8 +12,7 @@ MainWindowTest {
         when: windowShown
 
         function cleanup() {
-            RootData.project.newProject();
-            RootData.pageSelectionModel.currentPageAddress = "Data"
+            RootData.newProject();
         }
 
         function test_leads() {

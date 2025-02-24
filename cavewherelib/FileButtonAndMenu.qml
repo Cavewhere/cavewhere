@@ -33,9 +33,7 @@ MenuBar {
             onTriggered: {
                 menuBarId.askToSaveDialog.taskName = "creating a new file"
                 menuBarId.askToSaveDialog.afterSaveFunc = function() {
-                    RootData.pageSelectionModel.clearHistory()
-                    RootData.pageSelectionModel.gotoPageByName(null, "View")
-                    RootData.project.newProject();
+                    RootData.newProject();
                 }
                 menuBarId.askToSaveDialog.askToSave();
             }
