@@ -10,12 +10,13 @@
 
 //Our includes
 #include "cwTask.h"
+#include "CaveWhereLibExport.h"
 
 //Qt includes
 #include <QReadWriteLock>
 #include <QProcess>
 
-class cwCavernTask : public cwTask
+class CAVEWHERE_LIB_EXPORT cwCavernTask : public cwTask
 {
     Q_OBJECT
 public:
