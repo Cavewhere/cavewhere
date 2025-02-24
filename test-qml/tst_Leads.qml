@@ -67,6 +67,15 @@ MainWindowTest {
             compare(tableView.count, 5);
         }
 
+        function test_leadPositionCrash() {
+            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+
+            RootData.project.newProject();
+
+            let _obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->turnTableInteraction")
+            mouseDrag(_obj1, 495.773, 291.668, 20, 20, Qt.LeftButton, Qt.NoModifier, 50)
+        }
+
         function test_noLeadsMessage() {
             let dataButton_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mainSideBar->dataButton")
             mouseClick(dataButton_obj1)

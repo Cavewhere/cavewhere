@@ -63,8 +63,8 @@ void cwTransformUpdater::addPointItem(QQuickItem *object) {
     }
 
     PointItems.insert(object);
-    connect(object, SIGNAL(destroyed(QObject*)), SLOT(pointItemDeleted(QObject*)));
-    connect(object, SIGNAL(position3DChanged()), SLOT(handlePointItemDataChanged()));
+    connect(object, &QQuickItem::destroyed, this, &cwTransformUpdater::pointItemDeleted);
+    connect(object, SIGNAL(position3DChanged()), this, SLOT(handlePointItemDataChanged()));
     updatePoint(object);
 }
 
@@ -141,8 +141,13 @@ void cwTransformUpdater::updateTransformMatrix() {
   This will remove the object from the transformUpdater
   */
 void cwTransformUpdater::pointItemDeleted(QObject* object) {
-   QQuickItem* graphicsObject = qobject_cast<QQuickItem*>(object);
-   removePointItem(graphicsObject);
+    //Object has already been deleted, we need to remove it directly
+    //dynamic_cast don't work because the subclass has had destructor called already
+    PointItems.remove(static_cast<QQuickItem*>(object));
+
+    //Don't call removePointItem, object has already been partcially deleted
+    // QQuickItem* graphicsObject = qobject_cast<QQuickItem*>(object);
+    // removePointItem(graphicsObject);
 }
 
 /**
