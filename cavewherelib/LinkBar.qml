@@ -7,6 +7,7 @@ import cavewherelib
 
 QQ.Item {
     id: linkBarId
+    objectName: "linkBar"
     implicitHeight: rowLayoutId.height
 
     required property int sidebarWidth
@@ -33,6 +34,7 @@ QQ.Item {
                 anchors.centerIn: parent
 
                 Controls.RoundButton {
+                    objectName: "back"
                     icon.source: "qrc:/twbs-icons/icons/chevron-left.svg"
                     enabled: RootData.pageSelectionModel.hasBackward
                     onClicked: {

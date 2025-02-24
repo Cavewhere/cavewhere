@@ -40,7 +40,7 @@ MainWindowTest {
             mouseClick(imageId, 322, 392)
             wait(50);
 
-            let autoCalculateScrap = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->autoCalculate->checkBox")
+            let autoCalculateScrap = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteTransformEditor->autoCalculate->checkBox")
             mouseClick(autoCalculateScrap)
 
             mouseMove(imageId, 596, 402);
@@ -291,6 +291,74 @@ MainWindowTest {
             mouseClick(viewButton)
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "viewPage" });
+        }
+
+        /**
+          Make sure the projected profile direction stays, and doesn't change once
+          set
+          */
+        function test_projectedProfileDirection() {
+
+
+            TestHelper.loadProjectFromFile(RootData.project, "://datasets/tst_ScrapInteraction/projectedProfile.cw");
+
+            //Zoom into the data, in the 3d view
+            let renderer = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer");
+            let turnTableInteraction = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->turnTableInteraction")
+            turnTableInteraction.camera.zoomScale = 0.05;
+
+            wait(100);
+
+            RootData.pageSelectionModel.currentPageAddress = "Data/Cave=Cave 1/Trip=Trip 1"
+            tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
+
+            //Select carpet
+            let _obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
+            mouseClick(_obj1);
+
+            wait(500);
+
+            let imageId_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
+            mouseClick(imageId_obj1, 470.703, 608.133)
+
+            let transformEditor = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteTransformEditor")
+            verify(transformEditor.scrap.type === Scrap.ProjectedProfile)
+            verify(transformEditor.scrap.viewMatrix.direction === ProjectedProfileScrapViewMatrix.LookingAt);
+
+            //Change the type to LeftToRight
+            transformEditor.scrap.viewMatrix.direction = ProjectedProfileScrapViewMatrix.LeftToRight
+            verify(transformEditor.scrap.viewMatrix.direction === ProjectedProfileScrapViewMatrix.LeftToRight);
+
+            //Make sure the combobox updates
+            let directionComboBox_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteTransformEditor->autoCalculate->directionComboBox")
+            compare(directionComboBox_obj1.currentText, "left → right")
+
+            //Click on view
+            let viewButton_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mainSideBar->viewButton")
+            mouseClick(viewButton_obj1)
+
+            wait(500)
+
+            //Click back
+            let back_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->linkBar->back")
+            mouseClick(back_obj1, 16.5781, 13.8867)
+
+            wait(500)
+
+            //Select the same scrap again
+            imageId_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
+            mouseClick(imageId_obj1, 493.154, 663.103)
+
+            wait(100)
+
+            //Make sure the direction is correct
+            directionComboBox_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteTransformEditor->autoCalculate->directionComboBox")
+            compare(directionComboBox_obj1.currentText, "left → right")
+
+            //Make sure nothing has changed on the scrap level
+            transformEditor = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteTransformEditor")
+            verify(transformEditor.scrap.type === Scrap.ProjectedProfile)
+            verify(transformEditor.scrap.viewMatrix.direction === ProjectedProfileScrapViewMatrix.LeftToRight);
         }
     }
 }

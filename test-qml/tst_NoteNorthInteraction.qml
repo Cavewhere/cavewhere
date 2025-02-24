@@ -31,11 +31,11 @@ MainWindowTest {
 
             wait(200)
 
-            let typeComboBox = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->typeComboBox")
+            let typeComboBox = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->noteTransformEditor->typeComboBox")
             verify(typeComboBox.currentText === "Project Profile")
 
             //Select North arrow up
-            let setNorthButton_obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->autoCalculate->setNorthButton")
+            let setNorthButton_obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->noteTransformEditor->autoCalculate->setNorthButton")
             mouseClick(setNorthButton_obj1)
 
             let imageId_obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")

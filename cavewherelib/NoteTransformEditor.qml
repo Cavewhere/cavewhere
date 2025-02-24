@@ -14,6 +14,7 @@ import "qrc:/cavewherelib/cavewherelib/Theme.js" as Theme
 
 QQ.Item {
     id: editor
+    objectName: "noteTransformEditor"
 
     required property Scrap scrap
     property NoteTranformation noteTransform
@@ -168,6 +169,7 @@ QQ.Item {
 
                         Controls.ComboBox {
                             id: directionComboBoxId
+                            objectName: "directionComboBox"
 
                             enabled: !checkableBoxId.checked
 
@@ -185,19 +187,15 @@ QQ.Item {
                                 return null
                             }
 
-                            Binding {
-                                target: directionComboBoxId
-                                property: "currentIndex"
-                                value: {
-                                    if(directionComboBoxId.isValid()) {
-                                        let matrix = (editor.scrap.viewMatrix as ProjectedProfileScrapViewMatrix)
-                                        return matrix.direction
-                                    }
-                                    return -1;
+                            currentIndex: {
+                                if(directionComboBoxId.isValid()) {
+                                    let matrix = (editor.scrap.viewMatrix as ProjectedProfileScrapViewMatrix)
+                                    return matrix.direction
                                 }
+                                return -1;
                             }
 
-                            onCurrentIndexChanged: {
+                            onActivated: {
                                 if(directionComboBoxId.isValid()) {
                                     editor.scrap.viewMatrix.direction = currentIndex
                                 }
