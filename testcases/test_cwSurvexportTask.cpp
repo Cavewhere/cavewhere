@@ -4,6 +4,8 @@
 //Our includes
 #include "cwSurvexportTask.h"
 #include "cwGlobals.h"
+#include "LoadProjectHelper.h"
+#include "cwCavernTask.h"
 
 //Qt includes
 #include <QFileInfo>
@@ -27,28 +29,20 @@ TEST_CASE("cwSurvexportTask should produce a CSV file from a .3d file", "[cwSurv
     //If this fails, cavern couldn't be found
     REQUIRE(cavernPath.isEmpty() == false);
 
-    QString cavernDataFile = QStringLiteral("cwSurvexport_data.svx");
-    QString data3DFile = QStringLiteral("cwSurvexport_data.3d");
-    QString csvFile = QStringLiteral("cwSurvexport_data.3d.csv");
+    QString cavernDataFile = copyToTempFolder("://datasets/test_cwSurvexport/data.svx");
+    QDir tempDir = QFileInfo(cavernDataFile).absoluteDir();
 
-    QFile::remove(cavernDataFile);
-    QFile::remove(data3DFile);
-    QFile::remove(csvFile);
+    REQUIRE(QFile::exists(cavernDataFile));
 
-    QFile::copy("://datasets/test_cwSurvexport/data.svx", cavernDataFile);
+    cwCavernTask cavern;
+    cavern.setSurvexFile(cavernDataFile);
+    cavern.start();
+    cavern.waitToFinish();
 
-    QStringList arguments;
-    arguments.append(cavernDataFile);
-
-    QProcess cavernProcess;
-    cavernProcess.setProcessEnvironment(QProcessEnvironment::systemEnvironment());
-    cavernProcess.start(cavernPath, arguments);
-    cavernProcess.waitForFinished();
-
-    REQUIRE(QFileInfo(data3DFile).exists() == true);
+    REQUIRE(QFileInfo(cavern.output3dFileName()).exists() == true);
 
     cwSurvexportTask task;
-    task.setSurvex3DFile(data3DFile);
+    task.setSurvex3DFile(cavern.output3dFileName());
     task.start();
     task.waitToFinish();
 
@@ -56,7 +50,7 @@ TEST_CASE("cwSurvexportTask should produce a CSV file from a .3d file", "[cwSurv
     REQUIRE(task.outputFilename().isEmpty() == false);
 
     //Compare the test file with the generated file
-    QFile generatedFile(csvFile);
+    QFile generatedFile(task.outputFilename());
     QFile testFile("://datasets/test_cwSurvexport/cwSurvexport_data.3d.csv");
     generatedFile.open(QFile::ReadOnly);
     testFile.open(QFile::ReadOnly);
