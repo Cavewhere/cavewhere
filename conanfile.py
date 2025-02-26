@@ -11,7 +11,7 @@ class CaveWhereConan(ConanFile):
     url = "https://github.com/Cavewhere/Cavewhere"
     description = "Undergound Cave Survey and Mapping Software"
     topics = ("gis")
-    version = "1.0"
+    version = "2025.2"
     settings = "os", "compiler", "build_type", "arch"
     requires = [
     ("catch2/[>=2.13.10]"),
