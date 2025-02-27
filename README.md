@@ -30,7 +30,7 @@ This guide outlines the steps to build and run CaveWhere, a cave mapping softwar
 First, update your package list and install all necessary dependencies with the following command:
 
 ```bash
-sudo apt update && sudo apt install -y build-essential cmake ninja-build pipx liblocale-po-perl git
+sudo apt update && sudo apt install -y build-essential cmake ninja-build pipx liblocale-po-perl git qt6-base-dev qt6-declarative-dev qt6-svg-dev qt6-shadertools-dev
 ```
 
 ## Conan Package Manager Installation
@@ -39,6 +39,7 @@ Conan is required for managing packages and dependencies. If you have Conan inst
 
 ```bash
 pipx install conan
+pipx ensurepath
 ```
 
 ## Building CaveWhere
@@ -67,8 +68,17 @@ pipx install conan
    Use Conan to install the project dependencies:
 
    ```bash
-   conan install ../cavewhere --build=missing -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True 
+   conan profile detect --force
+   conan install ../cavewhere -o:a system_qt=false --build=missing -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True 
    ```
+        
+Conan will try to use the local package manager to install compatible dependencies. If a dependency isn't compatible, it will download it from Conan Center or build it from source.
+
+Conan may also build Qt from source, which can take a long time. However, this ensures you get the correct version of Qt that has been tested with Cavewhere. To use the system's Qt, set ```system_qt=false```.
+
+To use the system Qt libraries (note that you might encounter build errors, as Qt is typically outdated on most Linux distributions):
+
+```sudo apt install -y qt6-base-dev qt6-declarative-dev qt6-svg-dev qt6-shadertools-dev```
 
 4. **Configure the Project with CMake**
 
