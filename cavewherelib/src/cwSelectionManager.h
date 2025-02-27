@@ -10,7 +10,8 @@
 
 //Qt includes
 #include <QObject>
-#include <QtQmlIntegration>
+#include <QQmlEngine>
+
 class QQuickItem;
 
 class cwSelectionManager : public QObject
