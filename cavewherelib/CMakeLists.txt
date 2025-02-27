@@ -49,8 +49,8 @@ target_link_libraries(cavewherelib
     dewalls
     QMath3d
     MarkScope
-    SQLite::SQLite3
     PRIVATE
+    SQLite::SQLite3
     protobuf::protobuf
 )
 
