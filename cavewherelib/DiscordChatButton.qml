@@ -30,7 +30,7 @@ Controls.RoundButton {
 
     Controls.Popup {
         padding: 10
-        popupType: Controls.Popup.Item
+        //popupType: Controls.Popup.Item
 
         visible: chatButtonId.hovered
 
