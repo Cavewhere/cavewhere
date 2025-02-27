@@ -11,8 +11,5 @@ qt_add_qml_module(cavewhere_simplemodule
         Simple.qml
 )
 
-set_target_properties(cavewhere_simplemodule PROPERTIES
-    AUTOMOC ON
-    AUTORCC ON
-    AUTOUIC ON
-)
+#Ignore moc for qt 6.7?
+set_source_files_properties(cavewhere_simplemoduleplugin_cw_SimplePlugin_in.cpp PROPERTIES SKIP_AUTOMOC ON)
