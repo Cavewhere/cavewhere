@@ -78,12 +78,12 @@ generate_export_header(cavewhere-testlib
 
 target_link_libraries(cavewhere-testlib
     PRIVATE
-    Qt::Test
-    Qt::Core
-    Qt::Gui
-    Qt::Widgets
-    Qt::Quick
-    Qt::Qml
+    Qt6::Test
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::Quick
+    Qt6::Qml
     Catch2::Catch2
     cavewherelib
 )
@@ -112,7 +112,7 @@ target_sources(cavewhere-test PRIVATE ${cavewhere_test_CPP_FILES} ${cavewhere_te
 
 target_link_libraries(cavewhere-test
     PRIVATE
-    Qt::Test
+    Qt6::Test
     Catch2::Catch2
     cavewherelib
     cavewhere-testlib
@@ -155,11 +155,11 @@ target_compile_definitions(cavewhere-qml-test PRIVATE QUICK_TEST_SOURCE_DIR="${C
 
 target_link_libraries(cavewhere-qml-test
     PRIVATE
-    Qt::Test
-    Qt::Quick
-    Qt::Widgets
-    Qt::Qml
-    Qt::QuickTest
+    Qt6::Test
+    Qt6::Quick
+    Qt6::Widgets
+    Qt6::Qml
+    Qt6::QuickTest
     cavewhere-testlib
     cavewherelib
 )
@@ -190,12 +190,12 @@ set_target_properties(CaveWhere PROPERTIES
 
 target_link_libraries(CaveWhere
     PRIVATE
-    Qt::Core
-    Qt::Gui
-    Qt::Widgets
-    Qt::Quick
-    Qt::Sql
-    Qt::Test
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::Quick
+    Qt6::Sql
+    Qt6::Test
     cavewherelib
     MarkScope
 )
