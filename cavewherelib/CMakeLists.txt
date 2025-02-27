@@ -49,9 +49,9 @@ target_link_libraries(cavewherelib
     dewalls
     QMath3d
     MarkScope
+    SQLite::SQLite3
     PRIVATE
     protobuf::protobuf
-    SQLite::SQLite3
 )
 
 # Conditionally find the package and include directories
