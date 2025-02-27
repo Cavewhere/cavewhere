@@ -35,16 +35,16 @@ set_target_properties(cavewherelib PROPERTIES
 
 target_link_libraries(cavewherelib
     PUBLIC
-    Qt::Core
-    Qt::Gui
-    Qt::Widgets
-    Qt::Quick
-    Qt::Sql
-    Qt::OpenGL
-    Qt::Xml
-    Qt::Concurrent
-    Qt::Svg
-    Qt::GuiPrivate
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::Quick
+    Qt6::Sql
+    Qt6::OpenGL
+    Qt6::Xml
+    Qt6::Concurrent
+    Qt6::Svg
+    Qt6::GuiPrivate
     asyncfuture
     dewalls
     QMath3d
