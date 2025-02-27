@@ -22,7 +22,7 @@ find_package(Qt6
     ShaderTools
     REQUIRED)
 
-qt_add_library(cavewherelib SHARED)
+qt6_add_library(cavewherelib SHARED)
 
 #RESOURCE_PREFIX defaults to /qt/qml/ which is the default import path of the QML engine
 # qmake_policy(SET QTP0001 NEW)
@@ -80,12 +80,15 @@ generate_export_header(cavewherelib
 # Generate cavewhereVersion.h
 update_git_version(cavewherelib ${CMAKE_CURRENT_SOURCE_DIR}/src/cavewhereVersion.h.in)
 
-target_include_directories(cavewherelib PUBLIC
+target_include_directories(cavewherelib
+    PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils
     ${CMAKE_CURRENT_BINARY_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}/versionInfo
 )
+
+message(STATUS "SQLite3 includes: ${SQLite3_INCLUDE_DIRS}")
 
 # Collect source files cavewhereLib
 file(GLOB cavewherelib_CPP_FILES "src/*.cpp" "src/utils/*.cpp")
