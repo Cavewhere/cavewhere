@@ -80,21 +80,13 @@ generate_export_header(cavewherelib
 # Generate cavewhereVersion.h
 update_git_version(cavewherelib ${CMAKE_CURRENT_SOURCE_DIR}/src/cavewhereVersion.h.in)
 
-get_target_property(sqlIncludeDirs SQLite::SQLite3 INTERFACE_INCLUDE_DIRECTORIES)
-
 target_include_directories(cavewherelib
     PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils
     ${CMAKE_CURRENT_BINARY_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}/versionInfo
-    PRIVATE
-    ${sqlIncludeDIRs}
 )
-
-message(STATUS "SQLite::SQLite3 INTERFACE_LINK_DIRECTORIES: ${sqlIncludeDIRs}")
-
-message(STATUS "SQLite3 includes: ${SQLite3_INCLUDE_DIRS}")
 
 # Collect source files cavewhereLib
 file(GLOB cavewherelib_CPP_FILES "src/*.cpp" "src/utils/*.cpp")
