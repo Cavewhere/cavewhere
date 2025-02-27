@@ -10,3 +10,9 @@ qt_add_qml_module(cavewhere_simplemodule
     QML_FILES
         Simple.qml
 )
+
+set_target_properties(cavewhere_simplemodule PROPERTIES
+    AUTOMOC ON
+    AUTORCC ON
+    AUTOUIC ON
+)
