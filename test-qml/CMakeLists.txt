@@ -1,4 +1,5 @@
 #Putting this module in a subdirectory prevents a cmake qml module warning
+qt_add_library(cavewhere_simplemodule SHARED)
 set_target_properties(cavewhere_simplemodule PROPERTIES
     AUTOMOC ON
     AUTORCC ON

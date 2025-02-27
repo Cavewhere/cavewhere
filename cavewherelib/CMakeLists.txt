@@ -22,7 +22,7 @@ find_package(Qt6
     ShaderTools
     REQUIRED)
 
-qt6_add_library(cavewherelib SHARED)
+qt_add_library(cavewherelib SHARED)
 
 #RESOURCE_PREFIX defaults to /qt/qml/ which is the default import path of the QML engine
 # qmake_policy(SET QTP0001 NEW)
