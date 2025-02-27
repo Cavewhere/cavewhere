@@ -1,4 +1,10 @@
 #Putting this module in a subdirectory prevents a cmake qml module warning
+set_target_properties(cavewhere_simplemodule PROPERTIES
+    AUTOMOC ON
+    AUTORCC ON
+    AUTOUIC ON
+)
+
 qt_add_qml_module(cavewhere_simplemodule
     URI cw.Simple
     VERSION 1.0
@@ -10,6 +16,3 @@ qt_add_qml_module(cavewhere_simplemodule
     QML_FILES
         Simple.qml
 )
-
-#Ignore moc for qt 6.7?
-set_source_files_properties(cavewhere_simplemoduleplugin_cw_SimplePlugin_in.cpp PROPERTIES SKIP_AUTOMOC ON)
