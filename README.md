@@ -30,7 +30,7 @@ This guide outlines the steps to build and run CaveWhere, a cave mapping softwar
 First, update your package list and install all necessary dependencies with the following command:
 
 ```bash
-sudo apt update && sudo apt install -y build-essential cmake ninja-build pipx liblocale-po-perl git qt6-base-dev qt6-declarative-dev qt6-svg-dev qt6-shadertools-dev
+sudo apt update && sudo apt install -y build-essential cmake ninja-build pipx liblocale-po-perl git libsqlite3-dev
 ```
 
 ## Conan Package Manager Installation
@@ -69,23 +69,25 @@ pipx ensurepath
 
    ```bash
    conan profile detect --force
-   conan install ../cavewhere -o:a system_qt=false --build=missing -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True 
+   conan install ../cavewhere -o "&:system_qt=False" --build=missing -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True -of conan_deps
    ```
         
-Conan will try to use the local package manager to install compatible dependencies. If a dependency isn't compatible, it will download it from Conan Center or build it from source.
+   Conan will try to use the local package manager to install compatible dependencies. If a dependency isn't compatible, it will download it from Conan Center or build it from source.
 
-Conan may also build Qt from source, which can take a long time. However, this ensures you get the correct version of Qt that has been tested with Cavewhere. To use the system's Qt, set ```system_qt=false```.
+   Conan may also build Qt from source, which can take a long time and use a large amount of ram (16GB recommend for the build, 2GB VM will not cut it). However, this ensures you get the correct version of Qt that has been tested with Cavewhere. To use the system's Qt, set ```system_qt=Talse```.
 
-To use the system Qt libraries (note that you might encounter build errors, as Qt is typically outdated on most Linux distributions):
+   To use the system Qt libraries (note that you might encounter build errors, as Qt is typically outdated on most Linux distributions 2025.2 will build and run on 6.8 or later):
 
-```sudo apt install -y qt6-base-dev qt6-declarative-dev qt6-svg-dev qt6-shadertools-dev```
-
+   ```
+   sudo apt install -y qt6-base-dev qt6-declarative-dev qt6-svg-dev qt6-shadertools-dev
+    ```
+    
 4. **Configure the Project with CMake**
 
    Use CMake to configure the project. Ensure the `CMAKE_BUILD_TYPE` is set to `Release`:
 
    ```bash
-   cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_PDF=OFF -DCMAKE_MODULE_PATH=`pwd` ../cavewhere
+   cmake -G Ninja --preset conan-release -DCMAKE_TOOLCHAIN_FILE=conan_deps/conan_toolchain.cmake -S ../cavewhere -B .
    ```
 
 5. **Build the Project**
