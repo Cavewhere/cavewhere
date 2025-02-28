@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 
-import QtQuick
 import QtQuick as QQ
 import QtQuick.Layouts
 import QtQuick.Controls as QC
@@ -12,7 +11,6 @@ ColumnLayout {
     required property CaptureManager screenCaptureManager
     required property CaptureItemManiputalor captureItemManiputlor
     required property GLTerrainRenderer view
-    property alias addLayerButton: addLayerButton
 
     SelectExportAreaTool {
         id: selectionTool
@@ -22,15 +20,31 @@ ColumnLayout {
         visible: false
     }
 
-    QC.Button {
-        id: addLayerButton
-        objectName: "addLayerButton"
-        text: " Add Layer"
-        icon.source: "qrc:/twbs-icons/icons/layers.svg"
-        onClicked: {
-            selectionTool.activate()
-            RootData.pageSelectionModel.gotoPageByName(null, "View");
+    QQ.Item {
+        implicitWidth: addLayerButton.width
+        implicitHeight: addLayerButton.height
+        z: 1
+
+        QC.Button {
+            id: addLayerButton
+            objectName: "addLayerButton"
+            text: " Add Layer"
+            icon.source: "qrc:/twbs-icons/icons/layers.svg"
+            onClicked: {
+                selectionTool.activate()
+                RootData.pageSelectionModel.gotoPageByName(null, "View");
+            }
         }
+
+        HelpQuoteBox {
+            pointAtObject: addLayerButton
+            pointAtObjectPosition: Qt.point(addLayerButton.width / 2.0, addLayerButton.height)
+            triangleOffset: 0.0
+            visible: screenCaptureManager.numberOfCaptures === 0
+            text: "Add a new layer to create a map"
+        }
+
+
     }
 
     QC.GroupBox {
@@ -87,7 +101,7 @@ ColumnLayout {
                         onClicked: (mouse) => {
                                        layerListViewId.currentIndex = textDelegateId.index
 
-                                       if(mouse.button == Qt.RightButton) {
+                                       if(mouse.button === Qt.RightButton) {
                                            layerRightClickMenu.capture = layerProperties.layerObject
                                            layerRightClickMenu.popup()
                                        }

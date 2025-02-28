@@ -87,6 +87,7 @@ QQ.Item {
                     view: mapPageId.view
                     screenCaptureManager: screenCaptureManagerId
                     captureItemManiputlor: captureItemManiputalorId
+                    z: 1
                 }
 
                 QQ.Rectangle {
@@ -103,13 +104,5 @@ QQ.Item {
                 }
             }
         }
-    }
-
-    HelpQuoteBox {
-        pointAtObject: mapLayersId.addLayerButton
-        pointAtObjectPosition: Qt.point(mapLayersId.addLayerButton.width / 2.0, mapLayersId.addLayerButton.height)
-        triangleOffset: 0.0
-        visible: screenCaptureManagerId.numberOfCaptures === 0
-        text: "Add a new layer to create a map"
     }
 }
