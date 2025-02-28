@@ -52,7 +52,7 @@ class CaveWhereConan(ConanFile):
             self.options["qt"].qttools = True
             self.options["qt"].qttranslations = True
             self.options["qt"].qtimageformats = True
-            self.options["qt"].qtwayland = True
+            self.options["qt"].with_libjpeg = True
 
         #Arrow fails on github linux build, disable
         self.options["gdal"].with_arrow = False
