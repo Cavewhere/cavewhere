@@ -52,6 +52,7 @@ target_link_libraries(cavewherelib
     PRIVATE
     protobuf::protobuf
     SQLite::SQLite3
+    surveximg
 )
 
 # Conditionally find the package and include directories
