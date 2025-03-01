@@ -497,6 +497,7 @@ void cwCaptureManager::saveScene()
         QSvgGenerator generator;
         generator.setFileName(filename().toLocalFile());
         generator.setSize(imageSize.toSize());
+        generator.setResolution(resolution());
         generator.setViewBox(imageRect);
 
         QPainter painter;
