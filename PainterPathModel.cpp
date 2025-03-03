@@ -107,6 +107,7 @@ void PainterPathModel::addLinePolygon(QPainterPath &path, int modelRow)
     auto cap = [](const QPointF& normal, const QLineF& perpendicularLine, double radius) {
         QVector<QPointF> points;
         const int tessellation = 7;
+        points.reserve(tessellation - 2); //We don't include first and last points
 
         // The endpoints of the perpendicular line are the start and end of the arc.
         // Their midpoint is the center of the circle (which is at p2).
@@ -135,12 +136,15 @@ void PainterPathModel::addLinePolygon(QPainterPath &path, int modelRow)
             double angle = 0.0;
             if (usePositiveDirection) {
                 angle = angleStart + t * M_PI;
+                const QPointF pt(center.x() + radius * std::cos(angle),
+                                 center.y() + radius * std::sin(angle));
+                points.push_front(pt);
             } else {
                 angle = angleStart - t * M_PI;
+                const QPointF pt(center.x() + radius * std::cos(angle),
+                                 center.y() + radius * std::sin(angle));
+                points.push_back(pt);
             }
-            const QPointF pt(center.x() + radius * std::cos(angle),
-                             center.y() + radius * std::sin(angle));
-            points.push_back(pt);
         }
         return points;
     };
@@ -160,10 +164,7 @@ void PainterPathModel::addLinePolygon(QPainterPath &path, int modelRow)
         return cap(normal, perpendicularLine, lastPoint.width * 0.5);
     };
 
-    auto polygon = [this, beginCap, endCap](int modelRow) {
-        auto penLine = m_penLineModel->data(m_penLineModel->index(modelRow), PenLineModel::LineRole).value<PenLine>();
-        auto linePoints = penLine.points;
-
+    auto polygon = [this, beginCap, endCap](const QVector<PenPoint>& linePoints) {
         Q_ASSERT(linePoints.size() >= 2);
 
         //Generate the perpendicularLines that give width to the pen line
@@ -183,7 +184,7 @@ void PainterPathModel::addLinePolygon(QPainterPath &path, int modelRow)
         points.reserve(perpendicularLines.size() * 2 + 6);
 
         //Begin cap
-        points.append(beginCap(linePoints, perpendicularLines.at(0)));
+        // points.append(beginCap(linePoints, perpendicularLines.at(0)));
 
         //Go forward around the top edge of the polygon
         for(const auto& line : perpendicularLines) {
@@ -191,8 +192,8 @@ void PainterPathModel::addLinePolygon(QPainterPath &path, int modelRow)
         }
 
         //End cap
-        auto lastPerpendicularIndex = perpendicularLines.size() - 1;
-        points.append(endCap(linePoints, perpendicularLines.at(lastPerpendicularIndex)));
+        // auto lastPerpendicularIndex = perpendicularLines.size() - 1;
+        // points.append(endCap(linePoints, perpendicularLines.at(lastPerpendicularIndex)));
 
         //Go backward around the bottom edge of the polygon
         for(auto it = perpendicularLines.crbegin(); it != perpendicularLines.crend(); ++it) {
@@ -207,7 +208,7 @@ void PainterPathModel::addLinePolygon(QPainterPath &path, int modelRow)
     auto linePoints = penLine.points;
 
     if(linePoints.size() >= 2) {
-        path.addPolygon(polygon(modelRow));
+        path.addPolygon(polygon(linePoints));
 
         //Generate the perpendicularLines that give width to the pen line
         QVector<QLineF> perpendicularLines;
@@ -218,7 +219,10 @@ void PainterPathModel::addLinePolygon(QPainterPath &path, int modelRow)
             path.moveTo(line.p1());
             path.lineTo(line.p2());
         }
+
+        // path = path.simplified();
     }
+
 }
 
 QLineF PainterPathModel::perpendicularLineAt(const QVector<PenPoint>& points, int index) const
@@ -244,7 +248,7 @@ QLineF PainterPathModel::perpendicularLineAt(const QVector<PenPoint>& points, in
         double angleBetween = leftLine.angleTo(rightLine);
         double halfAngle = angleBetween * 0.5;
 
-        qDebug() << "Both good!";
+        // qDebug() << "Both good!";
 
         topLine.setP1(mid.position);
         topLine.setAngle(leftLine.angle() + halfAngle);
@@ -261,14 +265,14 @@ QLineF PainterPathModel::perpendicularLineAt(const QVector<PenPoint>& points, in
         if(!left.isNull()) {
             //The start section
             line = QLineF(mid.position, left.position);
-            qDebug() << "left good:" << line;
+            // qDebug() << "left good:" << line;
         } else if(!right.isNull()) {
-            line = QLineF(mid.position, right.position);
-            qDebug() << "Right good:" << line;
+            line = QLineF(right.position, mid.position);
+            // qDebug() << "Right good:" << line;
         }
 
 
-        qDebug() << "Mid:" << mid.position << right.position << line.length();
+        // qDebug() << "Mid:" << mid.position << right.position << line.length();
         Q_ASSERT(line.length() > 0.0);
 
         QLineF normalLine = line.normalVector();
@@ -286,14 +290,13 @@ QLineF PainterPathModel::perpendicularLineAt(const QVector<PenPoint>& points, in
         Q_ASSERT(false); //Not enough data need to have at least 2 points
     }
 
-    qDebug() << "Line:" << topLine.p2() << bottomLine.p2();
+    // qDebug() << "Line:" << topLine.p2() << bottomLine.p2();
     return QLineF(topLine.p2(), bottomLine.p2());
 }
 
 void PainterPathModel::updateActivePath()
 {
     m_activePath.clear();
-    // qDebug() << "Updating active path:" << m_activeLineIndex;
     addLinePolygon(m_activePath, m_activeLineIndex);
     auto activePathIndex = index(ActivePath);
     emit dataChanged(activePathIndex, activePathIndex, {PainterPathRole});

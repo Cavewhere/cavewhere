@@ -43,12 +43,13 @@ int PenLineModel::addNewLine()
 }
 
 void PenLineModel::addLine(const PenLine &line) {
+    // qDebug() << "-------------- Add line -------------";
     beginInsertRows(QModelIndex(), m_lines.size(), m_lines.size());
     m_lines.append(line);
     endInsertRows();
 }
 
-void PenLineModel::addPoint(int lineIndex, const PenPoint &point)
+void PenLineModel::addPoint(int lineIndex, PenPoint point)
 {
     if (lineIndex < 0 || lineIndex >= m_lines.size()) {
         qWarning() << "addPoint: lineIndex out of bounds:" << lineIndex;
@@ -59,17 +60,26 @@ void PenLineModel::addPoint(int lineIndex, const PenPoint &point)
         return;
     }
 
+    point.width = std::min(2.5, point.width);
+
+
     // Append the point to the specified PenLine.
     auto& points =  m_lines[lineIndex].points;
     if(!points.isEmpty()) {
         QLineF distanceLine(points.last().position, point.position);
-        if(distanceLine.length() <= 0.1) {
+        if(distanceLine.length() <= 10.0) {
             return;
         } else {
+            // qDebug() << "Point:" << point.position << point.width;
             points.append(point);
         }
     } else {
+        // qDebug() << "Point:" << point.position << point.width;
         points.append(point);
+    }
+
+    if(points.size() == 2) {
+        points[0].width = points.at(1).width;
     }
 
     // Notify that the data for this row has changed so that any views update.

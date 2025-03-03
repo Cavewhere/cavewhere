@@ -50,15 +50,16 @@ Window {
             Instantiator {
                 model: painterPathModel
                 delegate: SketchShapePath {
+                    //painterPath is a required property defined in c++
                     // parent: shapeId
                     strokeColor: "black"
                     // strokeColor: "transparent"
-                    // fillColor: "red"
+                    fillColor: "red"
                     // fillColor: "black"
-                    fillColor: "transparent"
+                    // fillColor: "transparent"
                     fillRule: ShapePath.WindingFill
                     strokeWidth: .1
-                    //painterPath is a required property defined in c++
+                    // strokeWidth: -1
                 }
                 onObjectAdded: (index, object) => {
                                    // Manually add to the Shape’s data
@@ -119,7 +120,7 @@ Window {
                 }
 
                 onActiveChanged: {
-                    // console.log("Active changed!" + active)
+                    console.log("Active changed!" + active)
                     if(active) {
                         painterPathModel.activeLineIndex = penModel.rowCount();
                         penModel.addNewLine();
@@ -131,11 +132,11 @@ Window {
 
                     if(active) {
                         let width = pressureScale * handler.point.pressure
-                        if(width === 0.0) {
-                            console.log("Width is zero!")
-                        }
+                        // if(width === 0.0) {
+                        //     console.log("Width is zero!")
+                        // }
 
-                        width = Math.min(3.0, width);
+                        // width = Math.min(3.0, width);
 
                         let penPoint = penModel.penPoint(handler.point.position, width)
                         penModel.addPoint(painterPathModel.activeLineIndex, penPoint)

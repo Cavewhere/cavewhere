@@ -52,7 +52,7 @@ public:
     // Utility methods to add or clear lines.
     Q_INVOKABLE int addNewLine();
     void addLine(const PenLine& line);
-    Q_INVOKABLE void addPoint(int lineIndex, const PenPoint& point);
+    Q_INVOKABLE void addPoint(int lineIndex, PenPoint point);
     void clear();
 
     Q_INVOKABLE PenPoint penPoint(QPointF point, double width)
