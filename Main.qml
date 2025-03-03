@@ -29,9 +29,10 @@ Window {
         }
 
         Rectangle {
-            opacity: .5
+            // opacity: .5
             anchors.fill: parent
-            color: "red"
+            // color: "red"
+            border.width: 5
         }
 
 
@@ -50,13 +51,13 @@ Window {
                 model: painterPathModel
                 delegate: SketchShapePath {
                     // parent: shapeId
-                    // strokeColor: "black"
+                    strokeColor: "black"
                     // strokeColor: "transparent"
                     // fillColor: "red"
-                    fillColor: "black"
-                    // fillColor: "transparent"
+                    // fillColor: "black"
+                    fillColor: "transparent"
                     fillRule: ShapePath.WindingFill
-                    strokeWidth: -1
+                    strokeWidth: .1
                     //painterPath is a required property defined in c++
                 }
                 onObjectAdded: (index, object) => {
