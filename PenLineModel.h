@@ -4,6 +4,7 @@
 #include <QAbstractListModel>
 #include <QQmlEngine>
 #include <QPointF>
+#include <QObjectBindableProperty>
 
 
 // A simple structure representing a point with a specific width.
@@ -30,6 +31,7 @@ public:
 // A pen line consisting of multiple pen points.
 struct PenLine {
     QVector<PenPoint> points;
+    double width = 2.5;
 };
 Q_DECLARE_METATYPE(PenLine)
 
@@ -37,9 +39,12 @@ class PenLineModel : public QAbstractListModel {
     Q_OBJECT
     QML_ELEMENT
 
+    Q_PROPERTY(double currentStrokeWidth READ currentStrokeWidth WRITE setCurrentStrokeWidth NOTIFY currentStrokeWidthChanged BINDABLE bindableCurrentStrokeWidth)
+
 public:
     enum PenLineRoles {
         LineRole = Qt::UserRole + 1,
+        LineWidthRole
     };
 
     explicit PenLineModel(QObject* parent = nullptr);
@@ -60,7 +65,16 @@ public:
         return PenPoint(point, width);
     }
 
+    double currentStrokeWidth() const { return m_currentStrokeWidth.value(); }
+    void setCurrentStrokeWidth(const double& currentStrokeWidth) { m_currentStrokeWidth = currentStrokeWidth; }
+    QBindable<double> bindableCurrentStrokeWidth() { return &m_currentStrokeWidth; }
+
+signals:
+    void currentStrokeWidthChanged();
+
+
 private:
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(PenLineModel, double, m_currentStrokeWidth, 2.5, &PenLineModel::currentStrokeWidthChanged);
     QVector<PenLine> m_lines;
 };
 

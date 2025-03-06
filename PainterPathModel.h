@@ -28,11 +28,7 @@ public:
 
     enum Roles {
         PainterPathRole = Qt::UserRole + 1,
-    };
-
-    enum RowType {
-        FinishedPath = 0,
-        ActivePath
+        StrokeWidthRole,
     };
 
     //There's the active which is 0, and
@@ -54,7 +50,6 @@ public:
     }
 
 
-
 signals:
     void penLineModelChanged();
     void activeLineIndexChanged();
@@ -62,18 +57,30 @@ signals:
 private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(PainterPathModel, int, m_activeLineIndex, -1, &PainterPathModel::activeLineIndexChanged);
 
-    QPainterPath m_finishedPath; //At index 0
-    QPainterPath m_activePath; //At index 1
+    struct Path {
+        QPainterPath painterPath;
+        double strokeWidth;
+    };
+
+    Path m_activePath; //At index 0
+    QList<Path> m_finishedPaths;
     QPointer<PenLineModel> m_penLineModel;
     int m_previousActivePath = -1;
     double m_maxWidth = 2.5;
+    static const int m_finishLineIndexOffset = 1;
 
     void addLinePolygon(QPainterPath& path, int modelRow);
 
     QLineF perpendicularLineAt(const QVector<PenPoint> &points, int index) const;
 
     void updateActivePath();
+    void updateActivePathStrokeWidth();
+
     void rebuildFinalPath();
+
+    QList<PainterPathModel::Path>::iterator indexOfFinalPaths(double strokeWidth);
+
+    void addOrUpdateFinishPath(int penLineIndex);
 
 };
 

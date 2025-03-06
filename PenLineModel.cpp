@@ -21,15 +21,20 @@ QVariant PenLineModel::data(const QModelIndex &index, int role) const {
         return QVariant();
 
     const PenLine& line = m_lines.at(index.row());
-    if (role == LineRole) {
+    switch(role) {
+    case LineRole:
         return QVariant::fromValue(line);
+    case LineWidthRole:
+        return line.width;
     }
+
     return QVariant();
 }
 
 QHash<int, QByteArray> PenLineModel::roleNames() const {
     QHash<int, QByteArray> roles;
     roles[LineRole] = "line";
+    roles[LineWidthRole] = "lineWidth";
     return roles;
 }
 
@@ -37,6 +42,9 @@ int PenLineModel::addNewLine()
 {
     int lastIndex = m_lines.size();
     PenLine line;
+    line.width = m_currentStrokeWidth;
+    qDebug() << "newline:" << line.width;
+
     addLine(line);
     Q_ASSERT(lastIndex == m_lines.size() - 1);
     return lastIndex;

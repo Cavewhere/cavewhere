@@ -12,11 +12,15 @@ PainterPathModel::PainterPathModel(QObject *parent)
     connect(this, &PainterPathModel::activeLineIndexChanged, this, [this]() {
         updateActivePath();
 
+        //Update the stroke width
+        updateActivePathStrokeWidth();
+
         // qDebug() << "m_previousActionPath:" << m_activeLineIndex.value() << m_previousActivePath;
         if(m_previousActivePath >= 0) {
-            addLinePolygon(m_finishedPath, m_previousActivePath);
-            auto finishedPathIndex = index(FinishedPath);
-            emit dataChanged(finishedPathIndex, finishedPathIndex, {PainterPathRole});
+            addOrUpdateFinishPath(m_previousActivePath);
+            // addLinePolygon(m_finishedPath, m_previousActivePath);
+            // auto finishedPathIndex = index(FinishedPath);
+            // emit dataChanged(finishedPathIndex, finishedPathIndex, {PainterPathRole});
         }
 
         m_previousActivePath = m_activeLineIndex;
@@ -26,25 +30,36 @@ PainterPathModel::PainterPathModel(QObject *parent)
 
 int PainterPathModel::rowCount(const QModelIndex &parent) const {
     Q_UNUSED(parent);
-    return 2;
+    return m_finishedPaths.size() + m_finishLineIndexOffset;
 }
 
 QVariant PainterPathModel::data(const QModelIndex &index, int role) const {
     if (index.row() < 0 || index.row() >= rowCount()) {
         return QVariant();
     }
-    if (role == PainterPathRole) {
-        if (index.row() == FinishedPath) {
-            return QVariant::fromValue(m_finishedPath);
-        } else if (index.row() == ActivePath) {
-            return QVariant::fromValue(m_activePath);
+
+    auto path = [this](const QModelIndex& index) -> const Path& {
+        if (index.row() == 0) {
+            return m_activePath;
+        } else  {
+            return m_finishedPaths.at(index.row() - m_finishLineIndexOffset);
         }
+    };
+
+    switch(role) {
+    case PainterPathRole:
+        return QVariant::fromValue(path(index).painterPath);
+    case StrokeWidthRole:
+        return path(index).strokeWidth;
     }
+
     return QVariant();
 }
 
 QHash<int, QByteArray> PainterPathModel::roleNames() const {
-    return { {PainterPathRole, "painterPath"} };
+    return { {PainterPathRole, "painterPath"},
+        {StrokeWidthRole, "strokeWidthRole"}
+    };
 }
 
 PenLineModel* PainterPathModel::penLineModel() const {
@@ -71,8 +86,9 @@ void PainterPathModel::setPenLineModel(PenLineModel* penLineModel) {
                 for(int i = first; i <= last; ++i) {
                     if(i == m_activeLineIndex) {
                         updateActivePath();
+                        updateActivePathStrokeWidth();
                     } else {
-                        addLinePolygon(m_finishedPath, i);
+                        addOrUpdateFinishPath(i);
                     }
                 }
             });
@@ -317,23 +333,83 @@ QLineF PainterPathModel::perpendicularLineAt(const QVector<PenPoint>& points, in
 
 void PainterPathModel::updateActivePath()
 {
-    m_activePath.clear();
-    addLinePolygon(m_activePath, m_activeLineIndex);
-    auto activePathIndex = index(ActivePath);
+    // qDebug() << "Update active path!";
+    m_activePath.painterPath.clear();
+    addLinePolygon(m_activePath.painterPath, m_activeLineIndex);
+    auto activePathIndex = index(0);
+    // qDebug() << "ActivePath:" << activePathIndex.data(PainterPathRole).value<QPainterPath>().elementCount();
     emit dataChanged(activePathIndex, activePathIndex, {PainterPathRole});
+}
+
+void PainterPathModel::updateActivePathStrokeWidth()
+{
+    auto newStrokeWidth =  m_penLineModel->index(m_activeLineIndex).data(PenLineModel::LineWidthRole).toDouble();
+    // qDebug() << "NewStrokWidth:" << newStrokeWidth << m_activePath.strokeWidth;
+    if(m_activePath.strokeWidth != newStrokeWidth) {
+        m_activePath.strokeWidth = newStrokeWidth;
+        auto activePathIndex = index(0);
+        emit dataChanged(activePathIndex, activePathIndex, {StrokeWidthRole});
+    }
 }
 
 void PainterPathModel::rebuildFinalPath()
 {
+    // m_finishedPaths.clear();
+    //Clear the QPainterPaths
+    for(auto& path : m_finishedPaths) {
+        path.painterPath.clear();
+    }
 
-    // qDebug() << "Rebuilding Final Path!";
-    m_finishedPath.clear();
     for(int i = 0; i < m_penLineModel->rowCount(); i++) {
         if(i != m_activeLineIndex) {
-            // qDebug() << "Adding finished path:" << i;
-            addLinePolygon(m_finishedPath, i);
+            addOrUpdateFinishPath(i);
         }
     }
-    auto finishedPathIndex = index(FinishedPath);
-    emit dataChanged(finishedPathIndex, finishedPathIndex, {PainterPathRole});
+    // auto finishedPathIndex = index(m_finishedPaths.size() + m_finishLineIndexOffset);
+
+    //Remove unused finished paths
+    for(auto it = m_finishedPaths.begin(); it != m_finishedPaths.end(); ++it) {
+        if(it->painterPath.isEmpty()) {
+            int index = static_cast<int>(it - m_finishedPaths.begin());
+            beginRemoveRows(QModelIndex(), index, index);
+            it = m_finishedPaths.erase(it);
+            endRemoveRows();
+        }
+    }
+
 }
+
+QList<PainterPathModel::Path>::iterator PainterPathModel::indexOfFinalPaths(double strokeWidth)
+{
+    auto it = std::find_if(m_finishedPaths.begin(), m_finishedPaths.end(), [strokeWidth](const Path& path) {
+        return path.strokeWidth == strokeWidth;
+    });
+    return it;
+}
+
+void PainterPathModel::addOrUpdateFinishPath(int penLineIndex)
+{
+    // if(penLineIndex != m_activeLineIndex) {
+    // qDebug() << "Adding finished path:" << i;
+    double lineWidth = m_penLineModel->index(penLineIndex).data(PenLineModel::LineWidthRole).toDouble();
+    auto it = indexOfFinalPaths(lineWidth);
+    int modelIndexInt = it - m_finishedPaths.begin() + m_finishLineIndexOffset;
+    if(it != m_finishedPaths.end()) {
+        //Add to existing line
+        addLinePolygon(it->painterPath, penLineIndex);
+        const auto modelIndex = index(modelIndexInt);
+        emit dataChanged(modelIndex, modelIndex, {PainterPathRole});
+    } else {
+        //Create a new line
+        int lastIndex = m_finishedPaths.size() + m_finishLineIndexOffset;
+        beginInsertRows(QModelIndex(), lastIndex, lastIndex);
+        Path newPath {QPainterPath(), lineWidth};
+        m_finishedPaths.append(newPath);
+        auto& lastPath = m_finishedPaths.last();
+        addLinePolygon(lastPath.painterPath, penLineIndex);
+        endInsertRows();
+    }
+    // }
+}
+
+

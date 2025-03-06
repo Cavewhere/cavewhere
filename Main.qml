@@ -1,5 +1,7 @@
 import QtQuick
 import QtQuick.Shapes
+import QtQuick.Controls
+import QtQuick.Layouts
 import CaveWhereSketch
 
 Window {
@@ -15,6 +17,32 @@ Window {
     PainterPathModel {
         id: painterPathModel
         penLineModel: penModel
+    }
+
+    ButtonGroup {
+        id: strokeWidthGroupId
+    }
+
+    GroupBox {
+        title: "Stroke Width"
+        z: 1
+        ColumnLayout {
+            RadioButton {
+                text: "Wall"
+                ButtonGroup.group: strokeWidthGroupId
+                onClicked: {
+                    penModel.currentStrokeWidth = 4.0
+                }
+            }
+
+            RadioButton {
+                text: "Features"
+                ButtonGroup.group: strokeWidthGroupId
+                onClicked: {
+                    penModel.currentStrokeWidth = 3.0
+                }
+            }
+        }
     }
 
     Item {
@@ -50,6 +78,8 @@ Window {
             Instantiator {
                 model: painterPathModel
                 delegate: SketchShapePath {
+                    required property double strokeWidthRole
+
                     //painterPath is a required property defined in c++
                     // parent: shapeId
                     strokeColor: "black"
@@ -59,8 +89,8 @@ Window {
                     fillColor: "transparent"
                     capStyle: ShapePath.RoundCap
                     // joinStyle: ShapePath.RoundJoin
-                    fillRule: ShapePath.WindingFill
-                    strokeWidth: 2.5
+                    // fillRule: ShapePath.WindingFill
+                    strokeWidth: strokeWidthRole
                     // strokeWidth: -1
                 }
                 onObjectAdded: (index, object) => {
@@ -68,6 +98,9 @@ Window {
                                    // console.log("object:" + object)
                                    shapeId.data.push(object)
                                }
+                onObjectRemoved: (index, object) => {
+                                    object.destroy()
+                                 }
             }
 
             // SketchShapePath {
