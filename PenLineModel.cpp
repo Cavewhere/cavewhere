@@ -70,9 +70,6 @@ void PenLineModel::addPoint(int lineIndex, PenPoint point)
             return;
         } else {
             // qDebug() << "Point:" << point.position << point.width;
-            // if(points.size() > 2) {
-            //     point.width = points.at(1).width;
-            // }
             points.append(point);
         }
     } else {

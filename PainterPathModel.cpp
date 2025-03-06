@@ -206,12 +206,26 @@ void PainterPathModel::addLinePolygon(QPainterPath &path, int modelRow)
         return points;
     };
 
+    auto centerline = [](const QVector<PenPoint>& linePoints) {
+        QPainterPath path;
+        path.reserve(linePoints.size());
+        if(linePoints.size() > 0) {
+            path.moveTo(linePoints.first().position);
+            for(int i = 1; i < linePoints.size(); i++) {
+                path.lineTo(linePoints.at(i).position);
+            }
+        }
+        return path;
+    };
+
     //Debugging:
     auto penLine = m_penLineModel->data(m_penLineModel->index(modelRow), PenLineModel::LineRole).value<PenLine>();
     auto linePoints = penLine.points;
 
     if(linePoints.size() >= 2) {
-        path.addPolygon(polygon(linePoints));
+        // path.addPolygon(polygon(linePoints));
+
+        path.addPath(centerline(linePoints));
 
         //Generate the perpendicularLines that give width to the pen line
         // QVector<QLineF> perpendicularLines;

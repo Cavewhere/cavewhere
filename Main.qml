@@ -55,11 +55,13 @@ Window {
                     strokeColor: "black"
                     // strokeColor: "transparent"
                     // fillColor: "red"
-                    fillColor: "black"
-                    // fillColor: "transparent"
+                    // fillColor: "black"
+                    fillColor: "transparent"
+                    capStyle: ShapePath.RoundCap
+                    // joinStyle: ShapePath.RoundJoin
                     fillRule: ShapePath.WindingFill
-                    // strokeWidth: .1
-                    strokeWidth: -1
+                    strokeWidth: 2.5
+                    // strokeWidth: -1
                 }
                 onObjectAdded: (index, object) => {
                                    // Manually add to the Shape’s data
