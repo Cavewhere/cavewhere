@@ -54,12 +54,12 @@ Window {
                     // parent: shapeId
                     strokeColor: "black"
                     // strokeColor: "transparent"
-                    fillColor: "red"
-                    // fillColor: "black"
+                    // fillColor: "red"
+                    fillColor: "black"
                     // fillColor: "transparent"
                     fillRule: ShapePath.WindingFill
-                    strokeWidth: .1
-                    // strokeWidth: -1
+                    // strokeWidth: .1
+                    strokeWidth: -1
                 }
                 onObjectAdded: (index, object) => {
                                    // Manually add to the Shape’s data

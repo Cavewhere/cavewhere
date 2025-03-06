@@ -66,6 +66,7 @@ private:
     QPainterPath m_activePath; //At index 1
     QPointer<PenLineModel> m_penLineModel;
     int m_previousActivePath = -1;
+    double m_maxWidth = 2.5;
 
     void addLinePolygon(QPainterPath& path, int modelRow);
 

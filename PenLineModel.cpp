@@ -57,20 +57,22 @@ void PenLineModel::addPoint(int lineIndex, PenPoint point)
     }
 
     if(point.width < 0.1) {
+        qDebug() << "Rejected for too small width:" << point.width;
         return;
     }
-
-    point.width = std::min(2.5, point.width);
 
 
     // Append the point to the specified PenLine.
     auto& points =  m_lines[lineIndex].points;
     if(!points.isEmpty()) {
         QLineF distanceLine(points.last().position, point.position);
-        if(distanceLine.length() <= 10.0) {
+        if(distanceLine.length() <= 0.2) {
             return;
         } else {
             // qDebug() << "Point:" << point.position << point.width;
+            // if(points.size() > 2) {
+            //     point.width = points.at(1).width;
+            // }
             points.append(point);
         }
     } else {

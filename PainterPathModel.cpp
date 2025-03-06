@@ -106,7 +106,7 @@ void PainterPathModel::addLinePolygon(QPainterPath &path, int modelRow)
     //end cap will drawn on p2 with the direction from p1 to p2
     auto cap = [](const QPointF& normal, const QLineF& perpendicularLine, double radius) {
         QVector<QPointF> points;
-        const int tessellation = 7;
+        const int tessellation = 9;
         points.reserve(tessellation - 2); //We don't include first and last points
 
         // The endpoints of the perpendicular line are the start and end of the arc.
@@ -184,21 +184,24 @@ void PainterPathModel::addLinePolygon(QPainterPath &path, int modelRow)
         points.reserve(perpendicularLines.size() * 2 + 6);
 
         //Begin cap
-        // points.append(beginCap(linePoints, perpendicularLines.at(0)));
+        points.append(beginCap(linePoints, perpendicularLines.at(0)));
 
         //Go forward around the top edge of the polygon
+        // qDebug() << "PerpendicularLines:" << perpendicularLines.size();
         for(const auto& line : perpendicularLines) {
             points.append(line.p1());
         }
 
         //End cap
-        // auto lastPerpendicularIndex = perpendicularLines.size() - 1;
-        // points.append(endCap(linePoints, perpendicularLines.at(lastPerpendicularIndex)));
+        auto lastPerpendicularIndex = perpendicularLines.size() - 1;
+        points.append(endCap(linePoints, perpendicularLines.at(lastPerpendicularIndex)));
 
         //Go backward around the bottom edge of the polygon
         for(auto it = perpendicularLines.crbegin(); it != perpendicularLines.crend(); ++it) {
             points.append(it->p2());
         }
+
+        // qDebug() << "points:" << points;
 
         return points;
     };
@@ -211,14 +214,14 @@ void PainterPathModel::addLinePolygon(QPainterPath &path, int modelRow)
         path.addPolygon(polygon(linePoints));
 
         //Generate the perpendicularLines that give width to the pen line
-        QVector<QLineF> perpendicularLines;
-        perpendicularLines.reserve(linePoints.size());
-        for(int i = 0; i < linePoints.size(); i++) {
-            auto line = perpendicularLineAt(linePoints, i);
-            // perpendicularLines.append(line);
-            path.moveTo(line.p1());
-            path.lineTo(line.p2());
-        }
+        // QVector<QLineF> perpendicularLines;
+        // perpendicularLines.reserve(linePoints.size());
+        // for(int i = 0; i < linePoints.size(); i++) {
+        //     auto line = perpendicularLineAt(linePoints, i);
+        //     // perpendicularLines.append(line);
+        //     path.moveTo(line.p1());
+        //     path.lineTo(line.p2());
+        // }
 
         // path = path.simplified();
     }
@@ -238,7 +241,8 @@ QLineF PainterPathModel::perpendicularLineAt(const QVector<PenPoint>& points, in
     QLineF topLine;
     QLineF bottomLine;
 
-    double halfWidth = mid.width * 0.5;
+    double width = std::min(m_maxWidth, mid.width);
+    double halfWidth = width * 0.5;
 
     //    qDebug() << "Null?:" << !left.isNull() << !right.isNull();
     if(!left.isNull() && !right.isNull()) {
@@ -262,27 +266,30 @@ QLineF PainterPathModel::perpendicularLineAt(const QVector<PenPoint>& points, in
         Q_ASSERT(topLine.p2() != bottomLine.p2());
     } else if(!left.isNull() || !right.isNull()){
         QLineF line;
+        double direction;
         if(!left.isNull()) {
             //The start section
             line = QLineF(mid.position, left.position);
+            direction = 1.0;
             // qDebug() << "left good:" << line;
         } else if(!right.isNull()) {
-            line = QLineF(right.position, mid.position);
+            line = QLineF(mid.position, right.position);
+            direction = -1.0;
             // qDebug() << "Right good:" << line;
         }
-
 
         // qDebug() << "Mid:" << mid.position << right.position << line.length();
         Q_ASSERT(line.length() > 0.0);
 
         QLineF normalLine = line.normalVector();
+
         //        qDebug() << "NormalLine:" << normalLine;
 
         topLine = normalLine;
-        topLine.setLength(halfWidth);
+        topLine.setLength(direction * halfWidth);
 
         bottomLine = normalLine;
-        bottomLine.setLength(-halfWidth);
+        bottomLine.setLength(-1.0 * direction * halfWidth);
 
         Q_ASSERT(topLine.p1() == bottomLine.p1());
         //        Q_ASSERT(topLine.p2() != bottomLine.p2());
