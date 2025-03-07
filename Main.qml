@@ -77,6 +77,9 @@ Window {
             id: shapeId
             anchors.fill: parent
 
+            // preferredRendererType: Shape.CurveRenderer
+            // asynchronous: true
+
             // SketchShapePath {
 
             // }
@@ -97,6 +100,7 @@ Window {
                     fillRule: ShapePath.WindingFill
                     // strokeWidth: strokeWidthRole < 0 ? 0.1 : strokeWidthRole //For Debugging
                     strokeWidth: strokeWidthRole
+
 
                 }
                 onObjectAdded: (index, object) => {
