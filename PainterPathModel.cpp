@@ -229,6 +229,32 @@ void PainterPathModel::addLinePolygon(QPainterPath &path, int modelRow)
         return points;
     };
 
+    auto smoothPressure = [this](const QVector<PenPoint>& linePoints) {
+        QVector<PenPoint> points;
+        points.reserve(linePoints.size());
+
+        int window = m_smoothingPressureWindow;
+        int size = linePoints.size();
+
+        for (int i = 0; i < size; ++i) {
+            int start = std::max(0, i - window);
+            int end = std::min(size - 1, i + window);
+
+            float sumPressure = 0.0f;
+            int count = end - start + 1;
+
+            for (int j = start; j <= end; ++j) {
+                sumPressure += linePoints[j].pressure;
+            }
+
+            PenPoint smoothedPoint = linePoints[i];
+            smoothedPoint.pressure = sumPressure / count;
+            points.push_back(smoothedPoint);
+        }
+
+        return points;
+    };
+
     auto centerline = [](const QVector<PenPoint>& linePoints) {
         QPainterPath path;
         path.reserve(linePoints.size());
@@ -250,7 +276,7 @@ void PainterPathModel::addLinePolygon(QPainterPath &path, int modelRow)
         if(penWidth > 0.0) {
             path.addPath(centerline(linePoints));
         } else {
-            path.addPolygon(polygon(linePoints));
+            path.addPolygon(polygon(smoothPressure(linePoints)));
         }
 
         //Generate the perpendicularLines that give width to the pen line

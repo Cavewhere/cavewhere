@@ -74,6 +74,7 @@ private:
     double m_minHalfWidth = 0.75;
     double m_widthScale = 10.0;
     int m_endPointTessellation = 5; //should be greater than 3
+    int m_smoothingPressureWindow = 5;
     double pressureToLineHalfWidth(const PenPoint& point) const;
 
 

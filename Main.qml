@@ -93,8 +93,10 @@ Window {
 
                     //painterPath is a required property defined in c++
                     // parent: shapeId
+                    pathHints: ShapePath.PathLinear
                     strokeColor: strokeWidthRole > 0 ? "black" : "transparent"
                     // strokeColor: strokeWidthRole > 0 ? "black" : "red" //For Debugging
+                    // fillColor: strokeWidthRole > 0 ? "lightgray" : "black"
                     fillColor: strokeWidthRole > 0 ? "transparent" : "black"
                     capStyle: ShapePath.RoundCap
                     fillRule: ShapePath.WindingFill
