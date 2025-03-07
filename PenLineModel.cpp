@@ -64,10 +64,10 @@ void PenLineModel::addPoint(int lineIndex, PenPoint point)
         return;
     }
 
-    if(point.width < 0.1) {
-        qDebug() << "Rejected for too small width:" << point.width;
-        return;
-    }
+    // if(point.pressure < 0.1) {
+    //     qDebug() << "Rejected for too small width:" << point.pressure;
+    //     return;
+    // }
 
 
     // Append the point to the specified PenLine.
@@ -86,7 +86,7 @@ void PenLineModel::addPoint(int lineIndex, PenPoint point)
     }
 
     if(points.size() == 2) {
-        points[0].width = points.at(1).width;
+        points[0].pressure = points.at(1).pressure;
     }
 
     // Notify that the data for this row has changed so that any views update.

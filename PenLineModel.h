@@ -14,18 +14,18 @@ class PenPoint {
 
 public:
     PenPoint() = default;
-    PenPoint(QPointF position, double width) :
+    PenPoint(QPointF position, double pressure) :
         position(position),
-        width(width)
+        pressure(pressure)
     {
     }
 
     bool isNull() const {
-        return width < 0.0;
+        return pressure < 0.0;
     }
 
     QPointF position;
-    double width = -1.0;
+    double pressure = -1.0;
 };
 
 // A pen line consisting of multiple pen points.

@@ -39,7 +39,15 @@ Window {
                 text: "Features"
                 ButtonGroup.group: strokeWidthGroupId
                 onClicked: {
-                    penModel.currentStrokeWidth = 3.0
+                    penModel.currentStrokeWidth = 2.5
+                }
+            }
+
+            RadioButton {
+                text: "With Pressure"
+                ButtonGroup.group: strokeWidthGroupId
+                onClicked: {
+                    penModel.currentStrokeWidth = -1.0;
                 }
             }
         }
@@ -82,16 +90,14 @@ Window {
 
                     //painterPath is a required property defined in c++
                     // parent: shapeId
-                    strokeColor: "black"
-                    // strokeColor: "transparent"
-                    // fillColor: "red"
-                    // fillColor: "black"
-                    fillColor: "transparent"
+                    strokeColor: strokeWidthRole > 0 ? "black" : "transparent"
+                    // strokeColor: strokeWidthRole > 0 ? "black" : "red" //For Debugging
+                    fillColor: strokeWidthRole > 0 ? "transparent" : "black"
                     capStyle: ShapePath.RoundCap
-                    // joinStyle: ShapePath.RoundJoin
-                    // fillRule: ShapePath.WindingFill
+                    fillRule: ShapePath.WindingFill
+                    // strokeWidth: strokeWidthRole < 0 ? 0.1 : strokeWidthRole //For Debugging
                     strokeWidth: strokeWidthRole
-                    // strokeWidth: -1
+
                 }
                 onObjectAdded: (index, object) => {
                                    // Manually add to the Shape’s data
@@ -166,14 +172,7 @@ Window {
                     // console.log("Point.pressure:" + handler.point.pressure + active)
 
                     if(active) {
-                        let width = pressureScale * handler.point.pressure
-                        // if(width === 0.0) {
-                        //     console.log("Width is zero!")
-                        // }
-
-                        // width = Math.min(3.0, width);
-
-                        let penPoint = penModel.penPoint(handler.point.position, width)
+                        let penPoint = penModel.penPoint(handler.point.position, handler.point.pressure)
                         penModel.addPoint(painterPathModel.activeLineIndex, penPoint)
                     }
                 }
