@@ -150,9 +150,7 @@ Window {
             PointHandler {
                 id: handler
 
-                property double pressureScaleStylus: 20.0
-                property double pressureScaleMouse: 10.0
-                property double pressureScale: pressureScaleStylus
+                property double pressureScale: 10.0
 
                 acceptedDevices: PointerDevice.Stylus | PointerDevice.Mouse
                 target: Rectangle {

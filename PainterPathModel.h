@@ -70,9 +70,9 @@ private:
     static const int m_finishLineIndexOffset = 1;
 
     //Free stoke pen
-    double m_maxHalfWidth = 1.5; //This is half the width the line
-    double m_minHalfWidth = 0.75;
-    double m_widthScale = 10.0;
+    double m_maxHalfWidth = 3.0; //This is half the width the line
+    double m_minHalfWidth = 0.5;
+    double m_widthScale = 1.5;
     int m_endPointTessellation = 5; //should be greater than 3
     int m_smoothingPressureWindow = 5;
     double pressureToLineHalfWidth(const PenPoint& point) const;

@@ -119,8 +119,9 @@ void PainterPathModel::setPenLineModel(PenLineModel* penLineModel) {
 
 double PainterPathModel::pressureToLineHalfWidth(const PenPoint &point) const
 {
-    double scaledPressure = point.pressure * m_widthScale;
-    return std::clamp(scaledPressure, m_minHalfWidth, m_maxHalfWidth);
+    Q_ASSERT(point.pressure >= 0.0);
+    Q_ASSERT(point.pressure <= 1.0);
+    return m_widthScale * (point.pressure * (m_maxHalfWidth - m_minHalfWidth) + m_minHalfWidth);
 }
 
 void PainterPathModel::addLinePolygon(QPainterPath &path, int modelRow)
