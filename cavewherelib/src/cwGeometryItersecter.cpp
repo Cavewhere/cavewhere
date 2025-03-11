@@ -98,8 +98,7 @@ double cwGeometryItersecter::intersects(const QRay3D &ray) const
 {
     QList<double> intersections;
 
-    foreach(Node node, Nodes) {
-
+    for(const Node& node : Nodes) {
         double t = node.BoundingBox.intersection(ray);
         if(!qIsNaN(t)) {
             intersections.append(t);
@@ -113,8 +112,8 @@ double cwGeometryItersecter::intersects(const QRay3D &ray) const
 
     //Find the max value int intersections
     double maxValue = -std::numeric_limits<double>::max();
-    foreach(double t, intersections) {
-        maxValue = qMax(t, maxValue);
+    for(double t : intersections) {
+        maxValue = std::max(t, maxValue);
     }
 
     return maxValue;
@@ -179,14 +178,12 @@ void cwGeometryItersecter::addLines(const cwGeometryItersecter::Object &object)
  */
 double cwGeometryItersecter::nearestNeighbor(const QRay3D &ray) const
 {
-
-    QVector<QVector3D> points;
-    points.resize(8);
+    std::array<QVector3D, 8> points;
 
     double bestT = 0.0;
     double bestDistance = std::numeric_limits<double>::max();
 
-    foreach(Node node, Nodes) {
+    for(const Node& node : Nodes) {
 
         QVector3D min = node.BoundingBox.minimum();
         QVector3D max = node.BoundingBox.maximum();
@@ -200,8 +197,7 @@ double cwGeometryItersecter::nearestNeighbor(const QRay3D &ray) const
         points[6] = QVector3D(min.x(), max.y(), max.z());
         points[7] = max;
 
-        for(int i = 0; i < 8; i++) {
-            const QVector3D& point = points.at(i);
+        for(const QVector3D& point : points) {
             double distance = ray.distance(point);
             if(distance < bestDistance) {
                 double t = ray.projectedDistance(point);

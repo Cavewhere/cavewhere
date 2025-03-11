@@ -35,6 +35,7 @@ cwBaseTurnTableInteraction::cwBaseTurnTableInteraction(QQuickItem *parent) :
     setupInteractionTimers();
 }
 
+
 /**
  * @brief cwBaseTurnTableInteraction::setGridPlane
  * @param plan
@@ -82,6 +83,9 @@ void cwBaseTurnTableInteraction::centerOn(QVector3D point, bool animate)
  * Unprojects the screen point at point and returns a QVector3d in world coordinates
  */
 QVector3D cwBaseTurnTableInteraction::unProject(QPoint point) {
+    Q_ASSERT(Camera);
+    Q_ASSERT(scene());
+    Q_ASSERT(scene()->geometryItersecter());
 
     //Create a ray from the back projection front and back plane
     QVector3D frontPoint = Camera->unProject(point, 0.0);
@@ -113,6 +117,17 @@ void cwBaseTurnTableInteraction::stopAnimation()
     if(ViewMatrixAnimation->state() == QAbstractAnimation::Running) {
         ViewMatrixAnimation->setCurrentTime(ViewMatrixAnimation->duration());
         ViewMatrixAnimation->stop();
+    }
+}
+
+void cwBaseTurnTableInteraction::bindPerspectiveIntersection()
+{
+    if(Camera && Scene) {
+        m_perspectiveIntersection.setBinding([this](){
+            return unProject(m_perspectiveMappedPos);
+        });
+    } else {
+        m_perspectiveIntersection.setValue(QVector3D());
     }
 }
 
@@ -184,14 +199,10 @@ void cwBaseTurnTableInteraction::rotate(QPoint position) {
 /**
   Zooms the view
   */
-void cwBaseTurnTableInteraction::zoom(QPoint position, int delta) {
+void cwBaseTurnTableInteraction::zoom(QPoint position, double delta) {
     ZoomPosition = position;
-    if(!ZoomInteractionTimer->isActive()) {
-        ZoomInteractionTimer->start();
-        ZoomDelta = delta;
-    } else {
-        ZoomDelta += delta;
-    }
+    ZoomDelta = delta;
+    zoomLastPosition();
 }
 
 /**
@@ -215,6 +226,8 @@ void cwBaseTurnTableInteraction::resetView() {
             Camera->setZoomScale(Camera->defaultZoomScale());
         }
     }
+
+    bindPerspectiveIntersection();
 }
 
 
@@ -418,24 +431,27 @@ void cwBaseTurnTableInteraction::zoomPerspective()
 {
     if(Camera.isNull()) { return; }
 
-    int delta = ZoomDelta;
+    double delta = ZoomDelta;
     QPoint position = ZoomPosition;
 
     //Make the event position into gl viewport
     QPoint mappedPos = Camera->mapToGLViewport(position);
+    m_perspectiveMappedPos = mappedPos; //Update the mapped position
+
     //Get the ray from the front of the screen to the back of the screen
     QVector3D front = Camera->unProject(mappedPos, 0.0);
 
-    //Find the intsection on the plane
-    QVector3D intersection = unProject(mappedPos);
+    //Find the intsection on the plane, this is only updated if the
+    //mouse position changed because of the property bindings
+    QVector3D intersection = m_perspectiveIntersection.value(); //unProject(mappedPos);
 
     //Smallray
     QVector3D ray = intersection - front;
     float rayLength = ray.length();
     ray.normalize();
 
-    float t = .0005 * delta;
-    t = qMax(-1.0f, qMin(1.0f, t));
+    // double t =  delta;
+    double t = qMax(-1.0, qMin(1.0, delta));
     t = rayLength * t;
 
     QVector3D newPositionDelta = ray * t;
@@ -454,13 +470,13 @@ void cwBaseTurnTableInteraction::zoomOrtho()
 {
     if(Camera.isNull()) { return; }
 
-    int delta = ZoomDelta;
+    double delta = ZoomDelta;
     QPoint position = ZoomPosition;
 
     //Make the event position into gl viewport
     QPoint mappedPos = Camera->mapToGLViewport(position);
 
-    double direction = delta > 0 ? 1.075 : 0.925;
+    double direction = 1.0 + delta;
     double zoomLevel = camera()->zoomScale() * direction;
 
     QVector3D before = Camera->unProject(mappedPos, 1.0);
@@ -535,6 +551,8 @@ void cwBaseTurnTableInteraction::setScene(cwScene* scene) {
         Scene = scene;
         emit sceneChanged();
     }
+
+    bindPerspectiveIntersection();
 }
 
 /**
