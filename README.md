@@ -30,7 +30,7 @@ This guide outlines the steps to build and run CaveWhere, a cave mapping softwar
 First, update your package list and install all necessary dependencies with the following command:
 
 ```bash
-sudo apt update && sudo apt install -y build-essential cmake ninja-build pipx liblocale-po-perl git libsqlite3-dev
+sudo apt update && sudo apt install -y build-essential cmake ninja-build pipx liblocale-po-perl git
 ```
 
 ## Conan Package Manager Installation
