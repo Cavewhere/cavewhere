@@ -1,13 +1,14 @@
 #ifndef PAINTERPATHMODEL_H
 #define PAINTERPATHMODEL_H
 
+//Our includes
+#include "PenLineModel.h"
+
 #include <QAbstractListModel>
 #include <QPainterPath>
 #include <QPointer>
 #include <QObjectBindableProperty>
 
-//Our includes
-#include "PenLineModel.h" // Ensure this header is available
 
 
 /**
@@ -65,11 +66,13 @@ private:
     struct ActivePath : Path {
         //Catch vectors of the top and bottom part of the polygon line, these aren't used
         //if the lineWidth isn't -1
+        QVector<QPointF> beginCap;
         QVector<QPointF> topLine;
         QVector<QPointF> bottomLine;
     };
 
     struct VariableWidthLine {
+        QVector<QPointF> beginCap;
         QVector<QPointF> topLine;
         QVector<QPointF> bottomLine; //doesn't include the end cap
         QPolygonF polygon; //includes the end cap

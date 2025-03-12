@@ -1,7 +1,7 @@
 #ifndef PENLINEMODEL_H
 #define PENLINEMODEL_H
 
-#include <QAbstractListModel>
+#include <QAbstractItemModel>
 #include <QQmlEngine>
 #include <QPointF>
 #include <QObjectBindableProperty>
@@ -83,7 +83,6 @@ private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(PenLineModel, double, m_currentStrokeWidth, 2.5, &PenLineModel::currentStrokeWidthChanged);
     QVector<PenLine> m_lines;
 
-public:
 };
 
 

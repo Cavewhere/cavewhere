@@ -16,3 +16,5 @@ class CaveWhereConan(ConanFile):
     requires = [
     ("catch2/[>=2.13.10]")
     ]
+    generators = "CMakeDeps", "CMakeToolchain", "VirtualBuildEnv", "VirtualRunEnv"
+

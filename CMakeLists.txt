@@ -1,7 +1,8 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.23)
 
 project(CaveWhereSketch VERSION 0.1 LANGUAGES CXX)
 
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Catch2 REQUIRED)
@@ -15,7 +16,6 @@ qt_standard_project_setup(REQUIRES 6.5)
 
 qt_add_executable(CaveWhereSketch
     main.cpp
-    testcases/test_PainterPathModel.cpp
 )
 
 qt_add_qml_module(cavewhere_sketch
@@ -83,8 +83,8 @@ target_sources(cavewhere-sketch-test PRIVATE ${cavewhere_sketch_test_CPP_FILES} 
 
 target_link_libraries(cavewhere-sketch-test
     PRIVATE
-    Catch2::Catch2
     cavewhere_sketch
+    Catch2::Catch2
 )
 
 

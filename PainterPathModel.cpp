@@ -176,9 +176,13 @@ void PainterPathModel::addPointToActivePath(const PenPoint &newPoint)
         // auto line = perpendicularLineAt(linePoints, linePoints.size() - 1);
 
         QPolygonF linePolygon;
-        linePolygon.reserve(m_activePath.topLine.size() + 1
-                            + m_activePath.bottomLine.size() + 1
-                            + m_endPointTessellation);
+        linePolygon.reserve(
+            m_activePath.beginCap.size()
+            + m_activePath.topLine.size() + 1
+            + m_activePath.bottomLine.size() + 1
+            + m_endPointTessellation);
+
+        linePolygon.append(m_activePath.beginCap);
 
         //Skip the first line because it's in the middle but perpendicularLineAt
         //treats it at the end because smooth lines are only the windows size
@@ -259,12 +263,13 @@ void PainterPathModel::addLinePolygon(QPainterPath &path, int modelRow)
         polygon.reserve((perpendicularLines.size() + m_endPointTessellation) * 2 );
 
         //Begin cap
-        QVector<QPointF> topLine;
-        topLine.reserve(perpendicularLines.size() + m_endPointTessellation);
-        topLine.append(beginCap(linePoints, perpendicularLines.at(0)));
+        auto beginCapPoints = beginCap(linePoints, perpendicularLines.at(0));
+        polygon.append(beginCapPoints);
 
         //Go forward around the top edge of the polygon
         // qDebug() << "PerpendicularLines:" << perpendicularLines.size();
+        QVector<QPointF> topLine;
+        topLine.reserve(perpendicularLines.size());
         for(const auto& line : perpendicularLines) {
             topLine.append(line.p1());
         }
@@ -285,6 +290,7 @@ void PainterPathModel::addLinePolygon(QPainterPath &path, int modelRow)
         polygon.append(bottomLine);
 
         return VariableWidthLine {
+            beginCapPoints,
             topLine,
             bottomLine,
             polygon
@@ -321,6 +327,7 @@ void PainterPathModel::addLinePolygon(QPainterPath &path, int modelRow)
 
             if(modelRow == m_activeLineIndex) {
                 //Cache the variablWidthline data
+                m_activePath.beginCap = polygonLine.beginCap;
                 m_activePath.topLine = polygonLine.topLine;
                 m_activePath.bottomLine = polygonLine.bottomLine;
             }
