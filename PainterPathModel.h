@@ -62,7 +62,20 @@ private:
         double strokeWidth;
     };
 
-    Path m_activePath; //At index 0
+    struct ActivePath : Path {
+        //Catch vectors of the top and bottom part of the polygon line, these aren't used
+        //if the lineWidth isn't -1
+        QVector<QPointF> topLine;
+        QVector<QPointF> bottomLine;
+    };
+
+    struct VariableWidthLine {
+        QVector<QPointF> topLine;
+        QVector<QPointF> bottomLine; //doesn't include the end cap
+        QPolygonF polygon; //includes the end cap
+    };
+
+    ActivePath m_activePath; //At index 0
     QList<Path> m_finishedPaths;
     QPointer<PenLineModel> m_penLineModel;
     int m_previousActivePath = -1;
@@ -71,14 +84,14 @@ private:
 
     //Free stoke pen
     double m_maxHalfWidth = 3.0; //This is half the width the line
-    double m_minHalfWidth = 0.5;
+    double m_minHalfWidth = 0.25;
     double m_widthScale = 1.5;
     int m_endPointTessellation = 5; //should be greater than 3
     int m_smoothingPressureWindow = 5;
     double pressureToLineHalfWidth(const PenPoint& point) const;
 
 
-
+    void addPointToActivePath(const PenPoint& newPoint);
     void addLinePolygon(QPainterPath& path, int modelRow);
 
     QLineF perpendicularLineAt(const QVector<PenPoint> &points, int index) const;
@@ -91,6 +104,11 @@ private:
     QList<PainterPathModel::Path>::iterator indexOfFinalPaths(double strokeWidth);
 
     void addOrUpdateFinishPath(int penLineIndex);
+
+    //For polygon generation
+    QVector<QPointF> capFromNormal(const QPointF& normal, const QLineF& perpendicularLine, double radius) const;
+    QVector<QPointF> cap(const QPointF& firstPoint, const QPointF& secondPoint, const QLineF& perpendicularLine) const;
+    QVector<QPointF> endCap(const QVector<PenPoint>& points, const QLineF& perpendicularLine) const;
 
 };
 

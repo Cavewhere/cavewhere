@@ -76,19 +76,49 @@ void PainterPathModel::setPenLineModel(PenLineModel* penLineModel) {
 
         if(m_penLineModel) {
             connect(m_penLineModel, &PenLineModel::rowsInserted, this, [this](const QModelIndex &parent, int first, int last) {
-                Q_UNUSED(parent);
-                Q_ASSERT(first >= 0);
-                Q_ASSERT(first < m_penLineModel->rowCount());
-                Q_ASSERT(last >= 0);
-                Q_ASSERT(last < m_penLineModel->rowCount());
-                Q_ASSERT(first <= last);
 
-                for(int i = first; i <= last; ++i) {
-                    if(i == m_activeLineIndex) {
-                        updateActivePath();
-                        updateActivePathStrokeWidth();
+                if(parent != QModelIndex()) {
+                    //Points added
+                    Q_ASSERT(first >= 0);
+                    Q_ASSERT(first < m_penLineModel->rowCount(parent));
+                    Q_ASSERT(last >= 0);
+                    Q_ASSERT(last < m_penLineModel->rowCount(parent));
+                    Q_ASSERT(first <= last);
+
+                    if(parent.row() == m_activeLineIndex) {
+                        //Make sure this is just at the end
+                        int pointCount = m_penLineModel->rowCount(parent);
+                        if(last ==  pointCount - 1 && pointCount > 2) {
+                            for(int i = first; i <= last; ++i) {
+                                //Add geometry to the active path
+                                auto index = m_penLineModel->index(i, 0, parent);
+                                PenPoint point = index.data(PenLineModel::PenPointRole).value<PenPoint>();
+                                addPointToActivePath(point);
+                            }
+                        } else {
+                            //Update the full active path
+                            updateActivePath();
+                        }
                     } else {
-                        addOrUpdateFinishPath(i);
+                        //Update finished path
+                        addOrUpdateFinishPath(parent.row());
+                    }
+
+                } else {
+                    //Full line added
+                    Q_ASSERT(first >= 0);
+                    Q_ASSERT(first < m_penLineModel->rowCount());
+                    Q_ASSERT(last >= 0);
+                    Q_ASSERT(last < m_penLineModel->rowCount());
+                    Q_ASSERT(first <= last);
+
+                    for(int i = first; i <= last; ++i) {
+                        if(i == m_activeLineIndex) {
+                            updateActivePath();
+                            updateActivePathStrokeWidth();
+                        } else {
+                            addOrUpdateFinishPath(i);
+                        }
                     }
                 }
             });
@@ -124,71 +154,72 @@ double PainterPathModel::pressureToLineHalfWidth(const PenPoint &point) const
     return m_widthScale * (point.pressure * (m_maxHalfWidth - m_minHalfWidth) + m_minHalfWidth);
 }
 
+void PainterPathModel::addPointToActivePath(const PenPoint &newPoint)
+{
+    if(m_activePath.strokeWidth > 0.0) {
+        m_activePath.painterPath.lineTo(newPoint.position);
+    } else {
+        auto last = m_penLineModel->rowCount() - 1;
+        auto penLine = m_penLineModel->data(m_penLineModel->index(last), PenLineModel::LineRole).value<PenLine>();
+        auto linePoints = penLine.points;
+
+        auto line = perpendicularLineAt(linePoints, linePoints.size() - 1);
+
+        QPolygonF linePolygon;
+        linePolygon.reserve(m_activePath.topLine.size() + 1
+                            + m_activePath.bottomLine.size() + 1
+                            + m_endPointTessellation);
+        m_activePath.topLine.append(line.p1());
+
+        linePolygon.append(m_activePath.topLine);
+        linePolygon.append(endCap(linePoints, line));
+
+        m_activePath.bottomLine.prepend(line.p2());
+        qDebug() << "Top: " << m_activePath.topLine.size() << "bottom:" << m_activePath.bottomLine.size();
+        linePolygon.append(m_activePath.bottomLine);
+
+        m_activePath.painterPath.clear();
+        m_activePath.painterPath.addPolygon(linePolygon);
+
+        auto activePathIndex = index(0);
+        emit dataChanged(activePathIndex, activePathIndex, {PainterPathRole});
+    }
+
+    //Generate the perpendicularLines that give width to the pen line
+    // QVector<QLineF> perpendicularLines;
+    // perpendicularLines.reserve(linePoints.size());
+    // for(int i = 0; i < linePoints.size(); i++) {
+    //     auto line = perpendicularLineAt(linePoints, i);
+    //     // perpendicularLines.append(line);
+    //     path.moveTo(line.p1());
+    //     path.lineTo(line.p2());
+    // }
+
+    // path = path.simplified();
+
+    auto activePathIndex = index(0);
+    emit dataChanged(activePathIndex, activePathIndex, {PainterPathRole});
+
+}
+
 void PainterPathModel::addLinePolygon(QPainterPath &path, int modelRow)
 {
-    //end cap will drawn on p2 with the direction from p1 to p2
-    auto cap = [this](const QPointF& normal, const QLineF& perpendicularLine, double radius) {
-        QVector<QPointF> points;
-        Q_ASSERT(m_endPointTessellation >= 3);
-        const int tessellation = m_endPointTessellation;
-        points.reserve(tessellation - 2); //We don't include first and last points
 
-        // The endpoints of the perpendicular line are the start and end of the arc.
-        // Their midpoint is the center of the circle (which is at p2).
-        const QPointF pStart = perpendicularLine.p1();
-        const QPointF pEnd = perpendicularLine.p2();
-        const QPointF center((pStart.x() + pEnd.x()) / 2.0, (pStart.y() + pEnd.y()) / 2.0);
-
-        // Compute the starting angle (from center to pStart)
-        const double angleStart = std::atan2(pStart.y() - center.y(), pStart.x() - center.x());
-
-        // The half circle has two possible arcs.
-        // We pick the one whose midpoint (at angleStart + π/2) lies in the direction of the given normal.
-        const double candidateAngle = angleStart + M_PI / 2.0;
-        const QPointF candidatePoint(center.x() + radius * std::cos(candidateAngle),
-                                     center.y() + radius * std::sin(candidateAngle));
-
-        // Compute the dot product of the candidate offset with the normal vector.
-        const QPointF candidateOffset(candidatePoint.x() - center.x(), candidatePoint.y() - center.y());
-        const double dot = candidateOffset.x() * normal.x() + candidateOffset.y() * normal.y();
-        const bool usePositiveDirection = (dot > 0);
-
-        // Tessellate the half circle (arc of π radians)
-        // We create tessellation number of points starting from angleStart to angleStart ± π.
-        for (int i = 1; i < tessellation - 1; ++i) {
-            const double t = static_cast<double>(i) / (tessellation - 1);
-            double angle = 0.0;
-            if (usePositiveDirection) {
-                angle = angleStart + t * M_PI;
-                const QPointF pt(center.x() + radius * std::cos(angle),
-                                 center.y() + radius * std::sin(angle));
-                points.push_front(pt);
-            } else {
-                angle = angleStart - t * M_PI;
-                const QPointF pt(center.x() + radius * std::cos(angle),
-                                 center.y() + radius * std::sin(angle));
-                points.push_back(pt);
-            }
-        }
-        return points;
-    };
-
-    auto beginCap = [cap, this](const QVector<PenPoint>& points, const QLineF& perpendicularLine) {
+    auto beginCap = [this](const QVector<PenPoint>& points, const QLineF& perpendicularLine) {
         Q_ASSERT(points.size() >= 2);
         auto firstPoint = points.at(0);
         auto normal = firstPoint.position - points.at(1).position;
-        return cap(normal, perpendicularLine, pressureToLineHalfWidth(firstPoint));
+        return capFromNormal(normal, perpendicularLine, pressureToLineHalfWidth(firstPoint));
     };
 
-    auto endCap = [cap, this](const QVector<PenPoint>& points, const QLineF& perpendicularLine) {
-        Q_ASSERT(points.size() >= 2);
-        auto lastIndex = points.size() - 1;
-        auto lastPoint = points.at(lastIndex);
-        auto normal = lastPoint.position - points.at(lastIndex - 1).position;
-        return cap(normal, perpendicularLine, pressureToLineHalfWidth(lastPoint));
-    };
+    // auto endCap = [this](const QVector<PenPoint>& points, const QLineF& perpendicularLine) {
+    //     Q_ASSERT(points.size() >= 2);
+    //     auto lastIndex = points.size() - 1;
+    //     auto lastPoint = points.at(lastIndex);
+    //     return cap(lastPoint.position, points.at(lastIndex - 1).position, perpendicularLine);
+    // };
 
-    auto polygon = [this, beginCap, endCap](const QVector<PenPoint>& linePoints) {
+    auto polygon = [this, beginCap](const QVector<PenPoint>& linePoints)->VariableWidthLine {
         Q_ASSERT(linePoints.size() >= 2);
 
         //Generate the perpendicularLines that give width to the pen line
@@ -197,37 +228,43 @@ void PainterPathModel::addLinePolygon(QPainterPath &path, int modelRow)
         for(int i = 0; i < linePoints.size(); i++) {
             auto line = perpendicularLineAt(linePoints, i);
             perpendicularLines.append(line);
-            // path.moveTo(line.p1());
-            // path.lineTo(line.p2());
         }
 
-        // path.move
-
         //Generate the polygon
-        QPolygonF points;
-        points.reserve((perpendicularLines.size() + m_endPointTessellation) * 2 );
+        QPolygonF polygon;
+        polygon.reserve((perpendicularLines.size() + m_endPointTessellation) * 2 );
 
         //Begin cap
-        points.append(beginCap(linePoints, perpendicularLines.at(0)));
+        QVector<QPointF> topLine;
+        topLine.reserve(perpendicularLines.size() + m_endPointTessellation);
+        topLine.append(beginCap(linePoints, perpendicularLines.at(0)));
 
         //Go forward around the top edge of the polygon
         // qDebug() << "PerpendicularLines:" << perpendicularLines.size();
         for(const auto& line : perpendicularLines) {
-            points.append(line.p1());
+            topLine.append(line.p1());
         }
+
+        //Add to the final polygon
+        polygon.append(topLine);
 
         //End cap
         auto lastPerpendicularIndex = perpendicularLines.size() - 1;
-        points.append(endCap(linePoints, perpendicularLines.at(lastPerpendicularIndex)));
+        polygon.append(endCap(linePoints, perpendicularLines.at(lastPerpendicularIndex)));
 
         //Go backward around the bottom edge of the polygon
+        QVector<QPointF> bottomLine;
+        bottomLine.reserve(perpendicularLines.size());
         for(auto it = perpendicularLines.crbegin(); it != perpendicularLines.crend(); ++it) {
-            points.append(it->p2());
+            bottomLine.append(it->p2());
         }
+        polygon.append(bottomLine);
 
-        // qDebug() << "points:" << points;
-
-        return points;
+        return VariableWidthLine {
+            topLine,
+            bottomLine,
+            polygon
+        };
     };
 
     auto smoothPressure = [this](const QVector<PenPoint>& linePoints) {
@@ -268,7 +305,6 @@ void PainterPathModel::addLinePolygon(QPainterPath &path, int modelRow)
         return path;
     };
 
-    //Debugging:
     auto penLine = m_penLineModel->data(m_penLineModel->index(modelRow), PenLineModel::LineRole).value<PenLine>();
     double penWidth = m_penLineModel->data(m_penLineModel->index(modelRow), PenLineModel::LineWidthRole).toDouble();
     auto linePoints = penLine.points;
@@ -277,7 +313,15 @@ void PainterPathModel::addLinePolygon(QPainterPath &path, int modelRow)
         if(penWidth > 0.0) {
             path.addPath(centerline(linePoints));
         } else {
-            path.addPolygon(polygon(smoothPressure(linePoints)));
+            auto polygonLine = polygon(smoothPressure(linePoints));
+            // auto polygonLine = polygon(linePoints);
+            path.addPolygon(polygonLine.polygon);
+
+            if(modelRow == m_activeLineIndex) {
+                //Cache the variablWidthline data
+                m_activePath.topLine = polygonLine.topLine;
+                m_activePath.bottomLine = polygonLine.bottomLine;
+            }
         }
 
         //Generate the perpendicularLines that give width to the pen line
@@ -446,6 +490,68 @@ void PainterPathModel::addOrUpdateFinishPath(int penLineIndex)
         endInsertRows();
     }
     // }
+}
+
+QVector<QPointF> PainterPathModel::capFromNormal(const QPointF &normal, const QLineF &perpendicularLine, double radius) const
+{
+    QVector<QPointF> points;
+    Q_ASSERT(m_endPointTessellation >= 3);
+    const int tessellation = m_endPointTessellation;
+    points.reserve(tessellation - 2); //We don't include first and last points
+
+    // The endpoints of the perpendicular line are the start and end of the arc.
+    // Their midpoint is the center of the circle (which is at p2).
+    const QPointF pStart = perpendicularLine.p1();
+    const QPointF pEnd = perpendicularLine.p2();
+    const QPointF center((pStart.x() + pEnd.x()) / 2.0, (pStart.y() + pEnd.y()) / 2.0);
+
+    // Compute the starting angle (from center to pStart)
+    const double angleStart = std::atan2(pStart.y() - center.y(), pStart.x() - center.x());
+
+    // The half circle has two possible arcs.
+    // We pick the one whose midpoint (at angleStart + π/2) lies in the direction of the given normal.
+    const double candidateAngle = angleStart + M_PI / 2.0;
+    const QPointF candidatePoint(center.x() + radius * std::cos(candidateAngle),
+                                 center.y() + radius * std::sin(candidateAngle));
+
+    // Compute the dot product of the candidate offset with the normal vector.
+    const QPointF candidateOffset(candidatePoint.x() - center.x(), candidatePoint.y() - center.y());
+    const double dot = candidateOffset.x() * normal.x() + candidateOffset.y() * normal.y();
+    const bool usePositiveDirection = (dot > 0);
+
+    // Tessellate the half circle (arc of π radians)
+    // We create tessellation number of points starting from angleStart to angleStart ± π.
+    for (int i = 1; i < tessellation - 1; ++i) {
+        const double t = static_cast<double>(i) / (tessellation - 1);
+        double angle = 0.0;
+        if (usePositiveDirection) {
+            angle = angleStart + t * M_PI;
+            const QPointF pt(center.x() + radius * std::cos(angle),
+                             center.y() + radius * std::sin(angle));
+            points.push_front(pt);
+        } else {
+            angle = angleStart - t * M_PI;
+            const QPointF pt(center.x() + radius * std::cos(angle),
+                             center.y() + radius * std::sin(angle));
+            points.push_back(pt);
+        }
+    }
+    return points;
+}
+
+
+QVector<QPointF> PainterPathModel::endCap(const QVector<PenPoint> &points, const QLineF &perpendicularLine) const
+{
+    Q_ASSERT(points.size() >= 2);
+    auto lastIndex = points.size() - 1;
+    auto lastPoint = points.at(lastIndex);
+    auto normal = lastPoint.position - points.at(lastIndex - 1).position;
+    return capFromNormal(normal, perpendicularLine, pressureToLineHalfWidth(lastPoint));
+}
+
+auto PainterPathModel::smoothPressure(const QVector<PenPoint> &point, int indexToSmooth)
+{
+
 }
 
 

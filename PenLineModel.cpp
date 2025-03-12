@@ -6,26 +6,42 @@
 #include "PenLineModel.h"
 
 PenLineModel::PenLineModel(QObject* parent)
-    : QAbstractListModel(parent)
+    : QAbstractItemModel(parent)
 {
 }
 
 int PenLineModel::rowCount(const QModelIndex &parent) const {
-    if (parent.isValid())
-        return 0;
+    if (parent.isValid()) {
+        return m_lines.at(parent.row()).points.size();
+    }
     return m_lines.size();
 }
 
 QVariant PenLineModel::data(const QModelIndex &index, int role) const {
-    if (!index.isValid() || index.row() < 0 || index.row() >= m_lines.size())
+    if (!index.isValid()) {
         return QVariant();
+    }
 
-    const PenLine& line = m_lines.at(index.row());
-    switch(role) {
-    case LineRole:
-        return QVariant::fromValue(line);
-    case LineWidthRole:
-        return line.width;
+    qintptr id = static_cast<qintptr>(index.internalId());
+    if(id == -1) {
+        //Line object level
+        if(index.row() >= 0 && index.row() < m_lines.size()) {
+            const PenLine& line = m_lines.at(index.row());
+            switch(role) {
+            case LineRole:
+                return QVariant::fromValue(line);
+            case LineWidthRole:
+                return line.width;
+            }
+        } else {
+            return QVariant();
+        }
+    } else {
+        //Line position data level
+        const PenLine& line = m_lines.at(id);
+        if(role == PenPointRole) {
+            return QVariant::fromValue(line.points.at(index.row()));
+        }
     }
 
     return QVariant();
@@ -36,6 +52,32 @@ QHash<int, QByteArray> PenLineModel::roleNames() const {
     roles[LineRole] = "line";
     roles[LineWidthRole] = "lineWidth";
     return roles;
+}
+
+QModelIndex PenLineModel::index(int row, int column, const QModelIndex &parent) const
+{
+    Q_UNUSED(parent);
+    if(parent == QModelIndex()) {
+        return createIndex(row, 0, -1);
+    } else {
+        auto lineIndex = parent.row();
+        if(lineIndex >= 0 && lineIndex < m_lines.size()) {
+            return createIndex(row, 0, lineIndex);
+        }
+    }
+    return QModelIndex(); //invalid index
+}
+
+QModelIndex PenLineModel::parent(const QModelIndex &child) const
+{
+    qintptr id = static_cast<qintptr>(child.internalId());
+    if(id == -1) {
+        return QModelIndex();
+    } else if(id >= 0 && id < m_lines.size()) {
+        return createIndex(id, 0, -1);
+    } else {
+        return QModelIndex();
+    }
 }
 
 int PenLineModel::addNewLine()
@@ -72,26 +114,30 @@ void PenLineModel::addPoint(int lineIndex, PenPoint point)
 
     // Append the point to the specified PenLine.
     auto& points =  m_lines[lineIndex].points;
+    auto appendPoint = [&](PenPoint point) {
+        int lastIndex = points.size();
+
+        // Notify that the data for this row has changed so that any views update.
+        QModelIndex index = this->index(lineIndex);
+
+        beginInsertRows(index, lastIndex, lastIndex) ;
+        points.append(point);
+        endInsertRows();
+    };
+
     if(!points.isEmpty()) {
         QLineF distanceLine(points.last().position, point.position);
         if(distanceLine.length() <= 0.2) {
             return;
         } else {
             // qDebug() << "Point:" << point.position << point.width;
-            points.append(point);
+            appendPoint(point);
         }
     } else {
         // qDebug() << "Point:" << point.position << point.width;
-        points.append(point);
+        appendPoint(point);
     }
 
-    if(points.size() == 2) {
-        points[0].pressure = points.at(1).pressure;
-    }
-
-    // Notify that the data for this row has changed so that any views update.
-    QModelIndex index = this->index(lineIndex);
-    emit dataChanged(index, index, { LineRole });
 }
 
 void PenLineModel::clear() {

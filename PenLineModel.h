@@ -35,7 +35,8 @@ struct PenLine {
 };
 Q_DECLARE_METATYPE(PenLine)
 
-class PenLineModel : public QAbstractListModel {
+
+class PenLineModel : public QAbstractItemModel {
     Q_OBJECT
     QML_ELEMENT
 
@@ -44,7 +45,8 @@ class PenLineModel : public QAbstractListModel {
 public:
     enum PenLineRoles {
         LineRole = Qt::UserRole + 1,
-        LineWidthRole
+        LineWidthRole,
+        PenPointRole
     };
 
     explicit PenLineModel(QObject* parent = nullptr);
@@ -53,6 +55,10 @@ public:
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     QVariant data(const QModelIndex &index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
+
+    QModelIndex index(int row, int column = 0, const QModelIndex &parent = QModelIndex()) const override;
+    QModelIndex parent(const QModelIndex &child) const override;
+    int columnCount(const QModelIndex &parent) const override { Q_UNUSED(parent); return 0; }
 
     // Utility methods to add or clear lines.
     Q_INVOKABLE int addNewLine();
@@ -76,6 +82,8 @@ signals:
 private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(PenLineModel, double, m_currentStrokeWidth, 2.5, &PenLineModel::currentStrokeWidthChanged);
     QVector<PenLine> m_lines;
+
+public:
 };
 
 
