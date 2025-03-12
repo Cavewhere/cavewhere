@@ -163,19 +163,43 @@ void PainterPathModel::addPointToActivePath(const PenPoint &newPoint)
         auto penLine = m_penLineModel->data(m_penLineModel->index(last), PenLineModel::LineRole).value<PenLine>();
         auto linePoints = penLine.points;
 
-        auto line = perpendicularLineAt(linePoints, linePoints.size() - 1);
+        int endSmooth = linePoints.size() - 1;
+        int beginSmooth = std::max(0, endSmooth - m_smoothingPressureWindow + 1);
+        auto smoothPoints = smoothPressure(linePoints, beginSmooth, endSmooth);
+
+        QVector<QLineF> newPerpendicularLines;
+        newPerpendicularLines.reserve(smoothPoints.size());
+        for(int i = 0; i < smoothPoints.size(); ++i) {
+            newPerpendicularLines.append(perpendicularLineAt(smoothPoints, i));
+        }
+
+        // auto line = perpendicularLineAt(linePoints, linePoints.size() - 1);
 
         QPolygonF linePolygon;
         linePolygon.reserve(m_activePath.topLine.size() + 1
                             + m_activePath.bottomLine.size() + 1
                             + m_endPointTessellation);
-        m_activePath.topLine.append(line.p1());
+
+        //Skip the first line because it's in the middle but perpendicularLineAt
+        //treats it at the end because smooth lines are only the windows size
+        for(int i = 1; i < newPerpendicularLines.size() - 1; ++i) {
+            m_activePath.topLine[beginSmooth + i] = newPerpendicularLines.at(i).p1();
+        }
+
+        m_activePath.topLine.append(newPerpendicularLines.last().p1());
 
         linePolygon.append(m_activePath.topLine);
-        linePolygon.append(endCap(linePoints, line));
+        linePolygon.append(endCap(smoothPoints, newPerpendicularLines.last()));
 
-        m_activePath.bottomLine.prepend(line.p2());
-        qDebug() << "Top: " << m_activePath.topLine.size() << "bottom:" << m_activePath.bottomLine.size();
+        //Skip the first line because it's in the middle but perpendicularLineAt
+        //treats it at the end because smooth lines are only the windows size
+        for(int i = 1; i < newPerpendicularLines.size() - 1; ++i) {
+            //Invert the index
+            int bottomLineIndex = m_activePath.bottomLine.size() - beginSmooth - i;
+            m_activePath.bottomLine[bottomLineIndex] = newPerpendicularLines.at(i).p2();
+        }
+
+        m_activePath.bottomLine.prepend(newPerpendicularLines.last().p2());
         linePolygon.append(m_activePath.bottomLine);
 
         m_activePath.painterPath.clear();
@@ -268,29 +292,7 @@ void PainterPathModel::addLinePolygon(QPainterPath &path, int modelRow)
     };
 
     auto smoothPressure = [this](const QVector<PenPoint>& linePoints) {
-        QVector<PenPoint> points;
-        points.reserve(linePoints.size());
-
-        int window = m_smoothingPressureWindow;
-        int size = linePoints.size();
-
-        for (int i = 0; i < size; ++i) {
-            int start = std::max(0, i - window);
-            int end = std::min(size - 1, i + window);
-
-            float sumPressure = 0.0f;
-            int count = end - start + 1;
-
-            for (int j = start; j <= end; ++j) {
-                sumPressure += linePoints[j].pressure;
-            }
-
-            PenPoint smoothedPoint = linePoints[i];
-            smoothedPoint.pressure = sumPressure / count;
-            points.push_back(smoothedPoint);
-        }
-
-        return points;
+        return this->smoothPressure(linePoints, 0, linePoints.size() - 1);
     };
 
     auto centerline = [](const QVector<PenPoint>& linePoints) {
@@ -549,9 +551,38 @@ QVector<QPointF> PainterPathModel::endCap(const QVector<PenPoint> &points, const
     return capFromNormal(normal, perpendicularLine, pressureToLineHalfWidth(lastPoint));
 }
 
-auto PainterPathModel::smoothPressure(const QVector<PenPoint> &point, int indexToSmooth)
+QVector<PenPoint> PainterPathModel::smoothPressure(const QVector<PenPoint>& points, int begin, int end) const
 {
+    Q_ASSERT(begin >= 0);
+    Q_ASSERT(begin < points.size());
+    Q_ASSERT(end >= 0);
+    Q_ASSERT(end < points.size());
+    Q_ASSERT(begin <= end);
 
+    auto size = end - begin;
+
+    QVector<PenPoint> smoothPoints;
+    smoothPoints.reserve(size);
+
+    int window = m_smoothingPressureWindow;
+    const int lastIndex = points.size() - 1;
+    for (int i = begin; i <= end; ++i) {
+        int start = std::max(0, i - window);
+        int clampedEnd = std::min(lastIndex, i + window);
+
+        double sumPressure = 0.0f;
+        double count = clampedEnd - start + 1;
+
+        for (int j = start; j <= clampedEnd; ++j) {
+            sumPressure += points.at(j).pressure;
+        }
+
+        PenPoint smoothedPoint = points.at(i);
+        smoothedPoint.pressure = sumPressure / count;
+        smoothPoints.push_back(smoothedPoint);
+    }
+
+    return smoothPoints;
 }
 
 

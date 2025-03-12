@@ -110,6 +110,8 @@ private:
     QVector<QPointF> cap(const QPointF& firstPoint, const QPointF& secondPoint, const QLineF& perpendicularLine) const;
     QVector<QPointF> endCap(const QVector<PenPoint>& points, const QLineF& perpendicularLine) const;
 
+    QVector<PenPoint> smoothPressure(const QVector<PenPoint>& points, int begin, int end) const;
+
 };
 
 #endif // PAINTERPATHMODEL_H
