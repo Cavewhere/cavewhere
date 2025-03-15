@@ -9,5 +9,6 @@
         <file>datasets/test_cwAddImageTask/supportedImage.tif</file>
         <file>datasets/test_cwAddImageTask/supportedImage.tiff</file>
         <file>datasets/test_cwAddImageTask/supportedImage.webp</file>
+        <file>datasets/test_cwAddImageTask/rotationByMetadata-rotation90.jpg</file>
     </qresource>
 </RCC>

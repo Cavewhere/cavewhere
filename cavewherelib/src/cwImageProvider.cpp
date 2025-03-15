@@ -9,6 +9,7 @@
 #include "cwImageProvider.h"
 #include "cwDebug.h"
 #include "cwSQLManager.h"
+#include "cwAddImageTask.h"
 
 //Qt includes
 #include <QSqlDatabase>
@@ -21,6 +22,8 @@
 #include <QDebug>
 #include <QSqlError>
 #include <QJsonDocument>
+#include <QBuffer>
+#include <QImageReader>
 
 //Std includes
 #include <stdexcept>
@@ -228,8 +231,8 @@ QImage cwImageProvider::image(const cwImageData &imageData) const
         }
     }
 
-
-    return QImage::fromData(imageData.data(), imageData.format());
+    auto imageByteData = imageData.data();
+    return cwAddImageTask::imageWithAutoTransform(imageByteData, imageData.format());
 }
 
 /**
