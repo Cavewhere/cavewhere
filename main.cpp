@@ -146,7 +146,7 @@ void setupCrashPad() {
 
     // Define paths for Crashpad's database and the handler executable
     qDebug() << "Crashpad handler:" << crashpadHandler;
-    base::FilePath handlerPath(crashpadHandler.toStdString());
+    base::FilePath handlerPath(crashpadHandler.toStdWString());
 
 
     auto baseDir = QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
@@ -157,8 +157,8 @@ void setupCrashPad() {
     QString databasePathStr = baseDir.absoluteFilePath(crashpadDir + QStringLiteral("/crashpad_db"));
     QString metricsPathStr = baseDir.absoluteFilePath(crashpadDir + QStringLiteral("/metrics"));
 
-    base::FilePath databasePath(databasePathStr.toStdString());
-    base::FilePath metricsPath(databasePathStr.toStdString());
+    base::FilePath databasePath(databasePathStr.toStdWString());
+    base::FilePath metricsPath(databasePathStr.toStdWString());
 
     qDebug() << "Path to crashpad database:" << databasePathStr;
     qDebug() << "Path to crashpad metrics:" << metricsPathStr;
