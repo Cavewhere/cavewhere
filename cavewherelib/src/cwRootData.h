@@ -73,6 +73,8 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
     Q_PROPERTY(cwSettings* settings READ settings CONSTANT)
     Q_PROPERTY(QString supportImageFormats READ supportImageFormats CONSTANT)
 
+    Q_PROPERTY(int titleBarHeight READ titleBarHeight CONSTANT)
+
     //Temporary properties that should be move to a view layer model
     Q_PROPERTY(bool leadsVisible READ leadsVisible WRITE setLeadsVisible NOTIFY leadsVisibleChanged)
     Q_PROPERTY(bool stationsVisible READ stationsVisible WRITE setStationVisible NOTIFY stationsVisibleChanged)
@@ -122,6 +124,8 @@ public:
     Q_INVOKABLE QUrl cavewhereImageUrl(int id) const;
     Q_INVOKABLE void newProject();
 
+    int titleBarHeight() const;
+
 signals:
     void regionChanged();
     void linePlotManagerChanged();
@@ -168,6 +172,7 @@ private:
     bool LeadsVisible = true; //!<
     bool StationVisible = true; //!<
 
+    int m_titleBarHeight;
 };
 
 /**

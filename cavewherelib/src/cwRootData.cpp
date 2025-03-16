@@ -33,6 +33,8 @@
 #include <QUndoStack>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QApplication>
+#include <QStyle>
 
 //Generated files from qbs
 #include "cavewhereVersion.h"
@@ -215,4 +217,10 @@ void cwRootData::newProject()
     PageSelectionModel->clearHistory();
     PageSelectionModel->gotoPageByName(nullptr, "View");
     Project->newProject();
+}
+
+int cwRootData::titleBarHeight() const
+{
+    Q_ASSERT(dynamic_cast<QApplication*>(QApplication::instance()) != nullptr);
+    return static_cast<QApplication*>(QApplication::instance())->style()->pixelMetric(QStyle::PM_TitleBarHeight);
 }
