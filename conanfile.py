@@ -32,7 +32,7 @@ class CaveWhereConan(ConanFile):
     def requirements(self):
         self.requires("expat/2.6.2", override=True)
         self.requires("libpng/1.6.44", override=True)
-        self.requires("sqlite3/3.48.0") #override=True breaks the include dir for sqlite3 don't use it
+        self.requires("sqlite3/3.44.2") #override=True breaks the include dir for sqlite3 don't use it
 
         # Or add a new requirement!
         if not self.options.system_qt:
