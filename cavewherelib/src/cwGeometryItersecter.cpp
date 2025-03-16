@@ -74,15 +74,16 @@ void cwGeometryItersecter::clear(cwRenderObject *parentObject)
  *
  * Removes the geometry that makes up parentObject and id
  */
-void cwGeometryItersecter::removeObject(cwRenderObject *parentObject, uint id)
+void cwGeometryItersecter::removeObject(cwRenderObject *parentObject, uint64_t id)
 {
     QList<Node>::iterator iter = Nodes.begin();
     while(iter != Nodes.end()) {
         Node& currentNode = *iter;
         if(currentNode.Object.parent() == parentObject &&
-                currentNode.Object.id() == id)
+            currentNode.Object.id() == id)
         {
-            iter = Nodes.erase(iter);
+            Nodes.erase(iter);
+            break;
         } else {
             ++iter;
         }
@@ -98,11 +99,22 @@ double cwGeometryItersecter::intersects(const QRay3D &ray) const
 {
     QList<double> intersections;
 
-    foreach(Node node, Nodes) {
-
+    for(const Node& node : Nodes) {
         double t = node.BoundingBox.intersection(ray);
         if(!qIsNaN(t)) {
-            intersections.append(t);
+            if(node.Object.type() == Triangles) {
+                Q_ASSERT(node.Object.indexes().size() % 3 == 0);
+                for(int i = 0; i < node.Object.indexes().size(); i+=3) {
+                    QBox3D box = Node::triangleToBoundingBox(node.Object, i);
+                    t = box.intersection(ray);
+                    if(!qIsNaN(t)) {
+                        intersections.append(t);
+                    }
+                }
+            } else {
+                //Line nodes, are direct
+                intersections.append(t);
+            }
         }
     }
 
@@ -113,8 +125,8 @@ double cwGeometryItersecter::intersects(const QRay3D &ray) const
 
     //Find the max value int intersections
     double maxValue = -std::numeric_limits<double>::max();
-    foreach(double t, intersections) {
-        maxValue = qMax(t, maxValue);
+    for(double t : intersections) {
+        maxValue = std::max(t, maxValue);
     }
 
     return maxValue;
@@ -137,9 +149,26 @@ void cwGeometryItersecter::addTriangles(const cwGeometryItersecter::Object &obje
 
     removeObject(object.parent(), object.id());
 
-    for(int i = 0; i < object.indexes().size(); i+=3) {
-        Nodes.append(Node(object, i));
+    float min = -std::numeric_limits<float>::max();
+    float max = -std::numeric_limits<float>::min();
+
+    QVector3D maxPosition(min, min, min);
+    QVector3D minPosition(max, max, max);
+
+    for(const QVector3D position : object.points()) {
+        maxPosition = QVector3D(std::max(maxPosition.x(), position.x()),
+                                std::max(maxPosition.y(), position.y()),
+                                std::max(maxPosition.z(), position.z()));
+        minPosition = QVector3D(std::min(minPosition.x(), position.x()),
+                                std::min(minPosition.y(), position.y()),
+                                std::min(minPosition.z(), position.z()));
     }
+
+    //Make sure the object is unique
+    Q_ASSERT(std::find_if(Nodes.begin(), Nodes.end(), [object](const Node& node) {
+        return node.Object.parent() == object.parent() && node.Object.id() == object.id();
+    }) == Nodes.end());
+    Nodes.append(Node(QBox3D(minPosition, maxPosition), object));
 }
 
 /**
@@ -179,14 +208,15 @@ void cwGeometryItersecter::addLines(const cwGeometryItersecter::Object &object)
  */
 double cwGeometryItersecter::nearestNeighbor(const QRay3D &ray) const
 {
-
-    QVector<QVector3D> points;
-    points.resize(8);
+    std::array<QVector3D, 8> points;
 
     double bestT = 0.0;
     double bestDistance = std::numeric_limits<double>::max();
 
-    foreach(Node node, Nodes) {
+    for(const Node& node : Nodes) {
+        if(node.Object.type() == Triangles) {
+            continue;
+        }
 
         QVector3D min = node.BoundingBox.minimum();
         QVector3D max = node.BoundingBox.maximum();
@@ -200,8 +230,7 @@ double cwGeometryItersecter::nearestNeighbor(const QRay3D &ray) const
         points[6] = QVector3D(min.x(), max.y(), max.z());
         points[7] = max;
 
-        for(int i = 0; i < 8; i++) {
-            const QVector3D& point = points.at(i);
+        for(const QVector3D& point : points) {
             double distance = ray.distance(point);
             if(distance < bestDistance) {
                 double t = ray.projectedDistance(point);
@@ -222,16 +251,15 @@ double cwGeometryItersecter::nearestNeighbor(const QRay3D &ray) const
 
 
 cwGeometryItersecter::Node::Node(const cwGeometryItersecter::Object &object, int indexInIndexes) :
-    Object(object),
-    IndexInIndexes(indexInIndexes)
+    Object(object)
 {
 
     switch(object.type()) {
     case Triangles:
-        BoundingBox = triangleToBoundingBox();
+        BoundingBox = triangleToBoundingBox(object, indexInIndexes);
         break;
     case Lines:
-        BoundingBox = lineToBoundingBox();
+        BoundingBox = lineToBoundingBox(object, indexInIndexes);
         break;
     default:
         break;
@@ -239,15 +267,23 @@ cwGeometryItersecter::Node::Node(const cwGeometryItersecter::Object &object, int
 
 }
 
+cwGeometryItersecter::Node::Node(const QBox3D boundingBox,
+                                 const cwGeometryItersecter::Object &object) :
+    BoundingBox(boundingBox),
+    Object(object)
+{
+
+}
+
 /**
  * @brief cwGeometryItersecter::Node::triangleToBoundingBox
  * @return Creates a bounding box around a triangle
  */
-QBox3D cwGeometryItersecter::Node::triangleToBoundingBox() const
+QBox3D cwGeometryItersecter::Node::triangleToBoundingBox(const cwGeometryItersecter::Object & object, int indexInIndexes)
 {
-    QVector3D p1 = Object.points().at(Object.indexes().at(IndexInIndexes));
-    QVector3D p2 = Object.points().at(Object.indexes().at(IndexInIndexes + 1));
-    QVector3D p3 = Object.points().at(Object.indexes().at(IndexInIndexes + 2));
+    QVector3D p1 = object.points().at(object.indexes().at(indexInIndexes));
+    QVector3D p2 = object.points().at(object.indexes().at(indexInIndexes + 1));
+    QVector3D p3 = object.points().at(object.indexes().at(indexInIndexes + 2));
 
     QVector3D maxPoint(qMax(p1.x(), qMax(p2.x(), p3.x())),
                        qMax(p1.y(), qMax(p2.y(), p3.y())),
@@ -264,10 +300,10 @@ QBox3D cwGeometryItersecter::Node::triangleToBoundingBox() const
  * @brief cwGeometryItersecter::Node::lineToBoundingBox
  * @return Creates a bounding box around a line
  */
-QBox3D cwGeometryItersecter::Node::lineToBoundingBox() const
+QBox3D cwGeometryItersecter::Node::lineToBoundingBox(const cwGeometryItersecter::Object & object, int indexInIndexes)
 {
-    QVector3D p1 = Object.points().at(Object.indexes().at(IndexInIndexes));
-    QVector3D p2 = Object.points().at(Object.indexes().at(IndexInIndexes + 1));
+    QVector3D p1 = object.points().at(object.indexes().at(indexInIndexes));
+    QVector3D p2 = object.points().at(object.indexes().at(indexInIndexes + 1));
 
     QVector3D maxPoint(qMax(p1.x(), p2.x()),
                        qMax(p1.y(), p2.y()),

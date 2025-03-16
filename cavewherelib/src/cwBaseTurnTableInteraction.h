@@ -90,7 +90,7 @@ public slots:
     void startRotating(QPoint currentMousePos);
     void rotate(QPoint currentMousePos);
 
-    void zoom(QPoint position, int delta);
+    void zoom(QPoint position, double delta);
 
     void resetView();
 
@@ -124,11 +124,15 @@ private:
 
     QTimer* ZoomInteractionTimer;
     QPoint ZoomPosition;
-    int ZoomDelta;
+    double ZoomDelta;
     double ZoomLevel; //This is for orthoginal projections, This is in pixel / meter
 
     QTimer* TranslateTimer;
     QPoint TranslatePosition;
+
+    //For zoom perspective
+    QProperty<QPoint> m_perspectiveMappedPos;
+    QProperty<QVector3D> m_perspectiveIntersection; //The intersection with geometry under the mouse
 
     QPointer<cwCamera> Camera; //!<
     QPointer<cwScene> Scene; //!<
@@ -151,6 +155,8 @@ private:
     QVector3D unProject(QPoint point);
 
     void stopAnimation();
+
+    void bindPerspectiveIntersection();
 };
 
 /**

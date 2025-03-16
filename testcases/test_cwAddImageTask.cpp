@@ -329,3 +329,43 @@ TEST_CASE("cwAddImageTask should not grow file size when regenerating mipmaps", 
     CHECK(ratio <= Catch::Approx(1.0)); //Make sure this hasn't grown
 }
 
+TEST_CASE("Load JPG with rotation from metadata", "[cwAddImageTask]") {
+    cwProject project;
+    QString filename = project.filename();
+
+    auto addImageTask = std::make_unique<cwAddImageTask>();
+    addImageTask->setDatabaseFilename(filename);
+    addImageTask->setImageTypesWithFormat(cwTextureUploadTask::OpenGL_RGBA);
+
+    auto rotatedImageFilename = copyToTempFolder("://datasets/test_cwAddImageTask/rotationByMetadata-rotation90.jpg");
+
+    addImageTask->setNewImagesPath({rotatedImageFilename});
+    auto future = addImageTask->images();
+    REQUIRE(cwAsyncFuture::waitForFinished(future, 20000));
+
+    REQUIRE(future.isFinished());
+    REQUIRE(future.resultCount() == 1);
+
+    cwImageProvider provider;
+    provider.setProjectPath(filename);
+
+    QImage rotatedImage = provider.image(future.result()->original());
+
+    CHECK(rotatedImage.width() == 3);
+    CHECK(rotatedImage.height() == 2);
+
+    QImageReader reader(rotatedImageFilename);
+    reader.setAutoTransform(true); //Make sure the image rotates correctly
+    QImage expectedImage = reader.read();
+
+    CHECK(expectedImage.width() == 3);
+    CHECK(expectedImage.height() == 2);
+
+    CHECK(rotatedImage == expectedImage);
+
+    //make sure the icon is rotated, since the image is less than 512x512 it's the original size
+    QImage iconImage = provider.image(future.result()->icon());
+    CHECK(iconImage.width() == 3);
+    CHECK(iconImage.height() == 2);
+    CHECK(iconImage == expectedImage);
+}

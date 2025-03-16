@@ -39,7 +39,7 @@
 #include <QTime>
 
 //Sqlite lite includes
-#include "sqlite3.h"
+#include <sqlite3.h>
 
 //Async includes
 #include <asyncfuture.h>
@@ -166,10 +166,6 @@ QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
         }
 
         QImage scaledImage = originalImage.scaled(scaledSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-
-        //FIXME: QImage doesn't support QColorSpaces correctly
-        //https://bugreports.qt.io/browse/QTBUG-82803
-        scaledImage.setColorSpace(QColorSpace());
 
         //Convert the image into a jpg
         QByteArray format = "jpg";
@@ -426,8 +422,6 @@ QImage cwAddImageTask::copyOriginalImage(QString imagePath,
         return QImage();
     }
 
-    //Read the whole file
-    QByteArray originalImageByteData = originalFile.readAll();
 
     //The the original file's format
     QByteArray format = QImageReader::imageFormat(imagePath);
@@ -442,9 +436,9 @@ QImage cwAddImageTask::copyOriginalImage(QString imagePath,
         return QImage();
     }
 
-    //Load the image
-    QImage image;
-    image.loadFromData(originalImageByteData, format.constData());
+    //Read the whole file
+    QByteArray originalImageByteData = originalFile.readAll();
+    QImage image = imageWithAutoTransform(originalImageByteData, format);
 
     *imageIdContainer = addImageToDatabase(image,
                                            format,
@@ -517,6 +511,16 @@ int cwAddImageTask::numberOfMipmapLevels(QSize imageSize) {
 QStringList cwAddImageTask::supportedImageFormats()
 {
     return QStringList({"bmp", "gif", "jpg", "jpeg", "png", "tif", "tiff", "svg", "webp"});
+}
+
+QImage cwAddImageTask::imageWithAutoTransform(QByteArray &data, const QByteArray &format)
+{
+    QBuffer stream(&data);
+
+    //Load the image
+    QImageReader imageReader(&stream, format);
+    imageReader.setAutoTransform(true); //supports format rotation
+    return imageReader.read();
 }
 
 /**

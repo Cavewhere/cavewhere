@@ -164,6 +164,15 @@ MenuBar {
             }
         }
 
+        MenuItem {
+            text: "Resize to 1080p"
+            onTriggered: {
+                let titleBarHeight = RootData.titleBarHeight * applicationWindow.screen.devicePixelRatio
+                applicationWindow.width = 1920 / applicationWindow.screen.devicePixelRatio
+                applicationWindow.height = (1080 - titleBarHeight) / applicationWindow.screen.devicePixelRatio
+            }
+        }
+
         // Menu {
         //     title: "Event Recording"
 

@@ -57,7 +57,7 @@ public:
 
     void addObject(const cwGeometryItersecter::Object& object);
     void clear(cwRenderObject* parentObject = nullptr);
-    void removeObject(cwRenderObject* parentObject, uint id);
+    void removeObject(cwRenderObject* parentObject, uint64_t id);
 
     double intersects(const QRay3D& ray) const;
 
@@ -68,15 +68,13 @@ private:
     public:
         Node();
         Node(const cwGeometryItersecter::Object& object, int indexInIndexes);
+        Node(const QBox3D boundingBox, const cwGeometryItersecter::Object& object);
 
         QBox3D BoundingBox;
         cwGeometryItersecter::Object Object;
-        int IndexInIndexes; //Where in Object this Node point's to
 
-    private:
-        QBox3D triangleToBoundingBox() const;
-        QBox3D lineToBoundingBox() const;
-
+        static QBox3D triangleToBoundingBox(const cwGeometryItersecter::Object & object, int indexInIndexes);
+        static QBox3D lineToBoundingBox(const cwGeometryItersecter::Object & object, int indexInIndexes);
     };
 
     QList<Node> Nodes;

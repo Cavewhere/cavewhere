@@ -74,6 +74,8 @@ public:
 
     static QStringList supportedImageFormats();
 
+    static QImage imageWithAutoTransform(QByteArray& data, const QByteArray& format);
+
 signals:
     void addedImages(QList<cwImage> images);
 

@@ -35,23 +35,23 @@ set_target_properties(cavewherelib PROPERTIES
 
 target_link_libraries(cavewherelib
     PUBLIC
-    Qt::Core
-    Qt::Gui
-    Qt::Widgets
-    Qt::Quick
-    Qt::Sql
-    Qt::OpenGL
-    Qt::Xml
-    Qt::Concurrent
-    Qt::Svg
-    Qt::GuiPrivate
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::Quick
+    Qt6::Sql
+    Qt6::OpenGL
+    Qt6::Xml
+    Qt6::Concurrent
+    Qt6::Svg
+    Qt6::GuiPrivate
     asyncfuture
     dewalls
     QMath3d
     MarkScope
     PRIVATE
-    protobuf::protobuf
     SQLite::SQLite3
+    protobuf::protobuf
     surveximg
 )
 
@@ -81,7 +81,8 @@ generate_export_header(cavewherelib
 # Generate cavewhereVersion.h
 update_git_version(cavewherelib ${CMAKE_CURRENT_SOURCE_DIR}/src/cavewhereVersion.h.in)
 
-target_include_directories(cavewherelib PUBLIC
+target_include_directories(cavewherelib
+    PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils
     ${CMAKE_CURRENT_BINARY_DIR}
