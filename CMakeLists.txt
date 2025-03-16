@@ -37,6 +37,7 @@ add_subdirectory(MarkScope)
 
 # All packages we need to find
 find_package(Catch2 REQUIRED)
+find_package(crashpad REQUIRED)
 find_package(Qt6
     COMPONENTS
     Core
@@ -198,6 +199,7 @@ target_link_libraries(CaveWhere
     Qt6::Test
     cavewherelib
     MarkScope
+    crashpad::crashpad
 )
 
 if(WIN32)
@@ -339,7 +341,7 @@ if(APPLE)
 
 
     if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-        ## This allows for profiling to work correctly for macos
+        # This allows for profiling to work correctly for macos
         # Query the available code signing identities.
         execute_process(
           COMMAND security find-identity -v -p codesigning
@@ -370,6 +372,12 @@ if(APPLE)
         endif()
 
     endif()
+
+    # Copy crashpad handler exec into the bundle
+    add_custom_command(TARGET CaveWhere POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_BINARY_DIR}/crashpad_handler" $<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/MacOS/crashpad_handler
+        COMMENT "Copying crashpad_handler into the application bundle."
+    )
 
 endif()
 

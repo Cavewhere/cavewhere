@@ -2,6 +2,7 @@ from conan import ConanFile
 from conan.tools.cmake import CMake, CMakeToolchain, CMakeDeps
 import os, sys
 from conan.errors import ConanInvalidConfiguration
+from conan.tools.files import copy
 import subprocess
 
 class CaveWhereConan(ConanFile):
@@ -23,6 +24,7 @@ class CaveWhereConan(ConanFile):
     ("proj/9.3.1"),
     ("libtiff/[>=4.5.1]"),
     ("gdal/3.8.3"),
+    ("crashpad/cci.20220219")
     ]
 
     options = {"system_qt": [True, False]}
@@ -32,7 +34,7 @@ class CaveWhereConan(ConanFile):
     def requirements(self):
         self.requires("expat/2.6.2", override=True)
         self.requires("libpng/1.6.44", override=True)
-        self.requires("sqlite3/3.48.0") #override=True breaks the include dir for sqlite3 don't use it
+        self.requires("sqlite3/3.44.2") #override=True breaks the include dir for sqlite3 don't use it
 
         # Or add a new requirement!
         if not self.options.system_qt:
@@ -77,3 +79,9 @@ class CaveWhereConan(ConanFile):
             raise ConanInvalidConfiguration(
                 "Locale::PO Perl module is not installed. Install it with `cpan Locale::PO`."
             )
+
+    def generate(self):
+        for bindir in self.dependencies["crashpad"].cpp_info.bindirs:
+            cavewhere_build_folder = self.build_folder + "/../../../"
+            print("Copying crashpad bin:" + bindir + " into " + cavewhere_build_folder)
+            copy(self, "*", bindir, cavewhere_build_folder)

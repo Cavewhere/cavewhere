@@ -24,12 +24,17 @@
 #include "cwApplication.h"
 #include "cwGlobals.h"
 #include "cwConcurrent.h"
+#include "cavewhereVersion.h"
 
 //std includes
 #include <memory>
 
 //MarkScope
 #include "MarkScope/FrameProfiler.h"
+
+//Crash pad
+#include "client/crashpad_client.h"
+#include "base/files/file_path.h"
 
 #ifndef CAVEWHERE_VERSION
 #define CAVEWHERE_VERSION "Sauce-Release"
@@ -119,6 +124,67 @@ void handleCommandline(QCoreApplication& a, cwRootData* rootData) {
     }
 }
 
+void setupCrashPad() {
+    // Define the upload URL (your server endpoint)
+    std::string uploadUrl = QStringLiteral("").toStdString();
+
+    // Optional: Provide additional arguments (e.g., metadata as --key=value)
+    std::vector<std::string> arguments;
+    // arguments.push_back("--log-level=debug");
+    // arguments.push_back("--version=" + CavewhereVersion.toStdString());
+
+    QString crashpadHandler = qApp->applicationDirPath() + QStringLiteral("/crashpad_handler");
+#if defined(Q_OS_WIN)
+    {
+        crashpadHandler += QStringLiteral(".exe");
+    }
+#endif
+
+    // Define paths for Crashpad's database and the handler executable
+    base::FilePath handlerPath(crashpadHandler.toStdString());
+
+
+    auto baseDir = QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
+    qDebug() << "BaseDir:" << baseDir;
+
+    QString crashpadDir = QStringLiteral("crashpad");
+    baseDir.mkpath(crashpadDir);
+
+    QString databasePathStr = baseDir.absoluteFilePath(crashpadDir + QStringLiteral("/crashpad_db"));
+    QString metricsPathStr = baseDir.absoluteFilePath(crashpadDir + QStringLiteral("/metrics"));
+
+    base::FilePath databasePath(databasePathStr.toStdString());
+    base::FilePath metricsPath(databasePathStr.toStdString());
+
+    qDebug() << "Path to crashpad database:" << databasePathStr;
+    qDebug() << "Path to crashpad metrics:" << metricsPathStr;
+
+
+    std::map<std::string, std::string> annotations; // Empty annotations
+    annotations["version"] = CavewhereVersion.toStdString();
+    annotations["backtrace.version"] = CavewhereVersion.toStdString();
+
+    // Initialize Crashpad
+    crashpad::CrashpadClient client;
+    bool success = client.StartHandler(handlerPath,
+                                       databasePath,
+                                       metricsPath,
+                                       uploadUrl,
+                                       annotations,
+                                       arguments,
+                                       /* restartable */ true,
+                                       /* asynchronous_start */ false);
+
+    if (!success) {
+        // If initialization fails, you might log the error or alert the user
+        QMessageBox msgBox;
+        msgBox.setText("Failed to initialize crash reporting.");
+        msgBox.exec();
+    }
+
+
+}
+
 int main(int argc, char *argv[])
 {
     //This needs to be first for QSettings
@@ -128,6 +194,11 @@ int main(int argc, char *argv[])
     QApplication::setApplicationVersion(CAVEWHERE_VERSION);
 
     cwApplication a(argc, argv);
+
+    setupCrashPad();
+
+    cwRootData* data = nullptr;
+    qDebug() << "Crash:" << data->defaultTrip();
 
     //Load all the fonts
     cwGlobals::loadFonts();
