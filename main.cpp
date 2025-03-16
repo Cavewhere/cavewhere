@@ -34,6 +34,8 @@
 
 //Crash pad
 #include "client/crashpad_client.h"
+#include "client/crash_report_database.h"
+#include "client/settings.h"
 #include "base/files/file_path.h"
 
 #ifndef CAVEWHERE_VERSION
@@ -126,7 +128,9 @@ void handleCommandline(QCoreApplication& a, cwRootData* rootData) {
 
 void setupCrashPad() {
     // Define the upload URL (your server endpoint)
-    std::string uploadUrl = QStringLiteral("").toStdString();
+    // std::string uploadUrl; // = "https://yourserver.com/crashreport/upload";
+    // std::string uploadUrl = QStringLiteral("https://submit.backtrace.io/cavewhere/0b720fe623347ec3c890432a12921cf35341564a5397b522ef16ab04b709a07c/minidump").toStdString();
+    std::string uploadUrl = QStringLiteral("https://cavewhere.com/crashdump_upload.php").toStdString();
 
     // Optional: Provide additional arguments (e.g., metadata as --key=value)
     std::vector<std::string> arguments;
@@ -141,11 +145,11 @@ void setupCrashPad() {
 #endif
 
     // Define paths for Crashpad's database and the handler executable
+    qDebug() << "Crashpad handler:" << crashpadHandler;
     base::FilePath handlerPath(crashpadHandler.toStdString());
 
 
     auto baseDir = QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
-    qDebug() << "BaseDir:" << baseDir;
 
     QString crashpadDir = QStringLiteral("crashpad");
     baseDir.mkpath(crashpadDir);
@@ -164,6 +168,8 @@ void setupCrashPad() {
     annotations["version"] = CavewhereVersion.toStdString();
     annotations["backtrace.version"] = CavewhereVersion.toStdString();
 
+
+
     // Initialize Crashpad
     crashpad::CrashpadClient client;
     bool success = client.StartHandler(handlerPath,
@@ -180,6 +186,16 @@ void setupCrashPad() {
         QMessageBox msgBox;
         msgBox.setText("Failed to initialize crash reporting.");
         msgBox.exec();
+    }
+
+    // Initialize your Crashpad database.
+    std::unique_ptr<crashpad::CrashReportDatabase> database =
+        crashpad::CrashReportDatabase::Initialize(databasePath);
+
+    // Check that the database was successfully created.
+    if (database) {
+        auto settings = database->GetSettings();
+        settings->SetUploadsEnabled(true);
     }
 
 
