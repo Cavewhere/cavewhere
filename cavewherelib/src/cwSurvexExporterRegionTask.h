@@ -22,8 +22,6 @@ public:
 
     bool writeRegion(QTextStream& stream, cwCavingRegion* region);
 
-
-
 protected:
     virtual void runTask();
 

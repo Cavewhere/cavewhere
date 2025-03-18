@@ -22,3 +22,6 @@
 [submodule "MarkScope"]
 	path = MarkScope
 	url = https://github.com/vpicaver/MarkScope.git
+[submodule "monad"]
+	path = monad
+	url = https://github.com/vpicaver/monad.git

@@ -37,10 +37,6 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, cwCave* cave) {
 
     stream << "*begin " << caveName << " ;" << cave->name() << Qt::endl << Qt::endl;
 
-    //This fucks up shit in cavern
-   // stream << "*sd compass 2.0 degrees" << Qt::endl;
-   // stream << "*sd clino 2.0 degrees" << Qt::endl << Qt::endl;
-
     //Add fix station to tie the cave down
     fixFirstStation(stream, cave);
 
