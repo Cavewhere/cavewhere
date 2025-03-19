@@ -1,0 +1,55 @@
+*begin  ;All the caves
+*begin PhakeCave3000 ;Phake Cave 3000
+
+*fix a1 0 0 0
+*begin ; Release 0.08
+*date 2020.02.26
+
+*team "Philip Schuchardt" "Developer"
+
+*data normal from to tape compass clino
+;From       To          Distance    Compass     Clino      
+a1          a2          14.52       49          -3         
+a2          a3          9.13        352         -17.3      
+a3          a4          11.05       82          -4.5       
+a4          a5          6.97        41          11.2       
+a4          a6          16.54       147.5       -7.5       
+a6          a7          9.81        43          26         
+a7          a8          10.23       74          17.4       
+a6          a9          23.44       -           DOWN       
+a9          a10         5.85        230         -8.4       
+a10         a11         10.56       172         -21.7      
+a11         a12         9.17        200         -5.3       
+a10         a13         18.28       116         -4.1       
+a13         a14         6.99        91          -1.2       
+
+*data passage station left right up down ignoreall
+a1          0           5           2           1.3        
+a2          2.5         0           1.5         2          
+a3          1.5         3           4.5         1          
+a4          0           2           2           1.7        
+a5          2.5         2.5         11          2          
+
+*data passage station left right up down ignoreall
+a4          5           0           3           23         
+a6          5           0           3           23         
+a7          0.2         3.5         2.5         1          
+a8          1           5           2           1.2        
+
+*data passage station left right up down ignoreall
+a6          1           5           2           1.2        
+a9          2.3         2           24          0          
+a10         2.3         2           24          0          
+a11         1           0.2         3           0.5        
+a12         0           2           8           35         
+
+*data passage station left right up down ignoreall
+a10         -           -           -           -          
+a13         1.8         0           1.8         1.7        
+a14         0           2           2           1.9        
+
+*end
+
+*end ; End of Phake Cave 3000
+
+*end

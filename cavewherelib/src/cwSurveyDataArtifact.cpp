@@ -21,7 +21,7 @@ cwSurveyDataArtifact::cwSurveyDataArtifact(QObject *parent)
     m_surveySignaler->addConnectionToChunks(SIGNAL(shotsRemoved(int,int)), this, SIGNAL(surveyDataChanged()));
     m_surveySignaler->addConnectionToChunks(SIGNAL(stationsAdded(int,int)), this, SIGNAL(surveyDataChanged()));
     m_surveySignaler->addConnectionToChunks(SIGNAL(stationsRemoved(int,int)), this, SIGNAL(surveyDataChanged()));
-    m_surveySignaler->addConnectionToChunks(SIGNAL(surveyDataChanged(cwSurveyChunk::DataRole,int)), this, SIGNAL(surveyDataChanged()));
+    m_surveySignaler->addConnectionToChunks(SIGNAL(dataChanged(cwSurveyChunk::DataRole,int)), this, SIGNAL(surveyDataChanged()));
     m_surveySignaler->addConnectionToChunks(SIGNAL(calibrationsChanged()), this, SIGNAL(surveyDataChanged()));
     m_surveySignaler->addConnectionToChunkCalibrations(SIGNAL(calibrationsChanged()), this, SIGNAL(surveyDataChanged()));
 }

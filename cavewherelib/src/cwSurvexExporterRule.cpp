@@ -46,31 +46,31 @@ void cwSurvexExporterRule::setSurveyData(cwSurveyDataArtifact* surveyData) {
     }
 }
 
-void cwSurvexExporterRule::setSurvexFileName(cwFileNameArtifact* survexFile) {
-    if (m_survexFilename != survexFile) {
+void cwSurvexExporterRule::setSurvexFileName(cwFileNameArtifact* survexFilename) {
+    if (m_survexFilename != survexFilename) {
         if(!m_survexFilename.isNull()) {
             disconnect(m_survexFilename, nullptr, this, nullptr);
         }
 
-        m_survexFilename = survexFile;
+        m_survexFilename = survexFilename;
 
-        if(m_survexFilename.isNull()) {
+        if(!m_survexFilename.isNull()) {
             connect(m_survexFilename, &cwFileNameArtifact::filenameChanged, this, &cwSurvexExporterRule::updatePipeline);
             updatePipeline();
         }
 
-        emit survexFileChanged();
+        emit survexFileNameChanged();
     }
 }
 
-ResultBase cwSurvexExporterRule::writeTrip(QTextStream &stream, const cwTrip *trip)
+ResultBase cwSurvexExporterRule::writeTrip(QTextStream &stream, const Trip& trip)
 {
     //Write header
-    stream << "*begin ; " << trip->name() << Qt::endl;
+    stream << "*begin ; " << trip.name << Qt::endl;
 
-    writeDate(stream, trip->date().date());
-    writeTeamData(stream, trip->team());
-    writeCalibrations(stream, trip->calibrations());
+    writeDate(stream, trip.date);
+    writeTeamData(stream, trip.teamMembers);
+    writeCalibrations(stream, trip.calibration);
     stream << Qt::endl;
     writeShotData(stream, trip);
     stream << Qt::endl;
@@ -81,34 +81,35 @@ ResultBase cwSurvexExporterRule::writeTrip(QTextStream &stream, const cwTrip *tr
     return ResultBase();
 }
 
-ResultBase cwSurvexExporterRule::writeCave(QTextStream &stream, const cwCave *cave)
+ResultBase cwSurvexExporterRule::writeCave(QTextStream& stream, const cwSurvexExporterRule::Cave& cave)
 {
-    QString caveName = cave->name().remove(" ");
+    QString caveName = cave.name;
+    caveName = caveName.remove(" ");
 
-    stream << "*begin " << caveName << " ;" << cave->name() << Qt::endl << Qt::endl;
+    stream << "*begin " << caveName << " ;" << cave.name << Qt::endl << Qt::endl;
 
     //Add fix station to tie the cave down
     fixFirstStation(stream, cave);
 
 
     //Go throug all the trips and save them
-    for(int i = 0; i < cave->tripCount(); i++) {
-        cwTrip* trip = cave->trip(i);
+    for(int i = 0; i < cave.trips.size(); i++) {
+        const Trip& trip = cave.trips.at(i);
         writeTrip(stream, trip);
         stream << Qt::endl;
     }
 
-    stream << "*end ; End of " << cave->name() << Qt::endl;
+    stream << "*end ; End of " << cave.name << Qt::endl;
 
     return ResultBase();
 }
 
-ResultBase cwSurvexExporterRule::writeRegion(QTextStream &stream, const cwCavingRegion *region)
+ResultBase cwSurvexExporterRule::writeRegion(QTextStream &stream, const Region& region)
 {
     stream << "*begin  ;All the caves" << Qt::endl;
 
-    for(int i = 0; i < region->caveCount(); i++) {
-        cwCave* cave = region->cave(i);
+    for(int i = 0; i < region.caves.size(); i++) {
+        const Cave& cave = region.caves.at(i);
 
         auto result = writeCave(stream, cave);
         if(result.hasError()) {
@@ -116,7 +117,7 @@ ResultBase cwSurvexExporterRule::writeRegion(QTextStream &stream, const cwCaving
         }
     }
 
-    stream << "*end" << Qt::endl;
+    stream << Qt::endl << "*end" << Qt::endl;
 
     return ResultBase();
 }
@@ -126,22 +127,27 @@ void cwSurvexExporterRule::updatePipeline()
     //Cancel the old future
     m_survexFileArtifact->filename().cancel();
 
-    //Copy
-    auto survexFilename = m_survexFilename->filename();
-    cwCavingRegion region = *(m_surveyData->region());
+    if(m_survexFilename && m_surveyData) {
 
-    auto future = cwConcurrent::run([survexFilename, region = std::move(region)]()->ResultString {
-        QSaveFile file(survexFilename);
-        file.open(QIODeviceBase::WriteOnly);
-        QTextStream stream(&file);
+        //Copy
+        auto survexFilename = m_survexFilename->filename();
+        const auto region = Region(m_surveyData->region()); //Copy all the region data for export
 
-        writeRegion(stream, &region);
+        auto future = cwConcurrent::run([survexFilename, region = std::move(region)]()->ResultString {
+            QSaveFile file(survexFilename);
+            file.open(QIODeviceBase::WriteOnly);
+            {
+                QTextStream stream(&file);
+                writeRegion(stream, region);
+            }
 
-        file.commit();
-        return survexFilename;
-    });
+            file.commit();
 
-    m_survexFileArtifact->setFilename(future);
+            return survexFilename;
+        });
+
+        m_survexFileArtifact->setFilename(future);
+    }
 }
 
 /**
@@ -149,24 +155,24 @@ void cwSurvexExporterRule::updatePipeline()
 
   This will write all the calibrations for the trip to the stream
   */
-void cwSurvexExporterRule::writeCalibrations(QTextStream& stream, cwTripCalibration* calibrations) {
-    writeLengthUnits(stream, calibrations->distanceUnit());
+void cwSurvexExporterRule::writeCalibrations(QTextStream& stream, const cwTripCalibrationData& calibrations) {
+    writeLengthUnits(stream, calibrations.distanceUnit());
 
-    writeCalibration(stream, "TAPE", calibrations->tapeCalibration());
+    writeCalibration(stream, "TAPE", calibrations.tapeCalibration());
 
-    double correctFrontsightCompass = calibrations->hasCorrectedCompassFrontsight() ? -180.0 : 0.0;
-    writeCalibration(stream, "COMPASS", calibrations->frontCompassCalibration() + correctFrontsightCompass);
+    double correctFrontsightCompass = calibrations.hasCorrectedCompassFrontsight() ? -180.0 : 0.0;
+    writeCalibration(stream, "COMPASS", calibrations.frontCompassCalibration() + correctFrontsightCompass);
 
-    double correctBacksightCompass = calibrations->hasCorrectedCompassBacksight() ? -180.0 : 0.0;
-    writeCalibration(stream, "BACKCOMPASS", calibrations->backCompassCalibration() + correctBacksightCompass);
+    double correctBacksightCompass = calibrations.hasCorrectedCompassBacksight() ? -180.0 : 0.0;
+    writeCalibration(stream, "BACKCOMPASS", calibrations.backCompassCalibration() + correctBacksightCompass);
 
-    double frontClinoScale = calibrations->hasCorrectedClinoFrontsight() ? -1.0 : 1.0;
-    writeCalibration(stream, "CLINO", calibrations->frontClinoCalibration(), frontClinoScale);
+    double frontClinoScale = calibrations.hasCorrectedClinoFrontsight() ? -1.0 : 1.0;
+    writeCalibration(stream, "CLINO", calibrations.frontClinoCalibration(), frontClinoScale);
 
-    double backClinoScale = calibrations->hasCorrectedClinoBacksight() ? -1.0 : 1.0;
-    writeCalibration(stream, "BACKCLINO", calibrations->backClinoCalibration(), backClinoScale);
+    double backClinoScale = calibrations.hasCorrectedClinoBacksight() ? -1.0 : 1.0;
+    writeCalibration(stream, "BACKCLINO", calibrations.backClinoCalibration(), backClinoScale);
 
-    writeCalibration(stream, "DECLINATION", calibrations->declination());
+    writeCalibration(stream, "DECLINATION", calibrations.declination());
 }
 
 void cwSurvexExporterRule::writeCalibration(QTextStream& stream, QString type, double value, double scale) {
@@ -211,9 +217,9 @@ void cwSurvexExporterRule::writeLengthUnits(QTextStream &stream,
 
   This will write the data as normal data
   */
-void cwSurvexExporterRule::writeShotData(QTextStream& stream, const cwTrip* trip, int textPadding) {
-    bool hasFrontSights = trip->calibrations()->hasFrontSights();
-    bool hasBackSights = trip->calibrations()->hasBackSights();
+void cwSurvexExporterRule::writeShotData(QTextStream& stream, const Trip trip, int textPadding) {
+    bool hasFrontSights = trip.calibration.hasFrontSights();
+    bool hasBackSights = trip.calibration.hasBackSights();
 
     //Make sure we have data to export
     if(!hasFrontSights && !hasBackSights) {
@@ -254,9 +260,8 @@ void cwSurvexExporterRule::writeShotData(QTextStream& stream, const cwTrip* trip
     //Write out the comment line (this is the column headers)
     stream << dataLineComment << Qt::endl;
 
-    QList<cwSurveyChunk*> chunks = trip->chunks();
-    for(int i = 0; i < chunks.size(); i++) {
-        const cwSurveyChunk* chunk = chunks.at(i);
+    for(int i = 0; i < trip.chunks.size(); i++) {
+        const SurveyChunk& chunk = trip.chunks.at(i);
 
         //Write the chunk data
         writeChunk(stream, hasFrontSights, hasBackSights, trip, chunk);
@@ -267,14 +272,14 @@ void cwSurvexExporterRule::writeShotData(QTextStream& stream, const cwTrip* trip
   \brief Writes the left right up down for each station in the trip, as
   a comment
   */
-void cwSurvexExporterRule::writeLRUDData(QTextStream& stream, const cwTrip* trip, int textPadding) {
+void cwSurvexExporterRule::writeLRUDData(QTextStream& stream, const Trip trip, int textPadding) {
 
     QString dataLineTemplate("%1 %2 %3 %4 %5");
 
-    foreach(cwSurveyChunk* chunk, trip->chunks()) {
+    for(const SurveyChunk& chunk : trip.chunks) {
         stream << "*data passage station left right up down ignoreall" << Qt::endl;
 
-        foreach(cwStation station, chunk->stations()) {
+        for(const cwStation& station : chunk.stations) {
             if(station.isValid()) {
                 QString dataLine = dataLineTemplate
                                        .arg(station.name(), textPadding)
@@ -294,16 +299,17 @@ void cwSurvexExporterRule::writeLRUDData(QTextStream& stream, const cwTrip* trip
 /**
   Writes the team data to survex file
   */
-void cwSurvexExporterRule::writeTeamData(QTextStream &stream, const cwTeam* team)
+void cwSurvexExporterRule::writeTeamData(QTextStream &stream, const QVector<cwTeamMember>& team)
 {
     stream << Qt::endl;
 
     QString dataLineTemplate("*team \"%1\"");
-    foreach(cwTeamMember teamMember, team->teamMembers()) {
+    for(const cwTeamMember& teamMember : team) {
         QString dataLine = dataLineTemplate.arg(teamMember.name());
         stream << dataLine;
 
-        foreach(QString job, teamMember.jobs()) {
+        auto jobs = teamMember.jobs();
+        for(const QString& job : std::as_const(jobs)) {
             stream << " \"" << job << "\"";
         }
 
@@ -327,12 +333,12 @@ void cwSurvexExporterRule::writeDate(QTextStream &stream, QDate date)
   If the current calibration isn't in yard, feet or meters, then this function converts the
   length into meters.
 */
-QString cwSurvexExporterRule::toSupportedLength(const cwTrip* trip, double length, cwDistanceStates::State state) {
+QString cwSurvexExporterRule::toSupportedLength(const Trip& trip, double length, cwDistanceStates::State state) {
     if(state == cwDistanceStates::Empty) {
         return "-";
     }
 
-    cwUnits::LengthUnit unit = trip->calibrations()->distanceUnit();
+    cwUnits::LengthUnit unit = trip.calibration.distanceUnit();
     switch(unit) {
     case cwUnits::Meters:
     case cwUnits::Feet:
@@ -379,11 +385,11 @@ QString cwSurvexExporterRule::clinoToString(double clino, cwClinoStates::State s
   \brief Writes a chunk to a stream
   */
 ResultBase cwSurvexExporterRule::writeChunk(QTextStream& stream,
-                                      bool hasFrontSights, //True if the dataset has backsights
-                                      bool hasBackSights, //True if the dataset has frontsights
-                                      const cwTrip* trip,
-                                      const cwSurveyChunk* chunk,
-                                      int textPadding) {
+                                            bool hasFrontSights, //True if the dataset has backsights
+                                            bool hasBackSights, //True if the dataset has frontsights
+                                            const Trip& trip,
+                                            const SurveyChunk& chunk,
+                                            int textPadding) {
 
     if(!hasBackSights && !hasFrontSights) {
         return ResultBase();
@@ -399,11 +405,11 @@ ResultBase cwSurvexExporterRule::writeChunk(QTextStream& stream,
     QStringList errors;
 
     //Iterate over all the shots
-    for(int i = 0; i < chunk->stationCount() - 1; i++) {
+    for(int i = 0; i < chunk.stations.size() - 1; i++) {
 
-        cwStation fromStation = chunk->station(i);
-        cwStation toStation = chunk->station(i + 1);
-        cwShot shot = chunk->shot(i);
+        cwStation fromStation = chunk.stations.at(i);
+        cwStation toStation = chunk.stations.at(i + 1);
+        cwShot shot = chunk.shots.at(i);
 
         if(!fromStation.isValid() || !toStation.isValid()) { continue; }
 
@@ -421,15 +427,13 @@ ResultBase cwSurvexExporterRule::writeChunk(QTextStream& stream,
                 backClino.compare("up", Qt::CaseInsensitive) != 0 &&
                 backClino.compare("down", Qt::CaseInsensitive) != 0) {
                 errors.append(QString("Error: No compass reading for %1 to %2")
-                                  .arg(fromStation.name())
-                                  .arg(toStation.name()));
+                                  .arg(fromStation.name(), toStation.name()));
             }
         }
 
         if(clino.isEmpty() && backClino.isEmpty()) {
             errors.append(QString("Error: No Clino reading for %1 to %2")
-                              .arg(fromStation.name())
-                              .arg(toStation.name()));
+                              .arg(fromStation.name(), toStation.name()));
         }
 
         if(compass.isEmpty()) { compass = "-"; }
@@ -473,8 +477,8 @@ ResultBase cwSurvexExporterRule::writeChunk(QTextStream& stream,
         }
 
         //Add chunk calibrations
-        cwTripCalibration* calibration = chunk->calibrations().value(i, nullptr);
-        if(calibration != nullptr) {
+        if(chunk.calibrations.contains(i)) {
+            cwTripCalibrationData calibration = chunk.calibrations.value(i);
             writeCalibrations(stream, calibration);
         }
 
@@ -506,24 +510,67 @@ ResultBase cwSurvexExporterRule::writeChunk(QTextStream& stream,
  *
  * This fixes the first station in the cave, if the cave has any stations.
  */
-void cwSurvexExporterRule::fixFirstStation(QTextStream &stream, const cwCave *cave)
+void cwSurvexExporterRule::fixFirstStation(QTextStream &stream, const Cave &cave)
 {
-    if(cave != nullptr) {
-        if(!cave->trips().isEmpty()) {
-            const auto trips = cave->trips();
-            const cwTrip* firstTrip = trips.first();
-            if(!firstTrip->chunks().isEmpty()) {
-                const auto chunks = firstTrip->chunks();
-                const cwSurveyChunk* firstChunk = chunks.first();
-                if(!firstChunk->stations().isEmpty()) {
-                    const auto stations = firstChunk->stations();
-                    const cwStation station = stations.first();
 
-                    stream << "*fix " << station.name() << " " << 0 << " " << 0 << " " << 0 << Qt::endl;
-                }
+    if(!cave.trips.isEmpty()) {
+        const auto trips = cave.trips;
+        const Trip& firstTrip = trips.first();
+        if(!firstTrip.chunks.isEmpty()) {
+            const auto chunks = firstTrip.chunks;
+            const SurveyChunk& firstChunk = chunks.first();
+            if(!firstChunk.stations.isEmpty()) {
+                const cwStation& station = firstChunk.stations.first();
+                stream << "*fix " << station.name() << " " << 0 << " " << 0 << " " << 0 << Qt::endl;
             }
+        }
+    }
+
+}
+
+
+
+cwSurvexExporterRule::SurveyChunk::SurveyChunk(const cwSurveyChunk *chunk) {
+    // Directly copy stations.
+    stations = chunk->stations();
+
+    // Assume the number of shots is one less than the station count.
+    int shotCount = chunk->stationCount() - 1;
+    for (int i = 0; i < shotCount; ++i) {
+        shots.append(chunk->shot(i));
+        // Assume calibrations() returns a QMap<int, cwTripCalibration*>
+        auto calMap = chunk->calibrations();
+        if (calMap.contains(i)) {
+            // Use the cwTripCalibrationData constructor.
+            calibrations.insert(i, calMap.value(i)->data());
         }
     }
 }
 
+cwSurvexExporterRule::Trip::Trip(const cwTrip *trip) {
+    name = trip->name();
+    date = trip->date().date();
+    // Copy team members directly.
+    teamMembers = trip->team()->teamMembers();
+    // Assume trip->calibrations() returns a pointer to cwTripCalibration.
+    calibration = trip->calibrations()->data();
+    // Copy each survey chunk.
+    for (const auto& chunk : trip->chunks()) {
+        chunks.append(SurveyChunk(chunk));
+    }
+}
 
+cwSurvexExporterRule::Cave::Cave(const cwCave *cave) {
+    name = cave->name();
+    int tripCount = cave->tripCount();
+    for (int i = 0; i < tripCount; ++i) {
+        trips.append(Trip(cave->trip(i)));
+    }
+}
+
+cwSurvexExporterRule::Region::Region(const cwCavingRegion *region) {
+    int caveCount = region->caveCount();
+    for (int i = 0; i < caveCount; ++i) {
+        caves.append(Cave(region->cave(i)));
+    }
+}

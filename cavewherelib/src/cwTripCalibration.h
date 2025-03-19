@@ -17,6 +17,131 @@
 //Our includes
 #include "cwUnits.h"
 
+class cwTripCalibrationData {
+public:
+    cwTripCalibrationData();
+    cwTripCalibrationData(const cwTripCalibrationData &other);
+    cwTripCalibrationData& operator=(const cwTripCalibrationData &other);
+
+    // Inline getters and setters for each calibration property:
+    inline bool hasCorrectedCompassBacksight() const { return d->m_CorrectedCompassBacksight; }
+    inline void setCorrectedCompassBacksight(bool value) { d->m_CorrectedCompassBacksight = value; }
+
+    inline bool hasCorrectedClinoBacksight() const { return d->m_CorrectedClinoBacksight; }
+    inline void setCorrectedClinoBacksight(bool value) { d->m_CorrectedClinoBacksight = value; }
+
+    inline bool hasCorrectedCompassFrontsight() const { return d->m_CorrectedCompassFrontsight; }
+    inline void setCorrectedCompassFrontsight(bool value) { d->m_CorrectedCompassFrontsight = value; }
+
+    inline bool hasCorrectedClinoFrontsight() const { return d->m_CorrectedClinoFrontsight; }
+    inline void setCorrectedClinoFrontsight(bool value) { d->m_CorrectedClinoFrontsight = value; }
+
+    inline double tapeCalibration() const { return d->m_TapeCalibration; }
+    inline void setTapeCalibration(double value) { d->m_TapeCalibration = value; }
+
+    inline double frontCompassCalibration() const { return d->m_FrontCompassCalibration; }
+    inline void setFrontCompassCalibration(double value) { d->m_FrontCompassCalibration = value; }
+
+    inline double frontClinoCalibration() const { return d->m_FrontClinoCalibration; }
+    inline void setFrontClinoCalibration(double value) { d->m_FrontClinoCalibration = value; }
+
+    inline double backCompassCalibration() const { return d->m_BackCompassCalibration; }
+    inline void setBackCompassCalibration(double value) { d->m_BackCompassCalibration = value; }
+
+    inline double backClinoCalibration() const { return d->m_BackClinoCalibration; }
+    inline void setBackClinoCalibration(double value) { d->m_BackClinoCalibration = value; }
+
+    inline double declination() const { return d->m_Declination; }
+    inline void setDeclination(double value) { d->m_Declination = value; }
+
+    inline cwUnits::LengthUnit distanceUnit() const { return d->m_DistanceUnit; }
+    inline void setDistanceUnit(cwUnits::LengthUnit value) { d->m_DistanceUnit = value; }
+
+    inline bool hasFrontSights() const { return d->m_FrontSights; }
+    inline void setFrontSights(bool value) { d->m_FrontSights = value; }
+
+    inline bool hasBackSights() const { return d->m_BackSights; }
+    inline void setBackSights(bool value) { d->m_BackSights = value; }
+
+private:
+    // The PrivateData class encapsulates the actual data and inherits QSharedData
+    class PrivateData : public QSharedData {
+    public:
+        PrivateData()
+            : m_CorrectedCompassBacksight(false)
+            , m_CorrectedClinoBacksight(false)
+            , m_CorrectedCompassFrontsight(false)
+            , m_CorrectedClinoFrontsight(false)
+            , m_TapeCalibration(0.0)
+            , m_FrontCompassCalibration(0.0)
+            , m_FrontClinoCalibration(0.0)
+            , m_BackCompassCalibration(0.0)
+            , m_BackClinoCalibration(0.0)
+            , m_Declination(0.0)
+            , m_DistanceUnit(cwUnits::Meters)
+            , m_FrontSights(true)
+            , m_BackSights(true)
+        {}
+
+        PrivateData(const PrivateData &other)
+            : QSharedData(other)
+            , m_CorrectedCompassBacksight(other.m_CorrectedCompassBacksight)
+            , m_CorrectedClinoBacksight(other.m_CorrectedClinoBacksight)
+            , m_CorrectedCompassFrontsight(other.m_CorrectedCompassFrontsight)
+            , m_CorrectedClinoFrontsight(other.m_CorrectedClinoFrontsight)
+            , m_TapeCalibration(other.m_TapeCalibration)
+            , m_FrontCompassCalibration(other.m_FrontCompassCalibration)
+            , m_FrontClinoCalibration(other.m_FrontClinoCalibration)
+            , m_BackCompassCalibration(other.m_BackCompassCalibration)
+            , m_BackClinoCalibration(other.m_BackClinoCalibration)
+            , m_Declination(other.m_Declination)
+            , m_DistanceUnit(other.m_DistanceUnit)
+            , m_FrontSights(other.m_FrontSights)
+            , m_BackSights(other.m_BackSights)
+        {}
+
+        bool m_CorrectedCompassBacksight;
+        bool m_CorrectedClinoBacksight;
+        bool m_CorrectedCompassFrontsight;
+        bool m_CorrectedClinoFrontsight;
+        double m_TapeCalibration;
+        double m_FrontCompassCalibration;
+        double m_FrontClinoCalibration;
+        double m_BackCompassCalibration;
+        double m_BackClinoCalibration;
+        double m_Declination;
+        cwUnits::LengthUnit m_DistanceUnit;
+        bool m_FrontSights;
+        bool m_BackSights;
+    };
+
+    QSharedDataPointer<PrivateData> d;
+};
+
+// Inline implementations for constructors and assignment
+inline cwTripCalibrationData::cwTripCalibrationData()
+    : d(new PrivateData)
+{
+}
+
+inline cwTripCalibrationData::cwTripCalibrationData(const cwTripCalibrationData &other)
+    : d(other.d)
+{
+}
+
+inline cwTripCalibrationData& cwTripCalibrationData::operator=(const cwTripCalibrationData &other)
+{
+    if (this != &other) {
+        d = other.d;
+    }
+    return *this;
+}
+
+
+#include <QObject>
+#include <QStringList>
+#include "cwUnits.h"
+
 class CAVEWHERE_LIB_EXPORT cwTripCalibration : public QObject
 {
     Q_OBJECT
@@ -38,51 +163,44 @@ class CAVEWHERE_LIB_EXPORT cwTripCalibration : public QObject
     Q_PROPERTY(bool backSights READ hasBackSights WRITE setBackSights NOTIFY backSightsChanged)
 
 public:
-    explicit cwTripCalibration(QObject *parent = 0);
-    cwTripCalibration(const cwTripCalibration& object);
-    cwTripCalibration& operator =(const cwTripCalibration& object);
+    explicit cwTripCalibration(QObject *parent = nullptr);
+    cwTripCalibration(const cwTripCalibration &other);
+    cwTripCalibration& operator=(const cwTripCalibration &other);
 
-    void setCorrectedCompassBacksight(bool isCorrected);
-    bool hasCorrectedCompassBacksight() const;
+    // Getters that delegate to the internal data instance:
+    bool hasCorrectedCompassBacksight() const { return m_data.hasCorrectedCompassBacksight(); }
+    bool hasCorrectedClinoBacksight() const { return m_data.hasCorrectedClinoBacksight(); }
+    bool hasCorrectedCompassFrontsight() const { return m_data.hasCorrectedCompassFrontsight(); }
+    bool hasCorrectedClinoFrontsight() const { return m_data.hasCorrectedClinoFrontsight(); }
+    double tapeCalibration() const { return m_data.tapeCalibration(); }
+    double frontCompassCalibration() const { return m_data.frontCompassCalibration(); }
+    double frontClinoCalibration() const { return m_data.frontClinoCalibration(); }
+    double backCompassCalibration() const { return m_data.backCompassCalibration(); }
+    double backClinoCalibration() const { return m_data.backClinoCalibration(); }
+    double declination() const { return m_data.declination(); }
+    cwUnits::LengthUnit distanceUnit() const { return m_data.distanceUnit(); }
+    bool hasFrontSights() const { return m_data.hasFrontSights(); }
+    bool hasBackSights() const { return m_data.hasBackSights(); }
 
-    void setCorrectedClinoBacksight(bool isCorrected);
-    bool hasCorrectedClinoBacksight() const;
-
-    void setCorrectedCompassFrontsight(bool correctedClinoFrontsight);
-    bool hasCorrectedCompassFrontsight() const;
-
-    void setCorrectedClinoFrontsight(bool correctedClinoFrontsight);
-    bool hasCorrectedClinoFrontsight() const;
-
-    void setTapeCalibration(double tapeCalibration);
-    double tapeCalibration() const;
-
-    void setFrontCompassCalibration(double calibration);
-    double frontCompassCalibration() const;
-
-    void setFrontClinoCalibration(double calibration);
-    double frontClinoCalibration() const;
-
-    void setBackCompassCalibration(double calibration);
-    double backCompassCalibration() const;
-
-    void setBackClinoCalibration(double calibration);
-    double backClinoCalibration() const;
-
-    void setDeclination(double declination);
-    double declination() const;
-
-    cwUnits::LengthUnit distanceUnit() const;
-    void setDistanceUnit(cwUnits::LengthUnit unit);
-
-    bool hasBackSights() const;
-    void setBackSights(bool hasBackSights);
-
-    bool hasFrontSights() const;
-    void setFrontSights(bool hasFrontSights);
-
+    // Setters that update the internal data and emit signals if changed:
+    void setCorrectedCompassBacksight(bool value);
+    void setCorrectedClinoBacksight(bool value);
+    void setCorrectedCompassFrontsight(bool value);
+    void setCorrectedClinoFrontsight(bool value);
+    void setTapeCalibration(double value);
+    void setFrontCompassCalibration(double value);
+    void setFrontClinoCalibration(double value);
+    void setBackCompassCalibration(double value);
+    void setBackClinoCalibration(double value);
+    void setDeclination(double value);
+    void setDistanceUnit(cwUnits::LengthUnit value);
+    void setFrontSights(bool value);
+    void setBackSights(bool value);
 
     QStringList supportedUnits() const;
+
+    // New getter that returns the entire data structure:
+    cwTripCalibrationData data() const { return m_data; }
 
     Q_INVOKABLE int mapToLengthUnit(int supportedUnitIndex);
     Q_INVOKABLE int mapToSupportUnit(int lengthUnit);
@@ -102,94 +220,14 @@ signals:
     void supportedUnitsChanged();
     void frontSightsChanged();
     void backSightsChanged();
-    void calibrationsChanged(); //Emited when ever any of calibrations have changed
+    void calibrationsChanged();
 
 public slots:
 
 private:
-    bool CorrectedCompassBacksight;
-    bool CorrectedClinoBacksight;
-    bool CorrectedCompassFrontsight; //!<
-    bool CorrectedClinoFrontsight; //!<
-    double TapeCalibration;
-    double FrontCompassCalibration;
-    double FrontClinoCalibration;
-    double BackCompasssCalibration;
-    double BackClinoCalibration;
-    double Declination;
-    cwUnits::LengthUnit DistanceUnit;
-    bool BackSights; //!<
-    bool FrontSights; //!<
-
-    cwTripCalibration& copy(const cwTripCalibration& object);
+    // The instance of the public data class
+    cwTripCalibrationData m_data;
 };
-
-inline bool cwTripCalibration::hasCorrectedCompassBacksight() const {
-    return CorrectedCompassBacksight;
-}
-
-inline bool cwTripCalibration::hasCorrectedClinoBacksight() const {
-    return CorrectedClinoBacksight;
-}
-
-/**
-* @brief cwTripCalibration::correctedCompassFrontsight
-* @return
-*/
-inline bool cwTripCalibration::hasCorrectedCompassFrontsight() const {
-    return CorrectedCompassFrontsight;
-}
-
-
-inline double cwTripCalibration::tapeCalibration() const {
-    return TapeCalibration;
-}
-
-inline double cwTripCalibration::frontCompassCalibration() const {
-    return FrontCompassCalibration;
-}
-
-inline double cwTripCalibration::frontClinoCalibration() const {
-    return FrontClinoCalibration;
-}
-
-inline double cwTripCalibration::backCompassCalibration() const {
-    return BackCompasssCalibration;
-}
-
-inline double cwTripCalibration::backClinoCalibration() const {
-    return BackClinoCalibration;
-}
-
-inline double cwTripCalibration::declination() const {
-    return Declination;
-}
-
-inline cwUnits::LengthUnit cwTripCalibration::distanceUnit() const {
-    return DistanceUnit;
-}
-
-/**
-    Gets frontSights, this returns true if the trip is using front sights
-*/
-inline bool cwTripCalibration::hasFrontSights() const {
-    return FrontSights;
-}
-
-/**
-Gets backSights
-*/
-inline bool cwTripCalibration::hasBackSights() const {
-    return BackSights;
-}
-
-/**
-* @brief class::correctedClinoFrontsight
-* @return
-*/
-inline bool cwTripCalibration::hasCorrectedClinoFrontsight() const {
-    return CorrectedClinoFrontsight;
-}
 
 
 
