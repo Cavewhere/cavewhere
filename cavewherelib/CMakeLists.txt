@@ -50,6 +50,8 @@ target_link_libraries(cavewherelib
     QMath3d
     MarkScope
     monad
+    QuickQanava
+    QuickQanavaplugin
     PRIVATE
     SQLite::SQLite3
     protobuf::protobuf
@@ -159,6 +161,7 @@ qt_add_qml_module(cavewherelib
     QML_FILES
         ${cavewhere_RELATIVE_QML_FILES}
         ${qml_singletons}
+
 )
 
 target_sources(cavewherelib PRIVATE ${cavewherelib_CPP_FILES} ${cavewherelib_H_FILES})

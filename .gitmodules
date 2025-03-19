@@ -25,3 +25,6 @@
 [submodule "monad"]
 	path = monad
 	url = https://github.com/vpicaver/monad.git
+[submodule "QuickQanava"]
+	path = QuickQanava
+	url = https://github.com/cneben/QuickQanava

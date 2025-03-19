@@ -118,6 +118,13 @@ QQ.Item {
         }
     }
 
+    QQ.Component {
+        id: pipelinePageComponent
+        PipelinePage {
+            anchors.fill: parent
+        }
+    }
+
     QQ.Component.onCompleted: {
         GlobalShadowTextInput.parent = overlay;
         RootPopupItem.parent = overlay
@@ -129,6 +136,7 @@ QQ.Item {
         RootData.pageSelectionModel.registerPage(null, "Testcases", testcasesPageComponent);
         RootData.pageSelectionModel.registerPage(null, "About", aboutPageComponent)
         RootData.pageSelectionModel.registerPage(null, "Settings", settingsPageComponent)
+        RootData.pageSelectionModel.registerPage(null, "Pipeline", pipelinePageComponent)
         RootData.pageSelectionModel.gotoPage(viewPage);
 
         mainContentId.renderer = pageView.pageItem(viewPage).renderer;
