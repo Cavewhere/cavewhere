@@ -21,6 +21,7 @@ cwSurvexExporterRule::cwSurvexExporterRule(QObject* parent)
     m_survexFilename(nullptr),
     m_survexFileArtifact(new cwFutureFileNameArtifact(this))
 {
+    setName("Survex Exporter");
 }
 
 cwSurvexExporterRule::~cwSurvexExporterRule() {}
@@ -143,6 +144,7 @@ void cwSurvexExporterRule::updatePipeline()
 
             file.commit();
 
+            qDebug() << "Finished writing survexFilename:" << survexFilename;
             return survexFilename;
         });
 

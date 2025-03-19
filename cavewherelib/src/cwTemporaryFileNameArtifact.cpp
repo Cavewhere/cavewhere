@@ -1,12 +1,14 @@
-#include "cwTemporaryFileArtifact.h"
+#include "cwTemporaryFileNameArtifact.h"
 
 //Qt includes
 #include <QDir>
 #include <QCoreApplication>
 
-cwTemporaryFileArtifact::cwTemporaryFileArtifact(QObject *parent)
+cwTemporaryFileNameArtifact::cwTemporaryFileNameArtifact(QObject *parent)
     : cwFileNameArtifact(parent)
 {
+    setName("Temporary file name");
+
     bindableFilename().setBinding([this](){
         QTemporaryFile file;
         QString suffix = m_suffix;
@@ -23,7 +25,7 @@ cwTemporaryFileArtifact::cwTemporaryFileArtifact(QObject *parent)
     });
 }
 
-cwTemporaryFileArtifact::~cwTemporaryFileArtifact()
+cwTemporaryFileNameArtifact::~cwTemporaryFileNameArtifact()
 {
     // m_tempFile is parented, so it will be automatically deleted.
 }

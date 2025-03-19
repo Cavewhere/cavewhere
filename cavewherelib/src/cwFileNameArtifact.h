@@ -4,6 +4,7 @@
 #include "cwArtifact.h"
 #include <QObject>
 #include <QObjectBindableProperty>
+#include <QQmlEngine>
 
 /**
  * @brief The cwFileNameArtifact class represents a file-based artifact.
@@ -13,12 +14,14 @@
 class cwFileNameArtifact : public cwArtifact
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(FileNameArtifact)
     Q_PROPERTY(QString filename READ filename WRITE setFilename NOTIFY filenameChanged BINDABLE bindableFilename)
 
 public:
     explicit cwFileNameArtifact(QObject *parent = nullptr)
         : cwArtifact(parent)
     {
+        setName("File Name");
     }
 
     virtual ~cwFileNameArtifact() {}

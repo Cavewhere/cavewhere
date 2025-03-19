@@ -8,7 +8,7 @@
 #include "LoadProjectHelper.h"
 #include "cwSurvexExporterRule.h"
 #include "cwSurveyDataArtifact.h"
-#include "cwTemporaryFileArtifact.h"
+#include "cwTemporaryFileNameArtifact.h"
 #include "cwAsyncFuture.h"
 
 TEST_CASE("cwSurvexExportRule should export a caving region correctly", "[cwSurvexExportRule]") {
@@ -20,8 +20,8 @@ TEST_CASE("cwSurvexExportRule should export a caving region correctly", "[cwSurv
     cwSurveyDataArtifact surveyData;
     surveyData.setRegion(cavingRegion);
 
-    // Use cwTemporaryFileArtifact to generate a temporary filename
-    cwTemporaryFileArtifact tempFileArtifact;
+    // Use cwTemporaryFileNameArtifact to generate a temporary filename
+    cwTemporaryFileNameArtifact tempFileArtifact;
     tempFileArtifact.setSuffix("cwSurvexExportRule.svx");
 
     // Create the exporter and set the necessary inputs

@@ -2,7 +2,10 @@
 #define CWSURVEYDATAARTIFACT_H
 
 #include "cwArtifact.h"
+
+//Qt includes
 #include <QObject>
+#include <QQmlEngine>
 
 // Forward declarations for types assumed to exist.
 class cwCavingRegion;
@@ -17,6 +20,8 @@ class cwSurveyChunkSignaler;
 class cwSurveyDataArtifact : public cwArtifact
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(SurveyDataArtifact)
+
     Q_PROPERTY(cwCavingRegion* region READ region WRITE setRegion NOTIFY regionChanged)
 
 public:

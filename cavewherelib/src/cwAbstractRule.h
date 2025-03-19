@@ -37,8 +37,8 @@ public:
     void setValid(bool valid) { m_valid = valid; }
     QBindable<bool> bindableValid() { return QBindable<bool>(&m_valid); }
 
-    QList<QMetaProperty> sourceProperties() const;
-    QList<QMetaProperty> outputProperties() const;
+    QList<QMetaProperty> sourceProperties() const { return properties(sourcesNames()); }
+    QList<QMetaProperty> outputProperties() const { return properties(outputsNames()); }
 
 protected:
     // Instead of abstract add/remove functions, you can use properties for sources/outputs

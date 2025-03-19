@@ -4,6 +4,7 @@
 //Qt includes
 #include <QPointer>
 #include <QMap>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwAbstractRule.h"
@@ -22,10 +23,9 @@ class cwTripCalibration;
 class cwTeam;
 class cwSurveyChunk;
 
-
-
 class cwSurvexExporterRule : public cwAbstractRule {
     Q_OBJECT
+    QML_NAMED_ELEMENT(SurvexExporterRule)
 
     //Sources
     Q_PROPERTY(cwSurveyDataArtifact* surveyData READ surveyData WRITE setSurveyData NOTIFY surveyDataChanged)
@@ -90,12 +90,12 @@ public:
     // Provide property names for introspection via the base class
     QList<QByteArray> sourcesNames() const override {
         return {
-            "surveyData"
-            "survexFilename",
+            "surveyData",
+            "survexFilename"
         };
     }
     QList<QByteArray> outputsNames() const override {
-        return { "survexFile" };
+        return { "survexFileArtifact" };
     }
 
     cwFutureFileNameArtifact* survexFileArtifact() const

@@ -7,6 +7,8 @@ cwSurveyDataArtifact::cwSurveyDataArtifact(QObject *parent)
     , m_region(nullptr)
     , m_surveySignaler(new cwSurveyChunkSignaler(this))
 {
+    setName("CaveWhere Survey Data");
+
     // Connect signals from the survey signaler directly to the dataChanged() signal.
     m_surveySignaler->addConnectionToCaves(SIGNAL(insertedTrips(int,int)), this, SIGNAL(surveyDataChanged()));
     m_surveySignaler->addConnectionToCaves(SIGNAL(removedTrips(int,int)), this, SIGNAL(surveyDataChanged()));

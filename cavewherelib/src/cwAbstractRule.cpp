@@ -26,14 +26,17 @@ void cwAbstractRule::setName(const QString &name)
     }
 }
 
+
 QList<QMetaProperty> cwAbstractRule::properties(const QList<QByteArray> &propertyNames) const
 {
     QList<QMetaProperty> properties;
     properties.reserve(propertyNames.size());
     const QMetaObject *meta = metaObject(); // returns the derived class's meta object
     for (const QByteArray &name : propertyNames) {
+        qDebug() << "Property name:" << name.constData();
         int index = meta->indexOfProperty(name.constData());
-        Q_ASSERT(index != 1); //Property doesn't exist!
+        Q_ASSERT(index != -1); //Property doesn't exist!
+        qDebug() << "Appending index:" << index;
         properties.append(meta->property(index));
     }
     return properties;
