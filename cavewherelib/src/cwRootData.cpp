@@ -35,6 +35,9 @@
 #include <QStandardPaths>
 #include <QApplication>
 #include <QStyle>
+#include <QProcess>
+#include <QDesktopServices>
+#include <QClipboard>
 
 //Generated files from qbs
 #include "cavewhereVersion.h"
@@ -128,7 +131,7 @@ Sets quickWindow
 void cwRootData::setQuickView(QQuickView* quickView) {
     if(QuickView != quickView) {
         QuickView = quickView;
-//        QMLReloader->setQuickView(QuickView);
+        //        QMLReloader->setQuickView(QuickView);
         emit quickWindowChanged();
     }
 }
@@ -223,4 +226,40 @@ int cwRootData::titleBarHeight() const
 {
     Q_ASSERT(dynamic_cast<QApplication*>(QApplication::instance()) != nullptr);
     return static_cast<QApplication*>(QApplication::instance())->style()->pixelMetric(QStyle::PM_TitleBarHeight);
+}
+
+void cwRootData::showInFolder(const QString &path) const
+{
+    QFileInfo info(path);
+#if defined(Q_OS_WIN)
+    QStringList args;
+    if (!info.isDir())
+        args << "/select,";
+    args << QDir::toNativeSeparators(path);
+    if (QProcess::startDetached("explorer", args))
+        return;
+#elif defined(Q_OS_MAC)
+    QStringList args;
+    args << "-e";
+    args << "tell application \"Finder\"";
+    args << "-e";
+    args << "activate";
+    args << "-e";
+    args << "select POSIX file \"" + path + "\"";
+    args << "-e";
+    args << "end tell";
+    args << "-e";
+    args << "return";
+    if (!QProcess::execute("/usr/bin/osascript", args))
+        return;
+#endif
+    QDesktopServices::openUrl(QUrl::fromLocalFile(info.isDir()? path : info.path()));
+
+}
+
+void cwRootData::copyText(const QString &text) const
+{
+    auto clipboard = QGuiApplication::clipboard();
+    clipboard->setText(text);
+
 }

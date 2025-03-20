@@ -1,4 +1,5 @@
 #include "cwPipelineManager.h"
+#include "cwPipelineComponentFactory.h"
 
 //Qt includes
 #include <QDebug>
@@ -9,8 +10,10 @@
 
 cwPipelineManager::cwPipelineManager(QObject *parent)
     : QObject(parent),
-    m_graph(nullptr)
+    m_graph(nullptr),
+    m_components(new cwPipelineComponentFactory(this))
 {
+
     // m_graph->setParent(this);
     // m_graph->setObjectName("PipelineManagerGraph");
     // m_graph->setConnectorEnabled(true);
@@ -26,12 +29,17 @@ cwPipelineManager::~cwPipelineManager()
 
 void cwPipelineManager::addArtifact(cwArtifact *artifact)
 {
+    qDebug() << "Context object:" << QQmlEngine::contextForObject(this);
     if (artifact != nullptr && !m_artifacts.contains(artifact)) {
         m_artifacts.append(artifact);
         artifact->setParent(this);
 
-        auto node = m_graph->insertNode();
+        auto component = m_components->createComponent(artifact, qmlEngine(this));
+        qDebug() << "Component:" << artifact << component;
+
+        auto node = m_graph->insertNode(component);
         node->setLabel(artifact->name());
+        node->getItem()->setProperty("artifact", QVariant::fromValue(artifact));
 
         node->getItem()->setX(10.0);
         node->getItem()->setY(m_artifacts.size() * (node->getItem()->height() + 10));
@@ -48,7 +56,8 @@ void cwPipelineManager::addRule(cwAbstractRule *rule)
         m_rules.append(rule);
         rule->setParent(this);
 
-        auto node = m_graph->insertNode();
+        auto component = m_components->createComponent(rule, qmlEngine(this));
+        auto node = m_graph->insertNode(component);
         node->setLabel(rule->name());
 
         node->getItem()->setX(250.0);

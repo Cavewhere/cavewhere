@@ -10,6 +10,7 @@
 //Our includes
 #include "cwArtifact.h"
 #include "cwAbstractRule.h"
+class cwPipelineComponentFactory;
 
 //QuickQanava
 #include <QuickQanava.h>
@@ -74,6 +75,8 @@ private:
     QHash<qan::Node*, cwArtifact*> m_nodeToArtifact;
     QHash<qan::Node*, cwAbstractRule*> m_nodeToRule;
     QHash<qan::PortItem*, Port> m_ports;
+
+    cwPipelineComponentFactory* m_components;
 
 };
 

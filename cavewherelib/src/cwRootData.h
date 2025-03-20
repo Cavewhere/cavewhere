@@ -126,6 +126,10 @@ public:
 
     int titleBarHeight() const;
 
+    //Utils
+    Q_INVOKABLE void showInFolder(const QString& path) const;
+    Q_INVOKABLE void copyText(const QString& text) const;
+
 signals:
     void regionChanged();
     void linePlotManagerChanged();
