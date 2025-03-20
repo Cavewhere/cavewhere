@@ -7,7 +7,7 @@
 
 //Catch includes
 #define CATCH_CONFIG_SFINAE
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 //Cavewhere includes
 #include "cwError.h"
@@ -22,13 +22,13 @@
 #include "TestHelper.h"
 
 //Qt includes
-#include <QSignalSpy>
+#include "cwSignalSpy.h"
 
 std::ostream& operator << ( std::ostream& os, QMap<int, cwTripCalibration*> const& value ) {
     os << "QMap<int, cwTripCalibration*>:[";
     for(auto iter = value.begin(); iter != value.end(); ++iter) {
         os << iter.key() << ":" << iter.value();
-        if(iter + 1 != value.end()) {
+        if(std::next(iter, 1) != value.end()) {
             os << ", ";
         }
     }
@@ -128,7 +128,7 @@ void checkNoShotDataError(cwSurveyChunk* chunk, int index, cwSurveyChunk::DataRo
   */
 TEST_CASE("Checks cwSurveyChunk errors", "[cwSurveyChunk]")
 {
-    cwSurveyChunk* chunk = new cwSurveyChunk();
+    auto chunk = std::make_unique<cwSurveyChunk>();
 
     //New chunks have no warnings or errors
     CHECK(chunk->errorModel()->fatalCount() == 0);
@@ -143,20 +143,20 @@ TEST_CASE("Checks cwSurveyChunk errors", "[cwSurveyChunk]")
     chunk->setData(cwSurveyChunk::StationNameRole, 0, "a1");
     CHECK(chunk->errorModel()->fatalCount() == 0);
     CHECK(chunk->errorModel()->warningCount() == 4); //4 warnings for LRUD
-    checkLRUDWarnings(chunk, 0);
+    checkLRUDWarnings(chunk.get(), 0);
 
     chunk->setData(cwSurveyChunk::StationNameRole, 1, "a2");
-    checkLRUDWarnings(chunk, 1); //4 warnings for LRUD
+    checkLRUDWarnings(chunk.get(), 1); //4 warnings for LRUD
 
     //There should be errors for each of the reading components
     CHECK(chunk->errorModel()->fatalCount() == 5); //Full shot data: distance, comp, clino, bs's
     CHECK(chunk->errorModel()->warningCount() == 8); //2 x LRUD
 
-    checkNoShotDataError(chunk, 0, cwSurveyChunk::ShotDistanceRole);
-    checkNoShotDataError(chunk, 0, cwSurveyChunk::ShotCompassRole);
-    checkNoShotDataError(chunk, 0, cwSurveyChunk::ShotClinoRole);
-    checkNoShotDataError(chunk, 0, cwSurveyChunk::ShotBackClinoRole);
-    checkNoShotDataError(chunk, 0, cwSurveyChunk::ShotClinoRole);
+    checkNoShotDataError(chunk.get(), 0, cwSurveyChunk::ShotDistanceRole);
+    checkNoShotDataError(chunk.get(), 0, cwSurveyChunk::ShotCompassRole);
+    checkNoShotDataError(chunk.get(), 0, cwSurveyChunk::ShotClinoRole);
+    checkNoShotDataError(chunk.get(), 0, cwSurveyChunk::ShotBackClinoRole);
+    checkNoShotDataError(chunk.get(), 0, cwSurveyChunk::ShotClinoRole);
 
     //Set the first shots data
     int shotIndex = 0;
@@ -165,14 +165,14 @@ TEST_CASE("Checks cwSurveyChunk errors", "[cwSurveyChunk]")
 
     chunk->setData(cwSurveyChunk::ShotCompassRole, shotIndex, 0);
     CHECK(chunk->errorsAt(shotIndex, cwSurveyChunk::ShotCompassRole) == nullptr);
-    checkNoShotDataError(chunk, shotIndex, cwSurveyChunk::ShotBackCompassRole, cwError::Warning);
+    checkNoShotDataError(chunk.get(), shotIndex, cwSurveyChunk::ShotBackCompassRole, cwError::Warning);
 
     chunk->setData(cwSurveyChunk::ShotBackCompassRole, shotIndex, 180);
     CHECK(chunk->errorsAt(shotIndex, cwSurveyChunk::ShotBackCompassRole) == nullptr);
 
     chunk->setData(cwSurveyChunk::ShotClinoRole, shotIndex, 3);
     CHECK(chunk->errorsAt(shotIndex, cwSurveyChunk::ShotClinoRole) == nullptr);
-    checkNoShotDataError(chunk, shotIndex, cwSurveyChunk::ShotBackClinoRole, cwError::Warning);
+    checkNoShotDataError(chunk.get(), shotIndex, cwSurveyChunk::ShotBackClinoRole, cwError::Warning);
 
     chunk->setData(cwSurveyChunk::ShotBackClinoRole, shotIndex, -3);
     CHECK(chunk->errorsAt(shotIndex, cwSurveyChunk::ShotBackClinoRole) == nullptr);
@@ -267,25 +267,25 @@ TEST_CASE("Checks cwSurveyChunk errors", "[cwSurveyChunk]")
         SECTION("Remove compass") {
             shotIndex = 1;
             chunk->setData(cwSurveyChunk::ShotCompassRole, shotIndex, "");
-            checkNoShotDataError(chunk, shotIndex, cwSurveyChunk::ShotCompassRole, cwError::Warning);
+            checkNoShotDataError(chunk.get(), shotIndex, cwSurveyChunk::ShotCompassRole, cwError::Warning);
         }
 
         SECTION("Remove back compass") {
             shotIndex = 1;
             chunk->setData(cwSurveyChunk::ShotBackCompassRole, shotIndex, "");
-            checkNoShotDataError(chunk, shotIndex, cwSurveyChunk::ShotBackCompassRole, cwError::Warning);
+            checkNoShotDataError(chunk.get(), shotIndex, cwSurveyChunk::ShotBackCompassRole, cwError::Warning);
         }
 
         SECTION("Remove clino") {
             shotIndex = 1;
             chunk->setData(cwSurveyChunk::ShotClinoRole, shotIndex, "");
-            checkNoShotDataError(chunk, shotIndex, cwSurveyChunk::ShotClinoRole, cwError::Warning);
+            checkNoShotDataError(chunk.get(), shotIndex, cwSurveyChunk::ShotClinoRole, cwError::Warning);
         }
 
         SECTION("Remove back clino") {
             shotIndex = 1;
             chunk->setData(cwSurveyChunk::ShotBackClinoRole, shotIndex, "");
-            checkNoShotDataError(chunk, shotIndex, cwSurveyChunk::ShotBackClinoRole, cwError::Warning);
+            checkNoShotDataError(chunk.get(), shotIndex, cwSurveyChunk::ShotBackClinoRole, cwError::Warning);
         }
     }
 
@@ -363,12 +363,12 @@ TEST_CASE("Checks cwSurveyChunk errors", "[cwSurveyChunk]")
 
     SECTION("Off by two change calibration") {
         shotIndex = 1;
-        cwTrip* trip = new cwTrip();
+        auto trip = std::make_unique<cwTrip>();
 
         CHECK(chunk->errorModel()->fatalCount() == 0);
         CHECK(chunk->errorModel()->warningCount() == 0);
 
-        trip->addChunk(chunk);
+        trip->addChunk(chunk.get());
 
         CHECK(chunk->errorModel()->fatalCount() == 0);
         CHECK(chunk->errorModel()->warningCount() == 0);
@@ -382,12 +382,13 @@ TEST_CASE("Checks cwSurveyChunk errors", "[cwSurveyChunk]")
 
         CHECK(chunk->errorModel()->fatalCount() == 0);
         CHECK(chunk->errorModel()->warningCount() == 4); //2 x compass and clino
+        chunk.release();
     }
 
     SECTION("Turn off back sights") {
         shotIndex = 1;
-        cwTrip* trip = new cwTrip();
-        trip->addChunk(chunk);
+        auto trip = std::make_unique<cwTrip>();
+        trip->addChunk(chunk.get());
 
         //Remove the back sites for compass
         chunk->setData(cwSurveyChunk::ShotBackCompassRole, shotIndex, "");
@@ -401,12 +402,13 @@ TEST_CASE("Checks cwSurveyChunk errors", "[cwSurveyChunk]")
         trip->calibrations()->setBackSights(false);
 
         CHECK(chunk->errorModel()->warningCount() == 0);
+        chunk.release(); //Trip owns this pointer now
     }
 
     SECTION("Turn off front sights") {
         shotIndex = 1;
-        cwTrip* trip = new cwTrip();
-        trip->addChunk(chunk);
+        auto trip = std::make_unique<cwTrip>();
+        trip->addChunk(chunk.get());
 
         //Remove the back sites for compass
         chunk->setData(cwSurveyChunk::ShotCompassRole, shotIndex, "");
@@ -420,6 +422,7 @@ TEST_CASE("Checks cwSurveyChunk errors", "[cwSurveyChunk]")
         trip->calibrations()->setFrontSights(false);
 
         CHECK(chunk->errorModel()->warningCount() == 0);
+        chunk.release(); //Trip owns this pointer now
     }
 
     SECTION("Use Up and Down for the Clino") {
@@ -468,8 +471,8 @@ TEST_CASE("Checks cwSurveyChunk errors", "[cwSurveyChunk]")
     }
 
     SECTION("No warning should be create with calibrations change") {
-        cwTrip* trip = new cwTrip();
-        trip->addChunk(chunk);
+        auto trip = std::make_unique<cwTrip>();
+        trip->addChunk(chunk.get());
 
         chunk->removeStation(2, cwSurveyChunk::Above);
 
@@ -579,6 +582,8 @@ TEST_CASE("Checks cwSurveyChunk errors", "[cwSurveyChunk]")
                 trip->calibrations()->setFrontClinoCalibration(0);
             }
         }
+
+        chunk.release(); //trip owns this pointer now
     }
 }
 
@@ -590,7 +595,7 @@ TEST_CASE("Checks cwSurveyChunk errors", "[cwSurveyChunk]")
 TEST_CASE("Tests adding removing and getting copying cwSurveyChunk calibrations", "[cwSurveyChunk]") {
 
     cwSurveyChunk chunk;
-    QSignalSpy spy(&chunk, SIGNAL(calibrationsChanged()));
+    cwSignalSpy spy(&chunk, SIGNAL(calibrationsChanged()));
 
     chunk.appendNewShot();
     chunk.setData(cwSurveyChunk::StationNameRole, 0, "a1");
@@ -747,9 +752,5 @@ TEST_CASE("Tests adding removing and getting copying cwSurveyChunk calibrations"
             CHECK(spy.size() == 5);
             CHECK(calibrations3 == chunk.calibrations());
         }
-
-
     }
-
-
 }

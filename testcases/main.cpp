@@ -5,20 +5,50 @@
 **
 **************************************************************************/
 
-//#define CATCH_CONFIG_MAIN  // This tells Catch to provide a main() - only do this in one cpp file
-//#include "catch.hpp"
-
 #define CATCH_CONFIG_RUNNER
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_session.hpp>
 
 //Qt includes
 #include <QApplication>
+#include <QThread>
+#include <QThreadPool>
+#include <QMetaObject>
+#include <QThreadPool>
+#include <QSettings>
+
+//Our includes
+#include "cwSettings.h"
+#include "cwTask.h"
+#include "cwConcurrent.h"
 
 int main( int argc, char* argv[] )
 {
   QApplication app(argc, argv);
 
-  int result = Catch::Session().run( argc, argv );
+  QApplication::setOrganizationName("Vadose Solutions");
+  QApplication::setOrganizationDomain("cavewhere.com");
+  QApplication::setApplicationName("cavewhere-test");
+  QApplication::setApplicationVersion("1.0");
+
+  {
+      QSettings settings;
+      settings.clear();
+  }
+
+  cwSettings::initialize();
+
+  app.thread()->setObjectName("Main QThread");
+
+  int result = 0;
+  QMetaObject::invokeMethod(&app, [&result, argc, argv]() {
+      result = Catch::Session().run( argc, argv );
+      QThreadPool::globalInstance()->waitForDone();
+      cwTask::threadPool()->waitForDone();
+      QApplication::quit();
+  }, Qt::QueuedConnection);
+
+  app.exec();
 
   return result;
 }

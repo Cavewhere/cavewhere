@@ -6,7 +6,7 @@
 **************************************************************************/
 
 //Catch includes
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 //Cavewhere includes
 #include "cwSurvexImporter.h"
@@ -127,5 +127,6 @@ TEST_CASE("Import chunk calibration", "[SurvexImport]") {
     CHECK(calibration->tapeCalibration() == -1.0);
 
     CHECK(trip->calibrations()->tapeCalibration() == -2.0);
+    delete importer;
 }
 

@@ -1,36 +1,24 @@
 [submodule "QMath3d"]
 	path = QMath3d
-	url = git@github.com:vpicaver/QMath3d.git
+        url = https://github.com/vpicaver/QMath3d.git
 [submodule "survex"]
 	path = survex
-	url = git@github.com:Cavewhere/survex.git
-[submodule "plotsauce"]
-	path = plotsauce
-        url = git@github.com:Cavewhere/plotsauce.git
-[submodule "protobuf"]
-	path = protobuf
-	url = git@github.com:Cavewhere/protobuf.git
-[submodule "zlib"]
-	path = zlib
-	url = git@github.com:Cavewhere/zlib.git
-[submodule "squish"]
-	path = squish
-	url = git@github.com:Cavewhere/squish.git
+        url = https://github.com/Cavewhere/survex.git
 [submodule "dewalls"]
 	path = dewalls
-	url = git@github.com:Cavewhere/dewalls
-[submodule "lib-qt-qml-tricks"]
-	path = lib-qt-qml-tricks
-	url = git@github.com:Cavewhere/lib-qt-qml-tricks.git
-[submodule "metacave"]
-	path = metacave
-	url = git@github.com:Cavewhere/metacave.git
-[submodule "installer/windows/vcredist"]
-	path = installer/windows/vcredist
-	url = git@github.com:Cavewhere/vcredist.git
+        url = https://github.com/Cavewhere/dewalls
 [submodule "installer/mac/create-dmg"]
 	path = installer/mac/create-dmg
-	url = git@github.com:Cavewhere/create-dmg.git
-[submodule "qt-qml-models"]
-	path = qt-qml-models
-	url = git@github.com:Cavewhere/qt-qml-models.git
+        url = https://github.com/Cavewhere/create-dmg.git
+[submodule "asyncfuture"]
+	path = asyncfuture
+        url = https://github.com/vpicaver/asyncfuture.git
+[submodule "cavewherelib/twbs-icons"]
+	path = cavewherelib/twbs-icons
+	url = https://github.com/twbs/icons.git
+[submodule "qml-test-recorder"]
+	path = qml-test-recorder
+        url = https://github.com/vpicaver/qml-test-recorder.git
+[submodule "MarkScope"]
+	path = MarkScope
+	url = https://github.com/vpicaver/MarkScope.git

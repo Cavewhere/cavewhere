@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/">
+        <file>datasets/test_cwTextureUploadTask/cwTextureUploadTask.cw</file>
+        <file>datasets/test_cwTextureUploadTask/PhakeCave.PNG</file>
+    </qresource>
+</RCC>

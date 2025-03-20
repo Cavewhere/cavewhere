@@ -1,0 +1,16 @@
+<RCC>
+    <qresource prefix="/">
+        <file>datasets/test_cwCSVImporterManager/allCustomColumns.txt</file>
+        <file>datasets/test_cwCSVImporterManager/defaultColumns.txt</file>
+        <file>datasets/test_cwCSVImporterManager/defaultColumnsColumnMissAlignment.txt</file>
+        <file>datasets/test_cwCSVImporterManager/emptyFile.txt</file>
+        <file>datasets/test_cwCSVImporterManager/lastLRUD.txt</file>
+        <file>datasets/test_cwCSVImporterManager/lastToLRUD.txt</file>
+        <file>datasets/test_cwCSVImporterManager/lastToLRUDError.txt</file>
+        <file>datasets/test_cwCSVImporterManager/long.csv</file>
+        <file>datasets/test_cwCSVImporterManager/long.csv.xlsx</file>
+        <file>datasets/test_cwCSVImporterManager/newTrips.txt</file>
+        <file>datasets/test_cwCSVImporterManager/seperator.txt</file>
+        <file>datasets/test_cwCSVImporterManager/skipHeaderLines.txt</file>
+    </qresource>
+</RCC>

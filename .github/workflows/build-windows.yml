@@ -1,0 +1,83 @@
+name: Build on Windows
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - '*'
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    steps:
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0 # Fetch the tags for the versions to work correctly
+
+      - name: Install Ninja
+        run: |
+          choco install ninja
+
+      - name: Verify Ninja Installation
+        run: |
+          where ninja
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          aqtversion: '==3.1.*'
+          version: '6.8.2'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_msvc2022_64'
+          modules: 'qtshadertools'
+
+      - name: Install Locale::PO
+        run: |
+          cpan Locale::PO
+
+      - name: Installing Conan
+        run: |
+          pipx install conan
+
+      - name: Check Conan Version
+        run: conan --version
+
+      - name: Configure Conan Profile
+        run: |
+          conan profile detect --force
+
+      - name: Cache Conan Packages
+        id: cache-conan
+        uses: actions/cache@v4
+        with:
+          path: C:/Users/runneradmin/.conan2
+          key: ${{ runner.os }}-conan-win3-${{ hashFiles('conanfile.*') }}
+          restore-keys: |
+            ${{ runner.os }}-conan-win3-
+
+      - name: Install Dependencies with Conan
+        run: |
+          conan install . --build=missing --output-folder=build -s compiler.cppstd=17 -s compiler.version=194 -c tools.cmake.cmaketoolchain:generator=Ninja
+#-s compiler=msvc -s compiler.cppstd=17 -s compiler.version=193 -s compiler.update=6
+
+      - name: Verify Toolchain File
+        run: |
+          cat build/conan_toolchain.cmake
+
+      # - name: List CMake Generators
+      #   run: cmake --help
+
+      - name: Configure the Project with CMake
+        run: |
+          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_PDF=OFF -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Qt\6.8.1\msvc2022_64\lib" -DCMAKE_TOOLCHAIN_FILE="build/conan_toolchain.cmake" -S . -B build
+
+      - name: Build the Project
+        run: cmake --build build --parallel

@@ -6,20 +6,20 @@
 **************************************************************************/
 
 //Catch includes
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 //Cavewhere includes
 #include <cwTripCalibration.h>
 
 //Qt inculdes
-#include <QSignalSpy>
+#include "cwSignalSpy.h"
 
 //Our includes
 #include "TestHelper.h"
 
-TEST_CASE("Trip Calibration Getters and setters should work") {
+TEST_CASE("Trip Calibration Getters and setters should work", "[cwTripCalibration]") {
 
-    cwTripCalibration* tripCalibration = new cwTripCalibration();
+    auto tripCalibration = std::make_unique<cwTripCalibration>();
 
     //Check constructor
     CHECK(tripCalibration->hasCorrectedClinoBacksight() == false);
@@ -36,66 +36,68 @@ TEST_CASE("Trip Calibration Getters and setters should work") {
     CHECK(tripCalibration->hasFrontSights() == true);
     CHECK(tripCalibration->hasBackSights() == true);
 
-    QSignalSpy* calibrationChanged = new QSignalSpy(tripCalibration, SIGNAL(calibrationsChanged()));
+    cwSignalSpy calibrationChanged(tripCalibration.get(), SIGNAL(calibrationsChanged()));
 
     tripCalibration->setCorrectedClinoBacksight(true);
     CHECK(tripCalibration->hasCorrectedClinoBacksight() == true);
-    CHECK(calibrationChanged->size() == 1);
+    CHECK(calibrationChanged.size() == 1);
 
     tripCalibration->setCorrectedCompassBacksight(true);
     CHECK(tripCalibration->hasCorrectedCompassBacksight() == true);
-    CHECK(calibrationChanged->size() == 2);
+    CHECK(calibrationChanged.size() == 2);
 
     tripCalibration->setCorrectedCompassFrontsight(true);
     CHECK(tripCalibration->hasCorrectedCompassFrontsight() == true);
-    CHECK(calibrationChanged->size() == 3);
+    CHECK(calibrationChanged.size() == 3);
 
     tripCalibration->setCorrectedClinoFrontsight(true);
     CHECK(tripCalibration->hasCorrectedClinoFrontsight() == true);
-    CHECK(calibrationChanged->size() == 4);
+    CHECK(calibrationChanged.size() == 4);
 
     tripCalibration->setTapeCalibration(1.0);
     CHECK(tripCalibration->tapeCalibration() == 1.0);
-    CHECK(calibrationChanged->size() == 5);
+    CHECK(calibrationChanged.size() == 5);
 
     tripCalibration->setFrontCompassCalibration(2.0);
     CHECK(tripCalibration->frontCompassCalibration() == 2.0);
-    CHECK(calibrationChanged->size() == 6);
+    CHECK(calibrationChanged.size() == 6);
 
     tripCalibration->setBackCompassCalibration(3.0);
     CHECK(tripCalibration->backCompassCalibration() == 3.0);
-    CHECK(calibrationChanged->size() == 7);
+    CHECK(calibrationChanged.size() == 7);
 
     tripCalibration->setFrontClinoCalibration(4.0);
     CHECK(tripCalibration->frontClinoCalibration() == 4.0);
-    CHECK(calibrationChanged->size() == 8);
+    CHECK(calibrationChanged.size() == 8);
 
     tripCalibration->setBackClinoCalibration(5.0);
     CHECK(tripCalibration->backClinoCalibration() == 5.0);
-    CHECK(calibrationChanged->size() == 9);
+    CHECK(calibrationChanged.size() == 9);
 
     tripCalibration->setDeclination(6.0);
     CHECK(tripCalibration->declination() == 6.0);
-    CHECK(calibrationChanged->size() == 10);
+    CHECK(calibrationChanged.size() == 10);
 
     tripCalibration->setDistanceUnit(cwUnits::Feet);
     CHECK(tripCalibration->distanceUnit() == cwUnits::Feet);
-    CHECK(calibrationChanged->size() == 11);
+    CHECK(calibrationChanged.size() == 11);
 
     tripCalibration->setFrontSights(false);
     CHECK(tripCalibration->hasFrontSights() == false);
-    CHECK(calibrationChanged->size() == 12);
+    CHECK(calibrationChanged.size() == 12);
 
     tripCalibration->setBackSights(false);
     CHECK(tripCalibration->hasBackSights() == false);
-    CHECK(calibrationChanged->size() == 13);
+    CHECK(calibrationChanged.size() == 13);
 
     SECTION("Check copy constructor") {
         //Check copy operator
         cwTripCalibration* calibration2 = new cwTripCalibration(*tripCalibration);
 
         //Byte for byte comparison
-        propertyCompare(tripCalibration, calibration2);
+        propertyCompare(tripCalibration.get(), calibration2);
+
+        delete calibration2;
     }
 
     SECTION("Check assignment operator") {
@@ -105,7 +107,9 @@ TEST_CASE("Trip Calibration Getters and setters should work") {
         *calibration2 = *tripCalibration;
 
         //Byte for byte comparison
-        propertyCompare(tripCalibration, calibration2);
+        propertyCompare(tripCalibration.get(), calibration2);
+
+        delete calibration2;
     }
 
 

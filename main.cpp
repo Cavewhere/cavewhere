@@ -11,105 +11,172 @@
 #include <QQmlContext>
 #include <QMessageBox>
 #include <QQmlApplicationEngine>
+#include <QThreadPool>
+#include <QQuickWindow>
 
 //Our includes
 //#include "cwMainWindow.h"
 #include "cwImage.h"
-#include "cwGlobalDirectory.h"
-#include "cwQMLRegister.h"
 #include "cwRootData.h"
 #include "cwProject.h"
 #include "cwImageProvider.h"
 #include "cwOpenFileEventHandler.h"
-#include "cwQMLReload.h"
-#include "cwDebug.h"
 #include "cwApplication.h"
-#include "cwUsedStationsTask.h"
+#include "cwGlobals.h"
+#include "cwConcurrent.h"
+
+//std includes
+#include <memory>
+
+//MarkScope
+#include "MarkScope/FrameProfiler.h"
 
 #ifndef CAVEWHERE_VERSION
 #define CAVEWHERE_VERSION "Sauce-Release"
 #endif
 
-QUrl mainWindowSourcePath() {
-    return QUrl::fromLocalFile(cwGlobalDirectory::baseDirectory() + cwGlobalDirectory::qmlMainFilePath());
+void customMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg) {
+    switch (type) {
+    case QtWarningMsg:
+        qDebug() << "QWarning triggered: " << msg;
+        if (msg.contains("No module named \"cavewherelib\" found")) {
+            // Breakpoint here for the debugger
+            qDebug() << "Breaking on QWarning...";
+#ifdef Q_OS_WIN
+            __debugbreak(); // Windows
+#else
+            __builtin_trap(); // macOS/Linux
+#endif
+        }
+        break;
+    case QtCriticalMsg:
+    case QtFatalMsg:
+        // Handle other types of messages if necessary
+        break;
+    default:
+        break;
+    }
+}
+
+void handleCommandline(QCoreApplication& a, cwRootData* rootData) {
+    // Command-line argument parser
+    QCommandLineParser parser;
+    parser.setApplicationDescription("CaveWhere Application");
+    parser.addHelpOption();
+
+    // Adding --page option
+    QCommandLineOption pageOption(QStringList({"p", "page"}),
+                                  "Specify the page URL to open.",
+                                  "pageurl");
+    parser.addOption(pageOption);
+
+    // Adding optional filename argument
+    parser.addPositionalArgument("filename", "The optional file to open.");
+
+    // Parse the command-line arguments
+    parser.process(a);
+
+    // Check if --page was provided
+    QString pageUrl;
+    if (parser.isSet(pageOption)) {
+        pageUrl = parser.value(pageOption);
+    }
+
+    const QStringList positionalArgs = parser.positionalArguments();
+    if (!positionalArgs.isEmpty()) {
+        QString filename = positionalArgs.first();
+        qDebug() << "Loading file:" << filename;
+        rootData->project()->loadFile(filename);
+
+        if(!pageUrl.isEmpty()) {
+            QObject* obj = new QObject();
+
+            struct ShouldLoad {
+                bool isPageViewLoaded = false;
+                bool isFileLoaded = false;
+            };
+
+            auto shouldLoad = std::make_shared<ShouldLoad>();
+
+            auto loadCommandLinePage = [obj, rootData, pageUrl, shouldLoad]() {
+                if(shouldLoad->isFileLoaded) {
+
+                    //This is pretty unrealiable, it depends on the loading spead
+                    QTimer::singleShot(250, [rootData, obj, pageUrl]() {
+                        rootData->pageSelectionModel()->setCurrentPageAddress(pageUrl);
+
+                        //This delete disconnects the connection
+                        obj->deleteLater();
+                    });
+                }
+            };
+
+            obj->connect(rootData->project(), &cwProject::loaded, obj, [shouldLoad, loadCommandLinePage]() {
+                shouldLoad->isFileLoaded = true;
+                loadCommandLinePage();
+            });
+        }
+    }
 }
 
 int main(int argc, char *argv[])
 {
+    //This needs to be first for QSettings
+    QApplication::setOrganizationName("Vadose Solutions");
+    QApplication::setOrganizationDomain("cavewhere.com");
+    QApplication::setApplicationName("CaveWhere");
+    QApplication::setApplicationVersion(CAVEWHERE_VERSION);
+
     cwApplication a(argc, argv);
-    a.setAttribute(Qt::AA_UseDesktopOpenGL);
 
-    cwRootData* rootData = new cwRootData();
+    //Load all the fonts
+    cwGlobals::loadFonts();
 
-    if(argc >= 2) {
-        QByteArray filenameByteArray(argv[1]);
-        rootData->project()->loadFile(QString::fromLocal8Bit(filenameByteArray));
-    }
+    // Configure multisample antialiasing
+    QSurfaceFormat format;
+    format.setSamples(4); // Adjust the sample count as needed
+    QSurfaceFormat::setDefaultFormat(format);
+
+    QQmlApplicationEngine* applicationEngine = new QQmlApplicationEngine();
+
+    // Add the macOS Resources directory to the QML import search path
+    QString resourcePath = QCoreApplication::applicationDirPath() + "/../Resources/qml";
+    applicationEngine->addImportPath(resourcePath);
+
+    QQmlContext* context = applicationEngine->rootContext();
+
+    //This allow to extra image data from the project's image database
+    cwImageProvider* imageProvider = new cwImageProvider();
+    context->engine()->addImageProvider(cwImageProvider::name(), imageProvider);
+
+    applicationEngine->loadFromModule(QStringLiteral("cavewherelib"),
+                                       QStringLiteral("CavewhereMainWindow"));
+    auto id = qmlTypeId("cavewherelib", 1, 0, "RootData");
+    cwRootData* rootData = applicationEngine->rootContext()->engine()->singletonInstance<cwRootData*>(id);
+
+    MarkScope::FrameProfiler frameProfiler(applicationEngine);
+
+    //Handle command line args
+    handleCommandline(a, rootData);
 
     //Handles when the user clicks on a file in Finder(Mac OS X) or Explorer (Windows)
     cwOpenFileEventHandler* openFileHandler = new cwOpenFileEventHandler(&a);
     openFileHandler->setProject(rootData->project());
     a.installEventFilter(openFileHandler);
 
-    QApplication::setOrganizationName("Vadose Solutions");
-    QApplication::setOrganizationDomain("cavewhere.com");
-    QApplication::setApplicationName("Cavewhere");
-    QApplication::setApplicationVersion("0.1");
-
-    cwGlobalDirectory::setupBaseDirectory();
-
-    //Register all of the cavewhere types
-    cwQMLRegister::registerQML();
-
-    QUrl mainWindowPath = mainWindowSourcePath();
-    QQmlApplicationEngine applicationEnigine;
-
-    rootData->qmlReloader()->setApplicationEngine(&applicationEnigine);
-
-//    applicationEnigine.rootContext();
-
-//    QQuickView view;
-//    view.setTitle(QString("Cavewhere - %1").arg(CAVEWHERE_VERSION));
-
-//    QSurfaceFormat format = view.format();
-//    format.setSamples(4);
-
-     //&view);
-
-//    rootData->setQuickView(&view);
-//    rootData->project()->load(QDir::homePath() + "/Dropbox/quanko.cw");
-//    rootData->project()->load(QDir::homePath() + "/test.cw");
-    QQmlContext* context =  applicationEnigine.rootContext(); //view.rootContext();
-
-    context->setContextObject(rootData);
-    context->setContextProperty("rootData", rootData);
-    //    context->setContextProperty("mainWindow", &view);
-
-    //This allow to extra image data from the project's image database
-    cwImageProvider* imageProvider = new cwImageProvider();
+    //Hookup the image provider now that the rootdata is create
     imageProvider->setProjectPath(rootData->project()->filename());
     QObject::connect(rootData->project(), SIGNAL(filenameChanged(QString)), imageProvider, SLOT(setProjectPath(QString)));
-    context->engine()->addImageProvider(cwImageProvider::Name, imageProvider);
+
+    auto quit = [&a, rootData, applicationEngine]() {
+        delete applicationEngine;
+        QThreadPool::globalInstance()->waitForDone();
+        cwTask::threadPool()->waitForDone();
+        a.quit();
+    };
 
     //Allow the engine to quit the application
-    QObject::connect(context->engine(), SIGNAL(quit()), &a, SLOT(quit()));
-
-//    QUrl mainWindowPath = mainWindowSourcePath();
-
-    if(!mainWindowPath.isEmpty()) {
-        applicationEnigine.load(mainWindowPath);
-        //        view.setFormat(format);
-//        view.setResizeMode(QQuickView::SizeRootObjectToView);
-//        view.setSource(mainWindowPath);
-//        view.show();
-    } else {
-        QMessageBox mainWindowNotFoundMessage(QMessageBox::Critical,
-                                              "Cavewhere Failed to Load Main Window",
-                                              "ಠ_ರೃ Cavewhere has failed to load its main window... <br><b>This is a bug!</b>",
-                                              QMessageBox::Close);
-        mainWindowNotFoundMessage.exec();
-        return 1;
-    }
+    QObject::connect(context->engine(), &QQmlEngine::quit, &a, quit, Qt::QueuedConnection);
 
     return a.exec();
 }

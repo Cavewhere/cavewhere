@@ -6,7 +6,7 @@
 **************************************************************************/
 
 //Catch includes
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 //Qt includes
 #include <QObject>
@@ -109,7 +109,7 @@ TEST_CASE("Getting and setting cwError should work", "[Error]")
   If this test false, cwError won't get and set correctly
   in QML. QML uses Q_GADGET meta system to extract data
   */
-TEST_CASE("Q_GADGET Q_PROPERTY work for cwError")
+TEST_CASE("Q_GADGET Q_PROPERTY work for cwError", "[cwError]")
 {
     QObject object;
 

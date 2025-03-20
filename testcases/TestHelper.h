@@ -6,11 +6,8 @@
 **************************************************************************/
 
 
-#ifndef STREAMOPERATOR
-#define STREAMOPERATOR
-
-//Catch includes
-#include "catch.hpp"
+#ifndef TEST_HELPER
+#define TEST_HELPER
 
 //Qt includes
 #include <QVector3D>
@@ -22,10 +19,24 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QSet>
+#include <QMetaEnum>
+#include <QTextStream>
+#include <QVector2D>
+#include <QMatrix4x4>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwStationPositionLookup.h"
 #include "cwProject.h"
+#include "cwError.h"
+#include "cwImageData.h"
+#include "CaveWhereTestLibExport.h"
+#include "LoadProjectHelper.h"
+
+//Std includes
+#include <iostream>
+
+
 
 inline std::ostream& operator << ( std::ostream& os, QVector3D const& value ) {
     os << "(" << value.x() << ", " << value.y() << ", " << value.z() << ")";
@@ -37,21 +48,10 @@ inline std::ostream& operator << ( std::ostream& os, QString const& value ) {
     return os;
 }
 
-inline std::ostream& operator << ( std::ostream& os, QStringList const& value ) {
-    if(!value.isEmpty()) {
-        os << "[";
-        for(auto iter = value.begin(); iter != value.end() - 1; iter++) {
-            os << "\"" + iter->toStdString() + "\",";
-        }
-        os << "\"" + value.last() + "\"]";
-    } else {
-        os << "[]";
-    }
-    return os;
-}
+ std::ostream& operator << ( std::ostream& os, QStringList const& value );
 
 inline std::ostream& operator << ( std::ostream& os, QSet<QString> const& value ) {
-    return operator <<(os, value.toList());
+    return operator <<(os, value.values());
 }
 
 inline std::ostream& operator << ( std::ostream& os, QVariant const& value ) {
@@ -64,34 +64,66 @@ inline std::ostream& operator << ( std::ostream& os, QMetaProperty const& value 
     return os;
 }
 
-inline void propertyCompare(QObject* tc1, QObject* tc2) {
+inline std::ostream& operator << ( std::ostream& os, QSize const& value ) {
+    os << "(" << value.width() << "x" << value.height() << ")";
+    return os;
+}
 
-    for(int i = 0; i < tc1->metaObject()->propertyCount(); i++) {
-        QMetaProperty property = tc1->metaObject()->property(i);
-        INFO("Testing property " << property);
-        CHECK(property.read(tc1) == property.read(tc2));
+inline std::ostream& operator << ( std::ostream& os, QSizeF const& value ) {
+    os << "(" << value.width() << "x" << value.height() << ")";
+    return os;
+}
+
+inline std::ostream& operator << ( std::ostream& os, cwImageData const& value ) {
+    return os << "[size=" << value.size() << "]";
+}
+
+inline std::ostream& operator << ( std::ostream& os, QVector2D const& value ) {
+    return os << "(" << value.x() << ", " << value.y() << ")";
+}
+
+inline std::ostream& operator << ( std::ostream& os, QList<cwImageData> const& value ) {
+    for(auto image : value) {
+        os << image << ",";
     }
+    return os;
 }
 
-inline double roundToDecimal(double value, int decimals) {
-    double decimalPlaces = 10.0 * decimals;
-    return qRound(value * decimalPlaces) / decimalPlaces;
-}
+ std::ostream& operator << ( std::ostream& os, QList<int> const& value);
 
-inline QVector3D roundToDecimal(QVector3D v, int decimals) {
-    return QVector3D(roundToDecimal(v.x(), decimals),
-                     roundToDecimal(v.y(), decimals),
-                     roundToDecimal(v.z(), decimals));
-}
+inline std::ostream& operator << ( std::ostream& os, const QMatrix4x4& matrix) {
+    os << "[\n";
+    for(int r = 0; r < 4; r++) {
+        for(int c = 0; c < 4; c++) {
+            os << matrix.data()[r * 4 + c];
 
-
-inline void checkQVector3D(QVector3D v1, QVector3D v2, int decimals = 2) {
-    if(v1 != v2) {
-        v1 = roundToDecimal(v1, decimals);
-        v2 = roundToDecimal(v2, decimals);
-        CHECK(v1 == v2);
+            if(c != 3) {
+                os << ",";
+            }
+        }
+        os << "\n";
     }
+    os << "]";
+    return os;
 }
+
+
+ std::ostream &operator << ( std::ostream& os, cwError const& error);
+
+inline std::ostream &operator << (std::ostream& os, QPointF point) {
+    os << "(" << point.x() << ", " << point.y() << ")";
+    return os;
+}
+
+void propertyCompare(QObject* tc1, QObject* tc2);
+
+double roundToDecimal(double value, int decimals);
+
+QVector3D roundToDecimal(QVector3D v, int decimals);
+
+void checkQVector3D(QVector3D v1, QVector3D v2, int decimals = 2);
+
+void fuzzyCompareVector(QVector3D v1, QVector3D v2, double delta = 0.000001);
 
 /**
  * @brief checkStationLookup
@@ -102,54 +134,12 @@ inline void checkQVector3D(QVector3D v1, QVector3D v2, int decimals = 2) {
  * equal to the stations in lookup2. Lookup2 could have extra stations that aren't checked. We
  * need this exact functionality for compass import export test. The compass exporter creates
  * extra stations at the end of the survey that has lrud data.
+ *`
+ * This needs to be inline for catch to work on windows (because this is a library)
  */
-inline void checkStationLookup(cwStationPositionLookup lookup1, cwStationPositionLookup lookup2) {
-    foreach(QString stationName, lookup1.positions().keys()) {
-        INFO("Checking position for " << stationName);
-        CHECK(lookup2.hasPosition(stationName) == true);
-        checkQVector3D(lookup1.position(stationName), lookup2.position(stationName));
-    }
-}
+void checkStationLookup(cwStationPositionLookup lookup1, cwStationPositionLookup lookup2);
 
-/**
- * Copyies filename to the temp folder
- */
-inline QString copyToTempFolder(QString filename) {
 
-    QFileInfo info(filename);
-    QString newFileLocation = QDir::tempPath() + "/" + info.fileName();
-
-    if(QFileInfo::exists(newFileLocation)) {
-        bool couldRemove = QFile::remove(newFileLocation);
-        INFO("Trying to remove " << newFileLocation);
-        REQUIRE(couldRemove == true);
-    }
-
-    bool couldCopy = QFile::copy(filename, newFileLocation);
-    INFO("Trying to copy " << filename << " to " << newFileLocation);
-    REQUIRE(couldCopy == true);
-
-    bool couldPermissions = QFile::setPermissions(newFileLocation, QFile::WriteOwner | QFile::ReadOwner);
-    INFO("Trying to set permissions for " << filename);
-    REQUIRE(couldPermissions);
-
-    return newFileLocation;
-}
-
-/**
- * @brief fileToProject
- * @param filename
- * @return A new project generate from filename
- */
-inline cwProject* fileToProject(QString filename) {
-    QString datasetFile = copyToTempFolder(filename);
-
-    cwProject* project = new cwProject();
-    project->loadFile(datasetFile);
-    project->waitLoadToFinish();
-
-    return project;
-}
 
 #endif // STREAMOPERATOR
 

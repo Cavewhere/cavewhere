@@ -6,7 +6,7 @@
 **************************************************************************/
 
 //Catch includes
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 //Our includes
 #include "cwFindUnconnectedSurveyChunksTask.h"
@@ -16,9 +16,9 @@
 #include "cwShot.h"
 #include "cwSurveyChunk.h"
 
-TEST_CASE("Test the find unconnected survey chunks") {
+TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChunksTask]") {
 
-    cwCave* cave = new cwCave();
+    auto cave = std::make_unique<cwCave>();
     cwTrip* trip = new cwTrip();
 
     cave->addTrip(trip);
@@ -44,7 +44,7 @@ TEST_CASE("Test the find unconnected survey chunks") {
     shot.setClino("0");
     shot.setBackClino("0");
 
-    cwFindUnconnectedSurveyChunksTask* task = new cwFindUnconnectedSurveyChunksTask();
+    auto task = std::make_unique<cwFindUnconnectedSurveyChunksTask>();
 
     SECTION("Single a single chunk should be connected to the cave") {
 
@@ -55,7 +55,7 @@ TEST_CASE("Test the find unconnected survey chunks") {
             chunk->appendShot(stations.at(i), stations.at(i+1), shot);
         }
 
-        task->setCave(cave);
+        task->setCave(cave.get());
         task->start();
         task->waitToFinish();
 
@@ -93,7 +93,7 @@ TEST_CASE("Test the find unconnected survey chunks") {
             chunk2->appendShot(withoutCapitals.at(i), withoutCapitals.at(i+1), shot);
         }
 
-        task->setCave(cave);
+        task->setCave(cave.get());
         task->start();
         task->waitToFinish();
 
@@ -125,7 +125,7 @@ TEST_CASE("Test the find unconnected survey chunks") {
             chunk2->appendShot(stations.at(i), stations.at(i+1), shot);
         }
 
-        task->setCave(cave);
+        task->setCave(cave.get());
         task->start();
         task->waitToFinish();
 
