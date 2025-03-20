@@ -106,12 +106,15 @@ QQ.Item {
 
                         DoubleClickTextInput {
                             id: tripDate
+                            objectName: "tripDate"
+
                             text: Qt.formatDate(clipArea.currentTrip.date, "yyyy-MM-dd")
 
                             font.bold: true
 
                             onFinishedEditting: function(newText) {
-                                clipArea.currentTrip.date = Date.fromLocaleDateString(Qt.locale(), newText, "yyyy-MM-dd");
+                                let dateTime = newText + " 00:00:00";
+                                clipArea.currentTrip.date = Date.fromLocaleString(Qt.locale(), dateTime, "yyyy-MM-dd HH:mm:ss");
                             }
                         }
                     }

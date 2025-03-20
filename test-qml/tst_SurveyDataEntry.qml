@@ -174,5 +174,27 @@ MainWindowTest {
             tryVerify(()=>{ return quoteBox === null });
             verify(distanceError.checked === false);
         }
+
+        function test_dateChangeShouldWork() {
+            addSurvey();
+
+            let date = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->tripDate")
+            date.openEditor();
+            // mouseDoubleClickSequence(date)
+
+            keyClick(50, 0) //2
+            keyClick(48, 0) //0
+            keyClick(50, 0) //2
+            keyClick(53, 0) //5
+            keyClick(45, 0) //-
+            keyClick(48, 0) //0
+            keyClick(50, 0) //2
+            keyClick(45, 0) //-
+            keyClick(49, 0) //1
+            keyClick(48, 0) //0
+            keyClick(16777220, 0) //Return
+
+            compare(date.text, "2025-02-10")
+        }
     }
 }
