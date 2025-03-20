@@ -122,6 +122,8 @@ MainWindowTest {
         function test_enterSurveyData() {
             addSurvey();
 
+            wait(10000);
+
             enterSurveyData();
         }
 
@@ -239,6 +241,25 @@ MainWindowTest {
             //Make sure the distance has gone down
             totalLengthText_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->totalLengthText")
             tryCompare(totalLengthText_obj1, "text", "Total Length: 11 m");
+        }
+
+        function test_loadSurveyEditor() {
+            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+
+            RootData.pageSelectionModel.currentPageAddress = "Data/Cave=Phake Cave 3000/Trip=Release 0.08"
+
+            tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
+
+            let backCheckbox = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->backSightCalibrationEditor->checkBox")
+            mouseClick(backCheckbox)
+
+            let frontSightCheckBox = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->frontSightCalibrationEditor->checkBox")
+            mouseClick(frontSightCheckBox)
+
+
+
+            wait(100000);
+
         }
     }
 }

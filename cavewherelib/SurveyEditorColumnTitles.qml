@@ -1,47 +1,75 @@
-import QtQuick 2.0
-import QtQuick.Layouts 1.1
-
-//Text {
-//    z: 5
-//    text: "Test!"
-//}
+import QtQuick
+import QtQuick.Layouts
 
 Item {
 //    width: 400
-    height: visible ? layoutId.height - 1 : 0
+    height: visible ? stationLabelId.height - 1 : 0
 
-    RowLayout {
-        id: layoutId
-        TitleLabel {
-            text: "Station"
-        }
+    property alias stationWidth: stationLabelId.width
+    property alias distanceWidth: distanceLabelId.width
+    property alias compassWidth: compassLabelId.width
+    property alias clinoWidth: clinoLabelId.width
+    property alias lWidth: lLabelId.width
+    property alias rWidth: rLabelId.width
+    property alias uWidth: uLabelId.width
+    property alias dWidth: dLabelId.width
+    property int shotOffset: 0
 
-        TitleLabel {
-            text: "Distance"
-        }
 
-        TitleLabel {
-            text: "Compass"
-        }
+    TitleLabel {
+        id: stationLabelId
+        text: "Station"
+    }
 
-        TitleLabel {
-            text: "Clino"
-        }
+    TitleLabel {
+        id: distanceLabelId
+        anchors.left: stationLabelId.right
+        anchors.leftMargin: -1
+        y: shotOffset
+        text: "Distance"
+    }
 
-        TitleLabel {
-            text: "L"
-        }
+    TitleLabel {
+        id: compassLabelId
+        anchors.left: distanceLabelId.right
+        anchors.leftMargin: -1
+        y: shotOffset
+        text: "Compass"
+    }
 
-        TitleLabel {
-            text: "R"
-        }
+    TitleLabel {
+        id: clinoLabelId
+        anchors.left: compassLabelId.right
+        anchors.leftMargin: -1
+        y: shotOffset
+        text: "Vertical\nAngle"
+    }
 
-        TitleLabel {
-            text: "U"
-        }
+    TitleLabel {
+        id: lLabelId
+        anchors.left: clinoLabelId.right
+        anchors.leftMargin: -1
+        text: "L"
+    }
 
-        TitleLabel {
-            text: "D"
-        }
+    TitleLabel {
+        id: rLabelId
+        anchors.left: lLabelId.right
+        anchors.leftMargin: -1
+        text: "R"
+    }
+
+    TitleLabel {
+        id: uLabelId
+        anchors.left: rLabelId.right
+        anchors.leftMargin: -1
+        text: "U"
+    }
+
+    TitleLabel {
+        id: dLabelId
+        anchors.left: uLabelId.right
+        anchors.leftMargin: -1
+        text: "D"
     }
 }

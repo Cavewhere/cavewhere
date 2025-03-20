@@ -30,10 +30,11 @@ QQ.Item {
         trip: clipArea.currentTrip
     }
 
-    SurvexEditorModel {
+    SurveyEditorModel {
         id: editorModel
         trip: currentTrip
     }
+
 
     Controls.ScrollView {
         id: scrollAreaId
@@ -64,8 +65,16 @@ QQ.Item {
         //                flickableAreaId.contentY = contentY;
         //            }
 
-        ListView {
+        QQ.ListView {
             id: view
+
+            Controls.ButtonGroup {
+                id: errorButtonGroupId
+            }
+
+            SurveyChunkTrimmer {
+                id: surveyChunkTrimmerId
+            }
 
             header: ColumnLayout {
                 id: column
@@ -75,6 +84,7 @@ QQ.Item {
 
                 ColumnLayout {
                     Layout.fillWidth: true
+
 
                     QQ.Item {
                         Layout.fillWidth: true
@@ -105,8 +115,8 @@ QQ.Item {
                             font.pixelSize: 20
 
                             onFinishedEditting: (newText) => {
-                                clipArea.currentTrip.name = newText
-                            }
+                                                    clipArea.currentTrip.name = newText
+                                                }
                         }
 
                         QQ.Item {
@@ -150,35 +160,58 @@ QQ.Item {
                     text: "Data"
                 }
 
-//                SurveyErrorOverview {
-//                    trip: currentTrip
-//                }
+                SurveyErrorOverview {
+                    trip: currentTrip
+                }
+
+                AddButton {
+                    id: addSurveyData
+                    objectName: "addSurveyData"
+                    text: "Add Survey Data " + clipArea.currentTrip + " " + clipArea.currentTrip.chunkCount
+                    Layout.alignment: Qt.AlignHCenter
+                    // anchors.horizontalCenter: view.horizontalCenter
+                    // visible: true
+                    visible: clipArea.currentTrip !== null && clipArea.currentTrip.chunkCount === 0
+
+                    onClicked: {
+                        clipArea.currentTrip.addNewChunk()
+                    }
+                }
             }
 
 
             model: editorModel
 
+
             delegate: DrySurveyComponent {
                 calibration: currentCalibration
+                errorButtonGroup: errorButtonGroupId
+                surveyChunkTrimmer: surveyChunkTrimmerId
             }
 
-            section.property: "chunkId"
-            section.delegate: SurveyEditorColumnTitles {
-                visible: {
-                    console.log("Section:" + section + " " + section.length);
-                    return section.length !== 0
-                }
+            // section.property: "chunkId"
+            // section.delegate: SurveyEditorColumnTitles {
+            //     visible: {
+            //         console.log("Section:" + section + " " + section.length);
+            //         return section.length !== 0
+            //     }
 
-                onVisibleChanged: {
-                    console.log("Section visiblity" + visible)
-                    if(section.length === 0) {
-                        visible = false;
-                    }
-                }
-            }
+            //     onVisibleChanged: {
+            //         console.log("Section visiblity" + visible)
+            //         if(section.length === 0) {
+            //             visible = false;
+            //         }
+            //     }
+            // }
 
             footer: ColumnLayout {
                 width: scrollAreaId.width - 30
+
+                QQ.Rectangle {
+                   color: "red"
+                   width: 100
+                   height: 100
+                }
 
                 Text {
                     objectName: "totalLengthText"
@@ -217,28 +250,16 @@ QQ.Item {
                         anchors.fill: parent
 
                         onClicked: {
+                            console.log("Mouse area click, new chunk!");
                             clipArea.currentTrip.addNewChunk();
                         }
-                    }
-                }
-            }
-
-                AddButton {
-                    id: addSurveyData
-                    objectName: "addSurveyData"
-                    text: "Add Survey Data"
-                    anchors.horizontalCenter: view.horizontalCenter
-//                    visible: true
-                    visible: clipArea.currentTrip !== null && clipArea.currentTrip.chunkCount === 0
-
-                    onClicked: {
-                        clipArea.currentTrip.addNewChunk()
                     }
                 }
             }
         }
     }
 }
+
 
 //MouseArea {
 //    anchors.fill: scrollAreaId

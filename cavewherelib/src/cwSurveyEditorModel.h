@@ -8,18 +8,21 @@ class cwSurveyChunk;
 //Qt includes
 #include <QAbstractListModel>
 #include <QPointer>
+#include <QQmlEngine>
 
 
 /**
- * @brief The cwSurvexEditorModel class
+ * @brief The cwSurveyEditorModel class
  *
  * This class transforms a cwTrip's cwSurveyChunk's into a data format that
  * can be read into by default Qt views like a Listview. This class doesn't
  * store any data. It only translate cwTrip's data into a list model
  */
-class cwSurvexEditorModel : public QAbstractListModel
+class cwSurveyEditorModel : public QAbstractListModel
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(SurveyEditorModel)
+
     Q_ENUMS(Roles)
 
     Q_PROPERTY(cwTrip* trip READ trip WRITE setTrip NOTIFY tripChanged)
@@ -27,7 +30,7 @@ class cwSurvexEditorModel : public QAbstractListModel
 
 
 public:
-    cwSurvexEditorModel();
+    cwSurveyEditorModel();
 
     enum Roles {
         StationNameRole,
@@ -41,7 +44,10 @@ public:
         ShotClinoRole,
         ShotBackClinoRole,
         ShotCalibrationRole,
-        ChunkIdRole
+        ChunkRole,
+        ChunkIdRole,
+        StationVisibleRole,
+        ShotVisibleRole
     };
 
     cwTrip* trip() const;
@@ -96,10 +102,10 @@ signals:
 };
 
 /**
-* @brief cwSurvexEditorModel::trip
+* @brief cwSurveyEditorModel::trip
 * @return
 */
-inline cwTrip* cwSurvexEditorModel::trip() const {
+inline cwTrip* cwSurveyEditorModel::trip() const {
     return Trip;
 }
 

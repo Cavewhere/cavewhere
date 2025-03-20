@@ -17,7 +17,7 @@ QQ.Item {
     property alias dataValue: editor.text
     property alias dataValidator: editor.validator
     required property SurveyChunk surveyChunk; //For hooking up signals and slots in subclasses
-    required property SurveyChunkView surveyChunkView;
+    // required property SurveyChunkView surveyChunkView;
     required property SurveyChunkTrimmer surveyChunkTrimmer; //For interaction
     property alias aboutToDelete: removeBoxId.visible
     property ErrorModel errorModel: null
@@ -257,212 +257,217 @@ QQ.Item {
 
         onClicked: {
             dataBox.focus = true
-		}
-
-    Keys.onPressed: {
-        handleTab(event);
-        switch(event.key) {
-        case Qt.Key_Left:
-        case Qt.Key_Right:
-        case Qt.Key_Up:
-        case Qt.Key_Down:
-        case Qt.Key_Backspace:
-            deletePressedHandler();
-            return;
         }
 
-        surveyChunkView.navigationArrow(rowIndex, dataRole, event.key);
 
-        if(event.key === Qt.Key_Backspace) {
-        }
-
-        if(editor.validator.validate(event.text) > 0 && event.text.length > 0) {
-            dataBox.state = 'MiddleTyping'
-            editor.openEditor()
-            globalShadowTextInput.textInput.text  = event.text
-            globalShadowTextInput.clearSelection() //GlobalShowTextInput is what's opened from editor.openEditor
-        }
-    }
-
-    QQ.Rectangle {
-        id: errorBorder
-        property bool shouldBeVisible: dataBox.errorModel !== null && (dataBox.errorModel.fatalCount > 0 || dataBox.errorModel.warningCount > 0)
+        QQ.Rectangle {
+            id: errorBorder
+            property bool shouldBeVisible: dataBox.errorModel !== null && (dataBox.errorModel.fatalCount > 0 || dataBox.errorModel.warningCount > 0)
 
 
-        anchors.fill: parent
-        anchors.margins: 1
-        border.width: 1
-        border.color: dataBox.errorAppearance(dataBox.errorBorderColor)
-        color: "#00000000"
-        visible: shouldBeVisible || errorIcon.checked
+            anchors.fill: parent
+            anchors.margins: 1
+            border.width: 1
+            border.color: dataBox.errorAppearance(dataBox.errorBorderColor)
+            color: "#00000000"
+            visible: shouldBeVisible || errorIcon.checked
 
-        Controls.RoundButton {
-            id: errorIcon
-            objectName: "errorIcon"
+            Controls.RoundButton {
+                id: errorIcon
+                objectName: "errorIcon"
 
-            property bool hasBeenToggled: false
+                property bool hasBeenToggled: false
 
-            implicitWidth: 12
-            implicitHeight: 12
+                implicitWidth: 12
+                implicitHeight: 12
 
-            checkable: true
-            radius: 0 //Makes it a square
+                checkable: true
+                radius: 0 //Makes it a square
 
-            focusPolicy: Qt.NoFocus
+                focusPolicy: Qt.NoFocus
 
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            anchors.margins: 2
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.margins: 2
 
-            //Make the popup go away when another error button is pressed
-            Controls.ButtonGroup.group: dataBox.errorButtonGroup
+                //Make the popup go away when another error button is pressed
+                Controls.ButtonGroup.group: dataBox.errorButtonGroup
 
-            QQ.Image {
-                anchors.centerIn: parent
-                source: dataBox.errorAppearance(dataBox.errorImageSource)
-                sourceSize: Qt.size(errorIcon.implicitWidth - 4, errorIcon.implicitHeight - 4)
-            }
-            onClicked: {
-                //ButtonGroup prevents users for unchecking the button
-                //this allows the checkbox to be unchecked by the user
-                if(checked && !hasBeenToggled) {
-                    checked = false;
+                QQ.Image {
+                    anchors.centerIn: parent
+                    source: dataBox.errorAppearance(dataBox.errorImageSource)
+                    sourceSize: Qt.size(errorIcon.implicitWidth - 4, errorIcon.implicitHeight - 4)
                 }
-                hasBeenToggled = false;
+                onClicked: {
+                    //ButtonGroup prevents users for unchecking the button
+                    //this allows the checkbox to be unchecked by the user
+                    if(checked && !hasBeenToggled) {
+                        checked = false;
+                    }
+                    hasBeenToggled = false;
+                }
+
+                onToggled: {
+                    hasBeenToggled = true;
+                }
             }
 
-            onToggled: {
-                hasBeenToggled = true;
-            }
-        }
-
-        ErrorListQuoteBox {
-            visible: errorIcon.checked
-            errors:  dataBox.errorModel !== null ? dataBox.errorModel.errors : null
-            errorIcon: errorIcon
-            quoteBoxObjectName: "errorBox" + dataBox.objectName
-        }
-    }
-
-    QQ.Keys.onPressed: (event) => {
-                           handleTab(event);
-                           surveyChunkView.navigationArrow(rowIndex, dataRole, event.key);
-
-                           if(event.key === Qt.Key_Backspace) {
-                               deletePressedHandler();
-                               return;
-                           }
-
-                           if(editor.validator.validate(event.text) > 0 && event.text.length > 0) {
-                               dataBox.state = 'MiddleTyping'
-                               editor.openEditor()
-                               GlobalShadowTextInput.textInput.text  = event.text
-                               GlobalShadowTextInput.clearSelection() //GlobalShowTextInput is what's opened from editor.openEditor
-                           }
-                       }
-
-    QQ.Keys.onSpacePressed: {
-        var trip = surveyChunk.parentTrip;
-        if(trip.chunkCount > 0) {
-            var lastChunkIndex = trip.chunkCount - 1
-            var lastChunk = trip.chunk(lastChunkIndex);
-            if(lastChunk.isStationAndShotsEmpty()) {
-                (dataBox.surveyChunkView.parent as SurveyChunkGroupView).setFocus(lastChunkIndex)
-                return;1
+            ErrorListQuoteBox {
+                visible: errorIcon.checked
+                errors:  dataBox.errorModel !== null ? dataBox.errorModel.errors : null
+                errorIcon: errorIcon
+                quoteBoxObjectName: "errorBox" + dataBox.objectName
             }
         }
 
-        surveyChunk.parentTrip.addNewChunk();
-    }
+        // QQ.Keys.onPressed: (event) => {
+        //     handleTab(event);
+        //     switch(event.key) {
+        //     case Qt.Key_Left:
+        //     case Qt.Key_Right:
+        //     case Qt.Key_Up:
+        //     case Qt.Key_Down:
+        //     case Qt.Key_Backspace:
+        //         deletePressedHandler();
+        //         return;
+        //     }
 
-    QQ.Keys.onEnterPressed: {
-        enteredPressed()
-    }
+        //     surveyChunkView.navigationArrow(rowIndex, dataRole, event.key);
 
-    QQ.Keys.onReturnPressed: {
-        enteredPressed();
-    }
+        //     // if(event.key === Qt.Key_Backspace) {
+        //     // }
 
-    QQ.Keys.onDeletePressed: {
-        deletePressed();
-    }
+        //     if(editor.validator.validate(event.text) > 0 && event.text.length > 0) {
+        //         dataBox.state = 'MiddleTyping'
+        //         editor.openEditor()
+        //         GlobalShadowTextInput.textInput.text  = event.text
+        //         GlobalShadowTextInput.clearSelection() //GlobalShowTextInput is what's opened from editor.openEditor
+        //     }
+        // }
 
-    onFocusChanged: {
-        if(focus) {
-            //Make sure it's visible to the user
-//            surveyChunkView.ensureDataBoxVisible(rowIndex, dataRole)
-//            surveyChunkTrimmer.chunk = surveyChunk;
+
+        // QQ.Keys.onPressed: (event) => {
+        //                        handleTab(event);
+        //                        surveyChunkView.navigationArrow(rowIndex, dataRole, event.key);
+
+        //                        if(event.key === Qt.Key_Backspace) {
+        //                            deletePressedHandler();
+        //                            return;
+        //                        }
+
+        //                        if(editor.validator.validate(event.text) > 0 && event.text.length > 0) {
+        //                            dataBox.state = 'MiddleTyping'
+        //                            editor.openEditor()
+        //                            GlobalShadowTextInput.textInput.text  = event.text
+        //                            GlobalShadowTextInput.clearSelection() //GlobalShowTextInput is what's opened from editor.openEditor
+        //                        }
+        //                    }
+
+        // QQ.Keys.onSpacePressed: {
+        //     var trip = surveyChunk.parentTrip;
+        //     if(trip.chunkCount > 0) {
+        //         var lastChunkIndex = trip.chunkCount - 1
+        //         var lastChunk = trip.chunk(lastChunkIndex);
+        //         if(lastChunk.isStationAndShotsEmpty()) {
+        //             (dataBox.surveyChunkView.parent as SurveyChunkGroupView).setFocus(lastChunkIndex)
+        //             return;
+        //         }
+        //     }
+
+        //     console.log("space bar 2 area click, new chunk!");
+        //     surveyChunk.parentTrip.addNewChunk();
+        // }
+
+        QQ.Keys.onEnterPressed: {
+            enteredPressed()
         }
-    }
 
-    states: [
+        QQ.Keys.onReturnPressed: {
+            enteredPressed();
+        }
 
-        QQ.State {
-            name: "MiddleTyping"
+        QQ.Keys.onDeletePressed: {
+            deletePressed();
+        }
 
-            QQ.PropertyChanges {
-                // dataBox._globalTextInput.onEnterPressed: {
-                //     console.log("sauce")
-                // }
+        onFocusChanged: {
+            if(focus) {
+                //Make sure it's visible to the user
+                //            surveyChunkView.ensureDataBoxVisible(rowIndex, dataRole)
+                //            surveyChunkTrimmer.chunk = surveyChunk;
+            }
+        }
 
-                dataBox._globalTextInput.onPressKeyPressed: {
-                    if(pressKeyEvent.key === Qt.Key_Tab ||
-                       pressKeyEvent.key === 1 + Qt.Key_Tab ||
-                       pressKeyEvent.key === Qt.Key_Space)
-                    {
-                        var commited = editor.commitChanges()
-                        if(!commited) { return; }
+        states: [
+
+            QQ.State {
+                name: "MiddleTyping"
+
+                QQ.PropertyChanges {
+                    // dataBox._globalTextInput.onEnterPressed: {
+                    //     console.log("sauce")
+                    // }
+
+                    dataBox._globalTextInput.onPressKeyPressed: {
+                        if(pressKeyEvent.key === Qt.Key_Tab ||
+                           pressKeyEvent.key === 1 + Qt.Key_Tab ||
+                           pressKeyEvent.key === Qt.Key_Space)
+                        {
+                            var commited = editor.commitChanges()
+                            if(!commited) { return; }
+                        }
+
+                        if(pressKeyEvent.key === Qt.Key_Space) {
+                            console.log("Space bar, new chunk!");
+                            surveyChunk.parentTrip.addNewChunk();
+                        }
+
+                        //Tab to the next entry on enter
+                        if(pressKeyEvent.key === Qt.Key_Enter ||
+                           pressKeyEvent.key === Qt.Key_Return) {
+                            handleNavigation("tabNext")
+                            pressKeyEvent.accepted = true;
+                        }
+
+                        //Use the default keyhanding that the GlobalShadowTextInput has
+                        GlobalShadowTextInput.textInput.defaultKeyHandling();
+
+                        //Handle the tabbing
+                        dataBox.handleTab(pressKeyEvent);
+
+                        if(pressKeyEvent.accepted) {
+                            //Have the editor commit changes
+                            dataBox.state = ''; //Default state
+
+                        }
+
                     }
 
-                    if(pressKeyEvent.key === Qt.Key_Space) {
-                        surveyChunk.parentTrip.addNewChunk();
+                    dataBox._globalTextInput.onFocusChanged: {
+                        if(!focus) {
+                            dataBox.state = '';
+                        }
                     }
 
-                    //Tab to the next entry on enter
-                    if(pressKeyEvent.key === Qt.Key_Enter ||
-                            pressKeyEvent.key === Qt.Key_Return) {
-                        handleNavigation("tabNext")
-                        pressKeyEvent.accepted = true;
-                    }
-
-                    //Use the default keyhanding that the GlobalShadowTextInput has
-                    GlobalShadowTextInput.textInput.defaultKeyHandling();
-
-                    //Handle the tabbing
-                    dataBox.handleTab(pressKeyEvent);
-
-                    if(pressKeyEvent.accepted) {
-                        //Have the editor commit changes
+                    dataBox._globalShadowTextInput.onEscapePressed: {
                         dataBox.state = ''; //Default state
-
-                    }
-
-                }
-
-                dataBox._globalTextInput.onFocusChanged: {
-                    if(!focus) {
-                        dataBox.state = '';
-                    }
-                }
-
-                dataBox._globalShadowTextInput.onEscapePressed: {
-                    dataBox.state = ''; //Default state
-                    dataBox.forceActiveFocus()
-                }
-
-                dataBox._globalShadowTextInput.onEnterPressed: {
-                    var commited = editor.commitChanges();
-                    if(commited) {
                         dataBox.forceActiveFocus()
                     }
-                }
-            }
 
-            QQ.PropertyChanges {
-                dataBox {
-                    z: 1
+                    dataBox._globalShadowTextInput.onEnterPressed: {
+                        var commited = editor.commitChanges();
+                        if(commited) {
+                            dataBox.forceActiveFocus()
+                        }
+                    }
+                }
+
+                QQ.PropertyChanges {
+                    dataBox {
+                        z: 1
+                    }
                 }
             }
-        }
-    ]
+        ]
+    }
 }

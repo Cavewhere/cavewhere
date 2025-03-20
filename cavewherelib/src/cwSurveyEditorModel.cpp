@@ -1,19 +1,19 @@
 //Our includes
-#include "cwSurvexEditorModel.h"
+#include "cwSurveyEditorModel.h"
 #include "cwTrip.h"
 #include "cwSurveyChunk.h"
 #include "cwTripCalibration.h"
 
-cwSurvexEditorModel::cwSurvexEditorModel()
+cwSurveyEditorModel::cwSurveyEditorModel()
 {
 
 }
 
 /**
-* @brief cwSurvexEditorModel::setTrip
+* @brief cwSurveyEditorModel::setTrip
 * @param trip -
 */
-void cwSurvexEditorModel::setTrip(cwTrip* trip) {
+void cwSurveyEditorModel::setTrip(cwTrip* trip) {
     if(Trip != trip) {
         beginResetModel();
         Trip = trip;
@@ -24,7 +24,7 @@ void cwSurvexEditorModel::setTrip(cwTrip* trip) {
     }
 }
 
-QVariant cwSurvexEditorModel::data(const QModelIndex& index, int role) const
+QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
 {
     if(!index.isValid()) {
         return QVariant();
@@ -32,7 +32,13 @@ QVariant cwSurvexEditorModel::data(const QModelIndex& index, int role) const
 
     auto chunkIndex = modelIndexToStationChunk(index);
     if(chunkIndex.first == nullptr) {
-        return QVariant();
+        switch(role) {
+        case StationVisibleRole:
+        case ShotVisibleRole:
+            return false;
+        default:
+            return QVariant();
+        }
     }
 
     Q_ASSERT(chunkIndex.second >= 0);
@@ -51,13 +57,18 @@ QVariant cwSurvexEditorModel::data(const QModelIndex& index, int role) const
         return QVariant(chunk->station(stationIndex).up());
     case StationDownRole:
         return QVariant(chunk->station(stationIndex).down());
+    case ChunkRole:
+        return QVariant::fromValue(chunk);
     case ChunkIdRole:
         return QString("%1").arg(reinterpret_cast<qlonglong>(chunk));
+    case StationVisibleRole:
+        return true;
     default:
         break;
     }
 
     int shotIndex = stationIndex;
+
     if(shotIndex < chunk->shotCount()) {
         switch(role) {
         case ShotDistanceRole:
@@ -72,8 +83,16 @@ QVariant cwSurvexEditorModel::data(const QModelIndex& index, int role) const
                 return QVariant::fromValue(calibration);
             }
         }
+        case ShotVisibleRole:
+            return true;
         default:
             break;
+        }
+    } else {
+        // qDebug() << "Shot count:" << shotIndex << chunk->shotCount() << role << DataBoxVisibleRole;
+
+        if(role == ShotVisibleRole) {
+            return false;
         }
     }
 
@@ -81,11 +100,11 @@ QVariant cwSurvexEditorModel::data(const QModelIndex& index, int role) const
 }
 
 /**
- * @brief cwSurvexEditorModel::rowCount
+ * @brief cwSurveyEditorModel::rowCount
  * @param parent
  * @return
  */
-int cwSurvexEditorModel::rowCount(const QModelIndex& parent) const
+int cwSurveyEditorModel::rowCount(const QModelIndex& parent) const
 {
     Q_UNUSED(parent);
 
@@ -94,17 +113,17 @@ int cwSurvexEditorModel::rowCount(const QModelIndex& parent) const
     }
 
     if(!IndexToChunk.isEmpty()) {
-        auto lastIter = IndexToChunk.end() - 1;
+        auto lastIter = std::prev(IndexToChunk.end());
         return lastIter.key().high();
     }
     return 0;
 }
 
 /**
- * @brief cwSurvexEditorModel::roleNames
+ * @brief cwSurveyEditorModel::roleNames
  * @return
  */
-QHash<int, QByteArray> cwSurvexEditorModel::roleNames() const
+QHash<int, QByteArray> cwSurveyEditorModel::roleNames() const
 {
     QHash<int, QByteArray> roles;
     roles.insert(StationNameRole, "stationName");
@@ -118,15 +137,18 @@ QHash<int, QByteArray> cwSurvexEditorModel::roleNames() const
     roles.insert(ShotClinoRole, "shotClino");
     roles.insert(ShotBackClinoRole, "shotBackClino");
     roles.insert(ShotCalibrationRole, "shotCalibration");
+    roles.insert(ChunkRole, "chunk");
     roles.insert(ChunkIdRole, "chunkId");
+    roles.insert(StationVisibleRole, "stationVisible");
+    roles.insert(ShotVisibleRole, "shotVisible");
     return roles;
 }
 
 /**
- * @brief cwSurvexEditorModel::addShotCalibration
+ * @brief cwSurveyEditorModel::addShotCalibration
  * @param index - The index for the whole trip
  */
-void cwSurvexEditorModel::addShotCalibration(int index)
+void cwSurveyEditorModel::addShotCalibration(int index)
 {
     auto chunkIndex = indexToStationChunk(index);
     if(chunkIndex.first != nullptr) {
@@ -139,11 +161,11 @@ void cwSurvexEditorModel::addShotCalibration(int index)
 }
 
 /**
- * @brief cwSurvexEditorModel::updateIndexToChunk
+ * @brief cwSurveyEditorModel::updateIndexToChunk
  *
  * This clears the current IndexToChunk and updates it with a new lookup
  */
-void cwSurvexEditorModel::updateIndexToChunk()
+void cwSurveyEditorModel::updateIndexToChunk()
 {
    IndexToChunk.clear();
 
@@ -151,7 +173,7 @@ void cwSurvexEditorModel::updateIndexToChunk()
        return;
    }
 
-   int stationCount = 0;
+   int stationCount = 1; //1 enables the tile bar to be displayed for the first chunk in the view
    foreach(cwSurveyChunk* chunk, Trip->chunks()) {
        int begin = stationCount;
        int end = begin + chunk->stationCount() - 1;
@@ -162,21 +184,21 @@ void cwSurvexEditorModel::updateIndexToChunk()
 }
 
 /**
- * @brief cwSurvexEditorModel::modelIndexToStationChunk
+ * @brief cwSurveyEditorModel::modelIndexToStationChunk
  * @param index - The index from the model
  * @return The station index in the chunk and the chunk at index
  */
-QPair<cwSurveyChunk*, int> cwSurvexEditorModel::modelIndexToStationChunk(const QModelIndex& index) const
+QPair<cwSurveyChunk*, int> cwSurveyEditorModel::modelIndexToStationChunk(const QModelIndex& index) const
 {
     return indexToStationChunk(index.row());
 }
 
 /**
- * @brief cwSurvexEditorModel::indexToStationChunk
+ * @brief cwSurveyEditorModel::indexToStationChunk
  * @param index - The row in model
  * @return The station index in teh chunk and teh cuhnk at index
  */
-QPair<cwSurveyChunk*, int> cwSurvexEditorModel::indexToStationChunk(int index) const
+QPair<cwSurveyChunk*, int> cwSurveyEditorModel::indexToStationChunk(int index) const
 {
     auto iter = IndexToChunk.lowerBound(Range(index));
 
