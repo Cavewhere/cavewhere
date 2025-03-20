@@ -28,9 +28,7 @@ MainWindowTest {
             wait(200);
         }
 
-        function test_enterSurveyData() {
-            addSurvey();
-
+        function enterSurveyData() {
             //Start adding survey data
             keyClick("b")
             keyClick(49, 0) //1
@@ -121,6 +119,12 @@ MainWindowTest {
             wait(50);
         }
 
+        function test_enterSurveyData() {
+            addSurvey();
+
+            enterSurveyData();
+        }
+
         function test_errorButtonsShouldWork() {
             addSurvey();
 
@@ -195,6 +199,14 @@ MainWindowTest {
             keyClick(16777220, 0) //Return
 
             compare(date.text, "2025-02-10")
+        }
+
+        function test_excludeDistance() {
+            addSurvey();
+
+            enterSurveyData();
+
+            wait(100000)
         }
     }
 }
