@@ -41,16 +41,23 @@ DataBox {
 
     ContextMenuButton {
         id: menuButtonId
+        objectName: "excludeMenuButton"
         visible: dataBoxId.focus
 
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.margins: 3
 
-        opacity: state == "" ? .75 : 1.0
+        focusPolicy: Qt.NoFocus
 
-        Controls.Menu {
+        opacity: state === "" ? .75 : 1.0
+
+        menu: Controls.Menu {
+            id: menuId
+            objectName: "excludeMenuId"
+
             Controls.MenuItem {
+                objectName: "excludeDistanceMenuItem"
                 text: dataBoxId.distanceIncluded ? "Exclude Distance" : "Include Distance"
                 onTriggered: {
                     dataBoxId.surveyChunk.setData(SurveyChunk.ShotDistanceIncludedRole,

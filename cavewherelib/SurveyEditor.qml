@@ -166,6 +166,7 @@ QQ.Item {
                 }
 
                 Text {
+                    objectName: "totalLengthText"
                     visible: !addSurveyData.visible
                     text: {
                         if(clipArea.currentTrip === null) { return "" }

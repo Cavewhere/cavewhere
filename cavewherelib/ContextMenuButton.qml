@@ -11,7 +11,7 @@ import QtQuick.Controls as QC
 QC.RoundButton {
     id: moreButton
 
-    default property var menu
+    required property QC.Menu menu
 
     icon.source: "qrc:/twbs-icons/icons/caret-down-fill.svg"
     // icon.width: 15

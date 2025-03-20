@@ -206,7 +206,39 @@ MainWindowTest {
 
             enterSurveyData();
 
-            wait(100000)
+            let coreTextInput_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->dataBox.1.5->coreTextInput")
+            mouseClick(coreTextInput_obj1)
+
+            let excludeMenuButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->dataBox.1.5->excludeMenuButton")
+            let excludeMenu = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->dataBox.1.5->excludeMenuButton").menu
+            tryVerify(() => { return excludeMenu.visible === false})
+
+            mouseClick(excludeMenuButton)
+
+            tryVerify(() => { return excludeMenu.visible })
+
+            let menuItem = findChild(excludeMenu, "excludeDistanceMenuItem")
+            mouseClick(menuItem);
+
+            tryVerify(() => { return excludeMenu.visible === false })
+
+            //Make sure the distance has gone down
+            let totalLengthText_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->totalLengthText")
+            tryCompare(totalLengthText_obj1, "text", "Total Length: 10 m");
+
+            //Include it again
+            mouseClick(excludeMenuButton)
+
+            tryVerify(() => { return excludeMenu.visible })
+
+            menuItem = findChild(excludeMenu, "excludeDistanceMenuItem")
+            mouseClick(menuItem);
+
+            tryVerify(() => { return excludeMenu.visible === false })
+
+            //Make sure the distance has gone down
+            totalLengthText_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->totalLengthText")
+            tryCompare(totalLengthText_obj1, "text", "Total Length: 11 m");
         }
     }
 }

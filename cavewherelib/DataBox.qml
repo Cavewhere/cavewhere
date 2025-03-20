@@ -153,7 +153,7 @@ QQ.Item {
         onClicked: (mouse) => {
                        dataBox.focus = true
 
-                       if(mouse.button == Qt.RightButton) {
+                       if(mouse.button === Qt.RightButton) {
                            dataBox.rightClick(mouse)
                        }
                    }
@@ -245,6 +245,8 @@ QQ.Item {
 
             checkable: true
             radius: 0 //Makes it a square
+
+            focusPolicy: Qt.NoFocus
 
             anchors.right: parent.right
             anchors.bottom: parent.bottom

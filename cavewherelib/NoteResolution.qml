@@ -51,7 +51,7 @@ FloatingGroupBox {
 
             ContextMenuButton {
 
-                Controls.Menu {
+                menu:Controls.Menu {
                     Controls.MenuItem {
                         text: {
                             var tripName = ""
