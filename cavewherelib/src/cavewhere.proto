@@ -30,14 +30,18 @@ message Trip {
 
 message Station {
     required QtProto.QString name = 1;
-    optional double left = 2 [deprecated = true];
-    optional double right = 3 [deprecated = true];
-    optional double up = 4 [deprecated = true];
-    optional double down = 5 [deprecated = true];
-    optional DistanceStates.State leftState = 6 [deprecated = true];
-    optional DistanceStates.State rightState = 7 [deprecated = true];
-    optional DistanceStates.State upState = 8 [deprecated = true];
-    optional DistanceStates.State downState = 9 [deprecated = true];
+
+    //---- Version <= 5 attributes
+    optional double left = 2\This is deprecated use leftReading
+    optional double right = 3 \\This is deprecated use rightReading
+    optional double up = 4 \\This is deprecated use upReading
+    optional double down = 5 \\This is deprecated use downReading
+    optional DistanceStates.State leftState = 6 \\This is deprecated use leftReading
+    optional DistanceStates.State rightState = 7 \\This is deprecated use rightReading
+    optional DistanceStates.State upState = 8 \\This is deprecated use upReading
+    optional DistanceStates.State downState = 9 \\This is deprecated use downReading
+
+    //---- Version >= 6 attributes
     optional DistanceReading leftReading = 10;
     optional DistanceReading rightReading = 11;
     optional DistanceReading upReading = 12;
@@ -93,17 +97,23 @@ message SurveyChunk {
 }
 
 message Shot {
-    optional double Distance = 1;
-    optional double Compass = 2;
-    optional double BackCompass = 3;
-    optional double Clino = 4;
-    optional double BackClino = 5;
-    optional DistanceStates.State distanceState = 6;
-    optional CompassStates.State compassState = 7;
-    optional CompassStates.State backCompassState = 8;
-    optional ClinoStates.State clinoState = 9;
-    optional ClinoStates.State backClinoState = 10;
+    //---- Version <= 5 attributes
+    optional double Distance = 1 [deprecated = true];
+    optional double Compass = 2 [deprecated = true];
+    optional double BackCompass = 3 [deprecated = true];
+    optional double Clino = 4 [deprecated = true];
+    optional double BackClino = 5 [deprecated = true];
+    optional DistanceStates.State distanceState = 6[deprecated = true];
+    optional CompassStates.State compassState = 7 [deprecated = true];
+    optional CompassStates.State backCompassState = 8 [deprecated = true];
+    optional ClinoStates.State clinoState = 9 [deprecated = true];
+    optional ClinoStates.State backClinoState = 10 [deprecated = true];
+
+    //All versions
     optional bool includeDistance = 11;
+
+    //--- Version >= 6 attributes
+    optional DistanceReading distanceReading = 12;
 }
 
 message DistanceStates {

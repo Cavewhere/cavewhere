@@ -55,6 +55,7 @@ namespace CavewhereProto {
     class StationPositionLookup;
     class Lead;
     class ScrapViewMatrix;
+    class DistanceReading;
 };
 
 namespace QtProto {
@@ -134,6 +135,7 @@ private:
     cwShot loadShot(const CavewhereProto::Shot& protoShot);
     cwStationPositionLookup loadStationPositionLookup(const CavewhereProto::StationPositionLookup& protoStationLookup);
     cwLead loadLead(const CavewhereProto::Lead& protoLead);
+    cwDistanceReading distanceReading(const CavewhereProto::DistanceReading& protoDistanceReading);
     int loadFileVersion(const CavewhereProto::CavingRegion& protoRegion);
 
     //Utils
@@ -156,6 +158,33 @@ private:
         }
         disconnectToDatabase();
     }
+
+    //Returns the distance based on functors
+    template<typename hasReadingFn, typename readingFn, typename stateFn, typename valueFn>
+    cwDistanceReading distance(hasReadingFn hasReading,
+                               readingFn reading,
+                               stateFn state,
+                               valueFn value)
+    {
+        if (hasReading()) {
+            //Version 6
+            return distanceReading(reading());
+        } else {
+            auto s = static_cast<cwDistanceStates::State>(state());
+            switch (s) {
+            case cwDistanceStates::Valid: {
+                return cwDistanceReading(value());
+            }
+            case cwDistanceStates::Empty: {
+                return cwDistanceReading();
+            }
+            default: {
+                Q_ASSERT(false);
+                return cwDistanceReading();
+            }
+            }
+        }
+    };
 
 //    QString readXMLFromDatabase();
 //    bool loadFromBoostSerialization();

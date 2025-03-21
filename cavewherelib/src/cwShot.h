@@ -159,7 +159,7 @@ inline double cwShot::backClino() const {
 }
 
 inline bool cwShot::isValid() const {
-    return distance().state() == cwDistanceReading::Valid;
+    return distance().state() == cwDistanceReading::State::Valid;
 }
 
 /**

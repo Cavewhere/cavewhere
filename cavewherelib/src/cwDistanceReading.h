@@ -11,14 +11,14 @@ class cwDistanceReading {
     Q_PROPERTY(QString value MEMBER m_value READ value WRITE setValue)
     Q_PROPERTY(State state READ state)
 public:
-    enum State {
+    enum class State : int {
         Valid = 0,   // Data is valid (convertible to a number)
         Empty = 1,   // No data entered
         Invalid = 2  // Data is not a valid number
     };
     Q_ENUM(State)
 
-    cwDistanceReading() : m_value(""), m_state(Empty) {
+    cwDistanceReading() : m_value(""), m_state(State::Empty) {
     }
     cwDistanceReading(const QString& value) : m_value(value) {
         updateState();
@@ -34,7 +34,7 @@ public:
     }
     double toDouble() const
     {
-        Q_ASSERT(m_state == Valid);
+        Q_ASSERT(m_state == State::Valid);
         return m_value.toDouble();
     }
     void fromDouble(double value) {

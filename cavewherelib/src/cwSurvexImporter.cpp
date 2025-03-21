@@ -1103,18 +1103,10 @@ void cwSurvexImporter::updateStationLRUD(cwStation before, cwStation station, cw
 
     //Swaps the left distance with the right distance
     auto swapLeftRight = [](cwStation& station) {
-        double left = station.left();
-        double right = station.right();
-        cwDistanceStates::State leftState = station.leftInputState();
-        cwDistanceStates::State rightState = station.rightInputState();
-
-        std::swap(left, right);
-        std::swap(leftState, rightState);
-
-        station.setLeft(left);
-        station.setRight(right);
-        station.setLeftInputState(leftState);
-        station.setRightInputState(rightState);
+        auto left = station.left();
+        auto right = station.right();
+        station.setLeft(right);
+        station.setRight(left);
     };
 
     for(int i = 0; i < CurrentBlock->Chunks.size(); i++) {

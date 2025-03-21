@@ -146,11 +146,11 @@ bool cwSurveyChunkTrimmer::isStationShotEmpty(cwSurveyChunk *chunk, int stationI
     cwShot shot = chunk->shot(stationIndex - 1);
 
     return station.name().isEmpty() &&
-            station.left().state() == cwDistanceReading::Empty &&
-            station.right().state() == cwDistanceReading::Empty &&
-            station.down().state() == cwDistanceReading::Empty &&
-            station.up().state() == cwDistanceReading::Empty &&
-            shot.distanceState() == cwDistanceStates::Empty &&
+            station.left().state() == cwDistanceReading::State::Empty &&
+            station.right().state() == cwDistanceReading::State::Empty &&
+            station.down().state() == cwDistanceReading::State::Empty &&
+            station.up().state() == cwDistanceReading::State::Empty &&
+            shot.distance().state() == cwDistanceReading::State::Empty &&
             shot.compassState() == cwCompassStates::Empty &&
             shot.clinoState() == cwClinoStates::Empty &&
             shot.backCompassState() == cwCompassStates::Empty &&

@@ -605,26 +605,26 @@ bool cwSurveyChunk::isShotRole(cwSurveyChunk::DataRole role) const {
   */
 QString cwSurveyChunk::guessLastStationName() const {
     //Need a least two stations for this to work.
-    if(stations().size() < 2) {
+    if(Stations.size() < 2) {
         return QString();
     }
 
-    if(stations().last().name().isEmpty()) {
+    if(Stations.last().name().isEmpty()) {
         QString stationName;
 
-        if(stations().size() == 2) {
+        if(Stations.size() == 2) {
             //Try to get the station name from the previous chunk
             QList<cwSurveyChunk*> chunks = parentTrip()->chunks();
             int index = chunks.indexOf(const_cast<cwSurveyChunk*>(this)) - 1;
             cwSurveyChunk* previousChunk = parentTrip()->chunk(index);
             if(previousChunk != nullptr) {
-                stationName = previousChunk->stations().last().name();
+                stationName = previousChunk->Stations.last().name();
             }
         }
 
         if(stationName.isEmpty()) {
-            int secondToLastStation = stations().size() - 2;
-            stationName = stations().at(secondToLastStation).name();
+            int secondToLastStation = Stations.size() - 2;
+            stationName = Stations.at(secondToLastStation).name();
         }
 
         QString nextStation = guessNextStation(stationName);
@@ -641,7 +641,7 @@ QString cwSurveyChunk::guessLastStationName() const {
   */
 QString cwSurveyChunk::guessNextStation(QString stationName) const {
     // Look for numbers to increment
-    QRegularExpression regexp("(\\D*)(\\d+)");
+    const static QRegularExpression regexp("(\\D*)(\\d+)");
     QRegularExpressionMatch match = regexp.match(stationName);
 
     if (match.hasMatch()) {
@@ -667,11 +667,11 @@ QString cwSurveyChunk::guessNextStation(QString stationName) const {
 void cwSurveyChunk::setStation(cwStation station, int index){
     if(index < 0 || index >= Stations.size()) { return; }
     Stations[index] = station;
-    dataChanged(StationNameRole, index);
-    dataChanged(StationLeftRole, index);
-    dataChanged(StationRightRole, index);
-    dataChanged(StationUpRole, index);
-    dataChanged(StationDownRole, index);
+    emit dataChanged(StationNameRole, index);
+    emit dataChanged(StationLeftRole, index);
+    emit dataChanged(StationRightRole, index);
+    emit dataChanged(StationUpRole, index);
+    emit dataChanged(StationDownRole, index);
 
     checkForStationError(index);
 }
@@ -692,17 +692,17 @@ bool cwSurveyChunk::isStationAndShotsEmpty() const
 
     foreach(cwStation station, Stations) {
         if(!station.name().isEmpty() ||
-            station.left().state() != cwDistanceReading::Empty ||
-            station.right().state() != cwDistanceReading::Empty ||
-            station.up().state() != cwDistanceReading::Empty ||
-            station.down().state() != cwDistanceReading::Empty)
+            station.left().state() != cwDistanceReading::State::Empty ||
+            station.right().state() != cwDistanceReading::State::Empty ||
+            station.up().state() != cwDistanceReading::State::Empty ||
+            station.down().state() != cwDistanceReading::State::Empty)
         {
             return false;
         }
     }
 
     foreach(cwShot shot, Shots) {
-        if(shot.distanceState() != cwDistanceStates::Empty ||
+        if(shot.distance().state() != cwDistanceReading::State::Empty ||
                 shot.backCompassState() != cwCompassStates::Empty ||
                 shot.compassState() != cwCompassStates::Empty ||
                 shot.clinoState() != cwClinoStates::Empty ||
@@ -1126,7 +1126,7 @@ QList<cwError> cwSurveyChunk::checkLRUDError(cwSurveyChunk::DataRole role, int i
         //No data is set
         cwError error;
         error.setType(cwError::Warning);
-        error.setMessage(QString("Missing \"%1\" for station \"%2\"").arg(direction).arg(stationName));
+        error.setMessage(QString("Missing \"%1\" for station \"%2\"").arg(direction, stationName));
         errors.append(error);
     } else if(!value.isNull()) {
         //The LRUD data isn't a number
@@ -1137,7 +1137,7 @@ QList<cwError> cwSurveyChunk::checkLRUDError(cwSurveyChunk::DataRole role, int i
 
             cwError error;
             error.setType(cwError::Fatal);
-            error.setMessage(QString("The \"%1\" value (\"%2\") isn't a number for station \"%3\"").arg(direction).arg(valueString).arg(stationName));
+            error.setMessage(QString("The \"%1\" value (\"%2\") isn't a number for station \"%3\"").arg(direction, valueString, stationName));
             errors.append(error);
         }
     }

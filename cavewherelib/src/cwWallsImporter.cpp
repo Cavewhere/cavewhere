@@ -128,7 +128,7 @@ void WallsImporterVisitor::parsedVector(Vector v)
             frontInclination = UAngle(0, Angle::Degrees);
         }
 
-        shot.setDistance(distance.get(dUnit));
+        shot.setDistance(cwDistanceReading(distance.get(dUnit)));
         if (v.frontAzimuth().isValid())
         {
             shot.setCompass(v.frontAzimuth().get(Angle::Degrees));
@@ -196,35 +196,35 @@ void WallsImporterVisitor::parsedVector(Vector v)
 
     if (v.left().isValid())
     {
-        lrudStation->setLeft(v.left().get(dUnit));
+        lrudStation->setLeft(cwDistanceReading(v.left().get(dUnit)));
     }
     else
     {
-        lrudStation->setLeftInputState(cwDistanceStates::Empty);
+        lrudStation->setLeft(cwDistanceReading());
     }
     if (v.right().isValid())
     {
-        lrudStation->setRight(v.right().get(dUnit));
+        lrudStation->setRight(cwDistanceReading(v.right().get(dUnit)));
     }
     else
     {
-        lrudStation->setRightInputState(cwDistanceStates::Empty);
+        lrudStation->setRight(cwDistanceReading());
     }
     if (v.up().isValid())
     {
-        lrudStation->setUp(v.up().get(dUnit));
+        lrudStation->setUp(cwDistanceReading(v.up().get(dUnit)));
     }
     else
     {
-        lrudStation->setUpInputState(cwDistanceStates::Empty);
+        lrudStation->setUp(cwDistanceReading());
     }
     if (v.down().isValid())
     {
-        lrudStation->setDown(v.down().get(dUnit));
+        lrudStation->setDown(cwDistanceReading(v.down().get(dUnit)));
     }
     else
     {
-        lrudStation->setDownInputState(cwDistanceStates::Empty);
+        lrudStation->setDown(cwDistanceReading());
     }
 
     // save the latest LRUDs associated with each station so that we can apply them in the end

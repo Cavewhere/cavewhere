@@ -249,7 +249,7 @@ void cwSurvexExporterTripTask::writeDate(QTextStream &stream, QDate date)
   length into meters.
 */
 QString cwSurvexExporterTripTask::toSupportedLength(const cwDistanceReading& reading) const {
-    if(reading.state() == cwDistanceReading::Empty) {
+    if(reading.state() == cwDistanceReading::State::Empty) {
         return "-";
     }
 

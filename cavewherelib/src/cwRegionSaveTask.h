@@ -9,6 +9,7 @@
 #define CWXMLPROJECTSAVETASK_H
 
 //Our includes
+#include "cavewhere.pb.h"
 #include "cwRegionIOTask.h"
 class cwCave;
 class cwTrip;
@@ -31,6 +32,7 @@ class cwStationPositionLookup;
 class cwLead;
 class cwSurveyNetwork;
 class cwProjectedProfileScrapViewMatrix;
+#include "cwDistanceReading.h"
 
 //Google protobuffer
 namespace CavewhereProto {
@@ -128,6 +130,8 @@ private:
                            const cwSurveyNetwork& network);
     void saveProjectedScrapViewMatrix(CavewhereProto::ProjectedProfileScrapViewMatrix* protoViewMatrix,
                                       cwProjectedProfileScrapViewMatrix* viewMatrix);
+    void saveDistanceReading(CavewhereProto::DistanceReading* protoDistanceReading,
+                             const cwDistanceReading& reading);
 
     //Utils
     void saveString(QtProto::QString* protoString, QString string);

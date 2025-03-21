@@ -219,25 +219,25 @@ double cwCompassExportCaveTask::convertField(cwStation station,
     double value = -999.0;
     switch(field) {
     case Left:
-        if(station.left().state() == cwDistanceReading::Valid) {
+        if(station.left().state() == cwDistanceReading::State::Valid) {
             value = station.left().toDouble();
             return cwUnits::convert(value, unit, cwUnits::Feet);
         }
         break;
     case Right:
-        if(station.right().state() == cwDistanceReading::Valid) {
+        if(station.right().state() == cwDistanceReading::State::Valid) {
             value = station.right().toDouble();
             return cwUnits::convert(value, unit, cwUnits::Feet);
         }
         break;
     case Up:
-        if(station.up().state() == cwDistanceReading::Valid) {
+        if(station.up().state() == cwDistanceReading::State::Valid) {
             value = station.up().toDouble();
             return cwUnits::convert(value, unit, cwUnits::Feet);
         }
         break;
     case Down:
-        if(station.down().state() == cwDistanceReading::Valid) {
+        if(station.down().state() == cwDistanceReading::State::Valid) {
             value = station.down().toDouble();
             return cwUnits::convert(value, unit, cwUnits::Feet);
         }

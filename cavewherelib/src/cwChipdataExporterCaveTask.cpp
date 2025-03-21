@@ -149,7 +149,7 @@ void cwChipdataExportCaveTask::writeShot(QTextStream &stream,
     stream << toStation.name().rightJustified(5, ' ', true);
     stream << fromStation.name().rightJustified(5, ' ', true);
 
-    if (shot.distance().state() == cwDistanceReading::Valid) {
+    if (shot.distance().state() == cwDistanceReading::State::Valid) {
         double distance = shot.distance().toDouble();
         if (feetAndInches) {
             stream << formatNumber(floor(distance), 0, 4);
@@ -218,7 +218,7 @@ void cwChipdataExportCaveTask::writeShot(QTextStream &stream,
 
 void cwChipdataExportCaveTask::writeLrudMeasurement(QTextStream &stream, const cwDistanceReading& measurement, cwUnits::LengthUnit fromUnit, cwUnits::LengthUnit toUnit)
 {
-    if (measurement.state() == cwDistanceReading::Valid) {
+    if (measurement.state() == cwDistanceReading::State::Valid) {
         stream << formatNumber(cwUnits::convert(measurement.toDouble(), fromUnit, toUnit), 1, 3);
     } else {
         stream << "   ";
@@ -246,7 +246,7 @@ QString cwChipdataExportCaveTask::formatNumber(double number, int maxPrecision, 
 bool cwChipdataExportCaveTask::isFeetAndInches(cwTrip *trip)
 {
     return trip->calibrations()->distanceUnit() == cwUnits::Feet && !containsShot(trip, [&](cwShot shot) {
-        if (shot.distance().state() == cwDistanceReading::Valid) {
+        if (shot.distance().state() == cwDistanceReading::State::Valid) {
             double f = fmod(shot.distance().toDouble() * 12.0, 1.0);
             return f > 1e-6 && f < (1 - 1e-6);
         }
