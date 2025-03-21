@@ -591,7 +591,8 @@ void cwCompassImporter::parseSurveyData(QFile *file)
             if(shot.isValid()) {
                 CurrentTrip->addShotToLastChunk(fromStation, toStation, shot);
                 if(!CurrentTrip->chunks().isEmpty()) {
-                    cwSurveyChunk* lastChunk = CurrentTrip->chunks().last();
+                    auto chunks = CurrentTrip->chunks();
+                    cwSurveyChunk* lastChunk = chunks.last();
                     int secondToLastStation = lastChunk->stationCount() - 2;
                     lastChunk->setStation(fromStation, secondToLastStation);
                 }

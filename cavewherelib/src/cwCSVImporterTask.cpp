@@ -124,7 +124,7 @@ cwCSVImporterTask::OutputPtr cwCSVImporterTask::operator()() const
                     from.setName(value);
                     break;
                 case Length:
-                    shot.setDistance(value);
+                    shot.setDistance(cwDistanceReading(value));
                     break;
                 case CompassFrontSight:
                     shot.setCompass(value);
@@ -139,16 +139,16 @@ cwCSVImporterTask::OutputPtr cwCSVImporterTask::operator()() const
                     shot.setBackClino(value);
                     break;
                 case Left:
-                    lrudStation.setLeft(value);
+                    lrudStation.setLeft(cwDistanceReading(value));
                     break;
                 case Right:
-                    lrudStation.setRight(value);
+                    lrudStation.setRight(cwDistanceReading(value));
                     break;
                 case Up:
-                    lrudStation.setUp(value);
+                    lrudStation.setUp(cwDistanceReading(value));
                     break;
                 case Down:
-                    lrudStation.setDown(value);
+                    lrudStation.setDown(cwDistanceReading(value));
                     break;
                 case Skip:
                     break;

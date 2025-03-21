@@ -287,14 +287,14 @@ TEST_CASE("Save and load should work correctly for Projected Profile v3->v5", "[
 
         struct Station {
             QString stationName;
-            std::optional<double> left;
-            std::optional<double> right;
-            std::optional<double> up;
-            std::optional<double> down;
+            QString left;
+            QString right;
+            QString up;
+            QString down;
         };
 
         QList<Station> stations {
-            {"a1", 1, 2, 3, 4},
+            {"a1", "1", "2", "3", "4"},
             {"a2", {},{},{},{}},
             {"a3", {},{},{},{}},
             {"a4", {},{},{},{}},
@@ -309,31 +309,31 @@ TEST_CASE("Save and load should work correctly for Projected Profile v3->v5", "[
             auto station = stations.at(stationIndex);
             CHECK(chunkStation.name().toStdString() == station.stationName.toStdString());
 
-            auto checkLRUD = [](auto stateFunc, auto valueFunc, std::optional<double> checkValue) {
-                if(checkValue.has_value()) {
-                    CHECK(stateFunc() == cwDistanceStates::Valid);
-                    CHECK(valueFunc() == checkValue.value());
+            auto checkLRUD = [](auto stateFunc, auto valueFunc, const QString& checkValue) {
+                if(!checkValue.isEmpty()) {
+                    CHECK(stateFunc() == cwDistanceReading::State::Valid);
+                    CHECK(valueFunc().value() == checkValue);
                 } else {
-                    CHECK(stateFunc() == cwDistanceStates::Empty);
+                    CHECK(stateFunc() == cwDistanceReading::State::Empty);
                 }
             };
 
-            checkLRUD([chunkStation]() { return chunkStation.leftInputState();},
-            [chunkStation]() { return chunkStation.left(); },
-            station.left
-            );
-            checkLRUD([chunkStation]() { return chunkStation.rightInputState();},
-            [chunkStation]() { return chunkStation.right(); },
-            station.right
-            );
-            checkLRUD([chunkStation]() { return chunkStation.upInputState();},
-            [chunkStation]() { return chunkStation.up(); },
-            station.up
-            );
-            checkLRUD([chunkStation]() { return chunkStation.downInputState();},
-            [chunkStation]() { return chunkStation.down(); },
-            station.down
-            );
+            checkLRUD([chunkStation]() { return chunkStation.left().state();},
+                      [chunkStation]() { return chunkStation.left(); },
+                      station.left
+                      );
+            checkLRUD([chunkStation]() { return chunkStation.right().state();},
+                      [chunkStation]() { return chunkStation.right(); },
+                      station.right
+                      );
+            checkLRUD([chunkStation]() { return chunkStation.up().state();},
+                      [chunkStation]() { return chunkStation.up(); },
+                      station.up
+                      );
+            checkLRUD([chunkStation]() { return chunkStation.down().state();},
+                      [chunkStation]() { return chunkStation.down(); },
+                      station.down
+                      );
         };
 
         struct Clino {
@@ -349,7 +349,7 @@ TEST_CASE("Save and load should work correctly for Projected Profile v3->v5", "[
         };
 
         struct Shot {
-            double distance;
+            QString distance;
             std::optional<double> compass;
             std::optional<double> backCompass;
             Clino clino;
@@ -357,11 +357,11 @@ TEST_CASE("Save and load should work correctly for Projected Profile v3->v5", "[
         };
 
         QList<Shot> shots {
-            { 10, {}, {}, {Clino::Down, {}}, {Clino::Up, {}}},
-            { 7.3, 50, 50.1, {Clino::Value, {-75}}, {Clino::Value, {-74}}},
-            { 4, 220, 219, {Clino::Value, {10}}, {Clino::Value, {11}}},
-            { 6, 46, 46.2, {Clino::Value, {-85}}, {Clino::Value, {-84.5}}},
-            { 21.5, 35, 34, {Clino::Value, {-78}}, {Clino::Value, {-77}}}
+            { "10", {}, {}, {Clino::Down, {}}, {Clino::Up, {}}},
+            { "7.3", 50, 50.1, {Clino::Value, {-75}}, {Clino::Value, {-74}}},
+            { "4", 220, 219, {Clino::Value, {10}}, {Clino::Value, {11}}},
+            { "6", 46, 46.2, {Clino::Value, {-85}}, {Clino::Value, {-84.5}}},
+            { "21.5", 35, 34, {Clino::Value, {-78}}, {Clino::Value, {-77}}}
         };
 
         REQUIRE(chunk->shotCount() == shots.size());
@@ -369,7 +369,7 @@ TEST_CASE("Save and load should work correctly for Projected Profile v3->v5", "[
         auto checkShot = [=](int shotIndex) {
             auto chunkShot = chunk->shot(shotIndex);
             auto shot = shots .at(shotIndex);
-            CHECK(chunkShot.distance() == shot.distance);
+            CHECK(chunkShot.distance().value() == shot.distance);
             if(shot.compass.has_value()) {
                 CHECK(chunkShot.compassState() == cwCompassStates::Valid);
                 CHECK(shot.compass == chunkShot.compass());

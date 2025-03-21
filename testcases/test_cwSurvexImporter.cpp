@@ -90,10 +90,10 @@ TEST_CASE("Import LRUD data correctly", "[SurvexImport]") {
         INFO("Current station:" << station.name().toStdString());
 
         CHECK(station.name().toStdString() == row.Name.toStdString());
-        CHECK(QString().number(station.left()).toStdString() == row.Left.toStdString());
-        CHECK(QString().number(station.right()).toStdString() == row.Right.toStdString());
-        CHECK(QString().number(station.up()).toStdString() == row.Up.toStdString());
-        CHECK(QString().number(station.down()).toStdString() == row.Down.toStdString());
+        CHECK(station.left().value().toStdString() == row.Left.toStdString());
+        CHECK(station.right().value().toStdString() == row.Right.toStdString());
+        CHECK(station.up().value().toStdString() == row.Up.toStdString());
+        CHECK(station.down().value().toStdString() == row.Down.toStdString());
     }
 
     delete importer;

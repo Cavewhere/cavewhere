@@ -32,14 +32,14 @@ message Station {
     required QtProto.QString name = 1;
 
     //---- Version <= 5 attributes
-    optional double left = 2\This is deprecated use leftReading
-    optional double right = 3 \\This is deprecated use rightReading
-    optional double up = 4 \\This is deprecated use upReading
-    optional double down = 5 \\This is deprecated use downReading
-    optional DistanceStates.State leftState = 6 \\This is deprecated use leftReading
-    optional DistanceStates.State rightState = 7 \\This is deprecated use rightReading
-    optional DistanceStates.State upState = 8 \\This is deprecated use upReading
-    optional DistanceStates.State downState = 9 \\This is deprecated use downReading
+    optional double left = 2 [deprecated = true]; //This is deprecated use leftReading
+    optional double right = 3 [deprecated = true]; //This is deprecated use rightReading
+    optional double up = 4  [deprecated = true]; //This is deprecated use upReading
+    optional double down = 5 [deprecated = true]; //This is deprecated use downReading
+    optional DistanceStates.State leftState = 6  [deprecated = true]; //This is deprecated use leftReading
+    optional DistanceStates.State rightState = 7  [deprecated = true]; //This is deprecated use rightReading
+    optional DistanceStates.State upState = 8 [deprecated = true]; //This is deprecated use upReading
+    optional DistanceStates.State downState = 9 [deprecated = true]; //This is deprecated use downReading
 
     //---- Version >= 6 attributes
     optional DistanceReading leftReading = 10;

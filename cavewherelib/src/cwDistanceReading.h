@@ -43,6 +43,14 @@ public:
 
     State state() const { return m_state; }
 
+    bool operator==(const cwDistanceReading& other) const {
+        return m_value == other.m_value;
+    }
+    bool operator!=(const cwDistanceReading& other) const {
+        return !operator==(other);
+    }
+
+
 private:
     void updateState();
 

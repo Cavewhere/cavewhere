@@ -20,13 +20,13 @@ class Checker {
 public:
 
     static void check(const cwShot& testShot, const cwShot& shot) {
-        CHECK_THAT(testShot.distance(), WithinAbs(shot.distance(), delta));
+        CHECK(testShot.distance() == shot.distance());
         CHECK_THAT(testShot.compass(), WithinAbs(shot.compass(), delta));
         CHECK_THAT(testShot.backCompass(), WithinAbs(shot.backCompass(), delta));
         CHECK_THAT(testShot.clino(), WithinAbs(shot.clino(), delta));
         CHECK_THAT(testShot.backClino(), WithinAbs(shot.backClino(), delta));
 
-        CHECK(testShot.distanceState() == shot.distanceState());
+        CHECK(testShot.distance().state() == shot.distance().state());
         CHECK(testShot.compassState() == shot.compassState());
         CHECK(testShot.backCompassState() == shot.backCompassState());
         CHECK(testShot.clinoState() == shot.clinoState());
@@ -35,15 +35,15 @@ public:
 
     static void check(const cwStation& testStation, const cwStation& station) {
         CHECK(testStation.name().toStdString() == station.name().toStdString());
-        CHECK_THAT(testStation.left(), WithinAbs(station.left(), delta));
-        CHECK_THAT(testStation.right(), WithinAbs(station.right(), delta));
-        CHECK_THAT(testStation.up(), WithinAbs(station.up(), delta));
-        CHECK_THAT(testStation.down(), WithinAbs(station.down(), delta));
+        CHECK(testStation.left() == station.left());
+        CHECK(testStation.right() == station.right());
+        CHECK(testStation.up() == station.up());
+        CHECK(testStation.down() == station.down());
 
-        CHECK(testStation.leftInputState() == station.leftInputState());
-        CHECK(testStation.rightInputState() == station.rightInputState());
-        CHECK(testStation.upInputState() == station.upInputState());
-        CHECK(testStation.downInputState() == station.downInputState());
+        CHECK(testStation.left().state() == station.left().state());
+        CHECK(testStation.right().state() == station.right().state());
+        CHECK(testStation.up().state() == station.up().state());
+        CHECK(testStation.down().state() == station.down().state());
     }
 
     static void check(const cwSurveyChunk* testChunk, const cwSurveyChunk* chunk) {
@@ -184,14 +184,14 @@ TEST_CASE("cwCSVImportManager previewText should works correctly", "[cwCSVImport
     for(int i = 0; i < chunk->stationCount(); i++) {
         auto station = chunk->station(i);
         CHECK(station.name().toStdString() == QString("%1").arg(i + 1).toStdString());
-        CHECK(station.leftInputState() == cwDistanceStates::Empty);
-        CHECK(station.rightInputState() == cwDistanceStates::Empty);
-        CHECK(station.upInputState() == cwDistanceStates::Empty);
-        CHECK(station.downInputState() == cwDistanceStates::Empty);
+        CHECK(station.left().state() == cwDistanceReading::State::Empty);
+        CHECK(station.right().state() == cwDistanceReading::State::Empty);
+        CHECK(station.up().state() == cwDistanceReading::State::Empty);
+        CHECK(station.down().state() == cwDistanceReading::State::Empty);
     }
 
     for(const auto& shot : chunk->shots()) {
-        CHECK(shot.distance() == 100.0);
+        CHECK(shot.distance().toDouble() == 100.0);
         CHECK(shot.clino() == 23.0);
         CHECK(shot.compass() == 101.0);
         CHECK(shot.backCompassState() == cwCompassStates::Empty);
@@ -223,30 +223,30 @@ TEST_CASE("cwCSVImportManager should parse with custom columns", "[cwCSVImporter
     cwSurveyChunk* chunk1 = new cwSurveyChunk();
 
     cwStation station1("1");
-    station1.setUp("1");
-    station1.setDown("2");
-    station1.setLeft("3");
-    station1.setRight("4");
+    station1.setUp(cwDistanceReading("1"));
+    station1.setDown(cwDistanceReading("2"));
+    station1.setLeft(cwDistanceReading("3"));
+    station1.setRight(cwDistanceReading("4"));
 
     cwStation station2("2");
-    station2.setUp("11");
-    station2.setDown("22");
-    station2.setLeft("33");
-    station2.setRight("44");
+    station2.setUp(cwDistanceReading("11"));
+    station2.setDown(cwDistanceReading("22"));
+    station2.setLeft(cwDistanceReading("33"));
+    station2.setRight(cwDistanceReading("44"));
 
     cwStation station3("3");
-    station3.setUp("12");
-    station3.setDown("23");
-    station3.setLeft("34");
-    station3.setRight("45");
+    station3.setUp(cwDistanceReading("12"));
+    station3.setDown(cwDistanceReading("23"));
+    station3.setLeft(cwDistanceReading("34"));
+    station3.setRight(cwDistanceReading("45"));
 
     cwStation station4("4");
 
     cwStation station2to5("2");
-    station2to5.setUp("13");
-    station2to5.setDown("24");
-    station2to5.setLeft("35");
-    station2to5.setRight("46");
+    station2to5.setUp(cwDistanceReading("13"));
+    station2to5.setDown(cwDistanceReading("24"));
+    station2to5.setLeft(cwDistanceReading("35"));
+    station2to5.setRight(cwDistanceReading("46"));
 
     cwStation station5("5");
 
@@ -381,37 +381,37 @@ TEST_CASE("cwCSVImageManager should process last shot LRUD data correctly", "[cw
     cwSurveyChunk* chunk1 = new cwSurveyChunk();
 
     cwStation station1("1");
-    station1.setUp("1");
-    station1.setDown("2");
-    station1.setLeft("3");
-    station1.setRight("4");
+    station1.setUp(cwDistanceReading("1"));
+    station1.setDown(cwDistanceReading("2"));
+    station1.setLeft(cwDistanceReading("3"));
+    station1.setRight(cwDistanceReading("4"));
 
     cwStation station2("2");
-    station2.setUp("11");
-    station2.setDown("22");
-    station2.setLeft("33");
-    station2.setRight("44");
+    station2.setUp(cwDistanceReading("11"));
+    station2.setDown(cwDistanceReading("22"));
+    station2.setLeft(cwDistanceReading("33"));
+    station2.setRight(cwDistanceReading("44"));
 
     cwStation station3("3");
-    station3.setUp("12");
-    station3.setDown("23");
-    station3.setLeft("34");
-    station3.setRight("45");
+    station3.setUp(cwDistanceReading("12"));
+    station3.setDown(cwDistanceReading("23"));
+    station3.setLeft(cwDistanceReading("34"));
+    station3.setRight(cwDistanceReading("45"));
 
     cwStation station4("4");
-    station4.setUp("14");
-    station4.setDown("25");
-    station4.setRight("47");
+    station4.setUp(cwDistanceReading("14"));
+    station4.setDown(cwDistanceReading("25"));
+    station4.setRight(cwDistanceReading("47"));
 
     cwStation station2to5("2");
-    station2to5.setUp("13");
-    station2to5.setDown("24");
-    station2to5.setLeft("35");
-    station2to5.setRight("46");
+    station2to5.setUp(cwDistanceReading("13"));
+    station2to5.setDown(cwDistanceReading("24"));
+    station2to5.setLeft(cwDistanceReading("35"));
+    station2to5.setRight(cwDistanceReading("46"));
 
     cwStation station5("5");
-    station5.setDown("26");
-    station5.setRight("48");
+    station5.setDown(cwDistanceReading("26"));
+    station5.setRight(cwDistanceReading("48"));
 
 
     chunk1->appendShot(station1, station2, cwShot("30.4", "20", "6", "-82", "-2"));
@@ -462,37 +462,37 @@ TEST_CASE("cwCSVImageManager should set UseFromStationForLRUD correctly", "[cwCS
     cwSurveyChunk* chunk1 = new cwSurveyChunk();
 
     cwStation station1("1");
-    station1.setUp("14");
-    station1.setDown("25");
-    station1.setRight("47");
+    station1.setUp(cwDistanceReading("14"));
+    station1.setDown(cwDistanceReading("25"));
+    station1.setRight(cwDistanceReading("47"));
 
     cwStation station2("2");
-    station2.setUp("1");
-    station2.setDown("2");
-    station2.setLeft("3");
-    station2.setRight("4");
+    station2.setUp(cwDistanceReading("1"));
+    station2.setDown(cwDistanceReading("2"));
+    station2.setLeft(cwDistanceReading("3"));
+    station2.setRight(cwDistanceReading("4"));
 
     cwStation station3("3");
-    station3.setUp("11");
-    station3.setDown("22");
-    station3.setLeft("33");
-    station3.setRight("44");
+    station3.setUp(cwDistanceReading("11"));
+    station3.setDown(cwDistanceReading("22"));
+    station3.setLeft(cwDistanceReading("33"));
+    station3.setRight(cwDistanceReading("44"));
 
     cwStation station4("4");
-    station4.setUp("12");
-    station4.setDown("23");
-    station4.setLeft("34");
-    station4.setRight("45");
+    station4.setUp(cwDistanceReading("12"));
+    station4.setDown(cwDistanceReading("23"));
+    station4.setLeft(cwDistanceReading("34"));
+    station4.setRight(cwDistanceReading("45"));
 
     cwStation station2to5("2");
-    station2to5.setDown("26");
-    station2to5.setRight("48");
+    station2to5.setDown(cwDistanceReading("26"));
+    station2to5.setRight(cwDistanceReading("48"));
 
     cwStation station5("5");
-    station5.setUp("13");
-    station5.setDown("24");
-    station5.setLeft("35");
-    station5.setRight("46");
+    station5.setUp(cwDistanceReading("13"));
+    station5.setDown(cwDistanceReading("24"));
+    station5.setLeft(cwDistanceReading("35"));
+    station5.setRight(cwDistanceReading("46"));
 
     chunk1->appendShot(station1, station2, cwShot("30.4", "20", "6", "-82", "-2"));
     chunk1->appendShot(station2, station3, cwShot("20.2", "21.1", "7", "4", "-4"));

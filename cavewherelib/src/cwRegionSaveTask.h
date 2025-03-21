@@ -9,7 +9,6 @@
 #define CWXMLPROJECTSAVETASK_H
 
 //Our includes
-#include "cavewhere.pb.h"
 #include "cwRegionIOTask.h"
 class cwCave;
 class cwTrip;
@@ -58,6 +57,7 @@ namespace CavewhereProto {
     class Lead;
     class SurveyNetwork;
     class ProjectedProfileScrapViewMatrix;
+    class DistanceReading;
 };
 
 namespace QtProto {

@@ -28,17 +28,17 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
     for(int i = 0; i < numStations; i++) {
         cwStation station;
         station.setName(QString("%1").arg(i+1));
-        station.setLeft("0");
-        station.setRight("0");
-        station.setUp("0");
-        station.setDown("0");
+        station.setLeft(cwDistanceReading("0"));
+        station.setRight(cwDistanceReading("0"));
+        station.setUp(cwDistanceReading("0"));
+        station.setDown(cwDistanceReading("0"));
 
         stations.append(station);
     }
 
 
     cwShot shot;
-    shot.setDistance("10");
+    shot.setDistance(cwDistanceReading("10"));
     shot.setCompass("0");
     shot.setBackCompass("180");
     shot.setClino("0");
