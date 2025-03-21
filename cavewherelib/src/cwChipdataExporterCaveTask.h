@@ -12,7 +12,7 @@
 #include "cwCaveExporterTask.h"
 #include "cwUnits.h"
 #include "cwStation.h"
-#include "cwReadingStates.h"
+
 class cwCave;
 class cwTrip;
 class cwTripCalibration;
@@ -39,7 +39,7 @@ private:
     void writeDataFormat(QTextStream& stream, cwTrip* trip);
     void writeChunk(QTextStream& stream, cwSurveyChunk* chunk, bool feetAndInches);
     void writeShot(QTextStream &stream, cwTripCalibration *calibrations, bool feetAndInches, const cwStation &fromStation, const cwStation &toStation, cwShot shot);
-    void writeLrudMeasurement(QTextStream &stream, cwDistanceStates::State state, double measurement, cwUnits::LengthUnit fromUnit, cwUnits::LengthUnit toUnit);
+    void writeLrudMeasurement(QTextStream &stream, const cwDistanceReading& measurement, cwUnits::LengthUnit fromUnit, cwUnits::LengthUnit toUnit);
     static QString formatNumber(double number, int maxPrecision, int columnWidth);
 
     static cwUnits::LengthUnit outputDistanceUnit(cwTrip* trip);

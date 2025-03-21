@@ -199,10 +199,10 @@ void cwSurvexExporterTripTask::writeLRUDData(QTextStream& stream, cwTrip* trip) 
             if(station.isValid()) {
                 QString dataLine = dataLineTemplate
                         .arg(station.name(), TextPadding)
-                        .arg(toSupportedLength(station.left(), station.leftInputState()), TextPadding)
-                        .arg(toSupportedLength(station.right(), station.rightInputState()), TextPadding)
-                        .arg(toSupportedLength(station.up(), station.upInputState()), TextPadding)
-                        .arg(toSupportedLength(station.down(), station.downInputState()), TextPadding);
+                        .arg(toSupportedLength(station.left()), TextPadding)
+                        .arg(toSupportedLength(station.right()), TextPadding)
+                        .arg(toSupportedLength(station.up()), TextPadding)
+                        .arg(toSupportedLength(station.down()), TextPadding);
 
                 stream << dataLine << Qt::endl;
             }
@@ -248,8 +248,8 @@ void cwSurvexExporterTripTask::writeDate(QTextStream &stream, QDate date)
   If the current calibration isn't in yard, feet or meters, then this function converts the
   length into meters.
 */
-QString cwSurvexExporterTripTask::toSupportedLength(double length, cwDistanceStates::State state) const {
-    if(state == cwDistanceStates::Empty) {
+QString cwSurvexExporterTripTask::toSupportedLength(const cwDistanceReading& reading) const {
+    if(reading.state() == cwDistanceReading::Empty) {
         return "-";
     }
 
@@ -258,9 +258,9 @@ QString cwSurvexExporterTripTask::toSupportedLength(double length, cwDistanceSta
     case cwUnits::Meters:
     case cwUnits::Feet:
     case cwUnits::Yards:
-        return QString("%1").arg(length);
+        return QString("%1").arg(reading.value());
     default:
-        return QString("%1").arg(cwUnits::convert(length, unit, cwUnits::Meters));
+        return QString("%1").arg(cwUnits::convert(reading.toDouble(), unit, cwUnits::Meters));
     }
 }
 
@@ -327,7 +327,7 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream,
 
         if(!fromStation.isValid() || !toStation.isValid()) { continue; }
 
-        QString distance = toSupportedLength(shot.distance(), cwDistanceStates::Valid);
+        QString distance = toSupportedLength(shot.distance());
         QString compass = compassToString(shot.compass(), shot.compassState());
         QString backCompass = compassToString(shot.backCompass(), shot.backCompassState());
         QString clino = clinoToString(shot.clino(), shot.clinoState());

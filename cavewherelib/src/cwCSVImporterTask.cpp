@@ -220,7 +220,7 @@ cwCSVImporterTask::OutputPtr cwCSVImporterTask::operator()() const
 
         mapColumns(readColumns, from, to, lrudStation, shot);
 
-        if(shot.distance() == 0.0 && trip->chunkCount() > 0) {
+        if(shot.distance().toDouble() == 0.0 && trip->chunkCount() > 0) {
             //LRUD shot, search for the shot. Look through this chunk first, then the whole cave
             setLastStationLRUD(from, to, lrudStation);
         } else {

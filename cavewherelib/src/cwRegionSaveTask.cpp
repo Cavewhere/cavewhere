@@ -479,6 +479,9 @@ void cwRegionSaveTask::saveTeamMember(CavewhereProto::TeamMember *protoTeamMembe
 void cwRegionSaveTask::saveStation(CavewhereProto::Station *protoStation, const cwStation &station)
 {
     saveString(protoStation->mutable_name(), station.name());
+
+
+
     protoStation->set_left(station.left());
     protoStation->set_right(station.right());
     protoStation->set_up(station.up());

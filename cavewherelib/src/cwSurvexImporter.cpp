@@ -23,6 +23,8 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QThread>
+#include <QRegularExpression>
+#include <QRegularExpressionMatch>
 
 //Std include
 #include "math.h"

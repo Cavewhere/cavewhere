@@ -14,6 +14,7 @@
 #include "cwStation.h"
 #include "cwShot.h"
 #include "cwLength.h"
+#include "cwDistanceReading.h"
 
 //Qt includes
 #include <QFileInfo>
@@ -522,11 +523,11 @@ void cwCompassImporter::parseSurveyData(QFile *file)
             if(lengthString != missingEntry) {
                 if(!convertNumber(lengthString, "length", &length)) { CurrentFileGood = false; return; }
 
-                shot.setDistance(cwUnits::convert(length, cwUnits::Feet, distanceUnits));
+                shot.setDistance(cwDistanceReading(cwUnits::convert(length, cwUnits::Feet, distanceUnits)));
 
                 //Fix the rounding issue, for compass... Only stores 1 hundreds of an foot
                 if(distanceUnits == cwUnits::Meters) {
-                    shot.setDistance(qRound(shot.distance() * 100.0) / 100.0); //Round to the nearest cm
+                    shot.setDistance(cwDistanceReading(qRound(shot.distance().toDouble() * 100.0) / 100.0)); //Round to the nearest cm
                 }
             }
 
@@ -540,24 +541,28 @@ void cwCompassImporter::parseSurveyData(QFile *file)
                 shot.setClino(inclination);
             }
 
+            auto toString = [](double value) {
+                return QString::number(value, 'g', 2);
+            };
+
             if(leftString != missingEntry) {
                 if(!convertNumber(leftString, "left", &left)) { CurrentFileGood = false; return; }
-                fromStation.setLeft(cwUnits::convert(left, cwUnits::Feet, distanceUnits));
+                fromStation.setLeft(toString(cwUnits::convert(left, cwUnits::Feet, distanceUnits)));
             }
 
             if(rightString != missingEntry) {
                 if(!convertNumber(rightString, "right", &right)) { CurrentFileGood = false; return; }
-                fromStation.setRight(cwUnits::convert(right, cwUnits::Feet, distanceUnits));
+                fromStation.setRight(toString(cwUnits::convert(right, cwUnits::Feet, distanceUnits)));
             }
 
             if(upString != missingEntry) {
                 if(!convertNumber(upString, "up", &up)) { CurrentFileGood = false; return; }
-                fromStation.setUp(cwUnits::convert(up, cwUnits::Feet, distanceUnits));
+                fromStation.setUp(toString(cwUnits::convert(up, cwUnits::Feet, distanceUnits)));
             }
 
             if(downString != missingEntry) {
                 if(!convertNumber(downString, "down", &down)) { CurrentFileGood = false; return; }
-                fromStation.setDown(cwUnits::convert(down, cwUnits::Feet, distanceUnits));
+                fromStation.setDown(toString(cwUnits::convert(down, cwUnits::Feet, distanceUnits)));
             }
 
             if(CurrentTrip->calibrations()->hasBackSights() && dataStrings.size() >= 11) {

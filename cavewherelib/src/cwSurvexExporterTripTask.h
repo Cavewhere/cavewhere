@@ -12,6 +12,7 @@
 #include "cwExporterTask.h"
 #include "cwUnits.h"
 #include "cwReadingStates.h"
+#include "cwDistanceReading.h"
 class cwTrip;
 class cwSurveyChunk;
 class cwTripCalibration;
@@ -53,7 +54,7 @@ private:
     void writeTeamData(QTextStream& stream, cwTeam *trip);
     void writeDate(QTextStream& stream, QDate date);
 
-    QString toSupportedLength(double length, cwDistanceStates::State) const;
+    QString toSupportedLength(const cwDistanceReading& reading) const;
     QString compassToString(double compass, cwCompassStates::State) const;
     QString clinoToString(double clino, cwClinoStates::State) const;
 };

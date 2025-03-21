@@ -16,6 +16,7 @@
 #include <QString>
 #include <QHash>
 #include <QSet>
+#include <QRegularExpression>
 
 /**
  * @brief The cwStationRenamer class

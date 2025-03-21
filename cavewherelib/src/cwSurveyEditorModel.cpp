@@ -50,13 +50,13 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
     case StationNameRole:
         return QVariant(chunk->station(stationIndex).name());
     case StationLeftRole:
-        return QVariant(chunk->station(stationIndex).left());
+        return QVariant(chunk->station(stationIndex).left().value());
     case StationRightRole:
-        return QVariant(chunk->station(stationIndex).right());
+        return QVariant(chunk->station(stationIndex).right().value());
     case StationUpRole:
-        return QVariant(chunk->station(stationIndex).up());
+        return QVariant(chunk->station(stationIndex).up().value());
     case StationDownRole:
-        return QVariant(chunk->station(stationIndex).down());
+        return QVariant(chunk->station(stationIndex).down().value());
     case ChunkRole:
         return QVariant::fromValue(chunk);
     case ChunkIdRole:
@@ -72,7 +72,7 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
     if(shotIndex < chunk->shotCount()) {
         switch(role) {
         case ShotDistanceRole:
-            return QVariant(chunk->shot(shotIndex).distance());
+            return QVariant(chunk->shot(shotIndex).distance().value());
         case ShotCompassRole:
             return QVariant(chunk->shot(shotIndex).compass());
         case ShotClinoRole:

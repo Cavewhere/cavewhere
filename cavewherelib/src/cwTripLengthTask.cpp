@@ -83,7 +83,7 @@ QPair<double, int> cwTripLengthTask::distanceOfChunk(const cwSurveyChunk *chunk)
     foreach(cwShot shot, chunk->shots()) {
         if(shot.distanceState() == cwDistanceStates::Valid &&
                 shot.isDistanceIncluded()) {
-            distance += shot.distance();
+            distance += shot.distance().toDouble();
             numberOfShots++;
         }
     }

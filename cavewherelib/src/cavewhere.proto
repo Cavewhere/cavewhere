@@ -30,14 +30,19 @@ message Trip {
 
 message Station {
     required QtProto.QString name = 1;
-    optional double left = 2;
-    optional double right = 3;
-    optional double up = 4;
-    optional double down = 5;
-    optional DistanceStates.State leftState = 6;
-    optional DistanceStates.State rightState = 7;
-    optional DistanceStates.State upState = 8;
-    optional DistanceStates.State downState = 9;
+    optional double left = 2 [deprecated = true];
+    optional double right = 3 [deprecated = true];
+    optional double up = 4 [deprecated = true];
+    optional double down = 5 [deprecated = true];
+    optional DistanceStates.State leftState = 6 [deprecated = true];
+    optional DistanceStates.State rightState = 7 [deprecated = true];
+    optional DistanceStates.State upState = 8 [deprecated = true];
+    optional DistanceStates.State downState = 9 [deprecated = true];
+    optional DistanceReading leftReading = 10;
+    optional DistanceReading rightReading = 11;
+    optional DistanceReading upReading = 12;
+    optional DistanceReading downReading = 13;
+
 }
 
 message SurveyNoteModel {
@@ -235,4 +240,8 @@ message ProjectedProfileScrapViewMatrix {
 
     optional double azimuth = 1;
     optional Direction direction = 2;
+}
+
+message DistanceReading {
+    optional QtProto.QString value = 1;
 }

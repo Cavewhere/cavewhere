@@ -219,26 +219,26 @@ double cwCompassExportCaveTask::convertField(cwStation station,
     double value = -999.0;
     switch(field) {
     case Left:
-        if(station.leftInputState() == cwDistanceStates::Valid) {
-            value = station.left();
+        if(station.left().state() == cwDistanceReading::Valid) {
+            value = station.left().toDouble();
             return cwUnits::convert(value, unit, cwUnits::Feet);
         }
         break;
     case Right:
-        if(station.rightInputState() == cwDistanceStates::Valid) {
-            value = station.right();
+        if(station.right().state() == cwDistanceReading::Valid) {
+            value = station.right().toDouble();
             return cwUnits::convert(value, unit, cwUnits::Feet);
         }
         break;
     case Up:
-        if(station.upInputState() == cwDistanceStates::Valid) {
-            value = station.up();
+        if(station.up().state() == cwDistanceReading::Valid) {
+            value = station.up().toDouble();
             return cwUnits::convert(value, unit, cwUnits::Feet);
         }
         break;
     case Down:
-        if(station.downInputState() == cwDistanceStates::Valid) {
-            value = station.down();
+        if(station.down().state() == cwDistanceReading::Valid) {
+            value = station.down().toDouble();
             return cwUnits::convert(value, unit, cwUnits::Feet);
         }
         break;
@@ -424,7 +424,7 @@ void cwCompassExportCaveTask::writeShot(QTextStream &stream,
         stream << formatDouble(-999) << " ";
         stream << formatDouble(-999) << " ";
     } else {
-        double shotLength = cwUnits::convert(shot.distance(),
+        double shotLength = cwUnits::convert(shot.distance().toDouble(),
                                              calibrations->distanceUnit(),
                                              cwUnits::Feet);
 

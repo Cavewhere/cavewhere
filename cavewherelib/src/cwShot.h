@@ -15,6 +15,7 @@ class cwStationReference;
 class cwValidator;
 #include "cwReadingStates.h"
 #include "cwGlobals.h"
+#include "cwDistanceReading.h"
 
 //Qt includes
 #include <QSharedDataPointer>
@@ -30,10 +31,11 @@ public:
            QString clino, QString backClino);
     cwShot(const cwShot& shot);
 
-    double distance() const;
-    void setDistance(QString distance);
-    void setDistance(double distance);
-    void setDistanceState(cwDistanceStates::State state);
+    cwDistanceReading distance() const;
+    void setDistance(const cwDistanceReading& reading) { Data->distance = reading; }
+
+    // void setDistance(double distance);
+    // void setDistanceState(cwDistanceStates::State state);
 
     double compass() const;
     void setCompass(QString compass);
@@ -55,7 +57,7 @@ public:
     void setBackClino(double backClino);
     void setBackClinoState(cwClinoStates::State state);
 
-    cwDistanceStates::State distanceState() const;
+    // cwDistanceStates::State distanceState() const;
     cwCompassStates::State compassState() const;
     cwCompassStates::State backCompassState() const;
     cwClinoStates::State clinoState() const;
@@ -80,13 +82,13 @@ private:
     public:
         PrivateData();
 
-        double Distance;
+        cwDistanceReading distance;
+
         double Compass;
         double BackCompass;
         double Clino;
         double BackClino;
 
-        cwDistanceStates::State DistanceState;
         cwCompassStates::State CompassState;
         cwCompassStates::State BackCompassState;
         cwClinoStates::State ClinoState;
@@ -107,9 +109,9 @@ private:
 
 };
 
-inline cwDistanceStates::State cwShot::distanceState() const {
-    return Data->DistanceState;
-}
+// inline cwDistanceStates::State cwShot::distanceState() const {
+//     return Data->DistanceState;
+// }
 
 inline cwCompassStates::State cwShot::compassState() const {
     return Data->CompassState;
@@ -136,8 +138,8 @@ inline bool cwShot::isDistanceIncluded() const
     return Data->IncludeDistance;
 }
 
-inline double cwShot::distance() const {
-    return Data->Distance;
+inline cwDistanceReading cwShot::distance() const {
+    return Data->distance;
 }
 
 inline double cwShot::compass() const {
@@ -157,7 +159,7 @@ inline double cwShot::backClino() const {
 }
 
 inline bool cwShot::isValid() const {
-    return distanceState() == cwDistanceStates::Valid;
+    return distance().state() == cwDistanceReading::Valid;
 }
 
 /**

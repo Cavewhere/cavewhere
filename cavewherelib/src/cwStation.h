@@ -13,9 +13,10 @@
 #include <QSharedDataPointer>
 
 //Our includes
-#include "cwReadingStates.h"
-#include "cwDistanceValidator.h"
+// #include "cwReadingStates.h"
+// #include "cwDistanceValidator.h"
 #include "cwGlobals.h"
+#include "cwDistanceReading.h"
 
 class CAVEWHERE_LIB_EXPORT cwStation {
 
@@ -34,36 +35,44 @@ public:
     cwStation(QString name);
 
     QString name() const;
-    double left() const;
-    double right() const;
-    double up() const;
-    double down() const;
 
-    cwDistanceStates::State leftInputState() const;
-    cwDistanceStates::State rightInputState() const;
-    cwDistanceStates::State upInputState() const;
-    cwDistanceStates::State downInputState() const;
+    cwDistanceReading left() const;
+    void setLeft(const cwDistanceReading& left) { Data->m_left = left; }
+
+    cwDistanceReading right() const;
+    void setRight(const cwDistanceReading& right) { Data->m_right = right; }
+
+    cwDistanceReading up() const;
+    void setUp(const cwDistanceReading& up) { Data->m_up = up; }
+
+    cwDistanceReading down() const;
+    void setDown(const cwDistanceReading& down) { Data->m_down = down; }
+
+    // cwDistanceStates::State leftInputState() const;
+    // cwDistanceStates::State rightInputState() const;
+    // cwDistanceStates::State upInputState() const;
+    // cwDistanceStates::State downInputState() const;
 
     void setData(QVariant data, DataRoles role);
     QVariant data(DataRoles role) const;
 
     bool setName(QString Name);
 
-    bool setLeft(QString left);
-    bool setLeft(double left);
-    void setLeftInputState(cwDistanceStates::State state);
+    // bool setLeft(QString left);
+    // bool setLeft(double left);
+    // void setLeftInputState(cwDistanceStates::State state);
 
-    bool setRight(QString right);
-    bool setRight(double right);
-    void setRightInputState(cwDistanceStates::State state);
+    // bool setRight(QString right);
+    // bool setRight(double right);
+    // void setRightInputState(cwDistanceStates::State state);
 
-    bool setUp(QString up);
-    bool setUp(double up);
-    void setUpInputState(cwDistanceStates::State state);
+    // bool setUp(QString up);
+    // bool setUp(double up);
+    // void setUpInputState(cwDistanceStates::State state);
 
-    bool setDown(QString down);
-    bool setDown(double down);
-    void setDownInputState(cwDistanceStates::State state);
+    // bool setDown(QString down);
+    // bool setDown(double down);
+    // void setDownInputState(cwDistanceStates::State state);
 
 //    QVector3D position() const;
 //    void setPosition(QVector3D position); //This is set by the loop closer
@@ -83,25 +92,31 @@ private:
 
         QString Name;
 
-        cwDistanceStates::State LeftState;
-        cwDistanceStates::State RightState;
-        cwDistanceStates::State UpState;
-        cwDistanceStates::State DownState;
+        cwDistanceReading m_left;
+        cwDistanceReading m_right;
+        cwDistanceReading m_up;
+        cwDistanceReading m_down;
 
-        double Left;
-        double Right;
-        double Up;
-        double Down;
+
+        // cwDistanceStates::State LeftState;
+        // cwDistanceStates::State RightState;
+        // cwDistanceStates::State UpState;
+        // cwDistanceStates::State DownState;
+
+        // double Left;
+        // double Right;
+        // double Up;
+        // double Down;
 
 //        QVector3D Position;
     };
 
     QSharedDataPointer<PrivateData> Data;
 
-    bool checkLRUDValue(double value) const;
-    bool setStringValue(double& setValue, cwDistanceStates::State& state, QString value);
-    bool setDoubleValue(double& setValue, cwDistanceStates::State& state, double value);
-    void setPrivateLRUDState(cwDistanceStates::State &memberState, cwDistanceStates::State newState);
+    // bool checkLRUDValue(double value) const;
+    // bool setStringValue(double& setValue, cwDistanceStates::State& state, QString value);
+    // bool setDoubleValue(double& setValue, cwDistanceStates::State& state, double value);
+    // void setPrivateLRUDState(cwDistanceStates::State &memberState, cwDistanceStates::State newState);
 };
 
 inline size_t qHash(const cwStation& station) {
@@ -109,26 +124,26 @@ inline size_t qHash(const cwStation& station) {
 }
 
 inline QString cwStation::name() const { return Data->Name; }
-inline double cwStation::left() const { return Data->Left; }
-inline double cwStation::right() const { return Data->Right; }
-inline double cwStation::up() const { return Data->Up; }
-inline double cwStation::down() const { return Data->Down; }
+inline cwDistanceReading cwStation::left() const { return Data->m_left; }
+inline cwDistanceReading cwStation::right() const { return Data->m_right; }
+inline cwDistanceReading cwStation::up() const { return Data->m_up; }
+inline cwDistanceReading cwStation::down() const { return Data->m_down; }
 
-inline cwDistanceStates::State cwStation::leftInputState() const {
-    return Data->LeftState;
-}
+// inline cwDistanceStates::State cwStation::leftInputState() const {
+//     return Data->LeftState;
+// }
 
-inline cwDistanceStates::State cwStation::rightInputState() const {
-    return Data->RightState;
-}
+// inline cwDistanceStates::State cwStation::rightInputState() const {
+//     return Data->RightState;
+// }
 
-inline cwDistanceStates::State cwStation::upInputState() const {
-    return Data->UpState;
-}
+// inline cwDistanceStates::State cwStation::upInputState() const {
+//     return Data->UpState;
+// }
 
-inline cwDistanceStates::State cwStation::downInputState() const {
-    return Data->DownState;
-}
+// inline cwDistanceStates::State cwStation::downInputState() const {
+//     return Data->DownState;
+// }
 
 //inline QVector3D cwStation::position() const { return Data->Position; }
 
@@ -137,10 +152,10 @@ inline cwDistanceStates::State cwStation::downInputState() const {
 //    Data->Position = position;
 //}
 
-inline bool cwStation::checkLRUDValue(double value) const
-{
-    return cwDistanceValidator::check(value);
-}
+// inline bool cwStation::checkLRUDValue(double value) const
+// {
+//     return cwDistanceValidator::check(value);
+// }
 
 inline bool cwStation::operator ==(const cwStation &station) const
 {

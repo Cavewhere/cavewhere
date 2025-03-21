@@ -13,6 +13,7 @@
 #include "cwCompassValidator.h"
 #include "cwClinoValidator.h"
 #include "cwValidator.h"
+#include "cwDistanceReading.h"
 
 
 cwShot::cwShot() :
@@ -40,12 +41,10 @@ cwShot::cwShot(const cwShot &shot) :
 }
 
 cwShot::PrivateData::PrivateData() :
-    Distance(0.0),
     Compass(0.0),
     BackCompass(0.0),
     Clino(0.0),
     BackClino(0.0),
-    DistanceState(cwDistanceStates::Empty),
     CompassState(cwCompassStates::Empty),
     BackCompassState(cwCompassStates::Empty),
     ClinoState(cwClinoStates::Empty),
@@ -55,33 +54,33 @@ cwShot::PrivateData::PrivateData() :
 
 }
 
-void cwShot::setDistance(QString distance) {
-    cwDistanceValidator validator;
-    setValueWithString(validator, Data->Distance, (int&)Data->DistanceState, distance);
-}
+// void cwShot::setDistance(QString distance) {
+//     cwDistanceValidator validator;
+//     setValueWithString(validator, Data->Distance, (int&)Data->DistanceState, distance);
+// }
 
-void cwShot::setDistance(double distance) {
-    if(cwDistanceValidator::check(distance)) {
-        Data->Distance = distance;
-        Data->DistanceState = cwDistanceStates::Valid;
-    }
-}
+// void cwShot::setDistance(double distance) {
+//     if(cwDistanceValidator::check(distance)) {
+//         Data->Distance = distance;
+//         Data->DistanceState = cwDistanceStates::Valid;
+//     }
+// }
 
-void cwShot::setDistanceState(cwDistanceStates::State state)
-{
-    //We need this switch statement because serialization class (or any other class) could send in interger
-    switch(state) {
-    case cwDistanceStates::Empty:
-        Data->DistanceState = cwDistanceStates::Empty;
-        break;
-    case cwDistanceStates::Valid:
-        Data->DistanceState = cwDistanceStates::Valid;
-        break;
-    default:
-        Data->DistanceState = cwDistanceStates::Empty;
-        break;
-    }
-}
+// void cwShot::setDistanceState(cwDistanceStates::State state)
+// {
+//     //We need this switch statement because serialization class (or any other class) could send in interger
+//     switch(state) {
+//     case cwDistanceStates::Empty:
+//         Data->DistanceState = cwDistanceStates::Empty;
+//         break;
+//     case cwDistanceStates::Valid:
+//         Data->DistanceState = cwDistanceStates::Valid;
+//         break;
+//     default:
+//         Data->DistanceState = cwDistanceStates::Empty;
+//         break;
+//     }
+// }
 
 void cwShot::setCompass(QString compass) {
     cwCompassValidator validator;
