@@ -236,6 +236,7 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
     root->futureManagerModel()->waitForFinished();
 }
 
+//This also test v3->v6
 TEST_CASE("Save and load should work correctly for Projected Profile v3->v5", "[ProtoSaveLoad]") {
 
     auto fileCheck = [](QString filename, auto scrapCheckFunc) {
