@@ -26,6 +26,7 @@ Item {
     required property cwCompassReading shotBackCompass;
     required property cwClinoReading shotClino;
     required property cwClinoReading shotBackClino;
+    required property bool titleVisible;
     required property bool stationVisible;
     required property bool shotVisible;
 
@@ -40,7 +41,7 @@ Item {
 
     SurveyEditorColumnTitles {
         id: titleColumnId
-        visible: !stationVisible
+        visible: itemId.titleVisible
         y: titleOffset
         shotOffset: Math.floor(stationBox1.height / 2.0);
     }

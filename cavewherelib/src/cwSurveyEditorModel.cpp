@@ -36,6 +36,8 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
         case StationVisibleRole:
         case ShotVisibleRole:
             return false;
+        case TitleVisibleRole:
+            return true;
         default:
             return QVariant();
         }
@@ -59,12 +61,14 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
         return QVariant::fromValue(chunk->station(stationIndex).down());
     case ChunkRole:
         return QVariant::fromValue(chunk);
-    case ChunkIdRole:
-        return QString("%1").arg(reinterpret_cast<qlonglong>(chunk));
+    // case ChunkIdRole:
+    //     return QString("%1").arg(reinterpret_cast<qlonglong>(chunk));
     case StationVisibleRole:
         return true;
     case IndexInChunkRole:
         return stationIndex;
+    case TitleVisibleRole:
+        return false;
     default:
         break;
     }
@@ -77,13 +81,15 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
             return QVariant::fromValue(chunk->shot(shotIndex).distance());
         case ShotCompassRole:
             return QVariant::fromValue(chunk->shot(shotIndex).compass());
+        case ShotBackCompassRole:
+            return QVariant::fromValue(chunk->shot(shotIndex).backCompass());
         case ShotClinoRole:
             return QVariant::fromValue(chunk->shot(shotIndex).clino());
+        case ShotBackClinoRole:
+            return QVariant::fromValue(chunk->shot(shotIndex).backClino());
         case ShotCalibrationRole: {
             cwTripCalibration* calibration = chunk->calibrations().value(shotIndex);
-            if(calibration != nullptr) {
-                return QVariant::fromValue(calibration);
-            }
+            return QVariant::fromValue(calibration);
         }
         case ShotVisibleRole:
             return true;
@@ -116,7 +122,7 @@ int cwSurveyEditorModel::rowCount(const QModelIndex& parent) const
 
     if(!IndexToChunk.isEmpty()) {
         auto lastIter = std::prev(IndexToChunk.end());
-        return lastIter.key().high();
+        return lastIter.key().high() + 1;
     }
     return 0;
 }
@@ -140,9 +146,9 @@ QHash<int, QByteArray> cwSurveyEditorModel::roleNames() const
     roles.insert(ShotBackClinoRole, "shotBackClino");
     roles.insert(ShotCalibrationRole, "shotCalibration");
     roles.insert(ChunkRole, "chunk");
-    roles.insert(ChunkIdRole, "chunkId");
     roles.insert(StationVisibleRole, "stationVisible");
     roles.insert(ShotVisibleRole, "shotVisible");
+    roles.insert(TitleVisibleRole, "titleVisible");
     roles.insert(IndexInChunkRole, "indexInChunk");
     return roles;
 }

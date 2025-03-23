@@ -45,9 +45,10 @@ public:
         ShotBackClinoRole,
         ShotCalibrationRole,
         ChunkRole,
-        ChunkIdRole,
+        // ChunkIdRole,
         StationVisibleRole,
         ShotVisibleRole,
+        TitleVisibleRole,
         IndexInChunkRole
     };
 
