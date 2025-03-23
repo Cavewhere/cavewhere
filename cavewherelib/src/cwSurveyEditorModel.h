@@ -47,7 +47,8 @@ public:
         ChunkRole,
         ChunkIdRole,
         StationVisibleRole,
-        ShotVisibleRole
+        ShotVisibleRole,
+        IndexInChunkRole
     };
 
     cwTrip* trip() const;

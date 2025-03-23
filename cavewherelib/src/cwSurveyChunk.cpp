@@ -1479,8 +1479,10 @@ bool cwSurveyChunk::isClinoDownOrUp(cwSurveyChunk::DataRole role, int index) con
  */
 bool cwSurveyChunk::isClinoDownOrUpHelper(cwSurveyChunk::DataRole role, int index) const
 {
-    QString value = data(role, index).toString().toLower();
-    return value.compare("up") == 0 || value.compare("down") == 0;
+    const QVariant variant = data(role, index);
+    Q_ASSERT(variant.canConvert<cwClinoReading>());
+    const cwClinoReading value = variant.value<cwClinoReading>();
+    return value.state() == cwClinoReading::State::Up || value.state() == cwClinoReading::State::Down;
 }
 
 /**

@@ -44,6 +44,8 @@ QQ.Item {
         anchors.left: parent.left
         anchors.margins: 1;
 
+        Controls.ScrollBar.vertical.stepSize: 50;
+
         width: 500; //flickableAreaId.contentWidth
         visible: true
         clip: true

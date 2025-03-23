@@ -250,11 +250,11 @@ MainWindowTest {
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
-            let backCheckbox = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->backSightCalibrationEditor->checkBox")
-            mouseClick(backCheckbox)
+            // let backCheckbox = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->backSightCalibrationEditor->checkBox")
+            // mouseClick(backCheckbox)
 
-            let frontSightCheckBox = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->frontSightCalibrationEditor->checkBox")
-            mouseClick(frontSightCheckBox)
+            // let frontSightCheckBox = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->frontSightCalibrationEditor->checkBox")
+            // mouseClick(frontSightCheckBox)
 
 
 

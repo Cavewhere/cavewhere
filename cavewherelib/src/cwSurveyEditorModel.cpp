@@ -48,21 +48,23 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
 
     switch(role) {
     case StationNameRole:
-        return QVariant(chunk->station(stationIndex).name());
+        return chunk->station(stationIndex).name();
     case StationLeftRole:
-        return QVariant(chunk->station(stationIndex).left().value());
+        return QVariant::fromValue(chunk->station(stationIndex).left());
     case StationRightRole:
-        return QVariant(chunk->station(stationIndex).right().value());
+        return QVariant::fromValue(chunk->station(stationIndex).right());
     case StationUpRole:
-        return QVariant(chunk->station(stationIndex).up().value());
+        return QVariant::fromValue(chunk->station(stationIndex).up());
     case StationDownRole:
-        return QVariant(chunk->station(stationIndex).down().value());
+        return QVariant::fromValue(chunk->station(stationIndex).down());
     case ChunkRole:
         return QVariant::fromValue(chunk);
     case ChunkIdRole:
         return QString("%1").arg(reinterpret_cast<qlonglong>(chunk));
     case StationVisibleRole:
         return true;
+    case IndexInChunkRole:
+        return stationIndex;
     default:
         break;
     }
@@ -72,11 +74,11 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
     if(shotIndex < chunk->shotCount()) {
         switch(role) {
         case ShotDistanceRole:
-            return QVariant(chunk->shot(shotIndex).distance().value());
+            return QVariant::fromValue(chunk->shot(shotIndex).distance());
         case ShotCompassRole:
-            return QVariant(chunk->shot(shotIndex).compass().value());
+            return QVariant::fromValue(chunk->shot(shotIndex).compass());
         case ShotClinoRole:
-            return QVariant(chunk->shot(shotIndex).clino().value());
+            return QVariant::fromValue(chunk->shot(shotIndex).clino());
         case ShotCalibrationRole: {
             cwTripCalibration* calibration = chunk->calibrations().value(shotIndex);
             if(calibration != nullptr) {
@@ -141,6 +143,7 @@ QHash<int, QByteArray> cwSurveyEditorModel::roleNames() const
     roles.insert(ChunkIdRole, "chunkId");
     roles.insert(StationVisibleRole, "stationVisible");
     roles.insert(ShotVisibleRole, "shotVisible");
+    roles.insert(IndexInChunkRole, "indexInChunk");
     return roles;
 }
 

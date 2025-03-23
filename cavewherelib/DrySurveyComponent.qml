@@ -3,7 +3,7 @@ import QtQuick.Controls as QC
 import cavewherelib
 
 Item {
-    id: item1
+    id: itemId
     width: 400
     height: stationVisible ? (lastElement ? 75 : 50 - 1) : titleColumnId.height + titleOffset
 
@@ -15,35 +15,42 @@ Item {
     required property QC.ButtonGroup errorButtonGroup
     required property SurveyChunkTrimmer surveyChunkTrimmer;
     required property SurveyChunk chunk;
+    required property int indexInChunk;
     required property string stationName;
-    required property double stationLeft;
-    required property double stationRight;
-    required property double stationUp;
-    required property double stationDown;
-    required property double shotDistance;
-    required property double shotCompass;
-    required property double shotBackCompass;
-    required property double shotClino;
-    required property double shotBackClino;
+    required property cwDistanceReading stationLeft;
+    required property cwDistanceReading stationRight;
+    required property cwDistanceReading stationUp;
+    required property cwDistanceReading stationDown;
+    required property cwDistanceReading shotDistance;
+    required property cwCompassReading shotCompass;
+    required property cwCompassReading shotBackCompass;
+    required property cwClinoReading shotClino;
+    required property cwClinoReading shotBackClino;
     required property bool stationVisible;
     required property bool shotVisible;
 
-    property int titleOffset: 25
+    readonly property int titleOffset: index === 0 ? 5 : 25
+
+    function errorModel(dataRole) {
+        if(chunk) {
+            return chunk.errorsAt(indexInChunk, dataRole)
+        }
+        return null;
+    }
 
     SurveyEditorColumnTitles {
         id: titleColumnId
         visible: !stationVisible
         y: titleOffset
         shotOffset: Math.floor(stationBox1.height / 2.0);
-
     }
 
     StationBox {
         id: stationBox1
         width: titleColumnId.stationWidth
         height: 50
-        dataValue: item1.stationVisible ? stationName : ""
-        visible: item1.stationVisible
+        dataValue: itemId.stationVisible ? stationName : ""
+        visible: itemId.stationVisible
 
         navigation.tabPrevious: NavigationItem { item: downBox; indexOffset: -1 }
         navigation.tabNext: NavigationItem { item: shotDistanceDataBox1; indexOffset: 1}
@@ -51,10 +58,11 @@ Item {
         navigation.arrowUp: NavigationItem { item: stationBox1; indexOffset: -1 }
         navigation.arrowDown: NavigationItem { item: stationBox1; indexOffset: 1 }
 
-        rowIndex: item1.index
-        errorButtonGroup: item1.errorButtonGroup
-        surveyChunkTrimmer: item1.surveyChunkTrimmer
-        surveyChunk: item1.chunk
+        rowIndex: itemId.index
+        errorButtonGroup: itemId.errorButtonGroup
+        errorModel: itemId.errorModel(SurveyChunk.StationNameRole)
+        surveyChunkTrimmer: itemId.surveyChunkTrimmer
+        surveyChunk: itemId.chunk
         dataRole: SurveyChunk.StationNameRole
 //        onTabPressed: {
 //            console.log("Tab Pressed!")
@@ -75,12 +83,13 @@ Item {
         anchors.leftMargin: -1
         anchors.top: stationBox1.verticalCenter
         anchors.topMargin: 0
-        dataValue: item1.shotVisible ? shotDistance : ""
-        visible: item1.shotVisible
-        rowIndex: item1.index
-        errorButtonGroup: item1.errorButtonGroup
-        surveyChunkTrimmer: item1.surveyChunkTrimmer
-        surveyChunk: item1.chunk
+        dataValue: itemId.shotVisible ? shotDistance.value : ""
+        visible: itemId.shotVisible
+        rowIndex: itemId.index
+        errorButtonGroup: itemId.errorButtonGroup
+        errorModel: itemId.errorModel(SurveyChunk.ShotDistanceRole)
+        surveyChunkTrimmer: itemId.surveyChunkTrimmer
+        surveyChunk: itemId.chunk
         dataRole: SurveyChunk.ShotDistanceRole
     }
 
@@ -92,12 +101,13 @@ Item {
         anchors.leftMargin: -1
         anchors.top: shotDistanceDataBox1.top
         anchors.topMargin: 0
-        visible: calibration.frontSights && item1.shotVisible
-        dataValue: item1.shotVisible ? shotCompass : ""
-        rowIndex: item1.index
-        errorButtonGroup: item1.errorButtonGroup
-        surveyChunkTrimmer: item1.surveyChunkTrimmer
-        surveyChunk: item1.chunk
+        visible: calibration.frontSights && itemId.shotVisible
+        dataValue: itemId.shotVisible ? shotCompass.value : ""
+        rowIndex: itemId.index
+        errorButtonGroup: itemId.errorButtonGroup
+        errorModel: itemId.errorModel(SurveyChunk.ShotCompassRole)
+        surveyChunkTrimmer: itemId.surveyChunkTrimmer
+        surveyChunk: itemId.chunk
         dataRole: SurveyChunk.ShotCompassRole
     }
 
@@ -109,12 +119,13 @@ Item {
         // anchors.leftMargin: -1
         anchors.top: calibration.frontSights ? shotDistanceDataBox1.verticalCenter : shotDistanceDataBox1.top
         anchors.topMargin: calibration.frontSights ? -1 : 0
-        visible: calibration.backSights && item1.shotVisible
-        dataValue: item1.shotVisible ? shotBackCompass : ""
-        rowIndex: item1.index
-        errorButtonGroup: item1.errorButtonGroup
-        surveyChunkTrimmer: item1.surveyChunkTrimmer
-        surveyChunk: item1.chunk
+        visible: calibration.backSights && itemId.shotVisible
+        dataValue: itemId.shotVisible ? shotBackCompass.value : ""
+        rowIndex: itemId.index
+        errorButtonGroup: itemId.errorButtonGroup
+        errorModel: itemId.errorModel(SurveyChunk.ShotBackCompassRole)
+        surveyChunkTrimmer: itemId.surveyChunkTrimmer
+        surveyChunk: itemId.chunk
         dataRole: SurveyChunk.ShotBackCompassRole
     }
 
@@ -126,12 +137,13 @@ Item {
         anchors.topMargin: 0
         anchors.left: compassFrontReadBox.right
         anchors.leftMargin: -1
-        visible: calibration.frontSights && item1.shotVisible
-        dataValue: item1.shotVisible ? shotClino : ""
-        rowIndex: item1.index
-        errorButtonGroup: item1.errorButtonGroup
-        surveyChunkTrimmer: item1.surveyChunkTrimmer
-        surveyChunk: item1.chunk
+        visible: calibration.frontSights && itemId.shotVisible
+        dataValue: itemId.shotVisible ? shotClino.value : ""
+        rowIndex: itemId.index
+        errorButtonGroup: itemId.errorButtonGroup
+        errorModel: itemId.errorModel(SurveyChunk.ShotClinoRole)
+        surveyChunkTrimmer: itemId.surveyChunkTrimmer
+        surveyChunk: itemId.chunk
         dataRole: SurveyChunk.ShotClinoRole
     }
 
@@ -143,12 +155,13 @@ Item {
         anchors.top: calibration.frontSights ? shotDistanceDataBox1.verticalCenter : shotDistanceDataBox1.top
         anchors.left: compassFrontReadBox.right
         anchors.leftMargin: -1
-        visible: calibration.backSights && item1.shotVisible
-        dataValue: item1.shotVisible ? shotBackClino : ""
-        rowIndex: item1.index
-        errorButtonGroup: item1.errorButtonGroup
-        surveyChunkTrimmer: item1.surveyChunkTrimmer
-        surveyChunk: item1.chunk
+        visible: calibration.backSights && itemId.shotVisible
+        dataValue: itemId.shotVisible ? shotBackClino.value : ""
+        rowIndex: itemId.index
+        errorButtonGroup: itemId.errorButtonGroup
+        errorModel: itemId.errorModel(SurveyChunk.ShotBackClinoRole)
+        surveyChunkTrimmer: itemId.surveyChunkTrimmer
+        surveyChunk: itemId.chunk
         dataRole: SurveyChunk.ShotBackClinoRole
     }
 
@@ -160,12 +173,13 @@ Item {
         anchors.leftMargin: -1
         anchors.top: stationBox1.top
         anchors.topMargin: 0
-        dataValue: item1.stationVisible ? stationLeft : ""
-        visible: item1.stationVisible
-        rowIndex: item1.index
-        errorButtonGroup: item1.errorButtonGroup
-        surveyChunkTrimmer: item1.surveyChunkTrimmer
-        surveyChunk: item1.chunk
+        dataValue: itemId.stationVisible ? stationLeft.value : ""
+        visible: itemId.stationVisible
+        rowIndex: itemId.index
+        errorButtonGroup: itemId.errorButtonGroup
+        errorModel: itemId.errorModel(SurveyChunk.StationLeftRole)
+        surveyChunkTrimmer: itemId.surveyChunkTrimmer
+        surveyChunk: itemId.chunk
         dataRole: SurveyChunk.StationLeftRole
     }
 
@@ -177,12 +191,13 @@ Item {
         anchors.top: stationBox1.top
         anchors.left: leftBox.right
         anchors.leftMargin: -1
-        dataValue: item1.stationVisible ? stationRight : ""
-        visible: item1.stationVisible
-        rowIndex: item1.index
-        errorButtonGroup: item1.errorButtonGroup
-        surveyChunkTrimmer: item1.surveyChunkTrimmer
-        surveyChunk: item1.chunk
+        dataValue: itemId.stationVisible ? stationRight.value : ""
+        visible: itemId.stationVisible
+        rowIndex: itemId.index
+        errorButtonGroup: itemId.errorButtonGroup
+        errorModel: itemId.errorModel(SurveyChunk.StationLeftRole)
+        surveyChunkTrimmer: itemId.surveyChunkTrimmer
+        surveyChunk: itemId.chunk
         dataRole: SurveyChunk.StationLeftRole
     }
 
@@ -194,12 +209,13 @@ Item {
         anchors.top: stationBox1.top
         anchors.left: rightBox.right
         anchors.leftMargin: -1
-        dataValue: item1.stationVisible ? stationUp : ""
-        visible: item1.stationVisible
-        rowIndex: item1.index
-        errorButtonGroup: item1.errorButtonGroup
-        surveyChunkTrimmer: item1.surveyChunkTrimmer
-        surveyChunk: item1.chunk
+        dataValue: itemId.stationVisible ? stationUp.value : ""
+        visible: itemId.stationVisible
+        rowIndex: itemId.index
+        errorButtonGroup: itemId.errorButtonGroup
+        errorModel: itemId.errorModel(SurveyChunk.StationLeftRole)
+        surveyChunkTrimmer: itemId.surveyChunkTrimmer
+        surveyChunk: itemId.chunk
         dataRole: SurveyChunk.StationLeftRole
     }
 
@@ -211,12 +227,13 @@ Item {
         anchors.top: stationBox1.top
         anchors.left: upBox.right
         anchors.leftMargin: -1
-        dataValue: item1.stationVisible ? stationDown : ""
-        visible: item1.stationVisible
-        rowIndex: item1.index
-        errorButtonGroup: item1.errorButtonGroup
-        surveyChunkTrimmer: item1.surveyChunkTrimmer
-        surveyChunk: item1.chunk
+        dataValue: itemId.stationVisible ? stationDown.value : ""
+        visible: itemId.stationVisible
+        rowIndex: itemId.index
+        errorButtonGroup: itemId.errorButtonGroup
+        errorModel: itemId.errorModel(SurveyChunk.StationLeftRole)
+        surveyChunkTrimmer: itemId.surveyChunkTrimmer
+        surveyChunk: itemId.chunk
         dataRole: SurveyChunk.StationLeftRole
     }
 

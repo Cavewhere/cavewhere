@@ -183,6 +183,34 @@ TEST_CASE("QMetaType system convertsion for cwReadings", "[cwReading]") {
         CHECK(dbl == Catch::Approx(expected));
     }
 
+    SECTION("Valid cwClinoReading up conversion") {
+        cwClinoReading r("uP"); //up value
+        QVariant var = QVariant::fromValue(r);
+        QString str = var.toString();
+        double dbl = var.toDouble(); //Should be 0.0
+        CHECK(str == r.value());
+        bool ok = false;
+        double expected = r.toDouble(&ok);
+        // For a valid cwClinoReading, the conversion should succeed.
+        CHECK(ok == false);
+        CHECK(dbl == 0.0);
+        CHECK(dbl == Catch::Approx(expected));
+    }
+
+    SECTION("Valid cwClinoReading up conversion") {
+        cwClinoReading r("Down"); //down value
+        QVariant var = QVariant::fromValue(r);
+        QString str = var.toString();
+        double dbl = var.toDouble(); //Should be 0.0
+        CHECK(str == r.value());
+        bool ok = false;
+        double expected = r.toDouble(&ok);
+        // For a valid cwClinoReading, the conversion should succeed.
+        CHECK(ok == false);
+        CHECK(dbl == 0.0);
+        CHECK(dbl == Catch::Approx(expected));
+    }
+
     // Invalid conversions.
     SECTION("Invalid cwClinoReading conversion") {
         cwClinoReading invalid("invalid");
