@@ -21,16 +21,16 @@ public:
 
     static void check(const cwShot& testShot, const cwShot& shot) {
         CHECK(testShot.distance() == shot.distance());
-        CHECK_THAT(testShot.compass(), WithinAbs(shot.compass(), delta));
-        CHECK_THAT(testShot.backCompass(), WithinAbs(shot.backCompass(), delta));
-        CHECK_THAT(testShot.clino(), WithinAbs(shot.clino(), delta));
-        CHECK_THAT(testShot.backClino(), WithinAbs(shot.backClino(), delta));
+        CHECK(testShot.compass() == shot.compass());
+        CHECK(testShot.backCompass() == shot.backCompass());
+        CHECK(testShot.clino() == shot.clino());
+        CHECK(testShot.backClino() == shot.backClino());
 
         CHECK(testShot.distance().state() == shot.distance().state());
-        CHECK(testShot.compassState() == shot.compassState());
-        CHECK(testShot.backCompassState() == shot.backCompassState());
-        CHECK(testShot.clinoState() == shot.clinoState());
-        CHECK(testShot.backClinoState() == shot.backClinoState());
+        CHECK(testShot.compass().state() == shot.compass().state());
+        CHECK(testShot.backCompass().state() == shot.backCompass().state());
+        CHECK(testShot.clino().state() == shot.clino().state());
+        CHECK(testShot.backClino().state() == shot.backClino().state());
     }
 
     static void check(const cwStation& testStation, const cwStation& station) {
@@ -191,11 +191,11 @@ TEST_CASE("cwCSVImportManager previewText should works correctly", "[cwCSVImport
     }
 
     for(const auto& shot : chunk->shots()) {
-        CHECK(shot.distance().toDouble() == 100.0);
-        CHECK(shot.clino() == 23.0);
-        CHECK(shot.compass() == 101.0);
-        CHECK(shot.backCompassState() == cwCompassStates::Empty);
-        CHECK(shot.backClinoState() == cwClinoStates::Empty);
+        CHECK(shot.distance().value().toStdString() == "100");
+        CHECK(shot.clino().value().toStdString() == "23");
+        CHECK(shot.compass().value().toStdString() == "101");
+        CHECK(shot.backCompass().state() == cwCompassReading::State::Empty);
+        CHECK(shot.backClino().state() == cwClinoReading::State::Empty);
     }
 }
 

@@ -2,32 +2,31 @@
 #define CWCOMPASSREADING_H
 
 //Our include
+#include "cwReading.h"
+
+//Qt includes
 #include <QObject>
 #include <QQmlEngine>
 
-class cwCompassReading {
+class cwCompassReading : public cwReading {
     Q_GADGET
     QML_VALUE_TYPE(cwCompassReading)
 
-    Q_PROPERTY(QString value MEMBER m_value READ value WRITE setValue)
     Q_PROPERTY(State state READ state)
 public:
-    enum State {
+    enum class State : int {
         Valid = 0,   // Data is valid (convertible to a number)
         Empty = 1,   // No data entered
         Invalid = 2  // Data is not a valid number
     };
     Q_ENUM(State)
 
-    cwCompassReading() : m_state(Empty) {}
-    cwCompassReading(const QString& value) : m_value(value) {
-        updateState();
+    cwCompassReading() : m_state(State::Empty) {}
+    cwCompassReading(const QString& value) : cwReading(value) {
+        cwCompassReading::updateState();
     }
-
-    QString value() const { return m_value; }
-    void setValue(const QString &value) {
-        m_value = value;
-        updateState();
+    explicit cwCompassReading(double value) : cwReading(value) {
+        cwCompassReading::updateState();
     }
 
     State state() const { return m_state; }
@@ -35,7 +34,6 @@ public:
 private:
     void updateState();
 
-    QString m_value;
     State m_state;
 };
 

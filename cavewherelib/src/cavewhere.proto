@@ -114,6 +114,10 @@ message Shot {
 
     //--- Version >= 6 attributes
     optional DistanceReading distanceReading = 12;
+    optional CompassReading compassReading = 13;
+    optional CompassReading backCompassReading = 14;
+    optional ClinoReading clinoReading = 15;
+    optional ClinoReading backClinoReading = 16;
 }
 
 message DistanceStates {
@@ -253,5 +257,13 @@ message ProjectedProfileScrapViewMatrix {
 }
 
 message DistanceReading {
+    optional QtProto.QString value = 1;
+}
+
+message CompassReading {
+    optional QtProto.QString value = 1;
+}
+
+message ClinoReading {
     optional QtProto.QString value = 1;
 }

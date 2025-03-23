@@ -533,12 +533,12 @@ void cwCompassImporter::parseSurveyData(QFile *file)
 
             if(bearingString != missingEntry) {
                 if(!convertNumber(bearingString, "bearing", &bearing)) { CurrentFileGood = false; return; }
-                shot.setCompass(bearing);
+                shot.setCompass(bearingString);
             }
 
             if(inclinationString != missingEntry) {
                 if(!convertNumber(inclinationString, "inclination", &inclination)) { CurrentFileGood = false; return; }
-                shot.setClino(inclination);
+                shot.setClino(inclinationString);
             }
 
             auto toString = [](double value) {
@@ -574,12 +574,12 @@ void cwCompassImporter::parseSurveyData(QFile *file)
 
                 if(backCompassString != missingEntry) {
                     if(!convertNumber(backCompassString, "back compass", &backCompass)) { CurrentFileGood = false; return; }
-                    shot.setBackCompass(backCompass);
+                    shot.setBackCompass(backCompassString);
                 }
 
                 if(backClinoString != missingEntry) {
                     if(!convertNumber(backClinoString, "back clino", &backClino)) { CurrentFileGood = false; return; }
-                    shot.setBackClino(backClino);
+                    shot.setBackClino(backClinoString);
                 }
             }
 

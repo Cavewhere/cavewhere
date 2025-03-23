@@ -131,51 +131,37 @@ void WallsImporterVisitor::parsedVector(Vector v)
         shot.setDistance(cwDistanceReading(distance.get(dUnit)));
         if (v.frontAzimuth().isValid())
         {
-            shot.setCompass(v.frontAzimuth().get(Angle::Degrees));
+            shot.setCompass(cwCompassReading(v.frontAzimuth().get(Angle::Degrees)));
         }
-        else
-        {
-            shot.setCompassState(cwCompassStates::Empty);
-        }
+
         if (frontInclination.isValid())
         {
-            shot.setClino(frontInclination.get(Angle::Degrees));
-            if (shot.clino() == 90.0)
-            {
-                shot.setClinoState(cwClinoStates::Up);
-            }
-            else if (shot.clino() == -90.0)
-            {
-                shot.setClinoState(cwClinoStates::Down);
-            }
-        }
-        else
-        {
-            shot.setClinoState(cwClinoStates::Empty);
+            shot.setClino(cwClinoReading(frontInclination.get(Angle::Degrees)));
+            // if (shot.clino() == 90.0)
+            // {
+            //     shot.setClinoState(cwClinoReading::State::Up);
+            // }
+            // else if (shot.clino() == -90.0)
+            // {
+            //     shot.setClinoState(cwClinoReading::State::Down);
+            // }
         }
         if (v.backAzimuth().isValid())
         {
-            shot.setBackCompass(v.backAzimuth().get(Angle::Degrees));
+            shot.setBackCompass(cwCompassReading(v.backAzimuth().get(Angle::Degrees)));
         }
-        else
-        {
-            shot.setBackCompassState(cwCompassStates::Empty);
-        }
+
         if (backInclination.isValid())
         {
-            shot.setBackClino(backInclination.get(Angle::Degrees));
-            if (shot.backClino() == 90.0)
-            {
-                shot.setBackClinoState(cwClinoStates::Up);
-            }
-            else if (shot.backClino() == -90.0)
-            {
-                shot.setBackClinoState(cwClinoStates::Down);
-            }
-        }
-        else
-        {
-            shot.setBackClinoState(cwClinoStates::Empty);
+            shot.setBackClino(cwClinoReading(backInclination.get(Angle::Degrees)));
+            // if (shot.backClino() == 90.0)
+            // {
+            //     shot.setBackClinoState(cwClinoReading::State::Up);
+            // }
+            // else if (shot.backClino() == -90.0)
+            // {
+            //     shot.setBackClinoState(cwClinoReading::State::Down);
+            // }
         }
 
         // TODO: exclude length flag/segment
@@ -443,7 +429,8 @@ void cwWallsImporter::applyLRUDs(cwTreeImportDataNode* block) {
     {
         for (int i = 0; i < chunk->stationCount(); i++)
         {
-            QString name = chunk->stations()[i].name();
+            auto stations = chunk->stations();
+            QString name = stations.at(i).name();
             if (StationMap.contains(name))
             {
                 chunk->setStation(StationMap[name], i);
@@ -603,7 +590,7 @@ bool cwWallsImporter::parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOu
     if (!file.open(QFile::ReadOnly))
     {
         addParseError(WallsMessage("error",
-                              QString("couldn't open file %1: %2").arg(filename).arg(file.errorString()),
+                              QString("couldn't open file %1: %2").arg(filename, file.errorString()),
                               survey->Name));
         return false;
     }
@@ -661,7 +648,8 @@ bool cwWallsImporter::parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOu
             }
             else if (lineNumber == 1 && !visitor.comment().isEmpty())
             {
-                surveyors = visitor.comment().trimmed().split(QRegularExpression("\\s*;\\s*"));
+                static const QRegularExpression regex(QStringLiteral("\\s*;\\s*"));
+                surveyors = visitor.comment().trimmed().split(regex);
             }
         }
         catch (const SegmentParseException& ex)

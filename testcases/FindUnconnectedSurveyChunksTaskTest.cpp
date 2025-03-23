@@ -39,10 +39,10 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
 
     cwShot shot;
     shot.setDistance(cwDistanceReading("10"));
-    shot.setCompass("0");
-    shot.setBackCompass("180");
-    shot.setClino("0");
-    shot.setBackClino("0");
+    shot.setCompass(cwCompassReading("0"));
+    shot.setBackCompass(cwCompassReading("180"));
+    shot.setClino(cwClinoReading("0"));
+    shot.setBackClino(cwClinoReading("0"));
 
     auto task = std::make_unique<cwFindUnconnectedSurveyChunksTask>();
 

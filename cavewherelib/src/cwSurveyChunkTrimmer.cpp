@@ -151,8 +151,8 @@ bool cwSurveyChunkTrimmer::isStationShotEmpty(cwSurveyChunk *chunk, int stationI
             station.down().state() == cwDistanceReading::State::Empty &&
             station.up().state() == cwDistanceReading::State::Empty &&
             shot.distance().state() == cwDistanceReading::State::Empty &&
-            shot.compassState() == cwCompassStates::Empty &&
-            shot.clinoState() == cwClinoStates::Empty &&
-            shot.backCompassState() == cwCompassStates::Empty &&
-            shot.backClinoState() == cwClinoStates::Empty;
+            shot.compass().state() == cwCompassReading::State::Empty &&
+            shot.clino().state() == cwClinoReading::State::Empty &&
+            shot.backCompass().state() == cwCompassReading::State::Empty &&
+            shot.backClino().state() == cwClinoReading::State::Empty;
 }

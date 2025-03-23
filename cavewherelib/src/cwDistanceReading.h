@@ -1,14 +1,17 @@
 #ifndef CWDISTANCEREADING_H
 #define CWDISTANCEREADING_H
 
+//Qt includes
 #include <QObject>
 #include <QQmlEngine>
 
-class cwDistanceReading {
+//Our includes
+#include "cwReading.h"
+
+class cwDistanceReading : public cwReading {
     Q_GADGET
     QML_VALUE_TYPE(cwDistanceReading)
 
-    Q_PROPERTY(QString value MEMBER m_value READ value WRITE setValue)
     Q_PROPERTY(State state READ state)
 public:
     enum class State : int {
@@ -18,43 +21,20 @@ public:
     };
     Q_ENUM(State)
 
-    cwDistanceReading() : m_value(""), m_state(State::Empty) {
+    cwDistanceReading() : m_state(State::Empty) {
     }
-    cwDistanceReading(const QString& value) : m_value(value) {
-        updateState();
+    cwDistanceReading(const QString& value) : cwReading(value) {
+        cwDistanceReading::updateState();
     }
-    explicit cwDistanceReading(double value) {
-        fromDouble(value);
-    }
-
-    QString value() const { return m_value; }
-    void setValue(const QString &value) {
-        m_value = value;
-        updateState();
-    }
-    double toDouble() const
-    {
-        Q_ASSERT(m_state == State::Valid);
-        return m_value.toDouble();
-    }
-    void fromDouble(double value) {
-        setValue(QString::number(value, 'g', 2));
+    explicit cwDistanceReading(double value) : cwReading(value) {
+        cwDistanceReading::updateState();
     }
 
     State state() const { return m_state; }
 
-    bool operator==(const cwDistanceReading& other) const {
-        return m_value == other.m_value;
-    }
-    bool operator!=(const cwDistanceReading& other) const {
-        return !operator==(other);
-    }
-
-
 private:
     void updateState();
 
-    QString m_value;
     State m_state;
 };
 

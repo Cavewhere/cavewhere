@@ -2,19 +2,20 @@
 #include "cwClinoValidator.h"
 
 void cwClinoReading::updateState() {
-    if (m_value.isEmpty()) {
-        m_state = Empty;
-    } else if (m_value.compare("down", Qt::CaseInsensitive) == 0) {
-        m_state = Down;
-    } else if (m_value.compare("up", Qt::CaseInsensitive) == 0) {
-        m_state = Up;
+    const QString value = this->value();
+    if (value.isEmpty()) {
+        m_state = State::Empty;
+    } else if (value.compare("down", Qt::CaseInsensitive) == 0) {
+        m_state = State::Down;
+    } else if (value.compare("up", Qt::CaseInsensitive) == 0) {
+        m_state = State::Up;
     } else {
         bool ok;
-        double value = m_value.toDouble(&ok);
-        if(ok && cwClinoValidator::check(value)) {
-            m_state = Valid;
+        double numberValue = value.toDouble(&ok);
+        if(ok && cwClinoValidator::check(numberValue)) {
+            m_state = State::Valid;
         } else {
-            m_state = Invalid;
+            m_state = State::Invalid;
         }
     }
 }

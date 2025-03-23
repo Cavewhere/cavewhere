@@ -20,7 +20,7 @@
 //Our includes
 #include "cwSettings.h"
 #include "cwTask.h"
-#include "cwConcurrent.h"
+#include "cwMetaTypeSystem.h"
 
 int main( int argc, char* argv[] )
 {
@@ -30,6 +30,8 @@ int main( int argc, char* argv[] )
   QApplication::setOrganizationDomain("cavewhere.com");
   QApplication::setApplicationName("cavewhere-test");
   QApplication::setApplicationVersion("1.0");
+
+  cwMetaTypeSystem::registerTypes();
 
   {
       QSettings settings;

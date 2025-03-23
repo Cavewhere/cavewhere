@@ -40,6 +40,7 @@ private:
     void writeChunk(QTextStream& stream, cwSurveyChunk* chunk, bool feetAndInches);
     void writeShot(QTextStream &stream, cwTripCalibration *calibrations, bool feetAndInches, const cwStation &fromStation, const cwStation &toStation, cwShot shot);
     void writeLrudMeasurement(QTextStream &stream, const cwDistanceReading& measurement, cwUnits::LengthUnit fromUnit, cwUnits::LengthUnit toUnit);
+    static QString formatNumber(QString number, int maxPrecision, int columnWidth);
     static QString formatNumber(double number, int maxPrecision, int columnWidth);
 
     static cwUnits::LengthUnit outputDistanceUnit(cwTrip* trip);

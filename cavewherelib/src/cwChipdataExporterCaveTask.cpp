@@ -18,8 +18,6 @@
 //Qt includes
 #include <QRegularExpression>
 
-//Std includes
-#include "cwMath.h"
 
 cwChipdataExportCaveTask::cwChipdataExportCaveTask(QObject *parent) :
     cwCaveExporterTask(parent)
@@ -178,23 +176,23 @@ void cwChipdataExportCaveTask::writeShot(QTextStream &stream,
         stream << " ";
     }
 
-    if (shot.compassState() == cwCompassStates::Valid) {
-        stream << formatNumber(shot.compass(), 2, 6);
+    if (shot.compass().state() == cwCompassReading::State::Valid) {
+        stream << formatNumber(shot.compass().value(), 2, 6);
     } else {
         stream << "      ";
     }
-    if (shot.backCompassState() == cwCompassStates::Valid) {
-        stream << formatNumber(shot.backCompass(), 2, 6);
+    if (shot.backCompass().state() == cwCompassReading::State::Valid) {
+        stream << formatNumber(shot.backCompass().value(), 2, 6);
     } else {
         stream << "      ";
     }
-    if (shot.clinoState() == cwClinoStates::Valid) {
-        stream << formatNumber(shot.clino(), 1, 5);
+    if (shot.clino().state() == cwClinoReading::State::Valid) {
+        stream << formatNumber(shot.clino().value(), 1, 5);
     } else {
         stream << "     ";
     }
-    if (shot.backClinoState() == cwClinoStates::Valid) {
-        stream << formatNumber(shot.backClino(), 1, 5);
+    if (shot.backClino().state() == cwClinoReading::State::Valid) {
+        stream << formatNumber(shot.backClino().value(), 1, 5);
     } else {
         stream << "     ";
     }
@@ -225,13 +223,12 @@ void cwChipdataExportCaveTask::writeLrudMeasurement(QTextStream &stream, const c
     }
 }
 
-QString cwChipdataExportCaveTask::formatNumber(double number, int maxPrecision, int columnWidth)
+QString cwChipdataExportCaveTask::formatNumber(QString formatted, int maxPrecision, int columnWidth)
 {
-    QString formatted = QString::number(number, 'f', maxPrecision);
     int decimalIndex = formatted.indexOf('.');
 
     if (decimalIndex >= 0) {
-        QRegularExpression re(R"(\.?0+$)");
+        static const QRegularExpression re(R"(\.?0+$)");
         QRegularExpressionMatch match = re.match(formatted);
 
         if (match.hasMatch()) {
@@ -241,6 +238,12 @@ QString cwChipdataExportCaveTask::formatNumber(double number, int maxPrecision, 
     }
 
     return formatted.rightJustified(columnWidth, ' ', true);
+}
+
+QString cwChipdataExportCaveTask::formatNumber(double number, int maxPrecision, int columnWidth)
+{
+    QString formatted = QString::number(number, 'f', maxPrecision);
+    return formatNumber(formatted, maxPrecision, columnWidth);
 }
 
 bool cwChipdataExportCaveTask::isFeetAndInches(cwTrip *trip)

@@ -74,9 +74,9 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
         case ShotDistanceRole:
             return QVariant(chunk->shot(shotIndex).distance().value());
         case ShotCompassRole:
-            return QVariant(chunk->shot(shotIndex).compass());
+            return QVariant(chunk->shot(shotIndex).compass().value());
         case ShotClinoRole:
-            return QVariant(chunk->shot(shotIndex).clino());
+            return QVariant(chunk->shot(shotIndex).clino().value());
         case ShotCalibrationRole: {
             cwTripCalibration* calibration = chunk->calibrations().value(shotIndex);
             if(calibration != nullptr) {

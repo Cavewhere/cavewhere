@@ -33,8 +33,6 @@
 #include <QSqlRecord>
 #include <QThread>
 
-//Std includes
-#include <sstream>
 
 //Protobuf
 #include "cavewhere.pb.h"
@@ -704,15 +702,45 @@ cwShot cwRegionLoadTask::loadShot(const CavewhereProto::Shot& protoShot)
         [&]() { return protoShot.distance(); } //Handle older version 5 attribute
         ));
 
-    shot.setCompass(protoShot.compass());
-    shot.setBackCompass(protoShot.backcompass());
-    shot.setClino(protoShot.clino());
-    shot.setBackClino(protoShot.backclino());
-    shot.setCompassState((cwCompassStates::State)protoShot.compassstate());
-    shot.setBackCompassState((cwCompassStates::State)protoShot.backcompassstate());
-    shot.setClinoState((cwClinoStates::State)protoShot.clinostate());
-    shot.setBackClinoState((cwClinoStates::State)protoShot.backclinostate());
+    shot.setCompass(compass(
+        [&]() { return protoShot.has_compassreading(); },
+        [&]() { return protoShot.compassreading(); },
+        [&]() { return protoShot.compassstate(); }, //Handle older version 5 attributes
+        [&]() { return protoShot.compass(); } //Handle older version 5 attribute
+        ));
+
+    shot.setBackCompass(compass(
+        [&]() { return protoShot.has_backcompassreading(); },
+        [&]() { return protoShot.backcompassreading(); },
+        [&]() { return protoShot.backcompassstate(); }, //Handle older version 5 attributes
+        [&]() { return protoShot.backcompass(); } //Handle older version 5 attribute
+        ));
+
+    shot.setClino(clino(
+        [&]() { return protoShot.has_clinoreading(); },
+        [&]() { return protoShot.clinoreading(); },
+        [&]() { return protoShot.clinostate(); }, //Handle older version 5 attributes
+        [&]() { return protoShot.clino(); } //Handle older version 5 attribute
+        ));
+
+    shot.setBackClino(clino(
+        [&]() { return protoShot.has_backclinoreading(); },
+        [&]() { return protoShot.backclinoreading(); },
+        [&]() { return protoShot.backclinostate(); }, //Handle older version 5 attributes
+        [&]() { return protoShot.backclino(); } //Handle older version 5 attribute
+        ));
+
     shot.setDistanceIncluded(protoShot.includedistance());
+
+    //Old code from version 5
+    // shot.setCompass(protoShot.compass());
+    // shot.setBackCompass(protoShot.backcompass());
+    // shot.setClino(protoShot.clino());
+    // shot.setBackClino(protoShot.backclino());
+    // shot.setCompassState((cwCompassStates::State)protoShot.compassstate());
+    // shot.setBackCompassState((cwCompassStates::State)protoShot.backcompassstate());
+    // shot.setClinoState((cwClinoStates::State)protoShot.clinostate());
+    // shot.setBackClinoState((cwClinoStates::State)protoShot.backclinostate());
 
     return shot;
 }
@@ -752,6 +780,16 @@ cwLead cwRegionLoadTask::loadLead(const CavewhereProto::Lead &protoLead)
 cwDistanceReading cwRegionLoadTask::distanceReading(const CavewhereProto::DistanceReading &protoDistanceReading)
 {
     return cwDistanceReading(loadString(protoDistanceReading.value()));
+}
+
+cwCompassReading cwRegionLoadTask::compassReading(const CavewhereProto::CompassReading &protoCompassReading)
+{
+    return cwCompassReading(loadString(protoCompassReading.value()));
+}
+
+cwClinoReading cwRegionLoadTask::clinoReading(const CavewhereProto::ClinoReading &protoClinoReading)
+{
+    return cwClinoReading(loadString(protoClinoReading.value()));
 }
 
 int cwRegionLoadTask::loadFileVersion(const CavewhereProto::CavingRegion &protoRegion)

@@ -506,18 +506,22 @@ void cwRegionSaveTask::saveShot(CavewhereProto::Shot *protoShot, const cwShot &s
     protoShot->set_includedistance(shot.isDistanceIncluded());
 
     saveDistanceReading(protoShot->mutable_distancereading(), shot.distance());
+    saveCompassReading(protoShot->mutable_compassreading(), shot.compass());
+    saveCompassReading(protoShot->mutable_backcompassreading(), shot.backCompass());
+    saveClinoReading(protoShot->mutable_clinoreading(), shot.clino());
+    saveClinoReading(protoShot->mutable_backclinoreading(), shot.backClino());
 
-
+    //Version 5
     // protoShot->set_distance(shot.distance());
-    protoShot->set_compass(shot.compass());
-    protoShot->set_backcompass(shot.backCompass());
-    protoShot->set_clino(shot.clino());
-    protoShot->set_backclino(shot.backClino());
+    // protoShot->set_compass(shot.compass());
+    // protoShot->set_backcompass(shot.backCompass());
+    // protoShot->set_clino(shot.clino());
+    // protoShot->set_backclino(shot.backClino());
     // protoShot->set_distancestate((CavewhereProto::DistanceStates_State)shot.distanceState());
-    protoShot->set_compassstate((CavewhereProto::CompassStates_State)shot.compassState());
-    protoShot->set_backcompassstate((CavewhereProto::CompassStates_State)shot.backCompassState());
-    protoShot->set_clinostate((CavewhereProto::ClinoStates_State)shot.clinoState());
-    protoShot->set_backclinostate((CavewhereProto::ClinoStates_State)shot.backClinoState());
+    // protoShot->set_compassstate((CavewhereProto::CompassStates_State)shot.compassState());
+    // protoShot->set_backcompassstate((CavewhereProto::CompassStates_State)shot.backCompassState());
+    // protoShot->set_clinostate((CavewhereProto::ClinoStates_State)shot.clinoState());
+    // protoShot->set_backclinostate((CavewhereProto::ClinoStates_State)shot.backClinoState());
 }
 
 /**
@@ -594,5 +598,15 @@ void cwRegionSaveTask::saveProjectedScrapViewMatrix(CavewhereProto::ProjectedPro
 void cwRegionSaveTask::saveDistanceReading(CavewhereProto::DistanceReading *protoDistanceReading, const cwDistanceReading &reading)
 {
     saveString(protoDistanceReading->mutable_value(), reading.value());
+}
+
+void cwRegionSaveTask::saveCompassReading(CavewhereProto::CompassReading *protoCompassReading, const cwCompassReading &reading)
+{
+    saveString(protoCompassReading->mutable_value(), reading.value());
+}
+
+void cwRegionSaveTask::saveClinoReading(CavewhereProto::ClinoReading *protoClinoReading, const cwClinoReading &reading)
+{
+    saveString(protoClinoReading->mutable_value(), reading.value());
 }
 
