@@ -213,7 +213,7 @@ QQ.Item {
 
                 Text {
                     objectName: "totalLengthText"
-                    visible: !addSurveyData.visible
+                    // visible: !addSurveyData.visible
                     text: {
                         if(clipArea.currentTrip === null) { return "" }
                         var unit = ""

@@ -39,7 +39,6 @@ QQ.Item {
     //    signal rightClicked(int index)
     //    signal splitOn(int index)
 
-
     function deletePressedHandler() {
         dataValue = '';
         editor.openEditor();
@@ -62,13 +61,18 @@ QQ.Item {
                 }
 
                 if(itemIndex >= 0) {
-                    do {
-                        view.currentIndex += navigation[navProperty].indexOffset
-                    } while(view.currentIndex < view.count &&
-                            view.currentIndex >= 0 &&
-                            !view.currentItem.children[itemIndex].visible)
+                    let nextCurrentIndex = view.currentIndex + navigation[navProperty].indexOffset
 
-                    view.currentItem.children[itemIndex].forceActiveFocus()
+                    //1 because title is at index 0
+                    while(nextCurrentIndex >= 1 && nextCurrentIndex < view.count) {
+                        // console.log("NextCurrentIndex:" + view.currentIndex + " " + nextCurrentIndex);
+                        view.currentIndex = nextCurrentIndex;
+                        if(view.currentItem.children[itemIndex].visible) {
+                            view.currentItem.children[itemIndex].forceActiveFocus()
+                            break;
+                        }
+                        nextCurrentIndex = view.currentIndex + navigation[navProperty].indexOffset
+                    }
                 } else {
                     let childrenItemStr = "";
                     for(let childIndex in view.currentItem.children) {
@@ -86,15 +90,15 @@ QQ.Item {
     }
 
     function handleTab(eventKey) {
-        console.log("HandleTab!")
+        // console.log("HandleTab!")
         if(eventKey.key === Qt.Key_Tab) {
-            console.log("Tab pressed! on " + dataBox.objectName)
+            // console.log("Tab pressed! on " + dataBox.objectName)
             tabPressed();
             handleNavigation("tabNext");
             eventKey.accepted = true
         } else if(eventKey.key === 1 + Qt.Key_Tab) {
             //Shift tab -- 1 + Qt.Key_Tab is a hack but it works
-            console.log("Tab Shift pressed! on " + dataBox.objectName)
+            // console.log("Tab Shift pressed! on " + dataBox.objectName)
             handleNavigation("tabPrevious");
             eventKey.accepted = true
         }
@@ -288,8 +292,8 @@ QQ.Item {
         }
 
         onClicked: {
+            dataBox.view.currentIndex = dataBox.rowIndex
             dataBox.forceActiveFocus();
-            // dataBox.focus = true
         }
 
 

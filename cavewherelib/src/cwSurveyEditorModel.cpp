@@ -186,7 +186,7 @@ void cwSurveyEditorModel::updateIndexToChunk()
    foreach(cwSurveyChunk* chunk, Trip->chunks()) {
        int begin = stationCount;
        int end = begin + chunk->stationCount() - 1;
-       qDebug() << "Insert:" << chunk << begin << end;
+       // qDebug() << "Insert:" << chunk << begin << end;
        IndexToChunk.insert(Range(begin, end), chunk);
        stationCount += chunk->stationCount() + 1;
    }

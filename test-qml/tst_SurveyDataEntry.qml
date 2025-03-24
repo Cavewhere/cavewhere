@@ -243,6 +243,10 @@ MainWindowTest {
             tryCompare(totalLengthText_obj1, "text", "Total Length: 11 m");
         }
 
+        /**
+          Test the tab interaction going forward and backwards with frontsights on, backsights on, and both
+          frontsights and backsights on.
+          */
         function test_surveyEditorNavigationTabWorks() {
             TestHelper.loadProjectFromFile(RootData.project, "://datasets/tst_SurveyDataEntry/navTest.cw");
 
@@ -263,20 +267,23 @@ MainWindowTest {
                 // console.log("Searching for item:" + itemName + " " + item)
                 if(item === null) {
                     console.log("Testcase will fail, Failed to find item!!!");
-                    wait(1000);
                 }
 
                 verify(item !== null);
+
                 // console.log("CurrentItem:" + currentItem + " " + currentItem.focus + " index:" + index + " nextRole:" + nextRole + " nextItem:" + item + " " + item.focus)
+                if(currentItem.focus === true) {
+                    console.log("Testcase will fail, bad currentItem focus!!!");
+                }
+
                 verify(currentItem.focus === false);
 
                 //Uncomment to help debug
                 if(item.focus !== true) {
                     console.log("Testcase will fail, bad focus!!!");
-                    wait(1000);
                 }
 
-                verify(item.focus === true)
+                verify(item.focus === true )
                 waitForRendering(RootData.pageView.currentPageItem)
                 return item;
             }
@@ -300,7 +307,7 @@ MainWindowTest {
             function runTabTest(frontsights, backsights) {
                 //Go forward
                 for(let i = 0; i < surveyView.count; i++) {
-                    console.log("i:" + i)
+                    // console.log("i:" + i)
                     let item = surveyView.itemAtIndex(i) as DrySurveyComponent;
                     if(item.titleVisible) {
                         //Skip the title
@@ -434,8 +441,6 @@ MainWindowTest {
                 }
             }
 
-            // wait(100000);
-
 
             let frontsight = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->frontSightCalibrationEditor->checkBox")
             let backsight = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->backSightCalibrationEditor->checkBox")
@@ -469,6 +474,52 @@ MainWindowTest {
 
             runTabTest(frontsight.checked, backsight.checked)
 
+        }
+
+        /**
+          Tabing backwards from the first element should stay focus.
+          Tabing forward from the last element should stay focus
+          */
+        function test_tabEndingShouldStayFocus() {
+            TestHelper.loadProjectFromFile(RootData.project, "://datasets/tst_SurveyDataEntry/navTest.cw");
+
+            RootData.pageSelectionModel.currentPageAddress = "Data/Cave=Cave 1/Trip=Trip 1"
+
+            tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
+
+            waitForRendering(RootData.pageView.currentPageItem)
+
+            let station1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.1.0")
+            mouseClick(station1)
+
+            waitForRendering(RootData.pageView.currentPageItem)
+
+            // wait(100000);
+
+            //Go backwards
+            verify(station1.focus === true)
+            keyClick(16777218, 33554432) //Backtab, Shift+
+
+            tryVerify(() => { return station1.focus === true; })
+
+
+            //-- Go the last element and tab forward
+            let surveyView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+            surveyView.currentIndex = surveyView.count - 1;
+            surveyView.positionViewAtEnd();
+            waitForRendering(RootData.pageView.currentPageItem)
+
+            let itemName = "rootId->tripPage->view->dataBox." + surveyView.currentIndex + "." + SurveyEditorModel.StationDownRole;
+            let lastItem = ObjectFinder.findObjectByChain(mainWindow, itemName)
+            mouseClick(lastItem);
+            waitForRendering(RootData.pageView.currentPageItem)
+
+            //Go forward
+            verify(lastItem.focus === true)
+
+            keyClick(16777217, 0) //Tab
+
+            verify(lastItem.focus === true);
         }
     }
 }

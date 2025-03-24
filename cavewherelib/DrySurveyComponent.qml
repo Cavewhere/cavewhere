@@ -126,7 +126,9 @@ Item {
                                        {item:(compassBackReadBox), used: itemId.calibration.backSights},
                                        {item:(leftBox), used: true}
                                       ])
-            indexOffset: 0}
+            indexOffset: 0
+        }
+
         // navigation.arrowLeft: NavigationItem { item: stationBox1 }
         // navigation.arrowRight: NavigationItem { item: compassFrontReadBox }
         // navigation.arrowUp: NavigationItem { item: shotDistanceDataBox1; indexOffset: -1 }
