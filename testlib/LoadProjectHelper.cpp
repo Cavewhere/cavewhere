@@ -21,6 +21,10 @@ QString copyToTempFolder(QString filename) {
     QFileInfo info(filename);
     QString newFileLocation = QDir::tempPath() + "/" + info.fileName();
 
+    if(!info.exists(filename)) {
+        qFatal() << "file doesnt' exist:" << filename;
+    }
+
     if(QFileInfo::exists(newFileLocation)) {
         QFile file(newFileLocation);
         file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ReadGroup | QFileDevice::ReadUser);

@@ -244,9 +244,9 @@ MainWindowTest {
         }
 
         function test_surveyEditorNavigationTabWorks() {
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+            TestHelper.loadProjectFromFile(RootData.project, "://datasets/tst_SurveyDataEntry/navTest.cw");
 
-            RootData.pageSelectionModel.currentPageAddress = "Data/Cave=Phake Cave 3000/Trip=Release 0.08"
+            RootData.pageSelectionModel.currentPageAddress = "Data/Cave=Cave 1/Trip=Trip 1"
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
@@ -437,7 +437,38 @@ MainWindowTest {
             // wait(100000);
 
 
-            runTabTest(true, false)
+            let frontsight = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->frontSightCalibrationEditor->checkBox")
+            let backsight = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->backSightCalibrationEditor->checkBox")
+
+            verify(frontsight.checked === true)
+            verify(backsight.checked === false)
+
+            runTabTest(frontsight.checked, backsight.checked)
+
+            //Scroll to the top
+            surveyView.positionViewAtBeginning();
+            waitForRendering(surveyView)
+
+            // ----- Enable the backsights ----
+            mouseClick(backsight);
+
+            verify(frontsight.checked === true)
+            verify(backsight.checked === true)
+
+            runTabTest(frontsight.checked, backsight.checked)
+
+            // ----- Backsights only ----
+            //Scroll to the top
+            surveyView.positionViewAtBeginning();
+            waitForRendering(surveyView)
+
+            mouseClick(frontsight);
+
+            verify(frontsight.checked === false)
+            verify(backsight.checked === true)
+
+            runTabTest(frontsight.checked, backsight.checked)
+
         }
     }
 }

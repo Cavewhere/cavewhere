@@ -234,7 +234,7 @@ Item {
                                           {item:(leftBox), used: true}
                                       ])
             indexOffset: {
-                if(itemId.indexInChunk === 0) {
+                if(itemId.indexInChunk === 0 || itemId.calibration.backSights) {
                     return 0;
                 } else {
                     return 1;
