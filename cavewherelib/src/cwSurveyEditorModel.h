@@ -45,12 +45,12 @@ public:
         ShotBackClinoRole,
         ShotCalibrationRole,
         ChunkRole,
-        // ChunkIdRole,
         StationVisibleRole,
         ShotVisibleRole,
         TitleVisibleRole,
         IndexInChunkRole
     };
+    Q_ENUM(Roles)
 
     cwTrip* trip() const;
     void setTrip(cwTrip* trip);

@@ -26,6 +26,7 @@ QQ.Item {
 
     required property int rowIndex
     required property int dataRole
+    required property QQ.ListView view
 
     property GlobalShadowTextInput _globalShadowTextInput: GlobalShadowTextInput
     property GlobalTextInputHelper _globalTextInput: GlobalShadowTextInput.textInput
@@ -47,12 +48,14 @@ QQ.Item {
 
     function handleNavigation(navProperty) {
         if(navigation[navProperty] !== null) {
+            let item = navigation[navProperty].item;
+
             if(navigation[navProperty].indexOffset !== 0) {
                 view.currentIndex = index
 
-                var itemIndex = -1;
-                for(var childIndex in view.currentItem.children) {
-                    if(view.currentItem.children[childIndex] === navigation[navProperty].item) {
+                let itemIndex = -1;
+                for(let childIndex in view.currentItem.children) {
+                    if(view.currentItem.children[childIndex] === item) {
                         itemIndex = childIndex;
                         break;
                     }
@@ -67,28 +70,31 @@ QQ.Item {
 
                     view.currentItem.children[itemIndex].forceActiveFocus()
                 } else {
-                    var childrenItemStr = "";
-                    for(var childIndex in view.currentItem.children) {
+                    let childrenItemStr = "";
+                    for(let childIndex in view.currentItem.children) {
                         childrenItemStr += "\n\t" + view.currentItem.children[childIndex];
                     }
 
-                    throw "Couldn't find " + navigation[navProperty].item + " try setting offsetIndex = 0, in list:" + childrenItemStr;
+                    throw "Couldn't find \"" + item + "\" try setting offsetIndex = 0, in list:" + childrenItemStr;
                 }
             } else {
-                if(navigation[navProperty].item != null) {
-                    navigation[navProperty].item.forceActiveFocus()
+                if(item !== null) {
+                    item.forceActiveFocus()
                 }
             }
         }
     }
 
     function handleTab(eventKey) {
+        console.log("HandleTab!")
         if(eventKey.key === Qt.Key_Tab) {
+            console.log("Tab pressed! on " + dataBox.objectName)
             tabPressed();
             handleNavigation("tabNext");
             eventKey.accepted = true
         } else if(eventKey.key === 1 + Qt.Key_Tab) {
             //Shift tab -- 1 + Qt.Key_Tab is a hack but it works
+            console.log("Tab Shift pressed! on " + dataBox.objectName)
             handleNavigation("tabPrevious");
             eventKey.accepted = true
         }
@@ -240,6 +246,32 @@ QQ.Item {
         visible: dataBox.focus || editor.isEditting
     }
 
+    QQ.Keys.onPressed: (event) => {
+        handleTab(event);
+        switch(event.key) {
+        case Qt.Key_Left:
+        case Qt.Key_Right:
+        case Qt.Key_Up:
+        case Qt.Key_Down:
+        case Qt.Key_Backspace:
+            deletePressedHandler();
+            return;
+        }
+
+        // surveyChunkView.navigationArrow(rowIndex, dataRole, event.key);
+
+        // if(event.key === Qt.Key_Backspace) {
+        // }
+
+        // if(editor.validator.validate(event.text) > 0 && event.text.length > 0) {
+        //     dataBox.state = 'MiddleTyping'
+        //     editor.openEditor()
+        //     GlobalShadowTextInput.textInput.text  = event.text
+        //     GlobalShadowTextInput.clearSelection() //GlobalShowTextInput is what's opened from editor.openEditor
+        // }
+    }
+
+
     DoubleClickTextInput {
         id: editor
         anchors.fill: parent
@@ -256,7 +288,8 @@ QQ.Item {
         }
 
         onClicked: {
-            dataBox.focus = true
+            dataBox.forceActiveFocus();
+            // dataBox.focus = true
         }
 
 

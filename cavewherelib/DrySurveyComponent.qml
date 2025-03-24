@@ -29,8 +29,10 @@ Item {
     required property bool titleVisible;
     required property bool stationVisible;
     required property bool shotVisible;
+    required property ListView view;
 
     readonly property int titleOffset: index === 0 ? 5 : 25
+
 
     function errorModel(dataRole) {
         if(chunk) {
@@ -39,32 +41,65 @@ Item {
         return null;
     }
 
+    function firstVisible(items) {
+        for(let i in items) {
+            if(items[i].used) {
+                return items[i].item;
+            }
+        }
+        return null;
+    }
+
     SurveyEditorColumnTitles {
         id: titleColumnId
         visible: itemId.titleVisible
         y: titleOffset
-        shotOffset: Math.floor(stationBox1.height / 2.0);
+        shotOffset: Math.floor(stationBox.height / 2.0);
     }
 
     StationBox {
-        id: stationBox1
+        id: stationBox
         width: titleColumnId.stationWidth
         height: 50
+
+        navigation.tabPrevious: NavigationItem {
+            item: {
+                if(itemId.indexInChunk === 1) {
+                    return stationBox
+                }
+                return downBox
+            }
+
+            indexOffset: -1
+        }
+        navigation.tabNext: NavigationItem {
+            item: {
+                if(itemId.indexInChunk === 0) {
+                    //Go to the text station name
+                    return stationBox
+                }
+                return shotDistanceDataBox;
+            }
+            indexOffset: {
+                if(itemId.indexInChunk === 0) {
+                    return 1;
+                }
+                return -1;
+            }
+        }
+        // navigation.arrowRight: NavigationItem { item: shotDistanceDataBox1 }
+        // navigation.arrowUp: NavigationItem { item: stationBox1; indexOffset: -1 }
+        // navigation.arrowDown: NavigationItem { item: stationBox1; indexOffset: 1 }
+
         dataValue: itemId.stationVisible ? stationName : ""
         visible: itemId.stationVisible
-
-        navigation.tabPrevious: NavigationItem { item: downBox; indexOffset: -1 }
-        navigation.tabNext: NavigationItem { item: shotDistanceDataBox1; indexOffset: 1}
-        navigation.arrowRight: NavigationItem { item: shotDistanceDataBox1 }
-        navigation.arrowUp: NavigationItem { item: stationBox1; indexOffset: -1 }
-        navigation.arrowDown: NavigationItem { item: stationBox1; indexOffset: 1 }
-
         rowIndex: itemId.index
         errorButtonGroup: itemId.errorButtonGroup
         errorModel: itemId.errorModel(SurveyChunk.StationNameRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
         surveyChunk: itemId.chunk
         dataRole: SurveyChunk.StationNameRole
+        view: itemId.view
 //        onTabPressed: {
 //            console.log("Tab Pressed!")
 //            view.currentIndex = index + 1;
@@ -77,13 +112,26 @@ Item {
     }
 
     ShotDistanceDataBox {
-        id: shotDistanceDataBox1
+        id: shotDistanceDataBox
         width: titleColumnId.distanceWidth
         height: 50
-        anchors.left: stationBox1.right
+        anchors.left: stationBox.right
         anchors.leftMargin: -1
-        anchors.top: stationBox1.verticalCenter
+        anchors.top: stationBox.verticalCenter
         anchors.topMargin: 0
+
+        navigation.tabPrevious: NavigationItem { item: stationBox; indexOffset: 1 }
+        navigation.tabNext: NavigationItem {
+            item: itemId.firstVisible([{item:(compassFrontReadBox), used: itemId.calibration.frontSights},
+                                       {item:(compassBackReadBox), used: itemId.calibration.backSights},
+                                       {item:(leftBox), used: true}
+                                      ])
+            indexOffset: 0}
+        // navigation.arrowLeft: NavigationItem { item: stationBox1 }
+        // navigation.arrowRight: NavigationItem { item: compassFrontReadBox }
+        // navigation.arrowUp: NavigationItem { item: shotDistanceDataBox1; indexOffset: -1 }
+        // navigation.arrowDown: NavigationItem { item: shotDistanceDataBox1; indexOffset: 1 }
+
         dataValue: itemId.shotVisible ? shotDistance.value : ""
         visible: itemId.shotVisible
         rowIndex: itemId.index
@@ -91,17 +139,29 @@ Item {
         errorModel: itemId.errorModel(SurveyChunk.ShotDistanceRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
         surveyChunk: itemId.chunk
-        dataRole: SurveyChunk.ShotDistanceRole
+        dataRole: SurveyEditorModel.ShotDistanceRole
+        view: itemId.view
     }
 
     CompassReadBox {
         id: compassFrontReadBox
         width: titleColumnId.compassWidth
         height: calibration.backSights ? 25 : 50
-        anchors.left: shotDistanceDataBox1.right
+        anchors.left: shotDistanceDataBox.right
         anchors.leftMargin: -1
-        anchors.top: shotDistanceDataBox1.top
+        anchors.top: shotDistanceDataBox.top
         anchors.topMargin: 0
+
+        navigation.tabPrevious: NavigationItem { item: shotDistanceDataBox; indexOffset: 0 }
+        navigation.tabNext: NavigationItem {
+            item: itemId.firstVisible([
+                                          {item:(compassBackReadBox), used: itemId.calibration.backSights},
+                                          {item:(clinoFrontReadBox), used: itemId.calibration.frontSights},
+                                          {item:(leftBox), used: true},
+                                      ])
+            indexOffset: 0
+        }
+
         visible: calibration.frontSights && itemId.shotVisible
         dataValue: itemId.shotVisible ? shotCompass.value : ""
         rowIndex: itemId.index
@@ -109,7 +169,8 @@ Item {
         errorModel: itemId.errorModel(SurveyChunk.ShotCompassRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
         surveyChunk: itemId.chunk
-        dataRole: SurveyChunk.ShotCompassRole
+        dataRole: SurveyEditorModel.ShotCompassRole
+        view: itemId.view
     }
 
     CompassReadBox {
@@ -118,8 +179,25 @@ Item {
         height: calibration.frontSights ? 26 : 50
         anchors.left: compassFrontReadBox.left
         // anchors.leftMargin: -1
-        anchors.top: calibration.frontSights ? shotDistanceDataBox1.verticalCenter : shotDistanceDataBox1.top
+        anchors.top: calibration.frontSights ? shotDistanceDataBox.verticalCenter : shotDistanceDataBox.top
         anchors.topMargin: calibration.frontSights ? -1 : 0
+
+        navigation.tabPrevious: NavigationItem {
+            item: itemId.firstVisible([{item:(compassFrontReadBox), used: itemId.calibration.frontSights},
+                                       {item:(shotDistanceDataBox), used: true},
+                                      ])
+            indexOffset: 0
+        }
+        navigation.tabNext: NavigationItem {
+            item: firstVisible([
+                                {item:(clinoFrontReadBox), used: itemId.calibration.frontSights},
+                                {item:(clinoBackReadBox), used: itemId.calibration.backSights},
+                                {item:(leftBox), used: true},
+                               ])
+            indexOffset: 0
+        }
+
+
         visible: calibration.backSights && itemId.shotVisible
         dataValue: itemId.shotVisible ? shotBackCompass.value : ""
         rowIndex: itemId.index
@@ -127,17 +205,43 @@ Item {
         errorModel: itemId.errorModel(SurveyChunk.ShotBackCompassRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
         surveyChunk: itemId.chunk
-        dataRole: SurveyChunk.ShotBackCompassRole
+        dataRole: SurveyEditorModel.ShotBackCompassRole
+        view: itemId.view
     }
 
     ClinoReadBox {
         id: clinoFrontReadBox
         width: titleColumnId.clinoWidth
         height: calibration.backSights ? 25 : 50
-        anchors.top: shotDistanceDataBox1.top
+        anchors.top: shotDistanceDataBox.top
         anchors.topMargin: 0
         anchors.left: compassFrontReadBox.right
         anchors.leftMargin: -1
+
+        navigation.tabPrevious: NavigationItem {
+            item: itemId.firstVisible([
+                                          {item:(compassBackReadBox), used: itemId.calibration.backSights},
+                                       {item:(compassFrontReadBox), used: itemId.calibration.frontSights},
+                                       {item:(shotDistanceDataBox), used: true},
+                                      ])
+            indexOffset: {
+                return 0;
+            }
+        }
+        navigation.tabNext: NavigationItem {
+            item: itemId.firstVisible([
+                                          {item:(clinoBackReadBox), used: itemId.calibration.backSights},
+                                          {item:(leftBox), used: true}
+                                      ])
+            indexOffset: {
+                if(itemId.indexInChunk === 0) {
+                    return 0;
+                } else {
+                    return 1;
+                }
+            }
+        }
+
         visible: calibration.frontSights && itemId.shotVisible
         dataValue: itemId.shotVisible ? shotClino.value : ""
         rowIndex: itemId.index
@@ -145,7 +249,8 @@ Item {
         errorModel: itemId.errorModel(SurveyChunk.ShotClinoRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
         surveyChunk: itemId.chunk
-        dataRole: SurveyChunk.ShotClinoRole
+        dataRole: SurveyEditorModel.ShotClinoRole
+        view: itemId.view
     }
 
     ClinoReadBox {
@@ -153,17 +258,38 @@ Item {
         width: titleColumnId.clinoWidth
         height: calibration.frontSights ? 26 : 50
         anchors.topMargin: calibration.frontSights ? -1 : 0
-        anchors.top: calibration.frontSights ? shotDistanceDataBox1.verticalCenter : shotDistanceDataBox1.top
+        anchors.top: calibration.frontSights ? shotDistanceDataBox.verticalCenter : shotDistanceDataBox.top
         anchors.left: compassFrontReadBox.right
         anchors.leftMargin: -1
         visible: calibration.backSights && itemId.shotVisible
+
+        navigation.tabPrevious: NavigationItem {
+            item: itemId.firstVisible([{item:clinoFrontReadBox, used: itemId.calibration.frontSights},
+                                       {item:compassBackReadBox, used: itemId.calibration.backSights},
+                                       {item:compassFrontReadBox, used: itemId.calibration.frontSights},
+                                       {item:shotDistanceDataBox, used: true}
+                                      ])
+            indexOffset: 0
+        }
+        navigation.tabNext: NavigationItem {
+            item: leftBox
+            indexOffset: {
+                if(itemId.indexInChunk === 0) {
+                    return 0;
+                } else {
+                    return 1;
+                }
+            }
+        }
+
         dataValue: itemId.shotVisible ? shotBackClino.value : ""
         rowIndex: itemId.index
         errorButtonGroup: itemId.errorButtonGroup
         errorModel: itemId.errorModel(SurveyChunk.ShotBackClinoRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
         surveyChunk: itemId.chunk
-        dataRole: SurveyChunk.ShotBackClinoRole
+        dataRole: SurveyEditorModel.ShotBackClinoRole
+        view: itemId.view
     }
 
     StationDistanceBox {
@@ -172,8 +298,35 @@ Item {
         height: 50
         anchors.left: clinoFrontReadBox.right
         anchors.leftMargin: -1
-        anchors.top: stationBox1.top
+        anchors.top: stationBox.top
         anchors.topMargin: 0
+
+        navigation.tabPrevious: NavigationItem {
+            item: {
+                if(itemId.indexInChunk === 1) {
+                    return downBox
+                } else {
+                    // return clinoFrontReadBox
+                    return firstVisible([{item:clinoBackReadBox, used: itemId.calibration.backSights},
+                                         {item:clinoFrontReadBox, used: itemId.calibration.frontSights},
+                                         {item:shotDistanceDataBox, used: true}
+                                       ])
+                }
+            }
+
+            indexOffset: {
+                if(itemId.indexInChunk === 0) {
+                    return 0;
+                } else {
+                    return -1;
+                }
+            }
+        }
+        navigation.tabNext: NavigationItem {
+            item: rightBox
+            indexOffset: 0
+        }
+
         dataValue: itemId.stationVisible ? stationLeft.value : ""
         visible: itemId.stationVisible
         rowIndex: itemId.index
@@ -181,7 +334,8 @@ Item {
         errorModel: itemId.errorModel(SurveyChunk.StationLeftRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
         surveyChunk: itemId.chunk
-        dataRole: SurveyChunk.StationLeftRole
+        dataRole: SurveyEditorModel.StationLeftRole
+        view: itemId.view
     }
 
     StationDistanceBox {
@@ -189,9 +343,19 @@ Item {
         width: titleColumnId.rWidth
         height: 50
         anchors.topMargin: 0
-        anchors.top: stationBox1.top
+        anchors.top: stationBox.top
         anchors.left: leftBox.right
         anchors.leftMargin: -1
+
+        navigation.tabPrevious: NavigationItem {
+            item: leftBox
+            indexOffset: 0
+        }
+        navigation.tabNext: NavigationItem {
+            item: upBox
+            indexOffset: 0
+        }
+
         dataValue: itemId.stationVisible ? stationRight.value : ""
         visible: itemId.stationVisible
         rowIndex: itemId.index
@@ -199,7 +363,8 @@ Item {
         errorModel: itemId.errorModel(SurveyChunk.StationLeftRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
         surveyChunk: itemId.chunk
-        dataRole: SurveyChunk.StationLeftRole
+        dataRole: SurveyEditorModel.StationRightRole
+        view: itemId.view
     }
 
     StationDistanceBox {
@@ -207,9 +372,19 @@ Item {
         width: titleColumnId.uWidth
         height: 50
         anchors.topMargin: 0
-        anchors.top: stationBox1.top
+        anchors.top: stationBox.top
         anchors.left: rightBox.right
         anchors.leftMargin: -1
+
+        navigation.tabPrevious: NavigationItem {
+            item: rightBox
+            indexOffset: 0
+        }
+        navigation.tabNext: NavigationItem {
+            item: downBox
+            indexOffset: 0
+        }
+
         dataValue: itemId.stationVisible ? stationUp.value : ""
         visible: itemId.stationVisible
         rowIndex: itemId.index
@@ -217,7 +392,8 @@ Item {
         errorModel: itemId.errorModel(SurveyChunk.StationLeftRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
         surveyChunk: itemId.chunk
-        dataRole: SurveyChunk.StationLeftRole
+        dataRole: SurveyEditorModel.StationUpRole
+        view: itemId.view
     }
 
     StationDistanceBox {
@@ -225,9 +401,25 @@ Item {
         width: titleColumnId.dWidth
         height: 50
         anchors.topMargin: 0
-        anchors.top: stationBox1.top
+        anchors.top: stationBox.top
         anchors.left: upBox.right
         anchors.leftMargin: -1
+
+        navigation.tabPrevious: NavigationItem {
+            item: upBox
+            indexOffset: 0
+        }
+        navigation.tabNext: NavigationItem {
+            item: {
+                if(itemId.indexInChunk === 0) {
+                    return leftBox
+                } else {
+                    return stationBox
+                }
+            }
+            indexOffset: 1
+        }
+
         dataValue: itemId.stationVisible ? stationDown.value : ""
         visible: itemId.stationVisible
         rowIndex: itemId.index
@@ -235,7 +427,8 @@ Item {
         errorModel: itemId.errorModel(SurveyChunk.StationLeftRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
         surveyChunk: itemId.chunk
-        dataRole: SurveyChunk.StationLeftRole
+        dataRole: SurveyEditorModel.StationDownRole
+        view: itemId.view
     }
 
 }

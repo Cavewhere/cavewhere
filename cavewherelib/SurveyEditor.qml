@@ -68,7 +68,8 @@ QQ.Item {
         //            }
 
         QQ.ListView {
-            id: view
+            id: viewId
+            objectName: "view"
 
             Controls.ButtonGroup {
                 id: errorButtonGroupId
@@ -189,6 +190,7 @@ QQ.Item {
                 calibration: currentCalibration
                 errorButtonGroup: errorButtonGroupId
                 surveyChunkTrimmer: surveyChunkTrimmerId
+                view: viewId
             }
 
             // section.property: "chunkId"
@@ -208,12 +210,6 @@ QQ.Item {
 
             footer: ColumnLayout {
                 width: scrollAreaId.width - 30
-
-                QQ.Rectangle {
-                   color: "red"
-                   width: 100
-                   height: 100
-                }
 
                 Text {
                     objectName: "totalLengthText"

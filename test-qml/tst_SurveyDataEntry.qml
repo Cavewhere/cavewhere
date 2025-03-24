@@ -243,23 +243,201 @@ MainWindowTest {
             tryCompare(totalLengthText_obj1, "text", "Total Length: 11 m");
         }
 
-        function test_loadSurveyEditor() {
+        function test_surveyEditorNavigationTabWorks() {
             TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
 
             RootData.pageSelectionModel.currentPageAddress = "Data/Cave=Phake Cave 3000/Trip=Release 0.08"
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
-            // let backCheckbox = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->backSightCalibrationEditor->checkBox")
-            // mouseClick(backCheckbox)
+            waitForRendering(RootData.pageView.currentPageItem)
 
-            // let frontSightCheckBox = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->frontSightCalibrationEditor->checkBox")
-            // mouseClick(frontSightCheckBox)
+            let station1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.1.0")
+            mouseClick(station1)
+
+            waitForRendering(RootData.pageView.currentPageItem)
+
+            function tabHelper(currentItem, index, nextRole) {
+                let itemName = "rootId->tripPage->view->dataBox." + index + "." + nextRole
+                let item = ObjectFinder.findObjectByChain(mainWindow, itemName)
+                // console.log("Searching for item:" + itemName + " " + item)
+                if(item === null) {
+                    console.log("Testcase will fail, Failed to find item!!!");
+                    wait(1000);
+                }
+
+                verify(item !== null);
+                // console.log("CurrentItem:" + currentItem + " " + currentItem.focus + " index:" + index + " nextRole:" + nextRole + " nextItem:" + item + " " + item.focus)
+                verify(currentItem.focus === false);
+
+                //Uncomment to help debug
+                if(item.focus !== true) {
+                    console.log("Testcase will fail, bad focus!!!");
+                    wait(1000);
+                }
+
+                verify(item.focus === true)
+                waitForRendering(RootData.pageView.currentPageItem)
+                return item;
+            }
+
+            function nextTab(currentItem, index, nextRole) {
+                verify(currentItem.focus === true)
+                keyClick(16777217, 0) //Tab
+                return tabHelper(currentItem, index, nextRole)
+            }
+
+            function previousTab(currentItem, index, nextRole) {
+                verify(currentItem.focus === true)
+                keyClick(16777218, 33554432) //Backtab, Shift+
+                return tabHelper(currentItem, index, nextRole)
+            }
+
+            let surveyView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+            let currentItem = station1;
 
 
+            function runTabTest(frontsights, backsights) {
+                //Go forward
+                for(let i = 0; i < surveyView.count; i++) {
+                    console.log("i:" + i)
+                    let item = surveyView.itemAtIndex(i) as DrySurveyComponent;
+                    if(item.titleVisible) {
+                        //Skip the title
+                        continue;
+                    }
+                    if(!item.shotVisible) {
+                        continue;
+                    }
 
-            wait(100000);
+                    if(item.indexInChunk === 0) {
+                        //First row in the chunk, go to the next station name
+                        currentItem = nextTab(currentItem, i+1, SurveyEditorModel.StationNameRole);
+                    }
 
+                    if(frontsights && backsights) {
+                        currentItem = nextTab(currentItem, i, SurveyEditorModel.ShotDistanceRole);
+                        currentItem = nextTab(currentItem, i, SurveyEditorModel.ShotCompassRole);
+                        currentItem = nextTab(currentItem, i, SurveyEditorModel.ShotBackCompassRole);
+                        currentItem = nextTab(currentItem, i, SurveyEditorModel.ShotClinoRole);
+                        currentItem = nextTab(currentItem, i, SurveyEditorModel.ShotBackClinoRole);
+                    } else if(frontsights) {
+                        currentItem = nextTab(currentItem, i, SurveyEditorModel.ShotDistanceRole);
+                        currentItem = nextTab(currentItem, i, SurveyEditorModel.ShotCompassRole);
+                        currentItem = nextTab(currentItem, i, SurveyEditorModel.ShotClinoRole);
+                    } else if(backsights) {
+                        currentItem = nextTab(currentItem, i, SurveyEditorModel.ShotDistanceRole);
+                        currentItem = nextTab(currentItem, i, SurveyEditorModel.ShotBackCompassRole);
+                        currentItem = nextTab(currentItem, i, SurveyEditorModel.ShotBackClinoRole);
+                    }
+
+                    if(item.indexInChunk === 0) {
+                        currentItem = nextTab(currentItem, i, SurveyEditorModel.StationLeftRole);
+                        currentItem = nextTab(currentItem, i, SurveyEditorModel.StationRightRole);
+                        currentItem = nextTab(currentItem, i, SurveyEditorModel.StationUpRole);
+                        currentItem = nextTab(currentItem, i, SurveyEditorModel.StationDownRole);
+                    }
+
+                    let nextStationOffset = function() {
+                        let nextItem = surveyView.itemAtIndex(i+2);
+                        if(nextItem) {
+                            return surveyView.itemAtIndex(i+2).titleVisible ? 3 : 2
+                        }
+                        return -1;
+                    }();
+
+                    currentItem = nextTab(currentItem, i+1, SurveyEditorModel.StationLeftRole);
+                    currentItem = nextTab(currentItem, i+1, SurveyEditorModel.StationRightRole);
+                    currentItem = nextTab(currentItem, i+1, SurveyEditorModel.StationUpRole);
+                    currentItem = nextTab(currentItem, i+1, SurveyEditorModel.StationDownRole);
+
+                    if(nextStationOffset > 0) {
+                        currentItem = nextTab(currentItem, i + nextStationOffset, SurveyEditorModel.StationNameRole);
+                    }
+                }
+
+                //Uncomment to debug tabbing from the end
+                // surveyView.currentIndex = surveyView.count - 1;
+                // waitForRendering(RootData.pageView.currentPageItem)
+                // let itemName = "rootId->tripPage->view->dataBox." + surveyView.currentIndex + "." + SurveyEditorModel.StationDownRole;
+                // let lastItem = ObjectFinder.findObjectByChain(mainWindow, itemName)
+                // currentItem = lastItem;
+                // currentItem.forceActiveFocus();
+                // surveyView.positionViewAtEnd();
+                // waitForRendering(surveyView)
+
+
+                //Go backwards
+                for(let i = surveyView.count - 1; i > 0; i--) {
+                    // console.log("---- Backwords i:" + i + " " + currentItem + "-----")
+
+                    let item = surveyView.itemAtIndex(i) as DrySurveyComponent;
+                    if(item.titleVisible) {
+                        //Skip the title
+                        continue;
+                    }
+
+                    currentItem = previousTab(currentItem, i, SurveyEditorModel.StationUpRole);
+                    currentItem = previousTab(currentItem, i, SurveyEditorModel.StationRightRole);
+                    currentItem = previousTab(currentItem, i, SurveyEditorModel.StationLeftRole);
+
+                    if(item.indexInChunk === 1) {
+                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.StationDownRole);
+                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.StationUpRole);
+                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.StationRightRole);
+                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.StationLeftRole);
+                    }
+
+                    if(frontsights && backsights) {
+                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.ShotBackClinoRole);
+                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.ShotClinoRole);
+                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.ShotBackCompassRole);
+                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.ShotCompassRole);
+                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.ShotDistanceRole);
+                    } else if(frontsights) {
+                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.ShotClinoRole);
+                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.ShotCompassRole);
+                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.ShotDistanceRole);
+                    } else if(backsights) {
+                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.ShotBackClinoRole);
+                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.ShotBackCompassRole);
+                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.ShotDistanceRole);
+                    }
+
+                    currentItem = previousTab(currentItem, i, SurveyEditorModel.StationNameRole);
+
+                    if(item.indexInChunk === 1) {
+                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.StationNameRole);
+                    }
+
+                    let prevStationOffset = function() {
+                        let prevItem = surveyView.itemAtIndex(i-2);
+                        if(prevItem) {
+                            // console.log("prevItem titleVisible:" + prevItem.titleVisible + " i:" + i);
+                            return prevItem.titleVisible ? 3 : 1
+                        }
+                        return 1;
+                    }();
+
+                    //Loop up to the previous row
+                    if(i-prevStationOffset >= 0) {
+                        // console.log("prevStationOffset:" + prevStationOffset);
+                        currentItem = previousTab(currentItem, i-prevStationOffset, SurveyEditorModel.StationDownRole);
+
+                        if(prevStationOffset > 1) {
+                            i -= prevStationOffset - 1
+                        }
+                    } else {
+                        //At the very beginning of the list
+                        break;
+                    }
+                }
+            }
+
+            // wait(100000);
+
+
+            runTabTest(true, false)
         }
     }
 }
