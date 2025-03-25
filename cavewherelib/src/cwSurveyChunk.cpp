@@ -43,12 +43,12 @@ cwSurveyChunk::cwSurveyChunk(QObject * parent) :
 
     connect(this, &cwSurveyChunk::added, this,
             [this](int stationBegin, int stationEnd,int shotBegin, int shotEnd) {
-                emit stationsAdded(stationBegin, stationBegin);
+                emit stationsAdded(stationBegin, stationEnd);
                 emit shotsAdded(shotBegin, shotEnd);
     });
     connect(this, &cwSurveyChunk::removed, this,
             [this](int stationBegin, int stationEnd,int shotBegin, int shotEnd) {
-                emit stationsRemoved(stationBegin, stationBegin);
+                emit stationsRemoved(stationBegin, stationEnd);
                 emit shotsRemoved(shotBegin, shotEnd);
     });
 

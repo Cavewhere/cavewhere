@@ -28,19 +28,6 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
                             emit dataChanged(modelIndex, modelIndex, {toModelRole(role)});
                         });
 
-                // auto findRowIndex = [this](const cwSurveyChunk* chunk) {
-                //     // Compute base model row for this chunk.
-                //     int baseRow = m_skipRowOffset;
-                //     const QList<cwSurveyChunk*> allChunks = m_trip->chunks();
-                //     for (cwSurveyChunk* c : allChunks) {
-                //         if (c == chunk) {
-                //             break;
-                //         }
-                //         baseRow += c->stationCount() + m_skipRowOffset;
-                //     }
-                //     return baseRow;
-                // };
-
                 // Stations added.
                 connect(chunk, &cwSurveyChunk::added, this,
                         [this, chunk](int stationBegin, int stationEnd, int shotBegin, int shotEnd) {
@@ -213,60 +200,6 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
         return shotData(chunkIndex);
     }
     return QVariant();
-
-    // if(chunkIndex.chunk == nullptr) {
-
-
-        // switch(role) {
-        // case StationVisibleRole:
-        // case ShotVisibleRole:
-        //     return false;
-        // case TitleVisibleRole:
-        //     return true;
-        // default:
-        //     return QVariant();
-        // }
-    // }
-
-    // Q_ASSERT(chunkIndex.index >= 0);
-
-    // cwSurveyChunk* chunk = chunkIndex.chunk;
-    // int stationIndex = chunkIndex.index;
-
-    // switch(role) {
-
-        // // case ChunkIdRole:
-        // //     return QString("%1").arg(reinterpret_cast<qlonglong>(chunk));
-        // case RowTypeRole:
-        //     return chunkIndex.type;
-        // case IndexInChunkRole:
-        //     return chunkIndex.index;
-        // case TitleVisibleRole:
-        //     return false;
-        // default:
-        //     break;
-        // }
-
-    // int shotIndex = stationIndex;
-
-    // if(shotIndex < chunk->shotCount()) {
-    //     switch(role) {
-
-        //     }
-        //     // case ShotVisibleRole:
-        //     //     return true;
-        //     default:
-        //         break;
-        //     }
-        // } else {
-        //     // qDebug() << "Shot count:" << shotIndex << chunk->shotCount() << role << DataBoxVisibleRole;
-
-    //     if(role == ShotVisibleRole) {
-    //         return false;
-    //     }
-    // }
-
-    // return QVariant();
 }
 
 /**

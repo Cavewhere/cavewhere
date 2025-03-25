@@ -95,7 +95,7 @@ TEST_CASE( "Connection are created between senders and recievers", "[SurveyChunk
 
         //Check that the slot was called
         CHECK(slotHelper.chunkSender() == chunk1);
-        CHECK(slotHelper.chunkStationAddedIndexes() == BeginEndPair(1,1));
+        CHECK(slotHelper.chunkStationAddedIndexes() == BeginEndPair(0,1));
 
         //Tests that an added trip is automastically connected
         cwSurveyChunk* chunk2 = new cwSurveyChunk();
