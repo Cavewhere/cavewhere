@@ -58,9 +58,6 @@ void cwStation::setData(QVariant data, DataRoles role) {
     case DownRole:
         setDown(data.toString());
         break;
-//    case PositionRole:
-//        setPosition(data.value<QVector3D>());
-//        break;
     }
 }
 
@@ -79,78 +76,10 @@ QVariant cwStation::data(DataRoles role) const {
         return up().value();
     case DownRole:
         return down().value();
-//    case PositionRole:
-//        return position();
     }
     return QVariant();
 }
 
-// /**
-//     Must be a valid length
-//   */
-// bool cwStation::setLeft(QString left) {
-//     return setStringValue(Data->Left, Data->LeftState, left);
-// }
-
-// bool cwStation::setLeft(double left)
-// {
-//     return setDoubleValue(Data->Left, Data->LeftState, left);
-// }
-
-// void cwStation::setLeftInputState(cwDistanceStates::State state)
-// {
-//     setPrivateLRUDState(Data->LeftState, state);
-// }
-
-// /**
-//     Must be a valid length, or empty
-//   */
-// bool cwStation::setRight(QString right) {
-//     return setStringValue(Data->Right, Data->RightState, right);
-// }
-
-// bool cwStation::setRight(double right)
-// {
-//     return setDoubleValue(Data->Right, Data->RightState, right);
-// }
-
-// void cwStation::setRightInputState(cwDistanceStates::State state)
-// {
-//     setPrivateLRUDState(Data->RightState, state);
-// }
-
-// /**
-//     Must be a valid length, or empty
-//   */
-// bool cwStation::setUp(QString up) {
-//     return setStringValue(Data->Up, Data->UpState, up);
-// }
-
-// bool cwStation::setUp(double up)
-// {
-//     return setDoubleValue(Data->Up, Data->UpState, up);
-// }
-
-// void cwStation::setUpInputState(cwDistanceStates::State state)
-// {
-//     setPrivateLRUDState(Data->UpState, state);
-// }
-
-// /**
-//     Must be a valid length, or empty
-//   */
-// bool cwStation::setDown(QString down) {
-//     return setStringValue(Data->Down, Data->DownState, down);
-// }
-
-// bool cwStation::setDown(double down) {
-//     return setDoubleValue(Data->Down, Data->DownState, down);
-// }
-
-// void cwStation::setDownInputState(cwDistanceStates::State state)
-// {
-//     setPrivateLRUDState(Data->DownState, state);
-// }
 
 /**
  * @brief cwStation::nameIsValid
@@ -164,50 +93,6 @@ bool cwStation::nameIsValid(QString stationName)
     cwStationValidator validator;
     return QValidator::Acceptable == validator.validate(stationName);
 }
-
-
-// bool cwStation::setStringValue(double &setValue, cwDistanceStates::State &state, QString value) {
-//     if(value.isEmpty()) {
-//         state = cwDistanceStates::Empty;
-//         setValue = 0.0;
-//         return true;
-//     }
-
-//     bool okay;
-//     double doubleValue = value.toDouble(&okay);
-//     if(okay) {
-//         return setDoubleValue(setValue, state, doubleValue);
-//     }
-//     return false;
-// }
-
-// bool cwStation::setDoubleValue(double &setValue, cwDistanceStates::State &state, double value) {
-//     if(checkLRUDValue(value)) {
-//         setValue = value;
-//         state = cwDistanceStates::Valid;
-//         return true;
-//     }
-//     return false;
-// }
-
-// /**
-//   Sets the LRUD State, this function uses a switch statement to verify the newState
-//   */
-// void cwStation::setPrivateLRUDState(cwDistanceStates::State &memberState, cwDistanceStates::State newState)
-// {
-//     //We need this switch statement because serialization class (or any other class) could send in interger
-//     switch(newState) {
-//     case cwDistanceStates::Empty:
-//         memberState = cwDistanceStates::Empty;
-//         break;
-//     case cwDistanceStates::Valid:
-//         memberState = cwDistanceStates::Valid;
-//         break;
-//     default:
-//         memberState = cwDistanceStates::Empty;
-//         break;
-//     }
-// }
 
 /**
  * @brief cwStation::setName
