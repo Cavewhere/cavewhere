@@ -41,6 +41,17 @@ cwSurveyChunk::cwSurveyChunk(QObject * parent) :
     //Handle updating chunk calibration indexing when stations are removde
     connect(this, &cwSurveyChunk::shotsRemoved, this, &cwSurveyChunk::updateCalibrationsRemoveShots);
 
+    connect(this, &cwSurveyChunk::added, this,
+            [this](int stationBegin, int stationEnd,int shotBegin, int shotEnd) {
+                emit stationsAdded(stationBegin, stationBegin);
+                emit shotsAdded(shotBegin, shotEnd);
+    });
+    connect(this, &cwSurveyChunk::removed, this,
+            [this](int stationBegin, int stationEnd,int shotBegin, int shotEnd) {
+                emit stationsRemoved(stationBegin, stationBegin);
+                emit shotsRemoved(shotBegin, shotEnd);
+    });
+
 }
 
 /**
@@ -271,13 +282,16 @@ void cwSurveyChunk::appendNewShot() {
         //Make valid
         for(int i = Stations.size(); i < 2; i++) {
             Stations.append(cwStation());
-            emit stationsAdded(i, i);
+            // emit stationsAdded(i, i);
         }
 
         if(Shots.size() != 1) {
             Shots.append(cwShot());
-            emit shotsAdded(0, 0);
+            // emit shotsAdded(0, 0);
         }
+
+        //Added initial stations
+        emit added(0, 1, 0, 0);
 
         checkForStationError(Stations.size() - 2);
         checkForStationError(Stations.size() - 1);
@@ -322,16 +336,16 @@ void cwSurveyChunk::appendShot(cwStation fromStation, cwStation toStation, cwSho
         checkForStationError(Stations.size() - 1);
     }
 
-    index = Shots.size();
+    int shotIndex = Shots.size();
     Shots.append(shot);
-    emit shotsAdded(index, index);
 
-    index = Stations.size();
+    int stationIndex = Stations.size();
     Stations.append(toStation);
-    emit stationsAdded(firstIndex, index);
 
-    checkForStationError(Stations.size() - 1);
-    checkForShotError(Shots.size() - 1);
+    emit added(firstIndex, stationIndex, shotIndex, shotIndex);
+
+    checkForStationError(stationIndex);
+    checkForShotError(shotIndex);
 }
 
 /**
@@ -361,19 +375,22 @@ cwSurveyChunk* cwSurveyChunk::splitAtStation(int stationIndex) {
         }
     }
 
-    int stationEnd = Stations.size() - 1;
-    int shotEnd = Shots.size() - 1;
+    // int stationEnd = Stations.size() - 1;
+    // int shotEnd = Shots.size() - 1;
 
 
     //Remove the stations and shots from the list
     int shotIndex = stationIndex - 1;
+    emit aboutToRemove(stationIndex, stationIndex, shotIndex, shotIndex);
+
     QList<cwStation>::iterator stationIter = Stations.begin() + stationIndex;
     QList<cwShot>::iterator shotIter = Shots.begin() + shotIndex;
     Stations.erase(stationIter, Stations.end());
     Shots.erase(shotIter, Shots.end());
 
-    emit stationsRemoved(stationIndex, stationEnd);
-    emit shotsRemoved(shotIndex, shotEnd);
+    emit removed(stationIndex, stationIndex, shotIndex, shotIndex);
+    // emit stationsRemoved(stationIndex, stationEnd);
+    // emit shotsRemoved(shotIndex, shotEnd);
 
     //Check for errors
     updateErrors();
@@ -411,8 +428,10 @@ void cwSurveyChunk::insertStation(int stationIndex, Direction direction) {
     Stations.insert(stationIndex, station);
     Shots.insert(shotIndex, cwShot());
 
-    emit stationsAdded(stationIndex, stationIndex);
-    emit shotsAdded(shotIndex, shotIndex);
+    emit added(stationIndex, stationIndex,
+               shotIndex, shotIndex);
+    // emit stationsAdded(stationIndex, stationIndex);
+    // emit shotsAdded(shotIndex, shotIndex);
 
     updateErrors();
 }
@@ -436,10 +455,13 @@ void cwSurveyChunk::insertShot(int shotIndex, Direction direction) {
     cwStation station;
 
     Stations.insert(stationIndex, station);
-    emit stationsAdded(stationIndex, stationIndex);
+    // emit stationsAdded(stationIndex, stationIndex);
 
     Shots.insert(shotIndex, cwShot());
-    emit shotsAdded(shotIndex, shotIndex);
+    // emit shotsAdded(shotIndex, shotIndex);
+
+    emit added(stationIndex, stationIndex,
+               shotIndex, shotIndex);
 
     updateErrors();
 }
@@ -1707,11 +1729,12 @@ cwErrorModel* cwSurveyChunk::errorsAt(int index, cwSurveyChunk::DataRole role) c
   This does no bounds checking!!!
   */
 void cwSurveyChunk::remove(int stationIndex, int shotIndex) {
-    Stations.removeAt(stationIndex);
-    emit stationsRemoved(stationIndex, stationIndex);
+    emit aboutToRemove(stationIndex, stationIndex, shotIndex, shotIndex);
 
+    Stations.removeAt(stationIndex);
     Shots.removeAt(shotIndex);
-    emit shotsRemoved(shotIndex, shotIndex);
+
+    emit removed(stationIndex, stationIndex, shotIndex, shotIndex);
 }
 
 /**

@@ -108,17 +108,15 @@ signals:
 
     void added(int stationBegin, int stationEnd,
                int shotBegin, int shotEnd);
+    void aboutToRemove(int stationBegin, int stationEnd,
+                       int shotBegin, int shotEnd);
     void removed(int stationBegin, int stationEnd,
                 int shotBegin, int shotEnd);
 
-    [[deprecated("Used added signal instead")]]
     void stationsAdded(int beginIndex, int endIndex);
-    [[deprecated("Used added signal instead")]]
     void shotsAdded(int beginIndex, int endIndex);
 
-    [[deprecated("Used removed signal instead")]]
     void stationsRemoved(int beginIndex, int endIndex);
-    [[deprecated("Used removed signal instead")]]
     void shotsRemoved(int beginIndex, int endIndex);
 
     void calibrationsChanged();

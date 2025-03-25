@@ -23,16 +23,20 @@ class cwSurveyEditorModel : public QAbstractListModel
     Q_OBJECT
     QML_NAMED_ELEMENT(SurveyEditorModel)
 
-    Q_ENUMS(Roles)
-
     Q_PROPERTY(cwTrip* trip READ trip WRITE setTrip NOTIFY tripChanged)
-
-
 
 public:
     cwSurveyEditorModel();
 
-    enum Roles {
+    enum RowType {
+        TitleRow,
+        StationRow,
+        ShotRow
+    };
+    Q_ENUM(RowType)
+
+    enum Role {
+        RowTypeRole,
         StationNameRole,
         StationLeftRole,
         StationRightRole,
@@ -45,12 +49,12 @@ public:
         ShotBackClinoRole,
         ShotCalibrationRole,
         ChunkRole,
-        StationVisibleRole,
-        ShotVisibleRole,
-        TitleVisibleRole,
+        // StationVisibleRole,
+        // ShotVisibleRole,
+        // TitleVisibleRole,
         IndexInChunkRole
     };
-    Q_ENUM(Roles)
+    Q_ENUM(Role)
 
     cwTrip* trip() const;
     void setTrip(cwTrip* trip);
@@ -63,50 +67,23 @@ public:
     Q_INVOKABLE void addShotCalibration(int index);
 
 private:
-
     struct ChunkIndex {
         cwSurveyChunk* chunk;
+        RowType type;
         int index;
-    };
-
-
-
-    class Range
-    {
-    public:
-        explicit Range(int item) : mLow(item), mHigh(item) { }  // [item,item]
-        Range(int low, int high) : mLow(low), mHigh(high) { }  // [low,high]
-        Range() : mLow(-1), mHigh(-1) {}
-
-        bool operator<(const Range& rhs) const
-        {
-            if (mLow < rhs.mLow && mHigh < rhs.mLow)
-            {
-                Q_ASSERT(mHigh < rhs.mLow); // sanity check
-                return true;
-            }
-            return false;
-        } // operator<
-
-        int low() const { return mLow; }
-        int high() const { return mHigh; }
-
-    private:
-        int mLow;
-        int mHigh;
     };
 
     QPointer<cwTrip> m_trip; //!<
     // QMap<Range, cwSurveyChunk*> m_indexToChunk;
-    int m_skipRowOffset = 1;
+    const int m_titleRowOffset = 1;
 
-    void updateIndexToChunk();
-    ChunkIndex modelIndexToStationChunk(const QModelIndex& index) const;
-    ChunkIndex indexToStationChunk(int index) const;
-    int chunkIndexToRow(const cwSurveyChunk* chunk, int chunkIndex) const;
-    QModelIndex chunkIndexToModelIndex(const cwSurveyChunk* chunk, int chunkIndex) const;
+    ChunkIndex toChunkIndex(const QModelIndex& index) const;
+    ChunkIndex toChunkIndex(int index) const;
+    int toRow(RowType type, const cwSurveyChunk* chunk, int chunkIndex) const;
+    QModelIndex toModelIndex(RowType type, const cwSurveyChunk* chunk, int chunkIndex) const;
 
-    Roles chunkRoleToModelRole(cwSurveyChunk::DataRole chunkRole);
+    Role toModelRole(cwSurveyChunk::DataRole chunkRole);
+    RowType toRowType(cwSurveyChunk::DataRole chunkRole);
 
 
 signals:
