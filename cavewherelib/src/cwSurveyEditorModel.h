@@ -3,7 +3,7 @@
 
 //Our includes
 #include "cwTrip.h"
-class cwSurveyChunk;
+#include "cwSurveyChunk.h"
 
 //Qt includes
 #include <QAbstractListModel>
@@ -64,6 +64,13 @@ public:
 
 private:
 
+    struct ChunkIndex {
+        cwSurveyChunk* chunk;
+        int index;
+    };
+
+
+
     class Range
     {
     public:
@@ -89,12 +96,17 @@ private:
         int mHigh;
     };
 
-    QPointer<cwTrip> Trip; //!<
-    QMap<Range, cwSurveyChunk*> IndexToChunk;
+    QPointer<cwTrip> m_trip; //!<
+    // QMap<Range, cwSurveyChunk*> m_indexToChunk;
+    int m_skipRowOffset = 1;
 
     void updateIndexToChunk();
-    QPair<cwSurveyChunk*, int> modelIndexToStationChunk(const QModelIndex& index) const;
-    QPair<cwSurveyChunk*, int> indexToStationChunk(int index) const;
+    ChunkIndex modelIndexToStationChunk(const QModelIndex& index) const;
+    ChunkIndex indexToStationChunk(int index) const;
+    int chunkIndexToRow(const cwSurveyChunk* chunk, int chunkIndex) const;
+    QModelIndex chunkIndexToModelIndex(const cwSurveyChunk* chunk, int chunkIndex) const;
+
+    Roles chunkRoleToModelRole(cwSurveyChunk::DataRole chunkRole);
 
 
 signals:
@@ -108,7 +120,7 @@ signals:
 * @return
 */
 inline cwTrip* cwSurveyEditorModel::trip() const {
-    return Trip;
+    return m_trip;
 }
 
 #endif // CWSURVEXEDITORMODEL_H

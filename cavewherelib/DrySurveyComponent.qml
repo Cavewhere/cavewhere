@@ -94,6 +94,7 @@ Item {
         dataValue: itemId.stationVisible ? stationName : ""
         visible: itemId.stationVisible
         rowIndex: itemId.index
+        indexInChunk: itemId.indexInChunk
         errorButtonGroup: itemId.errorButtonGroup
         errorModel: itemId.errorModel(SurveyChunk.StationNameRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
@@ -137,11 +138,12 @@ Item {
         dataValue: itemId.shotVisible ? shotDistance.value : ""
         visible: itemId.shotVisible
         rowIndex: itemId.index
+        indexInChunk: itemId.indexInChunk
         errorButtonGroup: itemId.errorButtonGroup
         errorModel: itemId.errorModel(SurveyChunk.ShotDistanceRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
         surveyChunk: itemId.chunk
-        dataRole: SurveyEditorModel.ShotDistanceRole
+        dataRole: SurveyChunk.ShotDistanceRole
         view: itemId.view
     }
 
@@ -167,11 +169,12 @@ Item {
         visible: calibration.frontSights && itemId.shotVisible
         dataValue: itemId.shotVisible ? shotCompass.value : ""
         rowIndex: itemId.index
+        indexInChunk: itemId.indexInChunk
         errorButtonGroup: itemId.errorButtonGroup
         errorModel: itemId.errorModel(SurveyChunk.ShotCompassRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
         surveyChunk: itemId.chunk
-        dataRole: SurveyEditorModel.ShotCompassRole
+        dataRole: SurveyChunk.ShotCompassRole
         view: itemId.view
     }
 
@@ -203,11 +206,12 @@ Item {
         visible: calibration.backSights && itemId.shotVisible
         dataValue: itemId.shotVisible ? shotBackCompass.value : ""
         rowIndex: itemId.index
+        indexInChunk: itemId.indexInChunk
         errorButtonGroup: itemId.errorButtonGroup
         errorModel: itemId.errorModel(SurveyChunk.ShotBackCompassRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
         surveyChunk: itemId.chunk
-        dataRole: SurveyEditorModel.ShotBackCompassRole
+        dataRole: SurveyChunk.ShotBackCompassRole
         view: itemId.view
     }
 
@@ -247,11 +251,12 @@ Item {
         visible: calibration.frontSights && itemId.shotVisible
         dataValue: itemId.shotVisible ? shotClino.value : ""
         rowIndex: itemId.index
+        indexInChunk: itemId.indexInChunk
         errorButtonGroup: itemId.errorButtonGroup
         errorModel: itemId.errorModel(SurveyChunk.ShotClinoRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
         surveyChunk: itemId.chunk
-        dataRole: SurveyEditorModel.ShotClinoRole
+        dataRole: SurveyChunk.ShotClinoRole
         view: itemId.view
     }
 
@@ -286,11 +291,12 @@ Item {
 
         dataValue: itemId.shotVisible ? shotBackClino.value : ""
         rowIndex: itemId.index
+        indexInChunk: itemId.indexInChunk
         errorButtonGroup: itemId.errorButtonGroup
         errorModel: itemId.errorModel(SurveyChunk.ShotBackClinoRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
         surveyChunk: itemId.chunk
-        dataRole: SurveyEditorModel.ShotBackClinoRole
+        dataRole: SurveyChunk.ShotBackClinoRole
         view: itemId.view
     }
 
@@ -332,11 +338,12 @@ Item {
         dataValue: itemId.stationVisible ? stationLeft.value : ""
         visible: itemId.stationVisible
         rowIndex: itemId.index
+        indexInChunk: itemId.indexInChunk
         errorButtonGroup: itemId.errorButtonGroup
         errorModel: itemId.errorModel(SurveyChunk.StationLeftRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
         surveyChunk: itemId.chunk
-        dataRole: SurveyEditorModel.StationLeftRole
+        dataRole: SurveyChunk.StationLeftRole
         view: itemId.view
     }
 
@@ -361,11 +368,12 @@ Item {
         dataValue: itemId.stationVisible ? stationRight.value : ""
         visible: itemId.stationVisible
         rowIndex: itemId.index
+        indexInChunk: itemId.indexInChunk
         errorButtonGroup: itemId.errorButtonGroup
         errorModel: itemId.errorModel(SurveyChunk.StationLeftRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
         surveyChunk: itemId.chunk
-        dataRole: SurveyEditorModel.StationRightRole
+        dataRole: SurveyChunk.StationRightRole
         view: itemId.view
     }
 
@@ -390,11 +398,12 @@ Item {
         dataValue: itemId.stationVisible ? stationUp.value : ""
         visible: itemId.stationVisible
         rowIndex: itemId.index
+        indexInChunk: itemId.indexInChunk
         errorButtonGroup: itemId.errorButtonGroup
         errorModel: itemId.errorModel(SurveyChunk.StationLeftRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
         surveyChunk: itemId.chunk
-        dataRole: SurveyEditorModel.StationUpRole
+        dataRole: SurveyChunk.StationUpRole
         view: itemId.view
     }
 
@@ -425,11 +434,12 @@ Item {
         dataValue: itemId.stationVisible ? stationDown.value : ""
         visible: itemId.stationVisible
         rowIndex: itemId.index
+        indexInChunk: itemId.indexInChunk
         errorButtonGroup: itemId.errorButtonGroup
         errorModel: itemId.errorModel(SurveyChunk.StationLeftRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
         surveyChunk: itemId.chunk
-        dataRole: SurveyEditorModel.StationDownRole
+        dataRole: SurveyChunk.StationDownRole
         view: itemId.view
     }
 

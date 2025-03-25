@@ -13,16 +13,209 @@ cwSurveyEditorModel::cwSurveyEditorModel()
 * @brief cwSurveyEditorModel::setTrip
 * @param trip -
 */
+// void cwSurveyEditorModel::setTrip(cwTrip* trip) {
+//     if(Trip != trip) {
+//         beginResetModel();
+//         Trip = trip;
+
+//         if(Trip) {
+//             auto connectChunk = [this](cwSurveyChunk* chunk) {
+//                 connect(chunk, &cwSurveyChunk::dataChanged, this, [this, chunk](cwSurveyChunk::DataRole role, int stationIndex) {
+//                     for (auto it = IndexToChunk.begin(); it != IndexToChunk.end(); ++it) {
+//                         if (it.value() == chunk) {
+//                             int modelRow = it.key().low() + stationIndex;
+//                             QModelIndex idx = index(modelRow, 0);
+//                             emit dataChanged(idx, idx, QVector<int>() << role);
+//                             break;
+//                         }
+//                     }
+//                 });
+//             };
+
+//             // Connect to cwTrip signals to handle chunks being added or removed.
+//             connect(Trip, &cwTrip::chunksInserted, this, [this, connectChunk](int begin, int end) {
+//                 beginInsertRows(QModelIndex(), begin, end);
+//                 updateIndexToChunk();
+//                 // Connect the dataChanged signal for each newly inserted chunk.
+//                 QList<cwSurveyChunk*> chunks = Trip->chunks();
+//                 for (int i = begin; i <= end && i < chunks.size(); ++i) {
+//                     cwSurveyChunk* chunk = chunks.at(i);
+//                     connectChunk(chunk);
+//                 }
+//                 endInsertRows();
+//             });
+
+//             connect(Trip, &cwTrip::chunksAboutToBeRemoved, this, [this](int begin, int end) {
+//                 beginRemoveRows(QModelIndex(), begin, end);
+//             });
+
+//             connect(Trip, &cwTrip::chunksRemoved, this, [this](int begin, int end) {
+//                 updateIndexToChunk();
+//                 endRemoveRows();
+//             });
+
+//             // Connect to dataChanged signal for existing chunks.
+//             const auto chunks = Trip->chunks();
+//             for (cwSurveyChunk* chunk : chunks) {
+//                 connectChunk(chunk);
+//             }
+//         }
+
+//         updateIndexToChunk();
+//         endResetModel();
+
+
+//         emit tripChanged();
+//     }
+// }
+
 void cwSurveyEditorModel::setTrip(cwTrip* trip) {
-    if(Trip != trip) {
+    if(m_trip != trip) {
         beginResetModel();
-        Trip = trip;
+        m_trip = trip;
+
+        if(m_trip) {
+            // Lambda to connect signals for a cwSurveyChunk.
+            auto connectChunk = [this](cwSurveyChunk* chunk) {
+                // Data changes in the chunk.
+
+
+                connect(chunk, &cwSurveyChunk::dataChanged, this,
+                        [this, chunk](cwSurveyChunk::DataRole role, int stationIndex) {
+                            auto modelIndex = chunkIndexToModelIndex(chunk, stationIndex);
+                            Q_ASSERT(modelIndex.isValid());
+                            emit dataChanged(modelIndex, modelIndex, {chunkRoleToModelRole(role)});
+                        });
+
+                // auto findRowIndex = [this](const cwSurveyChunk* chunk) {
+                //     // Compute base model row for this chunk.
+                //     int baseRow = m_skipRowOffset;
+                //     const QList<cwSurveyChunk*> allChunks = m_trip->chunks();
+                //     for (cwSurveyChunk* c : allChunks) {
+                //         if (c == chunk) {
+                //             break;
+                //         }
+                //         baseRow += c->stationCount() + m_skipRowOffset;
+                //     }
+                //     return baseRow;
+                // };
+
+                // Stations added.
+                connect(chunk, &cwSurveyChunk::stationsAdded, this,
+                        [this, chunk](int beginIndex, int endIndex) {
+                            int insertRow = chunkIndexToRow(chunk, beginIndex);
+                            beginInsertRows(QModelIndex(), insertRow, insertRow + (endIndex - beginIndex));
+                            updateIndexToChunk();
+                            endInsertRows();
+                        });
+                // Stations removed.
+                connect(chunk, &cwSurveyChunk::stationsRemoved, this,
+                        [this, chunk](int beginIndex, int endIndex) {
+                            int removeRow = chunkIndexToRow(chunk, beginIndex);
+                            beginRemoveRows(QModelIndex(), removeRow, removeRow + (endIndex - beginIndex));
+                            updateIndexToChunk();
+                            endRemoveRows();
+                        });
+                // // Shots added (row count remains unchanged; emit dataChanged).
+                // connect(chunk, &cwSurveyChunk::shotsAdded, this,
+                //         [this, chunk](int beginIndex, int endIndex) {
+                //             int baseRow = 1;
+                //             const QList<cwSurveyChunk*> allChunks = m_trip->chunks();
+                //             for (cwSurveyChunk* c : allChunks) {
+                //                 if (c == chunk) break;
+                //                 baseRow += c->stationCount() + 1;
+                //             }
+                //             for (int i = beginIndex; i <= endIndex; ++i) {
+                //                 int modelRow = baseRow + i;
+                //                 QModelIndex idx = index(modelRow, 0);
+                //                 emit dataChanged(idx, idx);
+                //             }
+                //         });
+                // // Shots removed.
+                // connect(chunk, &cwSurveyChunk::shotsRemoved, this,
+                //         [this, chunk](int beginIndex, int endIndex) {
+                //             int baseRow = 1;
+                //             const QList<cwSurveyChunk*> allChunks = m_trip->chunks();
+                //             for (cwSurveyChunk* c : allChunks) {
+                //                 if (c == chunk) break;
+                //                 baseRow += c->stationCount() + 1;
+                //             }
+                //             for (int i = beginIndex; i <= endIndex; ++i) {
+                //                 int modelRow = baseRow + i;
+                //                 QModelIndex idx = index(modelRow, 0);
+                //                 emit dataChanged(idx, idx);
+                //             }
+                //         });
+            };
+
+            auto disconnectChunk = [this](cwSurveyChunk* chunk) {
+                disconnect(chunk, nullptr, this, nullptr);
+            };
+
+            struct Range {
+                int begin;
+                int end;
+            };
+
+            auto modelRowRange = [this](int chunkBegin, int chunkEnd)->Range {
+                int modelRow = 0;
+                const QList<cwSurveyChunk*> allChunks = m_trip->chunks();
+                for (int i = 0; i < chunkBegin && i < allChunks.size(); ++i) {
+                    modelRow += allChunks.at(i)->stationCount() + m_skipRowOffset;
+                }
+                int totalNewRows = 0;
+                for (int i = chunkBegin; i <= chunkEnd && i < allChunks.size(); ++i) {
+                    totalNewRows += allChunks.at(i)->stationCount() + m_skipRowOffset;
+                }
+                return {modelRow, modelRow + totalNewRows - 1};
+            };
+
+            // Map cwTrip chunk-level changes to model row changes
+            connect(m_trip, &cwTrip::chunksInserted, this,
+                    [this, connectChunk, modelRowRange](int begin, int end) {
+                        // Calculate the model row where insertion begins.
+                        auto modelRange = modelRowRange(begin, end);
+
+                        const QList<cwSurveyChunk*> allChunks = m_trip->chunks();
+                        for (int i = begin; i <= end && i < allChunks.size(); ++i) {
+                            connectChunk(allChunks.at(i));
+                        }
+
+                        beginInsertRows(QModelIndex(), modelRange.begin, modelRange.end);
+                        endInsertRows();
+                    });
+
+            connect(m_trip, &cwTrip::chunksAboutToBeRemoved, this,
+                    [this, disconnectChunk, modelRowRange](int begin, int end) {
+                        auto modelRange = modelRowRange(begin, end);
+                        beginRemoveRows(QModelIndex(), modelRange.begin, modelRange.end);
+
+                        const QList<cwSurveyChunk*> allChunks = m_trip->chunks();
+                        for (int i = begin; i <= end && i < allChunks.size(); ++i) {
+                            disconnectChunk(allChunks.at(i));
+                        }
+                    });
+
+            connect(m_trip, &cwTrip::chunksRemoved, this,
+                    [this, disconnectChunk](int begin, int end) {
+                        endRemoveRows();
+                    });
+
+            // Connect signals for all existing chunks.
+            const auto chunks = m_trip->chunks();
+            for (cwSurveyChunk* chunk : chunks) {
+                connectChunk(chunk);
+            }
+        }
+
         updateIndexToChunk();
         endResetModel();
 
         emit tripChanged();
     }
 }
+
+
 
 QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
 {
@@ -31,7 +224,7 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
     }
 
     auto chunkIndex = modelIndexToStationChunk(index);
-    if(chunkIndex.first == nullptr) {
+    if(chunkIndex.chunk == nullptr) {
         switch(role) {
         case StationVisibleRole:
         case ShotVisibleRole:
@@ -43,10 +236,10 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
         }
     }
 
-    Q_ASSERT(chunkIndex.second >= 0);
+    Q_ASSERT(chunkIndex.index >= 0);
 
-    cwSurveyChunk* chunk = chunkIndex.first;
-    int stationIndex = chunkIndex.second;
+    cwSurveyChunk* chunk = chunkIndex.chunk;
+    int stationIndex = chunkIndex.index;
 
     switch(role) {
     case StationNameRole:
@@ -116,15 +309,22 @@ int cwSurveyEditorModel::rowCount(const QModelIndex& parent) const
 {
     Q_UNUSED(parent);
 
-    if(Trip.isNull()) {
+    if(m_trip.isNull()) {
         return 0;
     }
 
-    if(!IndexToChunk.isEmpty()) {
-        auto lastIter = std::prev(IndexToChunk.end());
-        return lastIter.key().high() + 1;
+    auto chunks = m_trip->chunks();
+    int count = 0;
+    for(const auto chunk : std::as_const(chunks)) {
+        count += chunk->stationCount() + m_skipRowOffset;
     }
-    return 0;
+    return count;
+
+    // if(!m_indexToChunk.isEmpty()) {
+    //     auto lastIter = std::prev(m_indexToChunk.end());
+    //     return lastIter.key().high() + 1;
+    // }
+    // return 0;
 }
 
 /**
@@ -159,37 +359,87 @@ QHash<int, QByteArray> cwSurveyEditorModel::roleNames() const
  */
 void cwSurveyEditorModel::addShotCalibration(int index)
 {
-    auto chunkIndex = indexToStationChunk(index);
-    if(chunkIndex.first != nullptr) {
-        chunkIndex.first->addCalibration(chunkIndex.second);
+    // auto chunkIndex = indexToStationChunk(index);
+    // if(chunkIndex.first != nullptr) {
+    //     chunkIndex.first->addCalibration(chunkIndex.second);
 
-        QModelIndex dataChangeIndex = this->index(index);
+    //     QModelIndex dataChangeIndex = this->index(index);
 
-        emit dataChanged(dataChangeIndex, dataChangeIndex, QVector<int>() << ShotCalibrationRole);
-    }
+    //     emit dataChanged(dataChangeIndex, dataChangeIndex, QVector<int>() << ShotCalibrationRole);
+    // }
 }
 
 /**
  * @brief cwSurveyEditorModel::updateIndexToChunk
  *
- * This clears the current IndexToChunk and updates it with a new lookup
+ * This clears the current m_indexToChunk and updates it with a new lookup
  */
 void cwSurveyEditorModel::updateIndexToChunk()
 {
-   IndexToChunk.clear();
+   // m_indexToChunk.clear();
 
-   if(Trip.isNull()) {
-       return;
-   }
+   // if(m_trip.isNull()) {
+   //     return;
+   // }
 
-   int stationCount = 1; //1 enables the tile bar to be displayed for the first chunk in the view
-   foreach(cwSurveyChunk* chunk, Trip->chunks()) {
-       int begin = stationCount;
-       int end = begin + chunk->stationCount() - 1;
-       // qDebug() << "Insert:" << chunk << begin << end;
-       IndexToChunk.insert(Range(begin, end), chunk);
-       stationCount += chunk->stationCount() + 1;
-   }
+   // int stationCount = m_skipRowOffset; //1 enables the tile bar to be displayed for the first chunk in the view
+   // foreach(cwSurveyChunk* chunk, m_trip->chunks()) {
+   //     int begin = stationCount;
+   //     int end = begin + chunk->stationCount() - m_skipRowOffset;
+   //     // qDebug() << "Insert:" << chunk << begin << end;
+   //     m_indexToChunk.insert(Range(begin, end), chunk);
+   //     stationCount += chunk->stationCount() + m_skipRowOffset;
+   // }
+}
+
+int cwSurveyEditorModel::chunkIndexToRow(const cwSurveyChunk *chunk, int chunkIndex) const
+{
+    // Compute base model row for this chunk.
+    int baseRow = 0;
+    const QList<cwSurveyChunk*> allChunks = m_trip->chunks();
+    for (cwSurveyChunk* c : allChunks) {
+        if (c == chunk) {
+            baseRow += m_skipRowOffset;
+            break;
+        }
+        baseRow += c->stationCount() + m_skipRowOffset;
+    }
+
+    Q_ASSERT(chunkIndex >= 0 && chunkIndex < chunk->stationCount());
+    return baseRow + chunkIndex;
+}
+
+QModelIndex cwSurveyEditorModel::chunkIndexToModelIndex(const cwSurveyChunk *chunk, int chunkIndex) const
+{
+
+    return index(chunkIndexToRow(chunk, chunkIndex));
+}
+
+cwSurveyEditorModel::Roles cwSurveyEditorModel::chunkRoleToModelRole(cwSurveyChunk::DataRole chunkRole)
+{
+    switch(chunkRole) {
+    case cwSurveyChunk::StationNameRole:
+        return StationNameRole;
+    case cwSurveyChunk::StationLeftRole:
+        return StationLeftRole;
+    case cwSurveyChunk::StationRightRole:
+        return StationRightRole;
+    case cwSurveyChunk::StationUpRole:
+        return StationUpRole;
+    case cwSurveyChunk::StationDownRole:
+        return StationDownRole;
+    case cwSurveyChunk::ShotDistanceRole:
+        return ShotDistanceRole;
+    case cwSurveyChunk::ShotDistanceIncludedRole:
+    case cwSurveyChunk::ShotCompassRole:
+        return ShotCompassRole;
+    case cwSurveyChunk::ShotBackCompassRole:
+        return ShotBackCompassRole;
+    case cwSurveyChunk::ShotClinoRole:
+        return ShotClinoRole;
+    case cwSurveyChunk::ShotBackClinoRole:
+        return ShotBackClinoRole;
+    }
 }
 
 /**
@@ -197,7 +447,7 @@ void cwSurveyEditorModel::updateIndexToChunk()
  * @param index - The index from the model
  * @return The station index in the chunk and the chunk at index
  */
-QPair<cwSurveyChunk*, int> cwSurveyEditorModel::modelIndexToStationChunk(const QModelIndex& index) const
+cwSurveyEditorModel::ChunkIndex cwSurveyEditorModel::modelIndexToStationChunk(const QModelIndex& index) const
 {
     return indexToStationChunk(index.row());
 }
@@ -207,17 +457,35 @@ QPair<cwSurveyChunk*, int> cwSurveyEditorModel::modelIndexToStationChunk(const Q
  * @param index - The row in model
  * @return The station index in teh chunk and teh cuhnk at index
  */
-QPair<cwSurveyChunk*, int> cwSurveyEditorModel::indexToStationChunk(int index) const
+cwSurveyEditorModel::ChunkIndex cwSurveyEditorModel::indexToStationChunk(int index) const
 {
-    auto iter = IndexToChunk.lowerBound(Range(index));
-
-    if(iter != IndexToChunk.end() && iter.key().low() <= index) {
-        int realIndex = index - iter.key().low();
-        cwSurveyChunk* chunk = iter.value();
-        Q_ASSERT(realIndex < chunk->stationCount());
-        Q_ASSERT(realIndex >= 0);
-        return QPair<cwSurveyChunk*, int>(chunk, realIndex);
+    auto chunks = m_trip->chunks();
+    for(const auto chunk : std::as_const(chunks)) {
+        auto diff = index - (chunk->stationCount() + m_skipRowOffset);
+        if(diff < 0) {
+            index = index - m_skipRowOffset;
+            if(index < 0) {
+                //Skip row
+                return {nullptr, -1};
+            }
+            return {chunk, index};
+        }
+        index = diff;
     }
 
-    return QPair<cwSurveyChunk*, int>(nullptr, -1);
+    //Nothing found
+    return {nullptr, -1};
+
+
+    // auto iter = m_indexToChunk.lowerBound(Range(index));
+
+    // if(iter != m_indexToChunk.end() && iter.key().low() <= index) {
+    //     int realIndex = index - iter.key().low();
+    //     cwSurveyChunk* chunk = iter.value();
+    //     Q_ASSERT(realIndex < chunk->stationCount());
+    //     Q_ASSERT(realIndex >= 0);
+    //     return {chunk, realIndex};
+    // }
+
+    // return {nullptr, -1};
 }

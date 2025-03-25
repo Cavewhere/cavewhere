@@ -789,8 +789,8 @@ QVariant cwSurveyChunk::shotData(DataRole role, int index) const {
   */
 void cwSurveyChunk::setStationData(cwSurveyChunk::DataRole role, int index, const QVariant& data) {
     if(index < 0 || index >= Stations.size()) {
-        qDebug() << QString("Can't set station data for role \"%1\" at index: \"%2\" with data: \"%3\"")
-                    .arg(role).arg(index).arg(data.toString()) << LOCATION;
+        qDebug().noquote() << QStringLiteral("Can't set station data for role \"%1\" at index: \"%2\" with data: \"%3\" index out of bounds")
+        .arg(role).arg(index).arg(data.toString()) << LOCATION;
         return;
     }
 

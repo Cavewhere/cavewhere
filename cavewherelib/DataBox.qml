@@ -17,14 +17,15 @@ QQ.Item {
     property alias dataValue: editor.text
     property alias dataValidator: editor.validator
     required property SurveyChunk surveyChunk; //For hooking up signals and slots in subclasses
-    // required property SurveyChunkView surveyChunkView;
+
     required property SurveyChunkTrimmer surveyChunkTrimmer; //For interaction
     property alias aboutToDelete: removeBoxId.visible
     property ErrorModel errorModel: null
     required property Controls.ButtonGroup errorButtonGroup
     property KeyNavigationContainer navigation: KeyNavigationContainer {}
 
-    required property int rowIndex
+    required property int rowIndex //Index in the ListView
+    required property int indexInChunk //Index in the surveyChunk
     required property int dataRole
     required property QQ.ListView view
 

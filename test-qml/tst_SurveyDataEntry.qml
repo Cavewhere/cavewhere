@@ -319,30 +319,30 @@ MainWindowTest {
 
                     if(item.indexInChunk === 0) {
                         //First row in the chunk, go to the next station name
-                        currentItem = nextTab(currentItem, i+1, SurveyEditorModel.StationNameRole);
+                        currentItem = nextTab(currentItem, i+1, SurveyChunk.StationNameRole);
                     }
 
                     if(frontsights && backsights) {
-                        currentItem = nextTab(currentItem, i, SurveyEditorModel.ShotDistanceRole);
-                        currentItem = nextTab(currentItem, i, SurveyEditorModel.ShotCompassRole);
-                        currentItem = nextTab(currentItem, i, SurveyEditorModel.ShotBackCompassRole);
-                        currentItem = nextTab(currentItem, i, SurveyEditorModel.ShotClinoRole);
-                        currentItem = nextTab(currentItem, i, SurveyEditorModel.ShotBackClinoRole);
+                        currentItem = nextTab(currentItem, i, SurveyChunk.ShotDistanceRole);
+                        currentItem = nextTab(currentItem, i, SurveyChunk.ShotCompassRole);
+                        currentItem = nextTab(currentItem, i, SurveyChunk.ShotBackCompassRole);
+                        currentItem = nextTab(currentItem, i, SurveyChunk.ShotClinoRole);
+                        currentItem = nextTab(currentItem, i, SurveyChunk.ShotBackClinoRole);
                     } else if(frontsights) {
-                        currentItem = nextTab(currentItem, i, SurveyEditorModel.ShotDistanceRole);
-                        currentItem = nextTab(currentItem, i, SurveyEditorModel.ShotCompassRole);
-                        currentItem = nextTab(currentItem, i, SurveyEditorModel.ShotClinoRole);
+                        currentItem = nextTab(currentItem, i, SurveyChunk.ShotDistanceRole);
+                        currentItem = nextTab(currentItem, i, SurveyChunk.ShotCompassRole);
+                        currentItem = nextTab(currentItem, i, SurveyChunk.ShotClinoRole);
                     } else if(backsights) {
-                        currentItem = nextTab(currentItem, i, SurveyEditorModel.ShotDistanceRole);
-                        currentItem = nextTab(currentItem, i, SurveyEditorModel.ShotBackCompassRole);
-                        currentItem = nextTab(currentItem, i, SurveyEditorModel.ShotBackClinoRole);
+                        currentItem = nextTab(currentItem, i, SurveyChunk.ShotDistanceRole);
+                        currentItem = nextTab(currentItem, i, SurveyChunk.ShotBackCompassRole);
+                        currentItem = nextTab(currentItem, i, SurveyChunk.ShotBackClinoRole);
                     }
 
                     if(item.indexInChunk === 0) {
-                        currentItem = nextTab(currentItem, i, SurveyEditorModel.StationLeftRole);
-                        currentItem = nextTab(currentItem, i, SurveyEditorModel.StationRightRole);
-                        currentItem = nextTab(currentItem, i, SurveyEditorModel.StationUpRole);
-                        currentItem = nextTab(currentItem, i, SurveyEditorModel.StationDownRole);
+                        currentItem = nextTab(currentItem, i, SurveyChunk.StationLeftRole);
+                        currentItem = nextTab(currentItem, i, SurveyChunk.StationRightRole);
+                        currentItem = nextTab(currentItem, i, SurveyChunk.StationUpRole);
+                        currentItem = nextTab(currentItem, i, SurveyChunk.StationDownRole);
                     }
 
                     let nextStationOffset = function() {
@@ -353,20 +353,20 @@ MainWindowTest {
                         return -1;
                     }();
 
-                    currentItem = nextTab(currentItem, i+1, SurveyEditorModel.StationLeftRole);
-                    currentItem = nextTab(currentItem, i+1, SurveyEditorModel.StationRightRole);
-                    currentItem = nextTab(currentItem, i+1, SurveyEditorModel.StationUpRole);
-                    currentItem = nextTab(currentItem, i+1, SurveyEditorModel.StationDownRole);
+                    currentItem = nextTab(currentItem, i+1, SurveyChunk.StationLeftRole);
+                    currentItem = nextTab(currentItem, i+1, SurveyChunk.StationRightRole);
+                    currentItem = nextTab(currentItem, i+1, SurveyChunk.StationUpRole);
+                    currentItem = nextTab(currentItem, i+1, SurveyChunk.StationDownRole);
 
                     if(nextStationOffset > 0) {
-                        currentItem = nextTab(currentItem, i + nextStationOffset, SurveyEditorModel.StationNameRole);
+                        currentItem = nextTab(currentItem, i + nextStationOffset, SurveyChunk.StationNameRole);
                     }
                 }
 
                 //Uncomment to debug tabbing from the end
                 // surveyView.currentIndex = surveyView.count - 1;
                 // waitForRendering(RootData.pageView.currentPageItem)
-                // let itemName = "rootId->tripPage->view->dataBox." + surveyView.currentIndex + "." + SurveyEditorModel.StationDownRole;
+                // let itemName = "rootId->tripPage->view->dataBox." + surveyView.currentIndex + "." + SurveyChunk.StationDownRole;
                 // let lastItem = ObjectFinder.findObjectByChain(mainWindow, itemName)
                 // currentItem = lastItem;
                 // currentItem.forceActiveFocus();
@@ -384,37 +384,37 @@ MainWindowTest {
                         continue;
                     }
 
-                    currentItem = previousTab(currentItem, i, SurveyEditorModel.StationUpRole);
-                    currentItem = previousTab(currentItem, i, SurveyEditorModel.StationRightRole);
-                    currentItem = previousTab(currentItem, i, SurveyEditorModel.StationLeftRole);
+                    currentItem = previousTab(currentItem, i, SurveyChunk.StationUpRole);
+                    currentItem = previousTab(currentItem, i, SurveyChunk.StationRightRole);
+                    currentItem = previousTab(currentItem, i, SurveyChunk.StationLeftRole);
 
                     if(item.indexInChunk === 1) {
-                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.StationDownRole);
-                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.StationUpRole);
-                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.StationRightRole);
-                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.StationLeftRole);
+                        currentItem = previousTab(currentItem, i-1, SurveyChunk.StationDownRole);
+                        currentItem = previousTab(currentItem, i-1, SurveyChunk.StationUpRole);
+                        currentItem = previousTab(currentItem, i-1, SurveyChunk.StationRightRole);
+                        currentItem = previousTab(currentItem, i-1, SurveyChunk.StationLeftRole);
                     }
 
                     if(frontsights && backsights) {
-                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.ShotBackClinoRole);
-                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.ShotClinoRole);
-                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.ShotBackCompassRole);
-                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.ShotCompassRole);
-                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.ShotDistanceRole);
+                        currentItem = previousTab(currentItem, i-1, SurveyChunk.ShotBackClinoRole);
+                        currentItem = previousTab(currentItem, i-1, SurveyChunk.ShotClinoRole);
+                        currentItem = previousTab(currentItem, i-1, SurveyChunk.ShotBackCompassRole);
+                        currentItem = previousTab(currentItem, i-1, SurveyChunk.ShotCompassRole);
+                        currentItem = previousTab(currentItem, i-1, SurveyChunk.ShotDistanceRole);
                     } else if(frontsights) {
-                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.ShotClinoRole);
-                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.ShotCompassRole);
-                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.ShotDistanceRole);
+                        currentItem = previousTab(currentItem, i-1, SurveyChunk.ShotClinoRole);
+                        currentItem = previousTab(currentItem, i-1, SurveyChunk.ShotCompassRole);
+                        currentItem = previousTab(currentItem, i-1, SurveyChunk.ShotDistanceRole);
                     } else if(backsights) {
-                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.ShotBackClinoRole);
-                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.ShotBackCompassRole);
-                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.ShotDistanceRole);
+                        currentItem = previousTab(currentItem, i-1, SurveyChunk.ShotBackClinoRole);
+                        currentItem = previousTab(currentItem, i-1, SurveyChunk.ShotBackCompassRole);
+                        currentItem = previousTab(currentItem, i-1, SurveyChunk.ShotDistanceRole);
                     }
 
-                    currentItem = previousTab(currentItem, i, SurveyEditorModel.StationNameRole);
+                    currentItem = previousTab(currentItem, i, SurveyChunk.StationNameRole);
 
                     if(item.indexInChunk === 1) {
-                        currentItem = previousTab(currentItem, i-1, SurveyEditorModel.StationNameRole);
+                        currentItem = previousTab(currentItem, i-1, SurveyChunk.StationNameRole);
                     }
 
                     let prevStationOffset = function() {
@@ -429,7 +429,7 @@ MainWindowTest {
                     //Loop up to the previous row
                     if(i-prevStationOffset >= 0) {
                         // console.log("prevStationOffset:" + prevStationOffset);
-                        currentItem = previousTab(currentItem, i-prevStationOffset, SurveyEditorModel.StationDownRole);
+                        currentItem = previousTab(currentItem, i-prevStationOffset, SurveyChunk.StationDownRole);
 
                         if(prevStationOffset > 1) {
                             i -= prevStationOffset - 1
@@ -509,7 +509,7 @@ MainWindowTest {
             surveyView.positionViewAtEnd();
             waitForRendering(RootData.pageView.currentPageItem)
 
-            let itemName = "rootId->tripPage->view->dataBox." + surveyView.currentIndex + "." + SurveyEditorModel.StationDownRole;
+            let itemName = "rootId->tripPage->view->dataBox." + surveyView.currentIndex + "." + SurveyChunk.StationDownRole;
             let lastItem = ObjectFinder.findObjectByChain(mainWindow, itemName)
             mouseClick(lastItem);
             waitForRendering(RootData.pageView.currentPageItem)
@@ -520,6 +520,31 @@ MainWindowTest {
             keyClick(16777217, 0) //Tab
 
             verify(lastItem.focus === true);
+        }
+
+        function test_tabGuessSurveyName() {
+            TestHelper.loadProjectFromFile(RootData.project, "://datasets/tst_SurveyDataEntry/navTest.cw");
+
+            RootData.pageSelectionModel.currentPageAddress = "Data/Cave=Cave 1/Trip=Trip 1"
+
+            tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
+
+            waitForRendering(RootData.pageView.currentPageItem)
+
+            //-- Go the last element and tab forward
+            let surveyView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+            surveyView.currentIndex = surveyView.count - 1;
+            surveyView.positionViewAtEnd();
+            waitForRendering(RootData.pageView.currentPageItem)
+
+            let itemName = "rootId->tripPage->view->dataBox." + surveyView.currentIndex + "." + SurveyChunk.StationNameRole;
+            let lastItem = ObjectFinder.findObjectByChain(mainWindow, itemName)
+            mouseClick(lastItem);
+            waitForRendering(RootData.pageView.currentPageItem)
+
+            keyClick(16777217, 0) //Tab
+
+            verify(lastItem.dataValue === "9", `"${lastItem.dataValue}" === "9"`);
         }
     }
 }
