@@ -188,6 +188,7 @@ Item {
         surveyChunk: itemId.chunk
         dataRole: SurveyChunk.ShotCompassRole
         view: itemId.view
+        readingText: "fs"
     }
 
     CompassReadBox {
@@ -225,6 +226,7 @@ Item {
         surveyChunk: itemId.chunk
         dataRole: SurveyChunk.ShotBackCompassRole
         view: itemId.view
+        readingText: "bs"
     }
 
     ClinoReadBox {
@@ -272,6 +274,7 @@ Item {
         surveyChunk: itemId.chunk
         dataRole: SurveyChunk.ShotClinoRole
         view: itemId.view
+        readingText: "fs"
     }
 
     ClinoReadBox {
@@ -312,6 +315,7 @@ Item {
         surveyChunk: itemId.chunk
         dataRole: SurveyChunk.ShotBackClinoRole
         view: itemId.view
+        readingText: "bs"
     }
 
     StationDistanceBox {
