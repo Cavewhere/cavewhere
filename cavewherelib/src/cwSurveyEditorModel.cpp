@@ -138,6 +138,8 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
         return QVariant::fromValue(chunkIndex.chunk);
     case RowTypeRole:
         return chunkIndex.type;
+    case IndexInChunkRole:
+        return chunkIndex.index;
     default:
         break;
     }

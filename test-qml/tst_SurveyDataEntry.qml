@@ -7,6 +7,7 @@ import QmlTestRecorder
 MainWindowTest {
     id: rootId
 
+
     TestCase {
         name: "SurveyDataEntry"
         when: windowShown
@@ -271,7 +272,8 @@ MainWindowTest {
 
                 verify(item !== null);
 
-                // console.log("CurrentItem:" + currentItem + " " + currentItem.focus + " index:" + index + " nextRole:" + nextRole + " nextItem:" + item + " " + item.focus)
+                console.log("CurrentItem:" + currentItem + " " + currentItem.focus + " index:" + index + " nextRole:" + nextRole + " nextItem:" + item + " " + item.focus)
+
                 if(currentItem.focus === true) {
                     console.log("Testcase will fail, bad currentItem focus!!!");
                 }
@@ -280,7 +282,7 @@ MainWindowTest {
 
                 //Uncomment to help debug
                 if(item.focus !== true) {
-                    console.log("Testcase will fail, bad focus!!!");
+                    console.log("Testcase will fail, bad focus!!! current focused on:" + rootId.Window.window.activeFocusItem);
                 }
 
                 verify(item.focus === true )
@@ -339,16 +341,16 @@ MainWindowTest {
                     }
 
                     if(item.indexInChunk === 0) {
-                        currentItem = nextTab(currentItem, i, SurveyChunk.StationLeftRole);
-                        currentItem = nextTab(currentItem, i, SurveyChunk.StationRightRole);
-                        currentItem = nextTab(currentItem, i, SurveyChunk.StationUpRole);
-                        currentItem = nextTab(currentItem, i, SurveyChunk.StationDownRole);
+                        currentItem = nextTab(currentItem, i-1, SurveyChunk.StationLeftRole);
+                        currentItem = nextTab(currentItem, i-1, SurveyChunk.StationRightRole);
+                        currentItem = nextTab(currentItem, i-1, SurveyChunk.StationUpRole);
+                        currentItem = nextTab(currentItem, i-1, SurveyChunk.StationDownRole);
                     }
 
                     let nextStationOffset = function() {
-                        let nextItem = surveyView.itemAtIndex(i+2);
+                        let nextItem = surveyView.itemAtIndex(i+3);
                         if(nextItem) {
-                            return surveyView.itemAtIndex(i+2).titleVisible ? 3 : 2
+                            return 3;
                         }
                         return -1;
                     }();
@@ -373,7 +375,6 @@ MainWindowTest {
                 // surveyView.positionViewAtEnd();
                 // waitForRendering(surveyView)
 
-
                 //Go backwards
                 for(let i = surveyView.count - 1; i > 0; i--) {
                     // console.log("---- Backwords i:" + i + " " + currentItem + "-----")
@@ -389,10 +390,10 @@ MainWindowTest {
                     currentItem = previousTab(currentItem, i, SurveyChunk.StationLeftRole);
 
                     if(item.indexInChunk === 1) {
-                        currentItem = previousTab(currentItem, i-1, SurveyChunk.StationDownRole);
-                        currentItem = previousTab(currentItem, i-1, SurveyChunk.StationUpRole);
-                        currentItem = previousTab(currentItem, i-1, SurveyChunk.StationRightRole);
-                        currentItem = previousTab(currentItem, i-1, SurveyChunk.StationLeftRole);
+                        currentItem = previousTab(currentItem, i-2, SurveyChunk.StationDownRole);
+                        currentItem = previousTab(currentItem, i-2, SurveyChunk.StationUpRole);
+                        currentItem = previousTab(currentItem, i-2, SurveyChunk.StationRightRole);
+                        currentItem = previousTab(currentItem, i-2, SurveyChunk.StationLeftRole);
                     }
 
                     if(frontsights && backsights) {
@@ -414,14 +415,15 @@ MainWindowTest {
                     currentItem = previousTab(currentItem, i, SurveyChunk.StationNameRole);
 
                     if(item.indexInChunk === 1) {
-                        currentItem = previousTab(currentItem, i-1, SurveyChunk.StationNameRole);
+                        currentItem = previousTab(currentItem, i-2, SurveyChunk.StationNameRole);
                     }
 
                     let prevStationOffset = function() {
-                        let prevItem = surveyView.itemAtIndex(i-2);
+                        let prevItem = surveyView.itemAtIndex(i-3);
                         if(prevItem) {
-                            // console.log("prevItem titleVisible:" + prevItem.titleVisible + " i:" + i);
-                            return prevItem.titleVisible ? 3 : 1
+                            console.log("prevItem titleVisible:" + prevItem.rowType === SurveyEditorModel.TitleRow + " " + prevItem.rowType + " i:" + i);
+                            // return 2;
+                            return prevItem.rowType === SurveyEditorModel.TitleRow ? 4 : 2
                         }
                         return 1;
                     }();
@@ -545,6 +547,17 @@ MainWindowTest {
             keyClick(16777217, 0) //Tab
 
             verify(lastItem.dataValue === "9", `"${lastItem.dataValue}" === "9"`);
+        }
+
+        function test_editorTest() {
+            TestHelper.loadProjectFromFile(RootData.project, "://datasets/tst_SurveyDataEntry/navTest.cw");
+
+            RootData.pageSelectionModel.currentPageAddress = "Data/Cave=Cave 1/Trip=Trip 1"
+
+            tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
+
+            waitForRendering(RootData.pageView.currentPageItem)
+            wait(1000000);
         }
     }
 }

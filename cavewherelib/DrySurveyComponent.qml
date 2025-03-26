@@ -5,7 +5,18 @@ import cavewherelib
 Item {
     id: itemId
     width: 400
-    height: stationVisible ? (lastElement ? 75 : 50 - 1) : titleColumnId.height + titleOffset
+    height: {
+        switch(rowType) {
+        case SurveyEditorModel.TitleRow:
+            return titleColumnId.height + titleOffset
+        case SurveyEditorModel.StationRow:
+            return lastElement ? 75 : 50 - 1
+        case SurveyEditorModel.ShotRow:
+            return 0
+        }
+    }
+
+    // height: stationVisible ? (lastElement ? 75 : 50 - 1) : titleColumnId.height + titleOffset
 
     readonly property bool lastElement: index == view.count - 1
     // readonly property bool skippedElement: stationName == undefined
@@ -26,9 +37,10 @@ Item {
     required property cwCompassReading shotBackCompass;
     required property cwClinoReading shotClino;
     required property cwClinoReading shotBackClino;
-    required property bool titleVisible;
-    required property bool stationVisible;
-    required property bool shotVisible;
+    required property int rowType;
+    // required property bool titleVisible:
+    readonly property bool stationVisible: itemId.rowType === SurveyEditorModel.StationRow
+    readonly property bool shotVisible: itemId.rowType === SurveyEditorModel.ShotRow
     required property ListView view;
 
     readonly property int titleOffset: index === 0 ? 5 : 25
@@ -52,7 +64,7 @@ Item {
 
     SurveyEditorColumnTitles {
         id: titleColumnId
-        visible: itemId.titleVisible
+        visible: rowType == SurveyEditorModel.TitleRow
         y: titleOffset
         shotOffset: Math.floor(stationBox.height / 2.0);
     }
@@ -91,8 +103,8 @@ Item {
         // navigation.arrowUp: NavigationItem { item: stationBox1; indexOffset: -1 }
         // navigation.arrowDown: NavigationItem { item: stationBox1; indexOffset: 1 }
 
-        dataValue: itemId.stationVisible ? stationName : ""
-        visible: itemId.stationVisible
+        dataValue: stationVisible ? stationName : ""
+        visible: stationVisible
         rowIndex: itemId.index
         indexInChunk: itemId.indexInChunk
         errorButtonGroup: itemId.errorButtonGroup
@@ -118,7 +130,7 @@ Item {
         height: 50
         anchors.left: stationBox.right
         anchors.leftMargin: -1
-        anchors.top: stationBox.verticalCenter
+        anchors.verticalCenter: stationBox.top
         anchors.topMargin: 0
 
         navigation.tabPrevious: NavigationItem { item: stationBox; indexOffset: 1 }
@@ -135,8 +147,8 @@ Item {
         // navigation.arrowUp: NavigationItem { item: shotDistanceDataBox1; indexOffset: -1 }
         // navigation.arrowDown: NavigationItem { item: shotDistanceDataBox1; indexOffset: 1 }
 
-        dataValue: itemId.shotVisible ? shotDistance.value : ""
-        visible: itemId.shotVisible
+        dataValue: shotVisible ? shotDistance.value : ""
+        visible: shotVisible
         rowIndex: itemId.index
         indexInChunk: itemId.indexInChunk
         errorButtonGroup: itemId.errorButtonGroup
@@ -240,7 +252,9 @@ Item {
                                           {item:(leftBox), used: true}
                                       ])
             indexOffset: {
-                if(itemId.indexInChunk === 0 || itemId.calibration.backSights) {
+                if(itemId.indexInChunk === 0 && !itemId.calibration.backSights) {
+                    return -1;
+                } else if (itemId.calibration.backSights) {
                     return 0;
                 } else {
                     return 1;
@@ -282,7 +296,7 @@ Item {
             item: leftBox
             indexOffset: {
                 if(itemId.indexInChunk === 0) {
-                    return 0;
+                    return -1;
                 } else {
                     return 1;
                 }
@@ -324,7 +338,7 @@ Item {
 
             indexOffset: {
                 if(itemId.indexInChunk === 0) {
-                    return 0;
+                    return 1;
                 } else {
                     return -1;
                 }

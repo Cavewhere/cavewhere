@@ -214,22 +214,25 @@ QQ.Item {
 
         gradient: QQ.Gradient {
             QQ.GradientStop {
-                position: dataBox.rowIndex % 2 === 0 ? 1.0 : 0.0
+                position: dataBox.indexInChunk % 2 === 0 ? 1.0 : 0.0
                 color:  "#DDF2FF"
             }
             QQ.GradientStop {
-                position: dataBox.rowIndex % 2 === 0 ? 0.4 : 0.6
+                position: dataBox.indexInChunk % 2 === 0 ? 0.4 : 0.6
                 color:  "white"
             }
         }
+
+        // DebugRectangle {}
 
         visible: dataBox.surveyChunk !== null && dataBox.surveyChunk.isStationRole(dataBox.dataRole)
     }
 
     QQ.Rectangle {
         id: backgroundShot
-        property bool offsetColor: dataBox.rowIndex % 2 === 0 && dataBox.surveyChunk !== null && dataBox.surveyChunk.isShotRole(dataBox.dataRole)
+        property bool offsetColor: dataBox.indexInChunk % 2 === 0 && dataBox.surveyChunk !== null && dataBox.surveyChunk.isShotRole(dataBox.dataRole)
         anchors.fill: parent
+        visible: dataBox.surveyChunk.isShotRole(dataBox.dataRole)
         color: offsetColor ? "#DDF2FF" : "white"
     }
 
