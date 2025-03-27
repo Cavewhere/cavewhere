@@ -91,6 +91,13 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
 
                         beginInsertRows(QModelIndex(), modelRange.begin, modelRange.end);
                         endInsertRows();
+
+                        const auto lastIndex = m_trip->chunkCount() - 1;
+                        if(end == lastIndex) {
+                            emit lastChunkAdded();
+                        }
+
+                        // qDebug() << "chunk inserted editor model:" << begin << end;
                     });
 
             connect(m_trip, &cwTrip::chunksAboutToBeRemoved, this,
@@ -100,6 +107,7 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
 
                         const QList<cwSurveyChunk*> allChunks = m_trip->chunks();
                         for (int i = begin; i <= end && i < allChunks.size(); ++i) {
+                            auto chunk = allChunks.at(i);
                             disconnectChunk(allChunks.at(i));
                         }
                     });
@@ -139,6 +147,7 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
     case RowTypeRole:
         return chunkIndex.type;
     case IndexInChunkRole:
+        qDebug() << "IndexInChunkRole:" << chunkIndex.index << index << role;
         return chunkIndex.index;
     default:
         break;
@@ -313,6 +322,24 @@ int cwSurveyEditorModel::toRow(RowType type, const cwSurveyChunk *chunk, int chu
     Q_ASSERT(toIndex() >= 0);
     Q_ASSERT(toIndex() < rowCount());
     return toIndex();
+}
+
+cwSurveyEditorBoxIndex cwSurveyEditorModel::boxIndex(RowType type,
+                                                     cwSurveyChunk *chunk,
+                                                     int chunkIndex,
+                                                     cwSurveyChunk::DataRole dataRole)
+{
+    return cwSurveyEditorBoxIndex(type, chunk, chunkIndex, dataRole);
+}
+
+cwSurveyEditorBoxIndex cwSurveyEditorModel::boxIndex(int row, cwSurveyChunk::DataRole dataRole) const
+{
+    auto chunkIndex = toChunkIndex(row);
+    return cwSurveyEditorBoxIndex(chunkIndex.type,
+                                  chunkIndex.chunk,
+                                  chunkIndex.index,
+                                  dataRole
+                                  );
 }
 
 QModelIndex cwSurveyEditorModel::toModelIndex(RowType type, const cwSurveyChunk *chunk, int chunkIndex) const

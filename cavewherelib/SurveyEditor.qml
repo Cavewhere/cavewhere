@@ -20,6 +20,8 @@ QQ.Item {
 
     signal collapseClicked();
 
+    property var window: QQ.Window.window
+
     clip: false
 
     width: scrollAreaId.width
@@ -30,9 +32,15 @@ QQ.Item {
         trip: clipArea.currentTrip
     }
 
+
     SurveyEditorModel {
         id: editorModel
-        trip: currentTrip
+        trip: clipArea.currentTrip
+
+        onLastChunkAdded: {
+            editorFocusId.focusOnLastChunk()
+            console.log("Window activeFocus:" + clipArea.window.activeFocusItem)
+        }
     }
 
 
@@ -77,6 +85,33 @@ QQ.Item {
 
             SurveyChunkTrimmer {
                 id: surveyChunkTrimmerId
+            }
+
+            StationValidator {
+                id: stationValidatorId
+            }
+
+            DistanceValidator {
+                id: distanceValidatorId
+            }
+
+            CompassValidator {
+                id: compassValidatorId
+            }
+
+            ClinoValidator {
+                id: clinoValidatorId
+            }
+
+            SurveyEditorFocus {
+                id: editorFocusId
+                trip: clipArea.currentTrip
+                view: viewId
+                model: editorModel
+            }
+
+            onCurrentIndexChanged: {
+                console.log("Current index changed:" + currentIndex)
             }
 
             header: ColumnLayout {
@@ -191,6 +226,12 @@ QQ.Item {
                 errorButtonGroup: errorButtonGroupId
                 surveyChunkTrimmer: surveyChunkTrimmerId
                 view: viewId
+                model: editorModel
+                stationValidator: stationValidatorId
+                distanceValidator: distanceValidatorId
+                compassValidator: compassValidatorId
+                clinoValidator: clinoValidatorId
+                editorFocus: editorFocusId
             }
 
             // section.property: "chunkId"
@@ -258,12 +299,3 @@ QQ.Item {
     }
 }
 
-
-//MouseArea {
-//    anchors.fill: scrollAreaId
-//    onPressed: {
-//        scrollAreaId.forceActiveFocus()
-//        mouse.accepted = false;
-//    }
-//}
-//}

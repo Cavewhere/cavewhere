@@ -8,11 +8,16 @@
 #ifndef CWSTATIONVALIDATOR_H
 #define CWSTATIONVALIDATOR_H
 
+//Our includes
 #include "cwValidator.h"
+
+//Qt includes
+#include <QQmlEngine>
 
 class cwStationValidator : public cwValidator
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(StationValidator)
 public:
     explicit cwStationValidator(QObject *parent = 0);
 

@@ -4,6 +4,7 @@ import cavewherelib
 
 Item {
     id: itemId
+    // objectName: "dryComponent." + index + "." + rowType
     width: 400
     height: {
         switch(rowType) {
@@ -27,6 +28,8 @@ Item {
     required property SurveyChunkTrimmer surveyChunkTrimmer;
     required property SurveyChunk chunk;
     required property int indexInChunk;
+
+    //Data that comes from the model
     required property string stationName;
     required property cwDistanceReading stationLeft;
     required property cwDistanceReading stationRight;
@@ -42,12 +45,24 @@ Item {
     readonly property bool stationVisible: itemId.rowType === SurveyEditorModel.StationRow
     readonly property bool shotVisible: itemId.rowType === SurveyEditorModel.ShotRow
     required property ListView view;
+    required property SurveyEditorModel model;
 
+    //Validators
+    required property StationValidator stationValidator;
+    required property DistanceValidator distanceValidator;
+    required property CompassValidator compassValidator;
+    required property ClinoValidator clinoValidator;
+
+    //For focus
+    required property SurveyEditorFocus editorFocus
+
+    //For sizing
     readonly property int titleOffset: index === 0 ? 5 : 25
 
 
     function errorModel(dataRole) {
         if(chunk) {
+            console.log("Chunk:" + chunk + "error:" + indexInChunk + " " + dataRole + " " + chunk.errorsAt(indexInChunk, dataRole))
             return chunk.errorsAt(indexInChunk, dataRole)
         }
         return null;
@@ -61,6 +76,70 @@ Item {
         }
         return null;
     }
+
+    function boxIndex(chunkRole) {
+        return model.boxIndex(rowType, chunk, indexInChunk, chunkRole);
+    }
+
+    Connections {
+        target: itemId.chunk
+        function onErrorsChanged(mainRole, index) {
+            if(index === indexInChunk) {
+                switch(mainRole) {
+                case SurveyChunk.StationNameRole:
+                    stationBox.errorModel = errorModel(SurveyChunk.StationNameRole);
+                    break;
+                case SurveyChunk.StationLeftRole:
+                    leftBox.errorModel = errorModel(SurveyChunk.StationLeftRole);
+                    break;
+                case SurveyChunk.StationRightRole:
+                    rightBox.errorModel = errorModel(SurveyChunk.StationRightRole);
+                    break;
+                case SurveyChunk.StationUpRole:
+                    upBox.errorModel = errorModel(SurveyChunk.StationUpRole);
+                    break;
+                case SurveyChunk.StationDownRole:
+                    downBox.errorModel = errorModel(SurveyChunk.StationDownRole);
+                    break;
+                case SurveyChunk.ShotDistanceRole:
+                    distanceBox.errorModel = errorModel(SurveyChunk.ShotDistanceRole);
+                    break;
+                case SurveyChunk.ShotCompassRole:
+                    stationBox.errorModel = errorModel(SurveyChunk.ShotCompassRole);
+                    break;
+                case SurveyChunk.ShotBackCompassRole:
+                    stationBox.errorModel = errorModel(SurveyChunk.ShotBackCompassRole);
+                    break;
+                case SurveyChunk.ShotClinoRole:
+                    stationBox.errorModel = errorModel(SurveyChunk.ShotClinoRole);
+                    break;
+                case SurveyChunk.ShotBackClinoRole:
+                    stationBox.errorModel = errorModel(SurveyChunk.ShotBackClinoRole);
+                    break;
+                }
+
+                console.log("onErrorChanged:" + mainRole + " " + index)
+            }
+
+
+        }
+    }
+
+    // function focusOnStationName() {
+    //     console.log("Focus on station:" + stationBox + " stationRow:" + rowType + " " +  (rowType === SurveyEditorModel.StationRow) + " " + stationBox.visible)
+    //     stationBox.forceActiveFocus()
+    // }
+
+    // function hasFocus(box) {
+    //     return editorFocus.chunk === box.chunk
+    //     && editorFocus.indexInChunk === box.indexInChunk
+    //     && editorFocus.chunkRole === box.dataRole
+    // }
+
+    // Text {
+    //     z: 1
+    //     text: indexInChunk + " " + stationBox.hasEditorFocus + "\n" + stationBox.objectName + "\n" + stationBox.focus
+    // }
 
     SurveyEditorColumnTitles {
         id: titleColumnId
@@ -106,22 +185,18 @@ Item {
         dataValue: stationVisible ? stationName : ""
         visible: stationVisible
         rowIndex: itemId.index
-        indexInChunk: itemId.indexInChunk
+        index: itemId.boxIndex(SurveyChunk.StationNameRole)
+        // indexInChunk: itemId.indexInChunk
         errorButtonGroup: itemId.errorButtonGroup
         errorModel: itemId.errorModel(SurveyChunk.StationNameRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
-        surveyChunk: itemId.chunk
-        dataRole: SurveyChunk.StationNameRole
+        // surveyChunk: itemId.chunk
+        // rowType: itemId.rowType
+        // dataRole: SurveyChunk.StationNameRole
         view: itemId.view
-//        onTabPressed: {
-//            console.log("Tab Pressed!")
-//            view.currentIndex = index + 1;
-//            view.currentItem.children[1].forceActiveFocus()
-////            shotDistanceDataBox1.forceActiveFocus()
-
-
-
-//        }
+        dataValidator: stationValidator
+        // focus: hasEditorFocus
+        editorFocus: itemId.editorFocus
     }
 
     ShotDistanceDataBox {
@@ -150,13 +225,16 @@ Item {
         dataValue: shotVisible ? shotDistance.value : ""
         visible: shotVisible
         rowIndex: itemId.index
-        indexInChunk: itemId.indexInChunk
+        index: itemId.boxIndex(SurveyChunk.ShotDistanceRole)
+        // indexInChunk: itemId.indexInChunk
         errorButtonGroup: itemId.errorButtonGroup
         errorModel: itemId.errorModel(SurveyChunk.ShotDistanceRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
-        surveyChunk: itemId.chunk
-        dataRole: SurveyChunk.ShotDistanceRole
+        // surveyChunk: itemId.chunk
+        // dataRole: SurveyChunk.ShotDistanceRole
         view: itemId.view
+        dataValidator: distanceValidator
+        editorFocus: itemId.editorFocus
     }
 
     CompassReadBox {
@@ -181,14 +259,17 @@ Item {
         visible: calibration.frontSights && itemId.shotVisible
         dataValue: itemId.shotVisible ? shotCompass.value : ""
         rowIndex: itemId.index
-        indexInChunk: itemId.indexInChunk
+        index: itemId.boxIndex(SurveyChunk.ShotCompassRole)
+        // indexInChunk: itemId.indexInChunk
         errorButtonGroup: itemId.errorButtonGroup
         errorModel: itemId.errorModel(SurveyChunk.ShotCompassRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
-        surveyChunk: itemId.chunk
-        dataRole: SurveyChunk.ShotCompassRole
+        // surveyChunk: itemId.chunk
+        // dataRole: SurveyChunk.ShotCompassRole
         view: itemId.view
         readingText: "fs"
+        dataValidator: compassValidator
+        editorFocus: itemId.editorFocus
     }
 
     CompassReadBox {
@@ -219,14 +300,17 @@ Item {
         visible: calibration.backSights && itemId.shotVisible
         dataValue: itemId.shotVisible ? shotBackCompass.value : ""
         rowIndex: itemId.index
-        indexInChunk: itemId.indexInChunk
+        index: itemId.boxIndex(SurveyChunk.ShotBackCompassRole)
+        // indexInChunk: itemId.indexInChunk
         errorButtonGroup: itemId.errorButtonGroup
         errorModel: itemId.errorModel(SurveyChunk.ShotBackCompassRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
-        surveyChunk: itemId.chunk
-        dataRole: SurveyChunk.ShotBackCompassRole
+        // surveyChunk: itemId.chunk
+        // dataRole: SurveyChunk.ShotBackCompassRole
         view: itemId.view
         readingText: "bs"
+        dataValidator: compassValidator
+        editorFocus: itemId.editorFocus
     }
 
     ClinoReadBox {
@@ -267,14 +351,17 @@ Item {
         visible: calibration.frontSights && itemId.shotVisible
         dataValue: itemId.shotVisible ? shotClino.value : ""
         rowIndex: itemId.index
-        indexInChunk: itemId.indexInChunk
+        index: itemId.boxIndex(SurveyChunk.ShotClinoRole)
+        // indexInChunk: itemId.indexInChunk
         errorButtonGroup: itemId.errorButtonGroup
         errorModel: itemId.errorModel(SurveyChunk.ShotClinoRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
-        surveyChunk: itemId.chunk
-        dataRole: SurveyChunk.ShotClinoRole
+        // surveyChunk: itemId.chunk
+        // dataRole: SurveyChunk.ShotClinoRole
         view: itemId.view
         readingText: "fs"
+        dataValidator: clinoValidator
+        editorFocus: itemId.editorFocus
     }
 
     ClinoReadBox {
@@ -308,14 +395,17 @@ Item {
 
         dataValue: itemId.shotVisible ? shotBackClino.value : ""
         rowIndex: itemId.index
-        indexInChunk: itemId.indexInChunk
+        index: itemId.boxIndex(SurveyChunk.ShotBackClinoRole)
+        // indexInChunk: itemId.indexInChunk
         errorButtonGroup: itemId.errorButtonGroup
         errorModel: itemId.errorModel(SurveyChunk.ShotBackClinoRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
-        surveyChunk: itemId.chunk
-        dataRole: SurveyChunk.ShotBackClinoRole
+        // surveyChunk: itemId.chunk
+        // dataRole: SurveyChunk.ShotBackClinoRole
         view: itemId.view
         readingText: "bs"
+        dataValidator: clinoValidator
+        editorFocus: itemId.editorFocus
     }
 
     StationDistanceBox {
@@ -356,13 +446,21 @@ Item {
         dataValue: itemId.stationVisible ? stationLeft.value : ""
         visible: itemId.stationVisible
         rowIndex: itemId.index
-        indexInChunk: itemId.indexInChunk
+        index: itemId.boxIndex(SurveyChunk.StationLeftRole)
+        // indexInChunk: itemId.indexInChunk
         errorButtonGroup: itemId.errorButtonGroup
         errorModel: itemId.errorModel(SurveyChunk.StationLeftRole)
+
+        onErrorModelChanged: {
+            console.log("Error model changed for left:" + errorModel + " " + this + " " + rowIndex)
+        }
+
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
-        surveyChunk: itemId.chunk
-        dataRole: SurveyChunk.StationLeftRole
+        // surveyChunk: itemId.chunk
+        // dataRole: SurveyChunk.StationLeftRole
         view: itemId.view
+        dataValidator: distanceValidator
+        editorFocus: itemId.editorFocus
     }
 
     StationDistanceBox {
@@ -386,13 +484,16 @@ Item {
         dataValue: itemId.stationVisible ? stationRight.value : ""
         visible: itemId.stationVisible
         rowIndex: itemId.index
-        indexInChunk: itemId.indexInChunk
+        index: itemId.boxIndex(SurveyChunk.StationRightRole)
+        // indexInChunk: itemId.indexInChunk
         errorButtonGroup: itemId.errorButtonGroup
-        errorModel: itemId.errorModel(SurveyChunk.StationLeftRole)
+        errorModel: itemId.errorModel(SurveyChunk.StationRightRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
-        surveyChunk: itemId.chunk
-        dataRole: SurveyChunk.StationRightRole
+        // surveyChunk: itemId.chunk
+        // dataRole: SurveyChunk.StationRightRole
         view: itemId.view
+        dataValidator: distanceValidator
+        editorFocus: itemId.editorFocus
     }
 
     StationDistanceBox {
@@ -416,13 +517,16 @@ Item {
         dataValue: itemId.stationVisible ? stationUp.value : ""
         visible: itemId.stationVisible
         rowIndex: itemId.index
-        indexInChunk: itemId.indexInChunk
+        index: itemId.boxIndex(SurveyChunk.StationUpRole)
+        // indexInChunk: itemId.indexInChunk
         errorButtonGroup: itemId.errorButtonGroup
-        errorModel: itemId.errorModel(SurveyChunk.StationLeftRole)
+        errorModel: itemId.errorModel(SurveyChunk.StationUpRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
-        surveyChunk: itemId.chunk
-        dataRole: SurveyChunk.StationUpRole
+        // surveyChunk: itemId.chunk
+        // dataRole: SurveyChunk.StationUpRole
         view: itemId.view
+        dataValidator: distanceValidator
+        editorFocus: itemId.editorFocus
     }
 
     StationDistanceBox {
@@ -452,13 +556,16 @@ Item {
         dataValue: itemId.stationVisible ? stationDown.value : ""
         visible: itemId.stationVisible
         rowIndex: itemId.index
-        indexInChunk: itemId.indexInChunk
+        index: itemId.boxIndex(SurveyChunk.StationDownRole)
+        // indexInChunk: itemId.indexInChunk
         errorButtonGroup: itemId.errorButtonGroup
-        errorModel: itemId.errorModel(SurveyChunk.StationLeftRole)
+        errorModel: itemId.errorModel(SurveyChunk.StationDownRole)
         surveyChunkTrimmer: itemId.surveyChunkTrimmer
-        surveyChunk: itemId.chunk
-        dataRole: SurveyChunk.StationDownRole
+        // surveyChunk: itemId.chunk
+        // dataRole: SurveyChunk.StationDownRole
         view: itemId.view
+        dataValidator: distanceValidator
+        editorFocus: itemId.editorFocus
     }
 
 }

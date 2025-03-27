@@ -23,25 +23,38 @@ MainWindowTest {
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
-            let addSuveyButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->addSurveyData")
+            let addSuveyButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->addSurveyData")
             mouseClick(addSuveyButton)
 
-            wait(200);
+            waitForRendering(rootId)
+
+            // wait(10000);
         }
 
         function enterSurveyData() {
+            waitForRendering(rootId);
+
+            // wait(100000);
+
             //Start adding survey data
             keyClick("b")
             keyClick(49, 0) //1
             keyClick(16777220, 0) //Return
 
+            waitForRendering(rootId);
+
             //Make sure that we go to the next station entry
             keyClick(16777217, 0) //Tab got to the next cell
+            waitForRendering(rootId);
             keyClick(16777217, 0) //Tab add the next station B2
+            waitForRendering(rootId);
 
             //Check that we have two stations
             let trip = RootData.pageView.currentPageItem.currentTrip as Trip;
             verify(trip !== null);
+
+            // wait(100000);
+
 
             let firstChunk = trip.chunk(0);
             verify(firstChunk.stationCount() === 3)
@@ -49,66 +62,103 @@ MainWindowTest {
             verify(firstChunk.data(SurveyChunk.StationNameRole, 1) === "b2")
             verify(firstChunk.data(SurveyChunk.StationNameRole, 2) === "")
 
-
             //Enter distance of 10
-            // verify(firstChunk.data(SurveyChunk.ShotCompassRole, 0) === "")
+            verify(firstChunk.data(SurveyChunk.ShotCompassRole, 0).value === "")
             keyClick(49, 0) //1
             keyClick(48, 0) //0
             keyClick(16777217, 0) //Tab
-            verify(firstChunk.data(SurveyChunk.ShotDistanceRole, 0) === "10")
-            wait(50);
+
+            verify(firstChunk.data(SurveyChunk.ShotDistanceRole, 0).value === "10")
+            waitForRendering(rootId);
 
             //Compass of 0
-            // verify(firstChunk.data(SurveyChunk.ShotCompassRole, 0) === "")
+            verify(firstChunk.data(SurveyChunk.ShotCompassRole, 0).value === "")
             keyClick(48, 0) //0
             keyClick(16777217, 0) //Tab
-            verify(firstChunk.data(SurveyChunk.ShotCompassRole, 0) === "0")
-            wait(50);
+            verify(firstChunk.data(SurveyChunk.ShotCompassRole, 0).value === "0")
+            waitForRendering(rootId)
 
-            //Skip back compass
-            // verify(firstChunk.data(SurveyChunk.ShotBackCompassRole, 0) === "")
+
+            //12 back compass
+            verify(firstChunk.data(SurveyChunk.ShotBackCompassRole, 0).value === "")
+            keyClick(49, 0) //1
+            keyClick(50, 0) //2
+            keyClick(16777220, 0) //Return
+            verify(firstChunk.data(SurveyChunk.ShotBackCompassRole, 0).value === "12")
             keyClick(16777217, 0) //Tab
-            // verify(firstChunk.data(SurveyChunk.ShotBackCompassRole, 0) === "")
 
             //Enter 11 for clino
-            // verify(firstChunk.data(SurveyChunk.ShotClinoRole, 0) === "")
+            verify(firstChunk.data(SurveyChunk.ShotClinoRole, 0).value === "")
             keyClick(49, 0) //1
             keyClick(49, 0) //1
             keyClick(16777217, 0) //Tab
-            verify(firstChunk.data(SurveyChunk.ShotClinoRole, 0) === "11")
-            wait(50);
+            verify(firstChunk.data(SurveyChunk.ShotClinoRole, 0).value === "11")
+            waitForRendering(rootId)
+
+            //13 back clino
+            verify(firstChunk.data(SurveyChunk.ShotBackClinoRole, 0).value === "")
+            keyClick(49, 0) //1
+            keyClick(51, 0) //3
+            keyClick(16777217, 0) //Tab
+            verify(firstChunk.data(SurveyChunk.ShotBackClinoRole, 0).value === "13")
+
+
+            //Left
+            verify(firstChunk.data(SurveyChunk.StationLeftRole, 0).value === "")
+            keyClick(48, 0) //0
+            keyClick(46, 0) //.
+            keyClick(50, 0) //2
+            keyClick(16777217, 0) //Tab
+            verify(firstChunk.data(SurveyChunk.StationLeftRole, 0).value === "0.2")
+
+            //Right
+            verify(firstChunk.data(SurveyChunk.StationRightRole, 0).value === "")
+            keyClick(49, 0) //1
+            keyClick(16777217, 0) //Tab
+            verify(firstChunk.data(SurveyChunk.StationRightRole, 0).value === "1")
+
+            //Up
+            verify(firstChunk.data(SurveyChunk.StationUpRole, 0).value === "")
+            keyClick(50, 0) //2
+            keyClick(16777217, 0) //Tab
+            verify(firstChunk.data(SurveyChunk.StationUpRole, 0).value === "2")
+
+            //Down
+            verify(firstChunk.data(SurveyChunk.StationDownRole, 0).value === "")
+            keyClick(51, 0) //3
+            keyClick(16777220, 0) //Return
+            verify(firstChunk.data(SurveyChunk.StationDownRole, 0).value === "3")
+            keyClick(16777217, 0) //Tab
 
             //Skip the LRUD
-            // keyClick(16777217, 0) //Tab
             keyClick(16777217, 0) //Tab
             keyClick(16777217, 0) //Tab
             keyClick(16777217, 0) //Tab
             keyClick(16777217, 0) //Tab
-            keyClick(16777217, 0) //Tab
-            keyClick(16777217, 0) //Tab
-            keyClick(16777217, 0) //Tab
-            keyClick(16777217, 0) //Tab
-            keyClick(16777217, 0) //Tab
+            verify(firstChunk.data(SurveyChunk.StationLeftRole, 1).value === "")
+            verify(firstChunk.data(SurveyChunk.StationRightRole, 1).value === "")
+            verify(firstChunk.data(SurveyChunk.StationUpRole, 1).value === "")
+            verify(firstChunk.data(SurveyChunk.StationDownRole, 1).value === "")
 
             //Connect to a1
             keyClick("a")
             keyClick(49, 0) //1
             keyClick(16777217, 0) //Tab
             verify(firstChunk.data(SurveyChunk.StationNameRole, 2) === "a1")
-            wait(50);
+            waitForRendering(rootId)
 
             //Distance of 1
             keyClick(49, 0) //1
             keyClick(16777217, 0) //Tab
-            verify(firstChunk.data(SurveyChunk.ShotDistanceRole, 1) === "1")
-            wait(50);
+            verify(firstChunk.data(SurveyChunk.ShotDistanceRole, 1).value === "1")
+            waitForRendering(rootId)
 
             //Compasss of 10
             keyClick(49, 0) //1
             keyClick(48, 0) //0
             keyClick(16777217, 0) //Tab
-            verify(firstChunk.data(SurveyChunk.ShotCompassRole, 1) === "10")
-            wait(50);
+            verify(firstChunk.data(SurveyChunk.ShotCompassRole, 1).value === "10")
+            waitForRendering(rootId)
 
             //Skip backcompass
             keyClick(16777217, 0) //Tab
@@ -116,14 +166,76 @@ MainWindowTest {
             //Clino of 0
             keyClick(48, 0) //0
             keyClick(16777217, 0) //Tab
-            verify(firstChunk.data(SurveyChunk.ShotClinoRole, 1) === "0")
-            wait(50);
+            verify(firstChunk.data(SurveyChunk.ShotClinoRole, 1).value === "0")
+            waitForRendering(rootId)
+
+            //make sure the secondChunk chunk doesn't exist before we create it
+            verify(trip.chunkCount === 1);
+
+            //Make a new scrap
+            keyClick(32, 0) //Space
+            verify(firstChunk)
+
+            // wait(100000);
+
+            //Make sure focus is on the secondChunk
+            let stationBox = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->view->dataBox.7.0")
+            console.log("Focus:" + rootId.Window.window.activeFocusItem)
+            verify(stationBox.focus === true);
+
+            // verify
+
+            //Make sure the first chunk gets trimmed
+            verify(firstChunk.stationCount() === 3)
+            verify(firstChunk.shotCount() === 2)
+
+            //Make sure the new scrap exists
+            verify(trip.chunkCount === 2);
+            let secondChunk = trip.chunk(1);
+            verify(secondChunk !== null);
+
+            //Add data
+            keyClick("a")
+            keyClick(49, 0) //1
+            keyClick(16777217, 0) //Tab
+
+            // wait(10000)
+            verify(secondChunk.data(SurveyChunk.StationNameRole, 0) === "a1")
+
+            //Auto guess next row
+            keyClick(16777217, 0) //Tab
+            verify(secondChunk.data(SurveyChunk.StationNameRole, 1) === "a2")
+
+            waitForRendering(rootId);
+
+            keyClick(52, 0) //4
+            keyClick(16777217, 0) //Tab
+            verify(secondChunk.data(SurveyChunk.ShotDistanceRole, 0).value === "4")
+
+            keyClick(51, 0) //3
+            keyClick(48, 0) //0
+            keyClick(16777217, 0) //Tab
+            verify(secondChunk.data(SurveyChunk.ShotCompassRole, 0).value === "30")
+
+            //Skip backsight
+            keyClick(16777217, 0) //Tab
+            verify(secondChunk.data(SurveyChunk.ShotBackCompassRole, 0).value === "")
+
+            keyClick(50, 0) //2
+            keyClick(48, 0) //0
+            keyClick(16777217, 0) //Tab
+            verify(secondChunk.data(SurveyChunk.ShotClinoRole, 0).value === "20")
+            verify(secondChunk.data(SurveyChunk.ShotBackClinoRole, 0).value === "")
+            verify(secondChunk.data(SurveyChunk.StationLeftRole, 0).value === "")
+            verify(secondChunk.data(SurveyChunk.StationRightRole, 0).value === "")
+            verify(secondChunk.data(SurveyChunk.StationUpRole, 0).value === "")
+            verify(secondChunk.data(SurveyChunk.StationDownRole, 0).value === "")
+
+            waitForRendering(rootId);
         }
 
         function test_enterSurveyData() {
             addSurvey();
-
-            wait(10000);
 
             enterSurveyData();
         }
@@ -138,8 +250,12 @@ MainWindowTest {
             keyClick(16777217, 0) //Tab
             keyClick(16777217, 0) //Tab
 
+            wait(100000)
+
             //Check that we can supress the a warning
-            let databox = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->dataBox.1.1")
+            let databox = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->view->dataBox.1.1")
+            verify(databox !== null)
+            verify(databox.errorModel !== null);
             let errors = databox.errorModel.errors;
 
             verify(errors.count == 1);
@@ -148,7 +264,7 @@ MainWindowTest {
             verify(errors.data(firstErrorIndex, ErrorListModel.ErrorTypeRole) === CwError.Warning)
             verify(errors.data(firstErrorIndex, ErrorListModel.SuppressedRole) === false)
 
-            let errorIcon_obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->dataBox.1.1->errorIcon")
+            let errorIcon_obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->view->dataBox.1.1->errorIcon")
             mouseClick(errorIcon_obj1)
 
             // wait(1000000);
@@ -163,7 +279,7 @@ MainWindowTest {
             tryVerify(()=>{ return errors.data(firstErrorIndex, ErrorListModel.SuppressedRole) === true; })
 
             //Make sure error message works, click on it
-            let distanceError = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->dataBox.0.5->errorIcon")
+            let distanceError = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->view->dataBox.0.5->errorIcon")
             mouseClick(distanceError)
 
             //Make sure the warning message that was shown before is now hidden
@@ -185,7 +301,7 @@ MainWindowTest {
         function test_dateChangeShouldWork() {
             addSurvey();
 
-            let date = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->tripDate")
+            let date = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->tripDate")
             date.openEditor();
             // mouseDoubleClickSequence(date)
 
@@ -209,11 +325,11 @@ MainWindowTest {
 
             enterSurveyData();
 
-            let coreTextInput_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->dataBox.1.5->coreTextInput")
+            let coreTextInput_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.1.5->coreTextInput")
             mouseClick(coreTextInput_obj1)
 
-            let excludeMenuButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->dataBox.1.5->excludeMenuButton")
-            let excludeMenu = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->dataBox.1.5->excludeMenuButton").menu
+            let excludeMenuButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.1.5->excludeMenuButton")
+            let excludeMenu = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.1.5->excludeMenuButton").menu
             tryVerify(() => { return excludeMenu.visible === false})
 
             mouseClick(excludeMenuButton)
@@ -226,7 +342,7 @@ MainWindowTest {
             tryVerify(() => { return excludeMenu.visible === false })
 
             //Make sure the distance has gone down
-            let totalLengthText_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->totalLengthText")
+            let totalLengthText_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->totalLengthText")
             tryCompare(totalLengthText_obj1, "text", "Total Length: 10 m");
 
             //Include it again
@@ -240,7 +356,7 @@ MainWindowTest {
             tryVerify(() => { return excludeMenu.visible === false })
 
             //Make sure the distance has gone down
-            totalLengthText_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->totalLengthText")
+            totalLengthText_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->totalLengthText")
             tryCompare(totalLengthText_obj1, "text", "Total Length: 11 m");
         }
 
@@ -272,7 +388,7 @@ MainWindowTest {
 
                 verify(item !== null);
 
-                console.log("CurrentItem:" + currentItem + " " + currentItem.focus + " index:" + index + " nextRole:" + nextRole + " nextItem:" + item + " " + item.focus)
+                // console.log("CurrentItem:" + currentItem + " " + currentItem.focus + " index:" + index + " nextRole:" + nextRole + " nextItem:" + item + " " + item.focus)
 
                 if(currentItem.focus === true) {
                     console.log("Testcase will fail, bad currentItem focus!!!");

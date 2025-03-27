@@ -12,30 +12,34 @@ import "qrc:/cavewherelib/cavewherelib/Theme.js" as Theme
 DataBox {
     id: stationBox
 
+    property var window: QQ.Window.window
+
     function commitAutoStation() {
-        var stationName = surveyChunk.guessLastStationName();
-        surveyChunk.setData(dataRole, indexInChunk, stationName);
+        var stationName = index.chunk.guessLastStationName();
+        index.chunk.setData(index.chunkRole, indexInChunk, stationName);
     }
 
     onFocusChanged: {
-       if(focus) {
-           //Make sure it's visible to the user
-           var lastStationIndex = surveyChunk.stationCount() - 1
+        // console.log("Focus changed!" + focus + " " + this + " Window activeFocus:" + stationBox.window.activeFocusItem) ;
 
-           //Try to guess for new stations what the next station is
-           //Make sure the station is the last station in the chunk
-           if(lastStationIndex  === indexInChunk) {
+        if(focus) {
+            //Make sure it's visible to the user
+            var lastStationIndex = index.chunk.stationCount() - 1
 
-               //Make sure the data is empty
-               if(dataValue === "") {
-                   var guessedstationName = surveyChunk.guessLastStationName();
-                   if(guessedstationName !== "") {
-                       stationName.text = guessedstationName
-                       state = "AutoNameState"
-                   }
-               }
-           }
-       }
+            //Try to guess for new stations what the next station is
+            //Make sure the station is the last station in the chunk
+            if(lastStationIndex  === indexInChunk) {
+
+                //Make sure the data is empty
+                if(dataValue === "") {
+                    var guessedstationName = index.chunk.guessLastStationName();
+                    if(guessedstationName !== "") {
+                        stationName.text = guessedstationName
+                        state = "AutoNameState"
+                    }
+                }
+            }
+        }
     }
 
     QQ.Rectangle {

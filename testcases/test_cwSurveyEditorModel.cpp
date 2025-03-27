@@ -53,6 +53,7 @@ TEST_CASE("cwSurveyEditorModel new chunk should work correctly", "[cwSurveyEdito
     CHECK(i1.data(cwSurveyEditorModel::ShotClinoRole).isNull());
     CHECK(i1.data(cwSurveyEditorModel::ShotBackClinoRole).isNull());
     CHECK(i1.data(cwSurveyEditorModel::RowTypeRole).toInt() == cwSurveyEditorModel::StationRow);
+    CHECK(i1.data(cwSurveyEditorModel::IndexInChunkRole).toInt() == 0);
 
     auto i2 = model.index(2); //Shot
     CHECK(i2.data(cwSurveyEditorModel::StationNameRole).isNull());
@@ -72,6 +73,7 @@ TEST_CASE("cwSurveyEditorModel new chunk should work correctly", "[cwSurveyEdito
     CHECK(i2.data(cwSurveyEditorModel::ShotBackClinoRole).toString().toStdString() == "");
     CHECK(i2.data(cwSurveyEditorModel::ShotCalibrationRole).toString().toStdString() == "");
     CHECK(i2.data(cwSurveyEditorModel::RowTypeRole).toInt() == cwSurveyEditorModel::ShotRow);
+    CHECK(i1.data(cwSurveyEditorModel::IndexInChunkRole).toInt() == 0);
 
     auto i3 = model.index(3); //Station
     CHECK(!i3.data(cwSurveyEditorModel::StationNameRole).isNull());
@@ -84,6 +86,7 @@ TEST_CASE("cwSurveyEditorModel new chunk should work correctly", "[cwSurveyEdito
     CHECK(i3.data(cwSurveyEditorModel::StationRightRole).toString().toStdString() == "");
     CHECK(i3.data(cwSurveyEditorModel::StationUpRole).toString().toStdString() == "");
     CHECK(i3.data(cwSurveyEditorModel::StationDownRole).toString().toStdString() == "");
+    CHECK(i3.data(cwSurveyEditorModel::IndexInChunkRole).toInt() == 1);
 
     CHECK(i3.data(cwSurveyEditorModel::ShotDistanceRole).isNull());
     CHECK(i3.data(cwSurveyEditorModel::ShotCompassRole).isNull());

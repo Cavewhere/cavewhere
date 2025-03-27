@@ -12,22 +12,55 @@ import QtQuick.Controls.Basic as BasicControls
 
 QQ.Item {
     id: dataBox
-    objectName: "dataBox." + rowIndex + "." + dataRole
+    objectName: "dataBox." + rowIndex + "." + index.chunkRole
 
     property alias dataValue: editor.text
     property alias dataValidator: editor.validator
-    required property SurveyChunk surveyChunk; //For hooking up signals and slots in subclasses
+    // required property SurveyChunk surveyChunk; //For hooking up signals and slots in subclasses
 
     required property SurveyChunkTrimmer surveyChunkTrimmer; //For interaction
     property alias aboutToDelete: removeBoxId.visible
-    property ErrorModel errorModel: null
+    required property ErrorModel errorModel
     required property Controls.ButtonGroup errorButtonGroup
     property KeyNavigationContainer navigation: KeyNavigationContainer {}
 
-    required property int rowIndex //Index in the ListView
-    required property int indexInChunk //Index in the surveyChunk
-    required property int dataRole
+    //The index informantion from cwSurveyEditorModel
+    required property cwSurveyEditorBoxIndex index
+
+    //Index in the ListView
+    required property int rowIndex
+
+    // required property int indexInChunk //Index in the surveyChunk
+    // required property int boxIndex.chunkRole
+    // property int boxIndex.rowType
+
     required property QQ.ListView view
+
+    //For changing the focus to other data boxs
+    required property SurveyEditorFocus editorFocus
+
+    readonly property bool hasEditorFocus: {
+        // if(editorFocus) {
+        //     if(editorFocus.boxIndex.chunk === index.chunk
+        //             && editorFocus.boxIndex.rowType === index.rowType
+        //             && editorFocus.boxIndex.indexInChunk === index.indexInChunk
+        //             && editorFocus.boxIndex.chunkRole === index.chunkRole) {
+        //         console.log("----");
+        //         console.log("Editor Focus1:" + this + " " + dataBox.index.chunk + " " + dataBox.index.indexInChunk + " " + dataBox.index.chunkRole + " " + dataBox.index.rowType)
+        //         console.log("Editor Focus2:" + this + " " + index.chunk + " " + index.indexInChunk + " " + index.chunkRole + " " + index.rowType)
+        //         console.log("hasEditorfocus:" + (editorFocus.boxIndex.chunk === index.chunk
+        //                                          && editorFocus.boxIndex.rowType === index.rowType
+        //                                          && editorFocus.boxIndex.indexInChunk === index.indexInChunk
+        //                                          && editorFocus.boxIndex.chunkRole === index.chunkRole))
+        //     }
+            return editorFocus.boxIndex.chunk === index.chunk
+                    && editorFocus.boxIndex.rowType === index.rowType
+                    && editorFocus.boxIndex.indexInChunk === index.indexInChunk
+                    && editorFocus.boxIndex.chunkRole === index.chunkRole
+        // } else {
+        //     return false;
+        // }
+    }
 
     property GlobalShadowTextInput _globalShadowTextInput: GlobalShadowTextInput
     property GlobalTextInputHelper _globalTextInput: GlobalShadowTextInput.textInput
@@ -40,6 +73,32 @@ QQ.Item {
     //    signal rightClicked(int index)
     //    signal splitOn(int index)
 
+    // QQ.Binding {
+    //     dataBox.focus: hasEditorFocus
+    // }
+
+    Text {
+        color: "red"
+        font.pixelSize: 10
+        // text: dataBox.objectName + "\nF:" + dataBox.focus + "\nEF:" + hasEditorFocus
+        text: dataBox.objectName + "\ne:" + errorModel
+        z: 1
+    }
+
+    onHasEditorFocusChanged: {
+        focus = hasEditorFocus
+    }
+
+    //We need to watch on currentIndex changed because the view
+    //set the focus on the row delegate. This will disable the focus on the
+    //correct databox.
+    QQ.Connections {
+       target: dataBox.view
+       function onCurrentIndexChanged() {
+           focus = hasEditorFocus;
+       }
+    }
+
     function deletePressedHandler() {
         dataValue = '';
         editor.openEditor();
@@ -51,7 +110,7 @@ QQ.Item {
             let item = navigation[navProperty].item;
 
             if(navigation[navProperty].indexOffset !== 0) {
-                view.currentIndex = index
+                view.currentIndex = rowIndex
 
                 let itemIndex = -1;
                 for(let childIndex in view.currentItem.children) {
@@ -70,6 +129,7 @@ QQ.Item {
                         view.currentIndex = nextCurrentIndex;
                         if(view.currentItem.children[itemIndex].visible) {
                             view.currentItem.children[itemIndex].forceActiveFocus()
+                            // editorFocus.boxIndex = view.currentItem.children[itemIndex].index
                             break;
                         }
                         nextCurrentIndex = view.currentIndex + navigation[navProperty].indexOffset
@@ -84,6 +144,7 @@ QQ.Item {
                 }
             } else {
                 if(item !== null) {
+                    // editorFocus.boxIndex = index
                     item.forceActiveFocus()
                 }
             }
@@ -91,7 +152,7 @@ QQ.Item {
     }
 
     function handleTab(eventKey) {
-        // console.log("HandleTab!")
+         console.log("HandleTab!")
         if(eventKey.key === Qt.Key_Tab) {
             // console.log("Tab pressed! on " + dataBox.objectName)
             tabPressed();
@@ -148,6 +209,24 @@ QQ.Item {
         return ""
     }
 
+    function addNewChunk() {
+        var trip = index.chunk.parentTrip;
+        if(trip.chunkCount > 0) {
+            var lastChunkIndex = trip.chunkCount - 1
+            var lastChunk = trip.chunk(lastChunkIndex);
+            if(lastChunk.isStationAndShotsEmpty()) {
+                dataBox.editorFocus.focusOnLastChunk();
+                return;
+            }
+        }
+
+        console.log("space bar 2 area click, new chunk!");
+        index.chunk.parentTrip.addNewChunk();
+
+        //Set active focus on the new chunk
+
+    }
+
     onEnteredPressed: {
         editor.openEditor()
     }
@@ -167,12 +246,12 @@ QQ.Item {
         Controls.MenuItem {
             text: "Remove Chunk"
             onTriggered: {
-                dataBox.surveyChunk.parentTrip.removeChunk(dataBox.surveyChunk)
+                dataBox.index.chunk.parentTrip.removeChunk(dataBox.index.chunk)
             }
 
             //            onContainsMouseChanged: {
-            //                var lastStationIndex = surveyChunk.stationCount() - 1;
-            //                var lastShotIndex = surveyChunk.shotCount() - 1;
+            //                var lastStationIndex = index.chunk.stationCount() - 1;
+            //                var lastShotIndex = index.chunk.shotCount() - 1;
 
             //                if(containsMouse) {
             //                    surveyChunkView.showRemoveBoxsOnStations(0, lastStationIndex);
@@ -200,7 +279,8 @@ QQ.Item {
         acceptedButtons: Qt.LeftButton | Qt.RightButton
 
         onClicked: (mouse) => {
-                       dataBox.focus = true
+                       dataBox.editorFocus = dataBox.index
+                       // dataBox.focus = true
 
                        if(mouse.button === Qt.RightButton) {
                            dataBox.rightClick(mouse)
@@ -214,25 +294,25 @@ QQ.Item {
 
         gradient: QQ.Gradient {
             QQ.GradientStop {
-                position: dataBox.indexInChunk % 2 === 0 ? 1.0 : 0.0
+                position: dataBox.index.indexInChunk % 2 === 0 ? 1.0 : 0.0
                 color:  "#DDF2FF"
             }
             QQ.GradientStop {
-                position: dataBox.indexInChunk % 2 === 0 ? 0.4 : 0.6
+                position: dataBox.index.indexInChunk % 2 === 0 ? 0.4 : 0.6
                 color:  "white"
             }
         }
 
         // DebugRectangle {}
 
-        visible: dataBox.surveyChunk !== null && dataBox.surveyChunk.isStationRole(dataBox.dataRole)
+        visible: dataBox.index.chunk !== null && dataBox.index.chunk.isStationRole(dataBox.index.chunkRole)
     }
 
     QQ.Rectangle {
         id: backgroundShot
-        property bool offsetColor: dataBox.indexInChunk % 2 === 0 && dataBox.surveyChunk !== null && dataBox.surveyChunk.isShotRole(dataBox.dataRole)
+        property bool offsetColor: dataBox.index.indexInChunk % 2 === 0 && dataBox.index.chunk !== null && dataBox.index.chunk.isShotRole(dataBox.index.chunkRole)
         anchors.fill: parent
-        visible: dataBox.surveyChunk.isShotRole(dataBox.dataRole)
+        visible: dataBox.index.chunk.isShotRole(dataBox.index.chunkRole)
         color: offsetColor ? "#DDF2FF" : "white"
     }
 
@@ -266,17 +346,45 @@ QQ.Item {
             return;
         }
 
-        // surveyChunkView.navigationArrow(rowIndex, dataRole, event.key);
+        // surveyChunkView.navigationArrow(rowIndex, boxIndex.chunkRole, event.key);
 
         // if(event.key === Qt.Key_Backspace) {
         // }
 
-        // if(editor.validator.validate(event.text) > 0 && event.text.length > 0) {
-        //     dataBox.state = 'MiddleTyping'
-        //     editor.openEditor()
-        //     GlobalShadowTextInput.textInput.text  = event.text
-        //     GlobalShadowTextInput.clearSelection() //GlobalShowTextInput is what's opened from editor.openEditor
+        if(dataValidator.validate(event.text) > 0 && event.text.length > 0) {
+            dataBox.state = 'MiddleTyping'
+            editor.openEditor()
+            GlobalShadowTextInput.textInput.text  = event.text
+            GlobalShadowTextInput.clearSelection() //GlobalShowTextInput is what's opened from editor.openEditor
+        }
+    }
+
+    QQ.Keys.onSpacePressed: {
+        addNewChunk();
+
+        // var trip = index.chunk.parentTrip;
+        // if(trip.chunkCount > 0) {
+        //     var lastChunkIndex = trip.chunkCount - 1
+        //     var lastChunk = trip.chunk(lastChunkIndex);
+        //     if(lastChunk.isStationAndShotsEmpty()) {
+        //         (dataBox.surveyChunkView.parent as SurveyChunkGroupView).setFocus(lastChunkIndex)
+        //         return;
+        //     }
         // }
+
+        // console.log("space bar 2 area click, new chunk!");
+        // index.chunk.parentTrip.addNewChunk();
+    }
+
+
+    onFocusChanged: {
+        if(focus) {
+            //Make sure it's visible to the user
+            //            surveyChunkView.ensureDataBoxVisible(rowIndex, boxIndex.chunkRole)
+            // console.log("Focus change:" + focus + " " + index.chunk + " " + this)
+            surveyChunkTrimmer.chunk = index.chunk;
+            editorFocus.boxIndex = index
+        }
     }
 
 
@@ -286,7 +394,7 @@ QQ.Item {
         autoResize: true
 
         onFinishedEditting: (newText) => {
-                                dataBox.surveyChunk.setData(dataBox.dataRole, dataBox.rowIndex, newText)
+                                dataBox.index.chunk.setData(dataBox.index.chunkRole, dataBox.index.indexInChunk, newText)
                                 dataBox.state = ""; //Go back to the default state
                                 dataBox.forceActiveFocus();
                             }
@@ -373,7 +481,7 @@ QQ.Item {
         //         return;
         //     }
 
-        //     surveyChunkView.navigationArrow(rowIndex, dataRole, event.key);
+        //     surveyChunkView.navigationArrow(rowIndex, boxIndex.chunkRole, event.key);
 
         //     // if(event.key === Qt.Key_Backspace) {
         //     // }
@@ -389,7 +497,7 @@ QQ.Item {
 
         // QQ.Keys.onPressed: (event) => {
         //                        handleTab(event);
-        //                        surveyChunkView.navigationArrow(rowIndex, dataRole, event.key);
+        //                        // surveyChunkView.navigationArrow(rowIndex, boxIndex.chunkRole, event.key);
 
         //                        if(event.key === Qt.Key_Backspace) {
         //                            deletePressedHandler();
@@ -405,18 +513,20 @@ QQ.Item {
         //                    }
 
         // QQ.Keys.onSpacePressed: {
-        //     var trip = surveyChunk.parentTrip;
-        //     if(trip.chunkCount > 0) {
-        //         var lastChunkIndex = trip.chunkCount - 1
-        //         var lastChunk = trip.chunk(lastChunkIndex);
-        //         if(lastChunk.isStationAndShotsEmpty()) {
-        //             (dataBox.surveyChunkView.parent as SurveyChunkGroupView).setFocus(lastChunkIndex)
-        //             return;
-        //         }
-        //     }
+        //     addNewChunk();
 
-        //     console.log("space bar 2 area click, new chunk!");
-        //     surveyChunk.parentTrip.addNewChunk();
+        //     // var trip = surveyChunk.parentTrip;
+        //     // if(trip.chunkCount > 0) {
+        //     //     var lastChunkIndex = trip.chunkCount - 1
+        //     //     var lastChunk = trip.chunk(lastChunkIndex);
+        //     //     if(lastChunk.isStationAndShotsEmpty()) {
+        //     //         (dataBox.surveyChunkView.parent as SurveyChunkGroupView).setFocus(lastChunkIndex)
+        //     //         return;
+        //     //     }
+        //     // }
+
+        //     // console.log("space bar 2 area click, new chunk!");
+        //     // index.chunk.parentTrip.addNewChunk();
         // }
 
         QQ.Keys.onEnterPressed: {
@@ -431,84 +541,93 @@ QQ.Item {
             deletePressed();
         }
 
-        onFocusChanged: {
-            if(focus) {
-                //Make sure it's visible to the user
-                //            surveyChunkView.ensureDataBoxVisible(rowIndex, dataRole)
-                //            surveyChunkTrimmer.chunk = surveyChunk;
-            }
-        }
+        // onFocusChanged: {
+        //     if(focus) {
+        //         //Make sure it's visible to the user
+        //         //            surveyChunkView.ensureDataBoxVisible(rowIndex, boxIndex.chunkRole)
+        //         console.log("Focus change:" + focus + " " + index.chunk)
+        //         surveyChunkTrimmer.chunk = index.chunk;
+        //     }
+        // }
 
-        states: [
+    }
 
-            QQ.State {
-                name: "MiddleTyping"
+    // onStateChanged: {
+    //     console.log("StateChanged:" + state)
+    // }
 
-                QQ.PropertyChanges {
-                    // dataBox._globalTextInput.onEnterPressed: {
-                    //     console.log("sauce")
-                    // }
+    states: [
 
-                    dataBox._globalTextInput.onPressKeyPressed: {
-                        if(pressKeyEvent.key === Qt.Key_Tab ||
-                           pressKeyEvent.key === 1 + Qt.Key_Tab ||
-                           pressKeyEvent.key === Qt.Key_Space)
-                        {
-                            var commited = editor.commitChanges()
-                            if(!commited) { return; }
-                        }
+        QQ.State {
+            name: "MiddleTyping"
 
-                        if(pressKeyEvent.key === Qt.Key_Space) {
-                            console.log("Space bar, new chunk!");
-                            surveyChunk.parentTrip.addNewChunk();
-                        }
+            QQ.PropertyChanges {
+                // dataBox._globalTextInput.onEnterPressed: {
+                //     console.log("sauce")
+                // }
 
-                        //Tab to the next entry on enter
-                        if(pressKeyEvent.key === Qt.Key_Enter ||
-                           pressKeyEvent.key === Qt.Key_Return) {
-                            handleNavigation("tabNext")
-                            pressKeyEvent.accepted = true;
-                        }
-
-                        //Use the default keyhanding that the GlobalShadowTextInput has
-                        GlobalShadowTextInput.textInput.defaultKeyHandling();
-
-                        //Handle the tabbing
-                        dataBox.handleTab(pressKeyEvent);
-
-                        if(pressKeyEvent.accepted) {
-                            //Have the editor commit changes
-                            dataBox.state = ''; //Default state
-
-                        }
-
+                dataBox._globalTextInput.onPressKeyPressed: () => {
+                    console.log("PressKeyEvent:" + pressKeyEvent)
+                    if(pressKeyEvent.key === Qt.Key_Tab ||
+                       pressKeyEvent.key === 1 + Qt.Key_Tab ||
+                       pressKeyEvent.key === Qt.Key_Space)
+                    {
+                        var commited = editor.commitChanges()
+                        if(!commited) { return; }
                     }
 
-                    dataBox._globalTextInput.onFocusChanged: {
-                        if(!focus) {
-                            dataBox.state = '';
-                        }
+                    if(pressKeyEvent.key === Qt.Key_Space) {
+                        console.log("Space bar, new chunk!");
+                        dataBox.addNewChunk();
+                        // index.chunk.parentTrip.addNewChunk();
                     }
 
-                    dataBox._globalShadowTextInput.onEscapePressed: {
+                    //Tab to the next entry on enter
+                    if(pressKeyEvent.key === Qt.Key_Enter ||
+                       pressKeyEvent.key === Qt.Key_Return) {
+                        handleNavigation("tabNext")
+                        pressKeyEvent.accepted = true;
+                    }
+
+                    //Use the default keyhanding that the GlobalShadowTextInput has
+                    GlobalShadowTextInput.textInput.defaultKeyHandling();
+
+                    //Handle the tabbing
+                    dataBox.handleTab(pressKeyEvent);
+
+                    if(pressKeyEvent.accepted) {
+                        //Have the editor commit changes
                         dataBox.state = ''; //Default state
+
+                    }
+
+                }
+
+                dataBox._globalTextInput.onFocusChanged: {
+                    if(!focus) {
+                        dataBox.state = '';
+                    }
+                }
+
+                dataBox._globalShadowTextInput.onEscapePressed: {
+                    dataBox.state = ''; //Default state
+                    dataBox.forceActiveFocus()
+                }
+
+                dataBox._globalShadowTextInput.onEnterPressed: {
+                    var commited = editor.commitChanges();
+                    if(commited) {
                         dataBox.forceActiveFocus()
                     }
-
-                    dataBox._globalShadowTextInput.onEnterPressed: {
-                        var commited = editor.commitChanges();
-                        if(commited) {
-                            dataBox.forceActiveFocus()
-                        }
-                    }
-                }
-
-                QQ.PropertyChanges {
-                    dataBox {
-                        z: 1
-                    }
                 }
             }
-        ]
-    }
+
+            QQ.PropertyChanges {
+                dataBox {
+                    z: 1
+                }
+            }
+        }
+    ]
+
 }

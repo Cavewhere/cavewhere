@@ -4,12 +4,12 @@
 //Our includes
 #include "cwTrip.h"
 #include "cwSurveyChunk.h"
+#include "cwSurveyEditorBoxIndex.h"
 
 //Qt includes
 #include <QAbstractListModel>
 #include <QPointer>
 #include <QQmlEngine>
-
 
 /**
  * @brief The cwSurveyEditorModel class
@@ -36,23 +36,27 @@ public:
     Q_ENUM(RowType)
 
     enum Role {
+        //The type of role: TitleRow, StationRow, ShotRow
         RowTypeRole,
+
+        //Station Data Roles
         StationNameRole,
         StationLeftRole,
         StationRightRole,
         StationUpRole,
         StationDownRole,
+
+        //Shot Data Roles
         ShotDistanceRole,
         ShotCompassRole,
         ShotBackCompassRole,
         ShotClinoRole,
         ShotBackClinoRole,
         ShotCalibrationRole,
+
+        //
         ChunkRole,
-        // StationVisibleRole,
-        // ShotVisibleRole,
-        // TitleVisibleRole,
-        IndexInChunkRole
+        IndexInChunkRole,
     };
     Q_ENUM(Role)
 
@@ -62,9 +66,15 @@ public:
     QVariant data(const QModelIndex &index, int role) const;
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
 
+
     QHash<int, QByteArray> roleNames() const;
 
     Q_INVOKABLE void addShotCalibration(int index);
+
+    Q_INVOKABLE int toRow(RowType type, const cwSurveyChunk* chunk, int chunkIndex) const;
+
+    Q_INVOKABLE cwSurveyEditorBoxIndex boxIndex(RowType type, cwSurveyChunk *chunk, int chunkIndex, cwSurveyChunk::DataRole dataRole);
+    Q_INVOKABLE cwSurveyEditorBoxIndex boxIndex(int row, cwSurveyChunk::DataRole dataRole) const;
 
 private:
     struct ChunkIndex {
@@ -74,12 +84,13 @@ private:
     };
 
     QPointer<cwTrip> m_trip; //!<
+
     // QMap<Range, cwSurveyChunk*> m_indexToChunk;
     const int m_titleRowOffset = 1;
 
     ChunkIndex toChunkIndex(const QModelIndex& index) const;
     ChunkIndex toChunkIndex(int index) const;
-    int toRow(RowType type, const cwSurveyChunk* chunk, int chunkIndex) const;
+    // int toRow(RowType type, const cwSurveyChunk* chunk, int chunkIndex) const;
     QModelIndex toModelIndex(RowType type, const cwSurveyChunk* chunk, int chunkIndex) const;
 
     Role toModelRole(cwSurveyChunk::DataRole chunkRole);
@@ -88,6 +99,9 @@ private:
 
 signals:
     void tripChanged();
+
+    //Called when a chunk has been added to the end of the model
+    void lastChunkAdded();
 
 
 };
