@@ -220,18 +220,24 @@ QQ.Item {
 
             model: editorModel
 
+            SurveyEditorColumnTitles {
+                id: titleTemplate
+                visible: false
+            }
+
 
             delegate: DrySurveyComponent {
                 calibration: currentCalibration
                 errorButtonGroup: errorButtonGroupId
                 surveyChunkTrimmer: surveyChunkTrimmerId
                 view: viewId
-                model: editorModel
+                // model: editorModel
                 stationValidator: stationValidatorId
                 distanceValidator: distanceValidatorId
                 compassValidator: compassValidatorId
                 clinoValidator: clinoValidatorId
                 editorFocus: editorFocusId
+                columnTemplate: titleTemplate
             }
 
             // section.property: "chunkId"

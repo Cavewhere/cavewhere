@@ -12,23 +12,24 @@ import QtQuick.Controls.Basic as BasicControls
 
 QQ.Item {
     id: dataBox
-    objectName: "dataBox." + rowIndex + "." + index.chunkRole
+    objectName: "dataBox." + listViewIndex + "." + dataValue.chunkDataRole
 
-    property alias dataValue: editor.text
+    // property alias dataValue: editor.text
     property alias dataValidator: editor.validator
     // required property SurveyChunk surveyChunk; //For hooking up signals and slots in subclasses
 
     required property SurveyChunkTrimmer surveyChunkTrimmer; //For interaction
     property alias aboutToDelete: removeBoxId.visible
-    required property ErrorModel errorModel
+    readonly property ErrorModel errorModel: dataValue.errorModel
     required property Controls.ButtonGroup errorButtonGroup
     property KeyNavigationContainer navigation: KeyNavigationContainer {}
 
     //The index informantion from cwSurveyEditorModel
-    required property cwSurveyEditorBoxIndex index
+    required property cwSurveyEditorBoxData dataValue
+    // required property cwSurveyEditorBoxIndex index
 
     //Index in the ListView
-    required property int rowIndex
+    required property int listViewIndex
 
     // required property int indexInChunk //Index in the surveyChunk
     // required property int boxIndex.chunkRole
@@ -53,10 +54,10 @@ QQ.Item {
         //                                          && editorFocus.boxIndex.indexInChunk === index.indexInChunk
         //                                          && editorFocus.boxIndex.chunkRole === index.chunkRole))
         //     }
-            return editorFocus.boxIndex.chunk === index.chunk
-                    && editorFocus.boxIndex.rowType === index.rowType
-                    && editorFocus.boxIndex.indexInChunk === index.indexInChunk
-                    && editorFocus.boxIndex.chunkRole === index.chunkRole
+            return editorFocus.rowIndex.chunk === dataValue.rowIndex.chunk
+                    && editorFocus.rowIndex.rowType === dataValue.rowIndex.rowType
+                    && editorFocus.rowIndex.indexInChunk === dataValue.rowIndex.indexInChunk
+                    && editorFocus.chunkDataRole === dataValue.chunkDataRole
         // } else {
         //     return false;
         // }
@@ -100,7 +101,8 @@ QQ.Item {
     }
 
     function deletePressedHandler() {
-        dataValue = '';
+        // dataValue = '';
+        editor.text = "";
         editor.openEditor();
         state = 'MiddleTyping';
     }
@@ -110,7 +112,7 @@ QQ.Item {
             let item = navigation[navProperty].item;
 
             if(navigation[navProperty].indexOffset !== 0) {
-                view.currentIndex = rowIndex
+                view.currentIndex = listViewIndex
 
                 let itemIndex = -1;
                 for(let childIndex in view.currentItem.children) {
@@ -210,7 +212,7 @@ QQ.Item {
     }
 
     function addNewChunk() {
-        var trip = index.chunk.parentTrip;
+        var trip = dataValue.rowIndex.chunk.parentTrip;
         if(trip.chunkCount > 0) {
             var lastChunkIndex = trip.chunkCount - 1
             var lastChunk = trip.chunk(lastChunkIndex);
@@ -221,7 +223,7 @@ QQ.Item {
         }
 
         console.log("space bar 2 area click, new chunk!");
-        index.chunk.parentTrip.addNewChunk();
+        dataValue.rowIndex.chunk.parentTrip.addNewChunk();
 
         //Set active focus on the new chunk
 
@@ -246,7 +248,7 @@ QQ.Item {
         Controls.MenuItem {
             text: "Remove Chunk"
             onTriggered: {
-                dataBox.index.chunk.parentTrip.removeChunk(dataBox.index.chunk)
+                dataBox.dataValue.rowIndex.chunk.parentTrip.removeChunk(dataBox.dataValue.rowIndex.chunk)
             }
 
             //            onContainsMouseChanged: {
@@ -279,7 +281,7 @@ QQ.Item {
         acceptedButtons: Qt.LeftButton | Qt.RightButton
 
         onClicked: (mouse) => {
-                       dataBox.editorFocus = dataBox.index
+                       dataBox.editorFocus = dataBox.dataValue.rowIndex
                        // dataBox.focus = true
 
                        if(mouse.button === Qt.RightButton) {
@@ -294,25 +296,28 @@ QQ.Item {
 
         gradient: QQ.Gradient {
             QQ.GradientStop {
-                position: dataBox.index.indexInChunk % 2 === 0 ? 1.0 : 0.0
+                position: dataBox.dataValue.rowIndex.indexInChunk % 2 === 0 ? 1.0 : 0.0
                 color:  "#DDF2FF"
             }
             QQ.GradientStop {
-                position: dataBox.index.indexInChunk % 2 === 0 ? 0.4 : 0.6
+                position: dataBox.dataValue.rowIndex.indexInChunk % 2 === 0 ? 0.4 : 0.6
                 color:  "white"
             }
         }
 
         // DebugRectangle {}
 
-        visible: dataBox.index.chunk !== null && dataBox.index.chunk.isStationRole(dataBox.index.chunkRole)
+        visible: dataBox.dataValue.rowIndex.chunk !== null
+                 && dataBox.dataValue.rowIndex.chunk.isStationRole(dataBox.dataValue.chunkDataRole)
     }
 
     QQ.Rectangle {
         id: backgroundShot
-        property bool offsetColor: dataBox.index.indexInChunk % 2 === 0 && dataBox.index.chunk !== null && dataBox.index.chunk.isShotRole(dataBox.index.chunkRole)
+        property bool offsetColor: dataBox.dataValue.rowIndex.indexInChunk % 2 === 0
+                                   && dataBox.dataValue.rowIndex.chunk !== null
+                                   && dataBox.dataValue.rowIndex.chunk.isShotRole(dataBox.dataValue.chunkDataRole)
         anchors.fill: parent
-        visible: dataBox.index.chunk.isShotRole(dataBox.index.chunkRole)
+        visible: dataBox.dataValue.rowIndex.chunk.isShotRole(dataBox.dataValue.chunkDataRole)
         color: offsetColor ? "#DDF2FF" : "white"
     }
 
@@ -346,7 +351,7 @@ QQ.Item {
             return;
         }
 
-        // surveyChunkView.navigationArrow(rowIndex, boxIndex.chunkRole, event.key);
+        // surveyChunkView.navigationArrow(listViewIndex, boxIndex.chunkRole, event.key);
 
         // if(event.key === Qt.Key_Backspace) {
         // }
@@ -380,10 +385,11 @@ QQ.Item {
     onFocusChanged: {
         if(focus) {
             //Make sure it's visible to the user
-            //            surveyChunkView.ensureDataBoxVisible(rowIndex, boxIndex.chunkRole)
+            //            surveyChunkView.ensureDataBoxVisible(listViewIndex, boxIndex.chunkRole)
             // console.log("Focus change:" + focus + " " + index.chunk + " " + this)
-            surveyChunkTrimmer.chunk = index.chunk;
-            editorFocus.boxIndex = index
+            surveyChunkTrimmer.chunk = dataValue.rowIndex.chunk;
+            editorFocus.rowIndex = dataValue.rowIndex
+            editorFocus.chunkDataRole = dataValue.chunkDataRole
         }
     }
 
@@ -392,9 +398,13 @@ QQ.Item {
         id: editor
         anchors.fill: parent
         autoResize: true
+        text: dataBox.dataValue.reading.value
 
         onFinishedEditting: (newText) => {
-                                dataBox.index.chunk.setData(dataBox.index.chunkRole, dataBox.index.indexInChunk, newText)
+                                console.log("DataBox:" + dataBox.index)
+                                let rowIndex = dataBox.dataValue.rowIndex;
+                                let chunk = rowIndex.chunk
+                                chunk.setData(dataBox.dataValue.chunkDataRole, rowIndex.indexInChunk, newText)
                                 dataBox.state = ""; //Go back to the default state
                                 dataBox.forceActiveFocus();
                             }
@@ -404,7 +414,7 @@ QQ.Item {
         }
 
         onClicked: {
-            dataBox.view.currentIndex = dataBox.rowIndex
+            dataBox.view.currentIndex = dataBox.listViewIndex
             dataBox.forceActiveFocus();
         }
 
@@ -481,7 +491,7 @@ QQ.Item {
         //         return;
         //     }
 
-        //     surveyChunkView.navigationArrow(rowIndex, boxIndex.chunkRole, event.key);
+        //     surveyChunkView.navigationArrow(listViewIndex, boxIndex.chunkRole, event.key);
 
         //     // if(event.key === Qt.Key_Backspace) {
         //     // }
@@ -497,7 +507,7 @@ QQ.Item {
 
         // QQ.Keys.onPressed: (event) => {
         //                        handleTab(event);
-        //                        // surveyChunkView.navigationArrow(rowIndex, boxIndex.chunkRole, event.key);
+        //                        // surveyChunkView.navigationArrow(listViewIndex, boxIndex.chunkRole, event.key);
 
         //                        if(event.key === Qt.Key_Backspace) {
         //                            deletePressedHandler();
@@ -544,7 +554,7 @@ QQ.Item {
         // onFocusChanged: {
         //     if(focus) {
         //         //Make sure it's visible to the user
-        //         //            surveyChunkView.ensureDataBoxVisible(rowIndex, boxIndex.chunkRole)
+        //         //            surveyChunkView.ensureDataBoxVisible(listViewIndex, boxIndex.chunkRole)
         //         console.log("Focus change:" + focus + " " + index.chunk)
         //         surveyChunkTrimmer.chunk = index.chunk;
         //     }

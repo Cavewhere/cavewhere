@@ -10,6 +10,7 @@ class cwReading {
     QML_VALUE_TYPE(cwReading)
 
     Q_PROPERTY(QString value MEMBER m_value READ value WRITE setValue)
+    Q_PROPERTY(int state READ state)
 
 public:
     cwReading() {}
@@ -21,6 +22,8 @@ public:
     QString value() const { return m_value; }
     void setValue(const QString &value);
 
+    int state() const { return m_state; }
+
     double toDouble(bool* ok = nullptr) const {
         return m_value.toDouble(ok);
     }
@@ -31,15 +34,21 @@ public:
 
     bool operator==(const cwReading& other) const {
         return m_value == other.m_value;
+        //Don't check state, because it's based on m_value
     }
     bool operator!=(const cwReading& other) {
         return !operator==(other);
     }
 
+protected:
+    cwReading(int state) : m_state(state) { }
+    void setState(int state) {m_state = state;}
+
 private:
     virtual void updateState() { };
 
     QString m_value;
+    int m_state = -1; //State is assigned by subclass in updateState()
 };
 
 

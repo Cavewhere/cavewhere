@@ -34,7 +34,7 @@ MainWindowTest {
         function enterSurveyData() {
             waitForRendering(rootId);
 
-            // wait(100000);
+            wait(100000);
 
             //Start adding survey data
             keyClick("b")

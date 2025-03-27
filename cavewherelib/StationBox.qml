@@ -15,8 +15,8 @@ DataBox {
     property var window: QQ.Window.window
 
     function commitAutoStation() {
-        var stationName = index.chunk.guessLastStationName();
-        index.chunk.setData(index.chunkRole, indexInChunk, stationName);
+        var stationName = dataValue.rowIndex.chunk.guessLastStationName();
+        dataValue.rowIndex.chunk.setData(dataValue.chunkDataRole, dataValue.rowIndex.indexInChunk, stationName);
     }
 
     onFocusChanged: {
@@ -24,18 +24,20 @@ DataBox {
 
         if(focus) {
             //Make sure it's visible to the user
-            var lastStationIndex = index.chunk.stationCount() - 1
+            if(dataValue.rowIndex.chunk) {
+                var lastStationIndex = dataValue.rowIndex.chunk.stationCount() - 1
 
-            //Try to guess for new stations what the next station is
-            //Make sure the station is the last station in the chunk
-            if(lastStationIndex  === indexInChunk) {
+                //Try to guess for new stations what the next station is
+                //Make sure the station is the last station in the chunk
+                if(lastStationIndex  === dataValue.rowIndex.indexInChunk) {
 
-                //Make sure the data is empty
-                if(dataValue === "") {
-                    var guessedstationName = index.chunk.guessLastStationName();
-                    if(guessedstationName !== "") {
-                        stationName.text = guessedstationName
-                        state = "AutoNameState"
+                    //Make sure the data is empty
+                    if(dataValue === "") {
+                        var guessedstationName = dataValue.rowIndex.chunk.guessLastStationName();
+                        if(guessedstationName !== "") {
+                            stationName.text = guessedstationName
+                            state = "AutoNameState"
+                        }
                     }
                 }
             }

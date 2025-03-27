@@ -21,7 +21,7 @@ public:
     };
     Q_ENUM(State)
 
-    cwCompassReading() : m_state(State::Empty) {}
+    cwCompassReading() : cwReading(static_cast<int>(State::Empty)) {}
     cwCompassReading(const QString& value) : cwReading(value) {
         cwCompassReading::updateState();
     }
@@ -29,12 +29,12 @@ public:
         cwCompassReading::updateState();
     }
 
-    State state() const { return m_state; }
+    State state() const { return static_cast<State>(cwReading::state()); }
 
 private:
     void updateState();
 
-    State m_state;
+    // State m_state;
 };
 
 #endif // CWCOMPASSREADING_H

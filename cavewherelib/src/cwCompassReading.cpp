@@ -4,14 +4,14 @@
 void cwCompassReading::updateState() {
     auto str = value();
     if (str.isEmpty()) {
-        m_state = State::Empty;
+        setState(static_cast<int>(State::Empty));
     } else {
         bool ok;
         double value = str.toDouble(&ok);
         if(ok && cwCompassValidator::check(value)) {
-            m_state = State::Valid;
+            setState(static_cast<int>(State::Valid));
         } else {
-            m_state = State::Invalid;
+            setState(static_cast<int>(State::Invalid));
         }
     }
 }

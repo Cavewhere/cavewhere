@@ -4,7 +4,7 @@
 //Our includes
 #include "cwTrip.h"
 #include "cwSurveyChunk.h"
-#include "cwSurveyEditorBoxIndex.h"
+#include "cwSurveyEditorRowIndex.h"
 
 //Qt includes
 #include <QAbstractListModel>
@@ -28,16 +28,17 @@ class cwSurveyEditorModel : public QAbstractListModel
 public:
     cwSurveyEditorModel();
 
-    enum RowType {
-        TitleRow,
-        StationRow,
-        ShotRow
-    };
-    Q_ENUM(RowType)
+    // enum RowType {
+    //     TitleRow,
+    //     StationRow,
+    //     ShotRow
+    // };
+    // Q_ENUM(RowType)
 
     enum Role {
         //The type of role: TitleRow, StationRow, ShotRow
-        RowTypeRole,
+        RowIndexRole,
+        // RowTypeRole,
 
         //Station Data Roles
         StationNameRole,
@@ -55,8 +56,8 @@ public:
         ShotCalibrationRole,
 
         //
-        ChunkRole,
-        IndexInChunkRole,
+        // ChunkRole,
+        // IndexInChunkRole,
     };
     Q_ENUM(Role)
 
@@ -71,30 +72,32 @@ public:
 
     Q_INVOKABLE void addShotCalibration(int index);
 
-    Q_INVOKABLE int toRow(RowType type, const cwSurveyChunk* chunk, int chunkIndex) const;
+    // Q_INVOKABLE int toModelRow(cwSurveyEditorRowIndex::RowType type, const cwSurveyChunk* chunk, int chunkIndex) const;
+    Q_INVOKABLE int toModelRow(const cwSurveyEditorRowIndex& rowIndex) const;
 
-    Q_INVOKABLE cwSurveyEditorBoxIndex boxIndex(RowType type, cwSurveyChunk *chunk, int chunkIndex, cwSurveyChunk::DataRole dataRole);
-    Q_INVOKABLE cwSurveyEditorBoxIndex boxIndex(int row, cwSurveyChunk::DataRole dataRole) const;
+    Q_INVOKABLE cwSurveyEditorRowIndex rowIndex(cwSurveyChunk *chunk, int chunkIndex, cwSurveyEditorRowIndex::RowType type) const;
+    // Q_INVOKABLE cwSurveyEditorRowIndex boxIndex(int row, cwSurveyChunk::DataRole dataRole) const;
 
 private:
-    struct ChunkIndex {
-        cwSurveyChunk* chunk;
-        RowType type;
-        int index;
-    };
+    // struct ChunkIndex {
+    //     cwSurveyChunk* chunk;
+    //     cwSurveyEditorRowIndex::RowType type;
+    //     int index;
+    // };
 
     QPointer<cwTrip> m_trip; //!<
 
     // QMap<Range, cwSurveyChunk*> m_indexToChunk;
     const int m_titleRowOffset = 1;
 
-    ChunkIndex toChunkIndex(const QModelIndex& index) const;
-    ChunkIndex toChunkIndex(int index) const;
-    // int toRow(RowType type, const cwSurveyChunk* chunk, int chunkIndex) const;
-    QModelIndex toModelIndex(RowType type, const cwSurveyChunk* chunk, int chunkIndex) const;
+    cwSurveyEditorRowIndex toRowIndex(const QModelIndex& index) const;
+    cwSurveyEditorRowIndex toRowIndex(int index) const;
+    // int toRow(cwSurveyEditorRowIndex::RowType type, const cwSurveyChunk* chunk, int chunkIndex) const;
+    // QModelIndex toModelIndex(cwSurveyEditorRowIndex::RowType type, const cwSurveyChunk* chunk, int chunkIndex) const;
+    QModelIndex toModelIndex(const cwSurveyEditorRowIndex& rowIndex) const;
 
     Role toModelRole(cwSurveyChunk::DataRole chunkRole);
-    RowType toRowType(cwSurveyChunk::DataRole chunkRole);
+    cwSurveyEditorRowIndex::RowType toRowType(cwSurveyChunk::DataRole chunkRole);
 
 
 signals:

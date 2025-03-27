@@ -3,6 +3,7 @@
 #include "cwTrip.h"
 #include "cwSurveyChunk.h"
 #include "cwTripCalibration.h"
+#include "cwSurveyEditorBoxData.h"
 
 cwSurveyEditorModel::cwSurveyEditorModel()
 {
@@ -19,32 +20,33 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
             auto connectChunk = [this](cwSurveyChunk* chunk) {
                 // Data changes in the chunk.
 
+                auto chunkDataChange = [this, chunk](cwSurveyChunk::DataRole role, int chunkIndex) {
+                    auto rowType = toRowType(role);
+                    auto modelIndex = toModelIndex({chunk, chunkIndex, rowType});
+                    Q_ASSERT(modelIndex.isValid());
+                    emit dataChanged(modelIndex, modelIndex, {toModelRole(role)});
+                };
 
-                connect(chunk, &cwSurveyChunk::dataChanged, this,
-                        [this, chunk](cwSurveyChunk::DataRole role, int stationIndex) {
-                            auto rowType = toRowType(role);
-                            auto modelIndex = toModelIndex(rowType, chunk, stationIndex);
-                            Q_ASSERT(modelIndex.isValid());
-                            emit dataChanged(modelIndex, modelIndex, {toModelRole(role)});
-                        });
+                connect(chunk, &cwSurveyChunk::dataChanged, this, chunkDataChange);
+                connect(chunk, &cwSurveyChunk::errorsChanged, this, chunkDataChange);
 
                 // Stations added.
                 connect(chunk, &cwSurveyChunk::added, this,
                         [this, chunk](int stationBegin, int stationEnd, int shotBegin, int shotEnd) {
-                            int first = std::min(toRow(StationRow, chunk, stationBegin),
-                                                 toRow(ShotRow, chunk, shotBegin));
-                            int last = std::max(toRow(StationRow, chunk, stationEnd),
-                                               toRow(ShotRow, chunk, shotEnd));
+                            int first = std::min(toModelRow({chunk, stationBegin, cwSurveyEditorRowIndex::StationRow} ),
+                                                 toModelRow({chunk, shotBegin, cwSurveyEditorRowIndex::ShotRow}));
+                            int last = std::max(toModelRow({chunk, stationEnd, cwSurveyEditorRowIndex::StationRow}),
+                                                toModelRow({chunk, shotEnd, cwSurveyEditorRowIndex::ShotRow}));
                             beginInsertRows(QModelIndex(), first, last);
                             endInsertRows();
                         });
                 // Stations removed.
                 connect(chunk, &cwSurveyChunk::aboutToRemove, this,
                         [this, chunk](int stationBegin, int stationEnd, int shotBegin, int shotEnd) {
-                            int first = std::min(toRow(StationRow, chunk, stationBegin),
-                                                 toRow(ShotRow, chunk, shotBegin));
-                            int last = std::max(toRow(StationRow, chunk, stationEnd),
-                                                toRow(ShotRow, chunk, shotEnd));
+                            int first = std::min(toModelRow({chunk, stationBegin, cwSurveyEditorRowIndex::StationRow}),
+                                                 toModelRow({chunk, shotBegin, cwSurveyEditorRowIndex::ShotRow}));
+                            int last = std::max(toModelRow({chunk, stationEnd, cwSurveyEditorRowIndex::StationRow}),
+                                                toModelRow({chunk, shotEnd, cwSurveyEditorRowIndex::ShotRow}));
                             beginRemoveRows(QModelIndex(), first, last);
                 });
 
@@ -139,60 +141,70 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
     }
 
 
-    auto chunkIndex = toChunkIndex(index);
+    const auto rowIndex = toRowIndex(index);
 
-    switch(role) {
-    case ChunkRole:
-        return QVariant::fromValue(chunkIndex.chunk);
-    case RowTypeRole:
-        return chunkIndex.type;
-    case IndexInChunkRole:
-        qDebug() << "IndexInChunkRole:" << chunkIndex.index << index << role;
-        return chunkIndex.index;
-    default:
-        break;
+    if(role == RowIndexRole) {
+        return QVariant::fromValue(rowIndex);
     }
 
-    auto titleData = [index, role](const ChunkIndex& chunkIndex)->QVariant {
-        if(role == RowTypeRole) {
-            return TitleRow;
-        }
+    // switch(role) {
+    // case ChunkRole:
+    //     return QVariant::fromValue(rowIndex.chunk);
+    // case RowTypeRole:
+    //     return rowIndex.type;
+    // case IndexInChunkRole:
+    //     qDebug() << "IndexInChunkRole:" << rowIndex.index << index << role;
+    //     return rowIndex.index;
+    // default:
+    //     break;
+    // }
+
+    auto titleData = [index, role](const cwSurveyEditorRowIndex& chunkIndex)->QVariant {
         return QVariant();
     };
 
-    auto stationData = [index, role](const ChunkIndex& chunkIndex)->QVariant {
-        const auto chunk = chunkIndex.chunk;
-        int stationIndex = chunkIndex.index;
+    auto data = [rowIndex](cwSurveyChunk::DataRole dataRole, auto dataFn) {
+        return QVariant::fromValue(cwSurveyEditorBoxData(
+            dataFn(),
+            rowIndex,
+            dataRole,
+            rowIndex.chunk()->errorsAt(rowIndex.indexInChunk(), dataRole)
+            ));
+    };
+
+    auto stationData = [index, role, data](const cwSurveyEditorRowIndex& chunkIndex)->QVariant {
+        const auto chunk = chunkIndex.chunk();
+        const int stationIndex = chunkIndex.indexInChunk();
         switch(role) {
         case StationNameRole:
-            return chunk->station(stationIndex).name();
+            return data(cwSurveyChunk::StationNameRole, [&]() { return cwReading(chunk->station(stationIndex).name()); });
         case StationLeftRole:
-            return QVariant::fromValue(chunk->station(stationIndex).left());
+            return data(cwSurveyChunk::StationLeftRole, [&]() { return chunk->station(stationIndex).left(); } );
         case StationRightRole:
-            return QVariant::fromValue(chunk->station(stationIndex).right());
+            return data(cwSurveyChunk::StationRightRole, [&]() { return chunk->station(stationIndex).right(); });
         case StationUpRole:
-            return QVariant::fromValue(chunk->station(stationIndex).up());
+            return data(cwSurveyChunk::StationUpRole, [&]() { return chunk->station(stationIndex).up(); });
         case StationDownRole:
-            return QVariant::fromValue(chunk->station(stationIndex).down());
+            return data(cwSurveyChunk::StationDownRole, [&]() { return chunk->station(stationIndex).down(); });
         default:
             return QVariant();
         }
     };
 
-    auto shotData = [index, role](const ChunkIndex& chunkIndex)->QVariant {
-        const auto chunk = chunkIndex.chunk;
-        int shotIndex = chunkIndex.index;
+    auto shotData = [index, role, data](const cwSurveyEditorRowIndex& chunkIndex)->QVariant {
+        const auto chunk = chunkIndex.chunk();
+        const int shotIndex = chunkIndex.indexInChunk();
         switch(role) {
         case ShotDistanceRole:
-            return QVariant::fromValue(chunk->shot(shotIndex).distance());
+            return data(cwSurveyChunk::ShotDistanceRole, [&]() { return chunk->shot(shotIndex).distance(); });
         case ShotCompassRole:
-            return QVariant::fromValue(chunk->shot(shotIndex).compass());
+            return data(cwSurveyChunk::ShotCompassRole, [&]() { return chunk->shot(shotIndex).compass(); });
         case ShotBackCompassRole:
-            return QVariant::fromValue(chunk->shot(shotIndex).backCompass());
+            return data(cwSurveyChunk::ShotBackCompassRole, [&]() { return chunk->shot(shotIndex).backCompass(); });
         case ShotClinoRole:
-            return QVariant::fromValue(chunk->shot(shotIndex).clino());
+            return data(cwSurveyChunk::ShotClinoRole, [&]() { return chunk->shot(shotIndex).clino(); });
         case ShotBackClinoRole:
-            return QVariant::fromValue(chunk->shot(shotIndex).backClino());
+            return data(cwSurveyChunk::ShotBackClinoRole, [&]() { return chunk->shot(shotIndex).backClino(); });
         case ShotCalibrationRole: {
             cwTripCalibration* calibration = chunk->calibrations().value(shotIndex);
             return QVariant::fromValue(calibration);
@@ -202,13 +214,13 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
         }
     };
 
-    switch(chunkIndex.type) {
-    case TitleRow:
-        return titleData(chunkIndex);
-    case StationRow:
-        return stationData(chunkIndex);
-    case ShotRow:
-        return shotData(chunkIndex);
+    switch(rowIndex.rowType()) {
+    case cwSurveyEditorRowIndex::TitleRow:
+        return titleData(rowIndex);
+    case cwSurveyEditorRowIndex::StationRow:
+        return stationData(rowIndex);
+    case cwSurveyEditorRowIndex::ShotRow:
+        return shotData(rowIndex);
     }
     return QVariant();
 }
@@ -241,6 +253,7 @@ int cwSurveyEditorModel::rowCount(const QModelIndex& parent) const
 QHash<int, QByteArray> cwSurveyEditorModel::roleNames() const
 {
     QHash<int, QByteArray> roles;
+    roles.insert(RowIndexRole, "rowIndex");
     roles.insert(StationNameRole, "stationName");
     roles.insert(StationLeftRole, "stationLeft");
     roles.insert(StationRightRole, "stationRight");
@@ -252,12 +265,12 @@ QHash<int, QByteArray> cwSurveyEditorModel::roleNames() const
     roles.insert(ShotClinoRole, "shotClino");
     roles.insert(ShotBackClinoRole, "shotBackClino");
     roles.insert(ShotCalibrationRole, "shotCalibration");
-    roles.insert(ChunkRole, "chunk");
-    roles.insert(RowTypeRole, "rowType");
+    // roles.insert(ChunkRole, "chunk");
+    // roles.insert(RowTypeRole, "rowType");
     // roles.insert(StationVisibleRole, "stationVisible");
     // roles.insert(ShotVisibleRole, "shotVisible");
     // roles.insert(TitleVisibleRole, "titleVisible");
-    roles.insert(IndexInChunkRole, "indexInChunk");
+    // roles.insert(IndexInChunkRole, "indexInChunk");
     return roles;
 }
 
@@ -277,45 +290,26 @@ void cwSurveyEditorModel::addShotCalibration(int index)
     // }
 }
 
-cwSurveyEditorModel::RowType cwSurveyEditorModel::toRowType(cwSurveyChunk::DataRole chunkRole)
-{
-    switch(chunkRole) {
-    case cwSurveyChunk::StationNameRole:
-    case cwSurveyChunk::StationLeftRole:
-    case cwSurveyChunk::StationRightRole:
-    case cwSurveyChunk::StationUpRole:
-    case cwSurveyChunk::StationDownRole:
-        return StationRow;
-    case cwSurveyChunk::ShotDistanceRole:
-    case cwSurveyChunk::ShotDistanceIncludedRole:
-    case cwSurveyChunk::ShotCompassRole:
-    case cwSurveyChunk::ShotBackCompassRole:
-    case cwSurveyChunk::ShotClinoRole:
-    case cwSurveyChunk::ShotBackClinoRole:
-        return ShotRow;
-    }
-}
-
-int cwSurveyEditorModel::toRow(RowType type, const cwSurveyChunk *chunk, int chunkIndex) const
+int cwSurveyEditorModel::toModelRow(const cwSurveyEditorRowIndex &rowIndex) const
 {
     // Compute base model row for this chunk.
     int baseRow = 0;
     const QList<cwSurveyChunk*> allChunks = m_trip->chunks();
     for (cwSurveyChunk* current : allChunks) {
-        if (current == chunk) {
+        if (current == rowIndex.chunk()) {
             break;
         }
         baseRow += current->stationCount() + current->shotCount() + m_titleRowOffset;
     }
 
-    auto toIndex = [=]()->int {
-        switch(type) {
-        case TitleRow:
+    auto toIndex = [&]()->int {
+        switch(rowIndex.rowType()) {
+        case cwSurveyEditorRowIndex::TitleRow:
             return baseRow;
-        case StationRow:
-            return baseRow + chunkIndex * 2 + m_titleRowOffset; //Alterate between the station and shot
-        case ShotRow:
-            return baseRow + chunkIndex * 2 + 1 + m_titleRowOffset;
+        case cwSurveyEditorRowIndex::StationRow:
+            return baseRow + rowIndex.indexInChunk() * 2 + m_titleRowOffset; //Alterate between the station and shot
+        case cwSurveyEditorRowIndex::ShotRow:
+            return baseRow + rowIndex.indexInChunk() * 2 + 1 + m_titleRowOffset;
         }
     };
 
@@ -324,28 +318,57 @@ int cwSurveyEditorModel::toRow(RowType type, const cwSurveyChunk *chunk, int chu
     return toIndex();
 }
 
-cwSurveyEditorBoxIndex cwSurveyEditorModel::boxIndex(RowType type,
-                                                     cwSurveyChunk *chunk,
-                                                     int chunkIndex,
-                                                     cwSurveyChunk::DataRole dataRole)
+cwSurveyEditorRowIndex cwSurveyEditorModel::rowIndex(cwSurveyChunk *chunk, int chunkIndex, cwSurveyEditorRowIndex::RowType type) const
 {
-    return cwSurveyEditorBoxIndex(type, chunk, chunkIndex, dataRole);
+    return cwSurveyEditorRowIndex(chunk, chunkIndex, type);
 }
 
-cwSurveyEditorBoxIndex cwSurveyEditorModel::boxIndex(int row, cwSurveyChunk::DataRole dataRole) const
+cwSurveyEditorRowIndex::RowType cwSurveyEditorModel::toRowType(cwSurveyChunk::DataRole chunkDataRole)
 {
-    auto chunkIndex = toChunkIndex(row);
-    return cwSurveyEditorBoxIndex(chunkIndex.type,
-                                  chunkIndex.chunk,
-                                  chunkIndex.index,
-                                  dataRole
-                                  );
+    switch(chunkDataRole) {
+    case cwSurveyChunk::StationNameRole:
+    case cwSurveyChunk::StationLeftRole:
+    case cwSurveyChunk::StationRightRole:
+    case cwSurveyChunk::StationUpRole:
+    case cwSurveyChunk::StationDownRole:
+        return cwSurveyEditorRowIndex::StationRow;
+    case cwSurveyChunk::ShotDistanceRole:
+    case cwSurveyChunk::ShotDistanceIncludedRole:
+    case cwSurveyChunk::ShotCompassRole:
+    case cwSurveyChunk::ShotBackCompassRole:
+    case cwSurveyChunk::ShotClinoRole:
+    case cwSurveyChunk::ShotBackClinoRole:
+        return cwSurveyEditorRowIndex::ShotRow;
+    }
 }
 
-QModelIndex cwSurveyEditorModel::toModelIndex(RowType type, const cwSurveyChunk *chunk, int chunkIndex) const
+// int cwSurveyEditorModel::toRow(RowType type, const cwSurveyChunk *chunk, int chunkIndex) const
+// {
+
+// }
+
+// cwSurveyEditorRowIndex cwSurveyEditorModel::boxIndex(RowType type,
+//                                                      cwSurveyChunk *chunk,
+//                                                      int chunkIndex,
+//                                                      cwSurveyChunk::DataRole dataRole)
+// {
+//     return cwSurveyEditorRowIndex(type, chunk, chunkIndex, dataRole);
+// }
+
+// cwSurveyEditorRowIndex cwSurveyEditorModel::boxIndex(int row, cwSurveyChunk::DataRole dataRole) const
+// {
+//     auto chunkIndex = toRowIndex(row);
+//     return cwSurveyEditorRowIndex(chunkIndex.type,
+//                                   chunkIndex.chunk,
+//                                   chunkIndex.index,
+//                                   dataRole
+//                                   );
+// }
+
+QModelIndex cwSurveyEditorModel::toModelIndex(const cwSurveyEditorRowIndex &rowIndex) const
 {
 
-    return index(toRow(type, chunk, chunkIndex));
+    return index(toModelRow(rowIndex));
 }
 
 cwSurveyEditorModel::Role cwSurveyEditorModel::toModelRole(cwSurveyChunk::DataRole chunkRole)
@@ -376,17 +399,17 @@ cwSurveyEditorModel::Role cwSurveyEditorModel::toModelRole(cwSurveyChunk::DataRo
 }
 
 /**
- * @brief cwSurveyEditorModel::toChunkIndex
+ * @brief cwSurveyEditorModel::toRowIndex
  * @param index - The index from the model
  * @return The station index in the chunk and the chunk at index
  */
-cwSurveyEditorModel::ChunkIndex cwSurveyEditorModel::toChunkIndex(const QModelIndex& index) const
+cwSurveyEditorRowIndex cwSurveyEditorModel::toRowIndex(const QModelIndex& index) const
 {
-    return toChunkIndex(index.row());
+    return toRowIndex(index.row());
 }
 
 /**
- * @brief cwSurveyEditorModel::toChunkIndex
+ * @brief cwSurveyEditorModel::toRowIndex
  * @param index - The row in model
  * @return The station index in teh chunk and teh cuhnk at index
  *
@@ -397,7 +420,7 @@ cwSurveyEditorModel::ChunkIndex cwSurveyEditorModel::toChunkIndex(const QModelIn
  * 3. station row
  * 4. ...
  */
-cwSurveyEditorModel::ChunkIndex cwSurveyEditorModel::toChunkIndex(int index) const
+cwSurveyEditorRowIndex cwSurveyEditorModel::toRowIndex(int index) const
 {
     auto chunks = m_trip->chunks();
     for(const auto chunk : std::as_const(chunks)) {
@@ -406,7 +429,7 @@ cwSurveyEditorModel::ChunkIndex cwSurveyEditorModel::toChunkIndex(int index) con
             index = index - m_titleRowOffset;
             if(index < 0) {
                 //Title row
-                return {chunk, TitleRow, -1};
+                return {chunk, -1, cwSurveyEditorRowIndex::TitleRow};
             }
 
             if(index % 2 == 0) {
@@ -414,18 +437,18 @@ cwSurveyEditorModel::ChunkIndex cwSurveyEditorModel::toChunkIndex(int index) con
                 int stationIndex = index / 2;
                 Q_ASSERT(stationIndex >= 0);
                 Q_ASSERT(stationIndex < chunk->stationCount());
-                return {chunk, StationRow, stationIndex};
+                return {chunk, stationIndex, cwSurveyEditorRowIndex::StationRow};
             } else {
                 //Is a shot
                 int shotIndex = index / 2;
                 Q_ASSERT(shotIndex >= 0);
                 Q_ASSERT(shotIndex < chunk->shotCount());
-                return {chunk, ShotRow, shotIndex};
+                return {chunk, shotIndex, cwSurveyEditorRowIndex::ShotRow};
             }
         }
         index = diff;
     }
 
     //Nothing found
-    return {nullptr, TitleRow, -1};
+    return cwSurveyEditorRowIndex();
 }

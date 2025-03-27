@@ -5,6 +5,8 @@
 #include "cwTrip.h"
 #include "cwSurveyEditorModel.h"
 #include "cwSurveyChunk.h"
+#include "cwSurveyEditorBoxData.h"
+#include "cwErrorListModel.h"
 
 //Qt includes
 #include <QSignalSpy>
@@ -17,6 +19,9 @@
 TEST_CASE("cwSurveyEditorModel new chunk should work correctly", "[cwSurveyEditorModel]") {
     cwTrip trip;
     trip.addNewChunk();
+
+    REQUIRE(trip.chunkCount() > 0);
+    auto firstChunk = trip.chunk(0);
 
     cwSurveyEditorModel model;
     model.setTrip(&trip);
@@ -34,7 +39,9 @@ TEST_CASE("cwSurveyEditorModel new chunk should work correctly", "[cwSurveyEdito
     CHECK(i0.data(cwSurveyEditorModel::ShotBackCompassRole).isNull());
     CHECK(i0.data(cwSurveyEditorModel::ShotClinoRole).isNull());
     CHECK(i0.data(cwSurveyEditorModel::ShotBackClinoRole).isNull());
-    CHECK(i0.data(cwSurveyEditorModel::RowTypeRole).toInt() == cwSurveyEditorModel::TitleRow);
+    CHECK(i0.data(cwSurveyEditorModel::RowIndexRole).value<cwSurveyEditorRowIndex>().chunk() == firstChunk);
+    CHECK(i0.data(cwSurveyEditorModel::RowIndexRole).value<cwSurveyEditorRowIndex>().rowType() == cwSurveyEditorRowIndex::TitleRow);
+    CHECK(i0.data(cwSurveyEditorModel::RowIndexRole).value<cwSurveyEditorRowIndex>().indexInChunk() == -1);
 
     auto i1 = model.index(1); //Station 1
     CHECK(!i1.data(cwSurveyEditorModel::StationNameRole).isNull());
@@ -42,18 +49,19 @@ TEST_CASE("cwSurveyEditorModel new chunk should work correctly", "[cwSurveyEdito
     CHECK(!i1.data(cwSurveyEditorModel::StationRightRole).isNull());
     CHECK(!i1.data(cwSurveyEditorModel::StationUpRole).isNull());
     CHECK(!i1.data(cwSurveyEditorModel::StationDownRole).isNull());
-    CHECK(i1.data(cwSurveyEditorModel::StationNameRole).toString().toStdString() == "");
-    CHECK(i1.data(cwSurveyEditorModel::StationLeftRole).toString().toStdString() == "");
-    CHECK(i1.data(cwSurveyEditorModel::StationRightRole).toString().toStdString() == "");
-    CHECK(i1.data(cwSurveyEditorModel::StationUpRole).toString().toStdString() == "");
-    CHECK(i1.data(cwSurveyEditorModel::StationDownRole).toString().toStdString() == "");
+    CHECK(i1.data(cwSurveyEditorModel::StationNameRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
+    CHECK(i1.data(cwSurveyEditorModel::StationLeftRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
+    CHECK(i1.data(cwSurveyEditorModel::StationRightRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
+    CHECK(i1.data(cwSurveyEditorModel::StationUpRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
+    CHECK(i1.data(cwSurveyEditorModel::StationDownRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
     CHECK(i1.data(cwSurveyEditorModel::ShotDistanceRole).isNull());
     CHECK(i1.data(cwSurveyEditorModel::ShotCompassRole).isNull());
     CHECK(i1.data(cwSurveyEditorModel::ShotBackCompassRole).isNull());
     CHECK(i1.data(cwSurveyEditorModel::ShotClinoRole).isNull());
     CHECK(i1.data(cwSurveyEditorModel::ShotBackClinoRole).isNull());
-    CHECK(i1.data(cwSurveyEditorModel::RowTypeRole).toInt() == cwSurveyEditorModel::StationRow);
-    CHECK(i1.data(cwSurveyEditorModel::IndexInChunkRole).toInt() == 0);
+    CHECK(i1.data(cwSurveyEditorModel::RowIndexRole).value<cwSurveyEditorRowIndex>().chunk() == firstChunk);
+    CHECK(i1.data(cwSurveyEditorModel::RowIndexRole).value<cwSurveyEditorRowIndex>().rowType() == cwSurveyEditorRowIndex::StationRow);
+    CHECK(i1.data(cwSurveyEditorModel::RowIndexRole).value<cwSurveyEditorRowIndex>().indexInChunk() == 0);
 
     auto i2 = model.index(2); //Shot
     CHECK(i2.data(cwSurveyEditorModel::StationNameRole).isNull());
@@ -66,14 +74,15 @@ TEST_CASE("cwSurveyEditorModel new chunk should work correctly", "[cwSurveyEdito
     CHECK(!i2.data(cwSurveyEditorModel::ShotBackCompassRole).isNull());
     CHECK(!i2.data(cwSurveyEditorModel::ShotClinoRole).isNull());
     CHECK(!i2.data(cwSurveyEditorModel::ShotBackClinoRole).isNull());
-    CHECK(i2.data(cwSurveyEditorModel::ShotDistanceRole).toString().toStdString() == "");
-    CHECK(i2.data(cwSurveyEditorModel::ShotCompassRole).toString().toStdString() == "");
-    CHECK(i2.data(cwSurveyEditorModel::ShotBackCompassRole).toString().toStdString() == "");
-    CHECK(i2.data(cwSurveyEditorModel::ShotClinoRole).toString().toStdString() == "");
-    CHECK(i2.data(cwSurveyEditorModel::ShotBackClinoRole).toString().toStdString() == "");
-    CHECK(i2.data(cwSurveyEditorModel::ShotCalibrationRole).toString().toStdString() == "");
-    CHECK(i2.data(cwSurveyEditorModel::RowTypeRole).toInt() == cwSurveyEditorModel::ShotRow);
-    CHECK(i1.data(cwSurveyEditorModel::IndexInChunkRole).toInt() == 0);
+    CHECK(i2.data(cwSurveyEditorModel::ShotDistanceRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
+    CHECK(i2.data(cwSurveyEditorModel::ShotCompassRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
+    CHECK(i2.data(cwSurveyEditorModel::ShotBackCompassRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
+    CHECK(i2.data(cwSurveyEditorModel::ShotClinoRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
+    CHECK(i2.data(cwSurveyEditorModel::ShotBackClinoRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
+    CHECK(i2.data(cwSurveyEditorModel::ShotCalibrationRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
+    CHECK(i2.data(cwSurveyEditorModel::RowIndexRole).value<cwSurveyEditorRowIndex>().chunk() == firstChunk);
+    CHECK(i2.data(cwSurveyEditorModel::RowIndexRole).value<cwSurveyEditorRowIndex>().rowType() == cwSurveyEditorRowIndex::ShotRow);
+    CHECK(i2.data(cwSurveyEditorModel::RowIndexRole).value<cwSurveyEditorRowIndex>().indexInChunk() == 0);
 
     auto i3 = model.index(3); //Station
     CHECK(!i3.data(cwSurveyEditorModel::StationNameRole).isNull());
@@ -81,12 +90,14 @@ TEST_CASE("cwSurveyEditorModel new chunk should work correctly", "[cwSurveyEdito
     CHECK(!i3.data(cwSurveyEditorModel::StationRightRole).isNull());
     CHECK(!i3.data(cwSurveyEditorModel::StationUpRole).isNull());
     CHECK(!i3.data(cwSurveyEditorModel::StationDownRole).isNull());
-    CHECK(i3.data(cwSurveyEditorModel::StationNameRole).toString().toStdString() == "");
-    CHECK(i3.data(cwSurveyEditorModel::StationLeftRole).toString().toStdString() == "");
-    CHECK(i3.data(cwSurveyEditorModel::StationRightRole).toString().toStdString() == "");
-    CHECK(i3.data(cwSurveyEditorModel::StationUpRole).toString().toStdString() == "");
-    CHECK(i3.data(cwSurveyEditorModel::StationDownRole).toString().toStdString() == "");
-    CHECK(i3.data(cwSurveyEditorModel::IndexInChunkRole).toInt() == 1);
+    CHECK(i3.data(cwSurveyEditorModel::StationNameRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
+    CHECK(i3.data(cwSurveyEditorModel::StationLeftRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
+    CHECK(i3.data(cwSurveyEditorModel::StationRightRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
+    CHECK(i3.data(cwSurveyEditorModel::StationUpRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
+    CHECK(i3.data(cwSurveyEditorModel::StationDownRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
+    CHECK(i3.data(cwSurveyEditorModel::RowIndexRole).value<cwSurveyEditorRowIndex>().chunk() == firstChunk);
+    CHECK(i3.data(cwSurveyEditorModel::RowIndexRole).value<cwSurveyEditorRowIndex>().rowType() == cwSurveyEditorRowIndex::StationRow);
+    CHECK(i3.data(cwSurveyEditorModel::RowIndexRole).value<cwSurveyEditorRowIndex>().indexInChunk() == 1);
 
     CHECK(i3.data(cwSurveyEditorModel::ShotDistanceRole).isNull());
     CHECK(i3.data(cwSurveyEditorModel::ShotCompassRole).isNull());
@@ -140,20 +151,20 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
 
     // Verify that the station data is initially empty.
     auto checkStationDataEmpty = [&](const QModelIndex &index) {
-        CHECK(model.data(index, cwSurveyEditorModel::StationNameRole).toString().isEmpty());
-        CHECK(model.data(index, cwSurveyEditorModel::StationLeftRole).toString().isEmpty());
-        CHECK(model.data(index, cwSurveyEditorModel::StationRightRole).toString().isEmpty());
-        CHECK(model.data(index, cwSurveyEditorModel::StationUpRole).toString().isEmpty());
-        CHECK(model.data(index, cwSurveyEditorModel::StationDownRole).toString().isEmpty());
+        CHECK(model.data(index, cwSurveyEditorModel::StationNameRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
+        CHECK(model.data(index, cwSurveyEditorModel::StationLeftRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
+        CHECK(model.data(index, cwSurveyEditorModel::StationRightRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
+        CHECK(model.data(index, cwSurveyEditorModel::StationUpRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
+        CHECK(model.data(index, cwSurveyEditorModel::StationDownRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
     };
 
     auto checkShotDataEmpty = [&](const QModelIndex &index) {
-        CHECK(model.data(index, cwSurveyEditorModel::ShotDistanceRole).toString().toStdString() == "");
-        CHECK(model.data(index, cwSurveyEditorModel::ShotCompassRole).toString().toStdString() == "");
-        CHECK(model.data(index, cwSurveyEditorModel::ShotBackCompassRole).toString().toStdString() == "");
-        CHECK(model.data(index, cwSurveyEditorModel::ShotClinoRole).toString().toStdString() == "");
-        CHECK(model.data(index, cwSurveyEditorModel::ShotBackClinoRole).toString().toStdString() == "");
-        CHECK(model.data(index, cwSurveyEditorModel::ShotCalibrationRole).toString().isEmpty());
+        CHECK(model.data(index, cwSurveyEditorModel::ShotDistanceRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
+        CHECK(model.data(index, cwSurveyEditorModel::ShotCompassRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
+        CHECK(model.data(index, cwSurveyEditorModel::ShotBackCompassRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
+        CHECK(model.data(index, cwSurveyEditorModel::ShotClinoRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
+        CHECK(model.data(index, cwSurveyEditorModel::ShotBackClinoRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
+        CHECK(model.data(index, cwSurveyEditorModel::ShotCalibrationRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
     };
 
     //Checks the surveyEditorModel agaist what it's watching
@@ -172,7 +183,8 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
             auto titleIndex = model.index(row);
             checkStationDataEmpty(titleIndex);
             checkShotDataEmpty(titleIndex);
-            CHECK(titleIndex.data(cwSurveyEditorModel::RowTypeRole).toInt() == cwSurveyEditorModel::TitleRow);
+            CHECK(titleIndex.data(cwSurveyEditorModel::RowIndexRole).value<cwSurveyEditorRowIndex>().rowType() == cwSurveyEditorRowIndex::TitleRow);
+            // CHECK(titleIndex.data(cwSurveyEditorModel::RowTypeRole).toInt() == cwSurveyEditorModel::TitleRow);
 
             row++;
 
@@ -184,13 +196,36 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
 
                 auto index = model.index(row);
                 INFO("modelIndex:" << index);
-                // CHECK(index.data(cwSurveyEditorModel::TitleVisibleRole).toBool() == false);
-                CHECK(model.data(index, cwSurveyEditorModel::StationNameRole).toString().toStdString() == station.name().toStdString());
-                CHECK(model.data(index, cwSurveyEditorModel::StationLeftRole).toString().toStdString() == station.left().value().toStdString());
-                CHECK(model.data(index, cwSurveyEditorModel::StationRightRole).toString().toStdString() == station.right().value().toStdString());
-                CHECK(model.data(index, cwSurveyEditorModel::StationUpRole).toString().toStdString() == station.up().value().toStdString());
-                CHECK(model.data(index, cwSurveyEditorModel::StationDownRole).toString().toStdString() == station.down().value().toStdString());
-                CHECK(index.data(cwSurveyEditorModel::RowTypeRole).toInt() == cwSurveyEditorModel::StationRow);
+                // CHECK(index.data(cwSurveyEditorModel::TitleVisibleRole).toBool() == false);                
+                auto rowIndex = index.data(cwSurveyEditorModel::RowIndexRole).value<cwSurveyEditorRowIndex>();
+                CHECK(rowIndex.rowType() == cwSurveyEditorRowIndex::StationRow);
+                CHECK(rowIndex.chunk() == chunk);
+                CHECK(rowIndex.indexInChunk() == i);
+
+                const auto stationNameData = model.data(index, cwSurveyEditorModel::StationNameRole).value<cwSurveyEditorBoxData>();
+                CHECK(stationNameData.reading().value().toStdString() == station.name().toStdString());
+                CHECK(stationNameData.chunkDataRole() == cwSurveyChunk::StationNameRole);
+                CHECK(stationNameData.rowIndex() == rowIndex);
+
+                const auto stationLeftData = model.data(index, cwSurveyEditorModel::StationLeftRole).value<cwSurveyEditorBoxData>();
+                CHECK(stationLeftData.reading().value().toStdString() == station.left().value().toStdString());
+                CHECK(stationLeftData.chunkDataRole() == cwSurveyChunk::StationLeftRole);
+                CHECK(stationLeftData.rowIndex() == rowIndex);
+
+                const auto stationRightData = model.data(index, cwSurveyEditorModel::StationRightRole).value<cwSurveyEditorBoxData>();
+                CHECK(stationRightData.reading().value().toStdString() == station.right().value().toStdString());
+                CHECK(stationRightData.chunkDataRole() == cwSurveyChunk::StationRightRole);
+                CHECK(stationRightData.rowIndex() == rowIndex);
+
+                const auto stationUpData = model.data(index, cwSurveyEditorModel::StationUpRole).value<cwSurveyEditorBoxData>();
+                CHECK(stationUpData.reading().value().toStdString() == station.up().value().toStdString());
+                CHECK(stationUpData.chunkDataRole() == cwSurveyChunk::StationUpRole);
+                CHECK(stationUpData.rowIndex() == rowIndex);
+
+                const auto stationDownData = model.data(index, cwSurveyEditorModel::StationDownRole).value<cwSurveyEditorBoxData>();
+                CHECK(stationDownData.reading().value().toStdString() == station.down().value().toStdString());
+                CHECK(stationDownData.chunkDataRole() == cwSurveyChunk::StationDownRole);
+                CHECK(stationDownData.rowIndex() == rowIndex);
 
                 row++;
 
@@ -199,12 +234,37 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
 
                 if(i < chunk->shotCount()) {
                     auto shot = chunk->shot(i);
-                    CHECK(model.data(index, cwSurveyEditorModel::ShotDistanceRole).toString().toStdString() == shot.distance().value().toStdString());
-                    CHECK(model.data(index, cwSurveyEditorModel::ShotCompassRole).toString().toStdString() == shot.compass().value().toStdString());
-                    CHECK(model.data(index, cwSurveyEditorModel::ShotBackCompassRole).toString().toStdString() == shot.backCompass().value().toStdString());
-                    CHECK(model.data(index, cwSurveyEditorModel::ShotClinoRole).toString().toStdString() == shot.clino().value().toStdString());
-                    CHECK(model.data(index, cwSurveyEditorModel::ShotBackClinoRole).toString().toStdString() == shot.backClino().value().toStdString());
-                    CHECK(index.data(cwSurveyEditorModel::RowTypeRole).toInt() == cwSurveyEditorModel::ShotRow);
+
+                    auto rowIndex = index.data(cwSurveyEditorModel::RowIndexRole).value<cwSurveyEditorRowIndex>();
+                    CHECK(rowIndex.rowType() == cwSurveyEditorRowIndex::ShotRow);
+                    CHECK(rowIndex.chunk() == chunk);
+                    CHECK(rowIndex.indexInChunk() == i);
+
+                    const auto distance = model.data(index, cwSurveyEditorModel::ShotDistanceRole).value<cwSurveyEditorBoxData>();
+                    const auto compass = model.data(index, cwSurveyEditorModel::ShotCompassRole).value<cwSurveyEditorBoxData>();
+                    const auto backCompass = model.data(index, cwSurveyEditorModel::ShotBackCompassRole).value<cwSurveyEditorBoxData>();
+                    const auto clino = model.data(index, cwSurveyEditorModel::ShotClinoRole).value<cwSurveyEditorBoxData>();
+                    const auto backClino = model.data(index, cwSurveyEditorModel::ShotBackClinoRole).value<cwSurveyEditorBoxData>();
+
+                    CHECK(distance.reading().value().toStdString() == shot.distance().value().toStdString());
+                    CHECK(compass.reading().value().toStdString() == shot.compass().value().toStdString());
+                    CHECK(backCompass.reading().value().toStdString() == shot.backCompass().value().toStdString());
+                    CHECK(clino.reading().value().toStdString() == shot.clino().value().toStdString());
+                    CHECK(backClino.reading().value().toStdString() == shot.backClino().value().toStdString());
+
+                    CHECK(distance.chunkDataRole() == cwSurveyChunk::ShotDistanceRole);
+                    CHECK(compass.chunkDataRole() == cwSurveyChunk::ShotCompassRole);
+                    CHECK(backCompass.chunkDataRole() == cwSurveyChunk::ShotBackCompassRole);
+                    CHECK(clino.chunkDataRole() == cwSurveyChunk::ShotClinoRole);
+                    CHECK(backClino.chunkDataRole() == cwSurveyChunk::ShotBackClinoRole);
+
+                    CHECK(distance.rowIndex() == rowIndex);
+                    CHECK(compass.rowIndex() == rowIndex);
+                    CHECK(backCompass.rowIndex() == rowIndex);
+                    CHECK(clino.rowIndex() == rowIndex);
+                    CHECK(backClino.rowIndex() == rowIndex);
+
+                    // CHECK(index.data(cwSurveyEditorModel::RowTypeRole).toInt() == cwSurveyEditorModel::ShotRow);
                     row++;
                 }
             }
@@ -225,15 +285,19 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
     checkShotDataEmpty(idx2);
     checkStationDataEmpty(idx1);
 
-    auto checkData = [&](const QModelIndex& index, cwSurveyEditorModel::Role role) {
+    auto checkData = [&](const QModelIndex& index, cwSurveyEditorModel::Role role, int errorCountChanged = 0) {
+        spyChecker[&dataChangedSpy] += errorCountChanged;
         spyChecker[&dataChangedSpy]++;
+
         spyChecker.requireSpies();
         REQUIRE(dataChangedSpy.last().size() == 3);
         // qDebug() << "dataChange0:" << dataChangedSpy.last().at(0).toModelIndex() << index;
-        CHECK(dataChangedSpy.last().at(0).toModelIndex() == index);
+        CHECK(dataChangedSpy.first().at(0).toModelIndex() == index);
         // qDebug() << "dataChange1:" << dataChangedSpy.last().at(1).toModelIndex() << index;
-        CHECK(dataChangedSpy.last().at(1).toModelIndex() == index);
-        CHECK(dataChangedSpy.last().at(2).value<QVector<int>>() == QVector<int>({role}));
+        CHECK(dataChangedSpy.first().at(1).toModelIndex() == index);
+        CHECK(dataChangedSpy.first().at(2).value<QVector<int>>() == QVector<int>({role}));
+
+        spyChecker.clearSpyCounts();
     };
 
     // Now change the data in the new survey chunk.
@@ -241,7 +305,7 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
     // Now change the data in the new survey chunk.
     // Update station at index 0.
     newChunk->setData(cwSurveyChunk::StationNameRole, 0, "A1");
-    checkData(idx1, cwSurveyEditorModel::StationNameRole);
+    checkData(idx1, cwSurveyEditorModel::StationNameRole, 4); //Added 4 LRUD warning
 
     newChunk->setData(cwSurveyChunk::StationLeftRole, 0, "1.0");
     checkData(idx1, cwSurveyEditorModel::StationLeftRole);
@@ -257,23 +321,23 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
 
     // Update shot at index 0.
     newChunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "10.0");
-    checkData(idx2, cwSurveyEditorModel::ShotDistanceRole);
+    checkData(idx2, cwSurveyEditorModel::ShotDistanceRole, 1); //Added a fatel error to station
 
     newChunk->setData(cwSurveyChunk::ShotCompassRole, 0, "100.0");
     checkData(idx2, cwSurveyEditorModel::ShotCompassRole);
 
     newChunk->setData(cwSurveyChunk::ShotBackCompassRole, 0, "200.0");
-    checkData(idx2, cwSurveyEditorModel::ShotBackCompassRole);
+    checkData(idx2, cwSurveyEditorModel::ShotBackCompassRole, 1); //Adds a warning because more than 2deg off compass
 
     newChunk->setData(cwSurveyChunk::ShotClinoRole, 0, "30.0");
     checkData(idx2, cwSurveyEditorModel::ShotClinoRole);
 
-    newChunk->setData(cwSurveyChunk::ShotBackClinoRole, 0, "40.0");
-    checkData(idx2, cwSurveyEditorModel::ShotBackClinoRole);
+    newChunk->setData(cwSurveyChunk::ShotBackClinoRole, 0, "40.0"); //Adds a warning because more than 2deg off clino
+    checkData(idx2, cwSurveyEditorModel::ShotBackClinoRole, 1);
 
     // Update station at index 1.
     newChunk->setData(cwSurveyChunk::StationNameRole, 1, "A2");
-    checkData(idx3, cwSurveyEditorModel::StationNameRole);
+    checkData(idx3, cwSurveyEditorModel::StationNameRole, 4); //Adds warning for empty LRUDs, removes 1 warning from the station name
 
     newChunk->setData(cwSurveyChunk::StationLeftRole, 1, "1.1");
     checkData(idx3, cwSurveyEditorModel::StationLeftRole);
@@ -288,23 +352,23 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
     checkData(idx3, cwSurveyEditorModel::StationDownRole);
 
     // Since signals are delivered directly, we can now check that the model reflects the updated data.
-    CHECK(model.data(idx1, cwSurveyEditorModel::StationNameRole).toString().toStdString() == "A1");
-    CHECK(model.data(idx1, cwSurveyEditorModel::StationLeftRole).toString().toStdString() == "1.0");
-    CHECK(model.data(idx1, cwSurveyEditorModel::StationRightRole).toString().toStdString() == "2.0");
-    CHECK(model.data(idx1, cwSurveyEditorModel::StationUpRole).toString().toStdString() == "3.0");
-    CHECK(model.data(idx1, cwSurveyEditorModel::StationDownRole).toString().toStdString() == "4.0");
+    CHECK(model.data(idx1, cwSurveyEditorModel::StationNameRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "A1");
+    CHECK(model.data(idx1, cwSurveyEditorModel::StationLeftRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "1.0");
+    CHECK(model.data(idx1, cwSurveyEditorModel::StationRightRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "2.0");
+    CHECK(model.data(idx1, cwSurveyEditorModel::StationUpRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "3.0");
+    CHECK(model.data(idx1, cwSurveyEditorModel::StationDownRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "4.0");
 
-    CHECK(model.data(idx2, cwSurveyEditorModel::ShotDistanceRole).toString().toStdString() == "10.0");
-    CHECK(model.data(idx2, cwSurveyEditorModel::ShotCompassRole).toString().toStdString() == "100.0");
-    CHECK(model.data(idx2, cwSurveyEditorModel::ShotBackCompassRole).toString().toStdString() == "200.0");
-    CHECK(model.data(idx2, cwSurveyEditorModel::ShotClinoRole).toString().toStdString() == "30.0");
-    CHECK(model.data(idx2, cwSurveyEditorModel::ShotBackClinoRole).toString().toStdString() == "40.0");
+    CHECK(model.data(idx2, cwSurveyEditorModel::ShotDistanceRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "10.0");
+    CHECK(model.data(idx2, cwSurveyEditorModel::ShotCompassRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "100.0");
+    CHECK(model.data(idx2, cwSurveyEditorModel::ShotBackCompassRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "200.0");
+    CHECK(model.data(idx2, cwSurveyEditorModel::ShotClinoRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "30.0");
+    CHECK(model.data(idx2, cwSurveyEditorModel::ShotBackClinoRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "40.0");
 
-    CHECK(model.data(idx3, cwSurveyEditorModel::StationNameRole).toString().toStdString() == "A2");
-    CHECK(model.data(idx3, cwSurveyEditorModel::StationLeftRole).toString().toStdString() == "1.1");
-    CHECK(model.data(idx3, cwSurveyEditorModel::StationRightRole).toString().toStdString() == "2.1");
-    CHECK(model.data(idx3, cwSurveyEditorModel::StationUpRole).toString().toStdString() == "3.1");
-    CHECK(model.data(idx3, cwSurveyEditorModel::StationDownRole).toString().toStdString() == "4.1");
+    CHECK(model.data(idx3, cwSurveyEditorModel::StationNameRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "A2");
+    CHECK(model.data(idx3, cwSurveyEditorModel::StationLeftRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "1.1");
+    CHECK(model.data(idx3, cwSurveyEditorModel::StationRightRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "2.1");
+    CHECK(model.data(idx3, cwSurveyEditorModel::StationUpRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "3.1");
+    CHECK(model.data(idx3, cwSurveyEditorModel::StationDownRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "4.1");
 
     // Verify that the expected signals were emitted.
     spyChecker.checkSpies();
@@ -327,12 +391,14 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
         auto idx4 = model.index(5); //New station
         checkStationDataEmpty(idx4);
 
-        CHECK(idx3.data(cwSurveyEditorModel::RowTypeRole).toInt() == cwSurveyEditorModel::ShotRow);
-        CHECK(idx4.data(cwSurveyEditorModel::RowTypeRole).toInt() == cwSurveyEditorModel::StationRow);
+        CHECK(idx3.data(cwSurveyEditorModel::RowIndexRole).value<cwSurveyEditorRowIndex>().rowType() == cwSurveyEditorRowIndex::ShotRow);
+        CHECK(idx4.data(cwSurveyEditorModel::RowIndexRole).value<cwSurveyEditorRowIndex>().rowType() == cwSurveyEditorRowIndex::StationRow);
+        // CHECK(idx3.data(cwSurveyEditorModel::RowTypeRole).toInt() == cwSurveyEditorModel::ShotRow);
+        // CHECK(idx4.data(cwSurveyEditorModel::RowTypeRole).toInt() == cwSurveyEditorModel::StationRow);
 
         //--- Update the stations new shot and station data
-        newChunk->setData(cwSurveyChunk::StationNameRole, 2, "A3");
-        checkData(idx4, cwSurveyEditorModel::StationNameRole);
+        newChunk->setData(cwSurveyChunk::StationNameRole, 2, "A3"); //Adds warning 4 to the a3's LRUD and adds fatals 5 for all the survey data
+        checkData(idx4, cwSurveyEditorModel::StationNameRole, 4 + 5);
 
         newChunk->setData(cwSurveyChunk::StationLeftRole, 2, "1.02");
         checkData(idx4, cwSurveyEditorModel::StationLeftRole);
@@ -350,30 +416,30 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
         newChunk->setData(cwSurveyChunk::ShotDistanceRole, 1, "10.02");
         checkData(idx3, cwSurveyEditorModel::ShotDistanceRole);
 
-        newChunk->setData(cwSurveyChunk::ShotCompassRole, 1, "100.02");
-        checkData(idx3, cwSurveyEditorModel::ShotCompassRole);
+        newChunk->setData(cwSurveyChunk::ShotCompassRole, 1, "100.02"); //Fatal error removed?
+        checkData(idx3, cwSurveyEditorModel::ShotCompassRole, 1);
 
-        newChunk->setData(cwSurveyChunk::ShotBackCompassRole, 1, "200.02");
-        checkData(idx3, cwSurveyEditorModel::ShotBackCompassRole);
+        newChunk->setData(cwSurveyChunk::ShotBackCompassRole, 1, "200.02"); //Warning added 2 deg off
+        checkData(idx3, cwSurveyEditorModel::ShotBackCompassRole, 1);
 
-        newChunk->setData(cwSurveyChunk::ShotClinoRole, 1, "30.02");
-        checkData(idx3, cwSurveyEditorModel::ShotClinoRole);
+        newChunk->setData(cwSurveyChunk::ShotClinoRole, 1, "30.02"); //Fatal error removed
+        checkData(idx3, cwSurveyEditorModel::ShotClinoRole, 1);
 
-        newChunk->setData(cwSurveyChunk::ShotBackClinoRole, 1, "40.02");
-        checkData(idx3, cwSurveyEditorModel::ShotBackClinoRole);
+        newChunk->setData(cwSurveyChunk::ShotBackClinoRole, 1, "40.02"); //Warning added, 2 deg off
+        checkData(idx3, cwSurveyEditorModel::ShotBackClinoRole, 1);
 
 
-        CHECK(model.data(idx3, cwSurveyEditorModel::ShotDistanceRole).toString().toStdString() == "10.02");
-        CHECK(model.data(idx3, cwSurveyEditorModel::ShotCompassRole).toString().toStdString() == "100.02");
-        CHECK(model.data(idx3, cwSurveyEditorModel::ShotBackCompassRole).toString().toStdString() == "200.02");
-        CHECK(model.data(idx3, cwSurveyEditorModel::ShotClinoRole).toString().toStdString() == "30.02");
-        CHECK(model.data(idx3, cwSurveyEditorModel::ShotBackClinoRole).toString().toStdString() == "40.02");
+        CHECK(model.data(idx3, cwSurveyEditorModel::ShotDistanceRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "10.02");
+        CHECK(model.data(idx3, cwSurveyEditorModel::ShotCompassRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "100.02");
+        CHECK(model.data(idx3, cwSurveyEditorModel::ShotBackCompassRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "200.02");
+        CHECK(model.data(idx3, cwSurveyEditorModel::ShotClinoRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "30.02");
+        CHECK(model.data(idx3, cwSurveyEditorModel::ShotBackClinoRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "40.02");
 
-        CHECK(model.data(idx4, cwSurveyEditorModel::StationNameRole).toString().toStdString() == "A3");
-        CHECK(model.data(idx4, cwSurveyEditorModel::StationLeftRole).toString().toStdString() == "1.02");
-        CHECK(model.data(idx4, cwSurveyEditorModel::StationRightRole).toString().toStdString() == "2.02");
-        CHECK(model.data(idx4, cwSurveyEditorModel::StationUpRole).toString().toStdString() == "3.02");
-        CHECK(model.data(idx4, cwSurveyEditorModel::StationDownRole).toString().toStdString() == "4.02");
+        CHECK(model.data(idx4, cwSurveyEditorModel::StationNameRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "A3");
+        CHECK(model.data(idx4, cwSurveyEditorModel::StationLeftRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "1.02");
+        CHECK(model.data(idx4, cwSurveyEditorModel::StationRightRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "2.02");
+        CHECK(model.data(idx4, cwSurveyEditorModel::StationUpRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "3.02");
+        CHECK(model.data(idx4, cwSurveyEditorModel::StationDownRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "4.02");
 
         checkModelData();
 
@@ -413,14 +479,19 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
             checkStationDataEmpty(stationIdx2);
             // (No shot row exists for station index 1 by default.)
 
-            CHECK(titleIdx.data(cwSurveyEditorModel::RowTypeRole).toInt() == cwSurveyEditorModel::TitleRow);
-            CHECK(stationIdx1.data(cwSurveyEditorModel::RowTypeRole).toInt() == cwSurveyEditorModel::StationRow);
-            CHECK(shotIdx1.data(cwSurveyEditorModel::RowTypeRole).toInt() == cwSurveyEditorModel::ShotRow);
-            CHECK(stationIdx2.data(cwSurveyEditorModel::RowTypeRole).toInt() == cwSurveyEditorModel::StationRow);
+            CHECK(titleIdx.data(cwSurveyEditorModel::RowIndexRole).value<cwSurveyEditorRowIndex>().rowType() == cwSurveyEditorRowIndex::TitleRow);
+            CHECK(stationIdx1.data(cwSurveyEditorModel::RowIndexRole).value<cwSurveyEditorRowIndex>().rowType() == cwSurveyEditorRowIndex::StationRow);
+            CHECK(shotIdx1.data(cwSurveyEditorModel::RowIndexRole).value<cwSurveyEditorRowIndex>().rowType() == cwSurveyEditorRowIndex::ShotRow);
+            CHECK(stationIdx2.data(cwSurveyEditorModel::RowIndexRole).value<cwSurveyEditorRowIndex>().rowType() == cwSurveyEditorRowIndex::StationRow);
+
+            // CHECK(titleIdx.data(cwSurveyEditorModel::RowTypeRole).toInt() == cwSurveyEditorModel::TitleRow);
+            // CHECK(stationIdx1.data(cwSurveyEditorModel::RowTypeRole).toInt() == cwSurveyEditorModel::StationRow);
+            // CHECK(shotIdx1.data(cwSurveyEditorModel::RowTypeRole).toInt() == cwSurveyEditorModel::ShotRow);
+            // CHECK(stationIdx2.data(cwSurveyEditorModel::RowTypeRole).toInt() == cwSurveyEditorModel::StationRow);
 
             //--- Update station 0 data in the new chunk.
-            secondChunk->setData(cwSurveyChunk::StationNameRole, 0, "B1");
-            checkData(stationIdx1, cwSurveyEditorModel::StationNameRole);
+            secondChunk->setData(cwSurveyChunk::StationNameRole, 0, "B1"); //4 warnings for LRUD's
+            checkData(stationIdx1, cwSurveyEditorModel::StationNameRole, 4);
 
             secondChunk->setData(cwSurveyChunk::StationLeftRole, 0, "1.5");
             checkData(stationIdx1, cwSurveyEditorModel::StationLeftRole);
@@ -435,24 +506,24 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
             checkData(stationIdx1, cwSurveyEditorModel::StationDownRole);
 
             // Update shot data for station 0 in the new chunk.
-            secondChunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "15.0");
-            checkData(shotIdx1, cwSurveyEditorModel::ShotDistanceRole);
+            secondChunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "15.0"); //Fatal for station name
+            checkData(shotIdx1, cwSurveyEditorModel::ShotDistanceRole, 1);
 
             secondChunk->setData(cwSurveyChunk::ShotCompassRole, 0, "150.0");
             checkData(shotIdx1, cwSurveyEditorModel::ShotCompassRole);
 
-            secondChunk->setData(cwSurveyChunk::ShotBackCompassRole, 0, "250.0");
-            checkData(shotIdx1, cwSurveyEditorModel::ShotBackCompassRole);
+            secondChunk->setData(cwSurveyChunk::ShotBackCompassRole, 0, "250.0"); //Two degrees off warning
+            checkData(shotIdx1, cwSurveyEditorModel::ShotBackCompassRole, 1);
 
             secondChunk->setData(cwSurveyChunk::ShotClinoRole, 0, "35.0");
             checkData(shotIdx1, cwSurveyEditorModel::ShotClinoRole);
 
-            secondChunk->setData(cwSurveyChunk::ShotBackClinoRole, 0, "45.0");
-            checkData(shotIdx1, cwSurveyEditorModel::ShotBackClinoRole);
+            secondChunk->setData(cwSurveyChunk::ShotBackClinoRole, 0, "45.0"); //Two degrees off warning
+            checkData(shotIdx1, cwSurveyEditorModel::ShotBackClinoRole, 1);
 
             //--- Update station 1 data in the new chunk.
-            secondChunk->setData(cwSurveyChunk::StationNameRole, 1, "B2");
-            checkData(stationIdx2, cwSurveyEditorModel::StationNameRole);
+            secondChunk->setData(cwSurveyChunk::StationNameRole, 1, "B2"); //4 warning for LRUD
+            checkData(stationIdx2, cwSurveyEditorModel::StationNameRole, 4);
 
             secondChunk->setData(cwSurveyChunk::StationLeftRole, 1, "1.6");
             checkData(stationIdx2, cwSurveyEditorModel::StationLeftRole);
@@ -467,23 +538,23 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
             checkData(stationIdx2, cwSurveyEditorModel::StationDownRole);
 
             //--- Verify that the model reflects the updated data for the second chunk.
-            CHECK(model.data(stationIdx1, cwSurveyEditorModel::StationNameRole).toString().toStdString() == "B1");
-            CHECK(model.data(stationIdx1, cwSurveyEditorModel::StationLeftRole).toString().toStdString() == "1.5");
-            CHECK(model.data(stationIdx1, cwSurveyEditorModel::StationRightRole).toString().toStdString() == "2.5");
-            CHECK(model.data(stationIdx1, cwSurveyEditorModel::StationUpRole).toString().toStdString() == "3.5");
-            CHECK(model.data(stationIdx1, cwSurveyEditorModel::StationDownRole).toString().toStdString() == "4.5");
+            CHECK(model.data(stationIdx1, cwSurveyEditorModel::StationNameRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "B1");
+            CHECK(model.data(stationIdx1, cwSurveyEditorModel::StationLeftRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "1.5");
+            CHECK(model.data(stationIdx1, cwSurveyEditorModel::StationRightRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "2.5");
+            CHECK(model.data(stationIdx1, cwSurveyEditorModel::StationUpRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "3.5");
+            CHECK(model.data(stationIdx1, cwSurveyEditorModel::StationDownRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "4.5");
 
-            CHECK(model.data(shotIdx1, cwSurveyEditorModel::ShotDistanceRole).toString().toStdString() == "15.0");
-            CHECK(model.data(shotIdx1, cwSurveyEditorModel::ShotCompassRole).toString().toStdString() == "150.0");
-            CHECK(model.data(shotIdx1, cwSurveyEditorModel::ShotBackCompassRole).toString().toStdString() == "250.0");
-            CHECK(model.data(shotIdx1, cwSurveyEditorModel::ShotClinoRole).toString().toStdString() == "35.0");
-            CHECK(model.data(shotIdx1, cwSurveyEditorModel::ShotBackClinoRole).toString().toStdString() == "45.0");
+            CHECK(model.data(shotIdx1, cwSurveyEditorModel::ShotDistanceRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "15.0");
+            CHECK(model.data(shotIdx1, cwSurveyEditorModel::ShotCompassRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "150.0");
+            CHECK(model.data(shotIdx1, cwSurveyEditorModel::ShotBackCompassRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "250.0");
+            CHECK(model.data(shotIdx1, cwSurveyEditorModel::ShotClinoRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "35.0");
+            CHECK(model.data(shotIdx1, cwSurveyEditorModel::ShotBackClinoRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "45.0");
 
-            CHECK(model.data(stationIdx2, cwSurveyEditorModel::StationNameRole).toString().toStdString() == "B2");
-            CHECK(model.data(stationIdx2, cwSurveyEditorModel::StationLeftRole).toString().toStdString() == "1.6");
-            CHECK(model.data(stationIdx2, cwSurveyEditorModel::StationRightRole).toString().toStdString() == "2.6");
-            CHECK(model.data(stationIdx2, cwSurveyEditorModel::StationUpRole).toString().toStdString() == "3.6");
-            CHECK(model.data(stationIdx2, cwSurveyEditorModel::StationDownRole).toString().toStdString() == "4.6");
+            CHECK(model.data(stationIdx2, cwSurveyEditorModel::StationNameRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "B2");
+            CHECK(model.data(stationIdx2, cwSurveyEditorModel::StationLeftRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "1.6");
+            CHECK(model.data(stationIdx2, cwSurveyEditorModel::StationRightRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "2.6");
+            CHECK(model.data(stationIdx2, cwSurveyEditorModel::StationUpRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "3.6");
+            CHECK(model.data(stationIdx2, cwSurveyEditorModel::StationDownRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "4.6");
 
             // Verify that the expected signals were emitted.
             spyChecker.checkSpies();
@@ -634,7 +705,8 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
             auto findNewChunkBase = [&](const cwSurveyChunk* chunk) {
                 for(int i = 0; i < model.rowCount(); i++) {
                     auto index = model.index(i);
-                    if(chunk == index.data(cwSurveyEditorModel::ChunkRole).value<cwSurveyChunk*>()) {
+
+                    if(chunk == index.data(cwSurveyEditorModel::RowIndexRole).value<cwSurveyEditorRowIndex>().chunk()) {
                         return index.row();
                     }
                 }
@@ -649,6 +721,7 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
                 int prevShotCount = newChunk->shotCount();
 
                 newChunk->removeStation(0, cwSurveyChunk::Below);
+                spyChecker[&dataChangedSpy]++; //Error Model change
                 spyChecker[&rowsRemovedSpy]++;
                 spyChecker.requireSpies();
 
@@ -678,6 +751,7 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
                     int prevShotCount = newChunk->shotCount();
 
                     newChunk->removeStation(1, cwSurveyChunk::Above);
+                    spyChecker[&dataChangedSpy]++; //Error Model change
                     spyChecker[&rowsRemovedSpy]++;
                     spyChecker.requireSpies();
 
@@ -703,6 +777,7 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
                     int prevShotCount = newChunk->shotCount();
 
                     newChunk->removeStation(1, cwSurveyChunk::Below);
+                    // spyChecker[&dataChangedSpy]++; //Error Model change
                     spyChecker[&rowsRemovedSpy]++;
                     spyChecker.requireSpies();
 
@@ -731,6 +806,7 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
                 int removedRow = baseRowIndex + 5; //+1 for title +4 for the third (and last) station
 
                 newChunk->removeStation(newChunk->stationCount() - 1, cwSurveyChunk::Above);
+                // spyChecker[&dataChangedSpy]++; //Error Model change
                 spyChecker[&rowsRemovedSpy]++;
                 spyChecker.requireSpies();
 

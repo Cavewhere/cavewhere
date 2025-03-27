@@ -12,7 +12,7 @@ class cwClinoReading : public cwReading {
     Q_GADGET
     QML_VALUE_TYPE(cwClinoReading)
 
-    Q_PROPERTY(State state READ state)
+    // Q_PROPERTY(State state READ state)
 public:
 
     enum class State : int {
@@ -25,7 +25,7 @@ public:
 
     Q_ENUM(State)
 
-    cwClinoReading() : m_state(State::Empty) {}
+    cwClinoReading() : cwReading(static_cast<int>(State::Empty)) {}
     cwClinoReading(const QString& value) : cwReading(value) {
         cwClinoReading::updateState();
     }
@@ -33,12 +33,12 @@ public:
         cwClinoReading::updateState();
     }
 
-    State state() const { return m_state; }
+    State state() const { return static_cast<State>(cwReading::state()); }
 
 private:
     void updateState();
 
-    State m_state;
+    // State m_state;
 };
 
 #endif // CWCLINOREADING_H

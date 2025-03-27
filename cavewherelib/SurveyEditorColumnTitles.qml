@@ -15,6 +15,17 @@ Item {
     property alias dWidth: dLabelId.width
     property int shotOffset: 0
 
+    property real columnOffset: 1
+
+    property real stationX: 0
+    property real distanceX: stationWidth - columnOffset
+    property real compassX: distanceX + distanceWidth - columnOffset
+    property real clinoX: compassX + compassWidth - columnOffset
+    property real leftX: clinoX + clinoWidth - columnOffset
+
+    property real dataRowHeight: 50
+    property real dataRowHalfHeight: dataRowHeight * 0.5
+    property real shotRowY: -dataRowHeight * 0.5
 
     TitleLabel {
         id: stationLabelId

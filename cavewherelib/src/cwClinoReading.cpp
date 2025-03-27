@@ -4,18 +4,18 @@
 void cwClinoReading::updateState() {
     const QString value = this->value();
     if (value.isEmpty()) {
-        m_state = State::Empty;
+        setState(static_cast<int>(State::Empty));
     } else if (value.compare("down", Qt::CaseInsensitive) == 0) {
-        m_state = State::Down;
+        setState(static_cast<int>(State::Down));
     } else if (value.compare("up", Qt::CaseInsensitive) == 0) {
-        m_state = State::Up;
+        setState(static_cast<int>(State::Up));
     } else {
         bool ok;
         double numberValue = value.toDouble(&ok);
         if(ok && cwClinoValidator::check(numberValue)) {
-            m_state = State::Valid;
+            setState(static_cast<int>(State::Valid));
         } else {
-            m_state = State::Invalid;
+            setState(static_cast<int>(State::Invalid));
         }
     }
 }
