@@ -1,5 +1,5 @@
-#ifndef CWSURVEYEDITORBOXINDEX_H
-#define CWSURVEYEDITORBOXINDEX_H
+#ifndef CWSURVEYEDITORROWINDEX_H
+#define CWSURVEYEDITORROWINDEX_H
 
 #include <QObject>
 #include <QQmlEngine>
@@ -56,14 +56,14 @@ public:
     }
 
     // Equality operator for QML
-    friend bool operator==(const cwSurveyEditorRowIndex &lhs, const cwSurveyEditorRowIndex &rhs) {
-        return lhs.m_chunk == rhs.m_chunk &&
-               lhs.m_indexInChunk == rhs.m_indexInChunk &&
-               lhs.m_rowType == rhs.m_rowType;
+    bool operator==(const cwSurveyEditorRowIndex &rhs) const {
+        return m_chunk == rhs.m_chunk &&
+               m_indexInChunk == rhs.m_indexInChunk &&
+               m_rowType == rhs.m_rowType;
     }
 
-    friend bool operator!=(const cwSurveyEditorRowIndex &lhs, const cwSurveyEditorRowIndex &rhs) {
-        return !(lhs == rhs);
+    bool operator!=(const cwSurveyEditorRowIndex &rhs) const {
+        return !operator==(rhs);
     }
 
 private:
@@ -87,4 +87,4 @@ QML_NAMED_ELEMENT(SurveyEditorRowIndex)
 QML_FOREIGN_NAMESPACE(cwSurveyEditorRowIndexDerived)
 }
 
-#endif // CWSURVEYEDITORBOXINDEX_H
+#endif // CWSURVEYEDITORROWINDEX_H

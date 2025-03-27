@@ -318,10 +318,9 @@ int cwSurveyEditorModel::toModelRow(const cwSurveyEditorRowIndex &rowIndex) cons
     return toIndex();
 }
 
-cwSurveyEditorRowIndex cwSurveyEditorModel::rowIndex(cwSurveyChunk *chunk, int chunkIndex, cwSurveyEditorRowIndex::RowType type) const
-{
-    return cwSurveyEditorRowIndex(chunk, chunkIndex, type);
-}
+
+
+
 
 cwSurveyEditorRowIndex::RowType cwSurveyEditorModel::toRowType(cwSurveyChunk::DataRole chunkDataRole)
 {

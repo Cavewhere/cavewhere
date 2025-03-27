@@ -42,22 +42,22 @@ QQ.Item {
 
     readonly property bool hasEditorFocus: {
         // if(editorFocus) {
-        //     if(editorFocus.boxIndex.chunk === index.chunk
-        //             && editorFocus.boxIndex.rowType === index.rowType
-        //             && editorFocus.boxIndex.indexInChunk === index.indexInChunk
-        //             && editorFocus.boxIndex.chunkRole === index.chunkRole) {
-        //         console.log("----");
-        //         console.log("Editor Focus1:" + this + " " + dataBox.index.chunk + " " + dataBox.index.indexInChunk + " " + dataBox.index.chunkRole + " " + dataBox.index.rowType)
-        //         console.log("Editor Focus2:" + this + " " + index.chunk + " " + index.indexInChunk + " " + index.chunkRole + " " + index.rowType)
-        //         console.log("hasEditorfocus:" + (editorFocus.boxIndex.chunk === index.chunk
-        //                                          && editorFocus.boxIndex.rowType === index.rowType
-        //                                          && editorFocus.boxIndex.indexInChunk === index.indexInChunk
-        //                                          && editorFocus.boxIndex.chunkRole === index.chunkRole))
-        //     }
-            return editorFocus.rowIndex.chunk === dataValue.rowIndex.chunk
-                    && editorFocus.rowIndex.rowType === dataValue.rowIndex.rowType
-                    && editorFocus.rowIndex.indexInChunk === dataValue.rowIndex.indexInChunk
-                    && editorFocus.chunkDataRole === dataValue.chunkDataRole
+            // if(editorFocus.boxIndex.chunk === dataValue.chunk
+            //         && editorFocus.boxIndex.rowType === dataValue.rowType
+            //         && editorFocus.boxIndex.indexInChunk === dataValue.indexInChunk
+            //         && editorFocus.boxIndex.chunkDataRole === dataValue.chunkDataRole) {
+                console.log("----");
+                console.log("Editor Focus1:" + this + " " + editorFocus.boxIndex.chunk  + " " + editorFocus.boxIndex.rowType + " " + editorFocus.boxIndex.indexInChunk + " " + editorFocus.boxIndex.chunkDataRole)
+                console.log("Editor Focus2:" + this + " " + dataValue.chunk + " " + dataValue.rowType + " " + dataValue.indexInChunk + " " + dataValue.chunkDataRole)
+                console.log("hasEditorfocus:" + (editorFocus.boxIndex.chunk === dataValue.chunk
+                                                 && editorFocus.boxIndex.rowType === dataValue.rowType
+                                                 && editorFocus.boxIndex.indexInChunk === dataValue.indexInChunk
+                                                 && editorFocus.boxIndex.chunkDataRole === dataValue.chunkDataRole))
+            // }
+            return editorFocus.boxIndex.chunk === dataValue.chunk
+                    && editorFocus.boxIndex.rowType === dataValue.rowType
+                    && editorFocus.boxIndex.indexInChunk === dataValue.indexInChunk
+                    && editorFocus.boxIndex.chunkDataRole === dataValue.chunkDataRole
         // } else {
         //     return false;
         // }
@@ -81,13 +81,17 @@ QQ.Item {
     Text {
         color: "red"
         font.pixelSize: 10
-        // text: dataBox.objectName + "\nF:" + dataBox.focus + "\nEF:" + hasEditorFocus
-        text: dataBox.objectName + "\ne:" + errorModel
+        text: dataBox.objectName + "\nF:" + dataBox.focus + "\nEF:" + hasEditorFocus
+        // text: dataBox.objectName + "\ne:" + errorModel
         z: 1
     }
 
     onHasEditorFocusChanged: {
+        console.log("HasFocusChanged!" + hasEditorFocus)
         focus = hasEditorFocus
+        if(focus) {
+            forceActiveFocus()
+        }
     }
 
     //We need to watch on currentIndex changed because the view
@@ -96,6 +100,7 @@ QQ.Item {
     QQ.Connections {
        target: dataBox.view
        function onCurrentIndexChanged() {
+           console.log("CurrentIndexChanged:" + dataBox.view.currentIndex)
            focus = hasEditorFocus;
        }
     }
@@ -212,7 +217,7 @@ QQ.Item {
     }
 
     function addNewChunk() {
-        var trip = dataValue.rowIndex.chunk.parentTrip;
+        var trip = dataValue.chunk.parentTrip;
         if(trip.chunkCount > 0) {
             var lastChunkIndex = trip.chunkCount - 1
             var lastChunk = trip.chunk(lastChunkIndex);
@@ -223,7 +228,7 @@ QQ.Item {
         }
 
         console.log("space bar 2 area click, new chunk!");
-        dataValue.rowIndex.chunk.parentTrip.addNewChunk();
+        dataValue.chunk.parentTrip.addNewChunk();
 
         //Set active focus on the new chunk
 
@@ -248,7 +253,7 @@ QQ.Item {
         Controls.MenuItem {
             text: "Remove Chunk"
             onTriggered: {
-                dataBox.dataValue.rowIndex.chunk.parentTrip.removeChunk(dataBox.dataValue.rowIndex.chunk)
+                dataBox.dataValue.chunk.parentTrip.removeChunk(dataBox.dataValue.chunk)
             }
 
             //            onContainsMouseChanged: {
@@ -281,7 +286,7 @@ QQ.Item {
         acceptedButtons: Qt.LeftButton | Qt.RightButton
 
         onClicked: (mouse) => {
-                       dataBox.editorFocus = dataBox.dataValue.rowIndex
+                       dataBox.editorFocus = dataBox.dataValue
                        // dataBox.focus = true
 
                        if(mouse.button === Qt.RightButton) {
@@ -296,28 +301,28 @@ QQ.Item {
 
         gradient: QQ.Gradient {
             QQ.GradientStop {
-                position: dataBox.dataValue.rowIndex.indexInChunk % 2 === 0 ? 1.0 : 0.0
+                position: dataBox.dataValue.indexInChunk % 2 === 0 ? 1.0 : 0.0
                 color:  "#DDF2FF"
             }
             QQ.GradientStop {
-                position: dataBox.dataValue.rowIndex.indexInChunk % 2 === 0 ? 0.4 : 0.6
+                position: dataBox.dataValue.indexInChunk % 2 === 0 ? 0.4 : 0.6
                 color:  "white"
             }
         }
 
         // DebugRectangle {}
 
-        visible: dataBox.dataValue.rowIndex.chunk !== null
-                 && dataBox.dataValue.rowIndex.chunk.isStationRole(dataBox.dataValue.chunkDataRole)
+        visible: dataBox.dataValue.chunk !== null
+                 && dataBox.dataValue.chunk.isStationRole(dataBox.dataValue.chunkDataRole)
     }
 
     QQ.Rectangle {
         id: backgroundShot
-        property bool offsetColor: dataBox.dataValue.rowIndex.indexInChunk % 2 === 0
-                                   && dataBox.dataValue.rowIndex.chunk !== null
-                                   && dataBox.dataValue.rowIndex.chunk.isShotRole(dataBox.dataValue.chunkDataRole)
+        property bool offsetColor: dataBox.dataValue.indexInChunk % 2 === 0
+                                   && dataBox.dataValue.chunk !== null
+                                   && dataBox.dataValue.chunk.isShotRole(dataBox.dataValue.chunkDataRole)
         anchors.fill: parent
-        visible: dataBox.dataValue.rowIndex.chunk.isShotRole(dataBox.dataValue.chunkDataRole)
+        visible: dataBox.dataValue.chunk.isShotRole(dataBox.dataValue.chunkDataRole)
         color: offsetColor ? "#DDF2FF" : "white"
     }
 
@@ -387,9 +392,8 @@ QQ.Item {
             //Make sure it's visible to the user
             //            surveyChunkView.ensureDataBoxVisible(listViewIndex, boxIndex.chunkRole)
             // console.log("Focus change:" + focus + " " + index.chunk + " " + this)
-            surveyChunkTrimmer.chunk = dataValue.rowIndex.chunk;
-            editorFocus.rowIndex = dataValue.rowIndex
-            editorFocus.chunkDataRole = dataValue.chunkDataRole
+            surveyChunkTrimmer.chunk = dataValue.chunk;
+            editorFocus.boxIndex = dataValue.boxIndex
         }
     }
 
@@ -401,10 +405,8 @@ QQ.Item {
         text: dataBox.dataValue.reading.value
 
         onFinishedEditting: (newText) => {
-                                console.log("DataBox:" + dataBox.index)
-                                let rowIndex = dataBox.dataValue.rowIndex;
-                                let chunk = rowIndex.chunk
-                                chunk.setData(dataBox.dataValue.chunkDataRole, rowIndex.indexInChunk, newText)
+                                let chunk = dataBox.dataValue.chunk
+                                chunk.setData(dataBox.dataValue.chunkDataRole, dataBox.dataValue.indexInChunk, newText)
                                 dataBox.state = ""; //Go back to the default state
                                 dataBox.forceActiveFocus();
                             }

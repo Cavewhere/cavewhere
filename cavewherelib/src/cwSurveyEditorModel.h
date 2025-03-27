@@ -5,6 +5,7 @@
 #include "cwTrip.h"
 #include "cwSurveyChunk.h"
 #include "cwSurveyEditorRowIndex.h"
+#include "cwSurveyEditorBoxIndex.h"
 
 //Qt includes
 #include <QAbstractListModel>
@@ -75,8 +76,21 @@ public:
     // Q_INVOKABLE int toModelRow(cwSurveyEditorRowIndex::RowType type, const cwSurveyChunk* chunk, int chunkIndex) const;
     Q_INVOKABLE int toModelRow(const cwSurveyEditorRowIndex& rowIndex) const;
 
-    Q_INVOKABLE cwSurveyEditorRowIndex rowIndex(cwSurveyChunk *chunk, int chunkIndex, cwSurveyEditorRowIndex::RowType type) const;
-    // Q_INVOKABLE cwSurveyEditorRowIndex boxIndex(int row, cwSurveyChunk::DataRole dataRole) const;
+    Q_INVOKABLE cwSurveyEditorRowIndex rowIndex(cwSurveyChunk *chunk, int chunkIndex, cwSurveyEditorRowIndex::RowType type) const
+    {
+        return cwSurveyEditorRowIndex(chunk, chunkIndex, type);
+    }
+    Q_INVOKABLE cwSurveyEditorBoxIndex boxIndex(const cwSurveyEditorRowIndex& rowIndex, cwSurveyChunk::DataRole dataRole) const
+    {
+        return cwSurveyEditorBoxIndex(rowIndex, dataRole);
+    }
+    Q_INVOKABLE cwSurveyEditorBoxIndex boxIndex(cwSurveyChunk *chunk,
+                                                int chunkIndex,
+                                                cwSurveyEditorRowIndex::RowType type,
+                                                cwSurveyChunk::DataRole dataRole) const
+    {
+        return boxIndex(rowIndex(chunk, chunkIndex, type), dataRole);
+    }
 
 private:
     // struct ChunkIndex {
