@@ -309,11 +309,13 @@ QQ.Item {
                            handleTab(event);
                            switch(event.key) {
                                case Qt.Key_Left:
+                               dataBox.editorFocus.setIndex(dataBox.navigation.arrowLeft())
                                break;
                                case Qt.Key_Right:
                                dataBox.editorFocus.setIndex(dataBox.navigation.arrowRight())
                                break;
                                case Qt.Key_Up:
+                               dataBox.editorFocus.setIndex(dataBox.navigation.arrowUp())
                                break;
                                case Qt.Key_Down:
                                dataBox.editorFocus.setIndex(dataBox.navigation.arrowDown())

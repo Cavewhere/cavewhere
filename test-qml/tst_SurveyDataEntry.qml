@@ -309,6 +309,12 @@ MainWindowTest {
             return navHelper(currentItem, index, nextRole, right, modifier);
         }
 
+        function leftArrow(currentItem, index, nextRole) {
+            let left = 16777234; //Left arrow key
+            let modifier = 0;
+            return navHelper(currentItem, index, nextRole, left, modifier);
+        }
+
         function previousTab(currentItem, index, nextRole) {
             let tab = 16777218;
             let modifier = 33554432;
@@ -489,52 +495,47 @@ MainWindowTest {
                 currentItem = rightArrow(null, rowIndex+lrudOffset, SurveyChunk.StationDownRole);
             }
 
-            // function rightArrowOnFullRow(currentItem, rowIndex) {
-            //     let shotOffset = rowIndex === 1 ? 1 : -1
-            //     let lrudOffset = rowIndex === 1 ? 2 : 0
+            function leftArrowOnFullRow(currentItem, rowIndex) {
+                let shotOffset = rowIndex === 1 ? 1 : -1
+                let lrudOffset = rowIndex === 1 ? 2 : 0
 
-            //     currentItem = rightArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotDistanceRole);
+                currentItem = leftArrow(currentItem, rowIndex+lrudOffset, SurveyChunk.StationUpRole);
+                currentItem = leftArrow(currentItem, rowIndex+lrudOffset, SurveyChunk.StationRightRole);
+                currentItem = leftArrow(currentItem, rowIndex+lrudOffset, SurveyChunk.StationLeftRole);
 
-            //     if(frontsight.checked && backsight.checked) {
-            //         currentItem = rightArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotBackCompassRole);
-            //         currentItem = rightArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotBackClinoRole);
-            //     } else if(frontsight.checked) {
-            //         currentItem = rightArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotCompassRole);
-            //         currentItem = rightArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotClinoRole);
-            //     } else if (backsight.checked) {
-            //         currentItem = rightArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotBackCompassRole);
-            //         currentItem = rightArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotBackClinoRole);
-            //     }
+                if(frontsight.checked && backsight.checked) {
+                    currentItem = leftArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotBackClinoRole);
+                    currentItem = leftArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotBackCompassRole);
+                } else if(frontsight.checked) {
+                    currentItem = leftArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotClinoRole);
+                    currentItem = leftArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotCompassRole);
+                } else if (backsight.checked) {
+                    currentItem = leftArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotBackClinoRole);
+                    currentItem = leftArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotBackCompassRole);
+                }
+                currentItem = leftArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotDistanceRole);
 
-            //     currentItem = rightArrow(currentItem, rowIndex+lrudOffset, SurveyChunk.StationLeftRole);
-            //     currentItem = rightArrow(currentItem, rowIndex+lrudOffset, SurveyChunk.StationRightRole);
-            //     currentItem = rightArrow(currentItem, rowIndex+lrudOffset, SurveyChunk.StationUpRole);
-            //     currentItem = rightArrow(currentItem, rowIndex+lrudOffset, SurveyChunk.StationDownRole);
+                currentItem = leftArrow(currentItem, rowIndex+lrudOffset, SurveyChunk.StationNameRole);
 
-
-            //     //Make sure we can't continue going
-            //     currentItem = rightArrow(null, rowIndex+lrudOffset, SurveyChunk.StationDownRole);
-            // }
-
-
-
-
+                //Make sure we can't continue going
+                currentItem = leftArrow(null, rowIndex+lrudOffset, SurveyChunk.StationNameRole);
+            }
 
             let frontsight = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->frontSightCalibrationEditor->checkBox")
             let backsight = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->backSightCalibrationEditor->checkBox")
 
-            function testRow(row, direction) {
+            function testRow(row, column, direction) {
                 let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view");
                 view.positionViewAtIndex(row, ListView.Contain)
 
-                let station = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + ".0")
-                mouseClick(station)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
+                mouseClick(cell)
 
                 verify(frontsight.checked === true)
                 verify(backsight.checked === false)
-                verify(station.focus === true);
+                verify(cell.focus === true);
 
-                direction(station, row);
+                direction(cell, row);
 
                 // ----- Enable the backsights and frontsights ----
                 mouseClick(backsight);
@@ -542,10 +543,10 @@ MainWindowTest {
                 verify(frontsight.checked === true)
                 verify(backsight.checked === true)
 
-                mouseClick(station)
-                verify(station.focus === true);
+                mouseClick(cell)
+                verify(cell.focus === true);
 
-                direction(station, row);
+                direction(cell, row);
 
                 // ----- Enable the backsights only
                 mouseClick(frontsight);
@@ -553,24 +554,37 @@ MainWindowTest {
                 verify(frontsight.checked === false)
                 verify(backsight.checked === true)
 
-                mouseClick(station)
-                verify(station.focus === true);
+                mouseClick(cell)
+                verify(cell.focus === true);
 
-                direction(station, row);
+                direction(cell, row);
 
                 mouseClick(frontsight);
                 mouseClick(backsight);
             }
 
+            //--- Test the right arrow
             //Test the first row
-            testRow(1, rightArrowOnFullRow)
+            // testRow(1, 0, rightArrowOnFullRow)
+
+            // //Test a middle row
+            // testRow(5, 0, rightArrowOnFullRow)
+
+            // //Test last row
+            // testRow(9, 0, rightArrowOnFullRow)
+
+            //--- Test the left arrow
+            //Test the first row
+            // wait(100000);
+            testRow(1, 4, leftArrowOnFullRow)
 
             //Test a middle row
-            // wait(100000);
-            testRow(5, rightArrowOnFullRow)
+            // testRow(5, 0, leftArrowOnFullRow)
 
             //Test last row
-            testRow(9, rightArrowOnFullRow)
+            // testRow(9, 0, leftArrowOnFullRow)
+
+
         }
 
         /**
