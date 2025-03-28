@@ -60,9 +60,9 @@ DataBox {
                 objectName: "excludeDistanceMenuItem"
                 text: dataBoxId.distanceIncluded ? "Exclude Distance" : "Include Distance"
                 onTriggered: {
-                    dataBoxId.surveyChunk.setData(SurveyChunk.ShotDistanceIncludedRole,
-                                                  dataBoxId.rowIndex,
-                                                  !dataBoxId.distanceIncluded)
+                    dataBoxId.dataValue.chunk.setData(SurveyChunk.ShotDistanceIncludedRole,
+                                                      dataBoxId.rowIndex,
+                                                      !dataBoxId.distanceIncluded)
                 }
             }
         }

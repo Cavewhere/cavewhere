@@ -333,11 +333,11 @@ MainWindowTest {
 
             enterSurveyData();
 
-            let coreTextInput_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.1.5->coreTextInput")
+            let coreTextInput_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.2.5->coreTextInput")
             mouseClick(coreTextInput_obj1)
 
-            let excludeMenuButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.1.5->excludeMenuButton")
-            let excludeMenu = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.1.5->excludeMenuButton").menu
+            let excludeMenuButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.2.5->excludeMenuButton")
+            let excludeMenu = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.2.5->excludeMenuButton").menu
             tryVerify(() => { return excludeMenu.visible === false})
 
             mouseClick(excludeMenuButton)
@@ -349,9 +349,12 @@ MainWindowTest {
 
             tryVerify(() => { return excludeMenu.visible === false })
 
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view");
+            view.positionViewAtEnd()
+
             //Make sure the distance has gone down
             let totalLengthText_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->totalLengthText")
-            tryCompare(totalLengthText_obj1, "text", "Total Length: 10 m");
+            tryCompare(totalLengthText_obj1, "text", "Total Length: 5 m");
 
             //Include it again
             mouseClick(excludeMenuButton)
@@ -365,7 +368,7 @@ MainWindowTest {
 
             //Make sure the distance has gone down
             totalLengthText_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->totalLengthText")
-            tryCompare(totalLengthText_obj1, "text", "Total Length: 11 m");
+            tryCompare(totalLengthText_obj1, "text", "Total Length: 15 m");
         }
 
         /**

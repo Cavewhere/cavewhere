@@ -522,6 +522,7 @@ Item {
                 view: itemId.view
                 dataValidator: distanceValidator
                 editorFocus: itemId.editorFocus
+                distanceIncluded: dataValue.chunk.data(SurveyChunk.ShotDistanceIncludedRole, dataValue.indexInChunk)
             }
 
             CompassReadBox {

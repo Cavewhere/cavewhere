@@ -466,9 +466,10 @@ cwSurveyEditorModel::Role cwSurveyEditorModel::toModelRole(cwSurveyChunk::DataRo
         return StationUpRole;
     case cwSurveyChunk::StationDownRole:
         return StationDownRole;
+    case cwSurveyChunk::ShotDistanceIncludedRole:
+        //Fallthrought to ShotDistanceRole, this will cause view updates
     case cwSurveyChunk::ShotDistanceRole:
         return ShotDistanceRole;
-    case cwSurveyChunk::ShotDistanceIncludedRole:
     case cwSurveyChunk::ShotCompassRole:
         return ShotCompassRole;
     case cwSurveyChunk::ShotBackCompassRole:
