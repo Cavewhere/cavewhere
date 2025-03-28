@@ -711,7 +711,9 @@ MainWindowTest {
 
             keyClick(16777217, 0) //Tab
 
-            verify(lastItem.dataValue === "9", `"${lastItem.dataValue}" === "9"`);
+            // wait(100000)
+
+            verify(lastItem.dataValue.reading.value === "9", `"${lastItem.dataValue.reading.value}" === "9"`);
         }
 
         function test_editorTest() {
