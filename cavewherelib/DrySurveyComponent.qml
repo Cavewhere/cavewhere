@@ -53,7 +53,7 @@ Item {
     // readonly property bool stationVisible: itemId.rowIndex.rowType === SurveyEditorModel.StationRow
     // readonly property bool shotVisible: itemId.rowIndex.rowType === SurveyEditorModel.ShotRow
     required property ListView view;
-    // required property SurveyEditorModel model;
+    required property SurveyEditorModel model;
 
     //Validators
     required property StationValidator stationValidator;
@@ -186,30 +186,57 @@ Item {
                 height: itemId.columnTemplate.dataRowHeight
 
                 // navigation.tabPrevious: NavigationItem {
+
+                //     // index: {
+                //     //     let current = model.
+
+                //     //     if(itemId.dataValue.rowIndex.indexInChunk === 1) {
+                //     //         current.
+                //     //     }
+
+                //     //     current.
+                //     // }
+
                 //     item: {
+
+
                 //         if(itemId.indexInChunk === 1) {
                 //             return stationBox
                 //         }
                 //         return downBox
                 //     }
 
-                //     indexOffset: -1
+                //     // indexOffset: -1
                 // }
-                // navigation.tabNext: NavigationItem {
-                //     item: {
-                //         if(itemId.indexInChunk === 0) {
-                //             //Go to the text station name
-                //             return stationBox
-                //         }
-                //         return shotDistanceDataBox;
-                //     }
-                //     indexOffset: {
-                //         if(itemId.indexInChunk === 0) {
-                //             return 1;
-                //         }
-                //         return -1;
-                //     }
-                // }
+                navigation.tabNext: NavigationItem {
+                    boxIndex: {
+                        let rowIndex = stationBox.dataValue.rowIndex
+                        if(rowIndex.indexInChunk === 0) {
+                            let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationName)
+                            console.log("BoxIndex statinoName:" + boxIndex + rowIndex)
+                            return itemId.model.offsetBoxIndex(boxIndex, 1);
+                        } else {
+                            // rowIndex.rowType = SurveyEditorRowIndex.ShotRow
+                            let boxIndex = itemId.model.boxIndex(rowIndex.chunk, rowIndex.indexInChunk - 1, SurveyEditorRowIndex.ShotRow, SurveyChunk.ShotDistanceRole)
+                            console.log("BoxIndex statinoName2:" + stationBox.objectName + " " + boxIndex + rowIndex + " " + SurveyEditorRowIndex.ShotRow)
+                            return itemId.model.offsetBoxIndex(boxIndex, 0);
+                        }
+                    }
+
+                    // item: {
+                    //     if(itemId.indexInChunk === 0) {
+                    //         //Go to the text station name
+                    //         return stationBox
+                    //     }
+                    //     return shotDistanceDataBox;
+                    // }
+                    // indexOffset: {
+                    //     if(itemId.indexInChunk === 0) {
+                    //         return 1;
+                    //     }
+                    //     return -1;
+                    // }
+                }
                 // navigation.arrowRight: NavigationItem { item: shotDistanceDataBox1 }
                 // navigation.arrowUp: NavigationItem { item: stationBox1; indexOffset: -1 }
                 // navigation.arrowDown: NavigationItem { item: stationBox1; indexOffset: 1 }

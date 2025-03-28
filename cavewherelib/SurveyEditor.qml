@@ -231,7 +231,7 @@ QQ.Item {
                 errorButtonGroup: errorButtonGroupId
                 surveyChunkTrimmer: surveyChunkTrimmerId
                 view: viewId
-                // model: editorModel
+                model: editorModel
                 stationValidator: stationValidatorId
                 distanceValidator: distanceValidatorId
                 compassValidator: compassValidatorId

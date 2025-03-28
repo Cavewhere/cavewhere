@@ -1,7 +1,6 @@
 import QtQuick 2.0
+import cavewherelib
 
 QtObject {
-    property Item item: null
-    property var itemFunc: () => { return null; }
-    property int indexOffset: 0
+    property cwSurveyEditorBoxIndex boxIndex
 }

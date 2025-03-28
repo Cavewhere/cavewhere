@@ -46,13 +46,13 @@ QQ.Item {
             //         && editorFocus.boxIndex.rowType === dataValue.rowType
             //         && editorFocus.boxIndex.indexInChunk === dataValue.indexInChunk
             //         && editorFocus.boxIndex.chunkDataRole === dataValue.chunkDataRole) {
-                console.log("----");
-                console.log("Editor Focus1:" + this + " " + editorFocus.boxIndex.chunk  + " " + editorFocus.boxIndex.rowType + " " + editorFocus.boxIndex.indexInChunk + " " + editorFocus.boxIndex.chunkDataRole)
-                console.log("Editor Focus2:" + this + " " + dataValue.chunk + " " + dataValue.rowType + " " + dataValue.indexInChunk + " " + dataValue.chunkDataRole)
-                console.log("hasEditorfocus:" + (editorFocus.boxIndex.chunk === dataValue.chunk
-                                                 && editorFocus.boxIndex.rowType === dataValue.rowType
-                                                 && editorFocus.boxIndex.indexInChunk === dataValue.indexInChunk
-                                                 && editorFocus.boxIndex.chunkDataRole === dataValue.chunkDataRole))
+                // console.log("----");
+                // console.log("Editor Focus1:" + this + " " + editorFocus.boxIndex.chunk  + " " + editorFocus.boxIndex.rowType + " " + editorFocus.boxIndex.indexInChunk + " " + editorFocus.boxIndex.chunkDataRole)
+                // console.log("Editor Focus2:" + this + " " + dataValue.chunk + " " + dataValue.rowType + " " + dataValue.indexInChunk + " " + dataValue.chunkDataRole)
+                // console.log("hasEditorfocus:" + (editorFocus.boxIndex.chunk === dataValue.chunk
+                //                                  && editorFocus.boxIndex.rowType === dataValue.rowType
+                //                                  && editorFocus.boxIndex.indexInChunk === dataValue.indexInChunk
+                //                                  && editorFocus.boxIndex.chunkDataRole === dataValue.chunkDataRole))
             // }
             return editorFocus.boxIndex.chunk === dataValue.chunk
                     && editorFocus.boxIndex.rowType === dataValue.rowType
@@ -100,7 +100,7 @@ QQ.Item {
     QQ.Connections {
        target: dataBox.view
        function onCurrentIndexChanged() {
-           console.log("CurrentIndexChanged:" + dataBox.view.currentIndex)
+           // console.log("CurrentIndexChanged:" + dataBox.view.currentIndex)
            focus = hasEditorFocus;
        }
     }
@@ -112,49 +112,56 @@ QQ.Item {
         state = 'MiddleTyping';
     }
 
+    function handleNextTab() {
+        console.log("Next tab:" + dataBox.navigation.tabNext.boxIndex)
+        dataBox.editorFocus.boxIndex = dataBox.navigation.tabNext.boxIndex
+    }
+
     function handleNavigation(navProperty) {
         if(navigation[navProperty] !== null) {
             let item = navigation[navProperty].item;
+            dataBox.editorFocus = item.boxIndex;
 
-            if(navigation[navProperty].indexOffset !== 0) {
-                view.currentIndex = listViewIndex
 
-                let itemIndex = -1;
-                for(let childIndex in view.currentItem.children) {
-                    if(view.currentItem.children[childIndex] === item) {
-                        itemIndex = childIndex;
-                        break;
-                    }
-                }
+            // if(navigation[navProperty].indexOffset !== 0) {
+            //     view.currentIndex = listViewIndex
 
-                if(itemIndex >= 0) {
-                    let nextCurrentIndex = view.currentIndex + navigation[navProperty].indexOffset
+            //     let itemIndex = -1;
+            //     for(let childIndex in view.currentItem.children) {
+            //         if(view.currentItem.children[childIndex] === item) {
+            //             itemIndex = childIndex;
+            //             break;
+            //         }
+            //     }
 
-                    //1 because title is at index 0
-                    while(nextCurrentIndex >= 1 && nextCurrentIndex < view.count) {
-                        // console.log("NextCurrentIndex:" + view.currentIndex + " " + nextCurrentIndex);
-                        view.currentIndex = nextCurrentIndex;
-                        if(view.currentItem.children[itemIndex].visible) {
-                            view.currentItem.children[itemIndex].forceActiveFocus()
-                            // editorFocus.boxIndex = view.currentItem.children[itemIndex].index
-                            break;
-                        }
-                        nextCurrentIndex = view.currentIndex + navigation[navProperty].indexOffset
-                    }
-                } else {
-                    let childrenItemStr = "";
-                    for(let childIndex in view.currentItem.children) {
-                        childrenItemStr += "\n\t" + view.currentItem.children[childIndex];
-                    }
+            //     if(itemIndex >= 0) {
+            //         let nextCurrentIndex = view.currentIndex + navigation[navProperty].indexOffset
 
-                    throw "Couldn't find \"" + item + "\" try setting offsetIndex = 0, in list:" + childrenItemStr;
-                }
-            } else {
-                if(item !== null) {
-                    // editorFocus.boxIndex = index
-                    item.forceActiveFocus()
-                }
-            }
+            //         //1 because title is at index 0
+            //         while(nextCurrentIndex >= 1 && nextCurrentIndex < view.count) {
+            //             // console.log("NextCurrentIndex:" + view.currentIndex + " " + nextCurrentIndex);
+            //             view.currentIndex = nextCurrentIndex;
+            //             if(view.currentItem.children[itemIndex].visible) {
+            //                 view.currentItem.children[itemIndex].forceActiveFocus()
+            //                 // editorFocus.boxIndex = view.currentItem.children[itemIndex].index
+            //                 break;
+            //             }
+            //             nextCurrentIndex = view.currentIndex + navigation[navProperty].indexOffset
+            //         }
+            //     } else {
+            //         let childrenItemStr = "";
+            //         for(let childIndex in view.currentItem.children) {
+            //             childrenItemStr += "\n\t" + view.currentItem.children[childIndex];
+            //         }
+
+            //         throw "Couldn't find \"" + item + "\" try setting offsetIndex = 0, in list:" + childrenItemStr;
+            //     }
+            // } else {
+            //     if(item !== null) {
+            //         // editorFocus.boxIndex = index
+            //         item.forceActiveFocus()
+            //     }
+            // }
         }
     }
 
@@ -163,7 +170,10 @@ QQ.Item {
         if(eventKey.key === Qt.Key_Tab) {
             // console.log("Tab pressed! on " + dataBox.objectName)
             tabPressed();
-            handleNavigation("tabNext");
+            handleNextTab();
+            // dataBox.editorFocus.boxIndex = dataBox.navigation.tabNext.boxIndex
+
+            // handleNavigation("tabNext");
             eventKey.accepted = true
         } else if(eventKey.key === 1 + Qt.Key_Tab) {
             //Shift tab -- 1 + Qt.Key_Tab is a hack but it works
@@ -597,7 +607,8 @@ QQ.Item {
                     //Tab to the next entry on enter
                     if(pressKeyEvent.key === Qt.Key_Enter ||
                        pressKeyEvent.key === Qt.Key_Return) {
-                        handleNavigation("tabNext")
+
+                        dataBox.handleNextTab()
                         pressKeyEvent.accepted = true;
                     }
 

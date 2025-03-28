@@ -34,7 +34,7 @@ MainWindowTest {
         function enterSurveyData() {
             waitForRendering(rootId);
 
-            wait(100000);
+            // wait(100);
 
             //Start adding survey data
             keyClick("b")
@@ -46,6 +46,9 @@ MainWindowTest {
             //Make sure that we go to the next station entry
             keyClick(16777217, 0) //Tab got to the next cell
             waitForRendering(rootId);
+
+            // wait(1000000);
+
             keyClick(16777217, 0) //Tab add the next station B2
             waitForRendering(rootId);
 
@@ -70,6 +73,8 @@ MainWindowTest {
 
             verify(firstChunk.data(SurveyChunk.ShotDistanceRole, 0).value === "10")
             waitForRendering(rootId);
+
+            wait(100000);
 
             //Compass of 0
             verify(firstChunk.data(SurveyChunk.ShotCompassRole, 0).value === "")

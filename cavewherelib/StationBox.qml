@@ -24,16 +24,16 @@ DataBox {
 
         if(focus) {
             //Make sure it's visible to the user
-            if(dataValue.rowIndex.chunk) {
-                var lastStationIndex = dataValue.rowIndex.chunk.stationCount() - 1
+            if(dataValue.chunk) {
+                var lastStationIndex = dataValue.chunk.stationCount() - 1
 
                 //Try to guess for new stations what the next station is
                 //Make sure the station is the last station in the chunk
-                if(lastStationIndex  === dataValue.rowIndex.indexInChunk) {
+                if(lastStationIndex  === dataValue.indexInChunk) {
 
                     //Make sure the data is empty
-                    if(dataValue === "") {
-                        var guessedstationName = dataValue.rowIndex.chunk.guessLastStationName();
+                    if(dataValue.reading.value === "") {
+                        var guessedstationName = dataValue.chunk.guessLastStationName();
                         if(guessedstationName !== "") {
                             stationName.text = guessedstationName
                             state = "AutoNameState"
