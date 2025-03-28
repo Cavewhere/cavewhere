@@ -87,7 +87,7 @@ QQ.Item {
     }
 
     onHasEditorFocusChanged: {
-        console.log("HasFocusChanged!" + hasEditorFocus)
+        // console.log("HasFocusChanged!" + hasEditorFocus)
         focus = hasEditorFocus
         if(focus) {
             view.currentIndex = listViewIndex
@@ -118,8 +118,8 @@ QQ.Item {
     }
 
     function handleNextTab() {
-        console.log("Next tab:" + dataBox.navigation.tabNext.boxIndex)
-        dataBox.editorFocus.boxIndex = dataBox.navigation.tabNext()
+        // console.log("Next tab:" + dataBox.navigation.tabNext())
+        dataBox.editorFocus.setIndex(dataBox.navigation.tabNext())
     }
 
     // function handleNavigation(navProperty) {
@@ -171,19 +171,13 @@ QQ.Item {
     // }
 
     function handleTab(eventKey) {
-         console.log("HandleTab!")
         if(eventKey.key === Qt.Key_Tab) {
-            // console.log("Tab pressed! on " + dataBox.objectName)
             tabPressed();
             handleNextTab();
-            // dataBox.editorFocus.boxIndex = dataBox.navigation.tabNext.boxIndex
-
-            // handleNavigation("tabNext");
             eventKey.accepted = true
         } else if(eventKey.key === 1 + Qt.Key_Tab) {
             //Shift tab -- 1 + Qt.Key_Tab is a hack but it works
-            // console.log("Tab Shift pressed! on " + dataBox.objectName)
-            handleNavigation("tabPrevious");
+            dataBox.editorFocus.setIndex(dataBox.navigation.tabPrevious())
             eventKey.accepted = true
         }
     }
@@ -363,12 +357,16 @@ QQ.Item {
                            handleTab(event);
                            switch(event.key) {
                                case Qt.Key_Left:
+                               break;
                                case Qt.Key_Right:
+                               break;
                                case Qt.Key_Up:
+                               break;
                                case Qt.Key_Down:
                                dataBox.editorFocus.boxIndex = dataBox.navigation.arrowDown()
+                               break;
                                case Qt.Key_Backspace:
-                               deletePressedHandler();
+                               // deletePressedHandler();
                                return;
                            }
 

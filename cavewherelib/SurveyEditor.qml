@@ -110,9 +110,9 @@ QQ.Item {
                 model: editorModel
             }
 
-            onCurrentIndexChanged: {
-                console.log("Current index changed:" + currentIndex)
-            }
+            // onCurrentIndexChanged: {
+            //     console.log("Current index changed:" + currentIndex)
+            // }
 
             header: ColumnLayout {
                 id: column

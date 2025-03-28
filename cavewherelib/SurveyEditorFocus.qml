@@ -13,6 +13,12 @@ QtObject {
     // property int chunkRole: -1
     // property int rowType: -1
 
+    function setIndex(newBoxIndex) {
+        if(newBoxIndex.chunk && newBoxIndex.indexInChunk >= 0) {
+            boxIndex = newBoxIndex
+        }
+    }
+
     function focusOnLastChunk() {
         let lastChunkIndex = trip.chunkCount - 1
         let lastChunk = trip.chunk(lastChunkIndex);
@@ -21,6 +27,7 @@ QtObject {
             view.currentIndex = model.toModelRow(lastBoxIndex.rowIndex);
             // view.forceActiveFocus()
 
+            setIndex(lastBoxIndex);
             boxIndex = lastBoxIndex
             console.log("Focus on last!" + boxIndex + " chunk:" + boxIndex.chunk)
         }

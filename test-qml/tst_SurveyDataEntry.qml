@@ -382,61 +382,88 @@ MainWindowTest {
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
-            waitForRendering(RootData.pageView.currentPageItem)
+            waitForRendering(mainWindow)
 
             let station1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.1.0")
             mouseClick(station1)
 
-            waitForRendering(RootData.pageView.currentPageItem)
+            waitForRendering(mainWindow)
 
-            function tabHelper(currentItem, index, nextRole) {
+            function navHelper(currentItem,
+                               index,
+                               nextRole,
+                               key,
+                               modifier)
+            {
+                if(currentItem !== null) {
+                    if(currentItem === undefined) {
+                        console.log("Undefined!")
+                    }
+
+                    if(currentItem.focus !== true) {
+                        console.log("Focus failed!, set breakpoint here");
+                    }
+
+                    verify(currentItem.focus === true)
+                }
+
+                keyClick(key, modifier) //Tab
+
                 let itemName = "rootId->tripPage->view->dataBox." + index + "." + nextRole
                 let item = ObjectFinder.findObjectByChain(mainWindow, itemName)
-                // console.log("Searching for item:" + itemName + " " + item)
                 if(item === null) {
+                    console.log("Searching for item:" + itemName + " current focused:" + mainWindow.Window.window.activeFocusItem)
                     console.log("Testcase will fail, Failed to find item!!!");
                 }
 
                 verify(item !== null);
 
-                // console.log("CurrentItem:" + currentItem + " " + currentItem.focus + " index:" + index + " nextRole:" + nextRole + " nextItem:" + item + " " + item.focus)
+                if(currentItem !== null) {
+                    if(currentItem.focus !== false) {
+                        console.log("Testcase will fail, bad currentItem focus!!! place breakpoint here" + currentItem);
+                    }
 
-                if(currentItem.focus === true) {
-                    console.log("Testcase will fail, bad currentItem focus!!!");
+                    verify(currentItem.focus === false);
                 }
-
-                verify(currentItem.focus === false);
 
                 //Uncomment to help debug
                 if(item.focus !== true) {
-                    console.log("Testcase will fail, bad focus!!! current focused on:" + rootId.Window.window.activeFocusItem);
+                    console.log("Testcase will fail, bad focus!!! current focused on:" + rootId.Window.window.activeFocusItem + "but should be focused on" + item);
                 }
 
                 verify(item.focus === true )
-                waitForRendering(RootData.pageView.currentPageItem)
+
+                //Enable for debugging this, this will slow down the testcase
+                // waitForRendering(mainWindow)
                 return item;
             }
 
             function nextTab(currentItem, index, nextRole) {
-                verify(currentItem.focus === true)
-                keyClick(16777217, 0) //Tab
-                return tabHelper(currentItem, index, nextRole)
+                let tab = 16777217; //Tab arrow keey
+                let modifier = 0;
+                return navHelper(currentItem, index, nextRole, tab, modifier);
+            }
+
+            function down(currentItem, index, nextRole) {
+                let tab = 16777237; //Down arrow key
+                let modifier = 0;
+                return navHelper(currentItem, index, nextRole, tab, modifier);
+
             }
 
             function previousTab(currentItem, index, nextRole) {
-                verify(currentItem.focus === true)
-                keyClick(16777218, 33554432) //Backtab, Shift+
-                return tabHelper(currentItem, index, nextRole)
+                let tab = 16777218;
+                let modifier = 33554432;
+                return navHelper(currentItem, index, nextRole, tab, modifier);
             }
 
             let surveyView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
             let currentItem = station1;
 
-
             function runTabTest(frontsights, backsights) {
                 //Go forward
                 for(let i = 0; i < surveyView.count; i++) {
-                    // console.log("i:" + i)
+                    console.log("i:" + i)
                     let item = surveyView.itemAtIndex(i) as DrySurveyComponent;
                     if(item.rowIndex.rowType === SurveyEditorRowIndex.TitleRow) {
                         //Skip the title
@@ -467,7 +494,7 @@ MainWindowTest {
                         currentItem = nextTab(currentItem, i, SurveyChunk.ShotBackClinoRole);
                     }
 
-                    if(item.indexInChunk === 0) {
+                    if(item.rowIndex.indexInChunk === 0) {
                         currentItem = nextTab(currentItem, i-1, SurveyChunk.StationLeftRole);
                         currentItem = nextTab(currentItem, i-1, SurveyChunk.StationRightRole);
                         currentItem = nextTab(currentItem, i-1, SurveyChunk.StationUpRole);
@@ -491,14 +518,21 @@ MainWindowTest {
                         currentItem = nextTab(currentItem, i + nextStationOffset, SurveyChunk.StationNameRole);
 
                         if(currentItem.dataValue.reading.value === "") {
+                            // console.log("Last station:" + (i + 4) + " " + surveyView.count)
+                            if(i + 4 >= surveyView.count) {
+                                //Done
+                                break;
+                            }
+
                             //probably at the last row, skip
-                            keyClick(16777237, 0) //Down
-
-                            // wait(100000);
+                            //We need to use null instead of currentItem, because the currentItem gets delete
+                            //The delete currentItem will cause a type error in the testcase
+                            currentItem = down(null, i + 3, SurveyChunk.StationNameRole)
                         }
-
                     }
                 }
+
+                console.log("Reverse!")
 
                 //Uncomment to debug tabbing from the end
                 // surveyView.currentIndex = surveyView.count - 1;
@@ -510,12 +544,15 @@ MainWindowTest {
                 // surveyView.positionViewAtEnd();
                 // waitForRendering(surveyView)
 
+                //Go to the previous down
+                currentItem = previousTab(currentItem, surveyView.count - 3, SurveyChunk.StationDownRole);
+
                 //Go backwards
-                for(let i = surveyView.count - 1; i > 0; i--) {
+                for(let i = surveyView.count - 3; i > 0; i--) {
                     // console.log("---- Backwords i:" + i + " " + currentItem + "-----")
 
                     let item = surveyView.itemAtIndex(i) as DrySurveyComponent;
-                    if(item.titleVisible) {
+                    if(item.rowIndex.rowType === SurveyEditorRowIndex.TitleRowp) {
                         //Skip the title
                         continue;
                     }
@@ -524,7 +561,7 @@ MainWindowTest {
                     currentItem = previousTab(currentItem, i, SurveyChunk.StationRightRole);
                     currentItem = previousTab(currentItem, i, SurveyChunk.StationLeftRole);
 
-                    if(item.indexInChunk === 1) {
+                    if(item.rowIndex.indexInChunk === 1) {
                         currentItem = previousTab(currentItem, i-2, SurveyChunk.StationDownRole);
                         currentItem = previousTab(currentItem, i-2, SurveyChunk.StationUpRole);
                         currentItem = previousTab(currentItem, i-2, SurveyChunk.StationRightRole);
@@ -547,25 +584,18 @@ MainWindowTest {
                         currentItem = previousTab(currentItem, i-1, SurveyChunk.ShotDistanceRole);
                     }
 
+
                     currentItem = previousTab(currentItem, i, SurveyChunk.StationNameRole);
 
-                    if(item.indexInChunk === 1) {
-                        currentItem = previousTab(currentItem, i-2, SurveyChunk.StationNameRole);
-                    }
 
-                    let prevStationOffset = function() {
-                        let prevItem = surveyView.itemAtIndex(i-3);
-                        if(prevItem) {
-                            console.log("prevItem titleVisible:" + prevItem.rowType === SurveyEditorModel.TitleRow + " " + prevItem.rowType + " i:" + i);
-                            // return 2;
-                            return prevItem.rowType === SurveyEditorModel.TitleRow ? 4 : 2
-                        }
-                        return 1;
-                    }();
+                    let prevStationOffset = 2;
+                    if(item.rowIndex.indexInChunk === 1) {
+                        currentItem = previousTab(currentItem, i-2, SurveyChunk.StationNameRole);
+                        prevStationOffset = 4;
+                    }
 
                     //Loop up to the previous row
                     if(i-prevStationOffset >= 0) {
-                        // console.log("prevStationOffset:" + prevStationOffset);
                         currentItem = previousTab(currentItem, i-prevStationOffset, SurveyChunk.StationDownRole);
 
                         if(prevStationOffset > 1) {
