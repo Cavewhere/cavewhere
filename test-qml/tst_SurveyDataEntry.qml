@@ -248,6 +248,7 @@ MainWindowTest {
 
         function test_errorButtonsShouldWork() {
             addSurvey();
+            // wait(100000);
 
             //Start adding survey data
             keyClick("a")
@@ -463,7 +464,7 @@ MainWindowTest {
             function runTabTest(frontsights, backsights) {
                 //Go forward
                 for(let i = 0; i < surveyView.count; i++) {
-                    console.log("i:" + i)
+                    // console.log("tab i:" + i)
                     let item = surveyView.itemAtIndex(i) as DrySurveyComponent;
                     if(item.rowIndex.rowType === SurveyEditorRowIndex.TitleRow) {
                         //Skip the title
@@ -711,20 +712,18 @@ MainWindowTest {
 
             keyClick(16777217, 0) //Tab
 
-            // wait(100000)
-
             verify(lastItem.dataValue.reading.value === "9", `"${lastItem.dataValue.reading.value}" === "9"`);
         }
 
-        function test_editorTest() {
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/tst_SurveyDataEntry/navTest.cw");
+        // function test_editorTest() {
+        //     TestHelper.loadProjectFromFile(RootData.project, "://datasets/tst_SurveyDataEntry/navTest.cw");
 
-            RootData.pageSelectionModel.currentPageAddress = "Data/Cave=Cave 1/Trip=Trip 1"
+        //     RootData.pageSelectionModel.currentPageAddress = "Data/Cave=Cave 1/Trip=Trip 1"
 
-            tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
+        //     tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
-            waitForRendering(RootData.pageView.currentPageItem)
-            wait(1000000);
-        }
+        //     waitForRendering(RootData.pageView.currentPageItem)
+        //     wait(1000000);
+        // }
     }
 }

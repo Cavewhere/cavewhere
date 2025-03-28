@@ -15,6 +15,19 @@ cwSurveyEditorModel::cwSurveyEditorModel()
 void cwSurveyEditorModel::setTrip(cwTrip* trip) {
     if(m_trip != trip) {
         beginResetModel();
+
+        auto disconnectChunk = [this](cwSurveyChunk* chunk) {
+            disconnect(chunk, nullptr, this, nullptr);
+        };
+
+        if(m_trip) {
+            const auto chunks = m_trip->chunks();
+            for(auto chunk : chunks) {
+                disconnectChunk(chunk);
+            }
+            disconnect(m_trip, nullptr, this, nullptr);
+        }
+
         m_trip = trip;
 
         if(m_trip) {
@@ -58,9 +71,6 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
                         });
             };
 
-            auto disconnectChunk = [this](cwSurveyChunk* chunk) {
-                disconnect(chunk, nullptr, this, nullptr);
-            };
 
             struct Range {
                 int begin;

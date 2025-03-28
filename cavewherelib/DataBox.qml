@@ -593,7 +593,7 @@ QQ.Item {
                 // }
 
                 dataBox._globalTextInput.onPressKeyPressed: () => {
-                    console.log("PressKeyEvent:" + pressKeyEvent)
+                    // console.log("PressKeyEvent:" + pressKeyEvent)
                     if(pressKeyEvent.key === Qt.Key_Tab ||
                        pressKeyEvent.key === 1 + Qt.Key_Tab ||
                        pressKeyEvent.key === Qt.Key_Space)

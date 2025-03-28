@@ -211,9 +211,9 @@ Item {
                 errorButtonGroup: itemId.errorButtonGroup
                 // errorModel: itemId.errorModel(SurveyChunk.StationLeftRole)
 
-                onErrorModelChanged: {
-                    console.log("Error model changed for left:" + errorModel + " " + this + " " + rowIndex)
-                }
+                // onErrorModelChanged: {
+                //     console.log("Error model changed for left:" + errorModel + " " + this + " " + rowIndex)
+                // }
 
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
                 // surveyChunk: itemId.chunk
@@ -323,7 +323,6 @@ Item {
                         return itemId.model.offsetBoxIndex(boxIndex, 1);
                     } else {
                         let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationNameRole)
-                        console.log("Down next tab:" + boxIndex + " " + itemId.model.offsetBoxIndex(boxIndex, 1))
                         return itemId.model.offsetBoxIndex(boxIndex, 1);
                     }
                 }
