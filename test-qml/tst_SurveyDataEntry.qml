@@ -12,6 +12,8 @@ MainWindowTest {
         name: "SurveyDataEntry"
         when: windowShown
 
+
+
         function addSurvey() {
             TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwScrapManager/ProjectProfile-test-v3.cw");
             RootData.pageSelectionModel.currentPageAddress = "Data/Cave=Cave 1"
@@ -240,6 +242,79 @@ MainWindowTest {
             waitForRendering(rootId);
         }
 
+        function navHelper(currentItem,
+                           index,
+                           nextRole,
+                           key,
+                           modifier)
+        {
+            if(currentItem !== null) {
+                if(currentItem === undefined) {
+                    console.log("Undefined!")
+                }
+
+                if(currentItem.focus !== true) {
+                    console.log("Focus failed!, set breakpoint here" + currentItem);
+                }
+
+                verify(currentItem.focus === true)
+            }
+
+            keyClick(key, modifier) //Tab
+
+            let itemName = "rootId->tripPage->view->dataBox." + index + "." + nextRole
+            let item = ObjectFinder.findObjectByChain(mainWindow, itemName)
+            if(item === null) {
+                console.log("Searching for item:" + itemName + " current focused:" + mainWindow.Window.window.activeFocusItem)
+                console.log("Testcase will fail, Failed to find item!!!");
+            }
+
+            verify(item !== null);
+
+            if(currentItem !== null) {
+                if(currentItem.focus !== false) {
+                    console.log("Testcase will fail, bad currentItem focus!!! place breakpoint here" + currentItem);
+                }
+
+                verify(currentItem.focus === false);
+            }
+
+            //Uncomment to help debug
+            if(item.focus !== true) {
+                console.log("Testcase will fail, bad focus!!! current focused on:" + rootId.Window.window.activeFocusItem + "but should be focused on" + item);
+            }
+
+            verify(item.focus === true )
+
+            //Enable for debugging this, this will slow down the testcase
+            // waitForRendering(mainWindow)
+            return item;
+        }
+
+        function nextTab(currentItem, index, nextRole) {
+            let tab = 16777217; //Tab arrow keey
+            let modifier = 0;
+            return navHelper(currentItem, index, nextRole, tab, modifier);
+        }
+
+        function downArrow(currentItem, index, nextRole) {
+            let tab = 16777237; //Down arrow key
+            let modifier = 0;
+            return navHelper(currentItem, index, nextRole, tab, modifier);
+        }
+
+        function rightArrow(currentItem, index, nextRole) {
+            let right = 16777236; //Right arrow key
+            let modifier = 0;
+            return navHelper(currentItem, index, nextRole, right, modifier);
+        }
+
+        function previousTab(currentItem, index, nextRole) {
+            let tab = 16777218;
+            let modifier = 33554432;
+            return navHelper(currentItem, index, nextRole, tab, modifier);
+        }
+
         function test_enterSurveyData() {
             addSurvey();
 
@@ -373,10 +448,136 @@ MainWindowTest {
         }
 
         /**
+          Test arrow keys for navigation
+          */
+        function test_arrowNavigation() {
+            TestHelper.loadProjectFromFile(RootData.project, "://datasets/tst_SurveyDataEntry/navTest.cw");
+
+            RootData.pageSelectionModel.currentPageAddress = "Data/Cave=Cave 1/Trip=Trip 1"
+
+            tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
+
+            waitForRendering(mainWindow)
+
+
+            // wait(1000000)
+
+            function rightArrowOnFullRow(currentItem, rowIndex) {
+                let shotOffset = rowIndex === 1 ? 1 : -1
+                let lrudOffset = rowIndex === 1 ? 2 : 0
+
+                currentItem = rightArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotDistanceRole);
+
+                if(frontsight.checked && backsight.checked) {
+                    currentItem = rightArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotBackCompassRole);
+                    currentItem = rightArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotBackClinoRole);
+                } else if(frontsight.checked) {
+                    currentItem = rightArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotCompassRole);
+                    currentItem = rightArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotClinoRole);
+                } else if (backsight.checked) {
+                    currentItem = rightArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotBackCompassRole);
+                    currentItem = rightArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotBackClinoRole);
+                }
+
+                currentItem = rightArrow(currentItem, rowIndex+lrudOffset, SurveyChunk.StationLeftRole);
+                currentItem = rightArrow(currentItem, rowIndex+lrudOffset, SurveyChunk.StationRightRole);
+                currentItem = rightArrow(currentItem, rowIndex+lrudOffset, SurveyChunk.StationUpRole);
+                currentItem = rightArrow(currentItem, rowIndex+lrudOffset, SurveyChunk.StationDownRole);
+
+
+                //Make sure we can't continue going
+                currentItem = rightArrow(null, rowIndex+lrudOffset, SurveyChunk.StationDownRole);
+            }
+
+            // function rightArrowOnFullRow(currentItem, rowIndex) {
+            //     let shotOffset = rowIndex === 1 ? 1 : -1
+            //     let lrudOffset = rowIndex === 1 ? 2 : 0
+
+            //     currentItem = rightArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotDistanceRole);
+
+            //     if(frontsight.checked && backsight.checked) {
+            //         currentItem = rightArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotBackCompassRole);
+            //         currentItem = rightArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotBackClinoRole);
+            //     } else if(frontsight.checked) {
+            //         currentItem = rightArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotCompassRole);
+            //         currentItem = rightArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotClinoRole);
+            //     } else if (backsight.checked) {
+            //         currentItem = rightArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotBackCompassRole);
+            //         currentItem = rightArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotBackClinoRole);
+            //     }
+
+            //     currentItem = rightArrow(currentItem, rowIndex+lrudOffset, SurveyChunk.StationLeftRole);
+            //     currentItem = rightArrow(currentItem, rowIndex+lrudOffset, SurveyChunk.StationRightRole);
+            //     currentItem = rightArrow(currentItem, rowIndex+lrudOffset, SurveyChunk.StationUpRole);
+            //     currentItem = rightArrow(currentItem, rowIndex+lrudOffset, SurveyChunk.StationDownRole);
+
+
+            //     //Make sure we can't continue going
+            //     currentItem = rightArrow(null, rowIndex+lrudOffset, SurveyChunk.StationDownRole);
+            // }
+
+
+
+
+
+            let frontsight = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->frontSightCalibrationEditor->checkBox")
+            let backsight = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->backSightCalibrationEditor->checkBox")
+
+            function testRow(row, direction) {
+                let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view");
+                view.positionViewAtIndex(row, ListView.Contain)
+
+                let station = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + ".0")
+                mouseClick(station)
+
+                verify(frontsight.checked === true)
+                verify(backsight.checked === false)
+                verify(station.focus === true);
+
+                direction(station, row);
+
+                // ----- Enable the backsights and frontsights ----
+                mouseClick(backsight);
+
+                verify(frontsight.checked === true)
+                verify(backsight.checked === true)
+
+                mouseClick(station)
+                verify(station.focus === true);
+
+                direction(station, row);
+
+                // ----- Enable the backsights only
+                mouseClick(frontsight);
+
+                verify(frontsight.checked === false)
+                verify(backsight.checked === true)
+
+                mouseClick(station)
+                verify(station.focus === true);
+
+                direction(station, row);
+
+                mouseClick(frontsight);
+                mouseClick(backsight);
+            }
+
+            //Test the first row
+            testRow(1, rightArrowOnFullRow)
+
+            //Test a middle row
+            // wait(100000);
+            testRow(5, rightArrowOnFullRow)
+
+            //Test last row
+            testRow(9, rightArrowOnFullRow)
+        }
+
+        /**
           Test the tab interaction going forward and backwards with frontsights on, backsights on, and both
           frontsights and backsights on.
           */
-        function test_surveyEditorNavigationTabWorks() {
+        function test_tabNavigationTabWorks() {
             TestHelper.loadProjectFromFile(RootData.project, "://datasets/tst_SurveyDataEntry/navTest.cw");
 
             RootData.pageSelectionModel.currentPageAddress = "Data/Cave=Cave 1/Trip=Trip 1"
@@ -390,73 +591,8 @@ MainWindowTest {
 
             waitForRendering(mainWindow)
 
-            function navHelper(currentItem,
-                               index,
-                               nextRole,
-                               key,
-                               modifier)
-            {
-                if(currentItem !== null) {
-                    if(currentItem === undefined) {
-                        console.log("Undefined!")
-                    }
 
-                    if(currentItem.focus !== true) {
-                        console.log("Focus failed!, set breakpoint here");
-                    }
 
-                    verify(currentItem.focus === true)
-                }
-
-                keyClick(key, modifier) //Tab
-
-                let itemName = "rootId->tripPage->view->dataBox." + index + "." + nextRole
-                let item = ObjectFinder.findObjectByChain(mainWindow, itemName)
-                if(item === null) {
-                    console.log("Searching for item:" + itemName + " current focused:" + mainWindow.Window.window.activeFocusItem)
-                    console.log("Testcase will fail, Failed to find item!!!");
-                }
-
-                verify(item !== null);
-
-                if(currentItem !== null) {
-                    if(currentItem.focus !== false) {
-                        console.log("Testcase will fail, bad currentItem focus!!! place breakpoint here" + currentItem);
-                    }
-
-                    verify(currentItem.focus === false);
-                }
-
-                //Uncomment to help debug
-                if(item.focus !== true) {
-                    console.log("Testcase will fail, bad focus!!! current focused on:" + rootId.Window.window.activeFocusItem + "but should be focused on" + item);
-                }
-
-                verify(item.focus === true )
-
-                //Enable for debugging this, this will slow down the testcase
-                // waitForRendering(mainWindow)
-                return item;
-            }
-
-            function nextTab(currentItem, index, nextRole) {
-                let tab = 16777217; //Tab arrow keey
-                let modifier = 0;
-                return navHelper(currentItem, index, nextRole, tab, modifier);
-            }
-
-            function down(currentItem, index, nextRole) {
-                let tab = 16777237; //Down arrow key
-                let modifier = 0;
-                return navHelper(currentItem, index, nextRole, tab, modifier);
-
-            }
-
-            function previousTab(currentItem, index, nextRole) {
-                let tab = 16777218;
-                let modifier = 33554432;
-                return navHelper(currentItem, index, nextRole, tab, modifier);
-            }
 
             let surveyView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
             let currentItem = station1;
@@ -528,7 +664,7 @@ MainWindowTest {
                             //probably at the last row, skip
                             //We need to use null instead of currentItem, because the currentItem gets delete
                             //The delete currentItem will cause a type error in the testcase
-                            currentItem = down(null, i + 3, SurveyChunk.StationNameRole)
+                            currentItem = downArrow(null, i + 3, SurveyChunk.StationNameRole)
                         }
                     }
                 }

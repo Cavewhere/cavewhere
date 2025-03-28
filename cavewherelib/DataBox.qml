@@ -122,54 +122,6 @@ QQ.Item {
         dataBox.editorFocus.setIndex(dataBox.navigation.tabNext())
     }
 
-    // function handleNavigation(navProperty) {
-    //     if(navigation[navProperty] !== null) {
-    //         let item = navigation[navProperty].item;
-    //         dataBox.editorFocus = item.boxIndex;
-
-
-    //         // if(navigation[navProperty].indexOffset !== 0) {
-    //         //     view.currentIndex = listViewIndex
-
-    //         //     let itemIndex = -1;
-    //         //     for(let childIndex in view.currentItem.children) {
-    //         //         if(view.currentItem.children[childIndex] === item) {
-    //         //             itemIndex = childIndex;
-    //         //             break;
-    //         //         }
-    //         //     }
-
-    //         //     if(itemIndex >= 0) {
-    //         //         let nextCurrentIndex = view.currentIndex + navigation[navProperty].indexOffset
-
-    //         //         //1 because title is at index 0
-    //         //         while(nextCurrentIndex >= 1 && nextCurrentIndex < view.count) {
-    //         //             // console.log("NextCurrentIndex:" + view.currentIndex + " " + nextCurrentIndex);
-    //         //             view.currentIndex = nextCurrentIndex;
-    //         //             if(view.currentItem.children[itemIndex].visible) {
-    //         //                 view.currentItem.children[itemIndex].forceActiveFocus()
-    //         //                 // editorFocus.boxIndex = view.currentItem.children[itemIndex].index
-    //         //                 break;
-    //         //             }
-    //         //             nextCurrentIndex = view.currentIndex + navigation[navProperty].indexOffset
-    //         //         }
-    //         //     } else {
-    //         //         let childrenItemStr = "";
-    //         //         for(let childIndex in view.currentItem.children) {
-    //         //             childrenItemStr += "\n\t" + view.currentItem.children[childIndex];
-    //         //         }
-
-    //         //         throw "Couldn't find \"" + item + "\" try setting offsetIndex = 0, in list:" + childrenItemStr;
-    //         //     }
-    //         // } else {
-    //         //     if(item !== null) {
-    //         //         // editorFocus.boxIndex = index
-    //         //         item.forceActiveFocus()
-    //         //     }
-    //         // }
-    //     }
-    // }
-
     function handleTab(eventKey) {
         if(eventKey.key === Qt.Key_Tab) {
             tabPressed();
@@ -295,7 +247,7 @@ QQ.Item {
         acceptedButtons: Qt.LeftButton | Qt.RightButton
 
         onClicked: (mouse) => {
-                       dataBox.editorFocus = dataBox.dataValue
+                       dataBox.editorFocus.setIndex(dataBox.dataValue.boxIndex)
                        // dataBox.focus = true
 
                        if(mouse.button === Qt.RightButton) {
@@ -359,11 +311,12 @@ QQ.Item {
                                case Qt.Key_Left:
                                break;
                                case Qt.Key_Right:
+                               dataBox.editorFocus.setIndex(dataBox.navigation.arrowRight())
                                break;
                                case Qt.Key_Up:
                                break;
                                case Qt.Key_Down:
-                               dataBox.editorFocus.boxIndex = dataBox.navigation.arrowDown()
+                               dataBox.editorFocus.setIndex(dataBox.navigation.arrowDown())
                                break;
                                case Qt.Key_Backspace:
                                // deletePressedHandler();

@@ -91,6 +91,7 @@ public:
     {
         return boxIndex(rowIndex(chunk, chunkIndex, type), dataRole);
     }
+    Q_INVOKABLE cwSurveyEditorBoxIndex boxIndex() const { return cwSurveyEditorBoxIndex(); }
 
     Q_INVOKABLE cwSurveyEditorBoxIndex offsetBoxIndex(const cwSurveyEditorBoxIndex& boxIndex, int offsetIndex) const;
 

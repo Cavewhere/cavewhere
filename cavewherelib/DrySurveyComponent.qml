@@ -138,7 +138,14 @@ Item {
                         }
                     }
 
-                // navigation.arrowRight: NavigationItem { item: shotDistanceDataBox1 }
+                navigation.arrowRight:
+                    () => {
+                        let rowIndex = stationBox.dataValue.rowIndex
+                        let offset = rowIndex.indexInChunk === 0 ? 0 : -1
+                        let boxIndex = boxIndex = itemId.model.boxIndex(rowIndex.chunk, rowIndex.indexInChunk + offset, SurveyEditorRowIndex.ShotRow, SurveyChunk.ShotDistanceRole)
+                        return itemId.model.offsetBoxIndex(boxIndex, 0);
+                    }
+
                 // navigation.arrowUp: NavigationItem { item: stationBox1; indexOffset: -1 }
                 // navigation.arrowDown: NavigationItem { item: stationBox1; indexOffset: 1 }
 
@@ -177,13 +184,13 @@ Item {
                 anchors.topMargin: 0
 
                 navigation.tabNext: () => {
-                    let rowIndex = stationBox.dataValue.rowIndex
+                    let rowIndex = leftBox.dataValue.rowIndex
                     let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationRightRole)
                     return itemId.model.offsetBoxIndex(boxIndex, 0);
                 }
                 navigation.tabPrevious:
                     () => {
-                        let rowIndex = stationBox.dataValue.rowIndex
+                        let rowIndex = leftBox.dataValue.rowIndex
                         if(rowIndex.indexInChunk === 1) {
                             let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationDownRole)
                             return itemId.model.offsetBoxIndex(boxIndex, -1);
@@ -200,6 +207,12 @@ Item {
                             boxIndex = itemId.model.boxIndex(rowIndex.chunk, rowIndex.indexInChunk + shotOffset, SurveyEditorRowIndex.ShotRow, SurveyChunk.ShotDistanceRole)
                         }
 
+                        return itemId.model.offsetBoxIndex(boxIndex, 0);
+                    }
+                navigation.arrowRight:
+                    () => {
+                        let rowIndex = leftBox.dataValue.rowIndex
+                        let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationRightRole)
                         return itemId.model.offsetBoxIndex(boxIndex, 0);
                     }
 
@@ -234,14 +247,20 @@ Item {
 
                 navigation.tabPrevious:
                     () => {
-                        let rowIndex = stationBox.dataValue.rowIndex
+                        let rowIndex = rightBox.dataValue.rowIndex
                         let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationLeftRole)
                         return itemId.model.offsetBoxIndex(boxIndex, 0)
                     }
 
                 navigation.tabNext:
                     () => {
-                        let rowIndex = stationBox.dataValue.rowIndex
+                        let rowIndex = rightBox.dataValue.rowIndex
+                        let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationUpRole)
+                        return itemId.model.offsetBoxIndex(boxIndex, 0);
+                    }
+                navigation.arrowRight:
+                    () => {
+                        let rowIndex = rightBox.dataValue.rowIndex
                         let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationUpRole)
                         return itemId.model.offsetBoxIndex(boxIndex, 0);
                     }
@@ -273,17 +292,24 @@ Item {
 
                 navigation.tabPrevious:
                     () => {
-                        let rowIndex = stationBox.dataValue.rowIndex
+                        let rowIndex = upBox.dataValue.rowIndex
                         let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationRightRole)
                         return itemId.model.offsetBoxIndex(boxIndex, 0)
                     }
 
                 navigation.tabNext:
                     () => {
-                        let rowIndex = stationBox.dataValue.rowIndex
+                        let rowIndex = upBox.dataValue.rowIndex
                         let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationDownRole)
                         return itemId.model.offsetBoxIndex(boxIndex, 0);
                     }
+                navigation.arrowRight:
+                    () => {
+                        let rowIndex = upBox.dataValue.rowIndex
+                        let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationDownRole)
+                        return itemId.model.offsetBoxIndex(boxIndex, 0);
+                    }
+
 
                 dataValue:  stationUp
                 // visible: itemId.stationVisible
@@ -311,13 +337,13 @@ Item {
 
                 navigation.tabPrevious:
                     () => {
-                        let rowIndex = stationBox.dataValue.rowIndex
+                        let rowIndex = downBox.dataValue.rowIndex
                         let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationUpRole)
                         return itemId.model.offsetBoxIndex(boxIndex, 0)
                     }
 
                 navigation.tabNext: () => {
-                    let rowIndex = stationBox.dataValue.rowIndex
+                    let rowIndex = downBox.dataValue.rowIndex
                     if(rowIndex.indexInChunk === 0) {
                         let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationLeftRole)
                         return itemId.model.offsetBoxIndex(boxIndex, 1);
@@ -326,6 +352,11 @@ Item {
                         return itemId.model.offsetBoxIndex(boxIndex, 1);
                     }
                 }
+                navigation.arrowRight:
+                    () => {
+                        return itemId.model.boxIndex() //Null
+                    }
+
 
                 dataValue: stationDown
                 // visible: itemId.stationVisible
@@ -361,14 +392,6 @@ Item {
                 y: itemId.columnTemplate.shotRowY
                 anchors.topMargin: 0
 
-                // navigation.tabPrevious: NavigationItem { item: stationBox; indexOffset: 1 }
-                // navigation.tabNext: NavigationItem {
-                //     item: itemId.firstVisible([{item:(compassFrontReadBox), used: itemId.calibration.frontSights},
-                //                                {item:(compassBackReadBox), used: itemId.calibration.backSights},
-                //                                {item:(leftBox), used: true}
-                //                               ])
-                //     indexOffset: 0
-                // }
                 navigation.tabPrevious:
                     () => {
                         let rowIndex = shotDistanceDataBox.dataValue.rowIndex
@@ -381,18 +404,22 @@ Item {
                         // }
                     }
 
-                navigation.tabNext: () => {
-                    let rowIndex = shotDistanceDataBox.dataValue.rowIndex
-                    let boxIndex;
-                    if(itemId.calibration.frontSights) {
-                        boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotCompassRole)
-                    } else if(itemId.calibration.backSights) {
-                        boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotBackCompassRole)
-                    } else {
-                        boxIndex = itemId.model.boxIndex(rowIndex.chunk, rowIndex.indexInChunk + 1, SurveyEditorRowIndex.StationRow, SurveyChunk.StationLeftRole)
+                navigation.tabNext:
+                    () => {
+                        let rowIndex = shotDistanceDataBox.dataValue.rowIndex
+                        let boxIndex;
+
+                        if(itemId.calibration.backSights) {
+                            boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotBackCompassRole)
+                        } else if(itemId.calibration.frontSights) {
+                            boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotCompassRole)
+                        } else {
+                            boxIndex = itemId.model.boxIndex(rowIndex.chunk, rowIndex.indexInChunk + 1, SurveyEditorRowIndex.StationRow, SurveyChunk.StationLeftRole)
+                        }
+                        return itemId.model.offsetBoxIndex(boxIndex, 0);
                     }
-                    return itemId.model.offsetBoxIndex(boxIndex, 0);
-                }
+                navigation.arrowRight: navigation.tabNext
+
 
 
                 // navigation.arrowLeft: NavigationItem { item: stationBox1 }
@@ -436,13 +463,13 @@ Item {
 
                 navigation.tabPrevious:
                     () => {
-                        let rowIndex = shotDistanceDataBox.dataValue.rowIndex
+                        let rowIndex = compassFrontReadBox.dataValue.rowIndex
                         let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotDistanceRole)
                         return itemId.model.offsetBoxIndex(boxIndex, 0);
                     }
 
                 navigation.tabNext: () => {
-                    let rowIndex = shotDistanceDataBox.dataValue.rowIndex
+                    let rowIndex = compassFrontReadBox.dataValue.rowIndex
                     let boxIndex;
                     if(itemId.calibration.backSights) {
                         boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotBackCompassRole)
@@ -453,6 +480,13 @@ Item {
                     }
                     return itemId.model.offsetBoxIndex(boxIndex, 0);
                 }
+                navigation.arrowRight:
+                    () => {
+                        let rowIndex = compassFrontReadBox.dataValue.rowIndex
+                        let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotClinoRole)
+                        return itemId.model.offsetBoxIndex(boxIndex, 0);
+                    }
+
 
                 visible: itemId.calibration.frontSights
                 dataValue: shotCompass
@@ -481,7 +515,7 @@ Item {
 
                 navigation.tabPrevious:
                     () => {
-                        let rowIndex = shotDistanceDataBox.dataValue.rowIndex
+                        let rowIndex = compassBackReadBox.dataValue.rowIndex
                         let boxIndex;
                         if(itemId.calibration.frontSights) {
                             boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotCompassRole)
@@ -492,7 +526,7 @@ Item {
                     }
 
                 navigation.tabNext: () => {
-                    let rowIndex = shotDistanceDataBox.dataValue.rowIndex
+                    let rowIndex = compassBackReadBox.dataValue.rowIndex
                     let boxIndex;
                     if(itemId.calibration.frontSights) {
                         boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotClinoRole)
@@ -504,6 +538,12 @@ Item {
                     return itemId.model.offsetBoxIndex(boxIndex, 0);
                 }
 
+                navigation.arrowRight:
+                    () => {
+                        let rowIndex = compassFrontReadBox.dataValue.rowIndex
+                        let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotBackClinoRole)
+                        return itemId.model.offsetBoxIndex(boxIndex, 0);
+                    }
 
                 visible: itemId.calibration.backSights
                 dataValue: shotBackCompass
@@ -530,34 +570,9 @@ Item {
                 anchors.left: compassFrontReadBox.right
                 anchors.leftMargin: -1
 
-                // navigation.tabPrevious: NavigationItem {
-                //     item: itemId.firstVisible([
-                //                                   {item:(compassBackReadBox), used: itemId.calibration.backSights},
-                //                                {item:(compassFrontReadBox), used: itemId.calibration.frontSights},
-                //                                {item:(shotDistanceDataBox), used: true},
-                //                               ])
-                //     indexOffset: {
-                //         return 0;
-                //     }
-                // }
-                // navigation.tabNext: NavigationItem {
-                //     item: itemId.firstVisible([
-                //                                   {item:(clinoBackReadBox), used: itemId.calibration.backSights},
-                //                                   {item:(leftBox), used: true}
-                //                               ])
-                //     indexOffset: {
-                //         if(itemId.indexInChunk === 0 && !itemId.calibration.backSights) {
-                //             return -1;
-                //         } else if (itemId.calibration.backSights) {
-                //             return 0;
-                //         } else {
-                //             return 1;
-                //         }
-                //     }
-                // }
                 navigation.tabPrevious:
                     () => {
-                        let rowIndex = shotDistanceDataBox.dataValue.rowIndex
+                        let rowIndex = clinoFrontReadBox.dataValue.rowIndex
                         let boxIndex;
                         if(itemId.calibration.backSights) {
                             boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotBackCompassRole)
@@ -571,13 +586,19 @@ Item {
 
                 navigation.tabNext:
                     () => {
-                        let rowIndex = shotDistanceDataBox.dataValue.rowIndex
+                        let rowIndex = clinoFrontReadBox.dataValue.rowIndex
                         let boxIndex;
                         if(itemId.calibration.backSights) {
                             boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotBackClinoRole)
                         } else {
                             boxIndex = itemId.nextLeftFromClino(rowIndex);
                         }
+                        return itemId.model.offsetBoxIndex(boxIndex, 0);
+                    }
+                navigation.arrowRight:
+                    () => {
+                        let rowIndex = clinoFrontReadBox.dataValue.rowIndex
+                        let boxIndex = itemId.model.boxIndex(rowIndex.chunk, rowIndex.indexInChunk + 1, SurveyEditorRowIndex.StationRow, SurveyChunk.StationLeftRole)
                         return itemId.model.offsetBoxIndex(boxIndex, 0);
                     }
 
@@ -609,7 +630,7 @@ Item {
 
                 navigation.tabPrevious:
                     () => {
-                        let rowIndex = shotDistanceDataBox.dataValue.rowIndex
+                        let rowIndex = clinoBackReadBox.dataValue.rowIndex
                         let boxIndex;
                         if(itemId.calibration.frontSights) {
                             boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotClinoRole)
@@ -623,10 +644,14 @@ Item {
 
                 navigation.tabNext:
                     () => {
-                        let rowIndex = shotDistanceDataBox.dataValue.rowIndex
+                        let rowIndex = clinoBackReadBox.dataValue.rowIndex
                         let boxIndex = itemId.nextLeftFromClino(rowIndex);
                         return itemId.model.offsetBoxIndex(boxIndex, 0);
                     }
+
+
+                navigation.arrowRight: clinoFrontReadBox.navigation.arrowRight
+
 
                 dataValue: shotBackClino
                 listViewIndex: itemId.index
@@ -645,426 +670,4 @@ Item {
 
         }
     }
-
-
-    // StationBox {
-    //     id: stationBox
-    //     width: titleColumnId.stationWidth
-    //     height: 50
-
-    //     navigation.tabPrevious: NavigationItem {
-    //         item: {
-    //             if(itemId.indexInChunk === 1) {
-    //                 return stationBox
-    //             }
-    //             return downBox
-    //         }
-
-    //         indexOffset: -1
-    //     }
-    //     navigation.tabNext: NavigationItem {
-    //         item: {
-    //             if(itemId.indexInChunk === 0) {
-    //                 //Go to the text station name
-    //                 return stationBox
-    //             }
-    //             return shotDistanceDataBox;
-    //         }
-    //         indexOffset: {
-    //             if(itemId.indexInChunk === 0) {
-    //                 return 1;
-    //             }
-    //             return -1;
-    //         }
-    //     }
-    //     // navigation.arrowRight: NavigationItem { item: shotDistanceDataBox1 }
-    //     // navigation.arrowUp: NavigationItem { item: stationBox1; indexOffset: -1 }
-    //     // navigation.arrowDown: NavigationItem { item: stationBox1; indexOffset: 1 }
-
-    //     dataValue: stationName
-    //     visible: stationVisible
-    //     listViewIndex: itemId.index
-    //     // index: itemId.boxIndex(SurveyChunk.StationNameRole)
-    //     // indexInChunk: itemId.indexInChunk
-    //     errorButtonGroup: itemId.errorButtonGroup
-    //     // errorModel: itemId.errorModel(SurveyChunk.StationNameRole)
-    //     surveyChunkTrimmer: itemId.surveyChunkTrimmer
-    //     // surveyChunk: itemId.chunk
-    //     // rowType: itemId.rowType
-    //     // dataRole: SurveyChunk.StationNameRole
-    //     view: itemId.view
-    //     dataValidator: stationValidator
-    //     // focus: hasEditorFocus
-    //     editorFocus: itemId.editorFocus
-    // }
-
-    // ShotDistanceDataBox {
-    //     id: shotDistanceDataBox
-    //     width: titleColumnId.distanceWidth
-    //     height: 50
-    //     anchors.left: stationBox.right
-    //     anchors.leftMargin: -1
-    //     anchors.verticalCenter: stationBox.top
-    //     anchors.topMargin: 0
-
-    //     navigation.tabPrevious: NavigationItem { item: stationBox; indexOffset: 1 }
-    //     navigation.tabNext: NavigationItem {
-    //         item: itemId.firstVisible([{item:(compassFrontReadBox), used: itemId.calibration.frontSights},
-    //                                    {item:(compassBackReadBox), used: itemId.calibration.backSights},
-    //                                    {item:(leftBox), used: true}
-    //                                   ])
-    //         indexOffset: 0
-    //     }
-
-    //     // navigation.arrowLeft: NavigationItem { item: stationBox1 }
-    //     // navigation.arrowRight: NavigationItem { item: compassFrontReadBox }
-    //     // navigation.arrowUp: NavigationItem { item: shotDistanceDataBox1; indexOffset: -1 }
-    //     // navigation.arrowDown: NavigationItem { item: shotDistanceDataBox1; indexOffset: 1 }
-
-    //     dataValue: shotDistance
-    //     visible: shotVisible
-    //     listViewIndex: itemId.index
-    //     // index: itemId.boxIndex(SurveyChunk.ShotDistanceRole)
-    //     // indexInChunk: itemId.indexInChunk
-    //     errorButtonGroup: itemId.errorButtonGroup
-    //     // errorModel: itemId.errorModel(SurveyChunk.ShotDistanceRole)
-    //     surveyChunkTrimmer: itemId.surveyChunkTrimmer
-    //     // surveyChunk: itemId.chunk
-    //     // dataRole: SurveyChunk.ShotDistanceRole
-    //     view: itemId.view
-    //     dataValidator: distanceValidator
-    //     editorFocus: itemId.editorFocus
-    // }
-
-    // CompassReadBox {
-    //     id: compassFrontReadBox
-    //     width: titleColumnId.compassWidth
-    //     height: calibration.backSights ? 25 : 50
-    //     anchors.left: shotDistanceDataBox.right
-    //     anchors.leftMargin: -1
-    //     anchors.top: shotDistanceDataBox.top
-    //     anchors.topMargin: 0
-
-    //     navigation.tabPrevious: NavigationItem { item: shotDistanceDataBox; indexOffset: 0 }
-    //     navigation.tabNext: NavigationItem {
-    //         item: itemId.firstVisible([
-    //                                       {item:(compassBackReadBox), used: itemId.calibration.backSights},
-    //                                       {item:(clinoFrontReadBox), used: itemId.calibration.frontSights},
-    //                                       {item:(leftBox), used: true},
-    //                                   ])
-    //         indexOffset: 0
-    //     }
-
-    //     visible: calibration.frontSights && itemId.shotVisible
-    //     dataValue: shotCompass
-    //     listViewIndex: itemId.index
-    //     // index: itemId.boxIndex(SurveyChunk.ShotCompassRole)
-    //     // indexInChunk: itemId.indexInChunk
-    //     errorButtonGroup: itemId.errorButtonGroup
-    //     // errorModel: itemId.errorModel(SurveyChunk.ShotCompassRole)
-    //     surveyChunkTrimmer: itemId.surveyChunkTrimmer
-    //     // surveyChunk: itemId.chunk
-    //     // dataRole: SurveyChunk.ShotCompassRole
-    //     view: itemId.view
-    //     readingText: "fs"
-    //     dataValidator: compassValidator
-    //     editorFocus: itemId.editorFocus
-    // }
-
-    // CompassReadBox {
-    //     id: compassBackReadBox
-    //     width: titleColumnId.compassWidth
-    //     height: calibration.frontSights ? 26 : 50
-    //     anchors.left: compassFrontReadBox.left
-    //     // anchors.leftMargin: -1
-    //     anchors.top: calibration.frontSights ? shotDistanceDataBox.verticalCenter : shotDistanceDataBox.top
-    //     anchors.topMargin: calibration.frontSights ? -1 : 0
-
-    //     navigation.tabPrevious: NavigationItem {
-    //         item: itemId.firstVisible([{item:(compassFrontReadBox), used: itemId.calibration.frontSights},
-    //                                    {item:(shotDistanceDataBox), used: true},
-    //                                   ])
-    //         indexOffset: 0
-    //     }
-    //     navigation.tabNext: NavigationItem {
-    //         item: firstVisible([
-    //                             {item:(clinoFrontReadBox), used: itemId.calibration.frontSights},
-    //                             {item:(clinoBackReadBox), used: itemId.calibration.backSights},
-    //                             {item:(leftBox), used: true},
-    //                            ])
-    //         indexOffset: 0
-    //     }
-
-
-    //     visible: calibration.backSights && itemId.shotVisible
-    //     dataValue: shotBackCompass
-    //     listViewIndex: itemId.index
-    //     // index: itemId.boxIndex(SurveyChunk.ShotBackCompassRole)
-    //     // indexInChunk: itemId.indexInChunk
-    //     errorButtonGroup: itemId.errorButtonGroup
-    //     // errorModel: itemId.errorModel(SurveyChunk.ShotBackCompassRole)
-    //     surveyChunkTrimmer: itemId.surveyChunkTrimmer
-    //     // surveyChunk: itemId.chunk
-    //     // dataRole: SurveyChunk.ShotBackCompassRole
-    //     view: itemId.view
-    //     readingText: "bs"
-    //     dataValidator: compassValidator
-    //     editorFocus: itemId.editorFocus
-    // }
-
-    // ClinoReadBox {
-    //     id: clinoFrontReadBox
-    //     width: titleColumnId.clinoWidth
-    //     height: calibration.backSights ? 25 : 50
-    //     anchors.top: shotDistanceDataBox.top
-    //     anchors.topMargin: 0
-    //     anchors.left: compassFrontReadBox.right
-    //     anchors.leftMargin: -1
-
-    //     navigation.tabPrevious: NavigationItem {
-    //         item: itemId.firstVisible([
-    //                                       {item:(compassBackReadBox), used: itemId.calibration.backSights},
-    //                                    {item:(compassFrontReadBox), used: itemId.calibration.frontSights},
-    //                                    {item:(shotDistanceDataBox), used: true},
-    //                                   ])
-    //         indexOffset: {
-    //             return 0;
-    //         }
-    //     }
-    //     navigation.tabNext: NavigationItem {
-    //         item: itemId.firstVisible([
-    //                                       {item:(clinoBackReadBox), used: itemId.calibration.backSights},
-    //                                       {item:(leftBox), used: true}
-    //                                   ])
-    //         indexOffset: {
-    //             if(itemId.indexInChunk === 0 && !itemId.calibration.backSights) {
-    //                 return -1;
-    //             } else if (itemId.calibration.backSights) {
-    //                 return 0;
-    //             } else {
-    //                 return 1;
-    //             }
-    //         }
-    //     }
-
-    //     visible: calibration.frontSights && itemId.shotVisible
-    //     dataValue: shotClino.value
-    //     listViewIndex: itemId.index
-    //     // index: itemId.boxIndex(SurveyChunk.ShotClinoRole)
-    //     // indexInChunk: itemId.indexInChunk
-    //     errorButtonGroup: itemId.errorButtonGroup
-    //     // errorModel: itemId.errorModel(SurveyChunk.ShotClinoRole)
-    //     surveyChunkTrimmer: itemId.surveyChunkTrimmer
-    //     // surveyChunk: itemId.chunk
-    //     // dataRole: SurveyChunk.ShotClinoRole
-    //     view: itemId.view
-    //     readingText: "fs"
-    //     dataValidator: clinoValidator
-    //     editorFocus: itemId.editorFocus
-    // }
-
-    // ClinoReadBox {
-    //     id: clinoBackReadBox
-    //     width: titleColumnId.clinoWidth
-    //     height: calibration.frontSights ? 26 : 50
-    //     anchors.topMargin: calibration.frontSights ? -1 : 0
-    //     anchors.top: calibration.frontSights ? shotDistanceDataBox.verticalCenter : shotDistanceDataBox.top
-    //     anchors.left: compassFrontReadBox.right
-    //     anchors.leftMargin: -1
-    //     visible: calibration.backSights && itemId.shotVisible
-
-    //     navigation.tabPrevious: NavigationItem {
-    //         item: itemId.firstVisible([{item:clinoFrontReadBox, used: itemId.calibration.frontSights},
-    //                                    {item:compassBackReadBox, used: itemId.calibration.backSights},
-    //                                    {item:compassFrontReadBox, used: itemId.calibration.frontSights},
-    //                                    {item:shotDistanceDataBox, used: true}
-    //                                   ])
-    //         indexOffset: 0
-    //     }
-    //     navigation.tabNext: NavigationItem {
-    //         item: leftBox
-    //         indexOffset: {
-    //             if(itemId.indexInChunk === 0) {
-    //                 return -1;
-    //             } else {
-    //                 return 1;
-    //             }
-    //         }
-    //     }
-
-    //     dataValue: shotBackClino.value
-    //     listViewIndex: itemId.index
-    //     // index: itemId.boxIndex(SurveyChunk.ShotBackClinoRole)
-    //     // indexInChunk: itemId.indexInChunk
-    //     errorButtonGroup: itemId.errorButtonGroup
-    //     // errorModel: itemId.errorModel(SurveyChunk.ShotBackClinoRole)
-    //     surveyChunkTrimmer: itemId.surveyChunkTrimmer
-    //     // surveyChunk: itemId.chunk
-    //     // dataRole: SurveyChunk.ShotBackClinoRole
-    //     view: itemId.view
-    //     readingText: "bs"
-    //     dataValidator: clinoValidator
-    //     editorFocus: itemId.editorFocus
-    // }
-
-    // StationDistanceBox {
-    //     id: leftBox
-    //     width: titleColumnId.lWidth
-    //     height: 50
-    //     anchors.left: clinoFrontReadBox.right
-    //     anchors.leftMargin: -1
-    //     anchors.top: stationBox.top
-    //     anchors.topMargin: 0
-
-    //     navigation.tabPrevious: NavigationItem {
-    //         item: {
-    //             if(itemId.indexInChunk === 1) {
-    //                 return downBox
-    //             } else {
-    //                 // return clinoFrontReadBox
-    //                 return firstVisible([{item:clinoBackReadBox, used: itemId.calibration.backSights},
-    //                                      {item:clinoFrontReadBox, used: itemId.calibration.frontSights},
-    //                                      {item:shotDistanceDataBox, used: true}
-    //                                    ])
-    //             }
-    //         }
-
-    //         indexOffset: {
-    //             if(itemId.indexInChunk === 0) {
-    //                 return 1;
-    //             } else {
-    //                 return -1;
-    //             }
-    //         }
-    //     }
-    //     navigation.tabNext: NavigationItem {
-    //         item: rightBox
-    //         indexOffset: 0
-    //     }
-
-    //     dataValue: stationLeft.value
-    //     visible: itemId.stationVisible
-    //     listViewIndex: itemId.index
-    //     // index: itemId.boxIndex(SurveyChunk.StationLeftRole)
-    //     // indexInChunk: itemId.indexInChunk
-    //     errorButtonGroup: itemId.errorButtonGroup
-    //     // errorModel: itemId.errorModel(SurveyChunk.StationLeftRole)
-
-    //     onErrorModelChanged: {
-    //         console.log("Error model changed for left:" + errorModel + " " + this + " " + rowIndex)
-    //     }
-
-    //     surveyChunkTrimmer: itemId.surveyChunkTrimmer
-    //     // surveyChunk: itemId.chunk
-    //     // dataRole: SurveyChunk.StationLeftRole
-    //     view: itemId.view
-    //     dataValidator: distanceValidator
-    //     editorFocus: itemId.editorFocus
-    // }
-
-    // StationDistanceBox {
-    //     id: rightBox
-    //     width: titleColumnId.rWidth
-    //     height: 50
-    //     anchors.topMargin: 0
-    //     anchors.top: stationBox.top
-    //     anchors.left: leftBox.right
-    //     anchors.leftMargin: -1
-
-    //     navigation.tabPrevious: NavigationItem {
-    //         item: leftBox
-    //         indexOffset: 0
-    //     }
-    //     navigation.tabNext: NavigationItem {
-    //         item: upBox
-    //         indexOffset: 0
-    //     }
-
-    //     dataValue: stationRight.value
-    //     visible: itemId.stationVisible
-    //     listViewIndex: itemId.index
-    //     // index: itemId.boxIndex(SurveyChunk.StationRightRole)
-    //     // indexInChunk: itemId.indexInChunk
-    //     errorButtonGroup: itemId.errorButtonGroup
-    //     // errorModel: itemId.errorModel(SurveyChunk.StationRightRole)
-    //     surveyChunkTrimmer: itemId.surveyChunkTrimmer
-    //     // surveyChunk: itemId.chunk
-    //     // dataRole: SurveyChunk.StationRightRole
-    //     view: itemId.view
-    //     dataValidator: distanceValidator
-    //     editorFocus: itemId.editorFocus
-    // }
-
-    // StationDistanceBox {
-    //     id: upBox
-    //     width: titleColumnId.uWidth
-    //     height: 50
-    //     anchors.topMargin: 0
-    //     anchors.top: stationBox.top
-    //     anchors.left: rightBox.right
-    //     anchors.leftMargin: -1
-
-    //     navigation.tabPrevious: NavigationItem {
-    //         item: rightBox
-    //         indexOffset: 0
-    //     }
-    //     navigation.tabNext: NavigationItem {
-    //         item: downBox
-    //         indexOffset: 0
-    //     }
-
-    //     dataValue:  stationUp.value
-    //     visible: itemId.stationVisible
-    //     listViewIndex: itemId.index
-    //     // index: itemId.boxIndex(SurveyChunk.StationUpRole)
-    //     // indexInChunk: itemId.indexInChunk
-    //     errorButtonGroup: itemId.errorButtonGroup
-    //     // errorModel: itemId.errorModel(SurveyChunk.StationUpRole)
-    //     surveyChunkTrimmer: itemId.surveyChunkTrimmer
-    //     // surveyChunk: itemId.chunk
-    //     // dataRole: SurveyChunk.StationUpRole
-    //     view: itemId.view
-    //     dataValidator: distanceValidator
-    //     editorFocus: itemId.editorFocus
-    // }
-
-    // StationDistanceBox {
-    //     id: downBox
-    //     width: titleColumnId.dWidth
-    //     height: 50
-    //     anchors.topMargin: 0
-    //     anchors.top: stationBox.top
-    //     anchors.left: upBox.right
-    //     anchors.leftMargin: -1
-
-    //     navigation.tabPrevious: NavigationItem {
-    //         item: upBox
-    //         indexOffset: 0
-    //     }
-    //     navigation.tabNext: NavigationItem {
-    //         item: {
-    //             if(itemId.indexInChunk === 0) {
-    //                 return leftBox
-    //             } else {
-    //                 return stationBox
-    //             }
-    //         }
-    //         indexOffset: 1
-    //     }
-
-    //     dataValue: stationDown.value
-    //     visible: itemId.stationVisible
-    //     listViewIndex: itemId.index
-    //     // index: itemId.boxIndex(SurveyChunk.StationDownRole)
-    //     // indexInChunk: itemId.indexInChunk
-    //     errorButtonGroup: itemId.errorButtonGroup
-    //     // errorModel: itemId.errorModel(SurveyChunk.StationDownRole)
-    //     surveyChunkTrimmer: itemId.surveyChunkTrimmer
-    //     // surveyChunk: itemId.chunk
-    //     // dataRole: SurveyChunk.StationDownRole
-    //     view: itemId.view
-    //     dataValidator: distanceValidator
-    //     editorFocus: itemId.editorFocus
-    // }
-
 }
