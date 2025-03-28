@@ -90,6 +90,8 @@ QQ.Item {
         console.log("HasFocusChanged!" + hasEditorFocus)
         focus = hasEditorFocus
         if(focus) {
+            view.currentIndex = listViewIndex
+            view.positionViewAtIndex(listViewIndex + 1, QQ.ListView.Contain)
             forceActiveFocus()
         }
     }
@@ -358,29 +360,30 @@ QQ.Item {
     }
 
     QQ.Keys.onPressed: (event) => {
-        handleTab(event);
-        switch(event.key) {
-        case Qt.Key_Left:
-        case Qt.Key_Right:
-        case Qt.Key_Up:
-        case Qt.Key_Down:
-        case Qt.Key_Backspace:
-            deletePressedHandler();
-            return;
-        }
+                           handleTab(event);
+                           switch(event.key) {
+                               case Qt.Key_Left:
+                               case Qt.Key_Right:
+                               case Qt.Key_Up:
+                               case Qt.Key_Down:
+                               dataBox.editorFocus.boxIndex = dataBox.navigation.arrowDown()
+                               case Qt.Key_Backspace:
+                               deletePressedHandler();
+                               return;
+                           }
 
-        // surveyChunkView.navigationArrow(listViewIndex, boxIndex.chunkRole, event.key);
+                           // surveyChunkView.navigationArrow(listViewIndex, boxIndex.chunkRole, event.key);
 
-        // if(event.key === Qt.Key_Backspace) {
-        // }
+                           // if(event.key === Qt.Key_Backspace) {
+                           // }
 
-        if(dataValidator.validate(event.text) > 0 && event.text.length > 0) {
-            dataBox.state = 'MiddleTyping'
-            editor.openEditor()
-            GlobalShadowTextInput.textInput.text  = event.text
-            GlobalShadowTextInput.clearSelection() //GlobalShowTextInput is what's opened from editor.openEditor
-        }
-    }
+                           if(dataValidator.validate(event.text) > 0 && event.text.length > 0) {
+                               dataBox.state = 'MiddleTyping'
+                               editor.openEditor()
+                               GlobalShadowTextInput.textInput.text  = event.text
+                               GlobalShadowTextInput.clearSelection() //GlobalShowTextInput is what's opened from editor.openEditor
+                           }
+                       }
 
     QQ.Keys.onSpacePressed: {
         addNewChunk();

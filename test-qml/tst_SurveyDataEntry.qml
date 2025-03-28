@@ -438,15 +438,15 @@ MainWindowTest {
                 for(let i = 0; i < surveyView.count; i++) {
                     // console.log("i:" + i)
                     let item = surveyView.itemAtIndex(i) as DrySurveyComponent;
-                    if(item.titleVisible) {
+                    if(item.rowIndex.rowType === SurveyEditorRowIndex.TitleRow) {
                         //Skip the title
                         continue;
                     }
-                    if(!item.shotVisible) {
+                    if(item.rowIndex.rowType !== SurveyEditorRowIndex.ShotRow) {
                         continue;
                     }
 
-                    if(item.indexInChunk === 0) {
+                    if(item.rowIndex.indexInChunk === 0) {
                         //First row in the chunk, go to the next station name
                         currentItem = nextTab(currentItem, i+1, SurveyChunk.StationNameRole);
                     }
@@ -489,6 +489,14 @@ MainWindowTest {
 
                     if(nextStationOffset > 0) {
                         currentItem = nextTab(currentItem, i + nextStationOffset, SurveyChunk.StationNameRole);
+
+                        if(currentItem.dataValue.reading.value === "") {
+                            //probably at the last row, skip
+                            keyClick(16777237, 0) //Down
+
+                            // wait(100000);
+                        }
+
                     }
                 }
 
