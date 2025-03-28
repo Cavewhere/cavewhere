@@ -74,7 +74,6 @@ MainWindowTest {
             verify(firstChunk.data(SurveyChunk.ShotDistanceRole, 0).value === "10")
             waitForRendering(rootId);
 
-            wait(100000);
 
             //Compass of 0
             verify(firstChunk.data(SurveyChunk.ShotCompassRole, 0).value === "")
@@ -83,7 +82,6 @@ MainWindowTest {
             verify(firstChunk.data(SurveyChunk.ShotCompassRole, 0).value === "0")
             waitForRendering(rootId)
 
-
             //12 back compass
             verify(firstChunk.data(SurveyChunk.ShotBackCompassRole, 0).value === "")
             keyClick(49, 0) //1
@@ -91,6 +89,7 @@ MainWindowTest {
             keyClick(16777220, 0) //Return
             verify(firstChunk.data(SurveyChunk.ShotBackCompassRole, 0).value === "12")
             keyClick(16777217, 0) //Tab
+
 
             //Enter 11 for clino
             verify(firstChunk.data(SurveyChunk.ShotClinoRole, 0).value === "")
@@ -115,6 +114,7 @@ MainWindowTest {
             keyClick(50, 0) //2
             keyClick(16777217, 0) //Tab
             verify(firstChunk.data(SurveyChunk.StationLeftRole, 0).value === "0.2")
+
 
             //Right
             verify(firstChunk.data(SurveyChunk.StationRightRole, 0).value === "")
@@ -145,12 +145,14 @@ MainWindowTest {
             verify(firstChunk.data(SurveyChunk.StationUpRole, 1).value === "")
             verify(firstChunk.data(SurveyChunk.StationDownRole, 1).value === "")
 
+
             //Connect to a1
             keyClick("a")
             keyClick(49, 0) //1
             keyClick(16777217, 0) //Tab
             verify(firstChunk.data(SurveyChunk.StationNameRole, 2) === "a1")
             waitForRendering(rootId)
+
 
             //Distance of 1
             keyClick(49, 0) //1
@@ -181,8 +183,6 @@ MainWindowTest {
             keyClick(32, 0) //Space
             verify(firstChunk)
 
-            // wait(100000);
-
             //Make sure focus is on the secondChunk
             let stationBox = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->view->dataBox.7.0")
             console.log("Focus:" + rootId.Window.window.activeFocusItem)
@@ -199,12 +199,13 @@ MainWindowTest {
             let secondChunk = trip.chunk(1);
             verify(secondChunk !== null);
 
+
             //Add data
             keyClick("a")
             keyClick(49, 0) //1
             keyClick(16777217, 0) //Tab
 
-            // wait(10000)
+            console.log("Name:" + secondChunk.data(SurveyChunk.StationNameRole, 0))
             verify(secondChunk.data(SurveyChunk.StationNameRole, 0) === "a1")
 
             //Auto guess next row

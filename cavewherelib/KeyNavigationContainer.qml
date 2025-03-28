@@ -1,12 +1,14 @@
 import QtQuick 2.0
+import cavewherelib
 
 QtObject {
 
-    property NavigationItem tabPrevious: null
-    property NavigationItem tabNext: null
-    property NavigationItem arrowLeft: null
-    property NavigationItem arrowRight: null
-    property NavigationItem arrowUp: null
-    property NavigationItem arrowDown: null
+    //Called as functions
+    property var tabPrevious
+    property var tabNext
+    property var arrowLeft
+    property var arrowRight
+    property var arrowUp
+    property var arrowDown
 
 }

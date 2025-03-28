@@ -102,6 +102,9 @@ QQ.Item {
        function onCurrentIndexChanged() {
            // console.log("CurrentIndexChanged:" + dataBox.view.currentIndex)
            focus = hasEditorFocus;
+           if(focus) {
+               forceActiveFocus()
+           }
        }
     }
 
@@ -114,56 +117,56 @@ QQ.Item {
 
     function handleNextTab() {
         console.log("Next tab:" + dataBox.navigation.tabNext.boxIndex)
-        dataBox.editorFocus.boxIndex = dataBox.navigation.tabNext.boxIndex
+        dataBox.editorFocus.boxIndex = dataBox.navigation.tabNext()
     }
 
-    function handleNavigation(navProperty) {
-        if(navigation[navProperty] !== null) {
-            let item = navigation[navProperty].item;
-            dataBox.editorFocus = item.boxIndex;
+    // function handleNavigation(navProperty) {
+    //     if(navigation[navProperty] !== null) {
+    //         let item = navigation[navProperty].item;
+    //         dataBox.editorFocus = item.boxIndex;
 
 
-            // if(navigation[navProperty].indexOffset !== 0) {
-            //     view.currentIndex = listViewIndex
+    //         // if(navigation[navProperty].indexOffset !== 0) {
+    //         //     view.currentIndex = listViewIndex
 
-            //     let itemIndex = -1;
-            //     for(let childIndex in view.currentItem.children) {
-            //         if(view.currentItem.children[childIndex] === item) {
-            //             itemIndex = childIndex;
-            //             break;
-            //         }
-            //     }
+    //         //     let itemIndex = -1;
+    //         //     for(let childIndex in view.currentItem.children) {
+    //         //         if(view.currentItem.children[childIndex] === item) {
+    //         //             itemIndex = childIndex;
+    //         //             break;
+    //         //         }
+    //         //     }
 
-            //     if(itemIndex >= 0) {
-            //         let nextCurrentIndex = view.currentIndex + navigation[navProperty].indexOffset
+    //         //     if(itemIndex >= 0) {
+    //         //         let nextCurrentIndex = view.currentIndex + navigation[navProperty].indexOffset
 
-            //         //1 because title is at index 0
-            //         while(nextCurrentIndex >= 1 && nextCurrentIndex < view.count) {
-            //             // console.log("NextCurrentIndex:" + view.currentIndex + " " + nextCurrentIndex);
-            //             view.currentIndex = nextCurrentIndex;
-            //             if(view.currentItem.children[itemIndex].visible) {
-            //                 view.currentItem.children[itemIndex].forceActiveFocus()
-            //                 // editorFocus.boxIndex = view.currentItem.children[itemIndex].index
-            //                 break;
-            //             }
-            //             nextCurrentIndex = view.currentIndex + navigation[navProperty].indexOffset
-            //         }
-            //     } else {
-            //         let childrenItemStr = "";
-            //         for(let childIndex in view.currentItem.children) {
-            //             childrenItemStr += "\n\t" + view.currentItem.children[childIndex];
-            //         }
+    //         //         //1 because title is at index 0
+    //         //         while(nextCurrentIndex >= 1 && nextCurrentIndex < view.count) {
+    //         //             // console.log("NextCurrentIndex:" + view.currentIndex + " " + nextCurrentIndex);
+    //         //             view.currentIndex = nextCurrentIndex;
+    //         //             if(view.currentItem.children[itemIndex].visible) {
+    //         //                 view.currentItem.children[itemIndex].forceActiveFocus()
+    //         //                 // editorFocus.boxIndex = view.currentItem.children[itemIndex].index
+    //         //                 break;
+    //         //             }
+    //         //             nextCurrentIndex = view.currentIndex + navigation[navProperty].indexOffset
+    //         //         }
+    //         //     } else {
+    //         //         let childrenItemStr = "";
+    //         //         for(let childIndex in view.currentItem.children) {
+    //         //             childrenItemStr += "\n\t" + view.currentItem.children[childIndex];
+    //         //         }
 
-            //         throw "Couldn't find \"" + item + "\" try setting offsetIndex = 0, in list:" + childrenItemStr;
-            //     }
-            // } else {
-            //     if(item !== null) {
-            //         // editorFocus.boxIndex = index
-            //         item.forceActiveFocus()
-            //     }
-            // }
-        }
-    }
+    //         //         throw "Couldn't find \"" + item + "\" try setting offsetIndex = 0, in list:" + childrenItemStr;
+    //         //     }
+    //         // } else {
+    //         //     if(item !== null) {
+    //         //         // editorFocus.boxIndex = index
+    //         //         item.forceActiveFocus()
+    //         //     }
+    //         // }
+    //     }
+    // }
 
     function handleTab(eventKey) {
          console.log("HandleTab!")
