@@ -561,6 +561,92 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
 
             checkModelData();
 
+            SECTION("offsetBoxIndex should work correctly") {
+                trip.addNewChunk();
+                auto thirdChunk = trip.chunk(trip.chunkCount() - 1);
+
+                REQUIRE(trip.chunkCount() == 3);
+
+                auto station01 = model.index(3).data(cwSurveyEditorModel::StationNameRole).value<cwSurveyEditorBoxData>();
+                CHECK(station01.indexInChunk() == 1);
+                CHECK(station01.chunk() == newChunk);
+                CHECK(station01.rowType() == cwSurveyEditorRowIndex::StationRow);
+                CHECK(station01.chunkDataRole() == cwSurveyChunk::StationNameRole);
+
+                auto station20 = model.offsetBoxIndex(station01.boxIndex(), 4);
+                CHECK(station20.indexInChunk() == 0);
+                CHECK(station20.chunk() == thirdChunk);
+                CHECK(station20.rowType() == cwSurveyEditorRowIndex::StationRow);
+                CHECK(station20.chunkDataRole() == cwSurveyChunk::StationNameRole);
+
+                auto station02 = model.offsetBoxIndex(station01.boxIndex(), 1);
+                CHECK(station02.indexInChunk() == 2);
+                CHECK(station02.chunk() == newChunk);
+                CHECK(station02.rowType() == cwSurveyEditorRowIndex::StationRow);
+                CHECK(station02.chunkDataRole() == cwSurveyChunk::StationNameRole);
+
+
+                auto station21 = model.offsetBoxIndex(station01.boxIndex(), 5);
+                CHECK(station21.indexInChunk() == 1);
+                CHECK(station21.chunk() == thirdChunk);
+                CHECK(station21.rowType() == cwSurveyEditorRowIndex::StationRow);
+                CHECK(station21.chunkDataRole() == cwSurveyChunk::StationNameRole);
+
+                auto station10 = model.offsetBoxIndex(station01.boxIndex(), 2);
+                CHECK(station10.indexInChunk() == 0);
+                CHECK(station10.chunk() == secondChunk);
+                CHECK(station10.rowType() == cwSurveyEditorRowIndex::StationRow);
+                CHECK(station10.chunkDataRole() == cwSurveyChunk::StationNameRole);
+
+                //Out of bounds forwards
+                auto stationOutOfBounds = model.offsetBoxIndex(station01.boxIndex(), 6);
+                CHECK(stationOutOfBounds.indexInChunk() == -1);
+                CHECK(stationOutOfBounds.chunk() == nullptr);
+
+                auto stationOutOfBounds1 = model.offsetBoxIndex(station01.boxIndex(), 99);
+                CHECK(stationOutOfBounds1.indexInChunk() == -1);
+                CHECK(stationOutOfBounds1.chunk() == nullptr);
+
+                //Negative offset
+                auto station00 = model.offsetBoxIndex(station01.boxIndex(), -1);
+                CHECK(station00.indexInChunk() == 0);
+                CHECK(station00.chunk() == newChunk);
+                CHECK(station00.rowType() == cwSurveyEditorRowIndex::StationRow);
+                CHECK(station00.chunkDataRole() == cwSurveyChunk::StationNameRole);
+
+                auto stationbad = model.offsetBoxIndex(station01.boxIndex(), -2);
+                CHECK(stationbad.indexInChunk() == -1);
+                CHECK(stationbad.chunk() == nullptr);
+
+                auto station21data = model.index(13).data(cwSurveyEditorModel::StationNameRole).value<cwSurveyEditorBoxData>();
+                CHECK(station21data.indexInChunk() == 1);
+                CHECK(station21data.chunk() == thirdChunk);
+                CHECK(station21data.rowType() == cwSurveyEditorRowIndex::StationRow);
+                CHECK(station21data.chunkDataRole() == cwSurveyChunk::StationNameRole);
+
+                auto station11 = model.offsetBoxIndex(station21data.boxIndex(), -2);
+                CHECK(station11.indexInChunk() == 1);
+                CHECK(station11.chunk() == secondChunk);
+                CHECK(station11.rowType() == cwSurveyEditorRowIndex::StationRow);
+                CHECK(station11.chunkDataRole() == cwSurveyChunk::StationNameRole);
+
+                auto station00a = model.offsetBoxIndex(station21data.boxIndex(), -6);
+                CHECK(station00a.indexInChunk() == 0);
+                CHECK(station00a.chunk() == newChunk);
+                CHECK(station00a.rowType() == cwSurveyEditorRowIndex::StationRow);
+                CHECK(station00a.chunkDataRole() == cwSurveyChunk::StationNameRole);
+
+                auto station10a = model.offsetBoxIndex(station21data.boxIndex(), -3);
+                CHECK(station10a.indexInChunk() == 0);
+                CHECK(station10a.chunk() == secondChunk);
+                CHECK(station10a.rowType() == cwSurveyEditorRowIndex::StationRow);
+                CHECK(station10a.chunkDataRole() == cwSurveyChunk::StationNameRole);
+
+                //Make sure 0 offset return the same thing
+                auto station01Other = model.offsetBoxIndex(station01.boxIndex(), 0);
+                CHECK(station01.boxIndex() == station01Other);
+            }
+
             SECTION("Remove chunk") {
                 int prevRowCount = model.rowCount();
 

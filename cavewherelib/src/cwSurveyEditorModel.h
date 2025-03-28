@@ -92,6 +92,8 @@ public:
         return boxIndex(rowIndex(chunk, chunkIndex, type), dataRole);
     }
 
+    Q_INVOKABLE cwSurveyEditorBoxIndex offsetBoxIndex(const cwSurveyEditorBoxIndex& boxIndex, int offsetIndex) const;
+
 private:
     // struct ChunkIndex {
     //     cwSurveyChunk* chunk;
@@ -110,8 +112,8 @@ private:
     // QModelIndex toModelIndex(cwSurveyEditorRowIndex::RowType type, const cwSurveyChunk* chunk, int chunkIndex) const;
     QModelIndex toModelIndex(const cwSurveyEditorRowIndex& rowIndex) const;
 
-    Role toModelRole(cwSurveyChunk::DataRole chunkRole);
-    cwSurveyEditorRowIndex::RowType toRowType(cwSurveyChunk::DataRole chunkRole);
+    Role toModelRole(cwSurveyChunk::DataRole chunkRole) const;
+    cwSurveyEditorRowIndex::RowType toRowType(cwSurveyChunk::DataRole chunkRole) const;
 
 
 signals:
