@@ -344,7 +344,7 @@ cwSurveyEditorBoxIndex cwSurveyEditorModel::offsetBoxIndex(const cwSurveyEditorB
     auto size = [&boxIndex](const cwSurveyChunk* chunk){
         if(boxIndex.rowType() == cwSurveyEditorRowIndex::StationRow) {
             return chunk->stationCount();
-        }  else if(boxIndex.rowType() == cwSurveyEditorRowIndex::StationRow) {
+        }  else if(boxIndex.rowType() == cwSurveyEditorRowIndex::ShotRow) {
             return chunk->shotCount();
         }
         return -1;

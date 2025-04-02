@@ -645,6 +645,19 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
                 //Make sure 0 offset return the same thing
                 auto station01Other = model.offsetBoxIndex(station01.boxIndex(), 0);
                 CHECK(station01.boxIndex() == station01Other);
+
+                //Make sure shot offset works correctly
+                auto shot00 = model.index(2).data(cwSurveyEditorModel::ShotDistanceRole).value<cwSurveyEditorBoxData>();
+                CHECK(shot00.indexInChunk() == 0);
+                CHECK(shot00.chunk() == newChunk);
+                CHECK(shot00.rowType() == cwSurveyEditorRowIndex::ShotRow);
+                CHECK(shot00.chunkDataRole() == cwSurveyChunk::ShotDistanceRole);
+
+                auto shot01 = model.offsetBoxIndex(shot00.boxIndex(), 1);
+                CHECK(shot01.indexInChunk() == 1);
+                CHECK(shot01.chunk() == newChunk);
+                CHECK(shot01.rowType() == cwSurveyEditorRowIndex::ShotRow);
+                CHECK(shot01.chunkDataRole() == cwSurveyChunk::ShotDistanceRole);
             }
 
             SECTION("Remove chunk") {

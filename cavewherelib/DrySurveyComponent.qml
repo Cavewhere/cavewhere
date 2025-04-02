@@ -150,6 +150,12 @@ Item {
                     () => {
                         return itemId.model.boxIndex() //Null
                     }
+                navigation.arrowDown:
+                    () => {
+                        let rowIndex = stationBox.dataValue.rowIndex
+                        let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationName)
+                        return itemId.model.offsetBoxIndex(boxIndex, 1);
+                    }
 
                 // navigation.arrowUp: NavigationItem { item: stationBox1; indexOffset: -1 }
                 // navigation.arrowDown: NavigationItem { item: stationBox1; indexOffset: 1 }
@@ -217,11 +223,7 @@ Item {
                     }
 
                 navigation.arrowLeft: navigation.tabPrevious
-                    // () => {
-                    //     let rowIndex = leftBox.dataValue.rowIndex
-                    //     let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationNameRole)
-                    //     return itemId.model.offsetBoxIndex(boxIndex, 0);
-                    // }
+
 
                 dataValue: stationLeft
                 // visible: itemId.stationVisible
@@ -449,6 +451,12 @@ Item {
                         let rowIndex = shotDistanceDataBox.dataValue.rowIndex
                         let boxIndex = itemId.model.boxIndex(rowIndex.chunk, rowIndex.indexInChunk + 1, SurveyEditorRowIndex.StationRow, SurveyChunk.StationNameRole)
                         return itemId.model.offsetBoxIndex(boxIndex, 0);
+                    }
+                navigation.arrowDown:
+                    () => {
+                        let boxIndex = shotDistanceDataBox.dataValue.boxIndex
+                        console.log("BoxIndex down:" + boxIndex + " " + itemId.model.offsetBoxIndex(boxIndex, 1));
+                        return itemId.model.offsetBoxIndex(boxIndex, 1);
                     }
 
 
