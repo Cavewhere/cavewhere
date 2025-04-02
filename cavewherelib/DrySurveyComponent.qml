@@ -146,14 +146,14 @@ Item {
                         return itemId.model.offsetBoxIndex(boxIndex, 0);
                     }
 
+                navigation.arrowLeft:
+                    () => {
+                        return itemId.model.boxIndex() //Null
+                    }
+
                 // navigation.arrowUp: NavigationItem { item: stationBox1; indexOffset: -1 }
                 // navigation.arrowDown: NavigationItem { item: stationBox1; indexOffset: 1 }
 
-                navigation.arrowDown: () => {
-                                          let rowIndex = stationBox.dataValue.rowIndex
-                                          let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationName)
-                                          return itemId.model.offsetBoxIndex(boxIndex, 1);
-                                      }
 
                 dataValue: itemId.stationName
                 // visible: stationVisible
@@ -216,6 +216,13 @@ Item {
                         return itemId.model.offsetBoxIndex(boxIndex, 0);
                     }
 
+                navigation.arrowLeft: navigation.tabPrevious
+                    // () => {
+                    //     let rowIndex = leftBox.dataValue.rowIndex
+                    //     let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationNameRole)
+                    //     return itemId.model.offsetBoxIndex(boxIndex, 0);
+                    // }
+
                 dataValue: stationLeft
                 // visible: itemId.stationVisible
                 listViewIndex: itemId.index
@@ -264,6 +271,12 @@ Item {
                         let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationUpRole)
                         return itemId.model.offsetBoxIndex(boxIndex, 0);
                     }
+                navigation.arrowLeft:
+                    () => {
+                        let rowIndex = leftBox.dataValue.rowIndex
+                        let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationLeftRole)
+                        return itemId.model.offsetBoxIndex(boxIndex, 0);
+                    }
 
 
                 dataValue: stationRight
@@ -307,6 +320,12 @@ Item {
                     () => {
                         let rowIndex = upBox.dataValue.rowIndex
                         let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationDownRole)
+                        return itemId.model.offsetBoxIndex(boxIndex, 0);
+                    }
+                navigation.arrowLeft:
+                    () => {
+                        let rowIndex = leftBox.dataValue.rowIndex
+                        let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationRightRole)
                         return itemId.model.offsetBoxIndex(boxIndex, 0);
                     }
 
@@ -355,6 +374,12 @@ Item {
                 navigation.arrowRight:
                     () => {
                         return itemId.model.boxIndex() //Null
+                    }
+                navigation.arrowLeft:
+                    () => {
+                        let rowIndex = leftBox.dataValue.rowIndex
+                        let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationUpRole)
+                        return itemId.model.offsetBoxIndex(boxIndex, 0);
                     }
 
 
@@ -419,6 +444,12 @@ Item {
                         return itemId.model.offsetBoxIndex(boxIndex, 0);
                     }
                 navigation.arrowRight: navigation.tabNext
+                navigation.arrowLeft:
+                    () => {
+                        let rowIndex = shotDistanceDataBox.dataValue.rowIndex
+                        let boxIndex = itemId.model.boxIndex(rowIndex.chunk, rowIndex.indexInChunk + 1, SurveyEditorRowIndex.StationRow, SurveyChunk.StationNameRole)
+                        return itemId.model.offsetBoxIndex(boxIndex, 0);
+                    }
 
 
 
@@ -486,7 +517,7 @@ Item {
                         let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotClinoRole)
                         return itemId.model.offsetBoxIndex(boxIndex, 0);
                     }
-
+                navigation.arrowLeft: navigation.tabPrevious
 
                 visible: itemId.calibration.frontSights
                 dataValue: shotCompass
@@ -540,8 +571,14 @@ Item {
 
                 navigation.arrowRight:
                     () => {
-                        let rowIndex = compassFrontReadBox.dataValue.rowIndex
+                        let rowIndex = compassBackReadBox.dataValue.rowIndex
                         let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotBackClinoRole)
+                        return itemId.model.offsetBoxIndex(boxIndex, 0);
+                    }
+                navigation.arrowLeft:
+                    () => {
+                        let rowIndex = compassBackReadBox.dataValue.rowIndex
+                        let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotDistanceRole)
                         return itemId.model.offsetBoxIndex(boxIndex, 0);
                     }
 
@@ -601,6 +638,12 @@ Item {
                         let boxIndex = itemId.model.boxIndex(rowIndex.chunk, rowIndex.indexInChunk + 1, SurveyEditorRowIndex.StationRow, SurveyChunk.StationLeftRole)
                         return itemId.model.offsetBoxIndex(boxIndex, 0);
                     }
+                navigation.arrowLeft:
+                    () => {
+                        let rowIndex = clinoFrontReadBox.dataValue.rowIndex
+                        let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotCompassRole)
+                        return itemId.model.offsetBoxIndex(boxIndex, 0);
+                    }
 
                 visible: itemId.calibration.frontSights
                 dataValue: shotClino
@@ -651,7 +694,12 @@ Item {
 
 
                 navigation.arrowRight: clinoFrontReadBox.navigation.arrowRight
-
+                navigation.arrowLeft:
+                    () => {
+                        let rowIndex = clinoFrontReadBox.dataValue.rowIndex
+                        let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotBackCompassRole)
+                        return itemId.model.offsetBoxIndex(boxIndex, 0);
+                    }
 
                 dataValue: shotBackClino
                 listViewIndex: itemId.index

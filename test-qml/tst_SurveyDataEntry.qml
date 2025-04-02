@@ -468,6 +468,9 @@ MainWindowTest {
 
             // wait(1000000)
 
+            let frontsight = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->frontSightCalibrationEditor->checkBox")
+            let backsight = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->backSightCalibrationEditor->checkBox")
+
             function rightArrowOnFullRow(currentItem, rowIndex) {
                 let shotOffset = rowIndex === 1 ? 1 : -1
                 let lrudOffset = rowIndex === 1 ? 2 : 0
@@ -497,7 +500,8 @@ MainWindowTest {
 
             function leftArrowOnFullRow(currentItem, rowIndex) {
                 let shotOffset = rowIndex === 1 ? 1 : -1
-                let lrudOffset = rowIndex === 1 ? 2 : 0
+                let lrudOffset = 0; //rowIndex === 1 ? 2 : 0
+                let stationOffset = rowIndex === 1 ? 2 : 0
 
                 currentItem = leftArrow(currentItem, rowIndex+lrudOffset, SurveyChunk.StationUpRole);
                 currentItem = leftArrow(currentItem, rowIndex+lrudOffset, SurveyChunk.StationRightRole);
@@ -515,14 +519,9 @@ MainWindowTest {
                 }
                 currentItem = leftArrow(currentItem, rowIndex+shotOffset, SurveyChunk.ShotDistanceRole);
 
-                currentItem = leftArrow(currentItem, rowIndex+lrudOffset, SurveyChunk.StationNameRole);
-
                 //Make sure we can't continue going
-                currentItem = leftArrow(null, rowIndex+lrudOffset, SurveyChunk.StationNameRole);
+                currentItem = leftArrow(null, rowIndex+stationOffset, SurveyChunk.StationNameRole);
             }
-
-            let frontsight = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->frontSightCalibrationEditor->checkBox")
-            let backsight = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->backSightCalibrationEditor->checkBox")
 
             function testRow(row, column, direction) {
                 let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view");
@@ -565,24 +564,23 @@ MainWindowTest {
 
             //--- Test the right arrow
             //Test the first row
-            // testRow(1, 0, rightArrowOnFullRow)
+            testRow(1, 0, rightArrowOnFullRow)
 
-            // //Test a middle row
-            // testRow(5, 0, rightArrowOnFullRow)
+            //Test a middle row
+            testRow(5, 0, rightArrowOnFullRow)
 
-            // //Test last row
-            // testRow(9, 0, rightArrowOnFullRow)
+            //Test last row
+            testRow(9, 0, rightArrowOnFullRow)
 
             //--- Test the left arrow
             //Test the first row
-            // wait(100000);
             testRow(1, 4, leftArrowOnFullRow)
 
             //Test a middle row
-            // testRow(5, 0, leftArrowOnFullRow)
+            testRow(5, 4, leftArrowOnFullRow)
 
             //Test last row
-            // testRow(9, 0, leftArrowOnFullRow)
+            testRow(9, 4, leftArrowOnFullRow)
 
 
         }
