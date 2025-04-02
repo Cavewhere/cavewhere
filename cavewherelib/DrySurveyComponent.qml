@@ -223,6 +223,10 @@ Item {
                     }
 
                 navigation.arrowLeft: navigation.tabPrevious
+                navigation.arrowDown:
+                    () => {
+                        return itemId.model.offsetBoxIndex(leftBox.dataValue.boxIndex, 1);
+                    }
 
 
                 dataValue: stationLeft
@@ -279,6 +283,10 @@ Item {
                         let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationLeftRole)
                         return itemId.model.offsetBoxIndex(boxIndex, 0);
                     }
+                navigation.arrowDown:
+                    () => {
+                        return itemId.model.offsetBoxIndex(rightBox.dataValue.boxIndex, 1);
+                    }
 
 
                 dataValue: stationRight
@@ -329,6 +337,10 @@ Item {
                         let rowIndex = leftBox.dataValue.rowIndex
                         let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationRightRole)
                         return itemId.model.offsetBoxIndex(boxIndex, 0);
+                    }
+                navigation.arrowDown:
+                    () => {
+                        return itemId.model.offsetBoxIndex(upBox.dataValue.boxIndex, 1);
                     }
 
 
@@ -382,6 +394,10 @@ Item {
                         let rowIndex = leftBox.dataValue.rowIndex
                         let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationUpRole)
                         return itemId.model.offsetBoxIndex(boxIndex, 0);
+                    }
+                navigation.arrowDown:
+                    () => {
+                        return itemId.model.offsetBoxIndex(downBox.dataValue.boxIndex, 1);
                     }
 
 
@@ -454,9 +470,7 @@ Item {
                     }
                 navigation.arrowDown:
                     () => {
-                        let boxIndex = shotDistanceDataBox.dataValue.boxIndex
-                        console.log("BoxIndex down:" + boxIndex + " " + itemId.model.offsetBoxIndex(boxIndex, 1));
-                        return itemId.model.offsetBoxIndex(boxIndex, 1);
+                        return itemId.model.offsetBoxIndex(shotDistanceDataBox.dataValue.boxIndex, 1);
                     }
 
 

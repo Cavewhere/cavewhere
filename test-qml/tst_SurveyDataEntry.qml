@@ -555,7 +555,7 @@ MainWindowTest {
                 surveyView.positionViewAtBeginning()
             }
 
-            function testRow(row, column, direction) {
+            function testRow(row, column, direction, testBacksights = true) {
                 let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view");
                 view.positionViewAtIndex(row, ListView.Contain)
 
@@ -570,30 +570,32 @@ MainWindowTest {
 
                 direction(cell, row, column);
 
-                // ----- Enable the backsights and frontsights ----
-                mouseClick(backsight);
+                if(testBacksights) {
+                    // ----- Enable the backsights and frontsights ----
+                    mouseClick(backsight);
 
-                verify(frontsight.checked === true)
-                verify(backsight.checked === true)
+                    verify(frontsight.checked === true)
+                    verify(backsight.checked === true)
 
-                mouseClick(cell)
-                verify(cell.focus === true);
+                    mouseClick(cell)
+                    verify(cell.focus === true);
 
-                direction(cell, row, column);
+                    direction(cell, row, column);
 
-                // ----- Enable the backsights only
-                mouseClick(frontsight);
+                    // ----- Enable the backsights only
+                    mouseClick(frontsight);
 
-                verify(frontsight.checked === false)
-                verify(backsight.checked === true)
+                    verify(frontsight.checked === false)
+                    verify(backsight.checked === true)
 
-                mouseClick(cell)
-                verify(cell.focus === true);
+                    mouseClick(cell)
+                    verify(cell.focus === true);
 
-                direction(cell, row, column);
+                    direction(cell, row, column);
 
-                mouseClick(frontsight);
-                mouseClick(backsight);
+                    mouseClick(frontsight);
+                    mouseClick(backsight);
+                }
             }
 
             // //--- Test the right arrow
@@ -617,10 +619,14 @@ MainWindowTest {
             // testRow(9, SurveyChunk.StationDownRole, leftArrowOnFullRow)
 
             //Test Down arrow
-            testRow(1, SurveyChunk.StationNameRole, downArrowOnFullColumn)
-            // wait(1000000);
-            testRow(2, SurveyChunk.ShotDistanceRole, downArrowOnFullColumn)
+            let testBacksights = false;
+            testRow(1, SurveyChunk.StationNameRole, downArrowOnFullColumn, testBacksights)
+            testRow(2, SurveyChunk.ShotDistanceRole, downArrowOnFullColumn, testBacksights)
 
+            testRow(1, SurveyChunk.StationLeftRole, downArrowOnFullColumn, testBacksights)
+            testRow(1, SurveyChunk.StationRightRole, downArrowOnFullColumn, testBacksights)
+            testRow(1, SurveyChunk.StationUpRole, downArrowOnFullColumn, testBacksights)
+            testRow(1, SurveyChunk.StationDownRole, downArrowOnFullColumn, testBacksights)
 
         }
 
