@@ -58,23 +58,6 @@ QQ.Item {
         visible: true
         clip: true
 
-        //        Flickable {
-        //            id: flickableAreaId
-
-        //            contentHeight: column.height
-        //            contentWidth: Math.max(spaceAddBar.width + spaceAddBar.x, view.contentWidth + 2) + 20.0
-
-        //            function ensureVisible(r){
-        //                var contentY = flickableAreaId.contentY;
-        //                if (flickableAreaId.contentY >= r.y) {
-        //                    contentY = r.y;
-        //                } else if (flickableAreaId.contentY+height <= r.y+r.height) {
-        //                    contentY = r.y+r.height-height;
-        //                }
-
-        //                flickableAreaId.contentY = contentY;
-        //            }
-
         QQ.ListView {
             id: viewId
             objectName: "view"
@@ -114,11 +97,13 @@ QQ.Item {
             //     console.log("Current index changed:" + currentIndex)
             // }
 
+            //Prevents default keyboard interaction
+            keyNavigationEnabled: false
+
             header: ColumnLayout {
                 id: column
                 spacing: 5
                 width: scrollAreaId.width - 30
-
 
                 ColumnLayout {
                     Layout.fillWidth: true
@@ -230,7 +215,7 @@ QQ.Item {
                 calibration: currentCalibration
                 errorButtonGroup: errorButtonGroupId
                 surveyChunkTrimmer: surveyChunkTrimmerId
-                view: viewId
+                // view: viewId
                 model: editorModel
                 stationValidator: stationValidatorId
                 distanceValidator: distanceValidatorId
@@ -240,20 +225,6 @@ QQ.Item {
                 columnTemplate: titleTemplate
             }
 
-            // section.property: "chunkId"
-            // section.delegate: SurveyEditorColumnTitles {
-            //     visible: {
-            //         console.log("Section:" + section + " " + section.length);
-            //         return section.length !== 0
-            //     }
-
-            //     onVisibleChanged: {
-            //         console.log("Section visiblity" + visible)
-            //         if(section.length === 0) {
-            //             visible = false;
-            //         }
-            //     }
-            // }
 
             footer: ColumnLayout {
                 width: scrollAreaId.width - 30

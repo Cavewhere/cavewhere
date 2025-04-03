@@ -14,7 +14,8 @@ QtObject {
     // property int rowType: -1
 
     function setIndex(newBoxIndex) {
-        if(newBoxIndex.chunk && newBoxIndex.indexInChunk >= 0) {
+        if(newBoxIndex.chunk && newBoxIndex.indexInChunk >= 0)
+        {
             boxIndex = newBoxIndex
         }
     }

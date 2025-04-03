@@ -66,6 +66,14 @@ public:
 
     // Equality operator for QML
     bool operator==(const cwSurveyEditorBoxIndex &rhs) const {
+
+        // qDebug() << "Equals:" << (m_rowIndex == rhs.m_rowIndex &&
+        //                           m_chunkDataRole == rhs.m_chunkDataRole)
+        //          << "rowIndex:" << m_rowIndex.rowType() << rhs.m_rowIndex.rowType()
+        //          << "chunk:" << m_rowIndex.chunk() << rhs.m_rowIndex.chunk()
+        //          << "indexInChunk:" << m_rowIndex.indexInChunk() << rhs.m_rowIndex.indexInChunk()
+        //          << "role:" << m_chunkDataRole << rhs.m_chunkDataRole;
+
         return m_rowIndex == rhs.m_rowIndex &&
                m_chunkDataRole == rhs.m_chunkDataRole;
     }

@@ -22,7 +22,7 @@ Item {
 
     // height: stationVisible ? (lastElement ? 75 : 50 - 1) : titleColumnId.height + titleOffset
 
-    readonly property bool lastElement: index == view.count - 1
+    readonly property bool lastElement: index == ListView.view.count - 1
     // readonly property bool skippedElement: stationName == undefined
     property TripCalibration calibration: null
     property bool canEditTripCalibration: false
@@ -52,7 +52,7 @@ Item {
     required property SurveyEditorColumnTitles columnTemplate
     // readonly property bool stationVisible: itemId.rowIndex.rowType === SurveyEditorModel.StationRow
     // readonly property bool shotVisible: itemId.rowIndex.rowType === SurveyEditorModel.ShotRow
-    required property ListView view;
+    // required property ListView view
     required property SurveyEditorModel model;
 
     //Validators
@@ -172,7 +172,7 @@ Item {
                 // surveyChunk: itemId.chunk
                 // rowType: itemId.rowType
                 // dataRole: SurveyChunk.StationNameRole
-                view: itemId.view
+                view: itemId.ListView.view
                 dataValidator: stationValidator
                 // focus: hasEditorFocus
                 editorFocus: itemId.editorFocus
@@ -244,7 +244,7 @@ Item {
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
                 // surveyChunk: itemId.chunk
                 // dataRole: SurveyChunk.StationLeftRole
-                view: itemId.view
+                view: itemId.ListView.view
                 dataValidator: distanceValidator
                 editorFocus: itemId.editorFocus
             }
@@ -299,7 +299,7 @@ Item {
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
                 // surveyChunk: itemId.chunk
                 // dataRole: SurveyChunk.StationRightRole
-                view: itemId.view
+                view: itemId.ListView.view
                 dataValidator: distanceValidator
                 editorFocus: itemId.editorFocus
             }
@@ -354,7 +354,7 @@ Item {
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
                 // surveyChunk: itemId.chunk
                 // dataRole: SurveyChunk.StationUpRole
-                view: itemId.view
+                view: itemId.ListView.view
                 dataValidator: distanceValidator
                 editorFocus: itemId.editorFocus
             }
@@ -411,7 +411,7 @@ Item {
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
                 // surveyChunk: itemId.chunk
                 // dataRole: SurveyChunk.StationDownRole
-                view: itemId.view
+                view: itemId.ListView.view
                 dataValidator: distanceValidator
                 editorFocus: itemId.editorFocus
             }
@@ -489,7 +489,7 @@ Item {
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
                 // surveyChunk: itemId.chunk
                 // dataRole: SurveyChunk.ShotDistanceRole
-                view: itemId.view
+                view: itemId.ListView.view
                 dataValidator: distanceValidator
                 editorFocus: itemId.editorFocus
                 distanceIncluded: dataValue.chunk.data(SurveyChunk.ShotDistanceIncludedRole, dataValue.indexInChunk)
@@ -540,6 +540,18 @@ Item {
                         return itemId.model.offsetBoxIndex(boxIndex, 0);
                     }
                 navigation.arrowLeft: navigation.tabPrevious
+                navigation.arrowDown:
+                    () => {
+                        let rowIndex = compassFrontReadBox.dataValue.rowIndex
+                        if(itemId.calibration.backSights) {
+                            let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotBackCompassRole)
+                            console.log("BoxIndex:" + boxIndex);
+                            return itemId.model.offsetBoxIndex(boxIndex, 0);
+                        } else {
+                            let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotCompassRole)
+                            return itemId.model.offsetBoxIndex(boxIndex, 1);
+                        }
+                    }
 
                 visible: itemId.calibration.frontSights
                 dataValue: shotCompass
@@ -551,7 +563,7 @@ Item {
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
                 // surveyChunk: itemId.chunk
                 // dataRole: SurveyChunk.ShotCompassRole
-                view: itemId.view
+                view: itemId.ListView.view
                 readingText: "fs"
                 dataValidator: compassValidator
                 editorFocus: itemId.editorFocus
@@ -603,6 +615,18 @@ Item {
                         let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotDistanceRole)
                         return itemId.model.offsetBoxIndex(boxIndex, 0);
                     }
+                navigation.arrowDown:
+                    () => {
+                        let rowIndex = compassBackReadBox.dataValue.rowIndex
+                        if(itemId.calibration.frontSights) {
+                            let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotCompassRole)
+                            // console.log("Offset:" + itemId.model.offsetBoxIndex(boxIndex, 1))
+                            return itemId.model.offsetBoxIndex(boxIndex, 1);
+                        } else {
+                            let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotBackCompassRole)
+                            return itemId.model.offsetBoxIndex(boxIndex, 1);
+                        }
+                    }
 
                 visible: itemId.calibration.backSights
                 dataValue: shotBackCompass
@@ -614,7 +638,7 @@ Item {
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
                 // surveyChunk: itemId.chunk
                 // dataRole: SurveyChunk.ShotBackCompassRole
-                view: itemId.view
+                view: itemId.ListView.view
                 readingText: "bs"
                 dataValidator: compassValidator
                 editorFocus: itemId.editorFocus
@@ -677,7 +701,7 @@ Item {
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
                 // surveyChunk: itemId.chunk
                 // dataRole: SurveyChunk.ShotClinoRole
-                view: itemId.view
+                view: itemId.ListView.view
                 readingText: "fs"
                 dataValidator: clinoValidator
                 editorFocus: itemId.editorFocus
@@ -732,7 +756,7 @@ Item {
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
                 // surveyChunk: itemId.chunk
                 // dataRole: SurveyChunk.ShotBackClinoRole
-                view: itemId.view
+                view: itemId.ListView.view
                 readingText: "bs"
                 dataValidator: clinoValidator
                 editorFocus: itemId.editorFocus

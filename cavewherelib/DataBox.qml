@@ -40,7 +40,7 @@ QQ.Item {
     //For changing the focus to other data boxs
     required property SurveyEditorFocus editorFocus
 
-    readonly property bool hasEditorFocus: {
+    readonly property bool hasEditorFocus: shouldHaveFocus()
         // if(editorFocus) {
             // if(editorFocus.boxIndex.chunk === dataValue.chunk
             //         && editorFocus.boxIndex.rowType === dataValue.rowType
@@ -54,14 +54,15 @@ QQ.Item {
                 //                                  && editorFocus.boxIndex.indexInChunk === dataValue.indexInChunk
                 //                                  && editorFocus.boxIndex.chunkDataRole === dataValue.chunkDataRole))
             // }
-            return editorFocus.boxIndex.chunk === dataValue.chunk
-                    && editorFocus.boxIndex.rowType === dataValue.rowType
-                    && editorFocus.boxIndex.indexInChunk === dataValue.indexInChunk
-                    && editorFocus.boxIndex.chunkDataRole === dataValue.chunkDataRole
+            // return editorFocus.boxIndex === dataValue.boxIndex
+        // return editorFocus.boxIndex.chunk === dataValue.chunk
+            //         && editorFocus.boxIndex.rowType === dataValue.rowType
+            //         && editorFocus.boxIndex.indexInChunk === dataValue.indexInChunk
+            //         && editorFocus.boxIndex.chunkDataRole === dataValue.chunkDataRole
         // } else {
         //     return false;
         // }
-    }
+    // }
 
     property GlobalShadowTextInput _globalShadowTextInput: GlobalShadowTextInput
     property GlobalTextInputHelper _globalTextInput: GlobalShadowTextInput.textInput
@@ -87,11 +88,12 @@ QQ.Item {
     }
 
     onHasEditorFocusChanged: {
-        // console.log("HasFocusChanged!" + hasEditorFocus)
         focus = hasEditorFocus
         if(focus) {
+            // console.log("HasFocusChanged!" + hasEditorFocus + " " + dataValue.boxIndex + " " + listViewIndex)
             view.currentIndex = listViewIndex
             view.positionViewAtIndex(listViewIndex + 1, QQ.ListView.Contain)
+            // view.positionViewAtIndex(listViewIndex, QQ.ListView.Contain)
             forceActiveFocus()
         }
     }
@@ -102,12 +104,19 @@ QQ.Item {
     QQ.Connections {
        target: dataBox.view
        function onCurrentIndexChanged() {
-           // console.log("CurrentIndexChanged:" + dataBox.view.currentIndex)
-           focus = hasEditorFocus;
-           if(focus) {
-               forceActiveFocus()
+           dataBox.focus = shouldHaveFocus(); //We need to use this instead of property, because property could be out of data, and cause binding loop
+           if(dataBox.focus) {
+               // console.log("CurrentIndexChanged:" + dataBox.view.currentIndex + " " + editorFocus.boxIndex + dataBox.dataValue.boxIndex
+               //             + " hasfocus:" + dataBox.hasEditorFocus
+               //             + " correct value:" + (editorFocus.boxIndex === dataBox.dataValue.boxIndex)
+               //             + " shouldHaveFocus:" + shouldHaveFocus())
+               dataBox.forceActiveFocus()
            }
        }
+    }
+
+    function shouldHaveFocus() {
+        return editorFocus.boxIndex === dataValue.boxIndex
     }
 
     function deletePressedHandler() {
@@ -310,15 +319,19 @@ QQ.Item {
                            switch(event.key) {
                                case Qt.Key_Left:
                                dataBox.editorFocus.setIndex(dataBox.navigation.arrowLeft())
+                               event.accepted = true
                                break;
                                case Qt.Key_Right:
                                dataBox.editorFocus.setIndex(dataBox.navigation.arrowRight())
+                               event.accepted = true
                                break;
                                case Qt.Key_Up:
                                dataBox.editorFocus.setIndex(dataBox.navigation.arrowUp())
+                               event.accepted = true
                                break;
                                case Qt.Key_Down:
                                dataBox.editorFocus.setIndex(dataBox.navigation.arrowDown())
+                               event.accepted = true
                                break;
                                case Qt.Key_Backspace:
                                // deletePressedHandler();
@@ -336,6 +349,7 @@ QQ.Item {
                                GlobalShadowTextInput.textInput.text  = event.text
                                GlobalShadowTextInput.clearSelection() //GlobalShowTextInput is what's opened from editor.openEditor
                            }
+
                        }
 
     QQ.Keys.onSpacePressed: {
@@ -362,7 +376,9 @@ QQ.Item {
             //            surveyChunkView.ensureDataBoxVisible(listViewIndex, boxIndex.chunkRole)
             // console.log("Focus change:" + focus + " " + index.chunk + " " + this)
             surveyChunkTrimmer.chunk = dataValue.chunk;
-            editorFocus.boxIndex = dataValue.boxIndex
+            // console.log("Focus Change:" + editorFocus.boxIndex + " " + dataValue.boxIndex)
+
+            editorFocus.setIndex(dataValue.boxIndex)
         }
     }
 
