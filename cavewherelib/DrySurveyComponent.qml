@@ -156,6 +156,12 @@ Item {
                         let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationName)
                         return itemId.model.offsetBoxIndex(boxIndex, 1);
                     }
+                navigation.arrowUp:
+                    () => {
+                        let rowIndex = stationBox.dataValue.rowIndex
+                        let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationName)
+                        return itemId.model.offsetBoxIndex(boxIndex, -1);
+                    }
 
                 // navigation.arrowUp: NavigationItem { item: stationBox1; indexOffset: -1 }
                 // navigation.arrowDown: NavigationItem { item: stationBox1; indexOffset: 1 }
