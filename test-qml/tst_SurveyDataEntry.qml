@@ -524,7 +524,6 @@ MainWindowTest {
             }
 
             function downArrowOnFullColumn(currentItem, rowIndex, columnIndex) {
-                // wait(100000)
                 let surveyView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
 
                 for(let i = rowIndex + 2; i < surveyView.count; i += 2) {
@@ -533,7 +532,7 @@ MainWindowTest {
                     let shotCount = chunk.shotCount();
                     let lastStationIndex = stationCount - 1
                     let lastShotIndex = shotCount - 1;
-                    console.log("i:" + i + " " + surveyView.count + " " + currentItem.dataValue.indexInChunk + " " + lastStationIndex + " " + (currentItem.dataValue.indexInChunk === lastStationIndex))
+                    //console.log("i:" + i + " " + surveyView.count + " " + currentItem.dataValue.indexInChunk + " " + lastStationIndex + " " + (currentItem.dataValue.indexInChunk === lastStationIndex))
                     if(currentItem.dataValue.rowType === SurveyEditorRowIndex.StationRow
                             && currentItem.dataValue.indexInChunk === lastStationIndex)
                     {
@@ -546,7 +545,8 @@ MainWindowTest {
                     } else if(currentItem.dataValue.rowType === SurveyEditorRowIndex.ShotRow) {
                         if(columnIndex === SurveyChunk.ShotCompassRole && backsight.checked && frontsight.checked) {
                             currentItem = downArrow(currentItem, i-2, SurveyChunk.ShotBackCompassRole)
-                            // console.log("back compass down:" + i);
+                        } else if(columnIndex === SurveyChunk.ShotClinoRole && backsight.checked && frontsight.checked) {
+                            currentItem = downArrow(currentItem, i-2, SurveyChunk.ShotBackClinoRole)
                         }
 
                         if(currentItem.dataValue.indexInChunk === lastShotIndex) {
@@ -554,20 +554,9 @@ MainWindowTest {
                                 break;
                             }
                             currentItem = null;
-                            // wait(100000)
-                            // i -= 2;
-                        } else {
-                            // if(columnIndex === SurveyChunk.ShotDistanceRole) {
-                            //     currentItem = downArrow(currentItem, i, SurveyChunk.ShotDistanceRole)
-                            // } else if(columnIndex === SurveyChunk.ShotCompassRole && backsight.checked && frontsight.checked) {
-                            //     // wait(100000)
-                            // } else if(columnIndex === SurveyChunk.ShotClinoRole && backsight.checked && frontsight.checked) {
-                            //     currentItem = downArrow(currentItem, i, SurveyChunk.ShotBackClinoRole)
-                            // }
                         }
                     }
 
-                    console.log("down:" + i);
                     currentItem = downArrow(currentItem, i, columnIndex);
                 }
 
@@ -653,7 +642,7 @@ MainWindowTest {
             testRow(1, SurveyChunk.StationNameRole, downArrowOnFullColumn, testBacksights)
             testRow(2, SurveyChunk.ShotDistanceRole, downArrowOnFullColumn, testBacksights)
             testRow(2, SurveyChunk.ShotCompassRole, downArrowOnFullColumn, true)
-            // testRow(2, SurveyChunk.ShotClinoRole, downArrowOnFullColumn, true)
+            testRow(2, SurveyChunk.ShotClinoRole, downArrowOnFullColumn, true)
 
             testRow(1, SurveyChunk.StationLeftRole, downArrowOnFullColumn, testBacksights)
             testRow(1, SurveyChunk.StationRightRole, downArrowOnFullColumn, testBacksights)

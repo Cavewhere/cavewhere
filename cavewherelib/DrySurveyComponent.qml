@@ -690,6 +690,18 @@ Item {
                         let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotCompassRole)
                         return itemId.model.offsetBoxIndex(boxIndex, 0);
                     }
+                navigation.arrowDown:
+                    () => {
+                        let rowIndex = clinoFrontReadBox.dataValue.rowIndex
+                        if(itemId.calibration.backSights) {
+                            let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotBackClinoRole)
+                            console.log("BoxIndex:" + boxIndex);
+                            return itemId.model.offsetBoxIndex(boxIndex, 0);
+                        } else {
+                            let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotClinoRole)
+                            return itemId.model.offsetBoxIndex(boxIndex, 1);
+                        }
+                    }
 
                 visible: itemId.calibration.frontSights
                 dataValue: shotClino
@@ -745,6 +757,18 @@ Item {
                         let rowIndex = clinoFrontReadBox.dataValue.rowIndex
                         let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotBackCompassRole)
                         return itemId.model.offsetBoxIndex(boxIndex, 0);
+                    }
+                navigation.arrowDown:
+                    () => {
+                        let rowIndex = clinoFrontReadBox.dataValue.rowIndex
+                        if(itemId.calibration.frontSights) {
+                            let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotClinoRole)
+                            // console.log("Offset:" + itemId.model.offsetBoxIndex(boxIndex, 1))
+                            return itemId.model.offsetBoxIndex(boxIndex, 1);
+                        } else {
+                            let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotBackClinoRole)
+                            return itemId.model.offsetBoxIndex(boxIndex, 1);
+                        }
                     }
 
                 dataValue: shotBackClino
