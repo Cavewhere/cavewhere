@@ -233,6 +233,10 @@ Item {
                     () => {
                         return itemId.model.offsetBoxIndex(leftBox.dataValue.boxIndex, 1);
                     }
+                navigation.arrowUp:
+                    () => {
+                        return itemId.model.offsetBoxIndex(leftBox.dataValue.boxIndex, -1);
+                    }
 
 
                 dataValue: stationLeft
@@ -293,6 +297,10 @@ Item {
                     () => {
                         return itemId.model.offsetBoxIndex(rightBox.dataValue.boxIndex, 1);
                     }
+                navigation.arrowUp:
+                    () => {
+                        return itemId.model.offsetBoxIndex(rightBox.dataValue.boxIndex, -1);
+                    }
 
 
                 dataValue: stationRight
@@ -349,6 +357,12 @@ Item {
                         return itemId.model.offsetBoxIndex(upBox.dataValue.boxIndex, 1);
                     }
 
+                navigation.arrowUp:
+                    () => {
+                        return itemId.model.offsetBoxIndex(upBox.dataValue.boxIndex, -1);
+                    }
+
+
 
                 dataValue:  stationUp
                 // visible: itemId.stationVisible
@@ -404,6 +418,10 @@ Item {
                 navigation.arrowDown:
                     () => {
                         return itemId.model.offsetBoxIndex(downBox.dataValue.boxIndex, 1);
+                    }
+                navigation.arrowUp:
+                    () => {
+                        return itemId.model.offsetBoxIndex(downBox.dataValue.boxIndex, -1);
                     }
 
 
@@ -477,6 +495,10 @@ Item {
                 navigation.arrowDown:
                     () => {
                         return itemId.model.offsetBoxIndex(shotDistanceDataBox.dataValue.boxIndex, 1);
+                    }
+                navigation.arrowUp:
+                    () => {
+                        return itemId.model.offsetBoxIndex(shotDistanceDataBox.dataValue.boxIndex, -1);
                     }
 
 
