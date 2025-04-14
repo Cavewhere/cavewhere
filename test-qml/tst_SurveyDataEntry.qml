@@ -201,6 +201,7 @@ MainWindowTest {
             let secondChunk = trip.chunk(1);
             verify(secondChunk !== null);
 
+            wait(50)
 
             //Add data
             keyClick("a")
@@ -261,7 +262,7 @@ MainWindowTest {
             }
 
             keyClick(key, modifier) //Tab
-            // wait(100);
+            // wait(25);
             // waitForRendering(rootId)
 
             let itemName = "rootId->tripPage->view->dataBox." + index + "." + nextRole
@@ -791,154 +792,369 @@ MainWindowTest {
             let surveyView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
             let currentItem = station1;
 
-            function runTabTest(frontsights, backsights) {
-                //Go forward
-                for(let i = 0; i < surveyView.count; i++) {
-                    // console.log("tab i:" + i)
-                    let item = surveyView.itemAtIndex(i) as DrySurveyComponent;
-                    if(item.rowIndex.rowType === SurveyEditorRowIndex.TitleRow) {
-                        //Skip the title
-                        continue;
-                    }
-                    if(item.rowIndex.rowType !== SurveyEditorRowIndex.ShotRow) {
-                        continue;
-                    }
+            function tabTestSingleSight(frontsight) {
 
-                    if(item.rowIndex.indexInChunk === 0) {
-                        //First row in the chunk, go to the next station name
-                        currentItem = nextTab(currentItem, i+1, SurveyChunk.StationNameRole);
-                    }
+                let compassRole = frontsight ? SurveyChunk.ShotCompassRole : SurveyChunk.ShotBackCompassRole
+                let clinoRole = frontsight ? SurveyChunk.ShotClinoRole : SurveyChunk.ShotBackClinoRole
 
-                    if(frontsights && backsights) {
-                        currentItem = nextTab(currentItem, i, SurveyChunk.ShotDistanceRole);
-                        currentItem = nextTab(currentItem, i, SurveyChunk.ShotCompassRole);
-                        currentItem = nextTab(currentItem, i, SurveyChunk.ShotBackCompassRole);
-                        currentItem = nextTab(currentItem, i, SurveyChunk.ShotClinoRole);
-                        currentItem = nextTab(currentItem, i, SurveyChunk.ShotBackClinoRole);
-                    } else if(frontsights) {
-                        currentItem = nextTab(currentItem, i, SurveyChunk.ShotDistanceRole);
-                        currentItem = nextTab(currentItem, i, SurveyChunk.ShotCompassRole);
-                        currentItem = nextTab(currentItem, i, SurveyChunk.ShotClinoRole);
-                    } else if(backsights) {
-                        currentItem = nextTab(currentItem, i, SurveyChunk.ShotDistanceRole);
-                        currentItem = nextTab(currentItem, i, SurveyChunk.ShotBackCompassRole);
-                        currentItem = nextTab(currentItem, i, SurveyChunk.ShotBackClinoRole);
-                    }
+                currentItem = nextTab(currentItem, 3, SurveyChunk.StationNameRole);
+                currentItem = nextTab(currentItem, 2, SurveyChunk.ShotDistanceRole);
+                currentItem = nextTab(currentItem, 2, compassRole);
+                currentItem = nextTab(currentItem, 2, clinoRole);
+                currentItem = nextTab(currentItem, 1, SurveyChunk.StationLeftRole);
+                currentItem = nextTab(currentItem, 1, SurveyChunk.StationRightRole);
+                currentItem = nextTab(currentItem, 1, SurveyChunk.StationUpRole);
+                currentItem = nextTab(currentItem, 1, SurveyChunk.StationDownRole);
+                currentItem = nextTab(currentItem, 3, SurveyChunk.StationLeftRole);
+                currentItem = nextTab(currentItem, 3, SurveyChunk.StationRightRole);
+                currentItem = nextTab(currentItem, 3, SurveyChunk.StationUpRole);
+                currentItem = nextTab(currentItem, 3, SurveyChunk.StationDownRole);
 
-                    if(item.rowIndex.indexInChunk === 0) {
-                        currentItem = nextTab(currentItem, i-1, SurveyChunk.StationLeftRole);
-                        currentItem = nextTab(currentItem, i-1, SurveyChunk.StationRightRole);
-                        currentItem = nextTab(currentItem, i-1, SurveyChunk.StationUpRole);
-                        currentItem = nextTab(currentItem, i-1, SurveyChunk.StationDownRole);
-                    }
+                currentItem = nextTab(currentItem, 5, SurveyChunk.StationNameRole);
+                currentItem = nextTab(currentItem, 4, SurveyChunk.ShotDistanceRole);
+                currentItem = nextTab(currentItem, 4, compassRole);
+                currentItem = nextTab(currentItem, 4, clinoRole);
+                currentItem = nextTab(currentItem, 5, SurveyChunk.StationLeftRole);
+                currentItem = nextTab(currentItem, 5, SurveyChunk.StationRightRole);
+                currentItem = nextTab(currentItem, 5, SurveyChunk.StationUpRole);
+                currentItem = nextTab(currentItem, 5, SurveyChunk.StationDownRole);
 
-                    let nextStationOffset = function() {
-                        let nextItem = surveyView.itemAtIndex(i+3);
-                        if(nextItem) {
-                            return 3;
-                        }
-                        return -1;
-                    }();
+                currentItem = nextTab(currentItem, 7, SurveyChunk.StationNameRole);
+                currentItem = nextTab(currentItem, 6, SurveyChunk.ShotDistanceRole);
+                currentItem = nextTab(currentItem, 6, compassRole);
+                currentItem = nextTab(currentItem, 6, clinoRole);
+                currentItem = nextTab(currentItem, 7, SurveyChunk.StationLeftRole);
+                currentItem = nextTab(currentItem, 7, SurveyChunk.StationRightRole);
+                currentItem = nextTab(currentItem, 7, SurveyChunk.StationUpRole);
+                currentItem = nextTab(currentItem, 7, SurveyChunk.StationDownRole);
 
-                    currentItem = nextTab(currentItem, i+1, SurveyChunk.StationLeftRole);
-                    currentItem = nextTab(currentItem, i+1, SurveyChunk.StationRightRole);
-                    currentItem = nextTab(currentItem, i+1, SurveyChunk.StationUpRole);
-                    currentItem = nextTab(currentItem, i+1, SurveyChunk.StationDownRole);
+                currentItem = nextTab(currentItem, 9, SurveyChunk.StationNameRole);
+                currentItem = downArrow(null, 9, SurveyChunk.StationNameRole)
 
-                    if(nextStationOffset > 0) {
-                        currentItem = nextTab(currentItem, i + nextStationOffset, SurveyChunk.StationNameRole);
+                currentItem = nextTab(null, 11, SurveyChunk.StationNameRole);
+                currentItem = nextTab(currentItem, 10, SurveyChunk.ShotDistanceRole);
+                currentItem = nextTab(currentItem, 10, compassRole);
+                currentItem = nextTab(currentItem, 10, clinoRole);
+                currentItem = nextTab(currentItem, 9, SurveyChunk.StationLeftRole);
+                currentItem = nextTab(currentItem, 9, SurveyChunk.StationRightRole);
+                currentItem = nextTab(currentItem, 9, SurveyChunk.StationUpRole);
+                currentItem = nextTab(currentItem, 9, SurveyChunk.StationDownRole);
+                currentItem = nextTab(currentItem, 11, SurveyChunk.StationLeftRole);
+                currentItem = nextTab(currentItem, 11, SurveyChunk.StationRightRole);
+                currentItem = nextTab(currentItem, 11, SurveyChunk.StationUpRole);
+                currentItem = nextTab(currentItem, 11, SurveyChunk.StationDownRole);
 
-                        if(currentItem.dataValue.reading.value === "") {
-                            // console.log("Last station:" + (i + 4) + " " + surveyView.count)
-                            if(i + 4 >= surveyView.count) {
-                                //Done
-                                break;
-                            }
+                currentItem = nextTab(currentItem, 13, SurveyChunk.StationNameRole);
+                currentItem = downArrow(null, 13, SurveyChunk.StationNameRole)
 
-                            //probably at the last row, skip
-                            //We need to use null instead of currentItem, because the currentItem gets delete
-                            //The delete currentItem will cause a type error in the testcase
-                            currentItem = downArrow(null, i + 3, SurveyChunk.StationNameRole)
-                        }
-                    }
-                }
+                currentItem = nextTab(null, 15, SurveyChunk.StationNameRole);
+                currentItem = nextTab(currentItem, 14, SurveyChunk.ShotDistanceRole);
+                currentItem = nextTab(currentItem, 14, compassRole);
+                currentItem = nextTab(currentItem, 14, clinoRole);
+                currentItem = nextTab(currentItem, 13, SurveyChunk.StationLeftRole);
+                currentItem = nextTab(currentItem, 13, SurveyChunk.StationRightRole);
+                currentItem = nextTab(currentItem, 13, SurveyChunk.StationUpRole);
+                currentItem = nextTab(currentItem, 13, SurveyChunk.StationDownRole);
+                currentItem = nextTab(currentItem, 15, SurveyChunk.StationLeftRole);
+                currentItem = nextTab(currentItem, 15, SurveyChunk.StationRightRole);
+                currentItem = nextTab(currentItem, 15, SurveyChunk.StationUpRole);
+                currentItem = nextTab(currentItem, 15, SurveyChunk.StationDownRole);
 
-                console.log("Reverse!")
+                currentItem = nextTab(currentItem, 17, SurveyChunk.StationNameRole);
+                currentItem = nextTab(currentItem, 16, SurveyChunk.ShotDistanceRole);
+                currentItem = nextTab(currentItem, 16, compassRole);
+                currentItem = nextTab(currentItem, 16, clinoRole);
+                currentItem = nextTab(currentItem, 17, SurveyChunk.StationLeftRole);
+                currentItem = nextTab(currentItem, 17, SurveyChunk.StationRightRole);
+                currentItem = nextTab(currentItem, 17, SurveyChunk.StationUpRole);
+                currentItem = nextTab(currentItem, 17, SurveyChunk.StationDownRole);
 
-                //Uncomment to debug tabbing from the end
-                // surveyView.currentIndex = surveyView.count - 1;
-                // waitForRendering(RootData.pageView.currentPageItem)
-                // let itemName = "rootId->tripPage->view->dataBox." + surveyView.currentIndex + "." + SurveyChunk.StationDownRole;
-                // let lastItem = ObjectFinder.findObjectByChain(mainWindow, itemName)
-                // currentItem = lastItem;
-                // currentItem.forceActiveFocus();
-                // surveyView.positionViewAtEnd();
-                // waitForRendering(surveyView)
+                currentItem = nextTab(currentItem, 19, SurveyChunk.StationNameRole);
+                currentItem = nextTab(currentItem, 18, SurveyChunk.ShotDistanceRole);
+                currentItem = nextTab(currentItem, 18, compassRole);
+                currentItem = nextTab(currentItem, 18, clinoRole);
+                currentItem = nextTab(currentItem, 19, SurveyChunk.StationLeftRole);
+                currentItem = nextTab(currentItem, 19, SurveyChunk.StationRightRole);
+                currentItem = nextTab(currentItem, 19, SurveyChunk.StationUpRole);
+                currentItem = nextTab(currentItem, 19, SurveyChunk.StationDownRole);
 
-                //Go to the previous down
-                currentItem = previousTab(currentItem, surveyView.count - 3, SurveyChunk.StationDownRole);
+                currentItem = nextTab(currentItem, 21, SurveyChunk.StationNameRole);
 
-                //Go backwards
-                for(let i = surveyView.count - 3; i > 0; i--) {
-                    // console.log("---- Backwords i:" + i + " " + currentItem + "-----")
+                //Reverse
+                currentItem = previousTab(currentItem, 19, SurveyChunk.StationDownRole);
+                currentItem = previousTab(currentItem, 19, SurveyChunk.StationUpRole);
+                currentItem = previousTab(currentItem, 19, SurveyChunk.StationRightRole);
+                currentItem = previousTab(currentItem, 19, SurveyChunk.StationLeftRole);
+                currentItem = previousTab(currentItem, 18, clinoRole);
+                currentItem = previousTab(currentItem, 18, compassRole);
+                currentItem = previousTab(currentItem, 18, SurveyChunk.ShotDistanceRole);
 
-                    let item = surveyView.itemAtIndex(i) as DrySurveyComponent;
-                    if(item.rowIndex.rowType === SurveyEditorRowIndex.TitleRowp) {
-                        //Skip the title
-                        continue;
-                    }
+                currentItem = previousTab(currentItem, 19, SurveyChunk.StationNameRole);
+                currentItem = previousTab(currentItem, 17, SurveyChunk.StationDownRole);
+                currentItem = previousTab(currentItem, 17, SurveyChunk.StationUpRole);
+                currentItem = previousTab(currentItem, 17, SurveyChunk.StationRightRole);
+                currentItem = previousTab(currentItem, 17, SurveyChunk.StationLeftRole);
+                currentItem = previousTab(currentItem, 16, clinoRole);
+                currentItem = previousTab(currentItem, 16, compassRole);
+                currentItem = previousTab(currentItem, 16, SurveyChunk.ShotDistanceRole);
 
-                    currentItem = previousTab(currentItem, i, SurveyChunk.StationUpRole);
-                    currentItem = previousTab(currentItem, i, SurveyChunk.StationRightRole);
-                    currentItem = previousTab(currentItem, i, SurveyChunk.StationLeftRole);
+                currentItem = previousTab(currentItem, 17, SurveyChunk.StationNameRole);
+                currentItem = previousTab(currentItem, 15, SurveyChunk.StationDownRole);
+                currentItem = previousTab(currentItem, 15, SurveyChunk.StationUpRole);
+                currentItem = previousTab(currentItem, 15, SurveyChunk.StationRightRole);
+                currentItem = previousTab(currentItem, 15, SurveyChunk.StationLeftRole);
+                currentItem = previousTab(currentItem, 13, SurveyChunk.StationDownRole);
+                currentItem = previousTab(currentItem, 13, SurveyChunk.StationUpRole);
+                currentItem = previousTab(currentItem, 13, SurveyChunk.StationRightRole);
+                currentItem = previousTab(currentItem, 13, SurveyChunk.StationLeftRole);
+                currentItem = previousTab(currentItem, 14, clinoRole);
+                currentItem = previousTab(currentItem, 14, compassRole);
+                currentItem = previousTab(currentItem, 14, SurveyChunk.ShotDistanceRole);
+                currentItem = previousTab(currentItem, 15, SurveyChunk.StationNameRole);
 
-                    if(item.rowIndex.indexInChunk === 1) {
-                        currentItem = previousTab(currentItem, i-2, SurveyChunk.StationDownRole);
-                        currentItem = previousTab(currentItem, i-2, SurveyChunk.StationUpRole);
-                        currentItem = previousTab(currentItem, i-2, SurveyChunk.StationRightRole);
-                        currentItem = previousTab(currentItem, i-2, SurveyChunk.StationLeftRole);
-                    }
+                currentItem = upArrow(null, 13, SurveyChunk.StationNameRole);
 
-                    if(frontsights && backsights) {
-                        currentItem = previousTab(currentItem, i-1, SurveyChunk.ShotBackClinoRole);
-                        currentItem = previousTab(currentItem, i-1, SurveyChunk.ShotClinoRole);
-                        currentItem = previousTab(currentItem, i-1, SurveyChunk.ShotBackCompassRole);
-                        currentItem = previousTab(currentItem, i-1, SurveyChunk.ShotCompassRole);
-                        currentItem = previousTab(currentItem, i-1, SurveyChunk.ShotDistanceRole);
-                    } else if(frontsights) {
-                        currentItem = previousTab(currentItem, i-1, SurveyChunk.ShotClinoRole);
-                        currentItem = previousTab(currentItem, i-1, SurveyChunk.ShotCompassRole);
-                        currentItem = previousTab(currentItem, i-1, SurveyChunk.ShotDistanceRole);
-                    } else if(backsights) {
-                        currentItem = previousTab(currentItem, i-1, SurveyChunk.ShotBackClinoRole);
-                        currentItem = previousTab(currentItem, i-1, SurveyChunk.ShotBackCompassRole);
-                        currentItem = previousTab(currentItem, i-1, SurveyChunk.ShotDistanceRole);
-                    }
+                currentItem = previousTab(currentItem, 11, SurveyChunk.StationDownRole);
+                currentItem = previousTab(currentItem, 11, SurveyChunk.StationUpRole);
+                currentItem = previousTab(currentItem, 11, SurveyChunk.StationRightRole);
+                currentItem = previousTab(currentItem, 11, SurveyChunk.StationLeftRole);
+                currentItem = previousTab(currentItem, 9, SurveyChunk.StationDownRole);
+                currentItem = previousTab(currentItem, 9, SurveyChunk.StationUpRole);
+                currentItem = previousTab(currentItem, 9, SurveyChunk.StationRightRole);
+                currentItem = previousTab(currentItem, 9, SurveyChunk.StationLeftRole);
+                currentItem = previousTab(currentItem, 10, clinoRole);
+                currentItem = previousTab(currentItem, 10, compassRole);
+                currentItem = previousTab(currentItem, 10, SurveyChunk.ShotDistanceRole);
+                currentItem = previousTab(currentItem, 11, SurveyChunk.StationNameRole);
 
+                currentItem = upArrow(null, 9, SurveyChunk.StationNameRole);
 
-                    currentItem = previousTab(currentItem, i, SurveyChunk.StationNameRole);
+                currentItem = previousTab(currentItem, 7, SurveyChunk.StationDownRole);
+                currentItem = previousTab(currentItem, 7, SurveyChunk.StationUpRole);
+                currentItem = previousTab(currentItem, 7, SurveyChunk.StationRightRole);
+                currentItem = previousTab(currentItem, 7, SurveyChunk.StationLeftRole);
+                currentItem = previousTab(currentItem, 6, clinoRole);
+                currentItem = previousTab(currentItem, 6, compassRole);
+                currentItem = previousTab(currentItem, 6, SurveyChunk.ShotDistanceRole);
+                currentItem = previousTab(currentItem, 7, SurveyChunk.StationNameRole);
 
+                currentItem = previousTab(currentItem, 5, SurveyChunk.StationDownRole);
+                currentItem = previousTab(currentItem, 5, SurveyChunk.StationUpRole);
+                currentItem = previousTab(currentItem, 5, SurveyChunk.StationRightRole);
+                currentItem = previousTab(currentItem, 5, SurveyChunk.StationLeftRole);
+                currentItem = previousTab(currentItem, 4, clinoRole);
+                currentItem = previousTab(currentItem, 4, compassRole);
+                currentItem = previousTab(currentItem, 4, SurveyChunk.ShotDistanceRole);
+                currentItem = previousTab(currentItem, 5, SurveyChunk.StationNameRole);
 
-                    let prevStationOffset = 2;
-                    if(item.rowIndex.indexInChunk === 1) {
-                        currentItem = previousTab(currentItem, i-2, SurveyChunk.StationNameRole);
-                        prevStationOffset = 4;
-                    }
-
-                    //Loop up to the previous row
-                    if(i-prevStationOffset >= 0) {
-                        currentItem = previousTab(currentItem, i-prevStationOffset, SurveyChunk.StationDownRole);
-
-                        if(prevStationOffset > 1) {
-                            i -= prevStationOffset - 1
-                        }
-                    } else {
-                        //At the very beginning of the list
-                        break;
-                    }
-                }
+                currentItem = previousTab(currentItem, 3, SurveyChunk.StationDownRole);
+                currentItem = previousTab(currentItem, 3, SurveyChunk.StationUpRole);
+                currentItem = previousTab(currentItem, 3, SurveyChunk.StationRightRole);
+                currentItem = previousTab(currentItem, 3, SurveyChunk.StationLeftRole);
+                currentItem = previousTab(currentItem, 1, SurveyChunk.StationDownRole);
+                currentItem = previousTab(currentItem, 1, SurveyChunk.StationUpRole);
+                currentItem = previousTab(currentItem, 1, SurveyChunk.StationRightRole);
+                currentItem = previousTab(currentItem, 1, SurveyChunk.StationLeftRole);
+                currentItem = previousTab(currentItem, 2, clinoRole);
+                currentItem = previousTab(currentItem, 2, compassRole);
+                currentItem = previousTab(currentItem, 2, SurveyChunk.ShotDistanceRole);
+                currentItem = previousTab(currentItem, 3, SurveyChunk.StationNameRole);
+                currentItem = previousTab(currentItem, 1, SurveyChunk.StationNameRole);
             }
 
+            function tabTestFrontAndBackSight() {
+                currentItem = nextTab(currentItem, 3, SurveyChunk.StationNameRole);
+                currentItem = nextTab(currentItem, 2, SurveyChunk.ShotDistanceRole);
+                currentItem = nextTab(currentItem, 2, SurveyChunk.ShotCompassRole);
+                currentItem = nextTab(currentItem, 2, SurveyChunk.ShotBackCompassRole);
+                currentItem = nextTab(currentItem, 2, SurveyChunk.ShotClinoRole);
+                currentItem = nextTab(currentItem, 2, SurveyChunk.ShotBackClinoRole);
+                currentItem = nextTab(currentItem, 1, SurveyChunk.StationLeftRole);
+                currentItem = nextTab(currentItem, 1, SurveyChunk.StationRightRole);
+                currentItem = nextTab(currentItem, 1, SurveyChunk.StationUpRole);
+                currentItem = nextTab(currentItem, 1, SurveyChunk.StationDownRole);
+                currentItem = nextTab(currentItem, 3, SurveyChunk.StationLeftRole);
+                currentItem = nextTab(currentItem, 3, SurveyChunk.StationRightRole);
+                currentItem = nextTab(currentItem, 3, SurveyChunk.StationUpRole);
+                currentItem = nextTab(currentItem, 3, SurveyChunk.StationDownRole);
+
+                currentItem = nextTab(currentItem, 5, SurveyChunk.StationNameRole);
+                currentItem = nextTab(currentItem, 4, SurveyChunk.ShotDistanceRole);
+                currentItem = nextTab(currentItem, 4, SurveyChunk.ShotCompassRole);
+                currentItem = nextTab(currentItem, 4, SurveyChunk.ShotBackCompassRole);
+                currentItem = nextTab(currentItem, 4, SurveyChunk.ShotClinoRole);
+                currentItem = nextTab(currentItem, 4, SurveyChunk.ShotBackClinoRole);
+                currentItem = nextTab(currentItem, 5, SurveyChunk.StationLeftRole);
+                currentItem = nextTab(currentItem, 5, SurveyChunk.StationRightRole);
+                currentItem = nextTab(currentItem, 5, SurveyChunk.StationUpRole);
+                currentItem = nextTab(currentItem, 5, SurveyChunk.StationDownRole);
+
+                currentItem = nextTab(currentItem, 7, SurveyChunk.StationNameRole);
+                currentItem = nextTab(currentItem, 6, SurveyChunk.ShotDistanceRole);
+                currentItem = nextTab(currentItem, 6, SurveyChunk.ShotCompassRole);
+                currentItem = nextTab(currentItem, 6, SurveyChunk.ShotBackCompassRole);
+                currentItem = nextTab(currentItem, 6, SurveyChunk.ShotClinoRole);
+                currentItem = nextTab(currentItem, 6, SurveyChunk.ShotBackClinoRole);
+                currentItem = nextTab(currentItem, 7, SurveyChunk.StationLeftRole);
+                currentItem = nextTab(currentItem, 7, SurveyChunk.StationRightRole);
+                currentItem = nextTab(currentItem, 7, SurveyChunk.StationUpRole);
+                currentItem = nextTab(currentItem, 7, SurveyChunk.StationDownRole);
+
+                currentItem = nextTab(currentItem, 9, SurveyChunk.StationNameRole);
+                currentItem = downArrow(null, 9, SurveyChunk.StationNameRole)
+
+                currentItem = nextTab(null, 11, SurveyChunk.StationNameRole);
+                currentItem = nextTab(currentItem, 10, SurveyChunk.ShotDistanceRole);
+                currentItem = nextTab(currentItem, 10, SurveyChunk.ShotCompassRole);
+                currentItem = nextTab(currentItem, 10, SurveyChunk.ShotBackCompassRole);
+                currentItem = nextTab(currentItem, 10, SurveyChunk.ShotClinoRole);
+                currentItem = nextTab(currentItem, 10, SurveyChunk.ShotBackClinoRole);
+                currentItem = nextTab(currentItem, 9, SurveyChunk.StationLeftRole);
+                currentItem = nextTab(currentItem, 9, SurveyChunk.StationRightRole);
+                currentItem = nextTab(currentItem, 9, SurveyChunk.StationUpRole);
+                currentItem = nextTab(currentItem, 9, SurveyChunk.StationDownRole);
+                currentItem = nextTab(currentItem, 11, SurveyChunk.StationLeftRole);
+                currentItem = nextTab(currentItem, 11, SurveyChunk.StationRightRole);
+                currentItem = nextTab(currentItem, 11, SurveyChunk.StationUpRole);
+                currentItem = nextTab(currentItem, 11, SurveyChunk.StationDownRole);
+
+                currentItem = nextTab(currentItem, 13, SurveyChunk.StationNameRole);
+                currentItem = downArrow(null, 13, SurveyChunk.StationNameRole)
+
+                currentItem = nextTab(null, 15, SurveyChunk.StationNameRole);
+                currentItem = nextTab(currentItem, 14, SurveyChunk.ShotDistanceRole);
+                currentItem = nextTab(currentItem, 14, SurveyChunk.ShotCompassRole);
+                currentItem = nextTab(currentItem, 14, SurveyChunk.ShotBackCompassRole);
+                currentItem = nextTab(currentItem, 14, SurveyChunk.ShotClinoRole);
+                currentItem = nextTab(currentItem, 14, SurveyChunk.ShotBackClinoRole);
+                currentItem = nextTab(currentItem, 13, SurveyChunk.StationLeftRole);
+                currentItem = nextTab(currentItem, 13, SurveyChunk.StationRightRole);
+                currentItem = nextTab(currentItem, 13, SurveyChunk.StationUpRole);
+                currentItem = nextTab(currentItem, 13, SurveyChunk.StationDownRole);
+                currentItem = nextTab(currentItem, 15, SurveyChunk.StationLeftRole);
+                currentItem = nextTab(currentItem, 15, SurveyChunk.StationRightRole);
+                currentItem = nextTab(currentItem, 15, SurveyChunk.StationUpRole);
+                currentItem = nextTab(currentItem, 15, SurveyChunk.StationDownRole);
+
+                currentItem = nextTab(currentItem, 17, SurveyChunk.StationNameRole);
+                currentItem = nextTab(currentItem, 16, SurveyChunk.ShotDistanceRole);
+                currentItem = nextTab(currentItem, 16, SurveyChunk.ShotCompassRole);
+                currentItem = nextTab(currentItem, 16, SurveyChunk.ShotBackCompassRole);
+                currentItem = nextTab(currentItem, 16, SurveyChunk.ShotClinoRole);
+                currentItem = nextTab(currentItem, 16, SurveyChunk.ShotBackClinoRole);
+                currentItem = nextTab(currentItem, 17, SurveyChunk.StationLeftRole);
+                currentItem = nextTab(currentItem, 17, SurveyChunk.StationRightRole);
+                currentItem = nextTab(currentItem, 17, SurveyChunk.StationUpRole);
+                currentItem = nextTab(currentItem, 17, SurveyChunk.StationDownRole);
+
+                currentItem = nextTab(currentItem, 19, SurveyChunk.StationNameRole);
+                currentItem = nextTab(currentItem, 18, SurveyChunk.ShotDistanceRole);
+                currentItem = nextTab(currentItem, 18, SurveyChunk.ShotCompassRole);
+                currentItem = nextTab(currentItem, 18, SurveyChunk.ShotBackCompassRole);
+                currentItem = nextTab(currentItem, 18, SurveyChunk.ShotClinoRole);
+                currentItem = nextTab(currentItem, 18, SurveyChunk.ShotBackClinoRole);
+                currentItem = nextTab(currentItem, 19, SurveyChunk.StationLeftRole);
+                currentItem = nextTab(currentItem, 19, SurveyChunk.StationRightRole);
+                currentItem = nextTab(currentItem, 19, SurveyChunk.StationUpRole);
+                currentItem = nextTab(currentItem, 19, SurveyChunk.StationDownRole);
+
+                currentItem = nextTab(currentItem, 21, SurveyChunk.StationNameRole);
+
+                //Reverse
+                currentItem = previousTab(currentItem, 19, SurveyChunk.StationDownRole);
+                currentItem = previousTab(currentItem, 19, SurveyChunk.StationUpRole);
+                currentItem = previousTab(currentItem, 19, SurveyChunk.StationRightRole);
+                currentItem = previousTab(currentItem, 19, SurveyChunk.StationLeftRole);
+                currentItem = previousTab(currentItem, 18, SurveyChunk.ShotBackClinoRole);
+                currentItem = previousTab(currentItem, 18, SurveyChunk.ShotClinoRole);
+                currentItem = previousTab(currentItem, 18, SurveyChunk.ShotBackCompassRole);
+                currentItem = previousTab(currentItem, 18, SurveyChunk.ShotCompassRole);
+                currentItem = previousTab(currentItem, 18, SurveyChunk.ShotDistanceRole);
+
+                currentItem = previousTab(currentItem, 19, SurveyChunk.StationNameRole);
+                currentItem = previousTab(currentItem, 17, SurveyChunk.StationDownRole);
+                currentItem = previousTab(currentItem, 17, SurveyChunk.StationUpRole);
+                currentItem = previousTab(currentItem, 17, SurveyChunk.StationRightRole);
+                currentItem = previousTab(currentItem, 17, SurveyChunk.StationLeftRole);
+                currentItem = previousTab(currentItem, 16, SurveyChunk.ShotBackClinoRole);
+                currentItem = previousTab(currentItem, 16, SurveyChunk.ShotClinoRole);
+                currentItem = previousTab(currentItem, 16, SurveyChunk.ShotBackCompassRole);
+                currentItem = previousTab(currentItem, 16, SurveyChunk.ShotCompassRole);
+                currentItem = previousTab(currentItem, 16, SurveyChunk.ShotDistanceRole);
+
+                currentItem = previousTab(currentItem, 17, SurveyChunk.StationNameRole);
+                currentItem = previousTab(currentItem, 15, SurveyChunk.StationDownRole);
+                currentItem = previousTab(currentItem, 15, SurveyChunk.StationUpRole);
+                currentItem = previousTab(currentItem, 15, SurveyChunk.StationRightRole);
+                currentItem = previousTab(currentItem, 15, SurveyChunk.StationLeftRole);
+                currentItem = previousTab(currentItem, 13, SurveyChunk.StationDownRole);
+                currentItem = previousTab(currentItem, 13, SurveyChunk.StationUpRole);
+                currentItem = previousTab(currentItem, 13, SurveyChunk.StationRightRole);
+                currentItem = previousTab(currentItem, 13, SurveyChunk.StationLeftRole);
+                currentItem = previousTab(currentItem, 14, SurveyChunk.ShotBackClinoRole);
+                currentItem = previousTab(currentItem, 14, SurveyChunk.ShotClinoRole);
+                currentItem = previousTab(currentItem, 14, SurveyChunk.ShotBackCompassRole);
+                currentItem = previousTab(currentItem, 14, SurveyChunk.ShotCompassRole);
+                currentItem = previousTab(currentItem, 14, SurveyChunk.ShotDistanceRole);
+                currentItem = previousTab(currentItem, 15, SurveyChunk.StationNameRole);
+
+                currentItem = upArrow(null, 13, SurveyChunk.StationNameRole);
+
+                currentItem = previousTab(currentItem, 11, SurveyChunk.StationDownRole);
+                currentItem = previousTab(currentItem, 11, SurveyChunk.StationUpRole);
+                currentItem = previousTab(currentItem, 11, SurveyChunk.StationRightRole);
+                currentItem = previousTab(currentItem, 11, SurveyChunk.StationLeftRole);
+                currentItem = previousTab(currentItem, 9, SurveyChunk.StationDownRole);
+                currentItem = previousTab(currentItem, 9, SurveyChunk.StationUpRole);
+                currentItem = previousTab(currentItem, 9, SurveyChunk.StationRightRole);
+                currentItem = previousTab(currentItem, 9, SurveyChunk.StationLeftRole);
+                currentItem = previousTab(currentItem, 10, SurveyChunk.ShotBackClinoRole);
+                currentItem = previousTab(currentItem, 10, SurveyChunk.ShotClinoRole);
+                currentItem = previousTab(currentItem, 10, SurveyChunk.ShotBackCompassRole);
+                currentItem = previousTab(currentItem, 10, SurveyChunk.ShotCompassRole);
+                currentItem = previousTab(currentItem, 10, SurveyChunk.ShotDistanceRole);
+                currentItem = previousTab(currentItem, 11, SurveyChunk.StationNameRole);
+
+                currentItem = upArrow(null, 9, SurveyChunk.StationNameRole);
+
+                currentItem = previousTab(currentItem, 7, SurveyChunk.StationDownRole);
+                currentItem = previousTab(currentItem, 7, SurveyChunk.StationUpRole);
+                currentItem = previousTab(currentItem, 7, SurveyChunk.StationRightRole);
+                currentItem = previousTab(currentItem, 7, SurveyChunk.StationLeftRole);
+                currentItem = previousTab(currentItem, 6, SurveyChunk.ShotBackClinoRole);
+                currentItem = previousTab(currentItem, 6, SurveyChunk.ShotClinoRole);
+                currentItem = previousTab(currentItem, 6, SurveyChunk.ShotBackCompassRole);
+                currentItem = previousTab(currentItem, 6, SurveyChunk.ShotCompassRole);
+                currentItem = previousTab(currentItem, 6, SurveyChunk.ShotDistanceRole);
+                currentItem = previousTab(currentItem, 7, SurveyChunk.StationNameRole);
+
+                currentItem = previousTab(currentItem, 5, SurveyChunk.StationDownRole);
+                currentItem = previousTab(currentItem, 5, SurveyChunk.StationUpRole);
+                currentItem = previousTab(currentItem, 5, SurveyChunk.StationRightRole);
+                currentItem = previousTab(currentItem, 5, SurveyChunk.StationLeftRole);
+                currentItem = previousTab(currentItem, 4, SurveyChunk.ShotBackClinoRole);
+                currentItem = previousTab(currentItem, 4, SurveyChunk.ShotClinoRole);
+                currentItem = previousTab(currentItem, 4, SurveyChunk.ShotBackCompassRole);
+                currentItem = previousTab(currentItem, 4, SurveyChunk.ShotCompassRole);
+                currentItem = previousTab(currentItem, 4, SurveyChunk.ShotDistanceRole);
+                currentItem = previousTab(currentItem, 5, SurveyChunk.StationNameRole);
+
+                currentItem = previousTab(currentItem, 3, SurveyChunk.StationDownRole);
+                currentItem = previousTab(currentItem, 3, SurveyChunk.StationUpRole);
+                currentItem = previousTab(currentItem, 3, SurveyChunk.StationRightRole);
+                currentItem = previousTab(currentItem, 3, SurveyChunk.StationLeftRole);
+                currentItem = previousTab(currentItem, 1, SurveyChunk.StationDownRole);
+                currentItem = previousTab(currentItem, 1, SurveyChunk.StationUpRole);
+                currentItem = previousTab(currentItem, 1, SurveyChunk.StationRightRole);
+                currentItem = previousTab(currentItem, 1, SurveyChunk.StationLeftRole);
+                currentItem = previousTab(currentItem, 2, SurveyChunk.ShotBackClinoRole);
+                currentItem = previousTab(currentItem, 2, SurveyChunk.ShotClinoRole);
+                currentItem = previousTab(currentItem, 2, SurveyChunk.ShotBackCompassRole);
+                currentItem = previousTab(currentItem, 2, SurveyChunk.ShotCompassRole);
+                currentItem = previousTab(currentItem, 2, SurveyChunk.ShotDistanceRole);
+                currentItem = previousTab(currentItem, 3, SurveyChunk.StationNameRole);
+                currentItem = previousTab(currentItem, 1, SurveyChunk.StationNameRole);
+            }
 
             let frontsight = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->frontSightCalibrationEditor->checkBox")
             let backsight = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->backSightCalibrationEditor->checkBox")
@@ -946,7 +1162,7 @@ MainWindowTest {
             verify(frontsight.checked === true)
             verify(backsight.checked === false)
 
-            runTabTest(frontsight.checked, backsight.checked)
+            tabTestSingleSight(true)
 
             //Scroll to the top
             surveyView.positionViewAtBeginning();
@@ -958,7 +1174,7 @@ MainWindowTest {
             verify(frontsight.checked === true)
             verify(backsight.checked === true)
 
-            runTabTest(frontsight.checked, backsight.checked)
+            tabTestFrontAndBackSight();
 
             // ----- Backsights only ----
             //Scroll to the top
@@ -970,8 +1186,7 @@ MainWindowTest {
             verify(frontsight.checked === false)
             verify(backsight.checked === true)
 
-            runTabTest(frontsight.checked, backsight.checked)
-
+            tabTestSingleSight(false);
         }
 
         /**

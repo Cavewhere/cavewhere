@@ -485,6 +485,20 @@ Item {
                         let rowIndex = shotDistanceDataBox.dataValue.rowIndex
                         let boxIndex;
 
+                        if(itemId.calibration.frontSights) {
+                            boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotCompassRole)
+                        } else if(itemId.calibration.backSights) {
+                            boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotBackCompassRole)
+                        } else {
+                            boxIndex = itemId.model.boxIndex(rowIndex.chunk, rowIndex.indexInChunk + 1, SurveyEditorRowIndex.StationRow, SurveyChunk.StationLeftRole)
+                        }
+                        return itemId.model.offsetBoxIndex(boxIndex, 0);
+                    }
+                navigation.arrowRight:
+                    () => {
+                        let rowIndex = shotDistanceDataBox.dataValue.rowIndex
+                        let boxIndex;
+
                         if(itemId.calibration.backSights) {
                             boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotBackCompassRole)
                         } else if(itemId.calibration.frontSights) {
@@ -494,7 +508,7 @@ Item {
                         }
                         return itemId.model.offsetBoxIndex(boxIndex, 0);
                     }
-                navigation.arrowRight: navigation.tabNext
+
                 navigation.arrowLeft:
                     () => {
                         let rowIndex = shotDistanceDataBox.dataValue.rowIndex
