@@ -92,7 +92,7 @@ QQ.Rectangle {
             width: container.maxImageWidth - 2 * container.border
             height: width;
             fillMode: QQ.Image.PreserveAspectFit
-            rotation: container.noteObject.rotate
+            rotation: container.noteObject === null ? 0 : container.noteObject.rotate
             smooth: true
 
             function updateHeight() {
@@ -137,7 +137,7 @@ QQ.Rectangle {
             anchors.right: parent.right
             anchors.top: parent.top
 
-            visible: galleryView.currentIndex == container.index
+            visible: galleryView.currentIndex === container.index
 
             QQ.TapHandler {
                 gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
@@ -196,7 +196,7 @@ QQ.Rectangle {
             anchors.leftMargin: 5
             anchors.rightMargin: 5
             anchors.topMargin: 5
-            visible: errorText.text != ""
+            visible: errorText.text !== ""
 
             color: "red";
 
@@ -271,8 +271,10 @@ QQ.Rectangle {
             onCurrentIndexChanged: updateCurrentNote()
             onCountChanged: {
                 updateCurrentNote()
-                if(count == 0) {
+                if(count <= 0) {
                     noteGallery.state = "NO_NOTES"
+                } else {
+                    noteGallery.state = "DEFAULT"
                 }
             }
 
@@ -492,19 +494,18 @@ QQ.Rectangle {
             }
 
             QQ.PropertyChanges {
-                galleryView {
-                    onCountChanged: {
-                        if(count > 0) {
-                            noteGallery.state = ""
-                            galleryContainer.visible = true
-                            mainButtonArea.visible = true
-                            noteArea.visible = true
-                            currentIndex = 0;
-                        }
-                        updateCurrentNote()
+                galleryView.onCountChanged: () => {
+                    if(count > 0) {
+                        noteGallery.state = ""
+                        galleryContainer.visible = true
+                        mainButtonArea.visible = true
+                        noteArea.visible = true
+                        currentIndex = 0;
                     }
+                    updateCurrentNote()
                 }
             }
+
         },
 
         QQ.State {
