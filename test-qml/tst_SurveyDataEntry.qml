@@ -261,12 +261,15 @@ MainWindowTest {
             }
 
             keyClick(key, modifier) //Tab
+            wait(100);
+            // waitForRendering(rootId)
 
             let itemName = "rootId->tripPage->view->dataBox." + index + "." + nextRole
             let item = ObjectFinder.findObjectByChain(mainWindow, itemName)
             if(item === null) {
                 console.log("Searching for item:" + itemName + " current focused:" + mainWindow.Window.window.activeFocusItem)
                 console.log("Testcase will fail, Failed to find item!!!");
+                wait(100000);
             }
 
             verify(item !== null);
@@ -282,6 +285,7 @@ MainWindowTest {
             //Uncomment to help debug
             if(item.focus !== true) {
                 console.log("Testcase will fail, bad focus!!! current focused on:" + rootId.Window.window.activeFocusItem + "but should be focused on" + item);
+                wait(100000)
             }
 
             verify(item.focus === true )
@@ -304,6 +308,7 @@ MainWindowTest {
         }
 
         function upArrow(currentItem, index, nextRole) {
+            console.log("Arrow up" + index + " " + nextRole)
             let upArrow = 16777235; //up arrow key
             let modifier = 0;
             return navHelper(currentItem, index, nextRole, upArrow, modifier);
@@ -578,7 +583,7 @@ MainWindowTest {
                 surveyView.positionViewAtEnd()
                 waitForRendering(rootId)
 
-                for(let i = rowIndex - 2; i >= 1; i -= 2) {
+                for(let i = rowIndex; i >= 1; i -= 2) {
                     let chunk = currentItem.dataValue.chunk
                     let stationCount = chunk.stationCount();
                     let shotCount = chunk.shotCount();
@@ -594,25 +599,36 @@ MainWindowTest {
 
                         currentItem = null
                     } else if(currentItem.dataValue.rowType === SurveyEditorRowIndex.ShotRow) {
-                        if(columnIndex === SurveyChunk.ShotCompassRole && backsight.checked && frontsight.checked) {
-                            currentItem = upArrow(currentItem, i+2, SurveyChunk.ShotBackCompassRole)
-                        } else if(columnIndex === SurveyChunk.ShotClinoRole && backsight.checked && frontsight.checked) {
-                            currentItem = upArrow(currentItem, i+2, SurveyChunk.ShotBackClinoRole)
+                        let offset = 0;
+
+                        console.log("ColumnIndex:" + columnIndex + " " + currentItem.dataValue.chunkDataRole );
+                        if(columnIndex === SurveyChunk.ShotBackCompassRole && backsight.checked && frontsight.checked) {
+                            console.log("I get here1");
+                            currentItem = upArrow(currentItem, i, SurveyChunk.ShotCompassRole)
+                        } else if(columnIndex === SurveyChunk.ShotBackClinoRole && backsight.checked && frontsight.checked) {
+                            currentItem = upArrow(currentItem, i, SurveyChunk.ShotClinoRole)
                         }
 
                         if(currentItem.dataValue.indexInChunk === firstShotIndex) {
-                            if(i === surveyView.count) {
+                            console.log("i::" + i)
+                            if(i === 2) {
                                 break;
                             }
+                            let nextIndex = currentItem.listViewIndex - 4;
                             currentItem = null;
+                            currentItem = upArrow(currentItem, nextIndex, columnIndex);
+                            i -= 2;
+                            continue;
                         }
+                        console.log("I get here2");
+                        currentItem = upArrow(currentItem, i - 2, columnIndex);
+                        continue;
                     }
-
-                    currentItem = upArrow(currentItem, i, columnIndex);
+                    currentItem = upArrow(currentItem, i - 2, columnIndex);
                 }
             }
 
-            function testRow(row, column, direction, testBacksights = true) {
+            function testRow(row, column, direction, testBacksights = true, startWithBacksights = false) {
                 let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view");
                 view.positionViewAtIndex(row, ListView.Contain)
 
@@ -630,18 +646,50 @@ MainWindowTest {
 
                 if(testBacksights) {
                     // ----- Enable the backsights and frontsights ----
+                    view.positionViewAtBeginning()
+                    wait(100);
                     mouseClick(backsight);
 
                     verify(frontsight.checked === true)
                     verify(backsight.checked === true)
 
-                    cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
+                    let startColumn = column
+                    if(startWithBacksights) {
+                        if(column === SurveyChunk.ShotCompassRole) {
+                            startColumn = SurveyChunk.ShotBackCompassRole
+                        } else if(column === SurveyChunk.ShotClinoRole) {
+                            startColumn = SurveyChunk.ShotBackClinoRole
+                        }
+                    }
+
+                    console.log("Position row:" + row)
+                    view.positionViewAtIndex(row - 1, ListView.Contain)
+                    view.positionViewAtIndex(row, ListView.Contain)
+                    view.positionViewAtIndex(row + 1, ListView.Contain)
+                    wait(100);
+                    // waitForRendering(view)
+
+
+                    // console.log("Current:" +  "rootId->tripPage->view->dataBox." + row + "." + startColumn)
+                    // wait(1000000);
+
+                    //We need to click twice because, this could change the number of the cells
+                    cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + startColumn)
                     mouseClick(cell)
+                    cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + startColumn)
+                    mouseClick(cell)
+                    console.log("Cell:" + cell)
+
+                    // wait(100000);
+
                     verify(cell.focus === true);
 
-                    direction(cell, row, column);
+                    direction(cell, row, startColumn);
 
                     // ----- Enable the backsights only
+                    view.positionViewAtBeginning()
+                    wait(100);
+                    // waitForRendering(view)
                     mouseClick(frontsight);
 
                     verify(frontsight.checked === false)
@@ -653,6 +701,12 @@ MainWindowTest {
                         column = SurveyChunk.ShotBackClinoRole
                     }
 
+                    view.positionViewAtIndex(row + 1, ListView.Contain)
+                    wait(100);
+                    // waitForRendering(view)
+
+                    cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
+                    mouseClick(cell)
                     cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
                     mouseClick(cell)
                     // wait(100000);
@@ -660,42 +714,45 @@ MainWindowTest {
 
                     direction(cell, row, column);
 
+                    view.positionViewAtBeginning()
+                    wait(100);
+                    // waitForRendering(view)
                     mouseClick(frontsight);
                     mouseClick(backsight);
                 }
             }
 
-            // //--- Test the right arrow
-            // //Test the first row
-            // testRow(1, SurveyChunk.StationNameRole, rightArrowOnFullRow)
+            //--- Test the right arrow
+            //Test the first row
+            testRow(1, SurveyChunk.StationNameRole, rightArrowOnFullRow)
 
-            // //Test a middle row
-            // testRow(5, SurveyChunk.StationNameRole, rightArrowOnFullRow)
+            //Test a middle row
+            testRow(5, SurveyChunk.StationNameRole, rightArrowOnFullRow)
 
-            // //Test last row
-            // testRow(9, SurveyChunk.StationNameRole, rightArrowOnFullRow)
+            //Test last row
+            testRow(9, SurveyChunk.StationNameRole, rightArrowOnFullRow)
 
-            // //--- Test the left arrow
-            // //Test the first row
-            // testRow(1, SurveyChunk.StationDownRole, leftArrowOnFullRow)
+            //--- Test the left arrow
+            //Test the first row
+            testRow(1, SurveyChunk.StationDownRole, leftArrowOnFullRow)
 
-            // //Test a middle row
-            // testRow(5, SurveyChunk.StationDownRole, leftArrowOnFullRow)
+            //Test a middle row
+            testRow(5, SurveyChunk.StationDownRole, leftArrowOnFullRow)
 
-            // //Test last row
-            // testRow(9, SurveyChunk.StationDownRole, leftArrowOnFullRow)
+            //Test last row
+            testRow(9, SurveyChunk.StationDownRole, leftArrowOnFullRow)
 
             // //Test Down arrow
             let testBacksights = false;
-            // testRow(1, SurveyChunk.StationNameRole, downArrowOnFullColumn, testBacksights)
-            // testRow(2, SurveyChunk.ShotDistanceRole, downArrowOnFullColumn, testBacksights)
-            // testRow(2, SurveyChunk.ShotCompassRole, downArrowOnFullColumn, true)
-            // testRow(2, SurveyChunk.ShotClinoRole, downArrowOnFullColumn, true)
+            testRow(1, SurveyChunk.StationNameRole, downArrowOnFullColumn, testBacksights)
+            testRow(2, SurveyChunk.ShotDistanceRole, downArrowOnFullColumn, testBacksights)
+            testRow(2, SurveyChunk.ShotCompassRole, downArrowOnFullColumn, true)
+            testRow(2, SurveyChunk.ShotClinoRole, downArrowOnFullColumn, true)
 
-            // testRow(1, SurveyChunk.StationLeftRole, downArrowOnFullColumn, testBacksights)
-            // testRow(1, SurveyChunk.StationRightRole, downArrowOnFullColumn, testBacksights)
-            // testRow(1, SurveyChunk.StationUpRole, downArrowOnFullColumn, testBacksights)
-            // testRow(1, SurveyChunk.StationDownRole, downArrowOnFullColumn, testBacksights)
+            testRow(1, SurveyChunk.StationLeftRole, downArrowOnFullColumn, testBacksights)
+            testRow(1, SurveyChunk.StationRightRole, downArrowOnFullColumn, testBacksights)
+            testRow(1, SurveyChunk.StationUpRole, downArrowOnFullColumn, testBacksights)
+            testRow(1, SurveyChunk.StationDownRole, downArrowOnFullColumn, testBacksights)
 
             //Test Up downArrow
 
@@ -703,22 +760,25 @@ MainWindowTest {
                 //Scroll to the bottom
                 let surveyView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
                 surveyView.positionViewAtEnd()
-                waitForRendering(rootId)
+                wait(100)
+                // waitForRendering(rootId)
 
                 let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + SurveyChunk.StationNameRole)
                 mouseClick(cell)
             }
 
             let lastStation = 21;
+            let startWithBacksights = true
             scrollToBottom(lastStation);
             testRow(lastStation, SurveyChunk.StationNameRole, upArrowOnFullColumn, testBacksights)
             scrollToBottom(lastStation);
             testRow(lastStation - 1, SurveyChunk.ShotDistanceRole, upArrowOnFullColumn, testBacksights)
-            // testRow(2, SurveyChunk.ShotCompassRole, upArrowOnFullColumn, true)
-            // testRow(2, SurveyChunk.ShotClinoRole, upArrowOnFullColumn, true)
+            scrollToBottom(lastStation);
+            testRow(lastStation - 1, SurveyChunk.ShotCompassRole, upArrowOnFullColumn, true, startWithBacksights)
+            scrollToBottom(lastStation);
+            testRow(lastStation - 1, SurveyChunk.ShotClinoRole, upArrowOnFullColumn, true, startWithBacksights)
 
             scrollToBottom(lastStation);
-            // wait(100000);
             testRow(lastStation, SurveyChunk.StationLeftRole, upArrowOnFullColumn, testBacksights)
             scrollToBottom(lastStation);
             testRow(lastStation, SurveyChunk.StationRightRole, upArrowOnFullColumn, testBacksights)

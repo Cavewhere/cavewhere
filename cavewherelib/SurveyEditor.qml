@@ -91,6 +91,20 @@ QQ.Item {
                 trip: clipArea.currentTrip
                 view: viewId
                 model: editorModel
+
+                onBoxIndexChanged: {
+                    //Move the list view
+                    let listViewIndex = editorModel.toModelRow(boxIndex.rowIndex)
+                    if(boxIndex.rowType === SurveyEditorRowIndex.ShotRow) {
+                        //Since the shot row has a height of zero, this -1 and +1 forces shot to be visible in the list view
+                        // view.currentIndex = listViewIndex
+                        view.positionViewAtIndex(listViewIndex - 1, QQ.ListView.Contain)
+                        view.positionViewAtIndex(listViewIndex + 1, QQ.ListView.Contain)
+                    } else {
+                        // view.currentIndex = listViewIndex
+                        view.positionViewAtIndex(listViewIndex, QQ.ListView.Contain)
+                    }
+                }
             }
 
             // onCurrentIndexChanged: {

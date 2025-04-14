@@ -11,7 +11,7 @@ Item {
         case SurveyEditorRowIndex.TitleRow:
             return titleLoaderId.item ? titleLoaderId.item.height + titleOffset : 0
         case SurveyEditorRowIndex.StationRow:
-            return lastElement ? 75 : 50 - 1
+            return 49
         case SurveyEditorRowIndex.ShotRow:
             return 0
         }
@@ -22,7 +22,7 @@ Item {
 
     // height: stationVisible ? (lastElement ? 75 : 50 - 1) : titleColumnId.height + titleOffset
 
-    readonly property bool lastElement: index == ListView.view.count - 1
+    // readonly property bool lastElement: index == ListView.view.count - 1
     // readonly property bool skippedElement: stationName == undefined
     property TripCalibration calibration: null
     property bool canEditTripCalibration: false
@@ -90,6 +90,15 @@ Item {
     //     // text: dataBox.objectName + "\nF:" + dataBox.focus + "\nEF:" + hasEditorFocus
     //     text: itemId.index + " type:" + itemId.rowIndex.rowType + " test:" + (itemId.rowIndex.rowType === SurveyEditorRowIndex.StationRow)
     //     z: 1
+    // }
+
+    // DebugRectangle {
+    //     z: 1
+    //     border.width: 1
+    //     visible: itemId.rowIndex.rowType === SurveyEditorRowIndex.StationRow
+    //     Text {
+    //         text: "i:" + index
+    //     }
     // }
 
 
@@ -573,11 +582,22 @@ Item {
                         let rowIndex = compassFrontReadBox.dataValue.rowIndex
                         if(itemId.calibration.backSights) {
                             let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotBackCompassRole)
-                            console.log("BoxIndex:" + boxIndex);
                             return itemId.model.offsetBoxIndex(boxIndex, 0);
                         } else {
                             let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotCompassRole)
                             return itemId.model.offsetBoxIndex(boxIndex, 1);
+                        }
+                    }
+                navigation.arrowUp:
+                    () => {
+                        let rowIndex = compassFrontReadBox.dataValue.rowIndex
+                        if(itemId.calibration.backSights) {
+                            let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotBackCompassRole)
+                            return itemId.model.offsetBoxIndex(boxIndex, -1);
+                        } else {
+                            //front sights
+                            let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotCompassRole)
+                            return itemId.model.offsetBoxIndex(boxIndex, -1);
                         }
                     }
 
@@ -655,6 +675,18 @@ Item {
                             return itemId.model.offsetBoxIndex(boxIndex, 1);
                         }
                     }
+                navigation.arrowUp:
+                    () => {
+                        let rowIndex = compassFrontReadBox.dataValue.rowIndex
+                        if(itemId.calibration.frontSights) {
+                            let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotCompassRole)
+                            return itemId.model.offsetBoxIndex(boxIndex, 0);
+                        } else {
+                            //Backsights
+                            let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotBackCompassRole)
+                            return itemId.model.offsetBoxIndex(boxIndex, -1);
+                        }
+                    }
 
                 visible: itemId.calibration.backSights
                 dataValue: shotBackCompass
@@ -730,6 +762,18 @@ Item {
                             return itemId.model.offsetBoxIndex(boxIndex, 1);
                         }
                     }
+                navigation.arrowUp:
+                    () => {
+                        let rowIndex = clinoFrontReadBox.dataValue.rowIndex
+                        if(itemId.calibration.backSights) {
+                            let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotBackClinoRole)
+                            return itemId.model.offsetBoxIndex(boxIndex, -1);
+                        } else {
+                            //front sights
+                            let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotClinoRole)
+                            return itemId.model.offsetBoxIndex(boxIndex, -1);
+                        }
+                    }
 
                 visible: itemId.calibration.frontSights
                 dataValue: shotClino
@@ -782,13 +826,13 @@ Item {
                 navigation.arrowRight: clinoFrontReadBox.navigation.arrowRight
                 navigation.arrowLeft:
                     () => {
-                        let rowIndex = clinoFrontReadBox.dataValue.rowIndex
+                        let rowIndex = clinoBackReadBox.dataValue.rowIndex
                         let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotBackCompassRole)
                         return itemId.model.offsetBoxIndex(boxIndex, 0);
                     }
                 navigation.arrowDown:
                     () => {
-                        let rowIndex = clinoFrontReadBox.dataValue.rowIndex
+                        let rowIndex = clinoBackReadBox.dataValue.rowIndex
                         if(itemId.calibration.frontSights) {
                             let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotClinoRole)
                             // console.log("Offset:" + itemId.model.offsetBoxIndex(boxIndex, 1))
@@ -796,6 +840,18 @@ Item {
                         } else {
                             let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotBackClinoRole)
                             return itemId.model.offsetBoxIndex(boxIndex, 1);
+                        }
+                    }
+                navigation.arrowUp:
+                    () => {
+                        let rowIndex = clinoBackReadBox.dataValue.rowIndex
+                        if(itemId.calibration.frontSights) {
+                            let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotClinoRole)
+                            return itemId.model.offsetBoxIndex(boxIndex, 0);
+                        } else {
+                            //Backsights
+                            let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotBackClinoRole)
+                            return itemId.model.offsetBoxIndex(boxIndex, -1);
                         }
                     }
 
