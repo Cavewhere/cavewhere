@@ -261,7 +261,7 @@ MainWindowTest {
             }
 
             keyClick(key, modifier) //Tab
-            wait(100);
+            // wait(100);
             // waitForRendering(rootId)
 
             let itemName = "rootId->tripPage->view->dataBox." + index + "." + nextRole
@@ -269,7 +269,7 @@ MainWindowTest {
             if(item === null) {
                 console.log("Searching for item:" + itemName + " current focused:" + mainWindow.Window.window.activeFocusItem)
                 console.log("Testcase will fail, Failed to find item!!!");
-                wait(100000);
+                // wait(100000);
             }
 
             verify(item !== null);
@@ -285,7 +285,7 @@ MainWindowTest {
             //Uncomment to help debug
             if(item.focus !== true) {
                 console.log("Testcase will fail, bad focus!!! current focused on:" + rootId.Window.window.activeFocusItem + "but should be focused on" + item);
-                wait(100000)
+                // wait(100000)
             }
 
             verify(item.focus === true )
@@ -308,7 +308,6 @@ MainWindowTest {
         }
 
         function upArrow(currentItem, index, nextRole) {
-            console.log("Arrow up" + index + " " + nextRole)
             let upArrow = 16777235; //up arrow key
             let modifier = 0;
             return navHelper(currentItem, index, nextRole, upArrow, modifier);
@@ -373,7 +372,7 @@ MainWindowTest {
             waitForRendering(rootId);
 
             //Make sure the warning is supressed
-            verify(errors.count == 1);
+            verify(errors.count === 1);
             verify(errors.data(firstErrorIndex, ErrorListModel.ErrorTypeRole) === CwError.Warning)
             tryVerify(()=>{ return errors.data(firstErrorIndex, ErrorListModel.SuppressedRole) === true; })
 
@@ -589,7 +588,7 @@ MainWindowTest {
                     let shotCount = chunk.shotCount();
                     let firstStationIndex = 0
                     let firstShotIndex = 0;
-                    console.log("i:" + i + " " + surveyView.count + " " + currentItem.dataValue.indexInChunk + " " + firstStationIndex + " " + (currentItem.dataValue.indexInChunk === firstStationIndex))
+                    // console.log("i:" + i + " " + surveyView.count + " " + currentItem.dataValue.indexInChunk + " " + firstStationIndex + " " + (currentItem.dataValue.indexInChunk === firstStationIndex))
                     if(currentItem.dataValue.rowType === SurveyEditorRowIndex.StationRow
                             && currentItem.dataValue.indexInChunk === firstStationIndex)
                     {
@@ -601,16 +600,13 @@ MainWindowTest {
                     } else if(currentItem.dataValue.rowType === SurveyEditorRowIndex.ShotRow) {
                         let offset = 0;
 
-                        console.log("ColumnIndex:" + columnIndex + " " + currentItem.dataValue.chunkDataRole );
                         if(columnIndex === SurveyChunk.ShotBackCompassRole && backsight.checked && frontsight.checked) {
-                            console.log("I get here1");
                             currentItem = upArrow(currentItem, i, SurveyChunk.ShotCompassRole)
                         } else if(columnIndex === SurveyChunk.ShotBackClinoRole && backsight.checked && frontsight.checked) {
                             currentItem = upArrow(currentItem, i, SurveyChunk.ShotClinoRole)
                         }
 
                         if(currentItem.dataValue.indexInChunk === firstShotIndex) {
-                            console.log("i::" + i)
                             if(i === 2) {
                                 break;
                             }
@@ -620,7 +616,6 @@ MainWindowTest {
                             i -= 2;
                             continue;
                         }
-                        console.log("I get here2");
                         currentItem = upArrow(currentItem, i - 2, columnIndex);
                         continue;
                     }
@@ -635,8 +630,6 @@ MainWindowTest {
 
                 let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
                 mouseClick(cell)
-
-                // wait(100000);
 
                 verify(frontsight.checked === true)
                 verify(backsight.checked === false)
@@ -662,25 +655,16 @@ MainWindowTest {
                         }
                     }
 
-                    console.log("Position row:" + row)
                     view.positionViewAtIndex(row - 1, ListView.Contain)
                     view.positionViewAtIndex(row, ListView.Contain)
                     view.positionViewAtIndex(row + 1, ListView.Contain)
-                    wait(100);
-                    // waitForRendering(view)
-
-
-                    // console.log("Current:" +  "rootId->tripPage->view->dataBox." + row + "." + startColumn)
-                    // wait(1000000);
+                    wait(50);
 
                     //We need to click twice because, this could change the number of the cells
                     cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + startColumn)
                     mouseClick(cell)
                     cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + startColumn)
                     mouseClick(cell)
-                    console.log("Cell:" + cell)
-
-                    // wait(100000);
 
                     verify(cell.focus === true);
 
@@ -688,8 +672,7 @@ MainWindowTest {
 
                     // ----- Enable the backsights only
                     view.positionViewAtBeginning()
-                    wait(100);
-                    // waitForRendering(view)
+                    wait(50);
                     mouseClick(frontsight);
 
                     verify(frontsight.checked === false)
@@ -702,21 +685,18 @@ MainWindowTest {
                     }
 
                     view.positionViewAtIndex(row + 1, ListView.Contain)
-                    wait(100);
-                    // waitForRendering(view)
+                    wait(50);
 
                     cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
                     mouseClick(cell)
                     cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
                     mouseClick(cell)
-                    // wait(100000);
                     verify(cell.focus === true);
 
                     direction(cell, row, column);
 
                     view.positionViewAtBeginning()
-                    wait(100);
-                    // waitForRendering(view)
+                    wait(50);
                     mouseClick(frontsight);
                     mouseClick(backsight);
                 }

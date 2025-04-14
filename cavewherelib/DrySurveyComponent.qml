@@ -755,7 +755,6 @@ Item {
                         let rowIndex = clinoFrontReadBox.dataValue.rowIndex
                         if(itemId.calibration.backSights) {
                             let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotBackClinoRole)
-                            console.log("BoxIndex:" + boxIndex);
                             return itemId.model.offsetBoxIndex(boxIndex, 0);
                         } else {
                             let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotClinoRole)
