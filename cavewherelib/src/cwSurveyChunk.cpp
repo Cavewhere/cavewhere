@@ -40,7 +40,6 @@ cwSurveyChunk::cwSurveyChunk(QObject * parent) :
 
     //Handle updating chunk calibration indexing when stations are removde
     connect(this, &cwSurveyChunk::shotsRemoved, this, &cwSurveyChunk::updateCalibrationsRemoveShots);
-    connect(this, &cwSurveyChunk::shotsRemoved, this, &cwSurveyChunk::updateCalibrationsRemoveShots);
 
     connect(this, &cwSurveyChunk::added, this,
             [this](int stationBegin, int stationEnd,int shotBegin, int shotEnd) {
