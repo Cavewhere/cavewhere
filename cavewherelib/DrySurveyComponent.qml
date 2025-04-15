@@ -101,6 +101,10 @@ Item {
     //     }
     // }
 
+    onFocusChanged:  {
+        console.log("Focus:" + focus + " " + this)
+        console.log(new Error().stack);
+    }
 
     Loader {
         id: titleLoaderId
@@ -404,6 +408,7 @@ Item {
                     () => {
                         let rowIndex = downBox.dataValue.rowIndex
                         let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationUpRole)
+                        console.log("Tab previous:" + boxIndex)
                         return itemId.model.offsetBoxIndex(boxIndex, 0)
                     }
 

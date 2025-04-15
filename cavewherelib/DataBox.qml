@@ -87,29 +87,7 @@ QQ.Item {
         z: 1
     }
 
-    onHasEditorFocusChanged: {
-        focus = hasEditorFocus
-        if(focus) {
-            forceActiveFocus()
-        }
-    }
 
-    //We need to watch on currentIndex changed because the view
-    //set the focus on the row delegate. This will disable the focus on the
-    //correct databox.
-    QQ.Connections {
-       target: dataBox.view
-       function onCurrentIndexChanged() {
-           dataBox.focus = shouldHaveFocus(); //We need to use this instead of property, because property could be out of data, and cause binding loop
-           if(dataBox.focus) {
-               // console.log("CurrentIndexChanged:" + dataBox.view.currentIndex + " " + editorFocus.boxIndex + dataBox.dataValue.boxIndex
-               //             + " hasfocus:" + dataBox.hasEditorFocus
-               //             + " correct value:" + (editorFocus.boxIndex === dataBox.dataValue.boxIndex)
-               //             + " shouldHaveFocus:" + shouldHaveFocus())
-               dataBox.forceActiveFocus()
-           }
-       }
-    }
 
     function shouldHaveFocus() {
         return editorFocus.boxIndex === dataValue.boxIndex
@@ -128,6 +106,7 @@ QQ.Item {
     }
 
     function handleTab(eventKey) {
+        console.log("Key press:" + eventKey.key + (eventKey.key === 1 + Qt.Key_Tab))
         if(eventKey.key === Qt.Key_Tab) {
             tabPressed();
             handleNextTab();
@@ -195,6 +174,42 @@ QQ.Item {
 
         dataValue.chunk.parentTrip.addNewChunk();
     }
+
+    onHasEditorFocusChanged: {
+        console.log("Force active focus:" + focus + " " + dataBox)
+        if(hasEditorFocus) {
+            forceActiveFocus()
+        }
+        focus = hasEditorFocus
+    }
+
+    //We need to watch on currentIndex changed because the view
+    //set the focus on the row delegate. This will disable the focus on the
+    //correct databox.
+    QQ.Connections {
+       target: dataBox.view
+       function onCurrentIndexChanged() {
+           dataBox.focus = shouldHaveFocus(); //We need to use this instead of property, because property could be out of data, and cause binding loop
+           if(dataBox.focus) {
+               // console.log("CurrentIndexChanged:" + dataBox.view.currentIndex + " " + editorFocus.boxIndex + dataBox.dataValue.boxIndex
+               //             + " hasfocus:" + dataBox.hasEditorFocus
+               //             + " correct value:" + (editorFocus.boxIndex === dataBox.dataValue.boxIndex)
+               //             + " shouldHaveFocus:" + shouldHaveFocus())
+               dataBox.forceActiveFocus()
+           }
+       }
+    }
+
+    // QQ.Connections {
+    //     target: editorFocus
+    //     function onBoxIndexChanged() {
+    //         if(hasEditorFocus) {
+    //             dataBox.forceActiveFocus();
+    //             console.log("Box index changed!" + dataBox)
+    //             // // focus = hasEditorFocus;
+    //         }
+    //     }
+    // }
 
     onEnteredPressed: {
         editor.openEditor()
@@ -341,7 +356,6 @@ QQ.Item {
                                GlobalShadowTextInput.textInput.text  = event.text
                                GlobalShadowTextInput.clearSelection() //GlobalShowTextInput is what's opened from editor.openEditor
                            }
-
                        }
 
     QQ.Keys.onSpacePressed: {

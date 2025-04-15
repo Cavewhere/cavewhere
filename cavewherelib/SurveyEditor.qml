@@ -105,9 +105,11 @@ QQ.Item {
                 }
             }
 
-            // onCurrentIndexChanged: {
-            //     console.log("Current index changed:" + currentIndex)
-            // }
+            currentIndex: -1
+
+            onCurrentIndexChanged: {
+                console.log("Current index changed:" + currentIndex)
+            }
 
             //Prevents default keyboard interaction
             keyNavigationEnabled: false
