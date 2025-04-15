@@ -95,21 +95,15 @@ QQ.Item {
                     let listViewIndex = editorModel.toModelRow(boxIndex.rowIndex)
                     if(boxIndex.rowType === SurveyEditorRowIndex.ShotRow) {
                         //Since the shot row has a height of zero, this -1 and +1 forces shot to be visible in the list view
-                        // view.currentIndex = listViewIndex
                         view.positionViewAtIndex(listViewIndex - 1, QQ.ListView.Contain)
                         view.positionViewAtIndex(listViewIndex + 1, QQ.ListView.Contain)
                     } else {
-                        // view.currentIndex = listViewIndex
                         view.positionViewAtIndex(listViewIndex, QQ.ListView.Contain)
                     }
                 }
             }
 
-            currentIndex: -1
-
-            onCurrentIndexChanged: {
-                console.log("Current index changed:" + currentIndex)
-            }
+            currentIndex: -1 //The currentIndex should change
 
             //Prevents default keyboard interaction
             keyNavigationEnabled: false
@@ -206,8 +200,6 @@ QQ.Item {
                     objectName: "addSurveyData"
                     text: "Add Survey Data "
                     Layout.alignment: Qt.AlignHCenter
-                    // anchors.horizontalCenter: view.horizontalCenter
-                    // visible: true
                     visible: clipArea.currentTrip !== null && clipArea.currentTrip.chunkCount === 0
 
                     onClicked: {
@@ -245,7 +237,6 @@ QQ.Item {
 
                 Text {
                     objectName: "totalLengthText"
-                    // visible: !addSurveyData.visible
                     text: {
                         if(clipArea.currentTrip === null) { return "" }
                         var unit = ""
@@ -266,8 +257,6 @@ QQ.Item {
                     id: spaceAddBar
                     objectName: "spaceAddBar"
                     source: "qrc:icons/spacebar.png"
-
-                    //                    anchors.horizontalCenter: view.horizontalCenter
 
                     visible: currentTrip !== null && currentTrip.chunkCount > 0
                     Layout.alignment: Qt.AlignHCenter

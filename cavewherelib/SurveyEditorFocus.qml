@@ -11,7 +11,6 @@ QtObject {
     function setIndex(newBoxIndex) {
         if(newBoxIndex.chunk && newBoxIndex.indexInChunk >= 0)
         {
-            console.log("New Focus:" + newBoxIndex)
             boxIndex = newBoxIndex
         }
     }
@@ -21,7 +20,6 @@ QtObject {
         let lastChunk = trip.chunk(lastChunkIndex);
         if(lastChunk.stationCount > 0) {
             let lastBoxIndex = model.boxIndex(lastChunk, 0, SurveyEditorRowIndex.StationRow, SurveyChunk.StationNameRole);
-            // view.currentIndex = model.toModelRow(lastBoxIndex.rowIndex);
 
             setIndex(lastBoxIndex);
             boxIndex = lastBoxIndex

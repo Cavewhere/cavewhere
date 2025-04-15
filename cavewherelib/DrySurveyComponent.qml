@@ -4,7 +4,7 @@ import cavewherelib
 
 Item {
     id: itemId
-    // objectName: "dryComponent." + index + "." + rowType
+
     width: 400
     height: {
         switch(rowIndex.rowType) {
@@ -18,19 +18,11 @@ Item {
     }
 
     //Visual properties
-    // property SurveyEditorColumnTitles titleItem
-
-    // height: stationVisible ? (lastElement ? 75 : 50 - 1) : titleColumnId.height + titleOffset
-
-    // readonly property bool lastElement: index == ListView.view.count - 1
-    // readonly property bool skippedElement: stationName == undefined
     property TripCalibration calibration: null
     property bool canEditTripCalibration: false
     required property int index;
     required property QC.ButtonGroup errorButtonGroup
     required property SurveyChunkTrimmer surveyChunkTrimmer;
-    // required property SurveyChunk chunk;
-    // required property int indexInChunk;
 
     //Data that comes from the model
     required property cwSurveyEditorBoxData stationName;
@@ -50,9 +42,6 @@ Item {
 
     //Visualize properties
     required property SurveyEditorColumnTitles columnTemplate
-    // readonly property bool stationVisible: itemId.rowIndex.rowType === SurveyEditorModel.StationRow
-    // readonly property bool shotVisible: itemId.rowIndex.rowType === SurveyEditorModel.ShotRow
-    // required property ListView view
     required property SurveyEditorModel model;
 
     //Validators
@@ -67,15 +56,6 @@ Item {
     //For sizing
     readonly property int titleOffset: index === 0 ? 5 : 25
 
-
-    // function errorModel(dataRole) {
-    //     if(chunk) {
-    //         console.log("Chunk:" + chunk + "error:" + indexInChunk + " " + dataRole + " " + chunk.errorsAt(indexInChunk, dataRole))
-    //         return chunk.errorsAt(indexInChunk, dataRole)
-    //     }
-    //     return null;
-    // }
-
     function nextLeftFromClino(rowIndex) {
         if(rowIndex.indexInChunk === 0) {
             return itemId.model.boxIndex(rowIndex.chunk, rowIndex.indexInChunk, SurveyEditorRowIndex.StationRow, SurveyChunk.StationLeftRole)
@@ -84,35 +64,12 @@ Item {
         }
     }
 
-    // Text {
-    //     color: "red"
-    //     font.pixelSize: 10
-    //     // text: dataBox.objectName + "\nF:" + dataBox.focus + "\nEF:" + hasEditorFocus
-    //     text: itemId.index + " type:" + itemId.rowIndex.rowType + " test:" + (itemId.rowIndex.rowType === SurveyEditorRowIndex.StationRow)
-    //     z: 1
-    // }
-
-    // DebugRectangle {
-    //     z: 1
-    //     border.width: 1
-    //     visible: itemId.rowIndex.rowType === SurveyEditorRowIndex.StationRow
-    //     Text {
-    //         text: "i:" + index
-    //     }
-    // }
-
-    onFocusChanged:  {
-        console.log("Focus:" + focus + " " + this)
-        console.log(new Error().stack);
-    }
-
     Loader {
         id: titleLoaderId
         active: itemId.rowIndex.rowType === SurveyEditorRowIndex.TitleRow
         sourceComponent: SurveyEditorColumnTitles {
             id: titleColumnId
             y: titleOffset
-            // shotOffset: Math.floor(stationBox.height / 2.0);
             shotOffset: Math.floor(50.0 / 2.0);
             chunk: itemId.rowIndex.chunk
             dataRowHeight: itemId.columnTemplate.dataRowHeight
@@ -179,24 +136,12 @@ Item {
                         return itemId.model.offsetBoxIndex(boxIndex, -1);
                     }
 
-                // navigation.arrowUp: NavigationItem { item: stationBox1; indexOffset: -1 }
-                // navigation.arrowDown: NavigationItem { item: stationBox1; indexOffset: 1 }
-
-
                 dataValue: itemId.stationName
-                // visible: stationVisible
                 listViewIndex: itemId.index
-                // index: itemId.boxIndex(SurveyChunk.StationNameRole)
-                // indexInChunk: itemId.indexInChunk
                 errorButtonGroup: itemId.errorButtonGroup
-                // errorModel: itemId.errorModel(SurveyChunk.StationNameRole)
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
-                // surveyChunk: itemId.chunk
-                // rowType: itemId.rowType
-                // dataRole: SurveyChunk.StationNameRole
                 view: itemId.ListView.view
                 dataValidator: stationValidator
-                // focus: hasEditorFocus
                 editorFocus: itemId.editorFocus
             }
 
@@ -205,8 +150,6 @@ Item {
                 id: leftBox
                 width: itemId.columnTemplate.lWidth
                 height: itemId.columnTemplate.dataRowHeight
-                // anchors.left: clinoFrontReadBox.right
-                // anchors.leftMargin: -1
                 x: itemId.columnTemplate.leftX
                 anchors.top: stationBox.top
                 anchors.topMargin: 0
@@ -256,20 +199,10 @@ Item {
 
 
                 dataValue: stationLeft
-                // visible: itemId.stationVisible
                 listViewIndex: itemId.index
-                // index: itemId.boxIndex(SurveyChunk.StationLeftRole)
-                // indexInChunk: itemId.indexInChunk
                 errorButtonGroup: itemId.errorButtonGroup
-                // errorModel: itemId.errorModel(SurveyChunk.StationLeftRole)
-
-                // onErrorModelChanged: {
-                //     console.log("Error model changed for left:" + errorModel + " " + this + " " + rowIndex)
-                // }
 
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
-                // surveyChunk: itemId.chunk
-                // dataRole: SurveyChunk.StationLeftRole
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
                 editorFocus: itemId.editorFocus
@@ -320,15 +253,9 @@ Item {
 
 
                 dataValue: stationRight
-                // visible: itemId.stationVisible
                 listViewIndex: itemId.index
-                // index: itemId.boxIndex(SurveyChunk.StationRightRole)
-                // indexInChunk: itemId.indexInChunk
                 errorButtonGroup: itemId.errorButtonGroup
-                // errorModel: itemId.errorModel(SurveyChunk.StationRightRole)
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
-                // surveyChunk: itemId.chunk
-                // dataRole: SurveyChunk.StationRightRole
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
                 editorFocus: itemId.editorFocus
@@ -381,15 +308,9 @@ Item {
 
 
                 dataValue:  stationUp
-                // visible: itemId.stationVisible
                 listViewIndex: itemId.index
-                // index: itemId.boxIndex(SurveyChunk.StationUpRole)
-                // indexInChunk: itemId.indexInChunk
                 errorButtonGroup: itemId.errorButtonGroup
-                // errorModel: itemId.errorModel(SurveyChunk.StationUpRole)
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
-                // surveyChunk: itemId.chunk
-                // dataRole: SurveyChunk.StationUpRole
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
                 editorFocus: itemId.editorFocus
@@ -408,7 +329,6 @@ Item {
                     () => {
                         let rowIndex = downBox.dataValue.rowIndex
                         let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationUpRole)
-                        console.log("Tab previous:" + boxIndex)
                         return itemId.model.offsetBoxIndex(boxIndex, 0)
                     }
 
@@ -443,15 +363,9 @@ Item {
 
 
                 dataValue: stationDown
-                // visible: itemId.stationVisible
                 listViewIndex: itemId.index
-                // index: itemId.boxIndex(SurveyChunk.StationDownRole)
-                // indexInChunk: itemId.indexInChunk
                 errorButtonGroup: itemId.errorButtonGroup
-                // errorModel: itemId.errorModel(SurveyChunk.StationDownRole)
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
-                // surveyChunk: itemId.chunk
-                // dataRole: SurveyChunk.StationDownRole
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
                 editorFocus: itemId.editorFocus
@@ -470,22 +384,14 @@ Item {
                 width: itemId.columnTemplate.distanceWidth
                 height: itemId.columnTemplate.dataRowHeight
                 x: itemId.columnTemplate.distanceX
-                // anchors.left: stationBox.right
-                // anchors.leftMargin: -1
-                // anchors.verticalCenter: stationBox.top
                 y: itemId.columnTemplate.shotRowY
                 anchors.topMargin: 0
 
                 navigation.tabPrevious:
                     () => {
                         let rowIndex = shotDistanceDataBox.dataValue.rowIndex
-                        // if(rowIndex.indexInChunk === 0) {
-                            let boxIndex = itemId.model.boxIndex(rowIndex.chunk, rowIndex.indexInChunk + 1, SurveyEditorRowIndex.StationRow, SurveyChunk.StationNameRole)
-                            return itemId.model.offsetBoxIndex(boxIndex, 0);
-                        // } else {
-                        //     let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.StationNameRole)
-                        //     return itemId.model.offsetBoxIndex(boxIndex, 1);
-                        // }
+                        let boxIndex = itemId.model.boxIndex(rowIndex.chunk, rowIndex.indexInChunk + 1, SurveyEditorRowIndex.StationRow, SurveyChunk.StationNameRole)
+                        return itemId.model.offsetBoxIndex(boxIndex, 0);
                     }
 
                 navigation.tabNext:
@@ -532,22 +438,10 @@ Item {
                         return itemId.model.offsetBoxIndex(shotDistanceDataBox.dataValue.boxIndex, -1);
                     }
 
-
-
-                // navigation.arrowLeft: NavigationItem { item: stationBox1 }
-                // navigation.arrowRight: NavigationItem { item: compassFrontReadBox }
-                // navigation.arrowUp: NavigationItem { item: shotDistanceDataBox1; indexOffset: -1 }
-                // navigation.arrowDown: NavigationItem { item: shotDistanceDataBox1; indexOffset: 1 }
-
                 dataValue: shotDistance
                 listViewIndex: itemId.index
-                // index: itemId.boxIndex(SurveyChunk.ShotDistanceRole)
-                // indexInChunk: itemId.indexInChunk
                 errorButtonGroup: itemId.errorButtonGroup
-                // errorModel: itemId.errorModel(SurveyChunk.ShotDistanceRole)
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
-                // surveyChunk: itemId.chunk
-                // dataRole: SurveyChunk.ShotDistanceRole
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
                 editorFocus: itemId.editorFocus
@@ -562,16 +456,6 @@ Item {
                 anchors.leftMargin: -1
                 anchors.top: shotDistanceDataBox.top
                 anchors.topMargin: 0
-
-                // navigation.tabPrevious: NavigationItem { item: shotDistanceDataBox; indexOffset: 0 }
-                // navigation.tabNext: NavigationItem {
-                //     item: itemId.firstVisible([
-                //                                   {item:(compassBackReadBox), used: itemId.calibration.backSights},
-                //                                   {item:(clinoFrontReadBox), used: itemId.calibration.frontSights},
-                //                                   {item:(leftBox), used: true},
-                //                               ])
-                //     indexOffset: 0
-                // }
 
                 navigation.tabPrevious:
                     () => {
@@ -626,13 +510,8 @@ Item {
                 visible: itemId.calibration.frontSights
                 dataValue: shotCompass
                 listViewIndex: itemId.index
-                // index: itemId.boxIndex(SurveyChunk.ShotCompassRole)
-                // indexInChunk: itemId.indexInChunk
                 errorButtonGroup: itemId.errorButtonGroup
-                // errorModel: itemId.errorModel(SurveyChunk.ShotCompassRole)
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
-                // surveyChunk: itemId.chunk
-                // dataRole: SurveyChunk.ShotCompassRole
                 view: itemId.ListView.view
                 readingText: "fs"
                 dataValidator: compassValidator
@@ -644,7 +523,6 @@ Item {
                 width: itemId.columnTemplate.compassWidth
                 height: calibration.frontSights ? itemId.columnTemplate.dataRowHalfHeight + 1 : itemId.columnTemplate.dataRowHeight
                 anchors.left: compassFrontReadBox.left
-                // anchors.leftMargin: -1
                 anchors.top: calibration.frontSights ? shotDistanceDataBox.verticalCenter : shotDistanceDataBox.top
                 anchors.topMargin: calibration.frontSights ? -1 : 0
 
@@ -690,7 +568,6 @@ Item {
                         let rowIndex = compassBackReadBox.dataValue.rowIndex
                         if(itemId.calibration.frontSights) {
                             let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotCompassRole)
-                            // console.log("Offset:" + itemId.model.offsetBoxIndex(boxIndex, 1))
                             return itemId.model.offsetBoxIndex(boxIndex, 1);
                         } else {
                             let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotBackCompassRole)
@@ -713,13 +590,8 @@ Item {
                 visible: itemId.calibration.backSights
                 dataValue: shotBackCompass
                 listViewIndex: itemId.index
-                // index: itemId.boxIndex(SurveyChunk.ShotBackCompassRole)
-                // indexInChunk: itemId.indexInChunk
                 errorButtonGroup: itemId.errorButtonGroup
-                // errorModel: itemId.errorModel(SurveyChunk.ShotBackCompassRole)
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
-                // surveyChunk: itemId.chunk
-                // dataRole: SurveyChunk.ShotBackCompassRole
                 view: itemId.ListView.view
                 readingText: "bs"
                 dataValidator: compassValidator
@@ -799,13 +671,8 @@ Item {
                 visible: itemId.calibration.frontSights
                 dataValue: shotClino
                 listViewIndex: itemId.index
-                // index: itemId.boxIndex(SurveyChunk.ShotClinoRole)
-                // indexInChunk: itemId.indexInChunk
                 errorButtonGroup: itemId.errorButtonGroup
-                // errorModel: itemId.errorModel(SurveyChunk.ShotClinoRole)
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
-                // surveyChunk: itemId.chunk
-                // dataRole: SurveyChunk.ShotClinoRole
                 view: itemId.ListView.view
                 readingText: "fs"
                 dataValidator: clinoValidator
@@ -856,7 +723,6 @@ Item {
                         let rowIndex = clinoBackReadBox.dataValue.rowIndex
                         if(itemId.calibration.frontSights) {
                             let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotClinoRole)
-                            // console.log("Offset:" + itemId.model.offsetBoxIndex(boxIndex, 1))
                             return itemId.model.offsetBoxIndex(boxIndex, 1);
                         } else {
                             let boxIndex = itemId.model.boxIndex(rowIndex, SurveyChunk.ShotBackClinoRole)
@@ -878,13 +744,8 @@ Item {
 
                 dataValue: shotBackClino
                 listViewIndex: itemId.index
-                // index: itemId.boxIndex(SurveyChunk.ShotBackClinoRole)
-                // indexInChunk: itemId.indexInChunk
                 errorButtonGroup: itemId.errorButtonGroup
-                // errorModel: itemId.errorModel(SurveyChunk.ShotBackClinoRole)
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
-                // surveyChunk: itemId.chunk
-                // dataRole: SurveyChunk.ShotBackClinoRole
                 view: itemId.ListView.view
                 readingText: "bs"
                 dataValidator: clinoValidator

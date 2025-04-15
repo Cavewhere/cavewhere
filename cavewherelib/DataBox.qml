@@ -14,9 +14,7 @@ QQ.Item {
     id: dataBox
     objectName: "dataBox." + listViewIndex + "." + dataValue.chunkDataRole
 
-    // property alias dataValue: editor.text
     property alias dataValidator: editor.validator
-    // required property SurveyChunk surveyChunk; //For hooking up signals and slots in subclasses
 
     required property SurveyChunkTrimmer surveyChunkTrimmer; //For interaction
     property alias aboutToDelete: removeBoxId.visible
@@ -26,14 +24,9 @@ QQ.Item {
 
     //The index informantion from cwSurveyEditorModel
     required property cwSurveyEditorBoxData dataValue
-    // required property cwSurveyEditorBoxIndex index
 
     //Index in the ListView
     required property int listViewIndex
-
-    // required property int indexInChunk //Index in the surveyChunk
-    // required property int boxIndex.chunkRole
-    // property int boxIndex.rowType
 
     required property QQ.ListView view
 
@@ -41,28 +34,6 @@ QQ.Item {
     required property SurveyEditorFocus editorFocus
 
     readonly property bool hasEditorFocus: shouldHaveFocus()
-        // if(editorFocus) {
-            // if(editorFocus.boxIndex.chunk === dataValue.chunk
-            //         && editorFocus.boxIndex.rowType === dataValue.rowType
-            //         && editorFocus.boxIndex.indexInChunk === dataValue.indexInChunk
-            //         && editorFocus.boxIndex.chunkDataRole === dataValue.chunkDataRole) {
-                // console.log("----");
-                // console.log("Editor Focus1:" + this + " " + editorFocus.boxIndex.chunk  + " " + editorFocus.boxIndex.rowType + " " + editorFocus.boxIndex.indexInChunk + " " + editorFocus.boxIndex.chunkDataRole)
-                // console.log("Editor Focus2:" + this + " " + dataValue.chunk + " " + dataValue.rowType + " " + dataValue.indexInChunk + " " + dataValue.chunkDataRole)
-                // console.log("hasEditorfocus:" + (editorFocus.boxIndex.chunk === dataValue.chunk
-                //                                  && editorFocus.boxIndex.rowType === dataValue.rowType
-                //                                  && editorFocus.boxIndex.indexInChunk === dataValue.indexInChunk
-                //                                  && editorFocus.boxIndex.chunkDataRole === dataValue.chunkDataRole))
-            // }
-            // return editorFocus.boxIndex === dataValue.boxIndex
-        // return editorFocus.boxIndex.chunk === dataValue.chunk
-            //         && editorFocus.boxIndex.rowType === dataValue.rowType
-            //         && editorFocus.boxIndex.indexInChunk === dataValue.indexInChunk
-            //         && editorFocus.boxIndex.chunkDataRole === dataValue.chunkDataRole
-        // } else {
-        //     return false;
-        // }
-    // }
 
     property GlobalShadowTextInput _globalShadowTextInput: GlobalShadowTextInput
     property GlobalTextInputHelper _globalTextInput: GlobalShadowTextInput.textInput
@@ -72,41 +43,29 @@ QQ.Item {
     signal deletePressed();
     signal tabPressed();
 
-    //    signal rightClicked(int index)
-    //    signal splitOn(int index)
-
-    // QQ.Binding {
-    //     dataBox.focus: hasEditorFocus
+    //Uncomment to visualize indexes for the box
+    // Text {
+    //     color: "red"
+    //     font.pixelSize: 10
+    //     text: dataBox.objectName + "\nF:" + dataBox.focus + "\nEF:" + hasEditorFocus
+    //     z: 1
     // }
-
-    Text {
-        color: "red"
-        font.pixelSize: 10
-        text: dataBox.objectName + "\nF:" + dataBox.focus + "\nEF:" + hasEditorFocus
-        // text: dataBox.objectName + "\ne:" + errorModel
-        z: 1
-    }
-
-
 
     function shouldHaveFocus() {
         return editorFocus.boxIndex === dataValue.boxIndex
     }
 
     function deletePressedHandler() {
-        // dataValue = '';
         editor.text = "";
         editor.openEditor();
         state = 'MiddleTyping';
     }
 
     function handleNextTab() {
-        // console.log("Next tab:" + dataBox.navigation.tabNext())
         dataBox.editorFocus.setIndex(dataBox.navigation.tabNext())
     }
 
     function handleTab(eventKey) {
-        console.log("Key press:" + eventKey.key + (eventKey.key === 1 + Qt.Key_Tab))
         if(eventKey.key === Qt.Key_Tab) {
             tabPressed();
             handleNextTab();
@@ -176,7 +135,6 @@ QQ.Item {
     }
 
     onHasEditorFocusChanged: {
-        console.log("Force active focus:" + focus + " " + dataBox)
         if(hasEditorFocus) {
             forceActiveFocus()
         }
@@ -199,17 +157,6 @@ QQ.Item {
            }
        }
     }
-
-    // QQ.Connections {
-    //     target: editorFocus
-    //     function onBoxIndexChanged() {
-    //         if(hasEditorFocus) {
-    //             dataBox.forceActiveFocus();
-    //             console.log("Box index changed!" + dataBox)
-    //             // // focus = hasEditorFocus;
-    //         }
-    //     }
-    // }
 
     onEnteredPressed: {
         editor.openEditor()
@@ -287,8 +234,6 @@ QQ.Item {
             }
         }
 
-        // DebugRectangle {}
-
         visible: dataBox.dataValue.chunk !== null
                  && dataBox.dataValue.chunk.isStationRole(dataBox.dataValue.chunkDataRole)
     }
@@ -345,11 +290,6 @@ QQ.Item {
                                return;
                            }
 
-                           // surveyChunkView.navigationArrow(listViewIndex, boxIndex.chunkRole, event.key);
-
-                           // if(event.key === Qt.Key_Backspace) {
-                           // }
-
                            if(dataValidator.validate(event.text) > 0 && event.text.length > 0) {
                                dataBox.state = 'MiddleTyping'
                                editor.openEditor()
@@ -360,30 +300,12 @@ QQ.Item {
 
     QQ.Keys.onSpacePressed: {
         addNewChunk();
-
-        // var trip = index.chunk.parentTrip;
-        // if(trip.chunkCount > 0) {
-        //     var lastChunkIndex = trip.chunkCount - 1
-        //     var lastChunk = trip.chunk(lastChunkIndex);
-        //     if(lastChunk.isStationAndShotsEmpty()) {
-        //         (dataBox.surveyChunkView.parent as SurveyChunkGroupView).setFocus(lastChunkIndex)
-        //         return;
-        //     }
-        // }
-
-        // console.log("space bar 2 area click, new chunk!");
-        // index.chunk.parentTrip.addNewChunk();
     }
 
 
     onFocusChanged: {
         if(focus) {
-            //Make sure it's visible to the user
-            //            surveyChunkView.ensureDataBoxVisible(listViewIndex, boxIndex.chunkRole)
-            // console.log("Focus change:" + focus + " " + index.chunk + " " + this)
             surveyChunkTrimmer.chunk = dataValue.chunk;
-            // console.log("Focus Change:" + editorFocus.boxIndex + " " + dataValue.boxIndex)
-
             editorFocus.setIndex(dataValue.boxIndex)
         }
     }
@@ -407,8 +329,6 @@ QQ.Item {
         }
 
         onClicked: {
-            // dataBox.view.currentIndex = dataBox.listViewIndex
-
             dataBox.forceActiveFocus();
         }
 
@@ -473,66 +393,6 @@ QQ.Item {
             }
         }
 
-        // QQ.Keys.onPressed: (event) => {
-        //     handleTab(event);
-        //     switch(event.key) {
-        //     case Qt.Key_Left:
-        //     case Qt.Key_Right:
-        //     case Qt.Key_Up:
-        //     case Qt.Key_Down:
-        //     case Qt.Key_Backspace:
-        //         deletePressedHandler();
-        //         return;
-        //     }
-
-        //     surveyChunkView.navigationArrow(listViewIndex, boxIndex.chunkRole, event.key);
-
-        //     // if(event.key === Qt.Key_Backspace) {
-        //     // }
-
-        //     if(editor.validator.validate(event.text) > 0 && event.text.length > 0) {
-        //         dataBox.state = 'MiddleTyping'
-        //         editor.openEditor()
-        //         GlobalShadowTextInput.textInput.text  = event.text
-        //         GlobalShadowTextInput.clearSelection() //GlobalShowTextInput is what's opened from editor.openEditor
-        //     }
-        // }
-
-
-        // QQ.Keys.onPressed: (event) => {
-        //                        handleTab(event);
-        //                        // surveyChunkView.navigationArrow(listViewIndex, boxIndex.chunkRole, event.key);
-
-        //                        if(event.key === Qt.Key_Backspace) {
-        //                            deletePressedHandler();
-        //                            return;
-        //                        }
-
-        //                        if(editor.validator.validate(event.text) > 0 && event.text.length > 0) {
-        //                            dataBox.state = 'MiddleTyping'
-        //                            editor.openEditor()
-        //                            GlobalShadowTextInput.textInput.text  = event.text
-        //                            GlobalShadowTextInput.clearSelection() //GlobalShowTextInput is what's opened from editor.openEditor
-        //                        }
-        //                    }
-
-        // QQ.Keys.onSpacePressed: {
-        //     addNewChunk();
-
-        //     // var trip = surveyChunk.parentTrip;
-        //     // if(trip.chunkCount > 0) {
-        //     //     var lastChunkIndex = trip.chunkCount - 1
-        //     //     var lastChunk = trip.chunk(lastChunkIndex);
-        //     //     if(lastChunk.isStationAndShotsEmpty()) {
-        //     //         (dataBox.surveyChunkView.parent as SurveyChunkGroupView).setFocus(lastChunkIndex)
-        //     //         return;
-        //     //     }
-        //     // }
-
-        //     // console.log("space bar 2 area click, new chunk!");
-        //     // index.chunk.parentTrip.addNewChunk();
-        // }
-
         QQ.Keys.onEnterPressed: {
             enteredPressed()
         }
@@ -544,21 +404,7 @@ QQ.Item {
         QQ.Keys.onDeletePressed: {
             deletePressed();
         }
-
-        // onFocusChanged: {
-        //     if(focus) {
-        //         //Make sure it's visible to the user
-        //         //            surveyChunkView.ensureDataBoxVisible(listViewIndex, boxIndex.chunkRole)
-        //         console.log("Focus change:" + focus + " " + index.chunk)
-        //         surveyChunkTrimmer.chunk = index.chunk;
-        //     }
-        // }
-
     }
-
-    // onStateChanged: {
-    //     console.log("StateChanged:" + state)
-    // }
 
     states: [
 
@@ -566,12 +412,8 @@ QQ.Item {
             name: "MiddleTyping"
 
             QQ.PropertyChanges {
-                // dataBox._globalTextInput.onEnterPressed: {
-                //     console.log("sauce")
-                // }
 
                 dataBox._globalTextInput.onPressKeyPressed: () => {
-                    // console.log("PressKeyEvent:" + pressKeyEvent)
                     if(pressKeyEvent.key === Qt.Key_Tab ||
                        pressKeyEvent.key === 1 + Qt.Key_Tab ||
                        pressKeyEvent.key === Qt.Key_Space)
@@ -581,9 +423,7 @@ QQ.Item {
                     }
 
                     if(pressKeyEvent.key === Qt.Key_Space) {
-                        console.log("Space bar, new chunk!");
                         dataBox.addNewChunk();
-                        // index.chunk.parentTrip.addNewChunk();
                     }
 
                     //Tab to the next entry on enter
@@ -625,12 +465,8 @@ QQ.Item {
                         dataBox.forceActiveFocus()
                     }
                 }
-            }
 
-            QQ.PropertyChanges {
-                dataBox {
-                    z: 1
-                }
+                dataBox.z: 1
             }
         }
     ]

@@ -27,7 +27,6 @@ public:
         RightRole,
         UpRole,
         DownRole
-//        PositionRole
     };
 
     cwStation();

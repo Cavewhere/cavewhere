@@ -259,11 +259,7 @@ MainWindowTest {
                 verify(currentItem.focus === true)
             }
 
-            console.log("Active focus:" + mainWindow.Window.window.activeFocusItem)
             keyClick(key, modifier) //Tab
-            console.log("Active focus after:" + mainWindow.Window.window.activeFocusItem)
-
-            // wait(100);
 
             let itemName = "rootId->tripPage->view->dataBox." + index + "." + nextRole
             let item = ObjectFinder.findObjectByChain(mainWindow, itemName)

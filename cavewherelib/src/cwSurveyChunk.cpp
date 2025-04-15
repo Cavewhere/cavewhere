@@ -379,10 +379,6 @@ cwSurveyChunk* cwSurveyChunk::splitAtStation(int stationIndex) {
         }
     }
 
-    // int stationEnd = Stations.size() - 1;
-    // int shotEnd = Shots.size() - 1;
-
-
     //Remove the stations and shots from the list
     int shotIndex = stationIndex - 1;
     emit aboutToRemove(stationIndex, stationIndex, shotIndex, shotIndex);
@@ -393,8 +389,6 @@ cwSurveyChunk* cwSurveyChunk::splitAtStation(int stationIndex) {
     Shots.erase(shotIter, Shots.end());
 
     emit removed(stationIndex, stationIndex, shotIndex, shotIndex);
-    // emit stationsRemoved(stationIndex, stationEnd);
-    // emit shotsRemoved(shotIndex, shotEnd);
 
     //Check for errors
     updateErrors();
@@ -457,10 +451,7 @@ void cwSurveyChunk::insertShot(int shotIndex, Direction direction) {
     cwStation station;
 
     Stations.insert(stationIndex, station);
-    // emit stationsAdded(stationIndex, stationIndex);
-
     Shots.insert(shotIndex, cwShot());
-    // emit shotsAdded(shotIndex, shotIndex);
 
     emit added(stationIndex, stationIndex,
                shotIndex, shotIndex);
@@ -478,44 +469,6 @@ bool cwSurveyChunk::canAddShot(const cwStation& fromStation, const cwStation& to
     Q_UNUSED(toStation);
     return Stations.empty() || Stations.last().name().compare(fromStation.name(), Qt::CaseInsensitive) == 0;
 }
-
-///**
-//  \brief Returns the two and from stations at shot
-
-//  This first find the shot and the get's the to and from station.
-//  */
-//QPair<cwStationReference, cwStationReference> cwSurveyChunk::toFromStations(const cwShot &shot) const {
-//    if(!isValid()) { return QPair<cwStationReference, cwStationReference>(); }
-//    //if(shot->parent() != this) { return QPair<cwStationReference*, cwStationReference*>(nullptr, nullptr); }
-
-//    for(int i = 0; i < Shots.size(); i++) {
-//        if(Shots[i].sameIntervalPointer(shot)) {
-//            return QPair<cwStationReference, cwStationReference>(Stations[i], Stations[i + 1]);
-//        }
-//    }
-
-//    return QPair<cwStationReference, cwStationReference>();
-//}
-
-///**
-//  \brief Returns the to and from stations at shot
-
-//  This first find the shot and the get's the to  station.
-//  */
-//cwStationReference cwSurveyChunk::toStation(const cwShot &shot) const
-//{
-//    return toFromStations(shot).second;
-//}
-
-///**
-//  \brief Returns the from stations at shot
-
-//  This first find the shot and the get's the  from station.
-//  */
-//cwStationReference cwSurveyChunk::fromStation(const cwShot &shot) const
-//{
-//    return toFromStations(shot).first;
-//}
 
 /**
   \brief Removes a shot and a station from the chunk
@@ -1129,10 +1082,6 @@ QList<cwError> cwSurveyChunk::checkLRUDError(cwSurveyChunk::DataRole role, int i
 
     QVariant value = data(role, index);
 
-    // if(value.isNull() && !) {
-    //     //No data is set
-    //     noDataWarning();
-    // } else if(!value.isNull()) {
     Q_ASSERT(!value.isNull());
 
     //The LRUD data isn't a number
@@ -1651,23 +1600,6 @@ void cwSurveyChunk::clearErrors()
     ErrorModel->errors()->clear();
 }
 
-///**
-// * @brief cwSurveyChunk::errorCount
-// * @param type
-// * @return
-// */
-//int cwSurveyChunk::errorCount(cwSurveyChunkError::ErrorType type) const
-//{
-//    int numberOfWarnings = 0;
-//    foreach(cwSurveyChunkError error, Errors.values()) {
-//        if(error.type() == type) {
-//            numberOfWarnings++;
-//        }
-//    }
-//    return numberOfWarnings;
-//}
-
-
 /**
   \brief Set's the chunk data based on a role
   */
@@ -1681,19 +1613,6 @@ void cwSurveyChunk::setData(DataRole role, int index, QVariant data) {
     }
 }
 
-///**
-// * @brief cwSurveyChunk::errors
-// * @return Returns all the errors in the survey chunk
-// */
-//cwErrorModel* cwSurveyChunk::errors() const
-//{
-////    if(parentCave() != nullptr) {
-////        return parentCave()->errorModel()->errors(this);
-////    }
-
-//    return QVariantList();
-//}
-
 /**
  * @brief cwSurveyChunk::error
  * @param role
@@ -1704,27 +1623,6 @@ cwErrorModel* cwSurveyChunk::errorsAt(int index, cwSurveyChunk::DataRole role) c
 {
     return CellErrorModels.value(CellIndex(index, role), nullptr);
 }
-
-///**
-// * @brief cwSurveyChunk::setSuppressWarning
-// * @param role
-// * @param index
-// * @param warning
-// * @param suppress
-// *
-// * This will find the warning in role and index and suppress it. It is not possible to suppress fatal
-// * errors. If the warning doesn't exist, this does nothing.
-// */
-//void cwSurveyChunk::setSuppressWarning(
-//                                       cwError warning,
-//                                       bool suppress)
-//{
-//    Q_UNUSED(warning);
-//    Q_UNUSED(suppress);
-////    if(parentCave() != nullptr) {
-////        return parentCave()->errorModel()->setSuppressForError(warning, suppress);
-////    }
-//}
 
 /**
   \brief Removes a station and a shot from the chunk
@@ -1752,35 +1650,6 @@ int cwSurveyChunk::index(int index, Direction direction) {
     }
     return -1;
 }
-
-///**
-//  Uses the parent trip and updates all the stations in this chunk
-//  with the new cave.
-
-//  If the parent trip is null or parent trip's cave is null, this
-//  does nothing
-//  */
-//void cwSurveyChunk::updateStationsWithNewCave() {
-//    if(ParentTrip == nullptr || ParentTrip->parentCave() == nullptr) { return; }
-
-//    for(int i = 0; i < Stations.size(); i++) {
-//        cwCave* cave = ParentTrip->parentCave();
-//        Stations[i].setCave(cave);
-//    }
-//}
-
-/**
-  \brief This creates a new station in the chunk
-
-  The station will be owned by this chunk, and the parent cave will be set
-  for the station
-  */
-//cwStationReference cwSurveyChunk::createNewStation() {
-//    //Create a new station
-//    cwStationReference station; // = new cwStationReference();
-//    station.setCave(parentCave());
-//    return station;
-//}
 
 /**
   \brief Returns true if the survey chunk has a station
@@ -1839,33 +1708,3 @@ QList<int> cwSurveyChunk::indicesOfStation(QString stationName) const {
     }
     return indices;
 }
-
-/**
-* @brief cwSurveyChunk::setConnectedState
-* @param connectedState - Connected means that the survey chunk is connect to the cave
-* Disconnected means that it's not connected to the cave
-* Unknown means that connection hasn't been calculated
-*/
-// void cwSurveyChunk::setConnectedState(ConnectedState connectedState) {
-//     if(IsConnectedState != connectedState) {
-//         IsConnectedState = connectedState;
-//         emit connectedStateChanged();
-//     }
-// }
-
-///**
-//* @brief cwSurveyChunk::warningCount
-//* @return
-//*/
-//int cwSurveyChunk::warningCount() const {
-//    return errorCount(cwSurveyChunkError::Warning);
-//}
-
-///**
-//* @brief cwSurveyChunk::fatalErrorCount
-//* @return
-//*/
-//int cwSurveyChunk::fatalErrorCount() const {
-//    return errorCount(cwSurveyChunkError::Fatal);
-//}
-
