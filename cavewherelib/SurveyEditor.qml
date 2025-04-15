@@ -204,7 +204,7 @@ QQ.Item {
                 AddButton {
                     id: addSurveyData
                     objectName: "addSurveyData"
-                    text: "Add Survey Data " + clipArea.currentTrip + " " + clipArea.currentTrip.chunkCount
+                    text: "Add Survey Data "
                     Layout.alignment: Qt.AlignHCenter
                     // anchors.horizontalCenter: view.horizontalCenter
                     // visible: true
