@@ -25,7 +25,7 @@ DataBox {
         if(focus) {
             //Make sure it's visible to the user
             if(dataValue.chunk) {
-                var lastStationIndex = dataValue.chunk.stationCount() - 1
+                var lastStationIndex = dataValue.chunk.stationCount - 1
 
                 //Try to guess for new stations what the next station is
                 //Make sure the station is the last station in the chunk

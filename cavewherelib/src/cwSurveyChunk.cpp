@@ -40,16 +40,21 @@ cwSurveyChunk::cwSurveyChunk(QObject * parent) :
 
     //Handle updating chunk calibration indexing when stations are removde
     connect(this, &cwSurveyChunk::shotsRemoved, this, &cwSurveyChunk::updateCalibrationsRemoveShots);
+    connect(this, &cwSurveyChunk::shotsRemoved, this, &cwSurveyChunk::updateCalibrationsRemoveShots);
 
     connect(this, &cwSurveyChunk::added, this,
             [this](int stationBegin, int stationEnd,int shotBegin, int shotEnd) {
                 emit stationsAdded(stationBegin, stationEnd);
                 emit shotsAdded(shotBegin, shotEnd);
+                emit stationCountChanged();
+                emit shotCountChanged();
     });
     connect(this, &cwSurveyChunk::removed, this,
             [this](int stationBegin, int stationEnd,int shotBegin, int shotEnd) {
                 emit stationsRemoved(stationBegin, stationEnd);
                 emit shotsRemoved(shotBegin, shotEnd);
+                emit stationCountChanged();
+                emit shotCountChanged();
     });
 
 }
@@ -430,8 +435,6 @@ void cwSurveyChunk::insertStation(int stationIndex, Direction direction) {
 
     emit added(stationIndex, stationIndex,
                shotIndex, shotIndex);
-    // emit stationsAdded(stationIndex, stationIndex);
-    // emit shotsAdded(shotIndex, shotIndex);
 
     updateErrors();
 }
@@ -1844,12 +1847,12 @@ QList<int> cwSurveyChunk::indicesOfStation(QString stationName) const {
 * Disconnected means that it's not connected to the cave
 * Unknown means that connection hasn't been calculated
 */
-void cwSurveyChunk::setConnectedState(ConnectedState connectedState) {
-    if(IsConnectedState != connectedState) {
-        IsConnectedState = connectedState;
-        emit connectedStateChanged();
-    }
-}
+// void cwSurveyChunk::setConnectedState(ConnectedState connectedState) {
+//     if(IsConnectedState != connectedState) {
+//         IsConnectedState = connectedState;
+//         emit connectedStateChanged();
+//     }
+// }
 
 ///**
 //* @brief cwSurveyChunk::warningCount

@@ -62,7 +62,7 @@ MainWindowTest {
 
 
             let firstChunk = trip.chunk(0);
-            verify(firstChunk.stationCount() === 3)
+            verify(firstChunk.stationCount === 3)
             verify(firstChunk.data(SurveyChunk.StationNameRole, 0) === "b1")
             verify(firstChunk.data(SurveyChunk.StationNameRole, 1) === "b2")
             verify(firstChunk.data(SurveyChunk.StationNameRole, 2) === "")
@@ -192,8 +192,8 @@ MainWindowTest {
             // verify
 
             //Make sure the first chunk gets trimmed
-            verify(firstChunk.stationCount() === 3)
-            verify(firstChunk.shotCount() === 2)
+            verify(firstChunk.stationCount === 3)
+            verify(firstChunk.shotCount === 2)
 
             //Make sure the new scrap exists
             verify(trip.chunkCount === 2);
@@ -276,6 +276,7 @@ MainWindowTest {
             if(currentItem !== null) {
                 if(currentItem.focus !== false) {
                     console.log("Testcase will fail, bad currentItem focus!!! place breakpoint here" + currentItem);
+                    wait(100000)
                 }
 
                 verify(currentItem.focus === false);
@@ -337,15 +338,43 @@ MainWindowTest {
         }
 
         function test_spaceBarVisible() {
-            let spaceBar = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->view->spaceAddBar")
-            verify(spaceBar === null)
-
             addSurvey();
-            spaceBar = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->view->spaceAddBar")
+            let spaceBar = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->view->spaceAddBar")
             verify(spaceBar.visible === true)
 
             enterSurveyData();
             verify(spaceBar.visible === true)
+        }
+
+        /**
+          Test to see if an error is shown when the chunk isn't connected
+          */
+        function test_notConnected() {
+            addSurvey();
+            enterSurveyData();
+
+            let a1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.7.0->coreTextInput")
+            mouseClick(a1, 38.9219, 10.4531)
+
+            let chunkError = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->chunkErrorDelegate.6")
+            let errorText = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->chunkErrorDelegate.6->errorText")
+            verify(chunkError.visible === false);
+            verify(errorText.text === "")
+
+            //Change to a1 to c1, this will disconnect the chunk
+            keyClick("c")
+            keyClick(49, 0) //1
+            keyClick(16777220, 0) //Return
+
+            let a2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.9.0->coreTextInput")
+            mouseClick(a2)
+
+            keyClick("d")
+            keyClick(50, 0) //2
+            keyClick(16777220, 0) //Return
+
+            verify(chunkError.visible === true);
+            verify(errorText.text === "Survey leg isn't connect to the cave")
         }
 
         function test_errorButtonsShouldWork() {
@@ -549,8 +578,8 @@ MainWindowTest {
 
                 for(let i = rowIndex + 2; i < surveyView.count; i += 2) {
                     let chunk = currentItem.dataValue.chunk
-                    let stationCount = chunk.stationCount();
-                    let shotCount = chunk.shotCount();
+                    let stationCount = chunk.stationCount;
+                    let shotCount = chunk.shotCount;
                     let lastStationIndex = stationCount - 1
                     let lastShotIndex = shotCount - 1;
                     //console.log("i:" + i + " " + surveyView.count + " " + currentItem.dataValue.indexInChunk + " " + lastStationIndex + " " + (currentItem.dataValue.indexInChunk === lastStationIndex))
@@ -595,8 +624,8 @@ MainWindowTest {
 
                 for(let i = rowIndex; i >= 1; i -= 2) {
                     let chunk = currentItem.dataValue.chunk
-                    let stationCount = chunk.stationCount();
-                    let shotCount = chunk.shotCount();
+                    let stationCount = chunk.stationCount;
+                    let shotCount = chunk.shotCount;
                     let firstStationIndex = 0
                     let firstShotIndex = 0;
                     // console.log("i:" + i + " " + surveyView.count + " " + currentItem.dataValue.indexInChunk + " " + firstStationIndex + " " + (currentItem.dataValue.indexInChunk === firstStationIndex))

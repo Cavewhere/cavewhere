@@ -31,8 +31,11 @@ class CAVEWHERE_LIB_EXPORT cwSurveyChunk : public QObject {
     QML_NAMED_ELEMENT(SurveyChunk)
 
     Q_PROPERTY(cwTrip* parentTrip READ parentTrip WRITE setParentTrip NOTIFY parentTripChanged)
-    Q_PROPERTY(ConnectedState connectedState READ connectedState WRITE setConnectedState NOTIFY connectedStateChanged)
+    // Q_PROPERTY(ConnectedState connectedState READ connectedState WRITE setConnectedState NOTIFY connectedStateChanged)
     Q_PROPERTY(cwErrorModel* errorModel READ errorModel CONSTANT)
+
+    Q_PROPERTY(int stationCount READ stationCount NOTIFY stationCountChanged FINAL)
+    Q_PROPERTY(int shotCount READ shotCount NOTIFY shotCountChanged FINAL)
 
 public:
     enum Direction {
@@ -98,10 +101,18 @@ public:
 
     Q_INVOKABLE bool isStationAndShotsEmpty() const;
 
-    ConnectedState connectedState() const;
-    void setConnectedState(ConnectedState connectedState);
+    // ConnectedState connectedState() const;
+    // void setConnectedState(ConnectedState connectedState);
 
     cwErrorModel* errorModel() const;
+
+    int stationCount() const;
+    int shotCount() const;
+
+    Q_INVOKABLE cwStation station(int index) const;
+    Q_INVOKABLE QList<int> indicesOfStation(QString stationName) const;
+
+    Q_INVOKABLE cwShot shot(int index) const;
 
 signals:
     void parentTripChanged();
@@ -129,13 +140,14 @@ signals:
 
     void errorsChanged(cwSurveyChunk::DataRole mainRole, int index);
 
-public slots:
-    int stationCount() const;
-    cwStation station(int index) const;
-    QList<int> indicesOfStation(QString stationName) const;
+    void shotCountChanged();
+    void stationCountChanged();
 
-    int shotCount() const;
-    cwShot shot(int index) const;
+public slots:
+    // cwStation station(int index) const;
+    // QList<int> indicesOfStation(QString stationName) const;
+
+    // cwShot shot(int index) const;
 
 //    QPair<cwStationReference, cwStationReference> toFromStations(const cwShot& shot) const;
 //    cwStationReference toStation(const cwShot& shot) const;
@@ -192,7 +204,7 @@ private:
 
     cwTrip* ParentTrip;
     bool Editting; //!< Puts the survey chunk in a edditing state, this will try to keep a empty shot at the end of the chunk
-    ConnectedState IsConnectedState; //!<
+    // ConnectedState IsConnectedState; //!<
 
     bool shotIndexCheck(int index) const { return index >= 0 && index < Shots.count();  }
     bool stationIndexCheck(int index) const { return index >= 0 && index < Stations.count(); }
@@ -269,9 +281,9 @@ inline QList<cwShot> cwSurveyChunk::shots() const {
 * @brief cwSurveyChunk::connectedState
 * @return
 */
-inline cwSurveyChunk::ConnectedState cwSurveyChunk::connectedState() const {
-    return IsConnectedState;
-}
+// inline cwSurveyChunk::ConnectedState cwSurveyChunk::connectedState() const {
+//     return IsConnectedState;
+// }
 
 
 /**

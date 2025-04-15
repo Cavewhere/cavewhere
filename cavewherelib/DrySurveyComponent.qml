@@ -68,13 +68,13 @@ Item {
     readonly property int titleOffset: index === 0 ? 5 : 25
 
 
-    function errorModel(dataRole) {
-        if(chunk) {
-            console.log("Chunk:" + chunk + "error:" + indexInChunk + " " + dataRole + " " + chunk.errorsAt(indexInChunk, dataRole))
-            return chunk.errorsAt(indexInChunk, dataRole)
-        }
-        return null;
-    }
+    // function errorModel(dataRole) {
+    //     if(chunk) {
+    //         console.log("Chunk:" + chunk + "error:" + indexInChunk + " " + dataRole + " " + chunk.errorsAt(indexInChunk, dataRole))
+    //         return chunk.errorsAt(indexInChunk, dataRole)
+    //     }
+    //     return null;
+    // }
 
     function nextLeftFromClino(rowIndex) {
         if(rowIndex.indexInChunk === 0) {
@@ -110,6 +110,9 @@ Item {
             y: titleOffset
             // shotOffset: Math.floor(stationBox.height / 2.0);
             shotOffset: Math.floor(50.0 / 2.0);
+            chunk: itemId.rowIndex.chunk
+            dataRowHeight: itemId.columnTemplate.dataRowHeight
+            listViewIndex: index
         }
     }
 
