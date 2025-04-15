@@ -187,7 +187,6 @@ MainWindowTest {
 
             //Make sure focus is on the secondChunk
             let stationBox = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->view->dataBox.7.0")
-            console.log("Focus:" + rootId.Window.window.activeFocusItem)
             verify(stationBox.focus === true);
 
             // verify
@@ -208,7 +207,6 @@ MainWindowTest {
             keyClick(49, 0) //1
             keyClick(16777217, 0) //Tab
 
-            console.log("Name:" + secondChunk.data(SurveyChunk.StationNameRole, 0))
             verify(secondChunk.data(SurveyChunk.StationNameRole, 0) === "a1")
 
             //Auto guess next row
@@ -336,6 +334,18 @@ MainWindowTest {
             addSurvey();
 
             enterSurveyData();
+        }
+
+        function test_spaceBarVisible() {
+            let spaceBar = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->view->spaceAddBar")
+            verify(spaceBar === null)
+
+            addSurvey();
+            spaceBar = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->view->spaceAddBar")
+            verify(spaceBar.visible === true)
+
+            enterSurveyData();
+            verify(spaceBar.visible === true)
         }
 
         function test_errorButtonsShouldWork() {

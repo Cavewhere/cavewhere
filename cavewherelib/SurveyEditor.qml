@@ -39,10 +39,8 @@ QQ.Item {
 
         onLastChunkAdded: {
             editorFocusId.focusOnLastChunk()
-            console.log("Window activeFocus:" + clipArea.window.activeFocusItem)
         }
     }
-
 
     Controls.ScrollView {
         id: scrollAreaId
@@ -264,11 +262,12 @@ QQ.Item {
 
                 QQ.Image {
                     id: spaceAddBar
+                    objectName: "spaceAddBar"
                     source: "qrc:icons/spacebar.png"
 
                     //                    anchors.horizontalCenter: view.horizontalCenter
 
-                    visible: currentTrip !== null && currentTrip.numberOfChunks > 0
+                    visible: currentTrip !== null && currentTrip.chunkCount > 0
                     Layout.alignment: Qt.AlignHCenter
 
                     Text {

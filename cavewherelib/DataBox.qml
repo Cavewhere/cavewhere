@@ -193,11 +193,7 @@ QQ.Item {
             }
         }
 
-        console.log("space bar 2 area click, new chunk!");
         dataValue.chunk.parentTrip.addNewChunk();
-
-        //Set active focus on the new chunk
-
     }
 
     onEnteredPressed: {
