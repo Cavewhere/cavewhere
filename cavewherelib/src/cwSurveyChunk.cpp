@@ -1007,8 +1007,7 @@ void cwSurveyChunk::checkForError(cwSurveyChunk::DataRole role, int index)
 
                 const int previousShotIndex = index - 1;
                 if((previousShotIndex < 0 || //Previous shot data doesn't exist
-                     !(isShotDataEmpty(previousShotIndex)) //Existing shot data needs to be not empty
-                         && isStationDataEmpty(index)))
+                     !(isShotDataEmpty(previousShotIndex)))) //Existing shot data needs to be not empty
                 {
                     //Station needs to have
                     cwError error;
