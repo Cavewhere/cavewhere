@@ -41,6 +41,7 @@ class CaveWhereConan(ConanFile):
 
     def build_requirements(self):
         self.tool_requires("protobuf/5.27.0")
+        self.tool_requires("cmake/[>=3 <4]")
 
     def configure(self):
         if not self.options.system_qt:
