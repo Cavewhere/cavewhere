@@ -49,6 +49,8 @@ void cwSurvexportCSVTask::runTask() {
                     qWarning() << "Issue while parsing survexport csv file:" << CSVFileName << " line:" << lineNumber << error.what();
                 }
             }
+        } else {
+            qWarning() << "Can't open survexport csv file:" << CSVFileName;
         }
     }
 

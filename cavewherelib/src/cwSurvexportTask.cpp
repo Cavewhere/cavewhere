@@ -16,6 +16,8 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QApplication>
+#include <QFileSystemWatcher>
+#include <QTimer>
 #include <QDebug>
 
 const QString cwSurvexportTask::Extension = ".csv";
@@ -41,12 +43,7 @@ void cwSurvexportTask::setSurvex3DFile(QString inputFile) {
   \brief Gets the path to the output file
   */
 QString cwSurvexportTask::outputFilename() const {
-    QFileInfo info(survex3DFilename().append(Extension));
-    if(info.exists()) {
-        return info.absoluteFilePath();
-    } else {
-        return QString();
-    }
+    return m_outputFilename;
 }
 
 /**
@@ -60,6 +57,8 @@ QString cwSurvexportTask::survex3DFilename() const {
   Runs plotsauce task
   */
 void cwSurvexportTask::runTask() {
+    m_outputFilename.clear();
+
     if(!isRunning()) {
         done();
         return;
@@ -97,6 +96,33 @@ void cwSurvexportTask::runTask() {
     SurvexportProcess->waitForFinished();
 
     SurvexportProcess->deleteLater();
+
+    //On windows survexport is slow to write files to disk, if the file
+    //doesn't exist, we wait until it shows up.
+    if(!QFileInfo::exists(outputFile)) {
+        auto dirPath = QFileInfo(outputFile).absolutePath();
+        QFileSystemWatcher watcher;
+        watcher.addPath(dirPath);
+
+        QEventLoop loop;
+        QObject::connect(&watcher, &QFileSystemWatcher::directoryChanged,
+                         &loop, [&](const QString& /*changedDir*/){
+                             if (QFileInfo::exists(outputFile)) {
+                                 loop.quit();
+                             }
+                         });
+
+        // also quit after 500 ms no matter what
+        QTimer::singleShot(500, &loop, &QEventLoop::quit);
+
+        // if the file already exists, skip waiting
+        if (!QFileInfo::exists(outputFile)) {
+            loop.exec();
+        }
+    }
+
+    qDebug() << "Done running survexport:" << inputFile << "output here:" << outputFile << QFileInfo::exists(outputFile);
+    m_outputFilename = outputFile;
 
     done();
 }

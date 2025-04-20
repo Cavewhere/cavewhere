@@ -35,6 +35,7 @@ private:
     //The filename of the survex 3d file
     static const QString Extension;
     QString Survex3DFileName;
+    QString m_outputFilename;
 
     QProcess* SurvexportProcess;
 
