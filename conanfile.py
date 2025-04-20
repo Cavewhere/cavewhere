@@ -29,7 +29,8 @@ class CaveWhereConan(ConanFile):
     default_options = {"system_qt": True}
     generators = "CMakeDeps", "CMakeToolchain", "VirtualBuildEnv", "VirtualRunEnv"
 
-    # def requirements(self):
+    def requirements(self):
+        self.requires("cmake/3.31.6", override=True)
         # self.requires("expat/2.6.2", override=True)
         # self.requires("libpng/1.6.44", override=True)
         # self.requires("sqlite3/3.44.2") #override=True breaks the include dir for sqlite3 don't use it
@@ -39,12 +40,12 @@ class CaveWhereConan(ConanFile):
         #     self.requires("qt/6.7.3")
         #     self.requires("xkbcommon/1.6.0", override=True)
 
-    def build_requirements(self):
+    # def build_requirements(self):
         # self.tool_requires("protobuf/5.27.0")
 
         # we need to force a Conan‑provided CMake ≥3.5 so that
         # wxWidgets’s CMakeLists passes cmake_minimum_required(...)
-        self.tool_requires("cmake/3.31.6", override=True)
+        # self.tool_requires("cmake/3.31.6", override=True)
 
     # def configure(self):
         # if not self.options.system_qt:
