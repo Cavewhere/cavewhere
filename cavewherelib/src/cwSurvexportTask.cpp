@@ -121,7 +121,6 @@ void cwSurvexportTask::runTask() {
         }
     }
 
-    qDebug() << "Done running survexport:" << inputFile << "output here:" << outputFile << QFileInfo::exists(outputFile);
     m_outputFilename = outputFile;
 
     done();
