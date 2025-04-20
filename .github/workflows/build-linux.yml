@@ -3,7 +3,7 @@ name: Build on Linux
 on:
   push:
     branches:
-      - master
+      - github_wxwidget
   pull_request:
     branches:
       - '*'
@@ -36,7 +36,7 @@ jobs:
         uses: jurplel/install-qt-action@v4
         with:
           aqtversion: '==3.1.*'
-          version: '6.8.2'
+          version: '6.8.3'
           host: 'linux'
           target: 'desktop'
           arch: 'linux_gcc_64'
