@@ -5,7 +5,10 @@
 #include <QObject>
 #include <QQmlEngine>
 
-class cwReading {
+//Cavewhere includes
+#include "CaveWhereLibExport.h"
+
+class CAVEWHERE_LIB_EXPORT cwReading {
     Q_GADGET
     QML_VALUE_TYPE(cwReading)
 

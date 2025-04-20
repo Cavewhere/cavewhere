@@ -3,12 +3,13 @@
 
 //Our include
 #include "cwReading.h"
+#include "CaveWhereLibExport.h"
 
 //Qt includes
 #include <QObject>
 #include <QQmlEngine>
 
-class cwCompassReading : public cwReading {
+class CAVEWHERE_LIB_EXPORT cwCompassReading : public cwReading {
     Q_GADGET
     QML_VALUE_TYPE(cwCompassReading)
 

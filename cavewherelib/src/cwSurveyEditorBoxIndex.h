@@ -1,13 +1,15 @@
 #ifndef CWSURVEYEDITORBOXINDEX_H
 #define CWSURVEYEDITORBOXINDEX_H
 
+//Our inludes
 #include "cwSurveyChunk.h"
 #include "cwSurveyEditorRowIndex.h"
+#include "CaveWhereLibExport.h"
 
 //Qt includes
 #include <QQmlEngine>
 
-class cwSurveyEditorBoxIndex {
+class CAVEWHERE_LIB_EXPORT cwSurveyEditorBoxIndex {
     Q_GADGET
     QML_VALUE_TYPE(cwSurveyEditorBoxIndex)
     Q_PROPERTY(cwSurveyEditorRowIndex rowIndex READ rowIndex WRITE setRowIndex)

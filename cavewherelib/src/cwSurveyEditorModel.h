@@ -6,6 +6,7 @@
 #include "cwSurveyChunk.h"
 #include "cwSurveyEditorRowIndex.h"
 #include "cwSurveyEditorBoxIndex.h"
+#include "CaveWhereLibExport.h"
 
 //Qt includes
 #include <QAbstractListModel>
@@ -19,7 +20,7 @@
  * can be read into by default Qt views like a Listview. This class doesn't
  * store any data. It only translate cwTrip's data into a list model
  */
-class cwSurveyEditorModel : public QAbstractListModel
+class CAVEWHERE_LIB_EXPORT cwSurveyEditorModel : public QAbstractListModel
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(SurveyEditorModel)
@@ -29,17 +30,9 @@ class cwSurveyEditorModel : public QAbstractListModel
 public:
     cwSurveyEditorModel();
 
-    // enum RowType {
-    //     TitleRow,
-    //     StationRow,
-    //     ShotRow
-    // };
-    // Q_ENUM(RowType)
-
     enum Role {
         //The type of role: TitleRow, StationRow, ShotRow
         RowIndexRole,
-        // RowTypeRole,
 
         //Station Data Roles
         StationNameRole,
@@ -55,10 +48,6 @@ public:
         ShotClinoRole,
         ShotBackClinoRole,
         ShotCalibrationRole,
-
-        //
-        // ChunkRole,
-        // IndexInChunkRole,
     };
     Q_ENUM(Role)
 
@@ -73,7 +62,6 @@ public:
 
     Q_INVOKABLE void addShotCalibration(int index);
 
-    // Q_INVOKABLE int toModelRow(cwSurveyEditorRowIndex::RowType type, const cwSurveyChunk* chunk, int chunkIndex) const;
     Q_INVOKABLE int toModelRow(const cwSurveyEditorRowIndex& rowIndex) const;
 
     Q_INVOKABLE cwSurveyEditorRowIndex rowIndex(cwSurveyChunk *chunk, int chunkIndex, cwSurveyEditorRowIndex::RowType type) const
@@ -96,21 +84,12 @@ public:
     Q_INVOKABLE cwSurveyEditorBoxIndex offsetBoxIndex(const cwSurveyEditorBoxIndex& boxIndex, int offsetIndex) const;
 
 private:
-    // struct ChunkIndex {
-    //     cwSurveyChunk* chunk;
-    //     cwSurveyEditorRowIndex::RowType type;
-    //     int index;
-    // };
-
     QPointer<cwTrip> m_trip; //!<
 
-    // QMap<Range, cwSurveyChunk*> m_indexToChunk;
     const int m_titleRowOffset = 1;
 
     cwSurveyEditorRowIndex toRowIndex(const QModelIndex& index) const;
     cwSurveyEditorRowIndex toRowIndex(int index) const;
-    // int toRow(cwSurveyEditorRowIndex::RowType type, const cwSurveyChunk* chunk, int chunkIndex) const;
-    // QModelIndex toModelIndex(cwSurveyEditorRowIndex::RowType type, const cwSurveyChunk* chunk, int chunkIndex) const;
     QModelIndex toModelIndex(const cwSurveyEditorRowIndex& rowIndex) const;
 
     Role toModelRole(cwSurveyChunk::DataRole chunkRole) const;
@@ -122,8 +101,6 @@ signals:
 
     //Called when a chunk has been added to the end of the model
     void lastChunkAdded();
-
-
 };
 
 /**

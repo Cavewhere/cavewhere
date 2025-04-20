@@ -11,10 +11,11 @@
 #include "cwSurveyEditorRowIndex.h"
 #include "cwSurveyChunk.h"
 #include "cwSurveyEditorBoxIndex.h" // Include the header for cwSurveyEditorBoxIndex
+#include "CaveWhereLibExport.h"
 
 class cwErrorModel; // Forward declaration for cwErrorModel
 
-class cwSurveyEditorBoxData {
+class CAVEWHERE_LIB_EXPORT cwSurveyEditorBoxData {
     Q_GADGET
     QML_VALUE_TYPE(cwSurveyEditorBoxData)
     Q_PROPERTY(cwErrorModel* errorModel READ errorModel WRITE setErrorModel)

@@ -7,8 +7,9 @@
 
 //Our includes
 #include "cwReading.h"
+#include "CaveWhereLibExport.h"
 
-class cwDistanceReading : public cwReading {
+class CAVEWHERE_LIB_EXPORT cwDistanceReading : public cwReading {
     Q_GADGET
     QML_VALUE_TYPE(cwDistanceReading)
 

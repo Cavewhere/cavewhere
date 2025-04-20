@@ -322,6 +322,8 @@ int cwSurveyEditorModel::toModelRow(const cwSurveyEditorRowIndex &rowIndex) cons
             return baseRow + rowIndex.indexInChunk() * 2 + m_titleRowOffset; //Alterate between the station and shot
         case cwSurveyEditorRowIndex::ShotRow:
             return baseRow + rowIndex.indexInChunk() * 2 + 1 + m_titleRowOffset;
+        default:
+            return -1;
         }
     };
 
@@ -431,6 +433,9 @@ cwSurveyEditorRowIndex::RowType cwSurveyEditorModel::toRowType(cwSurveyChunk::Da
     case cwSurveyChunk::ShotClinoRole:
     case cwSurveyChunk::ShotBackClinoRole:
         return cwSurveyEditorRowIndex::ShotRow;
+    default:
+        Q_ASSERT(false);
+        return cwSurveyEditorRowIndex::TitleRow;
     }
 }
 
@@ -488,6 +493,9 @@ cwSurveyEditorModel::Role cwSurveyEditorModel::toModelRole(cwSurveyChunk::DataRo
         return ShotClinoRole;
     case cwSurveyChunk::ShotBackClinoRole:
         return ShotBackClinoRole;
+    default:
+        Q_ASSERT(false);
+        return StationNameRole;
     }
 }
 

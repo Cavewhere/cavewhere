@@ -3,16 +3,17 @@
 
 //Our includes
 #include "cwReading.h"
+#include "CaveWhereLibExport.h"
 
 //Qt includes
 #include <QObject>
 #include <QQmlEngine>
 
-class cwClinoReading : public cwReading {
+
+class CAVEWHERE_LIB_EXPORT cwClinoReading : public cwReading {
     Q_GADGET
     QML_VALUE_TYPE(cwClinoReading)
 
-    // Q_PROPERTY(State state READ state)
 public:
 
     enum class State : int {

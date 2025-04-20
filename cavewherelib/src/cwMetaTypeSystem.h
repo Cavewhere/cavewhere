@@ -1,7 +1,9 @@
 #ifndef CWMETATYPESYSTEM_H
 #define CWMETATYPESYSTEM_H
 
-class cwMetaTypeSystem
+#include "CaveWhereLibExport.h"
+
+class CAVEWHERE_LIB_EXPORT cwMetaTypeSystem
 {
 public:
     cwMetaTypeSystem() = delete;

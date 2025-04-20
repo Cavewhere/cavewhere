@@ -1,11 +1,15 @@
 #ifndef CWSURVEYEDITORROWINDEX_H
 #define CWSURVEYEDITORROWINDEX_H
 
+//Qt includes
 #include <QObject>
 #include <QQmlEngine>
-#include "cwSurveyChunk.h"
 
-class cwSurveyEditorRowIndex {
+//Our includes
+#include "cwSurveyChunk.h"
+#include "CaveWhereLibExport.h"
+
+class CAVEWHERE_LIB_EXPORT cwSurveyEditorRowIndex {
     Q_GADGET
     QML_VALUE_TYPE(cwSurveyEditorRowIndex)
     Q_PROPERTY(cwSurveyChunk* chunk READ chunk WRITE setChunk)
