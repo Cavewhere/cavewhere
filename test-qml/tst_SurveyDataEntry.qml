@@ -1237,6 +1237,9 @@ MainWindowTest {
             verify(frontsight.checked === true)
             verify(backsight.checked === true)
 
+            station1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.1.0")
+            mouseClick(station1)
+
             tabTestFrontAndBackSight();
 
             // ----- Backsights only ----
@@ -1245,6 +1248,9 @@ MainWindowTest {
             waitForRendering(surveyView)
 
             mouseClick(frontsight);
+
+            station1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.1.0")
+            mouseClick(station1)
 
             verify(frontsight.checked === false)
             verify(backsight.checked === true)
