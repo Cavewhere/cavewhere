@@ -18,7 +18,7 @@ class CaveWhereConan(ConanFile):
     ("protobuf/5.27.0"),
 
     #We handle survex dependancies here for now, since we're using conan
-    ("wxwidgets/[>=3.2.5]"),
+    ("wxwidgets/[>=3.2.6]"),
     ("glew/[>=2.2.0]"),
     ("proj/9.3.1"),
     ("libtiff/[>=4.5.1]"),
@@ -41,7 +41,7 @@ class CaveWhereConan(ConanFile):
 
     def build_requirements(self):
         self.tool_requires("protobuf/5.27.0")
-        self.tool_requires("cmake/[>=3 <4]")
+#        self.tool_requires("cmake/[>=3 <4]")
 
     def configure(self):
         if not self.options.system_qt:
