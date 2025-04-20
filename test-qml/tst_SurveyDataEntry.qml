@@ -188,6 +188,7 @@ MainWindowTest {
             //Make sure focus is on the secondChunk
             let stationBox = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->view->dataBox.7.0")
             verify(stationBox.focus === true);
+            verify(stationBox === mainWindow.Window.window.activeFocusItem)
 
             // verify
 
@@ -204,10 +205,13 @@ MainWindowTest {
 
             //Add data
             keyClick("a")
+            // wait(1000)
             keyClick(49, 0) //1
+            // wait(1000)
             keyClick(16777217, 0) //Tab
+            // wait(1000)
 
-            verify(secondChunk.data(SurveyChunk.StationNameRole, 0) === "a1")
+            tryVerify(() => {return secondChunk.data(SurveyChunk.StationNameRole, 0) === "a1"})
 
             //Auto guess next row
             keyClick(16777217, 0) //Tab
@@ -404,6 +408,10 @@ MainWindowTest {
             verify(errors.data(firstErrorIndex, ErrorListModel.SuppressedRole) === false)
 
 
+            // wait(1000000)
+            //The error is in a async loader, so we need to wait for it to be created
+            tryVerify(() => { return ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->view->dataBox.1.1->coreTextInput->errorIcon") !== null })
+
             let errorIcon_obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->view->dataBox.1.1->coreTextInput->errorIcon")
             mouseClick(errorIcon_obj1)
 
@@ -424,8 +432,11 @@ MainWindowTest {
             mouseClick(distanceError)
             waitForRendering(rootId);
 
+            //Since error icon is in a loader, the item is deleted
+            errorIcon_obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->view->dataBox.1.1->coreTextInput->errorIcon")
+
             //Make sure the warning message that was shown before is now hidden
-            verify(errorIcon_obj1.visible === false)
+            verify(errorIcon_obj1 === null)
 
             //Make sure the error message is correct
             let errorText = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->errorBoxdataBox.2.5->errorText")
@@ -471,18 +482,22 @@ MainWindowTest {
             let coreTextInput_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.2.5->coreTextInput")
             mouseClick(coreTextInput_obj1)
 
+            // wait(1000000)
+
+            ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.2.5->excludeMenuButton")
             let excludeMenuButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.2.5->excludeMenuButton")
-            let excludeMenu = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.2.5->excludeMenuButton").menu
-            tryVerify(() => { return excludeMenu.visible === false})
+            let excludeMenu = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.2.5->excludeMenuButton->menuLoader")
+            tryVerify(() => { return excludeMenu.active === false})
 
             mouseClick(excludeMenuButton)
 
-            tryVerify(() => { return excludeMenu.visible })
+            tryVerify(() => { return excludeMenu.active })
+            tryVerify(() => { return excludeMenu.item.visible })
 
             let menuItem = findChild(excludeMenu, "excludeDistanceMenuItem")
             mouseClick(menuItem);
 
-            tryVerify(() => { return excludeMenu.visible === false })
+            tryVerify(() => { return excludeMenu.item.visible === false })
 
             let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view");
             view.positionViewAtEnd()
@@ -494,12 +509,12 @@ MainWindowTest {
             //Include it again
             mouseClick(excludeMenuButton)
 
-            tryVerify(() => { return excludeMenu.visible })
+            tryVerify(() => { return excludeMenu.item.visible })
 
             menuItem = findChild(excludeMenu, "excludeDistanceMenuItem")
             mouseClick(menuItem);
 
-            tryVerify(() => { return excludeMenu.visible === false })
+            tryVerify(() => { return excludeMenu.item.visible === false })
 
             //Make sure the distance has gone down
             totalLengthText_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->totalLengthText")

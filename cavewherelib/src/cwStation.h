@@ -9,12 +9,9 @@
 #define cwStation_H
 
 //Qt includes
-//#include <QVector3D>
 #include <QSharedDataPointer>
 
 //Our includes
-// #include "cwReadingStates.h"
-// #include "cwDistanceValidator.h"
 #include "cwGlobals.h"
 #include "cwDistanceReading.h"
 

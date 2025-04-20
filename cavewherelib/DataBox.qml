@@ -145,17 +145,17 @@ QQ.Item {
     //set the focus on the row delegate. This will disable the focus on the
     //correct databox.
     QQ.Connections {
-       target: dataBox.view
-       function onCurrentIndexChanged() {
-           dataBox.focus = shouldHaveFocus(); //We need to use this instead of property, because property could be out of data, and cause binding loop
-           if(dataBox.focus) {
-               // console.log("CurrentIndexChanged:" + dataBox.view.currentIndex + " " + editorFocus.boxIndex + dataBox.dataValue.boxIndex
-               //             + " hasfocus:" + dataBox.hasEditorFocus
-               //             + " correct value:" + (editorFocus.boxIndex === dataBox.dataValue.boxIndex)
-               //             + " shouldHaveFocus:" + shouldHaveFocus())
-               dataBox.forceActiveFocus()
-           }
-       }
+        target: dataBox.view
+        function onCurrentIndexChanged() {
+            dataBox.focus = shouldHaveFocus(); //We need to use this instead of property, because property could be out of data, and cause binding loop
+            if(dataBox.focus) {
+                // console.log("CurrentIndexChanged:" + dataBox.view.currentIndex + " " + editorFocus.boxIndex + dataBox.dataValue.boxIndex
+                //             + " hasfocus:" + dataBox.hasEditorFocus
+                //             + " correct value:" + (editorFocus.boxIndex === dataBox.dataValue.boxIndex)
+                //             + " shouldHaveFocus:" + shouldHaveFocus())
+                dataBox.forceActiveFocus()
+            }
+        }
     }
 
     onEnteredPressed: {
@@ -168,29 +168,34 @@ QQ.Item {
 
     onRightClick: {
         //Show menu
-        rightClickMenu.popup();
+        rightClickMenuLoader.active = true
+        rightClickMenuLoader.item.popup();
     }
 
-    Controls.Menu {
-        id: rightClickMenu
+    QQ.Loader {
+        id: rightClickMenuLoader
+        active: false
 
-        Controls.MenuItem {
-            text: "Remove Chunk"
-            onTriggered: {
-                dataBox.dataValue.chunk.parentTrip.removeChunk(dataBox.dataValue.chunk)
+        sourceComponent: Controls.Menu {
+
+            Controls.MenuItem {
+                text: "Remove Chunk"
+                onTriggered: {
+                    dataBox.dataValue.chunk.parentTrip.removeChunk(dataBox.dataValue.chunk)
+                }
+
+                //            onContainsMouseChanged: {
+                //                var lastStationIndex = index.chunk.stationCount() - 1;
+                //                var lastShotIndex = index.chunk.shotCount() - 1;
+
+                //                if(containsMouse) {
+                //                    surveyChunkView.showRemoveBoxsOnStations(0, lastStationIndex);
+                //                    surveyChunkView.showRemoveBoxsOnShots(0, lastShotIndex);
+                //                } else {
+                //                    surveyChunkView.hideRemoveBoxs();
+                //                }
+                //            }
             }
-
-            //            onContainsMouseChanged: {
-            //                var lastStationIndex = index.chunk.stationCount() - 1;
-            //                var lastShotIndex = index.chunk.shotCount() - 1;
-
-            //                if(containsMouse) {
-            //                    surveyChunkView.showRemoveBoxsOnStations(0, lastStationIndex);
-            //                    surveyChunkView.showRemoveBoxsOnShots(0, lastShotIndex);
-            //                } else {
-            //                    surveyChunkView.hideRemoveBoxs();
-            //                }
-            //            }
         }
     }
 
@@ -244,7 +249,7 @@ QQ.Item {
                                    && dataBox.dataValue.chunk !== null
                                    && dataBox.dataValue.chunk.isShotRole(dataBox.dataValue.chunkDataRole)
         anchors.fill: parent
-        visible: dataBox.dataValue.chunk.isShotRole(dataBox.dataValue.chunkDataRole)
+        visible: dataBox.dataValue.chunk ? dataBox.dataValue.chunk.isShotRole(dataBox.dataValue.chunkDataRole) : false
         color: offsetColor ? "#DDF2FF" : "white"
     }
 
@@ -267,6 +272,7 @@ QQ.Item {
     }
 
     QQ.Keys.onPressed: (event) => {
+                           event.accepted = true
                            handleTab(event);
                            switch(event.key) {
                                case Qt.Key_Left:
@@ -332,64 +338,82 @@ QQ.Item {
             dataBox.forceActiveFocus();
         }
 
-
-        QQ.Rectangle {
-            id: errorBorder
+        QQ.Loader {
+            id: errorBorderLoaderId
             property bool shouldBeVisible: dataBox.errorModel !== null && (dataBox.errorModel.fatalCount > 0 || dataBox.errorModel.warningCount > 0)
 
-
+            active: shouldBeVisible
             anchors.fill: parent
-            anchors.margins: 1
-            border.width: 1
-            border.color: dataBox.errorAppearance(dataBox.errorBorderColor)
-            color: "#00000000"
-            visible: shouldBeVisible || errorIcon.checked
 
-            Controls.RoundButton {
-                id: errorIcon
-                objectName: "errorIcon"
+            //This potentially causue a crash
+            // asynchronous: true
 
-                property bool hasBeenToggled: false
+            sourceComponent: QQ.Rectangle {
+                id: errorBorder
+                // property bool shouldBeVisible: dataBox.errorModel !== null && (dataBox.errorModel.fatalCount > 0 || dataBox.errorModel.warningCount > 0)
 
-                implicitWidth: 12
-                implicitHeight: 12
+                anchors.fill: parent
+                anchors.margins: 1
+                border.width: 1
+                border.color: dataBox.errorAppearance(dataBox.errorBorderColor)
+                color: "#00000000"
+                visible: errorBorderLoaderId.shouldBeVisible || errorIcon.checked
 
-                checkable: true
-                radius: 0 //Makes it a square
+                Controls.RoundButton {
+                    id: errorIcon
+                    objectName: "errorIcon"
 
-                focusPolicy: Qt.NoFocus
+                    property bool hasBeenToggled: false
 
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                anchors.margins: 2
+                    implicitWidth: 12
+                    implicitHeight: 12
 
-                //Make the popup go away when another error button is pressed
-                Controls.ButtonGroup.group: dataBox.errorButtonGroup
+                    checkable: true
+                    radius: 0 //Makes it a square
 
-                QQ.Image {
-                    anchors.centerIn: parent
-                    source: dataBox.errorAppearance(dataBox.errorImageSource)
-                    sourceSize: Qt.size(errorIcon.implicitWidth - 4, errorIcon.implicitHeight - 4)
-                }
-                onClicked: {
-                    //ButtonGroup prevents users for unchecking the button
-                    //this allows the checkbox to be unchecked by the user
-                    if(checked && !hasBeenToggled) {
-                        checked = false;
+                    focusPolicy: Qt.NoFocus
+
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    anchors.margins: 2
+
+                    //Make the popup go away when another error button is pressed
+                    Controls.ButtonGroup.group: dataBox.errorButtonGroup
+
+                    background: QQ.Rectangle {
+                        implicitWidth: 12
+                        implicitHeight: 12
+                        color: errorIcon.down || errorIcon.checked ? "#d6d6d6" : "#f6f6f6"
+                        border.color: "#26282a"
+                        border.width: 1
+                        radius: 0
                     }
-                    hasBeenToggled = false;
+
+                    QQ.Image {
+                        anchors.centerIn: parent
+                        source: dataBox.errorAppearance(dataBox.errorImageSource)
+                        sourceSize: Qt.size(errorIcon.implicitWidth - 4, errorIcon.implicitHeight - 4)
+                    }
+                    onClicked: {
+                        //ButtonGroup prevents users for unchecking the button
+                        //this allows the checkbox to be unchecked by the user
+                        if(checked && !hasBeenToggled) {
+                            checked = false;
+                        }
+                        hasBeenToggled = false;
+                    }
+
+                    onToggled: {
+                        hasBeenToggled = true;
+                    }
                 }
 
-                onToggled: {
-                    hasBeenToggled = true;
+                ErrorListQuoteBox {
+                    visible: errorIcon.checked
+                    errors:  dataBox.errorModel !== null ? dataBox.errorModel.errors : null
+                    errorIcon: errorIcon
+                    quoteBoxObjectName: "errorBox" + dataBox.objectName
                 }
-            }
-
-            ErrorListQuoteBox {
-                visible: errorIcon.checked
-                errors:  dataBox.errorModel !== null ? dataBox.errorModel.errors : null
-                errorIcon: errorIcon
-                quoteBoxObjectName: "errorBox" + dataBox.objectName
             }
         }
 

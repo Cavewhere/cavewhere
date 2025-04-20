@@ -378,6 +378,7 @@ Item {
         id: shotLoaderId
         active: itemId.rowIndex.rowType === SurveyEditorRowIndex.ShotRow
 
+
         sourceComponent: Item {
             ShotDistanceDataBox {
                 id: shotDistanceDataBox
@@ -445,7 +446,7 @@ Item {
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
                 editorFocus: itemId.editorFocus
-                distanceIncluded: dataValue.chunk.data(SurveyChunk.ShotDistanceIncludedRole, dataValue.indexInChunk)
+                distanceIncluded:  dataValue.chunk ? dataValue.chunk.data(SurveyChunk.ShotDistanceIncludedRole, dataValue.indexInChunk) : false
             }
 
             CompassReadBox {

@@ -13,7 +13,6 @@ class cwSurveyChunk;
 class cwStation;
 class cwStationReference;
 class cwValidator;
-#include "cwReadingStates.h"
 #include "cwGlobals.h"
 #include "cwDistanceReading.h"
 #include "cwCompassReading.h"
@@ -80,11 +79,6 @@ private:
 
     ValidState setValueWithString(const cwValidator& validator, double& memberData, int& memberState, QString newValue);
     void setClinoValueWithString(double& memberData, int& memberState, QString newValue);
-    void setPrivateCompass(double& memberData, cwCompassStates::State& state, double value);
-    void setPrivateClino(double& memberData, cwClinoStates::State& state, double value);
-
-    void setPrivateCompassState(cwCompassStates::State& memberState, cwCompassStates::State newState);
-    void setPrivateClinoState(cwClinoStates::State& memberState, cwClinoStates::State newState);
 
 };
 

@@ -103,6 +103,9 @@ QQ.Item {
                 }
             }
 
+            //reuseItem can cause instablity in testcases and crashes in qml, by default it's false
+            // reuseItems: true
+
             currentIndex: -1 //The currentIndex should change
 
             //Prevents default keyboard interaction

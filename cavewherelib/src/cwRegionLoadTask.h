@@ -31,6 +31,7 @@ class cwLength;
 #include "cwStationPositionLookup.h"
 #include "cwLead.h"
 #include "cwRegionLoadResult.h"
+#include "cwReadingStates.h"
 
 //Google protobuffer
 namespace CavewhereProto {

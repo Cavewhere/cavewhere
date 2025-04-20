@@ -18,7 +18,6 @@
 #include "cwTaskManagerModel.h"
 #include "cwImageProvider.h"
 #include "cwTripCalibration.h"
-#include "cwReadingStates.h"
 #include "cwTeam.h"
 #include "cwSurveyNoteModel.h"
 #include "cwNote.h"
