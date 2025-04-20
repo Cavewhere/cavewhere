@@ -70,6 +70,11 @@ void cwSurvexportTask::runTask() {
     QString inputFile = survex3DFilename();
     QString outputFile = inputFile + Extension;
 
+    //Remove the outputFile
+    //On windows survexport doesn't output the file exectly when the application ends, so to detect
+    //that the outputFile exists we need to remove it first
+    QFile::remove(outputFile);
+
     QStringList survexportNames;
     survexportNames.append("survex/survexport");
     survexportNames.append("survex/survexport.exe");

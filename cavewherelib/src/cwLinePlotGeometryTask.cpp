@@ -52,7 +52,7 @@ void cwLinePlotGeometryTask::runTask() {
 
     StationIndexLookup.clear();
 
-    emit done();
+    done();
 }
 
 /**

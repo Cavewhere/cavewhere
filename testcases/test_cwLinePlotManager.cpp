@@ -106,7 +106,7 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
             CHECK(cave->length()->value() == 10.0);
             CHECK(cave->depth()->value() == 0.0);
             CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 0.0, 0.0)); //B2 should no-longer exists
+            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 0.0, 0.0)); //a2 should no-longer exists
             CHECK(cave->stationPositionLookup().position("b2") == QVector3D(0.0, 10.0, 0.0));
         }
 
