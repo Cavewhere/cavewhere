@@ -44,7 +44,7 @@ class CaveWhereConan(ConanFile):
 
         # we need to force a Conan‑provided CMake ≥3.5 so that
         # wxWidgets’s CMakeLists passes cmake_minimum_required(...)
-        self.tool_requires("cmake/3.31.6")
+        self.tool_requires("cmake/3.31.6", override=True)
 
     # def configure(self):
         # if not self.options.system_qt:
