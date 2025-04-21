@@ -30,7 +30,7 @@ class CaveWhereConan(ConanFile):
     generators = "CMakeDeps", "CMakeToolchain", "VirtualBuildEnv", "VirtualRunEnv"
 
     def requirements(self):
-        self.requires("cmake/3.31.6", override=True)
+        self.requires("cmake/[>=3 <4]", override=True)
         # self.requires("expat/2.6.2", override=True)
         # self.requires("libpng/1.6.44", override=True)
         # self.requires("sqlite3/3.44.2") #override=True breaks the include dir for sqlite3 don't use it
