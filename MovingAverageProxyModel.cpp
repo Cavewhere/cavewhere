@@ -1,5 +1,10 @@
-// MovingAverageProxyModel.cpp
+//Our includes
 #include "MovingAverageProxyModel.h"
+#include "PenLineModel.h"
+
+//Qt includes
+#include <QPointF>
+
 
 MovingAverageProxyModel::MovingAverageProxyModel(QObject* parent)
     : QIdentityProxyModel(parent) {}
