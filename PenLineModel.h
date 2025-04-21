@@ -1,14 +1,17 @@
 #ifndef PENLINEMODEL_H
 #define PENLINEMODEL_H
 
+//Qt includes
 #include <QAbstractItemModel>
 #include <QQmlEngine>
 #include <QPointF>
 #include <QObjectBindableProperty>
 
+//Our includes
+#include "CaveWhereSketchLibExport.h"
 
 // A simple structure representing a point with a specific width.
-class PenPoint {
+class CAVEWHERE_SKETCH_LIB_EXPORT PenPoint {
     Q_GADGET
     QML_VALUE_TYPE(penPoint)
 
@@ -29,14 +32,14 @@ public:
 };
 
 // A pen line consisting of multiple pen points.
-struct PenLine {
+struct CAVEWHERE_SKETCH_LIB_EXPORT PenLine {
     QVector<PenPoint> points;
     double width = 2.5;
 };
 Q_DECLARE_METATYPE(PenLine)
 
 
-class PenLineModel : public QAbstractItemModel {
+class CAVEWHERE_SKETCH_LIB_EXPORT PenLineModel : public QAbstractItemModel {
     Q_OBJECT
     QML_ELEMENT
 

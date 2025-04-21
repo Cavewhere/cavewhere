@@ -3,7 +3,9 @@
 
 //Our includes
 #include "PenLineModel.h"
+#include "CaveWhereSketchLibExport.h"
 
+//Qt includes
 #include <QAbstractListModel>
 #include <QPainterPath>
 #include <QPointer>
@@ -14,7 +16,7 @@
 /**
  * @brief The PainterPathModel class
  */
-class PainterPathModel : public QAbstractListModel
+class CAVEWHERE_SKETCH_LIB_EXPORT PainterPathModel : public QAbstractListModel
 {
     Q_OBJECT
     QML_ELEMENT
