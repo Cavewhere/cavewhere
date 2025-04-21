@@ -3,7 +3,7 @@ name: Build on Windows
 on:
   push:
     branches:
-      - master
+      - github_wxwidget
   pull_request:
     branches:
       - '*'
