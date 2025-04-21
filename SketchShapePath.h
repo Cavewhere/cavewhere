@@ -11,7 +11,7 @@ class SketchShapePath : public QQuickShapePath
     Q_OBJECT
     QML_ELEMENT
 
-    Q_PROPERTY(QPainterPath painterPath READ path WRITE setPath CONSTANT REQUIRED)
+    Q_PROPERTY(QPainterPath painterPath READ path WRITE setPath REQUIRED)
 
 public:
     SketchShapePath(QQuickItem* parent = nullptr);

@@ -4,6 +4,10 @@ project(CaveWhereSketch VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(QT_QML_GENERATE_QMLLS_INI ON CACHE BOOL "Generate QMLLS INI file")
+
+# Include the GenerateExportHeader module
+include(GenerateExportHeader)
 
 find_package(Catch2 REQUIRED)
 find_package(Qt6
@@ -22,6 +26,7 @@ qt_add_executable(CaveWhereSketch
 qt_add_qml_module(cavewhere_sketch
     URI CaveWhereSketch
     VERSION 1.0
+    OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/CaveWhereSketch
     QML_FILES
         Main.qml
         SOURCES
@@ -30,6 +35,18 @@ qt_add_qml_module(cavewhere_sketch
         PainterPathModel.h PainterPathModel.cpp
         SketchShapePath.h SketchShapePath.cpp
         MovingAverageProxyModel.cpp MovingAverageProxyModel.h
+)
+
+# Generate the export header for windows
+generate_export_header(cavewhere_sketch
+    BASE_NAME CAVEWHERE_SKETCH_LIB
+    EXPORT_MACRO_NAME CAVEWHERE_SKETCH_LIB_EXPORT
+    EXPORT_FILE_NAME CaveWhereSketchLibExport.h
+)
+
+# For including the CaveWhereSketchLibExport.h
+target_include_directories(cavewhere_sketch PUBLIC
+    ${CMAKE_CURRENT_BINARY_DIR}
 )
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
