@@ -14,9 +14,15 @@ Window {
         id: penModel
     }
 
+    MovingAverageProxyModel {
+        id: movingAverageProxyModelId
+        sourceModel: penModel
+    }
+
     PainterPathModel {
         id: painterPathModel
-        penLineModel: penModel
+        // penLineModel: penModel
+        penLineModel: movingAverageProxyModelId
     }
 
     ButtonGroup {
@@ -111,43 +117,45 @@ Window {
                                    shapeId.data.push(object)
                                }
                 onObjectRemoved: (index, object) => {
-                                    object.destroy()
+                                     object.destroy()
                                  }
             }
+        }
 
+        PointHandler {
+            id: handler
 
-            PointHandler {
-                id: handler
+            property double pressureScale: 10.0
 
-                property double pressureScale: 10.0
+            acceptedDevices: PointerDevice.Unknown
+            // acceptedDevices:  PointerDevice.Stylus | PointerDevice.Mouse
+            cursorShape: Qt.BlankCursor
+            target: Rectangle {
+                parent: containerId
+                color: "red"
+                visible: handler.active
+                x: handler.point.position.x - width / 2
+                y: handler.point.position.y - height / 2
+                width: handler.pressureScale * handler.point.pressure;
+                height: width;
+                radius: width / 2
+            }
+            // target: containerId
 
-                acceptedDevices: PointerDevice.Stylus | PointerDevice.Mouse
-                target: Rectangle {
-                    parent: containerId
-                    color: "red"
-                    visible: handler.active
-                    x: handler.point.position.x - width / 2
-                    y: handler.point.position.y - height / 2
-                    width: handler.pressureScale * handler.point.pressure;
-                    height: width;
-                    radius: width / 2
+            onActiveChanged: {
+                // console.log("Active changed!" + active)
+                if(active) {
+                    painterPathModel.activeLineIndex = penModel.rowCount();
+                    penModel.addNewLine();
                 }
+            }
 
-                onActiveChanged: {
-                    console.log("Active changed!" + active)
-                    if(active) {
-                        painterPathModel.activeLineIndex = penModel.rowCount();
-                        penModel.addNewLine();
-                    }
-                }
+            onPointChanged: {
+                // console.log("Point.pressure:" + handler.point.position + " " + handler.point.pressure + active)
 
-                onPointChanged: {
-                    // console.log("Point.pressure:" + handler.point.pressure + active)
-
-                    if(active) {
-                        let penPoint = penModel.penPoint(handler.point.position, handler.point.pressure)
-                        penModel.addPoint(painterPathModel.activeLineIndex, penPoint)
-                    }
+                if(active) {
+                    let penPoint = penModel.penPoint(handler.point.position, handler.point.pressure)
+                    penModel.addPoint(painterPathModel.activeLineIndex, penPoint)
                 }
             }
         }

@@ -18,7 +18,7 @@ class PainterPathModel : public QAbstractListModel
 {
     Q_OBJECT
     QML_ELEMENT
-    Q_PROPERTY(PenLineModel* penLineModel READ penLineModel WRITE setPenLineModel NOTIFY penLineModelChanged)
+    Q_PROPERTY(QAbstractItemModel* penLineModel READ penLineModel WRITE setPenLineModel NOTIFY penLineModelChanged)
     Q_PROPERTY(int activeLineIndex READ activeLineIndex WRITE setActiveLineIndex NOTIFY activeLineIndexChanged BINDABLE bindableActiveLineIndex)
     // Q_PROPERTY(QPainterPath activePath READ activePath WRITE setActivePath NOTIFY activePathChanged FINAL)
     // Q_PROPERTY(QPainterPath finalPath READ finalPath WRITE setFinalPath NOTIFY finalPathChanged FINAL)
@@ -37,8 +37,8 @@ public:
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
 
-    PenLineModel* penLineModel() const;
-    void setPenLineModel(PenLineModel* penLineModel);
+    QAbstractItemModel* penLineModel() const;
+    void setPenLineModel(QAbstractItemModel* penLineModel);
 
     int activeLineIndex() const { return m_activeLineIndex.value(); }
     void setActiveLineIndex(const int& activeLineIndex) { m_activeLineIndex = activeLineIndex; }
@@ -80,7 +80,7 @@ private:
 
     ActivePath m_activePath; //At index 0
     QList<Path> m_finishedPaths;
-    QPointer<PenLineModel> m_penLineModel;
+    QPointer<QAbstractItemModel> m_penLineModel;
     int m_previousActivePath = -1;
 
     static const int m_finishLineIndexOffset = 1;

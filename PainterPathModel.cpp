@@ -62,11 +62,11 @@ QHash<int, QByteArray> PainterPathModel::roleNames() const {
     };
 }
 
-PenLineModel* PainterPathModel::penLineModel() const {
+QAbstractItemModel* PainterPathModel::penLineModel() const {
     return m_penLineModel;
 }
 
-void PainterPathModel::setPenLineModel(PenLineModel* penLineModel) {
+void PainterPathModel::setPenLineModel(QAbstractItemModel* penLineModel) {
     if (m_penLineModel != penLineModel) {
         if(m_penLineModel) {
             disconnect(this, nullptr, m_penLineModel, nullptr);
@@ -160,7 +160,7 @@ void PainterPathModel::addPointToActivePath(const PenPoint &newPoint)
         m_activePath.painterPath.lineTo(newPoint.position);
     } else {
         auto last = m_penLineModel->rowCount() - 1;
-        auto penLine = m_penLineModel->data(m_penLineModel->index(last), PenLineModel::LineRole).value<PenLine>();
+        auto penLine = m_penLineModel->data(m_penLineModel->index(last, 0), PenLineModel::LineRole).value<PenLine>();
         auto linePoints = penLine.points;
 
         int endSmooth = linePoints.size() - 1;
@@ -313,16 +313,16 @@ void PainterPathModel::addLinePolygon(QPainterPath &path, int modelRow)
         return path;
     };
 
-    auto penLine = m_penLineModel->data(m_penLineModel->index(modelRow), PenLineModel::LineRole).value<PenLine>();
-    double penWidth = m_penLineModel->data(m_penLineModel->index(modelRow), PenLineModel::LineWidthRole).toDouble();
+    auto penLine = m_penLineModel->data(m_penLineModel->index(modelRow, 0), PenLineModel::LineRole).value<PenLine>();
+    double penWidth = m_penLineModel->data(m_penLineModel->index(modelRow, 0), PenLineModel::LineWidthRole).toDouble();
     auto linePoints = penLine.points;
 
     if(linePoints.size() >= 2) {
         if(penWidth > 0.0) {
             path.addPath(centerline(linePoints));
         } else {
-            auto polygonLine = polygon(smoothPressure(linePoints));
-            // auto polygonLine = polygon(linePoints);
+            // auto polygonLine = polygon(smoothPressure(linePoints));
+            auto polygonLine = polygon(linePoints);
             path.addPolygon(polygonLine.polygon);
 
             if(modelRow == m_activeLineIndex) {
@@ -432,7 +432,7 @@ void PainterPathModel::updateActivePath()
 
 void PainterPathModel::updateActivePathStrokeWidth()
 {
-    auto newStrokeWidth =  m_penLineModel->index(m_activeLineIndex).data(PenLineModel::LineWidthRole).toDouble();
+    auto newStrokeWidth =  m_penLineModel->index(m_activeLineIndex, 0).data(PenLineModel::LineWidthRole).toDouble();
     // qDebug() << "NewStrokWidth:" << newStrokeWidth << m_activePath.strokeWidth;
     if(m_activePath.strokeWidth != newStrokeWidth) {
         m_activePath.strokeWidth = newStrokeWidth;
@@ -480,7 +480,7 @@ void PainterPathModel::addOrUpdateFinishPath(int penLineIndex)
 {
     // if(penLineIndex != m_activeLineIndex) {
     // qDebug() << "Adding finished path:" << i;
-    double lineWidth = m_penLineModel->index(penLineIndex).data(PenLineModel::LineWidthRole).toDouble();
+    double lineWidth = m_penLineModel->index(penLineIndex, 0).data(PenLineModel::LineWidthRole).toDouble();
     auto it = indexOfFinalPaths(lineWidth);
     int modelIndexInt = it - m_finishedPaths.begin() + m_finishLineIndexOffset;
     if(it != m_finishedPaths.end()) {
