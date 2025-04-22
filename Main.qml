@@ -127,8 +127,13 @@ Window {
 
             property double pressureScale: 10.0
 
-            acceptedDevices: PointerDevice.Unknown
-            // acceptedDevices:  PointerDevice.Stylus | PointerDevice.Mouse
+            //This works for ipad over sidecar on macOS
+            //See this bug: https://bugreports.qt.io/browse/QTBUG-80072
+            //acceptedDevices: PointerDevice.Unknown
+
+            //Works for ipad, windows 11 with pen, android with spen
+            acceptedDevices:  PointerDevice.Stylus | PointerDevice.Mouse
+
             cursorShape: Qt.BlankCursor
             target: Rectangle {
                 parent: containerId
