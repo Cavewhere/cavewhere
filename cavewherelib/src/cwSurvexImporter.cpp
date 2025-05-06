@@ -536,6 +536,11 @@ void cwSurvexImporter::parseNormalData(QString line) {
     QString fromStationName = extractData(data, From);
     QString toStationName= extractData(data, To);
 
+    if(fromStationName == QString("-") || toStationName == QString("-")) {
+        addWarning(QString("Skipping splay data at ") + fromStationName + " " + toStationName);
+        return;
+    }
+
     //Make sure the to and from stations exist
     if(fromStationName.isEmpty() || toStationName.isEmpty()) {
         addError("Can't extract shot data. No toStation or from station");
