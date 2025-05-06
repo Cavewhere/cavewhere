@@ -160,6 +160,8 @@ void cwSurvexImporter::clear() {
   \brief Loads the file
   */
 void cwSurvexImporter::loadFile(QString filename) {
+    filename.remove('"');
+
     //Open the survex file
     QFile file;
     bool fileIsOpen = openFile(file, filename);
@@ -1032,6 +1034,7 @@ void cwSurvexImporter::runStats(QString filename) {
         if (match.hasMatch()) {
             QString command = match.captured(1);
             QString args = match.captured(2).trimmed();
+            args.remove('"');
 
             if (compare(command, "include")) {
                 runStats(args);
