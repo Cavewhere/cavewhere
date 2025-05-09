@@ -14,6 +14,7 @@
 //Our includes
 #include "cwGlobals.h"
 #include "cwDistanceReading.h"
+#include "cwShotMeasurement.h"
 
 class CAVEWHERE_LIB_EXPORT cwStation {
 
@@ -67,6 +68,8 @@ private:
         cwDistanceReading m_right;
         cwDistanceReading m_up;
         cwDistanceReading m_down;
+
+        QList<cwShotMeasurement> m_splays;
     };
 
     QSharedDataPointer<PrivateData> Data;

@@ -195,9 +195,6 @@ private:
     void remove(int stationIndex, int shotIndex);
     int index(int index, Direction direction);
 
-    void updateStationsCave(cwStationReference station);
-
-    cwStationReference createNewStation();
 
     QVariant stationData(DataRole role, int index) const;
     QVariant shotData(DataRole role, int index) const;
