@@ -35,6 +35,7 @@ qt_add_qml_module(cavewhere_sketch
         PainterPathModel.h PainterPathModel.cpp
         SketchShapePath.h SketchShapePath.cpp
         MovingAverageProxyModel.cpp MovingAverageProxyModel.h
+        ExclusivePointHandler.h ExclusivePointHandler.cpp
 )
 
 # Generate the export header for windows
@@ -65,12 +66,15 @@ target_link_libraries(cavewhere_sketch
     Qt6::Quick
     Qt6::Core
     PRIVATE
+    Qt6::QuickPrivate
     Qt6::QuickShapesPrivate
 )
 
 target_include_directories(cavewhere_sketch
     PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
+    PRIVATE
+    ${Qt6Quick_PRIVATE_INCLUDE_DIRS}
 )
 
 target_link_libraries(CaveWhereSketch
