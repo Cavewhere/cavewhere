@@ -14,7 +14,14 @@
 
 
 /**
- * @brief The PainterPathModel class
+ * @brief Model converting PenLineModel data into QPainterPath batches for efficient QML rendering.
+ *
+ * PainterPathModel transforms pen line points into QPainterPath objects,
+ * grouping finished paths by stroke width into m_finishedPaths and
+ * maintaining the currently drawn path in m_activePath.
+ *
+ * In QML, an Instantiator watches this model and creates Shape elements,
+ * reducing QML object count and batching geometry for GPU performance.
  */
 class CAVEWHERE_SKETCH_LIB_EXPORT PainterPathModel : public QAbstractListModel
 {
@@ -22,8 +29,6 @@ class CAVEWHERE_SKETCH_LIB_EXPORT PainterPathModel : public QAbstractListModel
     QML_ELEMENT
     Q_PROPERTY(QAbstractItemModel* penLineModel READ penLineModel WRITE setPenLineModel NOTIFY penLineModelChanged)
     Q_PROPERTY(int activeLineIndex READ activeLineIndex WRITE setActiveLineIndex NOTIFY activeLineIndexChanged BINDABLE bindableActiveLineIndex)
-    // Q_PROPERTY(QPainterPath activePath READ activePath WRITE setActivePath NOTIFY activePathChanged FINAL)
-    // Q_PROPERTY(QPainterPath finalPath READ finalPath WRITE setFinalPath NOTIFY finalPathChanged FINAL)
 
 
 public:

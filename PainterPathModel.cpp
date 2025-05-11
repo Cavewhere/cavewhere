@@ -9,30 +9,54 @@ PainterPathModel::PainterPathModel(QObject *parent)
     , m_penLineModel(nullptr)
 {
 
+    // In PainterPathModel’s constructor we watch for changes to the activeLineIndex:
     connect(this, &PainterPathModel::activeLineIndexChanged, this, [this]() {
+        // 1) Rebuild the geometry for the newly active stroke:
         updateActivePath();
 
-        //Update the stroke width
+        // 2) Refresh its stroke‑width (in case it’s changed since we first built it):
         updateActivePathStrokeWidth();
 
-        // qDebug() << "m_previousActionPath:" << m_activeLineIndex.value() << m_previousActivePath;
-        if(m_previousActivePath >= 0) {
+        // 3) If there was a previously active stroke (m_previousActivePath ≥ 0),
+           //    finalize it by merging it into m_finishedPaths:
+        if (m_previousActivePath >= 0) {
             addOrUpdateFinishPath(m_previousActivePath);
-            // addLinePolygon(m_finishedPath, m_previousActivePath);
-            // auto finishedPathIndex = index(FinishedPath);
-            // emit dataChanged(finishedPathIndex, finishedPathIndex, {PainterPathRole});
         }
 
+        // 4) Remember the new active index so next time we can finalize *this* one:
         m_previousActivePath = m_activeLineIndex;
     });
-
 }
 
+
+/**
+ * @brief Returns the total number of painter‐path entries in this model.
+ *
+ * The model always has one “active” path (at row 0), plus one entry
+ * for each batch of finished paths in m_finishedPaths.
+ *
+ * @param parent Unused—this is a list model.
+ * @return The count = 1 (active path) + m_finishedPaths.size().
+ */
 int PainterPathModel::rowCount(const QModelIndex &parent) const {
     Q_UNUSED(parent);
     return m_finishedPaths.size() + m_finishLineIndexOffset;
 }
 
+/**
+ * @brief Provides the painter path or stroke width for a given row.
+ *
+ * Row 0 corresponds to the “active” path; rows ≥1 map into the
+ * m_finishedPaths list (offset by m_finishLineIndexOffset).
+ *
+ * @param index   The model index (row must be in [0, rowCount()-1]).
+ * @param role    One of PainterPathRole or StrokeWidthRole.
+ * @return A QVariant containing either:
+ *         - QPainterPath (for PainterPathRole)
+ *         - double stroke width (for StrokeWidthRole)
+ *         If the index is out of range or the role isn’t recognized,
+ *         returns an invalid QVariant.
+ */
 QVariant PainterPathModel::data(const QModelIndex &index, int role) const {
     if (index.row() < 0 || index.row() >= rowCount()) {
         return QVariant();
@@ -56,87 +80,125 @@ QVariant PainterPathModel::data(const QModelIndex &index, int role) const {
     return QVariant();
 }
 
+/**
+ * @brief Returns the role‐to‐name mapping used by QML.
+ *
+ * The returned hash tells Qt’s view system which string identifiers
+ * correspond to our custom roles (PainterPathRole and StrokeWidthRole).
+ * In QML delegates you can then write something like:
+ *
+ *   delegate: Shape {
+ *     property variant path: model.painterPath
+ *     property real  width: model.strokeWidthRole
+ *   }
+ *
+ * @return A QHash mapping each role enum to its QByteArray name.
+ */
 QHash<int, QByteArray> PainterPathModel::roleNames() const {
     return { {PainterPathRole, "painterPath"},
         {StrokeWidthRole, "strokeWidthRole"}
     };
 }
 
+/**
+ * @brief Returns the source PenLineModel supplying raw pen strokes.
+ *
+ * This model holds the list of PenLine objects whose points
+ * are converted into QPainterPaths by PainterPathModel.
+ *
+ * @return Pointer to the current QAbstractItemModel (PenLineModel),
+ *         or nullptr if none is set.
+ */
 QAbstractItemModel* PainterPathModel::penLineModel() const {
     return m_penLineModel;
 }
 
+/**
+ * @brief Sets the source PenLineModel and wires up update logic.
+ *
+ * Disconnects any existing model, then stores and reconnects to the new one.
+ * When rows are inserted in the PenLineModel:
+ *  - If inserting points into the active line, it incrementally adds those points to the active path.
+ *  - Otherwise, it rebuilds or finalizes the appropriate finished path.
+ * When dataChanged is emitted for LineRole:
+ *  - The active path is updated if its line has changed.
+ *  - All finished paths are rebuilt if another line changed.
+ *
+ * @param penLineModel  The QAbstractItemModel (a PenLineModel) that provides raw pen strokes.
+ *                      Pass nullptr to clear the current model.
+ * @see addPointToActivePath(), updateActivePath(), addOrUpdateFinishPath(), rebuildFinalPath()
+ */
 void PainterPathModel::setPenLineModel(QAbstractItemModel* penLineModel) {
     if (m_penLineModel != penLineModel) {
-        if(m_penLineModel) {
+        // Disconnect old model
+        if (m_penLineModel) {
             disconnect(this, nullptr, m_penLineModel, nullptr);
         }
 
         m_penLineModel = penLineModel;
 
-        if(m_penLineModel) {
-            connect(m_penLineModel, &PenLineModel::rowsInserted, this, [this](const QModelIndex &parent, int first, int last) {
+        if (m_penLineModel) {
+            // Handle new points or new lines inserted
+            connect(m_penLineModel, &PenLineModel::rowsInserted, this,
+                    [this](const QModelIndex &parent, int first, int last) {
+                        if (parent != QModelIndex()) {
+                            // Points added to an existing pen line
+                            Q_ASSERT(first >= 0);
+                            Q_ASSERT(first < m_penLineModel->rowCount(parent));
+                            Q_ASSERT(last >= 0);
+                            Q_ASSERT(last < m_penLineModel->rowCount(parent));
+                            Q_ASSERT(first <= last);
 
-                if(parent != QModelIndex()) {
-                    //Points added
-                    Q_ASSERT(first >= 0);
-                    Q_ASSERT(first < m_penLineModel->rowCount(parent));
-                    Q_ASSERT(last >= 0);
-                    Q_ASSERT(last < m_penLineModel->rowCount(parent));
-                    Q_ASSERT(first <= last);
-
-                    if(parent.row() == m_activeLineIndex) {
-                        //Make sure this is just at the end
-                        int pointCount = m_penLineModel->rowCount(parent);
-                        if(last ==  pointCount - 1 && pointCount > 2) {
-                            for(int i = first; i <= last; ++i) {
-                                //Add geometry to the active path
-                                auto index = m_penLineModel->index(i, 0, parent);
-                                PenPoint point = index.data(PenLineModel::PenPointRole).value<PenPoint>();
-                                addPointToActivePath(point);
+                            if (parent.row() == m_activeLineIndex) {
+                                // If only appending to the active stroke, add incrementally
+                                int pointCount = m_penLineModel->rowCount(parent);
+                                if (last == pointCount - 1 && pointCount > 2) {
+                                    for (int i = first; i <= last; ++i) {
+                                        auto idx = m_penLineModel->index(i, 0, parent);
+                                        PenPoint p = idx.data(PenLineModel::PenPointRole).value<PenPoint>();
+                                        addPointToActivePath(p);
+                                    }
+                                } else {
+                                    // Otherwise rebuild the entire active path
+                                    updateActivePath();
+                                }
+                            } else {
+                                // A finished stroke changed
+                                addOrUpdateFinishPath(parent.row());
                             }
                         } else {
-                            //Update the full active path
-                            updateActivePath();
+                            // Entire new lines added to the model
+                            Q_ASSERT(first >= 0);
+                            Q_ASSERT(first < m_penLineModel->rowCount());
+                            Q_ASSERT(last >= 0);
+                            Q_ASSERT(last < m_penLineModel->rowCount());
+                            Q_ASSERT(first <= last);
+
+                            for (int row = first; row <= last; ++row) {
+                                if (row == m_activeLineIndex) {
+                                    updateActivePath();
+                                    updateActivePathStrokeWidth();
+                                } else {
+                                    addOrUpdateFinishPath(row);
+                                }
+                            }
                         }
-                    } else {
-                        //Update finished path
-                        addOrUpdateFinishPath(parent.row());
-                    }
+                    });
 
-                } else {
-                    //Full line added
-                    Q_ASSERT(first >= 0);
-                    Q_ASSERT(first < m_penLineModel->rowCount());
-                    Q_ASSERT(last >= 0);
-                    Q_ASSERT(last < m_penLineModel->rowCount());
-                    Q_ASSERT(first <= last);
-
-                    for(int i = first; i <= last; ++i) {
-                        if(i == m_activeLineIndex) {
-                            updateActivePath();
-                            updateActivePathStrokeWidth();
-                        } else {
-                            addOrUpdateFinishPath(i);
-                        }
-                    }
-                }
-            });
-
-            connect(m_penLineModel, &PenLineModel::dataChanged,
-                    this, [this](const QModelIndex &topLeft,
+            // Handle modifications to existing pen lines
+            connect(m_penLineModel, &PenLineModel::dataChanged, this,
+                    [this](const QModelIndex &topLeft,
                            const QModelIndex &bottomRight,
-                           const QList<int> &roles = QList<int>())
-                    {
-                        if(roles.contains(PenLineModel::LineRole)) {
-                    // qDebug() << "Data changed:" << topLeft.row() << bottomRight.row();
-                            if(m_activeLineIndex >= topLeft.row() && m_activeLineIndex <= bottomRight.row()) {
+                           const QList<int> &roles) {
+                        if (roles.contains(PenLineModel::LineRole)) {
+                            // If the active line changed, rebuild it
+                            if (m_activeLineIndex >= topLeft.row() &&
+                                m_activeLineIndex <= bottomRight.row()) {
                                 updateActivePath();
                             }
-
-                            //Anything other than the active path
-                            if(!(m_activeLineIndex == topLeft.row() && m_activeLineIndex == bottomRight.row())) {
-                                //Rebuild final path
+                            // If any other line changed, rebuild finished batches
+                            if (!(m_activeLineIndex >= topLeft.row() &&
+                                  m_activeLineIndex <= bottomRight.row())) {
                                 rebuildFinalPath();
                             }
                         }
@@ -147,89 +209,132 @@ void PainterPathModel::setPenLineModel(QAbstractItemModel* penLineModel) {
     }
 }
 
+
+/**
+ * @brief Converts a normalized pressure value into a half‑width for stroking.
+ *
+ * This method asserts that the input pressure is within [0.0, 1.0], then
+ * linearly interpolates between m_minHalfWidth and m_maxHalfWidth, and
+ * finally applies the overall m_widthScale factor.
+ *
+ * @param point  The PenPoint whose pressure ∈ [0,1].
+ * @return       The half‑width (in scene units) to use for that pressure.
+ */
 double PainterPathModel::pressureToLineHalfWidth(const PenPoint &point) const
 {
     Q_ASSERT(point.pressure >= 0.0);
     Q_ASSERT(point.pressure <= 1.0);
-    return m_widthScale * (point.pressure * (m_maxHalfWidth - m_minHalfWidth) + m_minHalfWidth);
+
+    // linear interpolation: min + pressure * (max – min)
+    double interpolated = point.pressure * (m_maxHalfWidth - m_minHalfWidth)
+                          + m_minHalfWidth;
+
+    // apply global scale factor
+    return m_widthScale * interpolated;
 }
 
+/**
+ * @brief Appends a new point to the “active” painter path.
+ *
+ * If m_activePath.strokeWidth > 0, draws a simple lineTo().
+ * Otherwise, for a variable‑width brush it:
+ *   1. Retrieves the latest PenLine and its points.
+ *   2. Smooths pressure over m_smoothingPressureWindow.
+ *   3. Computes perpendicular lines at each smoothed point.
+ *   4. Builds linePolygon: beginCap, topLine, endCap, bottomLine.
+ *   5. Replaces m_activePath.painterPath with that polygon.
+ * Emits dataChanged() for row 0 when done.
+ *
+ * @param newPoint  The PenPoint (position + pressure) to add.
+ */
 void PainterPathModel::addPointToActivePath(const PenPoint &newPoint)
 {
-    if(m_activePath.strokeWidth > 0.0) {
+    if (m_activePath.strokeWidth > 0.0) {
+        // Fixed‑width stroke: just draw to the new point
         m_activePath.painterPath.lineTo(newPoint.position);
     } else {
-        auto last = m_penLineModel->rowCount() - 1;
-        auto penLine = m_penLineModel->data(m_penLineModel->index(last, 0), PenLineModel::LineRole).value<PenLine>();
-        auto linePoints = penLine.points;
+        // Variable‑width stroke: rebuild the full polygon
+        int last = m_penLineModel->rowCount() - 1;
+        PenLine penLine = m_penLineModel
+                              ->data(m_penLineModel->index(last, 0), PenLineModel::LineRole)
+                              .value<PenLine>();
+        QVector<PenPoint> linePoints = penLine.points;
 
-        int endSmooth = linePoints.size() - 1;
+        int endSmooth   = linePoints.size() - 1;
         int beginSmooth = std::max(0, endSmooth - m_smoothingPressureWindow + 1);
-        auto smoothPoints = smoothPressure(linePoints, beginSmooth, endSmooth);
+        QVector<PenPoint> smoothPoints =
+            smoothPressure(linePoints, beginSmooth, endSmooth);
 
         QVector<QLineF> newPerpendicularLines;
         newPerpendicularLines.reserve(smoothPoints.size());
-        for(int i = 0; i < smoothPoints.size(); ++i) {
-            newPerpendicularLines.append(perpendicularLineAt(smoothPoints, i));
+        for (int i = 0; i < smoothPoints.size(); ++i) {
+            newPerpendicularLines.append(
+                perpendicularLineAt(smoothPoints, i)
+                );
         }
-
-        // auto line = perpendicularLineAt(linePoints, linePoints.size() - 1);
 
         QPolygonF linePolygon;
         linePolygon.reserve(
             m_activePath.beginCap.size()
             + m_activePath.topLine.size() + 1
             + m_activePath.bottomLine.size() + 1
-            + m_endPointTessellation);
+            + m_endPointTessellation
+            );
 
+        // begin cap
         linePolygon.append(m_activePath.beginCap);
 
-        //Skip the first line because it's in the middle but perpendicularLineAt
-        //treats it at the end because smooth lines are only the windows size
-        for(int i = 1; i < newPerpendicularLines.size() - 1; ++i) {
-            m_activePath.topLine[beginSmooth + i] = newPerpendicularLines.at(i).p1();
+        // update and append topLine
+        for (int i = 1; i < newPerpendicularLines.size() - 1; ++i) {
+            m_activePath.topLine[beginSmooth + i] =
+                newPerpendicularLines.at(i).p1();
         }
-
         m_activePath.topLine.append(newPerpendicularLines.last().p1());
-
         linePolygon.append(m_activePath.topLine);
+
+        // end cap
         linePolygon.append(endCap(smoothPoints, newPerpendicularLines.last()));
 
-        //Skip the first line because it's in the middle but perpendicularLineAt
-        //treats it at the end because smooth lines are only the windows size
-        for(int i = 1; i < newPerpendicularLines.size() - 1; ++i) {
-            //Invert the index
-            int bottomLineIndex = m_activePath.bottomLine.size() - beginSmooth - i;
-            m_activePath.bottomLine[bottomLineIndex] = newPerpendicularLines.at(i).p2();
+        // update and append bottomLine
+        for (int i = 1; i < newPerpendicularLines.size() - 1; ++i) {
+            int bottomLineIndex =
+                m_activePath.bottomLine.size() - beginSmooth - i;
+            m_activePath.bottomLine[bottomLineIndex] =
+                newPerpendicularLines.at(i).p2();
         }
-
         m_activePath.bottomLine.prepend(newPerpendicularLines.last().p2());
         linePolygon.append(m_activePath.bottomLine);
 
         m_activePath.painterPath.clear();
         m_activePath.painterPath.addPolygon(linePolygon);
 
-        auto activePathIndex = index(0);
-        emit dataChanged(activePathIndex, activePathIndex, {PainterPathRole});
+        QModelIndex activeIndex = index(0);
+        emit dataChanged(activeIndex, activeIndex, { PainterPathRole });
     }
 
-    //Generate the perpendicularLines that give width to the pen line
-    // QVector<QLineF> perpendicularLines;
-    // perpendicularLines.reserve(linePoints.size());
-    // for(int i = 0; i < linePoints.size(); i++) {
-    //     auto line = perpendicularLineAt(linePoints, i);
-    //     // perpendicularLines.append(line);
-    //     path.moveTo(line.p1());
-    //     path.lineTo(line.p2());
-    // }
-
-    // path = path.simplified();
-
-    auto activePathIndex = index(0);
-    emit dataChanged(activePathIndex, activePathIndex, {PainterPathRole});
-
+    // Ensure views are updated
+    QModelIndex activeIndex = index(0);
+    emit dataChanged(activeIndex, activeIndex, { PainterPathRole });
 }
 
+/**
+ * @brief Builds and appends the painter path for a single pen line.
+ *
+ * This method reads the PenLine at @a modelRow from m_penLineModel,
+ * then:
+ *   - If the pen’s width (LineWidthRole) > 0, it constructs a simple
+ *     centerline via moveTo()/lineTo() and appends it to @a path.
+ *   - Otherwise, for a variable‑width stroke, it:
+ *       1. Generates smoothed pressure values for all points.
+ *       2. Computes perpendicular offset lines at each point.
+ *       3. Constructs a full polygon: begin cap, top edge, end cap, bottom edge.
+ *       4. Appends that polygon to @a path.
+ *   - If @a modelRow equals m_activeLineIndex, also caches the
+ *     beginCap, topLine, and bottomLine vectors into m_activePath.
+ *
+ * @param path      The QPainterPath to which this line’s geometry is added.
+ * @param modelRow  The row in m_penLineModel whose PenLine to render.
+ */
 void PainterPathModel::addLinePolygon(QPainterPath &path, int modelRow)
 {
 
@@ -348,6 +453,21 @@ void PainterPathModel::addLinePolygon(QPainterPath &path, int modelRow)
 
 }
 
+/**
+ * @brief Computes the perpendicular offset line at a given point in a stroke.
+ *
+ * For the point at @a index within @a points:
+ *   - If both neighbors exist, treats this as a “middle” point:
+ *       * Computes the bisector angle between the segments to left and right.
+ *       * Creates two half‑width lines (top and bottom) along that bisector.
+ *   - If only one neighbor exists (start or end of the stroke):
+ *       * Constructs a normal to the single segment and offsets by halfWidth.
+ *   - Asserts that there are at least two valid points.
+ *
+ * @param points  The full list of PenPoint for the stroke.
+ * @param index   The position within @a points to compute the offset.
+ * @return        A QLineF whose p1() = the top offset end, p2() = the bottom offset end.
+ */
 QLineF PainterPathModel::perpendicularLineAt(const QVector<PenPoint>& points, int index) const
 {
     Q_ASSERT(index >= 0);
@@ -420,6 +540,13 @@ QLineF PainterPathModel::perpendicularLineAt(const QVector<PenPoint>& points, in
     return QLineF(topLine.p2(), bottomLine.p2());
 }
 
+/**
+ * @brief Completely rebuilds the “active” stroke’s painter path.
+ *
+ * Clears the existing m_activePath.painterPath, then re‑adds
+ * the geometry for the current activeLineIndex via addLinePolygon().
+ * Finally, emits dataChanged() for row 0 so any bound views refresh.
+ */
 void PainterPathModel::updateActivePath()
 {
     // qDebug() << "Update active path!";
@@ -430,6 +557,14 @@ void PainterPathModel::updateActivePath()
     emit dataChanged(activePathIndex, activePathIndex, {PainterPathRole});
 }
 
+/**
+ * @brief Refreshes the stroke‑width value for the active path.
+ *
+ * Queries the source PenLineModel for the current LineWidthRole
+ * at m_activeLineIndex. If it differs from m_activePath.strokeWidth,
+ * updates the cached value and emits dataChanged() for row 0’s
+ * StrokeWidthRole so any bound views update their rendering.
+ */
 void PainterPathModel::updateActivePathStrokeWidth()
 {
     auto newStrokeWidth =  m_penLineModel->index(m_activeLineIndex, 0).data(PenLineModel::LineWidthRole).toDouble();
@@ -441,6 +576,16 @@ void PainterPathModel::updateActivePathStrokeWidth()
     }
 }
 
+/**
+ * @brief Regenerates all finished‑stroke painter paths from the source model.
+ *
+ * This method:
+ *   1. Clears the geometry of every entry in m_finishedPaths.
+ *   2. Iterates all pen lines in m_penLineModel (except the active one)
+ *      and calls addOrUpdateFinishPath() to rebuild or append their geometry.
+ *   3. Removes any entries from m_finishedPaths whose painterPath remains empty,
+ *      emitting the appropriate beginRemoveRows()/endRemoveRows() to update views.
+ */
 void PainterPathModel::rebuildFinalPath()
 {
     // m_finishedPaths.clear();
@@ -468,6 +613,16 @@ void PainterPathModel::rebuildFinalPath()
 
 }
 
+/**
+ * @brief Finds the index of a finished path with the given stroke width.
+ *
+ * Searches through m_finishedPaths for the first Path whose strokeWidth
+ * equals the specified value.
+ *
+ * @param strokeWidth  The stroke width to match.
+ * @return Iterator pointing to the matching Path, or m_finishedPaths.end()
+ *         if no entry has the given stroke width.
+ */
 QList<PainterPathModel::Path>::iterator PainterPathModel::indexOfFinalPaths(double strokeWidth)
 {
     auto it = std::find_if(m_finishedPaths.begin(), m_finishedPaths.end(), [strokeWidth](const Path& path) {
@@ -476,6 +631,20 @@ QList<PainterPathModel::Path>::iterator PainterPathModel::indexOfFinalPaths(doub
     return it;
 }
 
+/**
+ * @brief Adds a pen line’s geometry to an existing finished path or creates a new one.
+ *
+ * Looks up a Path in m_finishedPaths matching the stroke width of the
+ * pen line at @a penLineIndex. If found:
+ *   - Appends its geometry via addLinePolygon()
+ *   - Emits dataChanged() for the corresponding model row.
+ * Otherwise:
+ *   - Inserts a new row at the end (beginInsertRows()/endInsertRows())
+ *   - Creates and appends a fresh Path with that stroke width
+ *   - Builds its geometry via addLinePolygon()
+ *
+ * @param penLineIndex  Row in m_penLineModel whose line to finalize.
+ */
 void PainterPathModel::addOrUpdateFinishPath(int penLineIndex)
 {
     // if(penLineIndex != m_activeLineIndex) {
@@ -501,6 +670,24 @@ void PainterPathModel::addOrUpdateFinishPath(int penLineIndex)
     // }
 }
 
+/**
+ * @brief Generates a semicircular cap polygon based on a stroke normal.
+ *
+ * Given the normal vector at a stroke endpoint and its perpendicular
+ * line, this method tessellates a half‑circle of radius @a radius
+ * to form an end cap. The arc’s orientation (clockwise vs. counter‑clockwise)
+ * is chosen so that its midpoint faces in the direction of @a normal.
+ *
+ * @param normal             The vector direction of the stroke at the endpoint.
+ * @param perpendicularLine  The QLineF whose endpoints define the cap’s diameter.
+ * @param radius             The radius of the half‑circle (usually half the stroke width).
+ * @return QVector<QPointF>  The sequence of arc points (excluding the two
+ *         diameter endpoints), ready to append to a QPolygonF.
+ *
+ * @pre  m_endPointTessellation >= 3
+ * @note Reserves (m_endPointTessellation - 2) points; the caller must
+ *       also include the perpendicularLine endpoints separately.
+ */
 QVector<QPointF> PainterPathModel::capFromNormal(const QPointF &normal, const QLineF &perpendicularLine, double radius) const
 {
     QVector<QPointF> points;
@@ -548,7 +735,18 @@ QVector<QPointF> PainterPathModel::capFromNormal(const QPointF &normal, const QL
     return points;
 }
 
-
+/**
+ * @brief Builds the end‑cap for a variable‑width stroke.
+ *
+ * Assumes there are at least two PenPoint entries. Computes the stroke’s
+ * normal vector at the last point (difference between the last two points),
+ * then delegates to capFromNormal(), passing that normal, the provided
+ * perpendicularLine, and a radius based on the last point’s pressure.
+ *
+ * @param points             The full sequence of PenPoint for this stroke.
+ * @param perpendicularLine  The perpendicular offset line at the endpoint.
+ * @return QVector<QPointF>  The tessellated cap points (excluding the diameter endpoints).
+ */
 QVector<QPointF> PainterPathModel::endCap(const QVector<PenPoint> &points, const QLineF &perpendicularLine) const
 {
     Q_ASSERT(points.size() >= 2);
@@ -558,6 +756,24 @@ QVector<QPointF> PainterPathModel::endCap(const QVector<PenPoint> &points, const
     return capFromNormal(normal, perpendicularLine, pressureToLineHalfWidth(lastPoint));
 }
 
+/**
+ * @brief Smooths the pressure values of a range of PenPoints using a moving average.
+ *
+ * For each index i between @a begin and @a end (inclusive), this method
+ * computes the average pressure over a sliding window of size
+ * (2 * m_smoothingPressureWindow + 1), clamped to the valid range [0, lastIndex].
+ * It returns a new QVector of PenPoint where each point’s pressure has been
+ * replaced by this local average, but all other fields remain unchanged.
+ *
+ * @param points  The full sequence of PenPoint to sample from.
+ * @param begin   The starting index into @a points (must satisfy 0 ≤ begin < points.size()).
+ * @param end     The ending index into @a points   (must satisfy 0 ≤ end < points.size()).
+ * @return        A QVector<PenPoint> of length (end – begin + 1) containing
+ *                the points from @a begin to @a end with smoothed pressure values.
+ *
+ * @pre  begin ≤ end
+ * @pre  points.size() ≥ end + 1
+ */
 QVector<PenPoint> PainterPathModel::smoothPressure(const QVector<PenPoint>& points, int begin, int end) const
 {
     Q_ASSERT(begin >= 0);
