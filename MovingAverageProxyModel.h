@@ -25,6 +25,6 @@ signals:
     void windowSizeChanged();
 
 private:
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(MovingAverageProxyModel, int, m_windowSize, 8, &MovingAverageProxyModel::windowSizeChanged);
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(MovingAverageProxyModel, int, m_windowSize, 1, &MovingAverageProxyModel::windowSizeChanged);
 };
 #endif//MOVINGAVERAGEPROXYMODEL_H
