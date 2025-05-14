@@ -53,6 +53,16 @@ jobs:
         run: |
           conan profile detect --force
 
+      # Append your tool_requires to ~/.conan2/profiles/default
+      # This is a work around for wxwidgets https://github.com/conan-io/conan-center-index/issues/26878
+      # This can be remove once conan is fixed
+      - name: Add CMake tool requirement
+        run: |
+          PROFILE_PATH="$(conan config home)/profiles/default"
+          echo >> "$PROFILE_PATH"          # ensure a blank line
+          echo "[tool_requires]" >> "$PROFILE_PATH"
+          echo "!cmake/*: cmake/[>=3 <4]" >> "$PROFILE_PATH"
+
       - name: Cache Conan Packages
         id: cache-conan
         uses: actions/cache@v4
