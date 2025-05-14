@@ -97,6 +97,7 @@ TEST_CASE("cwCavePageModel Test with Static Data", "[cwCavePageModel]")
         }
     };
 
+    // qDebug().noquote() << "Cave error model:" << cave->errorModel()->toStringList().join('\n');
     checkModel();
 
     // Make sure updates work correctly, use signal spy to check for dataChanges

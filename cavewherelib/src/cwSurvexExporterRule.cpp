@@ -285,10 +285,10 @@ void cwSurvexExporterRule::writeLRUDData(QTextStream& stream, const Trip trip, i
             if(station.isValid()) {
                 QString dataLine = dataLineTemplate
                                        .arg(station.name(), textPadding)
-                                       .arg(toSupportedLength(trip, station.left(), station.leftInputState()), textPadding)
-                                       .arg(toSupportedLength(trip, station.right(), station.rightInputState()), textPadding)
-                                       .arg(toSupportedLength(trip, station.up(), station.upInputState()), textPadding)
-                                       .arg(toSupportedLength(trip, station.down(), station.downInputState()), textPadding);
+                                       .arg(toSupportedLength(trip, station.left()), textPadding)
+                                       .arg(toSupportedLength(trip, station.right()), textPadding)
+                                       .arg(toSupportedLength(trip, station.up()), textPadding)
+                                       .arg(toSupportedLength(trip, station.down()), textPadding);
 
                 stream << dataLine << Qt::endl;
             }
@@ -335,8 +335,8 @@ void cwSurvexExporterRule::writeDate(QTextStream &stream, QDate date)
   If the current calibration isn't in yard, feet or meters, then this function converts the
   length into meters.
 */
-QString cwSurvexExporterRule::toSupportedLength(const Trip& trip, double length, cwDistanceStates::State state) {
-    if(state == cwDistanceStates::Empty) {
+QString cwSurvexExporterRule::toSupportedLength(const Trip& trip, const cwDistanceReading& reading) {
+    if(reading.state() != cwDistanceReading::State::Valid) {
         return "-";
     }
 
@@ -345,22 +345,23 @@ QString cwSurvexExporterRule::toSupportedLength(const Trip& trip, double length,
     case cwUnits::Meters:
     case cwUnits::Feet:
     case cwUnits::Yards:
-        return QString("%1").arg(length);
+        return reading.value();
     default:
-        return QString("%1").arg(cwUnits::convert(length, unit, cwUnits::Meters));
+        return QString("%1").arg(cwUnits::convert(reading.toDouble(), unit, cwUnits::Meters));
     }
 }
 
 /**
   This converts a compass bearing into a string based on the state.
   */
-QString cwSurvexExporterRule::compassToString(double compass, cwCompassStates::State state)
+QString cwSurvexExporterRule::compassToString(const cwCompassReading& compass)
 {
-    switch(state) {
-    case cwCompassStates::Empty:
+    switch(compass.state()) {
+    case cwCompassReading::State::Empty:
+    case cwCompassReading::State::Invalid:
         return QString("-");
-    case cwCompassStates::Valid:
-        return QString("%1").arg(compass);
+    case cwCompassReading::State::Valid:
+        return compass.value();
     }
     return QString();
 }
@@ -368,16 +369,17 @@ QString cwSurvexExporterRule::compassToString(double compass, cwCompassStates::S
 /**
   This converts a clino into a string based on the state.
   */
-QString cwSurvexExporterRule::clinoToString(double clino, cwClinoStates::State state)
+QString cwSurvexExporterRule::clinoToString(const cwClinoReading& clino)
 {
-    switch(state) {
-    case cwClinoStates::Empty:
+    switch(clino.state()) {
+    case cwClinoReading::State::Empty:
+    case cwClinoReading::State::Invalid:
         return QString("-");
-    case cwClinoStates::Valid:
-        return QString("%1").arg(clino);
-    case cwClinoStates::Down:
+    case cwClinoReading::State::Valid:
+        return clino.value();
+    case cwClinoReading::State::Down:
         return QString("DOWN");
-    case cwClinoStates::Up:
+    case cwClinoReading::State::Up:
         return QString("UP");
     }
     return QString();
@@ -415,11 +417,11 @@ ResultBase cwSurvexExporterRule::writeChunk(QTextStream& stream,
 
         if(!fromStation.isValid() || !toStation.isValid()) { continue; }
 
-        QString distance = toSupportedLength(trip, shot.distance(), cwDistanceStates::Valid);
-        QString compass = compassToString(shot.compass(), shot.compassState());
-        QString backCompass = compassToString(shot.backCompass(), shot.backCompassState());
-        QString clino = clinoToString(shot.clino(), shot.clinoState());
-        QString backClino = clinoToString(shot.backClino(), shot.backClinoState());
+        QString distance = toSupportedLength(trip, shot.distance());
+        QString compass = compassToString(shot.compass());
+        QString backCompass = compassToString(shot.backCompass());
+        QString clino = clinoToString(shot.clino());
+        QString backClino = clinoToString(shot.backClino());
 
         //Make sure the model is good
         if(distance.isEmpty()) { continue; }

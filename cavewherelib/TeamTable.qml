@@ -16,7 +16,7 @@ QQ.Item {
 
     property Team model
 
-    height: childrenRect.height
+    implicitHeight: childrenRect.height
 
     function updateState() {
         if(teamList.count > 0) {
@@ -36,6 +36,7 @@ QQ.Item {
         id: personTable
 
         anchors.top: title.bottom
+        anchors.topMargin: 5
 
         width: teamList.width
         height: childrenRect.height

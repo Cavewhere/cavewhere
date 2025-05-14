@@ -13,6 +13,7 @@ import "Utils.js" as Utils
 
 CheckableGroupBox {
     id: editorId
+    objectName: "backSightCalibrationEditor"
 
     property TripCalibration calibration
 

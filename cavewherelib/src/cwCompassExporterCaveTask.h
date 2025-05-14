@@ -12,8 +12,8 @@
 #include "cwCaveExporterTask.h"
 #include "cwUnits.h"
 #include "cwStation.h"
-#include "cwReadingStates.h"
 #include "cwGlobals.h"
+#include "cwClinoReading.h"
 class cwCave;
 class cwTrip;
 class cwTripCalibration;
@@ -62,7 +62,7 @@ private:
     double convertField(cwTripCalibration *trip, cwShot shot, ShotField field);
     QString formatDouble(double value);
 
-    bool convertFromDownUp(cwClinoStates::State clinoReading, double* value);
+    bool convertFromDownUp(cwClinoReading::State clinoReading, double* value);
     QString surveyTeam(cwTrip* trip);
 
     void writeInvalidTripData(QTextStream& stream, cwTrip *trip);

@@ -23,6 +23,8 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QThread>
+#include <QRegularExpression>
+#include <QRegularExpressionMatch>
 
 //Std include
 #include "math.h"
@@ -158,6 +160,8 @@ void cwSurvexImporter::clear() {
   \brief Loads the file
   */
 void cwSurvexImporter::loadFile(QString filename) {
+    filename.remove('"');
+
     //Open the survex file
     QFile file;
     bool fileIsOpen = openFile(file, filename);
@@ -531,6 +535,11 @@ void cwSurvexImporter::parseNormalData(QString line) {
 
     QString fromStationName = extractData(data, From);
     QString toStationName= extractData(data, To);
+
+    if(fromStationName == QString("-") || toStationName == QString("-")) {
+        addWarning(QString("Skipping splay data at ") + fromStationName + " " + toStationName);
+        return;
+    }
 
     //Make sure the to and from stations exist
     if(fromStationName.isEmpty() || toStationName.isEmpty()) {
@@ -1030,6 +1039,7 @@ void cwSurvexImporter::runStats(QString filename) {
         if (match.hasMatch()) {
             QString command = match.captured(1);
             QString args = match.captured(2).trimmed();
+            args.remove('"');
 
             if (compare(command, "include")) {
                 runStats(args);
@@ -1101,18 +1111,10 @@ void cwSurvexImporter::updateStationLRUD(cwStation before, cwStation station, cw
 
     //Swaps the left distance with the right distance
     auto swapLeftRight = [](cwStation& station) {
-        double left = station.left();
-        double right = station.right();
-        cwDistanceStates::State leftState = station.leftInputState();
-        cwDistanceStates::State rightState = station.rightInputState();
-
-        std::swap(left, right);
-        std::swap(leftState, rightState);
-
-        station.setLeft(left);
-        station.setRight(right);
-        station.setLeftInputState(leftState);
-        station.setRightInputState(rightState);
+        auto left = station.left();
+        auto right = station.right();
+        station.setLeft(right);
+        station.setRight(left);
     };
 
     for(int i = 0; i < CurrentBlock->Chunks.size(); i++) {

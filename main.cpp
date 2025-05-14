@@ -13,6 +13,7 @@
 #include <QQmlApplicationEngine>
 #include <QThreadPool>
 #include <QQuickWindow>
+#include <QCommandLineParser>
 
 //Our includes
 //#include "cwMainWindow.h"
@@ -23,7 +24,7 @@
 #include "cwOpenFileEventHandler.h"
 #include "cwApplication.h"
 #include "cwGlobals.h"
-#include "cwConcurrent.h"
+#include "cwMetaTypeSystem.h"
 
 //QuickQanave includes
 #include <QuickQanava>
@@ -131,6 +132,9 @@ int main(int argc, char *argv[])
     QApplication::setApplicationVersion(CAVEWHERE_VERSION);
 
     cwApplication a(argc, argv);
+
+    //Register meta system
+    cwMetaTypeSystem::registerTypes();
 
     //Load all the fonts
     cwGlobals::loadFonts();

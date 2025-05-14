@@ -18,7 +18,6 @@
 #include "cwTaskManagerModel.h"
 #include "cwImageProvider.h"
 #include "cwTripCalibration.h"
-#include "cwReadingStates.h"
 #include "cwTeam.h"
 #include "cwSurveyNoteModel.h"
 #include "cwNote.h"
@@ -236,6 +235,7 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
     root->futureManagerModel()->waitForFinished();
 }
 
+//This also test v3->v6
 TEST_CASE("Save and load should work correctly for Projected Profile v3->v5", "[ProtoSaveLoad]") {
 
     auto fileCheck = [](QString filename, auto scrapCheckFunc) {
@@ -287,14 +287,14 @@ TEST_CASE("Save and load should work correctly for Projected Profile v3->v5", "[
 
         struct Station {
             QString stationName;
-            std::optional<double> left;
-            std::optional<double> right;
-            std::optional<double> up;
-            std::optional<double> down;
+            QString left;
+            QString right;
+            QString up;
+            QString down;
         };
 
         QList<Station> stations {
-            {"a1", 1, 2, 3, 4},
+            {"a1", "1", "2", "3", "4"},
             {"a2", {},{},{},{}},
             {"a3", {},{},{},{}},
             {"a4", {},{},{},{}},
@@ -309,31 +309,31 @@ TEST_CASE("Save and load should work correctly for Projected Profile v3->v5", "[
             auto station = stations.at(stationIndex);
             CHECK(chunkStation.name().toStdString() == station.stationName.toStdString());
 
-            auto checkLRUD = [](auto stateFunc, auto valueFunc, std::optional<double> checkValue) {
-                if(checkValue.has_value()) {
-                    CHECK(stateFunc() == cwDistanceStates::Valid);
-                    CHECK(valueFunc() == checkValue.value());
+            auto checkLRUD = [](auto stateFunc, auto valueFunc, const QString& checkValue) {
+                if(!checkValue.isEmpty()) {
+                    CHECK(stateFunc() == cwDistanceReading::State::Valid);
+                    CHECK(valueFunc().value() == checkValue);
                 } else {
-                    CHECK(stateFunc() == cwDistanceStates::Empty);
+                    CHECK(stateFunc() == cwDistanceReading::State::Empty);
                 }
             };
 
-            checkLRUD([chunkStation]() { return chunkStation.leftInputState();},
-            [chunkStation]() { return chunkStation.left(); },
-            station.left
-            );
-            checkLRUD([chunkStation]() { return chunkStation.rightInputState();},
-            [chunkStation]() { return chunkStation.right(); },
-            station.right
-            );
-            checkLRUD([chunkStation]() { return chunkStation.upInputState();},
-            [chunkStation]() { return chunkStation.up(); },
-            station.up
-            );
-            checkLRUD([chunkStation]() { return chunkStation.downInputState();},
-            [chunkStation]() { return chunkStation.down(); },
-            station.down
-            );
+            checkLRUD([chunkStation]() { return chunkStation.left().state();},
+                      [chunkStation]() { return chunkStation.left(); },
+                      station.left
+                      );
+            checkLRUD([chunkStation]() { return chunkStation.right().state();},
+                      [chunkStation]() { return chunkStation.right(); },
+                      station.right
+                      );
+            checkLRUD([chunkStation]() { return chunkStation.up().state();},
+                      [chunkStation]() { return chunkStation.up(); },
+                      station.up
+                      );
+            checkLRUD([chunkStation]() { return chunkStation.down().state();},
+                      [chunkStation]() { return chunkStation.down(); },
+                      station.down
+                      );
         };
 
         struct Clino {
@@ -345,69 +345,69 @@ TEST_CASE("Save and load should work correctly for Projected Profile v3->v5", "[
             };
 
             Type type;
-            std::optional<double> value;
+            QString value;
         };
 
         struct Shot {
-            double distance;
-            std::optional<double> compass;
-            std::optional<double> backCompass;
+            QString distance;
+            QString compass;
+            QString backCompass;
             Clino clino;
             Clino backClino;
         };
 
         QList<Shot> shots {
-            { 10, {}, {}, {Clino::Down, {}}, {Clino::Up, {}}},
-            { 7.3, 50, 50.1, {Clino::Value, {-75}}, {Clino::Value, {-74}}},
-            { 4, 220, 219, {Clino::Value, {10}}, {Clino::Value, {11}}},
-            { 6, 46, 46.2, {Clino::Value, {-85}}, {Clino::Value, {-84.5}}},
-            { 21.5, 35, 34, {Clino::Value, {-78}}, {Clino::Value, {-77}}}
+            { "10", {}, {}, {Clino::Down, {}}, {Clino::Up, {}}},
+            { "7.3", "50", "50.1", {Clino::Value, "-75"}, {Clino::Value, "-74"}},
+            { "4", "220", "219", {Clino::Value, "10"}, {Clino::Value, "11"}},
+            { "6", "46", "46.2", {Clino::Value, "-85"}, {Clino::Value, "-84.5"}},
+            { "21.5", "35", "34", {Clino::Value, "-78"}, {Clino::Value, "-77"}}
         };
 
         REQUIRE(chunk->shotCount() == shots.size());
 
         auto checkShot = [=](int shotIndex) {
             auto chunkShot = chunk->shot(shotIndex);
-            auto shot = shots .at(shotIndex);
-            CHECK(chunkShot.distance() == shot.distance);
-            if(shot.compass.has_value()) {
-                CHECK(chunkShot.compassState() == cwCompassStates::Valid);
-                CHECK(shot.compass == chunkShot.compass());
+            auto shot = shots.at(shotIndex);
+            CHECK(chunkShot.distance().value().toStdString() == shot.distance.toStdString());
+            if(!shot.compass.isEmpty()) {
+                CHECK(chunkShot.compass().state() == cwCompassReading::State::Valid);
+                CHECK(shot.compass.toStdString() == chunkShot.compass().value().toStdString());
             } else {
-                CHECK(chunkShot.compassState() == cwCompassStates::Empty);
+                CHECK(chunkShot.compass().state() == cwCompassReading::State::Empty);
             }
 
-            if(shot.backCompass.has_value()) {
-                CHECK(chunkShot.backCompassState() == cwCompassStates::Valid);
-                CHECK(shot.backCompass == chunkShot.backCompass());
+            if(!shot.backCompass.isEmpty()) {
+                CHECK(chunkShot.backCompass().state() == cwCompassReading::State::Valid);
+                CHECK(shot.backCompass.toStdString() == chunkShot.backCompass().value().toStdString());
             } else {
-                CHECK(chunkShot.backCompassState() == cwCompassStates::Empty);
+                CHECK(chunkShot.backCompass().state() == cwCompassReading::State::Empty);
             }
 
             auto checkClino = [](Clino clino, auto clinoStateFunc, auto clinoValueFunc) {
                 switch(clino.type) {
                 case Clino::Up:
-                    CHECK(clinoStateFunc() == cwClinoStates::Up);
+                    CHECK(clinoStateFunc() == cwClinoReading::State::Up);
                     break;
                 case Clino::Down:
-                    CHECK(clinoStateFunc() == cwClinoStates::Down);
+                    CHECK(clinoStateFunc() == cwClinoReading::State::Down);
                     break;
                 case Clino::Value:
-                    CHECK(clinoStateFunc() == cwClinoStates::Valid);
-                    CHECK(clinoValueFunc() == clino.value.value());
+                    CHECK(clinoStateFunc() == cwClinoReading::State::Valid);
+                    CHECK(clinoValueFunc().value().toStdString() == clino.value.toStdString());
                     break;
                 }
             };
 
             INFO("Front Clino");
             checkClino(shot.clino,
-                       [chunkShot]() { return chunkShot.clinoState(); },
+                       [chunkShot]() { return chunkShot.clino().state(); },
             [chunkShot]() { return chunkShot.clino(); }
             );
 
             INFO("Back clino");
             checkClino(shot.backClino,
-                       [chunkShot]() { return chunkShot.backClinoState(); },
+                       [chunkShot]() { return chunkShot.backClino().state(); },
             [chunkShot]() { return chunkShot.backClino(); }
             );
 

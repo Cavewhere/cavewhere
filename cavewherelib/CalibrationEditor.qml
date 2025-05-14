@@ -15,7 +15,7 @@ QQ.Rectangle {
     property TripCalibration calibration
 
     radius: 8
-    height: childrenRect.height
+    implicitHeight: childrenRect.height
 
     ColumnLayout {
         anchors.left: parent.left

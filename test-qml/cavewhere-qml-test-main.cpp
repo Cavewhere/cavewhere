@@ -11,7 +11,7 @@
 #include "cwImageProvider.h"
 #include "cwRootData.h"
 #include "cwGlobals.h"
-#include "cwConcurrent.h"
+#include "cwMetaTypeSystem.h"
 
 class Setup : public QObject
 {
@@ -56,6 +56,8 @@ int main(int argc, char **argv) \
 {
     //This allows use to create a QGraphicsScene, without QApplication, this crashes
     QApplication app(argc, argv);
+
+    cwMetaTypeSystem::registerTypes();
 
     cwGlobals::loadFonts();
 

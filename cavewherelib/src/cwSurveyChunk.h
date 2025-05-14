@@ -31,8 +31,10 @@ class CAVEWHERE_LIB_EXPORT cwSurveyChunk : public QObject {
     QML_NAMED_ELEMENT(SurveyChunk)
 
     Q_PROPERTY(cwTrip* parentTrip READ parentTrip WRITE setParentTrip NOTIFY parentTripChanged)
-    Q_PROPERTY(ConnectedState connectedState READ connectedState WRITE setConnectedState NOTIFY connectedStateChanged)
     Q_PROPERTY(cwErrorModel* errorModel READ errorModel CONSTANT)
+
+    Q_PROPERTY(int stationCount READ stationCount NOTIFY stationCountChanged FINAL)
+    Q_PROPERTY(int shotCount READ shotCount NOTIFY shotCountChanged FINAL)
 
 public:
     enum Direction {
@@ -75,7 +77,6 @@ public:
     cwTrip* parentTrip() const;
 
     cwCave* parentCave() const;
-//    void updateStationsWithNewCave();
 
     QList<cwStation> stations() const;
     QList<cwShot> shots() const;
@@ -98,13 +99,28 @@ public:
 
     Q_INVOKABLE bool isStationAndShotsEmpty() const;
 
-    ConnectedState connectedState() const;
-    void setConnectedState(ConnectedState connectedState);
-
     cwErrorModel* errorModel() const;
+
+    int stationCount() const;
+    int shotCount() const;
+
+    Q_INVOKABLE cwStation station(int index) const;
+    Q_INVOKABLE QList<int> indicesOfStation(QString stationName) const;
+
+    Q_INVOKABLE cwShot shot(int index) const;
+
+    Q_INVOKABLE cwErrorModel* errorsAt(int index, DataRole role) const;
+    Q_INVOKABLE QVariant data(DataRole role, int index) const;
 
 signals:
     void parentTripChanged();
+
+    void added(int stationBegin, int stationEnd,
+               int shotBegin, int shotEnd);
+    void aboutToRemove(int stationBegin, int stationEnd,
+                       int shotBegin, int shotEnd);
+    void removed(int stationBegin, int stationEnd,
+                int shotBegin, int shotEnd);
 
     void stationsAdded(int beginIndex, int endIndex);
     void shotsAdded(int beginIndex, int endIndex);
@@ -122,18 +138,10 @@ signals:
 
     void errorsChanged(cwSurveyChunk::DataRole mainRole, int index);
 
+    void shotCountChanged();
+    void stationCountChanged();
+
 public slots:
-    int stationCount() const;
-    cwStation station(int index) const;
-    QList<int> indicesOfStation(QString stationName) const;
-
-    int shotCount() const;
-    cwShot shot(int index) const;
-
-//    QPair<cwStationReference, cwStationReference> toFromStations(const cwShot& shot) const;
-//    cwStationReference toStation(const cwShot& shot) const;
-//    cwStationReference fromStation(const cwShot& shot) const;
-
     void appendNewShot();
     void appendShot(cwStation fromStation, cwStation toStation, cwShot shot);
 
@@ -148,12 +156,7 @@ public slots:
     void removeShot(int shotIndex, Direction station);
     bool canRemoveShot(int shotIndex, Direction station);
 
-    QVariant data(DataRole role, int index) const;
     void setData(DataRole role, int index, QVariant data);
-
-//    QVariantList errors() const;
-    cwErrorModel* errorsAt(int index, DataRole role) const;
-//    void setSuppressWarning(cwError warning, bool suppress);
 
 
 private:
@@ -185,7 +188,6 @@ private:
 
     cwTrip* ParentTrip;
     bool Editting; //!< Puts the survey chunk in a edditing state, this will try to keep a empty shot at the end of the chunk
-    ConnectedState IsConnectedState; //!<
 
     bool shotIndexCheck(int index) const { return index >= 0 && index < Shots.count();  }
     bool stationIndexCheck(int index) const { return index >= 0 && index < Stations.count(); }
@@ -193,9 +195,6 @@ private:
     void remove(int stationIndex, int shotIndex);
     int index(int index, Direction direction);
 
-    void updateStationsCave(cwStationReference station);
-
-    cwStationReference createNewStation();
 
     QVariant stationData(DataRole role, int index) const;
     QVariant shotData(DataRole role, int index) const;
@@ -225,9 +224,6 @@ private slots:
 
     void updateCalibrationsNewShots(int beginIndex, int endIndex);
     void updateCalibrationsRemoveShots(int beginIndex, int endIndex);
-
-//    int errorCount(cwSurveyChunkError::ErrorType type) const;
-
 };
 
 Q_DECLARE_METATYPE(cwSurveyChunk*)
@@ -255,15 +251,6 @@ inline QList<cwStation> cwSurveyChunk::stations() const {
   */
 inline QList<cwShot> cwSurveyChunk::shots() const {
     return Shots;
-}
-
-
-/**
-* @brief cwSurveyChunk::connectedState
-* @return
-*/
-inline cwSurveyChunk::ConnectedState cwSurveyChunk::connectedState() const {
-    return IsConnectedState;
 }
 
 

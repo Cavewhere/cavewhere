@@ -12,29 +12,32 @@ import "qrc:/cavewherelib/cavewherelib/Theme.js" as Theme
 DataBox {
     id: stationBox
 
+    property var window: QQ.Window.window
+
     function commitAutoStation() {
-        var stationName = surveyChunk.guessLastStationName();
-        surveyChunk.setData(dataRole, rowIndex, stationName);
-        surveyChunkView.tab(rowIndex, dataRole)
+        var stationName = dataValue.rowIndex.chunk.guessLastStationName();
+        dataValue.rowIndex.chunk.setData(dataValue.chunkDataRole, dataValue.rowIndex.indexInChunk, stationName);
     }
 
     onFocusChanged: {
+        // console.log("Focus changed!" + focus + " " + this + " Window activeFocus:" + stationBox.window.activeFocusItem) ;
+
         if(focus) {
             //Make sure it's visible to the user
-            surveyChunkView.ensureDataBoxVisible(rowIndex, dataRole)
+            if(dataValue.chunk) {
+                var lastStationIndex = dataValue.chunk.stationCount - 1
 
-            var lastStationIndex = surveyChunk.stationCount() - 1
+                //Try to guess for new stations what the next station is
+                //Make sure the station is the last station in the chunk
+                if(lastStationIndex  === dataValue.indexInChunk) {
 
-            //Try to guess for new stations what the next station is
-            //Make sure the station is the last station in the chunk
-            if(lastStationIndex  === rowIndex) {
-
-                //Make sure the data is empty
-                if(dataValue == "") {
-                    var guessedstationName = surveyChunk.guessLastStationName();
-                    if(guessedstationName !== "") {
-                        stationName.text = guessedstationName
-                        state = "AutoNameState"
+                    //Make sure the data is empty
+                    if(dataValue.reading.value === "") {
+                        var guessedstationName = dataValue.chunk.guessLastStationName();
+                        if(guessedstationName !== "") {
+                            stationName.text = guessedstationName
+                            state = "AutoNameState"
+                        }
                     }
                 }
             }

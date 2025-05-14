@@ -30,14 +30,23 @@ message Trip {
 
 message Station {
     required QtProto.QString name = 1;
-    optional double left = 2;
-    optional double right = 3;
-    optional double up = 4;
-    optional double down = 5;
-    optional DistanceStates.State leftState = 6;
-    optional DistanceStates.State rightState = 7;
-    optional DistanceStates.State upState = 8;
-    optional DistanceStates.State downState = 9;
+
+    //---- Version <= 5 attributes
+    optional double left = 2 [deprecated = true]; //This is deprecated use leftReading
+    optional double right = 3 [deprecated = true]; //This is deprecated use rightReading
+    optional double up = 4  [deprecated = true]; //This is deprecated use upReading
+    optional double down = 5 [deprecated = true]; //This is deprecated use downReading
+    optional DistanceStates.State leftState = 6  [deprecated = true]; //This is deprecated use leftReading
+    optional DistanceStates.State rightState = 7  [deprecated = true]; //This is deprecated use rightReading
+    optional DistanceStates.State upState = 8 [deprecated = true]; //This is deprecated use upReading
+    optional DistanceStates.State downState = 9 [deprecated = true]; //This is deprecated use downReading
+
+    //---- Version >= 6 attributes
+    optional DistanceReading leftReading = 10;
+    optional DistanceReading rightReading = 11;
+    optional DistanceReading upReading = 12;
+    optional DistanceReading downReading = 13;
+
 }
 
 message SurveyNoteModel {
@@ -88,17 +97,27 @@ message SurveyChunk {
 }
 
 message Shot {
-    optional double Distance = 1;
-    optional double Compass = 2;
-    optional double BackCompass = 3;
-    optional double Clino = 4;
-    optional double BackClino = 5;
-    optional DistanceStates.State distanceState = 6;
-    optional CompassStates.State compassState = 7;
-    optional CompassStates.State backCompassState = 8;
-    optional ClinoStates.State clinoState = 9;
-    optional ClinoStates.State backClinoState = 10;
+    //---- Version <= 5 attributes
+    optional double Distance = 1 [deprecated = true];
+    optional double Compass = 2 [deprecated = true];
+    optional double BackCompass = 3 [deprecated = true];
+    optional double Clino = 4 [deprecated = true];
+    optional double BackClino = 5 [deprecated = true];
+    optional DistanceStates.State distanceState = 6[deprecated = true];
+    optional CompassStates.State compassState = 7 [deprecated = true];
+    optional CompassStates.State backCompassState = 8 [deprecated = true];
+    optional ClinoStates.State clinoState = 9 [deprecated = true];
+    optional ClinoStates.State backClinoState = 10 [deprecated = true];
+
+    //All versions
     optional bool includeDistance = 11;
+
+    //--- Version >= 6 attributes
+    optional DistanceReading distanceReading = 12;
+    optional CompassReading compassReading = 13;
+    optional CompassReading backCompassReading = 14;
+    optional ClinoReading clinoReading = 15;
+    optional ClinoReading backClinoReading = 16;
 }
 
 message DistanceStates {
@@ -235,4 +254,16 @@ message ProjectedProfileScrapViewMatrix {
 
     optional double azimuth = 1;
     optional Direction direction = 2;
+}
+
+message DistanceReading {
+    optional QtProto.QString value = 1;
+}
+
+message CompassReading {
+    optional QtProto.QString value = 1;
+}
+
+message ClinoReading {
+    optional QtProto.QString value = 1;
 }

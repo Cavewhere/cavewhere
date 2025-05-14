@@ -15,6 +15,7 @@
 #include "cwUnits.h"
 #include "cwTripCalibration.h"
 #include "cwShot.h"
+#include "cwStation.h"
 #include "cwTeamMember.h"
 class cwTeam;
 class cwCave;
@@ -128,9 +129,9 @@ private:
     static void writeLRUDData(QTextStream &stream, const Trip trip, int textPadding = -11);
     static void writeTeamData(QTextStream &stream, const QVector<cwTeamMember>& team);
     static void writeDate(QTextStream &stream, QDate date);
-    static QString toSupportedLength(const Trip& trip, double length, cwDistanceStates::State state);
-    static QString compassToString(double compass, cwCompassStates::State state);
-    static QString clinoToString(double clino, cwClinoStates::State state);
+    static QString toSupportedLength(const Trip& trip, const cwDistanceReading& reading);
+    static QString compassToString(const cwCompassReading& compass);
+    static QString clinoToString(const cwClinoReading &clino);
     static Monad::ResultBase writeChunk(QTextStream &stream,
                            bool hasFrontSights,
                            bool hasBackSights,

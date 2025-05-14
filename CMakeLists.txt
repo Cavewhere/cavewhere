@@ -349,7 +349,8 @@ if(APPLE)
     add_dependencies(CaveWhere messageFiles) #Makes sure the message files get copied to bundle correctly
 
 
-    if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    # if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    if(CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
         ## This allows for profiling to work correctly for macos
         # Query the available code signing identities.
         execute_process(

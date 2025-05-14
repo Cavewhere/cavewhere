@@ -1,3 +1,7 @@
+// cwShot.h
+#ifndef CSHOT_H
+#define CSHOT_H
+
 /**************************************************************************
 **
 **    Copyright (C) 2013 by Philip Schuchardt
@@ -5,180 +9,70 @@
 **
 **************************************************************************/
 
-#ifndef CSHOT_H
-#define CSHOT_H
-
-//Our includes
-class cwSurveyChunk;
-class cwStation;
-class cwStationReference;
-class cwValidator;
-#include "cwReadingStates.h"
-#include "cwGlobals.h"
-
-//Qt includes
 #include <QSharedDataPointer>
+#include <QList>
+#include <QString>
+#include "cwGlobals.h"
+#include "cwShotMeasurement.h"
+#include "cwDistanceReading.h"
+#include "cwCompassReading.h"
+#include "cwClinoReading.h"
 
-class CAVEWHERE_LIB_EXPORT cwShot
-{
-
+class CAVEWHERE_LIB_EXPORT cwShot {
 public:
+    /**
+     * Default ctor: seeds with one front/back measurement (legacy behavior)
+     */
     cwShot();
 
-    cwShot(QString distance,
-           QString compass, QString backCompass,
-           QString clino, QString backClino);
-    cwShot(const cwShot& shot);
+    /**
+     * Legacy ctor: initializes front and backsight readings
+     */
+    cwShot(const QString& distance,
+           const QString& compass,
+           const QString& backCompass,
+           const QString& clino,
+           const QString& backClino);
 
-    double distance() const;
-    void setDistance(QString distance);
-    void setDistance(double distance);
-    void setDistanceState(cwDistanceStates::State state);
+    cwShot(const cwShot&) = default;
+    cwShot& operator=(const cwShot&) = default;
 
-    double compass() const;
-    void setCompass(QString compass);
-    void setCompass(double compass);
-    void setCompassState(cwCompassStates::State state);
+    // Legacy API (for backward compatibility)
+    cwDistanceReading distance() const;
+    void setDistance(const cwDistanceReading& reading);
 
-    double backCompass() const;
-    void setBackCompass(QString backCompass);
-    void setBackCompass(double backCompass);
-    void setBackCompassState(cwCompassStates::State state);
+    cwCompassReading compass() const;
+    void setCompass(const cwCompassReading& reading);
 
-    double clino() const;
-    void setClino(QString backClino);
-    void setClino(double clino);
-    void setClinoState(cwClinoStates::State state);
+    cwCompassReading backCompass() const;
+    void setBackCompass(const cwCompassReading& reading);
 
-    double backClino() const;
-    void setBackClino(QString backClino);
-    void setBackClino(double backClino);
-    void setBackClinoState(cwClinoStates::State state);
+    cwClinoReading clino() const;
+    void setClino(const cwClinoReading& reading);
 
-    cwDistanceStates::State distanceState() const;
-    cwCompassStates::State compassState() const;
-    cwCompassStates::State backCompassState() const;
-    cwClinoStates::State clinoState() const;
-    cwClinoStates::State backClinoState() const;
+    cwClinoReading backClino() const;
+    void setBackClino(const cwClinoReading& reading);
 
+    // Multi-measurement API
+    void addMeasurement(const cwShotMeasurement& measurement);
+    void removeMeasurementAt(int index);
+    const cwShotMeasurement& measurementAt(int index) const;
+    int measurementCount() const;
+
+    // Include/exclude in distance sums
     bool isDistanceIncluded() const;
-    void setDistanceIncluded(bool isDistanceIncluded);
+    void setDistanceIncluded(bool include);
 
+    // Validity check (delegates to first measurement)
     bool isValid() const;
 
-    bool sameIntervalPointer(const cwShot& other) const;
-
 private:
-    enum ValidState {
-        Invalid,
-        ValidEmpty,
-        ValidDouble,
-        ValidString
-    };
-
-    class PrivateData : public QSharedData {
-    public:
-        PrivateData();
-
-        double Distance;
-        double Compass;
-        double BackCompass;
-        double Clino;
-        double BackClino;
-
-        cwDistanceStates::State DistanceState;
-        cwCompassStates::State CompassState;
-        cwCompassStates::State BackCompassState;
-        cwClinoStates::State ClinoState;
-        cwClinoStates::State BackClinoState;
-
-        bool IncludeDistance;
-    };
-
-    QSharedDataPointer<PrivateData> Data;
-
-    ValidState setValueWithString(const cwValidator& validator, double& memberData, int& memberState, QString newValue);
-    void setClinoValueWithString(double& memberData, int& memberState, QString newValue);
-    void setPrivateCompass(double& memberData, cwCompassStates::State& state, double value);
-    void setPrivateClino(double& memberData, cwClinoStates::State& state, double value);
-
-    void setPrivateCompassState(cwCompassStates::State& memberState, cwCompassStates::State newState);
-    void setPrivateClinoState(cwClinoStates::State& memberState, cwClinoStates::State newState);
-
+    QList<cwShotMeasurement> measurements;
+    bool IncludeDistance = true;
 };
 
-inline cwDistanceStates::State cwShot::distanceState() const {
-    return Data->DistanceState;
-}
-
-inline cwCompassStates::State cwShot::compassState() const {
-    return Data->CompassState;
-}
-
-inline cwCompassStates::State cwShot::backCompassState() const {
-    return Data->BackCompassState;
-}
-
-inline cwClinoStates::State cwShot::clinoState() const {
-    return Data->ClinoState;
-}
-
-inline cwClinoStates::State cwShot::backClinoState() const {
-    return Data->BackClinoState;
-}
-
-/**
- * @brief cwShot::isDistanceIncluded
- * @return True if the shot should be included in the length or false if it should be excluded
- */
-inline bool cwShot::isDistanceIncluded() const
-{
-    return Data->IncludeDistance;
-}
-
-inline double cwShot::distance() const {
-    return Data->Distance;
-}
-
-inline double cwShot::compass() const {
-    return Data->Compass;
-}
-
-inline double cwShot::backCompass() const {
-    return Data->BackCompass;
-}
-
-inline double cwShot::clino() const {
-    return Data->Clino;
-}
-
-inline double cwShot::backClino() const {
-    return Data->BackClino;
-}
-
-inline bool cwShot::isValid() const {
-    return distanceState() == cwDistanceStates::Valid;
-}
-
-/**
- * @brief cwShot::setDistanceIncluded
- * @param includeDistance
- * If true the shot will be included in the distance caluclation, otherwise, it'll be
- * excluded.
- *
- * By default this is true.
- */
-inline void cwShot::setDistanceIncluded(bool includeDistance)
-{
-    Data->IncludeDistance = includeDistance;
-}
-
-
-/**
-  This return's true if the other shot has the same intertal point as this shot
-  */
-inline bool cwShot::sameIntervalPointer(const cwShot& other) const {
-    return Data == other.Data;
+inline int cwShot::measurementCount() const {
+    return measurements.size();
 }
 
 #endif // CSHOT_H

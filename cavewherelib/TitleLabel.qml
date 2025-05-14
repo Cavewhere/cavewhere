@@ -10,7 +10,7 @@ import QtQuick as QQ
 QQ.Rectangle {
     property alias text: textArea.text
 
-    width: textArea.width + 20
+    width: Math.floor(textArea.width) + 20
     height: 40
 
     border.color: "lightgray"

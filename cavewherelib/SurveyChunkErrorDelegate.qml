@@ -4,15 +4,18 @@ import cavewherelib
 
 QQ.Rectangle {
     id: delegateId
-    property SurveyChunk chunk;
+
+    required property SurveyChunk chunk;
+    readonly property real errorMessageHeight: layout.implicitHeight + 3
 
     z: 1
-    width: parent !== null ? parent.width + 2 : 0
-    height: parent !== null ? parent.height : 0
-    border.color: "#7E0000"
-    border.width: 1
+    // width: parent !== null ? parent.width + 2 : 0
+    // height: parent !== null ? parent.height : 0
+    // border.color: "#7E0000"
+    // border.width: 1
     color: "#00000000"
     visible: chunk !== null ? chunk.errorModel.errors.count > 0 : false
+
 
 
     QQ.Rectangle {
@@ -21,14 +24,16 @@ QQ.Rectangle {
         width: delegateId.width
         height: delegateId.height
         z: -1
+        y: -errorMessageHeight
         visible: delegateId.visible
+        // anchors.fill: parent
     }
 
     RowLayout {
         id: layout
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
-        anchors.topMargin: 3
+        // anchors.topMargin: 3
 
         QQ.Image {
             source: "qrc:icons/svg/stopSignError.svg"
@@ -37,6 +42,7 @@ QQ.Rectangle {
 
         Text {
             id: textId
+            objectName: "errorText"
             text: {
                 if(delegateId.chunk !== null) {
                     if(delegateId.chunk.errorModel.errors.count > 0) {

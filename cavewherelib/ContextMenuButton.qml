@@ -7,20 +7,29 @@
 
 import cavewherelib
 import QtQuick.Controls as QC
+import QtQuick
 
 QC.RoundButton {
     id: moreButton
 
-    default property var menu
+    // required property QC.Menu menu
+    required property Component menu
 
     icon.source: "qrc:/twbs-icons/icons/caret-down-fill.svg"
-    // icon.width: 15
-    // icon.height: 15
     implicitWidth: 20
     implicitHeight: 20
     radius: 0
 
+    Loader {
+        id: menuLoader
+        objectName: "menuLoader"
+        sourceComponent: menu
+        active: false
+        anchors.fill: parent
+    }
+
     onClicked: {
-        menu.popup()
+        menuLoader.active = true
+        menuLoader.item.popup();
     }
 }

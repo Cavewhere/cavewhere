@@ -33,8 +33,6 @@
 #include <QSqlRecord>
 #include <QThread>
 
-//Std includes
-#include <sstream>
 
 //Protobuf
 #include "cavewhere.pb.h"
@@ -627,14 +625,65 @@ cwStation cwRegionLoadTask::loadStation(const CavewhereProto::Station& protoStat
     cwStation station;
 
     station.setName(loadString(protoStation.name()));
-    station.setLeft(protoStation.left());
-    station.setRight(protoStation.right());
-    station.setUp(protoStation.up());
-    station.setDown(protoStation.down());
-    station.setLeftInputState((cwDistanceStates::State)protoStation.leftstate());
-    station.setRightInputState((cwDistanceStates::State)protoStation.rightstate());
-    station.setUpInputState((cwDistanceStates::State)protoStation.upstate());
-    station.setDownInputState((cwDistanceStates::State)protoStation.downstate());
+
+    //Returns the distance based on functors
+    // auto distance = [&](auto hasReading,
+    //                     auto reading,
+    //                     auto state,
+    //                     auto value) -> cwDistanceReading {
+    //     if (hasReading()) {
+    //         //Version 6
+    //         return distanceReading(reading());
+    //     } else {
+    //         auto s = static_cast<cwDistanceStates::State>(state());
+    //         switch (s) {
+    //         case cwDistanceStates::Valid: {
+    //             return cwDistanceReading(value());
+    //         }
+    //         case cwDistanceStates::Empty: {
+    //             return cwDistanceReading();
+    //         }
+    //         default: {
+    //             Q_ASSERT(false);
+    //             return cwDistanceReading();
+    //         }
+    //         }
+    //     }
+    // };
+
+    station.setLeft(distance(
+        [&]() { return protoStation.has_leftreading(); },
+        [&]() { return protoStation.leftreading(); },
+        [&]() { return protoStation.leftstate(); }, //Handle older version 5 attributes
+        [&]() { return protoStation.left(); } //Handle older version 5 attribute
+        ));
+    station.setRight(distance(
+        [&]() { return protoStation.has_rightreading(); },
+        [&]() { return protoStation.rightreading(); },
+        [&]() { return protoStation.rightstate(); }, //Handle older version 5 attributes
+        [&]() { return protoStation.right(); } //Handle older version 5 attribute
+        ));
+    station.setUp(distance(
+        [&]() { return protoStation.has_upreading(); },
+        [&]() { return protoStation.upreading(); },
+        [&]() { return protoStation.upstate(); }, //Handle older version 5 attributes
+        [&]() { return protoStation.up(); } //Handle older version 5 attribute
+        ));
+    station.setDown(distance(
+        [&]() { return protoStation.has_downreading(); },
+        [&]() { return protoStation.downreading(); },
+        [&]() { return protoStation.downstate(); }, //Handle older version 5 attributes
+        [&]() { return protoStation.down(); } //Handle older version 5 attribute
+        ));
+
+    //Old version 5 code
+    // station.setRight(protoStation.right());
+    // station.setUp(protoStation.up());
+    // station.setDown(protoStation.down());
+    // station.setLeftInputState((cwDistanceStates::State)protoStation.leftstate());
+    // station.setRightInputState((cwDistanceStates::State)protoStation.rightstate());
+    // station.setUpInputState((cwDistanceStates::State)protoStation.upstate());
+    // station.setDownInputState((cwDistanceStates::State)protoStation.downstate());
     return station;
 }
 
@@ -646,17 +695,52 @@ cwStation cwRegionLoadTask::loadStation(const CavewhereProto::Station& protoStat
 cwShot cwRegionLoadTask::loadShot(const CavewhereProto::Shot& protoShot)
 {
     cwShot shot;
-    shot.setDistance(protoShot.distance());
-    shot.setCompass(protoShot.compass());
-    shot.setBackCompass(protoShot.backcompass());
-    shot.setClino(protoShot.clino());
-    shot.setBackClino(protoShot.backclino());
-    shot.setDistanceState((cwDistanceStates::State)protoShot.distancestate());
-    shot.setCompassState((cwCompassStates::State)protoShot.compassstate());
-    shot.setBackCompassState((cwCompassStates::State)protoShot.backcompassstate());
-    shot.setClinoState((cwClinoStates::State)protoShot.clinostate());
-    shot.setBackClinoState((cwClinoStates::State)protoShot.backclinostate());
+    shot.setDistance(distance(
+        [&]() { return protoShot.has_distancereading(); },
+        [&]() { return protoShot.distancereading(); },
+        [&]() { return protoShot.distancestate(); }, //Handle older version 5 attributes
+        [&]() { return protoShot.distance(); } //Handle older version 5 attribute
+        ));
+
+    shot.setCompass(compass(
+        [&]() { return protoShot.has_compassreading(); },
+        [&]() { return protoShot.compassreading(); },
+        [&]() { return protoShot.compassstate(); }, //Handle older version 5 attributes
+        [&]() { return protoShot.compass(); } //Handle older version 5 attribute
+        ));
+
+    shot.setBackCompass(compass(
+        [&]() { return protoShot.has_backcompassreading(); },
+        [&]() { return protoShot.backcompassreading(); },
+        [&]() { return protoShot.backcompassstate(); }, //Handle older version 5 attributes
+        [&]() { return protoShot.backcompass(); } //Handle older version 5 attribute
+        ));
+
+    shot.setClino(clino(
+        [&]() { return protoShot.has_clinoreading(); },
+        [&]() { return protoShot.clinoreading(); },
+        [&]() { return protoShot.clinostate(); }, //Handle older version 5 attributes
+        [&]() { return protoShot.clino(); } //Handle older version 5 attribute
+        ));
+
+    shot.setBackClino(clino(
+        [&]() { return protoShot.has_backclinoreading(); },
+        [&]() { return protoShot.backclinoreading(); },
+        [&]() { return protoShot.backclinostate(); }, //Handle older version 5 attributes
+        [&]() { return protoShot.backclino(); } //Handle older version 5 attribute
+        ));
+
     shot.setDistanceIncluded(protoShot.includedistance());
+
+    //Old code from version 5
+    // shot.setCompass(protoShot.compass());
+    // shot.setBackCompass(protoShot.backcompass());
+    // shot.setClino(protoShot.clino());
+    // shot.setBackClino(protoShot.backclino());
+    // shot.setCompassState((cwCompassStates::State)protoShot.compassstate());
+    // shot.setBackCompassState((cwCompassStates::State)protoShot.backcompassstate());
+    // shot.setClinoState((cwClinoStates::State)protoShot.clinostate());
+    // shot.setBackClinoState((cwClinoStates::State)protoShot.backclinostate());
 
     return shot;
 }
@@ -691,6 +775,21 @@ cwLead cwRegionLoadTask::loadLead(const CavewhereProto::Lead &protoLead)
     lead.setSize(loadSizeF(protoLead.size()));
     lead.setCompleted(protoLead.completed());
     return lead;
+}
+
+cwDistanceReading cwRegionLoadTask::distanceReading(const CavewhereProto::DistanceReading &protoDistanceReading)
+{
+    return cwDistanceReading(loadString(protoDistanceReading.value()));
+}
+
+cwCompassReading cwRegionLoadTask::compassReading(const CavewhereProto::CompassReading &protoCompassReading)
+{
+    return cwCompassReading(loadString(protoCompassReading.value()));
+}
+
+cwClinoReading cwRegionLoadTask::clinoReading(const CavewhereProto::ClinoReading &protoClinoReading)
+{
+    return cwClinoReading(loadString(protoClinoReading.value()));
 }
 
 int cwRegionLoadTask::loadFileVersion(const CavewhereProto::CavingRegion &protoRegion)

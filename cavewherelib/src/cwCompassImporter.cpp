@@ -14,6 +14,7 @@
 #include "cwStation.h"
 #include "cwShot.h"
 #include "cwLength.h"
+#include "cwDistanceReading.h"
 
 //Qt includes
 #include <QFileInfo>
@@ -522,42 +523,46 @@ void cwCompassImporter::parseSurveyData(QFile *file)
             if(lengthString != missingEntry) {
                 if(!convertNumber(lengthString, "length", &length)) { CurrentFileGood = false; return; }
 
-                shot.setDistance(cwUnits::convert(length, cwUnits::Feet, distanceUnits));
+                shot.setDistance(cwDistanceReading(cwUnits::convert(length, cwUnits::Feet, distanceUnits)));
 
                 //Fix the rounding issue, for compass... Only stores 1 hundreds of an foot
                 if(distanceUnits == cwUnits::Meters) {
-                    shot.setDistance(qRound(shot.distance() * 100.0) / 100.0); //Round to the nearest cm
+                    shot.setDistance(cwDistanceReading(qRound(shot.distance().toDouble() * 100.0) / 100.0)); //Round to the nearest cm
                 }
             }
 
             if(bearingString != missingEntry) {
                 if(!convertNumber(bearingString, "bearing", &bearing)) { CurrentFileGood = false; return; }
-                shot.setCompass(bearing);
+                shot.setCompass(bearingString);
             }
 
             if(inclinationString != missingEntry) {
                 if(!convertNumber(inclinationString, "inclination", &inclination)) { CurrentFileGood = false; return; }
-                shot.setClino(inclination);
+                shot.setClino(inclinationString);
             }
+
+            auto toString = [](double value) {
+                return QString::number(value, 'g', 2);
+            };
 
             if(leftString != missingEntry) {
                 if(!convertNumber(leftString, "left", &left)) { CurrentFileGood = false; return; }
-                fromStation.setLeft(cwUnits::convert(left, cwUnits::Feet, distanceUnits));
+                fromStation.setLeft(toString(cwUnits::convert(left, cwUnits::Feet, distanceUnits)));
             }
 
             if(rightString != missingEntry) {
                 if(!convertNumber(rightString, "right", &right)) { CurrentFileGood = false; return; }
-                fromStation.setRight(cwUnits::convert(right, cwUnits::Feet, distanceUnits));
+                fromStation.setRight(toString(cwUnits::convert(right, cwUnits::Feet, distanceUnits)));
             }
 
             if(upString != missingEntry) {
                 if(!convertNumber(upString, "up", &up)) { CurrentFileGood = false; return; }
-                fromStation.setUp(cwUnits::convert(up, cwUnits::Feet, distanceUnits));
+                fromStation.setUp(toString(cwUnits::convert(up, cwUnits::Feet, distanceUnits)));
             }
 
             if(downString != missingEntry) {
                 if(!convertNumber(downString, "down", &down)) { CurrentFileGood = false; return; }
-                fromStation.setDown(cwUnits::convert(down, cwUnits::Feet, distanceUnits));
+                fromStation.setDown(toString(cwUnits::convert(down, cwUnits::Feet, distanceUnits)));
             }
 
             if(CurrentTrip->calibrations()->hasBackSights() && dataStrings.size() >= 11) {
@@ -569,12 +574,12 @@ void cwCompassImporter::parseSurveyData(QFile *file)
 
                 if(backCompassString != missingEntry) {
                     if(!convertNumber(backCompassString, "back compass", &backCompass)) { CurrentFileGood = false; return; }
-                    shot.setBackCompass(backCompass);
+                    shot.setBackCompass(backCompassString);
                 }
 
                 if(backClinoString != missingEntry) {
                     if(!convertNumber(backClinoString, "back clino", &backClino)) { CurrentFileGood = false; return; }
-                    shot.setBackClino(backClino);
+                    shot.setBackClino(backClinoString);
                 }
             }
 
@@ -586,7 +591,8 @@ void cwCompassImporter::parseSurveyData(QFile *file)
             if(shot.isValid()) {
                 CurrentTrip->addShotToLastChunk(fromStation, toStation, shot);
                 if(!CurrentTrip->chunks().isEmpty()) {
-                    cwSurveyChunk* lastChunk = CurrentTrip->chunks().last();
+                    auto chunks = CurrentTrip->chunks();
+                    cwSurveyChunk* lastChunk = chunks.last();
                     int secondToLastStation = lastChunk->stationCount() - 2;
                     lastChunk->setStation(fromStation, secondToLastStation);
                 }

@@ -14,11 +14,13 @@ import "Utils.js" as Utils
 QQ.Item {
     id: clipArea
 
-    property alias currentTrip: view.trip
+    property Trip currentTrip
     property TripCalibration currentCalibration: currentTrip.calibration
     readonly property alias contentWidth: scrollAreaId.width //For animation
 
     signal collapseClicked();
+
+    property var window: QQ.Window.window
 
     clip: false
 
@@ -30,6 +32,16 @@ QQ.Item {
         trip: clipArea.currentTrip
     }
 
+
+    SurveyEditorModel {
+        id: editorModel
+        trip: clipArea.currentTrip
+
+        onLastChunkAdded: {
+            editorFocusId.focusOnLastChunk()
+        }
+    }
+
     Controls.ScrollView {
         id: scrollAreaId
 
@@ -38,34 +50,75 @@ QQ.Item {
         anchors.left: parent.left
         anchors.margins: 1;
 
-        width: flickableAreaId.contentWidth + 20
+        Controls.ScrollBar.vertical.stepSize: 50;
+
+        width: 500; //flickableAreaId.contentWidth
         visible: true
         clip: true
 
-        QQ.Flickable {
-            id: flickableAreaId
+        QQ.ListView {
+            id: viewId
+            objectName: "view"
 
-            contentHeight: column.height
-            contentWidth: Math.max(spaceAddBar.width + spaceAddBar.x, view.contentWidth + 2)
-
-            function ensureVisible(r){
-                var contentY = flickableAreaId.contentY;
-                if (flickableAreaId.contentY >= r.y) {
-                    contentY = r.y;
-                } else if (flickableAreaId.contentY+height <= r.y+r.height) {
-                    contentY = r.y+r.height-height;
-                }
-
-                flickableAreaId.contentY = contentY;
+            Controls.ButtonGroup {
+                id: errorButtonGroupId
             }
 
-            QQ.Column {
-                id: column
+            SurveyChunkTrimmer {
+                id: surveyChunkTrimmerId
+            }
 
+            StationValidator {
+                id: stationValidatorId
+            }
+
+            DistanceValidator {
+                id: distanceValidatorId
+            }
+
+            CompassValidator {
+                id: compassValidatorId
+            }
+
+            ClinoValidator {
+                id: clinoValidatorId
+            }
+
+            SurveyEditorFocus {
+                id: editorFocusId
+                trip: clipArea.currentTrip
+                view: viewId
+                model: editorModel
+
+                onBoxIndexChanged: {
+                    //Move the list view
+                    let listViewIndex = editorModel.toModelRow(boxIndex.rowIndex)
+                    if(boxIndex.rowType === SurveyEditorRowIndex.ShotRow) {
+                        //Since the shot row has a height of zero, this -1 and +1 forces shot to be visible in the list view
+                        view.positionViewAtIndex(listViewIndex - 1, QQ.ListView.Contain)
+                        view.positionViewAtIndex(listViewIndex + 1, QQ.ListView.Contain)
+                    } else {
+                        view.positionViewAtIndex(listViewIndex, QQ.ListView.Contain)
+                    }
+                }
+            }
+
+            //reuseItem can cause instablity in testcases and crashes in qml, by default it's false
+            // reuseItems: true
+
+            currentIndex: -1 //The currentIndex should change
+
+            //Prevents default keyboard interaction
+            keyNavigationEnabled: false
+
+            header: ColumnLayout {
+                id: column
                 spacing: 5
+                width: scrollAreaId.width - 30
 
                 ColumnLayout {
-                    width: view.contentWidth
+                    Layout.fillWidth: true
+
 
                     QQ.Item {
                         Layout.fillWidth: true
@@ -96,8 +149,8 @@ QQ.Item {
                             font.pixelSize: 20
 
                             onFinishedEditting: (newText) => {
-                                clipArea.currentTrip.name = newText
-                            }
+                                                    clipArea.currentTrip.name = newText
+                                                }
                         }
 
                         QQ.Item {
@@ -106,12 +159,15 @@ QQ.Item {
 
                         DoubleClickTextInput {
                             id: tripDate
+                            objectName: "tripDate"
+
                             text: Qt.formatDate(clipArea.currentTrip.date, "yyyy-MM-dd")
 
                             font.bold: true
 
                             onFinishedEditting: function(newText) {
-                                clipArea.currentTrip.date = Date.fromLocaleDateString(Qt.locale(), newText, "yyyy-MM-dd");
+                                let dateTime = newText + " 00:00:00";
+                                clipArea.currentTrip.date = Date.fromLocaleString(Qt.locale(), dateTime, "yyyy-MM-dd HH:mm:ss");
                             }
                         }
                     }
@@ -120,16 +176,16 @@ QQ.Item {
                 BreakLine { }
 
                 CalibrationEditor {
-                    width: view.contentWidth
-                    calibration: clipArea.currentTrip === null ? null : clipArea.currentTrip.calibration
+                    Layout.fillWidth: true
+                    calibration: currentTrip === null ? null : clipArea.currentTrip.calibration
                 }
 
                 BreakLine { }
 
                 TeamTable {
                     id: teamTable
-                    model: clipArea.currentTrip !== null ? clipArea.currentTrip.team : null
-                    width: view.contentWidth
+                    model: currentTrip !== null ? clipArea.currentTrip.team : null
+                    Layout.fillWidth: true
                 }
 
                 BreakLine { }
@@ -139,31 +195,51 @@ QQ.Item {
                 }
 
                 SurveyErrorOverview {
-                    trip: clipArea.currentTrip
+                    trip: currentTrip
                 }
 
-                SurveyChunkGroupView {
-                    id: view
+                AddButton {
+                    id: addSurveyData
+                    objectName: "addSurveyData"
+                    text: "Add Survey Data "
+                    Layout.alignment: Qt.AlignHCenter
+                    visible: clipArea.currentTrip !== null && clipArea.currentTrip.chunkCount === 0
 
-                    trip: RootData.defaultTrip
-
-                    height: contentHeight
-                    width: view.contentWidth
-
-                    viewportX: flickableAreaId.contentX;
-                    viewportY: flickableAreaId.contentY;
-                    // viewportWidth: scrollAreaId.viewport.width;
-                    // viewportHeight: scrollAreaId.viewport.height;
-                    viewportWidth: flickableAreaId.visibleArea.widthRatio * flickableAreaId.width
-                    viewportHeight: flickableAreaId.visibleArea.heightRatio * flickableAreaId.height
-
-                    onEnsureVisibleRectChanged: flickableAreaId.ensureVisible(ensureVisibleRect);
-
-                    errorButtonGroup: Controls.ButtonGroup {}
+                    onClicked: {
+                        clipArea.currentTrip.addNewChunk()
+                    }
                 }
+            }
+
+
+            model: editorModel
+
+            SurveyEditorColumnTitles {
+                id: titleTemplate
+                visible: false
+            }
+
+
+            delegate: DrySurveyComponent {
+                calibration: currentCalibration
+                errorButtonGroup: errorButtonGroupId
+                surveyChunkTrimmer: surveyChunkTrimmerId
+                // view: viewId
+                model: editorModel
+                stationValidator: stationValidatorId
+                distanceValidator: distanceValidatorId
+                compassValidator: compassValidatorId
+                clinoValidator: clinoValidatorId
+                editorFocus: editorFocusId
+                columnTemplate: titleTemplate
+            }
+
+
+            footer: ColumnLayout {
+                width: scrollAreaId.width - 30
 
                 Text {
-                    visible: !addSurveyData.visible
+                    objectName: "totalLengthText"
                     text: {
                         if(clipArea.currentTrip === null) { return "" }
                         var unit = ""
@@ -182,11 +258,11 @@ QQ.Item {
 
                 QQ.Image {
                     id: spaceAddBar
+                    objectName: "spaceAddBar"
                     source: "qrc:icons/spacebar.png"
 
-                    anchors.horizontalCenter: view.horizontalCenter
-
-                    visible: clipArea.currentTrip !== null && clipArea.currentTrip.chunkCount > 0
+                    visible: currentTrip !== null && currentTrip.chunkCount > 0
+                    Layout.alignment: Qt.AlignHCenter
 
                     Text {
                         anchors.centerIn: parent
@@ -197,32 +273,13 @@ QQ.Item {
                         anchors.fill: parent
 
                         onClicked: {
+                            console.log("Mouse area click, new chunk!");
                             clipArea.currentTrip.addNewChunk();
                         }
-                    }
-                }
-
-                AddButton {
-                    id: addSurveyData
-                    objectName: "addSurveyData"
-                    text: "Add Survey Data"
-                    anchors.horizontalCenter: view.horizontalCenter
-//                    visible: true
-                    visible: clipArea.currentTrip !== null && clipArea.currentTrip.chunkCount === 0
-
-                    onClicked: {
-                        clipArea.currentTrip.addNewChunk()
                     }
                 }
             }
         }
     }
-
-    QQ.MouseArea {
-        anchors.fill: scrollAreaId
-        onPressed: function(mouse) {
-            scrollAreaId.forceActiveFocus()
-            mouse.accepted = false;
-        }
-    }
 }
+

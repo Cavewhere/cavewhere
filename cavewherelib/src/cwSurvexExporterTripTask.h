@@ -11,7 +11,9 @@
 //Our includes
 #include "cwExporterTask.h"
 #include "cwUnits.h"
-#include "cwReadingStates.h"
+#include "cwDistanceReading.h"
+#include "cwClinoReading.h"
+#include "cwCompassReading.h"
 class cwTrip;
 class cwSurveyChunk;
 class cwTripCalibration;
@@ -53,9 +55,9 @@ private:
     void writeTeamData(QTextStream& stream, cwTeam *trip);
     void writeDate(QTextStream& stream, QDate date);
 
-    QString toSupportedLength(double length, cwDistanceStates::State) const;
-    QString compassToString(double compass, cwCompassStates::State) const;
-    QString clinoToString(double clino, cwClinoStates::State) const;
+    QString toSupportedLength(const cwDistanceReading& reading) const;
+    QString compassToString(const cwCompassReading &reading) const;
+    QString clinoToString(const cwClinoReading& reading) const;
 };
 
 #endif // CWSURVEXEXPORTERTRIPTASK_H

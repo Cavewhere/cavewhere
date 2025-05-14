@@ -27,6 +27,12 @@ void SpyChecker::requireSpies() const
 {
     for(auto iter = begin(); iter != end(); iter++) {
         INFO("Key:" << iter.key()->objectName().toStdString());
+
+        if(iter.key()->size() != iter.value()) {
+            //Uncomment and place break point here to debug and get a stacktrace
+             qDebug() << "Key:" << iter.key()->objectName() << iter.key()->size() << "==" << iter.value();
+        }
+
         REQUIRE(iter.key()->size() == iter.value());
     }
 }

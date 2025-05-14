@@ -31,6 +31,7 @@ class cwLength;
 #include "cwStationPositionLookup.h"
 #include "cwLead.h"
 #include "cwRegionLoadResult.h"
+#include "cwReadingStates.h"
 
 //Google protobuffer
 namespace CavewhereProto {
@@ -55,6 +56,10 @@ namespace CavewhereProto {
     class StationPositionLookup;
     class Lead;
     class ScrapViewMatrix;
+    class DistanceReading;
+    class CompassReading;
+    class ClinoReading;
+
 };
 
 namespace QtProto {
@@ -134,6 +139,9 @@ private:
     cwShot loadShot(const CavewhereProto::Shot& protoShot);
     cwStationPositionLookup loadStationPositionLookup(const CavewhereProto::StationPositionLookup& protoStationLookup);
     cwLead loadLead(const CavewhereProto::Lead& protoLead);
+    cwDistanceReading distanceReading(const CavewhereProto::DistanceReading& protoDistanceReading);
+    cwCompassReading compassReading(const CavewhereProto::CompassReading& protoCompassReading);
+    cwClinoReading clinoReading(const CavewhereProto::ClinoReading& protoClinoReading);
     int loadFileVersion(const CavewhereProto::CavingRegion& protoRegion);
 
     //Utils
@@ -156,6 +164,90 @@ private:
         }
         disconnectToDatabase();
     }
+
+    //Returns the distance based on functors
+    template<typename hasReadingFn, typename readingFn, typename stateFn, typename valueFn>
+    cwDistanceReading distance(hasReadingFn hasReading,
+                               readingFn reading,
+                               stateFn state,
+                               valueFn value)
+    {
+        if (hasReading()) {
+            //Version 6
+            return distanceReading(reading());
+        } else {
+            //Version 5, fallback
+            auto s = static_cast<cwDistanceStates::State>(state());
+            switch (s) {
+            case cwDistanceStates::Valid: {
+                return cwDistanceReading(value());
+            }
+            case cwDistanceStates::Empty: {
+                return cwDistanceReading();
+            }
+            default: {
+                Q_ASSERT(false);
+                return cwDistanceReading();
+            }
+            }
+        }
+    };
+
+    template<typename hasReadingFn, typename readingFn, typename stateFn, typename valueFn>
+    cwClinoReading clino(hasReadingFn hasReading,
+                               readingFn reading,
+                               stateFn state,
+                               valueFn value)
+    {
+        if (hasReading()) {
+            //Version 6
+            return clinoReading(reading());
+        } else {
+            //Version 5, fallback, use old cwClinoStates
+            auto s = static_cast<cwClinoStates::State>(state());
+            switch (s) {
+            case cwClinoStates::Valid:
+                return cwClinoReading(value());
+            case cwClinoStates::Empty:
+                return cwClinoReading();
+            case cwClinoStates::Up:
+                return cwClinoReading(QStringLiteral("Up"));
+            case cwClinoStates::Down:
+                return cwClinoReading(QStringLiteral("Down"));
+            default: {
+                Q_ASSERT(false);
+                return cwClinoReading();
+            }
+            }
+        }
+    };
+
+    template<typename hasReadingFn, typename readingFn, typename stateFn, typename valueFn>
+    cwCompassReading compass(hasReadingFn hasReading,
+                           readingFn reading,
+                           stateFn state,
+                           valueFn value)
+    {
+        if (hasReading()) {
+            //Version 6
+            return compassReading(reading());
+        } else {
+            //Version 5, fallback, use old cwClinoStates
+            auto s = static_cast<cwCompassStates::State>(state());
+            switch (s) {
+            case cwCompassStates::Valid:
+                return cwCompassReading(value());
+            case cwCompassStates::Empty:
+                return cwCompassReading();
+            default: {
+                Q_ASSERT(false);
+                return cwCompassReading();
+            }
+            }
+        }
+    };
+
+
 
 //    QString readXMLFromDatabase();
 //    bool loadFromBoostSerialization();

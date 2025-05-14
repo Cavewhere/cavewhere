@@ -39,23 +39,35 @@ DataBox {
         }
     }
 
-    ContextMenuButton {
-        id: menuButtonId
-        visible: dataBoxId.focus
-
+    QQ.Loader {
+        // anchors.fill: parent
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.margins: 3
+        active: dataBoxId.focus
 
-        opacity: state == "" ? .75 : 1.0
+        sourceComponent: ContextMenuButton {
+            id: menuButtonId
+            objectName: "excludeMenuButton"
+            visible: dataBoxId.focus //&& dataBoxId.dataValue.reading.state === cwDistanceReading.Valid
 
-        Controls.Menu {
-            Controls.MenuItem {
-                text: dataBoxId.distanceIncluded ? "Exclude Distance" : "Include Distance"
-                onTriggered: {
-                    dataBoxId.surveyChunk.setData(SurveyChunk.ShotDistanceIncludedRole,
-                                                  dataBoxId.rowIndex,
-                                                  !dataBoxId.distanceIncluded)
+
+            focusPolicy: Qt.NoFocus
+
+            opacity: state === "" ? .75 : 1.0
+
+            menu: Controls.Menu {
+                id: menuId
+                objectName: "excludeMenuId"
+
+                Controls.MenuItem {
+                    objectName: "excludeDistanceMenuItem"
+                    text: dataBoxId.distanceIncluded ? "Exclude Distance" : "Include Distance"
+                    onTriggered: {
+                        dataBoxId.dataValue.chunk.setData(SurveyChunk.ShotDistanceIncludedRole,
+                                                          dataBoxId.rowIndex,
+                                                          !dataBoxId.distanceIncluded)
+                    }
                 }
             }
         }

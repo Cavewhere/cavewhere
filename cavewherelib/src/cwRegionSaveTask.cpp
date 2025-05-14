@@ -479,14 +479,21 @@ void cwRegionSaveTask::saveTeamMember(CavewhereProto::TeamMember *protoTeamMembe
 void cwRegionSaveTask::saveStation(CavewhereProto::Station *protoStation, const cwStation &station)
 {
     saveString(protoStation->mutable_name(), station.name());
-    protoStation->set_left(station.left());
-    protoStation->set_right(station.right());
-    protoStation->set_up(station.up());
-    protoStation->set_down(station.down());
-    protoStation->set_leftstate((CavewhereProto::DistanceStates_State)station.leftInputState());
-    protoStation->set_rightstate((CavewhereProto::DistanceStates_State)station.rightInputState());
-    protoStation->set_upstate((CavewhereProto::DistanceStates_State)station.upInputState());
-    protoStation->set_downstate((CavewhereProto::DistanceStates_State)station.downInputState());
+
+    saveDistanceReading(protoStation->mutable_leftreading(), station.left());
+    saveDistanceReading(protoStation->mutable_rightreading(), station.right());
+    saveDistanceReading(protoStation->mutable_upreading(), station.up());
+    saveDistanceReading(protoStation->mutable_downreading(), station.down());
+
+    // Version 5
+    // protoStation->set_left(station.left());
+    // protoStation->set_right(station.right());
+    // protoStation->set_up(station.up());
+    // protoStation->set_down(station.down());
+    // protoStation->set_leftstate((CavewhereProto::DistanceStates_State)station.leftInputState());
+    // protoStation->set_rightstate((CavewhereProto::DistanceStates_State)station.rightInputState());
+    // protoStation->set_upstate((CavewhereProto::DistanceStates_State)station.upInputState());
+    // protoStation->set_downstate((CavewhereProto::DistanceStates_State)station.downInputState());
 }
 
 /**
@@ -496,17 +503,25 @@ void cwRegionSaveTask::saveStation(CavewhereProto::Station *protoStation, const 
  */
 void cwRegionSaveTask::saveShot(CavewhereProto::Shot *protoShot, const cwShot &shot)
 {
-    protoShot->set_distance(shot.distance());
-    protoShot->set_compass(shot.compass());
-    protoShot->set_backcompass(shot.backCompass());
-    protoShot->set_clino(shot.clino());
-    protoShot->set_backclino(shot.backClino());
-    protoShot->set_distancestate((CavewhereProto::DistanceStates_State)shot.distanceState());
-    protoShot->set_compassstate((CavewhereProto::CompassStates_State)shot.compassState());
-    protoShot->set_backcompassstate((CavewhereProto::CompassStates_State)shot.backCompassState());
-    protoShot->set_clinostate((CavewhereProto::ClinoStates_State)shot.clinoState());
-    protoShot->set_backclinostate((CavewhereProto::ClinoStates_State)shot.backClinoState());
     protoShot->set_includedistance(shot.isDistanceIncluded());
+
+    saveDistanceReading(protoShot->mutable_distancereading(), shot.distance());
+    saveCompassReading(protoShot->mutable_compassreading(), shot.compass());
+    saveCompassReading(protoShot->mutable_backcompassreading(), shot.backCompass());
+    saveClinoReading(protoShot->mutable_clinoreading(), shot.clino());
+    saveClinoReading(protoShot->mutable_backclinoreading(), shot.backClino());
+
+    //Version 5
+    // protoShot->set_distance(shot.distance());
+    // protoShot->set_compass(shot.compass());
+    // protoShot->set_backcompass(shot.backCompass());
+    // protoShot->set_clino(shot.clino());
+    // protoShot->set_backclino(shot.backClino());
+    // protoShot->set_distancestate((CavewhereProto::DistanceStates_State)shot.distanceState());
+    // protoShot->set_compassstate((CavewhereProto::CompassStates_State)shot.compassState());
+    // protoShot->set_backcompassstate((CavewhereProto::CompassStates_State)shot.backCompassState());
+    // protoShot->set_clinostate((CavewhereProto::ClinoStates_State)shot.clinoState());
+    // protoShot->set_backclinostate((CavewhereProto::ClinoStates_State)shot.backClinoState());
 }
 
 /**
@@ -578,5 +593,20 @@ void cwRegionSaveTask::saveProjectedScrapViewMatrix(CavewhereProto::ProjectedPro
 {
     protoViewMatrix->set_azimuth(viewMatrix->azimuth());
     protoViewMatrix->set_direction(static_cast<CavewhereProto::ProjectedProfileScrapViewMatrix::Direction >(viewMatrix->direction()));
+}
+
+void cwRegionSaveTask::saveDistanceReading(CavewhereProto::DistanceReading *protoDistanceReading, const cwDistanceReading &reading)
+{
+    saveString(protoDistanceReading->mutable_value(), reading.value());
+}
+
+void cwRegionSaveTask::saveCompassReading(CavewhereProto::CompassReading *protoCompassReading, const cwCompassReading &reading)
+{
+    saveString(protoCompassReading->mutable_value(), reading.value());
+}
+
+void cwRegionSaveTask::saveClinoReading(CavewhereProto::ClinoReading *protoClinoReading, const cwClinoReading &reading)
+{
+    saveString(protoClinoReading->mutable_value(), reading.value());
 }
 

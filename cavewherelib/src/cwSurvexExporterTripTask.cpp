@@ -27,7 +27,7 @@ void cwSurvexExporterTripTask::setData(const cwTrip& trip) {
     if(!isRunning()) {
         *Trip = trip;
     } else {
-        qWarning("Can't set trip data will the trip exporter is running");
+        qDebug() << QStringLiteral("Can't set trip data will the trip exporter is running");
     }
 }
 
@@ -51,7 +51,7 @@ void cwSurvexExporterTripTask::runTask() {
   */
 void cwSurvexExporterTripTask::writeTrip(QTextStream& stream, cwTrip* trip) {
     //Write header
-    stream << "*begin ; " << trip->name() << Qt::endl;
+    stream << QStringLiteral("*begin ; ") << trip->name() << Qt::endl;
 
     writeDate(stream, trip->date().date());
     writeTeamData(stream, trip->team());
@@ -59,7 +59,7 @@ void cwSurvexExporterTripTask::writeTrip(QTextStream& stream, cwTrip* trip) {
     writeShotData(stream, trip); stream << Qt::endl;
     writeLRUDData(stream, trip);
 
-    stream << "*end" << Qt::endl;
+    stream << QStringLiteral("*end") << Qt::endl;
 }
 
 /**
@@ -70,33 +70,33 @@ void cwSurvexExporterTripTask::writeTrip(QTextStream& stream, cwTrip* trip) {
 void cwSurvexExporterTripTask::writeCalibrations(QTextStream& stream, cwTripCalibration* calibrations) {
     writeLengthUnits(stream, calibrations->distanceUnit());
 
-    writeCalibration(stream, "TAPE", calibrations->tapeCalibration());
+    writeCalibration(stream, QStringLiteral("TAPE"), calibrations->tapeCalibration());
 
     double correctFrontsightCompass = calibrations->hasCorrectedCompassFrontsight() ? -180.0 : 0.0;
-    writeCalibration(stream, "COMPASS", calibrations->frontCompassCalibration() + correctFrontsightCompass);
+    writeCalibration(stream, QStringLiteral("COMPASS"), calibrations->frontCompassCalibration() + correctFrontsightCompass);
 
     double correctBacksightCompass = calibrations->hasCorrectedCompassBacksight() ? -180.0 : 0.0;
-    writeCalibration(stream, "BACKCOMPASS", calibrations->backCompassCalibration() + correctBacksightCompass);
+    writeCalibration(stream, QStringLiteral("BACKCOMPASS"), calibrations->backCompassCalibration() + correctBacksightCompass);
 
     double frontClinoScale = calibrations->hasCorrectedClinoFrontsight() ? -1.0 : 1.0;
-    writeCalibration(stream, "CLINO", calibrations->frontClinoCalibration(), frontClinoScale);
+    writeCalibration(stream, QStringLiteral("CLINO"), calibrations->frontClinoCalibration(), frontClinoScale);
 
     double backClinoScale = calibrations->hasCorrectedClinoBacksight() ? -1.0 : 1.0;
-    writeCalibration(stream, "BACKCLINO", calibrations->backClinoCalibration(), backClinoScale);
+    writeCalibration(stream, QStringLiteral("BACKCLINO"), calibrations->backClinoCalibration(), backClinoScale);
 
-    writeCalibration(stream, "DECLINATION", calibrations->declination());
+    writeCalibration(stream, QStringLiteral("DECLINATION"), calibrations->declination());
 }
 
 void cwSurvexExporterTripTask::writeCalibration(QTextStream& stream, QString type, double value, double scale) {
     if(value == 0.0 && scale == 1.0) { return; }
     value = -value; //Flip the value be survex is counter intuitive
 
-    QString calibrationString = QString("*calibrate %1 %2")
+    QString calibrationString = QStringLiteral("*calibrate %1 %2")
             .arg(type)
             .arg(value, 0, 'f', 2);
 
     if(scale != 1.0) {
-        QString scaleString = QString(" %3").arg(scale, 0, 'f', 2);
+        QString scaleString = QStringLiteral(" %3").arg(scale, 0, 'f', 2);
         calibrationString += scaleString;
     }
 
@@ -113,10 +113,10 @@ void cwSurvexExporterTripTask::writeLengthUnits(QTextStream &stream,
     case cwUnits::Meters:
         return;
     case cwUnits::Feet:
-        stream << "*units tape feet" << Qt::endl;
+        stream << QStringLiteral("*units tape feet") << Qt::endl;
         break;
     case cwUnits::Yards:
-        stream << "*units tape yards" << Qt::endl;
+        stream << QStringLiteral("*units tape yards") << Qt::endl;
         break;
     default:
         //All other units are automatically converted to meters through toSupportedLength(QString length)
@@ -135,38 +135,38 @@ void cwSurvexExporterTripTask::writeShotData(QTextStream& stream, cwTrip* trip) 
 
     //Make sure we have data to export
     if(!hasFrontSights && !hasBackSights) {
-        stream << "; NO DATA (doesn't have front or backsight data)" << Qt::endl;
+        stream << QStringLiteral("; NO DATA (doesn't have front or backsight data)") << Qt::endl;
         return;
     }
 
     QString dataLineComment;
 
     if(hasFrontSights && hasBackSights) {
-        stream << "*data normal from to tape compass backcompass clino backclino" << Qt::endl;
-        dataLineComment = QString(";%1%2 %3 %4 %5 %6 %7")
-                .arg("From", TextPadding)
-                .arg("To", TextPadding)
-                .arg("Distance", TextPadding)
-                .arg("Compass", TextPadding)
-                .arg("BackCompass", TextPadding)
-                .arg("Clino", TextPadding)
-                .arg("BackClino", TextPadding);
+        stream << QStringLiteral("*data normal from to tape compass backcompass clino backclino") << Qt::endl;
+        dataLineComment = QStringLiteral(";%1%2 %3 %4 %5 %6 %7")
+                .arg(QStringLiteral("From"), TextPadding)
+                .arg(QStringLiteral("To"), TextPadding)
+                .arg(QStringLiteral("Distance"), TextPadding)
+                .arg(QStringLiteral("Compass"), TextPadding)
+                .arg(QStringLiteral("BackCompass"), TextPadding)
+                .arg(QStringLiteral("Clino"), TextPadding)
+                .arg(QStringLiteral("BackClino"), TextPadding);
     } else if(hasFrontSights) {
-        stream << "*data normal from to tape compass clino" << Qt::endl;
-        dataLineComment = QString(";%1%2 %3 %4 %5")
-                .arg("From", TextPadding)
-                .arg("To", TextPadding)
-                .arg("Distance", TextPadding)
-                .arg("Compass", TextPadding)
-                .arg("Clino", TextPadding);
+        stream << QStringLiteral("*data normal from to tape compass clino") << Qt::endl;
+        dataLineComment = QStringLiteral(";%1%2 %3 %4 %5")
+                .arg(QStringLiteral("From"), TextPadding)
+                .arg(QStringLiteral("To"), TextPadding)
+                .arg(QStringLiteral("Distance"), TextPadding)
+                .arg(QStringLiteral("Compass"), TextPadding)
+                .arg(QStringLiteral("Clino"), TextPadding);
     } else if(hasBackSights) {
-        stream << "*data normal from to tape backcompass backclino" << Qt::endl;
-        dataLineComment = QString(";%1%2 %3 %4 %5")
-                .arg("From", TextPadding)
-                .arg("To", TextPadding)
-                .arg("Distance", TextPadding)
-                .arg("BackCompass", TextPadding)
-                .arg("BackClino", TextPadding);
+        stream << QStringLiteral("*data normal from to tape backcompass backclino") << Qt::endl;
+        dataLineComment = QStringLiteral(";%1%2 %3 %4 %5")
+                .arg(QStringLiteral("From"), TextPadding)
+                .arg(QStringLiteral("To"), TextPadding)
+                .arg(QStringLiteral("Distance"), TextPadding)
+                .arg(QStringLiteral("BackCompass"), TextPadding)
+                .arg(QStringLiteral("BackClino"), TextPadding);
     }
 
     //Write out the comment line (this is the column headers)
@@ -190,19 +190,19 @@ void cwSurvexExporterTripTask::writeShotData(QTextStream& stream, cwTrip* trip) 
   */
 void cwSurvexExporterTripTask::writeLRUDData(QTextStream& stream, cwTrip* trip) {
 
-    QString dataLineTemplate("%1 %2 %3 %4 %5");
+    QString dataLineTemplate(QStringLiteral("%1 %2 %3 %4 %5"));
 
     foreach(cwSurveyChunk* chunk, trip->chunks()) {
-        stream << "*data passage station left right up down ignoreall" << Qt::endl;
+        stream << QStringLiteral("*data passage station left right up down ignoreall") << Qt::endl;
 
         foreach(cwStation station, chunk->stations()) {
             if(station.isValid()) {
                 QString dataLine = dataLineTemplate
                         .arg(station.name(), TextPadding)
-                        .arg(toSupportedLength(station.left(), station.leftInputState()), TextPadding)
-                        .arg(toSupportedLength(station.right(), station.rightInputState()), TextPadding)
-                        .arg(toSupportedLength(station.up(), station.upInputState()), TextPadding)
-                        .arg(toSupportedLength(station.down(), station.downInputState()), TextPadding);
+                        .arg(toSupportedLength(station.left()), TextPadding)
+                        .arg(toSupportedLength(station.right()), TextPadding)
+                        .arg(toSupportedLength(station.up()), TextPadding)
+                        .arg(toSupportedLength(station.down()), TextPadding);
 
                 stream << dataLine << Qt::endl;
             }
@@ -219,13 +219,13 @@ void cwSurvexExporterTripTask::writeTeamData(QTextStream &stream, cwTeam* team)
 {
     stream << Qt::endl;
 
-    QString dataLineTemplate("*team \"%1\"");
+    QString dataLineTemplate(QStringLiteral("*team \"%1\""));
     foreach(cwTeamMember teamMember, team->teamMembers()) {
         QString dataLine = dataLineTemplate.arg(teamMember.name());
         stream << dataLine;
 
         foreach(QString job, teamMember.jobs()) {
-            stream << " \"" << job << "\"";
+            stream << QStringLiteral(" \"") << job << QStringLiteral("\"");
         }
 
         stream << Qt::endl;
@@ -238,7 +238,7 @@ void cwSurvexExporterTripTask::writeTeamData(QTextStream &stream, cwTeam* team)
 void cwSurvexExporterTripTask::writeDate(QTextStream &stream, QDate date)
 {
     if(date.isValid()) {
-        stream << "*date " << date.toString("yyyy.MM.dd") << Qt::endl;
+        stream << QStringLiteral("*date ") << date.toString(QStringLiteral("yyyy.MM.dd")) << Qt::endl;
     }
 }
 
@@ -248,8 +248,8 @@ void cwSurvexExporterTripTask::writeDate(QTextStream &stream, QDate date)
   If the current calibration isn't in yard, feet or meters, then this function converts the
   length into meters.
 */
-QString cwSurvexExporterTripTask::toSupportedLength(double length, cwDistanceStates::State state) const {
-    if(state == cwDistanceStates::Empty) {
+QString cwSurvexExporterTripTask::toSupportedLength(const cwDistanceReading& reading) const {
+    if(reading.state() == cwDistanceReading::State::Empty) {
         return "-";
     }
 
@@ -258,22 +258,25 @@ QString cwSurvexExporterTripTask::toSupportedLength(double length, cwDistanceSta
     case cwUnits::Meters:
     case cwUnits::Feet:
     case cwUnits::Yards:
-        return QString("%1").arg(length);
+        return reading.value();
     default:
-        return QString("%1").arg(cwUnits::convert(length, unit, cwUnits::Meters));
+        return QString::number(cwUnits::convert(reading.toDouble(), unit, cwUnits::Meters));
     }
 }
 
 /**
   This converts a compass bearing into a string based on the state.
   */
-QString cwSurvexExporterTripTask::compassToString(double compass, cwCompassStates::State state) const
+QString cwSurvexExporterTripTask::compassToString(const cwCompassReading& reading) const
 {
-    switch(state) {
-    case cwCompassStates::Empty:
-        return QString("-");
-    case cwCompassStates::Valid:
-        return QString("%1").arg(compass);
+    switch(reading.state()) {
+    case cwCompassReading::State::Empty:
+        return QStringLiteral("-");
+    case cwCompassReading::State::Invalid:
+        qDebug() << "Compass reading is invalid:" << reading.value() << LOCATION;
+        //This should fallthrough to the valid case, just write the invalid data and have survex handle it
+    case cwCompassReading::State::Valid:
+        return reading.value();
     }
     return QString();
 }
@@ -281,17 +284,21 @@ QString cwSurvexExporterTripTask::compassToString(double compass, cwCompassState
 /**
   This converts a clino into a string based on the state.
   */
-QString cwSurvexExporterTripTask::clinoToString(double clino, cwClinoStates::State state) const
+QString cwSurvexExporterTripTask::clinoToString(const cwClinoReading& reading) const
 {
-    switch(state) {
-    case cwClinoStates::Empty:
-        return QString("-");
-    case cwClinoStates::Valid:
-        return QString("%1").arg(clino);
-    case cwClinoStates::Down:
-        return QString("DOWN");
-    case cwClinoStates::Up:
-        return QString("UP");
+    switch(reading.state()) {
+    case cwClinoReading::State::Empty:
+        return QStringLiteral("-");
+    case cwClinoReading::State::Invalid:
+        qDebug() << "Clino reading is invalid:" << reading.value() << LOCATION;
+        //This should fallthrough to the valid case, just write the invalid data and have survex handle it
+    case cwClinoReading::State::Valid:
+        return reading.value();
+    case cwClinoReading::State::Down:
+        return QStringLiteral("DOWN");
+    case cwClinoReading::State::Up:
+        return QStringLiteral("UP");
+
     }
     return QString();
 }
@@ -310,9 +317,9 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream,
 
     QString dataLineTemplate;
     if(hasBackSights && hasFrontSights) {
-        dataLineTemplate = QString("%1 %2 %3 %4 %5 %6 %7");
+        dataLineTemplate = QStringLiteral("%1 %2 %3 %4 %5 %6 %7");
     } else {
-        dataLineTemplate = QString("%1 %2 %3 %4 %5");
+        dataLineTemplate = QStringLiteral("%1 %2 %3 %4 %5");
     }
 
     //Iterate over all the shots
@@ -327,42 +334,42 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream,
 
         if(!fromStation.isValid() || !toStation.isValid()) { continue; }
 
-        QString distance = toSupportedLength(shot.distance(), cwDistanceStates::Valid);
-        QString compass = compassToString(shot.compass(), shot.compassState());
-        QString backCompass = compassToString(shot.backCompass(), shot.backCompassState());
-        QString clino = clinoToString(shot.clino(), shot.clinoState());
-        QString backClino = clinoToString(shot.backClino(), shot.backClinoState());
+        QString distance = toSupportedLength(shot.distance());
+        QString compass = compassToString(shot.compass());
+        QString backCompass = compassToString(shot.backCompass());
+        QString clino = clinoToString(shot.clino());
+        QString backClino = clinoToString(shot.backClino());
 
         //Make sure the model is good
         if(distance.isEmpty()) { continue; }
         if(compass.isEmpty() && backCompass.isEmpty()) {
-            if(clino.compare("up", Qt::CaseInsensitive) != 0 &&
-                    clino.compare("down", Qt::CaseInsensitive) != 0 &&
-                    backClino.compare("up", Qt::CaseInsensitive) != 0 &&
-                    backClino.compare("down", Qt::CaseInsensitive) != 0) {
-               Errors.append(QString("Error: No compass reading for %1 to %2")
+            if(clino.compare(QStringLiteral("up"), Qt::CaseInsensitive) != 0 &&
+                    clino.compare(QStringLiteral("down"), Qt::CaseInsensitive) != 0 &&
+                    backClino.compare(QStringLiteral("up"), Qt::CaseInsensitive) != 0 &&
+                    backClino.compare(QStringLiteral("down"), Qt::CaseInsensitive) != 0) {
+               Errors.append(QStringLiteral("Error: No compass reading for %1 to %2")
                              .arg(fromStation.name())
                              .arg(toStation.name()));
            }
         }
 
         if(clino.isEmpty() && backClino.isEmpty()) {
-            Errors.append(QString("Error: No Clino reading for %1 to %2")
+            Errors.append(QStringLiteral("Error: No Clino reading for %1 to %2")
                           .arg(fromStation.name())
                           .arg(toStation.name()));
         }
 
-        if(compass.isEmpty()) { compass = "-"; }
-        if(backCompass.isEmpty()) { backCompass = "-"; }
-        if(clino.isEmpty()) { clino = "-"; }
-        if(backClino.isEmpty()) { backClino = "-"; }
+        if(compass.isEmpty()) { compass = QStringLiteral("-"); }
+        if(backCompass.isEmpty()) { backCompass = QStringLiteral("-"); }
+        if(clino.isEmpty()) { clino = QStringLiteral("-"); }
+        if(backClino.isEmpty()) { backClino = QStringLiteral("-"); }
 
-        if((clino.compare("up", Qt::CaseInsensitive) == 0 &&
-                backClino.compare("up", Qt::CaseInsensitive) == 0) ||
-                (clino.compare("down", Qt::CaseInsensitive) == 0 &&
-                backClino.compare("down", Qt::CaseInsensitive) == 0)) {
+        if((clino.compare(QStringLiteral("up"), Qt::CaseInsensitive) == 0 &&
+                backClino.compare(QStringLiteral("up"), Qt::CaseInsensitive) == 0) ||
+                (clino.compare(QStringLiteral("down"), Qt::CaseInsensitive) == 0 &&
+                backClino.compare(QStringLiteral("down"), Qt::CaseInsensitive) == 0)) {
             // survex errors on "up up" or "down down" when backsights are corrected
-            backClino = "-";
+            backClino = QStringLiteral("-");
         }
 
         //Figure out the line of data
@@ -400,14 +407,14 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream,
 
         //Distance should be excluded, mark as duplicate
         if(!shot.isDistanceIncluded()) {
-            stream << "*flags duplicate" << Qt::endl;
+            stream << QStringLiteral("*flags duplicate") << Qt::endl;
         }
 
         stream << line << Qt::endl;
 
         //Turn duplication off
         if(!shot.isDistanceIncluded()) {
-            stream << "*flags not duplicate" << Qt::endl;
+            stream << QStringLiteral("*flags not duplicate") << Qt::endl;
         }
 
 //        emit progressed(i);

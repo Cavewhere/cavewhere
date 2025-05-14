@@ -753,4 +753,23 @@ TEST_CASE("Tests adding removing and getting copying cwSurveyChunk calibrations"
             CHECK(calibrations3 == chunk.calibrations());
         }
     }
+
+}
+
+TEST_CASE("Fix to abort - Test cwSurveyChunk with mostly empty data and copy", "[cwSurveyChunk]") {
+    cwSurveyChunk chunk;
+    chunk.appendNewShot();
+
+    REQUIRE(chunk.stationCount() == 2);
+    REQUIRE(chunk.shotCount() == 1);
+
+    chunk.setData(cwSurveyChunk::StationNameRole, 1, "b2");
+    CHECK(chunk.data(cwSurveyChunk::StationNameRole, 1).toString().toStdString() == "b2");
+
+    cwSurveyChunk chunkCopy(chunk);
+
+    REQUIRE(chunkCopy.stationCount() == 2);
+    REQUIRE(chunkCopy.shotCount() == 1);
+
+    CHECK(chunkCopy.data(cwSurveyChunk::StationNameRole, 1).toString().toStdString() == "b2");
 }

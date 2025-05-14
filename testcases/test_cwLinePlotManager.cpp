@@ -77,9 +77,9 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
     cwStation s1("a1");
     cwStation s2("a2");
     cwShot shot1;
-    shot1.setDistance("10.0");
-    shot1.setCompass("0.0");
-    shot1.setClino("0.0");
+    shot1.setDistance(cwDistanceReading("10.0"));
+    shot1.setCompass(cwCompassReading("0.0"));
+    shot1.setClino(cwClinoReading("0.0"));
 
     chunk->appendShot(s1, s2, shot1);
 
@@ -106,7 +106,7 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
             CHECK(cave->length()->value() == 10.0);
             CHECK(cave->depth()->value() == 0.0);
             CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 0.0, 0.0)); //B2 should no-longer exists
+            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 0.0, 0.0)); //a2 should no-longer exists
             CHECK(cave->stationPositionLookup().position("b2") == QVector3D(0.0, 10.0, 0.0));
         }
 
@@ -183,9 +183,9 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
             //is restarted
             for(int i = 0; i < total; i++) {
                 cwShot shot;
-                shot.setDistance(20);
-                shot.setCompass(90.0);
-                shot.setClino(0.0);
+                shot.setDistance(cwDistanceReading(20));
+                shot.setCompass(cwCompassReading("90.0"));
+                shot.setClino(cwClinoReading("0.0"));
                 cwStation station(QString("a3-%1").arg(i));
 
                 chunk->appendShot(chunk->stations().last(), station, shot);
@@ -232,9 +232,9 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
             cwStation s2a("a2");
             cwStation s3("a3");
             cwShot shot1;
-            shot1.setDistance("15.0");
-            shot1.setCompass("0.0");
-            shot1.setClino("0.0");
+            shot1.setDistance(cwDistanceReading("15.0"));
+            shot1.setCompass(cwCompassReading("0.0"));
+            shot1.setClino(cwClinoReading("0.0"));
 
             chunk2->appendShot(s2a, s3, shot1);
 
@@ -297,9 +297,9 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
             cwStation s1("a1");
             cwStation s2("a2");
             cwShot shot1;
-            shot1.setDistance("10.0");
-            shot1.setCompass("0.0");
-            shot1.setClino("0.0");
+            shot1.setDistance(cwDistanceReading("10.0"));
+            shot1.setCompass(cwCompassReading("0.0"));
+            shot1.setClino(cwClinoReading("0.0"));
 
             chunk->appendShot(s1, s2, shot1);
 
@@ -739,9 +739,9 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
             cwStation a3("a3");
             cwStation a4("a4");
             cwShot shot2;
-            shot2.setDistance("20.0");
-            shot2.setCompass("40.0");
-            shot2.setClino("2.0");
+            shot2.setDistance(cwDistanceReading("20.0"));
+            shot2.setCompass(cwCompassReading("40.0"));
+            shot2.setClino(cwClinoReading("2.0"));
 
             chunk2->appendShot(a3, a4, shot2);
 
@@ -790,9 +790,9 @@ TEST_CASE("cwLinePlotManager automatic update should work", "[cwLinePlotManager]
     cwStation s1("a1");
     cwStation s2("a2");
     cwShot shot1;
-    shot1.setDistance("10.0");
-    shot1.setCompass("0.0");
-    shot1.setClino("0.0");
+    shot1.setDistance(cwDistanceReading("10.0"));
+    shot1.setCompass(cwCompassReading("0.0"));
+    shot1.setClino(cwClinoReading("0.0"));
 
     chunk->appendShot(s1, s2, shot1);
 

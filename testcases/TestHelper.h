@@ -83,9 +83,14 @@ inline std::ostream& operator << ( std::ostream& os, QVector2D const& value ) {
 }
 
 inline std::ostream& operator << ( std::ostream& os, QList<cwImageData> const& value ) {
-    for(auto image : value) {
+    for(const auto& image : value) {
         os << image << ",";
     }
+    return os;
+}
+
+inline std::ostream& operator << ( std::ostream& os, const QModelIndex& index) {
+    os << "model:" << index.model() << "[" << index.row() << "," << index.column() << "," << index.internalId() << "]";
     return os;
 }
 

@@ -42,6 +42,8 @@ public:
 
     QList<cwErrorModel*> childModels() const;
 
+    QStringList toStringList() const;
+
 signals:
     void fatalCountChanged();
     void warningCountChanged();

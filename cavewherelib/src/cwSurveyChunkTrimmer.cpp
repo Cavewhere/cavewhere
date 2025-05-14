@@ -146,13 +146,13 @@ bool cwSurveyChunkTrimmer::isStationShotEmpty(cwSurveyChunk *chunk, int stationI
     cwShot shot = chunk->shot(stationIndex - 1);
 
     return station.name().isEmpty() &&
-            station.leftInputState() == cwDistanceStates::Empty &&
-            station.rightInputState() == cwDistanceStates::Empty &&
-            station.downInputState() == cwDistanceStates::Empty &&
-            station.upInputState() == cwDistanceStates::Empty &&
-            shot.distanceState() == cwDistanceStates::Empty &&
-            shot.compassState() == cwCompassStates::Empty &&
-            shot.clinoState() == cwClinoStates::Empty &&
-            shot.backCompassState() == cwCompassStates::Empty &&
-            shot.backClinoState() == cwClinoStates::Empty;
+            station.left().state() == cwDistanceReading::State::Empty &&
+            station.right().state() == cwDistanceReading::State::Empty &&
+            station.down().state() == cwDistanceReading::State::Empty &&
+            station.up().state() == cwDistanceReading::State::Empty &&
+            shot.distance().state() == cwDistanceReading::State::Empty &&
+            shot.compass().state() == cwCompassReading::State::Empty &&
+            shot.clino().state() == cwClinoReading::State::Empty &&
+            shot.backCompass().state() == cwCompassReading::State::Empty &&
+            shot.backClino().state() == cwClinoReading::State::Empty;
 }

@@ -189,3 +189,24 @@ QList<cwErrorModel *> cwErrorModel::childModels() const
 {
     return ChildModels;
 }
+
+/**
+ * This is useful for debugging
+ */
+QStringList cwErrorModel::toStringList() const
+{
+    auto errors = this->errors()->toList();
+    QStringList errorStringList;
+    errorStringList.reserve(fatalCount() + warningCount());
+    for(const auto& error : std::as_const(errors)) {
+        // qDebug() << error.type() << error.message();
+        errorStringList.append(QStringLiteral("%1:%2")
+                                   .arg(error.type())
+                                   .arg(error.message()));
+    }
+
+    for(auto child : ChildModels) {
+        errorStringList.append(child->toStringList());
+    }
+    return errorStringList;
+}

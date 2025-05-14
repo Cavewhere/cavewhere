@@ -59,10 +59,6 @@ QQ.Item {
                 ColumnLayout {
                     id: columnLayout
 
-                    Text {
-                        text: pointId.objectName
-                    }
-
                     SizeEditor {
                         readOnly: true
                         backgroundColor: "#C6C6C6"

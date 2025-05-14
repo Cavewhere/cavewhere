@@ -219,26 +219,26 @@ double cwCompassExportCaveTask::convertField(cwStation station,
     double value = -999.0;
     switch(field) {
     case Left:
-        if(station.leftInputState() == cwDistanceStates::Valid) {
-            value = station.left();
+        if(station.left().state() == cwDistanceReading::State::Valid) {
+            value = station.left().toDouble();
             return cwUnits::convert(value, unit, cwUnits::Feet);
         }
         break;
     case Right:
-        if(station.rightInputState() == cwDistanceStates::Valid) {
-            value = station.right();
+        if(station.right().state() == cwDistanceReading::State::Valid) {
+            value = station.right().toDouble();
             return cwUnits::convert(value, unit, cwUnits::Feet);
         }
         break;
     case Up:
-        if(station.upInputState() == cwDistanceStates::Valid) {
-            value = station.up();
+        if(station.up().state() == cwDistanceReading::State::Valid) {
+            value = station.up().toDouble();
             return cwUnits::convert(value, unit, cwUnits::Feet);
         }
         break;
     case Down:
-        if(station.downInputState() == cwDistanceStates::Valid) {
-            value = station.down();
+        if(station.down().state() == cwDistanceReading::State::Valid) {
+            value = station.down().toDouble();
             return cwUnits::convert(value, unit, cwUnits::Feet);
         }
         break;
@@ -259,26 +259,26 @@ double cwCompassExportCaveTask::convertField(cwTripCalibration* calibrations, cw
     switch(field) {
     case Compass:
     case BackCompass:
-        frontSite = shot.compass();
-        backSite = shot.backCompass();
+        frontSite = shot.compass().toDouble();
+        backSite = shot.backCompass().toDouble();
         break;
     case Clino:
     case BackClino:
-        frontSite = shot.clino();
-        backSite = shot.backClino();
+        frontSite = shot.clino().toDouble();
+        backSite = shot.backClino().toDouble();
     }
 
     double value = -999.0;
 
     if(field == Clino || field == BackClino) {
-        convertFromDownUp(shot.clinoState(), &frontSite);
-        convertFromDownUp(shot.backClinoState(), &backSite);
+        convertFromDownUp(shot.clino().state(), &frontSite);
+        convertFromDownUp(shot.backClino().state(), &backSite);
     }
 
     switch(field) {
     case Compass:
 
-        if(shot.compassState() == cwCompassStates::Valid) {
+        if(shot.compass().state() == cwCompassReading::State::Valid) {
             value = frontSite;
 
             if(calibrations->hasCorrectedClinoFrontsight()) {
@@ -295,7 +295,7 @@ double cwCompassExportCaveTask::convertField(cwTripCalibration* calibrations, cw
         break;
     case BackCompass:
 
-        if(shot.backCompassState() == cwCompassStates::Valid) {
+        if(shot.backCompass().state() == cwCompassReading::State::Valid) {
             //Backsite is valid
             value = backSite;
             if(calibrations->hasCorrectedCompassBacksight()) {
@@ -310,7 +310,7 @@ double cwCompassExportCaveTask::convertField(cwTripCalibration* calibrations, cw
 
         break;
     case Clino:
-        if(shot.clinoState() == cwClinoStates::Valid) {
+        if(shot.clino().state() == cwClinoReading::State::Valid) {
             if(calibrations->hasCorrectedCompassFrontsight()) {
                 value = -frontSite;
             } else {
@@ -325,7 +325,7 @@ double cwCompassExportCaveTask::convertField(cwTripCalibration* calibrations, cw
         }
         break;
     case BackClino:
-        if(shot.backClinoState() == cwClinoStates::Valid) {
+        if(shot.backClino().state() == cwClinoReading::State::Valid) {
             if(calibrations->hasCorrectedClinoBacksight()) {
                 value = -backSite;
             } else {
@@ -347,12 +347,12 @@ double cwCompassExportCaveTask::convertField(cwTripCalibration* calibrations, cw
 /**
   Heleper to extract shot data
   */
-bool cwCompassExportCaveTask::convertFromDownUp(cwClinoStates::State clinoReading, double* value) {
+bool cwCompassExportCaveTask::convertFromDownUp(cwClinoReading::State clinoReading, double* value) {
     switch(clinoReading) {
-    case cwClinoStates::Up:
+    case cwClinoReading::State::Up:
         *value = 90.0;
         return false;
-    case cwClinoStates::Down:
+    case cwClinoReading::State::Down:
         *value = -90.0;
         return true;
     default:
@@ -424,13 +424,13 @@ void cwCompassExportCaveTask::writeShot(QTextStream &stream,
         stream << formatDouble(-999) << " ";
         stream << formatDouble(-999) << " ";
     } else {
-        double shotLength = cwUnits::convert(shot.distance(),
+        double shotLength = cwUnits::convert(shot.distance().toDouble(),
                                              calibrations->distanceUnit(),
                                              cwUnits::Feet);
 
         if(!calibrations->hasFrontSights()) {
-            shot.setCompass(fmod(convertField(calibrations, shot, BackCompass) + 180.0, 360.0));
-            shot.setClino(-convertField(calibrations, shot, BackClino));
+            shot.setCompass(cwCompassReading(fmod(convertField(calibrations, shot, BackCompass) + 180.0, 360.0)));
+            shot.setClino(cwClinoReading(-convertField(calibrations, shot, BackClino)));
         }
 
         writeData(stream, "To", 12, toStation.name().toLower());

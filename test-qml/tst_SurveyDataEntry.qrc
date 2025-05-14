@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/">
+        <file>datasets/tst_SurveyDataEntry/navTest.cw</file>
+    </qresource>
+</RCC>

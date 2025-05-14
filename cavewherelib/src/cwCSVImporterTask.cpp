@@ -124,7 +124,7 @@ cwCSVImporterTask::OutputPtr cwCSVImporterTask::operator()() const
                     from.setName(value);
                     break;
                 case Length:
-                    shot.setDistance(value);
+                    shot.setDistance(cwDistanceReading(value));
                     break;
                 case CompassFrontSight:
                     shot.setCompass(value);
@@ -139,16 +139,16 @@ cwCSVImporterTask::OutputPtr cwCSVImporterTask::operator()() const
                     shot.setBackClino(value);
                     break;
                 case Left:
-                    lrudStation.setLeft(value);
+                    lrudStation.setLeft(cwDistanceReading(value));
                     break;
                 case Right:
-                    lrudStation.setRight(value);
+                    lrudStation.setRight(cwDistanceReading(value));
                     break;
                 case Up:
-                    lrudStation.setUp(value);
+                    lrudStation.setUp(cwDistanceReading(value));
                     break;
                 case Down:
-                    lrudStation.setDown(value);
+                    lrudStation.setDown(cwDistanceReading(value));
                     break;
                 case Skip:
                     break;
@@ -220,7 +220,7 @@ cwCSVImporterTask::OutputPtr cwCSVImporterTask::operator()() const
 
         mapColumns(readColumns, from, to, lrudStation, shot);
 
-        if(shot.distance() == 0.0 && trip->chunkCount() > 0) {
+        if(shot.distance().toDouble() == 0.0 && trip->chunkCount() > 0) {
             //LRUD shot, search for the shot. Look through this chunk first, then the whole cave
             setLastStationLRUD(from, to, lrudStation);
         } else {

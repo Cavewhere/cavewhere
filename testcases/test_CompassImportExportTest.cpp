@@ -154,13 +154,13 @@ TEST_CASE("Export invalid data - ISSUE #115", "[Compass]") {
         cwStation importStation = importedChunk->station(i);
 
         CHECK(loadStation.name().toStdString() == importStation.name().toStdString());
-        CHECK(loadStation.leftInputState() == importStation.leftInputState());
+        CHECK(loadStation.left().state() == importStation.left().state());
         CHECK(loadStation.left() == importStation.left());
-        CHECK(loadStation.rightInputState() == importStation.rightInputState());
+        CHECK(loadStation.right().state() == importStation.right().state());
         CHECK(loadStation.right() == importStation.right());
-        CHECK(loadStation.upInputState() == importStation.upInputState());
+        CHECK(loadStation.up().state() == importStation.up().state());
         CHECK(loadStation.up() == importStation.up());
-        CHECK(loadStation.downInputState() == importStation.downInputState());
+        CHECK(loadStation.down().state() == importStation.down().state());
         CHECK(loadStation.down() == importStation.down());
     }
 
@@ -171,15 +171,15 @@ TEST_CASE("Export invalid data - ISSUE #115", "[Compass]") {
         cwShot importShot = importedChunk->shot(i);
 
         CHECK(loadShot.distance() == importShot.distance());
-        CHECK(loadShot.distanceState() == importShot.distanceState());
+        CHECK(loadShot.distance().state() == importShot.distance().state());
         CHECK(loadShot.compass() == importShot.compass());
-        CHECK(loadShot.compassState() == importShot.compassState());
+        CHECK(loadShot.compass().state() == importShot.compass().state());
         CHECK(loadShot.backCompass() == importShot.backCompass());
-        CHECK(loadShot.backCompassState() == importShot.backCompassState());
+        CHECK(loadShot.backCompass().state() == importShot.backCompass().state());
         CHECK(loadShot.clino() == importShot.clino());
-        CHECK(loadShot.clinoState() == importShot.clinoState());
+        CHECK(loadShot.clino().state() == importShot.clino().state());
         CHECK(loadShot.backClino() == importShot.backClino());
-        CHECK(loadShot.backClinoState() == importShot.backClinoState());
+        CHECK(loadShot.backClino().state() == importShot.backClino().state());
     }
 }
 
@@ -196,8 +196,8 @@ TEST_CASE("Test 15 char format is okay", "[Compass]") {
 
     CHECK(messageSpy.size() == 0);
 
-    for(auto signal : messageSpy) {
-        for(auto arg : signal) {
+    for(const auto& signal : messageSpy) {
+        for(const auto& arg : signal) {
             qDebug() << "Arg:" << arg;
         }
     }
