@@ -1,145 +1,133 @@
-/**************************************************************************
-**
-**    Copyright (C) 2016 by Philip Schuchardt
-**    www.cavewhere.com
-**
-**************************************************************************/
+// cwSurveyNetwork.cpp
 
-//Our includes
 #include "cwSurveyNetwork.h"
 
-//Qt includes
-#include <QHash>
-#include <QSet>
+// single struct holding both adjacency and optional position
+struct StationData {
+    QStringList neighborList;
+    QVector3D stationPosition;
+    bool positionIsSet;
 
-class cwSurveyNetworkData : public QSharedData
-{
-public:
+    StationData() : neighborList(), stationPosition(), positionIsSet(false) {}
 
-    QHash<QString, QStringList> Network;
+    bool operator==(const StationData& other) const {
+        return neighborList == other.neighborList
+               && positionIsSet == other.positionIsSet
+               && stationPosition == other.stationPosition;
+    }
+
+    bool operator!=(const StationData& other) const { return !operator==(other); }
 };
 
-cwSurveyNetwork::cwSurveyNetwork() : data(new cwSurveyNetworkData)
-{
+class cwSurveyNetworkData : public QSharedData {
+public:
+    QHash<QString, StationData> stationDataMap;
+};
 
-}
+cwSurveyNetwork::cwSurveyNetwork() : m_data(new cwSurveyNetworkData) {}
 
-cwSurveyNetwork::cwSurveyNetwork(const cwSurveyNetwork &rhs) : data(rhs.data)
-{
+cwSurveyNetwork::cwSurveyNetwork(const cwSurveyNetwork& other) : m_data(other.m_data) {}
 
-}
-
-cwSurveyNetwork &cwSurveyNetwork::operator=(const cwSurveyNetwork &rhs)
-{
-    if (this != &rhs)
-        data.operator=(rhs.data);
+cwSurveyNetwork& cwSurveyNetwork::operator=(const cwSurveyNetwork& other) {
+    if (this != &other) {
+        m_data.operator=(other.m_data);
+    }
     return *this;
 }
 
-cwSurveyNetwork::~cwSurveyNetwork()
-{
+cwSurveyNetwork::~cwSurveyNetwork() {}
 
-}
+void cwSurveyNetwork::clear() { m_data->stationDataMap.clear(); }
 
-/**
- * Clears all the entries in the station network
- */
-void cwSurveyNetwork::clear()
-{
-    data->Network.clear();
-}
+void cwSurveyNetwork::addShot(const QString& fromStation, const QString& toStation) {
+    QString uppercaseFrom = fromStation.toUpper();
+    QString uppercaseTo = toStation.toUpper();
 
-/**
- * Adds a new shot to the network. With from station name to the to station name.
- * If the shot already exists in the network this will do nothing. The station names are
- * incasesesitive.
- */
-void cwSurveyNetwork::addShot(QString from, QString to) {
-    from = from.toUpper();
-    to = to.toUpper();
-
-    if(from.isEmpty() || to.isEmpty()) { return; }
-
-    if(!data->Network.contains(from)) {
-        data->Network.insert(from, QStringList());
+    if (uppercaseFrom.isEmpty() || uppercaseTo.isEmpty()) {
+        return;
     }
 
-    if(!data->Network.contains(to)) {
-        data->Network.insert(to, QStringList());
+    StationData& fromStationData = m_data->stationDataMap[uppercaseFrom];
+    StationData& toStationData = m_data->stationDataMap[uppercaseTo];
+
+    if (!fromStationData.neighborList.contains(uppercaseTo)) {
+        fromStationData.neighborList.append(uppercaseTo);
     }
-
-    QStringList& fromNeighbors = data->Network[from];
-    QStringList& toNeighbors = data->Network[to];
-
-    if(!fromNeighbors.contains(to)) {
-        fromNeighbors.append(to);
-    }
-
-    if(!toNeighbors.contains(from)) {
-        toNeighbors.append(from);
+    if (!toStationData.neighborList.contains(uppercaseFrom)) {
+        toStationData.neighborList.append(uppercaseFrom);
     }
 }
 
-/**
- * Returns all the neighboring stations at stationName. If stationName doesn't
- * exist in the network or has no neighboring stations, this returns an empty
- * list.
- */
-QStringList cwSurveyNetwork::neighbors(QString stationName) const
-{
-    stationName = stationName.toUpper();
-    return data->Network.value(stationName);
+QStringList cwSurveyNetwork::neighbors(const QString& stationName) const {
+    QString uppercaseName = stationName.toUpper();
+    auto dataIterator = m_data->stationDataMap.constFind(uppercaseName);
+    if (dataIterator != m_data->stationDataMap.constEnd()) {
+        return dataIterator->neighborList;
+    }
+    return {};
 }
 
-QStringList cwSurveyNetwork::stations() const
-{
-    return data->Network.keys();
+QStringList cwSurveyNetwork::stations() const { return m_data->stationDataMap.keys(); }
+
+bool cwSurveyNetwork::isEmpty() const { return m_data->stationDataMap.isEmpty(); }
+
+void cwSurveyNetwork::setPosition(const QString& stationName, const QVector3D& stationPosition) {
+    QString uppercaseName = stationName.toUpper();
+    StationData& stationData = m_data->stationDataMap[uppercaseName];
+    stationData.stationPosition = stationPosition;
+    stationData.positionIsSet = true;
 }
 
-bool cwSurveyNetwork::isEmpty() const
-{
-    return data->Network.isEmpty();
+QVector3D cwSurveyNetwork::position(const QString& stationName) const {
+    QString uppercaseName = stationName.toUpper();
+    auto dataIterator = m_data->stationDataMap.constFind(uppercaseName);
+    if (dataIterator != m_data->stationDataMap.constEnd() && dataIterator->positionIsSet) {
+        return dataIterator->stationPosition;
+    }
+    return QVector3D();
 }
 
-/**
- * Returns a list of change station names between two cwSurveyNetwork n1 and n2.
- *
- * A station is consider changed if it only exists in one of the networks or
- * if the stations neighbors don't match.
- *
- * Passing two of the same networks will return an emtpy list of stations
- */
-QStringList cwSurveyNetwork::changedStations(const cwSurveyNetwork &n1, const cwSurveyNetwork &n2)
-{
-    if(n1.data == n2.data) {
-        return QStringList();
+bool cwSurveyNetwork::hasPosition(const QString& stationName) const {
+    QString uppercaseName = stationName.toUpper();
+    auto dataIterator = m_data->stationDataMap.constFind(uppercaseName);
+    return (dataIterator != m_data->stationDataMap.constEnd() && dataIterator->positionIsSet);
+}
+
+QStringList cwSurveyNetwork::changedStations(const cwSurveyNetwork& firstNetwork, const cwSurveyNetwork& secondNetwork) {
+    if (firstNetwork.m_data == secondNetwork.m_data) {
+        return {};
     }
 
-    auto stations1 = cw::toSet(n1.stations());
-    auto stations2 = cw::toSet(n2.stations());
+    const QSet<QString> firstStationSet = cw::toSet(firstNetwork.stations());
+    const QSet<QString> secondStationSet = cw::toSet(secondNetwork.stations());
 
-    auto newStations1 = stations1 - stations2;
-    auto newStations2 = stations2 - stations1;
-    auto sameStations = stations1 & stations2;
+    const QSet<QString> stationsOnlyInFirst = firstStationSet - secondStationSet;
+    const QSet<QString> stationsOnlyInSecond = secondStationSet - firstStationSet;
+    const QSet<QString> commonStationSet = firstStationSet & secondStationSet;
 
-    QStringList changedStations = cw::toList(newStations1) + cw::toList(newStations2);
+    QStringList changedList;
+    changedList.reserve(stationsOnlyInFirst.count() + stationsOnlyInSecond.count());
 
-    for(auto station : sameStations) {
-        auto neighbors1 = cw::toSet(n1.neighbors(station));
-        auto neighbors2 = cw::toSet(n2.neighbors(station));
-        if(neighbors1 != neighbors2) {
-            changedStations.append(station);
+    for (const QString& stationName : stationsOnlyInFirst) {
+        changedList.append(stationName);
+    }
+
+    for (const QString& stationName : stationsOnlyInSecond) {
+        changedList.append(stationName);
+    }
+
+    for (const QString& stationName : commonStationSet) {
+        QSet<QString> neighborsInFirst = cw::toSet(firstNetwork.neighbors(stationName));
+        QSet<QString> neighborsInSecond = cw::toSet(secondNetwork.neighbors(stationName));
+        if (neighborsInFirst != neighborsInSecond) {
+            changedList.append(stationName);
         }
     }
-
-    return changedStations;
+    return changedList;
 }
 
-/**
- * Returns true if the survey network is the same.
- */
-bool cwSurveyNetwork::operator==(const cwSurveyNetwork &other) const
-{
-    return data == other.data || data->Network == other.data->Network || changedStations(*this, other).isEmpty();
+bool cwSurveyNetwork::operator==(const cwSurveyNetwork& other) const {
+    return m_data == other.m_data
+           || m_data->stationDataMap == other.m_data->stationDataMap
+           || changedStations(*this, other).isEmpty();
 }
-

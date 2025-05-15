@@ -53,3 +53,35 @@ TEST_CASE("cwSurveyNetwork should compare changedStation correctly", "[cwSurveyN
         CHECK(networkSet == testSet);
     }
 }
+
+TEST_CASE("cwSurveyNetwork position accessors", "[cwSurveyNetwork]") {
+    cwSurveyNetwork net;
+
+    // No positions have been set yet
+    CHECK(net.hasPosition("any") == false);
+    CHECK(net.position("any") == QVector3D());
+
+    // Setting a position for station "A1"
+    QVector3D expectedPos(1.0f, 2.0f, 3.0f);
+    net.setPosition("a1", expectedPos);
+
+    // hasPosition should be true (case‐insensitive)
+    CHECK(net.hasPosition("A1") == true);
+    CHECK(net.hasPosition("a1") == true);
+
+    // position() should return the exact QVector3D we set
+    CHECK(net.position("A1") == expectedPos);
+    CHECK(net.position("a1") == expectedPos);
+
+    // Setting another station without prior addShot()
+    net.setPosition("b2", QVector3D(-4.5f, 0.0f, 7.2f));
+    CHECK(net.hasPosition("B2") == true);
+    CHECK(net.position("B2") == QVector3D(-4.5f, 0.0f, 7.2f));
+
+    // Clearing the network should remove all positions
+    net.clear();
+    CHECK(net.hasPosition("A1") == false);
+    CHECK(net.position("A1") == QVector3D());
+    CHECK(net.hasPosition("B2") == false);
+    CHECK(net.position("B2") == QVector3D());
+}
