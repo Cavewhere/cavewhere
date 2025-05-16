@@ -7,7 +7,7 @@
 #include <QObjectBindableProperty>
 
 //Our includes
-#include "cwArtifact.h"
+// #include "cwArtifact.h"
 
 /**
  * @brief The cwAbstractRule class is the base class for all pipeline rules

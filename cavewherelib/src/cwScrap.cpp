@@ -539,7 +539,7 @@ QList< QPair <cwNoteStation, cwNoteStation> > cwScrap::noteShots() const {
     std::sort(validStationList.begin(), validStationList.end(),
               [](const cwNoteStation& s1, const cwNoteStation& s2)
     {
-        return s1.name().toUpper() < s2.name().toUpper();
+        return s1.name().toLower() < s2.name().toLower();
     });
 
     //Generate all the neighbor list for each station
@@ -559,7 +559,7 @@ QList< QPair <cwNoteStation, cwNoteStation> > cwScrap::noteShots() const {
             auto neighborsStation2 = stationNeighbors[j];
 
             //See if they make up a shot
-            if(neighborsStation1.contains(station2.name().toUpper()) && neighborsStation2.contains(station1.name().toUpper())) {
+            if(neighborsStation1.contains(station2.name().toLower()) && neighborsStation2.contains(station1.name().toLower())) {
                 shotList.append(QPair<cwNoteStation, cwNoteStation>(station1, station2));
             }
         }
@@ -986,7 +986,7 @@ QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, 
     }
 
     //return the best station from the calculation
-    return bestStationName;
+    return bestStationName
 }
 
 /**

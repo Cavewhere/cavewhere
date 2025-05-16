@@ -51,12 +51,12 @@ TEST_CASE("Survey network are returned", "[LinePlotManager]") {
         CHECK(foundNeighbors == checkNeigbbors);
     };
 
-    testStationNeigbors("a1", QStringList() << "A2" << "A4");
-    testStationNeigbors("a2", QStringList() << "A1" << "A3");
-    testStationNeigbors("a3", QStringList() << "A2" << "A4" << "A5");
-    testStationNeigbors("a4", QStringList() << "A1" << "A3");
-    testStationNeigbors("a5", QStringList() << "A3" << "A6");
-    testStationNeigbors("a6", QStringList() << "A5");
+    testStationNeigbors("a1", QStringList() << "a2" << "a4");
+    testStationNeigbors("a2", QStringList() << "a1" << "a3");
+    testStationNeigbors("a3", QStringList() << "a2" << "a4" << "a5");
+    testStationNeigbors("a4", QStringList() << "a1" << "a3");
+    testStationNeigbors("a5", QStringList() << "a3" << "a6");
+    testStationNeigbors("a6", QStringList() << "a5");
 }
 
 TEST_CASE("Changing data adding and removing caves trips survey chunks should run plotting", "[LinePlotManager]")

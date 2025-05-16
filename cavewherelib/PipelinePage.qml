@@ -18,11 +18,12 @@ StandardPage {
         // graph.containerItem.parent: graphView
 
         Component.onCompleted: {
-              pipelineId.addArtifact(surveyDataId);
-              pipelineId.addArtifact(survexInputFilename);
-              pipelineId.addRule(survexExporterRuleId);
+            pipelineId.addArtifact(surveyDataId);
+            pipelineId.addArtifact(survexInputFilename);
+            pipelineId.addRule(survexExporterRuleId);
+            pipelineId.addRule(surveyNetworkBuilderRuleId);
 
-              // let test = pipelineId.graph.insertNode()
+            // let test = pipelineId.graph.insertNode()
               // test.label = "Test 2";
 
               // console.log("Pipeline graph:" + test + pipelineId.graph.getNodeCount())
@@ -41,6 +42,10 @@ StandardPage {
 
     SurvexExporterRule {
           id: survexExporterRuleId
+    }
+
+    SurveyNetworkBuilderRule {
+        id: surveyNetworkBuilderRuleId
     }
 
     // Qan.Graph {

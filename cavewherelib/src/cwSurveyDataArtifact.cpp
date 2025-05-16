@@ -1,6 +1,9 @@
 #include "cwSurveyDataArtifact.h"
 #include "cwCavingRegion.h"
 #include "cwSurveyChunkSignaler.h"
+#include "cwSurveyChunk.h"
+#include "cwTeam.h"
+#include "cwTrip.h"
 
 cwSurveyDataArtifact::cwSurveyDataArtifact(QObject *parent)
     : cwArtifact(parent)
@@ -57,5 +60,54 @@ void cwSurveyDataArtifact::setRegion(cwCavingRegion* region)
 
         // Let the survey signaler know about the new region.
         m_surveySignaler->setRegion(m_region);
+    }
+}
+
+cwSurveyDataArtifact::SurveyChunk::SurveyChunk(const cwSurveyChunk *chunk) {
+    // Directly copy stations.
+    stations = chunk->stations();
+
+    // Assume the number of shots is one less than the station count.
+    int shotCount = chunk->stationCount() - 1;
+    for (int i = 0; i < shotCount; ++i) {
+        shots.append(chunk->shot(i));
+        // Assume calibrations() returns a QMap<int, cwTripCalibration*>
+        auto calMap = chunk->calibrations();
+        if (calMap.contains(i)) {
+            // Use the cwTripCalibrationData constructor.
+            calibrations.insert(i, calMap.value(i)->data());
+        }
+    }
+}
+
+cwSurveyDataArtifact::Trip::Trip(const cwTrip *trip) {
+    name = trip->name();
+    date = trip->date().date();
+    // Copy team members directly.
+    teamMembers = trip->team()->teamMembers();
+    // Assume trip->calibrations() returns a pointer to cwTripCalibration.
+    calibration = trip->calibrations()->data();
+    // Copy each survey chunk.
+    const auto tripChunks = trip->chunks();
+    chunks.reserve(tripChunks.size());
+    for (const auto& chunk : tripChunks) {
+        chunks.append(SurveyChunk(chunk));
+    }
+}
+
+cwSurveyDataArtifact::Cave::Cave(const cwCave *cave) {
+    name = cave->name();
+    int tripCount = cave->tripCount();
+    trips.reserve(tripCount);
+    for (int i = 0; i < tripCount; ++i) {
+        trips.append(Trip(cave->trip(i)));
+    }
+}
+
+cwSurveyDataArtifact::Region::Region(const cwCavingRegion *region) {
+    int caveCount = region->caveCount();
+    caves.reserve(caveCount);
+    for (int i = 0; i < caveCount; ++i) {
+        caves.append(Cave(region->cave(i)));
     }
 }

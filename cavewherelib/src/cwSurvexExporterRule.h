@@ -11,18 +11,18 @@
 #include "cwFutureFileNameArtifact.h"
 #include "cwSurveyDataArtifact.h"
 #include "cwFileNameArtifact.h"
-#include "cwReadingStates.h"
-#include "cwUnits.h"
-#include "cwTripCalibration.h"
-#include "cwShot.h"
-#include "cwStation.h"
-#include "cwTeamMember.h"
-class cwTeam;
-class cwCave;
-class cwTrip;
-class cwTripCalibration;
-class cwTeam;
-class cwSurveyChunk;
+// #include "cwReadingStates.h"
+// #include "cwUnits.h"
+// #include "cwTripCalibration.h"
+// #include "cwShot.h"
+// #include "cwStation.h"
+// #include "cwTeamMember.h"
+// class cwTeam;
+// class cwCave;
+// class cwTrip;
+// class cwTripCalibration;
+// class cwTeam;
+// class cwSurveyChunk;
 
 class cwSurvexExporterRule : public cwAbstractRule {
     Q_OBJECT
@@ -36,48 +36,48 @@ class cwSurvexExporterRule : public cwAbstractRule {
     Q_PROPERTY(cwFutureFileNameArtifact* survexFileArtifact READ survexFileArtifact CONSTANT)
 
 public:
-    struct SurveyChunk {
-        QVector<cwStation> stations;
-        QVector<cwShot> shots;
-        QMap<int, cwTripCalibrationData> calibrations;
+    // struct SurveyChunk {
+    //     QVector<cwStation> stations;
+    //     QVector<cwShot> shots;
+    //     QMap<int, cwTripCalibrationData> calibrations;
 
-        SurveyChunk() = default;
+    //     SurveyChunk() = default;
 
-        // Constructs a safe snapshot from a cwSurveyChunk pointer.
-        explicit SurveyChunk(const cwSurveyChunk* chunk);
-    };
+    //     // Constructs a safe snapshot from a cwSurveyChunk pointer.
+    //     explicit SurveyChunk(const cwSurveyChunk* chunk);
+    // };
 
-    struct Trip {
-        QString name;
-        QDate date;
-        QVector<cwTeamMember> teamMembers;
-        cwTripCalibrationData calibration;
-        QVector<SurveyChunk> chunks;
+    // struct Trip {
+    //     QString name;
+    //     QDate date;
+    //     QVector<cwTeamMember> teamMembers;
+    //     cwTripCalibrationData calibration;
+    //     QVector<SurveyChunk> chunks;
 
-        Trip() = default;
+    //     Trip() = default;
 
-        // Constructs a safe snapshot from a cwTrip pointer.
-        explicit Trip(const cwTrip* trip);
-    };
+    //     // Constructs a safe snapshot from a cwTrip pointer.
+    //     explicit Trip(const cwTrip* trip);
+    // };
 
-    struct Cave {
-        QString name;
-        QVector<Trip> trips;
+    // struct Cave {
+    //     QString name;
+    //     QVector<Trip> trips;
 
-        Cave() = default;
+    //     Cave() = default;
 
-        // Constructs a safe snapshot from a cwCave pointer.
-        explicit Cave(const cwCave* cave);
-    };
+    //     // Constructs a safe snapshot from a cwCave pointer.
+    //     explicit Cave(const cwCave* cave);
+    // };
 
-    struct Region {
-        QVector<Cave> caves;
+    // struct Region {
+    //     QVector<Cave> caves;
 
-        Region() = default;
+    //     Region() = default;
 
-        // Constructs a safe snapshot from a cwCavingRegion pointer.
-        explicit Region(const cwCavingRegion* region);
-    };
+    //     // Constructs a safe snapshot from a cwCavingRegion pointer.
+    //     explicit Region(const cwCavingRegion* region);
+    // };
 
     explicit cwSurvexExporterRule(QObject* parent = nullptr);
     virtual ~cwSurvexExporterRule();
@@ -104,9 +104,9 @@ public:
         return m_survexFileArtifact;
     }
 
-    static Monad::ResultBase writeRegion(QTextStream& stream, const Region& region);
-    static Monad::ResultBase writeCave(QTextStream& stream, const Cave& cave);
-    static Monad::ResultBase writeTrip(QTextStream& stream, const Trip& trip);
+    static Monad::ResultBase writeRegion(QTextStream& stream, const cwSurveyDataArtifact::Region& region);
+    static Monad::ResultBase writeCave(QTextStream& stream, const cwSurveyDataArtifact::Cave& cave);
+    static Monad::ResultBase writeTrip(QTextStream& stream, const cwSurveyDataArtifact::Trip& trip);
 
 signals:
     void surveyDataChanged();
@@ -116,8 +116,11 @@ private slots:
     void updatePipeline();
 
 private:
+    //Sources
     QPointer<cwSurveyDataArtifact> m_surveyData;
     QPointer<cwFileNameArtifact> m_survexFilename;
+
+    //Outputs
     cwFutureFileNameArtifact* m_survexFileArtifact;
 
 
@@ -125,20 +128,20 @@ private:
     static void writeCalibration(QTextStream& stream, QString type, double value, double scale = 1.0);
 
     static void writeLengthUnits(QTextStream &stream, cwUnits::LengthUnit unit);
-    static void writeShotData(QTextStream &stream, const Trip trip, int textPadding = -11);
-    static void writeLRUDData(QTextStream &stream, const Trip trip, int textPadding = -11);
+    static void writeShotData(QTextStream &stream, const cwSurveyDataArtifact::Trip trip, int textPadding = -11);
+    static void writeLRUDData(QTextStream &stream, const cwSurveyDataArtifact::Trip trip, int textPadding = -11);
     static void writeTeamData(QTextStream &stream, const QVector<cwTeamMember>& team);
     static void writeDate(QTextStream &stream, QDate date);
-    static QString toSupportedLength(const Trip& trip, const cwDistanceReading& reading);
+    static QString toSupportedLength(const cwSurveyDataArtifact::Trip& trip, const cwDistanceReading& reading);
     static QString compassToString(const cwCompassReading& compass);
     static QString clinoToString(const cwClinoReading &clino);
     static Monad::ResultBase writeChunk(QTextStream &stream,
                            bool hasFrontSights,
                            bool hasBackSights,
-                           const Trip& trip,
-                           const SurveyChunk& chunk,
+                           const cwSurveyDataArtifact::Trip& trip,
+                           const cwSurveyDataArtifact::SurveyChunk& chunk,
                            int textPadding = -11);
-    static void fixFirstStation(QTextStream &stream, const Cave& cave);
+    static void fixFirstStation(QTextStream &stream, const cwSurveyDataArtifact::Cave& cave);
 };
 
 #endif // CWSURVEXEXPORTERRULE_H

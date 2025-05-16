@@ -18,10 +18,10 @@ class cwSurveyNetworkData;
 class CAVEWHERE_LIB_EXPORT cwSurveyNetwork
 {
 public:
-    cwSurveyNetwork();
-    cwSurveyNetwork(const cwSurveyNetwork& other);
-    cwSurveyNetwork& operator=(const cwSurveyNetwork& other);
-    ~cwSurveyNetwork();
+    cwSurveyNetwork() = default;
+    cwSurveyNetwork(const cwSurveyNetwork& other) = default;
+    cwSurveyNetwork& operator=(const cwSurveyNetwork& other) = default;
+    ~cwSurveyNetwork() = default;
 
     void clear();
     void addShot(const QString& from, const QString& to);
@@ -41,7 +41,24 @@ public:
     bool operator!=(const cwSurveyNetwork& other) const { return !operator==(other); }
 
 private:
-    QSharedDataPointer<cwSurveyNetworkData> m_data;
+    // single struct holding both adjacency and optional position
+    struct StationData {
+        QStringList neighborList;
+        QVector3D stationPosition;
+        bool positionIsSet;
+
+        StationData() : neighborList(), stationPosition(), positionIsSet(false) {}
+
+        bool operator==(const StationData& other) const {
+            return neighborList == other.neighborList
+                   && positionIsSet == other.positionIsSet
+                   && stationPosition == other.stationPosition;
+        }
+
+        bool operator!=(const StationData& other) const { return !operator==(other); }
+    };
+
+    QHash<QString, StationData> stationDataMap;
 };
 
 #endif // CWSURVEYNETWORK_H

@@ -89,9 +89,9 @@ TEST_CASE("Save / Load should work with cwSurveyNetwork", "[ProtoSaveLoad]") {
         CHECK(foundNeighbors == checkNeigbbors);
     };
 
-    testStationNeigbors("a1", {"A2"});
-    testStationNeigbors("a2", {"A1", "A3"});
-    testStationNeigbors("a3", {"A2"});
+    testStationNeigbors("a1", {"a2"});
+    testStationNeigbors("a2", {"a1", "a3"});
+    testStationNeigbors("a3", {"a2"});
 }
 
 TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {

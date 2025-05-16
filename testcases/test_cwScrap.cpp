@@ -363,7 +363,7 @@ TEST_CASE("Guess neighbor station name", "[cwScrap]") {
 
                 QString guessedName = scrap->guessNeighborStationName(noteStation, neighborNoteStation.positionOnNote());
 
-                CHECK(neighborNoteStation.name().toUpper().toStdString() == guessedName.toStdString());
+                CHECK(neighborNoteStation.name().toLower().toStdString() == guessedName.toStdString());
             }
         }
     }

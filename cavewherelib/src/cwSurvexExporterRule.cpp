@@ -1,11 +1,7 @@
 #include "cwSurvexExporterRule.h"
-#include "cwCavingRegion.h"
 #include "cwConcurrent.h"
 #include "cwTrip.h"
-#include "cwCave.h"
 #include "cwTripCalibration.h"
-#include "cwSurveyChunk.h"
-#include "cwTeam.h"
 
 //Qt includes
 #include <QTextStream>
@@ -64,7 +60,7 @@ void cwSurvexExporterRule::setSurvexFileName(cwFileNameArtifact* survexFilename)
     }
 }
 
-ResultBase cwSurvexExporterRule::writeTrip(QTextStream &stream, const Trip& trip)
+ResultBase cwSurvexExporterRule::writeTrip(QTextStream &stream, const cwSurveyDataArtifact::Trip& trip)
 {
     //Write header
     stream << "*begin ; " << trip.name << Qt::endl;
@@ -82,7 +78,7 @@ ResultBase cwSurvexExporterRule::writeTrip(QTextStream &stream, const Trip& trip
     return ResultBase();
 }
 
-ResultBase cwSurvexExporterRule::writeCave(QTextStream& stream, const cwSurvexExporterRule::Cave& cave)
+ResultBase cwSurvexExporterRule::writeCave(QTextStream& stream, const cwSurveyDataArtifact::Cave& cave)
 {
     QString caveName = cave.name;
     caveName = caveName.remove(" ");
@@ -95,7 +91,7 @@ ResultBase cwSurvexExporterRule::writeCave(QTextStream& stream, const cwSurvexEx
 
     //Go throug all the trips and save them
     for(int i = 0; i < cave.trips.size(); i++) {
-        const Trip& trip = cave.trips.at(i);
+        const cwSurveyDataArtifact::Trip& trip = cave.trips.at(i);
         writeTrip(stream, trip);
         stream << Qt::endl;
     }
@@ -105,12 +101,12 @@ ResultBase cwSurvexExporterRule::writeCave(QTextStream& stream, const cwSurvexEx
     return ResultBase();
 }
 
-ResultBase cwSurvexExporterRule::writeRegion(QTextStream &stream, const Region& region)
+ResultBase cwSurvexExporterRule::writeRegion(QTextStream &stream, const cwSurveyDataArtifact::Region& region)
 {
     stream << "*begin  ;All the caves" << Qt::endl;
 
     for(int i = 0; i < region.caves.size(); i++) {
-        const Cave& cave = region.caves.at(i);
+        const cwSurveyDataArtifact::Cave& cave = region.caves.at(i);
 
         auto result = writeCave(stream, cave);
         if(result.hasError()) {
@@ -132,7 +128,7 @@ void cwSurvexExporterRule::updatePipeline()
 
         //Copy
         auto survexFilename = m_survexFilename->filename();
-        const auto region = Region(m_surveyData->region()); //Copy all the region data for export
+        const auto region = cwSurveyDataArtifact::Region(m_surveyData->region()); //Copy all the region data for export
 
         auto future = cwConcurrent::run([survexFilename, region = std::move(region)]()->ResultString {
             QSaveFile file(survexFilename);
@@ -219,7 +215,7 @@ void cwSurvexExporterRule::writeLengthUnits(QTextStream &stream,
 
   This will write the data as normal data
   */
-void cwSurvexExporterRule::writeShotData(QTextStream& stream, const Trip trip, int textPadding) {
+void cwSurvexExporterRule::writeShotData(QTextStream& stream, const cwSurveyDataArtifact::Trip trip, int textPadding) {
     bool hasFrontSights = trip.calibration.hasFrontSights();
     bool hasBackSights = trip.calibration.hasBackSights();
 
@@ -263,7 +259,7 @@ void cwSurvexExporterRule::writeShotData(QTextStream& stream, const Trip trip, i
     stream << dataLineComment << Qt::endl;
 
     for(int i = 0; i < trip.chunks.size(); i++) {
-        const SurveyChunk& chunk = trip.chunks.at(i);
+        const cwSurveyDataArtifact::SurveyChunk& chunk = trip.chunks.at(i);
 
         //Write the chunk data
         writeChunk(stream, hasFrontSights, hasBackSights, trip, chunk);
@@ -274,11 +270,11 @@ void cwSurvexExporterRule::writeShotData(QTextStream& stream, const Trip trip, i
   \brief Writes the left right up down for each station in the trip, as
   a comment
   */
-void cwSurvexExporterRule::writeLRUDData(QTextStream& stream, const Trip trip, int textPadding) {
+void cwSurvexExporterRule::writeLRUDData(QTextStream& stream, const cwSurveyDataArtifact::Trip trip, int textPadding) {
 
     QString dataLineTemplate("%1 %2 %3 %4 %5");
 
-    for(const SurveyChunk& chunk : trip.chunks) {
+    for(const cwSurveyDataArtifact::SurveyChunk& chunk : trip.chunks) {
         stream << "*data passage station left right up down ignoreall" << Qt::endl;
 
         for(const cwStation& station : chunk.stations) {
@@ -335,7 +331,7 @@ void cwSurvexExporterRule::writeDate(QTextStream &stream, QDate date)
   If the current calibration isn't in yard, feet or meters, then this function converts the
   length into meters.
 */
-QString cwSurvexExporterRule::toSupportedLength(const Trip& trip, const cwDistanceReading& reading) {
+QString cwSurvexExporterRule::toSupportedLength(const cwSurveyDataArtifact::Trip& trip, const cwDistanceReading& reading) {
     if(reading.state() != cwDistanceReading::State::Valid) {
         return "-";
     }
@@ -391,8 +387,8 @@ QString cwSurvexExporterRule::clinoToString(const cwClinoReading& clino)
 ResultBase cwSurvexExporterRule::writeChunk(QTextStream& stream,
                                             bool hasFrontSights, //True if the dataset has backsights
                                             bool hasBackSights, //True if the dataset has frontsights
-                                            const Trip& trip,
-                                            const SurveyChunk& chunk,
+                                            const cwSurveyDataArtifact::Trip& trip,
+                                            const cwSurveyDataArtifact::SurveyChunk& chunk,
                                             int textPadding) {
 
     if(!hasBackSights && !hasFrontSights) {
@@ -514,15 +510,15 @@ ResultBase cwSurvexExporterRule::writeChunk(QTextStream& stream,
  *
  * This fixes the first station in the cave, if the cave has any stations.
  */
-void cwSurvexExporterRule::fixFirstStation(QTextStream &stream, const Cave &cave)
+void cwSurvexExporterRule::fixFirstStation(QTextStream &stream, const cwSurveyDataArtifact::Cave &cave)
 {
 
     if(!cave.trips.isEmpty()) {
         const auto trips = cave.trips;
-        const Trip& firstTrip = trips.first();
+        const cwSurveyDataArtifact::Trip& firstTrip = trips.first();
         if(!firstTrip.chunks.isEmpty()) {
             const auto chunks = firstTrip.chunks;
-            const SurveyChunk& firstChunk = chunks.first();
+            const cwSurveyDataArtifact::SurveyChunk& firstChunk = chunks.first();
             if(!firstChunk.stations.isEmpty()) {
                 const cwStation& station = firstChunk.stations.first();
                 stream << "*fix " << station.name() << " " << 0 << " " << 0 << " " << 0 << Qt::endl;
@@ -532,49 +528,3 @@ void cwSurvexExporterRule::fixFirstStation(QTextStream &stream, const Cave &cave
 
 }
 
-
-
-cwSurvexExporterRule::SurveyChunk::SurveyChunk(const cwSurveyChunk *chunk) {
-    // Directly copy stations.
-    stations = chunk->stations();
-
-    // Assume the number of shots is one less than the station count.
-    int shotCount = chunk->stationCount() - 1;
-    for (int i = 0; i < shotCount; ++i) {
-        shots.append(chunk->shot(i));
-        // Assume calibrations() returns a QMap<int, cwTripCalibration*>
-        auto calMap = chunk->calibrations();
-        if (calMap.contains(i)) {
-            // Use the cwTripCalibrationData constructor.
-            calibrations.insert(i, calMap.value(i)->data());
-        }
-    }
-}
-
-cwSurvexExporterRule::Trip::Trip(const cwTrip *trip) {
-    name = trip->name();
-    date = trip->date().date();
-    // Copy team members directly.
-    teamMembers = trip->team()->teamMembers();
-    // Assume trip->calibrations() returns a pointer to cwTripCalibration.
-    calibration = trip->calibrations()->data();
-    // Copy each survey chunk.
-    for (const auto& chunk : trip->chunks()) {
-        chunks.append(SurveyChunk(chunk));
-    }
-}
-
-cwSurvexExporterRule::Cave::Cave(const cwCave *cave) {
-    name = cave->name();
-    int tripCount = cave->tripCount();
-    for (int i = 0; i < tripCount; ++i) {
-        trips.append(Trip(cave->trip(i)));
-    }
-}
-
-cwSurvexExporterRule::Region::Region(const cwCavingRegion *region) {
-    int caveCount = region->caveCount();
-    for (int i = 0; i < caveCount; ++i) {
-        caves.append(Cave(region->cave(i)));
-    }
-}

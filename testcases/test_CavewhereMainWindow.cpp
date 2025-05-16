@@ -24,12 +24,22 @@
 #include <QDebug>
 #include <QSettings>
 
+//QuickQanave includes
+#include <QuickQanava>
 
 class MainHelper {
 public:
     static QQmlApplicationEngine* createApplicationEnigne() {
         QQmlApplicationEngine* applicationEnigine = new QQmlApplicationEngine();
         cwRootData* rootData = new cwRootData(applicationEnigine);
+
+
+        // Add the macOS Resources directory to the QML import search path
+        QString resourcePath = QCoreApplication::applicationDirPath() + "/QuickQanava/src";
+        applicationEnigine->addImportPath(resourcePath);
+        qDebug() << "ResourcePath:" << resourcePath;
+
+        QuickQanava::initialize(applicationEnigine);
 
         applicationEnigine->loadFromModule(QStringLiteral("cavewherelib"),
                                            QStringLiteral("CavewhereMainWindow"));
