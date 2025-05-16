@@ -986,7 +986,7 @@ QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, 
     }
 
     //return the best station from the calculation
-    return bestStationName
+    return bestStationName;
 }
 
 /**
