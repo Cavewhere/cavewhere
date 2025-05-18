@@ -217,6 +217,8 @@ QQ.Item {
             SurveyEditorColumnTitles {
                 id: titleTemplate
                 visible: false
+                listViewIndex: -1
+                chunk: null
             }
 
 
