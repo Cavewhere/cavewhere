@@ -9,12 +9,22 @@ set(QT_QML_GENERATE_QMLLS_INI ON CACHE BOOL "Generate QMLLS INI file")
 # Include the GenerateExportHeader module
 include(GenerateExportHeader)
 
+# Include cavewhere
+add_subdirectory(cavewhere/cavewherelib)
+add_subdirectory(cavewhere/asyncfuture)
+add_subdirectory(cavewhere/QMath3d)
+add_subdirectory(cavewhere/monad)
+add_subdirectory(cavewhere/QuickQanava)
+add_subdirectory(cavewhere/dewalls)
+add_subdirectory(cavewhere/MarkScope)
+
 find_package(Catch2 REQUIRED)
 find_package(Qt6
     REQUIRED COMPONENTS
     Core
     Quick
     QuickShapesPrivate
+    Test
 )
 
 qt_standard_project_setup(REQUIRES 6.5)
@@ -36,6 +46,12 @@ qt_add_qml_module(cavewhere_sketch
         SketchShapePath.h SketchShapePath.cpp
         MovingAverageProxyModel.cpp MovingAverageProxyModel.h
         ExclusivePointHandler.h ExclusivePointHandler.cpp
+        RootData.h RootData.cpp
+        AbstractPainterPathModel.h AbstractPainterPathModel.cpp
+        CenterlinePainterModel.h CenterlinePainterModel.cpp
+        QML_FILES SketchPage.qml
+        TripCompactPage.qml
+        QML_FILES ShapePathInstantiator.qml
 )
 
 # Generate the export header for windows
@@ -65,6 +81,7 @@ target_link_libraries(cavewhere_sketch
     PUBLIC
     Qt6::Quick
     Qt6::Core
+    cavewherelib
     PRIVATE
     Qt6::QuickPrivate
     Qt6::QuickShapesPrivate
@@ -94,7 +111,8 @@ target_compile_definitions(cavewhere_sketch
 # )
 
 
-qt_add_executable(cavewhere-sketch-test)
+qt_add_executable(cavewhere-sketch-test
+    testcases/test_CenterlinePainterModel.cpp)
 
 set_target_properties(cavewhere-sketch-test PROPERTIES
     AUTOMOC ON
@@ -110,6 +128,7 @@ target_link_libraries(cavewhere-sketch-test
     PRIVATE
     cavewhere_sketch
     Catch2::Catch2
+    Qt6::Test
 )
 
 

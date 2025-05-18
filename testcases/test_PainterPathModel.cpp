@@ -8,6 +8,8 @@
 //QVector
 #include <QVector>
 
+using namespace cwSketch;
+
 TEST_CASE("PainterPathModel add new points", "[PainterPathModel]") {
 
     // Create a PenLineModel instance.

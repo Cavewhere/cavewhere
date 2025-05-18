@@ -4,6 +4,7 @@
 //Our includes
 #include "PenLineModel.h"
 #include "CaveWhereSketchLibExport.h"
+#include "AbstractPainterPathModel.h"
 
 //Qt includes
 #include <QAbstractListModel>
@@ -11,7 +12,7 @@
 #include <QPointer>
 #include <QObjectBindableProperty>
 
-
+namespace cwSketch {
 
 /**
  * @brief Model converting PenLineModel data into QPainterPath batches for efficient QML rendering.
@@ -23,7 +24,7 @@
  * In QML, an Instantiator watches this model and creates Shape elements,
  * reducing QML object count and batching geometry for GPU performance.
  */
-class CAVEWHERE_SKETCH_LIB_EXPORT PainterPathModel : public QAbstractListModel
+class CAVEWHERE_SKETCH_LIB_EXPORT PainterPathModel : public AbstractPainterPathModel
 {
     Q_OBJECT
     QML_ELEMENT
@@ -41,8 +42,10 @@ public:
 
     //There's the active which is 0, and
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
-    QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
-    QHash<int, QByteArray> roleNames() const override;
+
+    //Implemented in AbstractPainterPathModel
+    // QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
+    // QHash<int, QByteArray> roleNames() const override;
 
     QAbstractItemModel* penLineModel() const;
     void setPenLineModel(QAbstractItemModel* penLineModel);
@@ -57,6 +60,9 @@ public:
         return debugPath;
     }
 
+protected:
+    const Path &path(const QModelIndex &index) const override;
+
 
 signals:
     void penLineModelChanged();
@@ -64,11 +70,6 @@ signals:
 
 private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(PainterPathModel, int, m_activeLineIndex, -1, &PainterPathModel::activeLineIndexChanged);
-
-    struct Path {
-        QPainterPath painterPath;
-        double strokeWidth;
-    };
 
     struct ActivePath : Path {
         //Catch vectors of the top and bottom part of the polygon line, these aren't used
@@ -121,7 +122,7 @@ private:
     QVector<QPointF> endCap(const QVector<PenPoint>& points, const QLineF& perpendicularLine) const;
 
     QVector<PenPoint> smoothPressure(const QVector<PenPoint>& points, int begin, int end) const;
-
+};
 };
 
 #endif // PAINTERPATHMODEL_H

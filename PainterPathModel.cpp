@@ -4,8 +4,10 @@
 #include <QLineF>
 #include <QPolygonF>
 
+using namespace cwSketch;
+
 PainterPathModel::PainterPathModel(QObject *parent)
-    : QAbstractListModel(parent)
+    : AbstractPainterPathModel(parent)
     , m_penLineModel(nullptr)
 {
 
@@ -57,28 +59,28 @@ int PainterPathModel::rowCount(const QModelIndex &parent) const {
  *         If the index is out of range or the role isn’t recognized,
  *         returns an invalid QVariant.
  */
-QVariant PainterPathModel::data(const QModelIndex &index, int role) const {
-    if (index.row() < 0 || index.row() >= rowCount()) {
-        return QVariant();
-    }
+// QVariant PainterPathModel::data(const QModelIndex &index, int role) const {
+//     if (index.row() < 0 || index.row() >= rowCount()) {
+//         return QVariant();
+//     }
 
-    auto path = [this](const QModelIndex& index) -> const Path& {
-        if (index.row() == 0) {
-            return m_activePath;
-        } else  {
-            return m_finishedPaths.at(index.row() - m_finishLineIndexOffset);
-        }
-    };
+//     auto path = [this](const QModelIndex& index) -> const Path& {
+//         if (index.row() == 0) {
+//             return m_activePath;
+//         } else  {
+//             return m_finishedPaths.at(index.row() - m_finishLineIndexOffset);
+//         }
+//     };
 
-    switch(role) {
-    case PainterPathRole:
-        return QVariant::fromValue(path(index).painterPath);
-    case StrokeWidthRole:
-        return path(index).strokeWidth;
-    }
+//     switch(role) {
+//     case PainterPathRole:
+//         return QVariant::fromValue(path(index).painterPath);
+//     case StrokeWidthRole:
+//         return path(index).strokeWidth;
+//     }
 
-    return QVariant();
-}
+//     return QVariant();
+// }
 
 /**
  * @brief Returns the role‐to‐name mapping used by QML.
@@ -94,11 +96,11 @@ QVariant PainterPathModel::data(const QModelIndex &index, int role) const {
  *
  * @return A QHash mapping each role enum to its QByteArray name.
  */
-QHash<int, QByteArray> PainterPathModel::roleNames() const {
-    return { {PainterPathRole, "painterPath"},
-        {StrokeWidthRole, "strokeWidthRole"}
-    };
-}
+// QHash<int, QByteArray> PainterPathModel::roleNames() const {
+//     return { {PainterPathRole, "painterPath"},
+//         {StrokeWidthRole, "strokeWidthRole"}
+//     };
+// }
 
 /**
  * @brief Returns the source PenLineModel supplying raw pen strokes.
@@ -809,3 +811,12 @@ QVector<PenPoint> PainterPathModel::smoothPressure(const QVector<PenPoint>& poin
 }
 
 
+
+const AbstractPainterPathModel::Path &PainterPathModel::path(const QModelIndex &index) const
+{
+    if (index.row() == 0) {
+        return m_activePath;
+    } else  {
+        return m_finishedPaths.at(index.row() - m_finishLineIndexOffset);
+    }
+}

@@ -14,7 +14,8 @@ class CaveWhereConan(ConanFile):
     version = "2025.2"
     settings = "os", "compiler", "build_type", "arch"
     requires = [
-    ("catch2/[>=2.13.10]")
+    ("catch2/[>=2.13.10]"),
+    ("protobuf/5.27.0")
     ]
     generators = "CMakeDeps", "CMakeToolchain", "VirtualBuildEnv", "VirtualRunEnv"
 

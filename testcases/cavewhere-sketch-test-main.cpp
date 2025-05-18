@@ -3,18 +3,21 @@
 #include <catch2/catch_session.hpp>
 
 //Qt includes
-#include <QCoreApplication>
+#include <QGuiApplication>
 #include <QThread>
 #include <QSettings>
 
+//CaveWhere includes
+#include "cwTask.h"
+
 int main( int argc, char* argv[] )
 {
-    QCoreApplication app(argc, argv);
+    QGuiApplication app(argc, argv);
 
-    QCoreApplication::setOrganizationName("Vadose Solutions");
-    QCoreApplication::setOrganizationDomain("cavewhere.com");
-    QCoreApplication::setApplicationName("cavewhere-sketch-test");
-    QCoreApplication::setApplicationVersion("1.0");
+    QGuiApplication::setOrganizationName("Vadose Solutions");
+    QGuiApplication::setOrganizationDomain("cavewhere.com");
+    QGuiApplication::setApplicationName("cavewhere-sketch-test");
+    QGuiApplication::setApplicationVersion("1.0");
 
     {
         QSettings settings;
@@ -22,6 +25,8 @@ int main( int argc, char* argv[] )
     }
 
     app.thread()->setObjectName("Main QThread");
+
+    cwTask::initilizeThreadPool();
 
     int result = 0;
     QMetaObject::invokeMethod(&app, [&result, argc, argv]() {

@@ -1,0 +1,3 @@
+[submodule "cavewhere"]
+	path = cavewhere
+	url = git@github.com:Cavewhere/cavewhere.git

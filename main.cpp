@@ -1,10 +1,16 @@
+//Qt includes
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QSurfaceFormat>
 
+//CaveWhere
+#include "cwTask.h"
+
 int main(int argc, char *argv[])
 {
     QGuiApplication app(argc, argv);
+
+    cwTask::initilizeThreadPool();
 
     // Configure multisample antialiasing
     QSurfaceFormat format;
@@ -18,6 +24,11 @@ int main(int argc, char *argv[])
         &app,
         []() { QCoreApplication::exit(-1); },
         Qt::QueuedConnection);
+
+    QString resourcePath = QCoreApplication::applicationDirPath() + "/../../../";
+    qDebug() << "resourcePath:" << resourcePath;
+    engine.addImportPath(resourcePath);
+
     engine.loadFromModule("CaveWhereSketch", "Main");
 
     return app.exec();
