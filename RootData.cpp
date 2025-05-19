@@ -26,25 +26,25 @@ RootData::RootData(QObject *parent) :
 void RootData::createCurrentTrip()
 {
 
-    m_project->loadFile("/Users/cave/Desktop/nimbus.cw");
-    m_project->waitLoadToFinish();
+    // m_project->loadFile("/Users/cave/Desktop/nimbus.cw");
+    // m_project->waitLoadToFinish();
 
-    qDebug() << "Caves:" << m_project->cavingRegion()->caveCount();
+    // qDebug() << "Caves:" << m_project->cavingRegion()->caveCount();
 
-    m_currentTrip = m_project->cavingRegion()->cave(0)->trip(1);
+    // m_currentTrip = m_project->cavingRegion()->cave(0)->trip(1);
 
-    // cwTrip* trip = new cwTrip();
-    // trip->setName("My Trip");
+    cwTrip* trip = new cwTrip();
+    trip->setName("My Trip");
 
-    // trip->addNewChunk();
+    trip->addNewChunk();
 
-    // cwCave* cave = new cwCave();
-    // cave->setName("Test");
+    cwCave* cave = new cwCave();
+    cave->setName("Test");
 
-    // cave->addTrip(trip);
-    // cavingRegion()->addCave(cave);
+    cave->addTrip(trip);
+    cavingRegion()->addCave(cave);
 
-    // m_currentTrip = trip;
+    m_currentTrip = trip;
 }
 
 //For testing
@@ -67,6 +67,7 @@ void RootData::createGeometry2DPipeline()
 
     //1:250
     const double footToMeter = 0.3048;
+    // const double footToMeter = 1.0; //Operate in feet
     const double meterToInch = 1.0 / footToMeter * 12.0;
 
     const double mapScale = 250.0; //1:250

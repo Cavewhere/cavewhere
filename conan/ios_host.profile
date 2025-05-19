@@ -1,0 +1,12 @@
+[settings]
+arch=armv8
+build_type=Debug
+compiler=apple-clang
+compiler.libcxx=libc++
+compiler.version=16
+os=iOS
+os.sdk=iphoneos
+os.version=16.0
+[conf]
+tools.cmake.cmaketoolchain:generator=Xcode
+tools.cmake.cmaketoolchain:user_toolchain+={{profile_dir}}/ios_vars.cmake

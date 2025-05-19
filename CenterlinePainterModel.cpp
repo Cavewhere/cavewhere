@@ -62,6 +62,8 @@ CenterlinePainterModel::path(const QModelIndex &index) const
 
 void CenterlinePainterModel::updateModel()
 {
+    qDebug() << "Update centerlinePainterModel!";
+
     if (m_geometryArtifact) {
         // pull the future and wait for it
         auto future = m_geometryArtifact->geometryResult();
@@ -76,9 +78,10 @@ void CenterlinePainterModel::updateModel()
                 {
                     Path linePath;
                     QPainterPath lines;
-                    for (auto const &ln : geometry.shotLines) {
-                        lines.moveTo(ln.p1());
-                        lines.lineTo(ln.p2());
+                    for (auto const &line : geometry.shotLines) {
+                        lines.moveTo(line.p1());
+                        lines.lineTo(line.p2());
+                        qDebug() << "Line:" << line.p1() << line.p2();
                     }
                     linePath.painterPath = std::move(lines);
                     linePath.strokeWidth = 1.0;
@@ -89,8 +92,8 @@ void CenterlinePainterModel::updateModel()
                 {
                     Path symbolPath;
                     QPainterPath symbols;
-                    for (auto const &st : geometry.stations) {
-                        symbols.addEllipse(st.position, 1.0, 1.0);
+                    for (auto const &station : geometry.stations) {
+                        symbols.addEllipse(station.position, 1.0, 1.0);
                     }
                     symbolPath.painterPath = std::move(symbols);
                     symbolPath.strokeWidth = 1.0;
@@ -103,11 +106,11 @@ void CenterlinePainterModel::updateModel()
                     QPainterPath labels;
                     QFont font;
                     font.setPointSizeF(10.0);
-                    for (auto const &st : geometry.stations) {
+                    for (auto const &station : geometry.stations) {
                         // offset label by (0.6, 0.2)
-                        labels.addText(st.position + QPointF(2.0, 2.0),
+                        labels.addText(station.position + QPointF(2.0, 2.0),
                                        font,
-                                       st.name);
+                                       station.name);
                     }
                     labelPath.painterPath = std::move(labels);
                     labelPath.strokeWidth = 0.0;

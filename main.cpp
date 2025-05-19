@@ -25,9 +25,9 @@ int main(int argc, char *argv[])
         []() { QCoreApplication::exit(-1); },
         Qt::QueuedConnection);
 
-    QString resourcePath = QCoreApplication::applicationDirPath() + "/../../../";
-    qDebug() << "resourcePath:" << resourcePath;
-    engine.addImportPath(resourcePath);
+    // QString resourcePath = QCoreApplication::applicationDirPath() + "/../../../";
+    // qDebug() << "resourcePath:" << resourcePath;
+    // engine.addImportPath(resourcePath);
 
     engine.loadFromModule("CaveWhereSketch", "Main");
 
