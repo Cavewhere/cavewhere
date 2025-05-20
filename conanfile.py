@@ -37,7 +37,7 @@ class CaveWhereConan(ConanFile):
         if not self.options.system_qt:
             self.requires("qt/[>=6.7.3]")
             self.requires("xkbcommon/[>=1.6.0]", override=True)
-            self.requires("sqlite3/[>=3.45.0]", override=True)
+            self.requires("sqlite3/[>=3.45.0]") #, override=True) #override seems to use system's sqlite3 and causes issues
         else:
             self.requires("sqlite3/[>=3.44.2]")
 
