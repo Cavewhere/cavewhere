@@ -84,7 +84,7 @@ conan profile detect --force
 PROFILE_PATH="$(conan config home)/profiles/default"
 echo >> "$PROFILE_PATH"          # ensure a blank line
 echo "[tool_requires]" >> "$PROFILE_PATH"
-echo "!cmake/*: cmake/[>=3 <4]" >> "$PROFILE_PATH"
+echo '!cmake/*: cmake/[>=3 <4]' >> "$PROFILE_PATH"
 ```
 
 5. **Install CaveWhere dependancies through Conan**
