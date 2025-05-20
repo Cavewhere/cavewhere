@@ -38,9 +38,6 @@
 #include <QFile>
 #include <QTime>
 
-//Sqlite lite includes
-#include <sqlite3.h>
-
 //Async includes
 #include <asyncfuture.h>
 
