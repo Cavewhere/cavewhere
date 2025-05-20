@@ -11,9 +11,6 @@
 #include "cwDebug.h"
 #include "cwProject.h"
 
-//Sqlite lite includes
-#include <sqlite3.h>
-
 //Qt include
 #include <QSqlDatabase>
 #include <QSqlQuery>

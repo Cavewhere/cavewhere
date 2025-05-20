@@ -11,9 +11,6 @@
 #include <QSqlDatabase>
 #include <QThread>
 
-//Sqlite lite includes
-#include <sqlite3.h>
-
 //Our includse
 #include "cwSQLManager.h"
 #include "cwDebug.h"
@@ -69,6 +66,8 @@ bool cwSQLManager::beginTransaction(const QSqlDatabase& database, QueryType type
         lock->lockForWrite();
         break;
     }
+
+    const int SQLITE_BUSY = 5; //From the sqlite header, this prevents us from including sqlite
 
     //SQLITE begin transation
     QString beginTransationQuery = "BEGIN TRANSACTION";

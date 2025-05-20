@@ -6,7 +6,6 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/UpdateVersion.cmake)
 # All packages we need to find
 find_package(Protobuf REQUIRED)
 find_package(Catch2 REQUIRED)
-find_package(SQLite3 REQUIRED)
 find_package(Qt6
     COMPONENTS
     Core
@@ -50,7 +49,6 @@ target_link_libraries(cavewherelib
     QMath3d
     MarkScope
     PRIVATE
-    SQLite::SQLite3
     protobuf::protobuf
 )
 
