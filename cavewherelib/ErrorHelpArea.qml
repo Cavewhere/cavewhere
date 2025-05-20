@@ -6,7 +6,7 @@
 **************************************************************************/
 
 // import QtQuick as QQ // to target S60 5th Edition or Maemo 5
-import "qrc:/cavewherelib/cavewherelib/Theme.js" as Theme
+import "qrc:/qt/qml/cavewherelib/Theme.js" as Theme
 
 HelpArea {
 

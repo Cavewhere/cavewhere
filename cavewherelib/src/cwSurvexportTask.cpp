@@ -57,6 +57,7 @@ QString cwSurvexportTask::survex3DFilename() const {
   Runs plotsauce task
   */
 void cwSurvexportTask::runTask() {
+#if QT_CONFIG(process)
     m_outputFilename.clear();
 
     if(!isRunning()) {
@@ -127,10 +128,12 @@ void cwSurvexportTask::runTask() {
     }
 
     m_outputFilename = outputFile;
-
+#endif
     done();
 }
 
 void cwSurvexportTask::printErrors() const {
+#if QT_CONFIG(process)
     qDebug() << "PlotSauce errors: " << SurvexportProcess->errorString();
+#endif
 }

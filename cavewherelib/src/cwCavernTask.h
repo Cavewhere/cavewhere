@@ -47,7 +47,10 @@ private slots:
     void privateSetSurvexFile(QString suvexFile);
 
 //    void cavernFinished(int exitCode, QProcess::ExitStatus exitStatus);
+
+#if QT_CONFIG(process)
     void processError(QProcess::ProcessError error);
+#endif
 };
 
 #endif // CWCAVERNTASK_H

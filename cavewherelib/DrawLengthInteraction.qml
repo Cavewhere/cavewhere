@@ -8,7 +8,7 @@
 import QtQuick as QQ
 import QtQuick.Controls as QC
 import cavewherelib
-import "qrc:/cavewherelib/cavewherelib/Theme.js" as Theme
+import "qrc:/qt/qml/cavewherelib/Theme.js" as Theme
 
 PanZoomInteraction {
     id: interaction

@@ -30,11 +30,19 @@ class cwTestcaseManager : public QObject
     Q_PROPERTY(ProcessState processState READ processState NOTIFY processStateChanged)
 
 public:
+#if QT_CONFIG(process)
     enum ProcessState {
         NotRunning = QProcess::NotRunning,
         Running = QProcess::Running,
         Starting = QProcess::Starting
     };
+#else
+    enum ProcessState {
+        NotRunning,
+        Running,
+        Starting
+    };
+#endif
     Q_ENUM(ProcessState)
 
     cwTestcaseManager();
@@ -58,10 +66,15 @@ private:
 
     QString Arguments; //!<
     QString Result; //!<
+
+#if QT_CONFIG(process)
     QProcess* TestcaseProcess;
+#endif
 
 private slots:
+#if QT_CONFIG(process)
     void handleError(QProcess::ProcessError error);
+#endif
 
 signals:
     void resultChanged();
@@ -92,7 +105,11 @@ inline QString cwTestcaseManager::result() const {
 * @return
 */
 inline cwTestcaseManager::ProcessState cwTestcaseManager::processState() const {
+#if QT_CONFIG(process)
     return (ProcessState)TestcaseProcess->state();
+#else
+    return NotRunning;
+#endif
 }
 
 #endif // CWTESTCASEMANAGER_H

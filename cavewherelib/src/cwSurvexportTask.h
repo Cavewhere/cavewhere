@@ -37,7 +37,9 @@ private:
     QString Survex3DFileName;
     QString m_outputFilename;
 
+#if QT_CONFIG(process)
     QProcess* SurvexportProcess;
+#endif
 
     QString survex3DFilename() const;
 

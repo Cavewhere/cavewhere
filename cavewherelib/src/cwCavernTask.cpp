@@ -49,6 +49,7 @@ QString cwCavernTask::output3dFileName() const {
   \brief Runs survex's cavern
   */
  void cwCavernTask::runTask() {
+ #if QT_CONFIG(process)
      if(!isRunning()) {
          done();
          return;
@@ -119,8 +120,10 @@ QString cwCavernTask::output3dFileName() const {
          stop();
      }
 
+#endif
+
      done();
- }
+}
 
 
 /**
@@ -146,9 +149,11 @@ void cwCavernTask::privateSetSurvexFile(QString survexFile) {
 *
 * Called when cavern process has errored
 */
+#if QT_CONFIG(process)
 void cwCavernTask::processError(QProcess::ProcessError error)
 {
    qDebug() << "Cavern has errored out with ProcessError code" << error << LOCATION;
    stop();
    done();
 }
+#endif

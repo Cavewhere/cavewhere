@@ -238,7 +238,7 @@ void cwRootData::showInFolder(const QString &path) const
     args << QDir::toNativeSeparators(path);
     if (QProcess::startDetached("explorer", args))
         return;
-#elif defined(Q_OS_MAC)
+#elif defined(Q_OS_MAC) && QT_CONFIG(process)
     QStringList args;
     args << "-e";
     args << "tell application \"Finder\"";

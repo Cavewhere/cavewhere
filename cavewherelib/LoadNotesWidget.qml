@@ -7,7 +7,7 @@
 
 import QtQuick as QQ
 // import QtGraphicalEffects
-import "qrc:/cavewherelib/cavewherelib/Theme.js" as Theme
+import "qrc:/qt/qml/cavewherelib/Theme.js" as Theme
 
 QQ.Item {
     id: widgetId

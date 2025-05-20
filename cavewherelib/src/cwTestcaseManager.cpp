@@ -14,6 +14,7 @@
 #include <QRegularExpression>
 #include <QDebug>
 
+#if QT_CONFIG(process)
 cwTestcaseManager::cwTestcaseManager() :
     TestcaseProcess(new QProcess(this))
 {
@@ -41,6 +42,9 @@ cwTestcaseManager::cwTestcaseManager() :
         addToResult(QString("cavewhere-test has %1 with an exit code of %2").arg(typeOfFinish).arg(exitCode));
     });
 }
+#else
+cwTestcaseManager::cwTestcaseManager() {}
+#endif
 
 /**
  * Runs the testcase application
@@ -59,8 +63,9 @@ void cwTestcaseManager::run()
         addToResult("Error - Can't find cavewhere-test");
         return;
     }
-
+#if QT_CONFIG(process)
     TestcaseProcess->start(testcasePath, argumentList());
+#endif
 }
 
 /**
@@ -68,7 +73,9 @@ void cwTestcaseManager::run()
  */
 void cwTestcaseManager::stop()
 {
+    #if QT_CONFIG(process)
     TestcaseProcess->kill();
+#endif
 }
 
 /**
@@ -135,6 +142,7 @@ QStringList cwTestcaseManager::argumentList() const
 /**
  * This prints out errors from the process
  */
+#if QT_CONFIG(process)
 void cwTestcaseManager::handleError(QProcess::ProcessError error)
 {
     switch(error) {
@@ -146,4 +154,4 @@ void cwTestcaseManager::handleError(QProcess::ProcessError error)
     case QProcess::UnknownError: addToResult("cavewhere-test has had an unknown error ... sorry :("); break;
     }
 }
-
+#endif
