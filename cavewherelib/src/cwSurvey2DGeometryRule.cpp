@@ -31,7 +31,17 @@ void cwSurvey2DGeometryRule::setSurveyNetwork(
     cwSurveyNetworkArtifact* surveyNetwork)
 {
     if (m_surveyNetwork != surveyNetwork) {
+        if(m_surveyNetwork) {
+            disconnect(m_surveyNetwork, nullptr, this, nullptr);
+        }
+
         m_surveyNetwork = surveyNetwork;
+
+        if(m_surveyNetwork) {
+            connect(m_surveyNetwork, &cwSurveyNetworkArtifact::surveyNetworkChanged,
+                    this, &cwSurvey2DGeometryRule::updateGeometry);
+        }
+
         emit surveyNetworkChanged();
     }
 }
@@ -44,7 +54,17 @@ cwMatrix4x4Artifact* cwSurvey2DGeometryRule::viewMatrix() const
 void cwSurvey2DGeometryRule::setViewMatrix(cwMatrix4x4Artifact *viewMatrix)
 {
     if (m_viewMatrix != viewMatrix) {
+        if(m_viewMatrix) {
+            disconnect(m_viewMatrix, nullptr, this, nullptr);
+        }
+
         m_viewMatrix = viewMatrix;
+
+        if(m_viewMatrix) {
+            connect(m_viewMatrix, &cwMatrix4x4Artifact::matrix4x4Changed,
+                    this, &cwSurvey2DGeometryRule::updateGeometry);
+        }
+
         emit viewMatrixChanged();
     }
 }
