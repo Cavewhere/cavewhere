@@ -39,7 +39,7 @@ QList<int> supportedSampleCounts() {
 
 int sampleCount() {
     auto supported = supportedSampleCounts();
-    int wantedSampleCount = 4; //MSAA 4x4
+    int wantedSampleCount = 2; //MSAA 4x4, has issues on ios resize
     if(supported.contains(wantedSampleCount)) {
         return wantedSampleCount;
     } else if (!supported.isEmpty()) {
