@@ -88,6 +88,9 @@ QQ.Item {
     }
 
     function openEditor() {
+        //Open the virtual keyboard if any
+        Qt.inputMethod.show()
+
         clickTextInput.startedEditting()
 
         textAreaId.visible = false

@@ -204,12 +204,12 @@ void cwSurveyNetworkBuilderRule::updatePipeline()
 
 
                 // --- Pass 2: Breath First Search from root to assign positions ---
-                std::queue<QString> frontier;
-                frontier.push(firstValidStation);
+                QQueue<QString> frontier;
+                frontier.enqueue(firstValidStation);
 
                 while (!frontier.empty()) {
                     QString current = frontier.front();
-                    frontier.pop();
+                    frontier.dequeue();
 
                     const auto neigbors = network.neighbors(current);
                     for (auto const& neighbor : neigbors) {
@@ -223,7 +223,7 @@ void cwSurveyNetworkBuilderRule::updatePipeline()
                         QVector3D currentPos = network.position(current);
                         QVector3D vector = shotVectors.vector(current, neighbor);
                         network.setPosition(neighbor, currentPos + vector);
-                        frontier.push(neighbor);
+                        frontier.enqueue(neighbor);
                     }
                 }
 
