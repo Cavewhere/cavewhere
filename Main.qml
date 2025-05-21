@@ -10,11 +10,23 @@ Window {
     width: 640
     height: 480
     visible: true
+
+    //Test if
+    visibility: Qt.platform.os === "ios"
+                // || Qt.platform.os === "android"
+                ? Window.FullScreen
+                : Window.AutomaticVisibility
     title: qsTr("Hello World")
 
     function fuzzyEquals(value1, value2) {
         return Math.abs(value1 - value2) <= 0.0001;
     }
+
+    // ScreenSizeSaver {
+    //     id: screenSizeSaverId
+    //     window: windowId
+    //     windowName: "mainWindow"
+    // }
 
     RowLayout {
         id: toolBar
@@ -93,8 +105,5 @@ Window {
         // RootData.pageSelectionModel.registerPage(null, "Settings", settingsPageComponent)
         // RootData.pageSelectionModel.registerPage(null, "Pipeline", pipelinePageComponent)
         RootData.pageSelectionModel.gotoPage(sketchPage);
-
-        // mainContentId.renderer = pageView.pageItem(viewPage).renderer;
     }
-
 }
