@@ -54,8 +54,7 @@ int CenterlinePainterModel::rowCount(const QModelIndex &parent) const
     return m_paths.size();
 }
 
-const AbstractPainterPathModel::Path&
-CenterlinePainterModel::path(const QModelIndex &index) const
+AbstractPainterPathModel::Path CenterlinePainterModel::path(const QModelIndex &index) const
 {
     return m_paths.at(index.row());
 }

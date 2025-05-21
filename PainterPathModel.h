@@ -61,7 +61,7 @@ public:
     }
 
 protected:
-    const Path &path(const QModelIndex &index) const override;
+    Path path(const QModelIndex &index) const override;
 
 
 signals:

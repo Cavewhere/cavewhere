@@ -52,6 +52,7 @@ qt_add_qml_module(cavewhere_sketch
         QML_FILES SketchPage.qml
         TripCompactPage.qml
         QML_FILES ShapePathInstantiator.qml
+        SOURCES InfiniteGridModel.h InfiniteGridModel.cpp
 )
 
 # Generate the export header for windows

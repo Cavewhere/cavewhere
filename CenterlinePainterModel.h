@@ -32,7 +32,7 @@ private slots:
 
 private:
     // implement base’s pure virtual
-    const Path& path(const QModelIndex &index) const override;
+    Path path(const QModelIndex &index) const override;
 
     QPointer<cwSurvey2DGeometryArtifact> m_geometryArtifact;
 

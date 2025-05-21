@@ -2,6 +2,7 @@
 
 #include <QAbstractListModel>
 #include <QPainterPath>
+#include <QColor>
 
 namespace cwSketch {
 
@@ -17,6 +18,7 @@ public:
     enum Roles {
         PainterPathRole = Qt::UserRole + 1,
         StrokeWidthRole,
+        StrokeColorRole,
     };
 
     // Make these pure virtual so derived classes must implement them
@@ -29,10 +31,11 @@ protected:
     struct Path {
         QPainterPath painterPath;
         double strokeWidth;
+        QColor strokeColor;
     };
 
     //Subclass should implement this to access the current path
-    virtual const Path& path(const QModelIndex& index) const = 0;
+    virtual Path path(const QModelIndex& index) const = 0;
 };
 
 };

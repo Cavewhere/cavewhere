@@ -812,7 +812,7 @@ QVector<PenPoint> PainterPathModel::smoothPressure(const QVector<PenPoint>& poin
 
 
 
-const AbstractPainterPathModel::Path &PainterPathModel::path(const QModelIndex &index) const
+AbstractPainterPathModel::Path PainterPathModel::path(const QModelIndex &index) const
 {
     if (index.row() == 0) {
         return m_activePath;
