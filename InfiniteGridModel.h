@@ -26,10 +26,13 @@ class InfiniteGridModel : public AbstractPainterPathModel
 
     Q_PROPERTY(QMatrix4x4 mapMatrix READ mapMatrix WRITE setMapMatrix NOTIFY mapMatrixChanged BINDABLE bindableMapMatrix)
     Q_PROPERTY(QRectF viewport READ viewport WRITE setViewport NOTIFY viewportChanged BINDABLE bindableViewport)
+    Q_PROPERTY(QPointF origin READ origin WRITE setOrigin NOTIFY originChanged BINDABLE bindableOrigin)
+
 
     Q_PROPERTY(bool labelVisible READ labelVisible WRITE setLabelVisible NOTIFY labelVisibleChanged BINDABLE bindableLabelVisible)
     Q_PROPERTY(QColor labelColor READ labelColor WRITE setLabelColor NOTIFY labelColorChanged BINDABLE bindableLabelColor)
     Q_PROPERTY(QFont labelFont READ labelFont WRITE setLabelFont NOTIFY labelFontChanged BINDABLE bindableLabelFont)
+    Q_PROPERTY(double labelScale READ labelScale WRITE setLabelScale NOTIFY labelScaleChanged BINDABLE bindableLabelScale)
 
 public:
     explicit InfiniteGridModel(QObject* parent = nullptr);
@@ -59,6 +62,11 @@ public:
     void setViewport(const QRectF& rect) { m_viewport = rect; }
     QBindable<QRectF> bindableViewport() { return &m_viewport; }
 
+    //In map pixel where (0, 0) is in world coordinates
+    QPointF origin() const { return m_origin; }
+    void setOrigin(const QPointF& origin) { m_origin = origin; }
+    QBindable<QPointF> bindableOrigin() { return &m_origin; }
+
     // Label properties
     bool labelVisible() const { return m_labelVisible; }
     void setLabelVisible(bool visible) { m_labelVisible = visible; }
@@ -72,15 +80,22 @@ public:
     void setLabelFont(const QFont& font) { m_labelFont = font; }
     QBindable<QFont> bindableLabelFont() { return &m_labelFont; }
 
+    double labelScale() const { return m_labelScale; }
+    void setLabelScale(double labelScale) { m_labelScale = labelScale; }
+    QBindable<double> bindableLabelScale() { return &m_labelScale; }
+
+
 signals:
     void gridVisibleChanged();
     void lineWidthChanged();
     void lineColorChanged();
     void mapMatrixChanged();
     void viewportChanged();
+    void originChanged();
     void labelVisibleChanged();
     void labelColorChanged();
     void labelFontChanged();
+    void labelScaleChanged();
 
 protected:
     Path path(const QModelIndex& index) const override;
@@ -97,10 +112,12 @@ private:
 
     Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, QMatrix4x4, m_mapMatrix, &InfiniteGridModel::mapMatrixChanged)
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QRectF, m_viewport, QRectF(), &InfiniteGridModel::viewportChanged)
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QPointF, m_origin, QPointF(), &InfiniteGridModel::originChanged);
 
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, bool, m_labelVisible, true, &InfiniteGridModel::labelVisibleChanged)
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QColor, m_labelColor, QColor(0x88, 0x88, 0x88), &InfiniteGridModel::labelColorChanged)
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QFont, m_labelFont, QFont(), &InfiniteGridModel::labelFontChanged)
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_labelScale, 1.0, &InfiniteGridModel::labelScaleChanged);
 
     struct GridLine {
         double position; //Position on the map
@@ -112,6 +129,7 @@ private:
     Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, QVector<GridLine>, m_yGridLines);
     Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, QPainterPath, m_gridPath);
     Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, QPainterPath, m_labelsPath);
+    Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, QFont, m_scaledFont);
 
     QPropertyNotifier m_gridVisibleNotifier;
     QPropertyNotifier m_labelVisibleNotifier;
@@ -123,6 +141,9 @@ private:
     QPropertyNotifier m_labelFontNotifier;
     QPropertyNotifier m_gridPathNotifier;
     QPropertyNotifier m_labelsPathNotifier;
+
+    QPropertyNotifier m_fixedScaleFontNotifier;
+
 
 };
 

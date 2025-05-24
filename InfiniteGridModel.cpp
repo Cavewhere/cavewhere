@@ -17,7 +17,9 @@ cwSketch::InfiniteGridModel::InfiniteGridModel(QObject *parent) :
         return 1;
     });
 
-    auto gridLines = [this](double left, double right, double scale) {
+
+
+    auto gridLines = [this](double left, double right, double origin, double scale) {
         QVector<GridLine> positions;
 
         // nothing to do if grid is hidden or interval/scale invalid
@@ -33,23 +35,35 @@ cwSketch::InfiniteGridModel::InfiniteGridModel(QObject *parent) :
         }
 
         //Convert from pixel to meters in cave
-        double leftMeter = (left) / scale;
-        double rightMeter = (right) / scale;
+        double originMeter = origin / scale;
+        double leftMeter = left / scale;
+        double rightMeter = right / scale;
 
         double flipped = leftMeter > rightMeter ? -1.0 : 1.0;
 
-        // first grid line at or before left edge
-        int count = static_cast<int>(fabs(rightMeter - leftMeter) / interval) + 1;
+        leftMeter *= flipped;
+        rightMeter *= flipped;
+
+        //Clamp to the nearest interval gridline
+        int leftCount = leftMeter / interval;
+        int rightCount = rightMeter / interval;
+
+        Q_ASSERT(leftMeter <= rightMeter);
+
+        int count = rightCount - leftCount + 1;
         positions.reserve(count);
 
-        leftMeter = leftMeter * flipped;
+        //Clamp to the nearest interval gridline
+        leftMeter = leftCount * interval;
 
         // generate: world → pixel
-        // qDebug() << "Lines:" << leftMeter << "right m:" << right << "scale:" << scale << "count:" << count << "interval:" << interval;
+        // qDebug() << "Lines: left(m):" << leftMeter << "right(m):" << right << "scale:" << scale << "count:" << count << "interval:" << interval << "origin:" << origin;
         for(int i = 0; i < count; ++i) {
+            double positionInMeters = (leftMeter + i * interval) * flipped;
+
             const GridLine gridLine {
-                (leftMeter + i * interval) * scale * flipped, //in map pixels
-                i * interval * flipped //in cave units
+                positionInMeters * scale, //in map pixels
+                positionInMeters //in cave units
             };
 
             positions.append(gridLine);
@@ -63,8 +77,8 @@ cwSketch::InfiniteGridModel::InfiniteGridModel(QObject *parent) :
         auto viewport = m_viewport.value();
         auto mapMatrix = m_mapMatrix.value();
         const double xScale = mapMatrix(0,0);
-        qDebug() << "xGridLines:";
-        return gridLines(viewport.left(), viewport.right(), xScale);
+        qDebug() << "xGridLines:" << viewport.left() << viewport.right();
+        return gridLines(viewport.left(), viewport.right(), m_origin.value().x(), xScale);
     });
 
     m_yGridLines.setBinding([this, gridLines]() {
@@ -72,7 +86,7 @@ cwSketch::InfiniteGridModel::InfiniteGridModel(QObject *parent) :
         auto mapMatrix = m_mapMatrix.value();
         const double yScale = mapMatrix(1,1);
         qDebug() << "yGridLines:";
-        return gridLines(viewport.top(), viewport.bottom(), yScale);
+        return gridLines(viewport.top(), viewport.bottom(), m_origin.value().y(), yScale);
     });
 
     m_gridPath.setBinding([this]() {
@@ -96,27 +110,42 @@ cwSketch::InfiniteGridModel::InfiniteGridModel(QObject *parent) :
 
     m_labelsPath.setBinding([this]() {
         QPainterPath painterPath;
+
+        // qDebug() << "I get here!";
         if(m_labelVisible.value()) {
             const auto viewport = m_viewport.value();
             const auto xGridLines = m_xGridLines.value();
+
+            const QFont font = m_scaledFont.value();
+            QFontMetricsF fontMetrics(font);
+
 
             auto toString = [](double num) {
                 return QString::number(num);
             };
 
             for(const GridLine& xValue: xGridLines) {
-                painterPath.addText(QPointF(xValue.position, viewport.top()), m_labelFont, toString(xValue.value));
-                painterPath.addText(QPointF(xValue.position, viewport.bottom()), m_labelFont, toString(xValue.value));
+                const QString label = toString(xValue.value);
+                const QRectF bounds = fontMetrics.boundingRect(label);
+                // painterPath.addText(QPointF(bounds.center().x() + xValue.position, viewport.top()), font, label);
+                painterPath.addText(QPointF(xValue.position - bounds.center().x(), viewport.bottom()), font, label);
             }
 
             const auto yGridLines = m_yGridLines.value();
+            const double centerY = fontMetrics.boundingRect('0').height() * 0.5; //height() function doesn't give good results, use boundingbox instead
             for(const GridLine& yValue : yGridLines) {
-
-                painterPath.addText(QPointF(viewport.left(), yValue.position), m_labelFont, toString(yValue.value));
-                painterPath.addText(QPointF(viewport.right(), yValue.position), m_labelFont, toString(yValue.value));
+                const QString label = toString(yValue.value);
+                painterPath.addText(QPointF(viewport.left(), yValue.position + centerY), font, label);
+                // painterPath.addText(QPointF(viewport.right(), yValue.position), font, toString(yValue.value));
             }
         }
         return painterPath;
+    });
+
+    m_scaledFont.setBinding([this]() {
+        auto font = m_labelFont.value();
+        font.setPointSizeF(m_labelScale.value() * font.pointSizeF());
+        return font;
     });
 
     m_gridVisibleNotifier = m_gridVisible.addNotifier([this]() {
@@ -138,6 +167,8 @@ cwSketch::InfiniteGridModel::InfiniteGridModel(QObject *parent) :
             endRemoveRows();
         }
     });
+
+
 
     // Notify when line width changes (grid stroke width role)
     m_lineWidthNotifier = m_lineWidth.addNotifier([this]() {

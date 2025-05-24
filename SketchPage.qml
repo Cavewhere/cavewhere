@@ -39,22 +39,25 @@ StandardPage {
     InfiniteGridModel {
         id: majorGridModel
         viewport: containerId.viewport
+        origin: minorGridModel.origin
         lineColor: "#1eb6dd"
         gridInterval.value: 5.0
-
         mapMatrix: worldToScreenId.matrix
+
+        //Keeps the font size the same when zooming in and out
+        labelScale: 1.0 / containerId.scale
     }
 
     InfiniteGridModel {
         id: minorGridModel
         viewport: containerId.viewport
-        lineColor: "#5dcae7"
+        origin: Qt.point(containerId.x, containerId.y);
+        lineColor: "#005dcae7"
         lineWidth: 0.5
         labelVisible: false
-
         gridInterval.value: 1.0
-
         mapMatrix: worldToScreenId.matrix
+
     }
 
     WorldToScreenMatrix {
@@ -275,7 +278,6 @@ StandardPage {
         property rect viewport; //: sketchPageId.mapToItem(containerId, 0, 0, sketchPageId.width, sketchPageId.height)
 
         function updateViewport() {
-            // viewport = Qt.rect(-500, -500, 1000, 1000);
             viewport = sketchPageId.mapToItem(containerId, 0, 0, sketchPageId.width, sketchPageId.height)
         }
 
