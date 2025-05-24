@@ -19,6 +19,7 @@ Repeater {
 
         required property double strokeWidthRole
         required property var painterPath
+        required property color strokeColorRole
 
         // DebugRectangle {
 
@@ -29,10 +30,10 @@ Repeater {
             // parent: shapeId
             painterPath: shapeId.painterPath
             pathHints: ShapePath.PathLinear
-            strokeColor: shapeId.strokeWidthRole > 0 ? "black" : "transparent"
+            strokeColor: shapeId.strokeWidthRole > 0 ? shapeId.strokeColorRole : "transparent"
             // strokeColor: shapeId.strokeWidthRole > 0 ? "black" : "red" //For Debugging
             // fillColor: shapeId.strokeWidthRole > 0 ? "lightgray" : "black"
-            fillColor: shapeId.strokeWidthRole > 0 ? "transparent" : "black"
+            fillColor: shapeId.strokeWidthRole > 0 ? "transparent" : shapeId.strokeColorRole
             capStyle: ShapePath.RoundCap
             fillRule: ShapePath.WindingFill
             // strokeWidth: shapeId.strokeWidthRole < 0 ? 0.1 : shapeId.strokeWidthRole //For Debugging

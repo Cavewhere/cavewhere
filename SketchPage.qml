@@ -2,12 +2,19 @@ import QtQuick
 import QtQuick.Shapes
 import QtQuick.Controls as QC
 import QtQuick.Layouts
+import QtQuick.Window
 import CaveWhereSketch
 import cavewherelib
 
 StandardPage {
     id: sketchPageId
     clip: true
+
+    // property double dpi: windowId.dpi
+
+    // onDpiChanged: {
+    //     console.log("DPI changed:" + dpi)
+    // }
 
     PenLineModel {
         id: penModel
@@ -29,6 +36,34 @@ StandardPage {
         penLineModel: movingAverageProxyModelId
     }
 
+    InfiniteGridModel {
+        id: majorGridModel
+        viewport: Qt.rect(0, 0, 1000, 1000)
+        lineColor: "#1eb6dd"
+        gridInterval.value: 5.0
+
+        mapMatrix: worldToScreenId.matrix
+    }
+
+    InfiniteGridModel {
+        id: minorGridModel
+        viewport: Qt.rect(0, 0, 1000, 1000)
+        lineColor: "#5dcae7"
+        lineWidth: 0.5
+        labelVisible: false
+
+        gridInterval.value: 1.0
+
+        mapMatrix: worldToScreenId.matrix
+    }
+
+    WorldToScreenMatrix {
+        id: worldToScreenId
+        pixelDensity: Screen.pixelDensity //in mm
+        scale.scaleNumerator.value: 1
+        scale.scaleDenominator.value: 250
+    }
+
     QC.ButtonGroup {
         id: strokeWidthGroupId
     }
@@ -36,7 +71,6 @@ StandardPage {
     QC.GroupBox {
         title: "Stroke Width"
         z: 1
-        opacity: 0.5
 
 
         ColumnLayout {
@@ -174,7 +208,7 @@ StandardPage {
         parent: sketchPageId
         target: containerId
         rotationAxis.enabled: false
-        scaleAxis.enabled: false
+        // scaleAxis.enabled: false
     }
 
     ExclusivePointHandler {
@@ -253,6 +287,16 @@ StandardPage {
 
         ShapePathInstantiator {
             anchors.fill: parent
+            model: minorGridModel
+        }
+
+        ShapePathInstantiator {
+            anchors.fill: parent
+            model: majorGridModel
+        }
+
+        ShapePathInstantiator {
+            anchors.fill: parent
             model: RootDataSketch.centerlinePainterModel
             // shape: centerline
         }
@@ -262,31 +306,6 @@ StandardPage {
             model: painterPathModel
             // shape: shapeId
         }
-
-        // Shape {
-        //     id: centerline
-        //     anchors.fill: parent
-
-        // }
-
-        // Shape {
-        //     id: shapeId
-        //     anchors.fill: parent
-
-        //     // preferredRendererType: Shape.CurveRenderer
-        //     // asynchronous: true
-
-        //     // SketchShapePath {
-
-        //     // }
-
-        //     // preferredRendererType: Shape.SoftwareRenderer
-
-        //     ShapePathInstantiator {
-        //         model: painterPathModel
-        //         shape: shapeId
-        //     }
-        // }
     }
 
 }

@@ -11,6 +11,12 @@ Window {
     height: 480
     visible: true
 
+    // property double dpi: screen.physicalDotsPerInch
+
+    // onDpiChanged: {
+    //     console.log("DPI changed:" + dpi)
+    // }
+
     //Test if
     visibility: Qt.platform.os === "ios"
                 // || Qt.platform.os === "android"
@@ -105,5 +111,10 @@ Window {
         // RootData.pageSelectionModel.registerPage(null, "Settings", settingsPageComponent)
         // RootData.pageSelectionModel.registerPage(null, "Pipeline", pipelinePageComponent)
         RootData.pageSelectionModel.gotoPage(sketchPage);
+
+        // Component.onCompleted: {
+            // console.log("Logical DPI:", Screen.pixelDensity)
+            // console.log("Physical DPI:", Screen.physicalDotsPerInch)
+        // }
     }
 }

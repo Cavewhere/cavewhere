@@ -2,6 +2,12 @@ cmake_minimum_required(VERSION 3.23)
 
 project(CaveWhereSketch VERSION 0.1 LANGUAGES CXX)
 
+#Add address sanitizer for clang build only
+if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    add_compile_options($<$<CONFIG:Debug>:-fsanitize=address>)
+    add_link_options($<$<CONFIG:Debug>:-fsanitize=address>)
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(QT_QML_GENERATE_QMLLS_INI ON CACHE BOOL "Generate QMLLS INI file")
@@ -53,6 +59,7 @@ qt_add_qml_module(cavewhere_sketch
         TripCompactPage.qml
         QML_FILES ShapePathInstantiator.qml
         SOURCES InfiniteGridModel.h InfiniteGridModel.cpp
+        SOURCES WorldToScreenMatrix.h WorldToScreenMatrix.cpp
 )
 
 # Generate the export header for windows
@@ -113,7 +120,9 @@ target_compile_definitions(cavewhere_sketch
 
 
 qt_add_executable(cavewhere-sketch-test
-    testcases/test_CenterlinePainterModel.cpp)
+    testcases/test_CenterlinePainterModel.cpp
+    testcases/test_InfiniteGridModel.cpp
+    testcases/test_WorldToScreenMatrix.cpp)
 
 set_target_properties(cavewhere-sketch-test PROPERTIES
     AUTOMOC ON

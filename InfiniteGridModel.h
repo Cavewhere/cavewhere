@@ -9,20 +9,22 @@
 #include <QColor>
 #include <QFont>
 #include <QObjectBindableProperty>
-#include <array>
+#include <QQmlEngine>
+#include <QMatrix4x4>
 
 namespace cwSketch {
 
 class InfiniteGridModel : public AbstractPainterPathModel
 {
     Q_OBJECT
+    QML_ELEMENT
 
     Q_PROPERTY(bool gridVisible READ gridVisible WRITE setGridVisible NOTIFY gridVisibleChanged BINDABLE bindableGridVisible)
     Q_PROPERTY(double lineWidth READ lineWidth WRITE setLineWidth NOTIFY lineWidthChanged BINDABLE bindableLineWidth)
     Q_PROPERTY(QColor lineColor READ lineColor WRITE setLineColor NOTIFY lineColorChanged BINDABLE bindableLineColor)
     Q_PROPERTY(cwLength* gridInterval READ gridInterval CONSTANT)
 
-    Q_PROPERTY(double mapScale READ mapScale WRITE setMapScale NOTIFY mapScaleChanged BINDABLE bindableMapScale)
+    Q_PROPERTY(QMatrix4x4 mapMatrix READ mapMatrix WRITE setMapMatrix NOTIFY mapMatrixChanged BINDABLE bindableMapMatrix)
     Q_PROPERTY(QRectF viewport READ viewport WRITE setViewport NOTIFY viewportChanged BINDABLE bindableViewport)
 
     Q_PROPERTY(bool labelVisible READ labelVisible WRITE setLabelVisible NOTIFY labelVisibleChanged BINDABLE bindableLabelVisible)
@@ -32,7 +34,7 @@ class InfiniteGridModel : public AbstractPainterPathModel
 public:
     explicit InfiniteGridModel(QObject* parent = nullptr);
 
-    int rowCount(const QModelIndex& parent = QModelIndex()) const override { Q_UNUSED(parent); return 2; }
+    int rowCount(const QModelIndex& parent = QModelIndex()) const override;
 
     // Grid properties
     bool gridVisible() const { return m_gridVisible; }
@@ -49,9 +51,9 @@ public:
 
     cwLength* gridInterval() const { return m_gridInterval; }
 
-    double mapScale() const { return m_mapScale; }
-    void setMapScale(double scale) { m_mapScale = scale; }
-    QBindable<double> bindableMapScale() { return &m_mapScale; }
+    QMatrix4x4 mapMatrix() const { return m_mapMatrix; }
+    void setMapMatrix(const QMatrix4x4& mapMatrix) { m_mapMatrix = mapMatrix; }
+    QBindable<double> bindableMapMatrix() { return &m_mapMatrix; }
 
     QRectF viewport() const { return m_viewport; }
     void setViewport(const QRectF& rect) { m_viewport = rect; }
@@ -71,14 +73,14 @@ public:
     QBindable<QFont> bindableLabelFont() { return &m_labelFont; }
 
 signals:
-    void gridVisibleChanged(bool);
-    void lineWidthChanged(double);
-    void lineColorChanged(const QColor&);
-    void mapScaleChanged(double);
-    void viewportChanged(const QRectF&);
-    void labelVisibleChanged(bool);
-    void labelColorChanged(const QColor&);
-    void labelFontChanged(const QFont&);
+    void gridVisibleChanged();
+    void lineWidthChanged();
+    void lineColorChanged();
+    void mapMatrixChanged();
+    void viewportChanged();
+    void labelVisibleChanged();
+    void labelColorChanged();
+    void labelFontChanged();
 
 protected:
     Path path(const QModelIndex& index) const override;
@@ -93,18 +95,26 @@ private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_lineWidth, 1.0, &InfiniteGridModel::lineWidthChanged)
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QColor, m_lineColor, QColor(0xCC, 0xCC, 0xCC), &InfiniteGridModel::lineColorChanged)
 
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_mapScale, 50.0, &InfiniteGridModel::mapScaleChanged)
+    Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, QMatrix4x4, m_mapMatrix, &InfiniteGridModel::mapMatrixChanged)
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QRectF, m_viewport, QRectF(), &InfiniteGridModel::viewportChanged)
 
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, bool, m_labelVisible, true, &InfiniteGridModel::labelVisibleChanged)
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QColor, m_labelColor, QColor(0x88, 0x88, 0x88), &InfiniteGridModel::labelColorChanged)
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QFont, m_labelFont, QFont(), &InfiniteGridModel::labelFontChanged)
 
+    struct GridLine {
+        double position; //Position on the map
+        double value; //The cave distance label
+    };
+
     Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, int, m_size); //Number of paths in the model, will 0, 1, or 2
-    Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, QVector<double>, m_xGridLines);
-    Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, QVector<double>, m_yGridLines);
+    Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, QVector<GridLine>, m_xGridLines);
+    Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, QVector<GridLine>, m_yGridLines);
     Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, QPainterPath, m_gridPath);
     Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, QPainterPath, m_labelsPath);
+
+    QPropertyNotifier m_gridVisibleNotifier;
+    QPropertyNotifier m_labelVisibleNotifier;
 };
 
 } // namespace cwSketch
