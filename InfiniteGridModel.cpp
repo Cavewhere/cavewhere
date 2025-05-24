@@ -33,26 +33,27 @@ cwSketch::InfiniteGridModel::InfiniteGridModel(QObject *parent) :
         }
 
         //Convert from pixel to meters in cave
-        double leftMeter = left / scale;
-        double rightMeter = right / scale;
+        double leftMeter = (left) / scale;
+        double rightMeter = (right) / scale;
 
         double flipped = leftMeter > rightMeter ? -1.0 : 1.0;
-
 
         // first grid line at or before left edge
         int count = static_cast<int>(fabs(rightMeter - leftMeter) / interval) + 1;
         positions.reserve(count);
 
+        leftMeter = leftMeter * flipped;
+
         // generate: world → pixel
-        qDebug() << "Lines:" << leftMeter << "right m:" << right << "scale:" << scale << "count:" << count << "interval:" << interval;
+        // qDebug() << "Lines:" << leftMeter << "right m:" << right << "scale:" << scale << "count:" << count << "interval:" << interval;
         for(int i = 0; i < count; ++i) {
             const GridLine gridLine {
-                (left + i * interval) * scale * flipped,
-                i * interval * flipped
+                (leftMeter + i * interval) * scale * flipped, //in map pixels
+                i * interval * flipped //in cave units
             };
 
             positions.append(gridLine);
-            qDebug() << "Position:" << positions.last().position;
+            // qDebug() << "Position:" << positions.last().position;
         }
 
         return positions;
@@ -62,6 +63,7 @@ cwSketch::InfiniteGridModel::InfiniteGridModel(QObject *parent) :
         auto viewport = m_viewport.value();
         auto mapMatrix = m_mapMatrix.value();
         const double xScale = mapMatrix(0,0);
+        qDebug() << "xGridLines:";
         return gridLines(viewport.left(), viewport.right(), xScale);
     });
 
@@ -69,6 +71,7 @@ cwSketch::InfiniteGridModel::InfiniteGridModel(QObject *parent) :
         auto viewport = m_viewport.value();
         auto mapMatrix = m_mapMatrix.value();
         const double yScale = mapMatrix(1,1);
+        qDebug() << "yGridLines:";
         return gridLines(viewport.top(), viewport.bottom(), yScale);
     });
 
@@ -136,6 +139,38 @@ cwSketch::InfiniteGridModel::InfiniteGridModel(QObject *parent) :
         }
     });
 
+    // Notify when line width changes (grid stroke width role)
+    m_lineWidthNotifier = m_lineWidth.addNotifier([this]() {
+        QModelIndex idx = index(0, 0);
+        emit dataChanged(idx, idx, { StrokeWidthRole });
+    });
+
+    // Notify when line color changes (grid stroke color role)
+    m_lineColorNotifier = m_lineColor.addNotifier([this]() {
+        QModelIndex idx = index(0, 0);
+        emit dataChanged(idx, idx, { StrokeColorRole });
+    });
+
+    // Notify when label color changes (label stroke color role)
+    m_labelColorNotifier = m_labelColor.addNotifier([this]() {
+        // label row is 1 when grid is visible, otherwise 0
+        int row = m_gridVisible ? 1 : 0;
+        QModelIndex idx = index(row, 0);
+        emit dataChanged(idx, idx, { StrokeColorRole });
+    });
+
+    // Notify when grid geometry/path changes (grid painter path role)
+    m_gridPathNotifier = m_gridPath.addNotifier([this]() {
+        QModelIndex idx = index(0, 0);
+        emit dataChanged(idx, idx, { PainterPathRole });
+    });
+
+    // Notify when labels geometry/path changes (label painter path role)
+    m_labelsPathNotifier = m_labelsPath.addNotifier([this]() {
+        int row = m_gridVisible ? 1 : 0;
+        QModelIndex idx = index(row, 0);
+        emit dataChanged(idx, idx, { PainterPathRole });
+    });
 }
 
 int cwSketch::InfiniteGridModel::rowCount(const QModelIndex &parent) const {

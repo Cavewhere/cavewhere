@@ -24,6 +24,9 @@ TEST_CASE("Default property values", "[InfiniteGridModel]") {
     // Basic model structure
     REQUIRE(model.rowCount() == 2);
 
+    QMatrix4x4 defaultMatrix;
+    REQUIRE(model.mapMatrix() == defaultMatrix);
+
     // Grid defaults
     REQUIRE(model.gridVisible() == true);
     REQUIRE(model.bindableGridVisible().value() == true);
@@ -205,4 +208,93 @@ TEST_CASE("Grid row availability toggles with labelVisible", "[InfiniteGridModel
     idx1 = model.index(1,0);
     p1 = model.data(idx1, AbstractPainterPathModel::PainterPathRole).value<QPainterPath>();
     CHECK(p1.elementCount() == labelCount );
+}
+
+TEST_CASE("dataChanged signals on property updates", "[InfiniteGridModel][dataChanged]") {
+    InfiniteGridModel model;
+    model.setViewport(QRectF(0,0,20,20));
+
+    QSignalSpy spy(&model, &QAbstractItemModel::dataChanged);
+
+    SECTION("lineWidth emits StrokeWidthRole for grid row") {
+        spy.clear();
+        model.setLineWidth(2.5);
+        REQUIRE(spy.count() == 1);
+        auto args = spy.takeFirst();
+        REQUIRE(args.at(0).value<QModelIndex>() == model.index(0,0));
+        REQUIRE(args.at(1).value<QModelIndex>() == model.index(0,0));
+        auto roles = args.at(2).value<QVector<int>>();
+        REQUIRE(roles.contains(AbstractPainterPathModel::StrokeWidthRole));
+        REQUIRE(roles.size() == 1);
+    }
+
+    SECTION("lineColor emits StrokeColorRole for grid row") {
+        spy.clear();
+        model.setLineColor(Qt::red);
+        REQUIRE(spy.count() == 1);
+        auto args = spy.takeFirst();
+        REQUIRE(args.at(0).value<QModelIndex>() == model.index(0,0));
+        auto roles = args.at(2).value<QVector<int>>();
+        REQUIRE(roles.contains(AbstractPainterPathModel::StrokeColorRole));
+    }
+
+    SECTION("labelColor emits StrokeColorRole for label row") {
+        spy.clear();
+        model.setLabelColor(Qt::blue);
+        REQUIRE(spy.count() == 1);
+        auto args = spy.takeFirst();
+        REQUIRE(args.at(0).value<QModelIndex>() == model.index(1,0));
+        auto roles = args.at(2).value<QVector<int>>();
+        REQUIRE(roles.contains(AbstractPainterPathModel::StrokeColorRole));
+    }
+
+    SECTION("labelFont emits PainterPathRole for label row") {
+        spy.clear();
+        QFont font("Arial",14);
+        model.setLabelFont(font);
+        REQUIRE(spy.count() == 1);
+        auto args = spy.takeFirst();
+        REQUIRE(args.at(0).value<QModelIndex>() == model.index(1,0));
+        auto roles = args.at(2).value<QVector<int>>();
+        REQUIRE(roles.contains(AbstractPainterPathModel::PainterPathRole));
+    }
+
+    SECTION("viewport change emits PainterPathRole for each row separately") {
+        spy.clear();
+        model.setViewport(QRectF(0,0,30,30));
+        // two separate signals: one per row
+        REQUIRE(spy.count() == 2);
+        // First signal for grid
+        auto args0 = spy.takeFirst();
+        REQUIRE(args0.at(0).value<QModelIndex>() == model.index(0,0));
+        REQUIRE(args0.at(1).value<QModelIndex>() == model.index(0,0));
+        auto roles0 = args0.at(2).value<QVector<int>>();
+        REQUIRE(roles0.contains(AbstractPainterPathModel::PainterPathRole));
+        // Second signal for label
+        auto args1 = spy.takeFirst();
+        REQUIRE(args1.at(0).value<QModelIndex>() == model.index(1,0));
+        REQUIRE(args1.at(1).value<QModelIndex>() == model.index(1,0));
+        auto roles1 = args1.at(2).value<QVector<int>>();
+        REQUIRE(roles1.contains(AbstractPainterPathModel::PainterPathRole));
+    }
+
+    SECTION("mapMatrix change emits PainterPathRole for each row separately") {
+        spy.clear();
+        QMatrix4x4 mat;
+        mat.scale(2.0f, 2.0f, 1.0f);
+        model.setMapMatrix(mat);
+        REQUIRE(spy.count() == 2);
+        // grid row
+        auto margs0 = spy.takeFirst();
+        REQUIRE(margs0.at(0).value<QModelIndex>() == model.index(0,0));
+        REQUIRE(margs0.at(1).value<QModelIndex>() == model.index(0,0));
+        auto mroles0 = margs0.at(2).value<QVector<int>>();
+        REQUIRE(mroles0.contains(AbstractPainterPathModel::PainterPathRole));
+        // label row
+        auto margs1 = spy.takeFirst();
+        REQUIRE(margs1.at(0).value<QModelIndex>() == model.index(1,0));
+        REQUIRE(margs1.at(1).value<QModelIndex>() == model.index(1,0));
+        auto mroles1 = margs1.at(2).value<QVector<int>>();
+        REQUIRE(mroles1.contains(AbstractPainterPathModel::PainterPathRole));
+    }
 }

@@ -38,7 +38,7 @@ StandardPage {
 
     InfiniteGridModel {
         id: majorGridModel
-        viewport: Qt.rect(0, 0, 1000, 1000)
+        viewport: containerId.viewport
         lineColor: "#1eb6dd"
         gridInterval.value: 5.0
 
@@ -47,7 +47,7 @@ StandardPage {
 
     InfiniteGridModel {
         id: minorGridModel
-        viewport: Qt.rect(0, 0, 1000, 1000)
+        viewport: containerId.viewport
         lineColor: "#5dcae7"
         lineWidth: 0.5
         labelVisible: false
@@ -271,13 +271,26 @@ StandardPage {
         width: 1000
         height: 1000
 
+        // property Qt.point pos:
+        property rect viewport; //: sketchPageId.mapToItem(containerId, 0, 0, sketchPageId.width, sketchPageId.height)
 
-        // Rectangle {
-        //     // opacity: .5
-        //     anchors.fill: parent
-        //     // color: "red"
-        //     border.width: 5
-        // }
+        function updateViewport() {
+            // viewport = Qt.rect(-500, -500, 1000, 1000);
+            viewport = sketchPageId.mapToItem(containerId, 0, 0, sketchPageId.width, sketchPageId.height)
+        }
+
+        onViewportChanged: {
+            console.log("Viewport changed:" + viewport)
+        }
+
+        //Start off in the center, PinchHandler remove this binding
+        x: sketchPageId.width * 0.5
+        y: sketchPageId.height * 0.5
+
+        onScaleChanged: updateViewport();
+        onXChanged: updateViewport();
+        onYChanged: updateViewport();
+
 
         Rectangle {
             width: 5

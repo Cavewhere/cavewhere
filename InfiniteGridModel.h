@@ -115,6 +115,15 @@ private:
 
     QPropertyNotifier m_gridVisibleNotifier;
     QPropertyNotifier m_labelVisibleNotifier;
+
+    //dataChanged updates
+    QPropertyNotifier m_lineWidthNotifier;
+    QPropertyNotifier m_lineColorNotifier;
+    QPropertyNotifier m_labelColorNotifier;
+    QPropertyNotifier m_labelFontNotifier;
+    QPropertyNotifier m_gridPathNotifier;
+    QPropertyNotifier m_labelsPathNotifier;
+
 };
 
 } // namespace cwSketch
