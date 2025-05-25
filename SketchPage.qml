@@ -41,6 +41,7 @@ StandardPage {
         viewport: containerId.viewport
         origin: minorGridModel.origin
         lineColor: "#1eb6dd"
+        labelColor: "#178ba8"
         gridInterval.value: 5.0
         mapMatrix: worldToScreenId.matrix
 
@@ -52,7 +53,7 @@ StandardPage {
         id: minorGridModel
         viewport: containerId.viewport
         origin: Qt.point(containerId.x, containerId.y);
-        lineColor: "#005dcae7"
+        lineColor: "#5dcae7"
         lineWidth: 0.5
         labelVisible: false
         gridInterval.value: 1.0

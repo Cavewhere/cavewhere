@@ -32,6 +32,9 @@ class InfiniteGridModel : public AbstractPainterPathModel
     Q_PROPERTY(bool labelVisible READ labelVisible WRITE setLabelVisible NOTIFY labelVisibleChanged BINDABLE bindableLabelVisible)
     Q_PROPERTY(QColor labelColor READ labelColor WRITE setLabelColor NOTIFY labelColorChanged BINDABLE bindableLabelColor)
     Q_PROPERTY(QFont labelFont READ labelFont WRITE setLabelFont NOTIFY labelFontChanged BINDABLE bindableLabelFont)
+    Q_PROPERTY(double labelBackgroundMargin READ labelBackgroundMargin WRITE setLabelBackgroundMargin NOTIFY labelBackgroundMarginChanged BINDABLE bindableLabelBackgroundMargin)
+    Q_PROPERTY(QColor labelBackgroundColor READ labelBackgroundColor WRITE setLabelBackgroundColor NOTIFY labelBackgroundColorChanged BINDABLE bindableLabelBackgroundColor)
+
     Q_PROPERTY(double labelScale READ labelScale WRITE setLabelScale NOTIFY labelScaleChanged BINDABLE bindableLabelScale)
 
 public:
@@ -80,6 +83,14 @@ public:
     void setLabelFont(const QFont& font) { m_labelFont = font; }
     QBindable<QFont> bindableLabelFont() { return &m_labelFont; }
 
+    double labelBackgroundMargin() const { return m_labelBackgroundMargin.value(); }
+    void setLabelBackgroundMargin(const double& labelBackgroundMargin) { m_labelBackgroundMargin = labelBackgroundMargin; }
+    QBindable<double> bindableLabelBackgroundMargin() { return &m_labelBackgroundMargin; }
+
+    QColor labelBackgroundColor() const { return m_labelBackgroundColor.value(); }
+    void setLabelBackgroundColor(const QColor& labelBackgroundColor) { m_labelBackgroundColor = labelBackgroundColor; }
+    QBindable<QColor> bindableLabelBackgroundColor() { return &m_labelBackgroundColor; }
+
     double labelScale() const { return m_labelScale; }
     void setLabelScale(double labelScale) { m_labelScale = labelScale; }
     QBindable<double> bindableLabelScale() { return &m_labelScale; }
@@ -96,6 +107,8 @@ signals:
     void labelColorChanged();
     void labelFontChanged();
     void labelScaleChanged();
+    void labelBackgroundMarginChanged();
+    void labelBackgroundColorChanged();
 
 protected:
     Path path(const QModelIndex& index) const override;
@@ -115,20 +128,34 @@ private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QPointF, m_origin, QPointF(), &InfiniteGridModel::originChanged);
 
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, bool, m_labelVisible, true, &InfiniteGridModel::labelVisibleChanged)
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QColor, m_labelColor, QColor(0x88, 0x88, 0x88), &InfiniteGridModel::labelColorChanged)
+    // Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QColor, m_labelColor, QColor(0x88, 0x88, 0x88), &InfiniteGridModel::labelColorChanged)
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QColor, m_labelColor, QColor(0x00, 0x00, 0x00), &InfiniteGridModel::labelColorChanged)
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QFont, m_labelFont, QFont(), &InfiniteGridModel::labelFontChanged)
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_labelBackgroundMargin, 2.0, &InfiniteGridModel::labelBackgroundMarginChanged);
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QColor, m_labelBackgroundColor, Qt::white, &InfiniteGridModel::labelBackgroundColorChanged);
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_labelScale, 1.0, &InfiniteGridModel::labelScaleChanged);
+
+
 
     struct GridLine {
         double position; //Position on the map
         double value; //The cave distance label
     };
 
+    struct GridLabel {
+        QRectF bounds;
+        QString text;
+    };
+
     Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, int, m_size); //Number of paths in the model, will 0, 1, or 2
     Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, QVector<GridLine>, m_xGridLines);
     Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, QVector<GridLine>, m_yGridLines);
     Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, QPainterPath, m_gridPath);
+
+    Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, QVector<GridLabel>, m_gridLabels);
+
     Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, QPainterPath, m_labelsPath);
+    Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, QPainterPath, m_labelBackgroundPath);
     Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, QFont, m_scaledFont);
 
     QPropertyNotifier m_gridVisibleNotifier;
@@ -141,8 +168,7 @@ private:
     QPropertyNotifier m_labelFontNotifier;
     QPropertyNotifier m_gridPathNotifier;
     QPropertyNotifier m_labelsPathNotifier;
-
-    QPropertyNotifier m_fixedScaleFontNotifier;
+    QPropertyNotifier m_labelsBackgroundNotifier;
 
 
 };

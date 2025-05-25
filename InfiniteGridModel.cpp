@@ -11,7 +11,7 @@ cwSketch::InfiniteGridModel::InfiniteGridModel(QObject *parent) :
         }
 
         if(m_labelVisible) {
-            return 2;
+            return 3;
         }
 
         return 1;
@@ -108,13 +108,14 @@ cwSketch::InfiniteGridModel::InfiniteGridModel(QObject *parent) :
         return painterPath;
     });
 
-    m_labelsPath.setBinding([this]() {
-        QPainterPath painterPath;
+    m_gridLabels.setBinding([this]() {
+        QVector<GridLabel> labels;
 
-        // qDebug() << "I get here!";
         if(m_labelVisible.value()) {
+
             const auto viewport = m_viewport.value();
             const auto xGridLines = m_xGridLines.value();
+            const auto yGridLines = m_yGridLines.value();
 
             const QFont font = m_scaledFont.value();
             QFontMetricsF fontMetrics(font);
@@ -124,21 +125,71 @@ cwSketch::InfiniteGridModel::InfiniteGridModel(QObject *parent) :
                 return QString::number(num);
             };
 
+            labels.reserve(xGridLines.size() + yGridLines.size());
+
+            const double zeroHeight = fontMetrics.boundingRect('0').height(); //height() function doesn't give good results, use boundingbox instead
+
             for(const GridLine& xValue: xGridLines) {
-                const QString label = toString(xValue.value);
-                const QRectF bounds = fontMetrics.boundingRect(label);
-                // painterPath.addText(QPointF(bounds.center().x() + xValue.position, viewport.top()), font, label);
-                painterPath.addText(QPointF(xValue.position - bounds.center().x(), viewport.bottom()), font, label);
+                const QString text = toString(xValue.value);
+                QRectF bounds = fontMetrics.boundingRect(text);
+                bounds.moveTo(xValue.position - bounds.center().x(), viewport.bottom() - bounds.height());
+                bounds.setHeight(zeroHeight);
+                                    // painterPath.addText(QPointF(bounds.center().x() + xValue.position, viewport.top()), font, label);
+                // painterPath.addText(QPointF(xValue.position - bounds.center().x(), viewport.bottom()), font, label);
+                labels.append(GridLabel{
+                    bounds,
+                    text
+                });
             }
 
-            const auto yGridLines = m_yGridLines.value();
-            const double centerY = fontMetrics.boundingRect('0').height() * 0.5; //height() function doesn't give good results, use boundingbox instead
             for(const GridLine& yValue : yGridLines) {
-                const QString label = toString(yValue.value);
-                painterPath.addText(QPointF(viewport.left(), yValue.position + centerY), font, label);
+                const QString text = toString(yValue.value);
+                QRectF bounds = fontMetrics.boundingRect(text);
+                bounds.moveTo(viewport.left(), yValue.position + bounds.center().y());
+                bounds.setHeight(zeroHeight);
+
+                labels.append(GridLabel{
+                    bounds,
+                    text
+                });
+
+                // painterPath.addText(QPointF(viewport.left(), yValue.position + centerY), font, label);
                 // painterPath.addText(QPointF(viewport.right(), yValue.position), font, toString(yValue.value));
             }
         }
+
+        return labels;
+    });
+
+    m_labelsPath.setBinding([this]() {
+        QPainterPath painterPath;
+
+        const auto gridLabels = m_gridLabels.value();
+        const auto font = m_scaledFont.value();
+
+        for(const GridLabel& label : gridLabels) {
+            painterPath.addText(label.bounds.bottomLeft(), font, label.text);
+        }
+
+        return painterPath;
+    });
+
+    m_labelBackgroundPath.setBinding([this]() {
+        QPainterPath painterPath;
+
+        const auto gridLabels = m_gridLabels.value();
+
+        double marginSize = m_labelBackgroundMargin.value() * m_labelScale.value();
+        double marginSize2x = 2.0 * marginSize;
+        QPointF margin(marginSize, marginSize);
+
+        for(const GridLabel& label : gridLabels) {
+            auto bounds = label.bounds;
+            bounds.moveTopLeft(bounds.topLeft() - margin);
+            bounds.setSize(QSizeF(bounds.width() + marginSize2x, bounds.height() + marginSize2x));
+            painterPath.addRect(bounds);
+        }
+
         return painterPath;
     });
 
@@ -150,25 +201,23 @@ cwSketch::InfiniteGridModel::InfiniteGridModel(QObject *parent) :
 
     m_gridVisibleNotifier = m_gridVisible.addNotifier([this]() {
         if(m_gridVisible.value()) {
-            beginInsertRows(QModelIndex(), 0, 1);
+            beginInsertRows(QModelIndex(), 0, 2);
             endInsertRows();
         } else {
-            beginRemoveRows(QModelIndex(), 0, 1);
+            beginRemoveRows(QModelIndex(), 0, 2);
             endRemoveRows();
         }
     });
 
     m_labelVisibleNotifier = m_labelVisible.addNotifier([this]() {
         if(m_labelVisible.value()) {
-            beginInsertRows(QModelIndex(), 1, 1);
+            beginInsertRows(QModelIndex(), 1, 2);
             endInsertRows();
         } else {
-            beginRemoveRows(QModelIndex(), 1, 1);
+            beginRemoveRows(QModelIndex(), 1, 2);
             endRemoveRows();
         }
     });
-
-
 
     // Notify when line width changes (grid stroke width role)
     m_lineWidthNotifier = m_lineWidth.addNotifier([this]() {
@@ -198,8 +247,12 @@ cwSketch::InfiniteGridModel::InfiniteGridModel(QObject *parent) :
 
     // Notify when labels geometry/path changes (label painter path role)
     m_labelsPathNotifier = m_labelsPath.addNotifier([this]() {
-        int row = m_gridVisible ? 1 : 0;
-        QModelIndex idx = index(row, 0);
+        QModelIndex idx = index(2, 0);
+        emit dataChanged(idx, idx, { PainterPathRole });
+    });
+
+    m_labelsBackgroundNotifier = m_labelBackgroundPath.addNotifier([this]() {
+        QModelIndex idx = index(1, 0);
         emit dataChanged(idx, idx, { PainterPathRole });
     });
 }
@@ -220,8 +273,7 @@ cwSketch::AbstractPainterPathModel::Path cwSketch::InfiniteGridModel::path(const
         };
     };
 
-    auto labelPath = [this] {
-        qDebug() << "returning label path:" << m_labelsPath.value().elementCount();
+    auto labelPath = [this]() {
         return Path{
             m_labelsPath,
             -1, //No line width
@@ -229,21 +281,33 @@ cwSketch::AbstractPainterPathModel::Path cwSketch::InfiniteGridModel::path(const
         };
     };
 
+    auto labelBackground = [this]() {
+        return Path{
+            m_labelBackgroundPath,
+            -1, //No line width
+            m_labelBackgroundColor
+        };
+    };
+
     if(m_gridVisible.value() && m_labelVisible.value()) {
         if(index.row() == 0) {
             return gridPath();
         } else if(index.row() == 1) {
+            return labelBackground();
+        } else if(index.row() == 2) {
             return labelPath();
         }
     } else if(m_gridVisible.value()) {
         if(index.row() == 0) {
             return gridPath();
         }
-    } else if(m_labelVisible.value()) {
-        if(index.row() == 0) {
-            return labelPath();
-        }
     }
+
+    // else if(m_labelVisible.value()) {
+    //     if(index.row() == 0) {
+    //         return labelPath();
+    //     }
+    // }
 
     Q_ASSERT(false); //Unhandled case
     static const Path emptyPath{};
