@@ -36,30 +36,45 @@ StandardPage {
         penLineModel: movingAverageProxyModelId
     }
 
-    InfiniteGridModel {
-        id: majorGridModel
-        viewport: containerId.viewport
-        origin: minorGridModel.origin
-        lineColor: "#1eb6dd"
-        labelColor: "#178ba8"
-        gridInterval.value: 5.0
-        mapMatrix: worldToScreenId.matrix
+    // InfiniteGridModel {
+    //     id: majorGridModel
+    //     viewport: containerId.viewport
+    //     origin: minorGridModel.origin
+    //     lineColor: "#1eb6dd"
+    //     labelColor: "#178ba8"
+    //     gridInterval.value: 5.0
+    //     mapMatrix: worldToScreenId.matrix
+    //     gridVisible: {
+    //         let msaa = RootDataSketch.sampleCount;
+    //         let spacing = 1.0 / Math.sqrt(msaa);
+    //         let scaledLineWidth = containerId.scale * lineWidth;
+    //         return scaledLineWidth > spacing;
 
-        //Keeps the font size the same when zooming in and out
-        labelScale: 1.0 / containerId.scale
-    }
+    //         // lineWidth / containerId.scale < 1.0
+    //     }
 
-    InfiniteGridModel {
-        id: minorGridModel
-        viewport: containerId.viewport
-        origin: Qt.point(containerId.x, containerId.y);
-        lineColor: "#5dcae7"
-        lineWidth: 0.5
-        labelVisible: false
-        gridInterval.value: 1.0
-        mapMatrix: worldToScreenId.matrix
+    //     //Keeps the font size the same when zooming in and out
+    //     labelScale: 1.0 / containerId.scale
+    // }
 
-    }
+    // InfiniteGridModel {
+    //     id: minorGridModel
+    //     viewport: containerId.viewport
+    //     origin: Qt.point(containerId.x, containerId.y);
+    //     lineColor: "#5dcae7"
+    //     lineWidth: 0.5
+    //     labelVisible: false
+    //     gridVisible: {
+    //         let msaa = RootDataSketch.sampleCount;
+    //         let spacing = 1.0 / Math.sqrt(msaa);
+    //         let scaledLineWidth = containerId.scale * lineWidth;
+    //         return scaledLineWidth > spacing;
+
+    //         // lineWidth / containerId.scale < 1.0
+    //     }
+    //     gridInterval.value: 1.0
+    //     mapMatrix: worldToScreenId.matrix
+    // }
 
     WorldToScreenMatrix {
         id: worldToScreenId
@@ -75,6 +90,7 @@ StandardPage {
     QC.GroupBox {
         title: "Stroke Width"
         z: 1
+        anchors.right: parent.right
 
 
         ColumnLayout {
@@ -290,7 +306,10 @@ StandardPage {
         x: sketchPageId.width * 0.5
         y: sketchPageId.height * 0.5
 
-        onScaleChanged: updateViewport();
+        onScaleChanged: {
+            console.log("Scale changed:" + scale)
+            updateViewport();
+        }
         onXChanged: updateViewport();
         onYChanged: updateViewport();
 
@@ -301,15 +320,23 @@ StandardPage {
             color: "black"
         }
 
-        ShapePathInstantiator {
+        InfiniteGrid {
             anchors.fill: parent
-            model: minorGridModel
+            gridOrigin: Qt.point(containerId.x, containerId.y);
+            viewScale: containerId.scale
+            worldToScreenMatrix: worldToScreenId.matrix
+            viewport: containerId.viewport
         }
 
-        ShapePathInstantiator {
-            anchors.fill: parent
-            model: majorGridModel
-        }
+        // ShapePathInstantiator {
+        //     anchors.fill: parent
+        //     model: minorGridModel
+        // }
+
+        // ShapePathInstantiator {
+        //     anchors.fill: parent
+        //     model: majorGridModel
+        // }
 
         ShapePathInstantiator {
             anchors.fill: parent

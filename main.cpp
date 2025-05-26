@@ -2,10 +2,14 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QSurfaceFormat>
+#include <QQmlContext>
 #include <rhi/qrhi.h>
 
 //CaveWhere
 #include "cwTask.h"
+
+//Our includes
+#include "RootData.h"
 
 QList<int> supportedSampleCounts() {
 #if QT_CONFIG(vulkan)
@@ -39,7 +43,7 @@ QList<int> supportedSampleCounts() {
 
 int sampleCount() {
     auto supported = supportedSampleCounts();
-    int wantedSampleCount = 2; //MSAA 4x4, has issues on ios resize
+    int wantedSampleCount = 4; //MSAA 4x4, has issues on ios resize
     if(supported.contains(wantedSampleCount)) {
         return wantedSampleCount;
     } else if (!supported.isEmpty()) {
@@ -73,6 +77,9 @@ int main(int argc, char *argv[])
     // engine.addImportPath(resourcePath);
 
     engine.loadFromModule("CaveWhereSketch", "Main");
+    auto id = qmlTypeId("CaveWhereSketch", 1, 0, "RootDataSketch");
+    auto rootData = engine.rootContext()->engine()->singletonInstance<cwSketch::RootData*>(id);
+    Q_ASSERT(rootData);
 
     return app.exec();
 }

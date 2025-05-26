@@ -1,7 +1,7 @@
-#include "InfiniteGridModel.h"
+#include "FixedGridModel.h"
 
 
-cwSketch::InfiniteGridModel::InfiniteGridModel(QObject *parent) :
+cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
     m_gridInterval(new cwLength(10.0, cwUnits::Meters, this))
 {
     m_size.setBinding([this]() {
@@ -120,9 +120,12 @@ cwSketch::InfiniteGridModel::InfiniteGridModel(QObject *parent) :
             const QFont font = m_scaledFont.value();
             QFontMetricsF fontMetrics(font);
 
-
-            auto toString = [](double num) {
-                return QString::number(num);
+            auto toString = [this](double num) {
+                if(num == 0.0) {
+                    return QString::number(num) + m_gridInterval->unitName(m_gridInterval->unit());
+                } else {
+                    return QString::number(num);
+                }
             };
 
             labels.reserve(xGridLines.size() + yGridLines.size());
@@ -134,8 +137,6 @@ cwSketch::InfiniteGridModel::InfiniteGridModel(QObject *parent) :
                 QRectF bounds = fontMetrics.boundingRect(text);
                 bounds.moveTo(xValue.position - bounds.center().x(), viewport.bottom() - bounds.height());
                 bounds.setHeight(zeroHeight);
-                                    // painterPath.addText(QPointF(bounds.center().x() + xValue.position, viewport.top()), font, label);
-                // painterPath.addText(QPointF(xValue.position - bounds.center().x(), viewport.bottom()), font, label);
                 labels.append(GridLabel{
                     bounds,
                     text
@@ -152,9 +153,6 @@ cwSketch::InfiniteGridModel::InfiniteGridModel(QObject *parent) :
                     bounds,
                     text
                 });
-
-                // painterPath.addText(QPointF(viewport.left(), yValue.position + centerY), font, label);
-                // painterPath.addText(QPointF(viewport.right(), yValue.position), font, toString(yValue.value));
             }
         }
 
@@ -257,12 +255,12 @@ cwSketch::InfiniteGridModel::InfiniteGridModel(QObject *parent) :
     });
 }
 
-int cwSketch::InfiniteGridModel::rowCount(const QModelIndex &parent) const {
+int cwSketch::FixedGridModel::rowCount(const QModelIndex &parent) const {
     Q_UNUSED(parent);
     return m_size;
 }
 
-cwSketch::AbstractPainterPathModel::Path cwSketch::InfiniteGridModel::path(const QModelIndex &index) const
+cwSketch::AbstractPainterPathModel::Path cwSketch::FixedGridModel::path(const QModelIndex &index) const
 {
 
     auto gridPath = [this]() {

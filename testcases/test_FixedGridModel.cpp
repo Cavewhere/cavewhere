@@ -10,7 +10,7 @@
 #include <QtTest/QSignalSpy>
 
 //Our inculdes
-#include "InfiniteGridModel.h"
+#include "FixedGridModel.h"
 
 //CaveWhere includes
 #include "cwLength.h"
@@ -19,7 +19,7 @@ using namespace cwSketch;
 
 
 TEST_CASE("Default property values", "[InfiniteGridModel]") {
-    InfiniteGridModel model;
+    FixedGridModel model;
 
     // Basic model structure
     REQUIRE(model.rowCount() == 2);
@@ -53,49 +53,49 @@ TEST_CASE("Default property values", "[InfiniteGridModel]") {
 }
 
 TEST_CASE("Setter methods and signals", "[InfiniteGridModel]") {
-    InfiniteGridModel model;
+    FixedGridModel model;
 
-    QSignalSpy gridSpy(&model, &InfiniteGridModel::gridVisibleChanged);
+    QSignalSpy gridSpy(&model, &FixedGridModel::gridVisibleChanged);
     model.setGridVisible(false);
     REQUIRE(gridSpy.count() == 1);
     REQUIRE(model.gridVisible() == false);
 
-    QSignalSpy widthSpy(&model, &InfiniteGridModel::lineWidthChanged);
+    QSignalSpy widthSpy(&model, &FixedGridModel::lineWidthChanged);
     model.setLineWidth(2.5);
     REQUIRE(widthSpy.count() == 1);
 
-    QSignalSpy colorSpy(&model, &InfiniteGridModel::lineColorChanged);
+    QSignalSpy colorSpy(&model, &FixedGridModel::lineColorChanged);
     QColor red(Qt::red);
     model.setLineColor(red);
     REQUIRE(colorSpy.count() == 1);
 
-    // QSignalSpy scaleSpy(&model, &InfiniteGridModel::mapScaleChanged);
+    // QSignalSpy scaleSpy(&model, &FixedGridModel::mapScaleChanged);
     // model.setMapScale(10.0);
     // REQUIRE(scaleSpy.count() == 1);
     // CHECK(scaleSpy.takeFirst().at(0).toDouble() == Catch::Approx(10.0));
 
-    QSignalSpy viewportSpy(&model, &InfiniteGridModel::viewportChanged);
+    QSignalSpy viewportSpy(&model, &FixedGridModel::viewportChanged);
     QRectF rect(1,2,3,4);
     model.setViewport(rect);
     REQUIRE(viewportSpy.count() == 1);
 
-    QSignalSpy labelVisSpy(&model, &InfiniteGridModel::labelVisibleChanged);
+    QSignalSpy labelVisSpy(&model, &FixedGridModel::labelVisibleChanged);
     model.setLabelVisible(false);
     REQUIRE(labelVisSpy.count() == 1);
 
-    QSignalSpy labelColorSpy(&model, &InfiniteGridModel::labelColorChanged);
+    QSignalSpy labelColorSpy(&model, &FixedGridModel::labelColorChanged);
     QColor blue(Qt::blue);
     model.setLabelColor(blue);
     REQUIRE(labelColorSpy.count() == 1);
 
-    QSignalSpy labelFontSpy(&model, &InfiniteGridModel::labelFontChanged);
+    QSignalSpy labelFontSpy(&model, &FixedGridModel::labelFontChanged);
     QFont font("Arial", 12, QFont::Bold);
     model.setLabelFont(font);
     REQUIRE(labelFontSpy.count() == 1);
 }
 
 TEST_CASE("data() provides correct QVariant per role", "[InfiniteGridModel]") {
-    InfiniteGridModel model;
+    FixedGridModel model;
     model.setViewport(QRectF(0,0,10,10));
     // model.setMapScale(1.0);
 
@@ -123,7 +123,7 @@ TEST_CASE("data() provides correct QVariant per role", "[InfiniteGridModel]") {
 }
 
 TEST_CASE("Grid row availability toggles with gridVisible", "[InfiniteGridModel]") {
-    InfiniteGridModel model;
+    FixedGridModel model;
     model.setViewport(QRectF(0,0,10,10));
     // model.setMapScale(1.0);
 
@@ -168,7 +168,7 @@ TEST_CASE("Grid row availability toggles with gridVisible", "[InfiniteGridModel]
 }
 
 TEST_CASE("Grid row availability toggles with labelVisible", "[InfiniteGridModel]") {
-    InfiniteGridModel model;
+    FixedGridModel model;
     model.setViewport(QRectF(0,0,10,10));
     // model.setMapScale(1.0);
 
@@ -211,7 +211,7 @@ TEST_CASE("Grid row availability toggles with labelVisible", "[InfiniteGridModel
 }
 
 TEST_CASE("dataChanged signals on property updates", "[InfiniteGridModel][dataChanged]") {
-    InfiniteGridModel model;
+    FixedGridModel model;
     model.setViewport(QRectF(0,0,20,20));
 
     QSignalSpy spy(&model, &QAbstractItemModel::dataChanged);

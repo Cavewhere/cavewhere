@@ -23,6 +23,9 @@ class RootData : public QObject
     Q_PROPERTY(cwProject* project READ project CONSTANT)
     Q_PROPERTY(cwCavingRegion* cavingRegion READ cavingRegion NOTIFY cavingRegionChanged)
 
+    //MSAA sample count
+    Q_PROPERTY(int sampleCount READ sampleCount CONSTANT FINAL)
+
     //For testing
     Q_PROPERTY(cwTrip* currentTrip READ currentTrip CONSTANT)
     Q_PROPERTY(CenterlinePainterModel* centerlinePainterModel READ centerlinePainterModel CONSTANT)
@@ -43,11 +46,15 @@ public:
         return m_centerlinePainterModel;
     }
 
+    int sampleCount() const;
+
+
 signals:
     void cavingRegionChanged();
 
 private:
     cwProject* m_project;
+    int m_sampleCount = 1;
 
     //For testing
     QPointer<cwTrip> m_currentTrip;

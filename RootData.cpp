@@ -10,6 +10,7 @@
 //Qt includes
 #include <QScreen>
 #include <QGuiApplication>
+#include <QSurfaceFormat>
 
 using namespace cwSketch;
 
@@ -93,8 +94,13 @@ void RootData::createGeometry2DPipeline()
     //This is why you artifacts, it because you can interchange rules and the connections
     //still work.
     m_centerlinePainterModel->setSurvey2DGeometry(geometryRule->survey2DGeometry());
+}
 
 
+
+int RootData::sampleCount() const
+{
+    return QSurfaceFormat::defaultFormat().samples();
 }
 
 

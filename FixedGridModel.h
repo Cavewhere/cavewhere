@@ -14,7 +14,7 @@
 
 namespace cwSketch {
 
-class InfiniteGridModel : public AbstractPainterPathModel
+class FixedGridModel : public AbstractPainterPathModel
 {
     Q_OBJECT
     QML_ELEMENT
@@ -28,7 +28,6 @@ class InfiniteGridModel : public AbstractPainterPathModel
     Q_PROPERTY(QRectF viewport READ viewport WRITE setViewport NOTIFY viewportChanged BINDABLE bindableViewport)
     Q_PROPERTY(QPointF origin READ origin WRITE setOrigin NOTIFY originChanged BINDABLE bindableOrigin)
 
-
     Q_PROPERTY(bool labelVisible READ labelVisible WRITE setLabelVisible NOTIFY labelVisibleChanged BINDABLE bindableLabelVisible)
     Q_PROPERTY(QColor labelColor READ labelColor WRITE setLabelColor NOTIFY labelColorChanged BINDABLE bindableLabelColor)
     Q_PROPERTY(QFont labelFont READ labelFont WRITE setLabelFont NOTIFY labelFontChanged BINDABLE bindableLabelFont)
@@ -38,7 +37,7 @@ class InfiniteGridModel : public AbstractPainterPathModel
     Q_PROPERTY(double labelScale READ labelScale WRITE setLabelScale NOTIFY labelScaleChanged BINDABLE bindableLabelScale)
 
 public:
-    explicit InfiniteGridModel(QObject* parent = nullptr);
+    explicit FixedGridModel(QObject* parent = nullptr);
 
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
 
@@ -119,23 +118,21 @@ private:
     // storage
     cwLength* m_gridInterval;
 
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, bool, m_gridVisible, true, &InfiniteGridModel::gridVisibleChanged)
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_lineWidth, 1.0, &InfiniteGridModel::lineWidthChanged)
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QColor, m_lineColor, QColor(0xCC, 0xCC, 0xCC), &InfiniteGridModel::lineColorChanged)
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, bool, m_gridVisible, true, &FixedGridModel::gridVisibleChanged)
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, double, m_lineWidth, 1.0, &FixedGridModel::lineWidthChanged)
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, QColor, m_lineColor, QColor(0xCC, 0xCC, 0xCC), &FixedGridModel::lineColorChanged)
 
-    Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, QMatrix4x4, m_mapMatrix, &InfiniteGridModel::mapMatrixChanged)
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QRectF, m_viewport, QRectF(), &InfiniteGridModel::viewportChanged)
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QPointF, m_origin, QPointF(), &InfiniteGridModel::originChanged);
+    Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, QMatrix4x4, m_mapMatrix, &FixedGridModel::mapMatrixChanged)
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, QRectF, m_viewport, QRectF(), &FixedGridModel::viewportChanged)
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, QPointF, m_origin, QPointF(), &FixedGridModel::originChanged);
 
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, bool, m_labelVisible, true, &InfiniteGridModel::labelVisibleChanged)
-    // Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QColor, m_labelColor, QColor(0x88, 0x88, 0x88), &InfiniteGridModel::labelColorChanged)
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QColor, m_labelColor, QColor(0x00, 0x00, 0x00), &InfiniteGridModel::labelColorChanged)
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QFont, m_labelFont, QFont(), &InfiniteGridModel::labelFontChanged)
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_labelBackgroundMargin, 2.0, &InfiniteGridModel::labelBackgroundMarginChanged);
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QColor, m_labelBackgroundColor, Qt::white, &InfiniteGridModel::labelBackgroundColorChanged);
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_labelScale, 1.0, &InfiniteGridModel::labelScaleChanged);
-
-
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, bool, m_labelVisible, true, &FixedGridModel::labelVisibleChanged)
+    // Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, QColor, m_labelColor, QColor(0x88, 0x88, 0x88), &FixedGridModel::labelColorChanged)
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, QColor, m_labelColor, QColor(0x00, 0x00, 0x00), &FixedGridModel::labelColorChanged)
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, QFont, m_labelFont, QFont(), &FixedGridModel::labelFontChanged)
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, double, m_labelBackgroundMargin, 2.0, &FixedGridModel::labelBackgroundMarginChanged);
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, QColor, m_labelBackgroundColor, Qt::white, &FixedGridModel::labelBackgroundColorChanged);
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, double, m_labelScale, 1.0, &FixedGridModel::labelScaleChanged);
 
     struct GridLine {
         double position; //Position on the map
@@ -147,16 +144,16 @@ private:
         QString text;
     };
 
-    Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, int, m_size); //Number of paths in the model, will 0, 1, or 2
-    Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, QVector<GridLine>, m_xGridLines);
-    Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, QVector<GridLine>, m_yGridLines);
-    Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, QPainterPath, m_gridPath);
+    Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, int, m_size); //Number of paths in the model, will 0, 1, or 2
+    Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, QVector<GridLine>, m_xGridLines);
+    Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, QVector<GridLine>, m_yGridLines);
+    Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, QPainterPath, m_gridPath);
 
-    Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, QVector<GridLabel>, m_gridLabels);
+    Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, QVector<GridLabel>, m_gridLabels);
 
-    Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, QPainterPath, m_labelsPath);
-    Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, QPainterPath, m_labelBackgroundPath);
-    Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, QFont, m_scaledFont);
+    Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, QPainterPath, m_labelsPath);
+    Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, QPainterPath, m_labelBackgroundPath);
+    Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, QFont, m_scaledFont);
 
     QPropertyNotifier m_gridVisibleNotifier;
     QPropertyNotifier m_labelVisibleNotifier;
