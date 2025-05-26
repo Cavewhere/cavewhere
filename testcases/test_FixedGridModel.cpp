@@ -210,7 +210,7 @@ TEST_CASE("Grid row availability toggles with labelVisible", "[InfiniteGridModel
     CHECK(p1.elementCount() == labelCount );
 }
 
-TEST_CASE("dataChanged signals on property updates", "[InfiniteGridModel][dataChanged]") {
+TEST_CASE("dataChanged signals on property updates", "[InfiniteGridModel]") {
     FixedGridModel model;
     model.setViewport(QRectF(0,0,20,20));
 
@@ -297,4 +297,6 @@ TEST_CASE("dataChanged signals on property updates", "[InfiniteGridModel][dataCh
         auto mroles1 = margs1.at(2).value<QVector<int>>();
         REQUIRE(mroles1.contains(AbstractPainterPathModel::PainterPathRole));
     }
+
+
 }

@@ -1,8 +1,12 @@
 #include "FixedGridModel.h"
+#include "TextModel.h"
+
+#include "cwLength.h"
 
 
 cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
-    m_gridInterval(new cwLength(10.0, cwUnits::Meters, this))
+    m_gridInterval(new cwLength(10.0, cwUnits::Meters, this)),
+    m_textModel(new TextModel(this))
 {
     m_size.setBinding([this]() {
         if(!m_gridVisible) {
@@ -11,10 +15,10 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
         }
 
         if(m_labelVisible) {
-            return 3;
+            return LabelBackgroundIndex + 1;
         }
 
-        return 1;
+        return GridLineIndex + 1;
     });
 
 
@@ -77,7 +81,6 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
         auto viewport = m_viewport.value();
         auto mapMatrix = m_mapMatrix.value();
         const double xScale = mapMatrix(0,0);
-        qDebug() << "xGridLines:" << viewport.left() << viewport.right();
         return gridLines(viewport.left(), viewport.right(), m_origin.value().x(), xScale);
     });
 
@@ -85,7 +88,6 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
         auto viewport = m_viewport.value();
         auto mapMatrix = m_mapMatrix.value();
         const double yScale = mapMatrix(1,1);
-        qDebug() << "yGridLines:";
         return gridLines(viewport.top(), viewport.bottom(), m_origin.value().y(), yScale);
     });
 
@@ -117,7 +119,7 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
             const auto xGridLines = m_xGridLines.value();
             const auto yGridLines = m_yGridLines.value();
 
-            const QFont font = m_scaledFont.value();
+            const QFont font = m_labelFont.value();
             QFontMetricsF fontMetrics(font);
 
             auto toString = [this](double num) {
@@ -132,11 +134,24 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
 
             const double zeroHeight = fontMetrics.boundingRect('0').height(); //height() function doesn't give good results, use boundingbox instead
 
+            auto extraWidth = [](QRectF bounds) {
+                bounds.setWidth(bounds.width() + 1);
+                return bounds;
+            };
+
+            auto scaleBounds = [this](QRectF bounds){
+                double labelScale = m_labelScale.value();
+                bounds.setWidth(bounds.width() * labelScale);
+                bounds.setHeight(bounds.height() * labelScale);
+                return bounds;
+            };
+
             for(const GridLine& xValue: xGridLines) {
                 const QString text = toString(xValue.value);
-                QRectF bounds = fontMetrics.boundingRect(text);
-                bounds.moveTo(xValue.position - bounds.center().x(), viewport.bottom() - bounds.height());
-                bounds.setHeight(zeroHeight);
+                QRectF bounds = scaleBounds(extraWidth(fontMetrics.boundingRect(text)));
+                bounds.moveTo(xValue.position - bounds.width() * 0.5, viewport.bottom() - bounds.height());
+
+
                 labels.append(GridLabel{
                     bounds,
                     text
@@ -145,9 +160,8 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
 
             for(const GridLine& yValue : yGridLines) {
                 const QString text = toString(yValue.value);
-                QRectF bounds = fontMetrics.boundingRect(text);
-                bounds.moveTo(viewport.left(), yValue.position + bounds.center().y());
-                bounds.setHeight(zeroHeight);
+                QRectF bounds = scaleBounds(extraWidth(fontMetrics.boundingRect(text)));
+                bounds.moveTo(viewport.left(), yValue.position - bounds.height() * 0.5);
 
                 labels.append(GridLabel{
                     bounds,
@@ -157,19 +171,6 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
         }
 
         return labels;
-    });
-
-    m_labelsPath.setBinding([this]() {
-        QPainterPath painterPath;
-
-        const auto gridLabels = m_gridLabels.value();
-        const auto font = m_scaledFont.value();
-
-        for(const GridLabel& label : gridLabels) {
-            painterPath.addText(label.bounds.bottomLeft(), font, label.text);
-        }
-
-        return painterPath;
     });
 
     m_labelBackgroundPath.setBinding([this]() {
@@ -191,68 +192,156 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
         return painterPath;
     });
 
-    m_scaledFont.setBinding([this]() {
-        auto font = m_labelFont.value();
-        font.setPointSizeF(m_labelScale.value() * font.pointSizeF());
-        return font;
-    });
+    // m_scaledFont.setBinding([this]() {
+    //     auto font = m_labelFont.value();
+    //     font.setPointSizeF(m_labelScale.value() * font.pointSizeF());
+    //     return font;
+    // });
 
     m_gridVisibleNotifier = m_gridVisible.addNotifier([this]() {
         if(m_gridVisible.value()) {
-            beginInsertRows(QModelIndex(), 0, 2);
+            beginInsertRows(QModelIndex(), GridLineIndex, LabelBackgroundIndex);
             endInsertRows();
         } else {
-            beginRemoveRows(QModelIndex(), 0, 2);
+            beginRemoveRows(QModelIndex(), GridLineIndex, LabelBackgroundIndex);
             endRemoveRows();
         }
     });
 
     m_labelVisibleNotifier = m_labelVisible.addNotifier([this]() {
         if(m_labelVisible.value()) {
-            beginInsertRows(QModelIndex(), 1, 2);
+            beginInsertRows(QModelIndex(), LabelBackgroundIndex, LabelBackgroundIndex);
             endInsertRows();
         } else {
-            beginRemoveRows(QModelIndex(), 1, 2);
+            beginRemoveRows(QModelIndex(), LabelBackgroundIndex, LabelBackgroundIndex);
             endRemoveRows();
         }
     });
 
     // Notify when line width changes (grid stroke width role)
     m_lineWidthNotifier = m_lineWidth.addNotifier([this]() {
-        QModelIndex idx = index(0, 0);
+        QModelIndex idx = index(GridLineIndex);
         emit dataChanged(idx, idx, { StrokeWidthRole });
     });
 
     // Notify when line color changes (grid stroke color role)
     m_lineColorNotifier = m_lineColor.addNotifier([this]() {
-        QModelIndex idx = index(0, 0);
+        QModelIndex idx = index(GridLineIndex);
         emit dataChanged(idx, idx, { StrokeColorRole });
     });
 
     // Notify when label color changes (label stroke color role)
     m_labelColorNotifier = m_labelColor.addNotifier([this]() {
         // label row is 1 when grid is visible, otherwise 0
-        int row = m_gridVisible ? 1 : 0;
-        QModelIndex idx = index(row, 0);
+        int row = m_gridVisible ? LabelBackgroundIndex : GridLineIndex;
+        QModelIndex idx = index(row);
         emit dataChanged(idx, idx, { StrokeColorRole });
     });
 
     // Notify when grid geometry/path changes (grid painter path role)
     m_gridPathNotifier = m_gridPath.addNotifier([this]() {
-        QModelIndex idx = index(0, 0);
-        emit dataChanged(idx, idx, { PainterPathRole });
-    });
-
-    // Notify when labels geometry/path changes (label painter path role)
-    m_labelsPathNotifier = m_labelsPath.addNotifier([this]() {
-        QModelIndex idx = index(2, 0);
+        QModelIndex idx = index(GridLineIndex);
         emit dataChanged(idx, idx, { PainterPathRole });
     });
 
     m_labelsBackgroundNotifier = m_labelBackgroundPath.addNotifier([this]() {
-        QModelIndex idx = index(1, 0);
+        QModelIndex idx = index(LabelBackgroundIndex);
         emit dataChanged(idx, idx, { PainterPathRole });
     });
+
+    m_gridLabelsNotifier = m_gridLabels.addNotifier([this]() {
+        const auto newLabels = m_gridLabels.value();               // QVector<GridLabel>
+        const auto oldRows = m_textModel->rows();         // QVector<TextRow>
+        const int nNew = newLabels.size();
+        const int nOld = oldRows.size();
+
+        // Helper to convert a GridLabel -> TextRow
+        auto makeRow = [this](const GridLabel& gridLabel){
+            TextModel::TextRow row;
+            row.text        = gridLabel.text;
+            row.position    = gridLabel.bounds.topLeft();
+            row.font        = m_labelFont; //m_scaledFont;
+            row.fillColor   = m_labelColor;
+            row.strokeColor = Qt::transparent;
+            return row;
+        };
+
+        // // 1) If sizes match, and every element is equal, do nothing.
+        // if (nNew == nOld) {
+        //     bool identical = true;
+        //     for (int i = 0; i < nOld; ++i) {
+        //         if (oldRows[i].text != newLabels[i].text) {
+        //             identical = false;
+        //             break;
+        //         }
+        //     }
+        //     if (identical) return;
+        // }
+
+        // // 2) Try to find oldRows as a contiguous subsequence in newLabels → additions at ends
+        // if (nNew > nOld) {
+        //     // Scan for a start index j so that newLabels[j..j+nOld-1] matches oldRows[0..nOld-1].
+        //     for (int j = 0; j <= nNew - nOld; ++j) {
+        //         bool match = true;
+        //         for (int k = 0; k < nOld; ++k) {
+        //             if (oldRows[k].text != newLabels[j+k].text) {
+        //                 match = false;
+        //                 break;
+        //             }
+        //         }
+        //         if (!match) continue;
+
+        //         // Found match at offset j
+        //         //  - j rows were *added* at the front:
+        //         for (int f = j-1; f >= 0; --f) {
+        //             m_textModel->addText(m_textModel->index(0,0), makeRow(newLabels[f]));
+        //         }
+        //         //  - (nNew-nOld-j) rows were *added* at the back:
+        //         int backStart = j + nOld;
+        //         for (int b = backStart; b < nNew; ++b) {
+        //             m_textModel->addText(QModelIndex(), makeRow(newLabels[b]));
+        //         }
+        //         return;
+        //     }
+        // }
+        // // 3) Try to find newLabels as a contiguous subsequence in oldRows → removals at ends
+        // if (nOld > nNew) {
+        //     // Scan for a start index j so that oldRows[j..j+nNew-1] matches newLabels[0..nNew-1].
+        //     for (int j = 0; j <= nOld - nNew; ++j) {
+        //         bool match = true;
+        //         for (int k = 0; k < nNew; ++k) {
+        //             if (oldRows[j+k].text != newLabels[k].text) {
+        //                 match = false;
+        //                 break;
+        //             }
+        //         }
+        //         if (!match) continue;
+
+        //         // Found match at offset j
+        //         //  - j rows were *removed* from the front:
+        //         for (int f = 0; f < j; ++f) {
+        //             m_textModel->removeText(m_textModel->index(0,0));
+        //         }
+        //         //  - (nOld-nNew-j) rows were *removed* from the back:
+        //         int removeBack = nOld - nNew - j;
+        //         for (int b = 0; b < removeBack; ++b) {
+        //             m_textModel->removeText(
+        //                 m_textModel->index(m_textModel->rowCount()-1, 0)
+        //                 );
+        //         }
+        //         return;
+        //     }
+        // }
+
+        // 4) Fallback: too complicated to diff → full reset
+        QVector<TextModel::TextRow> all;
+        all.reserve(nNew);
+        for (auto const& label : newLabels) {
+            all.append(makeRow(label));
+        }
+        m_textModel->setRows(all);
+    });
+
 }
 
 int cwSketch::FixedGridModel::rowCount(const QModelIndex &parent) const {
@@ -271,14 +360,6 @@ cwSketch::AbstractPainterPathModel::Path cwSketch::FixedGridModel::path(const QM
         };
     };
 
-    auto labelPath = [this]() {
-        return Path{
-            m_labelsPath,
-            -1, //No line width
-            m_labelColor
-        };
-    };
-
     auto labelBackground = [this]() {
         return Path{
             m_labelBackgroundPath,
@@ -288,15 +369,13 @@ cwSketch::AbstractPainterPathModel::Path cwSketch::FixedGridModel::path(const QM
     };
 
     if(m_gridVisible.value() && m_labelVisible.value()) {
-        if(index.row() == 0) {
+        if(index.row() == GridLineIndex) {
             return gridPath();
-        } else if(index.row() == 1) {
+        } else if(index.row() == LabelBackgroundIndex) {
             return labelBackground();
-        } else if(index.row() == 2) {
-            return labelPath();
         }
     } else if(m_gridVisible.value()) {
-        if(index.row() == 0) {
+        if(index.row() == GridLineIndex) {
             return gridPath();
         }
     }
@@ -311,4 +390,5 @@ cwSketch::AbstractPainterPathModel::Path cwSketch::FixedGridModel::path(const QM
     static const Path emptyPath{};
     return emptyPath;
 }
+
 

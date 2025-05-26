@@ -2,6 +2,7 @@
 
 // Our includes
 #include "AbstractPainterPathModel.h"
+#include "TextModel.h"
 #include "cwLength.h"
 
 // Qt includes
@@ -33,10 +34,16 @@ class FixedGridModel : public AbstractPainterPathModel
     Q_PROPERTY(QFont labelFont READ labelFont WRITE setLabelFont NOTIFY labelFontChanged BINDABLE bindableLabelFont)
     Q_PROPERTY(double labelBackgroundMargin READ labelBackgroundMargin WRITE setLabelBackgroundMargin NOTIFY labelBackgroundMarginChanged BINDABLE bindableLabelBackgroundMargin)
     Q_PROPERTY(QColor labelBackgroundColor READ labelBackgroundColor WRITE setLabelBackgroundColor NOTIFY labelBackgroundColorChanged BINDABLE bindableLabelBackgroundColor)
+    Q_PROPERTY(TextModel* textModel READ textModel CONSTANT)
 
     Q_PROPERTY(double labelScale READ labelScale WRITE setLabelScale NOTIFY labelScaleChanged BINDABLE bindableLabelScale)
 
 public:
+    enum Index {
+        GridLineIndex = 0,
+        LabelBackgroundIndex = 1
+    };
+
     explicit FixedGridModel(QObject* parent = nullptr);
 
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
@@ -94,6 +101,7 @@ public:
     void setLabelScale(double labelScale) { m_labelScale = labelScale; }
     QBindable<double> bindableLabelScale() { return &m_labelScale; }
 
+    TextModel *textModel() const { return m_textModel; }
 
 signals:
     void gridVisibleChanged();
@@ -151,9 +159,9 @@ private:
 
     Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, QVector<GridLabel>, m_gridLabels);
 
-    Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, QPainterPath, m_labelsPath);
+    // Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, QPainterPath, m_labelsPath);
     Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, QPainterPath, m_labelBackgroundPath);
-    Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, QFont, m_scaledFont);
+    // Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, QFont, m_scaledFont);
 
     QPropertyNotifier m_gridVisibleNotifier;
     QPropertyNotifier m_labelVisibleNotifier;
@@ -166,8 +174,10 @@ private:
     QPropertyNotifier m_gridPathNotifier;
     QPropertyNotifier m_labelsPathNotifier;
     QPropertyNotifier m_labelsBackgroundNotifier;
+    QPropertyNotifier m_gridLabelsNotifier;
 
 
+    TextModel *m_textModel = nullptr;
 };
 
 } // namespace cwSketch

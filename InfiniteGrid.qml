@@ -62,4 +62,23 @@ Item {
         model: grid1
     }
 
+    Repeater {
+        model: grid1.textModel
+        delegate:Text {
+            scale: grid2.labelScale
+            transformOrigin: Item.TopLeft
+
+            required property string textRole
+            required property point positionRole
+            required property font fontRole
+            required property color fillColorRole
+            required property color strokeColorRole;
+
+            text: textRole
+            font: fontRole
+            x: positionRole.x
+            y: positionRole.y
+            color: fillColorRole
+        }
+    }
 }
