@@ -135,8 +135,7 @@ private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, QPointF, m_origin, QPointF(), &FixedGridModel::originChanged);
 
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, bool, m_labelVisible, true, &FixedGridModel::labelVisibleChanged)
-    // Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, QColor, m_labelColor, QColor(0x88, 0x88, 0x88), &FixedGridModel::labelColorChanged)
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, QColor, m_labelColor, QColor(0x00, 0x00, 0x00), &FixedGridModel::labelColorChanged)
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, QColor, m_labelColor, QColor(0x88, 0x88, 0x88), &FixedGridModel::labelColorChanged)
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, QFont, m_labelFont, QFont(), &FixedGridModel::labelFontChanged)
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, double, m_labelBackgroundMargin, 2.0, &FixedGridModel::labelBackgroundMarginChanged);
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, QColor, m_labelBackgroundColor, Qt::white, &FixedGridModel::labelBackgroundColorChanged);
@@ -159,9 +158,7 @@ private:
 
     Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, QVector<GridLabel>, m_gridLabels);
 
-    // Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, QPainterPath, m_labelsPath);
     Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, QPainterPath, m_labelBackgroundPath);
-    // Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, QFont, m_scaledFont);
 
     QPropertyNotifier m_gridVisibleNotifier;
     QPropertyNotifier m_labelVisibleNotifier;
