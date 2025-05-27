@@ -6,9 +6,12 @@
 #include <QQmlEngine>
 #include <QPointF>
 #include <QObjectBindableProperty>
+#include <QUndoStack>
 
 //Our includes
 #include "CaveWhereSketchLibExport.h"
+
+class PenLineModelUndoCommand;
 
 // A simple structure representing a point with a specific width.
 class CAVEWHERE_SKETCH_LIB_EXPORT PenPoint {
@@ -44,6 +47,7 @@ class CAVEWHERE_SKETCH_LIB_EXPORT PenLineModel : public QAbstractItemModel {
     QML_ELEMENT
 
     Q_PROPERTY(double currentStrokeWidth READ currentStrokeWidth WRITE setCurrentStrokeWidth NOTIFY currentStrokeWidthChanged BINDABLE bindableCurrentStrokeWidth)
+    Q_PROPERTY(QUndoStack* undoStack READ undoStack)
 
 public:
     enum PenLineRoles {
@@ -65,13 +69,23 @@ public:
 
     // Utility methods to add or clear lines.
     Q_INVOKABLE int addNewLine();
-    void addLine(const PenLine& line);
     Q_INVOKABLE void addPoint(int lineIndex, PenPoint point);
-    void clear();
+
+    // This creates and pushes an undo command for the current last-line.
+    Q_INVOKABLE void finishNewLine();
+
+    Q_INVOKABLE void clearUndoStack();
+
+    Q_INVOKABLE bool canClearUndoStack() const { return !m_lines.empty(); }
 
     Q_INVOKABLE PenPoint penPoint(QPointF point, double width)
     {
         return PenPoint(point, width);
+    }
+
+    QUndoStack* undoStack()
+    {
+        return m_undoStack;
     }
 
     double currentStrokeWidth() const { return m_currentStrokeWidth.value(); }
@@ -81,11 +95,12 @@ public:
 signals:
     void currentStrokeWidthChanged();
 
-
 private:
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(PenLineModel, double, m_currentStrokeWidth, 2.5, &PenLineModel::currentStrokeWidthChanged);
-    QVector<PenLine> m_lines;
+    friend class PenLineModelUndoCommand;
 
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(PenLineModel, double, m_currentStrokeWidth, 2.5, &PenLineModel::currentStrokeWidthChanged);
+    QVector<PenLine> m_lines, m_startLines;
+    QUndoStack *m_undoStack;
 };
 
 

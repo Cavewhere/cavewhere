@@ -80,6 +80,38 @@ StandardPage {
                     penModel.currentStrokeWidth += 0.1
                 }
             }
+
+            GroupBox {
+                ColumnLayout {
+                    QC.Button {
+                        id: undoId
+                        enabled: penModel.undoStack.canUndo
+                        text: "Undo"
+                        onClicked: {
+                            penModel.undoStack.undo();
+                        }
+                    }
+
+                    QC.Button {
+                        id: redoId
+                        enabled: penModel.undoStack.canRedo
+                        text: "Redo"
+                        onClicked: {
+                            penModel.undoStack.redo();
+                        }
+                    }
+
+                    QC.Button {
+                        id: clearId
+                        text: "Clear"
+                        enabled: penModel.canClearUndoStack
+                        onClicked: {
+                            penModel.clearUndoStack();
+                        }
+                    }
+
+                }
+            }
         }
     }
 
@@ -214,12 +246,14 @@ StandardPage {
             if(active) {
                 painterPathModel.activeLineIndex = penModel.rowCount();
                 penModel.addNewLine();
+            } else {
+                penModel.finishNewLine();
             }
         }
 
         onPointChanged: {
             if(active && handler.point.pressure > 0.0) {
-                console.log("Point.pressure:" + handler.point.position + " " + handler.point.pressure + active)
+                //console.log("Point.pressure:" + handler.point.position + " " + handler.point.pressure + active)
                 _mappedHandlerPoint = sketchPageId.mapToItem(containerId, handler.point.position);
 
                 let penPoint = penModel.penPoint(_mappedHandlerPoint, handler.point.pressure)
