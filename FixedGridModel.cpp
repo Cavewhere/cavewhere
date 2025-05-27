@@ -8,6 +8,15 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
     m_gridInterval(new cwLength(10.0, cwUnits::Meters, this)),
     m_textModel(new TextModel(this))
 {
+    connect(m_gridInterval, &cwLength::valueChanged, this, [this]() {
+        m_gridIntervalLength.notify();
+    });
+
+    connect(m_gridInterval, &cwLength::unitChanged, this, [this]() {
+        m_gridIntervalUnit.notify();
+    });
+
+
     m_size.setBinding([this]() {
         if(!m_gridVisible) {
             //Labels are also hidden when the grid lines are hidden
@@ -32,7 +41,7 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
         }
 
         //Interval in cave (meters)
-        double interval = cwUnits::convert(m_gridInterval->value(), (cwUnits::LengthUnit)m_gridInterval->unit(), cwUnits::Meters);
+        double interval = cwUnits::convert(m_gridIntervalLength.value(), (cwUnits::LengthUnit)m_gridIntervalUnit.value(), cwUnits::Meters);
 
         if (interval <= 0.0) {
             return positions;
@@ -78,15 +87,23 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
     };
 
     m_xGridLines.setBinding([this, gridLines]() {
-        auto viewport = m_viewport.value();
-        auto mapMatrix = m_mapMatrix.value();
+        QRectF viewport = m_viewport.value();
+        QMatrix4x4 mapMatrix = m_mapMatrix.value();
         const double xScale = mapMatrix(0,0);
         return gridLines(viewport.left(), viewport.right(), m_origin.value().x(), xScale);
     });
 
+    m_gridIntervalPixels.setBinding([this]() {
+        //Interval in cave (meters)
+        double interval = cwUnits::convert(m_gridIntervalLength.value(), (cwUnits::LengthUnit)m_gridIntervalUnit.value(), cwUnits::Meters);
+        QMatrix4x4 mapMatrix = m_mapMatrix.value();
+        const double xScale = mapMatrix(0,0);
+        return interval * xScale * 1.0 / m_labelScale;
+    });
+
     m_yGridLines.setBinding([this, gridLines]() {
-        auto viewport = m_viewport.value();
-        auto mapMatrix = m_mapMatrix.value();
+        QRectF viewport = m_viewport.value();
+        QMatrix4x4 mapMatrix = m_mapMatrix.value();
         const double yScale = mapMatrix(1,1);
         return gridLines(viewport.top(), viewport.bottom(), m_origin.value().y(), yScale);
     });
@@ -220,6 +237,7 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
 
     // Notify when line width changes (grid stroke width role)
     m_lineWidthNotifier = m_lineWidth.addNotifier([this]() {
+        // qDebug() << "LineWidth changed:" << m_lineWidth.value() << this;
         QModelIndex idx = index(GridLineIndex);
         emit dataChanged(idx, idx, { StrokeWidthRole });
     });

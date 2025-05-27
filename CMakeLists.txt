@@ -62,6 +62,7 @@ qt_add_qml_module(cavewhere_sketch
         SOURCES WorldToScreenMatrix.h WorldToScreenMatrix.cpp
         QML_FILES InfiniteGrid.qml
         SOURCES TextModel.h TextModel.cpp
+        SOURCES InfiniteGridModel.h InfiniteGridModel.cpp
 )
 
 # Generate the export header for windows
@@ -125,7 +126,8 @@ qt_add_executable(cavewhere-sketch-test
     testcases/test_CenterlinePainterModel.cpp
     testcases/test_FixedGridModel.cpp
     testcases/test_WorldToScreenMatrix.cpp
-    testcases/test_TextModel.cpp)
+    testcases/test_TextModel.cpp
+    testcases/test_InfiniteGridModel.cpp)
 
 set_target_properties(cavewhere-sketch-test PROPERTIES
     AUTOMOC ON

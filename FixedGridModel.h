@@ -38,6 +38,9 @@ class FixedGridModel : public AbstractPainterPathModel
 
     Q_PROPERTY(double labelScale READ labelScale WRITE setLabelScale NOTIFY labelScaleChanged BINDABLE bindableLabelScale)
 
+    Q_PROPERTY(double gridIntervalPixels READ gridIntervalPixels NOTIFY gridIntervalPixelsChanged BINDABLE bindableGridIntervalPixels)
+
+
 public:
     enum Index {
         GridLineIndex = 0,
@@ -65,7 +68,7 @@ public:
 
     QMatrix4x4 mapMatrix() const { return m_mapMatrix; }
     void setMapMatrix(const QMatrix4x4& mapMatrix) { m_mapMatrix = mapMatrix; }
-    QBindable<double> bindableMapMatrix() { return &m_mapMatrix; }
+    QBindable<QMatrix4x4> bindableMapMatrix() { return &m_mapMatrix; }
 
     QRectF viewport() const { return m_viewport; }
     void setViewport(const QRectF& rect) { m_viewport = rect; }
@@ -101,6 +104,10 @@ public:
     void setLabelScale(double labelScale) { m_labelScale = labelScale; }
     QBindable<double> bindableLabelScale() { return &m_labelScale; }
 
+    double gridIntervalPixels() const { return m_gridIntervalPixels.value(); }
+    QBindable<double> bindableGridIntervalPixels() const { return &m_gridIntervalPixels; }
+
+
     TextModel *textModel() const { return m_textModel; }
 
 signals:
@@ -116,6 +123,7 @@ signals:
     void labelScaleChanged();
     void labelBackgroundMarginChanged();
     void labelBackgroundColorChanged();
+    void gridIntervalPixelsChanged();
 
 protected:
     Path path(const QModelIndex& index) const override;
@@ -141,6 +149,10 @@ private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, QColor, m_labelBackgroundColor, Qt::white, &FixedGridModel::labelBackgroundColorChanged);
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, double, m_labelScale, 1.0, &FixedGridModel::labelScaleChanged);
 
+    //Readonly properties
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, double, m_gridIntervalPixels, 0.0, &FixedGridModel::gridIntervalPixelsChanged);
+
+
     struct GridLine {
         double position; //Position on the map
         double value; //The cave distance label
@@ -151,7 +163,21 @@ private:
         QString text;
     };
 
+    //Accessors for computed property
+    double gridIntervalLength() const {
+        return m_gridInterval->value();
+    }
+    Q_OBJECT_COMPUTED_PROPERTY(FixedGridModel, double, m_gridIntervalLength, &FixedGridModel::gridIntervalLength);
+
+    //Accessors for computed property
+    int gridIntervalUnit() const {
+        return m_gridInterval->unit();
+    }
+    Q_OBJECT_COMPUTED_PROPERTY(FixedGridModel, int, m_gridIntervalUnit, &FixedGridModel::gridIntervalUnit);
+
     Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, int, m_size); //Number of paths in the model, will 0, 1, or 2
+    // Q_OBJECT_COMPUTED_PROPERTY(FixedGridModel, double, m_gridIntervalLength, &FixedGridModel::gridIntervalLength);
+
     Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, QVector<GridLine>, m_xGridLines);
     Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, QVector<GridLine>, m_yGridLines);
     Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, QPainterPath, m_gridPath);
@@ -175,6 +201,7 @@ private:
 
 
     TextModel *m_textModel = nullptr;
+
 };
 
 } // namespace cwSketch

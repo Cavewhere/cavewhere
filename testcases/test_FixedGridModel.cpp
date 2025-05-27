@@ -18,7 +18,7 @@
 using namespace cwSketch;
 
 
-TEST_CASE("Default property values", "[InfiniteGridModel]") {
+TEST_CASE("Default property values", "[FixedGridModel]") {
     FixedGridModel model;
 
     // Basic model structure
@@ -52,7 +52,7 @@ TEST_CASE("Default property values", "[InfiniteGridModel]") {
     REQUIRE(model.gridInterval() != nullptr);
 }
 
-TEST_CASE("Setter methods and signals", "[InfiniteGridModel]") {
+TEST_CASE("Setter methods and signals", "[FixedGridModel]") {
     FixedGridModel model;
 
     QSignalSpy gridSpy(&model, &FixedGridModel::gridVisibleChanged);
@@ -94,7 +94,7 @@ TEST_CASE("Setter methods and signals", "[InfiniteGridModel]") {
     REQUIRE(labelFontSpy.count() == 1);
 }
 
-TEST_CASE("data() provides correct QVariant per role", "[InfiniteGridModel]") {
+TEST_CASE("data() provides correct QVariant per role", "[FixedGridModel]") {
     FixedGridModel model;
     model.setViewport(QRectF(0,0,10,10));
     // model.setMapScale(1.0);
@@ -122,7 +122,7 @@ TEST_CASE("data() provides correct QVariant per role", "[InfiniteGridModel]") {
     CHECK(!inv.isValid());
 }
 
-TEST_CASE("Grid row availability toggles with gridVisible", "[InfiniteGridModel]") {
+TEST_CASE("Grid row availability toggles with gridVisible", "[FixedGridModel]") {
     FixedGridModel model;
     model.setViewport(QRectF(0,0,10,10));
     // model.setMapScale(1.0);
@@ -167,7 +167,7 @@ TEST_CASE("Grid row availability toggles with gridVisible", "[InfiniteGridModel]
     CHECK(p1.elementCount() == labelCount);
 }
 
-TEST_CASE("Grid row availability toggles with labelVisible", "[InfiniteGridModel]") {
+TEST_CASE("Grid row availability toggles with labelVisible", "[FixedGridModel]") {
     FixedGridModel model;
     model.setViewport(QRectF(0,0,10,10));
     // model.setMapScale(1.0);
@@ -210,7 +210,7 @@ TEST_CASE("Grid row availability toggles with labelVisible", "[InfiniteGridModel
     CHECK(p1.elementCount() == labelCount );
 }
 
-TEST_CASE("dataChanged signals on property updates", "[InfiniteGridModel]") {
+TEST_CASE("dataChanged signals on property updates", "[FixedGridModel]") {
     FixedGridModel model;
     model.setViewport(QRectF(0,0,20,20));
 
@@ -270,7 +270,7 @@ TEST_CASE("dataChanged signals on property updates", "[InfiniteGridModel]") {
         REQUIRE(args0.at(1).value<QModelIndex>() == model.index(0,0));
         auto roles0 = args0.at(2).value<QVector<int>>();
         REQUIRE(roles0.contains(AbstractPainterPathModel::PainterPathRole));
-        // Second signal for label
+        // label backgrounds
         auto args1 = spy.takeFirst();
         REQUIRE(args1.at(0).value<QModelIndex>() == model.index(1,0));
         REQUIRE(args1.at(1).value<QModelIndex>() == model.index(1,0));
@@ -290,7 +290,7 @@ TEST_CASE("dataChanged signals on property updates", "[InfiniteGridModel]") {
         REQUIRE(margs0.at(1).value<QModelIndex>() == model.index(0,0));
         auto mroles0 = margs0.at(2).value<QVector<int>>();
         REQUIRE(mroles0.contains(AbstractPainterPathModel::PainterPathRole));
-        // label row
+        // row background
         auto margs1 = spy.takeFirst();
         REQUIRE(margs1.at(0).value<QModelIndex>() == model.index(1,0));
         REQUIRE(margs1.at(1).value<QModelIndex>() == model.index(1,0));
@@ -298,5 +298,49 @@ TEST_CASE("dataChanged signals on property updates", "[InfiniteGridModel]") {
         REQUIRE(mroles1.contains(AbstractPainterPathModel::PainterPathRole));
     }
 
+    SECTION("gridInterval changed length emits PainterPathRole") {
+        spy.clear();
 
+        CHECK(model.gridInterval()->value() == 10.0);
+
+        model.gridInterval()->setValue(20.0);
+
+        REQUIRE(spy.count() == 2);
+        // grid row
+        auto margs0 = spy.takeFirst();
+        REQUIRE(margs0.at(0).value<QModelIndex>() == model.index(0,0));
+        REQUIRE(margs0.at(1).value<QModelIndex>() == model.index(0,0));
+        auto mroles0 = margs0.at(2).value<QVector<int>>();
+        REQUIRE(mroles0.contains(AbstractPainterPathModel::PainterPathRole));
+
+        // row background
+        auto margs1 = spy.takeFirst();
+        REQUIRE(margs1.at(0).value<QModelIndex>() == model.index(1,0));
+        REQUIRE(margs1.at(1).value<QModelIndex>() == model.index(1,0));
+        auto mroles1 = margs1.at(2).value<QVector<int>>();
+        REQUIRE(mroles1.contains(AbstractPainterPathModel::PainterPathRole));
+    }
+
+    SECTION("gridInterval changed length units emits PainterPathRole") {
+        spy.clear();
+
+        CHECK(model.gridInterval()->value() == 10.0);
+
+        model.gridInterval()->setValue(20.0);
+
+        REQUIRE(spy.count() == 2);
+        // grid row
+        auto margs0 = spy.takeFirst();
+        REQUIRE(margs0.at(0).value<QModelIndex>() == model.index(0,0));
+        REQUIRE(margs0.at(1).value<QModelIndex>() == model.index(0,0));
+        auto mroles0 = margs0.at(2).value<QVector<int>>();
+        REQUIRE(mroles0.contains(AbstractPainterPathModel::PainterPathRole));
+
+        // row background
+        auto margs1 = spy.takeFirst();
+        REQUIRE(margs1.at(0).value<QModelIndex>() == model.index(1,0));
+        REQUIRE(margs1.at(1).value<QModelIndex>() == model.index(1,0));
+        auto mroles1 = margs1.at(2).value<QVector<int>>();
+        REQUIRE(mroles1.contains(AbstractPainterPathModel::PainterPathRole));
+    }
 }

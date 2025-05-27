@@ -298,16 +298,16 @@ StandardPage {
             viewport = sketchPageId.mapToItem(containerId, 0, 0, sketchPageId.width, sketchPageId.height)
         }
 
-        onViewportChanged: {
-            console.log("Viewport changed:" + viewport)
-        }
+        // onViewportChanged: {
+        //     console.log("Viewport changed:" + viewport)
+        // }
 
         //Start off in the center, PinchHandler remove this binding
         x: sketchPageId.width * 0.5
         y: sketchPageId.height * 0.5
 
         onScaleChanged: {
-            console.log("Scale changed:" + scale)
+            // console.log("Scale changed:" + scale)
             updateViewport();
         }
         onXChanged: updateViewport();
