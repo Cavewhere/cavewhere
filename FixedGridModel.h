@@ -32,6 +32,8 @@ class FixedGridModel : public AbstractPainterPathModel
     Q_PROPERTY(bool labelVisible READ labelVisible WRITE setLabelVisible NOTIFY labelVisibleChanged BINDABLE bindableLabelVisible)
     Q_PROPERTY(QColor labelColor READ labelColor WRITE setLabelColor NOTIFY labelColorChanged BINDABLE bindableLabelColor)
     Q_PROPERTY(QFont labelFont READ labelFont WRITE setLabelFont NOTIFY labelFontChanged BINDABLE bindableLabelFont)
+    Q_PROPERTY(double hiddenInterval READ hiddenInterval WRITE setHiddenInterval NOTIFY hiddenIntervalChanged BINDABLE bindableHiddenInterval)
+
     Q_PROPERTY(double labelBackgroundMargin READ labelBackgroundMargin WRITE setLabelBackgroundMargin NOTIFY labelBackgroundMarginChanged BINDABLE bindableLabelBackgroundMargin)
     Q_PROPERTY(QColor labelBackgroundColor READ labelBackgroundColor WRITE setLabelBackgroundColor NOTIFY labelBackgroundColorChanged BINDABLE bindableLabelBackgroundColor)
     Q_PROPERTY(TextModel* textModel READ textModel CONSTANT)
@@ -39,7 +41,7 @@ class FixedGridModel : public AbstractPainterPathModel
     Q_PROPERTY(double labelScale READ labelScale WRITE setLabelScale NOTIFY labelScaleChanged BINDABLE bindableLabelScale)
 
     Q_PROPERTY(double gridIntervalPixels READ gridIntervalPixels NOTIFY gridIntervalPixelsChanged BINDABLE bindableGridIntervalPixels)
-
+    Q_PROPERTY(QSizeF maxLabelSizePixels READ maxLabelSizePixels NOTIFY maxLabelSizePixelsChanged BINDABLE bindableMaxLabelSizePixels)
 
 public:
     enum Index {
@@ -104,9 +106,17 @@ public:
     void setLabelScale(double labelScale) { m_labelScale = labelScale; }
     QBindable<double> bindableLabelScale() { return &m_labelScale; }
 
+    //Uses the same map units as gridInterval()
+    //Ignores grid lines at this interval. This is useful for composing other grid model together
+    double hiddenInterval() const { return m_hiddenInterval.value(); }
+    void setHiddenInterval(const double& hiddenInterval) { m_hiddenInterval = hiddenInterval; }
+    QBindable<double> bindableHiddenInterval() { return &m_hiddenInterval; }
+
     double gridIntervalPixels() const { return m_gridIntervalPixels.value(); }
     QBindable<double> bindableGridIntervalPixels() const { return &m_gridIntervalPixels; }
 
+    QSizeF maxLabelSizePixels() const { return m_maxLabelSizePixels.value(); }
+    QBindable<QSizeF> bindableMaxLabelSizePixels() const { return &m_maxLabelSizePixels; }
 
     TextModel *textModel() const { return m_textModel; }
 
@@ -124,6 +134,8 @@ signals:
     void labelBackgroundMarginChanged();
     void labelBackgroundColorChanged();
     void gridIntervalPixelsChanged();
+    void hiddenIntervalChanged();
+    void maxLabelSizePixelsChanged();
 
 protected:
     Path path(const QModelIndex& index) const override;
@@ -148,9 +160,11 @@ private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, double, m_labelBackgroundMargin, 2.0, &FixedGridModel::labelBackgroundMarginChanged);
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, QColor, m_labelBackgroundColor, Qt::white, &FixedGridModel::labelBackgroundColorChanged);
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, double, m_labelScale, 1.0, &FixedGridModel::labelScaleChanged);
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, double, m_hiddenInterval, 0.0, &FixedGridModel::hiddenIntervalChanged);
 
     //Readonly properties
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, double, m_gridIntervalPixels, 0.0, &FixedGridModel::gridIntervalPixelsChanged);
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, QSizeF, m_maxLabelSizePixels, QSizeF(), &FixedGridModel::maxLabelSizePixelsChanged);
 
 
     struct GridLine {

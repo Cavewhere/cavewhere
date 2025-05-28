@@ -78,7 +78,7 @@ StandardPage {
 
     WorldToScreenMatrix {
         id: worldToScreenId
-        pixelDensity: Screen.pixelDensity //in mm
+        pixelDensity: Screen.pixelDensity //units = mm
         scale.scaleNumerator.value: 1
         scale.scaleDenominator.value: 250
     }
@@ -284,6 +284,16 @@ StandardPage {
         onGrabChanged: (transition, point) => {
             console.log("Grab changed:" + transition + " Exculive:" + PointerDevice.GrabExclusive + " Ungrab:" + PointerDevice.UngrabExclusive + " passive:" + PointerDevice.GrabPassive + " passive ungrab:" + PointerDevice.UngrabPassive)
         }
+    }
+
+    WheelHandler {
+        target: containerId
+        property: "scale"
+        targetScaleMultiplier: 1.1
+        // onWheel: {
+
+        // }
+
     }
 
     Item {

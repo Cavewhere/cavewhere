@@ -42,6 +42,7 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
 
         //Interval in cave (meters)
         double interval = cwUnits::convert(m_gridIntervalLength.value(), (cwUnits::LengthUnit)m_gridIntervalUnit.value(), cwUnits::Meters);
+        double ignoreInterval = cwUnits::convert(m_hiddenInterval.value(), (cwUnits::LengthUnit)m_gridIntervalUnit.value(), cwUnits::Meters);
 
         if (interval <= 0.0) {
             return positions;
@@ -73,13 +74,16 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
         // qDebug() << "Lines: left(m):" << leftMeter << "right(m):" << right << "scale:" << scale << "count:" << count << "interval:" << interval << "origin:" << origin;
         for(int i = 0; i < count; ++i) {
             double positionInMeters = (leftMeter + i * interval) * flipped;
+            bool keep = ignoreInterval > 0.0 ? std::abs(std::fmod(positionInMeters, ignoreInterval)) > 0.0001 : true;
 
-            const GridLine gridLine {
-                positionInMeters * scale, //in map pixels
-                positionInMeters //in cave units
-            };
+            if(keep) {
+                const GridLine gridLine {
+                    positionInMeters * scale, //in map pixels
+                    positionInMeters //in cave units
+                };
 
-            positions.append(gridLine);
+                positions.append(gridLine);
+            }
             // qDebug() << "Position:" << positions.last().position;
         }
 
@@ -98,6 +102,8 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
         double interval = cwUnits::convert(m_gridIntervalLength.value(), (cwUnits::LengthUnit)m_gridIntervalUnit.value(), cwUnits::Meters);
         QMatrix4x4 mapMatrix = m_mapMatrix.value();
         const double xScale = mapMatrix(0,0);
+        // qDebug() << "xScale:" << xScale;
+        // return interval * xScale * 1.0 / m_labelScale;
         return interval * xScale * 1.0 / m_labelScale;
     });
 
@@ -127,7 +133,31 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
         return painterPath;
     });
 
-    m_gridLabels.setBinding([this]() {
+    auto extraWidth = [](QRectF bounds) {
+        bounds.setWidth(bounds.width() + 1);
+        return bounds;
+    };
+
+    auto scaleBounds = [this](QRectF bounds){
+        double labelScale = m_labelScale.value();
+        bounds.setWidth(bounds.width() * labelScale);
+        bounds.setHeight(bounds.height() * labelScale);
+        return bounds;
+    };
+
+    auto textBounds = [extraWidth, scaleBounds](const QString& text, const QFontMetricsF& fontMetrics) {
+        return scaleBounds(extraWidth(fontMetrics.boundingRect(text)));
+    };
+
+    auto toString = [this](double num) {
+        if(num == 0.0) {
+            return QString::number(num) + m_gridInterval->unitName(m_gridInterval->unit());
+        } else {
+            return QString::number(num);
+        }
+    };
+
+    m_gridLabels.setBinding([this, textBounds, toString]() {
         QVector<GridLabel> labels;
 
         if(m_labelVisible.value()) {
@@ -139,33 +169,15 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
             const QFont font = m_labelFont.value();
             QFontMetricsF fontMetrics(font);
 
-            auto toString = [this](double num) {
-                if(num == 0.0) {
-                    return QString::number(num) + m_gridInterval->unitName(m_gridInterval->unit());
-                } else {
-                    return QString::number(num);
-                }
-            };
+
 
             labels.reserve(xGridLines.size() + yGridLines.size());
 
-            const double zeroHeight = fontMetrics.boundingRect('0').height(); //height() function doesn't give good results, use boundingbox instead
 
-            auto extraWidth = [](QRectF bounds) {
-                bounds.setWidth(bounds.width() + 1);
-                return bounds;
-            };
-
-            auto scaleBounds = [this](QRectF bounds){
-                double labelScale = m_labelScale.value();
-                bounds.setWidth(bounds.width() * labelScale);
-                bounds.setHeight(bounds.height() * labelScale);
-                return bounds;
-            };
 
             for(const GridLine& xValue: xGridLines) {
                 const QString text = toString(xValue.value);
-                QRectF bounds = scaleBounds(extraWidth(fontMetrics.boundingRect(text)));
+                QRectF bounds = textBounds(text, fontMetrics);
                 bounds.moveTo(xValue.position - bounds.width() * 0.5, viewport.bottom() - bounds.height());
 
 
@@ -177,7 +189,7 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
 
             for(const GridLine& yValue : yGridLines) {
                 const QString text = toString(yValue.value);
-                QRectF bounds = scaleBounds(extraWidth(fontMetrics.boundingRect(text)));
+                QRectF bounds = textBounds(text, fontMetrics);
                 bounds.moveTo(viewport.left(), yValue.position - bounds.height() * 0.5);
 
                 labels.append(GridLabel{
@@ -188,6 +200,32 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
         }
 
         return labels;
+    });
+
+    m_maxLabelSizePixels.setBinding([this, toString]() {
+        // const auto gridLabels = m_gridLabels.value();
+
+        // if(!gridLabels.isEmpty()) {
+        //     QSizeF max;
+        //     for(const auto& gridLabel : gridLabels ) {
+        //         double newWidth = gridLabel.bounds.size().width();
+        //         double newHeight = gridLabel.bounds.size().height();
+        //         if(newWidth > max.width()) {
+        //             max.setWidth(newWidth);
+        //         } else if(newHeight > max.height()){
+        //             max.setHeight(newHeight);
+        //         }
+        //     }
+        //     return max;
+        // } else {
+            const QFont font = m_labelFont.value();
+            QFontMetricsF fontMetrics(font);
+            double gridInterval = m_gridIntervalLength.value(); //in meters
+            double squared = gridInterval * gridInterval;
+            qDebug() << "Squared:" << squared << toString(-squared);
+            auto bounds = fontMetrics.boundingRect(toString(-squared)); //textBounds(QStringLiteral("-100"), fontMetrics);
+            return bounds.size();
+        // }
     });
 
     m_labelBackgroundPath.setBinding([this]() {
@@ -208,12 +246,6 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
 
         return painterPath;
     });
-
-    // m_scaledFont.setBinding([this]() {
-    //     auto font = m_labelFont.value();
-    //     font.setPointSizeF(m_labelScale.value() * font.pointSizeF());
-    //     return font;
-    // });
 
     m_gridVisibleNotifier = m_gridVisible.addNotifier([this]() {
         if(m_gridVisible.value()) {

@@ -65,6 +65,11 @@ bool TextModel::setData(const QModelIndex &index, const QVariant &value, int rol
 
 QHash<int, QByteArray> TextModel::roleNames() const
 {
+    return staticRoleNames();
+}
+
+QHash<int, QByteArray> TextModel::staticRoleNames()
+{
     return {
         { TextRole, "textRole" },
         { PositionRole, "positionRole" },

@@ -30,8 +30,18 @@ Item {
 
     ShapePathInstantiator {
         anchors.fill: parent
-        model: gridModel
+        model: gridModel.minorGridModel
     }
+
+    ShapePathInstantiator {
+        anchors.fill: parent
+        model: gridModel.majorGridModel
+    }
+
+    // ShapePathInstantiator {
+    //     anchors.fill: parent
+    //     model: gridModel
+    // }
 
     //Label Repeater for the grid labels
     Repeater {

@@ -30,13 +30,18 @@ class InfiniteGridModel : public QConcatenateTablesProxyModel {
     Q_PROPERTY(QFont labelFont READ labelFont WRITE setLabelFont NOTIFY labelFontChanged BINDABLE bindableLabelFont)
     Q_PROPERTY(double labelBackgroundMargin READ labelBackgroundMargin WRITE setLabelBackgroundMargin NOTIFY labelBackgroundMarginChanged BINDABLE bindableLabelBackgroundMargin)
     Q_PROPERTY(QColor labelBackgroundColor READ labelBackgroundColor WRITE setLabelBackgroundColor NOTIFY labelBackgroundColorChanged BINDABLE bindableLabelBackgroundColor)
+    Q_PROPERTY(double labelMinorScale READ labelMinorScale WRITE setLabelMinorScale NOTIFY labelMinorScaleChanged BINDABLE bindableLabelMinorScale)
+
     Q_PROPERTY(double msaaScale READ msaaScale WRITE setMsaaScale NOTIFY msaaScaleChanged BINDABLE bindableMsaaScale)
     Q_PROPERTY(double viewScale READ viewScale WRITE setViewScale NOTIFY viewScaleChanged BINDABLE bindableViewScale)
     Q_PROPERTY(QMatrix4x4 mapMatrix READ mapMatrix WRITE setMapMatrix NOTIFY mapMatrixChanged BINDABLE bindableMapMatrix)
     Q_PROPERTY(QPointF gridOrigin READ gridOrigin WRITE setGridOrigin NOTIFY gridOriginChanged BINDABLE bindableGridOrigin)
     Q_PROPERTY(QRectF viewport READ viewport WRITE setViewport NOTIFY viewportChanged BINDABLE bindableViewport)
 
-    Q_PROPERTY(TextModel* textModel READ textModel CONSTANT)
+    Q_PROPERTY(TextModelConcatenate* textModel READ textModel CONSTANT)
+
+    Q_PROPERTY(FixedGridModel* majorGridModel READ majorGridModel CONSTANT)
+    Q_PROPERTY(FixedGridModel* minorGridModel READ minorGridModel CONSTANT)
 
 public:
     explicit InfiniteGridModel(QObject* parent = nullptr);
@@ -77,6 +82,10 @@ public:
     void setLabelBackgroundColor(const QColor& color) { m_labelBackgroundColor = color; }
     QBindable<QColor> bindableLabelBackgroundColor() { return &m_labelBackgroundColor; }
 
+    double labelMinorScale() const { return m_labelMinorScale.value(); }
+    void setLabelMinorScale(const double& labelMinorScale) { m_labelMinorScale = labelMinorScale; }
+    QBindable<double> bindableLabelMinorScale() { return &m_labelMinorScale; }
+
     double msaaScale() const { return m_msaaScale; }
     void setMsaaScale(double value) { m_msaaScale = value; }
     QBindable<double> bindableMsaaScale() { return &m_msaaScale; }
@@ -101,9 +110,13 @@ public:
     void setMaxZoomLevel(const int& maxZoomLevel) { m_maxZoomLevel = maxZoomLevel; }
     QBindable<int> bindableMaxZoomLevel() { return &m_maxZoomLevel; }
 
-    TextModel *textModel() const;
+    TextModelConcatenate *textModel() const;
 
     QHash<int, QByteArray> roleNames() const { return m_majorGrid->roleNames(); }
+
+    FixedGridModel *majorGridModel() const;
+
+    FixedGridModel *minorGridModel() const;
 
 signals:
     void lineWidthChanged();
@@ -121,11 +134,12 @@ signals:
     void minorGridIntervalChanged();
     void minorGridMinPixelIntervalChanged();
     void maxZoomLevelChanged();
+    void labelMinorScaleChanged();
 
 private:
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_majorGridInterval, 10.0, &InfiniteGridModel::majorGridIntervalChanged);
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_minorGridInterval, 2.0, &InfiniteGridModel::minorGridIntervalChanged);
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_minorGridMinPixelInterval, double(10.0), &InfiniteGridModel::minorGridMinPixelIntervalChanged);
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_majorGridInterval, 5.0, &InfiniteGridModel::majorGridIntervalChanged);
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_minorGridInterval, 1.0, &InfiniteGridModel::minorGridIntervalChanged);
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_minorGridMinPixelInterval, 10.0, &InfiniteGridModel::minorGridMinPixelIntervalChanged);
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, int, m_maxZoomLevel, 5, &InfiniteGridModel::maxZoomLevelChanged);
 
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_lineWidth, 1.0, &InfiniteGridModel::lineWidthChanged)
@@ -134,13 +148,14 @@ private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QFont, m_labelFont, QFont(), &InfiniteGridModel::labelFontChanged)
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_labelBackgroundMargin, 2.0, &InfiniteGridModel::labelBackgroundMarginChanged)
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QColor, m_labelBackgroundColor, Qt::white, &InfiniteGridModel::labelBackgroundColorChanged)
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_labelMinorScale, 0.75, &InfiniteGridModel::labelMinorScaleChanged);
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_msaaScale, 1.0, &InfiniteGridModel::msaaScaleChanged)
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_viewScale, 1.0, &InfiniteGridModel::viewScaleChanged)
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QMatrix4x4, m_mapMatrix, QMatrix4x4(), &InfiniteGridModel::mapMatrixChanged)
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QPointF, m_gridOrigin, QPointF(), &InfiniteGridModel::gridOriginChanged)
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QRectF, m_viewport, QRectF(), &InfiniteGridModel::viewportChanged)
 
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, int, m_zoomLevel, 1)
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, int, m_zoomLevel, 0)
 
     int clampZoomLevel() const;
     Q_OBJECT_COMPUTED_PROPERTY(InfiniteGridModel, int, m_clampedZoomLevel, &InfiniteGridModel::clampZoomLevel);
@@ -153,6 +168,8 @@ private:
 
     FixedGridModel* m_majorGrid;
     FixedGridModel* m_minorGrid;
+
+    TextModelConcatenate* m_textModel;
 };
 }
 
