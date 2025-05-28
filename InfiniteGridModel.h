@@ -31,8 +31,9 @@ class InfiniteGridModel : public QConcatenateTablesProxyModel {
     Q_PROPERTY(double labelBackgroundMargin READ labelBackgroundMargin WRITE setLabelBackgroundMargin NOTIFY labelBackgroundMarginChanged BINDABLE bindableLabelBackgroundMargin)
     Q_PROPERTY(QColor labelBackgroundColor READ labelBackgroundColor WRITE setLabelBackgroundColor NOTIFY labelBackgroundColorChanged BINDABLE bindableLabelBackgroundColor)
     Q_PROPERTY(double labelMinorScale READ labelMinorScale WRITE setLabelMinorScale NOTIFY labelMinorScaleChanged BINDABLE bindableLabelMinorScale)
+    Q_PROPERTY(double labelMinorMargin READ labelMinorMargin WRITE setLabelMinorMargin NOTIFY labelMinorMarginChanged BINDABLE bindableLabelMinorMargin)
 
-    Q_PROPERTY(double msaaScale READ msaaScale WRITE setMsaaScale NOTIFY msaaScaleChanged BINDABLE bindableMsaaScale)
+    // Q_PROPERTY(double msaaScale READ msaaScale WRITE setMsaaScale NOTIFY msaaScaleChanged BINDABLE bindableMsaaScale)
     Q_PROPERTY(double viewScale READ viewScale WRITE setViewScale NOTIFY viewScaleChanged BINDABLE bindableViewScale)
     Q_PROPERTY(QMatrix4x4 mapMatrix READ mapMatrix WRITE setMapMatrix NOTIFY mapMatrixChanged BINDABLE bindableMapMatrix)
     Q_PROPERTY(QPointF gridOrigin READ gridOrigin WRITE setGridOrigin NOTIFY gridOriginChanged BINDABLE bindableGridOrigin)
@@ -86,9 +87,13 @@ public:
     void setLabelMinorScale(const double& labelMinorScale) { m_labelMinorScale = labelMinorScale; }
     QBindable<double> bindableLabelMinorScale() { return &m_labelMinorScale; }
 
-    double msaaScale() const { return m_msaaScale; }
-    void setMsaaScale(double value) { m_msaaScale = value; }
-    QBindable<double> bindableMsaaScale() { return &m_msaaScale; }
+    double labelMinorMargin() const { return m_labelMinorMargin.value(); }
+    void setLabelMinorMargin(const double& labelMinorMargin) { m_labelMinorMargin = labelMinorMargin; }
+    QBindable<double> bindableLabelMinorMargin() { return &m_labelMinorMargin; }
+
+    // double msaaScale() const { return m_msaaScale; }
+    // void setMsaaScale(double value) { m_msaaScale = value; }
+    // QBindable<double> bindableMsaaScale() { return &m_msaaScale; }
 
     double viewScale() const { return m_viewScale; }
     void setViewScale(double value) { m_viewScale = value; }
@@ -135,6 +140,7 @@ signals:
     void minorGridMinPixelIntervalChanged();
     void maxZoomLevelChanged();
     void labelMinorScaleChanged();
+    void labelMinorMarginChanged();
 
 private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_majorGridInterval, 5.0, &InfiniteGridModel::majorGridIntervalChanged);
@@ -149,7 +155,9 @@ private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_labelBackgroundMargin, 2.0, &InfiniteGridModel::labelBackgroundMarginChanged)
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QColor, m_labelBackgroundColor, Qt::white, &InfiniteGridModel::labelBackgroundColorChanged)
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_labelMinorScale, 0.75, &InfiniteGridModel::labelMinorScaleChanged);
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_msaaScale, 1.0, &InfiniteGridModel::msaaScaleChanged)
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_labelMinorMargin, 0.0, &InfiniteGridModel::labelMinorMarginChanged);
+
+    // Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_msaaScale, 1.0, &InfiniteGridModel::msaaScaleChanged)
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_viewScale, 1.0, &InfiniteGridModel::viewScaleChanged)
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QMatrix4x4, m_mapMatrix, QMatrix4x4(), &InfiniteGridModel::mapMatrixChanged)
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QPointF, m_gridOrigin, QPointF(), &InfiniteGridModel::gridOriginChanged)

@@ -296,6 +296,12 @@ StandardPage {
 
     }
 
+
+    DragHandler {
+        target: containerId
+        acceptedButtons: Qt.RightButton
+    }
+
     Item {
         id: containerId
         width: 1000

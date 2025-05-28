@@ -92,7 +92,7 @@ InfiniteGridModel::InfiniteGridModel(QObject *parent)
 
     m_minorGrid->bindableLabelVisible().setBinding([this]() {
         double minorGridPixels = m_minorGrid->gridIntervalPixels();
-        double margin = 10.0; //pixels
+        double margin = m_labelMinorMargin.value() * 2.0; //pixels
         qDebug() << "Minor grid:" << minorGridPixels << "label size:" << m_minorGrid->maxLabelSizePixels().width() << "margin:" << margin << "visible:" << (minorGridPixels > m_minorGrid->maxLabelSizePixels().width() + margin);
         return minorGridPixels > m_minorGrid->maxLabelSizePixels().width() + margin;
     });
@@ -104,17 +104,14 @@ InfiniteGridModel::InfiniteGridModel(QObject *parent)
     };
 
     m_majorZoomGridInterval.setBinding([this, interval]() {
-        qDebug() << "Major interval:" << interval(m_majorGridInterval.value(), m_clampedZoomLevel.value());
         return interval(m_majorGridInterval.value(), m_clampedZoomLevel.value());
     });
 
     m_minorZoomGridInterval.setBinding([this, interval]() {
-        qDebug() << "Minor interval:" << interval(m_minorGridInterval.value(), m_clampedZoomLevel.value());
         return interval(m_minorGridInterval.value(), m_clampedZoomLevel.value());
     });
 
     auto updateMajorInterval = [this]() {
-        qDebug() << "Major interval2:" << m_majorZoomGridInterval.value();
         m_majorGrid->gridInterval()->setValue(m_majorZoomGridInterval.value());
         m_minorGrid->setHiddenInterval(m_majorZoomGridInterval.value());
     };
@@ -122,22 +119,10 @@ InfiniteGridModel::InfiniteGridModel(QObject *parent)
     updateMajorInterval();
 
     auto updateMinorInterval = [this]() {
-        qDebug() << "Minor interval2:" << m_minorZoomGridInterval.value();
         m_minorGrid->gridInterval()->setValue(m_minorZoomGridInterval.value());
     };
     m_minorZoomGridIntervalNotifier = m_minorZoomGridInterval.addNotifier(updateMinorInterval);
     updateMinorInterval();
-
-    // m_minorGridIntervalPixelNotifier = m_minorGrid->bindableGridIntervalPixels().addNotifier([this]() {
-    //     double minorGridPixels = m_minorGrid->gridIntervalPixels();
-    //     // if(minorGridPixels < m_minorGridMinPixelInterval) {
-    //     //     m_zoomLevel.setValue(m_zoomLevel.value() + 1);
-    //     // } else if (minorGridPixels > m_minorGridMinPixelInterval * 10.0) {
-    //     //     m_zoomLevel.setValue(m_zoomLevel.value() - 1);
-    //     // }
-    //     // m_clampedZoomLevel.notify();
-    //     qDebug() << "scale:" << m_viewScale << "Minor grid pixel size:"  << m_minorGrid->gridIntervalPixels();
-    // });
 
     m_zoomLevel.setBinding([this]() -> int {
         double mapScale = m_mapMatrix.value()(0,0);
@@ -146,20 +131,6 @@ InfiniteGridModel::InfiniteGridModel(QObject *parent)
         double offset = 2.0; //Not sure why 2.0 works, but it does
         return int(std::log10(zoomScale * minPixelScale) + offset);
     });
-
-    // m_zoomLevel.setBinding([this]()->int {
-    //     double pixelSize = m_minorGrid->gridIntervalPixels();
-    //     double xScale = m_mapMatrix.value()(0,0);
-    //     qDebug() << "Zoom level:" << std::log10(m_viewScale * xScale) << "pixelSize:" << pixelSize << xScale << m_viewScale << "Before log:" << m_viewScale * xScale;
-    //     return std::log10(m_viewScale / xScale);
-    // });
-
-    // test_clampedZoomLevelNotifier = m_clampedZoomLevel.addNotifier([this]() {
-    //     qDebug() << "Clamped zoom changed:" << m_clampedZoomLevel;
-    // });
-
-
-
 
 }
 

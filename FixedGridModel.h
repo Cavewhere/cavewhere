@@ -189,7 +189,7 @@ private:
     }
     Q_OBJECT_COMPUTED_PROPERTY(FixedGridModel, int, m_gridIntervalUnit, &FixedGridModel::gridIntervalUnit);
 
-    Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, int, m_size); //Number of paths in the model, will 0, 1, or 2
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, int, m_size, LabelBackgroundIndex + 1); //Number of paths in the model, will 0, 1, or 2
     // Q_OBJECT_COMPUTED_PROPERTY(FixedGridModel, double, m_gridIntervalLength, &FixedGridModel::gridIntervalLength);
 
     Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, QVector<GridLine>, m_xGridLines);

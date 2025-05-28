@@ -8,6 +8,33 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
     m_gridInterval(new cwLength(10.0, cwUnits::Meters, this)),
     m_textModel(new TextModel(this))
 {
+    m_gridVisibleNotifier = m_gridVisible.addNotifier([this]() {
+        if(m_gridVisible.value()) {
+            beginInsertRows(QModelIndex(), GridLineIndex, LabelBackgroundIndex);
+            m_size = 2;
+            endInsertRows();
+        } else {
+            beginRemoveRows(QModelIndex(), GridLineIndex, LabelBackgroundIndex);
+            m_size = 0;
+            endRemoveRows();
+        }
+    });
+
+    m_labelVisibleNotifier = m_labelVisible.addNotifier([this]() {
+        if(m_gridVisible.value()) {
+            if(m_labelVisible.value()) {
+                beginInsertRows(QModelIndex(), LabelBackgroundIndex, LabelBackgroundIndex);
+                m_size = 2;
+                endInsertRows();
+            } else {
+                qDebug() << "remove background labels: rowCount:" << rowCount() << LabelBackgroundIndex;
+                beginRemoveRows(QModelIndex(), LabelBackgroundIndex, LabelBackgroundIndex);
+                m_size = 1;
+                endRemoveRows();
+            }
+        }
+    });
+
     connect(m_gridInterval, &cwLength::valueChanged, this, [this]() {
         m_gridIntervalLength.notify();
     });
@@ -17,19 +44,18 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
     });
 
 
-    m_size.setBinding([this]() {
-        if(!m_gridVisible) {
-            //Labels are also hidden when the grid lines are hidden
-            return 0;
-        }
+    // m_size.setBinding([this]() {
+    //     if(!m_gridVisible) {
+    //         //Labels are also hidden when the grid lines are hidden
+    //         return 0;
+    //     }
 
-        if(m_labelVisible) {
-            return LabelBackgroundIndex + 1;
-        }
+    //     if(m_labelVisible) {
+    //         return LabelBackgroundIndex + 1;
+    //     }
 
-        return GridLineIndex + 1;
-    });
-
+    //     return GridLineIndex + 1;
+    // });
 
 
     auto gridLines = [this](double left, double right, double origin, double scale) {
@@ -247,37 +273,23 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
         return painterPath;
     });
 
-    m_gridVisibleNotifier = m_gridVisible.addNotifier([this]() {
-        if(m_gridVisible.value()) {
-            beginInsertRows(QModelIndex(), GridLineIndex, LabelBackgroundIndex);
-            endInsertRows();
-        } else {
-            beginRemoveRows(QModelIndex(), GridLineIndex, LabelBackgroundIndex);
-            endRemoveRows();
-        }
-    });
 
-    m_labelVisibleNotifier = m_labelVisible.addNotifier([this]() {
-        if(m_labelVisible.value()) {
-            beginInsertRows(QModelIndex(), LabelBackgroundIndex, LabelBackgroundIndex);
-            endInsertRows();
-        } else {
-            beginRemoveRows(QModelIndex(), LabelBackgroundIndex, LabelBackgroundIndex);
-            endRemoveRows();
-        }
-    });
 
     // Notify when line width changes (grid stroke width role)
     m_lineWidthNotifier = m_lineWidth.addNotifier([this]() {
         // qDebug() << "LineWidth changed:" << m_lineWidth.value() << this;
         QModelIndex idx = index(GridLineIndex);
-        emit dataChanged(idx, idx, { StrokeWidthRole });
+        if(idx.isValid()) {
+            emit dataChanged(idx, idx, { StrokeWidthRole });
+        }
     });
 
     // Notify when line color changes (grid stroke color role)
     m_lineColorNotifier = m_lineColor.addNotifier([this]() {
         QModelIndex idx = index(GridLineIndex);
-        emit dataChanged(idx, idx, { StrokeColorRole });
+        if(idx.isValid()) {
+            emit dataChanged(idx, idx, { StrokeColorRole });
+        }
     });
 
     // Notify when label color changes (label stroke color role)
@@ -285,18 +297,24 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
         // label row is 1 when grid is visible, otherwise 0
         int row = m_gridVisible ? LabelBackgroundIndex : GridLineIndex;
         QModelIndex idx = index(row);
-        emit dataChanged(idx, idx, { StrokeColorRole });
+        if(idx.isValid()) {
+            emit dataChanged(idx, idx, { StrokeColorRole });
+        }
     });
 
     // Notify when grid geometry/path changes (grid painter path role)
     m_gridPathNotifier = m_gridPath.addNotifier([this]() {
         QModelIndex idx = index(GridLineIndex);
-        emit dataChanged(idx, idx, { PainterPathRole });
+        if(idx.isValid()) {
+            emit dataChanged(idx, idx, { PainterPathRole });
+        }
     });
 
     m_labelsBackgroundNotifier = m_labelBackgroundPath.addNotifier([this]() {
         QModelIndex idx = index(LabelBackgroundIndex);
-        emit dataChanged(idx, idx, { PainterPathRole });
+        if(idx.isValid()) {
+            emit dataChanged(idx, idx, { PainterPathRole });
+        }
     });
 
     m_gridLabelsNotifier = m_gridLabels.addNotifier([this]() {
@@ -418,6 +436,8 @@ cwSketch::AbstractPainterPathModel::Path cwSketch::FixedGridModel::path(const QM
         };
     };
 
+    qDebug() << "visible:" << m_gridVisible.value() << m_labelVisible.value();
+
     if(m_gridVisible.value() && m_labelVisible.value()) {
         if(index.row() == GridLineIndex) {
             return gridPath();
@@ -436,9 +456,10 @@ cwSketch::AbstractPainterPathModel::Path cwSketch::FixedGridModel::path(const QM
     //     }
     // }
 
-    Q_ASSERT(false); //Unhandled case
-    static const Path emptyPath{};
-    return emptyPath;
+    // Q_ASSERT(false); //Unhandled case
+    // static const Path emptyPath{};
+    // qDebug() << "Unhandled case!";
+    return Path {};
 }
 
 
