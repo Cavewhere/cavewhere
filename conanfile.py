@@ -15,7 +15,7 @@ class CaveWhereConan(ConanFile):
     settings = "os", "compiler", "build_type", "arch"
     requires = [
     ("catch2/[>=3.7.1]"),
-    ("protobuf/[>=5.27.0]"),
+    ("protobuf/[>=5.27.0 <6.0]"),
 
     #We handle survex dependancies here for now, since we're using conan
     ("wxwidgets/[>=3.2.6]"),
@@ -45,7 +45,7 @@ class CaveWhereConan(ConanFile):
             self.requires("sqlite3/[>=3.44.2]")
 
     def build_requirements(self):
-        self.tool_requires("protobuf/5.27.0")
+        self.tool_requires("protobuf/[>=5.27.0 <6.0]")
 
     def configure(self):
         if not self.options.system_qt:
