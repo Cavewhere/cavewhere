@@ -6,16 +6,15 @@
 using namespace cwSketch;
 
 InfiniteGridModel::InfiniteGridModel(QObject *parent)
-    : QConcatenateTablesProxyModel(parent)
+    : QObject(parent)
     , m_majorGrid(new FixedGridModel(this))
     , m_minorGrid(new FixedGridModel(this))
-    , m_textModel(new TextModelConcatenate(this))
 {
-    addSourceModel(m_minorGrid);
-    addSourceModel(m_majorGrid);
+    // addSourceModel(m_minorGrid);
+    // addSourceModel(m_majorGrid);
 
-    m_textModel->addSourceModel(m_majorGrid->textModel());
-    m_textModel->addSourceModel(m_minorGrid->textModel());
+    // m_textModel->addSourceModel(m_majorGrid->textModel());
+    // m_textModel->addSourceModel(m_minorGrid->textModel());
 
     m_minorGrid->setObjectName(QStringLiteral("minorGridModel"));
     m_majorGrid->setObjectName(QStringLiteral("majorGridModel"));
@@ -134,27 +133,11 @@ InfiniteGridModel::InfiniteGridModel(QObject *parent)
 
 }
 
-TextModelConcatenate *InfiniteGridModel::textModel() const
-{
-    return m_textModel;
-}
-
 int InfiniteGridModel::clampZoomLevel() const
 {
     // qDebug() << "Clamped Zoom level:" << std::max(0, std::min(m_zoomLevel.value(), m_maxZoomLevel.value()));
     return std::max(0, std::min(m_zoomLevel.value(), m_maxZoomLevel.value()));
 }
-
-// double InfiniteGridModel::majorZoomGridInterval() const
-// {
-//     qDebug() << "MajorZoomGridInterval!" << m_clampedZoomLevel.value() * m_majorGridInterval.value();
-//     return m_clampedZoomLevel.value() * m_majorGridInterval.value();
-// }
-
-// double InfiniteGridModel::minorZoomGridInterval() const
-// {
-//     return m_clampedZoomLevel.value() * m_minorGridInterval.value();
-// }
 
 
 FixedGridModel *InfiniteGridModel::majorGridModel() const
@@ -165,4 +148,14 @@ FixedGridModel *InfiniteGridModel::majorGridModel() const
 FixedGridModel *InfiniteGridModel::minorGridModel() const
 {
     return m_minorGrid;
+}
+
+TextModel *InfiniteGridModel::majorTextModel() const
+{
+    return m_majorGrid->textModel();
+}
+
+TextModel *InfiniteGridModel::minorTextModel() const
+{
+    return m_minorGrid->textModel();
 }

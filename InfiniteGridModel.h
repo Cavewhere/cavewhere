@@ -15,7 +15,7 @@
 
 namespace cwSketch {
 
-class InfiniteGridModel : public QConcatenateTablesProxyModel {
+class InfiniteGridModel : public QObject {
     Q_OBJECT
     QML_ELEMENT
 
@@ -39,10 +39,11 @@ class InfiniteGridModel : public QConcatenateTablesProxyModel {
     Q_PROPERTY(QPointF gridOrigin READ gridOrigin WRITE setGridOrigin NOTIFY gridOriginChanged BINDABLE bindableGridOrigin)
     Q_PROPERTY(QRectF viewport READ viewport WRITE setViewport NOTIFY viewportChanged BINDABLE bindableViewport)
 
-    Q_PROPERTY(TextModelConcatenate* textModel READ textModel CONSTANT)
-
     Q_PROPERTY(FixedGridModel* majorGridModel READ majorGridModel CONSTANT)
     Q_PROPERTY(FixedGridModel* minorGridModel READ minorGridModel CONSTANT)
+
+    Q_PROPERTY(TextModel* majorTextModel READ majorTextModel CONSTANT)
+    Q_PROPERTY(TextModel* minorTextModel READ minorTextModel CONSTANT)
 
 public:
     explicit InfiniteGridModel(QObject* parent = nullptr);
@@ -120,8 +121,10 @@ public:
     QHash<int, QByteArray> roleNames() const { return m_majorGrid->roleNames(); }
 
     FixedGridModel *majorGridModel() const;
-
     FixedGridModel *minorGridModel() const;
+
+    TextModel *majorTextModel() const;
+    TextModel *minorTextModel() const;
 
 signals:
     void lineWidthChanged();
@@ -176,8 +179,6 @@ private:
 
     FixedGridModel* m_majorGrid;
     FixedGridModel* m_minorGrid;
-
-    TextModelConcatenate* m_textModel;
 };
 }
 

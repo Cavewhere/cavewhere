@@ -23,6 +23,18 @@ public:
         QFont font;
         QColor fillColor;
         QColor strokeColor;
+
+        bool operator==(const TextRow& other) const {
+            return text == other.text &&
+                   position == other.position &&
+                   font == other.font &&
+                   fillColor == other.fillColor &&
+                   strokeColor == other.strokeColor;
+        }
+
+        bool operator!=(const TextRow& other) const {
+            return !(*this == other);
+        }
     };
 
     enum TextRoles
@@ -45,9 +57,12 @@ public:
     QHash<int, QByteArray> roleNames() const override;
     static QHash<int, QByteArray> staticRoleNames();
 
-    Q_INVOKABLE void addText(const QModelIndex& index, const TextRow& row);
+    Q_INVOKABLE void addText(int rowIndex, const TextRow& row);
+    Q_INVOKABLE void addText(int rowIndex, const QVector<TextRow>& rows);
     Q_INVOKABLE void removeText(const QModelIndex& index);
+    Q_INVOKABLE void removeText(const QModelIndex& index, int count);
     Q_INVOKABLE void setRows(const QVector<TextRow>& rows);
+    Q_INVOKABLE void replaceRows(const QVector<TextRow>& rows);
     Q_INVOKABLE void clear();
 
     QVector<TextRow> rows() const { return m_rows; }

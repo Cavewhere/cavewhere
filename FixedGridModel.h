@@ -170,11 +170,29 @@ private:
     struct GridLine {
         double position; //Position on the map
         double value; //The cave distance label
+
+        bool operator==(const GridLine& other) const {
+            return position == other.position
+                   && value == other.value;
+        }
+
+        bool operator!=(const GridLine& other) const {
+            return !(*this == other);
+        }
     };
 
     struct GridLabel {
         QRectF bounds;
         QString text;
+
+        bool operator==(const GridLabel& other) const {
+            return bounds == other.bounds
+                   && text == other.text;
+        }
+
+        bool operator!=(const GridLabel& other) const {
+            return !(*this == other);
+        }
     };
 
     //Accessors for computed property
@@ -197,6 +215,7 @@ private:
     Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, QPainterPath, m_gridPath);
 
     Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, QVector<GridLabel>, m_gridLabels);
+    Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, QVector<TextModel::TextRow>, m_textRows);
 
     Q_OBJECT_BINDABLE_PROPERTY(FixedGridModel, QPainterPath, m_labelBackgroundPath);
 

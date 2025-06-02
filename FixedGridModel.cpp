@@ -247,9 +247,9 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
             const QFont font = m_labelFont.value();
             QFontMetricsF fontMetrics(font);
             double gridInterval = m_gridIntervalLength.value(); //in meters
-            double squared = gridInterval * gridInterval;
-            qDebug() << "Squared:" << squared << toString(-squared);
+            double squared = gridInterval * gridInterval * 10 * 9;
             auto bounds = fontMetrics.boundingRect(toString(-squared)); //textBounds(QStringLiteral("-100"), fontMetrics);
+            qDebug() << "Squared:" << squared << toString(-squared) << bounds;
             return bounds.size();
         // }
     });
@@ -317,97 +317,35 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
         }
     });
 
-    m_gridLabelsNotifier = m_gridLabels.addNotifier([this]() {
-        const auto newLabels = m_gridLabels.value();               // QVector<GridLabel>
-        const auto oldRows = m_textModel->rows();         // QVector<TextRow>
-        const int nNew = newLabels.size();
-        const int nOld = oldRows.size();
+    m_textRows.setBinding([this]() {
+        const auto font = m_labelFont.value();
+        const auto fillColor = m_labelColor.value();
 
         // Helper to convert a GridLabel -> TextRow
-        auto makeRow = [this](const GridLabel& gridLabel){
+        auto makeRow = [this, font, fillColor](const GridLabel& gridLabel){
             TextModel::TextRow row;
             row.text        = gridLabel.text;
             row.position    = gridLabel.bounds.topLeft();
-            row.font        = m_labelFont; //m_scaledFont;
-            row.fillColor   = m_labelColor;
+            row.font        = font;
+            row.fillColor   = fillColor;
             row.strokeColor = Qt::transparent;
             return row;
         };
 
-        // // 1) If sizes match, and every element is equal, do nothing.
-        // if (nNew == nOld) {
-        //     bool identical = true;
-        //     for (int i = 0; i < nOld; ++i) {
-        //         if (oldRows[i].text != newLabels[i].text) {
-        //             identical = false;
-        //             break;
-        //         }
-        //     }
-        //     if (identical) return;
-        // }
+        auto labels = m_gridLabels.value();
 
-        // // 2) Try to find oldRows as a contiguous subsequence in newLabels → additions at ends
-        // if (nNew > nOld) {
-        //     // Scan for a start index j so that newLabels[j..j+nOld-1] matches oldRows[0..nOld-1].
-        //     for (int j = 0; j <= nNew - nOld; ++j) {
-        //         bool match = true;
-        //         for (int k = 0; k < nOld; ++k) {
-        //             if (oldRows[k].text != newLabels[j+k].text) {
-        //                 match = false;
-        //                 break;
-        //             }
-        //         }
-        //         if (!match) continue;
+        QVector<TextModel::TextRow> rows;
+        rows.reserve(labels.size());
 
-        //         // Found match at offset j
-        //         //  - j rows were *added* at the front:
-        //         for (int f = j-1; f >= 0; --f) {
-        //             m_textModel->addText(m_textModel->index(0,0), makeRow(newLabels[f]));
-        //         }
-        //         //  - (nNew-nOld-j) rows were *added* at the back:
-        //         int backStart = j + nOld;
-        //         for (int b = backStart; b < nNew; ++b) {
-        //             m_textModel->addText(QModelIndex(), makeRow(newLabels[b]));
-        //         }
-        //         return;
-        //     }
-        // }
-        // // 3) Try to find newLabels as a contiguous subsequence in oldRows → removals at ends
-        // if (nOld > nNew) {
-        //     // Scan for a start index j so that oldRows[j..j+nNew-1] matches newLabels[0..nNew-1].
-        //     for (int j = 0; j <= nOld - nNew; ++j) {
-        //         bool match = true;
-        //         for (int k = 0; k < nNew; ++k) {
-        //             if (oldRows[j+k].text != newLabels[k].text) {
-        //                 match = false;
-        //                 break;
-        //             }
-        //         }
-        //         if (!match) continue;
-
-        //         // Found match at offset j
-        //         //  - j rows were *removed* from the front:
-        //         for (int f = 0; f < j; ++f) {
-        //             m_textModel->removeText(m_textModel->index(0,0));
-        //         }
-        //         //  - (nOld-nNew-j) rows were *removed* from the back:
-        //         int removeBack = nOld - nNew - j;
-        //         for (int b = 0; b < removeBack; ++b) {
-        //             m_textModel->removeText(
-        //                 m_textModel->index(m_textModel->rowCount()-1, 0)
-        //                 );
-        //         }
-        //         return;
-        //     }
-        // }
-
-        // 4) Fallback: too complicated to diff → full reset
-        QVector<TextModel::TextRow> all;
-        all.reserve(nNew);
-        for (auto const& label : newLabels) {
-            all.append(makeRow(label));
+        for(const auto& label : labels) {
+            rows.append(makeRow(label));
         }
-        m_textModel->setRows(all);
+
+        return rows;
+    });
+
+    m_gridLabelsNotifier = m_textRows.addNotifier([this]() {
+        m_textModel->replaceRows(m_textRows);
     });
 
 }
@@ -436,7 +374,6 @@ cwSketch::AbstractPainterPathModel::Path cwSketch::FixedGridModel::path(const QM
         };
     };
 
-    qDebug() << "visible:" << m_gridVisible.value() << m_labelVisible.value();
 
     if(m_gridVisible.value() && m_labelVisible.value()) {
         if(index.row() == GridLineIndex) {
@@ -450,15 +387,8 @@ cwSketch::AbstractPainterPathModel::Path cwSketch::FixedGridModel::path(const QM
         }
     }
 
-    // else if(m_labelVisible.value()) {
-    //     if(index.row() == 0) {
-    //         return labelPath();
-    //     }
-    // }
-
-    // Q_ASSERT(false); //Unhandled case
-    // static const Path emptyPath{};
-    // qDebug() << "Unhandled case!";
+    //This is an unhandled case, because the model and QProperty will be in an
+    //intermidant state, we need to return an empty path.
     return Path {};
 }
 

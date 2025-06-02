@@ -15,6 +15,7 @@ QVariant TextModel::data(const QModelIndex &index, int role) const
 {
     if (!index.isValid() || index.row() < 0 || index.row() >= m_rows.size())
     {
+        qDebug() << "Invalid:" << index.isValid() << index.row();
         return {};
     }
 
@@ -26,7 +27,9 @@ QVariant TextModel::data(const QModelIndex &index, int role) const
     case FontRole:        return row.font;
     case FillColorRole:   return row.fillColor;
     case StrokeColorRole: return row.strokeColor;
-    default:              return {};
+    default:
+        qDebug() << "Unknown role:" << role << index;
+        return {};
     }
 }
 
@@ -79,11 +82,34 @@ QHash<int, QByteArray> TextModel::staticRoleNames()
     };
 }
 
-void TextModel::addText(const QModelIndex &index, const TextRow &row)
+void TextModel::addText(int rowIndex, const TextRow &row)
 {
-    int pos = index.isValid() ? index.row() : m_rows.size();
-    beginInsertRows(QModelIndex(), pos, pos);
-    m_rows.insert(pos, row);
+
+    if(rowIndex < 0 || rowIndex > m_rows.size()) {
+        Q_ASSERT(false);
+        return;
+    }
+
+    beginInsertRows(QModelIndex(), rowIndex, rowIndex);
+    m_rows.insert(rowIndex, row);
+    endInsertRows();
+}
+
+void TextModel::addText(int rowIndex, const QVector<TextRow> &rows)
+{
+    // only insert at a valid index
+    if (rowIndex < 0 || rowIndex > m_rows.size() || rows.isEmpty()) {
+        Q_ASSERT(false);
+        return;
+    }
+
+    const int pos = rowIndex;
+    const int count = rows.size();
+
+    beginInsertRows(QModelIndex(), pos, pos + count - 1);
+    for (int i = 0; i < count; ++i) {
+        m_rows.insert(pos + i, rows.at(i));
+    }
     endInsertRows();
 }
 
@@ -91,6 +117,7 @@ void TextModel::removeText(const QModelIndex &index)
 {
     if (!index.isValid() || index.row() < 0 || index.row() >= m_rows.size())
     {
+        Q_ASSERT(false);
         return;
     }
 
@@ -99,11 +126,79 @@ void TextModel::removeText(const QModelIndex &index)
     endRemoveRows();
 }
 
+void TextModel::removeText(const QModelIndex &index, int count)
+{
+    if (!index.isValid()
+        || index.row() < 0
+        || index.row() >= m_rows.size()
+        || count <= 0)
+    {
+        Q_ASSERT(false);
+        return;
+    }
+
+    const int start = index.row();
+    const int end = start + count - 1;
+
+    //make sure we don't go passed the end
+    Q_ASSERT(end <= m_rows.size() - 1);
+
+    beginRemoveRows(QModelIndex(), start, end);
+    // remove 'count' entries at position 'start'
+    for (int i = start; i <= end; ++i) {
+        m_rows.remove(start);
+    }
+    endRemoveRows();
+}
+
 void TextModel::setRows(const QVector<TextRow> &rows)
 {
     beginResetModel();
     m_rows = rows;
     endResetModel();
+}
+
+/**
+ * This prevents using a resetModel and adds new data to the end / beginning
+ * of the if needed. Called dataChanged the whole updated model. Model reset
+ * can cause object destruction and re-creation. This enable re-use of items.
+ */
+void TextModel::replaceRows(const QVector<TextRow> &rows)
+{
+
+    if(m_rows.size() < rows.size()) {
+        //Add rows to the end
+        const int diff = rows.size() - m_rows.size();
+        const int begin = m_rows.size();
+        beginInsertRows(QModelIndex(), begin, begin + diff - 1);
+        m_rows = rows;
+        endInsertRows();
+
+        //Data changed on everything else
+        Q_ASSERT(!m_rows.isEmpty());
+        if(begin > 0) {
+            emit dataChanged(index(0), index(begin  - 1));
+        }
+    } else if (m_rows.size() > rows.size()) {
+        //Remove rows at the end
+        const int diff = m_rows.size() - rows.size();
+        const int begin = m_rows.size() - diff;
+        beginRemoveRows(QModelIndex(), begin, m_rows.size() - 1);
+        m_rows = rows;
+        endRemoveRows();
+
+        //Data changed on everything else
+        if(!m_rows.isEmpty()) {
+            emit dataChanged(index(0), index(m_rows.size() - 1));
+        }
+    } else {
+        //Rows are equal size
+        m_rows = rows;
+
+        if(!m_rows.isEmpty()) {
+            emit dataChanged(index(0), index(m_rows.size() - 1));
+        }
+    }
 }
 
 void TextModel::clear()
