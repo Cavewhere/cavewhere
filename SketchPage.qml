@@ -36,46 +36,6 @@ StandardPage {
         penLineModel: movingAverageProxyModelId
     }
 
-    // InfiniteGridModel {
-    //     id: majorGridModel
-    //     viewport: containerId.viewport
-    //     origin: minorGridModel.origin
-    //     lineColor: "#1eb6dd"
-    //     labelColor: "#178ba8"
-    //     gridInterval.value: 5.0
-    //     mapMatrix: worldToScreenId.matrix
-    //     gridVisible: {
-    //         let msaa = RootDataSketch.sampleCount;
-    //         let spacing = 1.0 / Math.sqrt(msaa);
-    //         let scaledLineWidth = containerId.scale * lineWidth;
-    //         return scaledLineWidth > spacing;
-
-    //         // lineWidth / containerId.scale < 1.0
-    //     }
-
-    //     //Keeps the font size the same when zooming in and out
-    //     labelScale: 1.0 / containerId.scale
-    // }
-
-    // InfiniteGridModel {
-    //     id: minorGridModel
-    //     viewport: containerId.viewport
-    //     origin: Qt.point(containerId.x, containerId.y);
-    //     lineColor: "#5dcae7"
-    //     lineWidth: 0.5
-    //     labelVisible: false
-    //     gridVisible: {
-    //         let msaa = RootDataSketch.sampleCount;
-    //         let spacing = 1.0 / Math.sqrt(msaa);
-    //         let scaledLineWidth = containerId.scale * lineWidth;
-    //         return scaledLineWidth > spacing;
-
-    //         // lineWidth / containerId.scale < 1.0
-    //     }
-    //     gridInterval.value: 1.0
-    //     mapMatrix: worldToScreenId.matrix
-    // }
-
     WorldToScreenMatrix {
         id: worldToScreenId
         pixelDensity: Screen.pixelDensity //units = mm
@@ -232,6 +192,7 @@ StandardPage {
     }
 
     ExclusivePointHandler {
+    // PointHandler {
         id: handler
 
         property double pressureScale: 10.0
@@ -243,25 +204,28 @@ StandardPage {
         //acceptedDevices: PointerDevice.Unknown
 
         //Works for ipad, windows 11 with pen, android with spen
-        acceptedDevices:  PointerDevice.Stylus | PointerDevice.Mouse //| PointerDevice.TouchScreen
+        // acceptedButtons: Qt.LeftButton
+        acceptedDevices: PointerDevice.Stylus | PointerDevice.Mouse | PointerDevice.TouchPad //| PointerDevice.TouchScreen
         // acceptedPointerTypes: PointerDevice.Pen
 
-        grabPermissions: PointerHandler.ApprovesTakeOverByAnything //PointerHandler.CanTakeOverFromHandlersOfSameType | PointerHandler.ApprovesTakeOverByAnything
+        // grabPermissions: PointerHandler.ApprovesTakeOverByAnything //PointerHandler.CanTakeOverFromHandlersOfSameType | PointerHandler.ApprovesTakeOverByAnything
 
         cursorShape: Qt.BlankCursor
-        target: Rectangle {
-            parent: containerId
-            color: "red"
-            visible: handler.active
-            x: handler._mappedHandlerPoint.x - width / 2
-            y: handler._mappedHandlerPoint.y - height / 2
-            width: handler.pressureScale * handler.point.pressure;
-            height: width;
-            radius: width / 2
-        }
-        parent: sketchPageId
+        target: containerId
+        // target: Rectangle {
+        //     parent: containerId
+        //     color: "red"
+        //     visible: handler.active
+        //     x: handler._mappedHandlerPoint.x - width / 2
+        //     y: handler._mappedHandlerPoint.y - height / 2
+        //     width: handler.pressureScale * handler.point.pressure;
+        //     height: width;
+        //     radius: width / 2
+        // }
+        // parent: sketchPageId
         // parent: containerId
         // target: containerId
+        parent: sketchPageId
 
         onActiveChanged: {
             // console.log("Active changed!" + active)
@@ -281,19 +245,15 @@ StandardPage {
             }
         }
 
-        onGrabChanged: (transition, point) => {
-            console.log("Grab changed:" + transition + " Exculive:" + PointerDevice.GrabExclusive + " Ungrab:" + PointerDevice.UngrabExclusive + " passive:" + PointerDevice.GrabPassive + " passive ungrab:" + PointerDevice.UngrabPassive)
-        }
+        // onGrabChanged: (transition, point) => {
+        //     console.log("Grab changed:" + transition + " Exculive:" + PointerDevice.GrabExclusive + " Ungrab:" + PointerDevice.UngrabExclusive + " passive:" + PointerDevice.GrabPassive + " passive ungrab:" + PointerDevice.UngrabPassive)
+        // }
     }
 
     WheelHandler {
         target: containerId
         property: "scale"
         targetScaleMultiplier: 1.1
-        // onWheel: {
-
-        // }
-
     }
 
 
@@ -304,8 +264,8 @@ StandardPage {
 
     Item {
         id: containerId
-        width: 1000
-        height: 1000
+        // width: 1000
+        // height: 1000
 
         // property Qt.point pos:
         property rect viewport; //: sketchPageId.mapToItem(containerId, 0, 0, sketchPageId.width, sketchPageId.height)
@@ -337,7 +297,7 @@ StandardPage {
         }
 
         InfiniteGrid {
-            anchors.fill: parent
+            // anchors.fill: parent
             gridOrigin: Qt.point(containerId.x, containerId.y);
             viewScale: containerId.scale
             worldToScreenMatrix: worldToScreenId.matrix
