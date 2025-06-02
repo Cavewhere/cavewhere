@@ -25,6 +25,22 @@ add_subdirectory(cavewhere/dewalls)
 add_subdirectory(cavewhere/MarkScope)
 
 find_package(Catch2 REQUIRED)
+
+# Normally, Catch2 is expected to be installed locally;
+# if you'd rather not do that (e.g. for cross compilation
+# or environment reasons) you may replace the find_package()
+# call above with this, to download and build from source:
+#
+# include(FetchContent)
+# FetchContent_Declare(
+#     Catch2
+#     GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+#     GIT_TAG 2b60af89e23d28eefc081bc930831ee9d45ea58b # v3.8.1
+#     GIT_SHALLOW TRUE
+# )
+# FetchContent_MakeAvailable(Catch2)
+
+
 find_package(Qt6
     REQUIRED COMPONENTS
     Core

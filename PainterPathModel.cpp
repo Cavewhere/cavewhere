@@ -205,6 +205,13 @@ void PainterPathModel::setPenLineModel(QAbstractItemModel* penLineModel) {
                             }
                         }
                     });
+
+            connect(m_penLineModel, &QAbstractItemModel::modelReset,
+                    this, [this]() {
+                        m_previousActivePath = m_activeLineIndex;
+                        m_activeLineIndex = -1;
+                        rebuildFinalPath();
+                    });
         }
 
         emit penLineModelChanged();
@@ -604,12 +611,14 @@ void PainterPathModel::rebuildFinalPath()
     // auto finishedPathIndex = index(m_finishedPaths.size() + m_finishLineIndexOffset);
 
     //Remove unused finished paths
-    for(auto it = m_finishedPaths.begin(); it != m_finishedPaths.end(); ++it) {
+    for(auto it = m_finishedPaths.begin(); it != m_finishedPaths.end(); ) {
         if(it->painterPath.isEmpty()) {
-            int index = static_cast<int>(it - m_finishedPaths.begin());
+            int index = it - m_finishedPaths.begin() + m_finishLineIndexOffset;
             beginRemoveRows(QModelIndex(), index, index);
             it = m_finishedPaths.erase(it);
             endRemoveRows();
+        } else {
+            it++;
         }
     }
 

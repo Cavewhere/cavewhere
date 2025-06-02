@@ -5,9 +5,34 @@
 //Our includes
 #include "PenLineModel.h"
 
+class PenLineModelUndoCommand : public QUndoCommand {
+public:
+    PenLineModelUndoCommand(PenLineModel *model, const QVector<PenLine> &oldLines, const QVector<PenLine> &newLines) :
+        QUndoCommand("Draw Line", nullptr), m_penLineModel(model), m_oldLines(oldLines), m_newLines(newLines) {}
+
+    void undo() override
+    {
+        m_penLineModel->beginResetModel();
+        m_penLineModel->m_lines = m_oldLines;
+        m_penLineModel->endResetModel();
+    }
+
+    void redo() override
+    {
+        m_penLineModel->beginResetModel();
+        m_penLineModel->m_lines = m_newLines;
+        m_penLineModel->endResetModel();
+    }
+
+private:
+    PenLineModel *m_penLineModel;  // not owned
+    QVector<PenLine> m_oldLines, m_newLines;
+};
+
 PenLineModel::PenLineModel(QObject* parent)
-    : QAbstractItemModel(parent)
+    : QAbstractItemModel(parent), m_undoStack(new QUndoStack(this))
 {
+    m_undoStack->setUndoLimit(32);
 }
 
 int PenLineModel::rowCount(const QModelIndex &parent) const {
@@ -82,21 +107,24 @@ QModelIndex PenLineModel::parent(const QModelIndex &child) const
 
 int PenLineModel::addNewLine()
 {
+    m_startLines = m_lines;
+
     int lastIndex = m_lines.size();
     PenLine line;
     line.width = m_currentStrokeWidth;
-    qDebug() << "newline:" << line.width;
 
-    addLine(line);
+    beginInsertRows(QModelIndex(), m_lines.size(), m_lines.size());
+    m_lines.append(line);
+    endInsertRows();
+
     Q_ASSERT(lastIndex == m_lines.size() - 1);
     return lastIndex;
 }
 
-void PenLineModel::addLine(const PenLine &line) {
-    // qDebug() << "-------------- Add line -------------";
-    beginInsertRows(QModelIndex(), m_lines.size(), m_lines.size());
-    m_lines.append(line);
-    endInsertRows();
+Q_INVOKABLE void PenLineModel::finishNewLine()
+{
+    m_undoStack->push(new PenLineModelUndoCommand(this, m_startLines, m_lines));
+    m_startLines.clear();
 }
 
 void PenLineModel::addPoint(int lineIndex, PenPoint point)
@@ -114,7 +142,7 @@ void PenLineModel::addPoint(int lineIndex, PenPoint point)
 
     // Append the point to the specified PenLine.
     auto& points =  m_lines[lineIndex].points;
-    auto appendPoint = [&](PenPoint point) {
+    auto appendPoint = [&](const PenPoint &point) {
         int lastIndex = points.size();
 
         // Notify that the data for this row has changed so that any views update.
@@ -140,10 +168,9 @@ void PenLineModel::addPoint(int lineIndex, PenPoint point)
 
 }
 
-void PenLineModel::clear() {
-    beginResetModel();
-    m_lines.clear();
-    endResetModel();
+void PenLineModel::clearUndoStack() {
+    QVector<PenLine> empty;
+    m_undoStack->push(new PenLineModelUndoCommand(this, m_lines, empty));
 }
 
 
