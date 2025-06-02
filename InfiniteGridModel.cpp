@@ -21,6 +21,25 @@ InfiniteGridModel::InfiniteGridModel(QObject *parent)
     m_majorGrid->setGridZ(0);
     m_minorGrid->setGridZ(0);
 
+    //For hidding origin labels
+    m_originMask.setBinding([this]() {
+        QSizeF size = m_majorGrid->maxLabelSizePixels();
+        size.setHeight(size.height() * 0.5);
+        size.setWidth(size.width() * 0.25);
+        QRectF viewport = m_viewport.value();
+        QPointF bottomLeft = viewport.bottomLeft();
+        return QRectF(QPointF(bottomLeft.x(), bottomLeft.y() - size.height()),
+                      size);
+    });
+
+    m_majorGrid->bindableLabelMasks().setBinding([this]() {
+        return QList<QRectF>({m_originMask});
+    });
+
+    m_minorGrid->bindableLabelMasks().setBinding([this]() {
+        return m_majorGrid->labelMasks();
+    });
+
     // Individual bindings
     m_majorGrid->bindableViewport().setBinding([this]() {
         return m_viewport.value();
@@ -99,7 +118,7 @@ InfiniteGridModel::InfiniteGridModel(QObject *parent)
     m_minorGrid->bindableLabelVisible().setBinding([this]() {
         double minorGridPixels = m_minorGrid->gridIntervalPixels();
         double margin = m_labelMinorMargin.value() * 2.0; //pixels
-        qDebug() << "Minor grid:" << minorGridPixels << "label size:" << m_minorGrid->maxLabelSizePixels().width() << "margin:" << margin << "visible:" << (minorGridPixels > m_minorGrid->maxLabelSizePixels().width() + margin);
+        // qDebug() << "Minor grid:" << minorGridPixels << "label size:" << m_minorGrid->maxLabelSizePixels().width() << "margin:" << margin << "visible:" << (minorGridPixels > m_minorGrid->maxLabelSizePixels().width() + margin);
         return minorGridPixels > m_minorGrid->maxLabelSizePixels().width() + margin;
     });
 

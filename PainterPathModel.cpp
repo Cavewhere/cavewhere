@@ -663,7 +663,7 @@ void PainterPathModel::addOrUpdateFinishPath(int penLineIndex)
         //Create a new line
         int lastIndex = m_finishedPaths.size() + m_finishLineIndexOffset;
         beginInsertRows(QModelIndex(), lastIndex, lastIndex);
-        Path newPath {QPainterPath(), lineWidth};
+        Path newPath {QPainterPath(), Qt::black, lineWidth};
         m_finishedPaths.append(newPath);
         auto& lastPath = m_finishedPaths.last();
         addLinePolygon(lastPath.painterPath, penLineIndex);

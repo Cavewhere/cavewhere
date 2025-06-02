@@ -30,6 +30,19 @@ public:
 
 protected:
     struct Path {
+
+        Path() = default;
+        Path(const QPainterPath& path,
+             QColor strokeColor,
+             double strokeWidth,
+             double z = 0.0) :
+            painterPath(path)
+            ,strokeColor(strokeColor)
+            ,strokeWidth(strokeWidth)
+            ,z(z)
+        {}
+
+
         QPainterPath painterPath;
         QColor strokeColor;
         double strokeWidth = 1.0;

@@ -37,10 +37,6 @@ Item {
         model: gridModel.majorGridModel
     }
 
-    // ShapePathInstantiator {
-    //     anchors.fill: parent
-    //     model: gridModel
-    // }
 
     component LabelView : Repeater {
         id: repeaterId
@@ -78,4 +74,5 @@ Item {
         textZ: gridModel.majorGridModel.labelZ
         // z: 3
     }
+
 }

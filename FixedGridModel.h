@@ -33,6 +33,7 @@ class FixedGridModel : public AbstractPainterPathModel
     Q_PROPERTY(QColor labelColor READ labelColor WRITE setLabelColor NOTIFY labelColorChanged BINDABLE bindableLabelColor)
     Q_PROPERTY(QFont labelFont READ labelFont WRITE setLabelFont NOTIFY labelFontChanged BINDABLE bindableLabelFont)
     Q_PROPERTY(double hiddenInterval READ hiddenInterval WRITE setHiddenInterval NOTIFY hiddenIntervalChanged BINDABLE bindableHiddenInterval)
+    Q_PROPERTY(QList<QRectF> labelMasks READ labelMasks WRITE setLabelMasks NOTIFY labelMasksChanged BINDABLE bindableLabelMasks)
 
     Q_PROPERTY(double labelBackgroundMargin READ labelBackgroundMargin WRITE setLabelBackgroundMargin NOTIFY labelBackgroundMarginChanged BINDABLE bindableLabelBackgroundMargin)
     Q_PROPERTY(QColor labelBackgroundColor READ labelBackgroundColor WRITE setLabelBackgroundColor NOTIFY labelBackgroundColorChanged BINDABLE bindableLabelBackgroundColor)
@@ -137,6 +138,12 @@ public:
     void setLabelZ(const double& labelZ) { m_labelZ = labelZ; }
     QBindable<double> bindableLabelZ() { return &m_labelZ; }
 
+
+    QList<QRectF> labelMasks() const { return m_labelMasks.value(); }
+    void setLabelMasks(const QList<QRectF>& labelMasks) { m_labelMasks = labelMasks; }
+    QBindable<QList<QRectF>> bindableLabelMasks() { return &m_labelMasks; }
+
+
 signals:
     void gridVisibleChanged();
     void lineWidthChanged();
@@ -156,6 +163,7 @@ signals:
     void gridZChanged();
     void labelBackgroundZChanged();
     void labelZChanged();
+    void labelMasksChanged();
 
 protected:
     Path path(const QModelIndex& index) const override;
@@ -181,6 +189,9 @@ private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, QColor, m_labelBackgroundColor, Qt::white, &FixedGridModel::labelBackgroundColorChanged);
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, double, m_labelScale, 1.0, &FixedGridModel::labelScaleChanged);
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, double, m_hiddenInterval, 0.0, &FixedGridModel::hiddenIntervalChanged);
+
+    //Any rectangles in this list, will hide labels in the grid. This is useful for hidding origin labels
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, QList<QRectF>, m_labelMasks, QList<QRectF>(), &FixedGridModel::labelMasksChanged);
 
     //z values for the grid, for ordering
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, double, m_gridZ, 0.0, &FixedGridModel::gridZChanged);

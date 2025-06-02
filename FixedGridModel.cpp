@@ -193,35 +193,39 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
             const auto yGridLines = m_yGridLines.value();
 
             const QFont font = m_labelFont.value();
-            QFontMetricsF fontMetrics(font);
-
-
+            const QFontMetricsF fontMetrics(font);
 
             labels.reserve(xGridLines.size() + yGridLines.size());
 
+            const auto maskRects = m_labelMasks.value();
+            auto isHidden = [this, maskRects](const QRectF& bounds) {
+                for(const auto& rect : maskRects) {
+                    // qDebug() << "Bounds:" << bounds << "rect:" << rect << "intersects:" << bounds.intersects(rect);
+                    if(bounds.intersects(rect)) {
+                        return true;
+                    }
+                }
+                return false;
+            };
 
+            auto appendLabel = [&labels, isHidden](const GridLabel& label) {
+                if(!isHidden(label.bounds)) {
+                    labels.append(label);
+                }
+            };
 
             for(const GridLine& xValue: xGridLines) {
                 const QString text = toString(xValue.value);
                 QRectF bounds = textBounds(text, fontMetrics);
                 bounds.moveTo(xValue.position - bounds.width() * 0.5, viewport.bottom() - bounds.height());
-
-
-                labels.append(GridLabel{
-                    bounds,
-                    text
-                });
+                appendLabel({bounds, text});
             }
 
             for(const GridLine& yValue : yGridLines) {
                 const QString text = toString(yValue.value);
                 QRectF bounds = textBounds(text, fontMetrics);
                 bounds.moveTo(viewport.left(), yValue.position - bounds.height() * 0.5);
-
-                labels.append(GridLabel{
-                    bounds,
-                    text
-                });
+                appendLabel({bounds, text});
             }
         }
 

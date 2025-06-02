@@ -45,6 +45,9 @@ class InfiniteGridModel : public QObject {
     Q_PROPERTY(TextModel* majorTextModel READ majorTextModel CONSTANT)
     Q_PROPERTY(TextModel* minorTextModel READ minorTextModel CONSTANT)
 
+    //For testing
+    // Q_PROPERTY(QRectF originMask READ originMask WRITE setOriginMask NOTIFY originMaskChanged BINDABLE bindableOriginMask)
+
 public:
     explicit InfiniteGridModel(QObject* parent = nullptr);
 
@@ -127,6 +130,11 @@ public:
     TextModel *majorTextModel() const;
     TextModel *minorTextModel() const;
 
+    //For testing:
+    // QRectF originMask() const { return m_originMask.value(); }
+    // void setOriginMask(const QRectF& originMask) { m_originMask = originMask; }
+    // QBindable<QRectF> bindableOriginMask() { return &m_originMask; }
+
 signals:
     void lineWidthChanged();
     void lineColorChanged();
@@ -147,6 +155,9 @@ signals:
     void labelMinorMarginChanged();
     void minorColorLightnessChanged();
 
+    //For testing
+    // void originMaskChanged();
+
 private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_majorGridInterval, 5.0, &InfiniteGridModel::majorGridIntervalChanged);
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_minorGridInterval, 1.0, &InfiniteGridModel::minorGridIntervalChanged);
@@ -160,7 +171,7 @@ private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_labelBackgroundMargin, 2.0, &InfiniteGridModel::labelBackgroundMarginChanged)
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QColor, m_labelBackgroundColor, Qt::white, &InfiniteGridModel::labelBackgroundColorChanged)
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_labelMinorScale, 0.75, &InfiniteGridModel::labelMinorScaleChanged);
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_labelMinorMargin, 0.0, &InfiniteGridModel::labelMinorMarginChanged);
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_labelMinorMargin, 2.0, &InfiniteGridModel::labelMinorMarginChanged);
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_minorColorLightness, 0.07, &InfiniteGridModel::minorColorLightnessChanged); //0.0 to 1.0, 1.0 very light, 0.0 is no change
 
     // Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_msaaScale, 1.0, &InfiniteGridModel::msaaScaleChanged)
@@ -175,6 +186,10 @@ private:
     Q_OBJECT_COMPUTED_PROPERTY(InfiniteGridModel, int, m_clampedZoomLevel, &InfiniteGridModel::clampZoomLevel);
     Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, double, m_majorZoomGridInterval)
     Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, double, m_minorZoomGridInterval)
+
+    // Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QRectF, m_originMask, QRectF(), &InfiniteGridModel::originMaskChanged);
+
+    Q_OBJECT_BINDABLE_PROPERTY(InfiniteGridModel, QRectF, m_originMask);
 
     QPropertyNotifier m_majorZoomGridIntervalNotifier;
     QPropertyNotifier m_minorZoomGridIntervalNotifier;
