@@ -32,15 +32,20 @@ InfiniteGridModel::InfiniteGridModel(QObject *parent)
     m_majorGrid->bindableLabelColor().setBinding([this]() {
         return m_labelColor.value();
     });
-    m_minorGrid->bindableLabelColor().setBinding([this]() {
-        return m_labelColor.value();
+
+    auto clampLightness = [](double factor) -> int {
+        return std::max(100, std::min(200, (int)(100.0 + factor * 100.0)));
+    };
+
+    m_minorGrid->bindableLabelColor().setBinding([this, clampLightness]() {
+        return m_labelColor.value().lighter(clampLightness(m_minorColorLightness));
     });
 
     m_majorGrid->bindableLineColor().setBinding([this]() {
         return m_lineColor.value();
     });
-    m_minorGrid->bindableLineColor().setBinding([this]() {
-        return m_lineColor.value();
+    m_minorGrid->bindableLineColor().setBinding([this, clampLightness]() {
+        return m_lineColor.value().lighter(clampLightness(m_minorColorLightness));
     });
 
     m_majorGrid->bindableLabelFont().setBinding([this]() {

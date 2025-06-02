@@ -32,8 +32,8 @@ class InfiniteGridModel : public QObject {
     Q_PROPERTY(QColor labelBackgroundColor READ labelBackgroundColor WRITE setLabelBackgroundColor NOTIFY labelBackgroundColorChanged BINDABLE bindableLabelBackgroundColor)
     Q_PROPERTY(double labelMinorScale READ labelMinorScale WRITE setLabelMinorScale NOTIFY labelMinorScaleChanged BINDABLE bindableLabelMinorScale)
     Q_PROPERTY(double labelMinorMargin READ labelMinorMargin WRITE setLabelMinorMargin NOTIFY labelMinorMarginChanged BINDABLE bindableLabelMinorMargin)
+    Q_PROPERTY(double minorColorLightness READ minorColorLightness WRITE setMinorColorLightness NOTIFY minorColorLightnessChanged BINDABLE bindableMinorColorLightness)
 
-    // Q_PROPERTY(double msaaScale READ msaaScale WRITE setMsaaScale NOTIFY msaaScaleChanged BINDABLE bindableMsaaScale)
     Q_PROPERTY(double viewScale READ viewScale WRITE setViewScale NOTIFY viewScaleChanged BINDABLE bindableViewScale)
     Q_PROPERTY(QMatrix4x4 mapMatrix READ mapMatrix WRITE setMapMatrix NOTIFY mapMatrixChanged BINDABLE bindableMapMatrix)
     Q_PROPERTY(QPointF gridOrigin READ gridOrigin WRITE setGridOrigin NOTIFY gridOriginChanged BINDABLE bindableGridOrigin)
@@ -92,10 +92,6 @@ public:
     void setLabelMinorMargin(const double& labelMinorMargin) { m_labelMinorMargin = labelMinorMargin; }
     QBindable<double> bindableLabelMinorMargin() { return &m_labelMinorMargin; }
 
-    // double msaaScale() const { return m_msaaScale; }
-    // void setMsaaScale(double value) { m_msaaScale = value; }
-    // QBindable<double> bindableMsaaScale() { return &m_msaaScale; }
-
     double viewScale() const { return m_viewScale; }
     void setViewScale(double value) { m_viewScale = value; }
     QBindable<double> bindableViewScale() { return &m_viewScale; }
@@ -115,6 +111,11 @@ public:
     int maxZoomLevel() const { return m_maxZoomLevel.value(); }
     void setMaxZoomLevel(const int& maxZoomLevel) { m_maxZoomLevel = maxZoomLevel; }
     QBindable<int> bindableMaxZoomLevel() { return &m_maxZoomLevel; }
+
+    double minorColorLightness() const { return m_minorColorLightness.value(); }
+    void setMinorColorLightness(const double& minorColorLightness) { m_minorColorLightness = minorColorLightness; }
+    QBindable<double> bindableMinorColorLightness() { return &m_minorColorLightness; }
+
 
     TextModelConcatenate *textModel() const;
 
@@ -144,6 +145,7 @@ signals:
     void maxZoomLevelChanged();
     void labelMinorScaleChanged();
     void labelMinorMarginChanged();
+    void minorColorLightnessChanged();
 
 private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_majorGridInterval, 5.0, &InfiniteGridModel::majorGridIntervalChanged);
@@ -159,6 +161,7 @@ private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QColor, m_labelBackgroundColor, Qt::white, &InfiniteGridModel::labelBackgroundColorChanged)
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_labelMinorScale, 0.75, &InfiniteGridModel::labelMinorScaleChanged);
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_labelMinorMargin, 0.0, &InfiniteGridModel::labelMinorMarginChanged);
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_minorColorLightness, 0.07, &InfiniteGridModel::minorColorLightnessChanged); //0.0 to 1.0, 1.0 very light, 0.0 is no change
 
     // Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_msaaScale, 1.0, &InfiniteGridModel::msaaScaleChanged)
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_viewScale, 1.0, &InfiniteGridModel::viewScaleChanged)
