@@ -47,7 +47,7 @@ class CAVEWHERE_SKETCH_LIB_EXPORT PenLineModel : public QAbstractItemModel {
     QML_ELEMENT
 
     Q_PROPERTY(double currentStrokeWidth READ currentStrokeWidth WRITE setCurrentStrokeWidth NOTIFY currentStrokeWidthChanged BINDABLE bindableCurrentStrokeWidth)
-    Q_PROPERTY(QUndoStack* undoStack READ undoStack)
+    Q_PROPERTY(QUndoStack* undoStack READ undoStack CONSTANT)
 
 public:
     enum PenLineRoles {
