@@ -361,19 +361,20 @@ cwSketch::AbstractPainterPathModel::Path cwSketch::FixedGridModel::path(const QM
     auto gridPath = [this]() {
         return Path{
             m_gridPath,
+            m_lineColor,
             m_lineWidth,
-            m_lineColor
+            m_gridZ,
         };
     };
 
     auto labelBackground = [this]() {
         return Path{
             m_labelBackgroundPath,
-            -1, //No line width
-            m_labelBackgroundColor
+            m_labelBackgroundColor,
+            -1, //No line width,
+            m_labelBackgroundZ
         };
     };
-
 
     if(m_gridVisible.value() && m_labelVisible.value()) {
         if(index.row() == GridLineIndex) {

@@ -19,6 +19,7 @@ public:
         PainterPathRole = Qt::UserRole + 1,
         StrokeWidthRole,
         StrokeColorRole,
+        ZRole,
     };
 
     // Make these pure virtual so derived classes must implement them
@@ -30,8 +31,9 @@ public:
 protected:
     struct Path {
         QPainterPath painterPath;
-        double strokeWidth;
         QColor strokeColor;
+        double strokeWidth = 1.0;
+        double z = 0.0;
     };
 
     //Subclass should implement this to access the current path

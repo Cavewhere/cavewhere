@@ -20,6 +20,9 @@ Repeater {
         required property double strokeWidthRole
         required property var painterPath
         required property color strokeColorRole
+        required property double zRole
+
+        z: zRole
 
         // DebugRectangle {
 

@@ -43,6 +43,11 @@ class FixedGridModel : public AbstractPainterPathModel
     Q_PROPERTY(double gridIntervalPixels READ gridIntervalPixels NOTIFY gridIntervalPixelsChanged BINDABLE bindableGridIntervalPixels)
     Q_PROPERTY(QSizeF maxLabelSizePixels READ maxLabelSizePixels NOTIFY maxLabelSizePixelsChanged BINDABLE bindableMaxLabelSizePixels)
 
+    Q_PROPERTY(double gridZ READ gridZ WRITE setGridZ NOTIFY gridZChanged BINDABLE bindableGridZ)
+    Q_PROPERTY(double labelBackgroundZ READ labelBackgroundZ WRITE setLabelBackgroundZ NOTIFY labelBackgroundZChanged BINDABLE bindableLabelBackgroundZ)
+    Q_PROPERTY(double labelZ READ labelZ WRITE setLabelZ NOTIFY labelZChanged BINDABLE bindableLabelZ)
+
+
 public:
     enum Index {
         GridLineIndex = 0,
@@ -120,6 +125,18 @@ public:
 
     TextModel *textModel() const { return m_textModel; }
 
+    double gridZ() const { return m_gridZ.value(); }
+    void setGridZ(const double& gridZ) { m_gridZ = gridZ; }
+    QBindable<double> bindableGridZ() { return &m_gridZ; }
+
+    double labelBackgroundZ() const { return m_labelBackgroundZ.value(); }
+    void setLabelBackgroundZ(const double& labelBackgroundZ) { m_labelBackgroundZ = labelBackgroundZ; }
+    QBindable<double> bindableLabelBackgroundZ() { return &m_labelBackgroundZ; }
+
+    double labelZ() const { return m_labelZ.value(); }
+    void setLabelZ(const double& labelZ) { m_labelZ = labelZ; }
+    QBindable<double> bindableLabelZ() { return &m_labelZ; }
+
 signals:
     void gridVisibleChanged();
     void lineWidthChanged();
@@ -136,6 +153,9 @@ signals:
     void gridIntervalPixelsChanged();
     void hiddenIntervalChanged();
     void maxLabelSizePixelsChanged();
+    void gridZChanged();
+    void labelBackgroundZChanged();
+    void labelZChanged();
 
 protected:
     Path path(const QModelIndex& index) const override;
@@ -161,6 +181,11 @@ private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, QColor, m_labelBackgroundColor, Qt::white, &FixedGridModel::labelBackgroundColorChanged);
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, double, m_labelScale, 1.0, &FixedGridModel::labelScaleChanged);
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, double, m_hiddenInterval, 0.0, &FixedGridModel::hiddenIntervalChanged);
+
+    //z values for the grid, for ordering
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, double, m_gridZ, 0.0, &FixedGridModel::gridZChanged);
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, double, m_labelBackgroundZ, 0.0, &FixedGridModel::labelBackgroundZChanged);
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, double, m_labelZ, 0.0, &FixedGridModel::labelZChanged);
 
     //Readonly properties
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(FixedGridModel, double, m_gridIntervalPixels, 0.0, &FixedGridModel::gridIntervalPixelsChanged);

@@ -25,7 +25,6 @@ Item {
         viewScale: 1.0 / gridId.viewScale
         lineColor: "#1eb6dd"
         labelColor: "#178ba8"
-
     }
 
     ShapePathInstantiator {
@@ -44,7 +43,10 @@ Item {
     // }
 
     component LabelView : Repeater {
+        id: repeaterId
         // model: gridModel.minorTextModel
+        required property double textZ;
+
         delegate:Text {
             scale: gridModel.viewScale
             transformOrigin: Item.TopLeft
@@ -60,15 +62,20 @@ Item {
             x: positionRole.x
             y: positionRole.y
             color: fillColorRole
+            z: repeaterId.textZ
         }
     }
 
     //Minor grid
     LabelView {
         model: gridModel.minorTextModel
+        textZ: gridModel.minorGridModel.labelZ
+        // z: 2
     }
 
     LabelView {
         model: gridModel.majorTextModel
+        textZ: gridModel.majorGridModel.labelZ
+        // z: 3
     }
 }

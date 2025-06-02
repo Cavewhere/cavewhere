@@ -10,14 +10,16 @@ InfiniteGridModel::InfiniteGridModel(QObject *parent)
     , m_majorGrid(new FixedGridModel(this))
     , m_minorGrid(new FixedGridModel(this))
 {
-    // addSourceModel(m_minorGrid);
-    // addSourceModel(m_majorGrid);
-
-    // m_textModel->addSourceModel(m_majorGrid->textModel());
-    // m_textModel->addSourceModel(m_minorGrid->textModel());
-
     m_minorGrid->setObjectName(QStringLiteral("minorGridModel"));
     m_majorGrid->setObjectName(QStringLiteral("majorGridModel"));
+
+    //Orders the grids and labels so they're interleved
+    m_majorGrid->setLabelZ(2);
+    m_minorGrid->setLabelZ(2);
+    m_majorGrid->setLabelBackgroundZ(1);
+    m_minorGrid->setLabelBackgroundZ(1);
+    m_majorGrid->setGridZ(0);
+    m_minorGrid->setGridZ(0);
 
     // Individual bindings
     m_majorGrid->bindableViewport().setBinding([this]() {

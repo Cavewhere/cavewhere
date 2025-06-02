@@ -6,6 +6,7 @@ QHash<int, QByteArray> AbstractPainterPathModel::roleNames() const {
     return { {PainterPathRole, "painterPath"},
         {StrokeWidthRole, "strokeWidthRole"},
         {StrokeColorRole, "strokeColorRole"},
+        {ZRole, "zRole"},
     };
 }
 
@@ -21,6 +22,8 @@ QVariant AbstractPainterPathModel::data(const QModelIndex &index, int role) cons
         return path(index).strokeWidth;
     case StrokeColorRole:
         return path(index).strokeColor;
+    case ZRole:
+        return path(index).z;
     }
 
     return QVariant();
