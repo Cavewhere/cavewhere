@@ -24,6 +24,8 @@ Repeater {
 
         z: zRole
 
+        // preferredRendererType: Shape.CurveRenderer
+
         // DebugRectangle {
 
         // }

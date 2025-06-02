@@ -19,6 +19,8 @@ StandardPage {
     PenLineModel {
         id: penModel
 
+        viewScale: containerId.scale
+
         onCurrentStrokeWidthChanged: {
             console.log("onCurrentStrokeWidthChanged!" + penModel.currentStrokeWidth + (penModel.currentStrokeWidth.toFixed(1) == 2.5))
             featuresId.checked = windowId.fuzzyEquals(penModel.currentStrokeWidth, 2.5);

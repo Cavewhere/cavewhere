@@ -47,6 +47,9 @@ class CAVEWHERE_SKETCH_LIB_EXPORT PenLineModel : public QAbstractItemModel {
     QML_ELEMENT
 
     Q_PROPERTY(double currentStrokeWidth READ currentStrokeWidth WRITE setCurrentStrokeWidth NOTIFY currentStrokeWidthChanged BINDABLE bindableCurrentStrokeWidth)
+    Q_PROPERTY(double viewScale READ viewScale WRITE setViewScale NOTIFY viewScaleChanged BINDABLE bindableViewScale)
+    Q_PROPERTY(double sensitivity READ sensitivity WRITE setSensitivity NOTIFY sensitivityChanged BINDABLE bindableSensitivity)
+
     Q_PROPERTY(QUndoStack* undoStack READ undoStack CONSTANT)
 
 public:
@@ -92,13 +95,27 @@ public:
     void setCurrentStrokeWidth(const double& currentStrokeWidth) { m_currentStrokeWidth = currentStrokeWidth; }
     QBindable<double> bindableCurrentStrokeWidth() { return &m_currentStrokeWidth; }
 
+    double viewScale() const { return m_viewScale.value(); }
+    void setViewScale(const double& viewScale) { m_viewScale = viewScale; }
+    QBindable<double> bindableViewScale() { return &m_viewScale; }
+
+    double sensitivity() const { return m_sensitivity.value(); }
+    void setSensitivity(const double& sensitivity) { m_sensitivity = sensitivity; }
+    QBindable<double> bindableSensitivity() { return &m_sensitivity; }
+
+
 signals:
     void currentStrokeWidthChanged();
+    void viewScaleChanged();
+    void sensitivityChanged();
 
 private:
     friend class PenLineModelUndoCommand;
 
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(PenLineModel, double, m_currentStrokeWidth, 2.5, &PenLineModel::currentStrokeWidthChanged);
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(PenLineModel, double, m_viewScale, 1.0, &PenLineModel::viewScaleChanged);
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(PenLineModel, double, m_sensitivity, 0.25, &PenLineModel::sensitivityChanged);
+
     QVector<PenLine> m_lines, m_startLines;
     QUndoStack *m_undoStack;
 };

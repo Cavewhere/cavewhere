@@ -155,7 +155,7 @@ void PenLineModel::addPoint(int lineIndex, PenPoint point)
 
     if(!points.isEmpty()) {
         QLineF distanceLine(points.last().position, point.position);
-        if(distanceLine.length() <= 0.2) {
+        if(distanceLine.length() * m_viewScale < m_sensitivity) {
             return;
         } else {
             // qDebug() << "Point:" << point.position << point.width;
