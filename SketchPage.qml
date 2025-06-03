@@ -294,8 +294,37 @@ StandardPage {
 
 
     DragHandler {
-        target: containerId
+        // target: containerId
+        target: null
         acceptedButtons: Qt.RightButton
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+
+        dragThreshold: 0
+
+        property point lastPosition;
+
+        function containerPos(scenePosition) {
+            return containerId.parent.mapFromGlobal(centroid.scenePosition.x, centroid.scenePosition.y)
+        }
+
+        onActiveChanged: {
+            if(active) {
+                lastPosition = containerPos(centroid.scenePosition);
+            }
+        }
+
+        onCentroidChanged: {
+            if(active) {
+                let newPosition = containerPos(centroid.scenePosition);
+                let deltaX = newPosition.x - lastPosition.x
+                let deltaY = newPosition.y - lastPosition.y
+
+                containerId.x += deltaX
+                containerId.y += deltaY
+
+                lastPosition = newPosition
+            }
+        }
     }
 
     Item {
@@ -324,13 +353,6 @@ StandardPage {
         }
         onXChanged: updateViewport();
         onYChanged: updateViewport();
-
-
-        Rectangle {
-            width: 5
-            height: 5
-            color: "black"
-        }
 
         InfiniteGrid {
             // anchors.fill: parent
