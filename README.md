@@ -68,7 +68,7 @@ https://www.qt.io/download-qt-installer-oss
 
     Depending on the platform, CaveWhere Sketch will likely not configure correctly when opening the CMakeLists.txt. You can get to the configuration page clicking on Project. You can select which platform you want to configure using the lower project context button. 
     
-    ![Configuration page](readme-resources/configuring platform.png)
+    ![Configuration page](readme-resources/configuring-platform.png)
     
 5. **Configuring for Desktop - MacOS build and MacOS run (host)**
 
@@ -154,7 +154,7 @@ https://www.qt.io/download-qt-installer-oss
     
     You'll have to hit **Re-configure** once you finished making changes
     
-8. Building CaveWhere Sketch
+8. **Building CaveWhere Sketch**
     Command-R
     
     or     
