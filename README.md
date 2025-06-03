@@ -79,7 +79,7 @@ https://www.qt.io/download-qt-installer-oss
         PATH=/usr/bin:/bin:/usr/sbin:/sbin:/Users/cave/Qtcom/Tools/Ninja:/Users/cave/Library/Python/3.9/bin
     ```  
     
-    ![Enviroment](env.png)
+    ![Enviroment](readme-resources/env.png)
     
     ![Setting the Enviroment](readme-resources/env-settings.png)
     
@@ -136,7 +136,7 @@ https://www.qt.io/download-qt-installer-oss
         PATH=/usr/bin:/bin:/usr/sbin:/sbin:/Users/cave/Qtcom/Tools/Ninja:/Users/cave/Library/Python/3.9/bin
     ```  
 
-    ![Enviroment](env.png)
+    ![Enviroment](readme-resources/env.png)
 
     ![Setting the Enviroment](readme-resources/env-settings.png)
     
