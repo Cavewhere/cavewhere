@@ -180,7 +180,8 @@ private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QPointF, m_gridOrigin, QPointF(), &InfiniteGridModel::gridOriginChanged)
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, QRectF, m_viewport, QRectF(), &InfiniteGridModel::viewportChanged)
 
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, int, m_zoomLevel, 0)
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_zoomLevel, 0.0);
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(InfiniteGridModel, double, m_zoomTransition, 0.0);
 
     int clampZoomLevel() const;
     Q_OBJECT_COMPUTED_PROPERTY(InfiniteGridModel, int, m_clampedZoomLevel, &InfiniteGridModel::clampZoomLevel);

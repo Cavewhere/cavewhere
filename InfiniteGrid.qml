@@ -40,7 +40,7 @@ Item {
 
     component LabelView : Repeater {
         id: repeaterId
-        // model: gridModel.minorTextModel
+
         required property double textZ;
 
         delegate:Text {
@@ -66,13 +66,11 @@ Item {
     LabelView {
         model: gridModel.minorTextModel
         textZ: gridModel.minorGridModel.labelZ
-        // z: 2
     }
 
     LabelView {
         model: gridModel.majorTextModel
         textZ: gridModel.majorGridModel.labelZ
-        // z: 3
     }
 
 }

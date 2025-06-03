@@ -110,9 +110,24 @@ InfiniteGridModel::InfiniteGridModel(QObject *parent)
     });
 
     m_minorGrid->bindableLineWidth().setBinding([this]() {
+        auto lerp = [](double start, double end, double t) {
+            return start + t * (end - start);
+        };
+
         const double minorLineWidthScale = 0.5;
-        double lineWidth = m_lineWidth.value() * minorLineWidthScale;
-        return std::max(lineWidth, lineWidth * m_viewScale.value());
+        const double viewScale = m_viewScale.value();
+
+        double minorLineWidth = m_lineWidth.value() * minorLineWidthScale;
+        double minorLineWidthWithScale = minorLineWidth * viewScale;
+        double majorLineWidth = m_majorGrid->lineWidth();
+
+        //Rescale the m_zoomTransition, only use transition if we're above zoom level 1.0
+        if(m_zoomLevel >= 1.0) {
+            const double transition = std::min(1.0, m_zoomTransition * 2.0);
+            return lerp(majorLineWidth, minorLineWidthWithScale, transition);
+        } else {
+            return minorLineWidth;
+        }
     });
 
     m_minorGrid->bindableLabelVisible().setBinding([this]() {
@@ -149,12 +164,17 @@ InfiniteGridModel::InfiniteGridModel(QObject *parent)
     m_minorZoomGridIntervalNotifier = m_minorZoomGridInterval.addNotifier(updateMinorInterval);
     updateMinorInterval();
 
-    m_zoomLevel.setBinding([this]() -> int {
+    m_zoomLevel.setBinding([this]() -> double {
         double mapScale = m_mapMatrix.value()(0,0);
         double zoomScale = m_viewScale / mapScale;
         double minPixelScale = m_minorGridMinPixelInterval / 10.0; //Uses the min pixel interval to switch to the next zoomLevel
         double offset = 2.0; //Not sure why 2.0 works, but it does
-        return int(std::log10(zoomScale * minPixelScale) + offset);
+        return std::log10(zoomScale * minPixelScale) + offset;
+    });
+
+    m_zoomTransition.setBinding([this]() -> double {
+        double fraction = std::fmod(m_zoomLevel, 1.0);
+        return fraction;
     });
 
 }
@@ -162,7 +182,7 @@ InfiniteGridModel::InfiniteGridModel(QObject *parent)
 int InfiniteGridModel::clampZoomLevel() const
 {
     // qDebug() << "Clamped Zoom level:" << std::max(0, std::min(m_zoomLevel.value(), m_maxZoomLevel.value()));
-    return std::max(0, std::min(m_zoomLevel.value(), m_maxZoomLevel.value()));
+    return std::max(0, std::min((int)m_zoomLevel.value(), m_maxZoomLevel.value()));
 }
 
 
