@@ -148,6 +148,8 @@ bash: conan: command not found
 
    ```text
    CMAKE_CXX_STANDARD:STRING=17
+   CMAKE_OSX_DEPLOYMENT_TARGET:STRING=16.0
+   CMAKE_OSX_ARCHITECTURES:STRING=arm64
    CMAKE_PROJECT_INCLUDE_BEFORE:FILEPATH=YOUR_PATH_TO/CaveWhereSketch/conan/auto-setup-cross.cmake
    ```
 
