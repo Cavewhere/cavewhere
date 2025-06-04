@@ -355,7 +355,6 @@ StandardPage {
         onYChanged: updateViewport();
 
         InfiniteGrid {
-            // anchors.fill: parent
             gridOrigin: Qt.point(containerId.x, containerId.y);
             viewScale: containerId.scale
             worldToScreenMatrix: worldToScreenId.matrix

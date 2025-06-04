@@ -5,8 +5,6 @@ import cavewherelib
 Item {
     id: gridId
 
-    anchors.fill: parent
-
     property double msaaScale: 2.0 //Higher value will cause rendering aliasing
     property double viewScale: 1.0
     property alias viewport: gridModel.viewport
@@ -38,14 +36,24 @@ Item {
     }
 
 
-    component LabelView : Repeater {
+
+
+    //ListView likely gives better preformance than a repeater because
+    //they pool and re-use items, although this a abusive use of a list view
+    component LabelView : ListView {
         id: repeaterId
+
+        //Need to have some size or the text labels are generated
+        width: 1
+        height: 1
 
         required property double textZ;
 
-        delegate:Text {
-            scale: gridModel.viewScale
-            transformOrigin: Item.TopLeft
+        interactive: false
+        reuseItems: true
+
+        delegate:Item {
+            id: itemId
 
             required property string textRole
             required property point positionRole
@@ -53,14 +61,43 @@ Item {
             required property color fillColorRole
             required property color strokeColorRole;
 
-            text: textRole
-            font: fontRole
-            x: positionRole.x
-            y: positionRole.y
-            color: fillColorRole
-            z: repeaterId.textZ
+            Text {
+                scale: gridModel.viewScale
+                transformOrigin: Item.TopLeft
+                text: itemId.textRole
+                font: itemId.fontRole
+                x: itemId.positionRole.x
+                y: itemId.positionRole.y
+                color: itemId.fillColorRole
+            }
         }
+
+        z: repeaterId.textZ
     }
+
+    // component LabelView : Repeater {
+    //     id: repeaterId
+
+    //     required property double textZ;
+
+    //     delegate:Text {
+    //         scale: gridModel.viewScale
+    //         transformOrigin: Item.TopLeft
+
+    //         required property string textRole
+    //         required property point positionRole
+    //         required property font fontRole
+    //         required property color fillColorRole
+    //         required property color strokeColorRole;
+
+    //         text: textRole
+    //         font: fontRole
+    //         x: positionRole.x
+    //         y: positionRole.y
+    //         color: fillColorRole
+    //         z: repeaterId.textZ
+    //     }
+    // }
 
     //Minor grid
     LabelView {
