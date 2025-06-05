@@ -224,6 +224,8 @@ Make sure conan is in your PATH. Make sure you click "Re-configure with initial 
 
 ![Setting the Environment](readme-resources/env-settings.png)
 
+---
+
 Error message (search for these in the output):
 
 ```
@@ -243,3 +245,94 @@ Solution:
 Add **CMAKE_CXX_STANDARD=17 to the Initial Configuration**, it should fix the issue. ```auto-setup.cmake``` is run before ```CMakeLists.txt```; it calls conan install and sets up the host profile based on the current CMake settings (passed via command-line arguments). Host profile is the target you're going to run CaveWhere Sketch on, and build profile is the platform CaveWhere Sketch is compiled by. For macos compiling for macos, the host and build profiles should be pretty much the same. 
 
 auto-setup.cmake is invoked because QtCreator, by default, sets ```CMAKE_PROJECT_INCLUDE_BEFORE``` to point to it. However, since auto-setup.cmake runs before CMakeLists.txt, it can’t see ```CMAKE_CXX_STANDARD``` defined in CMakeLists.txt.
+
+Make sure you click "Re-configure with initial Paramaters", this will clear the cmake cache.
+
+--- 
+MacOS Configuring for iOS
+Error message (search for these in the output):
+
+```
+[cmake] ERROR: There are invalid packages:
+[cmake] catch2/3.7.1: Invalid: 'settings.arch' value not defined
+[cmake] zlib/1.3.1: Invalid: 'settings.arch' value not defined
+[cmake] abseil/20250127.0: Invalid: 'settings.arch' value not defined
+[cmake] protobuf/5.29.3: Invalid: 'settings.arch' value not defined
+```
+
+Cause: 
+arch isn't set in the host profile
+
+Solution:
+Add **CMAKE_OSX_ARCHITECTURES=arm64 to the Initial Configuration**
+
+Make sure you click "Re-configure with initial Paramaters", this will clear the cmake cache.
+
+---
+
+MacOS Configuring for iOS
+Error message (search for these in the output):
+
+```
+[cmake] ERROR: Invalid setting '16' is not a valid 'settings.os.version' value.
+[cmake] Possible values are ['7.0', '7.1', '8.0', '8.1', '8.2', '8.3', '8.4', '9.0', '9.1', '9.2', '9.3', '10.0', '10.1', '10.2', '10.3', '11.0', '11.1', '11.2', '11.3', '11.4', '12.0', '12.1', '12.2', '12.3', '12.4', '12.5', '13.0', '13.1', '13.2', '13.3', '13.4', '13.5', '13.6', '13.7', '14.0', '14.1', '14.2', '14.3', '14.4', '14.5', '14.6', '14.7', '14.8', '15.0', '15.1', '15.2', '15.3', '15.4', '15.5', '15.6', '15.7', '15.8', '16.0', '16.1', '16.2', '16.3', '16.4', '16.5', '16.6', '16.7', '17.0', '17.1', '17.2', '17.3', '17.4', '17.5', '17.6', '17.8', '18.0', '18.1', '18.2', '18.3', '18.4']
+[cmake] Read "http://docs.conan.io/2/knowledge/faq.html#error-invalid-setting"
+```
+
+Cause:
+settings.os.version is invalid, it needs 16.0, 16 won't work
+
+Solution:
+Add **CMAKE_OSX_DEPLOYMENT_TARGET=16.0 to the Initial Configuration**
+
+Make sure you click "Re-configure with initial Paramaters", this will clear the cmake cache.
+
+---
+
+MacOS configuring / building for iOS
+
+Configuration error messages
+
+```
+[cmake] /Users/cave/.conan2/p/b/proto2635ec7ea8a4c/b/build/protobuf.xcodeproj: error: Bundle identifier is missing. protoc doesn't have a bundle identifier. Add a value for PRODUCT_BUNDLE_IDENTIFIER in the build settings editor. (in target 'protoc' from project 'protobuf')
+```
+
+Potential xcode build failure if protobuf is in your conan cache
+```
+The following build commands failed:
+        PhaseScriptExecution Generate\ cavewhere/cavewherelib/cavewhere.pb.cc /Users/cave/Documents/projects/CaveWhereSketch/build/Qt_6_8_3_for_iOS/build/cavewherelib.build/Debug-iphoneos/Script-09104A79F330CBB00DAFE01C.sh (in target 'cavewherelib' from project 'CaveWhereSketch')
+(1 failure)
+```
+
+Cause:
+conan is doing cross-compiling here. In needs to build protobuf for the host as a library and for build to run protoc on cavewhere.pb. In this case conan / cmake trying build or run the ios version of protoc in macos, which does not work. 
+
+Solution:
+Use the provided auto-setup-cross.cmake. Add **CMAKE_PROJECT_INCLUDE_BEFORE=YOUR_PATH_TO/CaveWhereSketch/conan/auto-setup-cross.cmake to the Initial Configuration**. This will disable protoc from being built on the host (aka ios).
+
+Make sure you click "Re-configure with initial Paramaters", this will clear the cmake cache.
+
+---
+
+MacOS building for Android
+
+Building error messages
+
+```
+[ 25%] Running cpp protocol buffer compiler on /Users/cave/Documents/projects/CaveWhereSketch/cavewhere/cavewherelib/src/qt.proto
+/bin/sh: /Users/cave/.conan2/p/b/protoc72fdbfbfaf1b/p/bin/protoc: cannot execute binary file
+/bin/sh: /Users/cave/.conan2/p/b/protoc72fdbfbfaf1b/p/bin/protoc: cannot execute binary file
+make[2]: *** [cavewhere/cavewherelib/qt.pb.h] Error 126
+```
+
+Cause:
+conan is doing cross-compiling here. In needs to build protobuf for the host as a library and for build to run protoc on cavewhere.pb. In this case cmake trying build or run the android version of protoc in macos, which does not work. 
+
+Solution:
+Use the provided auto-setup-cross.cmake. Add **CMAKE_PROJECT_INCLUDE_BEFORE=YOUR_PATH_TO/CaveWhereSketch/conan/auto-setup-cross.cmake to the Initial Configuration**. This will disable protoc from being built on the host (aka android).
+
+Make sure you click "Re-configure with initial Paramaters", this will clear the cmake cache.
+
+
+
+
