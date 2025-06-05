@@ -24,7 +24,7 @@ WorldToScreenMatrix::WorldToScreenMatrix(QObject* parent)
         const double toMap = mapScale * meterToMilliMeter;
 
         //To pixels on screen (units in qml)
-        qDebug() << "Pixel density:" << m_pixelDensity.value() << "pixel/mm" << toMap;
+        //qDebug() << "Pixel density:" << m_pixelDensity.value() << "pixel/mm" << toMap;
         const double toScreen = toMap * m_pixelDensity.value();
 
         QMatrix4x4 scaleMatrix;

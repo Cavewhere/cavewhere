@@ -77,7 +77,7 @@ class TextModelConcatenate : public QConcatenateTablesProxyModel {
     Q_OBJECT
     QML_ELEMENT
 public:
-    TextModelConcatenate(QObject* parent) : QConcatenateTablesProxyModel(parent) {}
+    TextModelConcatenate(QObject* parent = nullptr) : QConcatenateTablesProxyModel(parent) {}
 
     QHash<int, QByteArray> roleNames() const {
         return TextModel::staticRoleNames();

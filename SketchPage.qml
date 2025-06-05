@@ -361,16 +361,6 @@ StandardPage {
             viewport: containerId.viewport
         }
 
-        // ShapePathInstantiator {
-        //     anchors.fill: parent
-        //     model: minorGridModel
-        // }
-
-        // ShapePathInstantiator {
-        //     anchors.fill: parent
-        //     model: majorGridModel
-        // }
-
         ShapePathInstantiator {
             anchors.fill: parent
             model: RootDataSketch.centerlinePainterModel

@@ -61,8 +61,6 @@ AbstractPainterPathModel::Path CenterlinePainterModel::path(const QModelIndex &i
 
 void CenterlinePainterModel::updateModel()
 {
-    qDebug() << "Update centerlinePainterModel!";
-
     if (m_geometryArtifact) {
         // pull the future and wait for it
         auto future = m_geometryArtifact->geometryResult();

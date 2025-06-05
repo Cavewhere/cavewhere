@@ -64,6 +64,7 @@ void RootData::createGeometry2DPipeline()
     //1:250 scales
     QScreen *screen = QGuiApplication::primaryScreen();
     qDebug() << "Device pixel ratio: " << screen->physicalDotsPerInch();
+    qDebug() << "FIXME! geometry pipeline is still in testing mode!!!";
 
 
     //1:250

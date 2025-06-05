@@ -27,7 +27,6 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
                 m_size = 2;
                 endInsertRows();
             } else {
-                qDebug() << "remove background labels: rowCount:" << rowCount() << LabelBackgroundIndex;
                 beginRemoveRows(QModelIndex(), LabelBackgroundIndex, LabelBackgroundIndex);
                 m_size = 1;
                 endRemoveRows();
@@ -233,29 +232,12 @@ cwSketch::FixedGridModel::FixedGridModel(QObject *parent) :
     });
 
     m_maxLabelSizePixels.setBinding([this, toString]() {
-        // const auto gridLabels = m_gridLabels.value();
-
-        // if(!gridLabels.isEmpty()) {
-        //     QSizeF max;
-        //     for(const auto& gridLabel : gridLabels ) {
-        //         double newWidth = gridLabel.bounds.size().width();
-        //         double newHeight = gridLabel.bounds.size().height();
-        //         if(newWidth > max.width()) {
-        //             max.setWidth(newWidth);
-        //         } else if(newHeight > max.height()){
-        //             max.setHeight(newHeight);
-        //         }
-        //     }
-        //     return max;
-        // } else {
-            const QFont font = m_labelFont.value();
-            QFontMetricsF fontMetrics(font);
-            double gridInterval = m_gridIntervalLength.value(); //in meters
-            double squared = gridInterval * gridInterval * 10 * 9;
-            auto bounds = fontMetrics.boundingRect(toString(-squared)); //textBounds(QStringLiteral("-100"), fontMetrics);
-            qDebug() << "Squared:" << squared << toString(-squared) << bounds;
-            return bounds.size();
-        // }
+        const QFont font = m_labelFont.value();
+        QFontMetricsF fontMetrics(font);
+        double gridInterval = m_gridIntervalLength.value(); //in meters
+        double squared = gridInterval * gridInterval * 10 * 9;
+        auto bounds = fontMetrics.boundingRect(toString(-squared)); //textBounds(QStringLiteral("-100"), fontMetrics);
+        return bounds.size();
     });
 
     m_labelBackgroundPath.setBinding([this]() {
