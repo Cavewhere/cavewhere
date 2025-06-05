@@ -46,7 +46,7 @@ void cwSurveyNetworkBuilderRule::updatePipeline()
                 return QString(cave.name + QStringLiteral(".") + station.name()).toLower();
             };
 
-            auto toStationPosition = [](const cwSurveyDataArtifact::SurveyChunk& chunk, int shotIndex) -> QVector3D {
+            auto toStationPosition = [](const cwTripCalibrationData& calibrationData, const cwSurveyDataArtifact::SurveyChunk& chunk, int shotIndex) -> QVector3D {
                 const cwShot& shot = chunk.shots.at(shotIndex);
                 const int count = shot.measurementCount();
                 if (count == 0) {
@@ -118,8 +118,12 @@ void cwSurveyNetworkBuilderRule::updatePipeline()
                         );
                 }
 
+                auto toMeters = [&](double value) {
+                    return cwUnits::convert(value, calibrationData.distanceUnit(), cwUnits::Meters);
+                };
+
                 // compute the averages
-                double avgDistance = distanceMean.mean();
+                double avgDistance = toMeters(distanceMean.mean());
                 double avgAzimuth = azimuthMean.mean();
                 double avgClino = clinoMean.mean();
 
@@ -196,7 +200,7 @@ void cwSurveyNetworkBuilderRule::updatePipeline()
 
                             network.addShot(fromName, toName);
 
-                            QVector3D vector = toStationPosition(chunk, i);
+                            QVector3D vector = toStationPosition(trip.calibration, chunk, i);
                             shotVectors.add(fromName, toName, vector);
                             }
                         }

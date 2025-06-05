@@ -75,7 +75,7 @@ GroupBox {
                         }
                     }
 
-                    onNewUnit: {
+                    onNewUnit: (unit) => {
                         if(editorId.calibration !== null) {
                             editorId.calibration.distanceUnit = editorId.calibration.mapToLengthUnit(unit)
                         }

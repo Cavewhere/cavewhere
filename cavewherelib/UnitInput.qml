@@ -43,14 +43,16 @@ UnitBaseItem {
 
             property int selectedIndex: unitInput.unit
 
-            Instantiator {
+            QQ.Instantiator {
                 model: unitInput.unitModel
                 Controls.MenuItem {
                     required property string modelData
                     required property int index
 
                     text: modelData; //unitModel[index]
-                    onTriggered: unitInput.newUnit(index)
+                    onTriggered: {
+                        unitInput.newUnit(index)
+                    }
                 }
                 onObjectAdded: (index, object) => menuId.insertItem(index, object)
                 onObjectRemoved: (index, object) => menuId.removeItem(object)
