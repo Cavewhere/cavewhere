@@ -7,6 +7,8 @@
 
 //CaveWhere
 #include "cwTask.h"
+#include "cwMetaTypeSystem.h"
+#include "cwGlobals.h"
 
 //Our includes
 #include "RootData.h"
@@ -58,6 +60,9 @@ int main(int argc, char *argv[])
 {
     QGuiApplication app(argc, argv);
 
+    cwMetaTypeSystem::registerTypes();
+    cwGlobals::initilizeResources();
+    cwGlobals::loadFonts();
     cwTask::initilizeThreadPool();
 
     QSurfaceFormat format;
