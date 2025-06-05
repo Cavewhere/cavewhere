@@ -67,8 +67,8 @@ else()
 endif()
 
 qt_add_resources(QT_RESOURCES
-    ${CMAKE_CURRENT_SOURCE_DIR}/resources.qrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/fonts/fonts.qrc
+    ${CMAKE_CURRENT_SOURCE_DIR}/cwResources.qrc
+    ${CMAKE_CURRENT_SOURCE_DIR}/fonts/cwFonts.qrc
 )
 target_sources(cavewherelib PRIVATE ${QT_RESOURCES})
 
@@ -189,6 +189,7 @@ qt_add_shaders(cavewherelib "cavewherelib_shaders"
 get_target_property(CURRENT_PROTOC_EXECUTABLE protobuf::protoc IMPORTED_LOCATION)
 
 # Check if the path contains ".conan2"
+message(STATUS "CMAKE_PROGRAM_PATH:" ${CMAKE_PROGRAM_PATH} )
 if (CURRENT_PROTOC_EXECUTABLE MATCHES "\\.conan2")
     message(STATUS "Using Conan's protoc: ${CURRENT_PROTOC_EXECUTABLE}")
 else()

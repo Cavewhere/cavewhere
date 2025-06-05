@@ -144,6 +144,15 @@ QList<QDir> cwGlobals::survexPath()
 #endif
 }
 
+/**
+ * Init's cavewhere lib resources when built as a static library
+ */
+void cwGlobals::initilizeResources()
+{
+    Q_INIT_RESOURCE(cwResources);
+    Q_INIT_RESOURCE(cwFonts);
+}
+
 void cwGlobals::loadFonts()
 {
     // Specify the resource path where your fonts are located

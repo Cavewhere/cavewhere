@@ -35,6 +35,8 @@ public:
     static QList<QDir> systemPaths();
     static QList<QDir> survexPath();
 
+    static void initilizeResources();
+
     static void loadFonts();
 };
 
