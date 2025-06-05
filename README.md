@@ -32,6 +32,10 @@ Restart your terminal or you’ll get:
 bash: conan: command not found
 ```
 
+*CaveWhere Sketch uses Conan to manage dependencies, allowing it to handle complex dependency trees that can be cross-compiled for multiple platforms and architectures. While setting up Conan can sometimes be a bit of a headache, once configured, it eliminates much of the hassle of manual dependency management.*
+
+*One key advantage of Conan is its use of hashing to track the exact configuration of each dependency. This ensures that all dependencies are built consistently and correctly for CaveWhere Sketch, avoiding subtle bugs caused by mismatched builds or misconfigured environments.*
+
 ## Building CaveWhere in QtCreator
 
 1. **Clone the Repository and Prepare the Environment**
@@ -162,3 +166,80 @@ bash: conan: command not found
    Press **⌘R** (Command-R) in QtCreator.
 
    ![Build and run CaveWhere Sketch](readme-resources/run.png)
+
+## Troubleshooting the build ##
+
+If you see a configuration error, you should look out the raw cmake output located in the **General Messages** tab. 
+
+![Configuration error](readme-resources/configuration-error.png)
+
+### Common configuration errors ###
+
+### Conan failed run correctly ### 
+Error message:
+```
+[cmake] -- Configuring done (3.5s)
+[cmake] CMake Error at cavewhere/cavewherelib/CMakeLists.txt:35 (target_link_libraries):
+[cmake]   Target "cavewherelib" links to:
+[cmake] 
+[cmake]     protobuf::protobuf
+[cmake] 
+[cmake]   but the target was not found.  Possible reasons include:
+[cmake] 
+[cmake]     * There is a typo in the target name.
+[cmake]     * A find_package call is missing for an IMPORTED target.
+[cmake]     * An ALIAS target is missing.
+[cmake] 
+[cmake] 
+[cmake] 
+[cmake] CMake Error:
+[cmake]   Running
+[cmake] 
+[cmake]    '/Users/cave/Qtcom/Tools/Ninja/ninja' '-C' '/Users/cave/Documents/projects/CaveWhereSketch/build/Qt_6_8_3_for_macOS-Debug' '-t' 'recompact'
+[cmake] 
+[cmake]   failed with:
+[cmake] 
+[cmake]    ninja: error: build.ninja:35: loading 'CMakeFiles/rules.ninja': No such file or directory
+[cmake] 
+[cmake]   include CMakeFiles/rules.ninja
+[cmake] 
+[cmake]                                 ^ near here
+
+```
+Generally, this means conan didn't run and failed. Scroll to the top of the message and look for conan errors.
+
+#### Common Conan failures ####
+
+Error message (search for these in the output):
+```
+[cmake]   Qt Creator: conan executable not found.  Package manager auto-setup will be
+[cmake]   skipped.  To disable this warning set QT_CREATOR_SKIP_CONAN_SETUP to ON.
+```
+
+Cause:
+conan isn't in the PATH enviroment variable.
+
+Solution:
+Make sure conan is in your PATH. Make sure you click "Re-configure with initial Paramaters", this will clear the cmake cache. 
+
+![Setting the Environment](readme-resources/env-settings.png)
+
+Error message (search for these in the output):
+
+```
+[cmake] ERROR: There are invalid packages:
+[cmake] abseil/20250127.0: Invalid: The compiler.cppstd is not defined for this configuration
+[cmake] protobuf/5.29.3: Invalid: Protobuf and abseil must be built with the same compiler.cppstd setting
+[cmake] CMake Error at /Users/cave/Documents/projects/CaveWhereSketch/build/Qt_6_8_3_for_macOS-Debug/.qtc/package-manager/conan_provider.cmake:461 (message):
+[cmake]   Conan install failed='6'
+[cmake] Call Stack (most recent call first):
+[cmake]   CMakeLists.txt:19 (conan_install)
+```
+
+Cause:
+The problem arises because the host profile doesn’t have ```compiler.cppstd=17``` set.
+
+Solution:
+Add **CMAKE_CXX_STANDARD=17 to the Initial Configuration**, it should fix the issue. ```auto-setup.cmake``` is run before ```CMakeLists.txt```; it calls conan install and sets up the host profile based on the current CMake settings (passed via command-line arguments). Host profile is the target you're going to run CaveWhere Sketch on, and build profile is the platform CaveWhere Sketch is compiled by. For macos compiling for macos, the host and build profiles should be pretty much the same. 
+
+auto-setup.cmake is invoked because QtCreator, by default, sets ```CMAKE_PROJECT_INCLUDE_BEFORE``` to point to it. However, since auto-setup.cmake runs before CMakeLists.txt, it can’t see ```CMAKE_CXX_STANDARD``` defined in CMakeLists.txt.
