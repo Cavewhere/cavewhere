@@ -275,7 +275,6 @@ QQ.Item {
                         anchors.fill: parent
 
                         onClicked: {
-                            console.log("Mouse area click, new chunk!");
                             clipArea.currentTrip.addNewChunk();
                         }
                     }
