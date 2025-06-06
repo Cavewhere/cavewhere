@@ -11,6 +11,7 @@
 
 //Sketch includes
 #include "CenterlinePainterModel.h"
+#include "PenLineModel.h"
 
 namespace cwSketch {
 
@@ -29,7 +30,7 @@ class RootData : public QObject
     //For testing
     Q_PROPERTY(cwTrip* currentTrip READ currentTrip CONSTANT)
     Q_PROPERTY(CenterlinePainterModel* centerlinePainterModel READ centerlinePainterModel CONSTANT)
-
+    Q_PROPERTY(PenLineModel* penLineModel READ penLineModel CONSTANT)
 
 public:
     RootData(QObject* parent = nullptr);
@@ -44,6 +45,10 @@ public:
     CenterlinePainterModel* centerlinePainterModel() const
     {
         return m_centerlinePainterModel;
+    }
+
+    PenLineModel* penLineModel() const {
+        return m_penLineModel;
     }
 
     int sampleCount() const;
@@ -62,8 +67,8 @@ private:
     void createCurrentTrip();
     void createGeometry2DPipeline();
 
-
     CenterlinePainterModel* m_centerlinePainterModel;
+    PenLineModel* m_penLineModel;
 };
 
 }

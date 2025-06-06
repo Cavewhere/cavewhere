@@ -49,11 +49,14 @@ find_package(Qt6
     Test
 )
 
+find_package(Protobuf REQUIRED)
+
 qt_standard_project_setup(REQUIRES 6.5)
 
 qt_add_executable(CaveWhereSketch
     main.cpp
 )
+
 
 qt_add_qml_module(cavewhere_sketch
     URI CaveWhereSketch
@@ -63,7 +66,6 @@ qt_add_qml_module(cavewhere_sketch
         Main.qml
         SOURCES
         PenLineModel.h PenLineModel.cpp
-        PenLineView.h PenLineView.cpp
         PainterPathModel.h PainterPathModel.cpp
         SketchShapePath.h SketchShapePath.cpp
         MovingAverageProxyModel.cpp MovingAverageProxyModel.h
@@ -79,7 +81,20 @@ qt_add_qml_module(cavewhere_sketch
         QML_FILES InfiniteGrid.qml
         SOURCES TextModel.h TextModel.cpp
         SOURCES InfiniteGridModel.h InfiniteGridModel.cpp
+        SOURCES PenLineModelSerializer.h PenLineModelSerializer.cpp
 )
+
+# get_target_property(CURRENT_PROTOC_EXECUTABLE protobuf::protoc IMPORTED_LOCATION)
+
+# Protobuf files
+file(GLOB protobuf_FILES "*.proto")
+set(Protobuf_IMPORT_DIRS ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/cavewhere/cavewherelib/src )
+protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${protobuf_FILES})
+target_sources(cavewhere_sketch PRIVATE ${protobuf_FILES} ${protobuf_FILES})
+
+# Add the generated files to your target
+set_source_files_properties(${PROTO_SRCS} ${PROTO_HDRS} PROPERTIES SKIP_AUTOMOC TRUE SKIP_AUTOUIC TRUE)
+target_sources(cavewhere_sketch PRIVATE ${PROTO_SRCS} ${PROTO_HDRS})
 
 # Generate the export header for windows
 generate_export_header(cavewhere_sketch
@@ -112,11 +127,13 @@ target_link_libraries(cavewhere_sketch
     PRIVATE
     Qt6::QuickPrivate
     Qt6::QuickShapesPrivate
+    protobuf::protobuf
 )
 
 target_include_directories(cavewhere_sketch
     PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_BINARY_DIR}
     PRIVATE
     ${Qt6Quick_PRIVATE_INCLUDE_DIRS}
 )

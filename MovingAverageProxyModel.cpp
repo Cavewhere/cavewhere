@@ -5,6 +5,7 @@
 //Qt includes
 #include <QPointF>
 
+using namespace cwSketch;
 
 MovingAverageProxyModel::MovingAverageProxyModel(QObject* parent)
     : QIdentityProxyModel(parent) {}

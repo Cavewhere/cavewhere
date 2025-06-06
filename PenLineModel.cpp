@@ -5,7 +5,9 @@
 //Our includes
 #include "PenLineModel.h"
 
-class PenLineModelUndoCommand : public QUndoCommand {
+using namespace cwSketch;
+
+class cwSketch::PenLineModelUndoCommand : public QUndoCommand {
 public:
     PenLineModelUndoCommand(PenLineModel *model, const QVector<PenLine> &oldLines, const QVector<PenLine> &newLines) :
         QUndoCommand("Draw Line", nullptr), m_penLineModel(model), m_oldLines(oldLines), m_newLines(newLines) {}
@@ -171,6 +173,13 @@ void PenLineModel::addPoint(int lineIndex, PenPoint point)
 void PenLineModel::clearUndoStack() {
     QVector<PenLine> empty;
     m_undoStack->push(new PenLineModelUndoCommand(this, m_lines, empty));
+}
+
+void PenLineModel::setLines(const QVector<PenLine> &lines)
+{
+    beginResetModel();
+    m_lines = lines;
+    endResetModel();
 }
 
 

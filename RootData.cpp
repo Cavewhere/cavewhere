@@ -6,11 +6,15 @@
 #include "cwSurveyNetworkBuilderRule.h"
 #include "cwSurvey2DGeometryRule.h"
 #include "cwMatrix4x4Artifact.h"
+#include "PenLineModelSerializer.h"
 
 //Qt includes
 #include <QScreen>
 #include <QGuiApplication>
 #include <QSurfaceFormat>
+#include <QSaveFile>
+#include <QStandardPaths>
+#include <QDir>
 
 using namespace cwSketch;
 
@@ -19,8 +23,42 @@ RootData::RootData(QObject *parent) :
 {
     //For testing
     m_centerlinePainterModel = new CenterlinePainterModel(this);
+    m_penLineModel = new PenLineModel(this);
     createCurrentTrip();
     createGeometry2DPipeline();
+
+
+    // 1) Ask Qt where the desktop folder is
+    QString desktopDir = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
+    QDir dir;
+    dir.mkdir(desktopDir);
+
+    // 2) Build the full path to your JSON file
+    QString testPath = desktopDir + QDir::separator() + "testPen.json";
+
+    if(QFile::exists(testPath)) {
+        QFile file(testPath);
+        file.open(QFile::ReadOnly);
+        auto data = file.readAll();
+        file.close();
+        auto results = PenLineModelSerializer::deserialize(data);
+        qDebug() << "Results:" << results.lines.size() << "error string:" << results.errorString << "data:" << data.size();
+        m_penLineModel->setLines(results.lines);
+    }
+
+    auto savePenModel = [this, testPath]() {
+        auto data = PenLineModelSerializer::serialize(*m_penLineModel);
+        qDebug() << "TestPAth:" << testPath;
+        QSaveFile saveFile(testPath);
+        saveFile.open(QFile::WriteOnly);
+        saveFile.write(data);
+        saveFile.commit();
+    };
+
+    // connect(m_penLineModel, &PenLineModel::rowsInserted, this, savePenModel);
+    // connect(m_penLineModel, &PenLineModel::rowsRemoved, this, savePenModel);
+    connect(m_penLineModel, &PenLineModel::modelReset, this, savePenModel);
+
 }
 
 //For testing

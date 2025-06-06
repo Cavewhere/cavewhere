@@ -1,5 +1,4 @@
-#ifndef PENLINEMODEL_H
-#define PENLINEMODEL_H
+#pragma once
 
 //Qt includes
 #include <QAbstractItemModel>
@@ -10,6 +9,8 @@
 
 //Our includes
 #include "CaveWhereSketchLibExport.h"
+
+namespace cwSketch {
 
 class PenLineModelUndoCommand;
 
@@ -39,8 +40,6 @@ struct CAVEWHERE_SKETCH_LIB_EXPORT PenLine {
     QVector<PenPoint> points;
     double width = 2.5;
 };
-Q_DECLARE_METATYPE(PenLine)
-
 
 class CAVEWHERE_SKETCH_LIB_EXPORT PenLineModel : public QAbstractItemModel {
     Q_OBJECT
@@ -103,6 +102,9 @@ public:
     void setSensitivity(const double& sensitivity) { m_sensitivity = sensitivity; }
     QBindable<double> bindableSensitivity() { return &m_sensitivity; }
 
+    QVector<PenLine> lines() const { return m_lines; }
+    void setLines(const QVector<PenLine>& lines);
+
 
 signals:
     void currentStrokeWidthChanged();
@@ -121,5 +123,6 @@ private:
 };
 
 
+};
 
-#endif // PENLINEMODEL_H
+Q_DECLARE_METATYPE(cwSketch::PenLine)

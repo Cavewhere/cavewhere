@@ -16,20 +16,26 @@ StandardPage {
     //     console.log("DPI changed:" + dpi)
     // }
 
-    PenLineModel {
-        id: penModel
-
-        viewScale: containerId.scale
-
-        onCurrentStrokeWidthChanged: {
-            console.log("onCurrentStrokeWidthChanged!" + penModel.currentStrokeWidth + (penModel.currentStrokeWidth.toFixed(1) == 2.5))
-            featuresId.checked = windowId.fuzzyEquals(penModel.currentStrokeWidth, 2.5);
-        }
+    Binding {
+        target: RootDataSketch.penLineModel
+        property: "viewScale"
+        value: containerId.scale
     }
+
+    // PenLineModel {
+    //     id: penModel
+
+    //     viewScale: containerId.scale
+
+    //     onCurrentStrokeWidthChanged: {
+    //         console.log("onCurrentStrokeWidthChanged!" + penModel.currentStrokeWidth + (penModel.currentStrokeWidth.toFixed(1) == 2.5))
+    //         featuresId.checked = windowId.fuzzyEquals(penModel.currentStrokeWidth, 2.5);
+    //     }
+    // }
 
     MovingAverageProxyModel {
         id: movingAverageProxyModelId
-        sourceModel: penModel
+        sourceModel: RootDataSketch.penLineModel
     }
 
     PainterPathModel {
@@ -62,11 +68,11 @@ StandardPage {
                 text: "Wall"
                 QC.ButtonGroup.group: strokeWidthGroupId
                 onClicked: {
-                    penModel.currentStrokeWidth = 4.0
+                    RootDataSketch.penLineModel.currentStrokeWidth = 4.0
                 }
 
                 Binding {
-                    wallId.checked: windowId.fuzzyEquals(penModel.currentStrokeWidth, 4.0)
+                    wallId.checked: windowId.fuzzyEquals(RootDataSketch.penLineModel.currentStrokeWidth, 4.0)
                 }
             }
 
@@ -75,25 +81,25 @@ StandardPage {
                 text: "Features"
                 QC.ButtonGroup.group: strokeWidthGroupId
                 onClicked: {
-                    penModel.currentStrokeWidth = 2.5
+                    RootDataSketch.penLineModel.currentStrokeWidth = 2.5
                 }
 
-                checked: windowId.fuzzyEquals(penModel.currentStrokeWidth, 2.5)
+                checked: windowId.fuzzyEquals(RootDataSketch.penLineModel.currentStrokeWidth, 2.5)
             }
 
             QC.RadioButton {
                 text: "With Pressure"
                 QC.ButtonGroup.group: strokeWidthGroupId
                 onClicked: {
-                    penModel.currentStrokeWidth = -1.0;
+                    RootDataSketch.penLineModel.currentStrokeWidth = -1.0;
                 }
             }
 
             QC.Button {
                 id: biggerId
-                text: "Bigger add 0.1 to " + penModel.currentStrokeWidth.toFixed(2)
+                text: "Bigger add 0.1 to " + RootDataSketch.penLineModel.currentStrokeWidth.toFixed(2)
                 onClicked: {
-                    penModel.currentStrokeWidth += 0.1
+                    RootDataSketch.penLineModel.currentStrokeWidth += 0.1
                 }
             }
 
@@ -101,28 +107,28 @@ StandardPage {
                 ColumnLayout {
                     QC.Button {
                         id: undoId
-                        enabled: penModel.undoStack.canUndo
+                        enabled: RootDataSketch.penLineModel.undoStack.canUndo
                         text: "Undo"
                         onClicked: {
-                            penModel.undoStack.undo();
+                            RootDataSketch.penLineModel.undoStack.undo();
                         }
                     }
 
                     QC.Button {
                         id: redoId
-                        enabled: penModel.undoStack.canRedo
+                        enabled: RootDataSketch.penLineModel.undoStack.canRedo
                         text: "Redo"
                         onClicked: {
-                            penModel.undoStack.redo();
+                            RootDataSketch.penLineModel.undoStack.redo();
                         }
                     }
 
                     QC.Button {
                         id: clearId
                         text: "Clear"
-                        enabled: penModel.canClearUndoStack
+                        enabled: RootDataSketch.penLineModel.canClearUndoStack
                         onClicked: {
-                            penModel.clearUndoStack();
+                            RootDataSketch.penLineModel.clearUndoStack();
                         }
                     }
 
@@ -264,10 +270,10 @@ StandardPage {
         onActiveChanged: {
             // console.log("Active changed!" + active)
             if(active) {
-                painterPathModel.activeLineIndex = penModel.rowCount();
-                penModel.addNewLine();
+                painterPathModel.activeLineIndex = RootDataSketch.penLineModel.rowCount();
+                RootDataSketch.penLineModel.addNewLine();
             } else {
-                penModel.finishNewLine();
+                RootDataSketch.penLineModel.finishNewLine();
             }
         }
 
@@ -276,8 +282,8 @@ StandardPage {
                 //console.log("Point.pressure:" + handler.point.position + " " + handler.point.pressure + active)
                 _mappedHandlerPoint = sketchPageId.mapToItem(containerId, handler.point.position);
 
-                let penPoint = penModel.penPoint(_mappedHandlerPoint, handler.point.pressure)
-                penModel.addPoint(painterPathModel.activeLineIndex, penPoint)
+                let penPoint = RootDataSketch.penLineModel.penPoint(_mappedHandlerPoint, handler.point.pressure)
+                RootDataSketch.penLineModel.addPoint(painterPathModel.activeLineIndex, penPoint)
             }
         }
 
