@@ -135,8 +135,6 @@ void RootData::createGeometry2DPipeline()
     m_centerlinePainterModel->setSurvey2DGeometry(geometryRule->survey2DGeometry());
 }
 
-
-
 int RootData::sampleCount() const
 {
     return QSurfaceFormat::defaultFormat().samples();

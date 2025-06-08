@@ -11,12 +11,6 @@ Item {
     property alias worldToScreenMatrix: gridModel.mapMatrix //Holds the map scaling
     property alias gridOrigin: gridModel.gridOrigin
 
-    function msaaGridVisible(lineWidth) {
-        let spacing = 1.0 / Math.sqrt(RootDataSketch.sampleCount * msaaScale);
-        let scaledLineWidth = viewScale * lineWidth;
-        return scaledLineWidth > spacing;
-    }
-
     InfiniteGridModel {
         id: gridModel
         viewport: containerId.viewport
