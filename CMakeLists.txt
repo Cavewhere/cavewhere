@@ -163,14 +163,17 @@ if(IOS)
     set(asset_catalog_path "ios/Assets.xcassets")
     target_sources(CaveWhereSketch PRIVATE "${asset_catalog_path}")
 
-    # 2. Add the storyboard as a bundled resource
-    set(LAUNCH_SB ${CMAKE_SOURCE_DIR}/ios/LaunchScreen.storyboard)
-    target_sources(CaveWhereSketch PRIVATE ${LAUNCH_SB})
-
     set_source_files_properties(
         ${asset_catalog_path}
-        # ${LAUNCH_SB}
         PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+
+    set_target_properties(CaveWhereSketch PROPERTIES
+      QT_IOS_LAUNCH_SCREEN "${CMAKE_SOURCE_DIR}/ios/LaunchScreen.storyboard"
+    )
+
+    # 2. Add the storyboard as a bundled resource
+    # set(LAUNCH_SB ${CMAKE_SOURCE_DIR}/ios/LaunchScreen.storyboard)
+    # target_sources(CaveWhereSketch PRIVATE ${LAUNCH_SB})
 
     #For app icon
     file(GLOB_RECURSE app_icons CONFIGURE_DEPENDS "ios/Icons/*.png")
