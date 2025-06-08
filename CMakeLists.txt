@@ -51,7 +51,7 @@ find_package(Qt6
 
 find_package(Protobuf REQUIRED)
 
-qt_standard_project_setup(REQUIRES 6.5)
+qt_standard_project_setup(REQUIRES 6.7)
 
 qt_add_executable(CaveWhereSketch
     main.cpp
@@ -114,6 +114,7 @@ target_include_directories(cavewhere_sketch PUBLIC
 set_target_properties(CaveWhereSketch PROPERTIES
 #    MACOSX_BUNDLE_GUI_IDENTIFIER com.vadosesolutions.CaveWhereSketch
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
+    XCODE_ATTRIBUTE_PRODUCT_NAME "CaveWhere Sketch"
     MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
     MACOSX_BUNDLE TRUE
     WIN32_EXECUTABLE TRUE
@@ -147,12 +148,43 @@ target_compile_definitions(cavewhere_sketch
     PRIVATE QT_USE_PRIVATE_HEADERS
 )
 
-# include(GNUInstallDirs)
-# install(TARGETS CaveWhereSketch
-#     BUNDLE DESTINATION .
-#     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-#     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-# )
+if(IOS)
+    set_target_properties(CaveWhereSketch PROPERTIES
+        MACOSX_BUNDLE_GUI_IDENTIFIER solutions.vadose.cavewheresketch
+        MACOSX_BUNDLE_BUNDLE_VERSION 1 #The build version
+        MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
+        MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/ios/MacOSXBundleInfo.plist.in
+        MACOSX_BUNDLE TRUE
+        XCODE_ATTRIBUTE_ENABLE_BITCODE "NO"
+        # XCODE_ATTRIBUTE_INFOPLIST_KEY_CFBundleDisplayName "cwSketch"
+        )
+
+    #For launch screen
+    set(asset_catalog_path "ios/Assets.xcassets")
+    target_sources(CaveWhereSketch PRIVATE "${asset_catalog_path}")
+
+    # 2. Add the storyboard as a bundled resource
+    set(LAUNCH_SB ${CMAKE_SOURCE_DIR}/ios/LaunchScreen.storyboard)
+    target_sources(CaveWhereSketch PRIVATE ${LAUNCH_SB})
+
+    set_source_files_properties(
+        ${asset_catalog_path}
+        # ${LAUNCH_SB}
+        PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+
+    #For app icon
+    file(GLOB_RECURSE app_icons CONFIGURE_DEPENDS "ios/Icons/*.png")
+    #message("App_icons:${app_icons}")
+    if(app_icons)
+        target_sources(CaveWhereSketch PRIVATE ${app_icons})
+        set_source_files_properties(
+            ${app_icons}
+            PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+        set_target_properties(CaveWhereSketch PROPERTIES XCODE_ATTRIBUTE_ASSETCATALOG_COMPILER_APPICON_NAME "AppIcon")
+    endif()
+
+    qt_import_plugins(CaveWhereSketch INCLUDE Qt::QIosOptionalPlugin_NSPhotoLibraryPlugin)
+endif()
 
 
 qt_add_executable(cavewhere-sketch-test
