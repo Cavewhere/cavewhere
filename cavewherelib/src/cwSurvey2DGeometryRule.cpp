@@ -96,10 +96,10 @@ void cwSurvey2DGeometryRule::updateGeometry()
     int value = 5;
     // Result<double> final = mbind(Result(value), [](Result<int> value) { return Result<double>(5.0); });
 
-    auto createGeometry = [matrix](QFuture<Result<cwSurveyNetwork>> surveyNetworkFuture) {
+    auto createGeometry = [matrix](const Result<cwSurveyNetwork> surveyNetworkResult) {
         return cwConcurrent::run([=]() {
             cwSurvey2DGeometry geometry;
-            const auto& surveyNetwork = surveyNetworkFuture.result().value();
+            const auto surveyNetwork = surveyNetworkResult.value();
 
             const auto stationNames = surveyNetwork.stations();
             geometry.stations.reserve(stationNames.size());
