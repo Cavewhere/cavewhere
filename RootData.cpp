@@ -19,8 +19,13 @@
 using namespace cwSketch;
 
 RootData::RootData(QObject *parent) :
-    m_project(new cwProject(this))
+    m_project(new cwProject(this)),
+    m_account(new QQuickGit::Account(this)),
+    m_accountWatcher(new QQuickGit::AccountSettingWatcher(this))
 {
+    //Save account settings to QSetting
+    m_accountWatcher->setPerson(m_account);
+
     //For testing
     m_centerlinePainterModel = new CenterlinePainterModel(this);
     m_penLineModel = new PenLineModel(this);
@@ -141,3 +146,8 @@ int RootData::sampleCount() const
 }
 
 
+
+QQuickGit::Account *RootData::account() const
+{
+    return m_account;
+}

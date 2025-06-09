@@ -13,6 +13,10 @@
 #include "CenterlinePainterModel.h"
 #include "PenLineModel.h"
 
+//QQuickGit inculdes
+#include "Account.h"
+#include "AccountSettingWatcher.h"
+
 namespace cwSketch {
 
 class RootData : public QObject
@@ -23,6 +27,8 @@ class RootData : public QObject
 
     Q_PROPERTY(cwProject* project READ project CONSTANT)
     Q_PROPERTY(cwCavingRegion* cavingRegion READ cavingRegion NOTIFY cavingRegionChanged)
+
+    Q_PROPERTY(QQuickGit::Account* account READ account CONSTANT)
 
     //MSAA sample count
     Q_PROPERTY(int sampleCount READ sampleCount CONSTANT FINAL)
@@ -54,12 +60,18 @@ public:
     int sampleCount() const;
 
 
+    QQuickGit::Account *account() const;
+
 signals:
     void cavingRegionChanged();
 
 private:
     cwProject* m_project;
+    QQuickGit::Account* m_account;
     int m_sampleCount = 1;
+
+    //internal
+    QQuickGit::AccountSettingWatcher* m_accountWatcher;
 
     //For testing
     QPointer<cwTrip> m_currentTrip;

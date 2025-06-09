@@ -65,8 +65,8 @@ void CenterlinePainterModel::updateModel()
         // pull the future and wait for it
         auto future = m_geometryArtifact->geometryResult();
 
-        auto convertToPainterPaths = [](auto future)->QFuture<Result<QVector<Path>>> {
-            const cwSurvey2DGeometry geometry = future.result().value();
+        auto convertToPainterPaths = [](const auto result)->QFuture<Result<QVector<Path>>> {
+            const cwSurvey2DGeometry geometry = result.value();
             return cwConcurrent::run([geometry]() {
                 QVector<Path> paths;
                 paths.reserve(3);

@@ -4,6 +4,7 @@ import QtQuick.Controls as QC
 import QtQuick.Layouts
 import CaveWhereSketch
 import cavewherelib
+import QQuickGit
 
 Window {
     id: windowId
@@ -34,30 +35,31 @@ Window {
     //     windowName: "mainWindow"
     // }
 
-    RowLayout {
-        id: toolBar
+    // RowLayout {
+    //     id: toolBar
 
-        QC.ToolButton {
-            text: "Data"
-            onClicked: {
-                RootData.pageSelectionModel.currentPageAddress = "Trip"
-            }
-        }
+    //     QC.ToolButton {
+    //         text: "Data"
+    //         onClicked: {
+    //             RootData.pageSelectionModel.currentPageAddress = "Trip"
+    //         }
+    //     }
 
-        QC.ToolButton {
-            text: "Sketch"
-            onClicked: {
-                RootData.pageSelectionModel.currentPageAddress = "Sketch"
-            }
-        }
-    }
+    //     QC.ToolButton {
+    //         text: "Sketch"
+    //         onClicked: {
+    //             RootData.pageSelectionModel.currentPageAddress = "Sketch"
+    //         }
+    //     }
+    // }
 
     Item {
         id: container;
-        anchors.top: toolBar.bottom
-        anchors.bottom: parent.bottom
-        anchors.left: parent.left
-        anchors.right: parent.right
+        anchors.fill: parent
+        // anchors.top: toolBar.bottom
+        // anchors.bottom: parent.bottom
+        // anchors.left: parent.left
+        // anchors.right: parent.right
 
         // property int currentPosition: height * mainSideBar.pageShownReal
 
@@ -85,6 +87,14 @@ Window {
     }
 
     Component {
+        id: welcomePageComponent
+        WelcomePage {
+            anchors.fill: parent
+            account: RootDataSketch.account
+        }
+    }
+
+    Component {
         id: sketchPageComponent
         SketchPage {
             anchors.fill: parent
@@ -98,11 +108,20 @@ Window {
         }
     }
 
+    // Component {
+    //     id: dataPageComponent
+    //     Rectangle {
+    //         color: "red"
+    //         anchors.fill: parent
+    //     }
+    // }
+
     Component.onCompleted: {
         GlobalShadowTextInput.parent = overlay;
         RootPopupItem.parent = overlay
 
         pageView.unknownPageComponent = unknownPageComponent
+        let welcomePage = RootData.pageSelectionModel.registerPage(null, "Welcome", welcomePageComponent);
         let tripPage = RootData.pageSelectionModel.registerPage(null, "Trip", tripPageComponent);
         let sketchPage = RootData.pageSelectionModel.registerPage(null, "Sketch", sketchPageComponent);
         // let mapPage = RootData.pageSelectionModel.registerPage(null, "Map", mapPageComponent)
@@ -110,7 +129,16 @@ Window {
         // RootData.pageSelectionModel.registerPage(null, "About", aboutPageComponent)
         // RootData.pageSelectionModel.registerPage(null, "Settings", settingsPageComponent)
         // RootData.pageSelectionModel.registerPage(null, "Pipeline", pipelinePageComponent)
-        RootData.pageSelectionModel.gotoPage(sketchPage);
+
+        console.log("RootData:" + RootDataSketch.account.isValid)
+
+        if(RootDataSketch.account.isValid) {
+            //Go to the main page
+            RootData.pageSelectionModel.gotoPage(sketchPage);
+        } else {
+            //Setup for the first time
+            RootData.pageSelectionModel.gotoPage(welcomePage);
+        }
 
         // Component.onCompleted: {
             // console.log("Logical DPI:", Screen.pixelDensity)

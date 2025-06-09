@@ -1,3 +1,6 @@
 [submodule "cavewhere"]
 	path = cavewhere
 	url = git@github.com:Cavewhere/cavewhere.git
+[submodule "QQuickGit"]
+	path = QQuickGit
+	url = git@github.com:vpicaver/QQuickGit.git

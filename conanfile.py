@@ -15,7 +15,12 @@ class CaveWhereConan(ConanFile):
     settings = "os", "compiler", "build_type", "arch"
     requires = [
     ("catch2/[>=2.13.10]"),
-    ("protobuf/6.30.1")
+    ("protobuf/6.30.1"),
+
+    #For QQuickGit
+    ("libgit2/1.8.4"),
+    ("openssl/3.5.0"),
+    ("libssh2/[>=1.11]")
     ]
 
     generators = "CMakeDeps", "CMakeToolchain", "VirtualBuildEnv", "VirtualRunEnv"

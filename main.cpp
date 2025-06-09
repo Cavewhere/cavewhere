@@ -3,6 +3,7 @@
 #include <QQmlApplicationEngine>
 #include <QSurfaceFormat>
 #include <QQmlContext>
+#include <QSettings>
 #include <rhi/qrhi.h>
 
 //CaveWhere
@@ -59,7 +60,12 @@ int sampleCount() {
 int main(int argc, char *argv[])
 {
     QGuiApplication app(argc, argv);
+    app.setOrganizationName("Vadose Solutions");
+    app.setOrganizationDomain("vadose.solutions");
+    app.setApplicationName("CaveWhereSketch");
+    app.setApplicationVersion("1.0");
 
+    //CaveWhere initilization
     cwMetaTypeSystem::registerTypes();
     cwGlobals::initilizeResources();
     cwGlobals::loadFonts();

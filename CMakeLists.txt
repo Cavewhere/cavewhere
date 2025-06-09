@@ -24,6 +24,8 @@ add_subdirectory(cavewhere/QuickQanava)
 add_subdirectory(cavewhere/dewalls)
 add_subdirectory(cavewhere/MarkScope)
 
+add_subdirectory(QQuickGit)
+
 find_package(Catch2 REQUIRED)
 
 # Normally, Catch2 is expected to be installed locally;
@@ -82,6 +84,8 @@ qt_add_qml_module(cavewhere_sketch
         SOURCES TextModel.h TextModel.cpp
         SOURCES InfiniteGridModel.h InfiniteGridModel.cpp
         SOURCES PenLineModelSerializer.h PenLineModelSerializer.cpp
+        QML_FILES WelcomePage.qml
+        QML_FILES Spacer.qml
 )
 
 # get_target_property(CURRENT_PROTOC_EXECUTABLE protobuf::protoc IMPORTED_LOCATION)
@@ -125,6 +129,7 @@ target_link_libraries(cavewhere_sketch
     Qt6::Quick
     Qt6::Core
     cavewherelib
+    qquickgit
     PRIVATE
     Qt6::QuickPrivate
     Qt6::QuickShapesPrivate
