@@ -27,6 +27,7 @@ add_subdirectory(cavewhere/MarkScope)
 add_subdirectory(QQuickGit)
 
 find_package(Catch2 REQUIRED)
+find_package(openssl)
 
 # Normally, Catch2 is expected to be installed locally;
 # if you'd rather not do that (e.g. for cross compilation
@@ -134,6 +135,7 @@ target_link_libraries(cavewhere_sketch
     Qt6::QuickPrivate
     Qt6::QuickShapesPrivate
     protobuf::protobuf
+    openssl::openssl
 )
 
 target_include_directories(cavewhere_sketch
@@ -152,6 +154,33 @@ target_link_libraries(CaveWhereSketch
 target_compile_definitions(cavewhere_sketch
     PRIVATE QT_USE_PRIVATE_HEADERS
 )
+
+if(ANDROID)
+    # #qt_android_generate_deployment_settings(MapWhere)
+    set(openssl_libdir ${OpenSSL_INCLUDE_DIRS}/../lib)
+    message(STATUS "OpenSSL lib dirs: ${openssl_libdir}")
+
+    # #SSL needs to be copied into bundle directory so it gets copied to the phone
+    set(ANDROID_BUILD_DIR ${CMAKE_CURRENT_BINARY_DIR}/android-build-CaveWhereSketch)
+
+    file(MAKE_DIRECTORY "${ANDROID_BUILD_DIR}/libs/${ANDROID_ABI}")
+
+    # copy-and-rename in one step
+    configure_file(
+        "${openssl_libdir}/libssl.so.3"
+        "${ANDROID_BUILD_DIR}/libs/${ANDROID_ABI}/libssl.so.3"
+        COPYONLY
+    )
+
+    configure_file(
+        "${openssl_libdir}/libcrypto.so.3"
+        "${ANDROID_BUILD_DIR}/libs/${ANDROID_ABI}/libcrypto.so.3"
+        COPYONLY
+    )
+
+    # file(REMOVE ${ANDROID_BUID_DIR}/libs/${ANDROID_ABI}/libssl.so)
+    # file(REMOVE ${ANDROID_BUID_DIR}/libs/${ANDROID_ABI}/libcrypto.so)
+endif()
 
 if(IOS)
     set_target_properties(CaveWhereSketch PROPERTIES

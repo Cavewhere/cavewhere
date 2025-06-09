@@ -5,7 +5,7 @@ from conan.errors import ConanInvalidConfiguration
 import subprocess
 
 class CaveWhereConan(ConanFile):
-    name = "CaveWwhereSketch"
+    name = "CaveWhereSketch"
     license = "GPL"
     author = "Philip Schuchardt vpicaver@gmail.com"
     url = "https://github.com/Cavewhere/CaveWhereSketch"
@@ -18,8 +18,8 @@ class CaveWhereConan(ConanFile):
     ("protobuf/6.30.1"),
 
     #For QQuickGit
-    ("libgit2/1.8.4"),
-    ("openssl/3.5.0"),
+    ("libgit2/1.9.0"),
+    #("openssl/3.5.0"),
     ("libssh2/[>=1.11]")
     ]
 
@@ -36,3 +36,21 @@ class CaveWhereConan(ConanFile):
 
     #     deps = CMakeDeps(self)
     #     deps.generate()
+
+    def requirements(self):
+        # if self.settings.os == "Android":
+        #     self.requires("openssl/3.5.0@test/demo", override=True)
+        # else:
+        self.requires("openssl/3.5.0")
+
+    def configure(self):
+        self.options["openssl"].shared = True
+
+        # if self.settings.os == "Android":
+        #     self.options["openssl"].shared = False
+        #     self.options["openssl"].no_asm = True #Windows building android, probably can comment out for other platforms
+
+        if self.settings.os == "iOS":
+            self.options["openssl"].shared = False
+            self.options["sqlite3"].build_executable = False
+            self.options["libgit2"].with_regex = "builtin"
