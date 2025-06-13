@@ -95,6 +95,13 @@ Window {
     }
 
     Component {
+        id: repositoryPageComponent
+        RepositoryListPage {
+            anchors.fill: parent
+        }
+    }
+
+    Component {
         id: sketchPageComponent
         SketchPage {
             anchors.fill: parent
@@ -124,6 +131,7 @@ Window {
         let welcomePage = RootData.pageSelectionModel.registerPage(null, "Welcome", welcomePageComponent);
         let tripPage = RootData.pageSelectionModel.registerPage(null, "Trip", tripPageComponent);
         let sketchPage = RootData.pageSelectionModel.registerPage(null, "Sketch", sketchPageComponent);
+        let repositoryPage = RootData.pageSelectionModel.registerPage(null, "Repositories", repositoryPageComponent);
         // let mapPage = RootData.pageSelectionModel.registerPage(null, "Map", mapPageComponent)
         // RootData.pageSelectionModel.registerPage(null, "Testcases", testcasesPageComponent);
         // RootData.pageSelectionModel.registerPage(null, "About", aboutPageComponent)
@@ -134,7 +142,7 @@ Window {
 
         if(RootDataSketch.account.isValid) {
             //Go to the main page
-            RootData.pageSelectionModel.gotoPage(sketchPage);
+            RootData.pageSelectionModel.gotoPage(repositoryPage);
         } else {
             //Setup for the first time
             RootData.pageSelectionModel.gotoPage(welcomePage);

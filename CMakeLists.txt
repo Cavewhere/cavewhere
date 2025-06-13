@@ -60,33 +60,63 @@ qt_add_executable(CaveWhereSketch
     main.cpp
 )
 
+# Collect source files qquickgitLib
+file(GLOB cwsketch_CPP_FILES "src/*.cpp")
+file(GLOB cwsketch_H_FILES "src/*.h")
+
+# Make the file paths relative to the project directory
+set(cwsketch_RELATIVE_CPP_FILES "")
+foreach(file ${cwsketch_CPP_FILES})
+    file(RELATIVE_PATH relFile "${CMAKE_CURRENT_SOURCE_DIR}" "${file}")
+    list(APPEND cwsketch_RELATIVE_CPP_FILES "${relFile}")
+endforeach()
+
+set(cwsketch_RELATIVE_H_FILES "")
+foreach(file ${cwsketch_H_FILES})
+    file(RELATIVE_PATH relFile "${CMAKE_CURRENT_SOURCE_DIR}" "${file}")
+    list(APPEND cwsketch_RELATIVE_H_FILES "${relFile}")
+endforeach()
+
+# Get all QML and JS files
+file(GLOB cwsketch_QML_FILES "qml/*.qml" "qml/*.js")
+
+# Define the list of QML singletons
+set(qml_singletons
+    # "UnitDefaults.qml"
+)
+
+# Remove the singleton files from the regular QML file list
+foreach(singleton ${qml_singletons})
+    list(REMOVE_ITEM cwsketch_QML_FILES "${CMAKE_CURRENT_SOURCE_DIR}/qml/${singleton}")
+endforeach()
+
+# Make the remaining QML files relative to the project directory
+set(cwsketch_RELATIVE_QML_FILES "")
+foreach(file ${cwsketch_QML_FILES})
+    file(RELATIVE_PATH relFile "${CMAKE_CURRENT_SOURCE_DIR}" "${file}")
+    message(STATUS "Adding QML file: ${relFile}")
+    list(APPEND cwsketch_RELATIVE_QML_FILES "${relFile}")
+endforeach()
+
 qt_add_qml_module(cavewhere_sketch
     URI CaveWhereSketch
     VERSION 1.0
     OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/CaveWhereSketch
+    DEPENDENCIES
+        QtQuick
+    SOURCES
+        ${cwsketch_RELATIVE_CPP_FILES}
+        ${cwsketch_RELATIVE_H_FILES}
     QML_FILES
-        Main.qml
-        SOURCES
-        PenLineModel.h PenLineModel.cpp
-        PainterPathModel.h PainterPathModel.cpp
-        SketchShapePath.h SketchShapePath.cpp
-        MovingAverageProxyModel.cpp MovingAverageProxyModel.h
-        ExclusivePointHandler.h ExclusivePointHandler.cpp
-        RootData.h RootData.cpp
-        AbstractPainterPathModel.h AbstractPainterPathModel.cpp
-        CenterlinePainterModel.h CenterlinePainterModel.cpp
-        QML_FILES SketchPage.qml
-        TripCompactPage.qml
-        QML_FILES ShapePathInstantiator.qml
-        SOURCES FixedGridModel.h FixedGridModel.cpp
-        SOURCES WorldToScreenMatrix.h WorldToScreenMatrix.cpp
-        QML_FILES InfiniteGrid.qml
-        SOURCES TextModel.h TextModel.cpp
-        SOURCES InfiniteGridModel.h InfiniteGridModel.cpp
-        SOURCES PenLineModelSerializer.h PenLineModelSerializer.cpp
-        QML_FILES WelcomePage.qml
-        QML_FILES Spacer.qml
-        SOURCES RepositoryModel.h RepositoryModel.cpp
+        ${cwsketch_RELATIVE_QML_FILES}
+        ${qml_singletons}
+)
+
+target_sources(cavewhere_sketch PRIVATE ${cavewherelib_CPP_FILES} ${cavewherelib_H_FILES})
+
+target_include_directories(cavewhere_sketch
+    PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 # get_target_property(CURRENT_PROTOC_EXECUTABLE protobuf::protoc IMPORTED_LOCATION)

@@ -173,3 +173,8 @@ QQuickGit::Account *RootData::account() const
 {
     return m_account;
 }
+
+RepositoryModel *RootData::repositoryModel() const
+{
+    return m_repositoryModel;
+}

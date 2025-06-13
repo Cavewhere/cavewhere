@@ -43,7 +43,12 @@ class RootData : public QObject
 public:
     RootData(QObject* parent = nullptr);
 
-    cwProject* project() const { return m_project; }
+    RootData(const RootData &) = delete;
+    RootData(RootData &&) = delete;
+    RootData &operator=(const RootData &) = delete;
+    RootData &operator=(RootData &&) = delete;
+
+    cwProject *project() const { return m_project; }
     cwCavingRegion* cavingRegion() const { return m_project->cavingRegion(); }
 
 
@@ -63,6 +68,8 @@ public:
 
 
     QQuickGit::Account *account() const;
+
+    RepositoryModel *repositoryModel() const;
 
 signals:
     void cavingRegionChanged();
