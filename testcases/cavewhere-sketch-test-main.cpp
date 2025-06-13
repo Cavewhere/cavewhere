@@ -7,6 +7,9 @@
 #include <QThread>
 #include <QSettings>
 
+//QQuickGit
+#include <GitRepository.h>
+
 //CaveWhere includes
 #include "cwTask.h"
 
@@ -18,6 +21,9 @@ int main( int argc, char* argv[] )
     QGuiApplication::setOrganizationDomain("cavewhere.com");
     QGuiApplication::setApplicationName("cavewhere-sketch-test");
     QGuiApplication::setApplicationVersion("1.0");
+
+    //initilize git
+    QQuickGit::GitRepository::initGitEngine();
 
     {
         QSettings settings;

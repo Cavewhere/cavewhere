@@ -12,6 +12,7 @@
 //Sketch includes
 #include "CenterlinePainterModel.h"
 #include "PenLineModel.h"
+#include "RepositoryModel.h"
 
 //QQuickGit inculdes
 #include "Account.h"
@@ -25,6 +26,7 @@ class RootData : public QObject
     QML_SINGLETON
     QML_NAMED_ELEMENT(RootDataSketch)
 
+    Q_PROPERTY(RepositoryModel* repositoryModel READ repositoryModel CONSTANT)
     Q_PROPERTY(cwProject* project READ project CONSTANT)
     Q_PROPERTY(cwCavingRegion* cavingRegion READ cavingRegion NOTIFY cavingRegionChanged)
 
@@ -68,6 +70,8 @@ signals:
 private:
     cwProject* m_project;
     QQuickGit::Account* m_account;
+    RepositoryModel* m_repositoryModel;
+
     int m_sampleCount = 1;
 
     //internal

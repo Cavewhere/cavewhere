@@ -20,6 +20,7 @@
 using namespace cwSketch;
 
 RootData::RootData(QObject *parent) :
+    m_repositoryModel(new RepositoryModel(this)),
     m_project(new cwProject(this)),
     m_account(new QQuickGit::Account(this)),
     m_accountWatcher(new QQuickGit::AccountSettingWatcher(this))
@@ -32,7 +33,6 @@ RootData::RootData(QObject *parent) :
     m_penLineModel = new PenLineModel(this);
     createCurrentTrip();
     createGeometry2DPipeline();
-
 
     // 1) Ask Qt where the desktop folder is
     QString desktopDir = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
@@ -65,27 +65,27 @@ RootData::RootData(QObject *parent) :
     // connect(m_penLineModel, &PenLineModel::rowsRemoved, this, savePenModel);
     connect(m_penLineModel, &PenLineModel::modelReset, this, savePenModel);
 
-    qDebug() << "Public key:";
-    qDebug() << m_account->publicKey();
+    // qDebug() << "Public key:";
+    // qDebug() << m_account->publicKey();
 
-    QDir cloneDir(desktopDir + "/test");
-    cloneDir.removeRecursively();
+    // QDir cloneDir(desktopDir + "/test");
+    // cloneDir.removeRecursively();
 
-    qDebug() << "Clone dir:" << cloneDir;
+    // qDebug() << "Clone dir:" << cloneDir;
 
-    QQuickGit::GitRepository repository;
-    repository.setDirectory(cloneDir);
-    auto future = repository.clone(QUrl("ssh://git@github.com/cavewhere/cavewhere-sketch.git"));
+    // QQuickGit::GitRepository repository;
+    // repository.setDirectory(cloneDir);
+    // auto future = repository.clone(QUrl("ssh://git@github.com/cavewhere/cavewhere-sketch.git"));
 
 
-    auto watcher = AsyncFuture::observe(future).context(this, [cloneDir, future]() {
-        qDebug() << "Done checking out:";
-        qDebug() << "Future error:" << future.result().errorMessage();
-        qDebug() << "Files:" << cloneDir.entryList();
-                                }).future();
+    // auto watcher = AsyncFuture::observe(future).context(this, [cloneDir, future]() {
+    //     qDebug() << "Done checking out:";
+    //     qDebug() << "Future error:" << future.result().errorMessage();
+    //     qDebug() << "Files:" << cloneDir.entryList();
+    //                             }).future();
 
-    AsyncFuture::waitForFinished(watcher);
-    qDebug() << "Future finished!" << future.result().hasError();
+    // AsyncFuture::waitForFinished(watcher);
+    // qDebug() << "Future finished!" << future.result().hasError();
 }
 
 //For testing

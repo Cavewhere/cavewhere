@@ -60,7 +60,6 @@ qt_add_executable(CaveWhereSketch
     main.cpp
 )
 
-
 qt_add_qml_module(cavewhere_sketch
     URI CaveWhereSketch
     VERSION 1.0
@@ -87,6 +86,7 @@ qt_add_qml_module(cavewhere_sketch
         SOURCES PenLineModelSerializer.h PenLineModelSerializer.cpp
         QML_FILES WelcomePage.qml
         QML_FILES Spacer.qml
+        SOURCES RepositoryModel.h RepositoryModel.cpp
 )
 
 # get_target_property(CURRENT_PROTOC_EXECUTABLE protobuf::protoc IMPORTED_LOCATION)
@@ -230,7 +230,8 @@ qt_add_executable(cavewhere-sketch-test
     testcases/test_FixedGridModel.cpp
     testcases/test_WorldToScreenMatrix.cpp
     testcases/test_TextModel.cpp
-    testcases/test_InfiniteGridModel.cpp)
+    testcases/test_InfiniteGridModel.cpp
+    testcases/test_RepositoryModel.cpp)
 
 set_target_properties(cavewhere-sketch-test PROPERTIES
     AUTOMOC ON
