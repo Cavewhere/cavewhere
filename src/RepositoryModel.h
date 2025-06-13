@@ -24,6 +24,7 @@ public:
     QHash<int, QByteArray> roleNames() const override;
 
     Q_INVOKABLE Monad::ResultBase addRepository(const QDir& repositoryDir);
+    Q_INVOKABLE Monad::ResultBase addRepository(const QUrl& localDir, const QString& name);
 
 private:
     void loadRepositories();

@@ -10,7 +10,6 @@ import QQuickGit
 StandardPage {
     id: pageId
 
-
     ColumnLayout {
         anchors.fill: parent
 
@@ -18,16 +17,45 @@ StandardPage {
             id: listViewId
 
             Layout.fillHeight: true
+            // Layout.leftMargin: 10
+            // Layout.rightMargin: 10
+            // Layout.topMargin: 10
 
             model: RootDataSketch.repositoryModel
 
-            delegate: Item {
+            delegate: Rectangle {
+                id: delegateId
+
                 required property string nameRole
+                required property int index
+
+                width: 150
+                height: Math.max(30, linkTextId.height)
+
+                color: index % 2 === 0 ? "#ffffff" : "#eeeeee"
+
+                // MouseArea {
+                //     anchors.fill: parent
+                //     onClicked: {
+
+                //     }
+                // }
 
                 LinkText {
-                    text: nameRole
+                    id: linkTextId
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.left: parent.left
+                    anchors.leftMargin: 10
+                    text: delegateId.nameRole
                     elide: Text.ElideRight
+
+                    onClicked: {
+                        //Load the cwCavingRegion, go to
+                        console.log("Clicked area:");
+                        RootData.pageSelectionModel.gotoPageByName(null, "Area")
+                    }
                 }
+
             }
         }
 
@@ -50,15 +78,26 @@ StandardPage {
             implicitWidth: 200
 
             TextFieldWithError {
+                id: repositoryNameId
                 textField.placeholderText: "Caving Area Name"
             }
 
-            LinkText {
-                text: folderDialogId.currentFolder
-                onClicked: {
-                    folderDialogId.open();
+            RowLayout {
+                Text {
+                    text: "Location:"
+                }
+
+                LinkText {
+                    text: folderDialogId.currentFolder
+                    onClicked: {
+                        folderDialogId.open();
+                    }
                 }
             }
+        }
+
+        onAccepted: {
+            RootDataSketch.repositoryModel.addRepository(folderDialogId.currentFolder, repositoryNameId.textField.text)
         }
 
         standardButtons: QC.Dialog.Cancel | QC.Dialog.Open

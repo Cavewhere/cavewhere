@@ -63,6 +63,29 @@ Monad::ResultBase RepositoryModel::addRepository(const QDir& repositoryDir)
     });
 }
 
+Monad::ResultBase RepositoryModel::addRepository(const QUrl &localDir, const QString &name)
+{
+    auto quotedFilename = [localDir]() {
+        return QStringLiteral("\"") + localDir.toString() + QStringLiteral("\"");
+    };
+
+    if(localDir.isLocalFile()) {
+        QFileInfo info(localDir.toLocalFile());
+        if(info.isDir()) {
+            return addRepository(QDir(info.absoluteFilePath()).absoluteFilePath(name));
+        } else {
+            if(info.exists()) {
+                return Monad::ResultBase(quotedFilename() + QStringLiteral(" doesn't exist"));
+            } else {
+                return Monad::ResultBase(quotedFilename() + QStringLiteral(" is not a directory"));
+            }
+        }
+    } else {
+        return Monad::ResultBase(quotedFilename() + QStringLiteral("is not a non-local directory"));
+    }
+}
+
+
 void RepositoryModel::loadRepositories()
 {
     QSettings settings;

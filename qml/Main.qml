@@ -115,6 +115,13 @@ Window {
         }
     }
 
+    Component {
+        id: dataPageComponent
+        DataMainPage {
+            anchors.fill: parent
+        }
+    }
+
     // Component {
     //     id: dataPageComponent
     //     Rectangle {
@@ -132,6 +139,8 @@ Window {
         let tripPage = RootData.pageSelectionModel.registerPage(null, "Trip", tripPageComponent);
         let sketchPage = RootData.pageSelectionModel.registerPage(null, "Sketch", sketchPageComponent);
         let repositoryPage = RootData.pageSelectionModel.registerPage(null, "Repositories", repositoryPageComponent);
+        let dataMainPage = RootData.pageSelectionModel.registerPage(null, "Area", dataPageComponent);
+
         // let mapPage = RootData.pageSelectionModel.registerPage(null, "Map", mapPageComponent)
         // RootData.pageSelectionModel.registerPage(null, "Testcases", testcasesPageComponent);
         // RootData.pageSelectionModel.registerPage(null, "About", aboutPageComponent)

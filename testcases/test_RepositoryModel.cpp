@@ -5,6 +5,7 @@
 #include <QSettings>
 #include <QTemporaryDir>
 #include <QModelIndex>
+#include <QUrl>
 
 //Our includes
 #include "RepositoryModel.h"
@@ -67,4 +68,40 @@ TEST_CASE("RepositoryModel addRepository and persistence", "[RepositoryModel]") 
     // QModelIndex idx2 = model2.index(0, 0);
     CHECK(model2.data(model2.index(0, 0), cwSketch::RepositoryModel::PathRole).toString() == repoDir.absolutePath());
     CHECK(model2.data(model2.index(1, 0), cwSketch::RepositoryModel::PathRole).toString() == nonExistentDir.absolutePath());
+}
+
+TEST_CASE("RepositoryModel addRepository with url and persistence", "[RepositoryModel]") {
+    // Clear settings before test
+    QSettings settings;
+    settings.clear();
+
+    cwSketch::RepositoryModel model;
+    REQUIRE(model.rowCount() == 0);
+
+    // Create a temporary directory as a dummy repository
+    QTemporaryDir tmpDir;
+    REQUIRE(tmpDir.isValid());
+    QDir parentDir(tmpDir.path());
+    CHECK(parentDir.exists());
+
+
+    // Test adding a non-existent directory
+    QDir nonExistentDir(tmpDir.path() + "/sauce");
+    REQUIRE_FALSE(nonExistentDir.exists());
+    auto result2 = model.addRepository(QUrl::fromLocalFile(parentDir.absolutePath()), "sauce");
+    INFO("Error on non-existent add: " << result2.errorMessage().toStdString());
+    CHECK(result2.hasError() == false);
+    // row count should remain unchanged
+    REQUIRE(model.rowCount() == 1);
+
+    QModelIndex idx1 = model.index(0, 0);
+    CHECK(model.data(idx1, cwSketch::RepositoryModel::PathRole).toString().toStdString() == nonExistentDir.absolutePath().toStdString());
+    CHECK(model.data(idx1, cwSketch::RepositoryModel::NameRole).toString().toStdString() == nonExistentDir.dirName().toStdString());
+
+    // Create a fresh model to verify persistence from QSettings
+    cwSketch::RepositoryModel model2;
+    REQUIRE(model2.rowCount() == 1);
+    // QModelIndex idx2 = model2.index(0, 0);
+    CHECK(model2.data(model2.index(0, 0), cwSketch::RepositoryModel::PathRole).toString().toStdString() == nonExistentDir.absolutePath().toStdString());
+
 }
