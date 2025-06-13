@@ -14,6 +14,9 @@
 //Our includes
 #include "RootData.h"
 
+//QQuickGit
+#include "GitRepository.h"
+
 QList<int> supportedSampleCounts() {
 #if QT_CONFIG(vulkan)
     QVulkanInstance inst;
@@ -70,6 +73,9 @@ int main(int argc, char *argv[])
     cwGlobals::initilizeResources();
     cwGlobals::loadFonts();
     cwTask::initilizeThreadPool();
+
+    //initilize git
+    QQuickGit::GitRepository::initGitEngine();
 
     QSurfaceFormat format;
     format.setSamples(sampleCount()); // Adjust the sample count as needed

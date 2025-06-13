@@ -17,6 +17,7 @@ class CaveWhereConan(ConanFile):
     ("catch2/[>=2.13.10]"),
     ("protobuf/6.30.1"),
 
+
     #For QQuickGit
     ("libgit2/1.9.0"),
     #("openssl/3.5.0"),
@@ -41,13 +42,13 @@ class CaveWhereConan(ConanFile):
         # if self.settings.os == "Android":
         #     self.requires("openssl/3.5.0@test/demo", override=True)
         # else:
-        self.requires("openssl/3.5.0")
+            self.requires("openssl/3.5.0")
 
     def configure(self):
         self.options["openssl"].shared = True
 
-        # if self.settings.os == "Android":
-        #     self.options["openssl"].shared = False
+        if self.settings.os == "Android":
+            self.options["openssl"].shared = False
         #     self.options["openssl"].no_asm = True #Windows building android, probably can comment out for other platforms
 
         if self.settings.os == "iOS":

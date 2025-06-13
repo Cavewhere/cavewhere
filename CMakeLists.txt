@@ -117,12 +117,13 @@ target_include_directories(cavewhere_sketch PUBLIC
 # If you are developing for iOS or macOS you should consider setting an
 # explicit, fixed bundle identifier manually though.
 set_target_properties(CaveWhereSketch PROPERTIES
-#    MACOSX_BUNDLE_GUI_IDENTIFIER com.vadosesolutions.CaveWhereSketch
-    MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
-    XCODE_ATTRIBUTE_PRODUCT_NAME "CaveWhere Sketch"
-    MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
+    # MACOSX_BUNDLE_GUI_IDENTIFIER com.vadosesolutions.CaveWhereSketch
+    # MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
+    # XCODE_ATTRIBUTE_PRODUCT_NAME "CaveWhere Sketch"
+    #XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "com.vadosesolutions.CaveWhereSketch"
+    # MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
     MACOSX_BUNDLE TRUE
-    WIN32_EXECUTABLE TRUE
+    # WIN32_EXECUTABLE TRUE
 )
 
 target_link_libraries(cavewhere_sketch
@@ -155,43 +156,43 @@ target_compile_definitions(cavewhere_sketch
     PRIVATE QT_USE_PRIVATE_HEADERS
 )
 
-if(ANDROID)
-    # #qt_android_generate_deployment_settings(MapWhere)
-    set(openssl_libdir ${OpenSSL_INCLUDE_DIRS}/../lib)
-    message(STATUS "OpenSSL lib dirs: ${openssl_libdir}")
+# if(ANDROID)
+#     # #qt_android_generate_deployment_settings(MapWhere)
+#     set(openssl_libdir ${OpenSSL_INCLUDE_DIRS}/../lib)
+#     message(STATUS "OpenSSL lib dirs: ${openssl_libdir}")
 
-    # #SSL needs to be copied into bundle directory so it gets copied to the phone
-    set(ANDROID_BUILD_DIR ${CMAKE_CURRENT_BINARY_DIR}/android-build-CaveWhereSketch)
+#     # #SSL needs to be copied into bundle directory so it gets copied to the phone
+#     set(ANDROID_BUILD_DIR ${CMAKE_CURRENT_BINARY_DIR}/android-build-CaveWhereSketch)
 
-    file(MAKE_DIRECTORY "${ANDROID_BUILD_DIR}/libs/${ANDROID_ABI}")
+#     file(MAKE_DIRECTORY "${ANDROID_BUILD_DIR}/libs/${ANDROID_ABI}")
 
-    # copy-and-rename in one step
-    configure_file(
-        "${openssl_libdir}/libssl.so.3"
-        "${ANDROID_BUILD_DIR}/libs/${ANDROID_ABI}/libssl.so.3"
-        COPYONLY
-    )
+#     # copy-and-rename in one step
+#     configure_file(
+#         "${openssl_libdir}/libssl.so.3"
+#         "${ANDROID_BUILD_DIR}/libs/${ANDROID_ABI}/libssl.s.so"
+#         COPYONLY
+#     )
 
-    configure_file(
-        "${openssl_libdir}/libcrypto.so.3"
-        "${ANDROID_BUILD_DIR}/libs/${ANDROID_ABI}/libcrypto.so.3"
-        COPYONLY
-    )
+#     configure_file(
+#         "${openssl_libdir}/libcrypto.so.3"
+#         "${ANDROID_BUILD_DIR}/libs/${ANDROID_ABI}/libcrypto.s.so"
+#         COPYONLY
+#     )
 
-    # file(REMOVE ${ANDROID_BUID_DIR}/libs/${ANDROID_ABI}/libssl.so)
-    # file(REMOVE ${ANDROID_BUID_DIR}/libs/${ANDROID_ABI}/libcrypto.so)
-endif()
+#     # file(REMOVE ${ANDROID_BUID_DIR}/libs/${ANDROID_ABI}/libssl.so)
+#     # file(REMOVE ${ANDROID_BUID_DIR}/libs/${ANDROID_ABI}/libcrypto.so)
+# endif()
 
 if(IOS)
     set_target_properties(CaveWhereSketch PROPERTIES
-        MACOSX_BUNDLE_GUI_IDENTIFIER solutions.vadose.cavewheresketch
+       MACOSX_BUNDLE_GUI_IDENTIFIER solutions.vadose.cavewheresketch
         MACOSX_BUNDLE_BUNDLE_VERSION 1 #The build version
         MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
-        MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/ios/MacOSXBundleInfo.plist.in
+       MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/ios/MacOSXBundleInfo.plist.in
         MACOSX_BUNDLE TRUE
         XCODE_ATTRIBUTE_ENABLE_BITCODE "NO"
         # XCODE_ATTRIBUTE_INFOPLIST_KEY_CFBundleDisplayName "cwSketch"
-        )
+    )
 
     #For launch screen
     set(asset_catalog_path "ios/Assets.xcassets")

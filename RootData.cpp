@@ -7,6 +7,7 @@
 #include "cwSurvey2DGeometryRule.h"
 #include "cwMatrix4x4Artifact.h"
 #include "PenLineModelSerializer.h"
+#include "GitRepository.h"
 
 //Qt includes
 #include <QScreen>
@@ -64,6 +65,27 @@ RootData::RootData(QObject *parent) :
     // connect(m_penLineModel, &PenLineModel::rowsRemoved, this, savePenModel);
     connect(m_penLineModel, &PenLineModel::modelReset, this, savePenModel);
 
+    qDebug() << "Public key:";
+    qDebug() << m_account->publicKey();
+
+    QDir cloneDir(desktopDir + "/test");
+    cloneDir.removeRecursively();
+
+    qDebug() << "Clone dir:" << cloneDir;
+
+    QQuickGit::GitRepository repository;
+    repository.setDirectory(cloneDir);
+    auto future = repository.clone(QUrl("ssh://git@github.com/cavewhere/cavewhere-sketch.git"));
+
+
+    auto watcher = AsyncFuture::observe(future).context(this, [cloneDir, future]() {
+        qDebug() << "Done checking out:";
+        qDebug() << "Future error:" << future.result().errorMessage();
+        qDebug() << "Files:" << cloneDir.entryList();
+                                }).future();
+
+    AsyncFuture::waitForFinished(watcher);
+    qDebug() << "Future finished!" << future.result().hasError();
 }
 
 //For testing

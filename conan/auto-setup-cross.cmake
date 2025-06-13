@@ -174,6 +174,26 @@ macro(qtc_auto_setup_conan)
           conan_profile_detect_default()
           detect_host_profile(\"${CMAKE_BINARY_DIR}/conan-dependencies/conan_host_profile\")
 
+          set(CONAN_PROFILE ${CMAKE_BINARY_DIR}/conan-dependencies/conan_host_profile)
+
+          # read the whole file into a variable
+          file(READ \"\${CONAN_PROFILE}\" _profile_content)
+
+          #message(FATAL_ERROR \"Contents:\${CONAN_PROFILE} c:\${_profile_content}\")
+
+          # remove any line exactly matching \"tools.cmake.cmaketoolchain:generator=Xcode\"
+          # (including its trailing newline)
+          string(REGEX REPLACE
+              \"tools\\.cmake\\.cmaketoolchain:generator=Xcode\"
+              \"\"
+              _profile_content
+              \"\${_profile_content}\"
+          )
+
+          # overwrite the original file
+          file(WRITE \"\${CONAN_PROFILE}\" \"\${_profile_content}\")
+          # file(WRITE \"\${CONAN_PROFILE}\" \"sauce\")
+
           # Now append the extra user_toolchain line
           # Assume we are in the [conf] section of the profile
           file(APPEND \"${CMAKE_BINARY_DIR}/conan-dependencies/conan_host_profile\"
