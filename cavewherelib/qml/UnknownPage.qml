@@ -1,5 +1,6 @@
 import QtQuick as QQ
 import QtQuick.Layouts
+import cavewherelib
 
 ScrollViewPage {
     QQ.Rectangle {

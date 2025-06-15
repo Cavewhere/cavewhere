@@ -7,7 +7,7 @@
 
 import QtQuick as QQ
 import cavewherelib
-import "qrc:/qt/qml/cavewherelib/Theme.js" as Theme
+import "qrc:/qt/qml/cavewherelib/qml/Theme.js" as Theme
 
 DataBox {
     id: stationBox

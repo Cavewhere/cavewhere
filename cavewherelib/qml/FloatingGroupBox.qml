@@ -7,7 +7,7 @@
 
 // import QtQuick as QQ // to target S60 5th Edition or Maemo 5
 import QtQuick as QQ
-import "qrc:/qt/qml/cavewherelib/Theme.js" as Theme
+import "qrc:/qt/qml/cavewherelib/qml/Theme.js" as Theme
 
 QQ.Item {
     id: floatingGroupBoxId

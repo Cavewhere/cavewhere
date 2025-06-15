@@ -5,19 +5,23 @@
 **
 **************************************************************************/
 
-// import QtQuick as QQ // to target S60 5th Edition or Maemo 5
 import QtQuick as QQ
-import "qrc:/qt/qml/cavewherelib/Theme.js" as Theme
+import "qrc:/qt/qml/cavewherelib/qml/Theme.js" as Theme
 
 QQ.Item {
-    id: groupBoxId
+    id: itemId
 
     property QQ.color backgroundColor: "white"
-    property alias text: titleText.text
-    property int contentHeight
-    default property alias contentChildren: contentArea.children
+    property alias checked: checkbox.checked
+    property alias text: checkbox.text
+    property bool contentsVisible: true
+    default property alias contentData: contentArea.data
 
-    height: titleText.height + contentHeight + 3
+    height: contentsVisible ? checkbox.height + contentArea.childrenRect.height + 3 : checkbox.height
+    width: contentArea.childrenRect.width + 6
+
+    implicitHeight: height
+    implicitWidth: width
 
     QQ.Rectangle {
         id: checkBoxGroup
@@ -25,8 +29,9 @@ QQ.Item {
         border.color: "gray"
         radius: Theme.floatingWidgetRadius
         color: "#00000000"
+        visible: itemId.contentsVisible
 
-        anchors.top: titleText.verticalCenter
+        anchors.top: checkbox.verticalCenter
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
@@ -38,7 +43,7 @@ QQ.Item {
             anchors.right: parent.right
             anchors.bottom: parent.bottom
 
-            anchors.topMargin: titleText.height / 2
+            anchors.topMargin: checkbox.height / 2
             anchors.leftMargin: 3
             anchors.rightMargin: 3
             anchors.bottomMargin: 3
@@ -46,16 +51,16 @@ QQ.Item {
     }
 
     QQ.Rectangle {
-        color: groupBoxId.backgroundColor
-        anchors.fill: titleText
+        color: itemId.backgroundColor
+        anchors.fill: checkbox
+        visible: itemId.contentsVisible
     }
 
-    Text {
-        id: titleText
+    CheckBox {
+        id: checkbox
+        objectName: "checkBox"
         anchors.left: checkBoxGroup.left
         anchors.leftMargin: 6
-
-        font.bold: true
     }
 
 }

@@ -111,14 +111,14 @@ foreach(file ${cavewhere_H_FILES})
 endforeach()
 
 # Get all QML and JS files
-file(GLOB cavewhere_QML_FILES "*.qml" "*.js")
+file(GLOB cavewhere_QML_FILES "qml/*.qml" "qml/*.js")
 
 # Define the list of QML singletons
 set(qml_singletons
-    "UnitDefaults.qml"
-    "GlobalShadowTextInput.qml"
-    "RootPopupItem.qml"
-    "YanoneKaffeesatz.qml"
+    "qml/UnitDefaults.qml"
+    "qml/GlobalShadowTextInput.qml"
+    "qml/RootPopupItem.qml"
+    "qml/YanoneKaffeesatz.qml"
 )
 
 # Remove the singleton files from the regular QML file list
