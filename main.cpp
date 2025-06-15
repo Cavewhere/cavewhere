@@ -26,6 +26,9 @@
 #include "cwGlobals.h"
 #include "cwMetaTypeSystem.h"
 
+//QQuickGit
+#include "GitRepository.h"
+
 //QuickQanave includes
 #include <QuickQanava>
 
@@ -143,6 +146,9 @@ int main(int argc, char *argv[])
     QSurfaceFormat format;
     format.setSamples(4); // Adjust the sample count as needed
     QSurfaceFormat::setDefaultFormat(format);
+
+    //initilize git
+    QQuickGit::GitRepository::initGitEngine();
 
     QQmlApplicationEngine* applicationEngine = new QQmlApplicationEngine();
 

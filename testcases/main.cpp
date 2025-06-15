@@ -22,6 +22,9 @@
 #include "cwTask.h"
 #include "cwMetaTypeSystem.h"
 
+//QQuickGit
+#include "GitRepository.h"
+
 int main( int argc, char* argv[] )
 {
   QApplication app(argc, argv);
@@ -32,6 +35,9 @@ int main( int argc, char* argv[] )
   QApplication::setApplicationVersion("1.0");
 
   cwMetaTypeSystem::registerTypes();
+
+  //initilize git
+  QQuickGit::GitRepository::initGitEngine();
 
   {
       QSettings settings;
