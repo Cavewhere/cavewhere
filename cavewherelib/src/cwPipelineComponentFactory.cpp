@@ -16,8 +16,8 @@ cwPipelineComponentFactory::cwPipelineComponentFactory(QObject* parent)
 
 void cwPipelineComponentFactory::initializeDefaultMappings() {
     // Register default mappings using the new registerComponent signature.
-    registerComponent(cwFileNameArtifact::staticMetaObject, QUrl("qrc:/cavewherelib/cavewherelib/FileNameArtifactNode.qml"));
-    registerComponent(cwTemporaryFileNameArtifact::staticMetaObject, QUrl("qrc:/cavewherelib/cavewherelib/TemporaryFileNameArtifact.qml"));
+    registerComponent(cwFileNameArtifact::staticMetaObject, QUrl("qrc:/qt/qml/cavewherelib/qml/FileNameArtifactNode.qml"));
+    registerComponent(cwTemporaryFileNameArtifact::staticMetaObject, QUrl("qrc:/qt/qml/cavewherelib/qml/TemporaryFileNameArtifact.qml"));
 }
 
 QQmlComponent* cwPipelineComponentFactory::createComponent(QObject* object, QQmlEngine *engine) {

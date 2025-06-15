@@ -284,7 +284,7 @@ void cwLeadView::createComponent()
 
 QString cwLeadView::qmlSource() const
 {
-    return QStringLiteral("qrc:/cavewherelib/cavewherelib/LeadPoint.qml");
+    return QStringLiteral("qrc:/qt/qml/cavewherelib/qml/LeadPoint.qml");
 }
 
 /**

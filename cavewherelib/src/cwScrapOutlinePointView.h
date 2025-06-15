@@ -44,7 +44,7 @@ private slots:
  */
 inline QString cwScrapOutlinePointView::qmlSource() const
 {
-    return QStringLiteral("qrc:/cavewherelib/cavewherelib/ScrapOutlinePoint.qml");
+    return QStringLiteral("qrc:/qt/qml/cavewherelib/qml/ScrapOutlinePoint.qml");
 }
 
 

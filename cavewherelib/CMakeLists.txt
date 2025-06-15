@@ -154,6 +154,7 @@ qt_add_qml_module(cavewherelib
     #NO_CACHEGEN #Make sure this is comment out for release mode
     DEPENDENCIES
         QtQuick
+        QuickQanava
     SOURCES
         ${cavewhere_RELATIVE_CPP_FILES}
         ${cavewhere_RELATIVE_H_FILES}

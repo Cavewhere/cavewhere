@@ -162,6 +162,13 @@ macro(qtc_auto_setup_conan)
         )
       endif()
 
+      # Conan expects "True"/"False" (or lowercase), so convert the CMake BOOL to a string
+      if(MOBILE_BUILD)
+        set(MOBILE_BUILD_STR "True")
+      else()
+        set(MOBILE_BUILD_STR "False")
+      endif()
+
       file(WRITE "${CMAKE_BINARY_DIR}/conan-dependencies/CMakeLists.txt" "
         cmake_minimum_required(VERSION 3.15)
 
@@ -210,6 +217,7 @@ macro(qtc_auto_setup_conan)
               -pr \"${CMAKE_BINARY_DIR}/conan-dependencies/conan_host_profile\"
               --build=${QT_CREATOR_CONAN_BUILD_POLICY}
               -s build_type=\${type}
+              -o &:mobile=${MOBILE_BUILD_STR}
               ${conan_generator})
           endforeach()
 

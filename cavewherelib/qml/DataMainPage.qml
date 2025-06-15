@@ -6,7 +6,7 @@
 **************************************************************************/
 
 //This cause a crash when creating the context for sub trip pages
-//cwPageView: "qrc:/cavewherelib/cavewherelib/DataMainPage.qml: Cannot instantiate bound component outside its creation context"
+//cwPageView: "qrc:/qt/qml/cavewherelib/qml/DataMainPage.qml: Cannot instantiate bound component outside its creation context"
 // pragma ComponentBehavior: Bound
 
 import cavewherelib

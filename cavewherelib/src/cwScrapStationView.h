@@ -83,7 +83,7 @@ protected:
  */
 inline QString cwScrapStationView::qmlSource() const
 {
-    return QStringLiteral("qrc:/cavewherelib/cavewherelib/NoteStation.qml");
+    return QStringLiteral("qrc:/qt/qml/cavewherelib/qml/NoteStation.qml");
 }
 
 

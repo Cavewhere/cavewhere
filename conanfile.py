@@ -15,23 +15,31 @@ class CaveWhereConan(ConanFile):
     settings = "os", "compiler", "build_type", "arch"
     requires = [
     ("catch2/[>=3.7.1]"),
-    ("protobuf/[>=5.27.0]"),
-
-    #We handle survex dependancies here for now, since we're using conan
-    ("wxwidgets/[>=3.2.6]"),
-    ("glew/[>=2.2.0]"),
-    ("libtiff/[>=4.5.1]"),
-    ("gdal/[>=3.5.3]"),
+    ("protobuf/[>=5.27.0]")
     ]
 
-    options = {"system_qt": [True, False]}
-    default_options = {"system_qt": True}
+    options = {
+    "system_qt": [True, False],
+    "mobile": [True, False]
+    }
+
+    default_options = {
+    "system_qt": True,
+    "mobile": False
+    }
+
     generators = "CMakeDeps", "CMakeToolchain", "VirtualBuildEnv", "VirtualRunEnv"
 
     def requirements(self):
-        self.requires("expat/[>=2.6.2]", override=True)
-        self.requires("libpng/[>=1.6.44]", override=True)
-        self.requires("proj/[>=9.3.1]")
+        if not self.options.mobile:
+            #We handle survex dependancies here for now, since we're using conan
+            self.requires("wxwidgets/[>=3.2.6]")
+            self.requires("glew/[>=2.2.0]")
+            self.requires("libtiff/[>=4.5.1]")
+            self.requires("gdal/[>=3.5.3]")
+            self.requires("expat/[>=2.6.2]", override=True)
+            self.requires("libpng/[>=1.6.44]", override=True)
+            self.requires("proj/[>=9.3.1]")
 
         # Or add a new requirement!
         if not self.options.system_qt:
@@ -42,9 +50,12 @@ class CaveWhereConan(ConanFile):
             self.requires("sqlite3/[>=3.44.2]")
 
     def build_requirements(self):
-        self.tool_requires("protobuf/5.27.0")
+        self.tool_requires("protobuf/<host_version>")
 
     def configure(self):
+        #This prevents protoc from needing zlib which adds a failing rpath protoc
+        self.options["protobuf"].with_zlib=False
+
         if not self.options.system_qt:
             self.options["qt"].shared = True
             self.options["qt"].qtshadertools = True
@@ -55,22 +66,21 @@ class CaveWhereConan(ConanFile):
             self.options["qt"].qtimageformats = True
             self.options["qt"].with_libjpeg = "libjpeg"
 
-        #Arrow fails on github linux build, disable
-        self.options["gdal"].with_arrow = False
+        if not self.options.mobile:
+            #Arrow fails on github linux build, disable
+            self.options["gdal"].with_arrow = False
 
-        #These options allow on crosscompiling on arm64 -> x86_64 on windows
-        #conan doesn't support strawberryperl or msys
-        self.options["gdal"].with_curl = False
-        self.options["gdal"].with_libiconv = False
-        self.options["proj"].with_curl = False
+            #These options allow on crosscompiling on arm64 -> x86_64 on windows
+            #conan doesn't support strawberryperl or msys
+            self.options["gdal"].with_curl = False
+            self.options["gdal"].with_libiconv = False
+            self.options["proj"].with_curl = False
 
-        #This prevents protoc from needing zlib which adds a failing rpath protoc
-        self.options["protobuf"].with_zlib=False
 
-        #This prevents xcode build from failing
-        self.options["libtiff"].zstd=False
+            #This prevents xcode build from failing
+            self.options["libtiff"].zstd=False
 
-        self._check_perl_locale_po()
+            self._check_perl_locale_po()
 
     def _check_perl_locale_po(self):
         try:

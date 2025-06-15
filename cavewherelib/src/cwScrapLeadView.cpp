@@ -64,5 +64,5 @@ void cwScrapLeadView::updateViewWithData(int begin, int end, QList<int> roles)
  */
 QString cwScrapLeadView::qmlSource() const
 {
-    return QStringLiteral("qrc:/cavewherelib/cavewherelib/NoteLead.qml");
+    return QStringLiteral("qrc:/qt/qml/cavewherelib/qml/NoteLead.qml");
 }
