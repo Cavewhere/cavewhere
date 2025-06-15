@@ -26,16 +26,22 @@ ApplicationWindow {
         return baseName + "   " + filename
     }
 
-    menuBar: FileButtonAndMenu {
-        id: fileMenuButton
+    menuBar: fileMenuLoaderId.item
 
-        saveAsFileDialog: saveAsFileDialogId
-        loadFileDialog: loadFileDialogId
-        applicationWindow: applicationWindowId
-        askToSaveDialog: askToSaveDialogId
+    QQ.Loader {
+        id: fileMenuLoaderId
+        active: RootData.desktopBuild
+        sourceComponent: FileButtonAndMenu {
+            id: fileMenuButton
 
-        onOpenAboutWindow:  {
-            loadAboutWindowId.setSource("AboutWindow.qml")
+            saveAsFileDialog: saveAsFileDialogId
+            loadFileDialog: loadFileDialogId
+            applicationWindow: applicationWindowId
+            askToSaveDialog: askToSaveDialogId
+
+            onOpenAboutWindow:  {
+                loadAboutWindowId.setSource("AboutWindow.qml")
+            }
         }
     }
 

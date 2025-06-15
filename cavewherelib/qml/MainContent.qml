@@ -5,7 +5,7 @@ import cavewherelib
 QQ.Item {
     id: mainContentId
 
-    property GLTerrainRenderer renderer;
+    // property GLTerrainRenderer renderer;
 
     anchors.fill: parent
 
@@ -21,29 +21,30 @@ QQ.Item {
 
     MainSideBar {
         id: mainSideBar;
+        visible: RootData.desktopBuild
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.leftMargin: 0
         anchors.top: linkBar.bottom
 
-        //For animating which page is shown
-        property real pageShownReal: pageShown;
+        // //For animating which page is shown
+        // property real pageShownReal: pageShown;
 
-        QQ.Behavior on pageShownReal {
-            QQ.NumberAnimation {
-                duration: 150
-            }
-        }
+        // QQ.Behavior on pageShownReal {
+        //     QQ.NumberAnimation {
+        //         duration: 150
+        //     }
+        // }
     }
 
     QQ.Item {
         id: container;
         anchors.top: linkBar.bottom
         anchors.bottom: parent.bottom
-        anchors.left: mainSideBar.right
+        anchors.left: RootData.desktopBuild ? mainSideBar.right : parent.left
         anchors.right: parent.right
 
-        property int currentPosition: height * mainSideBar.pageShownReal
+        // property int currentPosition: height * mainSideBar.pageShownReal
 
         PageView {
             id: pageView
@@ -64,29 +65,32 @@ QQ.Item {
     QQ.Component {
         id: renderingComponent
         RenderingView {
-            width:  parent.width
-            height: parent.height
-            x: 0; y: -container.currentPosition
+            anchors.fill: parent
             scene: RootData.regionSceneManager.scene
+            // width:  parent.width
+            // height: parent.height
+            // x: 0; y: -container.currentPosition
         }
     }
 
     QQ.Component {
         id: dataMainPageComponent
         DataMainPage {
-            width:  parent.width
-            height: parent.height
-            x: 0;
-            y: height - container.currentPosition
+            anchors.fill: parent
+            // width:  parent.width
+            // height: parent.height
+            // x: 0;
+            // y: height - container.currentPosition
         }
     }
 
     QQ.Component {
         id: mapPageComponent
         MapPage {
-            width:  parent.width
-            height: parent.height
+            anchors.fill: parent
             view: mainContentId.renderer;
+            // width:  parent.width
+            // height: parent.height
         }
     }
 
@@ -137,8 +141,12 @@ QQ.Item {
         RootData.pageSelectionModel.registerPage(null, "About", aboutPageComponent)
         RootData.pageSelectionModel.registerPage(null, "Settings", settingsPageComponent)
         RootData.pageSelectionModel.registerPage(null, "Pipeline", pipelinePageComponent)
-        RootData.pageSelectionModel.gotoPage(viewPage);
 
-        mainContentId.renderer = pageView.pageItem(viewPage).renderer;
+        if(RootData.desktopBuild) {
+            RootData.pageSelectionModel.gotoPage(viewPage);
+            mainContentId.renderer = pageView.pageItem(viewPage).renderer;
+        } else {
+            RootData.pageSelectionModel.gotoPage(dataPage);
+        }
     }
 }

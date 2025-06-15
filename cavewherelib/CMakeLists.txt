@@ -223,7 +223,11 @@ qt_wrap_ui(UI_HEADERS
 )
 
 
-target_compile_definitions(cavewherelib PRIVATE "CAVEWHERE_SOURCE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+target_compile_definitions(cavewherelib
+    PRIVATE "CAVEWHERE_SOURCE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}\""
+    PRIVATE "CW_MOBILE_BUILD"
+)
+
 
 target_sources(cavewherelib PRIVATE ${UI_HEADERS})
 

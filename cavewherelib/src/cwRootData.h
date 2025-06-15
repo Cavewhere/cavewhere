@@ -75,9 +75,13 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
 
     Q_PROPERTY(int titleBarHeight READ titleBarHeight CONSTANT)
 
+    Q_PROPERTY(bool mobileBuild READ mobileBuild CONSTANT)
+    Q_PROPERTY(bool desktopBuild READ desktopBuild CONSTANT)
+
     //Temporary properties that should be move to a view layer model
     Q_PROPERTY(bool leadsVisible READ leadsVisible WRITE setLeadsVisible NOTIFY leadsVisibleChanged)
     Q_PROPERTY(bool stationsVisible READ stationsVisible WRITE setStationVisible NOTIFY stationsVisibleChanged)
+
 
 public:
     explicit cwRootData(QObject *parent = 0);
@@ -129,6 +133,9 @@ public:
     //Utils
     Q_INVOKABLE void showInFolder(const QString& path) const;
     Q_INVOKABLE void copyText(const QString& text) const;
+
+    bool mobileBuild() const;
+    bool desktopBuild() const { return !mobileBuild(); }
 
 signals:
     void regionChanged();

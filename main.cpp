@@ -166,6 +166,8 @@ int main(int argc, char *argv[])
     auto id = qmlTypeId("cavewherelib", 1, 0, "RootData");
     cwRootData* rootData = applicationEngine->rootContext()->engine()->singletonInstance<cwRootData*>(id);
 
+    qDebug() << "CaveWhere built for" << (rootData->desktopBuild() ? "desktop" : "mobile");
+
     MarkScope::FrameProfiler frameProfiler(applicationEngine);
 
     //Handle command line args

@@ -16,7 +16,7 @@ QQ.Item {
         id: rowLayoutId
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.rightMargin: 5
+        anchors.rightMargin: RootData.desktopBuild ? 5 : 0
 
         spacing: 0
 
@@ -91,11 +91,6 @@ QQ.Item {
                     nextArrowVisible: linkBarListView.count - 1 !== index
                     text: nameRole
                 }
-
-                QQ.Rectangle {
-                    anchors.fill: parent
-                    color: "red"
-                }
             }
 
             Controls.TextField {
@@ -111,11 +106,13 @@ QQ.Item {
                 onEditingFinished: RootData.pageSelectionModel.currentPageAddress = text
             }
 
+
             Controls.Button {
                 id: textEnableButtonId
                 anchors.right: parent.right
                 anchors.rightMargin: 5
                 anchors.verticalCenter: parent.verticalCenter
+                visible: RootData.desktopBuild
 
                 text: "..."
                 onClicked: {
@@ -125,14 +122,18 @@ QQ.Item {
             }
         }
 
-        QQ.Item {
-           implicitWidth: 5
-            implicitHeight: 1
-        }
+        DesktopLoader {
+            sourceComponent: RowLayout {
+                QQ.Item {
+                    implicitWidth: 5
+                    implicitHeight: 1
+                }
 
-        DiscordChatButton {
-            implicitWidth: sizeItemId.height
-            implicitHeight: implicitWidth
+                DiscordChatButton {
+                    implicitWidth: sizeItemId.height
+                    implicitHeight: implicitWidth
+                }
+            }
         }
     }
 

@@ -263,3 +263,12 @@ void cwRootData::copyText(const QString &text) const
     clipboard->setText(text);
 
 }
+
+bool cwRootData::mobileBuild() const
+{
+#ifdef CW_MOBILE_BUILD
+    return true;
+#else
+    return false;
+#endif
+}
