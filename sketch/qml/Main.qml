@@ -1,0 +1,165 @@
+import QtQuick
+import QtQuick.Shapes
+import QtQuick.Controls as QC
+import QtQuick.Layouts
+import CaveWhereSketch
+import cavewherelib
+import QQuickGit
+
+Window {
+    id: windowId
+    width: 640
+    height: 480
+    visible: true
+
+    // property double dpi: screen.physicalDotsPerInch
+
+    // onDpiChanged: {
+    //     console.log("DPI changed:" + dpi)
+    // }
+
+    //Test if
+    visibility: Qt.platform.os === "ios"
+                // || Qt.platform.os === "android"
+                ? Window.FullScreen
+                : Window.AutomaticVisibility
+    title: qsTr("Hello World")
+
+    function fuzzyEquals(value1, value2) {
+        return Math.abs(value1 - value2) <= 0.0001;
+    }
+
+    // ScreenSizeSaver {
+    //     id: screenSizeSaverId
+    //     window: windowId
+    //     windowName: "mainWindow"
+    // }
+
+    // RowLayout {
+    //     id: toolBar
+
+    //     QC.ToolButton {
+    //         text: "Data"
+    //         onClicked: {
+    //             RootData.pageSelectionModel.currentPageAddress = "Trip"
+    //         }
+    //     }
+
+    //     QC.ToolButton {
+    //         text: "Sketch"
+    //         onClicked: {
+    //             RootData.pageSelectionModel.currentPageAddress = "Sketch"
+    //         }
+    //     }
+    // }
+
+    Item {
+        id: container;
+        anchors.fill: parent
+        // anchors.top: toolBar.bottom
+        // anchors.bottom: parent.bottom
+        // anchors.left: parent.left
+        // anchors.right: parent.right
+
+        // property int currentPosition: height * mainSideBar.pageShownReal
+
+        PageView {
+            id: pageView
+            anchors.fill: parent
+            pageSelectionModel: RootData.pageSelectionModel
+
+            Component.onCompleted: {
+                RootData.pageView = pageView
+            }
+        }
+    }
+
+    Item {
+        id: overlay
+        anchors.fill: parent
+    }
+
+    Component {
+        id: unknownPageComponent
+        UnknownPage {
+            anchors.fill: parent
+        }
+    }
+
+    Component {
+        id: welcomePageComponent
+        WelcomePage {
+            anchors.fill: parent
+            account: RootDataSketch.account
+        }
+    }
+
+    Component {
+        id: repositoryPageComponent
+        RepositoryListPage {
+            anchors.fill: parent
+        }
+    }
+
+    Component {
+        id: sketchPageComponent
+        SketchPage {
+            anchors.fill: parent
+        }
+    }
+
+    Component {
+        id: tripPageComponent
+        TripCompactPage {
+            anchors.fill: parent
+        }
+    }
+
+    Component {
+        id: dataPageComponent
+        DataMainPage {
+            anchors.fill: parent
+        }
+    }
+
+    // Component {
+    //     id: dataPageComponent
+    //     Rectangle {
+    //         color: "red"
+    //         anchors.fill: parent
+    //     }
+    // }
+
+    Component.onCompleted: {
+        GlobalShadowTextInput.parent = overlay;
+        RootPopupItem.parent = overlay
+
+        pageView.unknownPageComponent = unknownPageComponent
+        let welcomePage = RootData.pageSelectionModel.registerPage(null, "Welcome", welcomePageComponent);
+        let tripPage = RootData.pageSelectionModel.registerPage(null, "Trip", tripPageComponent);
+        let sketchPage = RootData.pageSelectionModel.registerPage(null, "Sketch", sketchPageComponent);
+        let repositoryPage = RootData.pageSelectionModel.registerPage(null, "Repositories", repositoryPageComponent);
+        let dataMainPage = RootData.pageSelectionModel.registerPage(null, "Area", dataPageComponent);
+
+        // let mapPage = RootData.pageSelectionModel.registerPage(null, "Map", mapPageComponent)
+        // RootData.pageSelectionModel.registerPage(null, "Testcases", testcasesPageComponent);
+        // RootData.pageSelectionModel.registerPage(null, "About", aboutPageComponent)
+        // RootData.pageSelectionModel.registerPage(null, "Settings", settingsPageComponent)
+        // RootData.pageSelectionModel.registerPage(null, "Pipeline", pipelinePageComponent)
+
+        console.log("RootData:" + RootDataSketch.account.isValid)
+
+        if(RootDataSketch.account.isValid) {
+            //Go to the main page
+            RootData.pageSelectionModel.gotoPage(repositoryPage);
+        } else {
+            //Setup for the first time
+            RootData.pageSelectionModel.gotoPage(welcomePage);
+        }
+
+        // Component.onCompleted: {
+            // console.log("Logical DPI:", Screen.pixelDensity)
+            // console.log("Physical DPI:", Screen.physicalDotsPerInch)
+        // }
+    }
+}
