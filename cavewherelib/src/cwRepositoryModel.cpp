@@ -1,17 +1,15 @@
-#include "RepositoryModel.h"
+#include "cwRepositoryModel.h"
 #include "Monad/Monad.h"
 #include "GitRepository.h"
 
 
-using namespace cwSketch;
-
-RepositoryModel::RepositoryModel(QObject* parent)
+cwRepositoryModel::cwRepositoryModel(QObject* parent)
     : QAbstractListModel(parent)
 {
     loadRepositories();
 }
 
-int RepositoryModel::rowCount(const QModelIndex& parent) const
+int cwRepositoryModel::rowCount(const QModelIndex& parent) const
 {
     if (parent.isValid()) {
         return 0;
@@ -19,7 +17,7 @@ int RepositoryModel::rowCount(const QModelIndex& parent) const
     return m_repositories.count();
 }
 
-QVariant RepositoryModel::data(const QModelIndex& index, int role) const
+QVariant cwRepositoryModel::data(const QModelIndex& index, int role) const
 {
     if (!index.isValid() || index.row() < 0 || index.row() >= m_repositories.count()) {
         return {};
@@ -36,7 +34,7 @@ QVariant RepositoryModel::data(const QModelIndex& index, int role) const
     }
 }
 
-QHash<int, QByteArray> RepositoryModel::roleNames() const
+QHash<int, QByteArray> cwRepositoryModel::roleNames() const
 {
     return QHash<int, QByteArray>{
         { PathRole, "pathRole" },
@@ -44,7 +42,7 @@ QHash<int, QByteArray> RepositoryModel::roleNames() const
     };
 }
 
-Monad::ResultBase RepositoryModel::addRepository(const QDir& repositoryDir)
+Monad::ResultBase cwRepositoryModel::addRepository(const QDir& repositoryDir)
 {
     return Monad::mtry([&](){
         const int newIndex = m_repositories.count();
@@ -63,7 +61,7 @@ Monad::ResultBase RepositoryModel::addRepository(const QDir& repositoryDir)
     });
 }
 
-Monad::ResultBase RepositoryModel::addRepository(const QUrl &localDir, const QString &name)
+Monad::ResultBase cwRepositoryModel::addRepository(const QUrl &localDir, const QString &name)
 {
     auto quotedFilename = [localDir]() {
         return QStringLiteral("\"") + localDir.toString() + QStringLiteral("\"");
@@ -86,7 +84,7 @@ Monad::ResultBase RepositoryModel::addRepository(const QUrl &localDir, const QSt
 }
 
 
-void RepositoryModel::loadRepositories()
+void cwRepositoryModel::loadRepositories()
 {
     QSettings settings;
     const QStringList list = settings.value(SettingsKey).toStringList();
@@ -98,7 +96,7 @@ void RepositoryModel::loadRepositories()
     }
 }
 
-void RepositoryModel::saveRepositories() const
+void cwRepositoryModel::saveRepositories() const
 {
     QSettings settings;
     QStringList list;

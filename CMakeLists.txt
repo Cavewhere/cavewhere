@@ -25,6 +25,7 @@ add_subdirectory(dewalls)
 add_subdirectory(cavewherelib)
 add_subdirectory(qml-test-recorder)
 add_subdirectory(monad)
+add_subdirectory(QQuickGit)
 
 #Allows QtCreator to find qml import directories
 #https://doc.qt.io/qtcreator/creator-qml-modules-with-plugins.html#importing-qml-modules

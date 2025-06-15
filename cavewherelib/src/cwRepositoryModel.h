@@ -5,9 +5,7 @@
 #include <QDir>
 #include <QSettings>
 
-namespace cwSketch {
-
-class RepositoryModel : public QAbstractListModel
+class cwRepositoryModel : public QAbstractListModel
 {
     Q_OBJECT
 
@@ -17,7 +15,7 @@ public:
         NameRole
     };
 
-    explicit RepositoryModel(QObject* parent = nullptr);
+    explicit cwRepositoryModel(QObject* parent = nullptr);
 
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
@@ -35,4 +33,3 @@ private:
     static constexpr char SettingsKey[] = "repositories";
 };
 
-};

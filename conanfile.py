@@ -15,7 +15,10 @@ class CaveWhereConan(ConanFile):
     settings = "os", "compiler", "build_type", "arch"
     requires = [
     ("catch2/[>=3.7.1]"),
-    ("protobuf/[>=5.27.0]")
+    ("protobuf/[>=5.27.0]"),
+    ("libgit2/1.9.0"),
+    ("libssh2/[>=1.11]"),
+    ("openssl/3.5.0")
     ]
 
     options = {
@@ -55,6 +58,17 @@ class CaveWhereConan(ConanFile):
     def configure(self):
         #This prevents protoc from needing zlib which adds a failing rpath protoc
         self.options["protobuf"].with_zlib=False
+
+        self.options["openssl"].shared = True
+
+        if self.settings.os == "Android":
+            self.options["openssl"].shared = False
+        #     self.options["openssl"].no_asm = True #Windows building android, probably can comment out for other platforms
+
+        if self.settings.os == "iOS":
+            self.options["openssl"].shared = False
+            self.options["sqlite3"].build_executable = False
+            self.options["libgit2"].with_regex = "builtin"
 
         if not self.options.system_qt:
             self.options["qt"].shared = True

@@ -51,6 +51,7 @@ target_link_libraries(cavewherelib
     monad
     QuickQanava
     QuickQanavaplugin
+    qquickgit
     PRIVATE
     protobuf::protobuf
     # surveximg

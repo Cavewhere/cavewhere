@@ -28,3 +28,9 @@
 [submodule "QuickQanava"]
 	path = QuickQanava
 	url = https://github.com/vpicaver/QuickQanava
+[submodule "QQuickGit"]
+	path = QQuickGit
+	url = https://github.com/vpicaver/QQuickGit
+[submodule "SignalSpyChecker"]
+	path = SignalSpyChecker
+	url = git@github.com:vpicaver/SignalSpyChecker.git

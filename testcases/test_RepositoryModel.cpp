@@ -8,29 +8,29 @@
 #include <QUrl>
 
 //Our includes
-#include "RepositoryModel.h"
+#include "cwRepositoryModel.h"
 
-TEST_CASE("RepositoryModel initial state", "[RepositoryModel]") {
+TEST_CASE("cwRepositoryModel initial state", "[cwRepositoryModel]") {
     // Ensure settings are clean
     QSettings settings;
     settings.clear();
 
-    cwSketch::RepositoryModel model;
+    cwRepositoryModel model;
     REQUIRE(model.rowCount() == 0);
 
     auto roles = model.roleNames();
-    REQUIRE(roles.contains(cwSketch::RepositoryModel::PathRole));
-    REQUIRE(roles.contains(cwSketch::RepositoryModel::NameRole));
-    REQUIRE(roles.value(cwSketch::RepositoryModel::PathRole) == "pathRole");
-    REQUIRE(roles.value(cwSketch::RepositoryModel::NameRole) == "nameRole");
+    REQUIRE(roles.contains(cwRepositoryModel::PathRole));
+    REQUIRE(roles.contains(cwRepositoryModel::NameRole));
+    REQUIRE(roles.value(cwRepositoryModel::PathRole) == "pathRole");
+    REQUIRE(roles.value(cwRepositoryModel::NameRole) == "nameRole");
 }
 
-TEST_CASE("RepositoryModel addRepository and persistence", "[RepositoryModel]") {
+TEST_CASE("cwRepositoryModel addRepository and persistence", "[cwRepositoryModel]") {
     // Clear settings before test
     QSettings settings;
     settings.clear();
 
-    cwSketch::RepositoryModel model;
+    cwRepositoryModel model;
     REQUIRE(model.rowCount() == 0);
 
     // Create a temporary directory as a dummy repository
@@ -46,8 +46,8 @@ TEST_CASE("RepositoryModel addRepository and persistence", "[RepositoryModel]") 
 
     // Verify data() returns correct path and name
     QModelIndex idx = model.index(0, 0);
-    REQUIRE(model.data(idx, cwSketch::RepositoryModel::PathRole).toString() == repoDir.absolutePath());
-    REQUIRE(model.data(idx, cwSketch::RepositoryModel::NameRole).toString() == repoDir.dirName());
+    REQUIRE(model.data(idx, cwRepositoryModel::PathRole).toString() == repoDir.absolutePath());
+    REQUIRE(model.data(idx, cwRepositoryModel::NameRole).toString() == repoDir.dirName());
 
     // Test adding a non-existent directory
     QDir nonExistentDir(tmpDir.path() + "/does_not_exist");
@@ -59,23 +59,23 @@ TEST_CASE("RepositoryModel addRepository and persistence", "[RepositoryModel]") 
     REQUIRE(model.rowCount() == 2);
 
     QModelIndex idx1 = model.index(1, 0);
-    CHECK(model.data(idx1, cwSketch::RepositoryModel::PathRole).toString().toStdString() == nonExistentDir.absolutePath().toStdString());
-    CHECK(model.data(idx1, cwSketch::RepositoryModel::NameRole).toString().toStdString() == nonExistentDir.dirName().toStdString());
+    CHECK(model.data(idx1, cwRepositoryModel::PathRole).toString().toStdString() == nonExistentDir.absolutePath().toStdString());
+    CHECK(model.data(idx1, cwRepositoryModel::NameRole).toString().toStdString() == nonExistentDir.dirName().toStdString());
 
     // Create a fresh model to verify persistence from QSettings
-    cwSketch::RepositoryModel model2;
+    cwRepositoryModel model2;
     REQUIRE(model2.rowCount() == 2);
     // QModelIndex idx2 = model2.index(0, 0);
-    CHECK(model2.data(model2.index(0, 0), cwSketch::RepositoryModel::PathRole).toString() == repoDir.absolutePath());
-    CHECK(model2.data(model2.index(1, 0), cwSketch::RepositoryModel::PathRole).toString() == nonExistentDir.absolutePath());
+    CHECK(model2.data(model2.index(0, 0), cwRepositoryModel::PathRole).toString() == repoDir.absolutePath());
+    CHECK(model2.data(model2.index(1, 0), cwRepositoryModel::PathRole).toString() == nonExistentDir.absolutePath());
 }
 
-TEST_CASE("RepositoryModel addRepository with url and persistence", "[RepositoryModel]") {
+TEST_CASE("cwRepositoryModel addRepository with url and persistence", "[cwRepositoryModel]") {
     // Clear settings before test
     QSettings settings;
     settings.clear();
 
-    cwSketch::RepositoryModel model;
+    cwRepositoryModel model;
     REQUIRE(model.rowCount() == 0);
 
     // Create a temporary directory as a dummy repository
@@ -95,13 +95,13 @@ TEST_CASE("RepositoryModel addRepository with url and persistence", "[Repository
     REQUIRE(model.rowCount() == 1);
 
     QModelIndex idx1 = model.index(0, 0);
-    CHECK(model.data(idx1, cwSketch::RepositoryModel::PathRole).toString().toStdString() == nonExistentDir.absolutePath().toStdString());
-    CHECK(model.data(idx1, cwSketch::RepositoryModel::NameRole).toString().toStdString() == nonExistentDir.dirName().toStdString());
+    CHECK(model.data(idx1, cwRepositoryModel::PathRole).toString().toStdString() == nonExistentDir.absolutePath().toStdString());
+    CHECK(model.data(idx1, cwRepositoryModel::NameRole).toString().toStdString() == nonExistentDir.dirName().toStdString());
 
     // Create a fresh model to verify persistence from QSettings
-    cwSketch::RepositoryModel model2;
+    cwRepositoryModel model2;
     REQUIRE(model2.rowCount() == 1);
     // QModelIndex idx2 = model2.index(0, 0);
-    CHECK(model2.data(model2.index(0, 0), cwSketch::RepositoryModel::PathRole).toString().toStdString() == nonExistentDir.absolutePath().toStdString());
+    CHECK(model2.data(model2.index(0, 0), cwRepositoryModel::PathRole).toString().toStdString() == nonExistentDir.absolutePath().toStdString());
 
 }
