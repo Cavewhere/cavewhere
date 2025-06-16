@@ -223,11 +223,15 @@ qt_wrap_ui(UI_HEADERS
     cwTaskProgressDialog.ui
 )
 
-
 target_compile_definitions(cavewherelib
     PRIVATE "CAVEWHERE_SOURCE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}\""
-    PRIVATE "CW_MOBILE_BUILD"
 )
+
+if(MOBILE_BUILD)
+    target_compile_definitions(cavewherelib
+        PRIVATE "CW_MOBILE_BUILD"
+    )
+endif()
 
 
 target_sources(cavewherelib PRIVATE ${UI_HEADERS})

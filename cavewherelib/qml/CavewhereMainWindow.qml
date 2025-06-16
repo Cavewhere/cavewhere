@@ -10,6 +10,7 @@ import QtQuick.Controls
 import QtQuick.Window
 import QtQuick.Dialogs
 import cavewherelib
+import QQuickGit
 
 ApplicationWindow {
     id: applicationWindowId
@@ -30,7 +31,7 @@ ApplicationWindow {
 
     QQ.Loader {
         id: fileMenuLoaderId
-        active: RootData.desktopBuild
+        active: RootData.desktopBuild && RootData.account.isValid
         sourceComponent: FileButtonAndMenu {
             id: fileMenuButton
 
@@ -55,8 +56,21 @@ ApplicationWindow {
         id: loadAboutWindowId
     }
 
-    MainContent {
+    QQ.Loader {
+        active: RootData.account.isValid
         anchors.fill: parent
+        sourceComponent: MainContent {
+            anchors.fill: parent
+        }
+    }
+
+    QQ.Loader {
+        active: !RootData.account.isValid
+        anchors.fill: parent
+        sourceComponent: WelcomePage {
+            anchors.fill: parent
+            account: RootData.account
+        }
     }
 
     QQ.Item {

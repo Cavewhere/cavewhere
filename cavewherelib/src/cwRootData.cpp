@@ -44,6 +44,8 @@
 
 cwRootData::cwRootData(QObject *parent) :
     QObject(parent),
+    m_account(new QQuickGit::Account(this)),
+    m_accountWatcher(new QQuickGit::AccountSettingWatcher(this)),
     DefaultTrip(new cwTrip(this)),
     DefaultTripCalibration(new cwTripCalibration(this))
 {
@@ -81,6 +83,9 @@ cwRootData::cwRootData(QObject *parent) :
     SurveyImportManager->setCavingRegion(Region);
     SurveyImportManager->setUndoStack(undoStack());
     SurveyImportManager->setErrorModel(Project->errorModel());
+
+    //Save account settings to QSetting
+    m_accountWatcher->setPerson(m_account);
 
     QuickView = nullptr;
 

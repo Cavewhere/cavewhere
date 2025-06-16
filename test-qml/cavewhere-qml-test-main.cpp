@@ -23,9 +23,8 @@ public:
 public slots:
     void qmlEngineAvailable(QQmlEngine *engine)
     {
-        //Init custom handlers here, this allows use to find the QmlTextRecorder
-        //from the example folder
-        // engine->addImportPath("qml-test-recorder");
+        //Init custom handlers here,
+        engine->addImportPath(":/"); //For Qan
 
         //This needs to be first for QSettings
         QApplication::setOrganizationName("Vadose Solutions");

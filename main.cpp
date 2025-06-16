@@ -142,6 +142,9 @@ int main(int argc, char *argv[])
     //Load all the fonts
     cwGlobals::loadFonts();
 
+    QSettings settings;
+    settings.clear();
+
     // Configure multisample antialiasing
     QSurfaceFormat format;
     format.setSamples(4); // Adjust the sample count as needed

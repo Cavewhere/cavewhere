@@ -37,6 +37,10 @@
 #include "cwSettings.h"
 #include "cwPageView.h"
 
+//QQuickGit inculdes
+#include "Account.h"
+#include "AccountSettingWatcher.h"
+
 #ifndef CAVEWHERE_VERSION
 #define CAVEWHERE_VERSION "Sauce-Release" //This is automaticaly update with qmake
 #endif
@@ -62,6 +66,7 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
     Q_PROPERTY(cwRegionSceneManager* regionSceneManager READ regionSceneManager NOTIFY regionSceneManagerChanged)
     Q_PROPERTY(cwTaskManagerModel* taskManagerModel READ taskManagerModel CONSTANT)
     Q_PROPERTY(cwFutureManagerModel* futureManagerModel READ futureManagerModel CONSTANT)
+    Q_PROPERTY(QQuickGit::Account* account READ account CONSTANT)
 
     Q_PROPERTY(cwPageSelectionModel* pageSelectionModel READ pageSelectionModel CONSTANT)
     Q_PROPERTY(cwPageView* pageView READ pageView WRITE setPageView NOTIFY pageViewChanged)
@@ -75,6 +80,7 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
 
     Q_PROPERTY(int titleBarHeight READ titleBarHeight CONSTANT)
 
+    //Support mobile vs desktop build
     Q_PROPERTY(bool mobileBuild READ mobileBuild CONSTANT)
     Q_PROPERTY(bool desktopBuild READ desktopBuild CONSTANT)
 
@@ -102,6 +108,7 @@ public:
     cwPageSelectionModel* pageSelectionModel() const;
     cwRegionTreeModel* regionTreeModel() const;
     cwSettings* settings() const;
+    QQuickGit::Account *account() const { return m_account; }
 
     cwPageView* pageView() const { return m_pageView; }
     void setPageView(cwPageView* value);
@@ -172,6 +179,10 @@ private:
     cwFutureManagerModel* FutureManagerModel; //!<
     cwPageSelectionModel* PageSelectionModel; //!<
     cwRegionTreeModel* RegionTreeModel; //!<
+
+    //Git account settings
+    QQuickGit::Account* m_account;
+    QQuickGit::AccountSettingWatcher* m_accountWatcher;
 
     QPointer<cwPageView> m_pageView;
 
