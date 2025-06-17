@@ -13,6 +13,9 @@
 #include "cwGlobals.h"
 #include "cwMetaTypeSystem.h"
 
+//QuickGit includes
+#include "GitRepository.h"
+
 class Setup : public QObject
 {
     Q_OBJECT
@@ -32,9 +35,16 @@ public slots:
         QApplication::setApplicationName("cavewhere-qml-test");
         // QApplication::setApplicationVersion(CAVEWHERE_VERSION);
 
+        //Clear all the settings
+        QSettings settings;
+        settings.clear();
+
         //This allow to extra image data from the project's image database
         cwImageProvider* imageProvider = new cwImageProvider();
         engine->addImageProvider(cwImageProvider::name(), imageProvider);
+
+        //Init libgit2
+        QQuickGit::GitRepository::initGitEngine();
 
         auto id = qmlTypeId("cavewherelib", 1, 0, "RootData");
         cwRootData* rootData = engine->rootContext()->engine()->singletonInstance<cwRootData*>(id);

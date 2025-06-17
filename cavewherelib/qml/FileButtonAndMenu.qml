@@ -44,11 +44,13 @@ MenuBar {
             text: "&Open"
             shortcut: "Ctrl+O"
             onTriggered: {
-                menuBarId.askToSaveDialog.taskName = "opening";
-                menuBarId.askToSaveDialog.afterSaveFunc = function() {
-                    loadFileDialog.open()
-                }
-                menuBarId.askToSaveDialog.askToSave();
+                RootData.pageSelectionModel.currentPageAddress = "Source"
+
+                // menuBarId.askToSaveDialog.taskName = "opening";
+                // menuBarId.askToSaveDialog.afterSaveFunc = function() {
+                //     loadFileDialog.open()
+                // }
+                // menuBarId.askToSaveDialog.askToSave();
             }
         }
 

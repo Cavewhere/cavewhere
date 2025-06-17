@@ -61,67 +61,24 @@ QC.ScrollView {
         PersonEdit {
             id: personEdit
             implicitWidth: columnLayoutId.width * 0.5
-            nextTab: nextButtonId
+            nextTab: nextButtonId.button
             account: Person {
                 id: tempPerson
             }
         }
 
-        Q.Item {
+        ButtonShake {
+            id: nextButtonId
             Layout.alignment: Qt.AlignRight
-            implicitWidth: nextButtonId.implicitWidth
-            implicitHeight: nextButtonId.implicitHeight
-
-            QC.Button {
-                id: nextButtonId
-                Layout.alignment: Qt.AlignRight
-                objectName: "nextButton"
-                text: "Next"
-                // enabled: tempPerson.isValid
-                onClicked: {
-                    if(tempPerson.isValid) {
-                        sketchPageId.account.name = tempPerson.name
-                        sketchPageId.account.email = tempPerson.email
-                    } else {
-                        personEdit.showErrors = true
-                        shakeAnim.restart()
-                    }
-
-                    // RootData.pageSelectionModel.currentPageAddress = "Sketch"
-                }
-            }
-
-            // A quick left-right wiggle
-            Q.SequentialAnimation {
-                id: shakeAnim
-                loops: 3               // shake back-and-forth 3 times
-                running: false
-                // move left
-                Q.NumberAnimation {
-                    target: nextButtonId
-                    property: "x"
-                    from: 0
-                    to:   -8
-                    duration: 50
-                    easing.type: Q.Easing.InOutQuad
-                }
-                // move right
-                Q.NumberAnimation {
-                    target: nextButtonId
-                    property: "x"
-                    from: -8
-                    to:   8
-                    duration: 100
-                    easing.type: Q.Easing.InOutQuad
-                }
-                // back to center
-                Q.NumberAnimation {
-                    target: nextButtonId
-                    property: "x"
-                    from: 8
-                    to:   0
-                    duration: 50
-                    easing.type: Q.Easing.InOutQuad
+            button.objectName: "nextButton"
+            button.text: "Next"
+            button.onClicked: {
+                if(tempPerson.isValid) {
+                    sketchPageId.account.name = tempPerson.name
+                    sketchPageId.account.email = tempPerson.email
+                } else {
+                    personEdit.showErrors = true
+                    shake();
                 }
             }
         }

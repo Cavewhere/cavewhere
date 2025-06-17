@@ -228,9 +228,12 @@ target_compile_definitions(cavewherelib
 )
 
 if(MOBILE_BUILD)
+    message(STATUS "Building as a mobile build")
     target_compile_definitions(cavewherelib
         PRIVATE "CW_MOBILE_BUILD"
     )
+else()
+    message(STATUS "Building as a desktop build")
 endif()
 
 

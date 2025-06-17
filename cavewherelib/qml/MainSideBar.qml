@@ -19,9 +19,13 @@ QQ.Rectangle {
     //Pageshown is an enumerated type that is either, view, data, draft
     property alias pageShown: buttonBar.currentIndex;
 
-    readonly property string _viewPage: "View"
-    readonly property string _dataPage: "Data"
-    readonly property string _mapPage: "Map"
+    property Page viewPage;
+    property Page dataPage;
+    property Page mapPage;
+
+    readonly property string _viewPage: viewPage.fullname()
+    readonly property string _dataPage: dataPage.fullname()
+    readonly property string _mapPage: mapPage.fullname()
 
     property bool gotoToPage: true
 

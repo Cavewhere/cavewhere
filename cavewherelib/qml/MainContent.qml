@@ -5,7 +5,7 @@ import cavewherelib
 QQ.Item {
     id: mainContentId
 
-    // property GLTerrainRenderer renderer;
+    property GLTerrainRenderer renderer;
 
     anchors.fill: parent
 
@@ -85,6 +85,13 @@ QQ.Item {
     }
 
     QQ.Component {
+        id: repositoriesComponent
+        RepositoryListPage {
+            anchors.fill: parent
+        }
+    }
+
+    QQ.Component {
         id: mapPageComponent
         MapPage {
             anchors.fill: parent
@@ -135,18 +142,23 @@ QQ.Item {
 
         pageView.unknownPageComponent = unknownPageComponent
         let viewPage = RootData.pageSelectionModel.registerPage(null, "View", renderingComponent);
-        let dataPage = RootData.pageSelectionModel.registerPage(null, "Data", dataMainPageComponent);
+        let repositoryPage = RootData.pageSelectionModel.registerPage(null, "Source", repositoriesComponent);
+        let dataPage = RootData.pageSelectionModel.registerPage(repositoryPage, "Data", dataMainPageComponent);
         let mapPage = RootData.pageSelectionModel.registerPage(null, "Map", mapPageComponent)
         RootData.pageSelectionModel.registerPage(null, "Testcases", testcasesPageComponent);
         RootData.pageSelectionModel.registerPage(null, "About", aboutPageComponent)
         RootData.pageSelectionModel.registerPage(null, "Settings", settingsPageComponent)
         RootData.pageSelectionModel.registerPage(null, "Pipeline", pipelinePageComponent)
 
+        mainSideBar.viewPage = viewPage;
+        mainSideBar.dataPage = dataPage;
+        mainSideBar.mapPage = mapPage;
+
         if(RootData.desktopBuild) {
             RootData.pageSelectionModel.gotoPage(viewPage);
             mainContentId.renderer = pageView.pageItem(viewPage).renderer;
         } else {
-            RootData.pageSelectionModel.gotoPage(dataPage);
+            RootData.pageSelectionModel.gotoPage(repositoryPage);
         }
     }
 }

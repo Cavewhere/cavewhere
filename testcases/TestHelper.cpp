@@ -92,3 +92,4 @@ void checkStationLookup(cwStationPositionLookup lookup1, cwStationPositionLookup
         checkQVector3D(lookup1.position(stationName), lookup2.position(stationName));
     }
 }
+

@@ -13,6 +13,7 @@
 #include <QVector3D>
 #include <QString>
 #include <QObject>
+#include <QTemporaryDir>
 
 //Our includes
 #include "cwProject.h"
@@ -49,6 +50,17 @@ public:
     Q_INVOKABLE bool fileExists(const QUrl& filename) const;
     Q_INVOKABLE size_t fileSize(const QUrl& filename) const;
     Q_INVOKABLE void removeFile(const QUrl& filename) const;
+
+    Q_INVOKABLE QUrl tempDirectoryUrl() {
+        QTemporaryDir dir;
+        dir.setAutoRemove(false);
+        return QUrl::fromLocalFile(dir.path());
+    }
+
+    Q_INVOKABLE QUrl toLocalUrl(const QString& path) {
+        return QUrl::fromLocalFile(path);
+    }
+
 };
 
 #endif // LOADPROJECTHELPER

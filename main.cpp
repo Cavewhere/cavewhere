@@ -142,6 +142,7 @@ int main(int argc, char *argv[])
     //Load all the fonts
     cwGlobals::loadFonts();
 
+    //Clear the settings for testing
     QSettings settings;
     settings.clear();
 

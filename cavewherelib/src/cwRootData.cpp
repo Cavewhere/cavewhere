@@ -46,6 +46,7 @@ cwRootData::cwRootData(QObject *parent) :
     QObject(parent),
     m_account(new QQuickGit::Account(this)),
     m_accountWatcher(new QQuickGit::AccountSettingWatcher(this)),
+    m_repositoryModel(new cwRepositoryModel(this)),
     DefaultTrip(new cwTrip(this)),
     DefaultTripCalibration(new cwTripCalibration(this))
 {
@@ -271,9 +272,17 @@ void cwRootData::copyText(const QString &text) const
 
 bool cwRootData::mobileBuild() const
 {
+    return isMobileBuild();
+}
+
+//Don't inline this because it depends on private CW_MOBILE_BUILD define
+bool cwRootData::isMobileBuild()
+{
 #ifdef CW_MOBILE_BUILD
     return true;
 #else
     return false;
 #endif
 }
+
+

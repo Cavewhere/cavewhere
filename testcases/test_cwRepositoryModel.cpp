@@ -6,6 +6,7 @@
 #include <QTemporaryDir>
 #include <QModelIndex>
 #include <QUrl>
+#include <QStandardPaths>
 
 //Our includes
 #include "cwRepositoryModel.h"
@@ -88,7 +89,7 @@ TEST_CASE("cwRepositoryModel addRepository with url and persistence", "[cwReposi
     // Test adding a non-existent directory
     QDir nonExistentDir(tmpDir.path() + "/sauce");
     REQUIRE_FALSE(nonExistentDir.exists());
-    auto result2 = model.addRepository(QUrl::fromLocalFile(parentDir.absolutePath()), "sauce");
+    auto result2 = model.addRepository(model.repositoryDir(QUrl::fromLocalFile(parentDir.absolutePath()), "sauce"));
     INFO("Error on non-existent add: " << result2.errorMessage().toStdString());
     CHECK(result2.hasError() == false);
     // row count should remain unchanged
@@ -103,5 +104,26 @@ TEST_CASE("cwRepositoryModel addRepository with url and persistence", "[cwReposi
     REQUIRE(model2.rowCount() == 1);
     // QModelIndex idx2 = model2.index(0, 0);
     CHECK(model2.data(model2.index(0, 0), cwRepositoryModel::PathRole).toString().toStdString() == nonExistentDir.absolutePath().toStdString());
+
+}
+
+TEST_CASE("cwRepositoryModel make sure defaultDepositoryDir works", "[cwRepositoryModel]") {
+
+    // Clear settings before test
+    QSettings settings;
+    settings.clear();
+
+    cwRepositoryModel model;
+    auto defaultPath = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+    CHECK(model.defaultRepositoryDir().toLocalFile().toStdString() == defaultPath.toStdString());
+
+    //Set the default path
+    const auto saucePath = defaultPath + "/test";
+    model.setDefaultRepositoryDir(QUrl::fromLocalFile(saucePath));
+    CHECK(model.defaultRepositoryDir().toLocalFile().toStdString() == saucePath.toStdString());
+
+    //Make sure it's updated in a new cwRepositoryModel, this is similar to restarting the app
+    cwRepositoryModel model2;
+    CHECK(model2.defaultRepositoryDir().toLocalFile().toStdString() == saucePath.toStdString());
 
 }
