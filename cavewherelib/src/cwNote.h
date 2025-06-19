@@ -100,9 +100,6 @@ private:
     cwImage ImageIds;
     float DisplayRotation;  //!< Display rotation of the notes, don't confuse this with NoteTransform's rotation
 
-    cwNoteTranformation NoteTransformation;
-    QList<cwNoteStation> Stations;
-
     QList<cwScrap*> Scraps;
 
     cwImageResolution* ImageResolution; //!< nullptr if the note should use image's resolution

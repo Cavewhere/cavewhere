@@ -46,11 +46,13 @@ class CAVEWHERE_LIB_EXPORT cwProject :  public QObject{
     Q_OBJECT
     QML_NAMED_ELEMENT(Project)
 
-    Q_PROPERTY(QString filename READ filename NOTIFY filenameChanged)
     Q_PROPERTY(QUndoStack* undoStack READ undoStack WRITE setUndoStack NOTIFY undoStackChanged)
+    Q_PROPERTY(cwErrorListModel* errorModel READ errorModel CONSTANT)
+
+    //Older save and load
+    Q_PROPERTY(QString filename READ filename NOTIFY filenameChanged)
     Q_PROPERTY(bool canSaveDirectly READ canSaveDirectly NOTIFY canSaveDirectlyChanged)
     Q_PROPERTY(bool isTemporaryProject READ isTemporaryProject NOTIFY isTemporaryProjectChanged)
-    Q_PROPERTY(cwErrorListModel* errorModel READ errorModel CONSTANT)
 
 public:
     cwProject(QObject* parent = nullptr);
@@ -62,43 +64,42 @@ public:
     QUndoStack* undoStack() const;
     void setUndoStack(QUndoStack* undoStack);
 
-    Q_INVOKABLE void save();
-    Q_INVOKABLE void saveAs(QString newFilename);
-
-    Q_INVOKABLE void newProject();
-
-    QString filename() const;
-
-    // void setTaskManager(cwTaskManagerModel* manager);
-    // cwTaskManagerModel* taskManager() const;
-
     cwFutureManagerToken futureManagerToken() const;
     void setFutureManagerToken(cwFutureManagerToken futureManagerToken);
 
-    static void createDefaultSchema(const QSqlDatabase& database);
-    static QString createTemporaryFilename();
-    static QSqlDatabase createDatabaseConnection(const QString& connectionName, const QString& databasePath);
+    cwErrorListModel* errorModel() const;
+
+    static QString supportedImageFormats();
+
+    //Older save and load
+    Q_INVOKABLE void save();
+    Q_INVOKABLE void saveAs(QString newFilename);
+    Q_INVOKABLE void newProject();
+
+    QString filename() const;
 
     Q_INVOKABLE void waitLoadToFinish();
     void waitSaveToFinish();
 
     Q_INVOKABLE bool isModified() const;
 
-    cwErrorListModel* errorModel() const;
+    static void createDefaultSchema(const QSqlDatabase& database);
+    static QString createTemporaryFilename();
+    static QSqlDatabase createDatabaseConnection(const QString& connectionName, const QString& databasePath);
 
     bool canSaveDirectly() const;
     bool isTemporaryProject() const;
 
     void addImages(QList<QUrl> noteImagePath, std::function<void (QList<cwImage> images)> func);
 
-    static QString supportedImageFormats();
-
 signals:
-    void filenameChanged(QString newFilename);
     void undoStackChanged();
+    void regionChanged();
+
+    // -----Old save and load
+    void filenameChanged(QString newFilename);
     void canSaveDirectlyChanged();
     void isTemporaryProjectChanged();
-    void regionChanged();
     void fileSaved();
     void loaded();
 
@@ -108,6 +109,7 @@ public slots:
 private:
 
     //If this is a temp project directory on not
+    //Old save and load
     bool TempProject;
     QString ProjectFile;
     QSqlDatabase ProjectDatabase;
@@ -116,6 +118,7 @@ private:
     //The region that this project looks after
     cwCavingRegion* Region;
 
+    //Old save and load
     QFuture<void> LoadFuture;
     QFuture<void> SaveFuture;
 

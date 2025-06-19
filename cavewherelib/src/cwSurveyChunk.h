@@ -180,6 +180,8 @@ private:
 
     QList<cwStation> Stations;
     QList<cwShot> Shots;
+
+    // Deperate this?! currently not used?!
     QMap<int, cwTripCalibration*> Calibrations;
 
     cwErrorModel* ErrorModel;
