@@ -44,165 +44,6 @@
 #include <cstddef>
 
 namespace cwDiff {
-// enum OperationType { Insert, Delete };
-
-// template<typename T>
-// struct DiffOperation {
-
-//     DiffOperation(OperationType type, std::size_t positionOld, std::size_t positionNew)
-//         : m_type(type), m_positionOld(positionOld), m_positionNew(positionNew)
-//     { }
-
-//     OperationType operationType() const { return m_type; }
-//     std::size_t positionOld() const { return m_positionOld; }
-//     std::size_t positionNew() const { return m_positionNew; }
-
-// private:
-//     OperationType m_type;
-//     std::size_t   m_positionOld;
-//     std::size_t   m_positionNew;
-// };
-
-// template<typename T>
-// std::vector<DiffOperation<T>> diff(
-//     const std::vector<T>& sequenceA,
-//     const std::vector<T>& sequenceB,
-//     std::size_t indexOld = 0,
-//     std::size_t indexNew = 0)
-// {
-//     std::size_t lengthA     = sequenceA.size();
-//     std::size_t lengthB     = sequenceB.size();
-//     std::size_t sumLength   = lengthA + lengthB;
-//     std::size_t maxSize     = 2 * std::min(lengthA, lengthB) + 2;
-
-//     if (lengthA > 0 && lengthB > 0) {
-//         int lengthDifference = static_cast<int>(lengthA) - static_cast<int>(lengthB);
-//         std::vector<int> forwardDistance(maxSize);
-//         std::vector<int> backwardDistance(maxSize);
-
-//         int maxEditDistance = static_cast<int>(sumLength / 2 + (sumLength % 2 != 0));
-//         auto modIndex = [&](int x) {
-//             int m = x % static_cast<int>(maxSize);
-//             return m < 0 ? m + maxSize : m;
-//         };
-
-//         for (int editDistance = 0; editDistance <= maxEditDistance; ++editDistance) {
-//             for (int pass = 0; pass < 2; ++pass) {
-//                 bool isForward    = (pass == 0);
-//                 auto& current     = isForward ? forwardDistance : backwardDistance;
-//                 auto& previous    = isForward ? backwardDistance : forwardDistance;
-//                 int  orientation  = isForward ? 1 : 0;
-
-//                 int startK = - (editDistance - 2 * std::max(0, editDistance - static_cast<int>(lengthB)));
-//                 int endK   =   editDistance - 2 * std::max(0, editDistance - static_cast<int>(lengthA));
-
-//                 for (int diagonalIndex = startK; diagonalIndex <= endK; diagonalIndex += 2) {
-//                     int xCoord = (diagonalIndex == -editDistance
-//                                   || (diagonalIndex != editDistance
-//                                       && previous[modIndex(diagonalIndex - 1)]
-//                                              < previous[modIndex(diagonalIndex + 1)]))
-//                                      ? previous[modIndex(diagonalIndex + 1)]
-//                                      : previous[modIndex(diagonalIndex - 1)] + 1;
-//                     int yCoord = xCoord - diagonalIndex;
-//                     int startX = xCoord;
-//                     int startY = yCoord;
-
-//                     // "Snake"—follow matching subsequence
-//                     while (xCoord < static_cast<int>(lengthA)
-//                            && yCoord < static_cast<int>(lengthB)
-//                            && (orientation == 1
-//                                    ? sequenceA[xCoord] == sequenceB[yCoord]
-//                                    : sequenceA[lengthA - xCoord - 1]
-//                                          == sequenceB[lengthB - yCoord - 1]))
-//                     {
-//                         ++xCoord;
-//                         ++yCoord;
-//                     }
-
-//                     current[modIndex(diagonalIndex)] = xCoord;
-//                     int diagonalOffsetIndex = - (diagonalIndex - lengthDifference);
-
-//                     // Check for overlap
-//                     if ((sumLength % 2) == orientation
-//                         && diagonalOffsetIndex >= -(editDistance - orientation)
-//                         && diagonalOffsetIndex <=  (editDistance - orientation)
-//                         && current[modIndex(diagonalIndex)]
-//                                    + previous[modIndex(diagonalOffsetIndex)]
-//                                >= static_cast<int>(lengthA))
-//                     {
-//                         int editCount = orientation == 1
-//                                             ? 2 * editDistance - 1
-//                                             : 2 * editDistance;
-
-//                         size_t x = std::min(lengthA, orientation == 1 ? startX : lengthA - xCoord);
-//                         size_t y = std::min(lengthB, orientation == 1 ? startY : lengthB - yCoord);
-//                         size_t u = std::min(lengthA, orientation == 1 ? xCoord : lengthA - startX);
-//                         size_t v = std::min(lengthB, orientation == 1 ? yCoord : lengthB - startY);
-
-//                         std::vector<DiffOperation<T>> result;
-//                         if (editCount > 1 || (x != u && y != v)) {
-//                             // Recurse on the first half
-//                             auto firstHalf = diff<T>(
-//                                 std::vector<T>(sequenceA.begin(), sequenceA.begin() + x),
-//                                 std::vector<T>(sequenceB.begin(), sequenceB.begin() + y),
-//                                 indexOld,
-//                                 indexNew);
-//                             // Recurse on the second half
-//                             auto secondHalf = diff<T>(
-//                                 std::vector<T>(sequenceA.begin() + u, sequenceA.end()),
-//                                 std::vector<T>(sequenceB.begin() + v, sequenceB.end()),
-//                                 indexOld + u,
-//                                 indexNew + v);
-//                             result.reserve(firstHalf.size() + secondHalf.size());
-//                             result.insert(result.end(), firstHalf.begin(),  firstHalf.end());
-//                             result.insert(result.end(), secondHalf.begin(), secondHalf.end());
-//                         }
-//                         else if (lengthB > lengthA) {
-//                             result = diff<T>({},
-//                                              std::vector<T>(sequenceB.begin() + lengthA, sequenceB.end()),
-//                                              indexOld + lengthA,
-//                                              indexNew + lengthA);
-//                         }
-//                         else if (lengthA > lengthB) {
-//                             result = diff<T>(
-//                                 std::vector<T>(sequenceA.begin() + lengthB, sequenceA.end()),
-//                                 {},
-//                                 indexOld + lengthB,
-//                                 indexNew + lengthB);
-//                         }
-//                         return result;
-//                     }
-//                 }
-//             }
-//         }
-//     }
-//     else if (lengthA > 0) {
-//         // All deletions
-//         std::vector<DiffOperation<T>> result;
-//         result.reserve(lengthA);
-//         for (std::size_t n = 0; n < lengthA; ++n) {
-//             result.emplace_back(Delete, indexOld + n, 0);
-//         }
-//         return result;
-//     }
-//     else {
-//         // All insertions
-//         std::vector<DiffOperation<T>> result;
-//         result.reserve(lengthB);
-//         for (std::size_t n = 0; n < lengthB; ++n) {
-//             result.emplace_back(Insert, indexOld, indexNew + n);
-//         }
-//         return result;
-//     }
-
-//     return {};  // No differences
-// }
-
-// #pragma once
-
-// #include <vector>
-// #include <string>
-// #include <algorithm>
 
 enum class EditOperation {
     Insert,
@@ -217,12 +58,18 @@ struct Edit {
     T value;
 };
 
-template<typename T>
-std::vector<Edit<T>> diff(const std::vector<T>& sequenceA, const std::vector<T>& sequenceB,
+
+
+
+
+
+template<typename T, typename Iter>
+std::vector<Edit<T>> diff(const Iter& beginA, const Iter& endA,
+                          const Iter& beginB, const Iter& endB,
                           std::size_t indexA = 0, std::size_t indexB = 0)
 {
-    const std::size_t N = sequenceA.size();
-    const std::size_t M = sequenceB.size();
+    const std::size_t N = std::distance(beginA, endA);
+    const std::size_t M = std::distance(beginB, endB);
     const std::size_t L = N + M;
     const std::size_t Z = 2 * std::min(N, M) + 2;
 
@@ -253,7 +100,7 @@ std::vector<Edit<T>> diff(const std::vector<T>& sequenceA, const std::vector<T>&
                     int t = b;
 
                     while (a < static_cast<int>(N) && b < static_cast<int>(M) &&
-                           sequenceA[(1 - o) * N + m * a + (o - 1)] == sequenceB[(1 - o) * M + m * b + (o - 1)]) {
+                           beginA[(1 - o) * N + m * a + (o - 1)] == beginB[(1 - o) * M + m * b + (o - 1)]) {
                         ++a;
                         ++b;
                     }
@@ -284,27 +131,25 @@ std::vector<Edit<T>> diff(const std::vector<T>& sequenceA, const std::vector<T>&
                         v = std::max(0, std::min(static_cast<int>(M), v));
 
                         if (D > 1 || (x != u && y != v)) {
-                            std::vector<T> e1(sequenceA.begin(), sequenceA.begin() + x);
-                            std::vector<T> f1(sequenceB.begin(), sequenceB.begin() + y);
-                            std::vector<T> e2(sequenceA.begin() + u, sequenceA.end());
-                            std::vector<T> f2(sequenceB.begin() + v, sequenceB.end());
-
-                            auto left = diff(e1, f1, indexA, indexB);
-                            auto right = diff(e2, f2, indexA + u, indexB + v);
+                            auto left = diff<T>(beginA, beginA + x, beginB, beginB + y, indexA, indexB);
+                            auto right = diff<T>(beginA + u, endA, beginB + v, endB, indexA + u, indexB + v);
                             left.insert(left.end(), right.begin(), right.end());
                             return left;
                         } else if (M > N) {
-                            std::vector<T> insertTail(sequenceB.begin() + N, sequenceB.end());
+                            auto iter = beginB + N;
                             std::vector<Edit<T>> result;
-                            for (std::size_t n = 0; n < insertTail.size(); ++n) {
-                                result.push_back({EditOperation::Insert, indexA + N, indexB + N + n, insertTail[n]});
+                            result.reserve(std::distance(iter, endB));
+                            for (std::size_t n = 0 ;iter < endB; ++iter, ++n) {
+                                result.push_back({EditOperation::Insert, indexA + N, indexB + N + n, *iter});
                             }
                             return result;
                         } else if (M < N) {
-                            std::vector<T> deleteTail(sequenceA.begin() + M, sequenceA.end());
+                            // std::vector<T> deleteTail(sequenceA.begin() + M, sequenceA.end());
+                            auto iter = beginA + M;
                             std::vector<Edit<T>> result;
-                            for (std::size_t n = 0; n < deleteTail.size(); ++n) {
-                                result.push_back({EditOperation::Delete, indexA + M + n, 0, deleteTail[n]});
+                            result.reserve(std::distance(iter, endA));
+                            for (std::size_t n = 0; iter < endA; ++iter, ++n) {
+                                result.push_back({EditOperation::Delete, indexA + M + n, 0, *iter});
                             }
                             return result;
                         } else {
@@ -316,19 +161,27 @@ std::vector<Edit<T>> diff(const std::vector<T>& sequenceA, const std::vector<T>&
         }
     } else if (N > 0) {
         std::vector<Edit<T>> result;
+        result.reserve(N);
         for (std::size_t n = 0; n < N; ++n) {
-            result.push_back({EditOperation::Delete, indexA + n, 0, sequenceA[n]});
+            result.push_back({EditOperation::Delete, indexA + n, 0, beginA[n]});
         }
         return result;
     } else {
         std::vector<Edit<T>> result;
+        result.reserve(M);
         for (std::size_t n = 0; n < M; ++n) {
-            result.push_back({EditOperation::Insert, indexA, indexB + n, sequenceB[n]});
+            result.push_back({EditOperation::Insert, indexA, indexB + n, beginB[n]});
         }
         return result;
     }
 
     return {}; // fallback
+}
+
+template<typename T, typename Container>
+std::vector<Edit<T>> diff(const Container& from, const Container& to) {
+    return diff<T>(from.begin(), from.end(),
+                   to.begin(), to.end());
 }
 
 
