@@ -55,7 +55,7 @@ struct Edit {
     EditOperation operation;
     std::size_t positionOld;
     std::size_t positionNew; // Only used for inserts
-    T value;
+    //T value;
 };
 
 
@@ -140,7 +140,8 @@ std::vector<Edit<T>> diff(const Iter& beginA, const Iter& endA,
                             std::vector<Edit<T>> result;
                             result.reserve(std::distance(iter, endB));
                             for (std::size_t n = 0 ;iter < endB; ++iter, ++n) {
-                                result.push_back({EditOperation::Insert, indexA + N, indexB + N + n, *iter});
+                                // result.push_back({EditOperation::Insert, indexA + N, indexB + N + n, *iter});
+                                result.push_back({EditOperation::Insert, indexA + N, indexB + N + n});
                             }
                             return result;
                         } else if (M < N) {
@@ -149,7 +150,8 @@ std::vector<Edit<T>> diff(const Iter& beginA, const Iter& endA,
                             std::vector<Edit<T>> result;
                             result.reserve(std::distance(iter, endA));
                             for (std::size_t n = 0; iter < endA; ++iter, ++n) {
-                                result.push_back({EditOperation::Delete, indexA + M + n, 0, *iter});
+                                // result.push_back({EditOperation::Delete, indexA + M + n, 0, *iter});
+                                result.push_back({EditOperation::Delete, indexA + M + n, 0});
                             }
                             return result;
                         } else {
@@ -163,14 +165,16 @@ std::vector<Edit<T>> diff(const Iter& beginA, const Iter& endA,
         std::vector<Edit<T>> result;
         result.reserve(N);
         for (std::size_t n = 0; n < N; ++n) {
-            result.push_back({EditOperation::Delete, indexA + n, 0, beginA[n]});
+            // result.push_back({EditOperation::Delete, indexA + n, 0, beginA[n]});
+            result.push_back({EditOperation::Delete, indexA + n, 0});
         }
         return result;
     } else {
         std::vector<Edit<T>> result;
         result.reserve(M);
         for (std::size_t n = 0; n < M; ++n) {
-            result.push_back({EditOperation::Insert, indexA, indexB + n, beginB[n]});
+            // result.push_back({EditOperation::Insert, indexA, indexB + n, beginB[n]});
+            result.push_back({EditOperation::Insert, indexA, indexB + n});
         }
         return result;
     }
