@@ -207,7 +207,7 @@ TEST_CASE("Randomized diff<Obj> tests with modifications", "[cwDiff]") {
         // additions at random positions
         for (int a = 0; a < addCount; ++a) {
             Obj obj;
-            obj.id    = QUuid::createUuid();
+            obj.id = QUuid::createUuid();
 
             int klen = keyLenDist(rng);
             QString k;
