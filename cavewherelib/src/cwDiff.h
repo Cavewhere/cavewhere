@@ -58,14 +58,12 @@ struct Edit {
     //T value;
 };
 
-
-
-
-
-
-template<typename T, typename Iter>
+//This is based on this algorithm
+//https://blog.robertelder.org/diff-algorithm/
+template<typename T, typename Iter, typename Comparator = std::equal_to<T>>
 std::vector<Edit<T>> diff(const Iter& beginA, const Iter& endA,
                           const Iter& beginB, const Iter& endB,
+                          Comparator equals = Comparator{},
                           std::size_t indexA = 0, std::size_t indexB = 0)
 {
     const std::size_t N = std::distance(beginA, endA);
@@ -100,7 +98,7 @@ std::vector<Edit<T>> diff(const Iter& beginA, const Iter& endA,
                     int t = b;
 
                     while (a < static_cast<int>(N) && b < static_cast<int>(M) &&
-                           beginA[(1 - o) * N + m * a + (o - 1)] == beginB[(1 - o) * M + m * b + (o - 1)]) {
+                           equals(beginA[(1 - o) * N + m * a + (o - 1)], beginB[(1 - o) * M + m * b + (o - 1)])) {
                         ++a;
                         ++b;
                     }
@@ -131,8 +129,8 @@ std::vector<Edit<T>> diff(const Iter& beginA, const Iter& endA,
                         v = std::max(0, std::min(static_cast<int>(M), v));
 
                         if (D > 1 || (x != u && y != v)) {
-                            auto left = diff<T>(beginA, beginA + x, beginB, beginB + y, indexA, indexB);
-                            auto right = diff<T>(beginA + u, endA, beginB + v, endB, indexA + u, indexB + v);
+                            auto left = diff<T>(beginA, beginA + x, beginB, beginB + y, equals, indexA, indexB);
+                            auto right = diff<T>(beginA + u, endA, beginB + v, endB, equals, indexA + u, indexB + v);
                             left.insert(left.end(), right.begin(), right.end());
                             return left;
                         } else if (M > N) {
@@ -182,10 +180,11 @@ std::vector<Edit<T>> diff(const Iter& beginA, const Iter& endA,
     return {}; // fallback
 }
 
-template<typename T, typename Container>
-std::vector<Edit<T>> diff(const Container& from, const Container& to) {
+template<typename T, typename Container, typename Comparator = std::equal_to<T>>
+std::vector<Edit<T>> diff(const Container& from, const Container& to, Comparator equals = Comparator{}) {
     return diff<T>(from.begin(), from.end(),
-                   to.begin(), to.end());
+                   to.begin(), to.end(),
+                   equals);
 }
 
 
