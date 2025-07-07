@@ -4,46 +4,18 @@
 #include <QString>
 #include <QDebug>
 
-// #include <vector>
-// #include <algorithm>
-// #include <functional>
-
-// // cwDiff: utilities for Myers diff and three-way merge of sequences of T
-// // T must be copyable and comparable via a provided equality predicate
-
-// #include <vector>
-// #include <functional>
-// #include <stdexcept>
-
-// // Implements Myers' diff algorithm with linear space (divide and conquer).
-// // Reference: https://blog.jcoglan.com/2017/02/12/the-myers-diff-algorithm-part-1/
-
-// // Internal struct to represent the "middle snake" for divide and conquer
-// struct Snake {
-//     // friend QDebug;
-//     long m_xStart;
-//     long m_yStart;
-//     long m_xEnd;
-//     long m_yEnd;
-// };
-
-
-// // QDebug stream operator
-// inline QDebug operator<<(QDebug dbg, const Snake& snake) {
-//     QDebugStateSaver saver(dbg);
-//     dbg.nospace() << "Snake("
-//                   << "[xStart: " << snake.m_xStart << ", "
-//                   << "xEnd: " << snake.m_xEnd << "] "
-//                   << "[yStart: " << snake.m_yStart << ", "
-//                   << "yEnd: " << snake.m_yEnd << "])";
-//     return dbg;
-// }
 
 #include <vector>
 #include <algorithm>
 #include <cstddef>
 
 namespace cwDiff {
+
+enum class MergeStrategy {
+    UseOursOnConflict,
+    UseTheirsOnConflict,
+    UseBaseOnConflict
+};
 
 enum class EditOperation {
     Insert,
@@ -225,7 +197,59 @@ std::vector<T> applyEditScript(
 
     return newSequence;
 }
+
+
+template<typename T, typename Comparator = std::equal_to<T>>
+T merge(const T& baseValue,
+                const T& oursValue,
+                const T& theirsValue,
+                MergeStrategy strategy,
+                Comparator equals = Comparator{}
+                )
+{
+    // 1) If both edited to the same thing → no conflict
+    if (equals(oursValue, theirsValue)) {
+        return oursValue;
+    }
+
+    // 2) If only "theirs" changed → take theirs
+    if (equals(oursValue, baseValue)) {
+        return theirsValue;
+    }
+
+    // 3) If only "ours" changed → take ours
+    if (equals(theirsValue, baseValue)) {
+        return oursValue;
+    }
+
+    // 4) Both changed differently → resolve per strategy
+    switch (strategy) {
+    case MergeStrategy::UseOursOnConflict: return oursValue;
+    case MergeStrategy::UseTheirsOnConflict: return theirsValue;
+    case MergeStrategy::UseBaseOnConflict: return baseValue;
+    }
+
+    Q_ASSERT(false);
+
+    // (Unreachable, but satisfy compiler)
+    return baseValue;
+}
+
 };
+
+// template<typename T, typename Container, typename Comparator = std::equal_to<T>>
+// T mergeThreeWay(const T& base, const T& ours, const T& thiers, Comparator equals = Comparator{}) {
+//     if(equals(base, ours) && equals(base, thiers)) {
+//         return base;
+//     } else {
+
+//     }
+// }
+
+
+
+
+
 
 
 
