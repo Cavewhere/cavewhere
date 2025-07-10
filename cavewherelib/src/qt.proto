@@ -17,6 +17,7 @@ message QPointF {
     required double y = 2;
 }
 
+//For backwards compatiblity
 message QString {
     required bytes stringData = 1;
 }
@@ -38,5 +39,10 @@ message QSizeF {
 }
 
 message QStringList {
-    repeated QString strings = 1;
+    repeated string strings = 2;
+    repeated QString legacy_strings = 1;
+}
+
+message QUuid {
+    required bytes uuid = 1;  // store QUuid as 16 raw bytes
 }

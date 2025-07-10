@@ -1,52 +1,69 @@
-syntax = "proto2";
+syntax = "proto3";
 import "qt.proto";
 
 package CavewhereProto;
 
+message FileVersion {
+    optional int32 version = 1; //Protobuf file version
+    optional string cavewhereVersion = 2;
+}
+
 message CavingRegion {
     repeated Cave caves = 1;
     optional int32 version = 2;
-    optional QtProto.QString cavewhereVersion = 3;
+    optional QtProto.QString legacy_cavewhereVersion = 3;
+    optional string cavewhereVersion = 4;
 }
 
 message Cave {
-    required QtProto.QString name = 1;
+    optional string name = 8;
     repeated Trip trips = 2;
     optional Units.LengthUnit lengthUnit = 3;
     optional Units.LengthUnit depthUnit = 4;
+
+    //These should be put into a local cache
     optional StationPositionLookup stationPositionLookup = 5;
     optional bool stationPositionLookupStale = 6;
     optional SurveyNetwork network = 7;
+
+    //Depercated types, don't use
+    optional QtProto.QString legacy_name = 1 [deprecated = true];
 }
 
 message Trip {
-    required QtProto.QString name = 1;
+    optional string name = 7;
     optional QtProto.QDate date = 2;
-    optional SurveyNoteModel noteModel = 3;
+    optional SurveyNoteModel noteModel = 3 [deprecated = true]; //Notes are loaded independantly from files
     optional TripCalibration tripCalibration = 4;
     repeated SurveyChunk chunks = 5;
     optional Team team = 6;
+
+    //Depercated types, don't use
+    optional QtProto.QString legacy_name = 1 [deprecated = true];
 }
 
+//This is a legacy message, do not use, use StationShot instead
 message Station {
-    required QtProto.QString name = 1;
+    optional string name = 14;
+
+    //---- Version = 6 attributes
+    optional DistanceReading legacy_leftReading = 10;
+    optional DistanceReading legacy_rightReading = 11;
+    optional DistanceReading legacy_upReading = 12;
+    optional DistanceReading legacy_downReading = 13;
+
+    //Depercated types, don't use
+    optional QtProto.QString legacy_name = 1 [deprecated = true];
 
     //---- Version <= 5 attributes
-    optional double left = 2 [deprecated = true]; //This is deprecated use leftReading
-    optional double right = 3 [deprecated = true]; //This is deprecated use rightReading
-    optional double up = 4  [deprecated = true]; //This is deprecated use upReading
-    optional double down = 5 [deprecated = true]; //This is deprecated use downReading
-    optional DistanceStates.State leftState = 6  [deprecated = true]; //This is deprecated use leftReading
-    optional DistanceStates.State rightState = 7  [deprecated = true]; //This is deprecated use rightReading
-    optional DistanceStates.State upState = 8 [deprecated = true]; //This is deprecated use upReading
-    optional DistanceStates.State downState = 9 [deprecated = true]; //This is deprecated use downReading
-
-    //---- Version >= 6 attributes
-    optional DistanceReading leftReading = 10;
-    optional DistanceReading rightReading = 11;
-    optional DistanceReading upReading = 12;
-    optional DistanceReading downReading = 13;
-
+    optional double legacy_left = 2 [deprecated = true]; //This is deprecated use leftReading
+    optional double legacy_right = 3 [deprecated = true]; //This is deprecated use rightReading
+    optional double legacy_up = 4  [deprecated = true]; //This is deprecated use upReading
+    optional double legacy_down = 5 [deprecated = true]; //This is deprecated use downReading
+    optional DistanceStates.State legacy_leftState = 6  [deprecated = true]; //This is deprecated use leftReading
+    optional DistanceStates.State legacy_rightState = 7  [deprecated = true]; //This is deprecated use rightReading
+    optional DistanceStates.State legacy_upState = 8 [deprecated = true]; //This is deprecated use upReading
+    optional DistanceStates.State legacy_downState = 9 [deprecated = true]; //This is deprecated use downReading
 }
 
 message SurveyNoteModel {
@@ -94,32 +111,58 @@ message SurveyChunk {
     repeated Station stations = 1;
     repeated Shot shots = 2;
     repeated ChunkCalibration calibrations = 3;
+    repeated StationShot line = 4;
 }
 
+//This is a legacy message, do not use, use StationShot instead
 message Shot {
     //---- Version <= 5 attributes
-    optional double Distance = 1 [deprecated = true];
-    optional double Compass = 2 [deprecated = true];
-    optional double BackCompass = 3 [deprecated = true];
-    optional double Clino = 4 [deprecated = true];
-    optional double BackClino = 5 [deprecated = true];
-    optional DistanceStates.State distanceState = 6[deprecated = true];
-    optional CompassStates.State compassState = 7 [deprecated = true];
-    optional CompassStates.State backCompassState = 8 [deprecated = true];
-    optional ClinoStates.State clinoState = 9 [deprecated = true];
-    optional ClinoStates.State backClinoState = 10 [deprecated = true];
+    optional double legacy_Distance = 1 [deprecated = true];
+    optional double legacy_Compass = 2 [deprecated = true];
+    optional double legacy_BackCompass = 3 [deprecated = true];
+    optional double legacy_Clino = 4 [deprecated = true];
+    optional double legacy_BackClino = 5 [deprecated = true];
+    optional DistanceStates.State legacy_distanceState = 6[deprecated = true];
+    optional CompassStates.State legacy_compassState = 7 [deprecated = true];
+    optional CompassStates.State legacy_backCompassState = 8 [deprecated = true];
+    optional ClinoStates.State legacy_clinoState = 9 [deprecated = true];
+    optional ClinoStates.State legacy_backClinoState = 10 [deprecated = true];
 
     //All versions
     optional bool includeDistance = 11;
 
-    //--- Version >= 6 attributes
-    optional DistanceReading distanceReading = 12;
-    optional CompassReading compassReading = 13;
-    optional CompassReading backCompassReading = 14;
-    optional ClinoReading clinoReading = 15;
-    optional ClinoReading backClinoReading = 16;
+    //--- Version = 6 attributes
+    optional DistanceReading legacy_distanceReading = 12;
+    optional CompassReading legacy_compassReading = 13;
+    optional CompassReading legacy_backCompassReading = 14;
+    optional ClinoReading legacy_clinoReading = 15;
+    optional ClinoReading legacy_backClinoReading = 16;
 }
 
+//This merges stations and shots together, so it's easier to read in JSON
+//This allows for interleaving stations and shots, this a union of cwStation and cwShot
+//Proto array of stationshot is interleaved Station -> shot -> station -> shot -> station.
+message StationShot {
+    //optional Station station = 1;
+    //optional Shot shot = 2;
+
+    //Station data
+    optional string name = 1;
+    optional string left = 2;
+    optional string right = 3;
+    optional string up = 4;
+    optional string down = 5;
+
+    //Shot data
+    optional bool includeDistance = 1000;
+    optional string distance = 1001;
+    optional string compass = 1002;
+    optional string backCompass = 1003;
+    optional string clino = 1004;
+    optional string backClino = 1005;
+}
+
+//This is a legacy message from < V5
 message DistanceStates {
     enum State {
         Valid = 0;
@@ -127,6 +170,7 @@ message DistanceStates {
     }
 }
 
+//This is a legacy message from < V5
 message CompassStates {
     enum State {
         Valid = 0;
@@ -134,6 +178,7 @@ message CompassStates {
     }
 }
 
+//This is a legacy message from < V5
 message ClinoStates {
     enum State {
         Valid = 0;
@@ -160,6 +205,7 @@ message Scrap {
     optional ProjectedProfileScrapViewMatrix profileViewMatrix = 8; //Only used if type == ProjectedProfile
 }
 
+//This is used for data cacheing
 message TriangulatedData {
     optional Image croppedImage = 1;
     repeated QtProto.QVector3D points = 2;
@@ -170,8 +216,11 @@ message TriangulatedData {
 }
 
 message NoteStation {
-    required QtProto.QString name = 1;
+    optional string name = 3;
     optional QtProto.QPointF positionOnNote = 2;
+
+    //Deprecated types, don't use
+    optional QtProto.QString legacy_name = 1 [deprecated = true];
 }
 
 message NoteTranformation {
@@ -181,12 +230,12 @@ message NoteTranformation {
 }
 
 message Length {
-    required double value = 1;
+    optional double value = 1;
     optional Units.LengthUnit unit = 2;
 }
 
 message ImageResolution {
-    required double value = 1;
+    optional double value = 1;
     optional Units.ImageResolutionUnit unit = 2;
 }
 
@@ -195,8 +244,10 @@ message Team {
 }
 
 message TeamMember {
-    optional QtProto.QString name = 1;
+    optional string name = 3;
     optional QtProto.QStringList jobs = 2;
+
+    optional QtProto.QString legacy_name = 1;
 }
 
 message Units {
@@ -223,24 +274,31 @@ message StationPositionLookup {
     repeated NamePosition stationPositions = 1;
 
     message NamePosition {
-        required QtProto.QString stationName = 1;
-        required QtProto.QVector3D position = 2;
+        optional string stationName = 3;
+        optional QtProto.QVector3D position = 2;
+
+        optional QtProto.QString legacy_stationName = 1;
     }
 }
 
 message Lead {
     optional QtProto.QPointF positionOnNote = 1;
-    optional QtProto.QString description = 2;
+    optional string description = 5;
     optional QtProto.QSizeF size = 3;
     optional bool completed = 4;
+
+    optional QtProto.QString legacy_description = 2;
 }
 
+//This should be cached
 message SurveyNetwork {
     repeated StationLookupItem stations = 1;
 
     message StationLookupItem {
-        required QtProto.QString stationName = 1;
-        required QtProto.QStringList neighbors = 2;
+        optional string stationName = 3;
+        optional QtProto.QStringList neighbors = 2;
+
+        optional QtProto.QString legacy_stationName = 1;
     }
 }
 
@@ -256,14 +314,16 @@ message ProjectedProfileScrapViewMatrix {
     optional Direction direction = 2;
 }
 
+//This is a legacy message, don't use
 message DistanceReading {
-    optional QtProto.QString value = 1;
+    optional QtProto.QString legacy_value = 1;
 }
 
+//This is a legacy message, don't use
 message CompassReading {
-    optional QtProto.QString value = 1;
+    optional QtProto.QString legacy_value = 1;
 }
-
+//This is a legacy message, don't use
 message ClinoReading {
-    optional QtProto.QString value = 1;
+    optional QtProto.QString legacy_value = 1;
 }

@@ -32,11 +32,11 @@
 #include "cwSQLManager.h"
 #include "cavewhereVersion.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
+#include "cwLead.h"
 
 //Google protobuffer
 #include "cavewhere.pb.h"
 #include "qt.pb.h"
-#include "cwLead.h"
 
 //Qt includes
 #include <QSqlQuery>
@@ -199,14 +199,27 @@ void cwRegionSaveTask::saveTripCalibration(CavewhereProto::TripCalibration *prot
  */
 void cwRegionSaveTask::saveSurveyChunk(CavewhereProto::SurveyChunk *protoChunk, cwSurveyChunk *chunk)
 {
-    foreach(cwStation station, chunk->stations()) {
-        CavewhereProto::Station* protoStation = protoChunk->add_stations();
-        saveStation(protoStation, station);
-    }
+    // foreach(cwStation station, chunk->stations()) {
+    //     CavewhereProto::Station* protoStation = protoChunk->add_stations();
+    //     saveStation(protoStation, station);
+    // }
 
-    foreach(cwShot shot, chunk->shots()) {
-        CavewhereProto::Shot* protoShot = protoChunk->add_shots();
-        saveShot(protoShot, shot);
+    // foreach(cwShot shot, chunk->shots()) {
+    //     CavewhereProto::Shot* protoShot = protoChunk->add_shots();
+    //     saveShot(protoShot, shot);
+    // }
+
+    Q_ASSERT(chunk->stationCount() - 1 == chunk->shotCount());
+
+
+    for(int i = 0; i < chunk->stationCount(); ++i) {
+        auto station = protoChunk->add_line();
+        saveStationShot(station, chunk->station(i));
+
+        if(i < chunk->shotCount()) {
+            auto shot = protoChunk->add_line();
+            saveStationShot(shot, chunk->shot(i));
+        }
     }
 
     auto calibrations = chunk->calibrations();
@@ -372,10 +385,9 @@ void cwRegionSaveTask::saveTriangulatedData(CavewhereProto::TriangulatedData *pr
  * @param protoString
  * @param string
  */
-void cwRegionSaveTask::saveString(QtProto::QString *protoString, QString string)
+void cwRegionSaveTask::saveString(std::string *protoString, const QString& string)
 {
-    QByteArray stringData = string.toUtf8();
-    protoString->set_stringdata(stringData.constData(), stringData.size());
+    *protoString = string.toUtf8().toStdString();
 }
 
 /**
@@ -444,7 +456,7 @@ void cwRegionSaveTask::saveVector2D(QtProto::QVector2D *protoVector2D, QVector2D
 void cwRegionSaveTask::saveStringList(QtProto::QStringList *protoStringList, QStringList stringlist)
 {
     foreach(QString string, stringlist) {
-        QtProto::QString* protoString = protoStringList->add_strings();
+        auto protoString = protoStringList->add_strings();
         saveString(protoString, string);
     }
 }
@@ -478,12 +490,18 @@ void cwRegionSaveTask::saveTeamMember(CavewhereProto::TeamMember *protoTeamMembe
  */
 void cwRegionSaveTask::saveStation(CavewhereProto::Station *protoStation, const cwStation &station)
 {
-    saveString(protoStation->mutable_name(), station.name());
+    // saveString(protoStation->mutable_name(), station.name());
 
-    saveDistanceReading(protoStation->mutable_leftreading(), station.left());
-    saveDistanceReading(protoStation->mutable_rightreading(), station.right());
-    saveDistanceReading(protoStation->mutable_upreading(), station.up());
-    saveDistanceReading(protoStation->mutable_downreading(), station.down());
+    // saveReading([&](){return protoStation->mutable_left();}, station.left(), cwDistanceReading::State::Empty);
+    // saveReading([&](){return protoStation->mutable_right();}, station.right(), cwDistanceReading::State::Empty);
+    // saveReading([&](){return protoStation->mutable_up();}, station.up(), cwDistanceReading::State::Empty);
+    // saveReading([&](){return protoStation->mutable_down();}, station.down(), cwDistanceReading::State::Empty);
+
+    // Version 6
+    // saveDistanceReading(protoStation->mutable_leftreading(), station.left());
+    // saveDistanceReading(protoStation->mutable_rightreading(), station.right());
+    // saveDistanceReading(protoStation->mutable_upreading(), station.up());
+    // saveDistanceReading(protoStation->mutable_downreading(), station.down());
 
     // Version 5
     // protoStation->set_left(station.left());
@@ -503,13 +521,23 @@ void cwRegionSaveTask::saveStation(CavewhereProto::Station *protoStation, const 
  */
 void cwRegionSaveTask::saveShot(CavewhereProto::Shot *protoShot, const cwShot &shot)
 {
-    protoShot->set_includedistance(shot.isDistanceIncluded());
+    // if(!shot.isDistanceIncluded()) {
+    //     //By default distance is included, only write it if it's not include
+    //     protoShot->set_includedistance(shot.isDistanceIncluded());
+    // }
 
-    saveDistanceReading(protoShot->mutable_distancereading(), shot.distance());
-    saveCompassReading(protoShot->mutable_compassreading(), shot.compass());
-    saveCompassReading(protoShot->mutable_backcompassreading(), shot.backCompass());
-    saveClinoReading(protoShot->mutable_clinoreading(), shot.clino());
-    saveClinoReading(protoShot->mutable_backclinoreading(), shot.backClino());
+    // saveReading([&](){ return protoShot->mutable_distance(); }, shot.distance(), cwDistanceReading::State::Empty);
+    // saveReading([&](){ return protoShot->mutable_compass(); }, shot.backCompass(), cwCompassReading::State::Empty);
+    // saveReading([&](){ return protoShot->mutable_backcompass(); }, shot.backCompass(), cwCompassReading::State::Empty);
+    // saveReading([&](){ return protoShot->mutable_clino(); }, shot.clino(), cwClinoReading::State::Empty);
+    // saveReading([&](){ return protoShot->mutable_backclino(); }, shot.backClino(), cwClinoReading::State::Empty);
+
+    //Version 6
+    // saveDistanceReading(protoShot->mutable_distancereading(), shot.distance());
+    // saveCompassReading(protoShot->mutable_compassreading(), shot.compass());
+    // saveCompassReading(protoShot->mutable_backcompassreading(), shot.backCompass());
+    // saveClinoReading(protoShot->mutable_clinoreading(), shot.clino());
+    // saveClinoReading(protoShot->mutable_backclinoreading(), shot.backClino());
 
     //Version 5
     // protoShot->set_distance(shot.distance());
@@ -522,6 +550,31 @@ void cwRegionSaveTask::saveShot(CavewhereProto::Shot *protoShot, const cwShot &s
     // protoShot->set_backcompassstate((CavewhereProto::CompassStates_State)shot.backCompassState());
     // protoShot->set_clinostate((CavewhereProto::ClinoStates_State)shot.clinoState());
     // protoShot->set_backclinostate((CavewhereProto::ClinoStates_State)shot.backClinoState());
+}
+
+void cwRegionSaveTask::saveStationShot(CavewhereProto::StationShot *protoStation, const cwStation &station)
+{
+    saveString(protoStation->mutable_name(), station.name());
+
+    saveReading([&](){return protoStation->mutable_left();}, station.left(), cwDistanceReading::State::Empty);
+    saveReading([&](){return protoStation->mutable_right();}, station.right(), cwDistanceReading::State::Empty);
+    saveReading([&](){return protoStation->mutable_up();}, station.up(), cwDistanceReading::State::Empty);
+    saveReading([&](){return protoStation->mutable_down();}, station.down(), cwDistanceReading::State::Empty);
+}
+
+void cwRegionSaveTask::saveStationShot(CavewhereProto::StationShot *protoShot, const cwShot &shot)
+{
+    if(!shot.isDistanceIncluded()) {
+        //By default distance is included, only write it if it's not include
+        protoShot->set_includedistance(shot.isDistanceIncluded());
+    }
+
+    saveReading([&](){ return protoShot->mutable_distance(); }, shot.distance(), cwDistanceReading::State::Empty);
+    saveReading([&](){ return protoShot->mutable_compass(); }, shot.backCompass(), cwCompassReading::State::Empty);
+    saveReading([&](){ return protoShot->mutable_backcompass(); }, shot.backCompass(), cwCompassReading::State::Empty);
+    saveReading([&](){ return protoShot->mutable_clino(); }, shot.clino(), cwClinoReading::State::Empty);
+    saveReading([&](){ return protoShot->mutable_backclino(); }, shot.backClino(), cwClinoReading::State::Empty);
+
 }
 
 /**
@@ -595,18 +648,18 @@ void cwRegionSaveTask::saveProjectedScrapViewMatrix(CavewhereProto::ProjectedPro
     protoViewMatrix->set_direction(static_cast<CavewhereProto::ProjectedProfileScrapViewMatrix::Direction >(viewMatrix->direction()));
 }
 
-void cwRegionSaveTask::saveDistanceReading(CavewhereProto::DistanceReading *protoDistanceReading, const cwDistanceReading &reading)
-{
-    saveString(protoDistanceReading->mutable_value(), reading.value());
-}
+// void cwRegionSaveTask::saveDistanceReading(CavewhereProto::DistanceReading *protoDistanceReading, const cwDistanceReading &reading)
+// {
+//     saveString(protoDistanceReading->mutable_legacy_value(), reading.value());
+// }
 
-void cwRegionSaveTask::saveCompassReading(CavewhereProto::CompassReading *protoCompassReading, const cwCompassReading &reading)
-{
-    saveString(protoCompassReading->mutable_value(), reading.value());
-}
+// void cwRegionSaveTask::saveCompassReading(CavewhereProto::CompassReading *protoCompassReading, const cwCompassReading &reading)
+// {
+//     saveString(protoCompassReading->mutable_legacy_value(), reading.value());
+// }
 
-void cwRegionSaveTask::saveClinoReading(CavewhereProto::ClinoReading *protoClinoReading, const cwClinoReading &reading)
-{
-    saveString(protoClinoReading->mutable_value(), reading.value());
-}
+// void cwRegionSaveTask::saveClinoReading(CavewhereProto::ClinoReading *protoClinoReading, const cwClinoReading &reading)
+// {
+//     saveString(protoClinoReading->mutable_legacy_value(), reading.value());
+// }
 

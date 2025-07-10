@@ -202,7 +202,8 @@ cwRegionLoadTask::LoadData cwRegionLoadTask::loadCavingRegion(const CavewherePro
     LoadData data(new cwCavingRegion(), loadFileVersion(protoRegion));
 
     data.fileVersion = loadFileVersion(protoRegion);
-    auto fileCavewhereVersion = protoRegion.has_cavewhereversion() ? loadString(protoRegion.cavewhereversion()) : "";
+    // auto fileCavewhereVersion = protoRegion.has_cavewhereversion() ? QString::fromStdString(protoRegion.cavewhereversion()) : loadString(protoRegion.cavewhereversion()) : "";
+    auto fileCavewhereVersion = LOAD_STRING(protoRegion, cavewhereversion);
 
     if(data.fileVersion > protoVersion()) {
         //Add a warning
@@ -238,7 +239,7 @@ cwRegionLoadTask::LoadData cwRegionLoadTask::loadCavingRegion(const CavewherePro
  */
 void cwRegionLoadTask::loadCave(const CavewhereProto::Cave& protoCave, cwCave *cave)
 {
-    QString name = loadString(protoCave.name());
+    QString name = loadName(protoCave);
     cwUnits::LengthUnit lengthUnit = static_cast<cwUnits::LengthUnit>(protoCave.lengthunit());
     cwUnits::LengthUnit depthUnit = static_cast<cwUnits::LengthUnit>(protoCave.depthunit());
 
@@ -287,8 +288,8 @@ void cwRegionLoadTask::loadCave(const CavewhereProto::Cave& protoCave, cwCave *c
  * @param trip
  */
 void cwRegionLoadTask::loadTrip(const CavewhereProto::Trip& protoTrip, cwTrip *trip)
-{
-    QString tripName = loadString(protoTrip.name());
+{    
+    QString tripName = loadName(protoTrip);
     QDate tripDate = loadDate(protoTrip.date());
 
     trip->setName(tripName);
@@ -624,7 +625,7 @@ cwStation cwRegionLoadTask::loadStation(const CavewhereProto::Station& protoStat
 {
     cwStation station;
 
-    station.setName(loadString(protoStation.name()));
+    station.setName(loadName(protoStation));
 
     //Returns the distance based on functors
     // auto distance = [&](auto hasReading,
@@ -652,28 +653,28 @@ cwStation cwRegionLoadTask::loadStation(const CavewhereProto::Station& protoStat
     // };
 
     station.setLeft(distance(
-        [&]() { return protoStation.has_leftreading(); },
-        [&]() { return protoStation.leftreading(); },
-        [&]() { return protoStation.leftstate(); }, //Handle older version 5 attributes
-        [&]() { return protoStation.left(); } //Handle older version 5 attribute
+        [&]() { return protoStation.has_legacy_leftreading(); }, //v6
+        [&]() { return protoStation.legacy_leftreading(); }, //v6
+        [&]() { return protoStation.legacy_leftstate(); }, //Handle older version 5 attributes
+        [&]() { return protoStation.legacy_left(); } //Handle older version 5 attribute
         ));
     station.setRight(distance(
-        [&]() { return protoStation.has_rightreading(); },
-        [&]() { return protoStation.rightreading(); },
-        [&]() { return protoStation.rightstate(); }, //Handle older version 5 attributes
-        [&]() { return protoStation.right(); } //Handle older version 5 attribute
+        [&]() { return protoStation.has_legacy_rightreading(); }, //v6
+        [&]() { return protoStation.legacy_rightreading(); }, //v6
+        [&]() { return protoStation.legacy_rightstate(); }, //Handle older version 5 attributes
+        [&]() { return protoStation.legacy_right(); } //Handle older version 5 attribute
         ));
     station.setUp(distance(
-        [&]() { return protoStation.has_upreading(); },
-        [&]() { return protoStation.upreading(); },
-        [&]() { return protoStation.upstate(); }, //Handle older version 5 attributes
-        [&]() { return protoStation.up(); } //Handle older version 5 attribute
+        [&]() { return protoStation.has_legacy_upreading(); }, //v6
+        [&]() { return protoStation.legacy_upreading(); }, //v6
+        [&]() { return protoStation.legacy_upstate(); }, //Handle older version 5 attributes
+        [&]() { return protoStation.legacy_up(); } //Handle older version 5 attribute
         ));
     station.setDown(distance(
-        [&]() { return protoStation.has_downreading(); },
-        [&]() { return protoStation.downreading(); },
-        [&]() { return protoStation.downstate(); }, //Handle older version 5 attributes
-        [&]() { return protoStation.down(); } //Handle older version 5 attribute
+        [&]() { return protoStation.has_legacy_downreading(); }, //v6
+        [&]() { return protoStation.legacy_downreading(); }, // v6
+        [&]() { return protoStation.legacy_downstate(); }, //Handle older version 5 attributes
+        [&]() { return protoStation.legacy_down(); } //Handle older version 5 attribute
         ));
 
     //Old version 5 code
@@ -696,38 +697,38 @@ cwShot cwRegionLoadTask::loadShot(const CavewhereProto::Shot& protoShot)
 {
     cwShot shot;
     shot.setDistance(distance(
-        [&]() { return protoShot.has_distancereading(); },
-        [&]() { return protoShot.distancereading(); },
-        [&]() { return protoShot.distancestate(); }, //Handle older version 5 attributes
-        [&]() { return protoShot.distance(); } //Handle older version 5 attribute
+        [&]() { return protoShot.has_legacy_distancereading(); }, //v6
+        [&]() { return protoShot.legacy_distancereading(); }, //v6
+        [&]() { return protoShot.legacy_distancestate(); }, //Handle older version 5 attributes
+        [&]() { return protoShot.legacy_distance(); } //Handle older version 5 attribute
         ));
 
     shot.setCompass(compass(
-        [&]() { return protoShot.has_compassreading(); },
-        [&]() { return protoShot.compassreading(); },
-        [&]() { return protoShot.compassstate(); }, //Handle older version 5 attributes
-        [&]() { return protoShot.compass(); } //Handle older version 5 attribute
+        [&]() { return protoShot.has_legacy_compassreading(); },
+        [&]() { return protoShot.legacy_compassreading(); },
+        [&]() { return protoShot.legacy_compassstate(); }, //Handle older version 5 attributes
+        [&]() { return protoShot.legacy_compass(); } //Handle older version 5 attribute
         ));
 
     shot.setBackCompass(compass(
-        [&]() { return protoShot.has_backcompassreading(); },
-        [&]() { return protoShot.backcompassreading(); },
-        [&]() { return protoShot.backcompassstate(); }, //Handle older version 5 attributes
-        [&]() { return protoShot.backcompass(); } //Handle older version 5 attribute
+        [&]() { return protoShot.has_legacy_backcompassreading(); },
+        [&]() { return protoShot.legacy_backcompassreading(); },
+        [&]() { return protoShot.legacy_backcompassstate(); }, //Handle older version 5 attributes
+        [&]() { return protoShot.legacy_backcompass(); } //Handle older version 5 attribute
         ));
 
     shot.setClino(clino(
-        [&]() { return protoShot.has_clinoreading(); },
-        [&]() { return protoShot.clinoreading(); },
-        [&]() { return protoShot.clinostate(); }, //Handle older version 5 attributes
-        [&]() { return protoShot.clino(); } //Handle older version 5 attribute
+        [&]() { return protoShot.has_legacy_clinoreading(); },
+        [&]() { return protoShot.legacy_clinoreading(); },
+        [&]() { return protoShot.legacy_clinostate(); }, //Handle older version 5 attributes
+        [&]() { return protoShot.legacy_clino(); } //Handle older version 5 attribute
         ));
 
     shot.setBackClino(clino(
-        [&]() { return protoShot.has_backclinoreading(); },
-        [&]() { return protoShot.backclinoreading(); },
-        [&]() { return protoShot.backclinostate(); }, //Handle older version 5 attributes
-        [&]() { return protoShot.backclino(); } //Handle older version 5 attribute
+        [&]() { return protoShot.has_legacy_backclinoreading(); },
+        [&]() { return protoShot.legacy_backclinoreading(); },
+        [&]() { return protoShot.legacy_backclinostate(); }, //Handle older version 5 attributes
+        [&]() { return protoShot.legacy_backclino(); } //Handle older version 5 attribute
         ));
 
     shot.setDistanceIncluded(protoShot.includedistance());
@@ -755,7 +756,7 @@ cwStationPositionLookup cwRegionLoadTask::loadStationPositionLookup(const Cavewh
     cwStationPositionLookup stationLookup;
     for(int i = 0; i < protoStationLookup.stationpositions_size(); i++) {
         const CavewhereProto::StationPositionLookup_NamePosition& namePosition = protoStationLookup.stationpositions(i);
-        QString name = loadString(namePosition.stationname());
+        QString name = LOAD_STRING(namePosition, stationname);
         QVector3D position = loadVector3D(namePosition.position());
         stationLookup.setPosition(name, position);
     }
@@ -779,17 +780,17 @@ cwLead cwRegionLoadTask::loadLead(const CavewhereProto::Lead &protoLead)
 
 cwDistanceReading cwRegionLoadTask::distanceReading(const CavewhereProto::DistanceReading &protoDistanceReading)
 {
-    return cwDistanceReading(loadString(protoDistanceReading.value()));
+    return cwDistanceReading(loadLegacyString(protoDistanceReading.legacy_value()));
 }
 
 cwCompassReading cwRegionLoadTask::compassReading(const CavewhereProto::CompassReading &protoCompassReading)
 {
-    return cwCompassReading(loadString(protoCompassReading.value()));
+    return cwCompassReading(loadLegacyString(protoCompassReading.legacy_value()));
 }
 
 cwClinoReading cwRegionLoadTask::clinoReading(const CavewhereProto::ClinoReading &protoClinoReading)
 {
-    return cwClinoReading(loadString(protoClinoReading.value()));
+    return cwClinoReading(loadLegacyString(protoClinoReading.legacy_value()));
 }
 
 int cwRegionLoadTask::loadFileVersion(const CavewhereProto::CavingRegion &protoRegion)
@@ -803,7 +804,12 @@ int cwRegionLoadTask::loadFileVersion(const CavewhereProto::CavingRegion &protoR
  * @param protoString
  * @return
  */
-QString cwRegionLoadTask::loadString(const QtProto::QString& protoString)
+QString cwRegionLoadTask::loadString(const std::string& protoString)
+{
+    return QString::fromUtf8(QByteArrayView(protoString.c_str(), protoString.length())); //QByteArray::fromStdString(protoString.c_str()));
+}
+
+QString cwRegionLoadTask::loadLegacyString(const QtProto::QString &protoString)
 {
     const std::string& string = protoString.stringdata();
     return QString::fromUtf8(string.c_str(), string.length());

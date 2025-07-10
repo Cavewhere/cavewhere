@@ -187,9 +187,7 @@ private:
     cwErrorModel* ErrorModel;
     QMap<CellIndex, cwErrorModel*> CellErrorModels;
 
-
     cwTrip* ParentTrip;
-    bool Editting; //!< Puts the survey chunk in a edditing state, this will try to keep a empty shot at the end of the chunk
 
     bool shotIndexCheck(int index) const { return index >= 0 && index < Shots.count();  }
     bool stationIndexCheck(int index) const { return index >= 0 && index < Stations.count(); }

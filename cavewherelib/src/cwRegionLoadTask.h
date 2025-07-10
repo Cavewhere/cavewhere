@@ -145,7 +145,8 @@ private:
     int loadFileVersion(const CavewhereProto::CavingRegion& protoRegion);
 
     //Utils
-    QString loadString(const QtProto::QString& protoString);
+    QString loadString(const std::string &protoString);
+    QString loadLegacyString(const QtProto::QString& protoString);
     QDate loadDate(const QtProto::QDate& protoDate);
     QSize loadSize(const QtProto::QSize& protoSize);
     QSizeF loadSizeF(const QtProto::QSizeF &protoSize);
@@ -153,6 +154,34 @@ private:
     QVector3D loadVector3D(const QtProto::QVector3D& protoVector3D);
     QVector2D loadVector2D(const QtProto::QVector2D& protoVector2D);
     QStringList loadStringList(const QtProto::QStringList& protoStringList);
+
+    template<auto HasLegacyFunc, auto LegacyGetFunc, auto GetFunc, typename Proto>
+    QString loadString(Proto protoObj) {
+        if ((protoObj.*HasLegacyFunc)()) {
+            // legacy returns something UTF-8–compatible
+            const std::string& string = (protoObj.*LegacyGetFunc)().stringdata();
+            return QString::fromUtf8(string.c_str(), string.length());
+        } else {
+            // new field is std::string
+            return loadString((protoObj.*GetFunc)());
+        }
+    }
+
+#define LOAD_STRING(proto, Prop) \
+    loadString< \
+            &std::decay_t<decltype(proto)>::has_legacy_##Prop, \
+            &std::decay_t<decltype(proto)>::legacy_##Prop, \
+            &std::decay_t<decltype(proto)>::Prop \
+        >(proto)
+
+    template<typename T>
+    QString loadName(T protoObj) {
+        // LOAD_STRING(protoObj, name);
+        return loadString<&T::has_legacy_name,
+                          &T::legacy_name,
+                          &T::name>
+            (protoObj);
+    }
 
     template<typename F>
     void runAfterConnected(F func) {
@@ -166,21 +195,25 @@ private:
     }
 
     //Returns the distance based on functors
-    template<typename hasReadingFn, typename readingFn, typename stateFn, typename valueFn>
-    cwDistanceReading distance(hasReadingFn hasReading,
-                               readingFn reading,
-                               stateFn state,
-                               valueFn value)
+    template<typename hasReadingFnV6,
+             typename readingFnV6,
+             typename stateFnV5,
+             typename valueFnV5>
+    cwDistanceReading distance(
+        hasReadingFnV6 hasReadingV6,
+        readingFnV6 readingV6,
+        stateFnV5 stateV5,
+        valueFnV5 valueV5)
     {
-        if (hasReading()) {
+        if (hasReadingV6()) {
             //Version 6
-            return distanceReading(reading());
+            return distanceReading(readingV6());
         } else {
             //Version 5, fallback
-            auto s = static_cast<cwDistanceStates::State>(state());
+            auto s = static_cast<cwDistanceStates::State>(stateV5());
             switch (s) {
             case cwDistanceStates::Valid: {
-                return cwDistanceReading(value());
+                return cwDistanceReading(valueV5());
             }
             case cwDistanceStates::Empty: {
                 return cwDistanceReading();
@@ -193,21 +226,26 @@ private:
         }
     };
 
-    template<typename hasReadingFn, typename readingFn, typename stateFn, typename valueFn>
-    cwClinoReading clino(hasReadingFn hasReading,
-                               readingFn reading,
-                               stateFn state,
-                               valueFn value)
+    template<
+        typename hasReadingFnV6,
+        typename readingFnV6,
+        typename stateFnV5,
+        typename valueFnV5>
+    cwClinoReading clino(
+        hasReadingFnV6 hasReadingV6,
+        readingFnV6 readingV6,
+        stateFnV5 stateV5,
+        valueFnV5 valueV5)
     {
-        if (hasReading()) {
+         if (hasReadingV6()) {
             //Version 6
-            return clinoReading(reading());
+            return clinoReading(readingV6());
         } else {
             //Version 5, fallback, use old cwClinoStates
-            auto s = static_cast<cwClinoStates::State>(state());
+            auto s = static_cast<cwClinoStates::State>(stateV5());
             switch (s) {
             case cwClinoStates::Valid:
-                return cwClinoReading(value());
+                return cwClinoReading(valueV5());
             case cwClinoStates::Empty:
                 return cwClinoReading();
             case cwClinoStates::Up:
@@ -222,21 +260,26 @@ private:
         }
     };
 
-    template<typename hasReadingFn, typename readingFn, typename stateFn, typename valueFn>
-    cwCompassReading compass(hasReadingFn hasReading,
-                           readingFn reading,
-                           stateFn state,
-                           valueFn value)
+    template<
+        typename hasReadingFnV6,
+        typename readingFnV6,
+        typename stateFnV5,
+        typename valueFnV5>
+    cwCompassReading compass(
+        hasReadingFnV6 hasReadingV6,
+        readingFnV6 readingV6,
+        stateFnV5 stateV5,
+        valueFnV5 valueV5)
     {
-        if (hasReading()) {
+        if (hasReadingV6()) {
             //Version 6
-            return compassReading(reading());
+            return compassReading(readingV6());
         } else {
             //Version 5, fallback, use old cwClinoStates
-            auto s = static_cast<cwCompassStates::State>(state());
+            auto s = static_cast<cwCompassStates::State>(stateV5());
             switch (s) {
             case cwCompassStates::Valid:
-                return cwCompassReading(value());
+                return cwCompassReading(valueV5());
             case cwCompassStates::Empty:
                 return cwCompassReading();
             default: {
