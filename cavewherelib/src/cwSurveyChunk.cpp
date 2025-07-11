@@ -32,7 +32,8 @@
 cwSurveyChunk::cwSurveyChunk(QObject * parent) :
     QObject(parent),
     ErrorModel(new cwErrorModel(this)),
-    ParentTrip(nullptr)
+    ParentTrip(nullptr),
+    m_id(QUuid::createUuid())
 {
 
     //Handle updating chunk calibration indexing when stations are added
@@ -66,7 +67,8 @@ cwSurveyChunk::cwSurveyChunk(QObject * parent) :
 cwSurveyChunk::cwSurveyChunk(const cwSurveyChunk& chunk) :
     QObject(),
     ErrorModel(new cwErrorModel(this)),
-    ParentTrip(nullptr)
+    ParentTrip(nullptr),
+    m_id(chunk.m_id)
 {
 
     //Copy all the stations
@@ -87,6 +89,7 @@ cwSurveyChunk::cwSurveyChunk(const cwSurveyChunk& chunk) :
 cwSurveyChunk::~cwSurveyChunk()
 {
 }
+
 
 /**
   \brief Checks if the survey Chunk is valid

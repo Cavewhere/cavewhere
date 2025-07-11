@@ -211,13 +211,14 @@ void cwRegionSaveTask::saveSurveyChunk(CavewhereProto::SurveyChunk *protoChunk, 
 
     Q_ASSERT(chunk->stationCount() - 1 == chunk->shotCount());
 
+    saveQUuid(protoChunk->mutable_id(), chunk->id());
 
     for(int i = 0; i < chunk->stationCount(); ++i) {
-        auto station = protoChunk->add_line();
+        auto station = protoChunk->add_leg();
         saveStationShot(station, chunk->station(i));
 
         if(i < chunk->shotCount()) {
-            auto shot = protoChunk->add_line();
+            auto shot = protoChunk->add_leg();
             saveStationShot(shot, chunk->shot(i));
         }
     }
@@ -459,6 +460,11 @@ void cwRegionSaveTask::saveStringList(QtProto::QStringList *protoStringList, QSt
         auto protoString = protoStringList->add_strings();
         saveString(protoString, string);
     }
+}
+
+void cwRegionSaveTask::saveQUuid(std::string *protoString, const QUuid &id)
+{
+    saveString(protoString, id.toString(QUuid::WithoutBraces));
 }
 
 /**

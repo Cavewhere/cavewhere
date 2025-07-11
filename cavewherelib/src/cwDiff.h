@@ -235,6 +235,14 @@ T merge(const T& baseValue,
     return baseValue;
 }
 
+// template<typename T>
+// T merge(base, ours, theirs) {
+//     //Go through the
+// }
+
+
+
+
 };
 
 // template<typename T, typename Container, typename Comparator = std::equal_to<T>>

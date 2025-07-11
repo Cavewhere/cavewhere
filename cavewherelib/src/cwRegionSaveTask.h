@@ -148,6 +148,7 @@ public:
     static void saveVector3D(QtProto::QVector3D* protoVector3D, QVector3D vector3D);
     static void saveVector2D(QtProto::QVector2D* protoVector2D, QVector2D vector2D);
     static void saveStringList(QtProto::QStringList* protoStringList, QStringList stringlist);
+    static void saveQUuid(std::string *protoString, const QUuid& id);
 
     template<typename StringFunc, typename State>
     static void saveReading(StringFunc getProtoString, const cwReading& reading, State emptyState) {

@@ -111,7 +111,8 @@ message SurveyChunk {
     repeated Station stations = 1;
     repeated Shot shots = 2;
     repeated ChunkCalibration calibrations = 3;
-    repeated StationShot line = 4;
+    repeated StationShot leg = 4;
+    optional string id = 5; //UUID
 }
 
 //This is a legacy message, do not use, use StationShot instead

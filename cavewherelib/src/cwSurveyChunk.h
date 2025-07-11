@@ -14,6 +14,7 @@
 #include "cwShot.h"
 #include "cwError.h"
 #include "cwGlobals.h"
+#include <QtCore/quuid.h>
 class cwErrorModel;
 class cwTrip;
 class cwCave;
@@ -69,6 +70,9 @@ public:
     cwSurveyChunk(QObject *parent = 0);
     cwSurveyChunk(const cwSurveyChunk& chunk);
     virtual ~cwSurveyChunk();
+
+    QUuid id() const { return m_id; }
+    void setId(const QUuid id) { m_id = id; }
 
     bool isValid() const;
     bool canAddShot(const cwStation& fromStation, const cwStation& toStation);
@@ -188,6 +192,8 @@ private:
     QMap<CellIndex, cwErrorModel*> CellErrorModels;
 
     cwTrip* ParentTrip;
+
+    QUuid m_id;
 
     bool shotIndexCheck(int index) const { return index >= 0 && index < Shots.count();  }
     bool stationIndexCheck(int index) const { return index >= 0 && index < Stations.count(); }
