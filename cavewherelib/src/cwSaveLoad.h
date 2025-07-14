@@ -89,6 +89,8 @@ public:
     //Base folder
     void saveTrip(const QDir& dir, const cwTrip* trip);
 
+    static std::unique_ptr<CavewhereProto::Trip> toProtoTrip(const cwTrip* trip);
+
     //For testing
     void waitForFinished();
 

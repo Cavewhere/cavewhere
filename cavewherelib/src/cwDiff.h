@@ -4,6 +4,10 @@
 #include <QString>
 #include <QDebug>
 
+namespace google::protobuf {
+class Message;
+}
+
 
 #include <vector>
 #include <algorithm>
@@ -241,7 +245,14 @@ T merge(const T& baseValue,
 // }
 
 
-
+// -----------------------------------------------------------------------------
+// 3) The main recursive merge routine
+// -----------------------------------------------------------------------------
+std::unique_ptr<google::protobuf::Message> mergeMessageByReflection(
+    const google::protobuf::Message& base,
+    const google::protobuf::Message& ours,
+    const google::protobuf::Message& theirs,
+    MergeStrategy strategy);
 
 };
 

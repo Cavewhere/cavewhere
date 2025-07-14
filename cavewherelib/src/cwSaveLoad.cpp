@@ -43,6 +43,14 @@ cwSaveLoad::cwSaveLoad(QObject *parent) :
 
 void cwSaveLoad::saveTrip(const QDir &dir, const cwTrip *trip)
 {
+    auto protoTrip = toProtoTrip(trip);
+
+    const QString filename = QStringLiteral("trip_data.json");
+    d->saveProtoMessage(this, dir.absoluteFilePath(filename), std::move(protoTrip));
+}
+
+std::unique_ptr<CavewhereProto::Trip> cwSaveLoad::toProtoTrip(const cwTrip *trip)
+{
     //Copy trip data into proto, on the main thread
     auto protoTrip = std::make_unique<CavewhereProto::Trip>();
 
@@ -61,8 +69,7 @@ void cwSaveLoad::saveTrip(const QDir &dir, const cwTrip *trip)
         cwRegionSaveTask::saveSurveyChunk(protoChunk, chunk);
     }
 
-    const QString filename = QStringLiteral("trip_data.json");
-    d->saveProtoMessage(this, dir.absoluteFilePath(filename), std::move(protoTrip));
+    return protoTrip;
 }
 
 void cwSaveLoad::waitForFinished()

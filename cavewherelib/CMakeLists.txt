@@ -52,8 +52,8 @@ target_link_libraries(cavewherelib
     QuickQanava
     QuickQanavaplugin
     qquickgit
-    PRIVATE
     protobuf::protobuf
+    PRIVATE
     # surveximg
 )
 
