@@ -3,11 +3,13 @@
 #include <catch2/catch_approx.hpp>
 
 //Our includes
+#include "cwShot.h"
 #include "cwTrip.h"
 #include "cwSaveLoad.h"
 #include "cwRootData.h"
 #include "cwDiff.h"
 #include "cwJobSettings.h"
+#include "cwSurveyChunk.h"
 
 //Qt includes
 #include <QStandardPaths>
@@ -60,16 +62,41 @@ TEST_CASE("cwSaveLoad should save and load cwTrip - complex", "[cwSaveLoad]") {
 
     //Test 3-way merging with protobuf
 
+}
 
+template<typename T>
+void dumpProto(T base, T ours, T theirs, T merged) {
+    QDir dir = testDir();
+    // dir.removeRecursively();
+    dir = testDir();
 
+    dir.mkdir("ours");
+    QDir oursDir = dir;
+    oursDir.cd("ours");
 
+    dir.mkdir("theirs");
+    QDir theirsDir = dir;
+    theirsDir.cd("theirs");
 
+    dir.mkdir("merged");
+    QDir mergedDir = dir;
+    mergedDir.cd("merged");
+
+    cwSaveLoad save;
+
+    save.saveProtoTrip(dir, std::move(base));
+    save.saveProtoTrip(oursDir, std::move(ours));
+    save.saveProtoTrip(theirsDir, std::move(theirs));
+    save.saveProtoTrip(mergedDir, std::move(merged));
+
+    save.waitForFinished();
 }
 
 TEST_CASE("cwSaveLoad should 3-way merge cwTrip correctly", "[cwSaveLoad]") {
     auto root = std::make_unique<cwRootData>();
     auto filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
 
+    //Prevents loop closure from happening
     root->settings()->jobSettings()->setAutomaticUpdate(false);
 
     root->project()->loadFile(filename);
@@ -171,5 +198,157 @@ TEST_CASE("cwSaveLoad should 3-way merge cwTrip correctly", "[cwSaveLoad]") {
         }
     }
 
+    SECTION("Change the update the chunk data") {
+
+        SECTION("Add new chunk") {
+            cwStation fromStation;
+            fromStation.setName("a1");
+
+            cwStation toStation;
+            toStation.setName("test1");
+
+            cwShot shot;
+            shot.setDistance(cwDistanceReading("20.1"));
+            shot.setClino(cwClinoReading("10.2"));
+            shot.setCompass(cwCompassReading("7.3"));
+
+            trip->addShotToLastChunk(fromStation, toStation, shot);
+
+            SECTION("Ours") {
+                auto change = cwSaveLoad::toProtoTrip(trip);
+
+                const google::protobuf::Message& baseRef = (*base.get());
+                const google::protobuf::Message& oursRef = (*change.get());
+                const google::protobuf::Message& thiersRef = (*base.get());
+
+                auto mergedTrip = cwDiff::mergeMessageByReflection(baseRef,
+                                                                   oursRef,
+                                                                   thiersRef,
+                                                                   cwDiff::MergeStrategy::UseOursOnConflict);
+                auto mergedTripPtr = [&]()->std::unique_ptr<CavewhereProto::Trip> {
+                    if(auto raw = dynamic_cast<CavewhereProto::Trip*>(mergedTrip.get())) {
+                        mergedTrip.release();
+                        return std::unique_ptr<CavewhereProto::Trip>(raw);
+                    }
+                    return nullptr;
+                }();
+                REQUIRE(mergedTripPtr != nullptr);
+
+                CHECK(!google::protobuf::util::MessageDifferencer::Equals(*base, *mergedTripPtr));
+                CHECK(google::protobuf::util::MessageDifferencer::Equals(*change, *mergedTripPtr));
+
+                //TODO make sure merge changes are real
+
+                // dumpProto(std::move(base),
+                //           std::move(change),
+                //           std::unique_ptr<CavewhereProto::Trip>(nullptr),
+                //           std::move(mergedTripPtr));
+
+            }
+
+            SECTION("Concat ours / thiers") {
+                auto ourChange = cwSaveLoad::toProtoTrip(trip);
+
+                auto lastChunkIndex = trip->chunkCount() - 1;
+                trip->removeChunks(lastChunkIndex, lastChunkIndex);
+
+                cwStation fromStation;
+                fromStation.setName("a2");
+
+                cwStation toStation;
+                toStation.setName("c10");
+
+                cwShot shot;
+                shot.setDistance(cwDistanceReading("21.1"));
+                shot.setClino(cwClinoReading("11.2"));
+                shot.setCompass(cwCompassReading("71.3"));
+
+                trip->addShotToLastChunk(fromStation, toStation, shot);
+
+                auto theirsChange = cwSaveLoad::toProtoTrip(trip);
+
+                const google::protobuf::Message& baseRef = (*base.get());
+                const google::protobuf::Message& oursRef = (*ourChange.get());
+                const google::protobuf::Message& thiersRef = (*theirsChange.get());
+
+                auto mergedTrip = cwDiff::mergeMessageByReflection(baseRef,
+                                                                   oursRef,
+                                                                   thiersRef,
+                                                                   cwDiff::MergeStrategy::UseOursOnConflict);
+                auto mergedTripPtr = [&]()->std::unique_ptr<CavewhereProto::Trip> {
+                    if(auto raw = dynamic_cast<CavewhereProto::Trip*>(mergedTrip.get())) {
+                        mergedTrip.release();
+                        return std::unique_ptr<CavewhereProto::Trip>(raw);
+                    }
+                    return nullptr;
+                }();
+                REQUIRE(mergedTripPtr != nullptr);
+
+                CHECK(!google::protobuf::util::MessageDifferencer::Equals(*base, *mergedTripPtr));
+                CHECK(!google::protobuf::util::MessageDifferencer::Equals(*ourChange, *mergedTripPtr));
+                CHECK(!google::protobuf::util::MessageDifferencer::Equals(*theirsChange, *mergedTripPtr));
+
+                //TODO make sure merge changes are real
+
+                // dumpProto(std::move(base),
+                //           std::move(ourChange),
+                //           std::move(theirsChange),
+                //           std::move(mergedTripPtr));
+            }
+        }
+
+        SECTION("Change station name and add shot at end") {
+
+            auto ourLastChunk = trip->chunk(trip->chunkCount() - 1);
+            auto ourLastStation = ourLastChunk->stationCount() - 1;
+            auto baseLastStationName = ourLastChunk->station(ourLastStation).name();
+            ourLastChunk->setData(cwSurveyChunk::StationNameRole, ourLastStation, "d1");
+            auto ourChange = cwSaveLoad::toProtoTrip(trip);
+
+            //Change it back
+            ourLastChunk->setData(cwSurveyChunk::StationNameRole, ourLastStation, baseLastStationName);
+
+            //Thiers
+            auto chunk = trip->chunk(trip->chunkCount() - 1);
+
+            auto lastShot = chunk->shotCount() - 1;
+            chunk->setData(cwSurveyChunk::ShotDistanceRole, lastShot, "30.2");
+            chunk->setData(cwSurveyChunk::ShotCompassRole, lastShot, "123.1");
+            chunk->setData(cwSurveyChunk::ShotClinoRole, lastShot, "23.4");
+
+            auto lastStation = chunk->stationCount() - 1;
+            chunk->setData(cwSurveyChunk::StationNameRole, lastStation, "c4");
+
+            auto theirsChange = cwSaveLoad::toProtoTrip(trip);
+
+            const google::protobuf::Message& baseRef = (*base.get());
+            const google::protobuf::Message& oursRef = (*ourChange.get());
+            const google::protobuf::Message& thiersRef = (*theirsChange.get());
+
+            auto mergedTrip = cwDiff::mergeMessageByReflection(baseRef,
+                                                               oursRef,
+                                                               thiersRef,
+                                                               cwDiff::MergeStrategy::UseOursOnConflict);
+            auto mergedTripPtr = [&]()->std::unique_ptr<CavewhereProto::Trip> {
+                if(auto raw = dynamic_cast<CavewhereProto::Trip*>(mergedTrip.get())) {
+                    mergedTrip.release();
+                    return std::unique_ptr<CavewhereProto::Trip>(raw);
+                }
+                return nullptr;
+            }();
+            REQUIRE(mergedTripPtr != nullptr);
+
+            CHECK(!google::protobuf::util::MessageDifferencer::Equals(*base, *mergedTripPtr));
+            CHECK(!google::protobuf::util::MessageDifferencer::Equals(*ourChange, *mergedTripPtr));
+            CHECK(!google::protobuf::util::MessageDifferencer::Equals(*theirsChange, *mergedTripPtr));
+
+            //TODO make sure merge changes are real
+
+            // dumpProto(std::move(base),
+            //           std::move(ourChange),
+            //           std::move(theirsChange),
+            //           std::move(mergedTripPtr));
+        }
+    }
 }
 

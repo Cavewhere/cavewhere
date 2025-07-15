@@ -66,59 +66,70 @@ void mergeRepeated(
     //replay exactly like mergeList, but Copy/Merge messages
     size_t baseIdx = 0, oursIdx = 0, theirsIdx = 0;
     size_t oursE = 0, thiersE = 0;
-    while (baseIdx < baseSubs.size() || oursE < oursEdits.size() || thiersE < theirsEdits.size()) {
+    while (baseIdx < baseSubs.size()
+           || oursE < oursEdits.size()
+           || thiersE < theirsEdits.size())
+    {
         bool oursDel = (oursE < oursEdits.size()
                         && oursEdits[oursE].operation == cwDiff::EditOperation::Delete
                         && oursEdits[oursE].positionOld == baseIdx);
         bool thiersDel = (thiersE < theirsEdits.size()
                           && theirsEdits[thiersE].operation == cwDiff::EditOperation::Delete
                           && theirsEdits[thiersE].positionOld == baseIdx);
-        bool oursIns = (oursE < oursEdits.size()
+        bool oursInserted = (oursE < oursEdits.size()
                         && oursEdits[oursE].operation == cwDiff::EditOperation::Insert
                         && oursEdits[oursE].positionOld == baseIdx);
-        bool thiersIns = (thiersE < theirsEdits.size()
+        bool thiersInserted = (thiersE < theirsEdits.size()
                           && theirsEdits[thiersE].operation == cwDiff::EditOperation::Insert
                           && theirsEdits[thiersE].positionOld == baseIdx);
 
         // both inserted → conflict or identical
-        if (oursIns && thiersIns) {
-            auto const& oSub = oursSubs[oursEdits[oursE].positionNew];
-            auto const& tSub = theirsSubs[theirsEdits[thiersE].positionNew];
-            if (fieldEqualsFunc(oSub, tSub)) {
-                // if (extractId(*oSub, idFieldDesc) == extractId(*tSub, idFieldDesc)) {
-                // same data → do full merge
+        if (oursInserted && thiersInserted) {
+            auto const& oursSub = oursSubs[oursEdits[oursE].positionNew];
+            auto const& thiersSub = theirsSubs[theirsEdits[thiersE].positionNew];
+            if (fieldEqualsFunc(oursSub, thiersSub)) {
+
+                //They are the same, just add ours
                 if constexpr (std::is_same_v<std::remove_cv_t<std::remove_pointer_t<Type>>, google::protobuf::Message>) {
                     //Merge the message
-                    auto merged = mergeMessageByReflection(*baseSubs[baseIdx],
-                                                           *oSub,
-                                                           *tSub,
-                                                           p.strategy);
-                    add(*merged);
+                    std::cout << "ours:" << oursSub->DebugString();
+                    std::cout << "theirs:" << thiersSub->DebugString();
+                    std::cout << "Equals:" << fieldEqualsFunc(oursSub, thiersSub);
+
+                    add(*oursSub);
+
+                    // auto merged = mergeMessageByReflection(*baseSubs[baseIdx],
+                    //                                        *oursSub,
+                    //                                        *thiersSub,
+                    //                                        p.strategy);
+                    // add(*merged);
                 } else {
                     //Merge the scalar
-                    auto merged = merge(baseSubs[baseIdx],
-                                        oSub,
-                                        tSub,
-                                        p.strategy,
-                                        fieldEqualsFunc);
-                    add(merged);
+                    add(oursSub);
+
+                    // auto merged = merge(baseSubs[baseIdx],
+                    //                     oursSub,
+                    //                     thiersSub,
+                    //                     p.strategy,
+                    //                     fieldEqualsFunc);
+                    // add(merged);
 
                 }
 
             } else {
                 // different data → append both
                 if constexpr (std::is_pointer<Type>()) {
-                    add(*oSub);
-                    add(*tSub);
+                    add(*oursSub);
+                    add(*thiersSub);
                 } else {
-                    add(oSub);
-                    add(tSub);
+                    add(oursSub);
+                    add(thiersSub);
                 }
             }
             ++oursE; ++thiersE;
             continue;
         }
-        if (oursIns) {
+        if (oursInserted) {
             if constexpr(std::is_pointer<Type>()) {
                 add(*oursSubs.at(oursEdits.at(oursE).positionNew));
             } else {
@@ -128,7 +139,7 @@ void mergeRepeated(
             ++oursE;
             continue;
         }
-        if (thiersIns) {
+        if (thiersInserted) {
             if constexpr(std::is_pointer<Type>()) {
                 add(*theirsSubs.at(theirsEdits.at(thiersE).positionNew));
             } else {
@@ -548,99 +559,103 @@ std::unique_ptr<google::protobuf::Message> mergeMessageByReflection(const google
         }
         // --- scalars / enums / strings
         else {
-            bool hasBase   = reflection->HasField(base,   field);
-            bool hasOurs   = reflection->HasField(ours,   field);
-            bool hasTheirs = reflection->HasField(theirs, field);
+            const bool hasBase   = reflection->HasField(base,   field);
+            const bool hasOurs   = reflection->HasField(ours,   field);
+            const bool hasTheirs = reflection->HasField(theirs, field);
+            const bool fieldExistChanged = hasBase != hasOurs || hasBase != hasTheirs || hasBase;
 
-            switch (field->cpp_type()) {
-            case google::protobuf::FieldDescriptor::CPPTYPE_INT32: {
-                int32_t b = hasBase   ? reflection->GetInt32(base,   field) : 0;
-                int32_t o = hasOurs   ? reflection->GetInt32(ours,   field) : b;
-                int32_t t = hasTheirs ? reflection->GetInt32(theirs, field) : b;
-                int32_t m = merge(b, o, t, strategy);
-                resReflection->SetInt32(result.get(), field, m);
-                break;
-            }
+            if(fieldExistChanged) {
+                switch (field->cpp_type()) {
+                case google::protobuf::FieldDescriptor::CPPTYPE_INT32: {
 
-            case google::protobuf::FieldDescriptor::CPPTYPE_INT64: {
-                int64_t b = hasBase   ? reflection->GetInt64(base,   field) : 0;
-                int64_t o = hasOurs   ? reflection->GetInt64(ours,   field) : b;
-                int64_t t = hasTheirs ? reflection->GetInt64(theirs, field) : b;
-                int64_t m = merge(b, o, t, strategy);
-                resReflection->SetInt64(result.get(), field, m);
-                break;
-            }
+                    int32_t b = hasBase   ? reflection->GetInt32(base,   field) : 0;
+                    int32_t o = hasOurs   ? reflection->GetInt32(ours,   field) : b;
+                    int32_t t = hasTheirs ? reflection->GetInt32(theirs, field) : b;
+                    int32_t m = merge(b, o, t, strategy);
+                    resReflection->SetInt32(result.get(), field, m);
+                    break;
+                }
 
-            case google::protobuf::FieldDescriptor::CPPTYPE_UINT32: {
-                uint32_t b = hasBase   ? reflection->GetUInt32(base,   field) : 0u;
-                uint32_t o = hasOurs   ? reflection->GetUInt32(ours,   field) : b;
-                uint32_t t = hasTheirs ? reflection->GetUInt32(theirs, field) : b;
-                uint32_t m = merge(b, o, t, strategy);
-                resReflection->SetUInt32(result.get(), field, m);
-                break;
-            }
+                case google::protobuf::FieldDescriptor::CPPTYPE_INT64: {
+                    int64_t b = hasBase   ? reflection->GetInt64(base,   field) : 0;
+                    int64_t o = hasOurs   ? reflection->GetInt64(ours,   field) : b;
+                    int64_t t = hasTheirs ? reflection->GetInt64(theirs, field) : b;
+                    int64_t m = merge(b, o, t, strategy);
+                    resReflection->SetInt64(result.get(), field, m);
+                    break;
+                }
 
-            case google::protobuf::FieldDescriptor::CPPTYPE_UINT64: {
-                uint64_t b = hasBase   ? reflection->GetUInt64(base,   field) : 0ull;
-                uint64_t o = hasOurs   ? reflection->GetUInt64(ours,   field) : b;
-                uint64_t t = hasTheirs ? reflection->GetUInt64(theirs, field) : b;
-                uint64_t m = merge(b, o, t, strategy);
-                resReflection->SetUInt64(result.get(), field, m);
-                break;
-            }
+                case google::protobuf::FieldDescriptor::CPPTYPE_UINT32: {
+                    uint32_t b = hasBase   ? reflection->GetUInt32(base,   field) : 0u;
+                    uint32_t o = hasOurs   ? reflection->GetUInt32(ours,   field) : b;
+                    uint32_t t = hasTheirs ? reflection->GetUInt32(theirs, field) : b;
+                    uint32_t m = merge(b, o, t, strategy);
+                    resReflection->SetUInt32(result.get(), field, m);
+                    break;
+                }
 
-            case google::protobuf::FieldDescriptor::CPPTYPE_DOUBLE: {
-                double b = hasBase   ? reflection->GetDouble(base,   field) : 0.0;
-                double o = hasOurs   ? reflection->GetDouble(ours,   field) : b;
-                double t = hasTheirs ? reflection->GetDouble(theirs, field) : b;
-                double m = merge(b, o, t, strategy);
-                resReflection->SetDouble(result.get(), field, m);
-                break;
-            }
+                case google::protobuf::FieldDescriptor::CPPTYPE_UINT64: {
+                    uint64_t b = hasBase   ? reflection->GetUInt64(base,   field) : 0ull;
+                    uint64_t o = hasOurs   ? reflection->GetUInt64(ours,   field) : b;
+                    uint64_t t = hasTheirs ? reflection->GetUInt64(theirs, field) : b;
+                    uint64_t m = merge(b, o, t, strategy);
+                    resReflection->SetUInt64(result.get(), field, m);
+                    break;
+                }
 
-            case google::protobuf::FieldDescriptor::CPPTYPE_FLOAT: {
-                float b = hasBase   ? reflection->GetFloat(base,   field) : 0.0f;
-                float o = hasOurs   ? reflection->GetFloat(ours,   field) : b;
-                float t = hasTheirs ? reflection->GetFloat(theirs, field) : b;
-                float m = merge(b, o, t, strategy);
-                resReflection->SetFloat(result.get(), field, m);
-                break;
-            }
+                case google::protobuf::FieldDescriptor::CPPTYPE_DOUBLE: {
+                    double b = hasBase   ? reflection->GetDouble(base,   field) : 0.0;
+                    double o = hasOurs   ? reflection->GetDouble(ours,   field) : b;
+                    double t = hasTheirs ? reflection->GetDouble(theirs, field) : b;
+                    double m = merge(b, o, t, strategy);
+                    resReflection->SetDouble(result.get(), field, m);
+                    break;
+                }
 
-            case google::protobuf::FieldDescriptor::CPPTYPE_BOOL: {
-                bool b = hasBase   ? reflection->GetBool(base,   field) : false;
-                bool o = hasOurs   ? reflection->GetBool(ours,   field) : b;
-                bool t = hasTheirs ? reflection->GetBool(theirs, field) : b;
-                bool m = merge(b, o, t, strategy);
-                resReflection->SetBool(result.get(), field, m);
-                break;
-            }
+                case google::protobuf::FieldDescriptor::CPPTYPE_FLOAT: {
+                    float b = hasBase   ? reflection->GetFloat(base,   field) : 0.0f;
+                    float o = hasOurs   ? reflection->GetFloat(ours,   field) : b;
+                    float t = hasTheirs ? reflection->GetFloat(theirs, field) : b;
+                    float m = merge(b, o, t, strategy);
+                    resReflection->SetFloat(result.get(), field, m);
+                    break;
+                }
 
-            case google::protobuf::FieldDescriptor::CPPTYPE_ENUM: {
-                int    b = hasBase   ? reflection->GetEnumValue(base,   field) : 0;
-                int    o = hasOurs   ? reflection->GetEnumValue(ours,   field) : b;
-                int    t = hasTheirs ? reflection->GetEnumValue(theirs, field) : b;
-                int    m = merge(b, o, t, strategy);
-                resReflection->SetEnumValue(result.get(), field, m);
-                break;
-            }
+                case google::protobuf::FieldDescriptor::CPPTYPE_BOOL: {
+                    bool b = hasBase   ? reflection->GetBool(base,   field) : false;
+                    bool o = hasOurs   ? reflection->GetBool(ours,   field) : b;
+                    bool t = hasTheirs ? reflection->GetBool(theirs, field) : b;
+                    bool m = merge(b, o, t, strategy);
+                    resReflection->SetBool(result.get(), field, m);
+                    break;
+                }
 
-            case google::protobuf::FieldDescriptor::CPPTYPE_STRING: {
-                std::string b = hasBase   ? reflection->GetString(base,   field) : std::string{};
-                std::string o = hasOurs   ? reflection->GetString(ours,   field) : b;
-                std::string t = hasTheirs ? reflection->GetString(theirs, field) : b;
-                std::string m = merge(b, o, t, strategy);
-                resReflection->SetString(result.get(), field, m);
-                break;
-            }
-            // … handle CPPTYPE_DOUBLE, BOOL, ENUM similarly …
-            default: {
-                // // fallback: prefer ours, then theirs, then base
-                // if (hasOurs)   resReflection->CopyField(result.get(), ours,   field);
-                // else if (hasTheirs) resReflection->CopyField(result.get(), theirs, field);
-                // else if (hasBase)   resReflection->CopyField(result.get(), base,   field);
-                // break;
-            }
+                case google::protobuf::FieldDescriptor::CPPTYPE_ENUM: {
+                    int    b = hasBase   ? reflection->GetEnumValue(base,   field) : 0;
+                    int    o = hasOurs   ? reflection->GetEnumValue(ours,   field) : b;
+                    int    t = hasTheirs ? reflection->GetEnumValue(theirs, field) : b;
+                    int    m = merge(b, o, t, strategy);
+                    resReflection->SetEnumValue(result.get(), field, m);
+                    break;
+                }
+
+                case google::protobuf::FieldDescriptor::CPPTYPE_STRING: {
+                    std::string b = hasBase   ? reflection->GetString(base,   field) : std::string{};
+                    std::string o = hasOurs   ? reflection->GetString(ours,   field) : b;
+                    std::string t = hasTheirs ? reflection->GetString(theirs, field) : b;
+                    std::string m = merge(b, o, t, strategy);
+                    resReflection->SetString(result.get(), field, m);
+                    break;
+                }
+                // … handle CPPTYPE_DOUBLE, BOOL, ENUM similarly …
+                default: {
+                    // // fallback: prefer ours, then theirs, then base
+                    // if (hasOurs)   resReflection->CopyField(result.get(), ours,   field);
+                    // else if (hasTheirs) resReflection->CopyField(result.get(), theirs, field);
+                    // else if (hasBase)   resReflection->CopyField(result.get(), base,   field);
+                    // break;
+                }
+                }
             }
         }
     }

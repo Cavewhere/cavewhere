@@ -88,6 +88,7 @@ public:
 
     //Base folder
     void saveTrip(const QDir& dir, const cwTrip* trip);
+    void saveProtoTrip(const QDir& dir, std::unique_ptr<CavewhereProto::Trip> protoTrip);
 
     static std::unique_ptr<CavewhereProto::Trip> toProtoTrip(const cwTrip* trip);
 
@@ -101,5 +102,6 @@ private:
 
 
 };
+
 
 #endif // CWSAVELOAD_H

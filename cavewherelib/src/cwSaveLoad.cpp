@@ -44,9 +44,16 @@ cwSaveLoad::cwSaveLoad(QObject *parent) :
 void cwSaveLoad::saveTrip(const QDir &dir, const cwTrip *trip)
 {
     auto protoTrip = toProtoTrip(trip);
+    saveProtoTrip(dir, std::move(protoTrip));
 
-    const QString filename = QStringLiteral("trip_data.json");
-    d->saveProtoMessage(this, dir.absoluteFilePath(filename), std::move(protoTrip));
+}
+
+void cwSaveLoad::saveProtoTrip(const QDir &dir, std::unique_ptr<CavewhereProto::Trip> protoTrip)
+{
+    if(protoTrip) {
+        const QString filename = QStringLiteral("trip_data.json");
+        d->saveProtoMessage(this, dir.absoluteFilePath(filename), std::move(protoTrip));
+    }
 }
 
 std::unique_ptr<CavewhereProto::Trip> cwSaveLoad::toProtoTrip(const cwTrip *trip)
