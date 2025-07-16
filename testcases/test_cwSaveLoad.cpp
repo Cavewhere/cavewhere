@@ -21,6 +21,7 @@
 #include <google/protobuf/message.h>
 #include <google/protobuf/util/message_differencer.h>
 #include "cavewhere.pb.h"
+using namespace google::protobuf;
 
 QDir testDir() {
     QString desktopPath = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
@@ -29,6 +30,207 @@ QDir testDir() {
     dir.cd("trip");
     return dir;
 }
+
+
+// deep‑compare a & b, but skip ANY field whose descriptor
+// appears in excludedFields
+bool compareMessagesIgnoring(
+    const Message& a,
+    const Message& b,
+    const std::set<const FieldDescriptor*>& excludedFields)
+{
+    // same object?
+    if (&a == &b) {
+        return true;
+    }
+
+    // byte‑for‑byte equal?
+    if (util::MessageDifferencer::Equals(a, b)) {
+        return true;
+    }
+
+    // must be same type
+    const Descriptor* desc = a.GetDescriptor();
+    if (desc != b.GetDescriptor()) {
+        return false;
+    }
+
+    const Reflection* reflA = a.GetReflection();
+    const Reflection* reflB = b.GetReflection();
+
+    // iterate every field in the descriptor
+    for (int i = 0; i < desc->field_count(); ++i) {
+        const FieldDescriptor* field = desc->field(i);
+        // qDebug() << "Field:" << i << field->DebugString();
+
+        // skip this field entirely if asked
+        if (excludedFields.count(field)) {
+            // qDebug() << "\t excluded!";
+            continue;
+        }
+
+        // handle repeated fields
+        if (field->is_repeated()) {
+            int sizeA = reflA->FieldSize(a, field);
+            int sizeB = reflB->FieldSize(b, field);
+            if (sizeA != sizeB) {
+                // qDebug() << "\tRepeated is different sizes!";
+                return false;
+            }
+
+            for (int idx = 0; idx < sizeA; ++idx) {
+                if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
+                    const Message& subA = reflA->GetRepeatedMessage(a, field, idx);
+                    const Message& subB = reflB->GetRepeatedMessage(b, field, idx);
+                    // qDebug() << "\tSub message!";
+                    if (!compareMessagesIgnoring(subA, subB, excludedFields)) {
+                        return false;
+                    }
+                }
+                else {
+                    // primitive or enum or string
+                    switch (field->cpp_type()) {
+                    case FieldDescriptor::CPPTYPE_INT32:
+                        if (reflA->GetRepeatedInt32(a, field, idx)
+                            != reflB->GetRepeatedInt32(b, field, idx)) {
+                            return false;
+                        }
+                        break;
+                    case FieldDescriptor::CPPTYPE_INT64:
+                        if (reflA->GetRepeatedInt64(a, field, idx)
+                            != reflB->GetRepeatedInt64(b, field, idx)) {
+                            return false;
+                        }
+                        break;
+                    case FieldDescriptor::CPPTYPE_UINT32:
+                        if (reflA->GetRepeatedUInt32(a, field, idx)
+                            != reflB->GetRepeatedUInt32(b, field, idx)) {
+                            return false;
+                        }
+                        break;
+                    case FieldDescriptor::CPPTYPE_UINT64:
+                        if (reflA->GetRepeatedUInt64(a, field, idx)
+                            != reflB->GetRepeatedUInt64(b, field, idx)) {
+                            return false;
+                        }
+                        break;
+                    case FieldDescriptor::CPPTYPE_DOUBLE:
+                        if (reflA->GetRepeatedDouble(a, field, idx)
+                            != reflB->GetRepeatedDouble(b, field, idx)) {
+                            return false;
+                        }
+                        break;
+                    case FieldDescriptor::CPPTYPE_FLOAT:
+                        if (reflA->GetRepeatedFloat(a, field, idx)
+                            != reflB->GetRepeatedFloat(b, field, idx)) {
+                            return false;
+                        }
+                        break;
+                    case FieldDescriptor::CPPTYPE_BOOL:
+                        if (reflA->GetRepeatedBool(a, field, idx)
+                            != reflB->GetRepeatedBool(b, field, idx)) {
+                            return false;
+                        }
+                        break;
+                    case FieldDescriptor::CPPTYPE_ENUM:
+                        if (reflA->GetRepeatedEnumValue(a, field, idx)
+                            != reflB->GetRepeatedEnumValue(b, field, idx)) {
+                            return false;
+                        }
+                        break;
+                    case FieldDescriptor::CPPTYPE_STRING:
+                        if (reflA->GetRepeatedString(a, field, idx)
+                            != reflB->GetRepeatedString(b, field, idx)) {
+                            return false;
+                        }
+                        break;
+                    default:
+                        return false;  // unknown type
+                    }
+                }
+            }
+        }
+        // singular field
+        else {
+            bool hasA = reflA->HasField(a, field);
+            bool hasB = reflB->HasField(b, field);
+            if (hasA != hasB) return false;
+            if (!hasA) continue;  // both unset → OK
+
+            if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
+                const Message& subA = reflA->GetMessage(a, field);
+                const Message& subB = reflB->GetMessage(b, field);
+                if (!compareMessagesIgnoring(subA, subB, excludedFields)) {
+                    return false;
+                }
+            }
+            else {
+                switch (field->cpp_type()) {
+                case FieldDescriptor::CPPTYPE_INT32:
+                    if (reflA->GetInt32(a, field)
+                        != reflB->GetInt32(b, field)) {
+                        return false;
+                    }
+                    break;
+                case FieldDescriptor::CPPTYPE_INT64:
+                    if (reflA->GetInt64(a, field)
+                        != reflB->GetInt64(b, field)) {
+                        return false;
+                    }
+                    break;
+                case FieldDescriptor::CPPTYPE_UINT32:
+                    if (reflA->GetUInt32(a, field)
+                        != reflB->GetUInt32(b, field)) {
+                        return false;
+                    }
+                    break;
+                case FieldDescriptor::CPPTYPE_UINT64:
+                    if (reflA->GetUInt64(a, field)
+                        != reflB->GetUInt64(b, field)) {
+                        return false;
+                    }
+                    break;
+                case FieldDescriptor::CPPTYPE_DOUBLE:
+                    if (reflA->GetDouble(a, field)
+                        != reflB->GetDouble(b, field)) {
+                        return false;
+                    }
+                    break;
+                case FieldDescriptor::CPPTYPE_FLOAT:
+                    if (reflA->GetFloat(a, field)
+                        != reflB->GetFloat(b, field)) {
+                        return false;
+                    }
+                    break;
+                case FieldDescriptor::CPPTYPE_BOOL:
+                    if (reflA->GetBool(a, field)
+                        != reflB->GetBool(b, field)) {
+                        return false;
+                    }
+                    break;
+                case FieldDescriptor::CPPTYPE_ENUM:
+                    if (reflA->GetEnumValue(a, field)
+                        != reflB->GetEnumValue(b, field)) {
+                        return false;
+                    }
+                    break;
+                case FieldDescriptor::CPPTYPE_STRING:
+                    if (reflA->GetString(a, field)
+                        != reflB->GetString(b, field)) {
+                        return false;
+                    }
+                    break;
+                default:
+                    return false;  // unknown type
+                }
+            }
+        }
+    }
+
+    // all fields matched
+    return true;
+}
+
 
 TEST_CASE("cwSaveLoad should save and load cwTrip - empty", "[cwSaveLoad]") {
     auto dir = testDir();
@@ -238,6 +440,34 @@ TEST_CASE("cwSaveLoad should 3-way merge cwTrip correctly", "[cwSaveLoad]") {
                 CHECK(google::protobuf::util::MessageDifferencer::Equals(*change, *mergedTripPtr));
 
                 //TODO make sure merge changes are real
+                REQUIRE(mergedTripPtr->chunks_size() == 5);
+
+                auto newChunk = mergedTripPtr->chunks(4);
+                REQUIRE(newChunk.leg_size() == 3);
+
+                int chunksFieldNumber = 5;
+                auto chunkField = base->descriptor()->FindFieldByNumber(5);
+                CHECK(compareMessagesIgnoring(*base, *mergedTripPtr, {chunkField}));
+
+                REQUIRE(base->chunks_size() == 4);
+                for(int i = 0; i < base->chunks_size(); ++i) {
+                    auto baseChunk = base->chunks(i);
+                    auto mergedChunk = mergedTripPtr->chunks(i);
+                    CHECK(google::protobuf::util::MessageDifferencer::Equals(baseChunk, mergedChunk));
+                }
+
+                CHECK(newChunk.leg(0).has_name());
+                CHECK(newChunk.leg(0).name() == "a1");
+
+                CHECK(newChunk.leg(1).has_distance());
+                CHECK(newChunk.leg(1).distance() == "20.1");
+                CHECK(newChunk.leg(1).has_clino());
+                CHECK(newChunk.leg(1).clino() == "10.2");
+                CHECK(newChunk.leg(1).has_compass());
+                CHECK(newChunk.leg(1).compass() == "7.3");
+
+                CHECK(newChunk.leg(2).has_name());
+                CHECK(newChunk.leg(2).name() == "test1");
 
                 // dumpProto(std::move(base),
                 //           std::move(change),
@@ -288,7 +518,50 @@ TEST_CASE("cwSaveLoad should 3-way merge cwTrip correctly", "[cwSaveLoad]") {
                 CHECK(!google::protobuf::util::MessageDifferencer::Equals(*ourChange, *mergedTripPtr));
                 CHECK(!google::protobuf::util::MessageDifferencer::Equals(*theirsChange, *mergedTripPtr));
 
-                //TODO make sure merge changes are real
+                int chunksFieldNumber = 5;
+                auto chunkField = base->descriptor()->FindFieldByNumber(5);
+                CHECK(compareMessagesIgnoring(*base, *mergedTripPtr, {chunkField}));
+
+                REQUIRE(mergedTripPtr->chunks_size() == 6);
+                REQUIRE(base->chunks_size() == 4);
+                for(int i = 0; i < base->chunks_size(); ++i) {
+                    auto baseChunk = base->chunks(i);
+                    auto mergedChunk = mergedTripPtr->chunks(i);
+                    CHECK(google::protobuf::util::MessageDifferencer::Equals(baseChunk, mergedChunk));
+                }
+
+                auto newChunkOurs = mergedTripPtr->chunks(4);
+                REQUIRE(newChunkOurs.leg_size() == 3);
+
+                CHECK(newChunkOurs.leg(0).has_name());
+                CHECK(newChunkOurs.leg(0).name() == "a1");
+
+                CHECK(newChunkOurs.leg(1).has_distance());
+                CHECK(newChunkOurs.leg(1).distance() == "20.1");
+                CHECK(newChunkOurs.leg(1).has_clino());
+                CHECK(newChunkOurs.leg(1).clino() == "10.2");
+                CHECK(newChunkOurs.leg(1).has_compass());
+                CHECK(newChunkOurs.leg(1).compass() == "7.3");
+
+                CHECK(newChunkOurs.leg(2).has_name());
+                CHECK(newChunkOurs.leg(2).name() == "test1");
+
+                auto newChunkTheirs = mergedTripPtr->chunks(5);
+                REQUIRE(newChunkTheirs.leg_size() == 3);
+
+                CHECK(newChunkTheirs.leg(0).has_name());
+                CHECK(newChunkTheirs.leg(0).name() == "a2");
+
+                CHECK(newChunkTheirs.leg(1).has_distance());
+                CHECK(newChunkTheirs.leg(1).distance() == "21.1");
+                CHECK(newChunkTheirs.leg(1).has_clino());
+                CHECK(newChunkTheirs.leg(1).clino() == "11.2");
+                CHECK(newChunkTheirs.leg(1).has_compass());
+                CHECK(newChunkTheirs.leg(1).compass() == "71.3");
+
+                CHECK(newChunkTheirs.leg(2).has_name());
+                CHECK(newChunkTheirs.leg(2).name() == "c10");
+
 
                 // dumpProto(std::move(base),
                 //           std::move(ourChange),
@@ -342,13 +615,59 @@ TEST_CASE("cwSaveLoad should 3-way merge cwTrip correctly", "[cwSaveLoad]") {
             CHECK(!google::protobuf::util::MessageDifferencer::Equals(*ourChange, *mergedTripPtr));
             CHECK(!google::protobuf::util::MessageDifferencer::Equals(*theirsChange, *mergedTripPtr));
 
-            //TODO make sure merge changes are real
+            int chunksFieldNumber = 5;
+            auto chunkField = base->descriptor()->FindFieldByNumber(5);
+            CHECK(compareMessagesIgnoring(*base, *mergedTripPtr, {chunkField}));
+
+            REQUIRE(mergedTripPtr->chunks_size() == 4);
+            REQUIRE(base->chunks_size() == 4);
+
+            //Skip the last chunk, because that's the one we changed
+            for(int i = 0; i < 3; ++i) {
+                auto baseChunk = base->chunks(i);
+                auto mergedChunk = mergedTripPtr->chunks(i);
+                CHECK(google::protobuf::util::MessageDifferencer::Equals(baseChunk, mergedChunk));
+            }
+
+            //The leg should be the same exepect for the last 3 entries, station and shot
+            const auto& mergedLastChunk = mergedTripPtr->chunks(3);
+            const auto& baseLastChunk = base->chunks(3);
+
+            CHECK(!google::protobuf::util::MessageDifferencer::Equals(baseLastChunk, mergedLastChunk));
+
+            //Everything should be the same expect for the legField
+            auto legField = baseLastChunk.descriptor()->FindFieldByNumber(4);
+            CHECK(compareMessagesIgnoring(baseLastChunk, mergedLastChunk, {legField}));
+
+            REQUIRE(mergedLastChunk.leg_size() == 8);
+            REQUIRE(baseLastChunk.leg_size() == 7);
+
+            //All the leg data should be the same expect for the last three rows
+            for(int i = 0; i < 5; i++) {
+                auto baseStationShot = baseLastChunk.leg(i);
+                auto mergedStationShot = mergedLastChunk.leg(i);
+                CHECK(util::MessageDifferencer::Equals(baseStationShot, mergedStationShot));
+            }
+
+            auto stationRenamed = mergedLastChunk.leg(5);
+            CHECK(stationRenamed.name() == "d1");
+
+            auto newShot = mergedLastChunk.leg(6);
+            CHECK(newShot.distance() == "30.2");
+            CHECK(newShot.compass() == "123.1");
+            CHECK(newShot.clino() == "23.4");
+
+            auto newStation = mergedLastChunk.leg(7);
+            CHECK(newStation.name() == "c4");
 
             // dumpProto(std::move(base),
             //           std::move(ourChange),
             //           std::move(theirsChange),
             //           std::move(mergedTripPtr));
         }
+
+
+
     }
 }
 

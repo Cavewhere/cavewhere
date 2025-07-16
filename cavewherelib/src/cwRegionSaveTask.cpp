@@ -560,7 +560,9 @@ void cwRegionSaveTask::saveShot(CavewhereProto::Shot *protoShot, const cwShot &s
 
 void cwRegionSaveTask::saveStationShot(CavewhereProto::StationShot *protoStation, const cwStation &station)
 {
-    saveString(protoStation->mutable_name(), station.name());
+    if(!station.name().isEmpty()) {
+        saveString(protoStation->mutable_name(), station.name());
+    }
 
     saveReading([&](){return protoStation->mutable_left();}, station.left(), cwDistanceReading::State::Empty);
     saveReading([&](){return protoStation->mutable_right();}, station.right(), cwDistanceReading::State::Empty);
@@ -576,7 +578,7 @@ void cwRegionSaveTask::saveStationShot(CavewhereProto::StationShot *protoShot, c
     }
 
     saveReading([&](){ return protoShot->mutable_distance(); }, shot.distance(), cwDistanceReading::State::Empty);
-    saveReading([&](){ return protoShot->mutable_compass(); }, shot.backCompass(), cwCompassReading::State::Empty);
+    saveReading([&](){ return protoShot->mutable_compass(); }, shot.compass(), cwCompassReading::State::Empty);
     saveReading([&](){ return protoShot->mutable_backcompass(); }, shot.backCompass(), cwCompassReading::State::Empty);
     saveReading([&](){ return protoShot->mutable_clino(); }, shot.clino(), cwClinoReading::State::Empty);
     saveReading([&](){ return protoShot->mutable_backclino(); }, shot.backClino(), cwClinoReading::State::Empty);
