@@ -147,12 +147,15 @@ message StationShot {
     //optional Station station = 1;
     //optional Shot shot = 2;
 
+    //Shared data
+    optional string id = 1;
+
     //Station data
-    optional string name = 1;
-    optional string left = 2;
-    optional string right = 3;
-    optional string up = 4;
-    optional string down = 5;
+    optional string name = 100;
+    optional string left = 101;
+    optional string right = 102;
+    optional string up = 103;
+    optional string down = 104;
 
     //Shot data
     optional bool includeDistance = 1000;

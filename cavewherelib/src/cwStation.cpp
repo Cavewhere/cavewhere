@@ -28,11 +28,14 @@ cwStation::cwStation(QString name) :
     setName(name);
 }
 
-cwStation::PrivateData::PrivateData() {
+cwStation::PrivateData::PrivateData() :
+    id(QUuid::createUuid())
+{
 
 }
 
 cwStation::PrivateData::PrivateData(QString name) :
+    id(QUuid::createUuid()),
     Name(name)
 {
 

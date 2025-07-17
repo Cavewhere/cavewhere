@@ -10,6 +10,7 @@
 
 //Qt includes
 #include <QSharedDataPointer>
+#include <QUuid>
 
 //Our includes
 #include "cwGlobals.h"
@@ -30,6 +31,9 @@ public:
     cwStation();
     cwStation(const cwStation& station);
     cwStation(QString name);
+
+    QUuid id() const { return Data->id; }
+    void setId(const QUuid id) { Data->id = id; }
 
     QString name() const;
     bool setName(QString Name);
@@ -61,6 +65,8 @@ private:
     public:
         PrivateData();
         PrivateData(QString name);
+
+        QUuid id;
 
         QString Name;
 

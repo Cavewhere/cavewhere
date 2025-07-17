@@ -3,8 +3,10 @@
 
 // --- PrivateData ---
 
-cwShot::cwShot()
+cwShot::cwShot() :
+    m_id(QUuid::createUuid())
 {
+
 }
 
 
@@ -12,7 +14,8 @@ cwShot::cwShot(const QString& distance,
                const QString& compass,
                const QString& backCompass,
                const QString& clino,
-               const QString& backClino)
+               const QString& backClino) :
+    m_id(QUuid::createUuid())
 {
     // Front measurement
     cwShotMeasurement front;

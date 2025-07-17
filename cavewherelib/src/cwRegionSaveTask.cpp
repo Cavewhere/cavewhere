@@ -560,6 +560,8 @@ void cwRegionSaveTask::saveShot(CavewhereProto::Shot *protoShot, const cwShot &s
 
 void cwRegionSaveTask::saveStationShot(CavewhereProto::StationShot *protoStation, const cwStation &station)
 {
+    saveQUuid(protoStation->mutable_id(), station.id());
+
     if(!station.name().isEmpty()) {
         saveString(protoStation->mutable_name(), station.name());
     }
@@ -572,6 +574,8 @@ void cwRegionSaveTask::saveStationShot(CavewhereProto::StationShot *protoStation
 
 void cwRegionSaveTask::saveStationShot(CavewhereProto::StationShot *protoShot, const cwShot &shot)
 {
+    saveQUuid(protoShot->mutable_id(), shot.id());
+
     if(!shot.isDistanceIncluded()) {
         //By default distance is included, only write it if it's not include
         protoShot->set_includedistance(shot.isDistanceIncluded());
@@ -582,7 +586,6 @@ void cwRegionSaveTask::saveStationShot(CavewhereProto::StationShot *protoShot, c
     saveReading([&](){ return protoShot->mutable_backcompass(); }, shot.backCompass(), cwCompassReading::State::Empty);
     saveReading([&](){ return protoShot->mutable_clino(); }, shot.clino(), cwClinoReading::State::Empty);
     saveReading([&](){ return protoShot->mutable_backclino(); }, shot.backClino(), cwClinoReading::State::Empty);
-
 }
 
 /**

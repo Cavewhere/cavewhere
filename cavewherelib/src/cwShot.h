@@ -12,6 +12,8 @@
 #include <QSharedDataPointer>
 #include <QList>
 #include <QString>
+#include <QUuid>
+
 #include "cwGlobals.h"
 #include "cwShotMeasurement.h"
 #include "cwDistanceReading.h"
@@ -36,6 +38,9 @@ public:
 
     cwShot(const cwShot&) = default;
     cwShot& operator=(const cwShot&) = default;
+
+    QUuid id() const { return m_id; }
+    void setId(const QUuid id) { m_id = id; }
 
     // Legacy API (for backward compatibility)
     cwDistanceReading distance() const;
@@ -67,6 +72,7 @@ public:
     bool isValid() const;
 
 private:
+    QUuid m_id;
     QList<cwShotMeasurement> measurements;
     bool IncludeDistance = true;
 };
