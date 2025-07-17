@@ -666,6 +666,82 @@ TEST_CASE("cwSaveLoad should 3-way merge cwTrip correctly", "[cwSaveLoad]") {
             //           std::move(mergedTripPtr));
         }
 
+        SECTION("Modify the same the same data") {
+            REQUIRE(trip->chunkCount() > 0);
+            auto firstChunk = trip->chunk(0);
+            firstChunk->setData(cwSurveyChunk::StationNameRole, 0, "b1"); //from a1 -> b1
+
+            auto ourChange = cwSaveLoad::toProtoTrip(trip);
+            auto theirsChange = cwSaveLoad::toProtoTrip(trip);
+
+            const google::protobuf::Message& baseRef = (*base.get());
+            const google::protobuf::Message& oursRef = (*ourChange.get());
+            const google::protobuf::Message& thiersRef = (*theirsChange.get());
+
+            auto mergedTrip = cwDiff::mergeMessageByReflection(baseRef,
+                                                               oursRef,
+                                                               thiersRef,
+                                                               cwDiff::MergeStrategy::UseOursOnConflict);
+            auto mergedTripPtr = [&]()->std::unique_ptr<CavewhereProto::Trip> {
+                if(auto raw = dynamic_cast<CavewhereProto::Trip*>(mergedTrip.get())) {
+                    mergedTrip.release();
+                    return std::unique_ptr<CavewhereProto::Trip>(raw);
+                }
+                return nullptr;
+            }();
+            REQUIRE(mergedTripPtr != nullptr);
+
+            CHECK(!google::protobuf::util::MessageDifferencer::Equals(*base, *mergedTripPtr));
+            CHECK(google::protobuf::util::MessageDifferencer::Equals(*ourChange, *mergedTripPtr));
+            CHECK(google::protobuf::util::MessageDifferencer::Equals(*theirsChange, *mergedTripPtr));
+
+            int chunksFieldNumber = 5;
+            auto chunkField = base->descriptor()->FindFieldByNumber(5);
+            CHECK(compareMessagesIgnoring(*base, *mergedTripPtr, {chunkField}));
+
+            REQUIRE(base->chunks_size() == 4);
+            REQUIRE(mergedTripPtr->chunks_size() == 4);
+
+            //Check that everything that the chunk are the same
+            const auto& baseFirstChunk = base->chunks(0);
+            const auto& mergedFirstChunk = mergedTripPtr->chunks(0);
+            CHECK(!util::MessageDifferencer::Equals(baseFirstChunk, mergedFirstChunk));
+
+            REQUIRE(baseFirstChunk.leg_size() == 9);
+            REQUIRE(mergedFirstChunk.leg_size() == 9);
+
+            const auto& baseFirstStation = baseFirstChunk.leg(0);
+            const auto& mergedFirstStation = mergedFirstChunk.leg(0);
+
+            CHECK(baseFirstStation.name() == "a1");
+            CHECK(mergedFirstStation.name() == "b1");
+
+            auto stationNameField = mergedFirstStation.descriptor()->FindFieldByNumber(1);
+            CHECK(compareMessagesIgnoring(baseFirstStation, mergedFirstStation, {stationNameField}));
+
+            //Make sure all the other leg data in the first chunk is the same
+            for(int i = 1; i < baseFirstChunk.leg_size(); i++) {
+                const auto& baseLeg = baseFirstChunk.leg(i);
+                const auto& mergedLeg = mergedFirstChunk.leg(i);
+                CHECK(util::MessageDifferencer::Equals(baseLeg, mergedLeg));
+            }
+
+            //Make sure all the other chunks are the same
+            for(int i = 1; i < base->chunks_size(); ++i) {
+                auto baseChunk = base->chunks(i);
+                auto mergedChunk = mergedTripPtr->chunks(i);
+                CHECK(util::MessageDifferencer::Equals(baseChunk, mergedChunk));
+            }
+
+            dumpProto(std::move(base),
+                      std::move(ourChange),
+                      std::move(theirsChange),
+                      std::move(mergedTripPtr));
+
+
+
+
+        }
 
 
     }

@@ -28,12 +28,28 @@ struct RepeatParameters {
     google::protobuf::Message* result;
 };
 
-template<typename RepeatedToVectorFunc, typename AddFunc, typename CompareFunc>
+template<typename EqualsFunc>
+struct Compare {
+    EqualsFunc equals;
+
+    //Merge equal Messages with equal ids. If the equals function is true where the
+    //ids are the same, the data in the Message may be different, this cause
+    //mergeRepeated to step into the Message and merge them. The ids must be
+    //independantly generated so UUID is a good choice.
+    bool deepMerge = false;
+};
+
+template<typename EqualsFunc>
+Compare<EqualsFunc> makeCompare(EqualsFunc equals, bool deepMerge) {
+    return Compare<EqualsFunc>{equals, deepMerge};
+}
+
+template<typename RepeatedToVectorFunc, typename AddFunc, typename CompareType>
 void mergeRepeated(
     const RepeatParameters& p,
     RepeatedToVectorFunc repeatedToVector,
     AddFunc add,
-    CompareFunc fieldEqualsFunc)
+    const CompareType& compare)
 {
     auto const* desc        = p.base.GetDescriptor();
     auto const* reflBase    = p.base.GetReflection();
@@ -43,16 +59,8 @@ void mergeRepeated(
     auto const* subMsgDesc  = p.field->message_type();
     // auto const* idFieldDesc = subMsgDesc->FindFieldByName("id");
 
-    // // collect sub-messages in vectors
-    // auto collectSubs = [&](const google::protobuf::Message& message){
-    //     std::vector<const google::protobuf::Message*> v;
-    //     int n = reflBase->FieldSize(message, field);
-    //     v.reserve(n);
-    //     for (int i = 0; i < n; ++i) {
-    //         v.push_back(&reflBase->GetRepeatedMessage(message, field, i));
-    //     }
-    //     return v;
-    // };
+    qDebug() << "------";
+
     auto baseSubs   = repeatedToVector(p.base);
     auto oursSubs   = repeatedToVector(p.ours);
     auto theirsSubs = repeatedToVector(p.theirs);
@@ -60,62 +68,68 @@ void mergeRepeated(
     using Type = typename decltype(baseSubs)::value_type;
 
     // diff scripts
-    auto oursEdits   = cwDiff::diff<Type>(baseSubs, oursSubs, fieldEqualsFunc);
-    auto theirsEdits = cwDiff::diff<Type>(baseSubs, theirsSubs, fieldEqualsFunc);
+    auto oursEdits   = cwDiff::diff<Type>(baseSubs, oursSubs, compare.equals);
+    auto theirsEdits = cwDiff::diff<Type>(baseSubs, theirsSubs, compare.equals);
 
     //replay exactly like mergeList, but Copy/Merge messages
     size_t baseIdx = 0, oursIdx = 0, theirsIdx = 0;
-    size_t oursE = 0, thiersE = 0;
+    size_t oursE = 0, theirsE = 0;
     while (baseIdx < baseSubs.size()
            || oursE < oursEdits.size()
-           || thiersE < theirsEdits.size())
+           || theirsE < theirsEdits.size())
     {
         bool oursDel = (oursE < oursEdits.size()
                         && oursEdits[oursE].operation == cwDiff::EditOperation::Delete
                         && oursEdits[oursE].positionOld == baseIdx);
-        bool thiersDel = (thiersE < theirsEdits.size()
-                          && theirsEdits[thiersE].operation == cwDiff::EditOperation::Delete
-                          && theirsEdits[thiersE].positionOld == baseIdx);
+        bool theirsDel = (theirsE < theirsEdits.size()
+                          && theirsEdits[theirsE].operation == cwDiff::EditOperation::Delete
+                          && theirsEdits[theirsE].positionOld == baseIdx);
         bool oursInserted = (oursE < oursEdits.size()
                         && oursEdits[oursE].operation == cwDiff::EditOperation::Insert
                         && oursEdits[oursE].positionOld == baseIdx);
-        bool thiersInserted = (thiersE < theirsEdits.size()
-                          && theirsEdits[thiersE].operation == cwDiff::EditOperation::Insert
-                          && theirsEdits[thiersE].positionOld == baseIdx);
+        bool theirsInserted = (theirsE < theirsEdits.size()
+                          && theirsEdits[theirsE].operation == cwDiff::EditOperation::Insert
+                          && theirsEdits[theirsE].positionOld == baseIdx);
+
+        qDebug() << "BaseIdx:" << baseIdx << " oursE:" << oursE << " thiersE:" << theirsE;
+        qDebug() << "OursIdx:" << oursIdx << " thiersIdx:" << theirsIdx;
+        qDebug() << "OursDel:" << oursDel << " ThiersDel:" << theirsDel << " OursInserted:" << oursInserted << " theirsInserted:" << theirsInserted;
 
         // both inserted → conflict or identical
-        if (oursInserted && thiersInserted) {
+        if (oursInserted && theirsInserted) {
             auto const& oursSub = oursSubs[oursEdits[oursE].positionNew];
-            auto const& thiersSub = theirsSubs[theirsEdits[thiersE].positionNew];
-            if (fieldEqualsFunc(oursSub, thiersSub)) {
+            auto const& thiersSub = theirsSubs[theirsEdits[theirsE].positionNew];
+            if (compare.equals(oursSub, thiersSub)) {
 
                 //They are the same, just add ours
                 if constexpr (std::is_same_v<std::remove_cv_t<std::remove_pointer_t<Type>>, google::protobuf::Message>) {
                     //Merge the message
-                    std::cout << "ours:" << oursSub->DebugString();
-                    std::cout << "theirs:" << thiersSub->DebugString();
-                    std::cout << "Equals:" << fieldEqualsFunc(oursSub, thiersSub);
+                    qDebug() << "ours:" << oursSub->DebugString();
+                    qDebug() << "theirs: " << thiersSub->DebugString();
+                    qDebug() << "Equals: " << compare.equals(oursSub, thiersSub);
 
-                    add(*oursSub);
-
-                    // auto merged = mergeMessageByReflection(*baseSubs[baseIdx],
-                    //                                        *oursSub,
-                    //                                        *thiersSub,
-                    //                                        p.strategy);
-                    // add(*merged);
+                    if(compare.deepMerge) {
+                        auto merged = mergeMessageByReflection(*baseSubs[baseIdx],
+                                                               *oursSub,
+                                                               *thiersSub,
+                                                               p.strategy);
+                        add(*merged);
+                    } else {
+                        add(*oursSub);
+                    }
                 } else {
                     //Merge the scalar
-                    add(oursSub);
-
-                    // auto merged = merge(baseSubs[baseIdx],
-                    //                     oursSub,
-                    //                     thiersSub,
-                    //                     p.strategy,
-                    //                     fieldEqualsFunc);
-                    // add(merged);
-
+                    if(compare.deepMerge) {
+                        auto merged = merge(baseSubs[baseIdx],
+                                            oursSub,
+                                            thiersSub,
+                                            p.strategy,
+                                            compare.equals);
+                        add(merged);
+                    } else {
+                        add(oursSub);
+                    }
                 }
-
             } else {
                 // different data → append both
                 if constexpr (std::is_pointer<Type>()) {
@@ -126,7 +140,7 @@ void mergeRepeated(
                     add(thiersSub);
                 }
             }
-            ++oursE; ++thiersE;
+            ++oursE; ++theirsE;
             continue;
         }
         if (oursInserted) {
@@ -139,27 +153,29 @@ void mergeRepeated(
             ++oursE;
             continue;
         }
-        if (thiersInserted) {
+        if (theirsInserted) {
             if constexpr(std::is_pointer<Type>()) {
-                add(*theirsSubs.at(theirsEdits.at(thiersE).positionNew));
+                add(*theirsSubs.at(theirsEdits.at(theirsE).positionNew));
             } else {
-                add(theirsSubs.at(theirsEdits.at(thiersE).positionNew));
+                add(theirsSubs.at(theirsEdits.at(theirsE).positionNew));
             }
 
-            ++thiersE;
+            ++theirsE;
             continue;
         }
 
         // deletions
-        if (oursDel && thiersDel) {
-            ++baseIdx; ++oursE; ++thiersE;
+        if (oursDel && theirsDel) {
+            ++baseIdx; ++oursE; ++theirsE;
+            ++oursIdx; ++theirsIdx; //I'm not sure if this is correct, might need to do more testing
+            qDebug() << "Both deleted!";
             continue;
         }
-        if (oursDel && !thiersDel) {
+        if (oursDel && !theirsDel) {
             // theirs kept?
             // if (extractId(*baseSubs[baseIdx], idFieldDesc)
             //     != extractId(*theirsSubs[theirsIdx], idFieldDesc)) {
-            if(!fieldEqualsFunc(baseSubs.at(baseIdx), theirsSubs.at(theirsIdx))) {
+            if(!compare.equals(baseSubs.at(baseIdx), theirsSubs.at(theirsIdx))) {
                 if (p.strategy != MergeStrategy::UseTheirsOnConflict) {
                     if constexpr(std::is_pointer<Type>()) {
                         add(*theirsSubs.at(theirsIdx));
@@ -174,8 +190,8 @@ void mergeRepeated(
             ++baseIdx; ++oursE; ++theirsIdx;
             continue;
         }
-        if (!oursDel && thiersDel) {
-            if(!fieldEqualsFunc(baseSubs.at(baseIdx), oursSubs.at(oursIdx))) {
+        if (!oursDel && theirsDel) {
+            if(!compare.equals(baseSubs.at(baseIdx), oursSubs.at(oursIdx))) {
                 // if (extractId(*baseSubs[baseIdx], idFieldDesc)
                 //     != extractId(*oursSubs[oursIdx], idFieldDesc)) {
                 if (p.strategy != MergeStrategy::UseOursOnConflict) {
@@ -188,41 +204,52 @@ void mergeRepeated(
                     // dst->CopyFrom(*oursSubs[oursIdx]);
                 }
             }
-            ++baseIdx; ++thiersE; ++oursIdx;
+            ++baseIdx; ++theirsE; ++oursIdx;
             continue;
         }
 
-        // unchanged in both → deep‐merge
+        // unchanged in both
         if (baseIdx < baseSubs.size()) {
 
             if constexpr(std::is_pointer<Type>()) {
-                auto merged = mergeMessageByReflection(
-                    *baseSubs[baseIdx],
-                    *oursSubs[oursIdx],
-                    *theirsSubs[theirsIdx],
-                    p.strategy);
+                if(compare.deepMerge) {
+                    auto merged = mergeMessageByReflection(
+                        *baseSubs[baseIdx],
+                        *oursSubs[oursIdx],
+                        *theirsSubs[theirsIdx],
+                        p.strategy);
 
-                add(*merged);
+                    qDebug() << "Deep merge:" << baseIdx << oursIdx << theirsIdx;
+
+                    add(*merged);
+                } else {
+                    qDebug() << "Adding ours!";
+                    add(*oursSubs[oursIdx]);
+                }
             } else {
-                auto merged = merge(
-                    baseSubs[baseIdx],
-                    oursSubs[oursIdx],
-                    theirsSubs[theirsIdx],
-                    p.strategy);
+                if(compare.deepMerge) {
+                    auto merged = merge(
+                        baseSubs[baseIdx],
+                        oursSubs[oursIdx],
+                        theirsSubs[theirsIdx],
+                        p.strategy);
 
-                add(merged);
+                    add(merged);
+                } else {
+                    add(oursSubs[oursIdx]);
+                }
             }
         }
 
         ++baseIdx; ++oursIdx; ++theirsIdx;
         if (oursDel) ++oursE;
-        if (thiersDel) ++thiersE;
+        if (theirsDel) ++theirsE;
     }
 }
 
-template<typename CompareFunc>
+template<typename Compare>
 void mergeRepeatedMessage(const RepeatParameters& p,
-                          CompareFunc fieldEqualsFunc)
+                          const Compare& fieldEqualsFunc)
 {
     // collect sub-messages in vectors
     auto collectSubs = [&](const google::protobuf::Message& message){
@@ -279,7 +306,7 @@ void mergeRepeatedTypedScaler(RepeatParameters& p,
     mergeRepeated(p,
                   collectSubs,
                   addValue,
-                  std::equal_to<T>());
+                  makeCompare(std::equal_to<T>(), false));
 }
 
 
@@ -522,7 +549,7 @@ std::unique_ptr<google::protobuf::Message> mergeMessageByReflection(const google
                         return leftId == rightId;
                     };
 
-                    mergeRepeatedMessage(p, idEquals);
+                    mergeRepeatedMessage(p, makeCompare(idEquals, true));
                 }
                 else {
                     // otherwise deep merge by all the fields
@@ -531,7 +558,7 @@ std::unique_ptr<google::protobuf::Message> mergeMessageByReflection(const google
                         Q_ASSERT(right);
                         return google::protobuf::util::MessageDifferencer::Equals(*left, *right);
                     };
-                    mergeRepeatedMessage(p, fieldEquals);
+                    mergeRepeatedMessage(p, makeCompare(fieldEquals, false));
                 }
             } else {
                 //Repeated basic type
