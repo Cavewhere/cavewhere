@@ -51,15 +51,8 @@ void mergeRepeated(
     AddFunc add,
     const CompareType& compare)
 {
-    auto const* desc        = p.base.GetDescriptor();
-    auto const* reflBase    = p.base.GetReflection();
-    auto const* reflOurs    = p.ours.GetReflection();
-    auto const* reflTheirs  = p.theirs.GetReflection();
-    auto      * reflResult  = p.result->GetReflection();
-    auto const* subMsgDesc  = p.field->message_type();
-    // auto const* idFieldDesc = subMsgDesc->FindFieldByName("id");
-
-    qDebug() << "------";
+    // qDebug() << "------";
+    // qDebug().noquote() << "p.base:" << p.base.ShortDebugString();
 
     auto baseSubs   = repeatedToVector(p.base);
     auto oursSubs   = repeatedToVector(p.ours);
@@ -91,9 +84,10 @@ void mergeRepeated(
                           && theirsEdits[theirsE].operation == cwDiff::EditOperation::Insert
                           && theirsEdits[theirsE].positionOld == baseIdx);
 
-        qDebug() << "BaseIdx:" << baseIdx << " oursE:" << oursE << " thiersE:" << theirsE;
-        qDebug() << "OursIdx:" << oursIdx << " thiersIdx:" << theirsIdx;
-        qDebug() << "OursDel:" << oursDel << " ThiersDel:" << theirsDel << " OursInserted:" << oursInserted << " theirsInserted:" << theirsInserted;
+        // qDebug() << "BaseIdx:" << baseIdx << " oursE:" << oursE << " thiersE:" << theirsE;
+        // qDebug() << "OursIdx:" << oursIdx << " thiersIdx:" << theirsIdx;
+        // qDebug() << "OursDel:" << oursDel << " ThiersDel:" << theirsDel << " OursInserted:" << oursInserted << " theirsInserted:" << theirsInserted;
+
 
         // both inserted → conflict or identical
         if (oursInserted && theirsInserted) {
@@ -104,9 +98,9 @@ void mergeRepeated(
                 //They are the same, just add ours
                 if constexpr (std::is_same_v<std::remove_cv_t<std::remove_pointer_t<Type>>, google::protobuf::Message>) {
                     //Merge the message
-                    qDebug() << "ours:" << oursSub->DebugString();
-                    qDebug() << "theirs: " << thiersSub->DebugString();
-                    qDebug() << "Equals: " << compare.equals(oursSub, thiersSub);
+                    // qDebug() << "ours:" << oursSub->DebugString();
+                    // qDebug() << "theirs: " << thiersSub->DebugString();
+                    // qDebug() << "Equals: " << compare.equals(oursSub, thiersSub);
 
                     if(compare.deepMerge) {
                         auto merged = mergeMessageByReflection(*baseSubs[baseIdx],
@@ -173,8 +167,6 @@ void mergeRepeated(
         }
         if (oursDel && !theirsDel) {
             // theirs kept?
-            // if (extractId(*baseSubs[baseIdx], idFieldDesc)
-            //     != extractId(*theirsSubs[theirsIdx], idFieldDesc)) {
             if(!compare.equals(baseSubs.at(baseIdx), theirsSubs.at(theirsIdx))) {
                 if (p.strategy != MergeStrategy::UseTheirsOnConflict) {
                     if constexpr(std::is_pointer<Type>()) {
@@ -182,9 +174,6 @@ void mergeRepeated(
                     } else {
                         add(theirsSubs.at(theirsIdx));
                     }
-
-                    // auto* dst = reflResult->AddMessage(result, field);
-                    // dst->CopyFrom(*theirsSubs[theirsIdx]);
                 }
             }
             ++baseIdx; ++oursE; ++theirsIdx;
@@ -192,16 +181,12 @@ void mergeRepeated(
         }
         if (!oursDel && theirsDel) {
             if(!compare.equals(baseSubs.at(baseIdx), oursSubs.at(oursIdx))) {
-                // if (extractId(*baseSubs[baseIdx], idFieldDesc)
-                //     != extractId(*oursSubs[oursIdx], idFieldDesc)) {
                 if (p.strategy != MergeStrategy::UseOursOnConflict) {
                     if constexpr(std::is_pointer<Type>()) {
                         add(*oursSubs.at(oursIdx));
                     } else {
                         add(oursSubs.at(oursIdx));
                     }
-                    // auto* dst = reflResult->AddMessage(result, field);
-                    // dst->CopyFrom(*oursSubs[oursIdx]);
                 }
             }
             ++baseIdx; ++theirsE; ++oursIdx;
@@ -213,17 +198,17 @@ void mergeRepeated(
 
             if constexpr(std::is_pointer<Type>()) {
                 if(compare.deepMerge) {
+                    // qDebug() << "Deep merge:" << baseIdx << oursIdx << theirsIdx;
+
                     auto merged = mergeMessageByReflection(
                         *baseSubs[baseIdx],
                         *oursSubs[oursIdx],
                         *theirsSubs[theirsIdx],
                         p.strategy);
 
-                    qDebug() << "Deep merge:" << baseIdx << oursIdx << theirsIdx;
-
                     add(*merged);
                 } else {
-                    qDebug() << "Adding ours!";
+                    // qDebug() << "Adding ours!";
                     add(*oursSubs[oursIdx]);
                 }
             } else {
@@ -292,7 +277,6 @@ void mergeRepeatedTypedScaler(RepeatParameters& p,
         v.reserve(n);
         for (int i = 0; i < n; ++i) {
             v.push_back(getRepeated(reflBase, message, p.field, i));
-            // v.push_back(reflBase->GetRepeatedInt32(message, p.field, i));
         }
         return v;
     };
@@ -300,7 +284,6 @@ void mergeRepeatedTypedScaler(RepeatParameters& p,
     auto addValue = [&](T value) {
         auto* reflResult  = p.result->GetReflection();
         add(reflResult, p.result, p.field, value);
-        // reflResult->AddInt32(result, field, value);
     };
 
     mergeRepeated(p,
@@ -522,10 +505,21 @@ std::unique_ptr<google::protobuf::Message> mergeMessageByReflection(const google
 
     for (int i = 0; i < descriptor->field_count(); ++i) {
         auto const* field = descriptor->field(i);
+        // qDebug() << "Field:" << field->DebugString();
 
         // --- repeated message? dispatch to helper
         if (field->is_repeated())
         {
+
+            if(reflection->FieldSize(base, field) == 0
+                && reflection->FieldSize(ours, field) == 0
+                && reflection->FieldSize(theirs, field) == 0)
+            {
+                //Field doesn't exist in all three, just ignore it
+                // qDebug() << "\tigonerd.";
+                continue;
+            }
+
             RepeatParameters p {
                 base, ours, theirs,
                 strategy,

@@ -573,7 +573,7 @@ TEST_CASE("cwSaveLoad should 3-way merge cwTrip correctly", "[cwSaveLoad]") {
         SECTION("Change station name and add shot at end") {
 
             auto ourLastChunk = trip->chunk(trip->chunkCount() - 1);
-            auto ourLastStation = ourLastChunk->stationCount() - 1;
+            auto ourLastStation = ourLastChunk->stationCount() - 2;
             auto baseLastStationName = ourLastChunk->station(ourLastStation).name();
             ourLastChunk->setData(cwSurveyChunk::StationNameRole, ourLastStation, "d1");
             auto ourChange = cwSaveLoad::toProtoTrip(trip);
@@ -639,25 +639,25 @@ TEST_CASE("cwSaveLoad should 3-way merge cwTrip correctly", "[cwSaveLoad]") {
             auto legField = baseLastChunk.descriptor()->FindFieldByNumber(4);
             CHECK(compareMessagesIgnoring(baseLastChunk, mergedLastChunk, {legField}));
 
-            REQUIRE(mergedLastChunk.leg_size() == 8);
+            REQUIRE(mergedLastChunk.leg_size() == 7);
             REQUIRE(baseLastChunk.leg_size() == 7);
 
             //All the leg data should be the same expect for the last three rows
-            for(int i = 0; i < 5; i++) {
+            for(int i = 0; i < 4; i++) {
                 auto baseStationShot = baseLastChunk.leg(i);
                 auto mergedStationShot = mergedLastChunk.leg(i);
                 CHECK(util::MessageDifferencer::Equals(baseStationShot, mergedStationShot));
             }
 
-            auto stationRenamed = mergedLastChunk.leg(5);
+            auto stationRenamed = mergedLastChunk.leg(4);
             CHECK(stationRenamed.name() == "d1");
 
-            auto newShot = mergedLastChunk.leg(6);
+            auto newShot = mergedLastChunk.leg(5);
             CHECK(newShot.distance() == "30.2");
             CHECK(newShot.compass() == "123.1");
             CHECK(newShot.clino() == "23.4");
 
-            auto newStation = mergedLastChunk.leg(7);
+            auto newStation = mergedLastChunk.leg(6);
             CHECK(newStation.name() == "c4");
 
             // dumpProto(std::move(base),
@@ -815,15 +815,88 @@ TEST_CASE("cwSaveLoad should 3-way merge cwTrip correctly", "[cwSaveLoad]") {
                 auto mergedChunk = mergedTripPtr->chunks(i);
                 CHECK(util::MessageDifferencer::Equals(baseChunk, mergedChunk));
             }
-
-            dumpProto(std::move(base),
-                      std::move(ourChange),
-                      std::move(theirsChange),
-                      std::move(mergedTripPtr));
-
         }
 
+        SECTION("Conflicts needs to be valid") {
 
+            SECTION("Remove first shot") {
+                //Change the first station in ours
+                REQUIRE(trip->chunkCount() > 0);
+                auto firstChunk = trip->chunk(0);
+                firstChunk->setData(cwSurveyChunk::StationNameRole, 0, "b1"); //from a1 -> b1
+                auto ourChange = cwSaveLoad::toProtoTrip(trip);
+
+                //Remove the first station and shot in thiers
+                //This removes the first station and shot, since merging is tracked on id
+                //there's no conflict even through the first station in the chunk has changed.
+                //This because the id, hasn't changed and will never change because it's a uuid
+                //This gives valid results (for chunk) at this case,
+                //but will always take the delete even if the merge
+                //stratage is opposite (like this testcase).
+                firstChunk->setData(cwSurveyChunk::StationNameRole, 0, "a1"); //from a1 -> b1
+                firstChunk->removeStation(0, cwSurveyChunk::Below);
+
+                auto theirsChange = cwSaveLoad::toProtoTrip(trip);
+
+                const google::protobuf::Message& baseRef = (*base.get());
+                const google::protobuf::Message& oursRef = (*ourChange.get());
+                const google::protobuf::Message& thiersRef = (*theirsChange.get());
+
+                auto mergedTrip = cwDiff::mergeMessageByReflection(baseRef,
+                                                                   oursRef,
+                                                                   thiersRef,
+                                                                   cwDiff::MergeStrategy::UseOursOnConflict);
+                auto mergedTripPtr = [&]()->std::unique_ptr<CavewhereProto::Trip> {
+                    if(auto raw = dynamic_cast<CavewhereProto::Trip*>(mergedTrip.get())) {
+                        mergedTrip.release();
+                        return std::unique_ptr<CavewhereProto::Trip>(raw);
+                    }
+                    return nullptr;
+                }();
+                REQUIRE(mergedTripPtr != nullptr);
+
+                CHECK(!google::protobuf::util::MessageDifferencer::Equals(*base, *mergedTripPtr));
+                CHECK(!google::protobuf::util::MessageDifferencer::Equals(*ourChange, *mergedTripPtr)); //Not the same because LRUD were changed
+                CHECK(google::protobuf::util::MessageDifferencer::Equals(*theirsChange, *mergedTripPtr));
+
+                int chunksFieldNumber = 5;
+                auto chunkField = base->descriptor()->FindFieldByNumber(5);
+                CHECK(compareMessagesIgnoring(*base, *mergedTripPtr, {chunkField}));
+
+                REQUIRE(base->chunks_size() == 4);
+                REQUIRE(mergedTripPtr->chunks_size() == 4);
+
+                //Check that everything that the chunk are the same
+                const auto& baseFirstChunk = base->chunks(0);
+                const auto& mergedFirstChunk = mergedTripPtr->chunks(0);
+                CHECK(!util::MessageDifferencer::Equals(baseFirstChunk, mergedFirstChunk));
+
+                REQUIRE(baseFirstChunk.leg_size() == 9);
+                REQUIRE(mergedFirstChunk.leg_size() == 7); //We delete the first and last station
+
+                const auto& baseFirstStation = baseFirstChunk.leg(0);
+                const auto& mergedFirstStation = mergedFirstChunk.leg(0);
+
+                //Make sure all the other leg data in the first chunk is the same
+                for(int i = 2; i < baseFirstChunk.leg_size(); i++) {
+                    const auto& baseLeg = baseFirstChunk.leg(i);
+                    const auto& mergedLeg = mergedFirstChunk.leg(i - 2);
+                    CHECK(util::MessageDifferencer::Equals(baseLeg, mergedLeg));
+                }
+
+                //Make sure all the other chunks are the same
+                for(int i = 1; i < base->chunks_size(); ++i) {
+                    auto baseChunk = base->chunks(i);
+                    auto mergedChunk = mergedTripPtr->chunks(i);
+                    CHECK(util::MessageDifferencer::Equals(baseChunk, mergedChunk));
+                }
+
+                // dumpProto(std::move(base),
+                //           std::move(ourChange),
+                //           std::move(theirsChange),
+                //           std::move(mergedTripPtr));
+            }
+        }
     }
 }
 
