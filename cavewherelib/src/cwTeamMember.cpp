@@ -7,10 +7,14 @@
 
 #include "cwTeamMember.h"
 
-cwTeamMember::cwTeamMember() {
+cwTeamMember::cwTeamMember()
+    : m_id(QUuid::createUuid())
+{
 }
 
-cwTeamMember::cwTeamMember(QString name, QStringList roles) {
+cwTeamMember::cwTeamMember(QString name, QStringList roles)
+    : m_id(QUuid::createUuid())
+{
     Name = name;
     Jobs = roles;
 }

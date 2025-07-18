@@ -11,12 +11,15 @@
 //Qt includes
 #include <QString>
 #include <QStringList>
+#include <QUuid>
 
-class cwTeamMember
-{
+class cwTeamMember {
 public:
     explicit cwTeamMember();
     cwTeamMember(QString name, QStringList jobs);
+
+    QUuid id() const { return m_id; }
+    void setId(const QUuid id) { m_id = id; }
 
     void setName(QString name);
     QString name() const;
@@ -25,6 +28,7 @@ public:
     QStringList jobs() const;
 
 private:
+    QUuid m_id;
     QString Name;
     QStringList Jobs;
 };

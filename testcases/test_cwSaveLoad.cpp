@@ -231,6 +231,199 @@ bool compareMessagesIgnoring(
     return true;
 }
 
+template<typename T>
+void dumpProto(T base, T ours, T theirs, T merged) {
+    QDir dir = testDir();
+    // dir.removeRecursively();
+    dir = testDir();
+
+    dir.mkdir("ours");
+    QDir oursDir = dir;
+    oursDir.cd("ours");
+
+    dir.mkdir("theirs");
+    QDir theirsDir = dir;
+    theirsDir.cd("theirs");
+
+    dir.mkdir("merged");
+    QDir mergedDir = dir;
+    mergedDir.cd("merged");
+
+    cwSaveLoad save;
+
+    save.saveProtoTrip(dir, std::move(base));
+    save.saveProtoTrip(oursDir, std::move(ours));
+    save.saveProtoTrip(theirsDir, std::move(theirs));
+    save.saveProtoTrip(mergedDir, std::move(merged));
+
+    save.waitForFinished();
+}
+
+
+// Recursively tweak every scalar (singular or repeated) and dive into sub‐messages
+static void mutateScalarsRecursively(
+    const google::protobuf::Message& baseMsg,
+    google::protobuf::Message&      oursMsg,
+    google::protobuf::Message&      theirsMsg)
+{
+    const auto* descriptor = baseMsg.GetDescriptor();
+    const auto* reflection = baseMsg.GetReflection();
+
+    for (int i = 0; i < descriptor->field_count(); ++i) {
+        const auto* field = descriptor->field(i);
+
+        //Skip id fields
+        if(field->name() == "id") {
+            continue;
+        }
+
+        // ----- repeated fields -----
+        if (field->is_repeated()) {
+            int count = reflection->FieldSize(baseMsg, field);
+
+            // repeated sub‐messages
+            if (field->cpp_type() == google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE) {
+                for (int index = 0; index < count; ++index) {
+                    const auto& baseSub = reflection->GetRepeatedMessage(baseMsg, field, index);
+                    auto* oursSub       = reflection->MutableRepeatedMessage(&oursMsg, field, index);
+                    auto* theirsSub     = reflection->MutableRepeatedMessage(&theirsMsg, field, index);
+                    mutateScalarsRecursively(baseSub, *oursSub, *theirsSub);
+                }
+            }
+            // repeated scalars
+            else {
+                for (int index = 0; index < count; ++index) {
+                    switch (field->cpp_type()) {
+                    case google::protobuf::FieldDescriptor::CPPTYPE_INT32: {
+                        int32_t value = reflection->GetRepeatedInt32(baseMsg, field, index);
+                        reflection->SetRepeatedInt32(&oursMsg,   field, index, value + 100);
+                        reflection->SetRepeatedInt32(&theirsMsg, field, index, value + 200);
+                        break;
+                    }
+                    case google::protobuf::FieldDescriptor::CPPTYPE_INT64: {
+                        int64_t value = reflection->GetRepeatedInt64(baseMsg, field, index);
+                        reflection->SetRepeatedInt64(&oursMsg,   field, index, value + 100);
+                        reflection->SetRepeatedInt64(&theirsMsg, field, index, value + 200);
+                        break;
+                    }
+                    case google::protobuf::FieldDescriptor::CPPTYPE_UINT32: {
+                        uint32_t value = reflection->GetRepeatedUInt32(baseMsg, field, index);
+                        reflection->SetRepeatedUInt32(&oursMsg,   field, index, value + 100u);
+                        reflection->SetRepeatedUInt32(&theirsMsg, field, index, value + 200u);
+                        break;
+                    }
+                    case google::protobuf::FieldDescriptor::CPPTYPE_UINT64: {
+                        uint64_t value = reflection->GetRepeatedUInt64(baseMsg, field, index);
+                        reflection->SetRepeatedUInt64(&oursMsg,   field, index, value + 100u);
+                        reflection->SetRepeatedUInt64(&theirsMsg, field, index, value + 200u);
+                        break;
+                    }
+                    case google::protobuf::FieldDescriptor::CPPTYPE_DOUBLE: {
+                        double value = reflection->GetRepeatedDouble(baseMsg, field, index);
+                        reflection->SetRepeatedDouble(&oursMsg,   field, index, value + 100.0);
+                        reflection->SetRepeatedDouble(&theirsMsg, field, index, value + 200.0);
+                        break;
+                    }
+                    case google::protobuf::FieldDescriptor::CPPTYPE_FLOAT: {
+                        float value = reflection->GetRepeatedFloat(baseMsg, field, index);
+                        reflection->SetRepeatedFloat(&oursMsg,   field, index, value + 100.0f);
+                        reflection->SetRepeatedFloat(&theirsMsg, field, index, value + 200.0f);
+                        break;
+                    }
+                    case google::protobuf::FieldDescriptor::CPPTYPE_BOOL: {
+                        bool value = reflection->GetRepeatedBool(baseMsg, field, index);
+                        reflection->SetRepeatedBool(&oursMsg,   field, index, !value);
+                        reflection->SetRepeatedBool(&theirsMsg, field, index, value);
+                        break;
+                    }
+                    case google::protobuf::FieldDescriptor::CPPTYPE_STRING: {
+                        std::string value = reflection->GetRepeatedString(baseMsg, field, index);
+                        reflection->SetRepeatedString(&oursMsg,   field, index, value + "_ours");
+                        reflection->SetRepeatedString(&theirsMsg, field, index, value + "_theirs");
+                        break;
+                    }
+                    default: {
+                        // skip enums / bytes / unknown
+                        break;
+                    }
+                    }
+                }
+            }
+
+            continue;  // done with this field
+        }
+
+        // ----- singular message fields -----
+        if (field->cpp_type() == google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE) {
+            auto* oursSub   = reflection->MutableMessage(&oursMsg,   field);
+            auto* theirsSub = reflection->MutableMessage(&theirsMsg, field);
+            mutateScalarsRecursively(
+                reflection->GetMessage(baseMsg, field),
+                *oursSub,
+                *theirsSub
+                );
+            continue;
+        }
+
+        // ----- singular scalar fields -----
+        switch (field->cpp_type()) {
+        case google::protobuf::FieldDescriptor::CPPTYPE_INT32: {
+            int32_t value = reflection->GetInt32(baseMsg, field);
+            reflection->SetInt32(&oursMsg,   field, value + 100);
+            reflection->SetInt32(&theirsMsg, field, value + 200);
+            break;
+        }
+        case google::protobuf::FieldDescriptor::CPPTYPE_INT64: {
+            int64_t value = reflection->GetInt64(baseMsg, field);
+            reflection->SetInt64(&oursMsg,   field, value + 100);
+            reflection->SetInt64(&theirsMsg, field, value + 200);
+            break;
+        }
+        case google::protobuf::FieldDescriptor::CPPTYPE_UINT32: {
+            uint32_t value = reflection->GetUInt32(baseMsg, field);
+            reflection->SetUInt32(&oursMsg,   field, value + 100u);
+            reflection->SetUInt32(&theirsMsg, field, value + 200u);
+            break;
+        }
+        case google::protobuf::FieldDescriptor::CPPTYPE_UINT64: {
+            uint64_t value = reflection->GetUInt64(baseMsg, field);
+            reflection->SetUInt64(&oursMsg,   field, value + 100u);
+            reflection->SetUInt64(&theirsMsg, field, value + 200u);
+            break;
+        }
+        case google::protobuf::FieldDescriptor::CPPTYPE_DOUBLE: {
+            double value = reflection->GetDouble(baseMsg, field);
+            reflection->SetDouble(&oursMsg,   field, value + 100.0);
+            reflection->SetDouble(&theirsMsg, field, value + 200.0);
+            break;
+        }
+        case google::protobuf::FieldDescriptor::CPPTYPE_FLOAT: {
+            float value = reflection->GetFloat(baseMsg, field);
+            reflection->SetFloat(&oursMsg,   field, value + 100.0f);
+            reflection->SetFloat(&theirsMsg, field, value + 200.0f);
+            break;
+        }
+        case google::protobuf::FieldDescriptor::CPPTYPE_BOOL: {
+            bool value = reflection->GetBool(baseMsg, field);
+            reflection->SetBool(&oursMsg,   field, !value);
+            reflection->SetBool(&theirsMsg, field, !value);
+            break;
+        }
+        case google::protobuf::FieldDescriptor::CPPTYPE_STRING: {
+            std::string value = reflection->GetString(baseMsg, field);
+            reflection->SetString(&oursMsg,   field, value + "_ours");
+            reflection->SetString(&theirsMsg, field, value + "_theirs");
+            break;
+        }
+        default: {
+            // skip enums / bytes / unknown
+            break;
+        }
+        }
+    }
+}
+
+
 
 TEST_CASE("cwSaveLoad should save and load cwTrip - empty", "[cwSaveLoad]") {
     auto dir = testDir();
@@ -266,33 +459,7 @@ TEST_CASE("cwSaveLoad should save and load cwTrip - complex", "[cwSaveLoad]") {
 
 }
 
-template<typename T>
-void dumpProto(T base, T ours, T theirs, T merged) {
-    QDir dir = testDir();
-    // dir.removeRecursively();
-    dir = testDir();
 
-    dir.mkdir("ours");
-    QDir oursDir = dir;
-    oursDir.cd("ours");
-
-    dir.mkdir("theirs");
-    QDir theirsDir = dir;
-    theirsDir.cd("theirs");
-
-    dir.mkdir("merged");
-    QDir mergedDir = dir;
-    mergedDir.cd("merged");
-
-    cwSaveLoad save;
-
-    save.saveProtoTrip(dir, std::move(base));
-    save.saveProtoTrip(oursDir, std::move(ours));
-    save.saveProtoTrip(theirsDir, std::move(theirs));
-    save.saveProtoTrip(mergedDir, std::move(merged));
-
-    save.waitForFinished();
-}
 
 TEST_CASE("cwSaveLoad should 3-way merge cwTrip correctly", "[cwSaveLoad]") {
     auto root = std::make_unique<cwRootData>();
@@ -815,6 +982,123 @@ TEST_CASE("cwSaveLoad should 3-way merge cwTrip correctly", "[cwSaveLoad]") {
                 auto mergedChunk = mergedTripPtr->chunks(i);
                 CHECK(util::MessageDifferencer::Equals(baseChunk, mergedChunk));
             }
+        }
+
+        SECTION("Field level conflict") {
+            //Change just ours
+            //Change just theirs
+            //Change ours and theirs, take ours
+            //Change ours and theirs, take theirs
+            auto baseTrip = cwSaveLoad::toProtoTrip(trip);
+
+            auto oursTrip = std::make_unique<CavewhereProto::Trip>();
+            oursTrip->CopyFrom(*baseTrip);
+
+            auto theirsTrip = std::make_unique<CavewhereProto::Trip>();
+            theirsTrip->CopyFrom(*baseTrip);
+
+            mutateScalarsRecursively(*baseTrip, *oursTrip, *theirsTrip);
+
+            SECTION("Change just ours") {
+                auto mergedTrip = cwDiff::mergeMessageByReflection(
+                    *baseTrip,         // base
+                    *oursTrip,         // ours
+                    *baseTrip,         // theirs == base
+                    cwDiff::MergeStrategy::UseOursOnConflict
+                    );
+                auto mergedTripPtr = [&]()->std::unique_ptr<CavewhereProto::Trip> {
+                    if(auto raw = dynamic_cast<CavewhereProto::Trip*>(mergedTrip.get())) {
+                        mergedTrip.release();
+                        return std::unique_ptr<CavewhereProto::Trip>(raw);
+                    }
+                    return nullptr;
+                }();
+                REQUIRE(mergedTripPtr != nullptr);
+
+                CHECK(util::MessageDifferencer::Equals(*oursTrip, *mergedTripPtr));
+                CHECK(!util::MessageDifferencer::Equals(*oursTrip, *baseTrip));
+
+                // dumpProto(std::move(baseTrip),
+                //           std::move(oursTrip),
+                //           std::move(theirsTrip),
+                //           std::move(mergedTripPtr));
+            }
+
+            SECTION("Change just theirs") {
+                auto mergedTrip = cwDiff::mergeMessageByReflection(
+                    *baseTrip,         // base
+                    *baseTrip,         // ours
+                    *theirsTrip,         // theirs == base
+                    cwDiff::MergeStrategy::UseOursOnConflict
+                    );
+                auto mergedTripPtr = [&]()->std::unique_ptr<CavewhereProto::Trip> {
+                    if(auto raw = dynamic_cast<CavewhereProto::Trip*>(mergedTrip.get())) {
+                        mergedTrip.release();
+                        return std::unique_ptr<CavewhereProto::Trip>(raw);
+                    }
+                    return nullptr;
+                }();
+                REQUIRE(mergedTripPtr != nullptr);
+
+                CHECK(util::MessageDifferencer::Equals(*theirsTrip, *mergedTripPtr));
+                CHECK(!util::MessageDifferencer::Equals(*oursTrip, *baseTrip));
+                CHECK(!util::MessageDifferencer::Equals(*oursTrip, *theirsTrip));
+
+                // dumpProto(std::move(baseTrip),
+                //           std::move(oursTrip),
+                //           std::move(theirsTrip),
+                //           std::move(mergedTripPtr));
+            }
+
+            SECTION("Change both take ours") {
+                auto mergedTrip = cwDiff::mergeMessageByReflection(
+                    *baseTrip,         // base
+                    *oursTrip,         // ours
+                    *theirsTrip,         // theirs
+                    cwDiff::MergeStrategy::UseOursOnConflict
+                    );
+                auto mergedTripPtr = [&]()->std::unique_ptr<CavewhereProto::Trip> {
+                    if(auto raw = dynamic_cast<CavewhereProto::Trip*>(mergedTrip.get())) {
+                        mergedTrip.release();
+                        return std::unique_ptr<CavewhereProto::Trip>(raw);
+                    }
+                    return nullptr;
+                }();
+                REQUIRE(mergedTripPtr != nullptr);
+
+                CHECK(util::MessageDifferencer::Equals(*oursTrip, *mergedTripPtr));
+                CHECK(!util::MessageDifferencer::Equals(*theirsTrip, *baseTrip));
+                CHECK(!util::MessageDifferencer::Equals(*theirsTrip, *oursTrip));
+            }
+
+            SECTION("Change both take theirs") {
+                auto mergedTrip = cwDiff::mergeMessageByReflection(
+                    *baseTrip,         // base
+                    *oursTrip,         // ours
+                    *theirsTrip,         // theirs
+                    cwDiff::MergeStrategy::UseTheirsOnConflict
+                    );
+                auto mergedTripPtr = [&]()->std::unique_ptr<CavewhereProto::Trip> {
+                    if(auto raw = dynamic_cast<CavewhereProto::Trip*>(mergedTrip.get())) {
+                        mergedTrip.release();
+                        return std::unique_ptr<CavewhereProto::Trip>(raw);
+                    }
+                    return nullptr;
+                }();
+                REQUIRE(mergedTripPtr != nullptr);
+
+                CHECK(util::MessageDifferencer::Equals(*theirsTrip, *mergedTripPtr));
+                CHECK(!util::MessageDifferencer::Equals(*oursTrip, *baseTrip));
+                CHECK(!util::MessageDifferencer::Equals(*theirsTrip, *oursTrip));
+
+                // dumpProto(std::move(baseTrip),
+                //           std::move(oursTrip),
+                //           std::move(theirsTrip),
+                //           std::move(mergedTripPtr));
+            }
+
+
+
         }
 
         SECTION("Conflicts needs to be valid") {

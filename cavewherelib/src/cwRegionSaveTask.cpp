@@ -485,6 +485,7 @@ void cwRegionSaveTask::saveLength(CavewhereProto::Length *protoLength, cwLength 
  */
 void cwRegionSaveTask::saveTeamMember(CavewhereProto::TeamMember *protoTeamMember, const cwTeamMember& teamMember)
 {
+    saveQUuid(protoTeamMember->mutable_id(), teamMember.id());
     saveString(protoTeamMember->mutable_name(), teamMember.name());
     saveStringList(protoTeamMember->mutable_jobs(), teamMember.jobs());
 }

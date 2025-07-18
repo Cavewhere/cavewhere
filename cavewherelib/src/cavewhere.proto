@@ -248,6 +248,7 @@ message Team {
 }
 
 message TeamMember {
+    optional string id = 4;
     optional string name = 3;
     optional QtProto.QStringList jobs = 2;
 
