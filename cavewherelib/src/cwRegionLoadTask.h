@@ -153,7 +153,7 @@ private:
     QPointF loadPointF(const QtProto::QPointF& protoPointF);
     QVector3D loadVector3D(const QtProto::QVector3D& protoVector3D);
     QVector2D loadVector2D(const QtProto::QVector2D& protoVector2D);
-    QStringList loadStringList(const QtProto::QStringList& protoStringList);
+    QStringList loadLegacyStringList(const QtProto::QStringList& protoStringList);
 
     template<auto HasLegacyFunc, auto LegacyGetFunc, auto GetFunc, typename Proto>
     QString loadString(Proto protoObj) {

@@ -269,8 +269,8 @@ void cwRegionLoadTask::loadCave(const CavewhereProto::Cave& protoCave, cwCave *c
         for(int i = 0; i < protoNetwork.stations_size(); i++) {
             auto stationItem = protoNetwork.stations(i);
 
-            auto stationName = loadString(stationItem.stationname());
-            auto neighbors = loadStringList(stationItem.neighbors());
+            auto stationName = loadLegacyString(stationItem.legacy_stationname());
+            auto neighbors = loadLegacyStringList(stationItem.legacy_neighbors());
 
             for(auto neighbor : neighbors) {
                 network.addShot(stationName, neighbor);
@@ -416,7 +416,7 @@ void cwRegionLoadTask::loadTeam(const CavewhereProto::Team& protoTeam, cwTeam *t
  */
 void cwRegionLoadTask::loadNote(const CavewhereProto::Note& protoNote, cwNote *note)
 {
-    cwImage image = loadImage(protoNote.image());
+    cwImage image = loadImage(protoNote.legacy_image());
     double rotation = protoNote.rotation();
 
     note->setImage(image);
@@ -528,7 +528,7 @@ void cwRegionLoadTask::loadImageResolution(const CavewhereProto::ImageResolution
 cwNoteStation cwRegionLoadTask::loadNoteStation(const CavewhereProto::NoteStation& protoNoteStation)
 {
     cwNoteStation noteStation;
-    noteStation.setName(loadString(protoNoteStation.name()));
+    noteStation.setName(loadLegacyString(protoNoteStation.legacy_name()));
     noteStation.setPositionOnNote(loadPointF(protoNoteStation.positiononnote()));
     return noteStation;
 }
@@ -611,8 +611,8 @@ void cwRegionLoadTask::loadLength(const CavewhereProto::Length& protoLength, cwL
 cwTeamMember cwRegionLoadTask::loadTeamMember(const CavewhereProto::TeamMember& protoTeamMember)
 {
     cwTeamMember teamMember;
-    teamMember.setName(loadString(protoTeamMember.name()));
-    teamMember.setJobs(loadStringList(protoTeamMember.jobs()));
+    teamMember.setName(loadLegacyString(protoTeamMember.legacy_name()));
+    teamMember.setJobs(loadLegacyStringList(protoTeamMember.legacy_jobs()));
     return teamMember;
 }
 
@@ -772,7 +772,7 @@ cwLead cwRegionLoadTask::loadLead(const CavewhereProto::Lead &protoLead)
 {
     cwLead lead;
     lead.setPositionOnNote(loadPointF(protoLead.positiononnote()));
-    lead.setDescription(loadString(protoLead.description()));
+    lead.setDescription(loadLegacyString(protoLead.legacy_description()));
     lead.setSize(loadSizeF(protoLead.size()));
     lead.setCompleted(protoLead.completed());
     return lead;
@@ -886,13 +886,17 @@ QVector2D cwRegionLoadTask::loadVector2D(const QtProto::QVector2D &protoVector2D
  * @param protoStringList
  * @return
  */
-QStringList cwRegionLoadTask::loadStringList(const QtProto::QStringList &protoStringList)
+QStringList cwRegionLoadTask::loadLegacyStringList(const QtProto::QStringList &protoStringList)
 {
     QStringList list;
-    list.reserve(protoStringList.strings_size());
-    for(int i = 0; i < protoStringList.strings_size(); i++) {
-        list.append(loadString(protoStringList.strings(i)));
+
+    if(protoStringList.legacy_strings_size() > 0) {
+        list.reserve(protoStringList.legacy_strings_size());
+        for(int i = 0; i < protoStringList.legacy_strings_size(); ++i) {
+            list.append(loadLegacyString(protoStringList.legacy_strings(i)));
+        }
     }
+
     return list;
 }
 

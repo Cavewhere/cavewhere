@@ -25,6 +25,8 @@ class cwProjectedProfileScrapViewMatrix;
 class cwDistanceReading;
 class cwClinoReading;
 class cwCompassReading;
+class cwCavingRegion;
+class cwProject;
 
 //Google protobuffer
 namespace CavewhereProto {
@@ -66,6 +68,10 @@ class QVector2D;
 class QStringList;
 };
 
+namespace google::protobuf {
+class Message;
+}
+
 //Qt includes
 #include <QDir>
 #include <QFuture>
@@ -85,15 +91,33 @@ public:
 
     //Save when ever data has changed (remove save / load?)
 
-
     //Base folder
-    void saveTrip(const QDir& dir, const cwTrip* trip);
-    void saveProtoTrip(const QDir& dir, std::unique_ptr<CavewhereProto::Trip> protoTrip);
+    void save(const cwCavingRegion* region);
 
+    void saveCave(const QDir& dir, const cwCave* cave);
+    static std::unique_ptr<CavewhereProto::Cave> toProtoCave(const cwCave* cave);
+
+    void saveTrip(const QDir& dir, const cwTrip* trip);
     static std::unique_ptr<CavewhereProto::Trip> toProtoTrip(const cwTrip* trip);
+
+    void saveNote(const QDir& dir, const cwNote* note);
+    static std::unique_ptr<CavewhereProto::Note> toProtoNote(const cwNote* note);
+
+    void saveAllFromV6(const QDir& dir, const cwProject* region);
+
+
+
 
     //For testing
     void waitForFinished();
+
+    static QString sanitizeDirectoryName(QString input);
+
+    void saveProtoMessage(
+        const QDir& dir,
+        const QString& filename,
+        std::unique_ptr<const google::protobuf::Message> message);
+
 
 private:
     struct Data;

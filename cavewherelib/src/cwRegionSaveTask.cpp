@@ -238,11 +238,10 @@ void cwRegionSaveTask::saveSurveyChunk(CavewhereProto::SurveyChunk *protoChunk, 
  */
 void cwRegionSaveTask::saveTeam(CavewhereProto::Team *protoTeam, cwTeam *team)
 {
-    foreach(cwTeamMember teamMember, team->teamMembers()) {
+    foreach(const cwTeamMember& teamMember, team->teamMembers()) {
         CavewhereProto::TeamMember* protoTeamMember = protoTeam->add_teammembers();
         saveTeamMember(protoTeamMember, teamMember);
     }
-
 }
 
 /**
@@ -252,7 +251,7 @@ void cwRegionSaveTask::saveTeam(CavewhereProto::Team *protoTeam, cwTeam *team)
  */
 void cwRegionSaveTask::saveNote(CavewhereProto::Note *protoNote, cwNote *note)
 {
-    saveImage(protoNote->mutable_image(), note->image());
+    // saveImage(protoNote->mutable_image(), note->image());
     protoNote->set_rotation(note->rotate());
     saveImageResolution(protoNote->mutable_imageresolution(), note->imageResolution());
 
@@ -303,8 +302,8 @@ void cwRegionSaveTask::saveScrap(CavewhereProto::Scrap *protoScrap, cwScrap *scr
 
     saveNoteTranformation(protoScrap->mutable_notetransformation(), scrap->noteTransformation());
     protoScrap->set_calculatenotetransform(scrap->calculateNoteTransform());
-    saveTriangulatedData(protoScrap->mutable_triangledata(), scrap->triangulationData());
-    protoScrap->set_type(static_cast<CavewhereProto::Scrap_ScrapType>(scrap->type()));
+    // saveTriangulatedData(protoScrap->mutable_triangledata(), scrap->triangulationData());
+    // protoScrap->set_type(static_cast<CavewhereProto::Scrap_ScrapType>(scrap->type()));
 
     if(scrap->type() == cwScrap::ProjectedProfile) {
         saveProjectedScrapViewMatrix(protoScrap->mutable_profileviewmatrix(), static_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix()));
@@ -454,13 +453,22 @@ void cwRegionSaveTask::saveVector2D(QtProto::QVector2D *protoVector2D, QVector2D
  * @param protoStringList
  * @param stringlist
  */
-void cwRegionSaveTask::saveStringList(QtProto::QStringList *protoStringList, QStringList stringlist)
+// void cwRegionSaveTask::saveStringList(QtProto::QStringList *protoStringList, QStringList stringlist)
+// {
+//     foreach(QString string, stringlist) {
+//         auto protoString = protoStringList->add_legacy_strings();
+//         saveString(protoString, string);
+//     }
+// }
+
+void cwRegionSaveTask::saveStringList(google::protobuf::RepeatedPtrField<std::string> *protoStringList, const QStringList &stringList)
 {
-    foreach(QString string, stringlist) {
-        auto protoString = protoStringList->add_strings();
-        saveString(protoString, string);
+    for(const auto& string : stringList) {
+        protoStringList->Add(string.toUtf8().toStdString());
     }
 }
+
+
 
 void cwRegionSaveTask::saveQUuid(std::string *protoString, const QUuid &id)
 {
@@ -635,8 +643,16 @@ void cwRegionSaveTask::saveStationLookup(CavewhereProto::StationPositionLookup *
 void cwRegionSaveTask::saveLead(CavewhereProto::Lead *protoLead, const cwLead &lead)
 {
     savePointF(protoLead->mutable_positiononnote(), lead.positionOnNote());
-    saveString(protoLead->mutable_description(), lead.desciption());
-    saveSizeF(protoLead->mutable_size(), lead.size());
+
+    if(!lead.desciption().isEmpty()) {
+        saveString(protoLead->mutable_description(), lead.desciption());
+    }
+
+    qDebug() << "Lead size:" << lead.size();
+    if(lead.size().isValid()) {
+        saveSizeF(protoLead->mutable_size(), lead.size());
+    }
+
     protoLead->set_completed(lead.completed());
 }
 

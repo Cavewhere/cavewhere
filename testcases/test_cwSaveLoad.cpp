@@ -251,10 +251,10 @@ void dumpProto(T base, T ours, T theirs, T merged) {
 
     cwSaveLoad save;
 
-    save.saveProtoTrip(dir, std::move(base));
-    save.saveProtoTrip(oursDir, std::move(ours));
-    save.saveProtoTrip(theirsDir, std::move(theirs));
-    save.saveProtoTrip(mergedDir, std::move(merged));
+    save.saveProtoMessage(dir, "base.json", std::move(base));
+    save.saveProtoMessage(oursDir, "ours.json", std::move(ours));
+    save.saveProtoMessage(theirsDir, "theirs.json", std::move(theirs));
+    save.saveProtoMessage(mergedDir, "merged.json", std::move(merged));
 
     save.waitForFinished();
 }
@@ -423,7 +423,45 @@ static void mutateScalarsRecursively(
     }
 }
 
+TEST_CASE("Test the sanitized for directory name", "[cwSaveLoad]") {
+    SECTION("Replaces forbidden characters") {
+        QString input = R"(My:Invalid/Name|Test)";
+        QString expected = "My_Invalid_Name_Test";
+        REQUIRE(cwSaveLoad::sanitizeDirectoryName(input).toStdString() == expected.toStdString());
+    }
 
+    SECTION("Trims whitespace") {
+        QString input = "   directory name   ";
+        QString expected = "directory name";
+        REQUIRE(cwSaveLoad::sanitizeDirectoryName(input) == expected);
+    }
+
+    SECTION("Removes leading and trailing dots") {
+        QString input = "..hidden.name..";
+        QString expected = "hidden.name";
+        REQUIRE(cwSaveLoad::sanitizeDirectoryName(input) == expected);
+    }
+
+    SECTION("Handles all forbidden characters") {
+        QString input = R"(\/:*?"<>|)";
+        QString expected = "_________";
+        REQUIRE(cwSaveLoad::sanitizeDirectoryName(input) == expected);
+    }
+
+    SECTION("Returns 'untitled' when input is empty") {
+        REQUIRE(cwSaveLoad::sanitizeDirectoryName("") == "untitled");
+    }
+
+    SECTION("Returns 'untitled' when result becomes empty") {
+        QString input = "......";
+        REQUIRE(cwSaveLoad::sanitizeDirectoryName(input) == "untitled");
+    }
+
+    SECTION("Valid name remains unchanged") {
+        QString input = "Valid_Directory_Name";
+        REQUIRE(cwSaveLoad::sanitizeDirectoryName(input) == input);
+    }
+}
 
 TEST_CASE("cwSaveLoad should save and load cwTrip - empty", "[cwSaveLoad]") {
     auto dir = testDir();
@@ -455,10 +493,31 @@ TEST_CASE("cwSaveLoad should save and load cwTrip - complex", "[cwSaveLoad]") {
     save.saveTrip(dir, trip);
     save.waitForFinished();
 
-    //Test 3-way merging with protobuf
-
 }
 
+TEST_CASE("cwSaveLoad should save old projects correctly", "[cwSaveLoad]") {
+    auto root = std::make_unique<cwRootData>();
+    // auto filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+    auto filename = "/Users/cave/Desktop/BlankenshipBlowhole.cw";
+
+    //Prevents loop closure from happening
+    root->settings()->jobSettings()->setAutomaticUpdate(false);
+
+    root->project()->loadFile(filename);
+    root->project()->waitLoadToFinish();
+
+    REQUIRE(root->project()->cavingRegion()->caveCount() >= 1);
+    auto cave = root->project()->cavingRegion()->cave(0);
+
+    REQUIRE(cave->tripCount() >= 1);
+    auto trip = cave->trip(0);
+
+    cwSaveLoad save;
+    auto dir = testDir();
+
+    save.saveAllFromV6(dir, root->project());
+    save.waitForFinished();
+}
 
 
 TEST_CASE("cwSaveLoad should 3-way merge cwTrip correctly", "[cwSaveLoad]") {
@@ -1096,9 +1155,6 @@ TEST_CASE("cwSaveLoad should 3-way merge cwTrip correctly", "[cwSaveLoad]") {
                 //           std::move(theirsTrip),
                 //           std::move(mergedTripPtr));
             }
-
-
-
         }
 
         SECTION("Conflicts needs to be valid") {
@@ -1183,4 +1239,6 @@ TEST_CASE("cwSaveLoad should 3-way merge cwTrip correctly", "[cwSaveLoad]") {
         }
     }
 }
+
+
 

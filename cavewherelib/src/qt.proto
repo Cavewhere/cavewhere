@@ -39,7 +39,6 @@ message QSizeF {
 }
 
 message QStringList {
-    repeated string strings = 2;
     repeated QString legacy_strings = 1;
 }
 

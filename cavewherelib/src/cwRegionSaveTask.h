@@ -77,6 +77,8 @@ namespace QtProto {
     class QStringList;
 };
 
+#include "google/protobuf/repeated_field.h"
+
 class cwRegionSaveTask : public cwRegionIOTask
 {
     Q_OBJECT
@@ -147,7 +149,8 @@ public:
     static void savePointF(QtProto::QPointF* protoPointF, QPointF point);
     static void saveVector3D(QtProto::QVector3D* protoVector3D, QVector3D vector3D);
     static void saveVector2D(QtProto::QVector2D* protoVector2D, QVector2D vector2D);
-    static void saveStringList(QtProto::QStringList* protoStringList, QStringList stringlist);
+    // static void saveStringList(QtProto::QStringList* protoStringList, QStringList stringlist);
+    static void saveStringList(google::protobuf::RepeatedPtrField<std::string>* protoStringList, const QStringList& stringList);
     static void saveQUuid(std::string *protoString, const QUuid& id);
 
     template<typename StringFunc, typename State>

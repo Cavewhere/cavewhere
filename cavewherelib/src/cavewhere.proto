@@ -8,6 +8,7 @@ message FileVersion {
     optional string cavewhereVersion = 2;
 }
 
+//This is a legacy message, do not use
 message CavingRegion {
     repeated Cave caves = 1;
     optional int32 version = 2;
@@ -18,6 +19,8 @@ message CavingRegion {
 message Cave {
     optional string name = 8;
     repeated Trip trips = 2;
+
+    //This probably should be in a settings file (global / local) somewhere
     optional Units.LengthUnit lengthUnit = 3;
     optional Units.LengthUnit depthUnit = 4;
 
@@ -66,17 +69,21 @@ message Station {
     optional DistanceStates.State legacy_downState = 9 [deprecated = true]; //This is deprecated use downReading
 }
 
+//This is a legacy message, do not use
 message SurveyNoteModel {
     repeated Note notes = 1;
 }
 
 message Note {
-    optional Image image = 1;
     optional double rotation = 2;
     repeated Scrap scraps = 3;
     optional ImageResolution imageResolution = 4;
+    optional string imagePath = 5; //Relative path to the note's image
+
+    optional Image legacy_image = 1;
 }
 
+//This is a legacy message, do not use
 message Image {
     optional int32 originalId = 1;
     optional int32 iconId = 2;
@@ -203,10 +210,12 @@ message Scrap {
     repeated NoteStation noteStations = 2;
     optional NoteTranformation noteTransformation = 3;
     optional bool calculateNoteTransform = 4;
-    optional TriangulatedData triangleData = 5;
     repeated Lead leads = 6;
     optional ScrapType type = 7;
     optional ProjectedProfileScrapViewMatrix profileViewMatrix = 8; //Only used if type == ProjectedProfile
+
+    //Should be cached
+    optional TriangulatedData triangleData = 5;
 }
 
 //This is used for data cacheing
@@ -249,9 +258,10 @@ message Team {
 
 message TeamMember {
     optional string id = 4;
-    optional string name = 3;
-    optional QtProto.QStringList jobs = 2;
+    optional string name = 3;    
+    repeated string jobs = 5;
 
+    optional QtProto.QStringList legacy_jobs = 2;
     optional QtProto.QString legacy_name = 1;
 }
 
@@ -301,8 +311,9 @@ message SurveyNetwork {
 
     message StationLookupItem {
         optional string stationName = 3;
-        optional QtProto.QStringList neighbors = 2;
+        repeated string neighbors = 4;
 
+        optional QtProto.QStringList legacy_neighbors = 2;
         optional QtProto.QString legacy_stationName = 1;
     }
 }

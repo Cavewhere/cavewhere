@@ -12,6 +12,7 @@
 #include <QObject>
 #include <QMatrix4x4>
 #include <QQmlEngine>
+#include <QPropertyBinding>
 
 //Our includes
 #include "cwImage.h"
@@ -27,6 +28,7 @@ class CAVEWHERE_LIB_EXPORT cwNote : public QObject
     Q_OBJECT
     QML_NAMED_ELEMENT(Note)
 
+    Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged BINDABLE bindableName)
     Q_PROPERTY(int original READ original NOTIFY originalChanged)
     Q_PROPERTY(int icon READ icon NOTIFY iconChanged)
     Q_PROPERTY(cwImage image READ image WRITE setImage NOTIFY imageChanged)
@@ -37,6 +39,10 @@ public:
     explicit cwNote(QObject *parent = 0);
     cwNote(const cwNote& object);
     cwNote& operator=(const cwNote& object);
+
+    QString name() const { return m_name.value(); }
+    void setName(const QString& name) { m_name = name; }
+    QBindable<QString> bindableName() { return &m_name; }
 
     void setImage(cwImage image);
     cwImage image() const;
@@ -71,6 +77,8 @@ public:
     Q_INVOKABLE void propagateResolutionNotesInTrip();
 
 signals:
+    void nameChanged();
+
     void originalChanged(int id);
     void iconChanged(int id);
     void imageChanged(cwImage image);
@@ -94,6 +102,8 @@ public slots:
     void updateScrapNoteTransform();
 
 private:
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwNote, QString, m_name, QString(), &cwNote::nameChanged);
+
     cwTrip* ParentTrip;
     cwCave* ParentCave;
 
