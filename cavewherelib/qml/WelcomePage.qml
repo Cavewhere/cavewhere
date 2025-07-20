@@ -38,7 +38,7 @@ QC.ScrollView {
             Q.Text {
                 id: versionControlId
                 width: columnLayoutId.width
-                text: "CaveWhere Sketch uses version control (Git) to keep track of changes to your sketches. Your name and email are used to record who made each change—just like signing your work. This information stays with your files and helps with collaboration, even if you’re working offline."
+                text: "CaveWhere uses version control (Git) to keep track of changes to your cave data. Your name and email are used to record who made each change—just like signing your work. This information stays with your files and helps with collaboration, even if you’re working offline."
                 wrapMode: Text.WordWrap
             }
         }
