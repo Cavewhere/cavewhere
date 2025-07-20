@@ -144,7 +144,7 @@ int main(int argc, char *argv[])
 
     //Clear the settings for testing
     QSettings settings;
-    settings.clear();
+    // settings.clear();
 
     // Configure multisample antialiasing
     QSurfaceFormat format;
