@@ -23,6 +23,10 @@ StandardPage {
             }
         }
 
+        QC.Button {
+
+        }
+
         ListView {
             id: listViewId
             objectName: "repositoryListView"
