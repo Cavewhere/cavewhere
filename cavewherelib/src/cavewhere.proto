@@ -14,6 +14,7 @@ message CavingRegion {
     optional int32 version = 2;
     optional QtProto.QString legacy_cavewhereVersion = 3;
     optional string cavewhereVersion = 4;
+    optional string name = 5;
 }
 
 message Cave {
@@ -30,19 +31,19 @@ message Cave {
     optional SurveyNetwork network = 7;
 
     //Depercated types, don't use
-    optional QtProto.QString legacy_name = 1 [deprecated = true];
+    optional QtProto.QString legacy_name = 1;
 }
 
 message Trip {
     optional string name = 7;
     optional QtProto.QDate date = 2;
-    optional SurveyNoteModel noteModel = 3 [deprecated = true]; //Notes are loaded independantly from files
     optional TripCalibration tripCalibration = 4;
     repeated SurveyChunk chunks = 5;
     optional Team team = 6;
 
     //Depercated types, don't use
-    optional QtProto.QString legacy_name = 1 [deprecated = true];
+    optional SurveyNoteModel noteModel = 3; //Notes are loaded independantly from files
+    optional QtProto.QString legacy_name = 1;
 }
 
 //This is a legacy message, do not use, use StationShot instead
@@ -56,17 +57,17 @@ message Station {
     optional DistanceReading legacy_downReading = 13;
 
     //Depercated types, don't use
-    optional QtProto.QString legacy_name = 1 [deprecated = true];
+    optional QtProto.QString legacy_name = 1;
 
-    //---- Version <= 5 attributes
-    optional double legacy_left = 2 [deprecated = true]; //This is deprecated use leftReading
-    optional double legacy_right = 3 [deprecated = true]; //This is deprecated use rightReading
-    optional double legacy_up = 4  [deprecated = true]; //This is deprecated use upReading
-    optional double legacy_down = 5 [deprecated = true]; //This is deprecated use downReading
-    optional DistanceStates.State legacy_leftState = 6  [deprecated = true]; //This is deprecated use leftReading
-    optional DistanceStates.State legacy_rightState = 7  [deprecated = true]; //This is deprecated use rightReading
-    optional DistanceStates.State legacy_upState = 8 [deprecated = true]; //This is deprecated use upReading
-    optional DistanceStates.State legacy_downState = 9 [deprecated = true]; //This is deprecated use downReading
+    //---- Version <= 5 attributes, don't use, legacy
+    optional double legacy_left = 2; //This is deprecated use leftReading
+    optional double legacy_right = 3; //This is deprecated use rightReading
+    optional double legacy_up = 4; //This is deprecated use upReading
+    optional double legacy_down = 5; //This is deprecated use downReading
+    optional DistanceStates.State legacy_leftState = 6 ; //This is deprecated use leftReading
+    optional DistanceStates.State legacy_rightState = 7; //This is deprecated use rightReading
+    optional DistanceStates.State legacy_upState = 8; //This is deprecated use upReading
+    optional DistanceStates.State legacy_downState = 9; //This is deprecated use downReading
 }
 
 //This is a legacy message, do not use
@@ -125,16 +126,16 @@ message SurveyChunk {
 //This is a legacy message, do not use, use StationShot instead
 message Shot {
     //---- Version <= 5 attributes
-    optional double legacy_Distance = 1 [deprecated = true];
-    optional double legacy_Compass = 2 [deprecated = true];
-    optional double legacy_BackCompass = 3 [deprecated = true];
-    optional double legacy_Clino = 4 [deprecated = true];
-    optional double legacy_BackClino = 5 [deprecated = true];
-    optional DistanceStates.State legacy_distanceState = 6[deprecated = true];
-    optional CompassStates.State legacy_compassState = 7 [deprecated = true];
-    optional CompassStates.State legacy_backCompassState = 8 [deprecated = true];
-    optional ClinoStates.State legacy_clinoState = 9 [deprecated = true];
-    optional ClinoStates.State legacy_backClinoState = 10 [deprecated = true];
+    optional double legacy_Distance = 1;
+    optional double legacy_Compass = 2;
+    optional double legacy_BackCompass = 3;
+    optional double legacy_Clino = 4;
+    optional double legacy_BackClino = 5;
+    optional DistanceStates.State legacy_distanceState = 6;
+    optional CompassStates.State legacy_compassState = 7;
+    optional CompassStates.State legacy_backCompassState = 8;
+    optional ClinoStates.State legacy_clinoState = 9;
+    optional ClinoStates.State legacy_backClinoState = 10;
 
     //All versions
     optional bool includeDistance = 11;
@@ -233,7 +234,7 @@ message NoteStation {
     optional QtProto.QPointF positionOnNote = 2;
 
     //Deprecated types, don't use
-    optional QtProto.QString legacy_name = 1 [deprecated = true];
+    optional QtProto.QString legacy_name = 1;
 }
 
 message NoteTranformation {

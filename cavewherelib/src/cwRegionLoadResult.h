@@ -23,8 +23,8 @@ public:
     void setErrors(const QList<cwError>& errors);
     QList<cwError> errors() const;
 
-    void setCavingRegion(const cwCavingRegionPtr& region);
-    cwCavingRegionPtr cavingRegion() const;
+    void setCavingRegion(const cwCavingRegionData& region);
+    cwCavingRegionData cavingRegion() const;
 
     void setFileVersion(int fileVersion);
     int fileVersion() const;

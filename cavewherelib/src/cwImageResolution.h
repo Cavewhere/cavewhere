@@ -24,13 +24,12 @@ class cwImageResolution : public cwUnitValue
 public:
     explicit cwImageResolution(QObject *parent = 0);
     cwImageResolution(double value, cwUnits::ImageResolutionUnit unit, QObject* parent = 0);
-    cwImageResolution(const cwImageResolution& other);
 
     QStringList unitNames() const;
     QString unitName(int unit) const;
     int toUnitType(QString unitName) const;
     
-    Q_INVOKABLE cwImageResolution convertTo(cwUnits::ImageResolutionUnit to) const;
+    Q_INVOKABLE cwImageResolution::Data convertTo(cwUnits::ImageResolutionUnit to) const;
 
     Q_INVOKABLE void setResolution(cwLength* length, double numberOfPixels);
 

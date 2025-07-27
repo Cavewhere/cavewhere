@@ -50,7 +50,8 @@ void cwWallsImportData::cavesHelper(QList<cwCave*>* caves,
         currentTrip->setDate(QDateTime(currentBlock->date(), QTime()));
 
         //Copy all the team members
-        currentTrip->setTeam(new cwTeam(*(currentBlock->team()))); //Copy the team
+
+        currentTrip->team()->setData(currentBlock->team()->data()); //Copy the team
 
         //Copy the calibration
         currentTrip->setCalibration(new cwTripCalibration(*(currentBlock->calibration())));
@@ -97,7 +98,8 @@ void cwWallsImportData::cavesHelper(QList<cwCave*>* caves,
 
         //Add all the chunks to the
         foreach(cwSurveyChunk* chunk, currentBlock->chunks()) {
-            cwSurveyChunk* newChunk = new cwSurveyChunk(*chunk);
+            cwSurveyChunk* newChunk = new cwSurveyChunk();
+            newChunk->setData(chunk->data());
             currentTrip->addChunk(newChunk);
         }
     }

@@ -80,9 +80,9 @@ cwProjectedProfileScrapViewMatrix::Data *cwProjectedProfileScrapViewMatrix::Data
     return new cwProjectedProfileScrapViewMatrix::Data(*this);
 }
 
-cwScrap::ScrapType cwProjectedProfileScrapViewMatrix::Data::type() const
+cwAbstractScrapViewMatrix::Type cwProjectedProfileScrapViewMatrix::Data::type() const
 {
-    return cwScrap::ProjectedProfile;
+    return Type::ProjectedProfile;
 }
 
 /**

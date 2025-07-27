@@ -26,7 +26,7 @@ class CAVEWHERE_LIB_EXPORT cwCompassExportCaveTask : public cwCaveExporterTask
 public:
     explicit cwCompassExportCaveTask(QObject *parent = 0);
 
-    bool writeCave(QTextStream& stream, cwCave* cave);
+    bool writeCave(QTextStream& stream, const cwCaveData& cave);
 
 signals:
 

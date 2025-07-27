@@ -215,25 +215,27 @@ void cwProject::save() {
   */
 void cwProject::privateSave() {
 
-    auto region = QSharedPointer<cwCavingRegion>::create(*Region);
-    QString filename = this->filename();
-    region->moveToThread(nullptr);
+    qDebug() << "Private Save is broken, TODO fix!";
 
-    auto future = cwConcurrent::run([region, filename]() {
-        cwRegionSaveTask saveTask;
-        saveTask.setDatabaseFilename(filename);
-        return saveTask.save(region.get());
-    });
+    // auto region = QSharedPointer<cwCavingRegion>::create(*Region);
+    // QString filename = this->filename();
+    // region->moveToThread(nullptr);
 
-    FutureToken.addJob({QFuture<void>(future), "Saving"});
+    // auto future = cwConcurrent::run([region, filename]() {
+    //     cwRegionSaveTask saveTask;
+    //     saveTask.setDatabaseFilename(filename);
+    //     return saveTask.save(region.get());
+    // });
 
-    SaveFuture = AsyncFuture::observe(future).subscribe([future, this](){
-        auto errors = future.result();
-        ErrorModel->append(errors);
-        if(!cwError::containsFatal(errors)) {
-            emit fileSaved();
-        }
-    }).future();
+    // FutureToken.addJob({QFuture<void>(future), "Saving"});
+
+    // SaveFuture = AsyncFuture::observe(future).subscribe([future, this](){
+    //     auto errors = future.result();
+    //     ErrorModel->append(errors);
+    //     if(!cwError::containsFatal(errors)) {
+    //         emit fileSaved();
+    //     }
+    // }).future();
 }
 
 bool cwProject::saveWillCauseDataLoss() const
@@ -392,7 +394,7 @@ void cwProject::loadFile(QString filename) {
     auto updateRegion = [this, filename](const cwRegionLoadResult& result) {
         setFilename(result.filename());
         setTemporaryProject(result.isTempFile());
-        *Region = *(result.cavingRegion().data());
+        Region->setData(result.cavingRegion());
         FileVersion = result.fileVersion();
         emit canSaveDirectlyChanged();
         emit loaded();
@@ -524,22 +526,27 @@ void cwProject::waitSaveToFinish()
  */
 bool cwProject::isModified() const
 {
-    cwRegionSaveTask saveTask;
-    QByteArray saveData = saveTask.serializedData(Region);
 
-    if(isTemporaryProject()) {
-        return Region->caveCount() > 0;
-    }
+    qDebug() << "TODO fix isModified!";
 
-    cwRegionLoadTask loadTask;
-    loadTask.setDatabaseFilename(filename());
-    loadTask.setDeleteOldImages(false);
-    auto result = loadTask.load();
-    loadTask.waitToFinish();
+    return true;
 
-    QByteArray currentData = saveTask.serializedData(result.cavingRegion().data());
+    // cwRegionSaveTask saveTask;
+    // QByteArray saveData = saveTask.serializedData(Region);
 
-    return saveData != currentData;
+    // if(isTemporaryProject()) {
+    //     return Region->caveCount() > 0;
+    // }
+
+    // cwRegionLoadTask loadTask;
+    // loadTask.setDatabaseFilename(filename());
+    // loadTask.setDeleteOldImages(false);
+    // auto result = loadTask.load();
+    // loadTask.waitToFinish();
+
+    // QByteArray currentData = saveTask.serializedData(result.cavingRegion().data());
+
+    // return saveData != currentData;
 }
 
 void cwProject::addImages(QList<QUrl> noteImagePaths,
@@ -617,6 +624,11 @@ QString cwProject::supportedImageFormats()
 
     return withWildCards.join(' ');
 }
+
+// cwProject::FileType cwProject::projectType(const QString &filename) const
+// {
+
+// }
 
 /**
  * @brief cwProject::setUndoStack

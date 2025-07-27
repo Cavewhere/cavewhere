@@ -15,20 +15,19 @@
 cwRegionIOTask::cwRegionIOTask(QObject* parent) :
     cwProjectIOTask(parent)
 {
-    Region = new cwCavingRegion();
-    Region->moveToThread(nullptr);
+
 }
 
 cwRegionIOTask::~cwRegionIOTask()
 {
-    delete Region;
+
 }
 
 /**
       This does a deap copy of the region, so it make a snapshot
       */
-void cwRegionIOTask::setCavingRegion(const cwCavingRegion& region) {
-    *Region = region;
+void cwRegionIOTask::setCavingRegion(const cwCavingRegionData& region) {
+    Region = region;
 }
 
 /**
@@ -40,12 +39,12 @@ void cwRegionIOTask::setCavingRegion(const cwCavingRegion& region) {
  * This fuction makes sure that the thread for region is correct when coping
  * the region.
  */
-void cwRegionIOTask::copyRegionTo(cwCavingRegion &region)
+void cwRegionIOTask::copyRegionTo(cwCavingRegion* region)
 {
-    Q_ASSERT(Region->thread() == nullptr);
+    // Q_ASSERT(Region->thread() == nullptr);
 
     //Preform copy
-    region = *Region;
+    region->setData(Region);
 }
 
 /**

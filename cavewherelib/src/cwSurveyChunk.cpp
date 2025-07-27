@@ -33,8 +33,9 @@ cwSurveyChunk::cwSurveyChunk(QObject * parent) :
     QObject(parent),
     ErrorModel(new cwErrorModel(this)),
     ParentTrip(nullptr),
-    m_id(QUuid::createUuid())
+    d({QUuid::createUuid(), {}, {}})
 {
+
 
     //Handle updating chunk calibration indexing when stations are added
     connect(this, &cwSurveyChunk::shotsAdded, this, &cwSurveyChunk::updateCalibrationsNewShots);
@@ -59,32 +60,25 @@ cwSurveyChunk::cwSurveyChunk(QObject * parent) :
 
 }
 
-/**
-  \brief Makes a deap copy of the chunk
+// /**
+//   \brief Makes a deap copy of the chunk
 
-  All station will be copied into new stations, with the same data.
-  */
-cwSurveyChunk::cwSurveyChunk(const cwSurveyChunk& chunk) :
-    QObject(),
-    ErrorModel(new cwErrorModel(this)),
-    ParentTrip(nullptr),
-    m_id(chunk.m_id)
-{
+//   All station will be copied into new stations, with the same data.
+//   */
+// cwSurveyChunk::cwSurveyChunk(const cwSurveyChunk& chunk) :
+//     QObject(),
+//     ErrorModel(new cwErrorModel(this)),
+//     ParentTrip(nullptr),
+//     d(chunk.d)
+// {
+//     //Copy all the Calibration
+//     for(auto iter = chunk.Calibrations.begin(); iter != chunk.Calibrations.end(); iter++) {
+//         Calibrations.insert(iter.key(), new cwTripCalibration(*iter.value()));
+//         Calibrations.value(iter.key())->setParent(this);
+//     }
 
-    //Copy all the stations
-    Stations = chunk.Stations;
-
-    //Copy all the shots
-    Shots = chunk.Shots;
-
-    //Copy all the Calibration
-    for(auto iter = chunk.Calibrations.begin(); iter != chunk.Calibrations.end(); iter++) {
-        Calibrations.insert(iter.key(), new cwTripCalibration(*iter.value()));
-        Calibrations.value(iter.key())->setParent(this);
-    }
-
-    updateErrors();
-}
+//     updateErrors();
+// }
 
 cwSurveyChunk::~cwSurveyChunk()
 {
@@ -95,7 +89,7 @@ cwSurveyChunk::~cwSurveyChunk()
   \brief Checks if the survey Chunk is valid
   */
 bool cwSurveyChunk::isValid() const {
-    return (Stations.size() - 1) == Shots.size() && !Stations.empty() && !Shots.empty();
+    return (d.stations.size() - 1) == d.shots.size() && !d.stations.empty() && !d.shots.empty();
 }
 
 /**
@@ -196,7 +190,7 @@ cwTripCalibration *cwSurveyChunk::lastCalibration() const
  * @return Returns the number of stations in the survey chunk
  */
 int cwSurveyChunk::stationCount() const {
-    return Stations.count();
+    return d.stations.count();
 }
 
 /**
@@ -261,18 +255,18 @@ void cwSurveyChunk::setParentTrip(cwTrip* trip) {
 
 cwStation cwSurveyChunk::station(int index) const {
     if(stationIndexCheck(index)) {
-        return Stations[index];
+        return d.stations[index];
     }
     return cwStation();
 }
 
 int cwSurveyChunk::shotCount() const {
-    return Shots.size();
+    return d.shots.size();
 }
 
 cwShot cwSurveyChunk::shot(int index) const {
     if(shotIndexCheck(index)) {
-        return Shots[index];
+        return d.shots[index];
     }
     return cwShot();
 }
@@ -285,32 +279,32 @@ cwShot cwSurveyChunk::shot(int index) const {
   */
 void cwSurveyChunk::appendNewShot() {
     //Check for special case
-    if(!isValid() && Stations.size() <= 2 && Shots.size() <= 1) {
+    if(!isValid() && d.stations.size() <= 2 && d.shots.size() <= 1) {
         //Make valid
-        for(int i = Stations.size(); i < 2; i++) {
-            Stations.append(cwStation());
+        for(int i = d.stations.size(); i < 2; i++) {
+            d.stations.append(cwStation());
             // emit stationsAdded(i, i);
         }
 
-        if(Shots.size() != 1) {
-            Shots.append(cwShot());
+        if(d.shots.size() != 1) {
+            d.shots.append(cwShot());
             // emit shotsAdded(0, 0);
         }
 
         //Added initial stations
         emit added(0, 1, 0, 0);
 
-        checkForStationError(Stations.size() - 2);
-        checkForStationError(Stations.size() - 1);
-        checkForShotError(Shots.size() - 1);
+        checkForStationError(d.stations.size() - 2);
+        checkForStationError(d.stations.size() - 1);
+        checkForShotError(d.shots.size() - 1);
 
         return;
     }
 
 
     cwStation fromStation;
-    if(!Stations.isEmpty()) {
-        fromStation = Stations.last();
+    if(!d.stations.isEmpty()) {
+        fromStation = d.stations.last();
         if(!fromStation.isValid()) {
             return;
         }
@@ -337,17 +331,17 @@ void cwSurveyChunk::appendShot(cwStation fromStation, cwStation toStation, cwSho
     if(!canAddShot(fromStation, toStation)) { return; }
 
     int index;
-    int firstIndex = Stations.size();
-    if(Stations.empty()) {
-        Stations.append(fromStation);
-        checkForStationError(Stations.size() - 1);
+    int firstIndex = d.stations.size();
+    if(d.stations.empty()) {
+        d.stations.append(fromStation);
+        checkForStationError(d.stations.size() - 1);
     }
 
-    int shotIndex = Shots.size();
-    Shots.append(shot);
+    int shotIndex = d.shots.size();
+    d.shots.append(shot);
 
-    int stationIndex = Stations.size();
-    Stations.append(toStation);
+    int stationIndex = d.stations.size();
+    d.stations.append(toStation);
 
     emit added(firstIndex, stationIndex, shotIndex, shotIndex);
 
@@ -364,21 +358,21 @@ void cwSurveyChunk::appendShot(cwStation fromStation, cwStation toStation, cwSho
   This will create a new chunk, that the caller is responsible for deleting
   */
 cwSurveyChunk* cwSurveyChunk::splitAtStation(int stationIndex) {
-    if(stationIndex < 1 || stationIndex >= Stations.size()) { return nullptr; }
+    if(stationIndex < 1 || stationIndex >= d.stations.size()) { return nullptr; }
 
     cwSurveyChunk* newChunk = new cwSurveyChunk(this);
-    newChunk->Stations.append(cwStation()); //Add an empty station to the front
+    newChunk->d.stations.append(cwStation()); //Add an empty station to the front
 
     //Copy the points from one chunk to another
-    for(int i = stationIndex; i < Stations.size(); i++) {
+    for(int i = stationIndex; i < d.stations.size(); i++) {
 
         //Get the current stations and shots
-        cwStation station = Stations[i];
+        cwStation station = d.stations[i];
         cwShot currentShot = shot(i - 1);
 
-        newChunk->Stations.append(station);
+        newChunk->d.stations.append(station);
         if(currentShot.isValid()) {
-            newChunk->Shots.append(currentShot);
+            newChunk->d.shots.append(currentShot);
         }
     }
 
@@ -386,10 +380,10 @@ cwSurveyChunk* cwSurveyChunk::splitAtStation(int stationIndex) {
     int shotIndex = stationIndex - 1;
     emit aboutToRemove(stationIndex, stationIndex, shotIndex, shotIndex);
 
-    QList<cwStation>::iterator stationIter = Stations.begin() + stationIndex;
-    QList<cwShot>::iterator shotIter = Shots.begin() + shotIndex;
-    Stations.erase(stationIter, Stations.end());
-    Shots.erase(shotIter, Shots.end());
+    QList<cwStation>::iterator stationIter = d.stations.begin() + stationIndex;
+    QList<cwShot>::iterator shotIter = d.shots.begin() + shotIndex;
+    d.stations.erase(stationIter, d.stations.end());
+    d.shots.erase(shotIter, d.shots.end());
 
     emit removed(stationIndex, stationIndex, shotIndex, shotIndex);
 
@@ -415,8 +409,8 @@ cwSurveyChunk* cwSurveyChunk::splitAtStation(int stationIndex) {
 
   */
 void cwSurveyChunk::insertStation(int stationIndex, Direction direction) {
-    if(Stations.empty()) { appendNewShot(); return; }
-    if(stationIndex < 0 || stationIndex >= Stations.size()) { return; }
+    if(d.stations.empty()) { appendNewShot(); return; }
+    if(stationIndex < 0 || stationIndex >= d.stations.size()) { return; }
 
     int shotIndex = stationIndex;
 
@@ -426,8 +420,8 @@ void cwSurveyChunk::insertStation(int stationIndex, Direction direction) {
 
     cwStation station;
 
-    Stations.insert(stationIndex, station);
-    Shots.insert(shotIndex, cwShot());
+    d.stations.insert(stationIndex, station);
+    d.shots.insert(shotIndex, cwShot());
 
     emit added(stationIndex, stationIndex,
                shotIndex, shotIndex);
@@ -442,8 +436,8 @@ void cwSurveyChunk::insertStation(int stationIndex, Direction direction) {
   at index + 1.  A station will also be added as well
   */
 void cwSurveyChunk::insertShot(int shotIndex, Direction direction) {
-    if(Stations.empty()) { appendNewShot(); return; }
-    if(shotIndex < 0 || shotIndex >= Stations.size()) { return; }
+    if(d.stations.empty()) { appendNewShot(); return; }
+    if(shotIndex < 0 || shotIndex >= d.stations.size()) { return; }
 
     int stationIndex = shotIndex + 1;
 
@@ -453,8 +447,8 @@ void cwSurveyChunk::insertShot(int shotIndex, Direction direction) {
 
     cwStation station;
 
-    Stations.insert(stationIndex, station);
-    Shots.insert(shotIndex, cwShot());
+    d.stations.insert(stationIndex, station);
+    d.shots.insert(shotIndex, cwShot());
 
     emit added(stationIndex, stationIndex,
                shotIndex, shotIndex);
@@ -470,7 +464,7 @@ void cwSurveyChunk::insertShot(int shotIndex, Direction direction) {
   */
 bool cwSurveyChunk::canAddShot(const cwStation& fromStation, const cwStation& toStation) {
     Q_UNUSED(toStation);
-    return Stations.empty() || Stations.last().name().compare(fromStation.name(), Qt::CaseInsensitive) == 0;
+    return d.stations.empty() || d.stations.last().name().compare(fromStation.name(), Qt::CaseInsensitive) == 0;
 }
 
 /**
@@ -585,26 +579,26 @@ bool cwSurveyChunk::isShotRole(cwSurveyChunk::DataRole role) const {
   */
 QString cwSurveyChunk::guessLastStationName() const {
     //Need a least two stations for this to work.
-    if(Stations.size() < 2) {
+    if(d.stations.size() < 2) {
         return QString();
     }
 
-    if(Stations.last().name().isEmpty()) {
+    if(d.stations.last().name().isEmpty()) {
         QString stationName;
 
-        if(Stations.size() == 2) {
+        if(d.stations.size() == 2) {
             //Try to get the station name from the previous chunk
             QList<cwSurveyChunk*> chunks = parentTrip()->chunks();
             int index = chunks.indexOf(const_cast<cwSurveyChunk*>(this)) - 1;
             cwSurveyChunk* previousChunk = parentTrip()->chunk(index);
             if(previousChunk != nullptr) {
-                stationName = previousChunk->Stations.last().name();
+                stationName = previousChunk->d.stations.last().name();
             }
         }
 
         if(stationName.isEmpty()) {
-            int secondToLastStation = Stations.size() - 2;
-            stationName = Stations.at(secondToLastStation).name();
+            int secondToLastStation = d.stations.size() - 2;
+            stationName = d.stations.at(secondToLastStation).name();
         }
 
         QString nextStation = guessNextStation(stationName);
@@ -645,8 +639,8 @@ QString cwSurveyChunk::guessNextStation(QString stationName) const {
  * If the index is out of range, this function will do nothing
  */
 void cwSurveyChunk::setStation(cwStation station, int index){
-    if(index < 0 || index >= Stations.size()) { return; }
-    Stations[index] = station;
+    if(index < 0 || index >= d.stations.size()) { return; }
+    d.stations[index] = station;
     emit dataChanged(StationNameRole, index);
     emit dataChanged(StationLeftRole, index);
     emit dataChanged(StationRightRole, index);
@@ -670,7 +664,7 @@ bool cwSurveyChunk::isStationAndShotsEmpty() const
         return true;
     }
 
-    foreach(cwStation station, Stations) {
+    foreach(cwStation station, d.stations) {
         if(!station.name().isEmpty() ||
             station.left().state() != cwDistanceReading::State::Empty ||
             station.right().state() != cwDistanceReading::State::Empty ||
@@ -681,7 +675,7 @@ bool cwSurveyChunk::isStationAndShotsEmpty() const
         }
     }
 
-    foreach(cwShot shot, Shots) {
+    foreach(cwShot shot, d.shots) {
         if(shot.distance().state() != cwDistanceReading::State::Empty ||
                 shot.backCompass().state() != cwCompassReading::State::Empty ||
                 shot.compass().state() != cwCompassReading::State::Empty ||
@@ -708,13 +702,37 @@ QVariant cwSurveyChunk::data(DataRole role, int index) const {
     }
 }
 
+cwSurveyChunkData cwSurveyChunk::data() const
+{
+    return d;
+}
+
+void cwSurveyChunk::setData(const cwSurveyChunkData &data)
+{
+    auto lastStationIndex = d.stations.size() - 1;
+    auto lastShotIndex = d.shots.size() - 1;
+
+    emit aboutToRemove(0, lastStationIndex, 0, lastShotIndex);
+    d.shots.clear();
+    d.stations.clear();
+    emit removed(0, lastStationIndex, 0, lastShotIndex);
+
+    d = data;
+
+    if(d.stations.size() > 0) {
+        emit added(0, d.stations.size() - 1, 0, d.shots.size());
+    }
+
+    updateErrors();
+}
+
 /**
   \brief Helper function to data
   */
 QVariant cwSurveyChunk::stationData(DataRole role, int index) const {
-    if(index < 0 || index >= Stations.size()) { return QVariant(); }
+    if(index < 0 || index >= d.stations.size()) { return QVariant(); }
 
-    const cwStation& station = Stations[index];
+    const cwStation& station = d.stations[index];
 
     switch (role) {
     case StationNameRole:
@@ -741,9 +759,9 @@ QVariant cwSurveyChunk::stationData(DataRole role, int index) const {
   \brief Helper function to data
   */
 QVariant cwSurveyChunk::shotData(DataRole role, int index) const {
-    if(index < 0 || index >= Shots.size()) { return QVariant(); }
+    if(index < 0 || index >= d.shots.size()) { return QVariant(); }
 
-    const cwShot& shot = Shots[index];
+    const cwShot& shot = d.shots[index];
 
     switch(role) {
     case ShotDistanceRole:
@@ -768,7 +786,7 @@ QVariant cwSurveyChunk::shotData(DataRole role, int index) const {
   \brief Sets the station's data for role, index, and data
   */
 void cwSurveyChunk::setStationData(cwSurveyChunk::DataRole role, int index, const QVariant& data) {
-    if(index < 0 || index >= Stations.size()) {
+    if(index < 0 || index >= d.stations.size()) {
         qDebug().noquote() << QStringLiteral("Can't set station data for role \"%1\" at index: \"%2\" with data: \"%3\" index out of bounds")
         .arg(role).arg(index).arg(data.toString()) << LOCATION;
         return;
@@ -780,7 +798,7 @@ void cwSurveyChunk::setStationData(cwSurveyChunk::DataRole role, int index, cons
     }
 
     QString dataString = data.toString();
-    cwStation& station = Stations[index];
+    cwStation& station = d.stations[index];
 
     switch (role) {
     case StationNameRole:
@@ -815,7 +833,7 @@ void cwSurveyChunk::setStationData(cwSurveyChunk::DataRole role, int index, cons
   \brief Sets the shot's data for role, index, and data
   */
 void cwSurveyChunk::setShotData(cwSurveyChunk::DataRole role, int index, const QVariant& data) {
-    if(index < 0 || index >= Shots.size()) {
+    if(index < 0 || index >= d.shots.size()) {
         qDebug() << QString("Can't set shot data for role \"%1\" at index: \"%2\" with data: \"%3\"")
                     .arg(role).arg(index).arg(data.toString()) << LOCATION;
         return;
@@ -826,7 +844,7 @@ void cwSurveyChunk::setShotData(cwSurveyChunk::DataRole role, int index, const Q
         return;
     }
 
-    cwShot& shot = Shots[index];
+    cwShot& shot = d.shots[index];
 
     switch(role) {
     case ShotDistanceRole:
@@ -883,7 +901,7 @@ void cwSurveyChunk::checkForErrorOnDataChanged(cwSurveyChunk::DataRole role, int
         }
 
         //Next shot
-        if(index < Shots.size()) {
+        if(index < d.shots.size()) {
             checkForError(ShotDistanceRole, index);
             checkForError(ShotCompassRole, index);
             checkForError(ShotBackCompassRole, index);
@@ -956,8 +974,8 @@ void cwSurveyChunk::checkForError(cwSurveyChunk::DataRole role, int index)
     case StationNameRole: {
 
         Q_ASSERT(index >= 0);
-        Q_ASSERT(index < Stations.size());
-        const cwStation& station = Stations.at(index);
+        Q_ASSERT(index < d.stations.size());
+        const cwStation& station = d.stations.at(index);
         QString stationName = station.name(); //data(StationNameRole, index).toString();
 
         if(stationName.isEmpty()) {
@@ -1029,7 +1047,7 @@ void cwSurveyChunk::checkForError(cwSurveyChunk::DataRole role, int index)
 void cwSurveyChunk::checkForStationError(int index)
 {
     Q_ASSERT(index >= 0);
-    Q_ASSERT(index < Stations.size());
+    Q_ASSERT(index < d.stations.size());
     checkForError(StationNameRole, index);
     checkForError(StationLeftRole, index);
     checkForError(StationRightRole, index);
@@ -1044,7 +1062,7 @@ void cwSurveyChunk::checkForStationError(int index)
 void cwSurveyChunk::checkForShotError(int index)
 {
     Q_ASSERT(index >= 0);
-    Q_ASSERT(index < Shots.size());
+    Q_ASSERT(index < d.shots.size());
     checkForError(ShotDistanceRole, index);
     checkForError(ShotDistanceIncludedRole, index);
     checkForError(ShotCompassRole, index);
@@ -1380,8 +1398,8 @@ QList<cwError> cwSurveyChunk::checkClinoMixingType(cwSurveyChunk::DataRole role,
 bool cwSurveyChunk::isShotDataEmpty(int index) const
 {
     Q_ASSERT(index >= 0);
-    Q_ASSERT(index < Shots.size());
-    const auto& shot = Shots.at(index);
+    Q_ASSERT(index < d.shots.size());
+    const auto& shot = d.shots.at(index);
 
     return shot.distance().state() == cwDistanceReading::State::Empty
            && shot.compass().state() == cwCompassReading::State::Empty
@@ -1398,8 +1416,8 @@ bool cwSurveyChunk::isShotDataEmpty(int index) const
 bool cwSurveyChunk::isStationDataEmpty(int index) const
 {
     Q_ASSERT(index >= 0);
-    Q_ASSERT(index < Stations.size());
-    const auto& station = Stations.at(index);
+    Q_ASSERT(index < d.stations.size());
+    const auto& station = d.stations.at(index);
 
     return station.left().state() == cwDistanceReading::State::Empty
            &&  station.right().state() == cwDistanceReading::State::Empty
@@ -1415,11 +1433,11 @@ void cwSurveyChunk::updateErrors()
 {
     clearErrors();
 
-    for(int i = 0; i < Shots.size(); i++) {
+    for(int i = 0; i < d.shots.size(); i++) {
         checkForShotError(i);
     }
 
-    for(int i = 0; i < Stations.size(); i++) {
+    for(int i = 0; i < d.stations.size(); i++) {
         checkForStationError(i);
     }
 }
@@ -1520,7 +1538,7 @@ void cwSurveyChunk::updateCalibrationsNewShots(int beginIndex, int endIndex)
         for(auto iter = Calibrations.begin(); iter != Calibrations.end(); iter++) {
             //if the calibration at shot x is greater than or equal to the first
             //index that was added and the beginIndex isn't the last shot in shots
-            if(beginIndex <= iter.key() && beginIndex != Shots.size() - distance) {
+            if(beginIndex <= iter.key() && beginIndex != d.shots.size() - distance) {
                 //Update the key and shift the calibration down
                 Q_ASSERT(iter.value() != nullptr);
                 newCalibration.insert(iter.key() + distance, iter.value());
@@ -1567,7 +1585,7 @@ void cwSurveyChunk::updateCalibrationsRemoveShots(int beginIndex, int endIndex)
                 }
             } else if(beginIndex <= iter.key() && endIndex >= iter.key()) {
                 //Deleting the index
-                if(beginIndex < Shots.size()) {
+                if(beginIndex < d.shots.size()) {
                     //There's a valid shot at beginIndex
                     if(!newCalibration.contains(beginIndex)) {
                         newCalibration.insert(beginIndex, iter.value());
@@ -1635,8 +1653,8 @@ cwErrorModel* cwSurveyChunk::errorsAt(int index, cwSurveyChunk::DataRole role) c
 void cwSurveyChunk::remove(int stationIndex, int shotIndex) {
     emit aboutToRemove(stationIndex, stationIndex, shotIndex, shotIndex);
 
-    Stations.removeAt(stationIndex);
-    Shots.removeAt(shotIndex);
+    d.stations.removeAt(stationIndex);
+    d.shots.removeAt(shotIndex);
 
     emit removed(stationIndex, stationIndex, shotIndex, shotIndex);
 }
@@ -1660,7 +1678,7 @@ int cwSurveyChunk::index(int index, Direction direction) {
 bool cwSurveyChunk::hasStation(QString stationName) const {
 
     //Linear search...
-    foreach(cwStation station, Stations) {
+    foreach(cwStation station, d.stations) {
         if(station.name().compare(stationName, Qt::CaseInsensitive) == 0) {
             return true;
         }
@@ -1704,8 +1722,8 @@ QSet<cwStation> cwSurveyChunk::neighboringStations(QString stationName) const {
   */
 QList<int> cwSurveyChunk::indicesOfStation(QString stationName) const {
     QList<int> indices;
-    for(int i = 0; i < Stations.size(); i++) {
-        if(Stations[i].name().compare(stationName, Qt::CaseInsensitive) == 0) {
+    for(int i = 0; i < d.stations.size(); i++) {
+        if(d.stations[i].name().compare(stationName, Qt::CaseInsensitive) == 0) {
             indices.append(i);
         }
     }

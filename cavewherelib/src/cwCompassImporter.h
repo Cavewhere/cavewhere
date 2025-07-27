@@ -33,7 +33,7 @@ public:
 
     void setCompassDataFiles(QStringList filename);
 
-    QList<cwCave> caves() const;
+    QList<cwCaveData> caves() const;
 
 protected:
     void runTask();
@@ -47,9 +47,10 @@ private:
     QStringList CompassDataFiles;
 
     //Output
-    QList<cwCave> Caves;
+    QList<cwCaveData> m_cavesData;
 
     //Status info
+    QList<cwCave*> Caves;
     int LineCount;
     QString CurrentFilename;
     cwCave* CurrentCave;
@@ -83,9 +84,9 @@ private:
  * @brief cwCompassImporter::cave
  * @return Returns the resulting cave.
  */
-inline QList<cwCave> cwCompassImporter::caves() const
+inline QList<cwCaveData> cwCompassImporter::caves() const
 {
-    return Caves;
+    return m_cavesData;
 }
 
 /**

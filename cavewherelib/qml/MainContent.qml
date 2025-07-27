@@ -85,8 +85,8 @@ QQ.Item {
     }
 
     QQ.Component {
-        id: repositoriesComponent
-        RepositoryListPage {
+        id: sourceComponent
+        SourceListPage {
             anchors.fill: parent
         }
     }
@@ -142,7 +142,7 @@ QQ.Item {
 
         pageView.unknownPageComponent = unknownPageComponent
         let viewPage = RootData.pageSelectionModel.registerPage(null, "View", renderingComponent);
-        let repositoryPage = RootData.pageSelectionModel.registerPage(null, "Source", repositoriesComponent);
+        let repositoryPage = RootData.pageSelectionModel.registerPage(null, "Source", sourceComponent);
         let dataPage = RootData.pageSelectionModel.registerPage(repositoryPage, "Data", dataMainPageComponent);
         let mapPage = RootData.pageSelectionModel.registerPage(null, "Map", mapPageComponent)
         RootData.pageSelectionModel.registerPage(null, "Testcases", testcasesPageComponent);

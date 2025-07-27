@@ -475,10 +475,10 @@ void cwCaptureManager::saveScene()
         outputImage.fill(backgroundFill);
 
         cwImageResolution resolutionDPI(resolution(), cwUnits::DotsPerInch);
-        cwImageResolution resolutionDPM = resolutionDPI.convertTo(cwUnits::DotsPerMeter);
+        cwImageResolution::Data resolutionDPM = resolutionDPI.convertTo(cwUnits::DotsPerMeter);
 
-        outputImage.setDotsPerMeterX(resolutionDPM.value());
-        outputImage.setDotsPerMeterY(resolutionDPM.value());
+        outputImage.setDotsPerMeterX(resolutionDPM.value);
+        outputImage.setDotsPerMeterY(resolutionDPM.value);
 
         QPainter painter(&outputImage);
         Scene->render(&painter, imageRect, sceneRect);

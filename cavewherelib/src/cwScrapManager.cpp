@@ -126,7 +126,6 @@ void cwScrapManager::setFutureManagerToken(cwFutureManagerToken token)
 void cwScrapManager::updateAllScraps() {
 
     //Get all the scraps for the whole region
-    QList<cwScrap*> scraps;
     foreach(cwCave* cave, RegionModel->cavingRegion()->caves()) {
         foreach(cwTrip* trip, cave->trips()) {
             foreach(cwNote* note, trip->notes()->notes()) {
@@ -463,10 +462,10 @@ cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) 
     data.setNoteImage(scrap->parentNote()->image());
     data.setOutline(scrap->points());
     data.setStations(mapNoteStationsToTriangulateStation(scrap->stations(), cave->stationPositionLookup()));
-    data.setNoteTransform(*(scrap->noteTransformation()));
+    data.setNoteTransform(scrap->noteTransformation()->data());
     data.setViewMatrix(scrap->viewMatrix()->data()->clone());
 
-    double dotsPerMeter = scrap->parentNote()->imageResolution()->convertTo(cwUnits::DotsPerMeter).value();
+    double dotsPerMeter = scrap->parentNote()->imageResolution()->convertTo(cwUnits::DotsPerMeter).value;
     data.setNoteImageResolution(dotsPerMeter);
 
     data.setLeads(scrap->leads());

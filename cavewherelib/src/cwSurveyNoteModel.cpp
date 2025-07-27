@@ -35,25 +35,9 @@ QHash<int, QByteArray> cwSurveyNoteModel::roleNames() const
     return roles;
 }
 
-cwSurveyNoteModel::cwSurveyNoteModel(const cwSurveyNoteModel& object) :
-    QAbstractListModel(nullptr),
-    ParentTrip(nullptr),
-    ParentCave(nullptr)
+
+void cwSurveyNoteModel::setData(const cwSurveyNoteModelData &data)
 {
-    copy(object);
-}
-
-cwSurveyNoteModel& cwSurveyNoteModel::operator=(const cwSurveyNoteModel& object) {
-    if(&object == this) { return *this; }
-    copy(object);
-    return *this;
-}
-
-/**
-  \brief Does a deap copy of all the notes in the notemodel
-  */
-void cwSurveyNoteModel::copy(const cwSurveyNoteModel& object) {
-
     beginResetModel();
 
     //Delete all the old notes
@@ -62,13 +46,25 @@ void cwSurveyNoteModel::copy(const cwSurveyNoteModel& object) {
     }
     Notes.clear();
 
-    foreach(cwNote* note, object.Notes) {
-        cwNote* copyNote = new cwNote(*note);
-        copyNote->setParentTrip(parentTrip());
-        Notes.append(copyNote);
+    Notes.reserve(data.notes.size());
+    for(const auto& noteData : data.notes) {
+        cwNote* newNote = new cwNote();
+        newNote->setParentTrip(parentTrip());
+        newNote->setData(noteData);
+        Notes.append(newNote);
     }
 
     endResetModel();
+}
+
+cwSurveyNoteModelData cwSurveyNoteModel::data() const
+{
+    cwSurveyNoteModelData data;
+    data.notes.reserve(Notes.size());
+    for(cwNote* note : Notes) {
+        data.notes.append(note->data());
+    }
+    return data;
 }
 
 /**
@@ -262,4 +258,7 @@ void cwSurveyNoteModel::setParentCave(cwCave *cave) {
         }
     }
 }
+
+
+
 

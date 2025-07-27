@@ -39,8 +39,8 @@ public:
     QList<cwTriangulateStation> stations() const;
     void setStations(QList<cwTriangulateStation> stations);
 
-    cwNoteTranformation noteTransform() const;
-    void setNoteTransform(cwNoteTranformation noteTransform);
+    cwNoteTransformationData noteTransform() const;
+    void setNoteTransform(const cwNoteTransformationData& noteTransform);
 
     double noteImageResolution() const;
     void setNoteImageResolution(double dotsPerMeter);

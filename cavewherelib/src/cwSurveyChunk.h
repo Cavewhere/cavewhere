@@ -14,7 +14,7 @@
 #include "cwShot.h"
 #include "cwError.h"
 #include "cwGlobals.h"
-#include <QtCore/quuid.h>
+#include "cwSurveyChunkData.h"
 class cwErrorModel;
 class cwTrip;
 class cwCave;
@@ -68,11 +68,11 @@ public:
     Q_ENUM(Direction)
 
     cwSurveyChunk(QObject *parent = 0);
-    cwSurveyChunk(const cwSurveyChunk& chunk);
+
     virtual ~cwSurveyChunk();
 
-    QUuid id() const { return m_id; }
-    void setId(const QUuid id) { m_id = id; }
+    QUuid id() const { return d.id; }
+    void setId(const QUuid id) { d.id = id; }
 
     bool isValid() const;
     bool canAddShot(const cwStation& fromStation, const cwStation& toStation);
@@ -85,9 +85,13 @@ public:
     QList<cwStation> stations() const;
     QList<cwShot> shots() const;
 
+    [[deprecated]]
     void addCalibration(int shotIndex, cwTripCalibration *calibration = nullptr);
+    [[deprecated]]
     void removeCalibration(int shotIndex);
+    [[deprecated]]
     QMap<int, cwTripCalibration *> calibrations() const;
+    [[deprecated]]
     cwTripCalibration* lastCalibration() const;
 
     bool hasStation(QString stationName) const;
@@ -115,6 +119,9 @@ public:
 
     Q_INVOKABLE cwErrorModel* errorsAt(int index, DataRole role) const;
     Q_INVOKABLE QVariant data(DataRole role, int index) const;
+
+    cwSurveyChunkData data() const;
+    void setData(const cwSurveyChunkData& data);
 
 signals:
     void parentTripChanged();
@@ -182,8 +189,10 @@ private:
         int Role;
     };
 
-    QList<cwStation> Stations;
-    QList<cwShot> Shots;
+    cwSurveyChunkData d;
+    // QUuid m_id;
+    // QList<cwStation> Stations;
+    // QList<cwShot> Shots;
 
     // Deperate this?! currently not used?!
     QMap<int, cwTripCalibration*> Calibrations;
@@ -193,10 +202,9 @@ private:
 
     cwTrip* ParentTrip;
 
-    QUuid m_id;
 
-    bool shotIndexCheck(int index) const { return index >= 0 && index < Shots.count();  }
-    bool stationIndexCheck(int index) const { return index >= 0 && index < Stations.count(); }
+    bool shotIndexCheck(int index) const { return index >= 0 && index < d.shots.count();  }
+    bool stationIndexCheck(int index) const { return index >= 0 && index < d.stations.count(); }
 
     void remove(int stationIndex, int shotIndex);
     int index(int index, Direction direction);
@@ -247,7 +255,7 @@ inline cwTrip* cwSurveyChunk::parentTrip() const {
   You shouldn't modify the station data from this list
   */
 inline QList<cwStation> cwSurveyChunk::stations() const {
-    return Stations;
+    return d.stations;
 }
 
 /**
@@ -256,7 +264,7 @@ inline QList<cwStation> cwSurveyChunk::stations() const {
   You shouldn't modify the shot data from this list
   */
 inline QList<cwShot> cwSurveyChunk::shots() const {
-    return Shots;
+    return d.shots;
 }
 
 

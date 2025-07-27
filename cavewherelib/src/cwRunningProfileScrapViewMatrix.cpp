@@ -43,7 +43,7 @@ cwRunningProfileScrapViewMatrix::Data *cwRunningProfileScrapViewMatrix::Data::cl
     return new cwRunningProfileScrapViewMatrix::Data(*this);
 }
 
-cwScrap::ScrapType cwRunningProfileScrapViewMatrix::Data::type() const
+cwAbstractScrapViewMatrix::Type cwRunningProfileScrapViewMatrix::Data::type() const
 {
-    return cwScrap::RunningProfile;
+    return Type::RunningProfile;
 }

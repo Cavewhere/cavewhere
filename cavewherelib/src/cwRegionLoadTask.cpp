@@ -104,8 +104,7 @@ cwRegionLoadResult cwRegionLoadTask::load()
             return results;
         }
 
-        data.region->moveToThread(nullptr);
-        results.setCavingRegion(data.region);
+        results.setCavingRegion(data.region->data());
         results.setFileVersion(data.fileVersion);
         results.setFileName(databaseFilename());
         return results;

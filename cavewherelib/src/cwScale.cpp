@@ -19,24 +19,24 @@ cwScale::cwScale(QObject *parent) :
     connectLengthObjects();
 }
 
-cwScale::cwScale(const cwScale &other) :
-    QObject(nullptr),
-    ScaleNumerator(new cwLength(*(other.ScaleNumerator))),
-    ScaleDenominator(new cwLength(*(other.ScaleDenominator)))
-{
-    ScaleNumerator->setParent(this);
-    ScaleDenominator->setParent(this);
-    connectLengthObjects();
-}
+// cwScale::cwScale(const cwScale &other) :
+//     QObject(nullptr),
+//     ScaleNumerator(new cwLength(*(other.ScaleNumerator))),
+//     ScaleDenominator(new cwLength(*(other.ScaleDenominator)))
+// {
+//     ScaleNumerator->setParent(this);
+//     ScaleDenominator->setParent(this);
+//     connectLengthObjects();
+// }
 
-const cwScale& cwScale::operator =(const cwScale &other)
-{
-    if(this != &other) {
-        *ScaleNumerator = *(other.ScaleNumerator);
-        *ScaleDenominator = *(other.ScaleDenominator);
-    }
-    return *this;
-}
+// const cwScale& cwScale::operator =(const cwScale &other)
+// {
+//     if(this != &other) {
+//         *ScaleNumerator = *(other.ScaleNumerator);
+//         *ScaleDenominator = *(other.ScaleDenominator);
+//     }
+//     return *this;
+// }
 
 /**
   This connects the length objects when the scale has changed.
@@ -56,9 +56,23 @@ void cwScale::connectLengthObjects() {
   For example, 1cm on the page of notes equals to 5m in the cave.
   */
 double cwScale::scale() const {
-    double numerator = scaleNumerator()->convertTo(cwUnits::Meters).value();
-    double denominator = scaleDenominator()->convertTo(cwUnits::Meters).value();
-    return   numerator / denominator;
+    double numerator = scaleNumerator()->convertTo(cwUnits::Meters).value;
+    double denominator = scaleDenominator()->convertTo(cwUnits::Meters).value;
+    return numerator / denominator;
+}
+
+void cwScale::setData(const Data &data)
+{
+    ScaleDenominator->setData(data.scaleDenominator);
+    ScaleNumerator->setData(data.scaleNumerator);
+}
+
+cwScale::Data cwScale::data() const
+{
+    return {
+        ScaleDenominator->data(),
+        ScaleNumerator->data()
+    };
 }
 
 /**

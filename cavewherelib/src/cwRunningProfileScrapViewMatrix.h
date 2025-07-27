@@ -24,7 +24,7 @@ public:
 
         QMatrix4x4 matrix() const;
         Data *clone() const;
-        cwScrap::ScrapType type() const;
+        Type type() const;
 
     private:
         bool Valid = false;

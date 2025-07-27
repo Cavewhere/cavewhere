@@ -427,39 +427,39 @@ TEST_CASE("Test the sanitized for directory name", "[cwSaveLoad]") {
     SECTION("Replaces forbidden characters") {
         QString input = R"(My:Invalid/Name|Test)";
         QString expected = "My_Invalid_Name_Test";
-        REQUIRE(cwSaveLoad::sanitizeDirectoryName(input).toStdString() == expected.toStdString());
+        REQUIRE(cwSaveLoad::sanitizeFileName(input).toStdString() == expected.toStdString());
     }
 
     SECTION("Trims whitespace") {
         QString input = "   directory name   ";
         QString expected = "directory name";
-        REQUIRE(cwSaveLoad::sanitizeDirectoryName(input) == expected);
+        REQUIRE(cwSaveLoad::sanitizeFileName(input) == expected);
     }
 
     SECTION("Removes leading and trailing dots") {
         QString input = "..hidden.name..";
         QString expected = "hidden.name";
-        REQUIRE(cwSaveLoad::sanitizeDirectoryName(input) == expected);
+        REQUIRE(cwSaveLoad::sanitizeFileName(input) == expected);
     }
 
     SECTION("Handles all forbidden characters") {
         QString input = R"(\/:*?"<>|)";
         QString expected = "_________";
-        REQUIRE(cwSaveLoad::sanitizeDirectoryName(input) == expected);
+        REQUIRE(cwSaveLoad::sanitizeFileName(input) == expected);
     }
 
     SECTION("Returns 'untitled' when input is empty") {
-        REQUIRE(cwSaveLoad::sanitizeDirectoryName("") == "untitled");
+        REQUIRE(cwSaveLoad::sanitizeFileName("") == "untitled");
     }
 
     SECTION("Returns 'untitled' when result becomes empty") {
         QString input = "......";
-        REQUIRE(cwSaveLoad::sanitizeDirectoryName(input) == "untitled");
+        REQUIRE(cwSaveLoad::sanitizeFileName(input) == "untitled");
     }
 
     SECTION("Valid name remains unchanged") {
         QString input = "Valid_Directory_Name";
-        REQUIRE(cwSaveLoad::sanitizeDirectoryName(input) == input);
+        REQUIRE(cwSaveLoad::sanitizeFileName(input) == input);
     }
 }
 

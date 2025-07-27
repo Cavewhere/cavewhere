@@ -28,13 +28,13 @@ class CAVEWHERE_LIB_EXPORT cwLength : public cwUnitValue
 public:
     explicit cwLength(QObject *parent = 0);
     cwLength(double value, cwUnits::LengthUnit unit, QObject* parent = 0);
-    cwLength(const cwLength& other);
+    // cwLength(const cwLength& other);
 
     QStringList unitNames() const;
     QString unitName(int unit) const;
     int toUnitType(QString unitString) const;
 
-    cwLength convertTo(cwUnits::LengthUnit to) const;
+    cwLength::Data convertTo(cwUnits::LengthUnit to) const;
 
 protected:
     virtual void convertToUnit(int newUnit);

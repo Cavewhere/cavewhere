@@ -11,6 +11,7 @@
 //Our includes
 #include "cwProjectIOTask.h"
 #include "cwGlobals.h"
+#include "cwCavingRegionData.h"
 class cwCavingRegion;
 
 class CAVEWHERE_LIB_EXPORT cwRegionIOTask : public cwProjectIOTask
@@ -20,15 +21,15 @@ public:
     cwRegionIOTask(QObject* parent = nullptr);
     ~cwRegionIOTask();
 
-    void setCavingRegion(const cwCavingRegion& region);
+    void setCavingRegion(const cwCavingRegionData& region);
 
-    void copyRegionTo(cwCavingRegion& region);
+    void copyRegionTo(cwCavingRegion *region);
 
     static int protoVersion();
     static QString toVersion(int protoVersion);
 
 protected:
-    cwCavingRegion* Region;
+    cwCavingRegionData Region;
 
 private:
 

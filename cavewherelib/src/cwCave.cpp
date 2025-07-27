@@ -12,6 +12,7 @@
 #include "cwLength.h"
 #include "cwErrorModel.h"
 #include "cwCavingRegion.h"
+#include "cwData.h"
 
 //Qt includes
 #include <QThread>
@@ -32,75 +33,75 @@ cwCave::cwCave(QObject* parent) :
 //    ErrorModel->addParent(this);
 }
 
-/**
-  \brief Copy constructor
-  */
-cwCave::cwCave(const cwCave& object) :
-    QAbstractListModel(nullptr),
-    cwUndoer(),
-    Length(new cwLength(this)),
-    Depth(new cwLength(this)),
-    ErrorModel(new cwErrorModel(this)),
-    StationPositionModelStale(false)
-{
-    Copy(object);
-}
+// /**
+//   \brief Copy constructor
+//   */
+// cwCave::cwCave(const cwCave& object) :
+//     QAbstractListModel(nullptr),
+//     cwUndoer(),
+//     Length(new cwLength(this)),
+//     Depth(new cwLength(this)),
+//     ErrorModel(new cwErrorModel(this)),
+//     StationPositionModelStale(false)
+// {
+//     Copy(object);
+// }
 
-/**
-  \brief Assignment operator
-  */
-cwCave& cwCave::operator=(const cwCave& object) {
-    return Copy(object);
-}
+// /**
+//   \brief Assignment operator
+//   */
+// cwCave& cwCave::operator=(const cwCave& object) {
+//     return Copy(object);
+// }
 
 cwCave::~cwCave() {
     Q_ASSERT(thread() == QThread::currentThread() || thread() == nullptr);
 }
 
-/**
-  \brief Copies data from one object to another one
-  */
-cwCave& cwCave::Copy(const cwCave& object) {
-    if(&object == this) {
-        return *this;
-    }
+// /**
+//   \brief Copies data from one object to another one
+//   */
+// cwCave& cwCave::Copy(const cwCave& object) {
+//     if(&object == this) {
+//         return *this;
+//     }
 
-    //Set the name of the cave
-    setName(object.name());
+//     //Set the name of the cave
+//     setName(object.name());
 
-    //Set the station positions
-    setStationPositionLookup(object.stationPositionLookup());
+//     //Set the station positions
+//     setStationPositionLookup(object.stationPositionLookup());
 
-    //Remove all the old trips
-    int lastTripIndex = Trips.size() - 1;
-    Trips.clear();
-    if(lastTripIndex > 0) {
-        emit removedTrips(0, lastTripIndex);
-    }
+//     //Remove all the old trips
+//     int lastTripIndex = Trips.size() - 1;
+//     Trips.clear();
+//     if(lastTripIndex > 0) {
+//         emit removedTrips(0, lastTripIndex);
+//     }
 
-    //Copy all the trips from object
-    Trips.reserve(object.tripCount());
-    for(int i = 0; i < object.tripCount(); i++) {
-        cwTrip* trip = object.trip(i);
-        cwTrip* newTrip = new cwTrip(*trip); //Deep copy of the trip
-        newTrip->setParent(this);
-        newTrip->setParentCave(this);
-        newTrip->errorModel()->setParentModel(ErrorModel);
-        Trips.append(newTrip);
-    }
+//     //Copy all the trips from object
+//     Trips.reserve(object.tripCount());
+//     for(int i = 0; i < object.tripCount(); i++) {
+//         cwTrip* trip = object.trip(i);
+//         cwTrip* newTrip = new cwTrip(*trip); //Deep copy of the trip
+//         newTrip->setParent(this);
+//         newTrip->setParentCave(this);
+//         newTrip->errorModel()->setParentModel(ErrorModel);
+//         Trips.append(newTrip);
+//     }
 
-    if(object.tripCount() - 1 > 0) {
-        emit insertedTrips(0, object.tripCount() - 1);
-    }
+//     if(object.tripCount() - 1 > 0) {
+//         emit insertedTrips(0, object.tripCount() - 1);
+//     }
 
-    *Length = *(object.Length);
-    *Depth = *(object.Depth);
+//     *Length = *(object.Length);
+//     *Depth = *(object.Depth);
 
-    StationPositionModelStale = object.StationPositionModelStale;
-    Network = object.Network;
+//     StationPositionModelStale = object.StationPositionModelStale;
+//     Network = object.Network;
 
-    return *this;
-}
+//     return *this;
+// }
 
 /**
   \brief Sets the name of the cwCave
@@ -386,6 +387,33 @@ QList<cwStation> cwCave::stations() const {
         allStations.append(trip->stations());
     }
     return allStations;
+}
+
+cwCaveData cwCave::data() const
+{
+    //Todo load trips
+    return {
+        Name,
+        cwData::toDataList<cwTripData>(Trips),
+        StationPositionModel
+    };
+}
+
+void cwCave::setData(const cwCaveData &data)
+{
+    setName(data.name);
+
+    //Remove all trips
+    for(int i = Trips.size(); i >= 0; --i) {
+        removeTrip(i);
+    }
+
+    //Insert all trips
+    for(const auto& tripData : data.trips) {
+        cwTrip* trip = new cwTrip();
+        trip->setData(tripData);
+        addTrip(trip);
+    }
 }
 
 /**

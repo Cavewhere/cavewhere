@@ -14,6 +14,7 @@
 
 //Our includes
 #include "cwTeamMember.h"
+#include "cwTeamData.h"
 
 class cwTeam : public QAbstractListModel
 {
@@ -30,7 +31,9 @@ public:
     Q_ENUM(TeamModelRoles)
 
     explicit cwTeam(QObject *parent = 0);
-    cwTeam(const cwTeam& team);
+
+    // [[deprecated]]
+    // cwTeam(const cwTeam& team);
 
     Q_INVOKABLE void addTeamMember();
     void addTeamMember(const cwTeamMember& teamMember);
@@ -47,6 +50,9 @@ public:
     Q_INVOKABLE void setData(int index, cwTeam::TeamModelRoles role, const QVariant& data);
 
     virtual QHash<int, QByteArray> roleNames() const;
+
+    void setData(const cwTeamData &data);
+    cwTeamData data() const { return {Team}; };
 
 signals:
 

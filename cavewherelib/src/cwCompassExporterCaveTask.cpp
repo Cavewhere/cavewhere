@@ -26,13 +26,16 @@ cwCompassExportCaveTask::cwCompassExportCaveTask(QObject *parent) :
 /**
   Writes all the trips to the data stream
   */
-bool cwCompassExportCaveTask::writeCave(QTextStream& stream, cwCave* cave) {
+bool cwCompassExportCaveTask::writeCave(QTextStream& stream, const cwCaveData &cave) {
     //Haven't done anything
     TotalProgress = 0;
 
+    auto cavePtr = std::make_unique<cwCave>();
+    cavePtr->setData(cave);
+
     //Go throug all the trips and save them
-    for(int i = 0; i < cave->tripCount(); i++) {
-        cwTrip* trip = cave->trip(i);
+    for(int i = 0; i < cavePtr->tripCount(); i++) {
+        cwTrip* trip = cavePtr->trip(i);
         writeTrip(stream, trip);
         TotalProgress += trip->numberOfStations();
         stream << compassNewLine();

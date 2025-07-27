@@ -1,5 +1,4 @@
 //Catch includes
-#include <QtCore/quuid.h>
 #include <catch2/catch_test_macros.hpp>
 
 //Std includes

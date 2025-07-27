@@ -522,9 +522,11 @@ cwTreeImportDataNode* cwWallsImporter::convertTrip(cwTrip* trip, cwTreeImportDat
         result->IncludeDistance = true;
         result->setName(trip->name());
         result->setDate(trip->date().date());
-        *result->calibration() = *trip->calibrations();
+        result->calibration()->setData(trip->calibrations()->data());
         foreach(cwSurveyChunk* chunk, trip->chunks()) {
-            result->addChunk(new cwSurveyChunk(*chunk));
+            auto newChunk = new cwSurveyChunk();
+            newChunk->setData(chunk->data());
+            result->addChunk(newChunk);
         }
 
         foreach (cwTeamMember member, trip->team()->teamMembers()) {

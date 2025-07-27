@@ -164,7 +164,10 @@ class CAVEWHERE_LIB_EXPORT cwTripCalibration : public QObject
 
 public:
     explicit cwTripCalibration(QObject *parent = nullptr);
+
+    [[deprecated]]
     cwTripCalibration(const cwTripCalibration &other);
+    [[deprecated]]
     cwTripCalibration& operator=(const cwTripCalibration &other);
 
     // Getters that delegate to the internal data instance:
@@ -201,6 +204,7 @@ public:
 
     // New getter that returns the entire data structure:
     cwTripCalibrationData data() const { return m_data; }
+    void setData(const cwTripCalibrationData& data);
 
     Q_INVOKABLE int mapToLengthUnit(int supportedUnitIndex);
     Q_INVOKABLE int mapToSupportUnit(int lengthUnit);

@@ -13,15 +13,19 @@
 //Our includes
 #include "cwStation.h"
 #include "cwGlobals.h"
+#include "cwTripData.h"
+// #include "cwTripCalibration.h"
+class cwTripCalibration;
 #include "cwUndoer.h"
 #include "cwCave.h"
+// #include "cwTeam.h"
+#include "cwSurveyChunk.h"
 class cwSurveyChunk;
-//class cwCave;
-class cwTeam;
-class cwTripCalibration;
+// class cwCave;
 class cwSurveyNoteModel;
 class cwShot;
 class cwErrorModel;
+class cwTeam;
 
 //Qt include
 #include <QObject>
@@ -49,8 +53,12 @@ class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
 
 public:
     explicit cwTrip(QObject *parent = 0);
-    cwTrip(const cwTrip& object);
-    cwTrip& operator=(const cwTrip& object);
+
+    // [[deprecated]]
+    // cwTrip(const cwTrip& object);
+    // [[deprecated]]
+    // cwTrip& operator=(const cwTrip& object);
+
     ~cwTrip();
 
     QString name() const;
@@ -92,6 +100,10 @@ public:
     void stationPositionModelUpdated();
 
     cwErrorModel* errorModel() const;
+
+    cwTripData data() const;
+    void setData(const cwTripData& data);
+
 signals:
     void nameChanged();
     void dateChanged(QDateTime date);
@@ -123,7 +135,7 @@ protected:
 
     virtual void setUndoStackForChildren();
 private:
-    void Copy(const cwTrip& object);
+    // void Copy(const cwTrip& object);
 
     class NameCommand : public QUndoCommand {
     public:

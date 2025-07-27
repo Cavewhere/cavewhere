@@ -7,14 +7,9 @@
 
 //Our includes
 #include "cwLinePlotGeometryTask.h"
-#include "cwSurveyChunk.h"
-#include "cwCavingRegion.h"
-#include "cwCave.h"
 #include "cwTrip.h"
-#include "cwSurveyChunk.h"
 #include "cwStationPositionLookup.h"
 #include "cwDebug.h"
-#include "cwLength.h"
 
 //Std includes
 #include <limits>
@@ -25,7 +20,7 @@
 cwLinePlotGeometryTask::cwLinePlotGeometryTask(QObject *parent) :
     cwTask(parent)
 {
-    Region = nullptr;
+
 }
 
 /**
@@ -39,9 +34,11 @@ void cwLinePlotGeometryTask::runTask() {
     PointData.clear();
     IndexData.clear();
     StationIndexLookup.clear();
-    CavesLengthAndDepths.resize(Region->caveCount());
 
-    for(int caveIndex = 0; caveIndex < Region->caveCount(); caveIndex++) {
+    const int caveCount = Region.caves.size();
+    CavesLengthAndDepths.resize(Region.caves.size());
+
+    for(int caveIndex = 0; caveIndex < caveCount; caveIndex++) {
         addStationPositions(caveIndex);
         addShotLines(caveIndex);
 
@@ -61,14 +58,14 @@ void cwLinePlotGeometryTask::runTask() {
   This adds the station positions to PointData
   */
 void cwLinePlotGeometryTask::addStationPositions(int caveIndex) {
-    cwCave* cave = Region->cave(caveIndex);
+    const cwCaveData& cave = Region.caves.at(caveIndex);
 
-    QMapIterator<QString, QVector3D> iter(cave->stationPositionLookup().positions());
+    QMapIterator<QString, QVector3D> iter(cave.stationPositionModel.positions());
 
     while(iter.hasNext()) {
         iter.next();
 
-        QString fullName = fullStationName(caveIndex, cave->name(), iter.key());
+        QString fullName = fullStationName(caveIndex, cave.name, iter.key());
 
         StationIndexLookup.insert(fullName, PointData.size());
 
@@ -87,24 +84,24 @@ void cwLinePlotGeometryTask::addStationPositions(int caveIndex) {
 void cwLinePlotGeometryTask::addShotLines(int caveIndex) {
     if(PointData.isEmpty()) { return; }
 
-    cwCave* cave = Region->cave(caveIndex);
+    const cwCaveData& cave = Region.caves.at(caveIndex);
 
     double minDepth = std::numeric_limits<double>::max();
     double maxDepth = -std::numeric_limits<double>::max();
     double length = 0.0; //Cave's length
 
     //Go through all the trips in the cave
-    for(int tripIndex = 0; tripIndex < cave->tripCount(); tripIndex++) {
-        cwTrip* trip = cave->trip(tripIndex);
+    for(int tripIndex = 0; tripIndex < cave.trips.size(); tripIndex++) {
+        const cwTripData& trip = cave.trips.at(tripIndex);
 
         //Go through all the chunks in the trip
-        foreach(cwSurveyChunk* chunk, trip->chunks()) {
+        foreach(const cwSurveyChunkData& chunk, trip.chunks) {
 
-            if(chunk->stationCount() < 2) { continue; }
+            if(chunk.stations.size() < 2) { continue; }
 
-            cwStation firstStation = chunk->station(0);
+            const cwStation& firstStation = chunk.stations.at(0);
 
-            QString fullName = fullStationName(caveIndex, cave->name(), firstStation.name());
+            QString fullName = fullStationName(caveIndex, cave.name, firstStation.name());
             if(!StationIndexLookup.contains(fullName)) {
                 qDebug() << "Warning! Couldn't find station position index (will result in rendering artifacts): " << fullName << LOCATION;
             }
@@ -116,14 +113,14 @@ void cwLinePlotGeometryTask::addShotLines(int caveIndex) {
             maxDepth = qMax(maxDepth, (double)previousPoint.z());
 
             //Go through all the the stations/shots in the chunk
-            for(int stationIndex = 1; stationIndex < chunk->stationCount(); stationIndex++) {
-                cwStation station = chunk->station(stationIndex);
-                cwShot shot = chunk->shot(stationIndex - 1);
+            for(int stationIndex = 1; stationIndex < chunk.stations.size(); stationIndex++) {
+                const cwStation& station = chunk.stations.at(stationIndex);
+                const cwShot& shot = chunk.shots.at(stationIndex - 1);
 
                 //Look up the index
-                fullName = fullStationName(caveIndex, cave->name(), station.name());
+                fullName = fullStationName(caveIndex, cave.name, station.name());
                 if(StationIndexLookup.contains(fullName)) {
-                    unsigned int stationIndex = StationIndexLookup.value(fullStationName(caveIndex, cave->name(), station.name()), 0);
+                    unsigned int stationIndex = StationIndexLookup.value(fullStationName(caveIndex, cave.name, station.name()), 0);
 
                     //Depth and length calculation
                     QVector3D currentPoint = PointData.at(stationIndex);

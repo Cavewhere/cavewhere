@@ -17,18 +17,22 @@
 #include <QDebug>
 #include <QSharedPointer>
 #include <QQmlEngine>
+#include <QObjectBindableProperty>
 
 //Our includes
 class cwCave;
 class cwProject;
+#include "cwCavingRegionData.h"
 #include "cwUndoer.h"
 #include "cwGlobals.h"
+
 
 class CAVEWHERE_LIB_EXPORT cwCavingRegion : public QAbstractListModel, public cwUndoer
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(CavingRegion)
 
+    Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged BINDABLE bindableName)
     Q_PROPERTY(int caveCount READ caveCount NOTIFY caveCountChanged)
 
 public:
@@ -37,17 +41,14 @@ public:
     };
     Q_ENUM(Roles)
 
-    // enum class Columns : int {
-    //     Name,
-    //     Length,
-    //     Depth,
-
-    // }
-
     explicit cwCavingRegion(QObject *parent = nullptr);
-    cwCavingRegion(const cwCavingRegion& object);
-    cwCavingRegion& operator=(const cwCavingRegion& object);
+    // cwCavingRegion(const cwCavingRegion& object);
+    // cwCavingRegion& operator=(const cwCavingRegion& object);
 //    ~cwCavingRegion() { qDebug() << "Deleted: " << this; }
+
+    QString name() const { return m_name.value(); }
+    void setName(const QString& name) { m_name = name; }
+    QBindable<QString> bindableName() { return &m_name; }
 
     bool hasCaves() const;
     Q_INVOKABLE int caveCount() const;
@@ -69,7 +70,13 @@ public:
     int indexOf(cwCave* cave);
 
     cwProject* parentProject() const;
+
+    void setData(const cwCavingRegionData &data);
+    cwCavingRegionData data() const;
+
 signals:
+    void nameChanged();
+
     void beginInsertCaves(int begin, int end);
     void insertedCaves(int begin, int end);
 
@@ -81,12 +88,14 @@ signals:
 public slots:
 
 protected:
-    QList<cwCave*> Caves;
+    QList<cwCave*> m_caves;
 
     virtual void setUndoStackForChildren();
 
 private:
-    cwCavingRegion& copy(const cwCavingRegion& object);
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwCavingRegion, QString, m_name, QString(), &cwCavingRegion::nameChanged);
+
+    // cwCavingRegion& copy(const cwCavingRegion& object);
 
     void unparentCave(cwCave* cave);
     void addCaveHelper();
@@ -132,29 +141,29 @@ typedef QSharedPointer<cwCavingRegion> cwCavingRegionPtr;
   \brief Get's the number of caves in the region
   */
 inline int cwCavingRegion::caveCount() const {
-    return Caves.count();
+    return m_caves.count();
 }
 
 /**
   \brief Returns true if the region has at least on cave, otherwise false
   */
 inline bool cwCavingRegion::hasCaves() const {
-    return !Caves.isEmpty();
+    return !m_caves.isEmpty();
 }
 
 /**
   \brief Get's a cave at index
   */
 inline cwCave* cwCavingRegion::cave(int index) const {
-    if(index < 0 || index >= Caves.size()) { return nullptr; }
-    return Caves[index];
+    if(index < 0 || index >= m_caves.size()) { return nullptr; }
+    return m_caves[index];
 }
 
 /**
   \brief Gets all the caves in the region
   */
 inline QList<cwCave*> cwCavingRegion::caves() const {
-    return Caves;
+    return m_caves;
 }
 
 #endif // CWCAVINGREGION_H

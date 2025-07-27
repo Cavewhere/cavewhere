@@ -9,6 +9,7 @@
 #include "cwSurveyNoteModel.h"
 #include "cwNote.h"
 #include "cwImageProvider.h"
+#include "cavewhereVersion.h"
 
 //Async future
 #include <asyncfuture.h>
@@ -57,11 +58,28 @@ cwSaveLoad::cwSaveLoad(QObject *parent) :
 
 }
 
+void cwSaveLoad::saveCavingRegion(const QDir &dir, const cwCavingRegion *region)
+{
+    saveProtoMessage(dir,
+                     sanitizeFileName(QStringLiteral("%1.cw").arg(region->name())),
+                     toProtoCavingRegion(region)
+                     );
+}
+
+std::unique_ptr<CavewhereProto::CavingRegion> cwSaveLoad::toProtoCavingRegion(const cwCavingRegion *region)
+{
+    auto protoRegion = std::make_unique<CavewhereProto::CavingRegion>();
+    protoRegion->set_version(cwRegionIOTask::protoVersion());
+    cwRegionSaveTask::saveString(protoRegion->mutable_cavewhereversion(), CavewhereVersion);
+    cwRegionSaveTask::saveString(protoRegion->mutable_name(), region->name());
+    return protoRegion;
+}
+
 void cwSaveLoad::saveCave(const QDir &dir, const cwCave *cave)
 {
     saveProtoMessage(
         dir,
-        QStringLiteral("cave_data.json"),
+        QStringLiteral("%1.cwcave").arg(cave->name()),
         toProtoCave(cave));
 }
 
@@ -76,7 +94,7 @@ void cwSaveLoad::saveTrip(const QDir &dir, const cwTrip *trip)
 {
     saveProtoMessage(
         dir,
-        QStringLiteral("trip_data.json"),
+        QStringLiteral("%1.cwtrip").arg(trip->name()),
         toProtoTrip(trip));
 }
 
@@ -138,7 +156,7 @@ void cwSaveLoad::saveAllFromV6(const QDir &dir, const cwProject* project)
 {
 
     auto makeDir = [](const QDir& rootDir, const QString& name) {
-        auto dirName = sanitizeDirectoryName(name);
+        auto dirName = sanitizeFileName(name);
         rootDir.mkdir(dirName);
 
         QDir subDir = rootDir;
@@ -158,7 +176,8 @@ void cwSaveLoad::saveAllFromV6(const QDir &dir, const cwProject* project)
 
         int imageIndex = 1;
         for(const cwNote* note : notes->notes()) {
-            cwNote noteCopy = cwNote(*note);
+            cwNote noteCopy;
+            noteCopy.setData(note->data());
 
             if(noteCopy.name().isEmpty()) {
                 noteCopy.setName(QString::number(imageIndex));
@@ -194,6 +213,11 @@ void cwSaveLoad::saveAllFromV6(const QDir &dir, const cwProject* project)
         }
     };
 
+    //Save the region's data
+    cwCavingRegion region;
+    region.setName(QFileInfo(project->filename()).baseName());
+    saveCavingRegion(dir, &region);
+
     //Go through all the caves
     for(const auto cave : project->cavingRegion()->caves()) {
         const QDir caveDir = makeDir(dir, cave->name());
@@ -214,7 +238,7 @@ void cwSaveLoad::waitForFinished()
     model.waitForFinished();
 }
 
-QString cwSaveLoad::sanitizeDirectoryName(QString input) {
+QString cwSaveLoad::sanitizeFileName(QString input) {
     // Modify the input string in-place
     const QString forbiddenChars = R"(\/:*?"<>|)";
     for (const QChar& ch : forbiddenChars) {
@@ -238,7 +262,9 @@ void cwSaveLoad::saveProtoMessage(const QDir &dir,
                                   std::unique_ptr<const google::protobuf::Message> message)
 {
     if(message) {
-        d->saveProtoMessage(this, dir.absoluteFilePath(filename), std::move(message));
+        d->saveProtoMessage(this,
+                            dir.absoluteFilePath(sanitizeFileName(filename)),
+                            std::move(message));
     }
 }
 

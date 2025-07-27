@@ -16,8 +16,10 @@
 
 //Our includes
 #include "cwImage.h"
-#include "cwNoteStation.h"
 #include "cwNoteTranformation.h"
+#include "cwNoteData.h"
+
+class cwScrap;
 class cwTrip;
 class cwScrap;
 class cwCave;
@@ -29,16 +31,16 @@ class CAVEWHERE_LIB_EXPORT cwNote : public QObject
     QML_NAMED_ELEMENT(Note)
 
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged BINDABLE bindableName)
-    Q_PROPERTY(int original READ original NOTIFY originalChanged)
-    Q_PROPERTY(int icon READ icon NOTIFY iconChanged)
-    Q_PROPERTY(cwImage image READ image WRITE setImage NOTIFY imageChanged)
     Q_PROPERTY(double rotate READ rotate WRITE setRotate NOTIFY rotateChanged)
     Q_PROPERTY(cwImageResolution* imageResolution READ imageResolution NOTIFY imageResolutionChanged)
 
+    //These are old, potentially remove?
+    Q_PROPERTY(int original READ original NOTIFY originalChanged)
+    Q_PROPERTY(int icon READ icon NOTIFY iconChanged)
+    Q_PROPERTY(cwImage image READ image WRITE setImage NOTIFY imageChanged)
 public:
+
     explicit cwNote(QObject *parent = 0);
-    cwNote(const cwNote& object);
-    cwNote& operator=(const cwNote& object);
 
     QString name() const { return m_name.value(); }
     void setName(const QString& name) { m_name = name; }
@@ -75,6 +77,9 @@ public:
 
     Q_INVOKABLE void resetImageResolution();
     Q_INVOKABLE void propagateResolutionNotesInTrip();
+
+    cwNoteData data() const;
+    void setData(const cwNoteData& data);
 
 signals:
     void nameChanged();

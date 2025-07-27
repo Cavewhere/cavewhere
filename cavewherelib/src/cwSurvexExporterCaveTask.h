@@ -22,12 +22,12 @@ class cwSurvexExporterCaveTask : public cwCaveExporterTask
 public:
     explicit cwSurvexExporterCaveTask(QObject *parent = 0);
 
-    bool writeCave(QTextStream& stream, cwCave* cave);
+    bool writeCave(QTextStream& stream, const cwCaveData &cave);
 
 private:
     cwSurvexExporterTripTask* TripExporter;
 
-    void fixFirstStation(QTextStream& stream, cwCave* cave);
+    void fixFirstStation(QTextStream& stream, const cwCaveData& cave);
 };
 
 #endif // CWSURVEXEXPORTERCAVETASK_H

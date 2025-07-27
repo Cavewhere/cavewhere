@@ -48,7 +48,7 @@ public:
         // Data interface
         QMatrix4x4 matrix() const;
         Data *clone() const;
-        cwScrap::ScrapType type() const;
+        Type type() const;
 
     protected:
         Data(const Data& other) = default;

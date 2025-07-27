@@ -17,6 +17,7 @@
 #include "cwTripCalibration.h"
 #include "cwSurveyNoteModel.h"
 #include "cwScrap.h"
+#include "cwNote.h"
 #include "cwDebug.h"
 #include "cwLength.h"
 #include "cwSurveyChunkSignaler.h"
@@ -234,7 +235,7 @@ void cwLinePlotManager::runSurvex() {
     if(Region != nullptr) {
         if(LinePlotTask->isReady()) {
             setCaveStationLookupAsStale(true);
-            LinePlotTask->setData(*Region);
+            LinePlotTask->setData(Region);
             LinePlotTask->start();
         } else {
             //Restart the survex
@@ -270,7 +271,8 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
     QMapIterator<cwCave*, cwLinePlotTask::LinePlotCaveData> iter(results.caveData());
     while(iter.hasNext()) {
         iter.next();
-        cwCave* cave = iter.key();
+
+        cwCave* cave = const_cast<cwCave*>(iter.key());
         cwLinePlotTask::LinePlotCaveData caveData = iter.value();
 
         updateUnconnectedChunkErrors(cave, caveData);

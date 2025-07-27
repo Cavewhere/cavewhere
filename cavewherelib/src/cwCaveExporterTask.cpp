@@ -15,13 +15,6 @@
 cwCaveExporterTask::cwCaveExporterTask(QObject* parent) :
     cwExporterTask(parent)
 {
-    Cave = new cwCave();
-    Cave->moveToThread(nullptr);
-}
-
-cwCaveExporterTask::~cwCaveExporterTask()
-{
-    delete Cave;
 }
 
 /**
@@ -29,11 +22,9 @@ cwCaveExporterTask::~cwCaveExporterTask()
 
   If the task is already running, then this does nothing
   */
-void cwCaveExporterTask::setData(const cwCave& cave) {
+void cwCaveExporterTask::setData(const cwCaveData &cave) {
     if(!isRunning()) {
-        Cave->moveToThread(QThread::currentThread());
-        *Cave = cave;
-        Cave->moveToThread(nullptr);
+        Cave = cave;
     } else {
         qWarning("Can't set cave data when cave exporter is already running");
     }
@@ -43,7 +34,6 @@ void cwCaveExporterTask::setData(const cwCave& cave) {
   \brief Starts running the export cave task
   */
 void cwCaveExporterTask::runTask() {
-    Cave->moveToThread(QThread::currentThread());
     if(checkData() && openOutputFile()) {
         bool good = writeCave(*OutputStream.data(), Cave);
         closeOutputFile();
@@ -54,7 +44,6 @@ void cwCaveExporterTask::runTask() {
     } else {
         stop();
     }
-    Cave->moveToThread(nullptr);
     done();
 }
 
@@ -78,9 +67,9 @@ bool cwCaveExporterTask::checkData() {
 /**
   \brief Checks if the cave has trips in it before running
   */
-bool cwCaveExporterTask::checkData(cwCave* cave) {
-    if(!cave->hasTrips()) {
-        Errors.append(QString("No trips to do loop closure in %1").arg(cave->name()));
+bool cwCaveExporterTask::checkData(const cwCaveData& cave) {
+    if(cave.trips.size() <= 0) {
+        Errors.append(QString("No trips to do loop closure in %1").arg(cave.name));
         return false;
     }
     return true;

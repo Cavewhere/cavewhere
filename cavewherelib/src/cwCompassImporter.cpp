@@ -36,12 +36,11 @@ cwCompassImporter::cwCompassImporter(QObject *parent) :
  */
 void cwCompassImporter::runTask()
 {
-    Caves.clear();
 
     for(int i = 0; i < CompassDataFiles.size() && isRunning(); i++) {
         CurrentFilename = CompassDataFiles.at(i);
-        Caves.append(cwCave());
-        CurrentCave = &Caves.last();
+        Caves.append(new cwCave());
+        CurrentCave = Caves.last();
         CurrentFileGood = true;
         CurrentTrip = nullptr;
         LineCount = 0;
@@ -60,9 +59,14 @@ void cwCompassImporter::runTask()
         }
     }
 
-    for(auto& cave : Caves) {
-        cave.moveToThread(nullptr);
+    //Copy all the cave data
+    m_cavesData.clear();
+    m_cavesData.reserve(Caves.size());
+    for(auto cave : Caves) {
+        m_cavesData.append(cave->data());
+        delete cave;
     }
+    Caves.clear();
 
     done();
 }

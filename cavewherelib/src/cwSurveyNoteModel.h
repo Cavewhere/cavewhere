@@ -15,9 +15,12 @@
 #include <QQmlEngine>
 
 //Our includes
-#include "cwNote.h"
 #include "cwImage.h"
 #include "cwGlobals.h"
+#include "cwSurveyNoteModelData.h"
+class cwTrip;
+class cwCave;
+class cwNote;
 class cwProject;
 
 class CAVEWHERE_LIB_EXPORT cwSurveyNoteModel : public QAbstractListModel
@@ -26,6 +29,7 @@ class CAVEWHERE_LIB_EXPORT cwSurveyNoteModel : public QAbstractListModel
     QML_NAMED_ELEMENT(SurveyNoteModel)
 
 public:
+
     enum Roles {
         ImageOriginalPathRole = Qt::UserRole + 1,
         ImageIconPathRole,
@@ -34,8 +38,6 @@ public:
     };
 
     explicit cwSurveyNoteModel(QObject *parent = 0);
-    cwSurveyNoteModel(const cwSurveyNoteModel& object);
-    cwSurveyNoteModel& operator=(const cwSurveyNoteModel& object);
 
     QList<cwNote*> notes() const;
     void addNotes(QList<cwNote*> notes);
@@ -56,6 +58,9 @@ public:
     bool hasNotes() const;
 
     virtual QHash<int, QByteArray> roleNames() const;
+
+    void setData(const cwSurveyNoteModelData& data);
+    cwSurveyNoteModelData data() const;
 
 signals:
 
@@ -108,6 +113,7 @@ inline bool cwSurveyNoteModel::hasNotes() const
 {
     return !Notes.isEmpty();
 }
+
 
 
 

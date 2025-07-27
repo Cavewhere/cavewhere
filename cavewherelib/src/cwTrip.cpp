@@ -13,6 +13,7 @@
 #include "cwTripCalibration.h"
 #include "cwSurveyNoteModel.h"
 #include "cwErrorModel.h"
+#include "cwData.h"
 
 //Qt includes
 #include <QMap>
@@ -33,64 +34,64 @@ cwTrip::cwTrip(QObject *parent) :
 //    qDebug() << "Creating:" << this;
 }
 
-void cwTrip::Copy(const cwTrip& object)
-{
-    ParentCave = nullptr;
+// void cwTrip::Copy(const cwTrip& object)
+// {
+//     ParentCave = nullptr;
 
-    //Copy the name of the trip
-    setName(object.Name);
-    setDate(object.DateTime);
+//     //Copy the name of the trip
+//     setName(object.Name);
+//     setDate(object.DateTime);
 
-    //Copy the team
-    Team = new cwTeam(*(object.Team));
-    Team->setParent(this);
+//     //Copy the team
+//     Team = new cwTeam(*(object.Team));
+//     Team->setParent(this);
 
-    //Copy the calibration
-    Calibration = new cwTripCalibration(*(object.Calibration));
-    Calibration->setParent(this);
+//     //Copy the calibration
+//     Calibration = new cwTripCalibration(*(object.Calibration));
+//     Calibration->setParent(this);
 
-    //Copy the notes model
-    Notes = new cwSurveyNoteModel(*(object.Notes));
-    Notes->setParentTrip(this);
+//     //Copy the notes model
+//     Notes = new cwSurveyNoteModel(*(object.Notes));
+//     Notes->setParentTrip(this);
 
-    ErrorModel = new cwErrorModel(this);
+//     ErrorModel = new cwErrorModel(this);
 
-    //Remove all the originals
-    int lastChunkIndex = Chunks.size() - 1;
-    Chunks.clear();
-    emit chunksRemoved(0, lastChunkIndex);
+//     //Remove all the originals
+//     int lastChunkIndex = Chunks.size() - 1;
+//     Chunks.clear();
+//     emit chunksRemoved(0, lastChunkIndex);
 
-    //Copy the chunks
-    Chunks.reserve(object.Chunks.size());
-    for(int i = 0; i < object.Chunks.size(); i++) {
-        cwSurveyChunk* objectsChunk = object.Chunks[i];
-        cwSurveyChunk* newChunk = new cwSurveyChunk(*objectsChunk);
-        newChunk->setParent(this);
-        newChunk->setParentTrip(this);
-        newChunk->errorModel()->setParentModel(ErrorModel);
-        Chunks.append(newChunk);
-    }
-    emit chunksInserted(0, object.Chunks.size() - 1);
+//     //Copy the chunks
+//     Chunks.reserve(object.Chunks.size());
+//     for(int i = 0; i < object.Chunks.size(); i++) {
+//         cwSurveyChunk* objectsChunk = object.Chunks[i];
+//         cwSurveyChunk* newChunk = new cwSurveyChunk(*objectsChunk);
+//         newChunk->setParent(this);
+//         newChunk->setParentTrip(this);
+//         newChunk->errorModel()->setParentModel(ErrorModel);
+//         Chunks.append(newChunk);
+//     }
+//     emit chunksInserted(0, object.Chunks.size() - 1);
 
-}
+// }
 
-/**
-  \brief Copy constructor
-  */
-cwTrip::cwTrip(const cwTrip& object)
-    : QObject(nullptr), cwUndoer()
-{
-    Copy(object);
-}
+// /**
+//   \brief Copy constructor
+//   */
+// cwTrip::cwTrip(const cwTrip& object)
+//     : QObject(nullptr), cwUndoer()
+// {
+//     Copy(object);
+// }
 
-/**
-  \brief Assignment operator
-  */
-cwTrip& cwTrip::operator=(const cwTrip& object) {
-    if(&object == this) { return *this; }
-    Copy(object);
-    return *this;
-}
+// /**
+//   \brief Assignment operator
+//   */
+// cwTrip& cwTrip::operator=(const cwTrip& object) {
+//     if(&object == this) { return *this; }
+//     Copy(object);
+//     return *this;
+// }
 
 cwTrip::~cwTrip()
 {
@@ -351,6 +352,37 @@ QSet<cwStation> cwTrip::neighboringStations(QString stationName) const {
 void cwTrip::stationPositionModelUpdated()
 {
     Notes->stationPositionModelUpdated();
+}
+
+cwTripData cwTrip::data() const
+{
+    QList<cwSurveyChunkData> chunks;
+    chunks.resize(Chunks.size());
+
+    return {
+        Name,
+        DateTime,
+        Team->data(),
+        Calibration->data(),
+        cwData::toDataList<cwSurveyChunkData>(Chunks),
+        Notes->data()
+    };
+}
+
+void cwTrip::setData(const cwTripData &data)
+{
+    setName(data.name);
+    setDate(data.date);
+    Team->setData(data.team);
+    Calibration->setData(data.calibrations);
+    Notes->setData(data.noteModel);
+
+    removeChunks(0, Chunks.size() - 1);
+    for(const auto& chunk : data.chunks) {
+        auto chunkObj = new cwSurveyChunk();
+        chunkObj->setData(chunk);
+        addChunk(chunkObj);
+    }
 }
 
 /**

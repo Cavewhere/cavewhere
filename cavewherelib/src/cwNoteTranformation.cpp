@@ -28,21 +28,21 @@ cwNoteTranformation::cwNoteTranformation(QObject* parent) :
 }
 
 
-cwNoteTranformation::cwNoteTranformation(const cwNoteTranformation& other) :
-    QObject(nullptr),
-    North(other.North),
-    Scale(new cwScale(*(other.Scale)))
-{
-    Scale->setParent(this);
-}
+// cwNoteTranformation::cwNoteTranformation(const cwNoteTranformation& other) :
+//     QObject(nullptr),
+//     North(other.North),
+//     Scale(new cwScale(*(other.Scale)))
+// {
+//     Scale->setParent(this);
+// }
 
-const cwNoteTranformation& cwNoteTranformation::operator =(const cwNoteTranformation& other) {
-    if(this != &other) {
-        setNorthUp(other.northUp());
-        *Scale = *(other.Scale);
-    }
-    return *this;
-}
+// const cwNoteTranformation& cwNoteTranformation::operator =(const cwNoteTranformation& other) {
+//     if(this != &other) {
+//         setNorthUp(other.northUp());
+//         *Scale = *(other.Scale);
+//     }
+//     return *this;
+// }
 
 /**
   In degrees, the rotation of the page of notes such that north is aligned with the y axis.
@@ -101,12 +101,12 @@ double cwNoteTranformation::calculateScale(QPointF p1, QPointF p2,
     double lengthInDots = sqrt(a * a + b * b);
 
     //Dots per meter
-    cwImageResolution meterResolution = resolution->convertTo(cwUnits::DotsPerMeter);
-    double dotsPerMeter = meterResolution.value();
+    cwImageResolution::Data meterResolution = resolution->convertTo(cwUnits::DotsPerMeter);
+    double dotsPerMeter = meterResolution.value;
 
     //Compute the scale
     double lengthInMetersOnPage = lengthInDots / dotsPerMeter;
-    double lengthInMetersInCave = length->convertTo(cwUnits::Meters).value();
+    double lengthInMetersInCave = length->convertTo(cwUnits::Meters).value;
     double scale = lengthInMetersOnPage / lengthInMetersInCave;
     return scale;
 }
@@ -120,6 +120,20 @@ QMatrix4x4 cwNoteTranformation::matrix() const {
     matrix.rotate(northUp(), 0.0, 0.0, 1.0);
     matrix.scale(1.0 / scale(), 1.0 / scale(), 1.0);
     return matrix;
+}
+
+void cwNoteTranformation::setData(const cwNoteTransformationData &data)
+{
+    setNorthUp(data.north);
+    Scale->setData(data.scale);
+}
+
+cwNoteTransformationData cwNoteTranformation::data() const
+{
+    return {
+        North,
+        Scale->data()
+    };
 }
 
 /**

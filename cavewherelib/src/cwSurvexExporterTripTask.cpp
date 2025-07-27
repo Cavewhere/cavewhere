@@ -17,15 +17,14 @@
 cwSurvexExporterTripTask::cwSurvexExporterTripTask(QObject *parent) :
     cwExporterTask(parent)
 {
-    Trip = new cwTrip(this);
 }
 
 /**
   \brief Sets the trip data
   */
-void cwSurvexExporterTripTask::setData(const cwTrip& trip) {
+void cwSurvexExporterTripTask::setData(const cwTripData &trip) {
     if(!isRunning()) {
-        *Trip = trip;
+        Trip = trip;
     } else {
         qDebug() << QStringLiteral("Can't set trip data will the trip exporter is running");
     }
@@ -37,10 +36,12 @@ void cwSurvexExporterTripTask::setData(const cwTrip& trip) {
   Both setData and setOutputFile should be set before calling cwTask::start
   */
 void cwSurvexExporterTripTask::runTask() {
-    setNumberOfSteps(Trip->numberOfStations());
+    auto tripPtr = std::make_unique<cwTrip>();
+
+    setNumberOfSteps(tripPtr->numberOfStations());
 
     openOutputFile();
-    writeTrip(*OutputStream.data(), Trip);
+    writeTrip(*OutputStream.data(), tripPtr.get());
     closeOutputFile();
 
     done();
@@ -129,7 +130,7 @@ void cwSurvexExporterTripTask::writeLengthUnits(QTextStream &stream,
 
   This will write the data as normal data
   */
-void cwSurvexExporterTripTask::writeShotData(QTextStream& stream, cwTrip* trip) {
+void cwSurvexExporterTripTask::writeShotData(QTextStream& stream, const cwTrip* trip) {
     bool hasFrontSights = trip->calibrations()->hasFrontSights();
     bool hasBackSights = trip->calibrations()->hasBackSights();
 
@@ -188,7 +189,7 @@ void cwSurvexExporterTripTask::writeShotData(QTextStream& stream, cwTrip* trip) 
   \brief Writes the left right up down for each station in the trip, as
   a comment
   */
-void cwSurvexExporterTripTask::writeLRUDData(QTextStream& stream, cwTrip* trip) {
+void cwSurvexExporterTripTask::writeLRUDData(QTextStream& stream, const cwTrip* trip) {
 
     QString dataLineTemplate(QStringLiteral("%1 %2 %3 %4 %5"));
 
@@ -197,12 +198,13 @@ void cwSurvexExporterTripTask::writeLRUDData(QTextStream& stream, cwTrip* trip) 
 
         foreach(cwStation station, chunk->stations()) {
             if(station.isValid()) {
+                const cwTripCalibration* calibration = trip->calibrations();
                 QString dataLine = dataLineTemplate
                         .arg(station.name(), TextPadding)
-                        .arg(toSupportedLength(station.left()), TextPadding)
-                        .arg(toSupportedLength(station.right()), TextPadding)
-                        .arg(toSupportedLength(station.up()), TextPadding)
-                        .arg(toSupportedLength(station.down()), TextPadding);
+                        .arg(toSupportedLength(calibration, station.left()), TextPadding)
+                        .arg(toSupportedLength(calibration, station.right()), TextPadding)
+                        .arg(toSupportedLength(calibration, station.up()), TextPadding)
+                        .arg(toSupportedLength(calibration, station.down()), TextPadding);
 
                 stream << dataLine << Qt::endl;
             }
@@ -215,7 +217,7 @@ void cwSurvexExporterTripTask::writeLRUDData(QTextStream& stream, cwTrip* trip) 
 /**
   Writes the team data to survex file
   */
-void cwSurvexExporterTripTask::writeTeamData(QTextStream &stream, cwTeam* team)
+void cwSurvexExporterTripTask::writeTeamData(QTextStream &stream, const cwTeam* team)
 {
     stream << Qt::endl;
 
@@ -248,12 +250,12 @@ void cwSurvexExporterTripTask::writeDate(QTextStream &stream, QDate date)
   If the current calibration isn't in yard, feet or meters, then this function converts the
   length into meters.
 */
-QString cwSurvexExporterTripTask::toSupportedLength(const cwDistanceReading& reading) const {
+QString cwSurvexExporterTripTask::toSupportedLength(const cwTripCalibration *calibration, const cwDistanceReading& reading) const {
     if(reading.state() == cwDistanceReading::State::Empty) {
         return "-";
     }
 
-    cwUnits::LengthUnit unit = Trip->calibrations()->distanceUnit();
+    cwUnits::LengthUnit unit = calibration->distanceUnit();
     switch(unit) {
     case cwUnits::Meters:
     case cwUnits::Feet:
@@ -334,7 +336,7 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream,
 
         if(!fromStation.isValid() || !toStation.isValid()) { continue; }
 
-        QString distance = toSupportedLength(shot.distance());
+        QString distance = toSupportedLength(chunk->parentTrip()->calibrations(), shot.distance());
         QString compass = compassToString(shot.compass());
         QString backCompass = compassToString(shot.backCompass());
         QString clino = clinoToString(shot.clino());

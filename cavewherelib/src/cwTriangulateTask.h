@@ -168,6 +168,8 @@ private:
 
     //For lead handling
     static QVector<QVector3D> leadPositionToVector3D(const QList<cwLead>& leads);
+
+    static QMatrix4x4 toNoteMatrix(const cwNoteTransformationData& data);
 };
 
 /**

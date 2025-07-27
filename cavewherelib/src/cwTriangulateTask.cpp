@@ -152,7 +152,7 @@ cwTriangulatedData cwTriangulateTask::triangulateGeometry(const cwTriangulateInD
 cwTriangulateTask::PointGrid cwTriangulateTask::createPointGrid(QRectF bounds, const cwTriangulateInData& scrapData)  {
     PointGrid grid;
 
-    cwNoteTranformation noteTransform = scrapData.noteTransform();
+    cwNoteTransformationData noteTransform = scrapData.noteTransform();
 
     QSize scrapImageSize = scrapData.noteImage().originalSize();
     double sizeOnPaperX = scrapImageSize.width() / scrapData.noteImageResolution(); //in meters
@@ -161,7 +161,10 @@ cwTriangulateTask::PointGrid cwTriangulateTask::createPointGrid(QRectF bounds, c
     //TODO: Make distance between points an option that can be adjusted
     double distanceBetweenPoints = 5.0; //In meters
     double pointsPerMeter = 1.0 / distanceBetweenPoints; //Grid resolution
-    double scale = noteTransform.scale(); //scale for the notes
+
+    cwScale noteScale;
+    noteScale.setData(noteTransform.scale);
+    double scale = noteScale.scale(); //scale for the notes
 
     double sizeInCaveX = sizeOnPaperX / scale; //in meters in cave
     double sizeInCaveY = sizeOnPaperY / scale; //in meters in cave
@@ -664,7 +667,7 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
         if(scrapData.viewMatrix()->type() == cwScrap::RunningProfile) {
             //This assumes that up on the page is up for the scrap
             auto profileCompare = [&scrapData](const cwTriangulateStation& left, const cwTriangulateStation& right)->bool {
-                QMatrix4x4 rotation = scrapData.noteTransform().matrix();
+                QMatrix4x4 rotation = toNoteMatrix(scrapData.noteTransform());
 
                 QPointF leftPoint = rotation.map(left.notePosition());
                 QPointF rightPoint = rotation.map(right.notePosition());
@@ -697,7 +700,7 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
 
             //Look for the section for the notePoint, returns the stations we want to warp between
             auto compare = [&scrapData](const cwTriangulateStation& station, const QVector3D& point)->bool {
-                QMatrix4x4 rotation = scrapData.noteTransform().matrix();
+                QMatrix4x4 rotation = toNoteMatrix(scrapData.noteTransform());
 
                 QPointF left = rotation.map(station.notePosition());
                 QVector3D right = rotation.map(point);
@@ -779,7 +782,7 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
     QMatrix4x4 toMetersOnPaper;
     toMetersOnPaper.scale(metersPerDot, metersPerDot, 1.0);
 
-    QMatrix4x4 toMetersInCave = scrapData.noteTransform().matrix();
+    QMatrix4x4 toMetersInCave = toNoteMatrix(scrapData.noteTransform());
 
     QMatrix4x4 toWorldCoords = toMetersInCave * toMetersOnPaper * toPixels * toLocal;
 
@@ -1023,6 +1026,13 @@ QVector<QVector3D> cwTriangulateTask::leadPositionToVector3D(const QList<cwLead>
         leadPositions.append(QVector3D(lead.positionOnNote()));
     }
     return leadPositions;
+}
+
+QMatrix4x4 cwTriangulateTask::toNoteMatrix(const cwNoteTransformationData &data)
+{
+    cwNoteTranformation transform;
+    transform.setData(data);
+    return transform.matrix();
 }
 
 /**

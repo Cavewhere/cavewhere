@@ -18,20 +18,12 @@ cwImageResolution::cwImageResolution(double value, cwUnits::ImageResolutionUnit 
 {
 }
 
-cwImageResolution::cwImageResolution(const cwImageResolution &other) :
-    cwUnitValue(other)
-{
-
-}
-
 /**
   This convert the length to a new length and returns a new
   cwLength object with that value
   */
-cwImageResolution cwImageResolution::convertTo(cwUnits::ImageResolutionUnit to) const {
-    cwImageResolution resolution = *this;
-    resolution.convertToUnit(to);
-    return resolution;
+cwImageResolution::Data cwImageResolution::convertTo(cwUnits::ImageResolutionUnit to) const {
+    return convertToHelper(to);
 }
 
 /**
@@ -43,8 +35,8 @@ cwImageResolution cwImageResolution::convertTo(cwUnits::ImageResolutionUnit to) 
  */
 void cwImageResolution::setResolution(cwLength *length, double numberOfPixels)
 {
-    cwLength lengthMeter = length->convertTo(cwUnits::Meters);
-    double dotsPerMeter = (double)numberOfPixels / lengthMeter.value();
+    cwLength::Data lengthMeter = length->convertTo(cwUnits::Meters);
+    double dotsPerMeter = (double)numberOfPixels / lengthMeter.value;
     double value = cwUnits::convert(dotsPerMeter, cwUnits::DotsPerMeter, (cwUnits::ImageResolutionUnit)unit());
     setValue(value);
 }

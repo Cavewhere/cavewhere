@@ -33,59 +33,59 @@ cwNote::cwNote(QObject *parent) :
 }
 
 
-cwNote::cwNote(const cwNote& object) :
-    QObject(nullptr),
-    ParentTrip(nullptr),
-    ParentCave(nullptr),
-    ImageResolution(new cwImageResolution(this))
-{
-    copy(object);
+// cwNote::cwNote(const cwNote& object) :
+//     QObject(nullptr),
+//     ParentTrip(nullptr),
+//     ParentCave(nullptr),
+//     ImageResolution(new cwImageResolution(this))
+// {
+//     copy(object);
 
-    connect(ImageResolution, &cwImageResolution::unitChanged, this, &cwNote::updateScrapNoteTransform);
-    connect(ImageResolution, &cwImageResolution::valueChanged, this, &cwNote::updateScrapNoteTransform);
-}
+//     connect(ImageResolution, &cwImageResolution::unitChanged, this, &cwNote::updateScrapNoteTransform);
+//     connect(ImageResolution, &cwImageResolution::valueChanged, this, &cwNote::updateScrapNoteTransform);
+// }
 
-cwNote& cwNote::operator=(const cwNote& object) {
-    if(&object == this) { return *this; }
-    copy(object);
-    return *this;
-}
+// cwNote& cwNote::operator=(const cwNote& object) {
+//     if(&object == this) { return *this; }
+//     copy(object);
+//     return *this;
+// }
 
-/**
-  Does a deap copy of the note
-  */
-void cwNote::copy(const cwNote& object) {
-    ImageIds = object.ImageIds;
-    DisplayRotation = object.DisplayRotation;
+// /**
+//   Does a deap copy of the note
+//   */
+// void cwNote::copy(const cwNote& object) {
+//     ImageIds = object.ImageIds;
+//     DisplayRotation = object.DisplayRotation;
 
-    //Delete extra scraps
-    for(int i = Scraps.size() - 1; i >= object.scraps().size(); i--) {
-        Scraps.at(i)->deleteLater();
-        Scraps.removeLast();
-    }
+//     //Delete extra scraps
+//     for(int i = Scraps.size() - 1; i >= object.scraps().size(); i--) {
+//         Scraps.at(i)->deleteLater();
+//         Scraps.removeLast();
+//     }
 
-    Q_ASSERT(Scraps.size() <= object.scraps().size());
+//     Q_ASSERT(Scraps.size() <= object.scraps().size());
 
-    //Update already created scraps
-    for(int i = 0; i < Scraps.size(); i++) {
-        cwScrap* oldScrap = object.scraps().at(i);
-        cwScrap* newScrap = object.scraps().at(i);
-        *oldScrap = *newScrap;
-    }
+//     //Update already created scraps
+//     for(int i = 0; i < Scraps.size(); i++) {
+//         cwScrap* oldScrap = object.scraps().at(i);
+//         cwScrap* newScrap = object.scraps().at(i);
+//         *oldScrap = *newScrap;
+//     }
 
-    //Add new scraps if needed
-    for(int i = Scraps.size(); i < object.scraps().size(); i++) {
-        cwScrap* otherScrap = object.scrap(i);
-        cwScrap* scrap = new cwScrap(*otherScrap);
-        setupScrap(scrap);
-        Scraps.append(scrap);
-    }
+//     //Add new scraps if needed
+//     for(int i = Scraps.size(); i < object.scraps().size(); i++) {
+//         cwScrap* otherScrap = object.scrap(i);
+//         cwScrap* scrap = new cwScrap(*otherScrap);
+//         setupScrap(scrap);
+//         Scraps.append(scrap);
+//     }
 
-    //Copy the image resolution
-    *ImageResolution = *(object.ImageResolution);
+//     //Copy the image resolution
+//     *ImageResolution = *(object.ImageResolution);
 
-    Q_ASSERT(Scraps.size() == object.scraps().size());
-}
+//     Q_ASSERT(Scraps.size() == object.scraps().size());
+// }
 
 /**
   \brief Sets the image data for the page of notes
@@ -267,7 +267,7 @@ void cwNote::setParentCave(cwCave *cave) {
  * @return Get's the resolution of the image
  */
 double cwNote::dotPerMeter() const {
-    return imageResolution()->convertTo(cwUnits::DotsPerMeter).value();
+    return imageResolution()->convertTo(cwUnits::DotsPerMeter).value;
 }
 
 /**
@@ -294,6 +294,52 @@ void cwNote::propagateResolutionNotesInTrip()
     if(parentTrip() == nullptr) { return; }
 
     foreach(cwNote* note, parentTrip()->notes()->notes()) {
-        *(note->imageResolution()) = *(imageResolution());
+        note->imageResolution()->setData(ImageResolution->data());
     }
+}
+
+cwNoteData cwNote::data() const
+{
+    QList<cwScrapData> scrapData;
+    scrapData.reserve(Scraps.size());
+    for(auto scrap : Scraps) {
+        scrapData.append(scrap->data());
+    }
+
+    return {
+        m_name,
+        DisplayRotation,
+        ImageResolution->data(),
+        std::move(scrapData)
+    };
+}
+
+void cwNote::setData(const cwNoteData &data)
+{
+    m_name = data.name;
+    setRotate(data.rotate);
+    ImageResolution->setData(data.imageResolution);
+
+    //Delete extra scraps
+    for(int i = Scraps.size() - 1; i >= data.scraps.size(); i--) {
+        Scraps.at(i)->deleteLater();
+        Scraps.removeLast();
+    }
+
+    Q_ASSERT(Scraps.size() <= data.scraps.size());
+
+    //Update already created scraps
+    for(int i = 0; i < Scraps.size(); i++) {
+        Scraps.at(i)->setData(data.scraps.at(i));
+    }
+
+    //Add new scraps if needed
+    for(int i = Scraps.size(); i < data.scraps.size(); i++) {
+        cwScrap* scrap = new cwScrap();
+        setupScrap(scrap);
+        scrap->setData(data.scraps.at(i));
+        Scraps.append(scrap);
+    }
+
+    emit scrapsReset();
 }

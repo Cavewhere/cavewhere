@@ -144,6 +144,25 @@ QStringList cwTripCalibration::supportedUnits() const
     return list;
 }
 
+void cwTripCalibration::setData(const cwTripCalibrationData &data) {
+    setCorrectedCompassBacksight(data.hasCorrectedCompassBacksight());
+    setCorrectedClinoBacksight(data.hasCorrectedClinoBacksight());
+    setCorrectedCompassFrontsight(data.hasCorrectedCompassFrontsight());
+    setCorrectedClinoFrontsight(data.hasCorrectedClinoFrontsight());
+
+    setTapeCalibration(data.tapeCalibration());
+    setFrontCompassCalibration(data.frontCompassCalibration());
+    setFrontClinoCalibration(data.frontClinoCalibration());
+    setBackCompassCalibration(data.backCompassCalibration());
+    setBackClinoCalibration(data.backClinoCalibration());
+
+    setDeclination(data.declination());
+    setDistanceUnit(data.distanceUnit());
+
+    setFrontSights(data.hasFrontSights());
+    setBackSights(data.hasBackSights());
+}
+
 int cwTripCalibration::mapToLengthUnit(int supportedUnitIndex)
 {
     switch (supportedUnitIndex) {

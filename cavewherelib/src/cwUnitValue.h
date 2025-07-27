@@ -30,10 +30,20 @@ class CAVEWHERE_LIB_EXPORT cwUnitValue : public QObject
     Q_PROPERTY(QStringList unitNames READ unitNames NOTIFY unitNamesChanged)
 
 public:
+    struct Data {
+        int unit = 0;
+        double value = 0.0;
+        bool updateValueWhenUnitChanged = false;
+    };
+
+
     explicit cwUnitValue(QObject *parent = 0);
     cwUnitValue(double value, int unit, QObject* parent = 0);
-    cwUnitValue(const cwUnitValue& other);
-    const cwUnitValue& operator =(const cwUnitValue& other);
+
+    // [[deprecated]]
+    // cwUnitValue(const cwUnitValue& other);
+    // [[deprecated]]
+    // const cwUnitValue& operator =(const cwUnitValue& other);
     
     double value() const;
     void setValue(double value);
@@ -48,6 +58,8 @@ public:
     virtual QString unitName(int unit) const = 0;
     Q_INVOKABLE virtual int toUnitType(QString unitName) const = 0;
 
+    Data data() const { return d; }
+    void setData(const Data& data);
 
 signals:
     void valueChanged();
@@ -59,45 +71,31 @@ public slots:
 protected:
     virtual void convertToUnit(int newUnit) = 0;
 
+    template <typename EnumType>
+    cwUnitValue::Data convertToHelper(EnumType to) const {
+        double newValue = cwUnits::convert(value(), (EnumType)unit(), (EnumType)to);
+        return {to,
+                newValue,
+                isUpdatingValue()};
+    }
+
 private:
-    class PrivateData : public QSharedData {
-    public:
-        PrivateData() :
-            Unit(0),
-            Value(0.0),
-            UpdateValueWhenUnitChanged(false)
-        {
-        }
+    Data d;
 
-        PrivateData(double value, int unit) :
-            Unit(unit),
-            Value(value),
-            UpdateValueWhenUnitChanged(false)
-            {
-        }
-
-        int Unit;
-        double Value;
-        bool UpdateValueWhenUnitChanged;
-    };
-
-    QSharedDataPointer<PrivateData> Data;
-
-    
 };
 
 /**
     Get's the value of the length
   */
 inline double cwUnitValue::value() const {
-    return Data->Value;
+    return d.value;
 }
 
 /**
     Get's the units of the value
   */
 inline int cwUnitValue::unit() const {
-    return Data->Unit;
+    return d.unit;
 }
 
 /**
@@ -105,7 +103,7 @@ inline int cwUnitValue::unit() const {
  * This is disabled by default
  */
 inline bool cwUnitValue::isUpdatingValue() const {
-   return Data->UpdateValueWhenUnitChanged;
+   return d.updateValueWhenUnitChanged;
 }
 
 #endif // CWUNITVALUE_H

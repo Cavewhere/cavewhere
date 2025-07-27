@@ -45,11 +45,15 @@ MenuBar {
             shortcut: "Ctrl+O"
             onTriggered: {
                 RootData.pageSelectionModel.currentPageAddress = "Source"
+                loadFileDialog.open();
+
+                //TODO, ask user to sync, uncommit changes?
 
                 // menuBarId.askToSaveDialog.taskName = "opening";
                 // menuBarId.askToSaveDialog.afterSaveFunc = function() {
                 //     loadFileDialog.open()
                 // }
+
                 // menuBarId.askToSaveDialog.askToSave();
             }
         }

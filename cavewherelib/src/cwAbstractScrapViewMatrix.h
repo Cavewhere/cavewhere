@@ -3,7 +3,7 @@
 
 //Our includes
 #include "cwGlobals.h"
-#include "cwScrap.h"
+#include "cwScrapType.h"
 
 //Qt includes
 #include <QObject>
@@ -17,16 +17,23 @@ class CAVEWHERE_LIB_EXPORT cwAbstractScrapViewMatrix : public QObject {
     QML_UNCREATABLE("Abstract class")
 
     Q_PROPERTY(QMatrix4x4 matrix READ matrix NOTIFY matrixChanged)
-    Q_PROPERTY(cwScrap::ScrapType type READ type CONSTANT)
+    Q_PROPERTY(Type type READ type CONSTANT)
 
 public:
+    enum Type {
+        Plan = cwScrapType::Plan,
+        RunningProfile = cwScrapType::RunningProfile,
+        ProjectedProfile = cwScrapType::ProjectedProfile
+    };
+    Q_ENUM(Type)
+
     class Data {
     public:
         Data() = default;
         virtual ~Data() = default;
         virtual QMatrix4x4 matrix() const = 0;
         virtual Data* clone() const = 0;
-        virtual cwScrap::ScrapType type() const = 0;
+        virtual Type type() const = 0;
     };
 
     cwAbstractScrapViewMatrix(QObject* parent = nullptr) :
@@ -43,9 +50,14 @@ public:
         return m_data.get();
     }
 
+    void setData(cwAbstractScrapViewMatrix::Data* data) {
+        m_data.reset(data);
+        emit matrixChanged();
+    }
+
     virtual cwAbstractScrapViewMatrix* clone() const = 0;
 
-    cwScrap::ScrapType type() const {
+    Type type() const {
         return m_data->type();
     }
 

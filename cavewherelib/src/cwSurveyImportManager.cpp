@@ -105,8 +105,9 @@ void cwSurveyImportManager::compassImporterFinished()
     UndoStack->beginMacro("Compass Import");
 
     //Add new caves
-    foreach(cwCave cave, CompassImporter->caves()) {
-        cwCave* newCave = new cwCave(cave); //Copy the caves
+    foreach(const auto& cave, CompassImporter->caves()) {
+        cwCave* newCave = new cwCave();
+        newCave->setData(cave);
         CavingRegion->addCave(newCave);
     }
 

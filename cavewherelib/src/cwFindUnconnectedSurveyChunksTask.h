@@ -13,6 +13,7 @@
 #include "cwTask.h"
 #include "cwError.h"
 #include "cwGlobals.h"
+#include "cwCaveData.h"
 class cwCave;
 class cwSurveyChunk;
 
@@ -44,33 +45,33 @@ public:
 
     cwFindUnconnectedSurveyChunksTask();
 
-    void setCave(cwCave* cave);
+    void setCave(const cwCaveData& cave);
     QList<Result> results() const;
 
 protected:
     void runTask();
 
 private:
-    cwCave* Cave;
+    cwCaveData Cave;
 
-    QSet<cwSurveyChunk*> Connected; //Connect to the main cave
-    QSet<cwSurveyChunk*> Unconnected; //Not connected
-    QMultiHash<cwSurveyChunk*, cwSurveyChunk*> ChunkConnectedTo; //How the chunks are connect to each other
+    QSet<const cwSurveyChunk*> Connected; //Connect to the main cave
+    QSet<const cwSurveyChunk*> Unconnected; //Not connected
+    QMultiHash<const cwSurveyChunk*, const cwSurveyChunk*> ChunkConnectedTo; //How the chunks are connect to each other
 
-    QHash<cwSurveyChunk*, QSet<QString>> ChunkToStationSet; //Index of cwSurveyChunk to station names set
+    QHash<const cwSurveyChunk*, QSet<QString>> ChunkToStationSet; //Index of cwSurveyChunk to station names set
 
     QList<Result> Results;
 
-    void indexChunkToStations();
+    void indexChunkToStations(const cwCave* cave);
 
-    bool isChunksConnect(cwSurveyChunk* chunk1, cwSurveyChunk* chunk2) const;
-    QSet<QString> chunkToStationNameSet(cwSurveyChunk* chunk) const;
-    void addConnectedTo(cwSurveyChunk* chunk1, cwSurveyChunk* chunk2);
-    void updateConnectedTo(cwSurveyChunk* chunk);
-    void updateConnectedTo();
-    void addFirstChunkAsConnected();
-    void insertChunkToConnected(cwSurveyChunk* chunk);
-    void updateResults();
+    bool isChunksConnect(const cwSurveyChunk *chunk1, const cwSurveyChunk *chunk2) const;
+    QSet<QString> chunkToStationNameSet(const cwSurveyChunk* chunk) const;
+    void addConnectedTo(const cwSurveyChunk* chunk1, const cwSurveyChunk* chunk2);
+    void updateConnectedTo(const cwCave *cave, const cwSurveyChunk *chunk);
+    void updateConnectedTo(const cwCave* cave);
+    void addFirstChunkAsConnected(const cwCave* cave);
+    void insertChunkToConnected(const cwSurveyChunk *chunk);
+    void updateResults(const cwCave* cave);
 
 
 };

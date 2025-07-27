@@ -21,24 +21,25 @@ cwSurvexExporterRegionTask::cwSurvexExporterRegionTask(QObject* parent) :
     CaveExporter = new cwSurvexExporterCaveTask(this);
     CaveExporter->setParentSurvexExporter(this);
 //    connect(CaveExporter, SIGNAL(progressed(int)), SLOT(UpdateProgress(int)));
-    Region = new cwCavingRegion(this);
+    // Region = new cwCavingRegion(this);
 }
 
 /**
   \brief Sets the data for the task
   */
-void cwSurvexExporterRegionTask::setData(const cwCavingRegion& region) {
+void cwSurvexExporterRegionTask::setData(const cwCavingRegionData& region) {
     if(!isReady()) {
         qWarning() << "Can't set data for survexExporterRegionTask because it's already running" << LOCATION;
         return;
     }
-    *Region = region;
+    Region = region;
+    // *Region = region;
 }
 
 /**
   \brief Outputs region to the stream
   */
-bool cwSurvexExporterRegionTask::writeRegion(QTextStream& stream, cwCavingRegion* region) {
+bool cwSurvexExporterRegionTask::writeRegion(QTextStream& stream, const cwCavingRegionData &region) {
     if(!checkData()) {
         return false;
     }
@@ -47,8 +48,8 @@ bool cwSurvexExporterRegionTask::writeRegion(QTextStream& stream, cwCavingRegion
 
     stream << "*begin  ;All the caves" << Qt::endl;
 
-    for(int i = 0; i < region->caveCount(); i++) {
-        cwCave* cave = region->cave(i);
+    for(int i = 0; i < region.caves.size(); i++) {
+        const cwCaveData& cave = region.caves.at(i);
         bool good = CaveExporter->writeCave(stream, cave);
         stream << Qt::endl;
 
@@ -91,7 +92,7 @@ void cwSurvexExporterRegionTask::UpdateProgress(int /*tripProgress*/) {
     This makes sure that the data is good
   */
 bool cwSurvexExporterRegionTask::checkData() {
-    if(!Region->hasCaves()) {
+    if(Region.caves.isEmpty()) {
         //No caves to process
         Errors.append("No caves to do loop closure");
         return false;

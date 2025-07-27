@@ -11,6 +11,7 @@
 //Our includes
 #include "cwTask.h"
 #include "cwStation.h"
+#include "cwCavingRegionData.h"
 class cwCavingRegion;
 class cwCave;
 
@@ -46,7 +47,7 @@ public:
     explicit cwLinePlotGeometryTask(QObject *parent = 0);
 
     //Inputs
-    void setRegion(cwCavingRegion* region);
+    void setRegion(const cwCavingRegionData &region);
 
     //Outputs
     QVector<QVector3D> pointData() const;
@@ -62,7 +63,7 @@ public slots:
 
 private:
     //Inputs
-    cwCavingRegion* Region;
+    cwCavingRegionData Region;
 
     //Outputs
     QVector<QVector3D> PointData;
@@ -83,7 +84,7 @@ private:
 
   \param region - should be valid
   */
-inline void cwLinePlotGeometryTask::setRegion(cwCavingRegion* region) {
+inline void cwLinePlotGeometryTask::setRegion(const cwCavingRegionData& region) {
     Region = region;
 }
 

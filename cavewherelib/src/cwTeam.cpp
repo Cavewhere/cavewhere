@@ -17,15 +17,15 @@ cwTeam::cwTeam(QObject *parent) :
 {
 }
 
-/**
-  Copy constructor for the team
-  */
-cwTeam::cwTeam(const cwTeam& team) :
-    QAbstractListModel(nullptr)
-{
-    //Copy the data
-    Team = team.Team;
-}
+// /**
+//   Copy constructor for the team
+//   */
+// cwTeam::cwTeam(const cwTeam& team) :
+//     QAbstractListModel(nullptr)
+// {
+//     //Copy the data
+//     Team = team.Team;
+// }
 
 
 void cwTeam::addTeamMember(const cwTeamMember& teamMember) {
@@ -66,6 +66,11 @@ QHash<int, QByteArray> cwTeam::roleNames() const
     roles[NameRole] = "name";
     roles[JobsRole] = "jobs";
     return roles;
+}
+
+void cwTeam::setData(const cwTeamData& data)
+{
+    setTeamMembers(data.members);   
 }
 
 bool cwTeam::setData(const QModelIndex& index, const QVariant &data, int role) {

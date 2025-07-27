@@ -10,6 +10,7 @@
 #include "cwCave.h"
 #include "cwDebug.h"
 #include "cwProject.h"
+#include "cwData.h"
 
 //Qt includes
 #include <QThread>
@@ -20,22 +21,22 @@ cwCavingRegion::cwCavingRegion(QObject *parent) :
 {
 }
 
-/**
-  \brief Copy constructor
-  */
-cwCavingRegion::cwCavingRegion(const cwCavingRegion& object) :
-    QAbstractListModel(nullptr),
-    cwUndoer(object.undoStack())
-{
-    copy(object);
-}
+// /**
+//   \brief Copy constructor
+//   */
+// cwCavingRegion::cwCavingRegion(const cwCavingRegion& object) :
+//     QAbstractListModel(nullptr),
+//     cwUndoer(object.undoStack())
+// {
+//     copy(object);
+// }
 
-/**
-  \brief Alignment operator
-  */
-cwCavingRegion& cwCavingRegion::operator=(const cwCavingRegion& object) {
-    return copy(object);
-}
+// /**
+//   \brief Alignment operator
+//   */
+// cwCavingRegion& cwCavingRegion::operator=(const cwCavingRegion& object) {
+//     return copy(object);
+// }
 
 /**
  * @brief cwCavingRegion::rowCount
@@ -62,7 +63,7 @@ QVariant cwCavingRegion::data(const QModelIndex &index, int role) const
 
     switch(role) {
     case CaveObjectRole:
-        return QVariant::fromValue(Caves.at(index.row()));
+        return QVariant::fromValue(m_caves.at(index.row()));
     }
 
     return QVariant();
@@ -91,55 +92,55 @@ QModelIndex cwCavingRegion::index(int row, int column, const QModelIndex &parent
     return QAbstractListModel::index(row, column, parent);
 }
 
-/**
-  \brief Copy's the object into this object
-  */
-cwCavingRegion& cwCavingRegion::copy(const cwCavingRegion& object) {
-    Q_ASSERT(object.thread() == thread() || object.thread() == nullptr || thread() == nullptr);
-    Q_ASSERT(QThread::currentThread() == thread() || thread() == nullptr);
+// /**
+//   \brief Copy's the object into this object
+//   */
+// cwCavingRegion& cwCavingRegion::copy(const cwCavingRegion& object) {
+//     Q_ASSERT(object.thread() == thread() || object.thread() == nullptr || thread() == nullptr);
+//     Q_ASSERT(QThread::currentThread() == thread() || thread() == nullptr);
 
-    if(&object == this) {
-        return *this;
-    }
+//     if(&object == this) {
+//         return *this;
+//     }
 
-    //Clear old caves
-    int lastIndex = Caves.size() - 1;
-    removeCaves(0, lastIndex);
+//     //Clear old caves
+//     int lastIndex = m_caves.size() - 1;
+//     removeCaves(0, lastIndex);
 
-    if(!object.Caves.isEmpty()) {
-        emit beginInsertCaves(0, object.Caves.size() - 1);
-        emit beginInsertRows(QModelIndex(), 0, object.Caves.size() - 1);
-    }
+//     if(!object.m_caves.isEmpty()) {
+//         emit beginInsertCaves(0, object.m_caves.size() - 1);
+//         emit beginInsertRows(QModelIndex(), 0, object.m_caves.size() - 1);
+//     }
 
-    //Add new caves
-    Caves.reserve(object.Caves.size());
-    foreach(cwCave* cave, object.Caves) {
+//     //Add new caves
+//     m_caves.reserve(object.m_caves.size());
+//     foreach(cwCave* cave, object.m_caves) {
 
-        //Strange copying to make sure the newCaves are
-        //On the correct thread
-        bool threadIsNull = thread() == nullptr;
-        if(threadIsNull) {
-            moveToThread(QThread::currentThread());
-        }
+//         //Strange copying to make sure the newCaves are
+//         //On the correct thread
+//         bool threadIsNull = thread() == nullptr;
+//         if(threadIsNull) {
+//             moveToThread(QThread::currentThread());
+//         }
 
-        cwCave* newCave = new cwCave(*cave);
-        newCave->setParent(this);  //Uncomment because this cause problems with QML
+//         cwCave* newCave = new cwCave(*cave);
+//         newCave->setParent(this);  //Uncomment because this cause problems with QML
 
-        if(threadIsNull) {
-            moveToThread(nullptr);
-        }
+//         if(threadIsNull) {
+//             moveToThread(nullptr);
+//         }
 
-        Caves.append(newCave);
-    }
+//         m_caves.append(newCave);
+//     }
 
-    if(Caves.size() - 1 >= 0) {
-        emit insertedCaves(0, Caves.size() -1);
-        emit endInsertRows();
-        emit caveCountChanged();
-    }
+//     if(m_caves.size() - 1 >= 0) {
+//         emit insertedCaves(0, m_caves.size() -1);
+//         emit endInsertRows();
+//         emit caveCountChanged();
+//     }
 
-    return *this;
-}
+//     return *this;
+// }
 
 
 /**
@@ -165,7 +166,7 @@ void cwCavingRegion::addCave(cwCave* cave) {
         addCaveHelper();
         return;
     };
-    insertCave(Caves.size(), cave);
+    insertCave(m_caves.size(), cave);
 }
 
 void cwCavingRegion::addCaves(QList<cwCave*> caves) {
@@ -176,7 +177,7 @@ void cwCavingRegion::addCaves(QList<cwCave*> caves) {
 
     //Run the insert cave command
     if(!caves.isEmpty()) {
-        int firstIndex = Caves.size();
+        int firstIndex = m_caves.size();
         pushUndo(new InsertCaveCommand(this, caves, firstIndex));
     }
 }
@@ -185,7 +186,7 @@ void cwCavingRegion::addCaves(QList<cwCave*> caves) {
   \brief Inserts a cave into the region at inedx
   */
 void cwCavingRegion::insertCave(int index, cwCave* cave) {
-    if(index < 0 || index > Caves.size()) { return; }
+    if(index < 0 || index > m_caves.size()) { return; }
 
     unparentCave(cave);
 
@@ -207,8 +208,8 @@ void cwCavingRegion::removeCave(int index) {
   */
 void cwCavingRegion::removeCaves(int beginIndex, int endIndex) {
     //Make sure the indexes are good
-    if(beginIndex < 0 || beginIndex >= Caves.size() ||
-            endIndex < 0 || endIndex >= Caves.size()) {
+    if(beginIndex < 0 || beginIndex >= m_caves.size() ||
+            endIndex < 0 || endIndex >= m_caves.size()) {
         return;
     }
 
@@ -224,8 +225,8 @@ void cwCavingRegion::removeCaves(int beginIndex, int endIndex) {
   \brief Removes all the caves from the region
   */
 void cwCavingRegion::clearCaves() {
-    if(!Caves.isEmpty()) {
-        removeCaves(0, Caves.size() - 1);
+    if(!m_caves.isEmpty()) {
+        removeCaves(0, m_caves.size() - 1);
     }
 }
 
@@ -233,12 +234,48 @@ void cwCavingRegion::clearCaves() {
   \brief Get's the index of the cave
   */
 int cwCavingRegion::indexOf(cwCave* cave) {
-    return Caves.indexOf(cave);
+    return m_caves.indexOf(cave);
 }
 
 cwProject *cwCavingRegion::parentProject() const
 {
     return dynamic_cast<cwProject*>(parent());
+}
+
+void cwCavingRegion::setData(const cwCavingRegionData &data)
+{
+    setName(data.name);
+
+    //Update existing caves
+    for(int i = 0; i < m_caves.size() && i < data.caves.size(); ++i) {
+        m_caves.at(i)->setData(data.caves.at(i));
+    }
+
+    if(m_caves.size() > data.caves.size()) {
+        //Remove caves
+        int firstIndex = data.caves.size();
+        int lastIndex = m_caves.size() - 1;
+        removeCaves(firstIndex, lastIndex);
+    } else if(m_caves.size() < data.caves.size()) {
+        //add new caves
+
+        QList<cwCave*> newCaves;
+        newCaves.reserve(data.caves.size() - m_caves.size());
+        for(int i = m_caves.size(); i < data.caves.size(); ++i) {
+            auto newCave = new cwCave(this);
+            newCave->setData(data.caves.at(i));
+            newCaves.append(newCave);
+        }
+        addCaves(newCaves);
+    }
+}
+
+cwCavingRegionData cwCavingRegion::data() const
+{    
+    return {
+        m_name.value(),
+        cwData::toDataList<cwCaveData>(m_caves)
+    };
 }
 
 /**
@@ -247,7 +284,7 @@ cwProject *cwCavingRegion::parentProject() const
   This will also set undo stack for the children as well
   */
 void cwCavingRegion::setUndoStackForChildren() {
-    setUndoStackForChildrenHelper(Caves);
+    setUndoStackForChildrenHelper(m_caves);
 }
 
 
@@ -258,7 +295,7 @@ void cwCavingRegion::unparentCave(cwCave* cave) {
     //Reparent the trip, if already in another cave
     cwCavingRegion* parentRegion = dynamic_cast<cwCavingRegion*>(((QObject*)cave)->parent());
     if(parentRegion != nullptr) {
-        int index = parentRegion->Caves.indexOf(cave);
+        int index = parentRegion->m_caves.indexOf(cave);
         parentRegion->removeCave(index);
     }
 }
@@ -293,7 +330,7 @@ void cwCavingRegion::InsertRemoveCave::insertCaves() {
     emit regionPtr->beginInsertRows(QModelIndex(), BeginIndex, EndIndex);
     for(int i = 0; i < Caves.size(); i++) {
         int index = BeginIndex + i;
-        regionPtr->Caves.insert(index, Caves[i]);
+        regionPtr->m_caves.insert(index, Caves[i]);
         Caves[i]->setParent(regionPtr);
     }
 
@@ -316,7 +353,7 @@ void cwCavingRegion::InsertRemoveCave::removeCaves() {
 
     for(int i = Caves.size() - 1; i >= 0; i--) {
         int index = BeginIndex + i;
-        regionPtr->Caves.removeAt(index);
+        regionPtr->m_caves.removeAt(index);
         Caves[i]->setParent(nullptr);
     }
 
@@ -365,14 +402,14 @@ cwCavingRegion::RemoveCaveCommand::RemoveCaveCommand(cwCavingRegion* region,
     InsertRemoveCave(region, beginIndex, endIndex)
 {
     for(int i = beginIndex; i <= endIndex; i++) {
-       Caves.append(region->Caves[i]);
+       Caves.append(region->m_caves[i]);
     }
 
     QString commandText;
     if(beginIndex != endIndex) {
         commandText = QString("Remove %1 caves").arg(endIndex - beginIndex);
     } else {
-        cwCave* cave = region->Caves[beginIndex];
+        cwCave* cave = region->m_caves[beginIndex];
         commandText = QString("Remove %1").arg(cave->name());
     }
 }

@@ -53,8 +53,6 @@ bool cwLinePlotTask::LinePlotCaveData::hasNetworkChanged() const
 cwLinePlotTask::cwLinePlotTask(QObject *parent) :
     cwTask(parent)
 {
-    Region = new cwCavingRegion();
-
     SurvexFile = new QTemporaryFile(this);
     SurvexFile->open();
     SurvexFile->setAutoRemove(false);
@@ -83,25 +81,24 @@ cwLinePlotTask::cwLinePlotTask(QObject *parent) :
 
 cwLinePlotTask::~cwLinePlotTask()
 {
-    delete Region;
 }
 
 /**
   \brief Set's the data for the line plot task
   */
-void cwLinePlotTask::setData(const cwCavingRegion& region) {
+void cwLinePlotTask::setData(const cwCavingRegion* region) {
     if(!isReady()) {
         qWarning() << "Can't set cave data for LinePlotTask, while it's running";
         return;
     }
 
     //Copy over all region data
-    *Region = region;
+    RegionData = region->data();
 
     //Change all the cave names, such that survex can handle them correctly
     encodeCaveNames();
 
-    SurvexExporter->setData(*Region);
+    SurvexExporter->setData(RegionData);
 
     //Populate the original pointers
     RegionOriginalPointers = RegionDataPtrs(region);
@@ -120,6 +117,10 @@ void cwLinePlotTask::runTask() {
         done();
         return;
     }
+
+    auto region = new cwCavingRegion();
+    region->setData(RegionData);
+    Region = region;
 
     //Clear the previous results
     Result.clear();
@@ -150,6 +151,9 @@ void cwLinePlotTask::runTask() {
     } catch(QString error) {
         done();
     }
+
+    delete Region;
+    Region = nullptr;
 }
 
 /**
@@ -219,7 +223,7 @@ void cwLinePlotTask::generateCenterlineGeometry() {
     PlotSauceParseTask->clearStationPositions();
 
 //    qDebug() << "Generating centerline geometry" << status();
-    CenterlineGeometryTask->setRegion(Region);
+    CenterlineGeometryTask->setRegion(Region->data());
     CenterlineGeometryTask->start();
 }
 
@@ -289,7 +293,7 @@ void cwLinePlotTask::checkForErrors()
 {
     for(int i = 0; i < Region->caveCount(); i++) {
         cwCave* cave = Region->cave(i);
-        UnconnectedSurveyChunkTask->setCave(cave);
+        UnconnectedSurveyChunkTask->setCave(cave->data());
         UnconnectedSurveyChunkTask->start();
         auto errorResults = UnconnectedSurveyChunkTask->results();
         if(errorResults.size() > 0) {
@@ -598,10 +602,10 @@ void cwLinePlotTask::updateCaveNetworks()
     }
 }
 
-void cwLinePlotTask::moveCaveRegionToThread(QThread *thread)
-{
-    Region->moveToThread(thread);
-}
+// void cwLinePlotTask::moveCaveRegionToThread(QThread *thread)
+// {
+//     Region->moveToThread(thread);
+// }
 
 /**
  * @brief cwLinePlotTask::addEmptyStationLookup
@@ -656,9 +660,9 @@ cwLinePlotTask::CaveDataPtrs::CaveDataPtrs(cwCave *cave)
  * Copies all the cave pointers out of the trip.  This allows the LinePlotTask to show exactly
  * what has changed
  */
-cwLinePlotTask::RegionDataPtrs::RegionDataPtrs(const cwCavingRegion &region)
+cwLinePlotTask::RegionDataPtrs::RegionDataPtrs(const cwCavingRegion *region)
 {
-    foreach(cwCave* cave, region.caves()) {
+    foreach(cwCave* cave, region->caves()) {
         Caves.append(cwLinePlotTask::CaveDataPtrs(cave));
     }
 }

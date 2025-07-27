@@ -52,7 +52,7 @@ void cwSurveyExportManager::exportSurvexRegion(QString filename) {
 
     cwSurvexExporterRegionTask* exportTask = new cwSurvexExporterRegionTask();
     exportTask->setOutputFile(filename);
-    exportTask->setData(*cavingRegion());
+    exportTask->setData(cavingRegion()->data());
     connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
     connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
     exportTask->start();
@@ -71,7 +71,7 @@ void cwSurveyExportManager::exportSurvexCave(QString filename) {
     if(cave != nullptr) {
         cwSurvexExporterCaveTask* exportTask = new cwSurvexExporterCaveTask();
         exportTask->setOutputFile(filename);
-        exportTask->setData(*cave);
+        exportTask->setData(cave->data());
         connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
         connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
         exportTask->start();
@@ -90,7 +90,7 @@ void cwSurveyExportManager::exportSurvexTrip(QString filename) {
     if(trip != nullptr) {
         cwSurvexExporterTripTask* exportTask = new cwSurvexExporterTripTask();
         exportTask->setOutputFile(filename);
-        exportTask->setData(*trip);
+        exportTask->setData(trip->data());
         connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
         connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
         exportTask->start();
@@ -110,7 +110,7 @@ void cwSurveyExportManager::exportCaveToCompass(QString filename) {
     if(cave != nullptr) {
         cwCompassExportCaveTask* exportTask = new cwCompassExportCaveTask();
         exportTask->setOutputFile(filename);
-        exportTask->setData(*cave);
+        exportTask->setData(cave->data());
         connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
         connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
         exportTask->start();
@@ -130,7 +130,7 @@ void cwSurveyExportManager::exportCaveToChipdata(QString filename) {
     if(cave != nullptr) {
         cwChipdataExportCaveTask* exportTask = new cwChipdataExportCaveTask();
         exportTask->setOutputFile(filename);
-        exportTask->setData(*cave);
+        exportTask->setData(cave->data());
         connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
         connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
         exportTask->start();

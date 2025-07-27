@@ -8,7 +8,8 @@ class cwRegionLoadResultData : public QSharedData
 {
 public:
     QList<cwError> errors;
-    cwCavingRegionPtr region;
+    cwCavingRegionData region;
+    // cwCavingRegionPtr region;
     int version = 0;
     QString filename;
     bool isTempFile = false;
@@ -56,12 +57,12 @@ QList<cwError> cwRegionLoadResult::errors() const
     return data->errors;
 }
 
-void cwRegionLoadResult::setCavingRegion(const cwCavingRegionPtr &region)
+void cwRegionLoadResult::setCavingRegion(const cwCavingRegionData &region)
 {
     data->region = region;
 }
 
-cwCavingRegionPtr cwRegionLoadResult::cavingRegion() const
+cwCavingRegionData cwRegionLoadResult::cavingRegion() const
 {
     return data->region;
 }

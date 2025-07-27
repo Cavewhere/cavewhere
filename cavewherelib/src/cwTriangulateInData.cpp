@@ -28,7 +28,7 @@ public:
     cwImage NoteImage;
     double DotPerMeter = 0;
     QPolygonF Outline;
-    cwNoteTranformation NoteTransform;
+    cwNoteTransformationData NoteTransform;
     QList<cwTriangulateStation> Stations;
     QList<cwLead> Leads;
     cwScrap::ScrapType Type;
@@ -114,14 +114,14 @@ void cwTriangulateInData::setStations(QList<cwTriangulateStation> stations) {
 /**
   Get variableName
   */
-cwNoteTranformation cwTriangulateInData::noteTransform() const {
+cwNoteTransformationData cwTriangulateInData::noteTransform() const {
     return data->NoteTransform;
 }
 
 /**
   Sets variableName
   */
-void cwTriangulateInData::setNoteTransform(cwNoteTranformation noteTransform) {
+void cwTriangulateInData::setNoteTransform(const cwNoteTransformationData& noteTransform) {
     data->NoteTransform = noteTransform;
 }
 

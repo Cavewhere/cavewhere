@@ -15,7 +15,7 @@
 
 //Our includes
 #include "cwGlobals.h"
-class cwLength;
+#include "cwLength.h"
 
 class CAVEWHERE_LIB_EXPORT cwScale : public QObject
 {
@@ -27,15 +27,21 @@ class CAVEWHERE_LIB_EXPORT cwScale : public QObject
     Q_PROPERTY(cwLength* scaleDenominator READ scaleDenominator CONSTANT)
 
 public:
+    struct Data {
+        cwLength::Data scaleNumerator;
+        cwLength::Data scaleDenominator;
+    };
+
     explicit cwScale(QObject *parent = 0);
-    cwScale(const cwScale& other);
-    const cwScale& operator =(const cwScale& other);
 
     cwLength* scaleNumerator() const;
     cwLength* scaleDenominator() const;
 
     void setScale(double scale);
     double scale() const;
+
+    void setData(const Data& data);
+    Data data() const;
 
 signals:
      void scaleChanged();

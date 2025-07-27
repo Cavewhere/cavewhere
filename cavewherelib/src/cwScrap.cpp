@@ -43,18 +43,18 @@ cwScrap::cwScrap(QObject *parent) :
 
 }
 
-cwScrap::cwScrap(const cwScrap& other)
-    : QObject(nullptr),
-      NoteTransformation(new cwNoteTranformation(this)),
-      CalculateNoteTransform(false),
-      ViewMatrix(nullptr),
-      ParentNote(nullptr),
-      ParentCave(nullptr),
-      TriangulationDataDirty(false)
-{
-    setCalculateNoteTransform(true);
-    copy(other);
-}
+// cwScrap::cwScrap(const cwScrap& other)
+//     : QObject(nullptr),
+//       NoteTransformation(new cwNoteTranformation(this)),
+//       CalculateNoteTransform(false),
+//       ViewMatrix(nullptr),
+//       ParentNote(nullptr),
+//       ParentCave(nullptr),
+//       TriangulationDataDirty(false)
+// {
+//     setCalculateNoteTransform(true);
+//     copy(other);
+// }
 
 /**
   \brief Inserts a point in scrap
@@ -451,7 +451,7 @@ void cwScrap::updateNoteTransformation() {
     QList< QPair<cwNoteStation, cwNoteStation> > shotStations = noteShots();
 
     //Choose the averaging function
-    std::function<cwNoteTranformation (QList< QPair<cwNoteStation, cwNoteStation> > )> averageFunc;
+    std::function<cwNoteTransformationData (QList< QPair<cwNoteStation, cwNoteStation> > )> averageFunc;
     switch(type()) {
     case RunningProfile:
         averageFunc = [this](auto list)
@@ -513,9 +513,8 @@ void cwScrap::updateNoteTransformation() {
     }
 
     //Do the calculations
-    cwNoteTranformation averageTransformation = averageFunc(shotStations);
-    NoteTransformation->setScale(averageTransformation.scale());
-    NoteTransformation->setNorthUp(averageTransformation.northUp());
+    cwNoteTransformationData averageTransformation = averageFunc(shotStations);
+    NoteTransformation->setData(averageTransformation);
 }
 
 /**
@@ -738,17 +737,17 @@ cwScrap::ScrapShotTransform cwScrap::averageTransformations(QList< ScrapShotTran
 /**
   Finds the average transfrom for the plan, based on all the shots in the scrap
   */
-cwNoteTranformation cwScrap::projectedAverageTransform(QList<QPair<cwNoteStation, cwNoteStation> > shotStations) const
+cwNoteTransformationData cwScrap::projectedAverageTransform(QList<QPair<cwNoteStation, cwNoteStation> > shotStations) const
 {
     QList<ScrapShotTransform> transformations = calculateShotTransformations(shotStations);
-    cwNoteTranformation averageTransformation = averageTransformations(transformations).toNoteTransform();
+    auto averageTransformation = averageTransformations(transformations).toNoteTransform();
     return averageTransformation;
 }
 
 /**
   Finds the average transform for the running profile, based on all the shots in the scrap
   */
-cwNoteTranformation cwScrap::runningProfileAverageTransform(QList<QPair<cwNoteStation, cwNoteStation> > shotStations) const
+cwNoteTransformationData cwScrap::runningProfileAverageTransform(QList<QPair<cwNoteStation, cwNoteStation> > shotStations) const
 {
     class ErrorTransforms {
     public:
@@ -834,11 +833,11 @@ cwNoteTranformation cwScrap::runningProfileAverageTransform(QList<QPair<cwNoteSt
 //    qDebug() << "Best rotation:" << minError.Rotation;
 
     //Using the mimimized error, find the average transform
-    cwNoteTranformation averageTransformation = averageTransformations(minError.Transformations).toNoteTransform();
+    cwNoteTransformationData averageTransformation = averageTransformations(minError.Transformations).toNoteTransform();
 
 //    qDebug() << "Average Transform:" << averageTransformation.northUp() << averageTransformation.scale();
 
-    averageTransformation.setNorthUp(averageTransformation.northUp() + minError.RotationOffset);
+    averageTransformation.north = averageTransformation.north + minError.RotationOffset;
 
     return averageTransformation;
 }
@@ -1173,31 +1172,31 @@ bool cwScrap::pointOnLine(QLineF line, QPointF point) {
             point.y() >= minY && point.y() <= maxY;
 }
 
-const cwScrap & cwScrap::operator =(const cwScrap &other) {
-    return copy(other);
-}
+// const cwScrap & cwScrap::operator =(const cwScrap &other) {
+//     return copy(other);
+// }
 
-/**
-  \brief The copy constructor for the scrap
-  */
-const cwScrap & cwScrap::copy(const cwScrap &other) {
-    if(&other == this) {
-        return *this;
-    }
+// /**
+//   \brief The copy constructor for the scrap
+//   */
+// const cwScrap & cwScrap::copy(const cwScrap &other) {
+//     if(&other == this) {
+//         return *this;
+//     }
 
-    OutlinePoints = other.OutlinePoints;
-    Stations = other.Stations;
-    Leads = other.Leads;
-    *NoteTransformation = *(other.NoteTransformation);
-    setCalculateNoteTransform(other.CalculateNoteTransform);
-    TriangulationData = other.TriangulationData;
+//     OutlinePoints = other.OutlinePoints;
+//     Stations = other.Stations;
+//     Leads = other.Leads;
+//     *NoteTransformation = *(other.NoteTransformation);
+//     setCalculateNoteTransform(other.CalculateNoteTransform);
+//     TriangulationData = other.TriangulationData;
 
-    setViewMatrix(other.ViewMatrix->clone());
+//     setViewMatrix(other.ViewMatrix->clone());
 
-    emit stationsReset();
+//     emit stationsReset();
 
-    return *this;
-}
+//     return *this;
+// }
 
 /**
  * Returns all the neighbor stations for station name in the scrap, by iterating through the
@@ -1265,6 +1264,30 @@ void cwScrap::updateImage()
     emit pointsReset();
 }
 
+void cwScrap::setData(const cwScrapData &data)
+{
+    setPoints(data.outlinePoints);
+    setStations(data.stations);
+    setLeads(data.leads);
+    NoteTransformation->setData(data.noteTransformation);
+    setCalculateNoteTransform(CalculateNoteTransform);
+
+    setType((ScrapType)data.viewMatrix->type());
+    ViewMatrix->setData(data.viewMatrix->clone());
+}
+
+cwScrapData cwScrap::data() const
+{
+    return {
+        OutlinePoints,
+        Stations,
+        Leads,
+        NoteTransformation->data(),
+        CalculateNoteTransform,
+        std::unique_ptr<cwAbstractScrapViewMatrix::Data>(ViewMatrix->data()->clone())
+    };
+}
+
 /**
 * Sets the scrap type on how it's going to be projected
 */
@@ -1300,19 +1323,19 @@ QStringList cwScrap::types() const {
 }
 
 cwScrap::ScrapType cwScrap::type() const {
-    return viewMatrix()->type();
+    return (ScrapType)viewMatrix()->type();
 }
 
-cwNoteTranformation cwScrap::ScrapShotTransform::toNoteTransform() const
+cwNoteTransformationData cwScrap::ScrapShotTransform::toNoteTransform() const
 {
     cwNoteTranformation transformation;
-    double angle = transformation.calculateNorth(QPointF(0.0, 0.0), ErrorVector.toPointF());
+    double northAngle = transformation.calculateNorth(QPointF(0.0, 0.0), ErrorVector.toPointF());
 
 //    qDebug() << "ErrorVectorAverage:" << errorVectorAverage;
 
-    transformation.setNorthUp(angle);
+    transformation.setNorthUp(northAngle);
     transformation.scaleNumerator()->setValue(1);
     transformation.scaleDenominator()->setValue(Scale);
 
-    return transformation;
+    return transformation.data();
 }

@@ -18,6 +18,7 @@ class cwCavingRegion;
 #include "cwStationPositionLookup.h"
 #include "cwGlobals.h"
 #include "cwSurveyNetwork.h"
+#include "cwCaveData.h"
 
 //Qt includes
 #include <QObject>
@@ -29,6 +30,7 @@ class cwCavingRegion;
 #include <QVariant>
 #include <QAbstractListModel>
 #include <QQmlEngine>
+
 
 class CAVEWHERE_LIB_EXPORT cwCave : public QAbstractListModel, public cwUndoer
 {
@@ -47,8 +49,8 @@ public:
     Q_ENUM(Roles)
 
     explicit cwCave(QObject* parent = nullptr);
-    cwCave(const cwCave& object);
-    cwCave& operator=(const cwCave& object);
+    // cwCave(const cwCave& object);
+    // cwCave& operator=(const cwCave& object);
     ~cwCave();
 
     QString name() const;
@@ -87,6 +89,9 @@ public:
     bool isStationPositionLookupStale() const;
 
     QList< cwStation > stations() const;
+
+    cwCaveData data() const;
+    void setData(const cwCaveData& data);
 
 signals:
     void beginInsertTrips(int begin, int end);

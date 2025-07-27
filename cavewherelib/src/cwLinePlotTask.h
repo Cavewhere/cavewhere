@@ -15,6 +15,7 @@ class cwLinePlotGeometryTask;
 #include "cwStationPositionLookup.h"
 #include "cwSurveyNetwork.h"
 #include "cwFindUnconnectedSurveyChunksTask.h"
+#include "cwCavingRegionData.h"
 class cwSurvexExporterRegionTask;
 class cwCavernTask;
 class cwSurvexportTask;
@@ -117,7 +118,7 @@ protected:
     virtual void runTask();
 
 public slots:
-    void setData(const cwCavingRegion &region);
+    void setData(const cwCavingRegion *region);
 
 private slots:
     void exportData();
@@ -166,7 +167,7 @@ private:
     class RegionDataPtrs {
     public:
         RegionDataPtrs() {}
-        RegionDataPtrs(const cwCavingRegion& region);
+        RegionDataPtrs(const cwCavingRegion* region);
 
         QList<CaveDataPtrs> Caves;
     };
@@ -191,7 +192,8 @@ private:
     };
 
     //The region data
-    cwCavingRegion* Region; //Local copy of the region, we can modify this
+    cwCavingRegionData RegionData; //Local copy of the region, we can modify this
+    const cwCavingRegion* Region = nullptr; //Only valid in the thread
     RegionDataPtrs RegionOriginalPointers; //Allows use to notify the which of the original data has changed
     QVector<cwStationPositionLookup> CaveStationLookups; //Copies of all the cave station lookups that are going to be modified
     QVector<StationTripScrapLookup> TripLookups; //Generated in indexStations()
@@ -226,7 +228,7 @@ private:
 
     void updateCaveNetworks();
 
-    Q_INVOKABLE void moveCaveRegionToThread(QThread* thread);
+    // Q_INVOKABLE void moveCaveRegionToThread(QThread* thread);
 
     void addEmptyStationLookup(int caveIndex);
 

@@ -14,14 +14,18 @@
 #include <QVector>
 #include <QPolygonF>
 #include <QQmlEngine>
+#include <QMatrix4x4>
 
 //Our includes
 #include "cwGlobals.h"
-#include "cwNoteTranformation.h"
 #include "cwNoteStation.h"
 #include "cwTriangulatedData.h"
 #include "cwLead.h"
-#include "cwStation.h"
+// #include "cwStation.h"
+#include "cwScrapData.h"
+#include "cwScrapType.h"
+#include "cwNoteTransformationData.h"
+class cwNoteTranformation;
 class cwAbstractScrapViewMatrix;
 class cwPlanScrapViewMatrix;
 class cwRunningProfileScrapViewMatrix;
@@ -49,9 +53,9 @@ class CAVEWHERE_LIB_EXPORT cwScrap : public QObject
 
 public:
     enum ScrapType {
-        Plan,
-        RunningProfile,
-        ProjectedProfile
+        Plan = cwScrapType::Plan,
+        RunningProfile = cwScrapType::RunningProfile,
+        ProjectedProfile = cwScrapType::ProjectedProfile
     };
     Q_ENUM(ScrapType);
 
@@ -74,8 +78,8 @@ public:
     Q_ENUM(LeadDataRole)
 
     explicit cwScrap(QObject *parent = 0);
-    cwScrap(const cwScrap& other);
-    const cwScrap& operator =(const cwScrap& other);
+    // cwScrap(const cwScrap& other);
+    // const cwScrap& operator =(const cwScrap& other);
 
     void setParentNote(cwNote* trip);
     cwNote* parentNote() const;
@@ -133,6 +137,9 @@ public:
 
     void updateImage();
 
+    void setData(const cwScrapData& data);
+    cwScrapData data() const;
+
 public slots:
     void updateNoteTransformation();
 
@@ -183,7 +190,7 @@ private:
         QVector3D ErrorVector;
         double RotationDiff;
 
-        cwNoteTranformation toNoteTransform() const;
+        cwNoteTransformationData toNoteTransform() const;
     };
 
     /**
@@ -241,8 +248,8 @@ private:
                                                    cwNoteStation station2,
                                                    const ProfileTransform& profileTransform) const;
     ScrapShotTransform averageTransformations(QList< ScrapShotTransform > shotTransforms) const;
-    cwNoteTranformation projectedAverageTransform(QList< QPair<cwNoteStation, cwNoteStation> > shotStations) const;
-    cwNoteTranformation runningProfileAverageTransform(QList< QPair<cwNoteStation, cwNoteStation> > shotStations) const;
+    cwNoteTransformationData projectedAverageTransform(QList< QPair<cwNoteStation, cwNoteStation> > shotStations) const;
+    cwNoteTransformationData runningProfileAverageTransform(QList< QPair<cwNoteStation, cwNoteStation> > shotStations) const;
 
     const cwScrap& copy(const cwScrap& other);
 

@@ -94,6 +94,9 @@ public:
     //Base folder
     void save(const cwCavingRegion* region);
 
+    void saveCavingRegion(const QDir& dir, const cwCavingRegion* region);
+    static std::unique_ptr<CavewhereProto::CavingRegion> toProtoCavingRegion(const cwCavingRegion* region);
+
     void saveCave(const QDir& dir, const cwCave* cave);
     static std::unique_ptr<CavewhereProto::Cave> toProtoCave(const cwCave* cave);
 
@@ -105,13 +108,13 @@ public:
 
     void saveAllFromV6(const QDir& dir, const cwProject* region);
 
-
+    void loadCavingRegion(const QString& filename);
 
 
     //For testing
     void waitForFinished();
 
-    static QString sanitizeDirectoryName(QString input);
+    static QString sanitizeFileName(QString input);
 
     void saveProtoMessage(
         const QDir& dir,

@@ -19,6 +19,7 @@
 
 //Our includes
 #include "cwGlobals.h"
+#include "cwNoteTransformationData.h"
 class cwLength;
 class cwImageResolution;
 class cwScale;
@@ -43,10 +44,7 @@ class CAVEWHERE_LIB_EXPORT cwNoteTranformation : public QObject
 
     Q_ENUMS(ProfileDirection)
 public:
-
     cwNoteTranformation(QObject* parent = 0);
-    cwNoteTranformation(const cwNoteTranformation& other);
-    const cwNoteTranformation& operator =(const cwNoteTranformation& other);
 
     cwLength* scaleNumerator() const;
     cwLength* scaleDenominator() const;
@@ -66,6 +64,9 @@ public:
                                       cwImageResolution* resolution);
 
     QMatrix4x4 matrix() const;
+
+    void setData(const cwNoteTransformationData& data);
+    cwNoteTransformationData data() const;
 
 signals:
     void scaleChanged();

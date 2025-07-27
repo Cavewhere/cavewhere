@@ -10,7 +10,7 @@
 
 //Our includes
 #include "cwSurvexExporterCaveTask.h"
-class cwCavingRegion;
+#include "cwCavingRegionData.h"
 
 class cwSurvexExporterRegionTask : public cwExporterTask {
     Q_OBJECT
@@ -18,9 +18,9 @@ class cwSurvexExporterRegionTask : public cwExporterTask {
 public:
     cwSurvexExporterRegionTask(QObject* parent = nullptr);
 
-    void setData(const cwCavingRegion& region);
+    void setData(const cwCavingRegionData &region);
 
-    bool writeRegion(QTextStream& stream, cwCavingRegion* region);
+    bool writeRegion(QTextStream& stream, const cwCavingRegionData& region);
 
 protected:
     virtual void runTask();
@@ -30,7 +30,7 @@ private slots:
 
 private:
     cwSurvexExporterCaveTask* CaveExporter;
-    cwCavingRegion* Region;
+    cwCavingRegionData Region;
     int TotalProgress;
 
     //Makes sure the region has caves

@@ -39,7 +39,7 @@ void cwBaseScrapInteraction::addScrap() {
     if(transform != nullptr) {
         //Used the previous note transform
         scrap()->setCalculateNoteTransform(false);
-        *(scrap()->noteTransformation()) = *transform; //Copy the note transform data to the scrap
+        scrap()->noteTransformation()->setData(transform->data());
     }
 
     note()->addScrap(scrap());

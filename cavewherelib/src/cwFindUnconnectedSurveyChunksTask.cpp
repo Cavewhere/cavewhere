@@ -17,11 +17,7 @@ cwFindUnconnectedSurveyChunksTask::cwFindUnconnectedSurveyChunksTask()
 
 }
 
-/**
- * @brief cwFindUnconnectedSurveyChunksTask::setCave
- * @param cave
- */
-void cwFindUnconnectedSurveyChunksTask::setCave(cwCave *cave)
+void cwFindUnconnectedSurveyChunksTask::setCave(const cwCaveData &cave)
 {
     Cave = cave;
 }
@@ -40,6 +36,8 @@ QList<cwFindUnconnectedSurveyChunksTask::Result> cwFindUnconnectedSurveyChunksTa
  */
 void cwFindUnconnectedSurveyChunksTask::runTask()
 {
+    auto cave = std::make_unique<cwCave>();
+    cave->setData(Cave);
 
     //Do a full refresh
     Connected.clear();
@@ -49,18 +47,18 @@ void cwFindUnconnectedSurveyChunksTask::runTask()
     Results.clear();
 
     //Index the cwSurveyChunk to station name sets
-    indexChunkToStations();
+    indexChunkToStations(cave.get());
 
     //Update the database which chunks are connected to other chunks
-    updateConnectedTo();
+    updateConnectedTo(cave.get());
 
     //Add the first survey chunk in the first trip as Connected
     //This will recursively find all the other connected trips, the connected set
     //will be populated after this call
-    addFirstChunkAsConnected();
+    addFirstChunkAsConnected(cave.get());
 
     //update the unconnect chunks, this should be empty if there's no unconnected chunks
-    updateResults();
+    updateResults(cave.get());
 
     done();
 }
@@ -68,9 +66,9 @@ void cwFindUnconnectedSurveyChunksTask::runTask()
 /**
  * @brief cwSurveyChunkConnectedToCaveTask::indexAllStationsToChunk
  */
-void cwFindUnconnectedSurveyChunksTask::indexChunkToStations()
+void cwFindUnconnectedSurveyChunksTask::indexChunkToStations(const cwCave* cave)
 {
-    foreach(cwTrip* trip, Cave->trips()) {
+    foreach(cwTrip* trip, cave->trips()) {
         foreach(cwSurveyChunk* chunk, trip->chunks()) {
             ChunkToStationSet.insert(chunk, chunkToStationNameSet(chunk));
         }
@@ -88,7 +86,7 @@ void cwFindUnconnectedSurveyChunksTask::indexChunkToStations()
  *
  * Returns false if chunk1 and chunk2 are equal to each other
  */
-bool cwFindUnconnectedSurveyChunksTask::isChunksConnect(cwSurveyChunk *chunk1, cwSurveyChunk *chunk2) const
+bool cwFindUnconnectedSurveyChunksTask::isChunksConnect(const cwSurveyChunk *chunk1, const cwSurveyChunk *chunk2) const
 {
     if(chunk1 == chunk2) { return false; }
     Q_ASSERT(ChunkToStationSet.contains(chunk1) && ChunkToStationSet.contains(chunk2));
@@ -109,7 +107,7 @@ bool cwFindUnconnectedSurveyChunksTask::isChunksConnect(cwSurveyChunk *chunk1, c
  * @param chunk
  * @return
  */
-QSet<QString> cwFindUnconnectedSurveyChunksTask::chunkToStationNameSet(cwSurveyChunk *chunk) const
+QSet<QString> cwFindUnconnectedSurveyChunksTask::chunkToStationNameSet(const cwSurveyChunk *chunk) const
 {
     QSet<QString> stationNameSet;
     for(int i = 0; i < chunk->stationCount(); i++) {
@@ -130,7 +128,7 @@ QSet<QString> cwFindUnconnectedSurveyChunksTask::chunkToStationNameSet(cwSurveyC
  * and chunk2 aren't connected, this function does nothing. If the chunk1 and chunk2 are already
  * indexed as connected, this function does nothing.
  */
-void cwFindUnconnectedSurveyChunksTask::addConnectedTo(cwSurveyChunk *chunk1, cwSurveyChunk *chunk2)
+void cwFindUnconnectedSurveyChunksTask::addConnectedTo(const cwSurveyChunk *chunk1, const cwSurveyChunk *chunk2)
 {
     if(isChunksConnect(chunk1, chunk2)) {
         if(!ChunkConnectedTo.contains(chunk1, chunk2)) {
@@ -147,9 +145,9 @@ void cwFindUnconnectedSurveyChunksTask::addConnectedTo(cwSurveyChunk *chunk1, cw
  * Loops through all the chunks in the cave and tries to connect the with chunk.
  * The ChunkConnectedTo database will be update with the connected chunk pairs
  */
-void cwFindUnconnectedSurveyChunksTask::updateConnectedTo(cwSurveyChunk *chunk)
+void cwFindUnconnectedSurveyChunksTask::updateConnectedTo(const cwCave* cave, const cwSurveyChunk *chunk)
 {
-    foreach(cwTrip* trip, Cave->trips()) {
+    foreach(cwTrip* trip, cave->trips()) {
         foreach(cwSurveyChunk* currentChunk, trip->chunks()) {
             addConnectedTo(chunk, currentChunk);
         }
@@ -161,11 +159,11 @@ void cwFindUnconnectedSurveyChunksTask::updateConnectedTo(cwSurveyChunk *chunk)
  *
  * Loops through all the chunks in the cave and connects them to one another
  */
-void cwFindUnconnectedSurveyChunksTask::updateConnectedTo()
+void cwFindUnconnectedSurveyChunksTask::updateConnectedTo(const cwCave *cave)
 {
-    foreach(cwTrip* trip, Cave->trips()) {
+    foreach(cwTrip* trip, cave->trips()) {
         foreach(cwSurveyChunk* currentChunk, trip->chunks()) {
-            updateConnectedTo(currentChunk);
+            updateConnectedTo(cave, currentChunk);
         }
     }
 }
@@ -173,9 +171,9 @@ void cwFindUnconnectedSurveyChunksTask::updateConnectedTo()
 /**
  * @brief cwSurveyChunkConnectedToCaveTask::addFirstChunkAsConnected
  */
-void cwFindUnconnectedSurveyChunksTask::addFirstChunkAsConnected()
+void cwFindUnconnectedSurveyChunksTask::addFirstChunkAsConnected(const cwCave *cave)
 {
-    foreach(cwTrip* trip, Cave->trips()) {
+    foreach(cwTrip* trip, cave->trips()) {
         foreach(cwSurveyChunk* chunk, trip->chunks()) {
             if(chunk->isValid()) {
                 for(int i = 0; i < chunk->stationCount(); i++) {
@@ -200,13 +198,13 @@ void cwFindUnconnectedSurveyChunksTask::addFirstChunkAsConnected()
  * to the connected list. The connected list are the chunks that are connected to
  * the cave
  */
-void cwFindUnconnectedSurveyChunksTask::insertChunkToConnected(cwSurveyChunk *chunk)
+void cwFindUnconnectedSurveyChunksTask::insertChunkToConnected(const cwSurveyChunk *chunk)
 {
     if(!Connected.contains(chunk)) {
         Connected.insert(chunk);
 
         auto chunksConnetedToChunk = ChunkConnectedTo.values(chunk);
-        foreach(cwSurveyChunk* currentChunk, chunksConnetedToChunk) {
+        foreach(const cwSurveyChunk* currentChunk, chunksConnetedToChunk) {
             insertChunkToConnected(currentChunk);
         }
     }
@@ -217,7 +215,7 @@ void cwFindUnconnectedSurveyChunksTask::insertChunkToConnected(cwSurveyChunk *ch
  *
  * This update's a list of unconnected values
  */
-void cwFindUnconnectedSurveyChunksTask::updateResults()
+void cwFindUnconnectedSurveyChunksTask::updateResults(const cwCave* cave)
 {
     Results.clear();
 
@@ -225,8 +223,8 @@ void cwFindUnconnectedSurveyChunksTask::updateResults()
     error.setMessage("Survey leg isn't connect to the cave");
     error.setType(cwError::Fatal);
 
-    for(int t = 0; t < Cave->tripCount(); t++) {
-        cwTrip* trip = Cave->trip(t);
+    for(int t = 0; t < cave->tripCount(); t++) {
+        cwTrip* trip = cave->trip(t);
         for(int c = 0; c < trip->chunkCount(); c++) {
             cwSurveyChunk* chunk = trip->chunk(c);
 

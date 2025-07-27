@@ -27,14 +27,17 @@ cwChipdataExportCaveTask::cwChipdataExportCaveTask(QObject *parent) :
 /**
   Writes all the trips to the data stream
   */
-bool cwChipdataExportCaveTask::writeCave(QTextStream& stream, cwCave* cave) {
+bool cwChipdataExportCaveTask::writeCave(QTextStream& stream, const cwCaveData &cave) {
     //Haven't done anything
     TotalProgress = 0;
 
+    auto cavePtr = std::make_unique<cwCave>();
+    cavePtr->setData(cave);
+
     //Go throug all the trips and save them
-    for(int i = 0; i < cave->tripCount(); i++) {
-        cwTrip* trip = cave->trip(i);
-        writeTrip(stream, trip, i == 0 ? cave->name() : QString());
+    for(int i = 0; i < cavePtr->tripCount(); i++) {
+        cwTrip* trip = cavePtr->trip(i);
+        writeTrip(stream, trip, i == 0 ? cavePtr->name() : QString());
         TotalProgress += trip->numberOfStations();
     }
 
