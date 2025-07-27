@@ -2,18 +2,19 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "cwCavingRegion.h"
+#include "cwCave.h"
 
 TEST_CASE("Copying caving region's data should work correctly", "[cwCavingRegion]") {
 
     cwCavingRegion region;
     region.setName("test region");
 
-    cwCavingRegion::Data regionData = region.data();
+    cwCavingRegionData regionData = region.data();
     CHECK(regionData.name.toStdString() == "test region");
     CHECK(regionData.caves.size() == 0);
 
     regionData.name = "new name";
-    regionData.caves.append(cwCave::Data {
+    regionData.caves.append(cwCaveData {
          "cave 1",
         // {}
     });

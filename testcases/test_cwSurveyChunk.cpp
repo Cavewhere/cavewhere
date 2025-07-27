@@ -645,7 +645,8 @@ TEST_CASE("Tests adding removing and getting copying cwSurveyChunk calibrations"
         CHECK(chunk.calibrations().value(2) == nullptr);
 
         SECTION("Copy calibration") {
-            cwSurveyChunk chunkCopy(chunk);
+            cwSurveyChunk chunkCopy;
+            chunkCopy.setData(chunk.data());
 
             CHECK(chunkCopy.calibrations().size() == 3);
             auto calibrations = chunkCopy.calibrations();
@@ -766,7 +767,8 @@ TEST_CASE("Fix to abort - Test cwSurveyChunk with mostly empty data and copy", "
     chunk.setData(cwSurveyChunk::StationNameRole, 1, "b2");
     CHECK(chunk.data(cwSurveyChunk::StationNameRole, 1).toString().toStdString() == "b2");
 
-    cwSurveyChunk chunkCopy(chunk);
+    cwSurveyChunk chunkCopy;
+    chunkCopy.setData(chunk.data());
 
     REQUIRE(chunkCopy.stationCount() == 2);
     REQUIRE(chunkCopy.shotCount() == 1);

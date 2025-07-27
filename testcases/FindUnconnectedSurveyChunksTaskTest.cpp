@@ -55,7 +55,7 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
             chunk->appendShot(stations.at(i), stations.at(i+1), shot);
         }
 
-        task->setCave(cave.get());
+        task->setCave(cave->data());
         task->start();
         task->waitToFinish();
 
@@ -93,7 +93,7 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
             chunk2->appendShot(withoutCapitals.at(i), withoutCapitals.at(i+1), shot);
         }
 
-        task->setCave(cave.get());
+        task->setCave(cave->data());
         task->start();
         task->waitToFinish();
 
@@ -125,7 +125,7 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
             chunk2->appendShot(stations.at(i), stations.at(i+1), shot);
         }
 
-        task->setCave(cave.get());
+        task->setCave(cave->data());
         task->start();
         task->waitToFinish();
 

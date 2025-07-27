@@ -14,6 +14,7 @@
 #include "cwFutureManagerModel.h"
 #include "cwImageDatabase.h"
 #include "cwPDFSettings.h"
+#include "cwNote.h"
 
 //Qt includes
 #include <QSqlQuery>

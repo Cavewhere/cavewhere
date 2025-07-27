@@ -45,7 +45,7 @@ TEST_CASE("Export/Import Compass", "[Compass]") {
     cwCave* loadedCave = project->cavingRegion()->cave(0);
 
     auto exportToCompass = std::make_unique<cwCompassExportCaveTask>();
-    exportToCompass->setData(*loadedCave);
+    exportToCompass->setData(loadedCave->data());
     exportToCompass->setOutputFile(exportFile);
     exportToCompass->start();
     exportToCompass->waitToFinish();
@@ -70,11 +70,13 @@ TEST_CASE("Export/Import Compass", "[Compass]") {
 
     CHECK(messageSpy.isEmpty());
 
-    QList<cwCave> caves = importFromCompass->caves();
+    QList<cwCaveData> caves = importFromCompass->caves();
     REQUIRE(caves.size() == 1);
 
     auto importedRegion = std::make_unique<cwCavingRegion>();
-    importedRegion->addCave(new cwCave(caves.first()));
+    auto newCave = new cwCave();
+    newCave->setData(caves.first());
+    importedRegion->addCave(newCave);
     CHECK(importedRegion->caveCount() == 1);
 
     auto plotManager = std::make_unique<cwLinePlotManager>();
@@ -110,7 +112,7 @@ TEST_CASE("Export invalid data - ISSUE #115", "[Compass]") {
     cwCave* loadedCave = project->cavingRegion()->cave(0);
 
     auto exportToCompass = std::make_unique<cwCompassExportCaveTask>();
-    exportToCompass->setData(*loadedCave);
+    exportToCompass->setData(loadedCave->data());
     exportToCompass->setOutputFile(exportFile);
     exportToCompass->start();
     exportToCompass->waitToFinish();
@@ -133,10 +135,12 @@ TEST_CASE("Export invalid data - ISSUE #115", "[Compass]") {
     importFromCompass->start();
     importFromCompass->waitToFinish();
 
-    QList<cwCave> caves = importFromCompass->caves();
+    QList<cwCaveData> caves = importFromCompass->caves();
     REQUIRE(caves.size() == 1);
 
-    cwCave* importedCaves = &caves[0];
+    // cwCave* importedCaves = &caves[0];
+    auto importedCaves = std::make_unique<cwCave>();
+    importedCaves->setData(caves.at(0));
 
     REQUIRE(loadedCave->trips().size() == 1);
     REQUIRE(importedCaves->trips().size() == 1);
@@ -202,6 +206,6 @@ TEST_CASE("Test 15 char format is okay", "[Compass]") {
         }
     }
 
-    QList<cwCave> caves = importFromCompass->caves();
+    QList<cwCaveData> caves = importFromCompass->caves();
     REQUIRE(caves.size() == 1);
 }

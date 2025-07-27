@@ -7,6 +7,7 @@
 #include "TestHelper.h"
 #include "cwTrip.h"
 #include "cwCave.h"
+#include "cwNote.h"
 #include "cwSurveyNoteModel.h"
 
 TEST_CASE("cwRegionTreeModel all function should work correctly", "[cwRegionTreeModel]") {

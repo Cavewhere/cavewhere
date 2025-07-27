@@ -15,6 +15,7 @@
 #include "cwCave.h"
 #include "cwTrip.h"
 #include "cwScrap.h"
+#include "cwNote.h"
 // #include "cwOpenGLSettings.h"
 
 //Qt includes
