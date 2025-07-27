@@ -1,3 +1,3 @@
 #include "cwCavingRegionData.h"
 
-cwCavingRegionData::cwCavingRegionData() {}
+// cwCavingRegionData::cwCavingRegionData() {}

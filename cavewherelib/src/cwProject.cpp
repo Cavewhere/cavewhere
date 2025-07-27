@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwProject.h"
+#include "Monad/Monad.h"
 #include "cwCave.h"
 #include "cwTrip.h"
 #include "cwAddImageTask.h"
@@ -24,6 +25,7 @@
 #include "cwPDFConverter.h"
 #include "cwPDFSettings.h"
 #include "cwConcurrent.h"
+#include "cwSaveLoad.h"
 
 //Qt includes
 #include <QDir>
@@ -625,10 +627,47 @@ QString cwProject::supportedImageFormats()
     return withWildCards.join(' ');
 }
 
-// cwProject::FileType cwProject::projectType(const QString &filename) const
-// {
+cwProject::FileType cwProject::projectType(const QString &filename) const
+{
+    //File is empty, return unknown
+    QFileInfo info(filename);
+    if(info.size() == 0) {
+        return Unknown;
+    }
 
-// }
+    //Check if we can connect to the sqlite database, v6 and lower
+    auto result = Monad::mtry([filename]() {
+        auto database = createDatabaseConnection("test_database", filename);
+
+        QSqlQuery query(database);
+        query.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='ObjectData'");
+
+        if (!query.exec()) {
+            return Monad::ResultBase(QStringLiteral("Failed to query database: %1").arg(query.lastError().text()));
+        }
+
+        if(!query.next()) {
+            return Monad::ResultBase(QStringLiteral("Sqlite database dosen't have ObjectData"));
+        }
+
+        //No error
+        return Monad::ResultBase();
+    });
+
+    if(result.hasError()) {
+        //Check to see
+        auto regionResult = cwSaveLoad::loadCavingRegion(filename);
+        if(regionResult.hasError()) {
+            return Unknown;
+        } else {
+            return Filebased;
+        }
+    } else {
+        //V6 or lower
+        return Sqlite;
+    }
+}
+
 
 /**
  * @brief cwProject::setUndoStack

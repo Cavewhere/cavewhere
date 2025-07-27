@@ -24,6 +24,8 @@
 #include <QtConcurrent>
 #include <QSaveFile>
 
+using namespace Monad;
+
 struct cwSaveLoad::Data {
     QDir m_rootDir; //Root project directory
 
@@ -224,6 +226,30 @@ void cwSaveLoad::saveAllFromV6(const QDir &dir, const cwProject* project)
         saveCave(caveDir, cave);
         saveTrips(caveDir, cave);
     }
+}
+
+Monad::Result<cwCavingRegionData> cwSaveLoad::loadCavingRegion(const QString &filename)
+{
+    QFile file(filename);
+    bool success = file.open(QFile::ReadOnly);
+    if(!success) {
+        return Result<cwCavingRegionData>(file.errorString());
+    }
+
+    auto allData = file.readAll();
+
+    CavewhereProto::CavingRegion regionProto;
+    auto status = google::protobuf::util::JsonStringToMessage(allData.toStdString(), &regionProto);
+    if (!status.ok()) {
+        return Result<cwCavingRegionData>(QString("Failed to parse JSON: %1").arg(QString::fromStdString(status.message().data())));
+    }
+
+    cwCavingRegionData regionData;
+    if(regionProto.has_name()) {
+        regionData.name = QString::fromStdString(regionProto.name());
+    }
+
+    return regionData;
 }
 
 void cwSaveLoad::waitForFinished()

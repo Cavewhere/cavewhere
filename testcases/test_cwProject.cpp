@@ -320,3 +320,25 @@ TEST_CASE("cwProject should add PDF correctly", "[cwProject]") {
         }
     }
 }
+
+TEST_CASE("cwProject should detect the correct file type", "[cwProject]") {
+    //Older sqlite project
+    QString datasetFile = copyToTempFolder(":/datasets/test_cwProject/Phake Cave 3000.cw");
+    auto project = std::make_unique<cwProject>();
+    CHECK(project->projectType(datasetFile) == cwProject::Sqlite);
+
+    //A file based file
+    datasetFile = copyToTempFolder(":/datasets/test_cwProject/v7.cw");
+    CHECK(project->projectType(datasetFile) == cwProject::Filebased);
+
+    //Empty file
+    QTemporaryFile tempFile;
+    tempFile.open();
+    datasetFile = tempFile.fileName();
+    CHECK(project->projectType(datasetFile) == cwProject::Unknown);
+
+    //File with random stuff in it
+    tempFile.write("Test random data");
+    tempFile.close();
+    CHECK(project->projectType(datasetFile) == cwProject::Unknown);
+}

@@ -55,11 +55,12 @@ class CAVEWHERE_LIB_EXPORT cwProject :  public QObject{
     Q_PROPERTY(bool isTemporaryProject READ isTemporaryProject NOTIFY isTemporaryProjectChanged)
 
 public:
-    // enum FileType {
-    //     Sqlite, //V6 and below
-    //     GitRepository //V7 and above
-    // };
-    // Q_ENUM(FileType);
+    enum FileType {
+        Unknown,
+        Sqlite, //V6 and below
+        Filebased, //V7 and above
+    };
+    Q_ENUM(FileType);
 
     cwProject(QObject* parent = nullptr);
     ~cwProject();
@@ -78,7 +79,7 @@ public:
     static QString supportedImageFormats();
 
 
-    // Q_INVOKABLE FileType projectType(const QString& filename) const;
+    Q_INVOKABLE FileType projectType(const QString& filename) const;
 
     //Older save and load
     Q_INVOKABLE void save();

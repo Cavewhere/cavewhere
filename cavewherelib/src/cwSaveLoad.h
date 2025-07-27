@@ -1,6 +1,7 @@
 #ifndef CWSAVELOAD_H
 #define CWSAVELOAD_H
 
+//Our includes
 class cwCave;
 class cwTrip;
 class cwSurveyNoteModel;
@@ -27,6 +28,7 @@ class cwClinoReading;
 class cwCompassReading;
 class cwCavingRegion;
 class cwProject;
+#include "cwCavingRegionData.h"
 
 //Google protobuffer
 namespace CavewhereProto {
@@ -72,6 +74,9 @@ namespace google::protobuf {
 class Message;
 }
 
+//Monad includes
+#include <Monad/Result.h>
+
 //Qt includes
 #include <QDir>
 #include <QFuture>
@@ -108,8 +113,7 @@ public:
 
     void saveAllFromV6(const QDir& dir, const cwProject* region);
 
-    void loadCavingRegion(const QString& filename);
-
+    static Monad::Result<cwCavingRegionData> loadCavingRegion(const QString& filename);
 
     //For testing
     void waitForFinished();
