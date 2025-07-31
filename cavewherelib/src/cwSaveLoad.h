@@ -82,6 +82,8 @@ class Message;
 #include <QFuture>
 #include <QHash>
 
+//Proto includes
+#include "cavewhere.pb.h"
 
 class cwSaveLoad : public QObject
 {
@@ -101,6 +103,7 @@ public:
 
     void saveCavingRegion(const QDir& dir, const cwCavingRegion* region);
     static std::unique_ptr<CavewhereProto::CavingRegion> toProtoCavingRegion(const cwCavingRegion* region);
+    static QString regionFileName(const QDir& dir, const cwCavingRegion* region);
 
     void saveCave(const QDir& dir, const cwCave* cave);
     static std::unique_ptr<CavewhereProto::Cave> toProtoCave(const cwCave* cave);
@@ -111,14 +114,32 @@ public:
     void saveNote(const QDir& dir, const cwNote* note);
     static std::unique_ptr<CavewhereProto::Note> toProtoNote(const cwNote* note);
 
-    void saveAllFromV6(const QDir& dir, const cwProject* region);
+    QString saveAllFromV6(const QDir& dir, const cwProject* region);
+
+    static Monad::Result<cwCavingRegionData> loadAll(const QString& filename);
 
     static Monad::Result<cwCavingRegionData> loadCavingRegion(const QString& filename);
+    static Monad::Result<cwCaveData> loadCave(const QString& filename);
+    static Monad::Result<cwTripData> loadTrip(const QString& filename);
+    static Monad::Result<cwNoteData> loadNote(const QString& filename);
+
+    static cwTripCalibrationData fromProtoTripCalibration(const CavewhereProto::TripCalibration& proto);
+    static cwTeamData fromProtoTeam(const CavewhereProto::Team& proto);
+    static cwTeamMember fromProtoTeamMember(const CavewhereProto::TeamMember& proto);
+    static QList<cwSurveyChunkData> fromProtoSurveyChunks(const google::protobuf::RepeatedPtrField<CavewhereProto::SurveyChunk> & protoList);
+    static cwSurveyChunkData fromProtoSurveyChunk(const CavewhereProto::SurveyChunk& protoChunk);
+    static cwStation fromProtoStation(const CavewhereProto::StationShot& protoStation);
+    static cwShot fromProtoShot(const CavewhereProto::StationShot& protoShot);
 
     //For testing
     void waitForFinished();
 
     static QString sanitizeFileName(QString input);
+    static QUuid toUuid(const std::string& uuidStr);
+
+    static QStringList fromProtoStringList(const google::protobuf::RepeatedPtrField<std::string> &protoStringList);
+
+
 
     void saveProtoMessage(
         const QDir& dir,

@@ -265,6 +265,7 @@ void cwCavingRegion::setData(const cwCavingRegionData &data)
             auto newCave = new cwCave(this);
             newCave->setData(data.caves.at(i));
             newCaves.append(newCave);
+            qDebug() << "Adding cave:" << newCave->name();
         }
         addCaves(newCaves);
     }

@@ -15,66 +15,49 @@
 #include <QVector2D>
 #include <QVector>
 
-cwImage::cwImage() :
-    Data(new PrivateData())
-{
-
-}
-
-bool cwImage::isMipmapsValid() const
-{
-    if(Data->Mipmaps.isEmpty()) {
+bool cwImage::isMipmapsValid() const {
+    if (!std::holds_alternative<IdData>(m_data->modeData)) {
         return false;
     }
-    auto iter = std::find_if(Data->Mipmaps.begin(), Data->Mipmaps.end(),
-                             [](int id) { return !cwImage::isIdValid(id); });
-    return iter == Data->Mipmaps.end();
-}
-
-QList<int> cwImage::ids() const
-{
-    QList<int> ids;
-    ids.reserve(2 + mipmaps().size());
-    if(isOriginalValid()) {
-        ids.append(original());
+    const auto& mipmapsList = std::get<IdData>(m_data->modeData).mipmapIds;
+    if (mipmapsList.isEmpty()) {
+        return false;
     }
-
-    if(isIconValid()) {
-        ids.append(icon());
-    }
-
-    if(isMipmapsValid()) {
-        ids.append(mipmaps());
-    }
-
-    return ids;
+    return std::all_of(mipmapsList.begin(), mipmapsList.end(), [](int id) {
+        return isIdValid(id);
+    });
 }
-
-
-cwImage::PrivateData::PrivateData() {
-    IconId = -1;
-    OriginalId = -1;
-    OriginalDotsPerMeter = 0;
-}
-
-
-bool cwImage::operator ==(const cwImage &other) const {
-
-    if(Data == other.Data) {
-        return true;
-    }
-
-    return Data->OriginalId == other.Data->OriginalId
-            && Data->Mipmaps == other.Data->Mipmaps
-            && Data->IconId == other.Data->IconId
-            && Data->OriginalSize == other.Data->OriginalSize
-            && Data->OriginalDotsPerMeter == other.Data->OriginalDotsPerMeter;
-}
-
 
 QDebug operator<<(QDebug debug, const cwImage &image)
 {
     QDebugStateSaver saver(debug);
     debug.nospace() << "(original:" << image.original() << " icon:" << image.icon() << " mipmaps:" << image.mipmaps() << " size:" << image.originalSize() << " dotPerMeter:" << image.originalDotsPerMeter();;
     return debug;
+}
+
+
+bool cwImage::operator==(const cwImage &other) const {
+    if (m_data == other.m_data) return true;
+    if (!m_data || !other.m_data) return false;
+
+    if (m_data->originalSize != other.m_data->originalSize ||
+        m_data->originalDotsPerMeter != other.m_data->originalDotsPerMeter) {
+        return false;
+    }
+
+    if (m_data->modeData.index() != other.m_data->modeData.index()) return false;
+
+    return m_data->modeData == other.m_data->modeData;
+}
+
+
+QList<int> cwImage::ids() const {
+    if (!std::holds_alternative<IdData>(m_data->modeData)) return {};
+    const auto& data = std::get<IdData>(m_data->modeData);
+    QList<int> out;
+    out.reserve(2 + data.mipmapIds.size());
+    if (isIdValid(data.originalId)) { out.append(data.originalId); }
+    if (isIdValid(data.iconId)) { out.append(data.iconId); }
+    out.append(data.mipmapIds);
+    return out;
 }

@@ -1,18 +1,9 @@
-/**************************************************************************
-**
-**    Copyright (C) 2013 by Philip Schuchardt
-**    www.cavewhere.com
-**
-**************************************************************************/
-
 #ifndef CWIMAGE_H
 #define CWIMAGE_H
 
-//Our includes
-class cwProject;
 #include "cwGlobals.h"
 
-//Qt includes
+// Qt includes
 #include <QString>
 #include <QImage>
 #include <QStringList>
@@ -21,12 +12,13 @@ class cwProject;
 #include <QSharedDataPointer>
 #include <QDebug>
 #include <QQmlEngine>
+#include <variant>
 
 /**
-  \brief This class stores id's to all the images in the database
+  \brief This class stores image references either by legacy ID or file path.
 
-  It stores the image path to original in the database,
-  all the mipmap levels, and a icon version that's less than 512 by 512 pixels
+  It supports both ID-based (original, mipmaps, icon) and path-based usage,
+  with a shared interface backed by a variant-based data structure.
   */
 class CAVEWHERE_LIB_EXPORT cwImage {
     Q_GADGET
@@ -36,166 +28,165 @@ class CAVEWHERE_LIB_EXPORT cwImage {
     Q_PROPERTY(int originalDotsPerMeter READ originalDotsPerMeter WRITE setOriginalDotsPerMeter)
 
 public:
-    cwImage();
+    enum class Mode {
+        Invalid,
+        Ids,
+        Paths
+    };
+    Q_ENUM(Mode)
+
+    cwImage() : m_data(new SharedData) {}
     virtual ~cwImage() = default;
 
-    void setMipmaps(QList<int> mipmapFiles);
-    QList<int> mipmaps() const;
+    void setMipmaps(QList<int> mipmapFiles) {
+        ensureIdData();
+        idData().mipmapIds = std::move(mipmapFiles);
+    }
 
-    int numberOfMipmapLevels();
+    QList<int> mipmaps() const {
+        return std::get<IdData>(m_data->modeData).mipmapIds;
+    }
 
-    void setIcon(int icon);
-    int icon() const;
+    int numberOfMipmapLevels() const {
+        return std::get<IdData>(m_data->modeData).mipmapIds.size();
+    }
 
-    void setOriginal(int originalId);
-    int original() const;
+    void setIcon(int icon) {
+        ensureIdData();
+        idData().iconId = icon;
+    }
 
-    void setOriginalSize(QSize size);
-    QSize originalSize() const;
+    int icon() const {
+        return std::get<IdData>(m_data->modeData).iconId;
+    }
 
-    void setOriginalDotsPerMeter(int dotsPerMeter);
-    int originalDotsPerMeter() const;
+    void setOriginal(int originalId) {
+        ensureIdData();
+        idData().originalId = originalId;
+    }
 
-    bool operator ==(const cwImage& other) const;
-    bool operator !=(const cwImage& other) const;
+    int original() const {
+        return std::get<IdData>(m_data->modeData).originalId;
+    }
 
-    bool isOriginalValid() const;
+    void setOriginalSize(QSize size) {
+        m_data->originalSize = std::move(size);
+    }
+
+    QSize originalSize() const {
+        return m_data->originalSize;
+    }
+
+    void setOriginalDotsPerMeter(int dotsPerMeter) {
+        m_data->originalDotsPerMeter = dotsPerMeter;
+    }
+
+    int originalDotsPerMeter() const {
+        return m_data->originalDotsPerMeter;
+    }
+
+    bool operator==(const cwImage& other) const;
+
+    bool operator!=(const cwImage& other) const {
+        return !(*this == other);
+    }
+
+    bool isOriginalValid() const {
+        return std::holds_alternative<IdData>(m_data->modeData) && isIdValid(original());
+    }
+
     bool isMipmapsValid() const;
-    bool isIconValid() const;
+
+    bool isIconValid() const {
+        return std::holds_alternative<IdData>(m_data->modeData) && isIdValid(icon());
+    }
 
     QList<int> ids() const;
 
+    void setPath(const QString& path) {
+        ensurePathData();
+        pathData().path = path;
+    }
+
+    QString path() const {
+        return std::get<PathData>(m_data->modeData).path;
+    }
+
+    Mode mode() const {
+        if (std::holds_alternative<IdData>(m_data->modeData)) return Mode::Ids;
+        if (std::holds_alternative<PathData>(m_data->modeData)) return Mode::Paths;
+        return Mode::Invalid;
+    }
+
 private:
-    class PrivateData : public QSharedData {
-    public:
-        PrivateData();
+    static bool isIdValid(int id) {
+        return id > -1;
+    }
 
-        int IconId;
-        int OriginalId;
-        QSize OriginalSize;
-        int OriginalDotsPerMeter;
+    struct IdData {
+        int originalId = -1;
+        int iconId = -1;
+        QList<int> mipmapIds;
 
-        QList<int> Mipmaps;
+        bool operator==(const IdData& other) const {
+            return originalId == other.originalId &&
+                   iconId == other.iconId &&
+                   mipmapIds == other.mipmapIds;
+        }
     };
 
-    static bool isIdValid(int id);
+    struct PathData {
+        QString path;
 
-    QSharedDataPointer<PrivateData> Data;
+        bool operator==(const PathData& other) const {
+            return path == other.path;
+        }
+    };
+
+    struct SharedData : public QSharedData {
+        QSize originalSize;
+        int originalDotsPerMeter = 0;
+        std::variant<std::monostate, IdData, PathData> modeData;
+
+        SharedData() = default;
+        SharedData(const SharedData&) = default;
+        ~SharedData() = default;
+    };
+
+    QSharedDataPointer<SharedData> m_data;
+
+    IdData& idData() {
+        return std::get<IdData>(m_data->modeData);
+    }
+
+    const IdData& idData() const {
+        return std::get<IdData>(m_data->modeData);
+    }
+
+    PathData& pathData() {
+        return std::get<PathData>(m_data->modeData);
+    }
+
+    const PathData& pathData() const {
+        return std::get<PathData>(m_data->modeData);
+    }
+
+    void ensureIdData() {
+        if (!std::holds_alternative<IdData>(m_data->modeData)) {
+            m_data.detach();
+            m_data->modeData = IdData();
+        }
+    }
+
+    void ensurePathData() {
+        if (!std::holds_alternative<PathData>(m_data->modeData)) {
+            m_data.detach();
+            m_data->modeData = PathData();
+        }
+    }
 };
 
 Q_DECLARE_METATYPE(cwImage)
-
-/**
-  \brief Sets the mipmap image filenames
-  */
-inline void cwImage::setMipmaps(QList<int> mipmapIds) {
-    Data->Mipmaps = mipmapIds;
-}
-
-/**
-  Gets the mipmap image filenames
-  */
-inline QList<int> cwImage::mipmaps() const {
-    return Data->Mipmaps;
-}
-
-/**
-  Get's the number of mipmaps
-  */
-inline int cwImage::numberOfMipmapLevels() {
-    return Data->Mipmaps.size();
-}
-
-/**
-  Sets the icon for this image
-  */
-inline void cwImage::setIcon(int iconId) {
-    Data->IconId = iconId;
-}
-
-/**
-  Gets the icon for the filename
-  */
-inline int cwImage::icon() const {
-    return Data->IconId;
-}
-
-
-/**
-  Sets the id filename
-  */
-inline void cwImage::setOriginal(int original) {
-    Data->OriginalId = original;
-}
-
-/**
-  Gets the id to the original image
-  */
-inline int cwImage::original() const {
-    return Data->OriginalId;
-}
-
-/**
-  Returns true if the original ids are equal
-  */
-
-
-/**
-  Returns true if the original ids aren't equal
-  */
-inline bool cwImage::operator !=(const cwImage& other) const {
-    return !operator ==(other);
-}
-
-/**
-  \brief Sets the original size of the image
-  */
-inline void cwImage::setOriginalSize(QSize size) {
-    Data->OriginalSize = size;
-}
-
-/**
-  \brief Gets the original size of the image
-  */
-inline QSize cwImage::originalSize() const {
-    return Data->OriginalSize;
-}
-
-/**
-  \brief Sets the origianl dots per meter
-  */
-inline void cwImage::setOriginalDotsPerMeter(int dotsPerMeter) {
-    Data->OriginalDotsPerMeter = dotsPerMeter;
-}
-
-/**
-  \brief Sets the original dots per meter
-  */
-inline int cwImage::originalDotsPerMeter() const {
-    return Data->OriginalDotsPerMeter;
-}
-
-inline bool cwImage::isOriginalValid() const
-{
-    return isIdValid(original());
-}
-
-/**
- * @return returns true if the icon id is valid
- */
-inline bool cwImage::isIconValid() const
-{
-    return isIdValid(Data->IconId);
-}
-
-inline bool cwImage::isIdValid(int id)
-{
-    return id > -1;
-}
-
 CAVEWHERE_LIB_EXPORT QDebug operator<<(QDebug debug, const cwImage &image);
-
-
-
 
 #endif // CWIMAGE_H

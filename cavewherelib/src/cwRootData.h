@@ -144,6 +144,8 @@ public:
     Q_INVOKABLE void showInFolder(const QString& path) const;
     Q_INVOKABLE void copyText(const QString& text) const;
     Q_INVOKABLE QString urlToLocal(const QUrl& url) const { return url.toLocalFile(); }
+    Q_INVOKABLE QString fileBaseName(const QString& path) const;
+    Q_INVOKABLE QString fileName(const QString& path) const;
 
     bool mobileBuild() const;
     bool desktopBuild() const { return !mobileBuild(); }

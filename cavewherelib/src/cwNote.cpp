@@ -306,11 +306,14 @@ cwNoteData cwNote::data() const
         scrapData.append(scrap->data());
     }
 
+    qDebug() << "Note data:" << m_name << ImageIds.original();
+
     return {
         m_name,
         DisplayRotation,
         ImageResolution->data(),
-        std::move(scrapData)
+        std::move(scrapData),
+        ImageIds
     };
 }
 
@@ -319,6 +322,9 @@ void cwNote::setData(const cwNoteData &data)
     m_name = data.name;
     setRotate(data.rotate);
     ImageResolution->setData(data.imageResolution);
+
+    //Old image data, for loading from old files
+    setImage(data.image);
 
     //Delete extra scraps
     for(int i = Scraps.size() - 1; i >= data.scraps.size(); i--) {

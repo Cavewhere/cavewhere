@@ -1,6 +1,7 @@
 #include "cwSaveLoad.h"
 #include "cwTrip.h"
 #include "cwRegionSaveTask.h"
+#include "cwRegionLoadTask.h"
 #include "cwConcurrent.h"
 #include "cwFutureManagerModel.h"
 #include "cwTeam.h"
@@ -24,7 +25,28 @@
 #include <QtConcurrent>
 #include <QSaveFile>
 
+//Monad
+#include "Monad/Monad.h"
+
 using namespace Monad;
+
+template<typename ProtoType>
+static Result<ProtoType> loadMessage(const QString& filename) {
+    QFile file(filename);
+    bool success = file.open(QFile::ReadOnly);
+    if(!success) {
+        return Result<ProtoType>(file.errorString());
+    }
+
+    auto allData = file.readAll();
+
+    ProtoType proto;
+    auto status = google::protobuf::util::JsonStringToMessage(allData.toStdString(), &proto);
+    if (!status.ok()) {
+        return Result<ProtoType>(QString("Failed to parse JSON: %1").arg(QString::fromStdString(status.message().data())));
+    }
+    return Result<ProtoType>(proto);
+}
 
 struct cwSaveLoad::Data {
     QDir m_rootDir; //Root project directory
@@ -75,6 +97,11 @@ std::unique_ptr<CavewhereProto::CavingRegion> cwSaveLoad::toProtoCavingRegion(co
     cwRegionSaveTask::saveString(protoRegion->mutable_cavewhereversion(), CavewhereVersion);
     cwRegionSaveTask::saveString(protoRegion->mutable_name(), region->name());
     return protoRegion;
+}
+
+QString cwSaveLoad::regionFileName(const QDir &dir, const cwCavingRegion *region)
+{
+    return dir.absoluteFilePath(sanitizeFileName(QStringLiteral("%1.cw").arg(region->name())));
 }
 
 void cwSaveLoad::saveCave(const QDir &dir, const cwCave *cave)
@@ -154,7 +181,7 @@ std::unique_ptr<CavewhereProto::Note> cwSaveLoad::toProtoNote(const cwNote *note
  *
  * This is useful for converting older CaveWhere files to the new file format
  */
-void cwSaveLoad::saveAllFromV6(const QDir &dir, const cwProject* project)
+QString cwSaveLoad::saveAllFromV6(const QDir &dir, const cwProject* project)
 {
 
     auto makeDir = [](const QDir& rootDir, const QString& name) {
@@ -168,6 +195,8 @@ void cwSaveLoad::saveAllFromV6(const QDir &dir, const cwProject* project)
     };
 
     const QString projectFilename = project->filename();
+
+    qDebug() << "Project path for image provider:" << projectFilename;
 
     cwImageProvider provider;
     provider.setProjectPath(projectFilename);
@@ -188,7 +217,7 @@ void cwSaveLoad::saveAllFromV6(const QDir &dir, const cwProject* project)
             saveNote(noteDir, &noteCopy);
 
             auto imageData = provider.data(note->image().original());
-            qDebug() << "ImageData:" << imageData.format() << imageData.size();
+            qDebug() << "ImageData:" << note->image().original() << imageData.format() << imageData.size();
 
             auto filename = noteDir.absoluteFilePath(QStringLiteral("%1.%2")
                                                         .arg(imageIndex)
@@ -226,32 +255,297 @@ void cwSaveLoad::saveAllFromV6(const QDir &dir, const cwProject* project)
         saveCave(caveDir, cave);
         saveTrips(caveDir, cave);
     }
+
+    return regionFileName(dir, &region);
+
+
 }
+
+Monad::Result<cwCavingRegionData> cwSaveLoad::loadAll(const QString &filename)
+{
+    // Load the root region file
+    auto regionResult = loadCavingRegion(filename);
+
+    return regionResult.then([filename](Result<cwCavingRegionData> result){
+
+        cwCavingRegionData region = result.value();
+
+        QDir regionDir = QFileInfo(filename).absoluteDir();
+
+        // Find all caves (*.cwcave)
+        QFileInfoList caveFiles;
+        QDirIterator it(regionDir.absolutePath(), QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            it.next();
+            QDir caveDir(it.filePath());
+
+            QFileInfoList files = caveDir.entryInfoList(QStringList() << "*.cwcave", QDir::Files);
+            if (!files.isEmpty()) {
+                caveFiles.append(files);
+            }
+        }
+
+        for (const QFileInfo &caveFileInfo : caveFiles) {
+            auto caveResult = loadCave(caveFileInfo.absoluteFilePath());
+            if(caveResult.hasError()) {
+                //FIX ME report error
+                continue;
+            }
+            // if (!caveResult) {
+            //     return caveResult.error();
+            // }
+
+            cwCaveData cave = caveResult.value();
+
+            // Load all trips for this cave
+            QDir caveDir = caveFileInfo.absoluteDir();
+            QDir tripsDir(caveDir.filePath("trips"));
+            if (tripsDir.exists()) {
+                QDirIterator tripIt(tripsDir.absolutePath(), QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
+                while (tripIt.hasNext()) {
+                    tripIt.next();
+                    QDir tripDir(tripIt.filePath());
+                    QFileInfoList tripFiles = tripDir.entryInfoList(QStringList() << "*.cwtrip", QDir::Files);
+                    for (const QFileInfo &tripFileInfo : tripFiles) {
+                        auto tripResult = loadTrip(tripFileInfo.absoluteFilePath());
+                        // if (!tripResult) {
+                        //     return tripResult.error();
+                        // }
+                        if(tripResult.hasError()) {
+                            //FIX ME report error
+                            continue;
+                        }
+
+                        cave.trips.append(tripResult.value());
+                    }
+                }
+            }
+
+            region.caves.append(cave);
+        }
+
+        return Result(region);
+    });
+}
+
 
 Monad::Result<cwCavingRegionData> cwSaveLoad::loadCavingRegion(const QString &filename)
-{
-    QFile file(filename);
-    bool success = file.open(QFile::ReadOnly);
-    if(!success) {
-        return Result<cwCavingRegionData>(file.errorString());
-    }
-
-    auto allData = file.readAll();
-
-    CavewhereProto::CavingRegion regionProto;
-    auto status = google::protobuf::util::JsonStringToMessage(allData.toStdString(), &regionProto);
-    if (!status.ok()) {
-        return Result<cwCavingRegionData>(QString("Failed to parse JSON: %1").arg(QString::fromStdString(status.message().data())));
-    }
-
-    cwCavingRegionData regionData;
-    if(regionProto.has_name()) {
-        regionData.name = QString::fromStdString(regionProto.name());
-    }
-
-    return regionData;
+{    
+    auto regionResult = loadMessage<CavewhereProto::CavingRegion>(filename);
+    return Monad::mbind(regionResult, [](const Result<CavewhereProto::CavingRegion>& result)
+                        {
+                            auto regionProto = result.value();
+                            cwCavingRegionData regionData;
+                            if(regionProto.has_name()) {
+                                regionData.name = QString::fromStdString(regionProto.name());
+                            }
+                            return Result(regionData);
+                        });
 }
 
+Monad::Result<cwCaveData> cwSaveLoad::loadCave(const QString &filename)
+{
+    qDebug() << "Loading cave:" << filename;
+    auto caveResult = loadMessage<CavewhereProto::Cave>(filename);
+    return Monad::mbind(caveResult, [](const Result<CavewhereProto::Cave>& result)
+                        {
+                            auto caveProto = result.value();
+                            cwCaveData caveData;
+                            if(caveProto.has_name()) {
+                                caveData.name = QString::fromStdString(caveProto.name());
+                            }
+                            return Result(caveData);
+                        });
+}
+
+Monad::Result<cwTripData> cwSaveLoad::loadTrip(const QString &filename)
+{
+    qDebug() << "Loading trip:" << filename;
+    auto tripResult = loadMessage<CavewhereProto::Trip>(filename);
+    return Monad::mbind(tripResult, [](const Result<CavewhereProto::Trip>& result)
+                        {
+                            auto tripProto = result.value();
+                            cwTripData tripData;
+
+                            if(tripProto.has_name()) {
+                                tripData.name = QString::fromStdString(tripProto.name());
+                            }
+
+                            if(tripProto.has_date()) {
+                                tripData.date = QDateTime(cwRegionLoadTask::loadDate(tripProto.date()), QTime());
+                            }
+
+                            if(tripProto.has_tripcalibration()) {
+                                tripData.calibrations = fromProtoTripCalibration(tripProto.tripcalibration());
+                            }
+
+                            if(tripProto.has_team()) {
+                                tripData.team = fromProtoTeam(tripProto.team());
+                            }
+
+                            tripData.chunks = fromProtoSurveyChunks(tripProto.chunks());
+
+
+                            return Result(tripData);
+                        });
+}
+
+Monad::Result<cwNoteData> cwSaveLoad::loadNote(const QString &filename)
+{
+
+}
+
+cwTripCalibrationData cwSaveLoad::fromProtoTripCalibration(const CavewhereProto::TripCalibration &proto)
+{
+    cwTripCalibrationData tripCalibration;
+    tripCalibration.setCorrectedCompassBacksight(proto.correctedcompassbacksight());
+    tripCalibration.setCorrectedClinoBacksight(proto.correctedclinobacksight());
+    tripCalibration.setCorrectedCompassFrontsight(proto.correctedcompassfrontsight());
+    tripCalibration.setCorrectedClinoFrontsight(proto.correctedclinofrontsight());
+    tripCalibration.setTapeCalibration(proto.tapecalibration());
+    tripCalibration.setFrontCompassCalibration(proto.frontcompasscalibration());
+    tripCalibration.setFrontClinoCalibration(proto.frontclinocalibration());
+    tripCalibration.setBackCompassCalibration(proto.backcompassscalibration());
+    tripCalibration.setBackClinoCalibration(proto.backclinocalibration());
+    tripCalibration.setDeclination(proto.declination());
+    tripCalibration.setDistanceUnit((cwUnits::LengthUnit)proto.distanceunit());
+    tripCalibration.setFrontSights(proto.frontsights());
+    tripCalibration.setBackSights(proto.backsights());
+    return tripCalibration;
+}
+
+cwTeamData cwSaveLoad::fromProtoTeam(const CavewhereProto::Team &proto)
+{
+    QList<cwTeamMember> members;
+    members.reserve(proto.teammembers_size());
+    for(int i = 0; i < proto.teammembers_size(); i++) {
+        cwTeamMember member = fromProtoTeamMember(proto.teammembers(i));
+        members.append(member);
+    }
+    return {
+        members
+    };
+}
+
+cwTeamMember cwSaveLoad::fromProtoTeamMember(const CavewhereProto::TeamMember &proto)
+{
+    cwTeamMember member;
+    auto id = toUuid(proto.id());
+    if(!id.isNull()) {
+        member.setId(id);
+    }
+    member.setJobs(fromProtoStringList(proto.jobs()));
+    member.setName(QString::fromStdString(proto.name()));
+    return member;
+}
+
+QList<cwSurveyChunkData> cwSaveLoad::fromProtoSurveyChunks(const google::protobuf::RepeatedPtrField<CavewhereProto::SurveyChunk> &protoList)
+{
+    QList<cwSurveyChunkData> chunks;
+
+    if(!protoList.empty()) {
+        chunks.reserve(protoList.size());
+
+        for (const auto& protoChunk : protoList) {
+            chunks.append(fromProtoSurveyChunk(protoChunk));
+        }
+    }
+
+    return chunks;
+}
+
+cwSurveyChunkData cwSaveLoad::fromProtoSurveyChunk(const CavewhereProto::SurveyChunk &protoChunk)
+{
+    cwSurveyChunkData chunkData;
+    chunkData.id = toUuid(protoChunk.id());
+
+    const int legCount = protoChunk.leg_size();
+    // Q_ASSERT(legCount % 2 == 0); // Each shot has 2 legs: a station and a shot
+
+    for (int i = 0; i < legCount; i += 2) {
+        const auto& protoStation = protoChunk.leg(i);
+        chunkData.stations.append(fromProtoStation(protoStation));
+
+        if(i + 1 < legCount) {
+            const auto& protoShot = protoChunk.leg(i + 1);
+            chunkData.shots.append(fromProtoShot(protoShot));
+        }
+    }
+
+    // const int calibrationCount = protoChunk.calibrations_size();
+    // for (int i = 0; i < calibrationCount; ++i) {
+    //     const auto& protoCalibration = protoChunk.calibrations(i);
+    //     int shotIndex = protoCalibration.shotindex();
+    //     auto calibration = fromProtoTripCalibration(protoCalibration.calibration());
+    //     chunkData.calibrations.insert(shotIndex, calibration);
+    // }
+
+    return chunkData;
+
+
+}
+
+cwStation cwSaveLoad::fromProtoStation(const CavewhereProto::StationShot &protoStation)
+{
+    cwStation station;
+
+    station.setId(toUuid(protoStation.id()));
+
+    if (protoStation.has_name()) {
+        station.setName(QString::fromStdString(protoStation.name()));
+    }
+
+    if (protoStation.has_left()) {
+        station.setLeft(QString::fromStdString(protoStation.left()));
+    }
+
+    if (protoStation.has_right()) {
+        station.setRight(QString::fromStdString(protoStation.right()));
+    }
+
+    if (protoStation.has_up()) {
+        station.setUp(QString::fromStdString(protoStation.up()));
+    }
+
+    if (protoStation.has_down()) {
+        station.setDown(QString::fromStdString(protoStation.down()));
+    }
+
+    return station;
+}
+
+cwShot cwSaveLoad::fromProtoShot(const CavewhereProto::StationShot &protoShot)
+{
+    cwShot shot;
+
+    shot.setId(toUuid(protoShot.id()));
+
+    if (protoShot.has_includedistance()) {
+        shot.setDistanceIncluded(protoShot.includedistance());
+    }
+
+    if (protoShot.has_distance()) {
+        shot.setDistance(QString::fromStdString(protoShot.distance()));
+    }
+
+    if (protoShot.has_compass()) {
+        shot.setCompass(QString::fromStdString(protoShot.compass()));
+    }
+
+    if (protoShot.has_backcompass()) {
+        shot.setBackCompass(QString::fromStdString(protoShot.backcompass()));
+    }
+
+    if (protoShot.has_clino()) {
+        shot.setClino(QString::fromStdString(protoShot.clino()));
+    }
+
+    if (protoShot.has_backclino()) {
+        shot.setBackClino(QString::fromStdString(protoShot.backclino()));
+    }
+
+    return shot;
+}
 void cwSaveLoad::waitForFinished()
 {
     cwFutureManagerModel model;
@@ -282,6 +576,28 @@ QString cwSaveLoad::sanitizeFileName(QString input) {
 
     return input;
 }
+
+QUuid cwSaveLoad::toUuid(const std::string &uuidStr)
+{
+    return QUuid::fromString(QString::fromStdString(uuidStr));
+}
+
+
+QStringList cwSaveLoad::fromProtoStringList(const google::protobuf::RepeatedPtrField<std::string>& protoStringList)
+{
+    QStringList stringList;
+
+    if(!protoStringList.empty()) {
+        stringList.reserve(protoStringList.size());
+
+        for (const auto& str : protoStringList) {
+            stringList.append(QString::fromStdString(str));
+        }
+    }
+
+    return stringList;
+}
+
 
 void cwSaveLoad::saveProtoMessage(const QDir &dir,
                                   const QString &filename,

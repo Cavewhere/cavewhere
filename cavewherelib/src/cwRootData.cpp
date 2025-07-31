@@ -270,6 +270,18 @@ void cwRootData::copyText(const QString &text) const
 
 }
 
+QString cwRootData::fileBaseName(const QString &path) const
+{
+    QFileInfo info(path);
+    return info.baseName();
+}
+
+QString cwRootData::fileName(const QString &path) const
+{
+    QFileInfo info(path);
+    return info.fileName();
+}
+
 bool cwRootData::mobileBuild() const
 {
     return isMobileBuild();

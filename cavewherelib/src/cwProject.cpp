@@ -379,43 +379,58 @@ void cwProject::newProject() {
 void cwProject::loadFile(QString filename) {
     if(filename.isEmpty()) { return; }
 
+
+    FileType type = projectType(filename);
+
     //Only load one file at a time
     LoadFuture.cancel();
 
     filename = cwGlobals::convertFromURL(filename);
 
-    //Run the load task async
-    auto loadFuture = cwConcurrent::run([filename](){
-        cwRegionLoadTask loadTask;
-        loadTask.setDatabaseFilename(filename);
-        return loadTask.load();
-    });
+    if(type == SqliteFileType) {
+        //Run the load task async
+        auto loadFuture = cwConcurrent::run([filename](){
+            cwRegionLoadTask loadTask;
+            loadTask.setDatabaseFilename(filename);
+            return loadTask.load();
+        });
 
-    FutureToken.addJob({QFuture<void>(loadFuture), "Loading"});
+        FutureToken.addJob({QFuture<void>(loadFuture), "Loading"});
 
-    auto updateRegion = [this, filename](const cwRegionLoadResult& result) {
-        setFilename(result.filename());
-        setTemporaryProject(result.isTempFile());
-        Region->setData(result.cavingRegion());
-        FileVersion = result.fileVersion();
-        emit canSaveDirectlyChanged();
-        emit loaded();
-    };
+        auto updateRegion = [this, filename](const cwRegionLoadResult& result) {
+            setFilename(result.filename());
+            setTemporaryProject(result.isTempFile());
+            Region->setData(result.cavingRegion());
+            FileVersion = result.fileVersion();
+            emit canSaveDirectlyChanged();
+            emit loaded();
+        };
 
-    LoadFuture = AsyncFuture::observe(loadFuture)
-            .subscribe([loadFuture, updateRegion, this]()
-    {
-        auto result = loadFuture.result();
-        if(result.errors().isEmpty()) {
-            updateRegion(result);
-        } else {
-            if(!cwError::containsFatal(result.errors())) {
-                //Just warnings, we should be able to load
-                updateRegion(result);
-            }
-            ErrorModel->append(result.errors());
+        LoadFuture = AsyncFuture::observe(loadFuture)
+                         .subscribe([loadFuture, updateRegion, this]()
+                                    {
+                                        auto result = loadFuture.result();
+                                        if(result.errors().isEmpty()) {
+                                            updateRegion(result);
+                                        } else {
+                                            if(!cwError::containsFatal(result.errors())) {
+                                                //Just warnings, we should be able to load
+                                                updateRegion(result);
+                                            }
+                                            ErrorModel->append(result.errors());
+                                        }
+                                    }).future();
+    } else if (type == GitFileType) {
+        //Find all the cave file
+        qDebug() << "Loading git based file:" << filename;
+
+        cwSaveLoad load;
+        auto regionData = load.loadAll(filename);
+
+        if(!regionData.hasError()) {
+            Region->setData(regionData.value());
         }
-    }).future();
+    }
 }
 
 /**
@@ -627,12 +642,33 @@ QString cwProject::supportedImageFormats()
     return withWildCards.join(' ');
 }
 
-cwProject::FileType cwProject::projectType(const QString &filename) const
+void cwProject::convertFromProjectV6(QString oldProjectFilename, const QDir &newProjectDirectory)
 {
+    //Make a temporary project
+    auto project = std::make_shared<cwProject>();
+    AsyncFuture::observe(project.get(), &cwProject::loaded)
+        .context(this, [this, project, oldProjectFilename, newProjectDirectory]() {
+            qDebug() << "I get here!" << oldProjectFilename << newProjectDirectory;
+            cwSaveLoad saveLoad;
+            auto newProjectName = saveLoad.saveAllFromV6(newProjectDirectory, project.get());
+
+            //Load the project into this cwProject
+            loadFile(newProjectName);
+        });
+
+    //Load the old project into the temp project
+    project->loadFile(oldProjectFilename);
+
+}
+
+cwProject::FileType cwProject::projectType(QString filename) const
+{
+    filename = cwGlobals::convertFromURL(filename);
+
     //File is empty, return unknown
     QFileInfo info(filename);
     if(info.size() == 0) {
-        return Unknown;
+        return UnknownFileType;
     }
 
     //Check if we can connect to the sqlite database, v6 and lower
@@ -658,13 +694,13 @@ cwProject::FileType cwProject::projectType(const QString &filename) const
         //Check to see
         auto regionResult = cwSaveLoad::loadCavingRegion(filename);
         if(regionResult.hasError()) {
-            return Unknown;
+            return UnknownFileType;
         } else {
-            return Filebased;
+            return GitFileType;
         }
     } else {
         //V6 or lower
-        return Sqlite;
+        return SqliteFileType;
     }
 }
 

@@ -12,25 +12,31 @@ TEST_CASE("cwImages isValid methods should return correctly", "[cwImage]") {
         image.setMipmaps({2});
         image.setIcon(4);
         CHECK(image.isOriginalValid() == true);
+        CHECK(image.mode() == cwImage::Mode::Ids);
 
         image.setOriginal(0);
         CHECK(image.isOriginalValid() == true);
+        CHECK(image.mode() == cwImage::Mode::Ids);
 
         image.setOriginal(-1);
         CHECK(image.isOriginalValid() == false);
+        CHECK(image.mode() == cwImage::Mode::Ids);
 
         image.setOriginal(-10);
         CHECK(image.isOriginalValid() == false);
         CHECK(image.isIconValid() == true);
         CHECK(image.isMipmapsValid() == true);
+        CHECK(image.mode() == cwImage::Mode::Ids);
     }
 
     SECTION("Icon") {
         image.setIcon(3);
         CHECK(image.isIconValid() == true);
+        CHECK(image.mode() == cwImage::Mode::Ids);
 
         image.setIcon(0);
         CHECK(image.isIconValid() == true);
+        CHECK(image.mode() == cwImage::Mode::Ids);
 
         image.setIcon(-1);
         CHECK(image.isIconValid() == false);
@@ -39,6 +45,7 @@ TEST_CASE("cwImages isValid methods should return correctly", "[cwImage]") {
         CHECK(image.isIconValid() == false);
         CHECK(image.isOriginalValid() == false);
         CHECK(image.isMipmapsValid() == false);
+        CHECK(image.mode() == cwImage::Mode::Ids);
     }
 
     SECTION("Mipmaps") {
@@ -61,79 +68,28 @@ TEST_CASE("cwImages isValid methods should return correctly", "[cwImage]") {
         CHECK(image.isMipmapsValid() == false);
         CHECK(image.isIconValid() == false);
         CHECK(image.isOriginalValid() == false);
+        CHECK(image.mode() == cwImage::Mode::Ids);
     }
 
-}
+    SECTION("Path-based image mode") {
+        cwImage pathImage;
+        CHECK(pathImage.mode() == cwImage::Mode::Invalid);
 
-TEST_CASE("cwImage ==operator should work correctly", "[cwImage]") {
+        pathImage.setPath("some/file.png");
+        CHECK(pathImage.mode() == cwImage::Mode::Paths);
+        CHECK(pathImage.path() == "some/file.png");
 
-    cwImage image;
-    image.setOriginal(1);
-    image.setMipmaps({2, 3, 4});
-    image.setIcon(5);
-    image.setOriginalSize(QSize(50, 51));
-    image.setOriginalDotsPerMeter(1000);
+        SECTION("copy the path") {
+            auto copy = pathImage;
+            copy.setPath("some/file2.png");
 
-    cwImage image2 = image;
-    CHECK(image == image2);
+            CHECK(pathImage.mode() == cwImage::Mode::Paths);
+            CHECK(pathImage.path() == "some/file.png");
 
-    cwImage image3 = image;
+            CHECK(copy.mode() == cwImage::Mode::Paths);
+            CHECK(copy.path() == "some/file2.png");
 
-    SECTION("Set icon") {
-        image.setIcon(6);
-        CHECK(image != image3);
-    }
-    SECTION("Set original") {
-        image.setOriginal(-1);
-        CHECK(image != image3);
-    }
-    SECTION("Set Mips") {
-        image.setMipmaps({72});
-        CHECK(image != image3);
-    }
-    SECTION("Set icon") {
-        image.setOriginalSize(QSize(54, 30));
-        CHECK(image != image3);
-    }
-    SECTION("Set icon") {
-        image.setOriginalDotsPerMeter(200);
-        CHECK(image != image3);
+        }
     }
 }
 
-TEST_CASE("cwImage ids should work correctly", "[cwImage]") {
-    cwImage image;
-
-    SECTION("Everything isn't valid") {
-        CHECK(image.ids().isEmpty());
-    }
-
-    SECTION("Everything is valid") {
-        image.setOriginal(1);
-        image.setMipmaps({2, 3, 4});
-        image.setIcon(5);
-
-        CHECK(image.ids() == QList<int>({1, 5, 2, 3, 4}));
-    }
-
-    SECTION("Everything is valid expect original") {
-        image.setMipmaps({2, 3, 4});
-        image.setIcon(5);
-
-        CHECK(image.ids() == QList<int>({5, 2, 3, 4}));
-    }
-
-    SECTION("Everything is valid expect icon") {
-        image.setOriginal(1);
-        image.setMipmaps({2, 3, 4});
-
-        CHECK(image.ids() == QList<int>({1, 2, 3, 4}));
-    }
-
-    SECTION("Everything is valid expect mipmaps") {
-        image.setOriginal(1);
-        image.setIcon(5);
-
-        CHECK(image.ids() == QList<int>({1, 5}));
-    }
-}

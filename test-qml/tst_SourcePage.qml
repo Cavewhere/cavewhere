@@ -210,5 +210,36 @@ MainWindowTest {
             let loader = ObjectFinder.findObjectByChain(mainWindow, "rootId->whereDialogLoader");
             compare(loader.active, false)
         }
+
+        function test_openV6CavewhereFile() {
+            RootData.pageSelectionModel.currentPageAddress = "Source"
+            waitForRendering(mainWindow);
+
+            // let openCavingAreaButton_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->openCavingAreaButton")
+            // mouseClick(openCavingAreaButton_obj1, 61.707, 18.5938)
+
+            //Simulating opening a file
+            let dialog = ObjectFinder.findObjectByChain(mainWindow, "rootId->loadProjectDialog")
+            dialog.loadFileDialog.selectedFile = Qt.url("file://Users/cave/Desktop/BlankenshipBlowhole.cw");
+            dialog.loadFileDialog.accepted()
+
+            //Make sure the convert dialog is open
+            let whereDialog = ObjectFinder.findObjectByChain(mainWindow, "rootId->loadProjectDialog->whereDialogLoader")
+            compare(whereDialog.active, true);
+
+            let openButton = ObjectFinder.findObjectByChain(mainWindow, "openRepoButton")
+            mouseClick(openButton)
+
+            //Make we have all the data
+
+
+
+
+
+
+
+            wait(100000);
+
+        }
     }
 }

@@ -85,6 +85,8 @@ public:
 
     cwRegionLoadResult load();
 
+    static QDate loadDate(const QtProto::QDate& protoDate);
+
 signals:
     void finishedLoading();
 
@@ -147,7 +149,7 @@ private:
     //Utils
     QString loadString(const std::string &protoString);
     QString loadLegacyString(const QtProto::QString& protoString);
-    QDate loadDate(const QtProto::QDate& protoDate);
+
     QSize loadSize(const QtProto::QSize& protoSize);
     QSizeF loadSizeF(const QtProto::QSizeF &protoSize);
     QPointF loadPointF(const QtProto::QPointF& protoPointF);

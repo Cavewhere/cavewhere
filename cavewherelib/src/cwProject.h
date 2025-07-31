@@ -37,6 +37,9 @@ class cwFutureManagerModel;
 #include <QQmlEngine>
 class QUndoStack;
 
+//Monad
+#include "Monad/Result.h"
+
 /**
   This class saves and load a cavewhere project using xml and sqlite
 
@@ -56,9 +59,9 @@ class CAVEWHERE_LIB_EXPORT cwProject :  public QObject{
 
 public:
     enum FileType {
-        Unknown,
-        Sqlite, //V6 and below
-        Filebased, //V7 and above
+        UnknownFileType,
+        SqliteFileType, //V6 and below
+        GitFileType, //V7 and above
     };
     Q_ENUM(FileType);
 
@@ -78,8 +81,9 @@ public:
 
     static QString supportedImageFormats();
 
+    Q_INVOKABLE FileType projectType(QString filename) const;
 
-    Q_INVOKABLE FileType projectType(const QString& filename) const;
+    Q_INVOKABLE void convertFromProjectV6(QString oldProjectFilename, const QDir &newProjectDirectory);
 
     //Older save and load
     Q_INVOKABLE void save();
@@ -116,9 +120,11 @@ signals:
     void loaded();
 
 public slots:
-     void loadFile(QString filename);
+    void loadFile(QString filename);
 
 private:
+
+     QDir m_projectDir;
 
     //If this is a temp project directory on not
     //Old save and load
