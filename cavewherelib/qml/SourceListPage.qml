@@ -25,7 +25,6 @@ StandardPage {
         QC.Button {
             objectName: "openCavingAreaButton"
             text: "Open"
-
         }
 
         ListView {

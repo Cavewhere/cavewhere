@@ -96,7 +96,7 @@ void cwLinePlotTask::setData(const cwCavingRegion* region) {
     RegionData = region->data();
 
     //Change all the cave names, such that survex can handle them correctly
-    // encodeCaveNames();
+    encodeCaveNames();
 
     SurvexExporter->setData(RegionData);
 
@@ -319,15 +319,15 @@ void cwLinePlotTask::checkForErrors()
  *
  * This encode's the cave's name. Allows survex to properly parse funny cavewhere cave names.
  */
-// void cwLinePlotTask::encodeCaveNames(cwCavingRegion* region)
-// {
-//     //Encode the the cave's index into the cave's name
-//     for(int i = 0; i < region->caveCount(); i++) {
-//         cwCave* cave = region->cave(i);
-// //        QString caveNameNoSpaces = cave->name().remove(" ");
-//         cave->setName(QString("%1").arg(i)); //.arg(caveNameNoSpaces));
-//     }
-// }
+void cwLinePlotTask::encodeCaveNames()
+{
+    //Encode the the cave's index into the cave's name
+    for(int i = 0; i < RegionData.caves.size(); i++) {
+        cwCaveData& cave = RegionData.caves[i];
+//        QString caveNameNoSpaces = cave->name().remove(" ");
+        cave.name = (QString("%1").arg(i)); //.arg(caveNameNoSpaces));
+    }
+}
 
 /**
  * @brief cwLinePlotTask::initializeCaveStationLookups
@@ -425,7 +425,7 @@ cwLinePlotTask::LinePlotCaveData &cwLinePlotTask::createLinePlotCaveDataAt(int i
 /**
  * @brief cwLinePlotTask::splitLookupByCave
  * @param stationPostions
- * @return
+ * @returnl
  */
 QVector<cwStationPositionLookup> cwLinePlotTask::splitLookupByCave(const cwStationPositionLookup &stationPostions)
 {

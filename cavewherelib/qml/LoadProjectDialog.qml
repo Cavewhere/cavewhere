@@ -37,8 +37,8 @@ Item {
 
 
             case Project.GitFileType:
+                RootData.project.loadFile(selectedFile);
                 break;
-
             }
 
             // RootData.project.loadFile(selectedFile)

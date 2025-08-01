@@ -216,7 +216,7 @@ private:
     QElapsedTimer Time;
 
     void checkForErrors();
-    // void encodeCaveNames(cwCavingRegion* region);
+    void encodeCaveNames();
     void initializeCaveStationLookups();
     void setStationAsChanged(int caveIndex, QString stationName);
     void indexStations();
