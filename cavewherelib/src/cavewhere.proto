@@ -76,22 +76,22 @@ message SurveyNoteModel {
 }
 
 message Note {
+    optional Image image = 1;
     optional double rotation = 2;
     repeated Scrap scraps = 3;
     optional ImageResolution imageResolution = 4;
-    optional string imagePath = 5; //Relative path to the note's image
 
-    optional Image legacy_image = 1;
 }
 
 //This is a legacy message, do not use
 message Image {
-    optional int32 originalId = 1;
-    optional int32 iconId = 2;
-    repeated int32 mipmapIds = 3;
+    optional int32 legacy_originalId = 1;
+    optional int32 legacy_iconId = 2;
+    repeated int32 legacy_mipmapIds = 3;
     optional QtProto.QSize size = 4;
     optional int32 dotPerMeter = 5;
     optional QtProto.QSizeF OBSOLETE_clipArea = 6; //Not need anymore
+    optional string path = 7;
 }
 
 message TripCalibration {
@@ -343,4 +343,9 @@ message CompassReading {
 //This is a legacy message, don't use
 message ClinoReading {
     optional QtProto.QString legacy_value = 1;
+}
+
+message DiskCacheEntry {
+    optional string checksum = 1;
+    optional bytes entry = 2;
 }

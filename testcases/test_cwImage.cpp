@@ -76,17 +76,17 @@ TEST_CASE("cwImages isValid methods should return correctly", "[cwImage]") {
         CHECK(pathImage.mode() == cwImage::Mode::Invalid);
 
         pathImage.setPath("some/file.png");
-        CHECK(pathImage.mode() == cwImage::Mode::Paths);
+        CHECK(pathImage.mode() == cwImage::Mode::Path);
         CHECK(pathImage.path() == "some/file.png");
 
         SECTION("copy the path") {
             auto copy = pathImage;
             copy.setPath("some/file2.png");
 
-            CHECK(pathImage.mode() == cwImage::Mode::Paths);
+            CHECK(pathImage.mode() == cwImage::Mode::Path);
             CHECK(pathImage.path() == "some/file.png");
 
-            CHECK(copy.mode() == cwImage::Mode::Paths);
+            CHECK(copy.mode() == cwImage::Mode::Path);
             CHECK(copy.path() == "some/file2.png");
 
         }

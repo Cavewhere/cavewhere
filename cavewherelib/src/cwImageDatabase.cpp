@@ -140,22 +140,27 @@ bool cwImageDatabase::imageExists(int id) const
 
 bool cwImageDatabase::mipmapsValid(cwImage image, bool usingCompression) const
 {
-    if(image.isOriginalValid()) {
-        //Should be in the database
-        if(usingCompression) {
-            if(!image.isMipmapsValid()) {
-                return false;
-            }
-            foreach(int mipmap, image.mipmaps()) {
-                if(!imageExists(mipmap)) {
-                    return false;
-                }
-            }
-            return true;
-        }
-        return imageExists(image.original());
-    }
-    return false;
+    //TODO: Remove this class?
+    //This breaks mipmap generation, which we do on the GPU now anyways
+    return true;
+
+
+    // if(image.isOriginalValid()) {
+    //     //Should be in the database
+    //     if(usingCompression) {
+    //         if(!image.isMipmapsValid()) {
+    //             return false;
+    //         }
+    //         foreach(int mipmap, image.mipmaps()) {
+    //             if(!imageExists(mipmap)) {
+    //                 return false;
+    //             }
+    //         }
+    //         return true;
+    //     }
+    //     return imageExists(image.original());
+    // }
+    // return false;
 }
 
 /**

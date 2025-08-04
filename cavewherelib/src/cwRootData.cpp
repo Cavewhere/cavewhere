@@ -23,7 +23,7 @@
 #include "cwTaskManagerModel.h"
 #include "cwPageSelectionModel.h"
 #include "cwSettings.h"
-#include "cwImageCompressionUpdater.h"
+// #include "cwImageCompressionUpdater.h"
 #include "cwAddImageTask.h"
 #include "cwJobSettings.h"
 #include "cwSurveyNoteModel.h"
@@ -105,9 +105,9 @@ cwRootData::cwRootData(QObject *parent) :
 
     PageSelectionModel = new cwPageSelectionModel(this);
 
-    cwImageCompressionUpdater* imageUpdater = new cwImageCompressionUpdater(this);
-    imageUpdater->setFutureToken(FutureManagerModel->token());
-    imageUpdater->setRegionTreeModel(RegionTreeModel);
+    // cwImageCompressionUpdater* imageUpdater = new cwImageCompressionUpdater(this);
+    // imageUpdater->setFutureToken(FutureManagerModel->token());
+    // imageUpdater->setRegionTreeModel(RegionTreeModel);
 
     auto updateAutomaticUpdate = [this]()
     {
@@ -216,9 +216,9 @@ QString cwRootData::cwRootData::supportImageFormats() const {
     return cwProject::supportedImageFormats();
 }
 
-QUrl cwRootData::cavewhereImageUrl(int id) const
+QUrl cwRootData::cavewhereImageUrl(const QString& path) const
 {
-    return cwImageProvider::imageUrl(id);
+    return cwImageProvider::imageUrl(path);
 }
 
 void cwRootData::newProject()

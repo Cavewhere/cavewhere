@@ -73,7 +73,7 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
 
     auto addCropToDatabase = [filename](QRect cropRect, const cwImage& image) {
         QVariantMap map({
-                            {cwImageProvider::cropIdKey(), image.original()},
+                            {cwImageProvider::cropIdKey(), image.path()},
                             {cwImageProvider::cropXKey(), cropRect.x()},
                             {cwImageProvider::cropYKey(), cropRect.y()},
                             {cwImageProvider::cropWidthKey(), cropRect.width()},
@@ -94,7 +94,7 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
     auto cropImage = [filename, originalImage, cropRect, addCropToDatabase]()->Image {
             cwImageProvider provider;
             provider.setProjectPath(filename);
-            cwImageData imageData = provider.data(originalImage.original());
+            cwImageData imageData = provider.data(originalImage.path());
             QImage image = provider.image(imageData);
             image.setColorSpace(QColorSpace());
             QRect cropArea = nearestDXT1Rect(mapNormalizedToIndex(cropRect,
@@ -127,7 +127,7 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
         }
 
         cwAddImageTask addImages;
-        addImages.setDatabaseFilename(filename);
+        // addImages.setDatabaseFilename(filename);
         addImages.setNewImages({cropRGBImage.croppedImage});
         addImages.setImageTypes(imageTypes);
 

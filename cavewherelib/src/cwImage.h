@@ -31,7 +31,7 @@ public:
     enum class Mode {
         Invalid,
         Ids,
-        Paths
+        Path
     };
     Q_ENUM(Mode)
 
@@ -44,10 +44,12 @@ public:
     }
 
     QList<int> mipmaps() const {
+        Q_ASSERT(std::holds_alternative<IdData>(m_data->modeData));
         return std::get<IdData>(m_data->modeData).mipmapIds;
     }
 
     int numberOfMipmapLevels() const {
+        Q_ASSERT(std::holds_alternative<IdData>(m_data->modeData));
         return std::get<IdData>(m_data->modeData).mipmapIds.size();
     }
 
@@ -57,6 +59,7 @@ public:
     }
 
     int icon() const {
+        Q_ASSERT(std::holds_alternative<IdData>(m_data->modeData));
         return std::get<IdData>(m_data->modeData).iconId;
     }
 
@@ -66,6 +69,7 @@ public:
     }
 
     int original() const {
+        Q_ASSERT(std::holds_alternative<IdData>(m_data->modeData));
         return std::get<IdData>(m_data->modeData).originalId;
     }
 
@@ -92,12 +96,14 @@ public:
     }
 
     bool isOriginalValid() const {
+        Q_ASSERT(std::holds_alternative<IdData>(m_data->modeData));
         return std::holds_alternative<IdData>(m_data->modeData) && isIdValid(original());
     }
 
     bool isMipmapsValid() const;
 
     bool isIconValid() const {
+        Q_ASSERT(std::holds_alternative<IdData>(m_data->modeData));
         return std::holds_alternative<IdData>(m_data->modeData) && isIdValid(icon());
     }
 
@@ -109,12 +115,18 @@ public:
     }
 
     QString path() const {
+        Q_ASSERT(std::holds_alternative<PathData>(m_data->modeData));
         return std::get<PathData>(m_data->modeData).path;
     }
 
+    bool isValid() const {
+        //Id mode shouldn't be used, and should only be in old loading code
+        return mode() == Mode::Path && !path().isEmpty();
+    }
+
     Mode mode() const {
-        if (std::holds_alternative<IdData>(m_data->modeData)) return Mode::Ids;
-        if (std::holds_alternative<PathData>(m_data->modeData)) return Mode::Paths;
+        if (std::holds_alternative<IdData>(m_data->modeData)) { return Mode::Ids; };
+        if (std::holds_alternative<PathData>(m_data->modeData)) { return Mode::Path; };
         return Mode::Invalid;
     }
 
@@ -173,14 +185,12 @@ private:
 
     void ensureIdData() {
         if (!std::holds_alternative<IdData>(m_data->modeData)) {
-            m_data.detach();
             m_data->modeData = IdData();
         }
     }
 
     void ensurePathData() {
         if (!std::holds_alternative<PathData>(m_data->modeData)) {
-            m_data.detach();
             m_data->modeData = PathData();
         }
     }

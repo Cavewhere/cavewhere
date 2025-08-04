@@ -41,7 +41,7 @@
 //Async includes
 #include <asyncfuture.h>
 
-cwAddImageTask::cwAddImageTask(QObject* parent) : cwProjectIOTask(parent)
+cwAddImageTask::cwAddImageTask(QObject* parent) : QObject(parent)
 {
 
 }
@@ -78,319 +78,319 @@ void cwAddImageTask::setImageTypesWithFormat(cwTextureUploadTask::Format format)
 
 QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
 {
-    QString filename = databaseFilename();
-    auto imageTypes = ImageTypes;
+    // QString filename = databaseFilename();
+    // auto imageTypes = ImageTypes;
 
-    std::function<PrivateImageData (const QString&)> loadImagesFromPath
-            = [filename, imageTypes](const QString& imagePath) {
-        //Where the database image ideas are stored
-        cwImage image;
+    // std::function<PrivateImageData (const QString&)> loadImagesFromPath
+    //         = [filename, imageTypes](const QString& imagePath) {
+    //     //Where the database image ideas are stored
+    //     cwImage image;
 
-        //Copy the original image to the database
-        QImage originalImage;
+    //     //Copy the original image to the database
+    //     QImage originalImage;
 
-        if(imageTypes & Original) {
-            originalImage = copyOriginalImage(imagePath, &image, filename);
-        } else {
-            originalImage = QImage(imagePath);
-        }
+    //     if(imageTypes & Original) {
+    //         originalImage = copyOriginalImage(imagePath, &image, filename);
+    //     } else {
+    //         originalImage = QImage(imagePath);
+    //     }
 
-        if(!originalImage.isNull()) {
-            return PrivateImageData(cwTrackedImage::createShared(image, filename),
-                                    originalImage,
-                                    imagePath);
-        }
-        qDebug() << "Image is null!" << LOCATION;
-        return PrivateImageData();
-    };
-
-    std::function<PrivateImageData (const QImage&)> loadFromImages
-            = [filename, imageTypes](const QImage& image) {
-        if(!image.isNull()) {
-            //Where the database image ideas are stored
-            cwImage imageId;
-
-            if(imageTypes & Original) {
-                copyOriginalImage(image, &imageId, filename);
-            }
-
-            return PrivateImageData(cwTrackedImage::createShared(imageId, filename),
-                                    image);
-        }
-        qDebug() << "Image is null!" << LOCATION;
-        return PrivateImageData();
-    };
-
-    auto loadFromDatabaseImage = [filename](const cwImage& image) {
-        cwImageProvider provider;
-        provider.setProjectPath(filename);
-        QImage imageData = provider.image(image.original());
-
-        if(imageData.isNull()) {
-            qDebug() << "Database image is null!" << LOCATION;
-            return PrivateImageData();
-        }
-
-        return PrivateImageData(cwTrackedImage::createShared(image,
-                                                             filename,
-                                                             cwTrackedImage::Mipmaps),
-                                imageData);
-    };
-
-    //For creating icon from private image data
-    std::function<cwTrackedImagePtr (const PrivateImageData&)> createIcon
-            = [filename, imageTypes](const PrivateImageData& imageData) {
-        Q_ASSERT(!imageData.OriginalImage.isNull());
-
-        if(!(imageTypes & Icon)) {
-            return cwTrackedImage::createShared(-1, filename, cwTrackedImage::NoOwnership);
-        }
-
-        if(imageData.Id->isIconValid()) {
-            return cwTrackedImage::createShared(imageData.Id->icon(),
-                                                filename,
-                                                cwTrackedImage::NoOwnership);
-        }
-        const QImage& originalImage = imageData.OriginalImage;
-        QSize scaledSize = QSize(512, 512);
-
-        if(originalImage.size().height() <= scaledSize.height() &&
-                originalImage.size().width() <= scaledSize.width()) {
-            //Make the original the icon
-            return cwTrackedImage::createShared(imageData.Id->original(),
-                                                filename,
-                                                cwTrackedImage::NoOwnership);
-        }
-
-        QImage scaledImage = originalImage.scaled(scaledSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-
-        //Convert the image into a jpg
-        QByteArray format = "jpg";
-        QByteArray jpgData;
-        QBuffer buffer(&jpgData);
-        QImageWriter writer(&buffer, format);
-        writer.setCompression(85);
-        writer.write(scaledImage);
-
-        int dotMeter = imageData.Id->originalDotsPerMeter() > 0 ? scaledImage.dotsPerMeterX() : 0;
-
-        //Write the data to database
-        cwImageData iconImageData(scaledSize, dotMeter, format, jpgData);
-        int imageId = cwImageDatabase(filename).addImage(iconImageData);
-        return cwTrackedImage::createShared(imageId, filename);
-    };
-
-    struct Mipmap {
-        QImage image;
-        int id;
-    };
-
-    //Scaling images for mipmaps
-    std::function<QList<Mipmap> (const PrivateImageData&)> scaleImage
-            = [](const PrivateImageData& imageData)->QList<Mipmap> {
-        const QImage& originalImage = imageData.OriginalImage;
-
-        QSizeF clipArea;
-        QImage scaledImage = ensureImageDivisibleBy4(originalImage, &clipArea);
-        QList<int> mipmapIds = imageData.Id->mipmaps();
-
-        auto mipmapId = [mipmapIds](int index) {
-            if(index < mipmapIds.size()) {
-                return mipmapIds.at(index);
-            }
-            return -1;
-        };
-
-        int numberOfLevels = numberOfMipmapLevels(scaledImage.size());
-
-        QSize scaledImageSize = scaledImage.size();
-
-        QList<Mipmap> scaledImages;
-
-        for(int i = 0; i < numberOfLevels; i++) {
-            //Rescaled the image
-            scaledImage = scaledImage.scaled(scaledImageSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-            scaledImages.append({scaledImage, mipmapId(i)});
-
-            //Create the new width and height, by halfing them
-            scaledImageSize = half(scaledImageSize);
-        }
-
-        return scaledImages;
-    };
-
-    //For creating mipmaps
-    // std::function<QFuture<cwTrackedImagePtr> (const QList<Mipmap>& image)> compressAndUpload
-    //         = [filename](const QList<Mipmap>& mipmaps)->QFuture<cwTrackedImagePtr> {
-
-    //     QList<QImage> mipmapImages = cw::transform(mipmaps,
-    //                                            [](const Mipmap& mipmap)
-    //     {
-    //         return mipmap.image;
-    //     });
-
-    //     // cwDXT1Compresser compresser;
-    //     // auto compressFuture = compresser.compress(mipmapImages);
-
-    //     return AsyncFuture::observe(compressFuture)
-    //             .subscribe([compressFuture, mipmaps, filename]()
-    //     {
-    //         struct CompressedMipmap {
-    //             cwDXT1Compresser::CompressedImage image;
-    //             int id;
-    //         };
-
-    //         auto compressionResults = compressFuture.results();
-    //         Q_ASSERT(mipmaps.size() == compressionResults.size());
-
-    //         auto mipmapIter = mipmaps.begin();
-    //         QList<CompressedMipmap> mipmaps = cw::transform(compressionResults,
-    //                                                     [&mipmapIter](const cwDXT1Compresser::CompressedImage& compressedImage)
-    //         {
-    //             CompressedMipmap mipmap = {compressedImage, mipmapIter->id};
-    //             mipmapIter++;
-    //             return mipmap;
-    //         });
-
-    //         std::function<cwTrackedImagePtr (const CompressedMipmap&)> updateDatabase
-    //                 = [filename](const CompressedMipmap& mipmap) {
-    //             cwImageData imageData = cwImageProvider::createDxt1(mipmap.image.size, mipmap.image.data);
-    //             int imageId = cwImageDatabase(filename).addOrUpdateImage(imageData, mipmap.id);
-    //             return cwTrackedImage::createShared(imageId, filename);
-    //         };
-
-    //         return QtConcurrent::mapped(mipmaps, updateDatabase);
-    //     }).future();
+    //     if(!originalImage.isNull()) {
+    //         return PrivateImageData(cwTrackedImage::createShared(image, filename),
+    //                                 originalImage,
+    //                                 imagePath);
+    //     }
+    //     qDebug() << "Image is null!" << LOCATION;
+    //     return PrivateImageData();
     // };
 
-    auto pathImagesFuture = NewImagePaths.isEmpty() ? QFuture<PrivateImageData>() : cwConcurrent::mapped(NewImagePaths, loadImagesFromPath);
-    auto imagesFuture = NewImages.isEmpty() ? QFuture<PrivateImageData>() : cwConcurrent::mapped(NewImages, loadFromImages);
-    auto regeneratedFuture = RegenerateMipmap.isOriginalValid() ? cwConcurrent::run(std::bind(loadFromDatabaseImage, RegenerateMipmap)) : QFuture<PrivateImageData>();
-    auto imageCombine = AsyncFuture::combine();
+    // std::function<PrivateImageData (const QImage&)> loadFromImages
+    //         = [filename, imageTypes](const QImage& image) {
+    //     if(!image.isNull()) {
+    //         //Where the database image ideas are stored
+    //         cwImage imageId;
 
-    auto addToImageCombine = [&imageCombine](QFuture<PrivateImageData> future) {
-        if(!future.isCanceled()) {
-            imageCombine << future;
-        }
-    };
+    //         if(imageTypes & Original) {
+    //             copyOriginalImage(image, &imageId, filename);
+    //         }
 
-    addToImageCombine(pathImagesFuture);
-    addToImageCombine(imagesFuture);
-    addToImageCombine(regeneratedFuture);
+    //         return PrivateImageData(cwTrackedImage::createShared(imageId, filename),
+    //                                 image);
+    //     }
+    //     qDebug() << "Image is null!" << LOCATION;
+    //     return PrivateImageData();
+    // };
 
-    return AsyncFuture::observe(imageCombine.future())
-            .subscribe([pathImagesFuture,
-                       imagesFuture,
-                       regeneratedFuture,
-                       imageTypes,
-                       scaleImage,
-                       // compressAndUpload,
-                       createIcon
-                       ]()
-    {
+    // auto loadFromDatabaseImage = [filename](const cwImage& image) {
+    //     cwImageProvider provider;
+    //     provider.setProjectPath(filename);
+    //     QImage imageData = provider.image(image.path());
 
-        QList<PrivateImageData> imageData =
-                pathImagesFuture.results()
-                + imagesFuture.results()
-                + regeneratedFuture.results();
+    //     if(imageData.isNull()) {
+    //         qDebug() << "Database image is null!" << LOCATION;
+    //         return PrivateImageData();
+    //     }
 
-        QList<PrivateImageData> filterData;
-        filterData.reserve(imageData.size());
+    //     return PrivateImageData(cwTrackedImage::createShared(image,
+    //                                                          filename,
+    //                                                          cwTrackedImage::Mipmaps),
+    //                             imageData);
+    // };
+
+    // //For creating icon from private image data
+    // std::function<cwTrackedImagePtr (const PrivateImageData&)> createIcon
+    //         = [filename, imageTypes](const PrivateImageData& imageData) {
+    //     Q_ASSERT(!imageData.OriginalImage.isNull());
+
+    //     if(!(imageTypes & Icon)) {
+    //         return cwTrackedImage::createShared(-1, filename, cwTrackedImage::NoOwnership);
+    //     }
+
+    //     if(imageData.Id->isIconValid()) {
+    //         return cwTrackedImage::createShared(imageData.Id->icon(),
+    //                                             filename,
+    //                                             cwTrackedImage::NoOwnership);
+    //     }
+    //     const QImage& originalImage = imageData.OriginalImage;
+    //     QSize scaledSize = QSize(512, 512);
+
+    //     if(originalImage.size().height() <= scaledSize.height() &&
+    //             originalImage.size().width() <= scaledSize.width()) {
+    //         //Make the original the icon
+    //         return cwTrackedImage::createShared(imageData.Id->original(),
+    //                                             filename,
+    //                                             cwTrackedImage::NoOwnership);
+    //     }
+
+    //     QImage scaledImage = originalImage.scaled(scaledSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+
+    //     //Convert the image into a jpg
+    //     QByteArray format = "jpg";
+    //     QByteArray jpgData;
+    //     QBuffer buffer(&jpgData);
+    //     QImageWriter writer(&buffer, format);
+    //     writer.setCompression(85);
+    //     writer.write(scaledImage);
+
+    //     int dotMeter = imageData.Id->originalDotsPerMeter() > 0 ? scaledImage.dotsPerMeterX() : 0;
+
+    //     //Write the data to database
+    //     cwImageData iconImageData(scaledSize, dotMeter, format, jpgData);
+    //     int imageId = cwImageDatabase(filename).addImage(iconImageData);
+    //     return cwTrackedImage::createShared(imageId, filename);
+    // };
+
+    // // struct Mipmap {
+    // //     QImage image;
+    // //     int id;
+    // // };
+
+    // // //Scaling images for mipmaps
+    // // std::function<QList<Mipmap> (const PrivateImageData&)> scaleImage
+    // //         = [](const PrivateImageData& imageData)->QList<Mipmap> {
+    // //     const QImage& originalImage = imageData.OriginalImage;
+
+    // //     QSizeF clipArea;
+    // //     QImage scaledImage = ensureImageDivisibleBy4(originalImage, &clipArea);
+    // //     QList<int> mipmapIds = imageData.Id->mipmaps();
+
+    // //     auto mipmapId = [mipmapIds](int index) {
+    // //         if(index < mipmapIds.size()) {
+    // //             return mipmapIds.at(index);
+    // //         }
+    // //         return -1;
+    // //     };
+
+    // //     int numberOfLevels = numberOfMipmapLevels(scaledImage.size());
+
+    // //     QSize scaledImageSize = scaledImage.size();
+
+    // //     QList<Mipmap> scaledImages;
+
+    // //     for(int i = 0; i < numberOfLevels; i++) {
+    // //         //Rescaled the image
+    // //         scaledImage = scaledImage.scaled(scaledImageSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+    // //         scaledImages.append({scaledImage, mipmapId(i)});
+
+    // //         //Create the new width and height, by halfing them
+    // //         scaledImageSize = half(scaledImageSize);
+    // //     }
+
+    // //     return scaledImages;
+    // // };
+
+    // //For creating mipmaps
+    // // std::function<QFuture<cwTrackedImagePtr> (const QList<Mipmap>& image)> compressAndUpload
+    // //         = [filename](const QList<Mipmap>& mipmaps)->QFuture<cwTrackedImagePtr> {
+
+    // //     QList<QImage> mipmapImages = cw::transform(mipmaps,
+    // //                                            [](const Mipmap& mipmap)
+    // //     {
+    // //         return mipmap.image;
+    // //     });
+
+    // //     // cwDXT1Compresser compresser;
+    // //     // auto compressFuture = compresser.compress(mipmapImages);
+
+    // //     return AsyncFuture::observe(compressFuture)
+    // //             .subscribe([compressFuture, mipmaps, filename]()
+    // //     {
+    // //         struct CompressedMipmap {
+    // //             cwDXT1Compresser::CompressedImage image;
+    // //             int id;
+    // //         };
+
+    // //         auto compressionResults = compressFuture.results();
+    // //         Q_ASSERT(mipmaps.size() == compressionResults.size());
+
+    // //         auto mipmapIter = mipmaps.begin();
+    // //         QList<CompressedMipmap> mipmaps = cw::transform(compressionResults,
+    // //                                                     [&mipmapIter](const cwDXT1Compresser::CompressedImage& compressedImage)
+    // //         {
+    // //             CompressedMipmap mipmap = {compressedImage, mipmapIter->id};
+    // //             mipmapIter++;
+    // //             return mipmap;
+    // //         });
+
+    // //         std::function<cwTrackedImagePtr (const CompressedMipmap&)> updateDatabase
+    // //                 = [filename](const CompressedMipmap& mipmap) {
+    // //             cwImageData imageData = cwImageProvider::createDxt1(mipmap.image.size, mipmap.image.data);
+    // //             int imageId = cwImageDatabase(filename).addOrUpdateImage(imageData, mipmap.id);
+    // //             return cwTrackedImage::createShared(imageId, filename);
+    // //         };
+
+    // //         return QtConcurrent::mapped(mipmaps, updateDatabase);
+    // //     }).future();
+    // // };
+
+    // auto pathImagesFuture = NewImagePaths.isEmpty() ? QFuture<PrivateImageData>() : cwConcurrent::mapped(NewImagePaths, loadImagesFromPath);
+    // auto imagesFuture = NewImages.isEmpty() ? QFuture<PrivateImageData>() : cwConcurrent::mapped(NewImages, loadFromImages);
+    // // auto regeneratedFuture = RegenerateMipmap.isOriginalValid() ? cwConcurrent::run(std::bind(loadFromDatabaseImage, RegenerateMipmap)) : QFuture<PrivateImageData>();
+    // auto imageCombine = AsyncFuture::combine();
+
+    // auto addToImageCombine = [&imageCombine](QFuture<PrivateImageData> future) {
+    //     if(!future.isCanceled()) {
+    //         imageCombine << future;
+    //     }
+    // };
+
+    // addToImageCombine(pathImagesFuture);
+    // addToImageCombine(imagesFuture);
+    // // addToImageCombine(regeneratedFuture);
+
+    // return AsyncFuture::observe(imageCombine.future())
+    //         .subscribe([pathImagesFuture,
+    //                    imagesFuture,
+    //                    // regeneratedFuture,
+    //                    imageTypes,
+    //                    // scaleImage,
+    //                    // compressAndUpload,
+    //                    createIcon
+    //                    ]()
+    // {
+
+    //         QList<PrivateImageData> imageData =
+    //             pathImagesFuture.results()
+    //             + imagesFuture.results();
+    //         // + regeneratedFuture.results();
+
+    //     QList<PrivateImageData> filterData;
+    //     filterData.reserve(imageData.size());
         
-        //Remove all invalid images
-        std::copy_if(imageData.begin(), imageData.end(), std::back_inserter(filterData),
-                     [](const PrivateImageData& data)
-        {
-            return !data.OriginalImage.isNull();
-        });
+    //     //Remove all invalid images
+    //     std::copy_if(imageData.begin(), imageData.end(), std::back_inserter(filterData),
+    //                  [](const PrivateImageData& data)
+    //     {
+    //         return !data.OriginalImage.isNull();
+    //     });
 
-        QFuture<QVector<QFuture<cwTrackedImagePtr>>> compressAndUploadFuture = AsyncFuture::completedWithList(QVector<QFuture<cwTrackedImagePtr>>());
+    //     // QFuture<QVector<QFuture<cwTrackedImagePtr>>> compressAndUploadFuture = AsyncFuture::completedWithList(QVector<QFuture<cwTrackedImagePtr>>());
 
-        // if(imageTypes & Mipmaps) {
-        //     auto scaleFuture = QtConcurrent::mapped(filterData, scaleImage);
+    //     // if(imageTypes & Mipmaps) {
+    //     //     auto scaleFuture = QtConcurrent::mapped(filterData, scaleImage);
 
-        //     compressAndUploadFuture = AsyncFuture::observe(scaleFuture)
-        //             .subscribe([compressAndUpload, scaleFuture]()
-        //     {
-        //         QList<QList<Mipmap>> allImages = scaleFuture.results();
-        //         QVector<QFuture<cwTrackedImagePtr>> ids;
-        //         ids.reserve(allImages.size());
+    //     //     compressAndUploadFuture = AsyncFuture::observe(scaleFuture)
+    //     //             .subscribe([compressAndUpload, scaleFuture]()
+    //     //     {
+    //     //         QList<QList<Mipmap>> allImages = scaleFuture.results();
+    //     //         QVector<QFuture<cwTrackedImagePtr>> ids;
+    //     //         ids.reserve(allImages.size());
 
-        //         std::transform(allImages.begin(),
-        //                        allImages.end(),
-        //                        std::back_inserter(ids),
-        //                        compressAndUpload);
+    //     //         std::transform(allImages.begin(),
+    //     //                        allImages.end(),
+    //     //                        std::back_inserter(ids),
+    //     //                        compressAndUpload);
 
-        //         return ids;
-        //     }
-        //     ).future();
-        // }
+    //     //         return ids;
+    //     //     }
+    //     //     ).future();
+    //     // }
 
-        auto iconFuture = cwConcurrent::mapped(filterData, createIcon);
-        auto idCombine = AsyncFuture::combine() << iconFuture << compressAndUploadFuture;
+    //     auto iconFuture = cwConcurrent::mapped(filterData, createIcon);
+    //     auto idCombine = AsyncFuture::combine() << iconFuture; // << compressAndUploadFuture;
 
-        return AsyncFuture::observe(idCombine.future())
-                .subscribe([=]()
-        {
-            auto icons = iconFuture.results();
-            auto allMipmaps = compressAndUploadFuture.result();
+    //     return AsyncFuture::observe(idCombine.future())
+    //             .subscribe([=]()
+    //     {
+    //         auto icons = iconFuture.results();
+    //         // auto allMipmaps = compressAndUploadFuture.result();
 
-            auto completedImages = [=]() {
-                Q_ASSERT(icons.size() == filterData.size());
-                Q_ASSERT(icons.size() == allMipmaps.size() || allMipmaps.isEmpty());
+    //         // auto completedImages = [=]() {
+    //         Q_ASSERT(icons.size() == filterData.size());
+    //         // Q_ASSERT(icons.size() == allMipmaps.size() || allMipmaps.isEmpty());
 
-                QList<cwTrackedImagePtr> images;
+    //         QList<cwTrackedImagePtr> images;
 
-                auto toMipmap = [](const QList<cwTrackedImagePtr>& mipmapPtrs)
-                {
-                    QList<int> mipmaps;
-                    mipmaps.reserve(mipmapPtrs.size());
-                    std::transform(mipmapPtrs.begin(), mipmapPtrs.end(), std::back_inserter(mipmaps),
-                                   [](const cwTrackedImagePtr& ptr)
-                    {
-                        return ptr->take().original(); //The original for this image is a mipmapId
-                    });
-                    return mipmaps;
-                };
+    //         // auto toMipmap = [](const QList<cwTrackedImagePtr>& mipmapPtrs)
+    //         // {
+    //         //     QList<int> mipmaps;
+    //         //     mipmaps.reserve(mipmapPtrs.size());
+    //         //     std::transform(mipmapPtrs.begin(), mipmapPtrs.end(), std::back_inserter(mipmaps),
+    //         //                    [](const cwTrackedImagePtr& ptr)
+    //         //     {
+    //         //         return ptr->take().original(); //The original for this image is a mipmapId
+    //         //     });
+    //         //     return mipmaps;
+    //         // };
 
-                for(int i = 0; i < icons.size(); i++) {
-                    auto icon = icons.at(i);
-                    auto image = filterData.at(i);
+    //         for(int i = 0; i < icons.size(); i++) {
+    //             auto icon = icons.at(i);
+    //             auto image = filterData.at(i);
 
-                    auto newImage = image.Id;
-                    newImage->setIcon(icon->take().original()); //The original for this image is a iconId
+    //             auto newImage = image.Id;
+    //             newImage->setIcon(icon->take().original()); //The original for this image is a iconId
 
-                    if(i < allMipmaps.size()) {
-                        auto mipmapFutures = allMipmaps.at(i);
-                        Q_ASSERT(mipmapFutures.isFinished());
-                        newImage->setMipmaps(toMipmap(mipmapFutures.results()));
-                    }
+    //             // if(i < allMipmaps.size()) {
+    //             //     auto mipmapFutures = allMipmaps.at(i);
+    //             //     Q_ASSERT(mipmapFutures.isFinished());
+    //             //     newImage->setMipmaps(toMipmap(mipmapFutures.results()));
+    //             // }
 
-                    images.append(newImage);
-                }
+    //             images.append(newImage);
+    //         }
 
-                return AsyncFuture::completed(images);
-            };
+    //         return AsyncFuture::completed(images);
+    //         // };
 
-            if(!(imageTypes & Mipmaps)) {
-                //RGBA, so don't use mipmaps
-                Q_ASSERT(allMipmaps.isEmpty());
-                return completedImages();
-            }
+    //         // if(!(imageTypes & Mipmaps)) {
+    //         //     //RGBA, so don't use mipmaps
+    //         //     Q_ASSERT(allMipmaps.isEmpty());
+    //         //     return completedImages();
+    //         // }
 
-            Q_ASSERT(imageTypes & Mipmaps);
+    //         // Q_ASSERT(imageTypes & Mipmaps);
 
-            //Combine all the futures together
-            auto mipmapCombine = AsyncFuture::combine();
-            for(const auto& mipmapFuture : allMipmaps) {
-                mipmapCombine << mipmapFuture;
-            }
+    //         //Combine all the futures together
+    //         // auto mipmapCombine = AsyncFuture::combine();
+    //         // for(const auto& mipmapFuture : allMipmaps) {
+    //         //     mipmapCombine << mipmapFuture;
+    //         // }
 
-            return AsyncFuture::observe(mipmapCombine.future())
-                    .subscribe(completedImages)
-                    .future();
-        }).future();
-    }).future();
+    //         // return AsyncFuture::observe(mipmapCombine.future())
+    //         //         .subscribe(completedImages)
+    //         //         .future();
+    //     }).future();
+    // }).future();
 }
 
 /**

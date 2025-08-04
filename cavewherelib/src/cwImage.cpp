@@ -31,7 +31,11 @@ bool cwImage::isMipmapsValid() const {
 QDebug operator<<(QDebug debug, const cwImage &image)
 {
     QDebugStateSaver saver(debug);
-    debug.nospace() << "(original:" << image.original() << " icon:" << image.icon() << " mipmaps:" << image.mipmaps() << " size:" << image.originalSize() << " dotPerMeter:" << image.originalDotsPerMeter();;
+    if(image.mode() == cwImage::Mode::Ids) {
+        debug.nospace() << "original:" << image.original() << " icon:" << image.icon() << " mipmaps:" << image.mipmaps() << " size:" << image.originalSize() << " dotPerMeter:" << image.originalDotsPerMeter();;
+    }  else {
+        debug.nospace() << "path:" << image.path() << " size:" << image.originalSize() << " dotPerMeter:" << image.originalDotsPerMeter();
+    }
     return debug;
 }
 

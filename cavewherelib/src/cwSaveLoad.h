@@ -29,6 +29,7 @@ class cwCompassReading;
 class cwCavingRegion;
 class cwProject;
 #include "cwCavingRegionData.h"
+#include "cwProjectedProfileScrapViewMatrix.h"
 
 //Google protobuffer
 namespace CavewhereProto {
@@ -130,6 +131,13 @@ public:
     static cwSurveyChunkData fromProtoSurveyChunk(const CavewhereProto::SurveyChunk& protoChunk);
     static cwStation fromProtoStation(const CavewhereProto::StationShot& protoStation);
     static cwShot fromProtoShot(const CavewhereProto::StationShot& protoShot);
+    static cwScrapData fromProtoScrap(const CavewhereProto::Scrap& protoScrap);
+    static cwNoteStation fromProtoNoteStation(const CavewhereProto::NoteStation& protoNoteStation);
+    static cwLead fromProtoLead(const CavewhereProto::Lead& protoLead);
+    static cwNoteTransformationData fromProtoNoteTransformation(const CavewhereProto::NoteTranformation& protoNoteTransform);
+    static cwLength::Data fromProtoLength(const CavewhereProto::Length& protoLength);
+    static std::unique_ptr<cwProjectedProfileScrapViewMatrix::Data> fromProtoProjectedScraptViewMatrix(const CavewhereProto::ProjectedProfileScrapViewMatrix protoViewMatrix);
+    static cwImageResolution::Data fromProtoImageResolution(const CavewhereProto::ImageResolution& protoImageResolution);
 
     //For testing
     void waitForFinished();

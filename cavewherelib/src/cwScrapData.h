@@ -12,6 +12,10 @@
 
 struct cwScrapData {
 
+    cwScrapData() :
+        viewMatrix(nullptr)
+    {}
+
     cwScrapData(const QPolygonF& outlinePoints,
                 const QList<cwNoteStation>& stations,
                 const QList<cwLead>& leads,

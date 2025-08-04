@@ -259,7 +259,7 @@ void cwProject::addImageHelper(std::function<void (QList<cwImage>)> outputCallBa
     auto format = cwTextureUploadTask::format();
 
     cwAddImageTask addImageTask;
-    addImageTask.setDatabaseFilename(filename());
+    // addImageTask.setDatabaseFilename(filename());
     addImageTask.setImageTypesWithFormat(format);
 
     //Set all the noteImagePath

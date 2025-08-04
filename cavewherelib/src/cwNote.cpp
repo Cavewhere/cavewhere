@@ -96,9 +96,9 @@ cwNote::cwNote(QObject *parent) :
 void cwNote::setImage(cwImage image) {
     if(ImageIds != image) {
         ImageIds = image;
-        emit originalChanged(ImageIds.original());
-        emit iconChanged(ImageIds.icon());
-        emit imageChanged(ImageIds);
+        // emit originalChanged(ImageIds.original());
+        // emit iconChanged(ImageIds.icon());
+        emit imageChanged();
 
         resetImageResolution();
     }
@@ -306,7 +306,7 @@ cwNoteData cwNote::data() const
         scrapData.append(scrap->data());
     }
 
-    qDebug() << "Note data:" << m_name << ImageIds.original();
+    qDebug() << "Note data:" << m_name << ImageIds.mode();
 
     return {
         m_name,

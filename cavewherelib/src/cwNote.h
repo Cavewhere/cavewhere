@@ -35,8 +35,8 @@ class CAVEWHERE_LIB_EXPORT cwNote : public QObject
     Q_PROPERTY(cwImageResolution* imageResolution READ imageResolution NOTIFY imageResolutionChanged)
 
     //These are old, potentially remove?
-    Q_PROPERTY(int original READ original NOTIFY originalChanged)
-    Q_PROPERTY(int icon READ icon NOTIFY iconChanged)
+    // Q_PROPERTY(int original READ original NOTIFY originalChanged)
+    // Q_PROPERTY(int icon READ icon NOTIFY iconChanged)
     Q_PROPERTY(cwImage image READ image WRITE setImage NOTIFY imageChanged)
 public:
 
@@ -49,8 +49,8 @@ public:
     void setImage(cwImage image);
     cwImage image() const;
 
-    int original() const;
-    int icon() const;
+    // int original() const;
+    // int icon() const;
 
     void setRotate(double degrees);
     double rotate() const;
@@ -84,9 +84,9 @@ public:
 signals:
     void nameChanged();
 
-    void originalChanged(int id);
-    void iconChanged(int id);
-    void imageChanged(cwImage image);
+    // void originalChanged(int id);
+    // void iconChanged(int id);
+    void imageChanged();
     void rotateChanged(float rotate);
     void imageResolutionChanged();
 
@@ -140,13 +140,13 @@ inline cwImage cwNote::image() const {
     return ImageIds;
 }
 
-inline int cwNote::original() const {
-    return ImageIds.original();
-}
+// inline int cwNote::original() const {
+//     return ImageIds.original();
+// }
 
-inline int cwNote::icon() const {
-    return ImageIds.icon();
-}
+// inline int cwNote::icon() const {
+//     return ImageIds.icon();
+// }
 
 /**
   \brief Sets the rotation for the notes

@@ -11,6 +11,8 @@
 #include "cwNote.h"
 #include "cwImageProvider.h"
 #include "cavewhereVersion.h"
+#include "cwPlanScrapViewMatrix.h"
+#include "cwRunningProfileScrapViewMatrix.h"
 
 //Async future
 #include <asyncfuture.h>
@@ -163,6 +165,7 @@ std::unique_ptr<CavewhereProto::Note> cwSaveLoad::toProtoNote(const cwNote *note
     //Copy trip data into proto, on the main thread
     auto protoNote = std::make_unique<CavewhereProto::Note>();
 
+    cwRegionSaveTask::saveImage(protoNote->mutable_image(), note->image());
 
     protoNote->set_rotation(note->rotate());
     cwRegionSaveTask::saveImageResolution(protoNote->mutable_imageresolution(), note->imageResolution());
@@ -213,15 +216,12 @@ QString cwSaveLoad::saveAllFromV6(const QDir &dir, const cwProject* project)
             if(noteCopy.name().isEmpty()) {
                 noteCopy.setName(QString::number(imageIndex));
             }
-
-            saveNote(noteDir, &noteCopy);
-
             auto imageData = provider.data(note->image().original());
             qDebug() << "ImageData:" << note->image().original() << imageData.format() << imageData.size();
 
             auto filename = noteDir.absoluteFilePath(QStringLiteral("%1.%2")
-                                                        .arg(imageIndex)
-                                                        .arg(imageData.format().toLower()));
+                                                         .arg(imageIndex)
+                                                         .arg(imageData.format().toLower()));
 
             qDebug() << "Saving note too:" << filename;
 
@@ -229,6 +229,12 @@ QString cwSaveLoad::saveAllFromV6(const QDir &dir, const cwProject* project)
             file.open(QSaveFile::WriteOnly);
             file.write(imageData.data());
             file.commit();
+
+            cwImage noteImage = noteCopy.image();
+            noteImage.setPath(filename);
+            noteCopy.setImage(noteImage);
+
+            saveNote(noteDir, &noteCopy);
 
             ++imageIndex;
         }
@@ -266,8 +272,7 @@ Monad::Result<cwCavingRegionData> cwSaveLoad::loadAll(const QString &filename)
     // Load the root region file
     auto regionResult = loadCavingRegion(filename);
 
-    return regionResult.then([filename](Result<cwCavingRegionData> result){
-
+    return regionResult.then([filename](Result<cwCavingRegionData> result) {
         cwCavingRegionData region = result.value();
 
         QDir regionDir = QFileInfo(filename).absoluteDir();
@@ -287,13 +292,10 @@ Monad::Result<cwCavingRegionData> cwSaveLoad::loadAll(const QString &filename)
 
         for (const QFileInfo &caveFileInfo : caveFiles) {
             auto caveResult = loadCave(caveFileInfo.absoluteFilePath());
-            if(caveResult.hasError()) {
-                //FIX ME report error
+            if (caveResult.hasError()) {
+                // FIXME: log or collect the error
                 continue;
             }
-            // if (!caveResult) {
-            //     return caveResult.error();
-            // }
 
             cwCaveData cave = caveResult.value();
 
@@ -305,18 +307,34 @@ Monad::Result<cwCavingRegionData> cwSaveLoad::loadAll(const QString &filename)
                 while (tripIt.hasNext()) {
                     tripIt.next();
                     QDir tripDir(tripIt.filePath());
+
                     QFileInfoList tripFiles = tripDir.entryInfoList(QStringList() << "*.cwtrip", QDir::Files);
                     for (const QFileInfo &tripFileInfo : tripFiles) {
                         auto tripResult = loadTrip(tripFileInfo.absoluteFilePath());
-                        // if (!tripResult) {
-                        //     return tripResult.error();
-                        // }
-                        if(tripResult.hasError()) {
-                            //FIX ME report error
+
+                        if (tripResult.hasError()) {
+                            // FIXME: log or collect the error
                             continue;
                         }
 
-                        cave.trips.append(tripResult.value());
+                        cwTripData trip = tripResult.value();
+
+                        // Load notes inside the notes subfolder
+                        QDir notesDir = tripDir.filePath("notes");
+                        if (notesDir.exists()) {
+                            QFileInfoList noteFiles = notesDir.entryInfoList(QStringList() << "*.cwnote", QDir::Files);
+                            for (const QFileInfo &noteFileInfo : noteFiles) {
+                                auto noteResult = loadNote(noteFileInfo.absoluteFilePath());
+                                if (noteResult.hasError()) {
+                                    // FIXME: log or collect the error
+                                    continue;
+                                }
+
+                                trip.noteModel.notes.append(noteResult.value());
+                            }
+                        }
+
+                        cave.trips.append(trip);
                     }
                 }
             }
@@ -327,7 +345,6 @@ Monad::Result<cwCavingRegionData> cwSaveLoad::loadAll(const QString &filename)
         return Result(region);
     });
 }
-
 
 Monad::Result<cwCavingRegionData> cwSaveLoad::loadCavingRegion(const QString &filename)
 {    
@@ -392,6 +409,27 @@ Monad::Result<cwTripData> cwSaveLoad::loadTrip(const QString &filename)
 
 Monad::Result<cwNoteData> cwSaveLoad::loadNote(const QString &filename)
 {
+    auto noteResult = loadMessage<CavewhereProto::Note>(filename);
+
+    return Monad::mbind(noteResult, [](const Result<CavewhereProto::Note>& result) -> Monad::Result<cwNoteData> {
+        const CavewhereProto::Note& protoNote = result.value();
+
+        cwNoteData noteData;
+
+        // Load rotation
+        noteData.rotate = protoNote.rotation();
+
+        // Load image resolution
+        noteData.imageResolution = fromProtoImageResolution(protoNote.imageresolution());
+
+        // Load scraps
+        for (const auto& protoScrap : protoNote.scraps()) {
+            auto scrap = fromProtoScrap(protoScrap);
+            noteData.scraps.append(scrap);
+        }
+
+        return noteData;
+    });
 
 }
 
@@ -546,6 +584,132 @@ cwShot cwSaveLoad::fromProtoShot(const CavewhereProto::StationShot &protoShot)
 
     return shot;
 }
+
+cwScrapData cwSaveLoad::fromProtoScrap(const CavewhereProto::Scrap &protoScrap)
+{
+    cwScrapData scrapData;
+
+    // Load outline points
+    for (const QtProto::QPointF& protoPoint : protoScrap.outlinepoints()) {
+        scrapData.outlinePoints.append(cwRegionLoadTask::loadPointF(protoPoint));
+    }
+
+    // Load stations
+    for (const CavewhereProto::NoteStation& protoStation : protoScrap.notestations()) {
+        scrapData.stations.append(fromProtoNoteStation(protoStation));
+    }
+
+    // Load leads
+    for (const CavewhereProto::Lead& protoLead : protoScrap.leads()) {
+        scrapData.leads.append(fromProtoLead(protoLead));
+    }
+
+    // Load note transformation
+    scrapData.noteTransformation = fromProtoNoteTransformation(protoScrap.notetransformation());
+
+    // Load calculate note transform flag
+    scrapData.calculateNoteTransform = protoScrap.calculatenotetransform();
+
+    //Generate the correct scrap type
+    if(protoScrap.has_type()) {
+        switch(protoScrap.type()) {
+        case CavewhereProto::Scrap::ScrapType::Scrap_ScrapType_Plan:
+            scrapData.viewMatrix = std::make_unique<cwPlanScrapViewMatrix::Data>();
+        case CavewhereProto::Scrap::ScrapType::Scrap_ScrapType_RunningProfile:
+            scrapData.viewMatrix = std::make_unique<cwRunningProfileScrapViewMatrix::Data>();
+        case CavewhereProto::Scrap::ScrapType::Scrap_ScrapType_ProjectedProfile:
+            // Load view matrix
+            if (protoScrap.has_profileviewmatrix()) {
+                scrapData.viewMatrix = fromProtoProjectedScraptViewMatrix(protoScrap.profileviewmatrix());
+            } else {
+                scrapData.viewMatrix = std::make_unique<cwProjectedProfileScrapViewMatrix::Data>();
+            }
+            scrapData.viewMatrix = std::make_unique<cwProjectedProfileScrapViewMatrix::Data>();
+        default:
+            scrapData.viewMatrix = std::make_unique<cwPlanScrapViewMatrix::Data>();
+        }
+    } else {
+        scrapData.viewMatrix = std::make_unique<cwPlanScrapViewMatrix::Data>();
+    }
+
+    return scrapData;
+}
+
+cwNoteStation cwSaveLoad::fromProtoNoteStation(const CavewhereProto::NoteStation &protoNoteStation)
+{
+    cwNoteStation noteStation;
+    noteStation.setName(QString::fromStdString(protoNoteStation.name()));
+    noteStation.setPositionOnNote(cwRegionLoadTask::loadPointF(protoNoteStation.positiononnote()));
+    return noteStation;
+}
+
+cwLead cwSaveLoad::fromProtoLead(const CavewhereProto::Lead &protoLead)
+{
+    cwLead lead;
+
+    // Load position on note
+    lead.setPositionOnNote(cwRegionLoadTask::loadPointF(protoLead.positiononnote()));
+
+    // Load description if present
+    if (protoLead.has_description()) {
+        lead.setDescription(QString::fromStdString(protoLead.description()));
+    }
+
+    // Load size if present and valid
+    if (protoLead.has_size()) {
+        QSizeF size = cwRegionLoadTask::loadSizeF(protoLead.size());
+        if (size.isValid()) {
+            lead.setSize(size);
+        }
+    }
+
+    // Load completed flag
+    lead.setCompleted(protoLead.completed());
+
+    return lead;
+}
+
+cwNoteTransformationData cwSaveLoad::fromProtoNoteTransformation(const CavewhereProto::NoteTranformation &protoNoteTransform)
+{
+    cwNoteTransformationData data;
+
+    data.north = protoNoteTransform.northup();
+
+    if (protoNoteTransform.has_scalenumerator()) {
+        data.scale.scaleNumerator = fromProtoLength(protoNoteTransform.scalenumerator());
+    }
+
+    if (protoNoteTransform.has_scaledenominator()) {
+        data.scale.scaleDenominator = fromProtoLength(protoNoteTransform.scaledenominator());
+    }
+
+    return data;
+}
+
+std::unique_ptr<cwProjectedProfileScrapViewMatrix::Data> cwSaveLoad::fromProtoProjectedScraptViewMatrix(const CavewhereProto::ProjectedProfileScrapViewMatrix protoViewMatrix)
+{
+    auto matrix = std::make_unique<cwProjectedProfileScrapViewMatrix::Data>();
+    matrix->setAzimuth(protoViewMatrix.azimuth());
+    matrix->setDirection(static_cast<cwProjectedProfileScrapViewMatrix::AzimuthDirection>(protoViewMatrix.direction()));
+    return matrix;
+}
+
+cwImageResolution::Data cwSaveLoad::fromProtoImageResolution(const CavewhereProto::ImageResolution &protoImageResolution)
+{
+    cwImageResolution::Data resolution;
+    resolution.value = protoImageResolution.value();
+    resolution.unit = static_cast<cwUnits::ImageResolutionUnit>(protoImageResolution.unit());
+    return resolution;
+}
+
+cwLength::Data cwSaveLoad::fromProtoLength(const CavewhereProto::Length &protoLength)
+{
+    return {
+        protoLength.unit(),
+        protoLength.value()
+    };
+}
+
 void cwSaveLoad::waitForFinished()
 {
     cwFutureManagerModel model;

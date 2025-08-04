@@ -43,30 +43,18 @@ cwImageProvider::cwImageProvider() :
 
   See Qt docs for details
   */
-QImage cwImageProvider::requestImage(const QString &id, QSize *size, const QSize &requestedSize) {
-    bool okay;
-    int sqlId = id.toInt(&okay);
-
-    if(!okay) {
-        qDebug() << "cwImageProvider:: Couldn't convert id to a number where id=" << id;
-        return QImage();
-    }
-
-    //Extract the image data from the database
-    auto imageData = data(sqlId);
-
+QImage cwImageProvider::requestImage(const QString &path, QSize *size, const QSize &requestedSize) {
     //Read the image in
-    QImage image = this->image(imageData);
+    QImage image = this->image(path);
 
     //Make sure the image is good
     if(image.isNull()) {
-        qDebug() << "cwImageProvider:: Image isn't of format " << imageData.format();
+        qDebug() << "cwImageProvider:: can't read image:" << path << LOCATION;
         return QImage();
     }
 
     int maxSize = qMax(requestedSize.width(), requestedSize.height());
     if(maxSize > 0) {
-
         //Get the size of the image, scale it and return it.
         QImage scaledImage = image.scaled(QSize(maxSize, maxSize), Qt::KeepAspectRatio, Qt::SmoothTransformation);
         *size = scaledImage.size();
@@ -77,6 +65,19 @@ QImage cwImageProvider::requestImage(const QString &id, QSize *size, const QSize
         *size = image.size();
         return image;
     }
+}
+
+QImage cwImageProvider::image(const QString &path) const
+{
+    QString fullPath = imagePath(path);
+
+    //Extract the image data from the disk
+    auto imageData = data(fullPath);
+
+    //Read the image in
+    QImage image = this->image(imageData);
+
+    return image;
 }
 
 /**
@@ -91,19 +92,31 @@ void cwImageProvider::setProjectPath(QString projectPath) {
   Returns the project path where the images will be extracted from
   */
 QString cwImageProvider::projectPath() const {
-    QMutexLocker locker(const_cast<QMutex*>(&ProjectPathMutex));
+    QMutexLocker locker(&ProjectPathMutex);
     return ProjectPath;
+}
+
+QString cwImageProvider::imagePath(const QString &relativeImagePath) const
+{
+    QMutexLocker locker(&ProjectPathMutex);
+
+    QFileInfo info(ProjectPath);
+    QDir dir = info.absoluteDir();
+
+    return dir.absoluteFilePath(relativeImagePath);
 }
 
 /**
   Gets the metadata of the original image
   */
-cwImageData cwImageProvider::originalMetadata(const cwImage &image) const {
-    return data(image.original(), true); //Only get the metadata of the original
-}
+// cwImageData cwImageProvider::originalMetadata(const cwImage &image) const {
+//     return data(image.original(), true); //Only get the metadata of the original
+// }
 
 /**
   Gets the metadata of the image at id
+
+  This is used get old data from sqlite database, this should NOT be used in new coe
   */
 cwImageData cwImageProvider::data(int id, bool metaDataOnly) const {
     if(projectPath().isEmpty()) {
@@ -184,16 +197,33 @@ cwImageData cwImageProvider::data(int id, bool metaDataOnly) const {
     return cwImageData();
 }
 
-/**
-  \brief Gets a QImage from the image provider.  If the image at id is null, then
-  this will return a empty image
-  */
-QImage cwImageProvider::image(int id) const
+cwImageData cwImageProvider::data(QString filename) const
 {
-    cwImageData imageData = data(id);
-    return image(imageData);
+    QFile file(filename);
+    file.open(QFile::ReadOnly);
+    auto data = file.readAll();
 
+    QFileInfo info(filename);
+    QString extention = info.suffix();
+
+    QImageReader reader(filename);
+    QSize size = reader.size();
+
+    int dotPerMeter = -1; //Can't query this from the image, require QImage
+
+    return cwImageData(size, dotPerMeter, extention.toUtf8(), data);
 }
+
+// /**
+//   \brief Gets a QImage from the image provider.  If the image at id is null, then
+//   this will return a empty image
+//   */
+// QImage cwImageProvider::image(int id) const
+// {
+//     cwImageData imageData = data(id);
+//     return image(imageData);
+
+// }
 
 QImage cwImageProvider::image(const cwImageData &imageData) const
 {
@@ -216,14 +246,14 @@ QImage cwImageProvider::image(const cwImageData &imageData) const
         };
 
         try {
-            int id = getValue(cropIdKey());
+            QString path = map[cropIdKey()].toString();
             int x = getValue(cropXKey());
             int y = getValue(cropYKey());
             int width = getValue(cropWidthKey());
             int height = getValue(cropHeightKey());
 
             QRect cropRect(x, y, width, height);
-            QImage originalImage = image(id);
+            QImage originalImage(imagePath(path));
             return originalImage.copy(cropRect);
         } catch(std::runtime_error error) {
             qDebug() << "Error:" << error.what();
@@ -261,7 +291,7 @@ cwImageData cwImageProvider::createDxt1(QSize size, const QByteArray &uncompress
     return cwImageData(size, 0, cwImageProvider::dxt1GzExtension(), outputData);
 }
 
-QString cwImageProvider::imageUrl(int id)
+QString cwImageProvider::imageUrl(QString relativePath)
 {
-    return QStringLiteral("image://") + cwImageProvider::name() + QStringLiteral("/") + QString::number(id);
+    return QStringLiteral("image://") + cwImageProvider::name() + QStringLiteral("/") + relativePath;
 }

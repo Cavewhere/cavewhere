@@ -27,13 +27,19 @@ class CAVEWHERE_LIB_EXPORT cwImageProvider : public QQuickImageProvider
 
 public:
     cwImageProvider();
-    virtual QImage requestImage(const QString &id, QSize *size, const QSize &requestedSize);
+    virtual QImage requestImage(const QString &path, QSize *size, const QSize &requestedSize);
 
-    cwImageData originalMetadata(const cwImage& image) const;
-    cwImageData data(int id, bool metaDataOnly = false) const;
-    QImage image(int id) const;
+    // cwImageData originalMetadata(const cwImage& image) const;
+    // QImage image(int id) const;
+    QImage image(const QString& path) const;
     QImage image(const cwImageData& data) const;
     QVector2D scaleTexCoords(const cwImage &image) const;
+
+    //data(id) is an old function used to load old image data, and shouldn't be used
+    cwImageData data(int id, bool metaDataOnly = false) const;
+
+    //New image data with full path
+    cwImageData data(QString filename) const;
 
     static cwImageData createDxt1(QSize size, const QByteArray& uncompressData);
 
@@ -47,7 +53,7 @@ public:
     static QByteArray cropHeightKey() { return QByteArrayLiteral("height"); }
     static QByteArray cropIdKey() { return QByteArrayLiteral("id"); }
 
-    static QString imageUrl(int id);
+    static QString imageUrl(QString relativePath);
 
 public slots:
     void setProjectPath(QString projectPath);
@@ -57,11 +63,12 @@ private:
     static QString requestImageSQL() { return QLatin1String("SELECT type,width,height,dotsPerMeter,imageData from Images where id=?"); }
     static QString requestMetadataSQL() { return QLatin1String("SELECT type,width,height,dotsPerMeter from Images where id=?"); }
     QString ProjectPath;
-    QMutex ProjectPathMutex;
+    mutable QMutex ProjectPathMutex;
 
     static QAtomicInt ConnectionCounter;
 
     QString projectPath() const;
+    QString imagePath(const QString& relativeImagePath) const;
 };
 
 #endif // CWPROJECTIMAGEPROVIDER_H

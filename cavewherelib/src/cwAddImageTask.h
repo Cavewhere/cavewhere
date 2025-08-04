@@ -30,7 +30,7 @@
 
 class CompressImageKernal;
 
-class CAVEWHERE_LIB_EXPORT cwAddImageTask : public cwProjectIOTask
+class CAVEWHERE_LIB_EXPORT cwAddImageTask : public QObject
 {
     friend class CompressImageKernal;
 
@@ -62,6 +62,8 @@ public:
     void setImageTypes(int types);
     void setImageTypesWithFormat(cwTextureUploadTask::Format format);
 
+    void setCachePath(const QString& cachePath) { m_cachePath = cachePath; }
+    QString cachePath() const { return m_cachePath; }
 
     //Process the images
     QFuture<cwTrackedImagePtr> images() const;
@@ -91,21 +93,21 @@ private:
             OriginalImage(original),
             Name(name)
         {
-
         }
-
 
         cwTrackedImagePtr Id;
         QImage OriginalImage;
         QString Name;
     };
 
+    //Cached
+    QString m_cachePath;
+
     //Possible image sources
     QStringList NewImagePaths;
     QList<QImage> NewImages;
     cwImage RegenerateMipmap;
     int ImageTypes = (Original | Icon | Mipmaps);
-//    cwTextureUploadTask::Format FormatType = cwTextureUploadTask::Unknown;
 
     static QImage copyOriginalImage(QString image,
                                     cwImage* imageIds,

@@ -8,17 +8,8 @@
 #ifndef CW3DREGIONVIEWER_H
 #define CW3DREGIONVIEWER_H
 
-//Qt includes
-#include <QVector3D>
-#include <QMatrix4x4>
-#include <QPlane3D>
-
 //Our includes
 #include "cwRhiViewer.h"
-//class cwGLTerrain;
-//class cwGLLinePlot;
-//class cwGLScraps;
-//class cwGLGridPlane;
 class cwGeometryItersecter;
 #include "cwOrthogonalProjection.h"
 #include "cwPerspectiveProjection.h"

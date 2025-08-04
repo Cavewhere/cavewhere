@@ -251,7 +251,7 @@ void cwRegionSaveTask::saveTeam(CavewhereProto::Team *protoTeam, cwTeam *team)
  */
 void cwRegionSaveTask::saveNote(CavewhereProto::Note *protoNote, cwNote *note)
 {
-    // saveImage(protoNote->mutable_image(), note->image());
+    saveImage(protoNote->mutable_image(), note->image());
     protoNote->set_rotation(note->rotate());
     saveImageResolution(protoNote->mutable_imageresolution(), note->imageResolution());
 
@@ -268,13 +268,18 @@ void cwRegionSaveTask::saveNote(CavewhereProto::Note *protoNote, cwNote *note)
  */
 void cwRegionSaveTask::saveImage(CavewhereProto::Image *protoImage, const cwImage &image)
 {
-    protoImage->set_originalid(image.original());
-    protoImage->set_iconid(image.icon());
+    qDebug() << "Saving image:" << image.mode();
+    Q_ASSERT(image.mode() == cwImage::Mode::Path);
+
+    saveString(protoImage->mutable_path(), image.path());
+
+    // protoImage->set_originalid(image.original());
+    // protoImage->set_iconid(image.icon());
     protoImage->set_dotpermeter(image.originalDotsPerMeter());
     saveSize(protoImage->mutable_size(), image.originalSize());
-    foreach(int mipmapId, image.mipmaps()) {
-        protoImage->add_mipmapids(mipmapId);
-    }
+    // foreach(int mipmapId, image.mipmaps()) {
+    //     protoImage->add_mipmapids(mipmapId);
+    // }
 
 }
 
@@ -303,7 +308,7 @@ void cwRegionSaveTask::saveScrap(CavewhereProto::Scrap *protoScrap, cwScrap *scr
     saveNoteTranformation(protoScrap->mutable_notetransformation(), scrap->noteTransformation());
     protoScrap->set_calculatenotetransform(scrap->calculateNoteTransform());
     // saveTriangulatedData(protoScrap->mutable_triangledata(), scrap->triangulationData());
-    // protoScrap->set_type(static_cast<CavewhereProto::Scrap_ScrapType>(scrap->type()));
+    protoScrap->set_type(static_cast<CavewhereProto::Scrap_ScrapType>(scrap->type()));
 
     if(scrap->type() == cwScrap::ProjectedProfile) {
         saveProjectedScrapViewMatrix(protoScrap->mutable_profileviewmatrix(), static_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix()));

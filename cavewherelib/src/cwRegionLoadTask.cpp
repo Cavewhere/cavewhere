@@ -415,7 +415,7 @@ void cwRegionLoadTask::loadTeam(const CavewhereProto::Team& protoTeam, cwTeam *t
  */
 void cwRegionLoadTask::loadNote(const CavewhereProto::Note& protoNote, cwNote *note)
 {
-    cwImage image = loadImage(protoNote.legacy_image());
+    cwImage image = loadImage(protoNote.image());
     double rotation = protoNote.rotation();
 
     note->setImage(image);
@@ -443,15 +443,15 @@ cwImage cwRegionLoadTask::loadImage(const CavewhereProto::Image& protoImage)
 {
     cwImage image;
 
-    image.setOriginal(protoImage.originalid());
-    image.setIcon(protoImage.iconid());
+    image.setOriginal(protoImage.legacy_originalid());
+    image.setIcon(protoImage.legacy_iconid());
     image.setOriginalDotsPerMeter(protoImage.dotpermeter());
     image.setOriginalSize(loadSize(protoImage.size()));
 
     QList<int> mipmaps;
-    mipmaps.reserve(protoImage.mipmapids_size());
-    for(int i = 0; i < protoImage.mipmapids_size(); i++) {
-        mipmaps.append(protoImage.mipmapids(i));
+    mipmaps.reserve(protoImage.legacy_mipmapids_size());
+    for(int i = 0; i < protoImage.legacy_mipmapids_size(); i++) {
+        mipmaps.append(protoImage.legacy_mipmapids(i));
     }
 
     image.setMipmaps(mipmaps);

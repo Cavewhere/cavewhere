@@ -15,7 +15,8 @@
 #include <QQmlEngine>
 
 //Our includes
-class cwRegionTreeModel;
+#include "cwRegionTreeModel.h"
+// class cwRegionTreeModel;
 class cwCave;
 #include "cwScrap.h"
 

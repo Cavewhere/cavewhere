@@ -510,13 +510,15 @@ void cwScrapManager::scrapInsertedHelper(cwNote *parentNote, int begin, int end)
         //Add the scrap data that's already in it
         m_renderScraps->addScrapToUpdate(scrap);
 
+        //Pull data from data cache, make sure the checksum is good too
+
         //Make sure the scrap's previously calculated data is okay.
         if((scrap->triangulationData().isStale() ||
                 scrap->triangulationData().isNull() ||
                 !scrapImagesOkay(scrap))
                 &&
                 isScrapGeometryValid(scrap))
-        {
+        {   
             //Isn't okay, we need to recalculate it
             scrapsToUpdate.append(scrap);
         } else if(scrap->triangulationData().croppedImageData().isNull()

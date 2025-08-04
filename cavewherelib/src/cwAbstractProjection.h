@@ -11,9 +11,11 @@
 //Qt includes
 #include <QObject>
 #include <QQmlEngine>
+#include <QMatrix4x4>
 
 //Our includes
 #include "cwProjection.h"
+// #include "cw3dRegionViewer.h"
 class cw3dRegionViewer;
 
 class cwAbstractProjection : public QObject
@@ -76,6 +78,8 @@ private:
 
 
 };
+
+#include "cw3dRegionViewer.h"
 
 /**
  * @brief cwAbstractProjection::projection

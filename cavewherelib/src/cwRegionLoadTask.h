@@ -86,6 +86,11 @@ public:
     cwRegionLoadResult load();
 
     static QDate loadDate(const QtProto::QDate& protoDate);
+    static QSize loadSize(const QtProto::QSize& protoSize);
+    static QSizeF loadSizeF(const QtProto::QSizeF &protoSize);
+    static QPointF loadPointF(const QtProto::QPointF& protoPointF);
+    static QVector3D loadVector3D(const QtProto::QVector3D& protoVector3D);
+    static QVector2D loadVector2D(const QtProto::QVector2D& protoVector2D);
 
 signals:
     void finishedLoading();
@@ -150,11 +155,6 @@ private:
     QString loadString(const std::string &protoString);
     QString loadLegacyString(const QtProto::QString& protoString);
 
-    QSize loadSize(const QtProto::QSize& protoSize);
-    QSizeF loadSizeF(const QtProto::QSizeF &protoSize);
-    QPointF loadPointF(const QtProto::QPointF& protoPointF);
-    QVector3D loadVector3D(const QtProto::QVector3D& protoVector3D);
-    QVector2D loadVector2D(const QtProto::QVector2D& protoVector2D);
     QStringList loadLegacyStringList(const QtProto::QStringList& protoStringList);
 
     template<auto HasLegacyFunc, auto LegacyGetFunc, auto GetFunc, typename Proto>

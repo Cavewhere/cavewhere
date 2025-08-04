@@ -100,7 +100,7 @@ TEST_CASE("Image data should save and load correctly", "[cwProject]") {
     cwImage image = trip->notes()->notes().first()->image();
     cwImageProvider provider;
     provider.setProjectPath(project->filename());
-    QImage sqlImage = provider.image(image.original());
+    QImage sqlImage = provider.image(image.path());
 
     CHECK(!sqlImage.isNull());
     CHECK(originalImage == sqlImage);
