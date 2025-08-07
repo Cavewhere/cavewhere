@@ -25,14 +25,20 @@ public:
     QDir dir() const;
     void setDir(const QDir& directory);
 
+    QString filePath(const Key& key) const;
+
 private:
+
     // Helper utilities
     QDir relativeDir(const Key& key) const;
-    QString filePath(const Key& key) const;
     std::shared_ptr<QMutex> fileMutexForPath(const QString& path) const;
 
     QDir m_dir;
-    mutable QMutex m_mutex;
-    mutable QMutex m_hashMutex;
-    mutable QHash<QString, std::shared_ptr<QMutex>> m_fileMutexes;
+
+    struct FileLockerSingleton {
+        mutable QMutex hashMutex;
+        mutable QHash<QString, std::shared_ptr<QMutex>> fileMutexes;
+    };
+
+    static FileLockerSingleton* singleton;
 };

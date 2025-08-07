@@ -199,7 +199,17 @@ cwImageData cwImageProvider::data(int id, bool metaDataOnly) const {
 
 cwImageData cwImageProvider::data(QString filename) const
 {
-    QFile file(filename);
+    qDebug() << "ProjectPath:" << ProjectPath;
+
+    QFileInfo projectInfo(ProjectPath);
+    auto projectDir = projectInfo.absoluteDir();
+    auto imagePath = projectDir.absoluteFilePath(filename);
+
+    if(!QFileInfo::exists(imagePath)) {
+        qDebug() << "cwImageProvider can't open:" << filename << LOCATION;
+    }
+
+    QFile file(imagePath);
     file.open(QFile::ReadOnly);
     auto data = file.readAll();
 

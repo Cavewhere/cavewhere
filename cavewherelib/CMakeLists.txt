@@ -20,6 +20,7 @@ find_package(Qt6
     Test
     ShaderTools
     REQUIRED)
+find_package(xxHash REQUIRED)
 
 qt_add_library(cavewherelib STATIC)
 
@@ -54,6 +55,7 @@ target_link_libraries(cavewherelib
     qquickgit
     protobuf::protobuf
     PRIVATE
+    xxHash::xxhash
     # surveximg
 )
 

@@ -18,7 +18,8 @@ class CaveWhereConan(ConanFile):
     ("protobuf/[>=5.27.0]"),
     ("libgit2/1.9.0"),
     ("libssh2/[>=1.11]"),
-    ("openssl/3.5.0")
+    ("openssl/3.5.0"),
+    ("xxhash/[>=0.8.3]")
     ]
 
     options = {

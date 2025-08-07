@@ -122,7 +122,7 @@ public:
     static Monad::Result<cwCavingRegionData> loadCavingRegion(const QString& filename);
     static Monad::Result<cwCaveData> loadCave(const QString& filename);
     static Monad::Result<cwTripData> loadTrip(const QString& filename);
-    static Monad::Result<cwNoteData> loadNote(const QString& filename);
+    static Monad::Result<cwNoteData> loadNote(const QString& filename, const QDir &projectDir);
 
     static cwTripCalibrationData fromProtoTripCalibration(const CavewhereProto::TripCalibration& proto);
     static cwTeamData fromProtoTeam(const CavewhereProto::Team& proto);
@@ -147,6 +147,11 @@ public:
 
     static QStringList fromProtoStringList(const google::protobuf::RepeatedPtrField<std::string> &protoStringList);
 
+    //Returns the relative path to the project
+    static QDir projectDir(const cwProject* project);
+    static QDir caveDir(const cwCave* cave);
+    static QDir tripDir(const cwTrip* trip);
+    static QDir noteDir(const cwNote* note);
 
 
     void saveProtoMessage(
@@ -159,8 +164,9 @@ private:
     struct Data;
     std::unique_ptr<Data> d;
 
-
-
+    static QDir caveDirHelper(const QDir& projectDir, const cwCave *cave);
+    static QDir tripDirHelper(const QDir& caveDir, const cwTrip* trip);
+    static QDir noteDirHelper(const QDir& tripDir);
 };
 
 

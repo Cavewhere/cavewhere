@@ -15,6 +15,10 @@
 #include "cwAsyncFuture.h"
 #include "cwImageDatabase.h"
 #include "cwConcurrent.h"
+#include "cwDiskCacher.h"
+
+//xxhash
+#include "xxhash.h" // Path to xxHash header
 
 //Qt includes
 #include <QByteArray>
@@ -66,32 +70,83 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
     auto format = Format;
 
     struct Image {
-        int id;
+        cwDiskCacher::Key key;
         QImage croppedImage;
         int dotsPerMeter;
     };
 
-    auto addCropToDatabase = [filename](QRect cropRect, const cwImage& image) {
-        QVariantMap map({
-                            {cwImageProvider::cropIdKey(), image.path()},
-                            {cwImageProvider::cropXKey(), cropRect.x()},
-                            {cwImageProvider::cropYKey(), cropRect.y()},
-                            {cwImageProvider::cropWidthKey(), cropRect.width()},
-                            {cwImageProvider::cropHeightKey(), cropRect.height()}
-                        });
-        auto document = QJsonDocument::fromVariant(map);
-        auto json = document.toJson(QJsonDocument::Compact);
-
-        cwImageData imageData(cropRect.size(),
-                              image.originalDotsPerMeter(),
-                              cwImageProvider::croppedReferenceExtension(),
-                              json);
-
-        cwImageDatabase database(filename);
-        return database.addImage(imageData);
+    auto hash = [](const QImage& image)->quint64 {
+        return XXH3_64bits(image.constBits(), static_cast<size_t>(image.sizeInBytes()));
     };
 
-    auto cropImage = [filename, originalImage, cropRect, addCropToDatabase]()->Image {
+    auto dir = QFileInfo(filename).dir();
+
+    auto addCropToDatabase = [filename, dir](QImage image, const QRectF& crop, quint64 hash) {
+        qDebug() << "Add to database:" << filename;
+        QFileInfo info(filename);
+
+        auto toString = [](const QRectF crop) {
+            return QString::number(crop.x())
+                   + "-" +
+                   QString::number(crop.y())
+            + "_" +
+                   QString::number(crop.width())
+            + "x" +
+                   QString::number(crop.height());
+        };
+
+        cwDiskCacher::Key key {
+                              info.fileName() + toString(crop),
+                              info.dir(),
+                              QString::number(hash, 16)
+        };
+
+        QByteArray imageData;
+        QBuffer buffer(&imageData);
+        buffer.open(QIODevice::WriteOnly);
+        image.save(&buffer, "PNG");
+        buffer.close();
+
+        //Save image data into the disk cacher
+        cwDiskCacher cacher(dir);
+        cacher.insert(key, imageData);
+        // cwDiskCacher::instance()->insert(key, imageData);
+
+        return key;
+
+        // cwDiskCacher::instance()->insert({
+
+        // },
+        //                                  );
+
+
+
+        // Q_ASSERT()
+        // cwImageProvider provider;
+        // provider.image(image.path());
+
+
+
+        // QVariantMap map({
+        //                     {cwImageProvider::cropIdKey(), image.path()},
+        //                     {cwImageProvider::cropXKey(), cropRect.x()},
+        //                     {cwImageProvider::cropYKey(), cropRect.y()},
+        //                     {cwImageProvider::cropWidthKey(), cropRect.width()},
+        //                     {cwImageProvider::cropHeightKey(), cropRect.height()}
+        //                 });
+        // auto document = QJsonDocument::fromVariant(map);
+        // auto json = document.toJson(QJsonDocument::Compact);
+
+        // cwImageData imageData(cropRect.size(),
+        //                       image.originalDotsPerMeter(),
+        //                       cwImageProvider::croppedReferenceExtension(),
+        //                       json);
+
+        // cwImageDatabase database(filename);
+        // return database.addImage(imageData);
+    };
+
+    auto cropImage = [filename, originalImage, cropRect, addCropToDatabase, hash]()->Image {
             cwImageProvider provider;
             provider.setProjectPath(filename);
             cwImageData imageData = provider.data(originalImage.path());
@@ -100,57 +155,77 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
             QRect cropArea = nearestDXT1Rect(mapNormalizedToIndex(cropRect,
                                                                   originalImage.originalSize()));
             if(!image.isNull()) {
-                int id = addCropToDatabase(cropArea, originalImage);
-                return Image({id, image.copy(cropArea), originalImage.originalDotsPerMeter()});
+                QImage croppedImage = image.copy(cropArea);
+                auto key = addCropToDatabase(croppedImage, cropArea, hash(image));
+                return Image({key, image.copy(cropArea), originalImage.originalDotsPerMeter()});
             }
 
             QImage badImage(cropArea.size(), QImage::Format_ARGB32);
             badImage.fill(QColor("red"));
             qDebug() << "Original image is bad id:" << originalImage.original() << imageData.data().size() << imageData.size() << imageData.format() << LOCATION;
-            return Image({-1, badImage, 0});
+            return Image({{}, badImage, 0});
     };
 
     auto cropFuture = cwConcurrent::run(cropImage);
 
-    auto addImageFuture = AsyncFuture::observe(cropFuture)
-            .subscribe([cropFuture, filename, format]()
-    {
-        int imageTypes = cwAddImageTask::None;
-        // if(format == cwTextureUploadTask::DXT1Mipmaps) {
-        //     imageTypes |= cwAddImageTask::Mipmaps;
-        // }
+    auto finishedFuture =
+        AsyncFuture::observe(cropFuture)
+            .subscribe([cropFuture, dir]() {
+                auto cropRGBImage = cropFuture.result();
 
-        Image cropRGBImage = cropFuture.result();
-        if(cropRGBImage.id < 0) {
-            //Bad image, add the red image crop
-            imageTypes |= cwAddImageTask::Original;
-        }
+                if(!cropRGBImage.key.id.isEmpty()) {
+                    cwDiskCacher cacher(dir);
+                    auto filePath = cacher.filePath(cropRGBImage.key);
+                    cwImage image;
+                    image.setPath(filePath);
 
-        cwAddImageTask addImages;
-        // addImages.setDatabaseFilename(filename);
-        addImages.setNewImages({cropRGBImage.croppedImage});
-        addImages.setImageTypes(imageTypes);
+                    return cwTrackedImage::createShared(image,
+                                                        image.path(),
+                                                        cwTrackedImage::Original);
+                }
 
-        return addImages.images();
-    }).future();
+                return cwTrackedImagePtr();
+            }).future();
 
-    auto finishedFuture = AsyncFuture::observe(addImageFuture)
-            .subscribe([addImageFuture, cropFuture]()
-    {
-        auto cropRGBImage = cropFuture.result();
-        auto images = addImageFuture.results();
-        if(!images.isEmpty()) {
-            auto imagePtr = images.first();
-            if(cropRGBImage.id > 0) {
-                //Update with the ref image
-                imagePtr->setOriginalDotsPerMeter(cropRGBImage.dotsPerMeter);
-                imagePtr->setOriginalSize(cropRGBImage.croppedImage.size());
-                imagePtr->setOriginal(cropRGBImage.id);
-            }
-            return images.first();
-        }
-        return cwTrackedImagePtr();
-    }).future();
+    // auto addImageFuture = AsyncFuture::observe(cropFuture)
+    //         .subscribe([cropFuture, filename, format]()
+    // {
+    //     int imageTypes = cwAddImageTask::None;
+    //     // if(format == cwTextureUploadTask::DXT1Mipmaps) {
+    //     //     imageTypes |= cwAddImageTask::Mipmaps;
+    //     // }
+
+    //     Image cropRGBImage = cropFuture.result();
+    //     if(cropRGBImage.id < 0) {
+    //         //Bad image, add the red image crop
+    //         imageTypes |= cwAddImageTask::Original;
+    //     }
+
+    //     cwAddImageTask addImages;
+    //     // addImages.setDatabaseFilename(filename);
+    //     addImages.setNewImages({cropRGBImage.croppedImage});
+    //     addImages.setImageTypes(imageTypes);
+
+    //     return addImages.images();
+    // }).future();
+
+    // auto finishedFuture = AsyncFuture::observe(addImageFuture)
+    //         .subscribe([addImageFuture, cropFuture]()
+    // {
+    //     auto cropRGBImage = cropFuture.result();
+    //     auto images = addImageFuture.results();
+    //     if(!images.isEmpty()) {
+    //         auto imagePtr = images.first();
+    //         if(cropRGBImage.id > 0) {
+    //             //Update with the ref image
+    //             imagePtr->setOriginalDotsPerMeter(cropRGBImage.dotsPerMeter);
+    //             imagePtr->setOriginalSize(cropRGBImage.croppedImage.size());
+    //             imagePtr->setOriginal(cropRGBImage.id);
+    //         }
+    //         return images.first();
+    //     }
+    //     return cwTrackedImagePtr();
+    // }).future();
 
     return finishedFuture;
 }

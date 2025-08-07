@@ -7,6 +7,7 @@
 #include <QFileInfo>
 #include <QMutexLocker>
 
+cwDiskCacher::FileLockerSingleton* cwDiskCacher::singleton = new cwDiskCacher::FileLockerSingleton();
 
 cwDiskCacher::cwDiskCacher(const QDir& directory)
     : m_dir(directory)
@@ -20,19 +21,17 @@ cwDiskCacher::~cwDiskCacher()
     //by default m_fileMutexes will clear the hash in the destructor. We copy the
     //mutexes into other, so the reference count in the mutexes increase. Clearing
     //m_fileMutexes will work correctly. This prevents a use after free memory issue
-    auto other = m_fileMutexes;
-    m_fileMutexes.clear();
+    // auto other = m_fileMutexes;
+    // m_fileMutexes.clear();
 }
 
 QDir cwDiskCacher::dir() const
 {
-    QMutexLocker locker(&m_mutex);
     return m_dir;
 }
 
 void cwDiskCacher::setDir(const QDir& directory)
 {
-    QMutexLocker locker(&m_mutex);
     m_dir = directory;
 }
 
@@ -50,19 +49,19 @@ QString cwDiskCacher::filePath(const Key& key) const
 
 std::shared_ptr<QMutex> cwDiskCacher::fileMutexForPath(const QString& path) const
 {
-    QMutexLocker locker(&m_hashMutex);
-    auto it = m_fileMutexes.find(path);
-    if (it == m_fileMutexes.end()) {
+    QMutexLocker locker(&singleton->hashMutex);
+    auto it = singleton->fileMutexes.find(path);
+    if (it == singleton->fileMutexes.end()) {
         // Custom deleter: remove from map when last reference goes away
         auto deleter = [this, path](QMutex* ptr) {
             {
-                QMutexLocker hashLocker(&m_hashMutex);
-                m_fileMutexes.remove(path);
+                QMutexLocker hashLocker(&singleton->hashMutex);
+                singleton->fileMutexes.remove(path);
             }
             delete ptr;
         };
         std::shared_ptr<QMutex> mutexPtr(new QMutex(), deleter);
-        m_fileMutexes.insert(path, mutexPtr);
+        singleton->fileMutexes.insert(path, mutexPtr);
         return mutexPtr;
     }
     return it.value();
@@ -71,11 +70,7 @@ std::shared_ptr<QMutex> cwDiskCacher::fileMutexForPath(const QString& path) cons
 QByteArray cwDiskCacher::entry(const Key& key) const
 {
     // Determine cache file path under global lock
-    QString cacheFile;
-    {
-        QMutexLocker locker(&m_mutex);
-        cacheFile = filePath(key);
-    }
+    QString cacheFile = filePath(key);
 
     // Acquire per-file mutex
     auto fileMutex = fileMutexForPath(cacheFile);
@@ -99,11 +94,7 @@ QByteArray cwDiskCacher::entry(const Key& key) const
 void cwDiskCacher::insert(const Key& key, const QByteArray& data)
 {
     // Determine cache file path under global lock
-    QString cacheFile;
-    {
-        QMutexLocker locker(&m_mutex);
-        cacheFile = filePath(key);
-    }
+    QString cacheFile = filePath(key);;
 
     // Acquire per-file mutex
     auto fileMutex = fileMutexForPath(cacheFile);

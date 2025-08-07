@@ -112,12 +112,16 @@ QVariant cwSurveyNoteModel::data(const QModelIndex &index, int role) const {
         return cwImageProvider::imageUrl(imagePath.path());
     }
     case ImageIconPathRole: {
+        cwImage imagePath = Notes[row]->image();
+        return cwImageProvider::imageUrl(imagePath.path());
+
+
         //Get's the icon for the note
         // cwImage imagePath = Notes[row]->image();
         // return cwImageProvider::imageUrl(imagePath.icon());
 
         //FIXME: Add icon support
-        return QString();
+        // return QString();
     }
     case ImageRole: {
         return QVariant::fromValue(Notes[row]->image());
@@ -142,6 +146,11 @@ QVariant cwSurveyNoteModel::data(const QModelIndex &index, int role) const {
   project.
   */
 void cwSurveyNoteModel::addFromFiles(QList<QUrl> files) {
+
+
+
+
+
     project()->addImages(files,
                          [this](QList<cwImage> notes)
     {

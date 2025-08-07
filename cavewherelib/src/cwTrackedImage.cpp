@@ -78,32 +78,34 @@ void cwTrackedImage::deleteImagesFromDatabase() const
         return;
     }
 
-    QList<int> imagesIds;
-    imagesIds.reserve(2 + mipmaps().size());
-    if(Owner & Original) {
-        imagesIds.append(original());
-    }
+    //FIXME: Do we need to clean up passed tracked images for path images?
 
-    if(Owner & Icon) {
-        imagesIds.append(icon());
-    }
+    // QList<int> imagesIds;
+    // imagesIds.reserve(2 + mipmaps().size());
+    // if(Owner & Original) {
+    //     imagesIds.append(original());
+    // }
 
-    if(Owner & Mipmaps) {
-        imagesIds.append(mipmaps());
-    }
+    // if(Owner & Icon) {
+    //     imagesIds.append(icon());
+    // }
 
-    QSet<int> uniqueImages;
-    for(auto id : imagesIds) {
-        if(id > 0) {
-            uniqueImages.insert(id);
-        }
-    }
+    // if(Owner & Mipmaps) {
+    //     imagesIds.append(mipmaps());
+    // }
 
-    imagesIds = QList<int>(uniqueImages.begin(), uniqueImages.end());
+    // QSet<int> uniqueImages;
+    // for(auto id : imagesIds) {
+    //     if(id > 0) {
+    //         uniqueImages.insert(id);
+    //     }
+    // }
 
-    if(!imagesIds.isEmpty()) {
-        cwImageDatabase(Filename).removeImages(imagesIds);
-    }
+    // imagesIds = QList<int>(uniqueImages.begin(), uniqueImages.end());
+
+    // if(!imagesIds.isEmpty()) {
+    //     cwImageDatabase(Filename).removeImages(imagesIds);
+    // }
 }
 
 void cwTrackedImage::sharedPtrDeleter(cwTrackedImage *image)

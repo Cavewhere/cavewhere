@@ -58,17 +58,18 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
         };
 
         auto loadRGB = [&imageProvidor, image]()->QImage {
-            auto imageData = imageProvidor.data(image->original());
+            auto imageData = imageProvidor.data(image->path());
 
             if(imageData.data().isEmpty()) {
                 return {};
             }
 
-            QImage image = cwOpenGLUtils::toGLTexture(imageProvidor.image(imageData));
+            QImage qimage = cwOpenGLUtils::toGLTexture(imageProvidor.image(imageData));
+            qDebug() << "Loaded:" << image->path() << QFileInfo::exists(image->path()) << qimage.size();
 
             //We might want convert the image here to prevent Rhi from having to covert it
 
-            return image;
+            return qimage;
             // if(!image.isNull()) {
             //     image = cwOpenGLUtils::toGLTexture(image);
             //     QByteArray data(reinterpret_cast<char*>(image.bits()),

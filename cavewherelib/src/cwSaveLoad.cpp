@@ -187,14 +187,19 @@ std::unique_ptr<CavewhereProto::Note> cwSaveLoad::toProtoNote(const cwNote *note
 QString cwSaveLoad::saveAllFromV6(const QDir &dir, const cwProject* project)
 {
 
-    auto makeDir = [](const QDir& rootDir, const QString& name) {
-        auto dirName = sanitizeFileName(name);
-        rootDir.mkdir(dirName);
+    // auto makeDir = [](const QDir& rootDir, const QString& name) {
+    //     auto dirName = sanitizeFileName(name);
+    //     rootDir.mkdir(dirName);
 
-        QDir subDir = rootDir;
-        subDir.cd(dirName);
+    //     QDir subDir = rootDir;
+    //     subDir.cd(dirName);
 
-        return subDir;
+    //     return subDir;
+    // };
+
+    auto makeDir = [](const QDir& dir) {
+        dir.mkpath(QStringLiteral("."));
+        return dir;
     };
 
     const QString projectFilename = project->filename();
@@ -205,8 +210,8 @@ QString cwSaveLoad::saveAllFromV6(const QDir &dir, const cwProject* project)
     provider.setProjectPath(projectFilename);
 
 
-    auto saveNotes = [makeDir, this, &provider](const QDir& tripDir, const cwSurveyNoteModel* notes) {
-        const QDir noteDir = makeDir(tripDir, QStringLiteral("notes"));
+    auto saveNotes = [makeDir, this, &provider, dir](const QDir& tripDir, const cwSurveyNoteModel* notes) {
+        const QDir noteDir = makeDir(noteDirHelper(tripDir));
 
         int imageIndex = 1;
         for(const cwNote* note : notes->notes()) {
@@ -230,8 +235,10 @@ QString cwSaveLoad::saveAllFromV6(const QDir &dir, const cwProject* project)
             file.write(imageData.data());
             file.commit();
 
+
             cwImage noteImage = noteCopy.image();
-            noteImage.setPath(filename);
+            QString relativeFilename = dir.relativeFilePath(filename);
+            noteImage.setPath(relativeFilename);
             noteCopy.setImage(noteImage);
 
             saveNote(noteDir, &noteCopy);
@@ -241,10 +248,10 @@ QString cwSaveLoad::saveAllFromV6(const QDir &dir, const cwProject* project)
     };
 
     auto saveTrips = [this, projectFilename, makeDir, saveNotes](const QDir& caveDir, const cwCave* cave) {
-        const QDir tripsDir = makeDir(caveDir, QStringLiteral("trips"));
+        // const QDir tripsDir = makeDir(caveDir, QStringLiteral("trips"));
 
         for(const auto trip : cave->trips()) {
-            const QDir tripDir = makeDir(tripsDir, trip->name());
+            const QDir tripDir = makeDir(tripDirHelper(caveDir, trip));
             saveTrip(tripDir, trip);
             saveNotes(tripDir, trip->notes());
         }
@@ -257,7 +264,7 @@ QString cwSaveLoad::saveAllFromV6(const QDir &dir, const cwProject* project)
 
     //Go through all the caves
     for(const auto cave : project->cavingRegion()->caves()) {
-        const QDir caveDir = makeDir(dir, cave->name());
+        const QDir caveDir = makeDir(caveDirHelper(dir, cave));
         saveCave(caveDir, cave);
         saveTrips(caveDir, cave);
     }
@@ -324,7 +331,7 @@ Monad::Result<cwCavingRegionData> cwSaveLoad::loadAll(const QString &filename)
                         if (notesDir.exists()) {
                             QFileInfoList noteFiles = notesDir.entryInfoList(QStringList() << "*.cwnote", QDir::Files);
                             for (const QFileInfo &noteFileInfo : noteFiles) {
-                                auto noteResult = loadNote(noteFileInfo.absoluteFilePath());
+                                auto noteResult = loadNote(noteFileInfo.absoluteFilePath(), regionDir);
                                 if (noteResult.hasError()) {
                                     // FIXME: log or collect the error
                                     continue;
@@ -407,11 +414,11 @@ Monad::Result<cwTripData> cwSaveLoad::loadTrip(const QString &filename)
                         });
 }
 
-Monad::Result<cwNoteData> cwSaveLoad::loadNote(const QString &filename)
+Monad::Result<cwNoteData> cwSaveLoad::loadNote(const QString &filename, const QDir& projectDir)
 {
     auto noteResult = loadMessage<CavewhereProto::Note>(filename);
 
-    return Monad::mbind(noteResult, [](const Result<CavewhereProto::Note>& result) -> Monad::Result<cwNoteData> {
+    return Monad::mbind(noteResult, [filename, projectDir](const Result<CavewhereProto::Note>& result) -> Monad::Result<cwNoteData> {
         const CavewhereProto::Note& protoNote = result.value();
 
         cwNoteData noteData;
@@ -421,6 +428,10 @@ Monad::Result<cwNoteData> cwSaveLoad::loadNote(const QString &filename)
 
         // Load image resolution
         noteData.imageResolution = fromProtoImageResolution(protoNote.imageresolution());
+
+        // Load the image
+        noteData.image.setPath(QString::fromStdString(protoNote.image().path()));
+        noteData.image.setOriginalDotsPerMeter(protoNote.image().dotpermeter());
 
         // Load scraps
         for (const auto& protoScrap : protoNote.scraps()) {
@@ -762,6 +773,40 @@ QStringList cwSaveLoad::fromProtoStringList(const google::protobuf::RepeatedPtrF
     return stringList;
 }
 
+QDir cwSaveLoad::projectDir(const cwProject *project)
+{
+    QFileInfo info(project->filename());
+    return info.absoluteDir();
+}
+
+QDir cwSaveLoad::caveDir(const cwCave *cave)
+{
+    if(cave->parentRegion() && cave->parentRegion()->parentProject()) {
+        QDir projDir = projectDir(cave->parentRegion()->parentProject());
+        return caveDirHelper(projDir, cave);
+    } else {
+        return QDir();
+    }
+
+}
+
+QDir cwSaveLoad::tripDir(const cwTrip *trip)
+{
+    if(trip->parentCave()) {
+        return tripDirHelper(caveDir(trip->parentCave()), trip);
+    } else {
+        return QDir();
+    }
+}
+
+QDir cwSaveLoad::noteDir(const cwNote *note)
+{
+    if(note->parentTrip()) {
+        return noteDirHelper(tripDir(note->parentTrip()));
+    } else {
+        return QDir();
+    }
+}
 
 void cwSaveLoad::saveProtoMessage(const QDir &dir,
                                   const QString &filename,
@@ -772,6 +817,22 @@ void cwSaveLoad::saveProtoMessage(const QDir &dir,
                             dir.absoluteFilePath(sanitizeFileName(filename)),
                             std::move(message));
     }
+}
+
+QDir cwSaveLoad::caveDirHelper(const QDir &projectDir, const cwCave *cave)
+{
+    QString caveDirName = sanitizeFileName(cave->name());
+    return QDir(projectDir.absoluteFilePath(caveDirName));
+}
+
+QDir cwSaveLoad::tripDirHelper(const QDir &caveDir, const cwTrip *trip)
+{
+    return QDir(caveDir.absoluteFilePath(QStringLiteral("trips/") + sanitizeFileName(trip->name())));
+}
+
+QDir cwSaveLoad::noteDirHelper(const QDir &tripDir)
+{
+    return QDir(tripDir.absoluteFilePath("notes"));
 }
 
 void cwSaveLoad::Data::saveProtoMessage(

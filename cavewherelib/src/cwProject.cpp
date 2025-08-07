@@ -428,6 +428,8 @@ void cwProject::loadFile(QString filename) {
         auto regionData = load.loadAll(filename);
 
         if(!regionData.hasError()) {
+            setFilename(filename);
+            setTemporaryProject(false);
             Region->setData(regionData.value());
         }
     }

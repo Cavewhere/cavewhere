@@ -38,7 +38,7 @@ TEST_CASE("cwDiskCacher concurrent insert and entry", "[cwDiskCacher]") {
     // tempDir.setAutoRemove(false);
     // qDebug() << "Temp dir:" << tempDir.path();
     REQUIRE(tempDir.isValid());
-    cwDiskCacher cacher(tempDir.path());
+    auto tempPath = tempDir.path();
 
     const int n = 100;
     QVector<cwDiskCacher::Key> keys;
@@ -61,11 +61,13 @@ TEST_CASE("cwDiskCacher concurrent insert and entry", "[cwDiskCacher]") {
     for(int j = 0; j < 100; j++) {
         // Concurrent inserts
         QtConcurrent::blockingMap(idxs, [&](int i) {
+            cwDiskCacher cacher(tempPath);
             cacher.insert(keys[i], datas[i]);
         });
 
         // Concurrent entries
-        QtConcurrent::blockingMap(idxs, [&](int i) {
+        QtConcurrent::blockingMap(idxs, [tempPath, &checkMutex, &checks, keys, datas](int i) {
+            cwDiskCacher cacher(tempPath);
             auto res = cacher.entry(keys[i]);
             QMutexLocker locker(&checkMutex);
             checks.append(res == datas[i]);

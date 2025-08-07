@@ -124,7 +124,7 @@ public slots:
 
 private:
 
-     QDir m_projectDir;
+     // QDir m_projectDir;
 
     //If this is a temp project directory on not
     //Old save and load

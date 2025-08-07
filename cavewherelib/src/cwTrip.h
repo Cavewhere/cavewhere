@@ -87,7 +87,7 @@ public:
     QList<cwSurveyChunk*> chunks() const;
 
     void setParentCave(cwCave* parentCave);
-    cwCave* parentCave();
+    cwCave* parentCave() const;
 
     QList< cwStation > stations() const;
     QList< cwStation > uniqueStations() const;
@@ -188,7 +188,7 @@ inline QDateTime cwTrip::date() const {
 /**
   \brief Parent's cave
   */
-inline cwCave* cwTrip::parentCave() {
+inline cwCave* cwTrip::parentCave() const {
     return ParentCave;
 }
 

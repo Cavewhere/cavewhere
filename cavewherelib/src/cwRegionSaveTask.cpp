@@ -245,7 +245,7 @@ void cwRegionSaveTask::saveTeam(CavewhereProto::Team *protoTeam, cwTeam *team)
 }
 
 /**
- * @brief cwRegionSaveTask::saveNote
+ * @brief cwRegionSaveTask::saveNotec
  * @param protoNote
  * @param note
  */
