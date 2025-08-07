@@ -38,7 +38,7 @@ public:
     //data(id) is an old function used to load old image data, and shouldn't be used
     cwImageData data(int id, bool metaDataOnly = false) const;
 
-    //New image data with full path
+    //image data with full path
     cwImageData data(QString filename) const;
 
     static cwImageData createDxt1(QSize size, const QByteArray& uncompressData);
@@ -46,6 +46,7 @@ public:
     static QString name() { return QLatin1String("sqlimagequery"); }
     static QByteArray dxt1GzExtension() { return QByteArrayLiteral("dxt1.gz"); }
     static QByteArray croppedReferenceExtension() { return QByteArrayLiteral("croppedReference"); }
+    static QString imageCacheExtension() { return QStringLiteral("cw_img_cache"); }
 
     static QByteArray cropXKey() { return QByteArrayLiteral("x"); }
     static QByteArray cropYKey() { return QByteArrayLiteral("y"); }
@@ -54,6 +55,7 @@ public:
     static QByteArray cropIdKey() { return QByteArrayLiteral("id"); }
 
     static QString imageUrl(QString relativePath);
+
 
 public slots:
     void setProjectPath(QString projectPath);

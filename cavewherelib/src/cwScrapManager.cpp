@@ -791,21 +791,21 @@ void cwScrapManager::taskFinished(const QList<cwScrap*>& scrapsToUpdate,
 
     DeletedScraps.clear();
 
-    //Removed all cropped image data
-    foreach(cwScrap* scrap, validScraps) {
-        cwImage image = scrap->triangulationData().croppedImage();
-        imagesToRemove.append(image);
-    }
+    // //Removed all cropped image data
+    // foreach(cwScrap* scrap, validScraps) {
+    //     cwImage image = scrap->triangulationData().croppedImage();
+    //     imagesToRemove.append(image);
+    // }
 
-    auto filename = Project->filename();
-    auto removeFuture = cwConcurrent::run([filename, imagesToRemove](){
-        cwImageDatabase imageDatabase(filename);
-        for(const auto& image : imagesToRemove) {
-            imageDatabase.removeImages(image.ids());
-        }
-    });
+    // auto filename = Project->filename();
+    // auto removeFuture = cwConcurrent::run([filename, imagesToRemove](){
+    //     cwImageDatabase imageDatabase(filename);
+    //     for(const auto& image : imagesToRemove) {
+    //         imageDatabase.removeImages(image.ids());
+    //     }
+    // });
 
-    FutureManagerToken.addJob(cwFuture(removeFuture, "Removing Old Images"));
+    // FutureManagerToken.addJob(cwFuture(removeFuture, "Removing Old Images"));
 
     for(int i = 0; i < validScraps.size(); i++) {
         cwScrap* scrap = validScraps.at(i);
@@ -817,6 +817,7 @@ void cwScrapManager::taskFinished(const QList<cwScrap*>& scrapsToUpdate,
         triangleData.croppedImagePtr()->take();
 
         scrap->setTriangulationData(triangleData);
+        qDebug() << "Adding scrap:" << scrap;
         m_renderScraps->addScrapToUpdate(scrap);
     }
 }

@@ -10,6 +10,7 @@
 #include "cwDebug.h"
 #include "cwSQLManager.h"
 #include "cwAddImageTask.h"
+#include "cwDiskCacher.h"
 
 //Qt includes
 #include <QSqlDatabase>
@@ -199,8 +200,6 @@ cwImageData cwImageProvider::data(int id, bool metaDataOnly) const {
 
 cwImageData cwImageProvider::data(QString filename) const
 {
-    qDebug() << "ProjectPath:" << ProjectPath;
-
     QFileInfo projectInfo(ProjectPath);
     auto projectDir = projectInfo.absoluteDir();
     auto imagePath = projectDir.absoluteFilePath(filename);
@@ -209,15 +208,24 @@ cwImageData cwImageProvider::data(QString filename) const
         qDebug() << "cwImageProvider can't open:" << filename << LOCATION;
     }
 
-    QFile file(imagePath);
-    file.open(QFile::ReadOnly);
-    auto data = file.readAll();
-
     QFileInfo info(filename);
     QString extention = info.suffix();
 
-    QImageReader reader(filename);
-    QSize size = reader.size();
+    QSize size;
+    QByteArray data;
+
+    if(extention == imageCacheExtension()) {
+        //From the disk cacher
+        cwDiskCacher cacher(projectDir);
+        data = cacher.entry(imagePath);
+    } else {
+        //Normal file
+        QFile file(imagePath);
+        file.open(QFile::ReadOnly);
+        data = file.readAll();
+        QImageReader reader(filename);
+        size = reader.size();
+    }
 
     int dotPerMeter = -1; //Can't query this from the image, require QImage
 

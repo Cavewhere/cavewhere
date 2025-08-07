@@ -175,6 +175,9 @@ void cwRhiScraps::updateResources(const ResourceUpdateData& data)
 
     for (auto it = m_scraps.begin(); it != m_scraps.end(); ++it) {
         RhiScrap* scrap = it.value();
+
+        qDebug() << "Update resources:" << scrap << scrap->geometryNeedsUpdate << scrap->textureNeedsUpdate;
+
         if (!scrap->resourcesInitialized) {
             scrap->initializeResources(data, m_sharedScrapData);
         }

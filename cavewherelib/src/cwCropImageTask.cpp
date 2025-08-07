@@ -81,9 +81,12 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
 
     auto dir = QFileInfo(filename).dir();
 
-    auto addCropToDatabase = [filename, dir](QImage image, const QRectF& crop, quint64 hash) {
-        qDebug() << "Add to database:" << filename;
-        QFileInfo info(filename);
+    auto addCropToDatabase = [filename, dir](QImage image,
+                                             QString pathToImage,
+                                             const QRectF& crop,
+                                             quint64 parentHash) {
+        qDebug() << "Add to database:" << pathToImage;
+        QFileInfo info(pathToImage);
 
         auto toString = [](const QRectF crop) {
             return QString::number(crop.x())
@@ -96,9 +99,9 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
         };
 
         cwDiskCacher::Key key {
-                              info.fileName() + toString(crop),
+                              toString(crop) + QStringLiteral("crop-") + info.fileName() + QStringLiteral(".") + cwImageProvider::imageCacheExtension(),
                               info.dir(),
-                              QString::number(hash, 16)
+                              QString::number(parentHash, 16)
         };
 
         QByteArray imageData;
@@ -152,11 +155,14 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
             cwImageData imageData = provider.data(originalImage.path());
             QImage image = provider.image(imageData);
             image.setColorSpace(QColorSpace());
+            qDebug() << "CropRect:" << cropRect;
             QRect cropArea = nearestDXT1Rect(mapNormalizedToIndex(cropRect,
-                                                                  originalImage.originalSize()));
+                                                                  image.size()));
+            qDebug() << "Crop:" << cropArea;
+
             if(!image.isNull()) {
                 QImage croppedImage = image.copy(cropArea);
-                auto key = addCropToDatabase(croppedImage, cropArea, hash(image));
+                auto key = addCropToDatabase(croppedImage, originalImage.path(), cropArea, hash(image));
                 return Image({key, image.copy(cropArea), originalImage.originalDotsPerMeter()});
             }
 

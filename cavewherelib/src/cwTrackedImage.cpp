@@ -24,7 +24,7 @@ cwTrackedImage::cwTrackedImage(const cwImage &image, const QString &filename, in
     Owner(ownership),
     Filename(filename)
 {
-    Q_ASSERT(QFile::exists(filename));
+    // Q_ASSERT(QFile::exists(filename));
 }
 
 cwTrackedImage::cwTrackedImage(cwTrackedImage &&other) :

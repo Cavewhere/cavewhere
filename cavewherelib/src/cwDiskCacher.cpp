@@ -38,7 +38,7 @@ void cwDiskCacher::setDir(const QDir& directory)
 // Private helpers
 QDir cwDiskCacher::relativeDir(const Key& key) const
 {
-    return QDir(m_dir.filePath(key.path.path()));
+    return QDir(m_dir.filePath(QStringLiteral(".cw_cache/") + key.path.path()));
 }
 
 QString cwDiskCacher::filePath(const Key& key) const
@@ -71,7 +71,11 @@ QByteArray cwDiskCacher::entry(const Key& key) const
 {
     // Determine cache file path under global lock
     QString cacheFile = filePath(key);
+    return entry(cacheFile, key.checksum);
+}
 
+QByteArray cwDiskCacher::entry(const QString &cacheFile, const QString& checksum) const
+{
     // Acquire per-file mutex
     auto fileMutex = fileMutexForPath(cacheFile);
     QMutexLocker fileLocker(fileMutex.get());
@@ -84,7 +88,9 @@ QByteArray cwDiskCacher::entry(const Key& key) const
 
         CavewhereProto::DiskCacheEntry entryProto;
         if (entryProto.ParseFromArray(raw.constData(), raw.size()) &&
-            QString::fromStdString(entryProto.checksum()) == key.checksum) {
+            //Make sure the checksum works out
+            (checksum.isEmpty() || QString::fromStdString(entryProto.checksum()) == checksum))
+        {
             result = QByteArray::fromStdString(entryProto.entry());
         }
     }
@@ -95,6 +101,7 @@ void cwDiskCacher::insert(const Key& key, const QByteArray& data)
 {
     // Determine cache file path under global lock
     QString cacheFile = filePath(key);;
+    qDebug() << "Saving cache file:" << cacheFile;
 
     // Acquire per-file mutex
     auto fileMutex = fileMutexForPath(cacheFile);
