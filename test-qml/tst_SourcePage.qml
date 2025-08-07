@@ -231,8 +231,12 @@ MainWindowTest {
             mouseClick(openButton)
 
             //Make we have all the data
+            wait(1000);
+            console.log("Cave count:" + RootData.region.caveCount)
+            tryVerify(() => { return RootData.region.caveCount === 1})
 
-
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=BB/Trip=Trip 10"
+            waitForRendering(mainWindow);
 
 
 

@@ -26,6 +26,7 @@ class CAVEWHERE_LIB_EXPORT cwImage {
 
     Q_PROPERTY(QSize originalSize READ originalSize WRITE setOriginalSize)
     Q_PROPERTY(int originalDotsPerMeter READ originalDotsPerMeter WRITE setOriginalDotsPerMeter)
+    Q_PROPERTY(QString path READ path WRITE setPath)
 
 public:
     enum class Mode {

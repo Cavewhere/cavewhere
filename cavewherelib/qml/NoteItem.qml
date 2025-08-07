@@ -20,7 +20,7 @@ ImageItem {
     property bool scrapsVisible: false
 
     imageRotation: note ? note.rotate : 0
-    source: note ? RootData.cavewhereImageUrl(note.original) : ""
+    source: note ? RootData.cavewhereImageUrl(note.image.path) : ""
 
     clip: true
 
