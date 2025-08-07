@@ -81,6 +81,7 @@ cwLinePlotTask::cwLinePlotTask(QObject *parent) :
 
 cwLinePlotTask::~cwLinePlotTask()
 {
+    waitToFinish();
 }
 
 /**
