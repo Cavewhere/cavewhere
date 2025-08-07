@@ -459,6 +459,7 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
 cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) {
     cwTriangulateInData data;
     cwCave* cave = scrap->parentNote()->parentTrip()->parentCave();
+
     data.setNoteImage(scrap->parentNote()->image());
     data.setOutline(scrap->points());
     data.setStations(mapNoteStationsToTriangulateStation(scrap->stations(), cave->stationPositionLookup()));
@@ -817,7 +818,6 @@ void cwScrapManager::taskFinished(const QList<cwScrap*>& scrapsToUpdate,
         triangleData.croppedImagePtr()->take();
 
         scrap->setTriangulationData(triangleData);
-        qDebug() << "Adding scrap:" << scrap;
         m_renderScraps->addScrapToUpdate(scrap);
     }
 }

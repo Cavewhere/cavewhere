@@ -176,8 +176,6 @@ void cwRhiScraps::updateResources(const ResourceUpdateData& data)
     for (auto it = m_scraps.begin(); it != m_scraps.end(); ++it) {
         RhiScrap* scrap = it.value();
 
-        qDebug() << "Update resources:" << scrap << scrap->geometryNeedsUpdate << scrap->textureNeedsUpdate;
-
         if (!scrap->resourcesInitialized) {
             scrap->initializeResources(data, m_sharedScrapData);
         }
@@ -272,6 +270,8 @@ void cwRhiScraps::render(const RenderData& data)
             { scrap->texCoordBuffer, 0 }
         };
         data.cb->setVertexInput(0, 2, vertexInputs, scrap->indexBuffer, 0, QRhiCommandBuffer::IndexUInt32);
+
+        Q_ASSERT(scrap->numberOfIndices > 0);
         data.cb->drawIndexed(scrap->numberOfIndices);
     }
 }

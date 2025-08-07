@@ -10,10 +10,6 @@
 #include "cwCropImageTask.h"
 #include "cwImageData.h"
 #include "cwDebug.h"
-#include "cwProject.h"
-#include "cwAddImageTask.h"
-#include "cwAsyncFuture.h"
-#include "cwImageDatabase.h"
 #include "cwConcurrent.h"
 #include "cwDiskCacher.h"
 
@@ -85,17 +81,17 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
                                              QString pathToImage,
                                              const QRectF& crop,
                                              quint64 parentHash) {
-        qDebug() << "Add to database:" << pathToImage;
         QFileInfo info(pathToImage);
 
         auto toString = [](const QRectF crop) {
-            return QString::number(crop.x())
-                   + "-" +
-                   QString::number(crop.y())
-            + "_" +
-                   QString::number(crop.width())
-            + "x" +
-                   QString::number(crop.height());
+            return
+                QString::number(crop.x())
+                + "-" +
+                QString::number(crop.y())
+                + "_" +
+                QString::number(crop.width())
+                + "x" +
+                QString::number(crop.height());
         };
 
         cwDiskCacher::Key key {
@@ -113,40 +109,7 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
         //Save image data into the disk cacher
         cwDiskCacher cacher(dir);
         cacher.insert(key, imageData);
-        // cwDiskCacher::instance()->insert(key, imageData);
-
         return key;
-
-        // cwDiskCacher::instance()->insert({
-
-        // },
-        //                                  );
-
-
-
-        // Q_ASSERT()
-        // cwImageProvider provider;
-        // provider.image(image.path());
-
-
-
-        // QVariantMap map({
-        //                     {cwImageProvider::cropIdKey(), image.path()},
-        //                     {cwImageProvider::cropXKey(), cropRect.x()},
-        //                     {cwImageProvider::cropYKey(), cropRect.y()},
-        //                     {cwImageProvider::cropWidthKey(), cropRect.width()},
-        //                     {cwImageProvider::cropHeightKey(), cropRect.height()}
-        //                 });
-        // auto document = QJsonDocument::fromVariant(map);
-        // auto json = document.toJson(QJsonDocument::Compact);
-
-        // cwImageData imageData(cropRect.size(),
-        //                       image.originalDotsPerMeter(),
-        //                       cwImageProvider::croppedReferenceExtension(),
-        //                       json);
-
-        // cwImageDatabase database(filename);
-        // return database.addImage(imageData);
     };
 
     auto cropImage = [filename, originalImage, cropRect, addCropToDatabase, hash]()->Image {
@@ -155,10 +118,8 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
             cwImageData imageData = provider.data(originalImage.path());
             QImage image = provider.image(imageData);
             image.setColorSpace(QColorSpace());
-            qDebug() << "CropRect:" << cropRect;
             QRect cropArea = nearestDXT1Rect(mapNormalizedToIndex(cropRect,
                                                                   image.size()));
-            qDebug() << "Crop:" << cropArea;
 
             if(!image.isNull()) {
                 QImage croppedImage = image.copy(cropArea);
@@ -183,6 +144,7 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
                     cwDiskCacher cacher(dir);
                     auto filePath = cacher.filePath(cropRGBImage.key);
                     cwImage image;
+                    image.setOriginalSize(cropRGBImage.croppedImage.size());
                     image.setPath(filePath);
 
                     return cwTrackedImage::createShared(image,
@@ -192,46 +154,6 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
 
                 return cwTrackedImagePtr();
             }).future();
-
-    // auto addImageFuture = AsyncFuture::observe(cropFuture)
-    //         .subscribe([cropFuture, filename, format]()
-    // {
-    //     int imageTypes = cwAddImageTask::None;
-    //     // if(format == cwTextureUploadTask::DXT1Mipmaps) {
-    //     //     imageTypes |= cwAddImageTask::Mipmaps;
-    //     // }
-
-    //     Image cropRGBImage = cropFuture.result();
-    //     if(cropRGBImage.id < 0) {
-    //         //Bad image, add the red image crop
-    //         imageTypes |= cwAddImageTask::Original;
-    //     }
-
-    //     cwAddImageTask addImages;
-    //     // addImages.setDatabaseFilename(filename);
-    //     addImages.setNewImages({cropRGBImage.croppedImage});
-    //     addImages.setImageTypes(imageTypes);
-
-    //     return addImages.images();
-    // }).future();
-
-    // auto finishedFuture = AsyncFuture::observe(addImageFuture)
-    //         .subscribe([addImageFuture, cropFuture]()
-    // {
-    //     auto cropRGBImage = cropFuture.result();
-    //     auto images = addImageFuture.results();
-    //     if(!images.isEmpty()) {
-    //         auto imagePtr = images.first();
-    //         if(cropRGBImage.id > 0) {
-    //             //Update with the ref image
-    //             imagePtr->setOriginalDotsPerMeter(cropRGBImage.dotsPerMeter);
-    //             imagePtr->setOriginalSize(cropRGBImage.croppedImage.size());
-    //             imagePtr->setOriginal(cropRGBImage.id);
-    //         }
-    //         return images.first();
-    //     }
-    //     return cwTrackedImagePtr();
-    // }).future();
 
     return finishedFuture;
 }

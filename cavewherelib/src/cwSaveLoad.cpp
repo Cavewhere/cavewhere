@@ -431,6 +431,7 @@ Monad::Result<cwNoteData> cwSaveLoad::loadNote(const QString &filename, const QD
 
         // Load the image
         noteData.image.setPath(QString::fromStdString(protoNote.image().path()));
+        noteData.image.setOriginalSize(cwRegionLoadTask::loadSize(protoNote.image().size()));
         noteData.image.setOriginalDotsPerMeter(protoNote.image().dotpermeter());
 
         // Load scraps

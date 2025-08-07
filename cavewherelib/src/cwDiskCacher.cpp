@@ -101,7 +101,6 @@ void cwDiskCacher::insert(const Key& key, const QByteArray& data)
 {
     // Determine cache file path under global lock
     QString cacheFile = filePath(key);;
-    qDebug() << "Saving cache file:" << cacheFile;
 
     // Acquire per-file mutex
     auto fileMutex = fileMutexForPath(cacheFile);
