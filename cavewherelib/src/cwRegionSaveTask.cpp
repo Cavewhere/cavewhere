@@ -268,7 +268,6 @@ void cwRegionSaveTask::saveNote(CavewhereProto::Note *protoNote, cwNote *note)
  */
 void cwRegionSaveTask::saveImage(CavewhereProto::Image *protoImage, const cwImage &image)
 {
-    qDebug() << "Saving image:" << image.mode();
     Q_ASSERT(image.mode() == cwImage::Mode::Path);
 
     saveString(protoImage->mutable_path(), image.path());
@@ -290,6 +289,8 @@ void cwRegionSaveTask::saveImage(CavewhereProto::Image *protoImage, const cwImag
  */
 void cwRegionSaveTask::saveScrap(CavewhereProto::Scrap *protoScrap, cwScrap *scrap)
 {
+    saveQUuid(protoScrap->mutable_id(), scrap->id());
+
     foreach(QPointF outlinePoint, scrap->points()) {
         QtProto::QPointF* protoPoint = protoScrap->add_outlinepoints();
         savePointF(protoPoint, outlinePoint);
@@ -653,7 +654,6 @@ void cwRegionSaveTask::saveLead(CavewhereProto::Lead *protoLead, const cwLead &l
         saveString(protoLead->mutable_description(), lead.desciption());
     }
 
-    qDebug() << "Lead size:" << lead.size();
     if(lead.size().isValid()) {
         saveSizeF(protoLead->mutable_size(), lead.size());
     }

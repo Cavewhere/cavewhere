@@ -47,6 +47,8 @@ public:
         fileToProject(project, filename);
     }
 
+    Q_INVOKABLE QString copyToTempDir(const QString& filename);
+
     Q_INVOKABLE bool fileExists(const QUrl& filename) const;
     Q_INVOKABLE size_t fileSize(const QUrl& filename) const;
     Q_INVOKABLE void removeFile(const QUrl& filename) const;

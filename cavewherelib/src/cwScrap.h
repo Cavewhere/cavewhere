@@ -15,6 +15,7 @@
 #include <QPolygonF>
 #include <QQmlEngine>
 #include <QMatrix4x4>
+#include <QtCore/quuid.h>
 
 //Our includes
 #include "cwGlobals.h"
@@ -80,6 +81,9 @@ public:
     explicit cwScrap(QObject *parent = 0);
     // cwScrap(const cwScrap& other);
     // const cwScrap& operator =(const cwScrap& other);
+
+    void setId(const QUuid& id) { m_id = id; }
+    QUuid id() const { return m_id; }
 
     void setParentNote(cwNote* trip);
     cwNote* parentNote() const;
@@ -207,6 +211,9 @@ private:
         QMatrix4x4 Rotation;
         QMatrix4x4 Mirror;
     };
+
+    //The object id
+    QUuid m_id;
 
     //The outline of the scrap, in normalized points
     QPolygonF OutlinePoints;

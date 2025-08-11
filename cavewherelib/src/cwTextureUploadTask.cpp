@@ -65,7 +65,6 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
             }
 
             QImage qimage = cwOpenGLUtils::toGLTexture(imageProvidor.image(imageData));
-            qDebug() << "Loaded:" << image->path() << QFileInfo::exists(image->path()) << qimage.size();
 
             //We might want convert the image here to prevent Rhi from having to covert it
 

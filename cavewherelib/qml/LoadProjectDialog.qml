@@ -20,7 +20,6 @@ Item {
             RootData.pageSelectionModel.gotoPageByName(null, "View")
 
             let fileType = RootData.project.projectType(selectedFile);
-            console.log("Filetype:" + fileType)
 
             switch(fileType) {
             case Project.UnknownFileType:
@@ -28,7 +27,6 @@ Item {
                 console.log("Unknown file type")
                 break;
             case Project.SqliteFileType:
-                console.log("Sqlite file:" + Project.SqliteFileType)
                 oldFilePath = RootData.urlToLocal(selectedFile);
                 convertedDialog.filename = RootData.fileName(oldFilePath)
                 convertedDialog.repositoryName = RootData.fileBaseName(oldFilePath);

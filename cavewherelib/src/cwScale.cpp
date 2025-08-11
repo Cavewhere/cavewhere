@@ -70,8 +70,8 @@ void cwScale::setData(const Data &data)
 cwScale::Data cwScale::data() const
 {
     return {
-        ScaleDenominator->data(),
-        ScaleNumerator->data()
+        ScaleNumerator->data(),
+        ScaleDenominator->data()
     };
 }
 

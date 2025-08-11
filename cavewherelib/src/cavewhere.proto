@@ -207,6 +207,7 @@ message Scrap {
         ProjectedProfile = 2;
     }
 
+    optional string id = 9; //Uuid
     repeated QtProto.QPointF outlinePoints = 1;
     repeated NoteStation noteStations = 2;
     optional NoteTranformation noteTransformation = 3;

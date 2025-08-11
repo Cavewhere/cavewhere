@@ -53,24 +53,37 @@ static Result<ProtoType> loadMessage(const QString& filename) {
 struct cwSaveLoad::Data {
     QDir m_rootDir; //Root project directory
 
-    QHash<QString, QFuture<void>> m_runningJobs;
-    std::unordered_map<QString, std::unique_ptr<const google::protobuf::Message>> m_waitingJobs;
+    QHash<QString, QFuture<ResultBase>> m_runningJobs;
 
-    void saveProtoMessage(
+    struct WaitingJob {
+        AsyncFuture::Deferred<Monad::ResultBase> jobDeferred;
+        std::unique_ptr<const google::protobuf::Message> message;
+
+        WaitingJob() = default;
+        WaitingJob(WaitingJob&&) noexcept = default;
+        WaitingJob& operator=(WaitingJob&&) noexcept = default;
+
+        // Prevent copying
+        WaitingJob(const WaitingJob&) = delete;
+        WaitingJob& operator=(const WaitingJob&) = delete;
+    };
+
+    std::unordered_map<QString, WaitingJob> m_waitingJobs;
+
+    QFuture<Monad::ResultBase> saveProtoMessage(
         cwSaveLoad* context,
         const QString& filename,
         std::unique_ptr<const google::protobuf::Message> message
         );
 
-    void saveProtoMessage(
+    QFuture<Monad::ResultBase> saveProtoMessage(
         cwSaveLoad* context,
         const QDir& dir,
         const QString& filename,
         std::unique_ptr<const google::protobuf::Message> message)
     {
-        if(message) {
-            saveProtoMessage(context, dir.absoluteFilePath(filename), std::move(message));
-        }
+        Q_ASSERT(message);
+        return saveProtoMessage(context, dir.absoluteFilePath(filename), std::move(message));
     }
 
 };
@@ -84,9 +97,9 @@ cwSaveLoad::cwSaveLoad(QObject *parent) :
 
 }
 
-void cwSaveLoad::saveCavingRegion(const QDir &dir, const cwCavingRegion *region)
+QFuture<ResultBase> cwSaveLoad::saveCavingRegion(const QDir &dir, const cwCavingRegion *region)
 {
-    saveProtoMessage(dir,
+    return saveProtoMessage(dir,
                      sanitizeFileName(QStringLiteral("%1.cw").arg(region->name())),
                      toProtoCavingRegion(region)
                      );
@@ -106,9 +119,9 @@ QString cwSaveLoad::regionFileName(const QDir &dir, const cwCavingRegion *region
     return dir.absoluteFilePath(sanitizeFileName(QStringLiteral("%1.cw").arg(region->name())));
 }
 
-void cwSaveLoad::saveCave(const QDir &dir, const cwCave *cave)
+QFuture<ResultBase> cwSaveLoad::saveCave(const QDir &dir, const cwCave *cave)
 {
-    saveProtoMessage(
+    return saveProtoMessage(
         dir,
         QStringLiteral("%1.cwcave").arg(cave->name()),
         toProtoCave(cave));
@@ -121,9 +134,9 @@ std::unique_ptr<CavewhereProto::Cave> cwSaveLoad::toProtoCave(const cwCave *cave
     return protoCave;
 }
 
-void cwSaveLoad::saveTrip(const QDir &dir, const cwTrip *trip)
+QFuture<ResultBase> cwSaveLoad::saveTrip(const QDir &dir, const cwTrip *trip)
 {
-    saveProtoMessage(
+    return saveProtoMessage(
         dir,
         QStringLiteral("%1.cwtrip").arg(trip->name()),
         toProtoTrip(trip));
@@ -152,9 +165,9 @@ std::unique_ptr<CavewhereProto::Trip> cwSaveLoad::toProtoTrip(const cwTrip *trip
     return protoTrip;
 }
 
-void cwSaveLoad::saveNote(const QDir &dir, const cwNote *note)
+QFuture<ResultBase> cwSaveLoad::saveNote(const QDir &dir, const cwNote *note)
 {
-    saveProtoMessage(
+    return saveProtoMessage(
         dir,
         QStringLiteral("%1.cwnote").arg(note->name()),
         toProtoNote(note));
@@ -184,19 +197,8 @@ std::unique_ptr<CavewhereProto::Note> cwSaveLoad::toProtoNote(const cwNote *note
  *
  * This is useful for converting older CaveWhere files to the new file format
  */
-QString cwSaveLoad::saveAllFromV6(const QDir &dir, const cwProject* project)
+QFuture<ResultString> cwSaveLoad::saveAllFromV6(const QDir &dir, const cwProject* project)
 {
-
-    // auto makeDir = [](const QDir& rootDir, const QString& name) {
-    //     auto dirName = sanitizeFileName(name);
-    //     rootDir.mkdir(dirName);
-
-    //     QDir subDir = rootDir;
-    //     subDir.cd(dirName);
-
-    //     return subDir;
-    // };
-
     auto makeDir = [](const QDir& dir) {
         dir.mkpath(QStringLiteral("."));
         return dir;
@@ -204,73 +206,105 @@ QString cwSaveLoad::saveAllFromV6(const QDir &dir, const cwProject* project)
 
     const QString projectFilename = project->filename();
 
-    qDebug() << "Project path for image provider:" << projectFilename;
+    auto saveNoteImage = [projectFilename, dir](cwNoteData noteData, int imageIndex, QDir noteDir) {
+        cwImageProvider provider;
+        provider.setProjectPath(projectFilename);
 
-    cwImageProvider provider;
-    provider.setProjectPath(projectFilename);
+        cwNote noteCopy;
+        noteCopy.setData(noteData);
+
+        if(noteCopy.name().isEmpty()) {
+            noteCopy.setName(QString::number(imageIndex));
+        }
+        auto imageData = provider.data(noteCopy.image().original());
+
+        auto filename = noteDir.absoluteFilePath(QStringLiteral("%1.%2")
+                                                     .arg(imageIndex)
+                                                     .arg(imageData.format().toLower()));
 
 
-    auto saveNotes = [makeDir, this, &provider, dir](const QDir& tripDir, const cwSurveyNoteModel* notes) {
+        QSaveFile file(filename);
+        file.open(QSaveFile::WriteOnly);
+        file.write(imageData.data());
+        file.commit();
+
+        cwImage noteImage = noteCopy.image();
+        QString relativeFilename = dir.relativeFilePath(filename);
+        noteImage.setPath(relativeFilename);
+        noteCopy.setImage(noteImage);
+
+        return noteCopy.data();
+    };
+
+
+    auto saveNotes = [makeDir, this, dir, saveNoteImage](const QDir& tripDir, const cwSurveyNoteModel* notes) {
         const QDir noteDir = makeDir(noteDirHelper(tripDir));
+
+        QList<QFuture<ResultBase>> noteFutures;
+        noteFutures.reserve(notes->notes().size() * 2);
 
         int imageIndex = 1;
         for(const cwNote* note : notes->notes()) {
-            cwNote noteCopy;
-            noteCopy.setData(note->data());
 
-            if(noteCopy.name().isEmpty()) {
-                noteCopy.setName(QString::number(imageIndex));
-            }
-            auto imageData = provider.data(note->image().original());
-            qDebug() << "ImageData:" << note->image().original() << imageData.format() << imageData.size();
+            auto noteData = note->data();
 
-            auto filename = noteDir.absoluteFilePath(QStringLiteral("%1.%2")
-                                                         .arg(imageIndex)
-                                                         .arg(imageData.format().toLower()));
+            auto saveImageFuture = cwConcurrent::run([saveNoteImage, noteData, imageIndex, noteDir]() {
+                return saveNoteImage(noteData, imageIndex, noteDir);
+            });
 
-            qDebug() << "Saving note too:" << filename;
+            auto noteFuture =
+                AsyncFuture::observe(saveImageFuture)
+                    .context(this, [this, noteDir, noteData, saveImageFuture]() {
+                        cwNote noteCopy;
+                        noteCopy.setData(saveImageFuture.result());
 
-            QSaveFile file(filename);
-            file.open(QSaveFile::WriteOnly);
-            file.write(imageData.data());
-            file.commit();
+                        return saveNote(noteDir, &noteCopy);
+                    }).future();
 
 
-            cwImage noteImage = noteCopy.image();
-            QString relativeFilename = dir.relativeFilePath(filename);
-            noteImage.setPath(relativeFilename);
-            noteCopy.setImage(noteImage);
-
-            saveNote(noteDir, &noteCopy);
+            noteFutures.append(noteFuture);
 
             ++imageIndex;
         }
+
+        return noteFutures;
     };
 
     auto saveTrips = [this, projectFilename, makeDir, saveNotes](const QDir& caveDir, const cwCave* cave) {
-        // const QDir tripsDir = makeDir(caveDir, QStringLiteral("trips"));
+        QList<QFuture<ResultBase>> tripFutures;
+        tripFutures.reserve(cave->tripCount());
+
+        QList<QFuture<ResultBase>> noteFutures;
 
         for(const auto trip : cave->trips()) {
             const QDir tripDir = makeDir(tripDirHelper(caveDir, trip));
-            saveTrip(tripDir, trip);
-            saveNotes(tripDir, trip->notes());
+            tripFutures.append(saveTrip(tripDir, trip));
+            noteFutures.append(saveNotes(tripDir, trip->notes()));
         }
+
+        return tripFutures + noteFutures;
     };
 
     //Save the region's data
     cwCavingRegion region;
     region.setName(QFileInfo(project->filename()).baseName());
-    saveCavingRegion(dir, &region);
+    auto regionFuture = saveCavingRegion(dir, &region);
+    QString newProjectFilename = regionFileName(dir, &region);
+
+    QList<QFuture<ResultBase>> saveFutures;
+    saveFutures.append(regionFuture);
 
     //Go through all the caves
     for(const auto cave : project->cavingRegion()->caves()) {
         const QDir caveDir = makeDir(caveDirHelper(dir, cave));
-        saveCave(caveDir, cave);
-        saveTrips(caveDir, cave);
+        saveFutures.append(saveCave(caveDir, cave));
+        saveFutures.append(saveTrips(caveDir, cave));
     }
 
-    return regionFileName(dir, &region);
-
+    auto combine = AsyncFuture::combine() << saveFutures;
+    return combine.context(this, [newProjectFilename]() {
+                      return ResultString(newProjectFilename);
+                  }).future();
 
 }
 
@@ -301,6 +335,7 @@ Monad::Result<cwCavingRegionData> cwSaveLoad::loadAll(const QString &filename)
             auto caveResult = loadCave(caveFileInfo.absoluteFilePath());
             if (caveResult.hasError()) {
                 // FIXME: log or collect the error
+                qDebug() << "Cave result has errror:" << caveResult.errorMessage();
                 continue;
             }
 
@@ -369,7 +404,6 @@ Monad::Result<cwCavingRegionData> cwSaveLoad::loadCavingRegion(const QString &fi
 
 Monad::Result<cwCaveData> cwSaveLoad::loadCave(const QString &filename)
 {
-    qDebug() << "Loading cave:" << filename;
     auto caveResult = loadMessage<CavewhereProto::Cave>(filename);
     return Monad::mbind(caveResult, [](const Result<CavewhereProto::Cave>& result)
                         {
@@ -601,6 +635,10 @@ cwScrapData cwSaveLoad::fromProtoScrap(const CavewhereProto::Scrap &protoScrap)
 {
     cwScrapData scrapData;
 
+    if(protoScrap.has_id()) {
+        scrapData.id = toUuid(protoScrap.id());
+    }
+
     // Load outline points
     for (const QtProto::QPointF& protoPoint : protoScrap.outlinepoints()) {
         scrapData.outlinePoints.append(cwRegionLoadTask::loadPointF(protoPoint));
@@ -627,8 +665,10 @@ cwScrapData cwSaveLoad::fromProtoScrap(const CavewhereProto::Scrap &protoScrap)
         switch(protoScrap.type()) {
         case CavewhereProto::Scrap::ScrapType::Scrap_ScrapType_Plan:
             scrapData.viewMatrix = std::make_unique<cwPlanScrapViewMatrix::Data>();
+            break;
         case CavewhereProto::Scrap::ScrapType::Scrap_ScrapType_RunningProfile:
             scrapData.viewMatrix = std::make_unique<cwRunningProfileScrapViewMatrix::Data>();
+            break;
         case CavewhereProto::Scrap::ScrapType::Scrap_ScrapType_ProjectedProfile:
             // Load view matrix
             if (protoScrap.has_profileviewmatrix()) {
@@ -636,9 +676,10 @@ cwScrapData cwSaveLoad::fromProtoScrap(const CavewhereProto::Scrap &protoScrap)
             } else {
                 scrapData.viewMatrix = std::make_unique<cwProjectedProfileScrapViewMatrix::Data>();
             }
-            scrapData.viewMatrix = std::make_unique<cwProjectedProfileScrapViewMatrix::Data>();
+            break;
         default:
             scrapData.viewMatrix = std::make_unique<cwPlanScrapViewMatrix::Data>();
+            break;
         }
     } else {
         scrapData.viewMatrix = std::make_unique<cwPlanScrapViewMatrix::Data>();
@@ -729,7 +770,7 @@ void cwSaveLoad::waitForFinished()
          it != d->m_runningJobs.end();
          ++it)
     {
-        model.addJob(cwFuture(it.value(), QStringLiteral()));
+        model.addJob(cwFuture(QFuture<void>(it.value()), QStringLiteral()));
     }
     model.waitForFinished();
 }
@@ -809,15 +850,15 @@ QDir cwSaveLoad::noteDir(const cwNote *note)
     }
 }
 
-void cwSaveLoad::saveProtoMessage(const QDir &dir,
+QFuture<ResultBase> cwSaveLoad::saveProtoMessage(const QDir &dir,
                                   const QString &filename,
                                   std::unique_ptr<const google::protobuf::Message> message)
 {
-    if(message) {
-        d->saveProtoMessage(this,
-                            dir.absoluteFilePath(sanitizeFileName(filename)),
-                            std::move(message));
-    }
+    Q_ASSERT(message);
+    return d->saveProtoMessage(this,
+                               dir.absoluteFilePath(sanitizeFileName(filename)),
+                               std::move(message));
+
 }
 
 QDir cwSaveLoad::caveDirHelper(const QDir &projectDir, const cwCave *cave)
@@ -836,22 +877,27 @@ QDir cwSaveLoad::noteDirHelper(const QDir &tripDir)
     return QDir(tripDir.absoluteFilePath("notes"));
 }
 
-void cwSaveLoad::Data::saveProtoMessage(
+QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
     cwSaveLoad* context,
     const QString &filename,
     std::unique_ptr<const google::protobuf::Message> message)
 {
-    qDebug() << "Filename:" << filename;
-
     //Make sure we're not saving to the same file at the same time
     if (m_runningJobs.contains(filename)) {
-        m_waitingJobs[filename] = std::move(message);
+        auto deferred = AsyncFuture::Deferred<ResultBase>();
+
+        m_waitingJobs[filename] = WaitingJob {
+            deferred,
+            std::move(message),
+        };
+
+        //Add defered here
+        return deferred.future();
     } else {
         auto future = cwConcurrent::run([filename, message = std::move(message)]() {
             QSaveFile file(filename);
             if (!file.open(QFile::WriteOnly)) {
-                qWarning("Failed to open file for writing: %s", qUtf8Printable(filename));
-                return;
+                return Monad::ResultBase(QStringLiteral("Failed to open file for writing: %1").arg(filename));
             }
 
             std::string json_output;
@@ -861,12 +907,13 @@ void cwSaveLoad::Data::saveProtoMessage(
 
             auto status = google::protobuf::util::MessageToJsonString(*message, &json_output, options);
             if (!status.ok()) {
-                qWarning("Failed to convert proto message to JSON: %s", status.ToString().c_str());
-                return;
+                return Monad::ResultBase(QStringLiteral("Failed to convert proto message to JSON: %1").arg(status.ToString().c_str()));
             }
 
             file.write(json_output.c_str(), json_output.size());
             file.commit();
+
+            return Monad::ResultBase();
         });
 
         AsyncFuture::observe(future).context(context, [filename, this, context]() {
@@ -876,12 +923,18 @@ void cwSaveLoad::Data::saveProtoMessage(
             for (auto it = m_waitingJobs.begin();
                  it != m_waitingJobs.end();
                  ++it) {
-                saveProtoMessage(context, it->first, std::move(it->second));
+                WaitingJob& job = it->second;
+                auto future = saveProtoMessage(context, it->first, std::move(job.message));
+                AsyncFuture::observe(future).context(context, [deferred = std::move(job.jobDeferred), future]() mutable {
+                    deferred.complete(future.result());
+                });
             }
             m_waitingJobs.clear();
         });
 
         m_runningJobs.insert(filename, future);
+
+        return future;
     }
 
 }

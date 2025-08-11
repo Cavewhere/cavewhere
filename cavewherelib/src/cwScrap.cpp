@@ -31,6 +31,7 @@
 
 cwScrap::cwScrap(QObject *parent) :
     QObject(parent),
+    m_id(QUuid::createUuid()),
     NoteTransformation(new cwNoteTranformation(this)),
     CalculateNoteTransform(false),
     ViewMatrix(nullptr),
@@ -1266,19 +1267,23 @@ void cwScrap::updateImage()
 
 void cwScrap::setData(const cwScrapData &data)
 {
+    setId(data.id);
     setPoints(data.outlinePoints);
     setStations(data.stations);
     setLeads(data.leads);
-    NoteTransformation->setData(data.noteTransformation);
-    setCalculateNoteTransform(CalculateNoteTransform);
 
     setType((ScrapType)data.viewMatrix->type());
     ViewMatrix->setData(data.viewMatrix->clone());
+
+    //Order matters since auto calculate can change the NoteTransformation
+    setCalculateNoteTransform(data.calculateNoteTransform);
+    NoteTransformation->setData(data.noteTransformation);
 }
 
 cwScrapData cwScrap::data() const
 {
     return {
+        m_id,
         OutlinePoints,
         Stations,
         Leads,

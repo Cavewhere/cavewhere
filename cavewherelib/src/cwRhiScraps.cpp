@@ -271,7 +271,7 @@ void cwRhiScraps::render(const RenderData& data)
         };
         data.cb->setVertexInput(0, 2, vertexInputs, scrap->indexBuffer, 0, QRhiCommandBuffer::IndexUInt32);
 
-        Q_ASSERT(scrap->numberOfIndices > 0);
+        Q_ASSERT(scrap->numberOfIndices > 0); //If this fails the scrap isn't generated correctly
         data.cb->drawIndexed(scrap->numberOfIndices);
     }
 }

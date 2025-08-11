@@ -215,31 +215,37 @@ MainWindowTest {
             RootData.pageSelectionModel.currentPageAddress = "Source"
             waitForRendering(mainWindow);
 
+            //Copy the test project to the test folder
+            let filename = TestHelper.copyToTempDir("://datasets/test_cwProject/Phake Cave 3000 2024.2.cw");
+
             // let openCavingAreaButton_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->openCavingAreaButton")
             // mouseClick(openCavingAreaButton_obj1, 61.707, 18.5938)
 
+            console.log("Temp file:" + filename)
+
             //Simulating opening a file
             let dialog = ObjectFinder.findObjectByChain(mainWindow, "rootId->loadProjectDialog")
-            dialog.loadFileDialog.selectedFile = Qt.url("file://Users/cave/Desktop/BlankenshipBlowhole.cw");
+            dialog.loadFileDialog.selectedFile = Qt.url("file:/" + filename);
             dialog.loadFileDialog.accepted()
 
             //Make sure the convert dialog is open
             let whereDialog = ObjectFinder.findObjectByChain(mainWindow, "rootId->loadProjectDialog->whereDialogLoader")
             compare(whereDialog.active, true);
 
+            let folderDialog = findChild(whereDialog, "folderDialog");
+            // let folderDialog = ObjectFinder.findObjectByChain(mainWindow, "rootId->loadProjectDialog->whereDialogLoader->folderDialog")
+            folderDialog.currentFolder = TestHelper.tempDirectoryUrl()
+
             let openButton = ObjectFinder.findObjectByChain(mainWindow, "openRepoButton")
             mouseClick(openButton)
 
             //Make we have all the data
-            wait(1000);
-            console.log("Cave count:" + RootData.region.caveCount)
+            // wait(1000);
+            // console.log("Cave count:" + RootData.region.caveCount)
             tryVerify(() => { return RootData.region.caveCount === 1})
 
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=BB/Trip=Trip 10"
-            waitForRendering(mainWindow);
-
-
-
+            // RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=BB/Trip=Trip 10"
+            // waitForRendering(mainWindow);
 
 
             wait(100000);

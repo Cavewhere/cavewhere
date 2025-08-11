@@ -306,8 +306,6 @@ cwNoteData cwNote::data() const
         scrapData.append(scrap->data());
     }
 
-    qDebug() << "Note data:" << m_name << ImageIds.mode();
-
     return {
         m_name,
         DisplayRotation,

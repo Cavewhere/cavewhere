@@ -102,20 +102,20 @@ public:
     //Base folder
     void save(const cwCavingRegion* region);
 
-    void saveCavingRegion(const QDir& dir, const cwCavingRegion* region);
+    QFuture<Monad::ResultBase> saveCavingRegion(const QDir& dir, const cwCavingRegion* region);
     static std::unique_ptr<CavewhereProto::CavingRegion> toProtoCavingRegion(const cwCavingRegion* region);
     static QString regionFileName(const QDir& dir, const cwCavingRegion* region);
 
-    void saveCave(const QDir& dir, const cwCave* cave);
+    QFuture<Monad::ResultBase> saveCave(const QDir& dir, const cwCave* cave);
     static std::unique_ptr<CavewhereProto::Cave> toProtoCave(const cwCave* cave);
 
-    void saveTrip(const QDir& dir, const cwTrip* trip);
+    QFuture<Monad::ResultBase> saveTrip(const QDir& dir, const cwTrip* trip);
     static std::unique_ptr<CavewhereProto::Trip> toProtoTrip(const cwTrip* trip);
 
-    void saveNote(const QDir& dir, const cwNote* note);
+    QFuture<Monad::ResultBase> saveNote(const QDir& dir, const cwNote* note);
     static std::unique_ptr<CavewhereProto::Note> toProtoNote(const cwNote* note);
 
-    QString saveAllFromV6(const QDir& dir, const cwProject* region);
+    QFuture<Monad::ResultString> saveAllFromV6(const QDir& dir, const cwProject* region);
 
     static Monad::Result<cwCavingRegionData> loadAll(const QString& filename);
 
@@ -154,7 +154,7 @@ public:
     static QDir noteDir(const cwNote* note);
 
 
-    void saveProtoMessage(
+    QFuture<Monad::ResultBase> saveProtoMessage(
         const QDir& dir,
         const QString& filename,
         std::unique_ptr<const google::protobuf::Message> message);

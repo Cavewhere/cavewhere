@@ -151,6 +151,7 @@ Loader {
 
     FolderDialog {
         id: folderDialogId
+        objectName: "folderDialog"
         currentFolder: RootData.repositoryModel.defaultRepositoryDir
         selectedFolder: currentFolder
     }

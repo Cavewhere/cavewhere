@@ -3,6 +3,7 @@
 
 //Qt includes
 #include <QPolygonF>
+#include <QtCore/quuid.h>
 
 //Our includes
 #include "cwLead.h"
@@ -16,12 +17,16 @@ struct cwScrapData {
         viewMatrix(nullptr)
     {}
 
-    cwScrapData(const QPolygonF& outlinePoints,
-                const QList<cwNoteStation>& stations,
-                const QList<cwLead>& leads,
-                const cwNoteTransformationData& noteTransformation,
-                bool calculateNoteTransform,
-                std::unique_ptr<cwAbstractScrapViewMatrix::Data> viewMatrix) :
+    cwScrapData(
+        const QUuid& id,
+        const QPolygonF& outlinePoints,
+        const QList<cwNoteStation>& stations,
+        const QList<cwLead>& leads,
+        const cwNoteTransformationData& noteTransformation,
+        bool calculateNoteTransform,
+        std::unique_ptr<cwAbstractScrapViewMatrix::Data> viewMatrix)
+        :
+        id(id),
         outlinePoints(outlinePoints),
         stations(stations),
         leads(leads),
@@ -33,6 +38,7 @@ struct cwScrapData {
 
     //We need this because we need to clone the viewMatrix data
     cwScrapData(const cwScrapData& other) :
+        id(other.id),
         outlinePoints(other.outlinePoints),
         stations(other.stations),
         leads(other.leads),
@@ -46,6 +52,7 @@ struct cwScrapData {
     //We need this because we need to clone the viewMatrix data
     cwScrapData& operator=(const cwScrapData& other) {
         if (this != &other) {
+            id = other.id;
             outlinePoints = other.outlinePoints;
             stations = other.stations;
             leads = other.leads;
@@ -56,11 +63,12 @@ struct cwScrapData {
         return *this;
     }
 
+    QUuid id;
     QPolygonF outlinePoints;
     QList<cwNoteStation> stations;
     QList<cwLead> leads;
     cwNoteTransformationData noteTransformation;
-    bool calculateNoteTransform;
+    bool calculateNoteTransform = true;
     std::unique_ptr<cwAbstractScrapViewMatrix::Data> viewMatrix;
 };
 

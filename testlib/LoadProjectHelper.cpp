@@ -53,6 +53,11 @@ QString prependTempFolder(QString filename)
     return QStandardPaths::writableLocation(QStandardPaths::TempLocation) + "/" + filename;
 }
 
+QString TestHelper::copyToTempDir(const QString &filename)
+{
+    return copyToTempFolder(filename);
+}
+
 bool TestHelper::fileExists(const QUrl &filename) const
 {
     QFileInfo info(filename.toLocalFile());

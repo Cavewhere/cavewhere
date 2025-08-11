@@ -379,7 +379,6 @@ void cwProject::newProject() {
 void cwProject::loadFile(QString filename) {
     if(filename.isEmpty()) { return; }
 
-
     FileType type = projectType(filename);
 
     //Only load one file at a time
@@ -422,8 +421,6 @@ void cwProject::loadFile(QString filename) {
                                     }).future();
     } else if (type == GitFileType) {
         //Find all the cave file
-        qDebug() << "Loading git based file:" << filename;
-
         cwSaveLoad load;
         auto regionData = load.loadAll(filename);
 
@@ -431,6 +428,8 @@ void cwProject::loadFile(QString filename) {
             setFilename(filename);
             setTemporaryProject(false);
             Region->setData(regionData.value());
+        } else {
+            qDebug() << "Error loading:" << filename;
         }
     }
 }
@@ -647,19 +646,26 @@ QString cwProject::supportedImageFormats()
 void cwProject::convertFromProjectV6(QString oldProjectFilename, const QDir &newProjectDirectory)
 {
     //Make a temporary project
-    auto project = std::make_shared<cwProject>();
-    AsyncFuture::observe(project.get(), &cwProject::loaded)
-        .context(this, [this, project, oldProjectFilename, newProjectDirectory]() {
-            qDebug() << "I get here!" << oldProjectFilename << newProjectDirectory;
-            cwSaveLoad saveLoad;
-            auto newProjectName = saveLoad.saveAllFromV6(newProjectDirectory, project.get());
+    auto tempProject = std::make_shared<cwProject>();
+    AsyncFuture::observe(tempProject.get(), &cwProject::loaded)
+        .context(this, [this, tempProject, oldProjectFilename, newProjectDirectory]() {
+            //Use a shared pointer here, too keep saveLoad alive until, the project is fully saved
+            auto saveLoad = std::make_shared<cwSaveLoad>();
+            auto filenameFuture = saveLoad->saveAllFromV6(newProjectDirectory, tempProject.get());
 
-            //Load the project into this cwProject
-            loadFile(newProjectName);
+            auto loadFuture = AsyncFuture::observe(filenameFuture)
+                                  .context(this, [saveLoad, filenameFuture, this]() {
+                                      if(!filenameFuture.result().hasError()) {
+                                          //Load the project into this cwProject
+                                          loadFile(filenameFuture.result().value());
+                                      }
+                                  }).future();
+
+            FutureToken.addJob(cwFuture(loadFuture, QStringLiteral("Converting")));
         });
 
     //Load the old project into the temp project
-    project->loadFile(oldProjectFilename);
+    tempProject->loadFile(oldProjectFilename);
 
 }
 
