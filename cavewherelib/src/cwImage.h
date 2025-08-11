@@ -49,11 +49,6 @@ public:
         return std::get<IdData>(m_data->modeData).mipmapIds;
     }
 
-    int numberOfMipmapLevels() const {
-        Q_ASSERT(std::holds_alternative<IdData>(m_data->modeData));
-        return std::get<IdData>(m_data->modeData).mipmapIds.size();
-    }
-
     void setIcon(int icon) {
         ensureIdData();
         idData().iconId = icon;
@@ -122,7 +117,8 @@ public:
 
     bool isValid() const {
         //Id mode shouldn't be used, and should only be in old loading code
-        return mode() == Mode::Path && !path().isEmpty();
+        return (mode() == Mode::Path && !path().isEmpty())
+               || (mode() == Mode::Ids && isOriginalValid()); //This is needed for loading old code
     }
 
     Mode mode() const {

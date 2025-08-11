@@ -3,7 +3,6 @@
 
 #include "cwRHIObject.h"
 #include "cwTriangulatedData.h"
-#include "cwImageTexture.h"
 #include "cwFutureManagerToken.h"
 #include "cwProject.h"
 

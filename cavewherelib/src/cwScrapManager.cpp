@@ -523,7 +523,7 @@ void cwScrapManager::scrapInsertedHelper(cwNote *parentNote, int begin, int end)
             //Isn't okay, we need to recalculate it
             scrapsToUpdate.append(scrap);
         } else if(scrap->triangulationData().croppedImageData().isNull()
-                   && scrap->triangulationData().croppedImage().isOriginalValid()) {
+                   && scrap->triangulationData().croppedImage().isValid()) {
             //Load the image data from disk, async
             cwTextureUploadTask uploadTask;
             uploadTask.setImage(scrap->triangulationData().croppedImage());

@@ -263,16 +263,20 @@ void cwRhiScraps::render(const RenderData& data)
     for (auto scrap : std::as_const(m_scraps)) {
         // Set up per-scrap resources (textures, etc.)
         Q_ASSERT(m_globalSrb->isLayoutCompatible(scrap->srb)); //if this fails check layout compatibility
-        data.cb->setShaderResources(scrap->srb);
 
-        const QRhiCommandBuffer::VertexInput vertexInputs[] = {
-            { scrap->vertexBuffer, 0 },
-            { scrap->texCoordBuffer, 0 }
-        };
-        data.cb->setVertexInput(0, 2, vertexInputs, scrap->indexBuffer, 0, QRhiCommandBuffer::IndexUInt32);
+        //Make sure the scrap is valid to draw
+        if(scrap->numberOfIndices > 0) {
+            data.cb->setShaderResources(scrap->srb);
 
-        Q_ASSERT(scrap->numberOfIndices > 0); //If this fails the scrap isn't generated correctly
-        data.cb->drawIndexed(scrap->numberOfIndices);
+            const QRhiCommandBuffer::VertexInput vertexInputs[] = {
+                { scrap->vertexBuffer, 0 },
+                { scrap->texCoordBuffer, 0 }
+            };
+            data.cb->setVertexInput(0, 2, vertexInputs, scrap->indexBuffer, 0, QRhiCommandBuffer::IndexUInt32);
+
+            // Q_ASSERT(scrap->numberOfIndices > 0); //If this fails the scrap isn't generated correctly
+            data.cb->drawIndexed(scrap->numberOfIndices);
+        }
     }
 }
 

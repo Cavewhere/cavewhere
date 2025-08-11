@@ -129,7 +129,7 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
 
             QImage badImage(cropArea.size(), QImage::Format_ARGB32);
             badImage.fill(QColor("red"));
-            qDebug() << "Original image is bad id:" << originalImage.original() << imageData.data().size() << imageData.size() << imageData.format() << LOCATION;
+            // qDebug() << "Original image is bad id:" << originalImage.original() << imageData.data().size() << imageData.size() << imageData.format() << LOCATION;
             return Image({{}, badImage, 0});
     };
 
