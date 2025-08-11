@@ -38,8 +38,6 @@ Item {
                 RootData.project.loadFile(selectedFile);
                 break;
             }
-
-            // RootData.project.loadFile(selectedFile)
         }
     }
 

@@ -394,7 +394,7 @@ void cwProject::loadFile(QString filename) {
             return loadTask.load();
         });
 
-        FutureToken.addJob({QFuture<void>(loadFuture), "Loading"});
+        FutureToken.addJob({QFuture<void>(loadFuture), QStringLiteral("Loading")});
 
         auto updateRegion = [this, filename](const cwRegionLoadResult& result) {
             setFilename(result.filename());
@@ -406,7 +406,7 @@ void cwProject::loadFile(QString filename) {
         };
 
         LoadFuture = AsyncFuture::observe(loadFuture)
-                         .subscribe([loadFuture, updateRegion, this]()
+                         .context(this, [loadFuture, updateRegion, this]()
                                     {
                                         auto result = loadFuture.result();
                                         if(result.errors().isEmpty()) {
@@ -421,16 +421,21 @@ void cwProject::loadFile(QString filename) {
                                     }).future();
     } else if (type == GitFileType) {
         //Find all the cave file
-        cwSaveLoad load;
-        auto regionData = load.loadAll(filename);
+        qDebug() << "Loading File:" << filename;
+        auto regionDataFuture = cwSaveLoad::loadAll(filename);
 
-        if(!regionData.hasError()) {
-            setFilename(filename);
-            setTemporaryProject(false);
-            Region->setData(regionData.value());
-        } else {
-            qDebug() << "Error loading:" << filename;
-        }
+        FutureToken.addJob({QFuture<void>(regionDataFuture), QStringLiteral("Loading")});
+
+        LoadFuture = AsyncFuture::observe(regionDataFuture)
+            .context(this, [this, regionDataFuture, filename]() {
+                if(!regionDataFuture.result().hasError()) {
+                    setFilename(filename);
+                    setTemporaryProject(false);
+                    Region->setData(regionDataFuture.result().value());
+                } else {
+                    errorModel()->append(cwError(QStringLiteral("Error loading: %1 : %2").arg(filename, regionDataFuture.result().errorMessage())));
+                }
+            }).future();
     }
 }
 

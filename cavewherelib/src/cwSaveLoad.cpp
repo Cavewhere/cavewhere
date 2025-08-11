@@ -308,83 +308,85 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(const QDir &dir, const cwProject
 
 }
 
-Monad::Result<cwCavingRegionData> cwSaveLoad::loadAll(const QString &filename)
+QFuture<Monad::Result<cwCavingRegionData>> cwSaveLoad::loadAll(const QString &filename)
 {
-    // Load the root region file
-    auto regionResult = loadCavingRegion(filename);
+    return cwConcurrent::run([filename]() {
+        // Load the root region file
+        auto regionResult = loadCavingRegion(filename);
 
-    return regionResult.then([filename](Result<cwCavingRegionData> result) {
-        cwCavingRegionData region = result.value();
+        return regionResult.then([filename](Result<cwCavingRegionData> result) {
+            cwCavingRegionData region = result.value();
 
-        QDir regionDir = QFileInfo(filename).absoluteDir();
+            QDir regionDir = QFileInfo(filename).absoluteDir();
 
-        // Find all caves (*.cwcave)
-        QFileInfoList caveFiles;
-        QDirIterator it(regionDir.absolutePath(), QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
-        while (it.hasNext()) {
-            it.next();
-            QDir caveDir(it.filePath());
+            // Find all caves (*.cwcave)
+            QFileInfoList caveFiles;
+            QDirIterator it(regionDir.absolutePath(), QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
+            while (it.hasNext()) {
+                it.next();
+                QDir caveDir(it.filePath());
 
-            QFileInfoList files = caveDir.entryInfoList(QStringList() << "*.cwcave", QDir::Files);
-            if (!files.isEmpty()) {
-                caveFiles.append(files);
-            }
-        }
-
-        for (const QFileInfo &caveFileInfo : caveFiles) {
-            auto caveResult = loadCave(caveFileInfo.absoluteFilePath());
-            if (caveResult.hasError()) {
-                // FIXME: log or collect the error
-                qDebug() << "Cave result has errror:" << caveResult.errorMessage();
-                continue;
-            }
-
-            cwCaveData cave = caveResult.value();
-
-            // Load all trips for this cave
-            QDir caveDir = caveFileInfo.absoluteDir();
-            QDir tripsDir(caveDir.filePath("trips"));
-            if (tripsDir.exists()) {
-                QDirIterator tripIt(tripsDir.absolutePath(), QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
-                while (tripIt.hasNext()) {
-                    tripIt.next();
-                    QDir tripDir(tripIt.filePath());
-
-                    QFileInfoList tripFiles = tripDir.entryInfoList(QStringList() << "*.cwtrip", QDir::Files);
-                    for (const QFileInfo &tripFileInfo : tripFiles) {
-                        auto tripResult = loadTrip(tripFileInfo.absoluteFilePath());
-
-                        if (tripResult.hasError()) {
-                            // FIXME: log or collect the error
-                            continue;
-                        }
-
-                        cwTripData trip = tripResult.value();
-
-                        // Load notes inside the notes subfolder
-                        QDir notesDir = tripDir.filePath("notes");
-                        if (notesDir.exists()) {
-                            QFileInfoList noteFiles = notesDir.entryInfoList(QStringList() << "*.cwnote", QDir::Files);
-                            for (const QFileInfo &noteFileInfo : noteFiles) {
-                                auto noteResult = loadNote(noteFileInfo.absoluteFilePath(), regionDir);
-                                if (noteResult.hasError()) {
-                                    // FIXME: log or collect the error
-                                    continue;
-                                }
-
-                                trip.noteModel.notes.append(noteResult.value());
-                            }
-                        }
-
-                        cave.trips.append(trip);
-                    }
+                QFileInfoList files = caveDir.entryInfoList(QStringList() << "*.cwcave", QDir::Files);
+                if (!files.isEmpty()) {
+                    caveFiles.append(files);
                 }
             }
 
-            region.caves.append(cave);
-        }
+            for (const QFileInfo &caveFileInfo : caveFiles) {
+                auto caveResult = loadCave(caveFileInfo.absoluteFilePath());
+                if (caveResult.hasError()) {
+                    // FIXME: log or collect the error
+                    qDebug() << "Cave result has errror:" << caveResult.errorMessage();
+                    continue;
+                }
 
-        return Result(region);
+                cwCaveData cave = caveResult.value();
+
+                // Load all trips for this cave
+                QDir caveDir = caveFileInfo.absoluteDir();
+                QDir tripsDir(caveDir.filePath("trips"));
+                if (tripsDir.exists()) {
+                    QDirIterator tripIt(tripsDir.absolutePath(), QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
+                    while (tripIt.hasNext()) {
+                        tripIt.next();
+                        QDir tripDir(tripIt.filePath());
+
+                        QFileInfoList tripFiles = tripDir.entryInfoList(QStringList() << "*.cwtrip", QDir::Files);
+                        for (const QFileInfo &tripFileInfo : tripFiles) {
+                            auto tripResult = loadTrip(tripFileInfo.absoluteFilePath());
+
+                            if (tripResult.hasError()) {
+                                // FIXME: log or collect the error
+                                continue;
+                            }
+
+                            cwTripData trip = tripResult.value();
+
+                            // Load notes inside the notes subfolder
+                            QDir notesDir = tripDir.filePath("notes");
+                            if (notesDir.exists()) {
+                                QFileInfoList noteFiles = notesDir.entryInfoList(QStringList() << "*.cwnote", QDir::Files);
+                                for (const QFileInfo &noteFileInfo : noteFiles) {
+                                    auto noteResult = loadNote(noteFileInfo.absoluteFilePath(), regionDir);
+                                    if (noteResult.hasError()) {
+                                        // FIXME: log or collect the error
+                                        continue;
+                                    }
+
+                                    trip.noteModel.notes.append(noteResult.value());
+                                }
+                            }
+
+                            cave.trips.append(trip);
+                        }
+                    }
+                }
+
+                region.caves.append(cave);
+            }
+
+            return Result(region);
+        });
     });
 }
 

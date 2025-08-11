@@ -117,7 +117,7 @@ public:
 
     QFuture<Monad::ResultString> saveAllFromV6(const QDir& dir, const cwProject* region);
 
-    static Monad::Result<cwCavingRegionData> loadAll(const QString& filename);
+    static QFuture<Monad::Result<cwCavingRegionData>> loadAll(const QString& filename);
 
     static Monad::Result<cwCavingRegionData> loadCavingRegion(const QString& filename);
     static Monad::Result<cwCaveData> loadCave(const QString& filename);
