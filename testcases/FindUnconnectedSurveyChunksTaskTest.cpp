@@ -104,6 +104,7 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
 
         chunk1->appendShot(chunk1->stations().last(), newCaptical, shot);
 
+        task->setCave(cave->data());
         task->start();
         task->waitToFinish();
         CHECK(task->results().size() == 0);
@@ -143,6 +144,7 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
                 chunk3->appendShot(stations.at(i), stations.at(i+1), shot);
             }
 
+            task->setCave(cave->data());
             task->start();
             task->waitToFinish();
 
@@ -160,6 +162,7 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
                     chunk4->appendShot(stations.at(i), stations.at(i+1), shot);
                 }
 
+                task->setCave(cave->data());
                 task->start();
                 task->waitToFinish();
 
@@ -180,6 +183,7 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
                         chunk5->appendShot(stations.at(i), stations.at(i+1), shot);
                     }
 
+                    task->setCave(cave->data());
                     task->start();
                     task->waitToFinish();
 
@@ -197,6 +201,7 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
                         chunk6->appendShot(stations.at(i), stations.at(i+1), shot);
                     }
 
+                    task->setCave(cave->data());
                     task->start();
                     task->waitToFinish();
 
@@ -212,6 +217,10 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
                     trip2->addChunk(chunk5);
 
                     chunk5->appendNewShot(); //Black shot
+
+                    task->setCave(cave->data());
+                    task->start();
+                    task->waitToFinish();
 
                     //All connected should have no errors
                     REQUIRE(task->results().size() == 0);
