@@ -13,8 +13,6 @@
 #include "cwConcurrent.h"
 #include "cwDiskCacher.h"
 
-//xxhash
-#include "xxhash.h" // Path to xxHash header
 
 //Qt includes
 #include <QByteArray>
@@ -72,16 +70,17 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
     };
 
     auto hash = [](const QImage& image)->quint64 {
-        return XXH3_64bits(image.constBits(), static_cast<size_t>(image.sizeInBytes()));
+        return cwImageProvider::imageHash(image);
     };
 
-    auto dir = QFileInfo(filename).dir();
 
-    auto addCropToDatabase = [filename, dir](QImage image,
-                                             QString pathToImage,
-                                             const QRectF& crop,
-                                             quint64 parentHash) {
-        QFileInfo info(pathToImage);
+
+    auto addCropToDatabase = [filename](
+                                 QImage image,
+                                 QString pathToImage,
+                                 const QRectF& crop,
+                                 quint64 parentHash) {
+        // QFileInfo info(pathToImage);
 
         auto toString = [](const QRectF crop) {
             return
@@ -94,22 +93,30 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
                 QString::number(crop.height());
         };
 
-        cwDiskCacher::Key key {
-                              toString(crop) + QStringLiteral("crop-") + info.fileName() + QStringLiteral(".") + cwImageProvider::imageCacheExtension(),
-                              info.dir(),
-                              QString::number(parentHash, 16)
-        };
+        // cwDiskCacher::Key key {
+        //                       toString(crop) + QStringLiteral("crop-") + info.fileName() + QStringLiteral(".") + cwImageProvider::imageCacheExtension(),
+        //                       info.dir(),
+        //                       QString::number(parentHash, 16)
+        // };
 
-        QByteArray imageData;
-        QBuffer buffer(&imageData);
-        buffer.open(QIODevice::WriteOnly);
-        image.save(&buffer, "PNG");
-        buffer.close();
+        // QByteArray imageData;
+        // QBuffer buffer(&imageData);
+        // buffer.open(QIODevice::WriteOnly);
+        // image.save(&buffer, "PNG");
+        // buffer.close();
 
-        //Save image data into the disk cacher
-        cwDiskCacher cacher(dir);
-        cacher.insert(key, imageData);
-        return key;
+        // //Save image data into the disk cacher
+        // cwDiskCacher cacher(dir);
+        // cacher.insert(key, imageData);
+        // return key;
+
+        return cwImageProvider::addToImageCache(filename,
+                                                image,
+                                                cwImageProvider::imageCacheKey(
+                                                    pathToImage,
+                                                    toString(crop) + QStringLiteral("crop"),
+                                                    parentHash)
+                                                );
     };
 
     auto cropImage = [filename, originalImage, cropRect, addCropToDatabase, hash]()->Image {
@@ -137,7 +144,8 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
 
     auto finishedFuture =
         AsyncFuture::observe(cropFuture)
-            .subscribe([cropFuture, dir]() {
+            .context(this, [cropFuture, filename]() {
+                auto dir = QFileInfo(filename).dir();
                 auto cropRGBImage = cropFuture.result();
 
                 if(!cropRGBImage.key.id.isEmpty()) {

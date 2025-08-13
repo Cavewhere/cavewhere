@@ -89,6 +89,7 @@ QQ.Rectangle {
             anchors.centerIn: parent
 
             source: container.imageIconPath
+            sourceSize: Qt.size(width, height)
             width: container.maxImageWidth - 2 * container.border
             height: width;
             fillMode: QQ.Image.PreserveAspectFit

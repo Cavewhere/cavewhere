@@ -29,13 +29,14 @@
 //Std includes
 #include <stdexcept>
 
+//xxhash
+#include "xxhash.h" // Path to xxHash header
+
 QAtomicInt cwImageProvider::ConnectionCounter;
 
 cwImageProvider::cwImageProvider() :
     QQuickImageProvider(QQuickImageProvider::Image)
 {
-
-
 
 }
 
@@ -45,32 +46,59 @@ cwImageProvider::cwImageProvider() :
   See Qt docs for details
   */
 QImage cwImageProvider::requestImage(const QString &path, QSize *size, const QSize &requestedSize) {
-    //Read the image in
-    QImage image = this->image(path);
 
-    //Make sure the image is good
-    if(image.isNull()) {
-        qDebug() << "cwImageProvider:: can't read image:" << path << LOCATION;
-        return QImage();
-    }
+    int maxSize = std::max(requestedSize.width(), requestedSize.height());
 
-    int maxSize = qMax(requestedSize.width(), requestedSize.height());
     if(maxSize > 0) {
-        //Get the size of the image, scale it and return it.
-        QImage scaledImage = image.scaled(QSize(maxSize, maxSize), Qt::KeepAspectRatio, Qt::SmoothTransformation);
-        *size = scaledImage.size();
+        //Generate a smaller image than the original, this could be an icon
+        auto hash = fileHash(imagePath(path));
+        QString prefix = QStringLiteral("scaled-") + QString::number(requestedSize.width()) + QStringLiteral("_") + QString::number(requestedSize.height());
+        auto key = imageCacheKey(path, prefix, hash);
 
-        return scaledImage;
+        cwDiskCacher cacher(QFileInfo(ProjectPath).absoluteDir());
+        auto entry = cacher.entry(key);
+        if(entry.isEmpty()) {
+            //Read the image in
+            QImage image = this->image(path);
+
+            //Get the size of the image, scale it and return it.
+            QImage scaledImage = image.scaled(QSize(maxSize, maxSize), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            *size = scaledImage.size();
+
+            //Add to the cache
+            addToImageCache(ProjectPath, scaledImage, key);
+
+            //Return the scaled image
+            return scaledImage;
+        } else {
+            //Found the scaled image in cache
+            auto image = this->image(cwImageData(QSize(), -1, imageCacheExtension().toUtf8(), entry));
+            *size = image.size();
+            return image;
+        }
     } else {
-        //Just return the image
-        *size = image.size();
-        return image;
+        QImage image = this->image(path);
+
+        //Make sure the image is good
+        if(image.isNull()) {
+            qDebug() << "cwImageProvider:: can't read image:" << path << LOCATION;
+            return QImage();
+        } else {
+            //Just return the image
+            *size = image.size();
+            return image;
+        }
     }
+
+    //This is a bug, should have return before here
+    Q_ASSERT(false);
+
 }
 
 QImage cwImageProvider::image(const QString &path) const
 {
     QString fullPath = imagePath(path);
+    // qDebug() << "FullPath:" << fullPath;
 
     //Extract the image data from the disk
     auto imageData = data(fullPath);
@@ -312,4 +340,54 @@ cwImageData cwImageProvider::createDxt1(QSize size, const QByteArray &uncompress
 QString cwImageProvider::imageUrl(QString relativePath)
 {
     return QStringLiteral("image://") + cwImageProvider::name() + QStringLiteral("/") + relativePath;
+}
+
+quint64 cwImageProvider::imageHash(const QImage &image)
+{
+    return XXH3_64bits(image.constBits(), static_cast<size_t>(image.sizeInBytes()));
+}
+
+quint64 cwImageProvider::fileHash(const QString &path)
+{
+    QFile file(path);
+    file.open(QFile::ReadOnly);
+    auto byteArray = file.readAll();
+    return toHash(byteArray);
+}
+
+quint64 cwImageProvider::toHash(const QByteArray &data)
+{
+    return XXH3_64bits(data.constData(), data.size());
+}
+
+cwDiskCacher::Key cwImageProvider::addToImageCache(
+    const QString& projectFilename,
+    const QImage& image,
+    const cwDiskCacher::Key& key)
+{
+    QFileInfo info(projectFilename);
+
+    QByteArray imageData;
+    QBuffer buffer(&imageData);
+    buffer.open(QIODevice::WriteOnly);
+    image.save(&buffer, "PNG");
+    buffer.close();
+
+    //Save image data into the disk cacher
+    cwDiskCacher cacher(info.dir());
+    cacher.insert(key, imageData);
+    return key;
+}
+
+cwDiskCacher::Key cwImageProvider::imageCacheKey(const QString &pathToImage, const QString &keyPrefix, quint64 parentImageHash)
+{
+    QFileInfo info(pathToImage);
+
+    cwDiskCacher::Key key {
+        keyPrefix + QStringLiteral("-") + info.fileName() + QStringLiteral(".") + cwImageProvider::imageCacheExtension(),
+        info.dir(),
+        QString::number(parentImageHash, 16)
+    };
+
+    return key;
 }

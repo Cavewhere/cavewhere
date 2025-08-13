@@ -100,7 +100,7 @@ QByteArray cwDiskCacher::entry(const QString &cacheFile, const QString& checksum
 void cwDiskCacher::insert(const Key& key, const QByteArray& data)
 {
     // Determine cache file path under global lock
-    QString cacheFile = filePath(key);;
+    QString cacheFile = filePath(key);
 
     // Acquire per-file mutex
     auto fileMutex = fileMutexForPath(cacheFile);

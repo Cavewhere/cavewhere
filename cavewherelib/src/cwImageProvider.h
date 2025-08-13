@@ -20,6 +20,7 @@
 #include "cwImage.h"
 #include "cwImageData.h"
 #include "cwGlobals.h"
+#include "cwDiskCacher.h"
 
 class CAVEWHERE_LIB_EXPORT cwImageProvider : public QQuickImageProvider
 {
@@ -56,6 +57,18 @@ public:
 
     static QString imageUrl(QString relativePath);
 
+    static quint64 imageHash(const QImage& image);
+    static quint64 fileHash(const QString& path);
+    static quint64 toHash(const QByteArray& data);
+
+    static cwDiskCacher::Key addToImageCache(
+        const QString& projectPath,
+        const QImage& image,
+        const cwDiskCacher::Key& key);
+
+    static cwDiskCacher::Key imageCacheKey(const QString& pathToImage,
+                                           const QString& keyPrefix,
+                                           quint64 parentImageHash);
 
 public slots:
     void setProjectPath(QString projectPath);
