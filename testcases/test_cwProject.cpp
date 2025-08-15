@@ -43,7 +43,7 @@ TEST_CASE("cwProject isModified should work correctly", "[cwProject]") {
     project.newProject();
     CHECK(project.isModified() == false);
 
-    project.loadFile(testFile);
+    project.loadOrConvert(testFile);
     project.waitLoadToFinish();
     CHECK(project.isModified() == false);
 
@@ -177,7 +177,7 @@ TEST_CASE("Images should be removed correctly", "[cwProject]") {
 
     QList<QUrl> filenames {
         QUrl::fromLocalFile(copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG")),
-                QUrl::fromLocalFile(copyToTempFolder("://datasets/test_cwProject/crashMap.png"))
+        QUrl::fromLocalFile(copyToTempFolder("://datasets/test_cwProject/crashMap.png"))
     };
 
     QList<cwImage> loadedImages;

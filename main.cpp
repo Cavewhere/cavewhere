@@ -93,7 +93,7 @@ void handleCommandline(QCoreApplication& a, cwRootData* rootData) {
     if (!positionalArgs.isEmpty()) {
         QString filename = positionalArgs.first();
         qDebug() << "Loading file:" << filename;
-        rootData->project()->loadFile(filename);
+        rootData->project()->loadOrConvert(filename);
 
         if(!pageUrl.isEmpty()) {
             QObject* obj = new QObject();

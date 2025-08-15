@@ -24,7 +24,7 @@ class cwCropImageTask;
 #include <QSet>
 #include <QPoint>
 
-class cwTriangulateTask //: public cwTask
+class cwTriangulateTask
 {
 //    Q_OBJECT
 public:

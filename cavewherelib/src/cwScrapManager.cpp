@@ -417,6 +417,7 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
     }
 
     auto run = [this]() {
+
         //Running
         auto dirtyScraps = cw::toList(DirtyScraps);
 
@@ -441,6 +442,7 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
             {
                 Q_ASSERT(data.resultCount() == 1);
                 Q_ASSERT(data.isFinished());
+
                 return data.result();
             });
 

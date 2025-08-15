@@ -144,7 +144,7 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
 
     auto finishedFuture =
         AsyncFuture::observe(cropFuture)
-            .context(this, [cropFuture, filename]() {
+            .subscribe([cropFuture, filename]() {
                 auto dir = QFileInfo(filename).dir();
                 auto cropRGBImage = cropFuture.result();
 

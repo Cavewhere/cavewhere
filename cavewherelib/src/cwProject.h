@@ -108,6 +108,8 @@ public:
 
     void addImages(QList<QUrl> noteImagePath, std::function<void (QList<cwImage> images)> func);
 
+    void loadOrConvert(const QString& filename);
+
 signals:
     void undoStackChanged();
     void regionChanged();

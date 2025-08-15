@@ -246,6 +246,12 @@ cwImageData cwImageProvider::data(QString filename) const
         //From the disk cacher
         cwDiskCacher cacher(projectDir);
         data = cacher.entry(imagePath);
+
+        QBuffer buffer(&data);
+        buffer.open(QIODevice::ReadOnly);
+        QImageReader reader(&buffer);
+        size = reader.size();
+
     } else {
         //Normal file
         QFile file(imagePath);

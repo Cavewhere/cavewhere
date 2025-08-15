@@ -421,7 +421,6 @@ void cwProject::loadFile(QString filename) {
                                     }).future();
     } else if (type == GitFileType) {
         //Find all the cave file
-        qDebug() << "Loading File:" << filename;
         auto regionDataFuture = cwSaveLoad::loadAll(filename);
 
         FutureToken.addJob({QFuture<void>(regionDataFuture), QStringLiteral("Loading")});
@@ -627,6 +626,23 @@ void cwProject::addImages(QList<QUrl> noteImagePaths,
     }
 }
 
+void cwProject::loadOrConvert(const QString &filename)
+{
+    if(filename.isEmpty()) { return; }
+
+    FileType type = projectType(filename);
+
+    if(type == SqliteFileType) {
+        QTemporaryDir dir;
+        dir.setAutoRemove(false);
+        auto tempDir = QDir(dir.filePath(QFileInfo(filename).baseName()));
+        convertFromProjectV6(filename, tempDir);
+        setTemporaryProject(true);
+    } else {
+        loadFile(filename);
+    }
+}
+
 /**
  * Returns all the image formats
  */
@@ -648,12 +664,14 @@ QString cwProject::supportedImageFormats()
     return withWildCards.join(' ');
 }
 
+
 void cwProject::convertFromProjectV6(QString oldProjectFilename, const QDir &newProjectDirectory)
 {
     //Make a temporary project
     auto tempProject = std::make_shared<cwProject>();
-    AsyncFuture::observe(tempProject.get(), &cwProject::loaded)
+    auto loadTempProjectFuture = AsyncFuture::observe(tempProject.get(), &cwProject::loaded)
         .context(this, [this, tempProject, oldProjectFilename, newProjectDirectory]() {
+
             //Use a shared pointer here, too keep saveLoad alive until, the project is fully saved
             auto saveLoad = std::make_shared<cwSaveLoad>();
             auto filenameFuture = saveLoad->saveAllFromV6(newProjectDirectory, tempProject.get());
@@ -667,7 +685,9 @@ void cwProject::convertFromProjectV6(QString oldProjectFilename, const QDir &new
                                   }).future();
 
             FutureToken.addJob(cwFuture(loadFuture, QStringLiteral("Converting")));
-        });
+        }).future();
+
+    FutureToken.addJob(cwFuture(loadTempProjectFuture, QStringLiteral("Loading")));
 
     //Load the old project into the temp project
     tempProject->loadFile(oldProjectFilename);

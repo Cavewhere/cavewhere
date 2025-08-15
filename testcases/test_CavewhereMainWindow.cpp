@@ -34,11 +34,12 @@ public:
         QQmlApplicationEngine* applicationEnigine = new QQmlApplicationEngine();
         cwRootData* rootData = new cwRootData(applicationEnigine);
 
+        rootData->account()->setName("First Last");
+        rootData->account()->setEmail("sauce@test.com");
 
         // Add the macOS Resources directory to the QML import search path
         QString resourcePath = QCoreApplication::applicationDirPath() + "/QuickQanava/src";
         applicationEnigine->addImportPath(resourcePath);
-        qDebug() << "ResourcePath:" << resourcePath;
 
         QuickQanava::initialize(applicationEnigine);
 
@@ -127,7 +128,7 @@ TEST_CASE("Main window should load file and close the window", "[CavewhereMainWi
 
     QEventLoop loop;
     QTimer::singleShot(2000, qApp, [rootData, filename, firstAppEngine, &loop]() {
-        rootData->project()->loadFile(filename);
+        rootData->project()->loadOrConvert(filename);
 
         QTimer::singleShot(2000, qApp, [firstAppEngine, &loop](){
             delete firstAppEngine;
@@ -169,7 +170,7 @@ TEST_CASE("Load project with no images for scraps", "[CavewhereMainWindow]") {
     QTimer::singleShot(2000, qApp, [rootData, filename, firstAppEngine, &loop]() {
 
         auto project = rootData->project();
-        project->loadFile(filename);
+        project->loadOrConvert(filename);
         project->waitLoadToFinish();
 
         INFO("Filename:" << project->filename());
@@ -194,17 +195,18 @@ TEST_CASE("Load project with no images for scraps", "[CavewhereMainWindow]") {
         for(const auto& scrap : note->scraps()) {
             auto triangleData = scrap->triangulationData();
 
-            QList<int> ids = {
-                triangleData.croppedImage().original(),
+            REQUIRE(triangleData.croppedImage().mode() == cwImage::Mode::Path);
+
+            QList<QString> paths = {
+                triangleData.croppedImage().path(),
             };
 
             // CHECK(!triangleData.croppedImage().isIconValid());
             CHECK((triangleData.croppedImage().isValid()));
 
-
-            for(auto id : ids) {
-                auto data = imageProvider.data(id, true);
-                INFO("Id:" << id << " isValid:" << data.size().isValid());
+            for(const auto& path : paths) {
+                auto data = imageProvider.data(path);
+                INFO("Id:" << path << " isValid:" << data.size().isValid());
                 CHECK((data.size().isValid()));
             }
         }

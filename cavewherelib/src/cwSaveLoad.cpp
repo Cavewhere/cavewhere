@@ -288,6 +288,7 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(const QDir &dir, const cwProject
     //Save the region's data
     cwCavingRegion region;
     region.setName(QFileInfo(project->filename()).baseName());
+    makeDir(dir);
     auto regionFuture = saveCavingRegion(dir, &region);
     QString newProjectFilename = regionFileName(dir, &region);
 
@@ -420,7 +421,6 @@ Monad::Result<cwCaveData> cwSaveLoad::loadCave(const QString &filename)
 
 Monad::Result<cwTripData> cwSaveLoad::loadTrip(const QString &filename)
 {
-    qDebug() << "Loading trip:" << filename;
     auto tripResult = loadMessage<CavewhereProto::Trip>(filename);
     return Monad::mbind(tripResult, [](const Result<CavewhereProto::Trip>& result)
                         {
@@ -899,6 +899,7 @@ QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
         auto future = cwConcurrent::run([filename, message = std::move(message)]() {
             QSaveFile file(filename);
             if (!file.open(QFile::WriteOnly)) {
+                qWarning() << "Failed to write to " << filename << file.errorString();
                 return Monad::ResultBase(QStringLiteral("Failed to open file for writing: %1").arg(filename));
             }
 

@@ -44,14 +44,16 @@ QList<QFuture<cwTriangulatedData>> cwTriangulateTask::triangulate() const
     QString projectFilename = ProjectFilename;
     cwTextureUploadTask::Format format = Format;
 
-    std::function<QFuture<cwTriangulatedData> (const cwTriangulateInData&)> triangulateScrap
+    auto triangulateScrap
         = [projectFilename, format](const cwTriangulateInData& scrap)->QFuture<cwTriangulatedData>
     {
+
         auto cropFuture = cropScrap(scrap, projectFilename, format);
 
         return AsyncFuture::observe(cropFuture)
             .subscribe([cropFuture, scrap, projectFilename]()
                        {
+
                            cwTextureUploadTask uploadTask;
                            cwImage croppedImage = *(cropFuture.result());
                            uploadTask.setImage(croppedImage);
@@ -62,6 +64,7 @@ QList<QFuture<cwTriangulatedData>> cwTriangulateTask::triangulate() const
                            return AsyncFuture::observe(uploadFuture)
                                .subscribe(
                                    [scrap, cropFuture, uploadFuture]() {
+
                                        return cwConcurrent::run([scrap, cropFuture, uploadFuture]()
                                                                 {
                                                                     return triangulateGeometry(scrap,
