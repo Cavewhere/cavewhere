@@ -248,7 +248,7 @@ MainWindowTest {
             // waitForRendering(mainWindow);
 
 
-            wait(100000);
+            // wait(100000);
 
         }
     }

@@ -30,6 +30,9 @@
 //Async future
 #include "asyncfuture.h"
 
+//Std includes
+#include <ranges>
+
 cwScrapManager::cwScrapManager(QObject *parent) :
     QObject(parent),
     LinePlotManager(nullptr),
@@ -419,7 +422,11 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
     auto run = [this]() {
 
         //Running
-        auto dirtyScraps = cw::toList(DirtyScraps);
+        auto dirtyScrapsRange =
+            cw::toList(DirtyScraps)
+            | std::views::filter([](const cwScrap* scrap) { return scrap->parentCave() != nullptr; });
+
+        QList<cwScrap*> dirtyScraps(dirtyScrapsRange.begin(), dirtyScrapsRange.end());
 
         if(dirtyScraps.isEmpty()) {
             return AsyncFuture::completed();
