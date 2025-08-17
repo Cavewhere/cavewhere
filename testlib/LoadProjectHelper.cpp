@@ -12,7 +12,7 @@ std::shared_ptr<cwProject> fileToProject(QString filename) {
 void fileToProject(cwProject *project, const QString &filename) {
     QString datasetFile = copyToTempFolder(filename);
 
-    project->loadFile(datasetFile);
+    project->loadOrConvert(datasetFile);
     project->waitLoadToFinish();
 }
 

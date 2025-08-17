@@ -44,6 +44,7 @@ endif()
 
 # All packages we need to find
 find_package(Catch2 REQUIRED)
+find_package(Protobuf REQUIRED)
 find_package(Qt6
     COMPONENTS
     Core
@@ -74,6 +75,7 @@ qt_add_qml_module(cavewhere-testlib
     SOURCES
         testlib/LoadProjectHelper.cpp
         testlib/LoadProjectHelper.h
+    # STATIC
     #QML_FILES
 )
 
@@ -122,8 +124,9 @@ target_link_libraries(cavewhere-test
     PRIVATE
     Qt6::Test
     Catch2::Catch2
-    cavewherelib
     cavewhere-testlib
+    cavewherelib
+    protobuf::protobuf
 )
 
 #### Cavewhere qml tests ####

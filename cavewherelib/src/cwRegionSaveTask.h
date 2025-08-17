@@ -77,7 +77,14 @@ namespace QtProto {
     class QStringList;
 };
 
-#include "google/protobuf/repeated_field.h"
+    // Forward declaration
+    namespace google {
+    namespace protobuf {
+    template <typename T> class RepeatedPtrField;
+    }
+    }
+
+// #include "google/protobuf/repeated_field.h"
 
 class cwRegionSaveTask : public cwRegionIOTask
 {

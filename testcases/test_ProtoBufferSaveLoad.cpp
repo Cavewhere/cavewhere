@@ -3,7 +3,6 @@
 
 //Our includes
 #include "cwRegionLoadTask.h"
-#include "cwRegionSaveTask.h"
 #include "cwRootData.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
@@ -24,6 +23,7 @@
 #include "cwScrap.h"
 #include "cwRunningProfileScrapViewMatrix.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
+#include "cwRegionSaveTask.h"
 
 //std includes
 #include <memory>
@@ -32,6 +32,8 @@
 
 //Qt includes
 #include <QUuid>
+#include <QDirIterator>
+#include <QFileInfo>
 
 //catch includes
 #include <catch2/catch_test_macros.hpp>
@@ -73,7 +75,7 @@ TEST_CASE("Save / Load should work with cwSurveyNetwork", "[ProtoSaveLoad]") {
 
     CHECK(root->region()->caveCount() == 0);
 
-    root->project()->loadFile(filename);
+    root->project()->loadOrConvert(filename);
     root->project()->waitLoadToFinish();
     REQUIRE(root->region()->caveCount() == 1);
     CHECK(root->project()->isTemporaryProject() == false);
@@ -105,7 +107,7 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
         auto errorModel = root->project()->errorModel();
         CHECK(errorModel->size() == 0);
 
-        root->project()->loadFile(filename);
+        root->project()->loadOrConvert(filename);
         root->project()->waitLoadToFinish();
 
         REQUIRE(errorModel->size() == 1);
@@ -115,6 +117,23 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
     }
 
     SECTION("Bad file that does exist") {
+        auto allResourcePaths = [](const QString& root = QStringLiteral(":/")) {
+            QStringList paths;
+            QDirIterator it(
+                root,
+                QStringList{},                                // match all
+                QDir::AllEntries | QDir::NoDotAndDotDot,     // include files and dirs
+                QDirIterator::Subdirectories
+                );
+            while (it.hasNext()) {
+                paths.push_back(it.next());
+            }
+            paths.sort();
+            return paths;
+        };
+
+        qDebug() << "Resources:" << allResourcePaths();
+
         fileToProject(root->project(), "://datasets/test_ProtoBufferSaveLoad/badFile.cw");
         root->project()->waitLoadToFinish();
         auto errorModel = root->project()->errorModel();
@@ -187,7 +206,7 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
         QFileInfo info(filename);
         REQUIRE(!info.isReadable());
 
-        root->project()->loadFile(filename);
+        root->project()->loadOrConvert(filename);
         root->project()->waitLoadToFinish();
         auto errorModel = root->project()->errorModel();
 
@@ -214,7 +233,7 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
         REQUIRE(!info.isWritable());
         REQUIRE(info.isReadable());
 
-        root->project()->loadFile(filename);
+        root->project()->loadOrConvert(filename);
         root->project()->waitLoadToFinish();
         auto errorModel = root->project()->errorModel();
 
@@ -248,7 +267,7 @@ TEST_CASE("Save and load should work correctly for Projected Profile v3->v5", "[
         if(isResourceFile(filename)) {
             fileToProject(root->project(), filename);
         } else {
-            root->project()->loadFile(filename);
+            root->project()->loadOrConvert(filename);
             root->project()->waitLoadToFinish();
         }
 

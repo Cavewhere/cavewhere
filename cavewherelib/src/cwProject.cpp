@@ -346,7 +346,7 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
                              }
 
                              ErrorModel->append(result.errors());
-                             return ResultBase(fatalErrors);
+                             return fatalErrors.isEmpty() ? ResultBase() : ResultBase(fatalErrors);
                          }
 
                          return ResultBase();
@@ -379,30 +379,42 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
 {
     //Make a temporary project
     auto tempProject = std::make_shared<cwProject>();
+
+    //Load the old project into the temp project
+    auto oldLoadFuture = tempProject->loadHelper(oldProjectFilename);
+
     auto loadTempProjectFuture =
-        AsyncFuture::observe(tempProject.get(), &cwProject::loaded)
-            .context(this, [this, tempProject, oldProjectFilename, newProjectDirectory]() {
+        AsyncFuture::observe(oldLoadFuture)
+            .context(this, [this, oldLoadFuture, tempProject, oldProjectFilename, newProjectDirectory]() {
+                return mbind(oldLoadFuture, [=, this](const ResultBase& result){
+                    //Use a shared pointer here, too keep saveLoad alive until, the project is fully saved
+                    auto saveLoad = std::make_shared<cwSaveLoad>();
+                    auto filenameFuture = saveLoad->saveAllFromV6(newProjectDirectory, tempProject.get());
 
-                //Use a shared pointer here, too keep saveLoad alive until, the project is fully saved
-                auto saveLoad = std::make_shared<cwSaveLoad>();
-                auto filenameFuture = saveLoad->saveAllFromV6(newProjectDirectory, tempProject.get());
+                    auto loadFuture
+                        = AsyncFuture::observe(filenameFuture)
+                              .context(this, [saveLoad, filenameFuture, this]() {
+                                  return Monad::mbind(filenameFuture, [this](const Monad::ResultString& filename) {
+                                      return loadHelper(filename.value());
+                                  });
+                              }).future();
 
-                auto loadFuture
-                    = AsyncFuture::observe(filenameFuture)
-                          .context(this, [saveLoad, filenameFuture, this]() {
-                              return Monad::mbind(filenameFuture, [this](const Monad::ResultString& filename) {
-                                  return loadHelper(filename.value());
-                              });
-                          }).future();
-
-                FutureToken.addJob(cwFuture(QFuture<void>(loadFuture), QStringLiteral("Converting")));
-                return loadFuture;
+                    FutureToken.addJob(cwFuture(QFuture<void>(loadFuture), QStringLiteral("Converting")));
+                    return loadFuture;
+                });
             }).future();
+
+    AsyncFuture::observe(loadTempProjectFuture)
+        .context(this, [this, loadTempProjectFuture](){
+            auto result = loadTempProjectFuture.result();
+            if(result.hasError()) {
+                errorModel()->append(cwError(loadTempProjectFuture.result().errorMessage()));
+            }
+        });
+
 
     FutureToken.addJob(cwFuture(QFuture<void>(loadTempProjectFuture), QStringLiteral("Loading")));
 
-    //Load the old project into the temp project
-    tempProject->loadFile(oldProjectFilename);
 
     return loadTempProjectFuture;
 }

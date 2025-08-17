@@ -32,6 +32,12 @@
 
 using namespace Monad;
 
+// static cwStation fromProtoStation(const CavewhereProto::StationShot& protoStation);
+// static cwShot fromProtoShot(const CavewhereProto::StationShot& protoShot);
+static QStringList fromProtoStringList(const google::protobuf::RepeatedPtrField<std::string> &protoStringList);
+static QList<cwSurveyChunkData> fromProtoSurveyChunks(const google::protobuf::RepeatedPtrField<CavewhereProto::SurveyChunk> & protoList);
+
+
 template<typename ProtoType>
 static Result<ProtoType> loadMessage(const QString& filename) {
     QFile file(filename);
@@ -533,7 +539,7 @@ cwTeamMember cwSaveLoad::fromProtoTeamMember(const CavewhereProto::TeamMember &p
     return member;
 }
 
-QList<cwSurveyChunkData> cwSaveLoad::fromProtoSurveyChunks(const google::protobuf::RepeatedPtrField<CavewhereProto::SurveyChunk> &protoList)
+QList<cwSurveyChunkData> fromProtoSurveyChunks(const google::protobuf::RepeatedPtrField<CavewhereProto::SurveyChunk> &protoList)
 {
     QList<cwSurveyChunkData> chunks;
 
@@ -541,7 +547,7 @@ QList<cwSurveyChunkData> cwSaveLoad::fromProtoSurveyChunks(const google::protobu
         chunks.reserve(protoList.size());
 
         for (const auto& protoChunk : protoList) {
-            chunks.append(fromProtoSurveyChunk(protoChunk));
+            chunks.append(cwSaveLoad::fromProtoSurveyChunk(protoChunk));
         }
     }
 
@@ -810,7 +816,7 @@ QUuid cwSaveLoad::toUuid(const std::string &uuidStr)
 }
 
 
-QStringList cwSaveLoad::fromProtoStringList(const google::protobuf::RepeatedPtrField<std::string>& protoStringList)
+QStringList fromProtoStringList(const google::protobuf::RepeatedPtrField<std::string>& protoStringList)
 {
     QStringList stringList;
 

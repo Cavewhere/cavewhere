@@ -58,6 +58,7 @@ class ProjectedProfileScrapViewMatrix;
 class DistanceReading;
 class CompassReading;
 class ClinoReading;
+class StationShot;
 };
 
 namespace QtProto {
@@ -82,9 +83,6 @@ class Message;
 #include <QDir>
 #include <QFuture>
 #include <QHash>
-
-//Proto includes
-#include "cavewhere.pb.h"
 
 class cwSaveLoad : public QObject
 {
@@ -127,7 +125,7 @@ public:
     static cwTripCalibrationData fromProtoTripCalibration(const CavewhereProto::TripCalibration& proto);
     static cwTeamData fromProtoTeam(const CavewhereProto::Team& proto);
     static cwTeamMember fromProtoTeamMember(const CavewhereProto::TeamMember& proto);
-    static QList<cwSurveyChunkData> fromProtoSurveyChunks(const google::protobuf::RepeatedPtrField<CavewhereProto::SurveyChunk> & protoList);
+    // static QList<cwSurveyChunkData> fromProtoSurveyChunks(const google::protobuf::RepeatedPtrField<CavewhereProto::SurveyChunk> & protoList);
     static cwSurveyChunkData fromProtoSurveyChunk(const CavewhereProto::SurveyChunk& protoChunk);
     static cwStation fromProtoStation(const CavewhereProto::StationShot& protoStation);
     static cwShot fromProtoShot(const CavewhereProto::StationShot& protoShot);
@@ -145,7 +143,7 @@ public:
     static QString sanitizeFileName(QString input);
     static QUuid toUuid(const std::string& uuidStr);
 
-    static QStringList fromProtoStringList(const google::protobuf::RepeatedPtrField<std::string> &protoStringList);
+    // static QStringList fromProtoStringList(const google::protobuf::RepeatedPtrField<std::string> &protoStringList);
 
     //Returns the relative path to the project
     static QDir projectDir(const cwProject* project);
