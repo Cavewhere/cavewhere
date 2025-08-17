@@ -704,7 +704,18 @@ QVariant cwSurveyChunk::data(DataRole role, int index) const {
 
 cwSurveyChunkData cwSurveyChunk::data() const
 {
-    return d;
+    auto data = d;
+
+    data.calibrations.clear();
+
+    for(auto iter = Calibrations.constKeyValueBegin();
+         iter != Calibrations.constKeyValueEnd();
+         ++iter)
+    {
+        data.calibrations.insert(iter->first, iter->second->data());
+    }
+
+    return data;
 }
 
 void cwSurveyChunk::setData(const cwSurveyChunkData &data)
@@ -717,10 +728,27 @@ void cwSurveyChunk::setData(const cwSurveyChunkData &data)
     d.stations.clear();
     emit removed(0, lastStationIndex, 0, lastShotIndex);
 
+    //Removed all trip calibrations
+    for(auto value : std::as_const(Calibrations)) {
+        value->deleteLater();
+    }
+    Calibrations.clear();
+
+
     d = data;
 
     if(d.stations.size() > 0) {
         emit added(0, d.stations.size() - 1, 0, d.shots.size());
+    }
+
+    //Add all the calibrations
+    for(auto iter = d.calibrations.keyValueBegin();
+         iter != d.calibrations.keyValueEnd();
+         ++iter)
+    {
+        auto calibration = new cwTripCalibration(this);
+        calibration->setData(iter->second);
+        addCalibration(iter->first, calibration);
     }
 
     updateErrors();

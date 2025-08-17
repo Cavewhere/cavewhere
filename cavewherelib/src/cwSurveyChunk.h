@@ -85,13 +85,13 @@ public:
     QList<cwStation> stations() const;
     QList<cwShot> shots() const;
 
-    [[deprecated]]
+    // [[deprecated]]
     void addCalibration(int shotIndex, cwTripCalibration *calibration = nullptr);
-    [[deprecated]]
+    // [[deprecated]]
     void removeCalibration(int shotIndex);
-    [[deprecated]]
+    // [[deprecated]]
     QMap<int, cwTripCalibration *> calibrations() const;
-    [[deprecated]]
+    // [[deprecated]]
     cwTripCalibration* lastCalibration() const;
 
     bool hasStation(QString stationName) const;
