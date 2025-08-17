@@ -69,7 +69,7 @@ cwRegionLoadResult cwRegionLoadTask::load()
     QFileInfo info(databaseFilename());
 
     if(!info.exists()) {
-        results.addError(cwError(QString("Couldn't open '%1' because it doesn't exist").arg(databaseFilename()), cwError::Fatal));
+        results.addError(cwError(doesNotExistErrorMessage(databaseFilename()), cwError::Fatal));
         return results;
     }
 
@@ -812,6 +812,11 @@ QString cwRegionLoadTask::loadLegacyString(const QtProto::QString &protoString)
 {
     const std::string& string = protoString.stringdata();
     return QString::fromUtf8(string.c_str(), string.length());
+}
+
+QString cwRegionLoadTask::doesNotExistErrorMessage(const QString &filename)
+{
+    return QString("Couldn't open '%1' because it doesn't exist").arg(filename);
 }
 
 /**

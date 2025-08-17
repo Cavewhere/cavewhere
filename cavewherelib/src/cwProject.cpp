@@ -329,6 +329,7 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
             .context(this, [loadFuture, updateRegion, this]()->ResultBase
                      {
                          auto result = loadFuture.result();
+
                          if(result.errors().isEmpty()) {
                              updateRegion(result);
                          } else {
@@ -343,6 +344,11 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
                                             | std::views::transform([](const cwError& error)->QString { return error.message(); });
 
                                  fatalErrors = QStringList(errorRange.begin(), errorRange.end()).join('\n');
+                             }
+
+                             qDebug() << "Result error:" << result.errors().size();
+                             for(const cwError& error : result.errors()) {
+                                 qDebug() << "Message:" << error.message();
                              }
 
                              ErrorModel->append(result.errors());
@@ -366,13 +372,17 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
                     return ResultBase();
                 } else {
                     auto error = QStringLiteral("Error loading: %1 : %2").arg(filename, regionDataFuture.result().errorMessage());
-                    errorModel()->append(cwError(error));
+                    errorModel()->append(cwError(error, cwError::Fatal));
                     return ResultBase(error);
                 }
             }).future();
     }
 
-    return QtFuture::makeReadyValueFuture(ResultBase(QStringLiteral("Unknown CaveWhere file type")));
+    if(!QFileInfo::exists(filename)) {
+        return QtFuture::makeReadyValueFuture(ResultBase(cwRegionLoadTask::doesNotExistErrorMessage(filename)));
+    }
+
+    return QtFuture::makeReadyValueFuture(ResultBase(QStringLiteral("Couldn't open '%1' because it has a unknown file type. Is it corrupted!?").arg(filename)));
 }
 
 QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFilename, const QDir &newProjectDirectory, bool isTemporary)
@@ -383,10 +393,16 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
     //Load the old project into the temp project
     auto oldLoadFuture = tempProject->loadHelper(oldProjectFilename);
 
+    qDebug() << "oldLoadFuture:" << oldLoadFuture.isFinished();
+
     auto loadTempProjectFuture =
         AsyncFuture::observe(oldLoadFuture)
             .context(this, [this, oldLoadFuture, tempProject, oldProjectFilename, newProjectDirectory]() {
+                                         qDebug() << "oldLoadFuture:" << oldLoadFuture.result().hasError() << oldLoadFuture.result().errorMessage();
+
                 return mbind(oldLoadFuture, [=, this](const ResultBase& result){
+                                             qDebug() << "Save";
+
                     //Use a shared pointer here, too keep saveLoad alive until, the project is fully saved
                     auto saveLoad = std::make_shared<cwSaveLoad>();
                     auto filenameFuture = saveLoad->saveAllFromV6(newProjectDirectory, tempProject.get());
@@ -404,19 +420,25 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
                 });
             }).future();
 
-    AsyncFuture::observe(loadTempProjectFuture)
-        .context(this, [this, loadTempProjectFuture](){
-            auto result = loadTempProjectFuture.result();
-            if(result.hasError()) {
-                errorModel()->append(cwError(loadTempProjectFuture.result().errorMessage()));
-            }
-        });
+    auto errorHandlingFuture =
+        AsyncFuture::observe(loadTempProjectFuture)
+            .context(this, [this, loadTempProjectFuture, tempProject](){
+                auto result = loadTempProjectFuture.result();
+                errorModel()->append(tempProject->errorModel()->toList());
+
+                // if(result.hasError()) {
+                //     qDebug() << "Adding error:" << loadTempProjectFuture.result().errorMessage();
+                //     errorModel()->append(cwError(loadTempProjectFuture.result().errorMessage(), cwError::Fatal));
+                // }
+
+                return loadTempProjectFuture;
+            }).future();
 
 
-    FutureToken.addJob(cwFuture(QFuture<void>(loadTempProjectFuture), QStringLiteral("Loading")));
+    FutureToken.addJob(cwFuture(QFuture<void>(errorHandlingFuture), QStringLiteral("Loading")));
 
 
-    return loadTempProjectFuture;
+    return errorHandlingFuture;
 }
 
 /**
@@ -718,7 +740,15 @@ void cwProject::loadOrConvert(const QString &filename)
         LoadFuture = convertFromProjectV6Helper(filename, tempDir, temporaryProject);
         // setTemporaryProject(true);
     } else {
-        LoadFuture = loadHelper(filename);
+        //This could be Git file or a corrupted file
+        auto loadFuture = loadHelper(filename);
+        LoadFuture = AsyncFuture::observe(loadFuture)
+                         .context(this, [loadFuture, this]() {
+                             auto result = loadFuture.result();
+                             if(result.hasError()) {
+                                 errorModel()->append(cwError(result.errorMessage(), cwError::Fatal));
+                             }
+                         }).future();
     }
 }
 

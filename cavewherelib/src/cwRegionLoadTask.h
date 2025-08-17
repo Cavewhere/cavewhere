@@ -92,6 +92,8 @@ public:
     static QVector3D loadVector3D(const QtProto::QVector3D& protoVector3D);
     static QVector2D loadVector2D(const QtProto::QVector2D& protoVector2D);
 
+    static QString doesNotExistErrorMessage(const QString& filename);
+
 signals:
     void finishedLoading();
 

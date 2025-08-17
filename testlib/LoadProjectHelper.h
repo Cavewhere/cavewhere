@@ -35,7 +35,7 @@ QString CAVEWHERE_TESTLIB_EXPORT prependTempFolder(QString filename);
  * @return A new project generate from filename
  */
 std::shared_ptr<cwProject> CAVEWHERE_TESTLIB_EXPORT fileToProject(QString filename);
-void CAVEWHERE_TESTLIB_EXPORT fileToProject(cwProject* project, const QString& filename);
+QString CAVEWHERE_TESTLIB_EXPORT fileToProject(cwProject* project, const QString& filename);
 
 class CAVEWHERE_TESTLIB_EXPORT TestHelper : public QObject {
     Q_OBJECT

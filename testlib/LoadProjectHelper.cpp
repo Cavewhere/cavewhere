@@ -9,11 +9,13 @@ std::shared_ptr<cwProject> fileToProject(QString filename) {
     return project;
 }
 
-void fileToProject(cwProject *project, const QString &filename) {
+QString fileToProject(cwProject *project, const QString &filename) {
     QString datasetFile = copyToTempFolder(filename);
 
     project->loadOrConvert(datasetFile);
     project->waitLoadToFinish();
+
+    return datasetFile;
 }
 
 QString copyToTempFolder(QString filename) {

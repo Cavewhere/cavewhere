@@ -132,15 +132,17 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
             return paths;
         };
 
-        qDebug() << "Resources:" << allResourcePaths();
-
-        fileToProject(root->project(), "://datasets/test_ProtoBufferSaveLoad/badFile.cw");
+        auto filename = fileToProject(root->project(), "://datasets/test_ProtoBufferSaveLoad/badFile.cw");
         root->project()->waitLoadToFinish();
         auto errorModel = root->project()->errorModel();
 
         REQUIRE(errorModel->size() == 1);
 
-        CHECK(errorModel->at(0) == cwError("Couldn't prepare select Caving Region:'file is not a database' sql:'SELECT protoBuffer FROM ObjectData where id = 1'", cwError::Fatal));
+        cwError expectedError = cwError(QStringLiteral("Couldn't open '%1' because it has a unknown file type. Is it corrupted!?").arg(filename), cwError::Fatal);
+        INFO("Model:" << errorModel->at(0));
+        INFO("expected:" << expectedError);
+
+        CHECK(errorModel->at(0) == expectedError);
 
         CHECK(root->project()->isTemporaryProject());
     }
@@ -152,6 +154,7 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
 
         REQUIRE(errorModel->size() == 1);
 
+        INFO("Model:" << errorModel->at(0));
         CHECK(errorModel->at(0) == cwError("Couldn't read proto buffer. Corrupted?!", cwError::Fatal));
 
         CHECK(root->project()->isTemporaryProject());
@@ -165,6 +168,7 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
 
         auto errorModel = root->project()->errorModel();
 
+        INFO("Model:" << errorModel->at(0));
         REQUIRE(errorModel->size() == 1);
 
         QString expectErrorMessage = QString("Upgrade CaveWhere to 0.08-70-g20d1d7c to load this file! Current file version is 10000. CaveWhere %1 supports up to file version %2. You are loading a newer CaveWhere file than this version supports. You will loss data if you save")
@@ -213,6 +217,8 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
         REQUIRE(errorModel->size() == 1);
 
         QString expectErrorMessage = QString("Couldn't open '%1' because you don't have permission to read it").arg(filename);
+
+        INFO("Error-at(0):" << errorModel->at(0));
 
         CHECK(errorModel->at(0) == cwError(expectErrorMessage, cwError::Fatal));
 
