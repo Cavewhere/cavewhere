@@ -478,7 +478,7 @@ TEST_CASE("cwSaveLoad should save and load cwTrip - complex", "[cwSaveLoad]") {
     auto root = std::make_unique<cwRootData>();
     auto filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
 
-    root->project()->loadFile(filename);
+    root->project()->loadOrConvert(filename);
     root->project()->waitLoadToFinish();
 
     REQUIRE(root->project()->cavingRegion()->caveCount() >= 1);
@@ -503,7 +503,7 @@ TEST_CASE("cwSaveLoad should save old projects correctly", "[cwSaveLoad]") {
     //Prevents loop closure from happening
     root->settings()->jobSettings()->setAutomaticUpdate(false);
 
-    root->project()->loadFile(filename);
+    root->project()->loadOrConvert(filename);
     root->project()->waitLoadToFinish();
 
     REQUIRE(root->project()->cavingRegion()->caveCount() >= 1);
@@ -527,7 +527,7 @@ TEST_CASE("cwSaveLoad should 3-way merge cwTrip correctly", "[cwSaveLoad]") {
     //Prevents loop closure from happening
     root->settings()->jobSettings()->setAutomaticUpdate(false);
 
-    root->project()->loadFile(filename);
+    root->project()->loadOrConvert(filename);
     root->project()->waitLoadToFinish();
 
     REQUIRE(root->project()->cavingRegion()->caveCount() >= 1);

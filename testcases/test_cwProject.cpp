@@ -47,6 +47,8 @@ TEST_CASE("cwProject isModified should work correctly", "[cwProject]") {
     project.waitLoadToFinish();
     CHECK(project.isModified() == false);
 
+    REQUIRE(project.cavingRegion()->caveCount() == 1);
+
     project.cavingRegion()->cave(0)->addTrip();
     CHECK(project.isModified() == true);
 

@@ -266,6 +266,11 @@ cwImageData cwImageProvider::data(QString filename) const
     return cwImageData(size, dotPerMeter, extention.toUtf8(), data);
 }
 
+QString cwImageProvider::absoluteImagePath(const cwImage &image) const
+{
+    return imagePath(image.path());
+}
+
 // /**
 //   \brief Gets a QImage from the image provider.  If the image at id is null, then
 //   this will return a empty image

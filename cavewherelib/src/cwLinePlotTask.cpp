@@ -81,7 +81,7 @@ cwLinePlotTask::cwLinePlotTask(QObject *parent) :
 
 cwLinePlotTask::~cwLinePlotTask()
 {
-    waitToFinish();
+    waitToFinish(cwTask::IgnoreRestart);
 }
 
 /**
@@ -121,6 +121,7 @@ void cwLinePlotTask::runTask() {
 
     auto region = new cwCavingRegion();
     region->setData(RegionData);
+    Q_ASSERT(Region == nullptr);
     Region = region;
 
     //Clear the previous results
@@ -147,14 +148,17 @@ void cwLinePlotTask::runTask() {
 
         linePlotTaskComplete();
 
+        delete Region;
+        Region = nullptr;
+
         done();
 
     } catch(QString error) {
+        delete Region;
+        Region = nullptr;
+
         done();
     }
-
-    delete Region;
-    Region = nullptr;
 }
 
 /**

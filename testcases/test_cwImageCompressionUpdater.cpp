@@ -17,13 +17,15 @@ TEST_CASE("cwRootData should automatically update compression for notes", "[cwIm
 
     auto checkNotesAreGood = [&rootData, project]() {
         //Test that the cwNotes have mipmaps
-        QList<cwNote*> notes = rootData->regionTreeModel()->all<cwNote*>(QModelIndex(), &cwRegionTreeModel::note);
+        const QList<cwNote*> notes = rootData->regionTreeModel()->all<cwNote*>(QModelIndex(), &cwRegionTreeModel::note);
 
         CHECK(notes.size() == 3);
 
-        cwImageDatabase imageDatabase(project->filename());
+        cwImageProvider provider;
+        provider.setProjectPath(project->filename());
+
         for(cwNote* note : notes) {
-            CHECK(imageDatabase.imageExists(note->image().original()));
+            CHECK(QFileInfo::exists(provider.absoluteImagePath(note->image())));
         }
     };
 
@@ -41,13 +43,15 @@ TEST_CASE("cwRootData should automatically update compression for scaps", "[cwIm
 
     auto checkScrapsAreGood = [&rootData, project]() {
         //Test that the cwNotes have mipmaps
-        QList<cwScrap*> scraps = rootData->regionTreeModel()->all<cwScrap*>(QModelIndex(), &cwRegionTreeModel::scrap);
+        const QList<cwScrap*> scraps = rootData->regionTreeModel()->all<cwScrap*>(QModelIndex(), &cwRegionTreeModel::scrap);
 
         CHECK(scraps.size() == 1);
 
-        cwImageDatabase imageDatabase(project->filename());
+        cwImageProvider provider;
+        provider.setProjectPath(project->filename());
+
         for(cwScrap* scrap : scraps) {
-            CHECK(imageDatabase.imageExists(scrap->triangulationData().croppedImage().original()));
+            CHECK(QFileInfo::exists(provider.absoluteImagePath(scrap->triangulationData().croppedImage())));
         }
     };
 
