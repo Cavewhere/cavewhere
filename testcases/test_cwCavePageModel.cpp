@@ -51,12 +51,32 @@ TEST_CASE("cwCavePageModel Test with Static Data", "[cwCavePageModel]")
         int errorCount;
     };
 
-    std::vector<TripTestData> expectedData = {
+    std::vector<TripTestData> expectedDataUnordered = {
         {"Trip 1", "2024-11-12", "A 1-3", 12.0, 3},
         {"Trip 2", "2024-11-11", "A 3-4", 90.0, 0},
         {"Trip 3", "2024-11-10", "B 2-4", 14.0, 0},
         {"Trip 4", "2024-11-09", "C 2-3", 21.0, 4}
     };
+
+    std::vector<TripTestData> expectedData = [&]() {
+        std::vector<TripTestData> testData;
+        testData.reserve(expectedDataUnordered.size());
+
+        for(int i = 0; i < model.rowCount(); i++) {
+            const QModelIndex index = model.index(i, 0);
+            const QString tripName = model.data(index, cwCavePageModel::TripNameRole).toString();
+            auto iter = std::find_if(expectedDataUnordered.begin(), expectedDataUnordered.end(),
+                                     [tripName](const TripTestData& data) {
+                                         return data.name == tripName;
+                                     });
+            REQUIRE(iter != expectedDataUnordered.end());
+            testData.push_back(*iter);
+        }
+
+        REQUIRE(testData.size() == expectedDataUnordered.size());
+
+        return testData;
+    }();
 
     auto checkModel = [&]() {
         //Wait for the thread pool to settle
@@ -135,43 +155,63 @@ TEST_CASE("cwCavePageModel Test with Static Data", "[cwCavePageModel]")
 
     SECTION("Update underlying data") {
         REQUIRE(testCave->tripCount() == 4);
-        auto trip2 = testCave->trip(1);
+
+        auto trips = testCave->trips();
+        auto tripIter = std::find_if(trips.begin(), trips.end(),
+                                 [](const cwTrip* trip) {
+                                     return trip->name() == QStringLiteral("Trip 2");
+                                 });
+
+        auto iter = std::find_if(expectedData.begin(), expectedData.end(),
+                                     [](const auto& tripData) {
+                                         return tripData.name == QStringLiteral("Trip 2");
+                                     });
+
+
+        auto trip2 = *tripIter; //testCave->trip(1);
+
+        auto index = std::distance(expectedData.begin(), iter);
+
+        CHECK(trip2->name().toStdString() == "Trip 2");
+        CHECK(expectedData[index].name.toStdString() == "Trip 2");
 
         //Update name
         trip2->setName("New trip 2");
-        expectedData[1].name = "New trip 2";
+        expectedData[index].name = "New trip 2";
         checkModel();
-        checkDataChangedSpy(1, {cwCavePageModel::TripNameRole});
+        checkDataChangedSpy(index, {cwCavePageModel::TripNameRole});
 
         //Update date
         trip2->setDate(QDateTime(QDate(2025, 1, 2), QTime()));
-        expectedData[1].date = "2025-01-02";
+        expectedData[index].date = "2025-01-02";
         checkModel();
-        checkDataChangedSpy(1, {cwCavePageModel::TripDateRole});
+        checkDataChangedSpy(index, {cwCavePageModel::TripDateRole});
+
+        dataChangedSpy.clear();
 
         //Update shot data and length
         REQUIRE(trip2->chunkCount() == 1);
         auto chunk = trip2->chunk(0);
         chunk->setData(cwSurveyChunk::StationNameRole, 1, "A5");
-        expectedData[1].stationNames = "A 5-5";
+        expectedData[index].stationNames = "A 5-5";
         checkModel();
-        checkDataChangedSpy(1, {cwCavePageModel::TripDistanceRole}); //This one shouldn't really be emitted
-        checkDataChangedSpy(1, {cwCavePageModel::UsedStationsRole});
+        checkDataChangedSpy(index, {cwCavePageModel::TripDistanceRole}); //This one shouldn't really be emitted
+        checkDataChangedSpy(index, {cwCavePageModel::UsedStationsRole});
         CHECK(dataChangedSpy.size() == 0);
 
         //Update the length
         chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, 80);
-        expectedData[1].distance = 80;
+        expectedData[index].distance = 80;
         checkModel();
-        checkDataChangedSpy(1, {cwCavePageModel::TripDistanceRole});
+        checkDataChangedSpy(index, {cwCavePageModel::TripDistanceRole});
         CHECK(dataChangedSpy.size() == 0);
 
         //Change error count
         chunk->setData(cwSurveyChunk::StationLeftRole, 0, "");
-        expectedData[1].errorCount = 1;
+        expectedData[index].errorCount = 1;
         checkModel();
-        checkDataChangedSpy(1, {cwCavePageModel::TripDistanceRole}); //This one shouldn't really be emitted
-        checkDataChangedSpy(1, {cwCavePageModel::ErrorCountRole});
+        checkDataChangedSpy(index, {cwCavePageModel::TripDistanceRole}); //This one shouldn't really be emitted
+        checkDataChangedSpy(index, {cwCavePageModel::ErrorCountRole});
     }
 
     // Test case for adding a new trip
