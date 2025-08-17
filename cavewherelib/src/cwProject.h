@@ -83,7 +83,8 @@ public:
 
     Q_INVOKABLE FileType projectType(QString filename) const;
 
-    Q_INVOKABLE void convertFromProjectV6(QString oldProjectFilename, const QDir &newProjectDirectory);
+    Q_INVOKABLE void convertFromProjectV6(QString oldProjectFilename,
+                                          const QDir &newProjectDirectory);
 
     //Older save and load
     Q_INVOKABLE void save();
@@ -169,6 +170,11 @@ private:
 
     void addImageHelper(std::function<void (QList<cwImage>)> outputCallBackFunc,
                         std::function<void (cwAddImageTask*)> setImagesFunc);
+
+    QFuture<Monad::ResultBase> loadHelper(QString filename);
+    QFuture<Monad::ResultBase> convertFromProjectV6Helper(QString oldProjectFilename,
+                                                          const QDir &newProjectDirectory,
+                                                          bool isTemporary = false);
 };
 
 /**

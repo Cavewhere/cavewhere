@@ -11,7 +11,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     add_link_options($<$<CONFIG:Debug>:-fsanitize=address>)
 endif()
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(QT_QML_GENERATE_QMLLS_INI ON CACHE BOOL "Generate QMLLS INI file")
 

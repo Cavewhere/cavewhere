@@ -254,7 +254,7 @@ struct LineObj {
     Obj obj;
     QList<Obj> list;
 
-    bool operator==(const LineObj& other) {
+    bool operator==(const LineObj& other) const {
         return id == other.id
                && size == other.size
                && obj == other.obj

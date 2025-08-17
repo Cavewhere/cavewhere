@@ -30,6 +30,8 @@ TEST_CASE("Export/Import Compass", "[Compass]") {
 
     QString datasetFile = copyToTempFolder(":/datasets/compass/compassImportExport.cw");
 
+
+
     auto project = std::make_unique<cwProject>();
     project->loadOrConvert(datasetFile);
 

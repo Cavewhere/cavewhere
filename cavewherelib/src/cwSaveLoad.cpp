@@ -60,6 +60,14 @@ struct cwSaveLoad::Data {
         std::unique_ptr<const google::protobuf::Message> message;
 
         WaitingJob() = default;
+        WaitingJob(AsyncFuture::Deferred<Monad::ResultBase> job,
+                   std::unique_ptr<const google::protobuf::Message>&& msg) :
+            jobDeferred(job),
+            message(std::move(msg))
+        {
+
+        }
+
         WaitingJob(WaitingJob&&) noexcept = default;
         WaitingJob& operator=(WaitingJob&&) noexcept = default;
 

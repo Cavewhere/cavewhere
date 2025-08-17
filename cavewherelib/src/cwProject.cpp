@@ -45,6 +45,12 @@
 //Async Future
 #include <asyncfuture.h>
 
+//Std includes
+#include <ranges>
+
+//Monad includes
+using namespace Monad;
+
 QAtomicInt cwProject::ConnectionCounter;
 
 /**
@@ -289,6 +295,118 @@ void cwProject::addImageHelper(std::function<void (QList<cwImage>)> outputCallBa
     });
 }
 
+QFuture<ResultBase> cwProject::loadHelper(QString filename)
+{
+    if(filename.isEmpty()) { QtFuture::makeReadyValueFuture(ResultBase(QStringLiteral("File name is empty"))); }
+
+    FileType type = projectType(filename);
+
+    // //Only load one file at a time
+    // LoadFuture.cancel();
+
+    filename = cwGlobals::convertFromURL(filename);
+
+    if(type == SqliteFileType) {
+        //Run the load task async
+        auto loadFuture = cwConcurrent::run([filename](){
+            cwRegionLoadTask loadTask;
+            loadTask.setDatabaseFilename(filename);
+            return loadTask.load();
+        });
+
+        FutureToken.addJob({QFuture<void>(loadFuture), QStringLiteral("Loading")});
+
+        auto updateRegion = [this, filename](const cwRegionLoadResult& result) {
+            setFilename(result.filename());
+            setTemporaryProject(result.isTempFile());
+            Region->setData(result.cavingRegion());
+            FileVersion = result.fileVersion();
+            emit canSaveDirectlyChanged();
+            emit loaded();
+        };
+
+        return AsyncFuture::observe(loadFuture)
+            .context(this, [loadFuture, updateRegion, this]()->ResultBase
+                     {
+                         auto result = loadFuture.result();
+                         if(result.errors().isEmpty()) {
+                             updateRegion(result);
+                         } else {
+
+                             QString fatalErrors;
+                             if(!cwError::containsFatal(result.errors())) {
+                                 //Just warnings, we should be able to load
+                                 updateRegion(result);
+                             } else {
+                                 auto errorRange = result.errors()
+                                            | std::views::filter(cwError::isFatal)
+                                            | std::views::transform([](const cwError& error)->QString { return error.message(); });
+
+                                 fatalErrors = QStringList(errorRange.begin(), errorRange.end()).join('\n');
+                             }
+
+                             ErrorModel->append(result.errors());
+                             return ResultBase(fatalErrors);
+                         }
+
+                         return ResultBase();
+                     }).future();
+    } else if (type == GitFileType) {
+        //Find all the cave file
+        auto regionDataFuture = cwSaveLoad::loadAll(filename);
+
+        FutureToken.addJob({QFuture<void>(regionDataFuture), QStringLiteral("Loading")});
+
+        return AsyncFuture::observe(regionDataFuture)
+            .context(this, [this, regionDataFuture, filename]() {
+                if(!regionDataFuture.result().hasError()) {
+                    setFilename(filename);
+                    setTemporaryProject(false);
+                    Region->setData(regionDataFuture.result().value());
+                    return ResultBase();
+                } else {
+                    auto error = QStringLiteral("Error loading: %1 : %2").arg(filename, regionDataFuture.result().errorMessage());
+                    errorModel()->append(cwError(error));
+                    return ResultBase(error);
+                }
+            }).future();
+    }
+
+    return QtFuture::makeReadyValueFuture(ResultBase(QStringLiteral("Unknown CaveWhere file type")));
+}
+
+QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFilename, const QDir &newProjectDirectory, bool isTemporary)
+{
+    //Make a temporary project
+    auto tempProject = std::make_shared<cwProject>();
+    auto loadTempProjectFuture =
+        AsyncFuture::observe(tempProject.get(), &cwProject::loaded)
+            .context(this, [this, tempProject, oldProjectFilename, newProjectDirectory]() {
+
+                //Use a shared pointer here, too keep saveLoad alive until, the project is fully saved
+                auto saveLoad = std::make_shared<cwSaveLoad>();
+                auto filenameFuture = saveLoad->saveAllFromV6(newProjectDirectory, tempProject.get());
+
+                auto loadFuture
+                    = AsyncFuture::observe(filenameFuture)
+                          .context(this, [saveLoad, filenameFuture, this]() {
+                              return Monad::mbind(filenameFuture, [this](const Monad::ResultString& filename) {
+                                  return loadHelper(filename.value());
+                              });
+                          }).future();
+
+                FutureToken.addJob(cwFuture(QFuture<void>(loadFuture), QStringLiteral("Converting")));
+                return loadFuture;
+            }).future();
+
+    FutureToken.addJob(cwFuture(QFuture<void>(loadTempProjectFuture), QStringLiteral("Loading")));
+
+    //Load the old project into the temp project
+    tempProject->loadFile(oldProjectFilename);
+
+    return loadTempProjectFuture;
+}
+
 /**
   Saves the project as a new file
 
@@ -379,63 +497,9 @@ void cwProject::newProject() {
 void cwProject::loadFile(QString filename) {
     if(filename.isEmpty()) { return; }
 
-    FileType type = projectType(filename);
-
     //Only load one file at a time
     LoadFuture.cancel();
-
-    filename = cwGlobals::convertFromURL(filename);
-
-    if(type == SqliteFileType) {
-        //Run the load task async
-        auto loadFuture = cwConcurrent::run([filename](){
-            cwRegionLoadTask loadTask;
-            loadTask.setDatabaseFilename(filename);
-            return loadTask.load();
-        });
-
-        FutureToken.addJob({QFuture<void>(loadFuture), QStringLiteral("Loading")});
-
-        auto updateRegion = [this, filename](const cwRegionLoadResult& result) {
-            setFilename(result.filename());
-            setTemporaryProject(result.isTempFile());
-            Region->setData(result.cavingRegion());
-            FileVersion = result.fileVersion();
-            emit canSaveDirectlyChanged();
-            emit loaded();
-        };
-
-        LoadFuture = AsyncFuture::observe(loadFuture)
-                         .context(this, [loadFuture, updateRegion, this]()
-                                    {
-                                        auto result = loadFuture.result();
-                                        if(result.errors().isEmpty()) {
-                                            updateRegion(result);
-                                        } else {
-                                            if(!cwError::containsFatal(result.errors())) {
-                                                //Just warnings, we should be able to load
-                                                updateRegion(result);
-                                            }
-                                            ErrorModel->append(result.errors());
-                                        }
-                                    }).future();
-    } else if (type == GitFileType) {
-        //Find all the cave file
-        auto regionDataFuture = cwSaveLoad::loadAll(filename);
-
-        FutureToken.addJob({QFuture<void>(regionDataFuture), QStringLiteral("Loading")});
-
-        LoadFuture = AsyncFuture::observe(regionDataFuture)
-            .context(this, [this, regionDataFuture, filename]() {
-                if(!regionDataFuture.result().hasError()) {
-                    setFilename(filename);
-                    setTemporaryProject(false);
-                    Region->setData(regionDataFuture.result().value());
-                } else {
-                    errorModel()->append(cwError(QStringLiteral("Error loading: %1 : %2").arg(filename, regionDataFuture.result().errorMessage())));
-                }
-            }).future();
-    }
+    LoadFuture = loadHelper(filename);
 }
 
 /**
@@ -632,14 +696,17 @@ void cwProject::loadOrConvert(const QString &filename)
 
     FileType type = projectType(filename);
 
+    LoadFuture.cancel();
+
     if(type == SqliteFileType) {
         QTemporaryDir dir;
         dir.setAutoRemove(false);
         auto tempDir = QDir(dir.filePath(QFileInfo(filename).baseName()));
-        convertFromProjectV6(filename, tempDir);
-        setTemporaryProject(true);
+        bool temporaryProject = true;
+        LoadFuture = convertFromProjectV6Helper(filename, tempDir, temporaryProject);
+        // setTemporaryProject(true);
     } else {
-        loadFile(filename);
+        LoadFuture = loadHelper(filename);
     }
 }
 
@@ -665,33 +732,38 @@ QString cwProject::supportedImageFormats()
 }
 
 
-void cwProject::convertFromProjectV6(QString oldProjectFilename, const QDir &newProjectDirectory)
+void cwProject::convertFromProjectV6(QString oldProjectFilename,
+                                     const QDir &newProjectDirectory)
 {
     //Make a temporary project
     auto tempProject = std::make_shared<cwProject>();
     auto loadTempProjectFuture = AsyncFuture::observe(tempProject.get(), &cwProject::loaded)
-        .context(this, [this, tempProject, oldProjectFilename, newProjectDirectory]() {
+        .context(this, [this, tempProject, oldProjectFilename, newProjectDirectory]()->QFuture<ResultBase> {
 
             //Use a shared pointer here, too keep saveLoad alive until, the project is fully saved
             auto saveLoad = std::make_shared<cwSaveLoad>();
             auto filenameFuture = saveLoad->saveAllFromV6(newProjectDirectory, tempProject.get());
+            qDebug() << "I get here!";
 
             auto loadFuture = AsyncFuture::observe(filenameFuture)
-                                  .context(this, [saveLoad, filenameFuture, this]() {
+                                  .context(this, [saveLoad, filenameFuture, this]() {                                      
                                       if(!filenameFuture.result().hasError()) {
                                           //Load the project into this cwProject
-                                          loadFile(filenameFuture.result().value());
+                                          qDebug() << "Loading project:" << filenameFuture.result().value();
+                                          return loadHelper(filenameFuture.result().value());
+                                      } else {
+                                          return QtFuture::makeReadyValueFuture<ResultBase>(filenameFuture.result());
                                       }
                                   }).future();
 
-            FutureToken.addJob(cwFuture(loadFuture, QStringLiteral("Converting")));
+            FutureToken.addJob(cwFuture(QFuture<void>(loadFuture), QStringLiteral("Converting")));
+            return loadFuture;
         }).future();
 
-    FutureToken.addJob(cwFuture(loadTempProjectFuture, QStringLiteral("Loading")));
+    FutureToken.addJob(cwFuture(QFuture<void>(loadTempProjectFuture), QStringLiteral("Loading")));
 
     //Load the old project into the temp project
     tempProject->loadFile(oldProjectFilename);
-
 }
 
 cwProject::FileType cwProject::projectType(QString filename) const

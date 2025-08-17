@@ -78,6 +78,8 @@ void cwAddImageTask::setImageTypesWithFormat(cwTextureUploadTask::Format format)
 
 QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
 {
+    return QtFuture::makeReadyValueFuture(cwTrackedImagePtr());
+
     // QString filename = databaseFilename();
     // auto imageTypes = ImageTypes;
 
