@@ -86,6 +86,7 @@ TEST_CASE("cwTrackImage should work with QSharedPointer's custom delete function
             auto newImage = newImages.first();
 
             //FIXME!
+            loop.quit();
             REQUIRE(false);
 
             CHECK(newImage.isIconValid());
