@@ -34,8 +34,11 @@ TEST_CASE("cwTrackedImage should delete images from database", "[cwTrackedImage]
 
         auto newImage = newImages.first();
 
-        CHECK(newImage.isIconValid());
-        CHECK(newImage.isOriginalValid());
+        //FIXME!
+        REQUIRE(false);
+
+        // CHECK(newImage.isIconValid());
+        // CHECK(newImage.isOriginalValid());
 
         trackedImage = cwTrackedImage(newImage, project->filename());
         count++;
@@ -44,8 +47,12 @@ TEST_CASE("cwTrackedImage should delete images from database", "[cwTrackedImage]
     rootData->futureManagerModel()->waitForFinished();
 
     CHECK(count == 1);
-    CHECK(trackedImage.isIconValid());
-    CHECK(trackedImage.isOriginalValid());
+
+    //FIXME!
+    REQUIRE(false);
+
+    // CHECK(trackedImage.isIconValid());
+    // CHECK(trackedImage.isOriginalValid());
 
     trackedImage.deleteImagesFromDatabase();
 
@@ -78,6 +85,9 @@ TEST_CASE("cwTrackImage should work with QSharedPointer's custom delete function
 
             auto newImage = newImages.first();
 
+            //FIXME!
+            REQUIRE(false);
+
             CHECK(newImage.isIconValid());
             CHECK(newImage.isOriginalValid());
 
@@ -93,6 +103,9 @@ TEST_CASE("cwTrackImage should work with QSharedPointer's custom delete function
     cwAsyncFuture::waitForFinished(future);
 
     REQUIRE(!trackImagePtr.isNull());
+
+    //FIXME!
+    REQUIRE(false);
 
     auto checkThatImageExist = [project](int id) {
         cwImageDatabase database(project->filename());
