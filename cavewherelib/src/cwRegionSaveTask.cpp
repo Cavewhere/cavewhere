@@ -51,35 +51,35 @@ cwRegionSaveTask::cwRegionSaveTask(QObject *parent) :
     GOOGLE_PROTOBUF_VERIFY_VERSION;
 }
 
-QByteArray cwRegionSaveTask::serializedData(cwCavingRegion* region)
-{
-    CavewhereProto::CavingRegion protoRegion;
-    saveCavingRegion(protoRegion, region);
+// QByteArray cwRegionSaveTask::serializedData(cwCavingRegion* region)
+// {
+//     CavewhereProto::CavingRegion protoRegion;
+//     saveCavingRegion(protoRegion, region);
 
-    std::string regionString = protoRegion.SerializeAsString();
+//     std::string regionString = protoRegion.SerializeAsString();
 
-    QByteArray regionByteArray;
-    if(!regionString.empty()) {
-        regionByteArray = QByteArray(&regionString[0], regionString.size());
-    }
-    return regionByteArray;
-}
+//     QByteArray regionByteArray;
+//     if(!regionString.empty()) {
+//         regionByteArray = QByteArray(&regionString[0], regionString.size());
+//     }
+//     return regionByteArray;
+// }
 
-QList<cwError> cwRegionSaveTask::save(cwCavingRegion* region)
-{
-    //Open a datebase connection
-    bool connected = connectToDatabase("saveRegionTask");
-    if(connected) {
+// QList<cwError> cwRegionSaveTask::save(cwCavingRegion* region)
+// {
+//     //Open a datebase connection
+//     bool connected = connectToDatabase("saveRegionTask");
+//     if(connected) {
 
-        cwProject::createDefaultSchema(database());
+//         cwProject::createDefaultSchema(database());
 
-        saveToProtoBuffer(region);
+//         saveToProtoBuffer(region);
 
-        disconnectToDatabase();
-    }
+//         disconnectToDatabase();
+//     }
 
-    return errors();
-}
+//     return errors();
+// }
 
 void cwRegionSaveTask::runTask() {
     //Finished
@@ -91,31 +91,31 @@ void cwRegionSaveTask::runTask() {
  *
  * Save cavewhere object data usingo google protobuffer
  */
-void cwRegionSaveTask::saveToProtoBuffer(cwCavingRegion* region)
-{
-    cwSQLManager::Transaction transaction(database());
+// void cwRegionSaveTask::saveToProtoBuffer(cwCavingRegion* region)
+// {
+//     cwSQLManager::Transaction transaction(database());
 
-    QByteArray regionByteArray = serializedData(region);
+//     QByteArray regionByteArray = serializedData(region);
 
-    QSqlQuery insertCavingRegion(database());
-    QString queryStr =
-            QString("INSERT OR REPLACE INTO ObjectData ") +
-            QString("(id, protoBuffer) ") +
-            QString("VALUES (1, ?)");
+//     QSqlQuery insertCavingRegion(database());
+//     QString queryStr =
+//             QString("INSERT OR REPLACE INTO ObjectData ") +
+//             QString("(id, protoBuffer) ") +
+//             QString("VALUES (1, ?)");
 
-    bool successful = insertCavingRegion.prepare(queryStr);
-    if(!successful) {
-        addError(cwError(QString("Couldn't create query to insert region proto buffer data:") + insertCavingRegion.lastError().text(), cwError::Fatal));
-        stop();
-    }
+//     bool successful = insertCavingRegion.prepare(queryStr);
+//     if(!successful) {
+//         addError(cwError(QString("Couldn't create query to insert region proto buffer data:") + insertCavingRegion.lastError().text(), cwError::Fatal));
+//         stop();
+//     }
 
-    insertCavingRegion.bindValue(0, regionByteArray);
-    bool success = insertCavingRegion.exec();
+//     insertCavingRegion.bindValue(0, regionByteArray);
+//     bool success = insertCavingRegion.exec();
 
-    if(!success) {
-        addError(cwError(QString("Couldn't execute query:") + insertCavingRegion.lastError().databaseText() + " " + queryStr + " " + LOCATION_STR, cwError::Fatal));
-    }
-}
+//     if(!success) {
+//         addError(cwError(QString("Couldn't execute query:") + insertCavingRegion.lastError().databaseText() + " " + queryStr + " " + LOCATION_STR, cwError::Fatal));
+//     }
+// }
 
 /**
  * @brief cwRegionSaveTask::saveCave

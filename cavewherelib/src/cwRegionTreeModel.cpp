@@ -736,6 +736,11 @@ cwScrap *cwRegionTreeModel::scrap(const QModelIndex &index) const
     return nullptr;
 }
 
+QObject *cwRegionTreeModel::object(const QModelIndex &index) const
+{
+    return data(index, ObjectRole).value<QObject*>();
+}
+
 /**
   \brief Adds all the connection for a cave
   */

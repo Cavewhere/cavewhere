@@ -74,13 +74,23 @@ cwRegionLoadResult cwRegionLoadTask::load()
     }
 
     if(!info.isReadable()) {
-        results.addError(cwError(QString("Couldn't open '%1' because you don't have permission to read it").arg(databaseFilename()), cwError::Fatal));
+        results.addError(cwError(fileNotReadableErrorMessage(databaseFilename()), cwError::Fatal));
         return results;
     }
 
     if(!info.isWritable()) {
         results.addError(cwError(QString("'%1' is a ReadOnly file. Copying it to a temporary file").arg(databaseFilename()), cwError::Warning));
-        auto newFilename = cwProject::createTemporaryFilename();
+
+        auto createTemporaryFilename = []()
+        {
+            QDateTime seedTime = QDateTime::currentDateTime();
+            return QString("%1/CavewhereTmpProject-%2.cw")
+                    .arg(QDir::tempPath())
+                    .arg(seedTime.toMSecsSinceEpoch(), 0, 16);
+        };
+
+
+        auto newFilename = createTemporaryFilename();
         QFile::copy(databaseFilename(), newFilename);
         QFile::setPermissions(newFilename, QFileDevice::WriteOwner | QFileDevice::WriteUser | QFileDevice::ReadOwner | QFileDevice::ReadUser);
         setDatabaseFilename(newFilename);
@@ -817,6 +827,11 @@ QString cwRegionLoadTask::loadLegacyString(const QtProto::QString &protoString)
 QString cwRegionLoadTask::doesNotExistErrorMessage(const QString &filename)
 {
     return QString("Couldn't open '%1' because it doesn't exist").arg(filename);
+}
+
+QString cwRegionLoadTask::fileNotReadableErrorMessage(const QString &filename)
+{
+    return QString("Couldn't open '%1' because you don't have permission to read it").arg(filename);
 }
 
 /**

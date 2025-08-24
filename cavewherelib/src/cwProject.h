@@ -26,6 +26,7 @@ class cwRegionLoadTask;
 class cwRegionSaveTask;
 class cwErrorListModel;
 class cwFutureManagerModel;
+class cwSaveLoad;
 
 //Qt includes
 #include <QSqlDatabase>
@@ -86,9 +87,10 @@ public:
     Q_INVOKABLE void convertFromProjectV6(QString oldProjectFilename,
                                           const QDir &newProjectDirectory);
 
+
     //Older save and load
-    Q_INVOKABLE void save();
-    Q_INVOKABLE void saveAs(QString newFilename);
+    // Q_INVOKABLE void save();
+    // Q_INVOKABLE void saveAs(QString newFilename);
     Q_INVOKABLE void newProject();
 
     QString filename() const;
@@ -100,8 +102,8 @@ public:
 
 
     //Old cavewhere file handling
-    static void createDefaultSchema(const QSqlDatabase& database);
-    static QString createTemporaryFilename();
+    // static void createDefaultSchema(const QSqlDatabase& database);
+    // static QString createTemporaryFilename();
     static QSqlDatabase createDatabaseConnection(const QString& connectionName, const QString& databasePath);
 
     bool canSaveDirectly() const;
@@ -128,6 +130,8 @@ public slots:
 private:
 
      // QDir m_projectDir;
+    cwSaveLoad* m_saveLoad;
+
 
     //If this is a temp project directory on not
     //Old save and load
@@ -155,11 +159,11 @@ private:
     //For keeping database connection unique
     static QAtomicInt ConnectionCounter;
 
-    void createTempProjectFile();
-    void createDefaultSchema();
+    // void createTempProjectFile();
+    // void createDefaultSchema();
 
-    static void createTable(const QSqlDatabase& database, QString sql); //Helpers to createDefaultSchema
-    static void insertDocumentation(const QSqlDatabase& database, QList<QPair<QString, QString> > filenames); //Helpers to createDefaultSchema
+    // static void createTable(const QSqlDatabase& database, QString sql); //Helpers to createDefaultSchema
+    // static void insertDocumentation(const QSqlDatabase& database, QList<QPair<QString, QString> > filenames); //Helpers to createDefaultSchema
 
     void setFilename(QString newFilename);
 
@@ -194,16 +198,12 @@ inline QUndoStack *cwProject::undoStack() const
 
   This should always be valid
   */
-inline QString cwProject::filename() const {
-    return ProjectFile;
-}
+
 
 /**
   Returns true if the user hasn't save the project and false if they have
   */
-inline bool cwProject::isTemporaryProject() const {
-    return TempProject;
-}
+
 
 inline cwErrorListModel* cwProject::errorModel() const {
     return ErrorModel;

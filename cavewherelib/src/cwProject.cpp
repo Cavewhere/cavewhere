@@ -58,13 +58,18 @@ QAtomicInt cwProject::ConnectionCounter;
   */
 cwProject::cwProject(QObject* parent) :
     QObject(parent),
+    m_saveLoad(new cwSaveLoad(this)),
     TempProject(true),
     FileVersion(cwRegionIOTask::protoVersion()),
     Region(new cwCavingRegion(this)),
     UndoStack(new QUndoStack(this)),
     ErrorModel(new cwErrorListModel(this))
 {
+    m_saveLoad->setCavingRegion(Region);
+    connect(m_saveLoad, &cwSaveLoad::isTemporaryProjectChanged, this, &cwProject::isTemporaryProjectChanged);
+
     newProject();
+
 }
 
 cwProject::~cwProject()
@@ -74,36 +79,36 @@ cwProject::~cwProject()
 /**
   Creates a new tempDirectoryPath for the temp project
   */
-void cwProject::createTempProjectFile() {
+// void cwProject::createTempProjectFile() {
 
-    if(isTemporaryProject()) {
-        //Remove the old temp project file
-        if(QFileInfo(filename()).exists()) {
-            QFile::remove(filename());
-        }
-    }
+//     if(isTemporaryProject()) {
+//         //Remove the old temp project file
+//         if(QFileInfo(filename()).exists()) {
+//             QFile::remove(filename());
+//         }
+//     }
 
-    //Create the with a hex number
-    QString projectFile = createTemporaryFilename();
-    setFilename(projectFile);
+//     //Create the with a hex number
+//     QString projectFile = createTemporaryFilename();
+//     setFilename(projectFile);
 
-    setTemporaryProject(true);
+//     setTemporaryProject(true);
 
-    //Create and open a new database connection
-    int nextConnectonName = ConnectionCounter.fetchAndAddAcquire(1);
-    ProjectDatabase = QSqlDatabase::addDatabase("QSQLITE", QString("ProjectConnection-%1").arg(nextConnectonName));
-    ProjectDatabase.setDatabaseName(ProjectFile);
-    bool couldOpen = ProjectDatabase.open();
-    if(!couldOpen) {
-        ErrorModel->append(cwError(QString("Couldn't open temp project file: %1. Temp directory not writable?").arg(ProjectFile), cwError::Fatal));
-        return;
-    }
+//     //Create and open a new database connection
+//     int nextConnectonName = ConnectionCounter.fetchAndAddAcquire(1);
+//     ProjectDatabase = QSqlDatabase::addDatabase("QSQLITE", QString("ProjectConnection-%1").arg(nextConnectonName));
+//     ProjectDatabase.setDatabaseName(ProjectFile);
+//     bool couldOpen = ProjectDatabase.open();
+//     if(!couldOpen) {
+//         ErrorModel->append(cwError(QString("Couldn't open temp project file: %1. Temp directory not writable?").arg(ProjectFile), cwError::Fatal));
+//         return;
+//     }
 
-    //Create default schema
-    createDefaultSchema();
+//     //Create default schema
+//     createDefaultSchema();
 
-    emit canSaveDirectlyChanged();
-}
+//     emit canSaveDirectlyChanged();
+// }
 
 /**
   \brief This creates the default empty schema for the project
@@ -120,91 +125,91 @@ void cwProject::createTempProjectFile() {
   id | type | shouldDelete | data
 
   */
-void cwProject::createDefaultSchema() {
-    createDefaultSchema(ProjectDatabase);
-}
+// void cwProject::createDefaultSchema() {
+//     createDefaultSchema(ProjectDatabase);
+// }
 
-/**
- * @brief cwProject::addTable
- * @param tableName - Used only for warning messages
- * @param sql - The sql that run on the project database
- */
-void cwProject::createTable(const QSqlDatabase& database, QString sql)
-{
-    QSqlQuery createObjectDataTable(database);
+// /**
+//  * @brief cwProject::addTable
+//  * @param tableName - Used only for warning messages
+//  * @param sql - The sql that run on the project database
+//  */
+// void cwProject::createTable(const QSqlDatabase& database, QString sql)
+// {
+//     QSqlQuery createObjectDataTable(database);
 
-    //Create the caving region
-    bool couldPrepare = createObjectDataTable.prepare(sql);
-    if(!couldPrepare) {
-        qDebug() << "Couldn't prepare table:" << createObjectDataTable.lastError().databaseText() << sql << LOCATION;
-    }
+//     //Create the caving region
+//     bool couldPrepare = createObjectDataTable.prepare(sql);
+//     if(!couldPrepare) {
+//         qDebug() << "Couldn't prepare table:" << createObjectDataTable.lastError().databaseText() << sql << LOCATION;
+//     }
 
-    bool couldCreate = createObjectDataTable.exec();
-    if(!couldCreate) {
-        qDebug() << "Couldn't create table:" << createObjectDataTable.lastError().databaseText() << LOCATION;
-    }
-}
+//     bool couldCreate = createObjectDataTable.exec();
+//     if(!couldCreate) {
+//         qDebug() << "Couldn't create table:" << createObjectDataTable.lastError().databaseText() << LOCATION;
+//     }
+// }
 
-/**
- * @brief cwProject::insertDocumentation
- * @param files - A pair Contains the filename and the path to the content of the file
- * @param pair.first - The filename that's stored in the project
- * @param pair.second - The path, usually a resaurce, to the content
- */
-void cwProject::insertDocumentation(const QSqlDatabase& database, QList<QPair<QString, QString> > filenames) //QString filename, QString pathToContent)
-{
-    QSqlQuery hasDocsQuery(database);
-    QString hasDocsQuerySQL = "SELECT name FROM sqlite_master WHERE type='table' AND name='FileFormatDocumenation'";
-    bool success = hasDocsQuery.exec(hasDocsQuerySQL);
-    if(success && hasDocsQuery.next()) {
-        Q_ASSERT(hasDocsQuery.value(0).toString() == QString("FileFormatDocumenation"));
-        QSqlQuery deleteDocsQuery(database);
-        QString deleteQuery = "delete from FileFormatDocumenation";
-        bool success = deleteDocsQuery.exec(deleteQuery);
-        if(!success) {
-            qDebug() << "Couldn't delete contents from FileFormatDocumenation" << deleteDocsQuery.lastError().text() << LOCATION;
-        }
-    } else {
-        if(!success) {
-            qDebug() << "Couldn't run query" << hasDocsQuery.lastError().text() << LOCATION;
-        }
-    }
+// /**
+//  * @brief cwProject::insertDocumentation
+//  * @param files - A pair Contains the filename and the path to the content of the file
+//  * @param pair.first - The filename that's stored in the project
+//  * @param pair.second - The path, usually a resaurce, to the content
+//  */
+// void cwProject::insertDocumentation(const QSqlDatabase& database, QList<QPair<QString, QString> > filenames) //QString filename, QString pathToContent)
+// {
+//     QSqlQuery hasDocsQuery(database);
+//     QString hasDocsQuerySQL = "SELECT name FROM sqlite_master WHERE type='table' AND name='FileFormatDocumenation'";
+//     bool success = hasDocsQuery.exec(hasDocsQuerySQL);
+//     if(success && hasDocsQuery.next()) {
+//         Q_ASSERT(hasDocsQuery.value(0).toString() == QString("FileFormatDocumenation"));
+//         QSqlQuery deleteDocsQuery(database);
+//         QString deleteQuery = "delete from FileFormatDocumenation";
+//         bool success = deleteDocsQuery.exec(deleteQuery);
+//         if(!success) {
+//             qDebug() << "Couldn't delete contents from FileFormatDocumenation" << deleteDocsQuery.lastError().text() << LOCATION;
+//         }
+//     } else {
+//         if(!success) {
+//             qDebug() << "Couldn't run query" << hasDocsQuery.lastError().text() << LOCATION;
+//         }
+//     }
 
-    QSqlQuery insertDocsQuery(database);
-    QString query =
-            QString("insert into FileFormatDocumenation") +
-            QString(" (filename, content) values (?, ?)");
+//     QSqlQuery insertDocsQuery(database);
+//     QString query =
+//             QString("insert into FileFormatDocumenation") +
+//             QString(" (filename, content) values (?, ?)");
 
-    bool couldPrepare = insertDocsQuery.prepare(query);
-    if(!couldPrepare) {
-        qDebug() << "Couldn't prepare insertDocsQuery:" << insertDocsQuery.lastError().databaseText() << query << LOCATION;
-    }
+//     bool couldPrepare = insertDocsQuery.prepare(query);
+//     if(!couldPrepare) {
+//         qDebug() << "Couldn't prepare insertDocsQuery:" << insertDocsQuery.lastError().databaseText() << query << LOCATION;
+//     }
 
-    //Go through all the documenation files
-    QPair<QString, QString> filePair;
-    foreach(filePair, filenames) {
-        QString filename = filePair.first;
-        QString pathToFile = filePair.second;
+//     //Go through all the documenation files
+//     QPair<QString, QString> filePair;
+//     foreach(filePair, filenames) {
+//         QString filename = filePair.first;
+//         QString pathToFile = filePair.second;
 
 
-        QFile file(pathToFile);
-        bool couldOpen = file.open(QFile::ReadOnly);
-        if(!couldOpen) {
-            qDebug() << "Couldn't open documentation file:" << pathToFile << LOCATION;
-            continue;
-        }
+//         QFile file(pathToFile);
+//         bool couldOpen = file.open(QFile::ReadOnly);
+//         if(!couldOpen) {
+//             qDebug() << "Couldn't open documentation file:" << pathToFile << LOCATION;
+//             continue;
+//         }
 
-        QByteArray fileContent = file.readAll();
+//         QByteArray fileContent = file.readAll();
 
-        insertDocsQuery.bindValue(0, filename);
-        insertDocsQuery.bindValue(1, fileContent);
-        bool success = insertDocsQuery.exec();
+//         insertDocsQuery.bindValue(0, filename);
+//         insertDocsQuery.bindValue(1, fileContent);
+//         bool success = insertDocsQuery.exec();
 
-        if(!success) {
-            qDebug() << "Couldn't execute query:" << insertDocsQuery.lastError().databaseText() << query << LOCATION;
-        }
-    }
-}
+//         if(!success) {
+//             qDebug() << "Couldn't execute query:" << insertDocsQuery.lastError().databaseText() << query << LOCATION;
+//         }
+//     }
+// }
 
 /**
   \brief Saves the project.
@@ -212,10 +217,10 @@ void cwProject::insertDocumentation(const QSqlDatabase& database, QList<QPair<QS
   Make sure the project isn't a temporary project. If it is a temporary project,
  call saveAs(filename) instead
   */
-void cwProject::save() {
-    Q_ASSERT(canSaveDirectly());
-    privateSave();
-}
+// void cwProject::save() {
+//     Q_ASSERT(canSaveDirectly());
+//     privateSave();
+// }
 
 
 /**
@@ -383,8 +388,14 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
             }).future();
     }
 
-    if(!QFileInfo::exists(filename)) {
+    QFileInfo info(filename);
+
+    if(!info.exists()) {
         return QtFuture::makeReadyValueFuture(ResultBase(cwRegionLoadTask::doesNotExistErrorMessage(filename)));
+    }
+
+    if(!info.isReadable()) {
+        return QtFuture::makeReadyValueFuture(ResultBase(cwRegionLoadTask::fileNotReadableErrorMessage(filename)));
     }
 
     return QtFuture::makeReadyValueFuture(ResultBase(QStringLiteral("Couldn't open '%1' because it has a unknown file type. Is it corrupted!?").arg(filename)));
@@ -425,11 +436,15 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
                 });
             }).future();
 
-    auto errorHandlingFuture =
+    auto finalFuture =
         AsyncFuture::observe(loadTempProjectFuture)
-            .context(this, [this, loadTempProjectFuture, tempProject](){
+            .context(this, [this, loadTempProjectFuture, tempProject, isTemporary](){
                 auto result = loadTempProjectFuture.result();
                 errorModel()->append(tempProject->errorModel()->toList());
+
+                setTemporaryProject(isTemporary);
+                FileVersion = tempProject->FileVersion;
+
 
                 // if(result.hasError()) {
                 //     qDebug() << "Adding error:" << loadTempProjectFuture.result().errorMessage();
@@ -440,10 +455,10 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
             }).future();
 
 
-    FutureToken.addJob(cwFuture(QFuture<void>(errorHandlingFuture), QStringLiteral("Loading")));
+    FutureToken.addJob(cwFuture(QFuture<void>(finalFuture), QStringLiteral("Loading")));
 
 
-    return errorHandlingFuture;
+    return finalFuture;
 }
 
 /**
@@ -453,58 +468,60 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
     the original. If the project is a temperary project, the temperary project will be removed
     from disk.
   */
-void cwProject::saveAs(QString newFilename){
-    newFilename = cwGlobals::addExtension(newFilename, "cw");
-    newFilename = cwGlobals::convertFromURL(newFilename);
+// void cwProject::saveAs(QString newFilename){
+//     newFilename = cwGlobals::addExtension(newFilename, "cw");
+//     newFilename = cwGlobals::convertFromURL(newFilename);
 
-    if(QFileInfo(newFilename) == QFileInfo(filename()) && saveWillCauseDataLoss()) {
-        errorModel()->append(cwError(QString("Can't overwrite %1 because file is newer that the current version of CaveWhere. To solve this, save it somewhere else").arg(filename()), cwError::Fatal));
-        return;
-    }
+//     if(QFileInfo(newFilename) == QFileInfo(filename()) && saveWillCauseDataLoss()) {
+//         errorModel()->append(cwError(QString("Can't overwrite %1 because file is newer that the current version of CaveWhere. To solve this, save it somewhere else").arg(filename()), cwError::Fatal));
+//         return;
+//     }
 
-    //Just save it the user is overwritting it
-    if(QFileInfo(newFilename) == QFileInfo(filename())) {
-        privateSave();
-        return;
-    }
+//     //Just save it the user is overwritting it
+//     if(QFileInfo(newFilename) == QFileInfo(filename())) {
+//         privateSave();
+//         return;
+//     }
 
-    //Try to remove the existing file
-    if(QFileInfo(newFilename).exists()) {
-        bool couldRemove = QFile::remove(newFilename);
-        if(!couldRemove) {
-            errorModel()->append(cwError(QString("Couldn't remove %1").arg(newFilename), cwError::Fatal));
-            return;
-        }
-    }
+//     //Try to remove the existing file
+//     if(QFileInfo(newFilename).exists()) {
+//         bool couldRemove = QFile::remove(newFilename);
+//         if(!couldRemove) {
+//             errorModel()->append(cwError(QString("Couldn't remove %1").arg(newFilename), cwError::Fatal));
+//             return;
+//         }
+//     }
 
-    //Copy the old file to the new location
-    bool couldCopy = QFile::copy(filename(), newFilename);
-    if(!couldCopy) {
-        errorModel()->append(cwError(QString("Couldn't copy %1 to %2").arg(filename()).arg(newFilename), cwError::Fatal));
-        return;
-    }
+//     //Copy the old file to the new location
+//     bool couldCopy = QFile::copy(filename(), newFilename);
+//     if(!couldCopy) {
+//         errorModel()->append(cwError(QString("Couldn't copy %1 to %2").arg(filename()).arg(newFilename), cwError::Fatal));
+//         return;
+//     }
 
-    if(isTemporaryProject()) {
-        QFile::remove(filename());
-    }
+//     if(isTemporaryProject()) {
+//         QFile::remove(filename());
+//     }
 
-    //Update the project filename
-    setFilename(newFilename);
-    setTemporaryProject(false);
+//     //Update the project filename
+//     setFilename(newFilename);
+//     setTemporaryProject(false);
 
-    //Save the current data
-    privateSave();
-}
+//     //Save the current data
+//     privateSave();
+// }
 
 /**
   \brief Creates a new project
   */
 void cwProject::newProject() {
-    //Creates a temp directory for the project
-    createTempProjectFile();
+    m_saveLoad->newProject();
 
-    //Create the caving the caving region that this project mantaines
-    Region->clearCaves();
+    // //Creates a temp directory for the project
+    // createTempProjectFile();
+
+    // //Create the caving the caving region that this project mantaines
+    // Region->clearCaves();
 
     //Clear undo stack
     UndoStack->clear();
@@ -557,59 +574,59 @@ void cwProject::setFilename(QString newFilename) {
  * @brief cwProject::createDefaultSchema
  * @param database
  */
-void cwProject::createDefaultSchema(const QSqlDatabase &database)
-{
+// void cwProject::createDefaultSchema(const QSqlDatabase &database)
+// {
 
-    //Create the database with full vacuum so we don't use up tons of space
-    QSqlQuery vacuumQuery(database);
-    QString query = QString("PRAGMA auto_vacuum = 1");
-    vacuumQuery.exec(query);
+//     //Create the database with full vacuum so we don't use up tons of space
+//     QSqlQuery vacuumQuery(database);
+//     QString query = QString("PRAGMA auto_vacuum = 1");
+//     vacuumQuery.exec(query);
 
-    cwSQLManager::Transaction transaction(database);
+//     cwSQLManager::Transaction transaction(database);
 
-    //Create the caving region
-    QString objectDataQuery =
-            QString("CREATE TABLE IF NOT EXISTS ObjectData (") +
-            QString("id INTEGER PRIMARY KEY AUTOINCREMENT,") + //First index
-            QString("protoBuffer BLOB") + //Last index
-            QString(")");
+//     //Create the caving region
+//     QString objectDataQuery =
+//             QString("CREATE TABLE IF NOT EXISTS ObjectData (") +
+//             QString("id INTEGER PRIMARY KEY AUTOINCREMENT,") + //First index
+//             QString("protoBuffer BLOB") + //Last index
+//             QString(")");
 
-    //Create ObjectData
-    createTable(database, objectDataQuery);
+//     //Create ObjectData
+//     createTable(database, objectDataQuery);
 
-    QString documentationTableQuery =
-            QString("CREATE TABLE IF NOT EXISTS FileFormatDocumenation (") +
-            QString("id INTEGER PRIMARY KEY AUTOINCREMENT,") + //First index
-            QString("filename STRING,") +
-            QString("content STRING)");
-    createTable(database, documentationTableQuery);
+//     QString documentationTableQuery =
+//             QString("CREATE TABLE IF NOT EXISTS FileFormatDocumenation (") +
+//             QString("id INTEGER PRIMARY KEY AUTOINCREMENT,") + //First index
+//             QString("filename STRING,") +
+//             QString("content STRING)");
+//     createTable(database, documentationTableQuery);
 
-    QList< QPair< QString, QString> > docsFiles;
-    docsFiles.append(QPair<QString, QString>("README.txt", ":/docs/FileFormatDocumentation.txt"));
-    docsFiles.append(QPair<QString, QString>("qt.pro", ":/src/qt.proto"));
-    docsFiles.append(QPair<QString, QString>("cavewhere.pro", ":/src/qt.proto"));
-    insertDocumentation(database, docsFiles);
+//     QList< QPair< QString, QString> > docsFiles;
+//     docsFiles.append(QPair<QString, QString>("README.txt", ":/docs/FileFormatDocumentation.txt"));
+//     docsFiles.append(QPair<QString, QString>("qt.pro", ":/src/qt.proto"));
+//     docsFiles.append(QPair<QString, QString>("cavewhere.pro", ":/src/qt.proto"));
+//     insertDocumentation(database, docsFiles);
 
-    //Create the caving region
-    QString imageTableQuery =
-            QString("CREATE TABLE IF NOT EXISTS Images (") +
-            QString("id INTEGER PRIMARY KEY AUTOINCREMENT,") + //First index
-            QString("type STRING,") + //Type of image
-            QString("shouldDelete BOOL,") + //If the image should be delete
-            QString("width INTEGER,") + //The width of the image
-            QString("height INTEGER,") + //The height of the image
-            QString("dotsPerMeter INTEGER,") + //The resolution of the image
-            QString("imageData BLOB)"); //The blob that stores the image data
-    createTable(database, imageTableQuery);
-}
+//     //Create the caving region
+//     QString imageTableQuery =
+//             QString("CREATE TABLE IF NOT EXISTS Images (") +
+//             QString("id INTEGER PRIMARY KEY AUTOINCREMENT,") + //First index
+//             QString("type STRING,") + //Type of image
+//             QString("shouldDelete BOOL,") + //If the image should be delete
+//             QString("width INTEGER,") + //The width of the image
+//             QString("height INTEGER,") + //The height of the image
+//             QString("dotsPerMeter INTEGER,") + //The resolution of the image
+//             QString("imageData BLOB)"); //The blob that stores the image data
+//     createTable(database, imageTableQuery);
+// }
 
-QString cwProject::createTemporaryFilename()
-{
-    QDateTime seedTime = QDateTime::currentDateTime();
-    return QString("%1/CavewhereTmpProject-%2.cw")
-            .arg(QDir::tempPath())
-            .arg(seedTime.toMSecsSinceEpoch(), 0, 16);
-}
+// QString cwProject::createTemporaryFilename()
+// {
+//     QDateTime seedTime = QDateTime::currentDateTime();
+//     return QString("%1/CavewhereTmpProject-%2.cw")
+//             .arg(QDir::tempPath())
+//             .arg(seedTime.toMSecsSinceEpoch(), 0, 16);
+// }
 
 QSqlDatabase cwProject::createDatabaseConnection(const QString &connectionName, const QString &databasePath)
 {
@@ -633,6 +650,7 @@ QSqlDatabase cwProject::createDatabaseConnection(const QString &connectionName, 
 void cwProject::waitLoadToFinish()
 {
     cwAsyncFuture::waitForFinished(LoadFuture);
+    m_saveLoad->waitForFinished();
 }
 
 /**
@@ -643,7 +661,8 @@ void cwProject::waitLoadToFinish()
  */
 void cwProject::waitSaveToFinish()
 {
-    cwAsyncFuture::waitForFinished(SaveFuture);
+    m_saveLoad->waitForFinished();
+    // cwAsyncFuture::waitForFinished(SaveFuture);
 }
 
 /**
@@ -879,3 +898,11 @@ cwFutureManagerToken cwProject::futureManagerToken() const {
 }
 
 
+
+bool cwProject::isTemporaryProject() const {
+    return m_saveLoad->isTemporaryProject();
+}
+
+QString cwProject::filename() const {
+    return m_saveLoad->fileName();
+}

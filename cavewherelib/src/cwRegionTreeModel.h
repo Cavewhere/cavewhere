@@ -72,6 +72,7 @@ public:
     Q_INVOKABLE cwCave* cave(const QModelIndex& index) const;
     Q_INVOKABLE cwNote* note(const QModelIndex& index) const;
     Q_INVOKABLE cwScrap* scrap(const QModelIndex& index) const;
+    Q_INVOKABLE QObject* object(const QModelIndex& index) const;
 
     Q_INVOKABLE bool isScrap(const QModelIndex& index) const;
     Q_INVOKABLE bool isNote(const QModelIndex& index) const;

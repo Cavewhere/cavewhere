@@ -92,8 +92,8 @@ class cwRegionSaveTask : public cwRegionIOTask
 public:
     explicit cwRegionSaveTask(QObject *parent = 0);
 
-    QByteArray serializedData(cwCavingRegion *region);
-    QList<cwError> save(cwCavingRegion *region);
+    // QByteArray serializedData(cwCavingRegion *region);
+    // QList<cwError> save(cwCavingRegion *region);
 
 
     static void saveCave(CavewhereProto::Cave* protoCave, cwCave* cave);
@@ -177,7 +177,7 @@ protected:
 
 private:
 
-    void saveToProtoBuffer(cwCavingRegion* region);
+    // void saveToProtoBuffer(cwCavingRegion* region);
 
 };
 

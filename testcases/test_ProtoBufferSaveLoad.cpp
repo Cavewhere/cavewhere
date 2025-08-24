@@ -38,63 +38,64 @@
 //catch includes
 #include <catch2/catch_test_macros.hpp>
 
-TEST_CASE("Save / Load should work with cwSurveyNetwork", "[ProtoSaveLoad]") {
+//Survey networks should be saved in the cache, so this testcase no longer make sense
+// TEST_CASE("Save / Load should work with cwSurveyNetwork", "[ProtoSaveLoad]") {
 
-    auto root = std::make_unique<cwRootData>();
+//     auto root = std::make_unique<cwRootData>();
 
-    cwCave* cave = new cwCave();
-    cwTrip* trip = new cwTrip();
+//     cwCave* cave = new cwCave();
+//     cwTrip* trip = new cwTrip();
 
-    cave->addTrip(trip);
-    root->region()->addCave(cave);
+//     cave->addTrip(trip);
+//     root->region()->addCave(cave);
 
-    cwSurveyChunk* chunk = new cwSurveyChunk;
+//     cwSurveyChunk* chunk = new cwSurveyChunk;
 
-    cwStation a1("a1");
-    cwStation a2("a2");
-    cwStation a3("a3");
+//     cwStation a1("a1");
+//     cwStation a2("a2");
+//     cwStation a3("a3");
 
-    cwShot a1_to_a2("100", "0.0", "0.0", "0.0", "0.0");
-    cwShot a2_to_a3("50", "0.0", "0.0", "0.0", "0.0");
+//     cwShot a1_to_a2("100", "0.0", "0.0", "0.0", "0.0");
+//     cwShot a2_to_a3("50", "0.0", "0.0", "0.0", "0.0");
 
-    chunk->appendShot(a1, a2, a1_to_a2);
-    chunk->appendShot(a2, a3, a2_to_a3);
+//     chunk->appendShot(a1, a2, a1_to_a2);
+//     chunk->appendShot(a2, a3, a2_to_a3);
 
-    trip->addChunk(chunk);
+//     trip->addChunk(chunk);
 
-    root->linePlotManager()->waitToFinish();
+//     root->linePlotManager()->waitToFinish();
 
-    CHECK(root->project()->isTemporaryProject() == true);
+//     CHECK(root->project()->isTemporaryProject() == true);
 
-    auto filename = prependTempFolder(QString("test_cwSurveyNetwork-") + QUuid::createUuid().toString().remove(QRegularExpression("{|}|-")) + ".cw");
-    root->project()->saveAs(filename);
-    root->project()->waitSaveToFinish();
+//     auto filename = prependTempFolder(QString("test_cwSurveyNetwork-") + QUuid::createUuid().toString().remove(QRegularExpression("{|}|-")) + ".cw");
+//     root->project()->saveAs(filename);
+//     root->project()->waitSaveToFinish();
 
-    root->project()->newProject();
-    root->project()->waitSaveToFinish();
+//     root->project()->newProject();
+//     root->project()->waitSaveToFinish();
 
-    CHECK(root->region()->caveCount() == 0);
+//     CHECK(root->region()->caveCount() == 0);
 
-    root->project()->loadOrConvert(filename);
-    root->project()->waitLoadToFinish();
-    REQUIRE(root->region()->caveCount() == 1);
-    CHECK(root->project()->isTemporaryProject() == false);
+//     root->project()->loadOrConvert(filename);
+//     root->project()->waitLoadToFinish();
+//     REQUIRE(root->region()->caveCount() == 1);
+//     CHECK(root->project()->isTemporaryProject() == false);
 
-    auto loadCave = root->region()->cave(0);
-    auto network = loadCave->network();
+//     auto loadCave = root->region()->cave(0);
+//     auto network = loadCave->network();
 
-    auto testStationNeigbors = [=](QString stationName, QStringList
-            neighbors) {
-        auto neighborsAtStation = network.neighbors(stationName);
-        auto foundNeighbors = QSet<QString>(neighborsAtStation.begin(), neighborsAtStation.end());
-        auto checkNeigbbors = QSet<QString>(neighbors.begin(), neighbors.end());
-        CHECK(foundNeighbors == checkNeigbbors);
-    };
+//     auto testStationNeigbors = [=](QString stationName, QStringList
+//             neighbors) {
+//         auto neighborsAtStation = network.neighbors(stationName);
+//         auto foundNeighbors = QSet<QString>(neighborsAtStation.begin(), neighborsAtStation.end());
+//         auto checkNeigbbors = QSet<QString>(neighbors.begin(), neighbors.end());
+//         CHECK(foundNeighbors == checkNeigbbors);
+//     };
 
-    testStationNeigbors("a1", {"a2"});
-    testStationNeigbors("a2", {"a1", "a3"});
-    testStationNeigbors("a3", {"a2"});
-}
+//     testStationNeigbors("a1", {"a2"});
+//     testStationNeigbors("a2", {"a1", "a3"});
+//     testStationNeigbors("a3", {"a2"});
+// }
 
 TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
     auto root = std::make_unique<cwRootData>();
@@ -178,7 +179,7 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
         errorModel->clear();
 
         CHECK(root->project()->cavingRegion()->caveCount() == 1);
-        CHECK(root->project()->isTemporaryProject() == false);
+        CHECK(root->project()->isTemporaryProject() == true); //All old testcase files are temporary because they need to be converted
         CHECK(root->project()->canSaveDirectly() == false);
 
         SECTION("Check that saveAs fails to the file") {
@@ -187,7 +188,10 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
 
             QThread::msleep(10);
 
-            root->project()->saveAs(root->project()->filename());
+            //Fix me, this was calling saveAs
+            REQUIRE(false);
+
+            // root->project()->saveAs(root->project()->filename());
             REQUIRE(errorModel->size() == 1);
             expectErrorMessage = QString("Can't overwrite %1 because file is newer that the current version of CaveWhere. To solve this, save it somewhere else").arg(root->project()->filename());
             CHECK(errorModel->at(0) == cwError(expectErrorMessage, cwError::Fatal));
@@ -457,7 +461,9 @@ TEST_CASE("Save and load should work correctly for Projected Profile v3->v5", "[
         root->taskManagerModel()->waitForTasks();
         root->futureManagerModel()->waitForFinished();
 
-        root->project()->save();
+        //Fixme: this was calling save
+        REQUIRE(false);
+
         root->futureManagerModel()->waitForFinished();
 
         CHECK(root->project()->canSaveDirectly() == true);

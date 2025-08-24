@@ -15,6 +15,7 @@
 #include "cwImageDatabase.h"
 #include "cwPDFSettings.h"
 #include "cwNote.h"
+#include "cwSaveLoad.h"
 
 //Qt includes
 #include <QSqlQuery>
@@ -35,7 +36,10 @@ TEST_CASE("cwProject isModified should work correctly", "[cwProject]") {
     QString testFile = prependTempFolder("test_cwProject.cw");
     QFile::remove(testFile);
 
-    project.saveAs(testFile);
+    //Fixme: this was calling save as
+    REQUIRE(false);
+
+    // project.saveAs(testFile);
     project.waitSaveToFinish();
 
     CHECK(project.isModified() == false);
@@ -52,7 +56,10 @@ TEST_CASE("cwProject isModified should work correctly", "[cwProject]") {
     project.cavingRegion()->cave(0)->addTrip();
     CHECK(project.isModified() == true);
 
-    project.save();
+    //Fixme: this was calling save
+    REQUIRE(false);
+
+    // project.save();
     project.waitSaveToFinish();
     CHECK(project.isModified() == false);
 
@@ -77,7 +84,11 @@ TEST_CASE("Image data should save and load correctly", "[cwProject]") {
 
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
-    project->saveAs(prependTempFolder("imageTest-" + QUuid::createUuid().toString().left(5)));
+
+    //Fixme: this was calling saveAs
+    REQUIRE(false);
+
+    // project->saveAs(prependTempFolder("imageTest-" + QUuid::createUuid().toString().left(5)));
 
     auto region = project->cavingRegion();
     region->addCave();
@@ -343,4 +354,44 @@ TEST_CASE("cwProject should detect the correct file type", "[cwProject]") {
     tempFile.write("Test random data");
     tempFile.close();
     CHECK(project->projectType(datasetFile) == cwProject::UnknownFileType);
+}
+
+TEST_CASE("Test cave name changes", "[cwProject]") {
+
+    SECTION("Simple case") {
+        //Change the name of the cave
+        auto project = std::make_unique<cwProject>();
+        project->waitSaveToFinish();
+
+        INFO("Project name:" << project->filename().toStdString());
+        CHECK(project->isTemporaryProject());
+        CHECK(QFileInfo::exists(project->filename()));
+
+        //Add the cave
+        cwCave* cave = new cwCave();
+        cave->setName("test");
+        project->cavingRegion()->addCave(cave);
+        project->waitSaveToFinish();
+
+        //Check no-name cave
+        CHECK(QFileInfo::exists(project->filename()));
+        // CHECK(project->filename() == cwSaveLoad::projectAbsolutePath(project.get()));
+
+        qDebug() << "File:" << cwSaveLoad::caveAbsolutePath(cave);
+        auto testFilename = cwSaveLoad::caveAbsolutePath(cave);
+        QFileInfo info(testFilename);
+        auto oldDir = info.absoluteDir();
+        oldDir.cdUp();
+
+        CHECK(QFileInfo::exists(cwSaveLoad::caveAbsolutePath(cave)));
+
+        //Test renaming the cave
+        cave->setName("test2");
+        project->waitSaveToFinish();
+
+
+
+        CHECK(QFileInfo::exists(cwSaveLoad::caveAbsolutePath(cave)));
+        CHECK(cwSaveLoad::caveAbsolutePath(cave).toStdString() == oldDir.filePath("test2/test2.cwcave").toStdString());
+    }
 }

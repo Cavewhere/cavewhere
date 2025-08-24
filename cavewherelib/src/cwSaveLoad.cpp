@@ -13,6 +13,7 @@
 #include "cavewhereVersion.h"
 #include "cwPlanScrapViewMatrix.h"
 #include "cwRunningProfileScrapViewMatrix.h"
+#include "cwRegionTreeModel.h"
 
 //Async future
 #include <asyncfuture.h>
@@ -26,16 +27,17 @@
 //Qt includes
 #include <QtConcurrent>
 #include <QSaveFile>
+#include <QSet>
+
+//QQuickGit
+#include "GitRepository.h"
 
 //Monad
 #include "Monad/Monad.h"
 
 using namespace Monad;
 
-// static cwStation fromProtoStation(const CavewhereProto::StationShot& protoStation);
-// static cwShot fromProtoShot(const CavewhereProto::StationShot& protoShot);
 static QStringList fromProtoStringList(const google::protobuf::RepeatedPtrField<std::string> &protoStringList);
-static QList<cwSurveyChunkData> fromProtoSurveyChunks(const google::protobuf::RepeatedPtrField<CavewhereProto::SurveyChunk> & protoList);
 
 
 template<typename ProtoType>
@@ -57,10 +59,20 @@ static Result<ProtoType> loadMessage(const QString& filename) {
 }
 
 struct cwSaveLoad::Data {
-    QDir m_rootDir; //Root project directory
 
-    QHash<QString, QFuture<ResultBase>> m_runningJobs;
+    struct RenameJob {
+        enum class Kind { File, Directory };
 
+        QString oldPath;
+        QString newPath;
+        Kind kind = Kind::File;
+
+        bool rename() const {
+            return QDir().rename(oldPath, newPath);
+        }
+    };
+
+    //More messages,
     struct WaitingJob {
         AsyncFuture::Deferred<Monad::ResultBase> jobDeferred;
         std::unique_ptr<const google::protobuf::Message> message;
@@ -82,7 +94,81 @@ struct cwSaveLoad::Data {
         WaitingJob& operator=(const WaitingJob&) = delete;
     };
 
+
+    QString projectFileName;
+
+    //Where the objects are currently being saved
+    //This the absolute directory to the m_rootDir
+    QHash<const QObject*, QString> m_fileLookup;
+
+    //For watching when object data has changed
+    cwRegionTreeModel* m_regionTreeModel;
+
+    //New file future
+    QFuture<void> newFileFuture;
+
+    //Saving jobs
+    QList<RenameJob> m_renameJobs;
     std::unordered_map<QString, WaitingJob> m_waitingJobs;
+    QHash<QString, QFuture<ResultBase>> m_runningJobs;
+
+    bool isTemporary = true;
+
+    static QList<cwSurveyChunkData> fromProtoSurveyChunks(const google::protobuf::RepeatedPtrField<CavewhereProto::SurveyChunk> & protoList);
+
+    void addRenameJob(const RenameJob& job) {
+        Q_ASSERT((job.kind == RenameJob::Kind::Directory) == QFileInfo(job.oldPath).isDir());
+
+        auto pathDepth = [](const QString& path) -> int {
+            const QString cleaned = QDir::cleanPath(path);
+
+            int slashCount = 0;
+            for (const QChar ch : QStringView{cleaned}) {
+                if (ch == u'/') {
+                    ++slashCount;
+                }
+            }
+            return slashCount;
+        };
+
+        auto kindRank = [](RenameJob::Kind kind) -> int {
+            // Files first (0), directories second (1).
+            return (kind == RenameJob::Kind::File) ? 0 : 1;
+        };
+
+        auto lessThan = [&](const RenameJob& a, const RenameJob& b) -> bool {
+            const int aRank = kindRank(a.kind);
+            const int bRank = kindRank(b.kind);
+            if (aRank != bRank) {
+                return aRank < bRank;
+            }
+
+            const int aDepth = pathDepth(a.oldPath);
+            const int bDepth = pathDepth(b.oldPath);
+            if (aDepth != bDepth) {
+                // Deeper first.
+                return aDepth > bDepth;
+            }
+
+            // Stable lexical tie-breaker.
+            return a.oldPath < b.oldPath;
+        };
+
+        const auto beginIt = m_renameJobs.begin();
+        const auto endIt   = m_renameJobs.end();
+
+        const auto it = std::lower_bound(beginIt, endIt, job, lessThan);
+
+        // If an element with the same oldPath already exists at this position, replace it.
+        if (it != endIt && it->oldPath == job.oldPath) {
+            *it = job;
+            return;
+        }
+
+        // Otherwise insert at the correct sorted position.
+        m_renameJobs.insert(static_cast<int>(it - beginIt), job);
+    }
+
 
     QFuture<Monad::ResultBase> saveProtoMessage(
         cwSaveLoad* context,
@@ -100,6 +186,20 @@ struct cwSaveLoad::Data {
         return saveProtoMessage(context, dir.absoluteFilePath(filename), std::move(message));
     }
 
+    void renameFiles() {
+        Q_ASSERT(m_runningJobs.isEmpty());
+
+        for(const auto& job : m_renameJobs) {
+            job.rename();
+        }
+
+        m_renameJobs.clear();
+    }
+
+
+
+
+
 };
 
 cwSaveLoad::~cwSaveLoad() = default;
@@ -108,15 +208,98 @@ cwSaveLoad::cwSaveLoad(QObject *parent) :
     QObject(parent),
     d(std::make_unique<cwSaveLoad::Data>())
 {
+    d->m_regionTreeModel = new cwRegionTreeModel(this);
 
+    // newProject();
+
+    // connect(d->m_regionTreeModel, &cwRegionTreeModel::rowsInserted,
+    //         this, [this](QModelIndex parent, int begin, int end)
+    //         {
+    //     qDebug() << "Added :" << parent << begin << end;
+    //             if(parent == QModelIndex()) {
+    //                 //These are all caves
+    //                 for(int i = begin; i <= end; i++) {
+    //                     auto index = d->m_regionTreeModel->index(i, 0, parent);
+    //                     cwCave* cave = index.data(cwRegionTreeModel::ObjectRole).value<cwCave*>();
+    //                     d->connectCave(this, cave);
+    //                     saveCave(cave);
+    //                 }
+    //             }
+    //         });
+
+}
+
+void cwSaveLoad::newProject()
+{
+    //Make sure we haven't requested a newProject already and we
+    //aren't already waiting
+    if(!d->newFileFuture.isRunning()) {
+        //Disconnect all connections
+        disconnectTreeModel();
+
+        //Wait for jobs to complete
+        auto future = completeSaveJobs();
+
+        d->newFileFuture =
+            AsyncFuture::observe(future)
+                .context(this, [this]() {
+                    //Clear the current data
+                    auto region = d->m_regionTreeModel->cavingRegion();
+
+                    if(region) [[likely]] {
+                        region->clearCaves();
+
+                        //Rename the region
+                        const auto tempName = randomName();
+                        region->setName(tempName);
+
+                        //Create the temp directory
+                        auto tempDir = createTemporaryDirectory(tempName);
+
+                        //Add repository
+                        QQuickGit::GitRepository repo;
+                        repo.setDirectory(tempDir);
+                        repo.initRepository();
+
+                        //Save the project file
+                        saveCavingRegion(tempDir, region);
+
+                        //Connect all for watching for saves
+                        connectTreeModel();
+
+                        setTemporary(true);
+                        setFileNameHelper(tempDir.absoluteFilePath(regionFileName(region)));
+                    }
+                }).future();
+    }
+}
+
+QString cwSaveLoad::fileName() const
+{
+    return d->projectFileName;
+}
+
+void cwSaveLoad::setFileName(const QString &filename)
+{
+    Q_ASSERT(false);
+}
+
+void cwSaveLoad::setCavingRegion(cwCavingRegion *region)
+{
+    d->m_regionTreeModel->setCavingRegion(region);
+}
+
+const cwCavingRegion *cwSaveLoad::cavingRegion() const
+{
+    return d->m_regionTreeModel->cavingRegion();
 }
 
 QFuture<ResultBase> cwSaveLoad::saveCavingRegion(const QDir &dir, const cwCavingRegion *region)
 {
     return saveProtoMessage(dir,
-                     sanitizeFileName(QStringLiteral("%1.cw").arg(region->name())),
-                     toProtoCavingRegion(region)
-                     );
+                            regionFileName(region),
+                            toProtoCavingRegion(region)
+                            );
 }
 
 std::unique_ptr<CavewhereProto::CavingRegion> cwSaveLoad::toProtoCavingRegion(const cwCavingRegion *region)
@@ -131,6 +314,23 @@ std::unique_ptr<CavewhereProto::CavingRegion> cwSaveLoad::toProtoCavingRegion(co
 QString cwSaveLoad::regionFileName(const QDir &dir, const cwCavingRegion *region)
 {
     return dir.absoluteFilePath(sanitizeFileName(QStringLiteral("%1.cw").arg(region->name())));
+}
+
+void cwSaveLoad::saveCave(const cwCave *cave)
+{
+    qDebug() << "Saving cave:" << cave << cave->name() << caveDir(cave);
+    auto saveFuture = saveCave(caveDir(cave), cave);
+
+    QPointer<const cwCave> cavePtr = cave;
+
+    AsyncFuture::observe(saveFuture)
+        .context(this, [this, saveFuture, cavePtr](){
+            if(!saveFuture.result().hasError()) {
+                qDebug() << "Updating fileLookup";
+                auto filename = caveAbsolutePath(cavePtr);
+                d->m_fileLookup[cavePtr] = filename;
+            }
+        });
 }
 
 QFuture<ResultBase> cwSaveLoad::saveCave(const QDir &dir, const cwCave *cave)
@@ -457,7 +657,7 @@ Monad::Result<cwTripData> cwSaveLoad::loadTrip(const QString &filename)
                                 tripData.team = fromProtoTeam(tripProto.team());
                             }
 
-                            tripData.chunks = fromProtoSurveyChunks(tripProto.chunks());
+                            tripData.chunks = cwSaveLoad::Data::fromProtoSurveyChunks(tripProto.chunks());
 
 
                             return Result(tripData);
@@ -539,7 +739,7 @@ cwTeamMember cwSaveLoad::fromProtoTeamMember(const CavewhereProto::TeamMember &p
     return member;
 }
 
-QList<cwSurveyChunkData> fromProtoSurveyChunks(const google::protobuf::RepeatedPtrField<CavewhereProto::SurveyChunk> &protoList)
+QList<cwSurveyChunkData> cwSaveLoad::Data::fromProtoSurveyChunks(const google::protobuf::RepeatedPtrField<CavewhereProto::SurveyChunk> &protoList)
 {
     QList<cwSurveyChunkData> chunks;
 
@@ -781,14 +981,221 @@ cwLength::Data cwSaveLoad::fromProtoLength(const CavewhereProto::Length &protoLe
 
 void cwSaveLoad::waitForFinished()
 {
-    cwFutureManagerModel model;
-    for(auto it = d->m_runningJobs.begin();
-         it != d->m_runningJobs.end();
-         ++it)
-    {
-        model.addJob(cwFuture(QFuture<void>(it.value()), QStringLiteral()));
+    auto waitOnRunningJobs = [this]() {
+        cwFutureManagerModel model;
+        for(auto it = d->m_runningJobs.begin();
+             it != d->m_runningJobs.end();
+             ++it)
+        {
+            model.addJob(cwFuture(QFuture<void>(it.value()), QStringLiteral()));
+        }
+        model.addJob(cwFuture(d->newFileFuture, QStringLiteral()));
+        model.waitForFinished();
+    };
+
+    auto future = AsyncFuture::observe(d->newFileFuture)
+                      .context(this, waitOnRunningJobs)
+                      .future();
+
+    waitOnRunningJobs();
+}
+
+void cwSaveLoad::disconnectTreeModel()
+{
+    //Disconnect from the tree model
+    disconnect(d->m_regionTreeModel, nullptr, this, nullptr);
+
+    //Disconnect all the objects watch in the tree
+    disconnectObjects();
+}
+
+void cwSaveLoad::connectTreeModel()
+{
+
+    //Connect when region has changed
+    connect(d->m_regionTreeModel, &cwRegionTreeModel::rowsInserted,
+            this, [this](const QModelIndex &parent, int first, int last) {
+                for(int i = first; i <= last; i++) {
+                    auto index = d->m_regionTreeModel->index(i, 0, parent);
+                    switch(index.data(cwRegionTreeModel::TypeRole).toInt()) {
+                    case cwRegionTreeModel::CaveType: {
+                        auto cave = d->m_regionTreeModel->cave(index);
+                        saveCave(cave);
+                        connectCave(cave);
+                    }
+                    case cwRegionTreeModel::TripType:
+                        connectTrip(d->m_regionTreeModel->trip(index));
+                    case cwRegionTreeModel::NoteType:
+                        connectNote(d->m_regionTreeModel->note(index));
+                    default:
+                        break;
+                    }
+        }
+    });
+
+    connect(d->m_regionTreeModel, &cwRegionTreeModel::rowsAboutToBeRemoved,
+            this, [this](const QModelIndex &parent, int first, int last) {
+                for(int i = first; i <= last; i++) {
+                    auto index = d->m_regionTreeModel->index(i, 0, parent);
+                    auto object = index.data(cwRegionTreeModel::ObjectRole).value<QObject*>();
+                    disconnect(object, nullptr, this, nullptr);
+                }
+            });
+
+
+    // connect(d->m_regionTreeModel, &cwRegionTreeModel::modelAboutToBeReset,
+    //         this, [this]() {
+    //     disconnectObjects();
+    // });
+
+    // auto reset = [this]() {
+    //     //Connect all the subobjects
+    //     connectObjects();
+
+    //     //Save the current caving region,
+    // };
+
+    // connect(d->m_regionTreeModel, &cwRegionTreeModel::modelReset,
+    //         this, reset);
+
+
+    connectObjects();
+
+    // reset();
+}
+
+void cwSaveLoad::disconnectObjects()
+{
+    //Disconnect from all the objects
+    QList<QObject*> objects = d->m_regionTreeModel->all<QObject*>(QModelIndex(), &cwRegionTreeModel::object);
+    for(auto obj : objects) {
+        disconnect(obj, nullptr, this, nullptr);
     }
-    model.waitForFinished();
+}
+
+void cwSaveLoad::connectObjects()
+{
+
+    {
+        auto caves = d->m_regionTreeModel->all<cwCave*>(QModelIndex(), &cwRegionTreeModel::cave);
+        for(auto cave : caves) {
+            connectCave(cave);
+        }
+    }
+
+    {
+        auto trips = d->m_regionTreeModel->all<cwTrip*>(QModelIndex(), &cwRegionTreeModel::trip);
+        for(auto trip : trips) {
+            connectTrip(trip);
+        }
+    }
+
+    {
+        auto notes = d->m_regionTreeModel->all<cwNote*>(QModelIndex(), &cwRegionTreeModel::note);
+        for(auto note : notes) {
+            connectNote(note);
+        }
+    }
+
+}
+
+void cwSaveLoad::connectCave(cwCave *cave)
+{
+    if (cave == nullptr) {
+        return;
+    }
+
+    auto saveCaveName = [cave, this]() {
+        //We need to handle changing the directory and changing the name of the file
+        auto currentFileName = d->m_fileLookup.value(cave);
+        QString folderName = QFileInfo(currentFileName).absolutePath();
+
+        auto fileRename = Data::RenameJob {currentFileName, caveAbsolutePath(cave), Data::RenameJob::Kind::File};
+        auto folderRename = Data::RenameJob {folderName, caveDir(cave).absolutePath(), Data::RenameJob::Kind::Directory};
+
+        d->addRenameJob(fileRename);
+        d->addRenameJob(folderRename);
+
+        saveCave(cave);
+    };
+
+    connect(cave, &cwCave::nameChanged, this, saveCaveName);
+}
+
+void cwSaveLoad::connectTrip(cwTrip *trip)
+{
+
+}
+
+void cwSaveLoad::connectNote(cwNote *note)
+{
+
+}
+
+void cwSaveLoad::connectScrap(cwScrap *scrap)
+{
+
+}
+
+void cwSaveLoad::setFileNameHelper(const QString &fileName)
+{
+    if(d->projectFileName != fileName) {
+        d->projectFileName = fileName;
+        emit fileNameChanged();
+    }
+}
+
+
+void cwSaveLoad::setTemporary(bool isTemp)
+{
+    if(d->isTemporary != isTemp) {
+        d->isTemporary = isTemp;
+        emit isTemporaryProjectChanged();
+    }
+}
+
+QString cwSaveLoad::randomName() const
+{
+    quint32 randomValue = QRandomGenerator::global()->generate();
+    return QStringLiteral("cavewhereTmp-") + QStringLiteral("%1").arg(randomValue, 8, 16, QChar(u'0'));
+}
+
+QDir cwSaveLoad::createTemporaryDirectory(const QString &subDirName)
+{
+    QTemporaryDir tempDir;
+    tempDir.setAutoRemove(false);
+
+    QDir dir(tempDir.path());
+    dir.mkdir(subDirName);
+    dir.cd(subDirName);
+
+    return dir;
+}
+
+QFuture<void> cwSaveLoad::completeSaveJobs()
+{
+    bool hasRunningJobs = !d->m_runningJobs.isEmpty();
+    bool hasWaitingJobs = !d->m_waitingJobs.empty();
+
+    if(hasRunningJobs || hasWaitingJobs) {
+        auto combine = AsyncFuture::combine();
+
+        if(hasRunningJobs) {
+            for(auto keyValue : d->m_runningJobs.asKeyValueRange()) {
+                combine << keyValue.second;
+            }
+        }
+
+        if(hasWaitingJobs) {
+            for(const auto& keyValue : d->m_waitingJobs) {
+                combine << keyValue.second.jobDeferred.future();
+            }
+        }
+
+        return combine.future();
+    } else {
+        return QtFuture::makeReadyVoidFuture();
+    }
 }
 
 QString cwSaveLoad::sanitizeFileName(QString input) {
@@ -815,6 +1222,17 @@ QUuid cwSaveLoad::toUuid(const std::string &uuidStr)
     return QUuid::fromString(QString::fromStdString(uuidStr));
 }
 
+// QString cwSaveLoad::projectFileName(const cwProject *project)
+// {
+//     Q_ASSERT(false);
+//     return QString();
+// }
+
+// QString cwSaveLoad::projectAbsolutePath(const cwProject *project)
+// {
+//     return QString(); //regionFileName();
+// }
+
 
 QStringList fromProtoStringList(const google::protobuf::RepeatedPtrField<std::string>& protoStringList)
 {
@@ -835,6 +1253,21 @@ QDir cwSaveLoad::projectDir(const cwProject *project)
 {
     QFileInfo info(project->filename());
     return info.absoluteDir();
+}
+
+QString cwSaveLoad::regionFileName(const cwCavingRegion *region)
+{
+    return sanitizeFileName(region->name() + QStringLiteral(".cw"));
+}
+
+QString cwSaveLoad::caveFileName(const cwCave *cave)
+{
+    return sanitizeFileName(cave->name() + QStringLiteral(".cwcave"));
+}
+
+QString cwSaveLoad::caveAbsolutePath(const cwCave *cave)
+{
+    return caveDir(cave).absoluteFilePath(caveFileName(cave));
 }
 
 QDir cwSaveLoad::caveDir(const cwCave *cave)
@@ -898,8 +1331,13 @@ QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
     const QString &filename,
     std::unique_ptr<const google::protobuf::Message> message)
 {
+    if(!m_renameJobs.isEmpty() && m_runningJobs.isEmpty()) {
+        //Rename files and directories
+        renameFiles();
+    }
+
     //Make sure we're not saving to the same file at the same time
-    if (m_runningJobs.contains(filename)) {
+    if (m_runningJobs.contains(filename) && !m_renameJobs.isEmpty()) {
         auto deferred = AsyncFuture::Deferred<ResultBase>();
 
         m_waitingJobs[filename] = WaitingJob {
@@ -910,48 +1348,76 @@ QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
         //Add defered here
         return deferred.future();
     } else {
+
+
         auto future = cwConcurrent::run([filename, message = std::move(message)]() {
-            QSaveFile file(filename);
-            if (!file.open(QFile::WriteOnly)) {
-                qWarning() << "Failed to write to " << filename << file.errorString();
-                return Monad::ResultBase(QStringLiteral("Failed to open file for writing: %1").arg(filename));
-            }
+            auto ensurePathForFile = [](const QString& filePath) {
+                QFileInfo fileInfo(filePath);
+                QDir dir = fileInfo.dir();
+                if (!dir.exists()) {
+                    bool success = dir.mkpath(".");
+                    if(success) {
+                        ResultBase();
+                    } else {
+                        ResultBase(QStringLiteral("Couldn't create directory:") + dir.absolutePath());
+                    }
+                }
+                return ResultBase();
+            };
 
-            std::string json_output;
-            google::protobuf::util::JsonPrintOptions options;
-            options.add_whitespace = true; // Makes it pretty
-            // options.always_print_primitive_fields = true; // Optional: print even if fields are default
+            return mbind(ensurePathForFile(filename), [&](ResultBase /*result*/) {
+                QSaveFile file(filename);
+                if (!file.open(QFile::WriteOnly)) {
+                    qWarning() << "Failed to write to " << filename << file.errorString();
+                    return Monad::ResultBase(QStringLiteral("Failed to open file for writing: %1").arg(filename));
+                }
 
-            auto status = google::protobuf::util::MessageToJsonString(*message, &json_output, options);
-            if (!status.ok()) {
-                return Monad::ResultBase(QStringLiteral("Failed to convert proto message to JSON: %1").arg(status.ToString().c_str()));
-            }
+                std::string json_output;
+                google::protobuf::util::JsonPrintOptions options;
+                options.add_whitespace = true; // Makes it pretty
+                // options.always_print_primitive_fields = true; // Optional: print even if fields are default
 
-            file.write(json_output.c_str(), json_output.size());
-            file.commit();
+                auto status = google::protobuf::util::MessageToJsonString(*message, &json_output, options);
+                if (!status.ok()) {
+                    return Monad::ResultBase(QStringLiteral("Failed to convert proto message to JSON: %1").arg(status.ToString().c_str()));
+                }
 
-            return Monad::ResultBase();
+                file.write(json_output.c_str(), json_output.size());
+                file.commit();
+
+                return Monad::ResultBase();
+            });
         });
 
-        AsyncFuture::observe(future).context(context, [filename, this, context]() {
-            m_runningJobs.remove(filename);
+        AsyncFuture::observe(future).context(
+            context, [filename, this, context]() {
+                m_runningJobs.remove(filename);
 
-            //Run waiting save jobs
-            for (auto it = m_waitingJobs.begin();
-                 it != m_waitingJobs.end();
-                 ++it) {
-                WaitingJob& job = it->second;
-                auto future = saveProtoMessage(context, it->first, std::move(job.message));
-                AsyncFuture::observe(future).context(context, [deferred = std::move(job.jobDeferred), future]() mutable {
-                    deferred.complete(future.result());
-                });
-            }
-            m_waitingJobs.clear();
-        });
+                if(m_renameJobs.isEmpty()) {
+                    // Run waiting save jobs
+                    for (auto it = m_waitingJobs.begin(); it != m_waitingJobs.end(); ++it) {
+                        WaitingJob& job = it->second;
+
+                        //Recursive call
+                        auto future = saveProtoMessage(context, it->first, std::move(job.message));
+                        AsyncFuture::observe(future).context(context, [deferred = std::move(job.jobDeferred), future]() mutable {
+                            deferred.complete(future.result());
+                        });
+                    }
+                    m_waitingJobs.clear();
+                } else if(!m_runningJobs.isEmpty()) {
+                    renameFiles();
+                }
+            });
 
         m_runningJobs.insert(filename, future);
 
         return future;
     }
+}
 
+
+bool cwSaveLoad::isTemporaryProject() const
+{
+    return d->isTemporary;
 }
