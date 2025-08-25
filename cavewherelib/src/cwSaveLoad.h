@@ -123,7 +123,7 @@ public:
     static std::unique_ptr<CavewhereProto::Cave> toProtoCave(const cwCave* cave);
     static std::unique_ptr<CavewhereProto::Trip> toProtoTrip(const cwTrip* trip);
 
-    QFuture<Monad::ResultBase> saveTrip(const QDir& dir, const cwTrip* trip);
+    QFuture<Monad::ResultBase> save(const QDir& dir, const cwTrip* trip);
 
 
     //Returns the relative path to the project
@@ -133,17 +133,17 @@ public:
 
     static QString regionFileName(const cwCavingRegion* region);
 
-    static QString caveFileName(const cwCave* cave);
-    static QString caveAbsolutePath(const cwCave* cave);
-    static QDir caveDir(const cwCave* cave);
+    static QString fileName(const cwCave* cave);
+    static QString absolutePath(const cwCave* cave);
+    static QDir dir(const cwCave* cave);
 
-    static QString tripFileName(const cwTrip* trip);
-    static QString tripAbsolutePath(const cwTrip* trip);
-    static QDir tripDir(const cwTrip* trip);
+    static QString fileName(const cwTrip* trip);
+    static QString absolutePath(const cwTrip* trip);
+    static QDir dir(const cwTrip* trip);
 
-    static QString noteFileName(const cwNote* note);
-    static QString noteAbsolutePath(const cwNote* note);
-    static QDir noteDir(const cwNote* note);
+    static QString fileName(const cwNote* note);
+    static QString absolutePath(const cwNote* note);
+    static QDir dir(const cwNote* note);
 
     //For testing
     void waitForFinished();
@@ -219,14 +219,15 @@ private:
     static std::unique_ptr<CavewhereProto::CavingRegion> toProtoCavingRegion(const cwCavingRegion* region);
     static QString regionFileName(const QDir& dir, const cwCavingRegion* region);
 
-    void saveCave(const cwCave* cave);
-    QFuture<Monad::ResultBase> saveCave(const QDir& dir, const cwCave* cave);
+    void save(const cwCave* cave);
+    QFuture<Monad::ResultBase> save(const QDir& dir, const cwCave* cave);
     // static std::unique_ptr<CavewhereProto::Cave> toProtoCave(const cwCave* cave);
 
+    void save(const cwTrip* trip);
     // QFuture<Monad::ResultBase> saveTrip(const QDir& dir, const cwTrip* trip);
     // static std::unique_ptr<CavewhereProto::Trip> toProtoTrip(const cwTrip* trip);
 
-    QFuture<Monad::ResultBase> saveNote(const QDir& dir, const cwNote* note);
+    QFuture<Monad::ResultBase> save(const QDir& dir, const cwNote* note);
     static std::unique_ptr<CavewhereProto::Note> toProtoNote(const cwNote* note);
 
     static Monad::Result<cwCaveData> loadCave(const QString& filename);
@@ -247,6 +248,8 @@ private:
     static cwLength::Data fromProtoLength(const CavewhereProto::Length& protoLength);
     static std::unique_ptr<cwProjectedProfileScrapViewMatrix::Data> fromProtoProjectedScraptViewMatrix(const CavewhereProto::ProjectedProfileScrapViewMatrix protoViewMatrix);
     static cwImageResolution::Data fromProtoImageResolution(const CavewhereProto::ImageResolution& protoImageResolution);
+
+
 
 };
 

@@ -40,6 +40,8 @@ using namespace Monad;
 static QStringList fromProtoStringList(const google::protobuf::RepeatedPtrField<std::string> &protoStringList);
 
 
+
+
 template<typename ProtoType>
 static Result<ProtoType> loadMessage(const QString& filename) {
     QFile file(filename);
@@ -196,10 +198,21 @@ struct cwSaveLoad::Data {
         m_renameJobs.clear();
     }
 
+    template<typename T>
+    void saveObject(cwSaveLoad* context, const T* object) {
+        // qDebug() << "Saving object:" << object << object->name() << dir(object);
+        auto saveFuture = context->save(dir(object), object);
 
+        QPointer<const T> ptr = object;
 
-
-
+        AsyncFuture::observe(saveFuture)
+            .context(context, [context, saveFuture, ptr](){
+                if(!saveFuture.result().hasError()) {
+                    auto filename = context->absolutePath(ptr);
+                    context->d->m_fileLookup[ptr] = filename;
+                }
+            });
+    }
 };
 
 cwSaveLoad::~cwSaveLoad() = default;
@@ -316,24 +329,17 @@ QString cwSaveLoad::regionFileName(const QDir &dir, const cwCavingRegion *region
     return dir.absoluteFilePath(sanitizeFileName(QStringLiteral("%1.cw").arg(region->name())));
 }
 
-void cwSaveLoad::saveCave(const cwCave *cave)
+void cwSaveLoad::save(const cwCave *cave)
 {
-    qDebug() << "Saving cave:" << cave << cave->name() << caveDir(cave);
-    auto saveFuture = saveCave(caveDir(cave), cave);
-
-    QPointer<const cwCave> cavePtr = cave;
-
-    AsyncFuture::observe(saveFuture)
-        .context(this, [this, saveFuture, cavePtr](){
-            if(!saveFuture.result().hasError()) {
-                qDebug() << "Updating fileLookup";
-                auto filename = caveAbsolutePath(cavePtr);
-                d->m_fileLookup[cavePtr] = filename;
-            }
-        });
+    d->saveObject(this, cave);
 }
 
-QFuture<ResultBase> cwSaveLoad::saveCave(const QDir &dir, const cwCave *cave)
+void cwSaveLoad::save(const cwTrip *trip)
+{
+    d->saveObject(this, trip);
+}
+
+QFuture<ResultBase> cwSaveLoad::save(const QDir &dir, const cwCave *cave)
 {
     return saveProtoMessage(
         dir,
@@ -348,11 +354,11 @@ std::unique_ptr<CavewhereProto::Cave> cwSaveLoad::toProtoCave(const cwCave *cave
     return protoCave;
 }
 
-QFuture<ResultBase> cwSaveLoad::saveTrip(const QDir &dir, const cwTrip *trip)
+QFuture<ResultBase> cwSaveLoad::save(const QDir &dir, const cwTrip *trip)
 {
     return saveProtoMessage(
         dir,
-        QStringLiteral("%1.cwtrip").arg(trip->name()),
+        fileName(trip),
         toProtoTrip(trip));
 }
 
@@ -379,7 +385,7 @@ std::unique_ptr<CavewhereProto::Trip> cwSaveLoad::toProtoTrip(const cwTrip *trip
     return protoTrip;
 }
 
-QFuture<ResultBase> cwSaveLoad::saveNote(const QDir &dir, const cwNote *note)
+QFuture<ResultBase> cwSaveLoad::save(const QDir &dir, const cwNote *note)
 {
     return saveProtoMessage(
         dir,
@@ -472,7 +478,7 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(const QDir &dir, const cwProject
                         cwNote noteCopy;
                         noteCopy.setData(saveImageFuture.result());
 
-                        return saveNote(noteDir, &noteCopy);
+                        return save(noteDir, &noteCopy);
                     }).future();
 
 
@@ -492,7 +498,7 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(const QDir &dir, const cwProject
 
         for(const auto trip : cave->trips()) {
             const QDir tripDir = makeDir(tripDirHelper(caveDir, trip));
-            tripFutures.append(saveTrip(tripDir, trip));
+            tripFutures.append(save(tripDir, trip));
             noteFutures.append(saveNotes(tripDir, trip->notes()));
         }
 
@@ -512,7 +518,7 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(const QDir &dir, const cwProject
     //Go through all the caves
     for(const auto cave : project->cavingRegion()->caves()) {
         const QDir caveDir = makeDir(caveDirHelper(dir, cave));
-        saveFutures.append(saveCave(caveDir, cave));
+        saveFutures.append(save(caveDir, cave));
         saveFutures.append(saveTrips(caveDir, cave));
     }
 
@@ -1020,13 +1026,19 @@ void cwSaveLoad::connectTreeModel()
                     switch(index.data(cwRegionTreeModel::TypeRole).toInt()) {
                     case cwRegionTreeModel::CaveType: {
                         auto cave = d->m_regionTreeModel->cave(index);
-                        saveCave(cave);
+                        save(cave);
                         connectCave(cave);
+                        break;
                     }
-                    case cwRegionTreeModel::TripType:
-                        connectTrip(d->m_regionTreeModel->trip(index));
+                    case cwRegionTreeModel::TripType: {
+                        auto trip = d->m_regionTreeModel->trip(index);
+                        save(trip);
+                        connectTrip(trip);
+                        break;
+                    }
                     case cwRegionTreeModel::NoteType:
                         connectNote(d->m_regionTreeModel->note(index));
+                        break;
                     default:
                         break;
                     }
@@ -1110,13 +1122,13 @@ void cwSaveLoad::connectCave(cwCave *cave)
         auto currentFileName = d->m_fileLookup.value(cave);
         QString folderName = QFileInfo(currentFileName).absolutePath();
 
-        auto fileRename = Data::RenameJob {currentFileName, caveAbsolutePath(cave), Data::RenameJob::Kind::File};
-        auto folderRename = Data::RenameJob {folderName, caveDir(cave).absolutePath(), Data::RenameJob::Kind::Directory};
+        auto fileRename = Data::RenameJob {currentFileName, absolutePath(cave), Data::RenameJob::Kind::File};
+        auto folderRename = Data::RenameJob {folderName, dir(cave).absolutePath(), Data::RenameJob::Kind::Directory};
 
         d->addRenameJob(fileRename);
         d->addRenameJob(folderRename);
 
-        saveCave(cave);
+        save(cave);
     };
 
     connect(cave, &cwCave::nameChanged, this, saveCaveName);
@@ -1260,17 +1272,17 @@ QString cwSaveLoad::regionFileName(const cwCavingRegion *region)
     return sanitizeFileName(region->name() + QStringLiteral(".cw"));
 }
 
-QString cwSaveLoad::caveFileName(const cwCave *cave)
+QString cwSaveLoad::fileName(const cwCave *cave)
 {
     return sanitizeFileName(cave->name() + QStringLiteral(".cwcave"));
 }
 
-QString cwSaveLoad::caveAbsolutePath(const cwCave *cave)
+QString cwSaveLoad::absolutePath(const cwCave *cave)
 {
-    return caveDir(cave).absoluteFilePath(caveFileName(cave));
+    return dir(cave).absoluteFilePath(fileName(cave));
 }
 
-QDir cwSaveLoad::caveDir(const cwCave *cave)
+QDir cwSaveLoad::dir(const cwCave *cave)
 {
     if(cave->parentRegion() && cave->parentRegion()->parentProject()) {
         QDir projDir = projectDir(cave->parentRegion()->parentProject());
@@ -1281,19 +1293,29 @@ QDir cwSaveLoad::caveDir(const cwCave *cave)
 
 }
 
-QDir cwSaveLoad::tripDir(const cwTrip *trip)
+QString cwSaveLoad::fileName(const cwTrip *trip)
+{
+    return sanitizeFileName(trip->name() + QStringLiteral(".cwtrip"));
+}
+
+QString cwSaveLoad::absolutePath(const cwTrip *trip)
+{
+    return dir(trip).absoluteFilePath(fileName(trip));
+}
+
+QDir cwSaveLoad::dir(const cwTrip *trip)
 {
     if(trip->parentCave()) {
-        return tripDirHelper(caveDir(trip->parentCave()), trip);
+        return tripDirHelper(dir(trip->parentCave()), trip);
     } else {
         return QDir();
     }
 }
 
-QDir cwSaveLoad::noteDir(const cwNote *note)
+QDir cwSaveLoad::dir(const cwNote *note)
 {
     if(note->parentTrip()) {
-        return noteDirHelper(tripDir(note->parentTrip()));
+        return noteDirHelper(dir(note->parentTrip()));
     } else {
         return QDir();
     }

@@ -356,9 +356,9 @@ TEST_CASE("cwProject should detect the correct file type", "[cwProject]") {
     CHECK(project->projectType(datasetFile) == cwProject::UnknownFileType);
 }
 
-TEST_CASE("Test cave name changes", "[cwProject]") {
+TEST_CASE("Test save changes", "[cwProject]") {
 
-    SECTION("Simple case") {
+    SECTION("Simple cave name change") {
         //Change the name of the cave
         auto project = std::make_unique<cwProject>();
         project->waitSaveToFinish();
@@ -377,21 +377,65 @@ TEST_CASE("Test cave name changes", "[cwProject]") {
         CHECK(QFileInfo::exists(project->filename()));
         // CHECK(project->filename() == cwSaveLoad::projectAbsolutePath(project.get()));
 
-        qDebug() << "File:" << cwSaveLoad::caveAbsolutePath(cave);
-        auto testFilename = cwSaveLoad::caveAbsolutePath(cave);
+        qDebug() << "File:" << cwSaveLoad::absolutePath(cave);
+        auto testFilename = cwSaveLoad::absolutePath(cave);
         QFileInfo info(testFilename);
         auto oldDir = info.absoluteDir();
         oldDir.cdUp();
 
-        CHECK(QFileInfo::exists(cwSaveLoad::caveAbsolutePath(cave)));
+        CHECK(QFileInfo::exists(cwSaveLoad::absolutePath(cave)));
 
         //Test renaming the cave
         cave->setName("test2");
         project->waitSaveToFinish();
 
+        CHECK(QFileInfo::exists(cwSaveLoad::absolutePath(cave)));
+        CHECK(cwSaveLoad::absolutePath(cave).toStdString() == oldDir.filePath("test2/test2.cwcave").toStdString());
+    }
 
+    SECTION("Simple cave and trip") {
+        //Change the name of the cave
+        auto project = std::make_unique<cwProject>();
+        project->waitSaveToFinish();
 
-        CHECK(QFileInfo::exists(cwSaveLoad::caveAbsolutePath(cave)));
-        CHECK(cwSaveLoad::caveAbsolutePath(cave).toStdString() == oldDir.filePath("test2/test2.cwcave").toStdString());
+        INFO("Project name:" << project->filename().toStdString());
+        CHECK(project->isTemporaryProject());
+        CHECK(QFileInfo::exists(project->filename()));
+
+        //Add the cave
+        cwCave* cave = new cwCave();
+        cave->setName("test");
+
+        //Add a trip
+        cwTrip* trip = new cwTrip();
+        trip->setName("test trip");
+        cave->addTrip(trip);
+
+        //Add them all
+        project->cavingRegion()->addCave(cave);
+
+        project->waitSaveToFinish();
+
+        CHECK(QFileInfo::exists(cwSaveLoad::absolutePath(cave)));
+        CHECK(QFileInfo::exists(cwSaveLoad::absolutePath(trip)));
+
+        qDebug() << "Trip:" << cwSaveLoad::absolutePath(trip);
+
+        SECTION("Rename the cave") {
+            auto testFilename = cwSaveLoad::absolutePath(cave);
+            QFileInfo info(testFilename);
+            auto oldDir = info.absoluteDir();
+            oldDir.cdUp();
+
+            //Test renaming the cave
+            cave->setName("test2");
+
+            project->waitSaveToFinish();
+
+            CHECK(QFileInfo::exists(cwSaveLoad::absolutePath(cave)));
+            CHECK(QFileInfo::exists(cwSaveLoad::absolutePath(trip)));
+            CHECK(cwSaveLoad::absolutePath(cave).toStdString() == oldDir.filePath("test2/test2.cwcave").toStdString());
+            CHECK(cwSaveLoad::absolutePath(trip).toStdString() == oldDir.filePath("test2/trips/test trip/test trip.cwtrip").toStdString());
+        }
     }
 }

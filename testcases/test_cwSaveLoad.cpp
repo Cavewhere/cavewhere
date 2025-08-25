@@ -469,7 +469,7 @@ TEST_CASE("cwSaveLoad should save and load cwTrip - empty", "[cwSaveLoad]") {
     cwTrip emptyTrip;
 
     cwSaveLoad save;
-    save.saveTrip(dir, &emptyTrip);
+    save.save(dir, &emptyTrip);
 
     save.waitForFinished();
 }
@@ -490,7 +490,7 @@ TEST_CASE("cwSaveLoad should save and load cwTrip - complex", "[cwSaveLoad]") {
     cwSaveLoad save;
     auto dir = testDir();
 
-    save.saveTrip(dir, trip);
+    save.save(dir, trip);
     save.waitForFinished();
 
 }
