@@ -340,14 +340,16 @@ void cwCompassImporter::parseSurveyTeam(QFile *file)
 
     QStringList teamList = surveyTeam.split(delimiter, Qt::SkipEmptyParts);
     if(!teamList.isEmpty()) {
-        cwTeam* team = new cwTeam();
+
+        QList<cwTeamMember> members;
+        members.reserve(teamList.size());
 
         foreach(QString name, teamList) {
             cwTeamMember member(name, QStringList());
-            team->addTeamMember(member);
+            members.append(member);
         }
 
-        CurrentTrip->setTeam(team);
+        CurrentTrip->team()->setTeamMembers(members);
     }
 }
 

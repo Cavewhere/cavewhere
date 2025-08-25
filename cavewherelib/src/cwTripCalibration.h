@@ -165,10 +165,10 @@ class CAVEWHERE_LIB_EXPORT cwTripCalibration : public QObject
 public:
     explicit cwTripCalibration(QObject *parent = nullptr);
 
-    [[deprecated]]
-    cwTripCalibration(const cwTripCalibration &other);
-    [[deprecated]]
-    cwTripCalibration& operator=(const cwTripCalibration &other);
+    // [[deprecated]]
+    // cwTripCalibration(const cwTripCalibration &other);
+    // [[deprecated]]
+    // cwTripCalibration& operator=(const cwTripCalibration &other);
 
     // Getters that delegate to the internal data instance:
     bool hasCorrectedCompassBacksight() const { return m_data.hasCorrectedCompassBacksight(); }

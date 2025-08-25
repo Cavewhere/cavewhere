@@ -116,36 +116,36 @@ void cwTrip::setDate(QDateTime date) {
     }
 }
 
-/**
-  Sets the team for the trip
-  */
-void cwTrip::setTeam(cwTeam* team) {
-    if(team != Team) {
-        if(Team != nullptr)  {
-            Team->deleteLater(); //Delete the old team
-        }
+// /**
+//   Sets the team for the trip
+//   */
+// void cwTrip::setTeam(cwTeam* team) {
+//     if(team != Team) {
+//         if(Team != nullptr)  {
+//             Team->deleteLater(); //Delete the old team
+//         }
 
-        Team = team;
+//         Team = team;
 
-        if(Team != nullptr) {
-            Team->setParent(this);
-        }
+//         if(Team != nullptr) {
+//             Team->setParent(this);
+//         }
 
-        emit teamChanged();
-    }
-}
+//         emit teamChanged();
+//     }
+// }
 
 /**
   Sets the calibration for the trip
   */
-void cwTrip::setCalibration(cwTripCalibration* calibration) {
-    if(calibration != Calibration) {
-        Calibration->deleteLater();
-        Calibration = calibration;
-        Calibration->setParent(this);
-        emit calibrationChanged();
-    }
-}
+// void cwTrip::setCalibration(cwTripCalibration* calibration) {
+//     if(calibration != Calibration) {
+//         Calibration->deleteLater();
+//         Calibration = calibration;
+//         Calibration->setParent(this);
+//         emit calibrationChanged();
+//     }
+// }
 
 /**
  * @brief cwTrip::addShotToLastChunk

@@ -54,7 +54,7 @@ void cwWallsImportData::cavesHelper(QList<cwCave*>* caves,
         currentTrip->team()->setData(currentBlock->team()->data()); //Copy the team
 
         //Copy the calibration
-        currentTrip->setCalibration(new cwTripCalibration(*(currentBlock->calibration())));
+        currentTrip->calibrations()->setData(currentBlock->calibration()->data());
 
         //Creates a cave for the trip if there isn't one
         if(currentCave == nullptr) {

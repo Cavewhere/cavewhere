@@ -685,11 +685,12 @@ bool cwWallsImporter::parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOu
         {
             foreach (cwTripPtr trip, visitor.trips())
             {
-                cwTeam* team = new cwTeam(trip.data());
-                foreach (QString surveyor, surveyors) {
-                    team->addTeamMember(cwTeamMember(surveyor, QStringList()));
+                QList<cwTeamMember> members;
+                members.reserve(surveyors.size());
+                foreach (const QString& surveyor, surveyors) {
+                    members.append(cwTeamMember(surveyor, QStringList()));
                 }
-                trip->setTeam(team);
+                trip->team()->setTeamMembers(members);
             }
         }
 

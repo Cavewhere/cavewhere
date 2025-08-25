@@ -5,19 +5,19 @@ cwTripCalibration::cwTripCalibration(QObject *parent)
 {
 }
 
-cwTripCalibration::cwTripCalibration(const cwTripCalibration &other)
-    : QObject(nullptr),
-    m_data(other.m_data)
-{
-}
+// cwTripCalibration::cwTripCalibration(const cwTripCalibration &other)
+//     : QObject(nullptr),
+//     m_data(other.m_data)
+// {
+// }
 
-cwTripCalibration& cwTripCalibration::operator=(const cwTripCalibration &other)
-{
-    if (this != &other) {
-        m_data = other.m_data;
-    }
-    return *this;
-}
+// cwTripCalibration& cwTripCalibration::operator=(const cwTripCalibration &other)
+// {
+//     if (this != &other) {
+//         m_data = other.m_data;
+//     }
+//     return *this;
+// }
 
 void cwTripCalibration::setCorrectedCompassBacksight(bool value)
 {

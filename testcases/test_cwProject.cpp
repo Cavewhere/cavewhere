@@ -145,8 +145,8 @@ TEST_CASE("Images should load correctly", "[cwProject]") {
     QImage crashMap(crashMapPath);
     auto y = crashMap.size().height() - 1;
     testImages += Image {crashMap.pixelColor(0, y),
-               crashMap.size(),
-               QUrl::fromLocalFile(copyToTempFolder(crashMapPath))
+        crashMap.size(),
+        QUrl::fromLocalFile(copyToTempFolder(crashMapPath))
     };
 
     QVector<QUrl> filenames;
@@ -235,7 +235,7 @@ TEST_CASE("Images should be removed correctly", "[cwProject]") {
     auto imageIds = [](const cwImage& image) {
         QList<int> ids {
             image.original(),
-                    image.icon(),
+            image.icon(),
         };
 
         ids.append(image.mipmaps());
@@ -247,9 +247,9 @@ TEST_CASE("Images should be removed correctly", "[cwProject]") {
 
         return std::accumulate(ids.begin(), ids.end(), true,
                                [func](bool current, int id)
-        {
-            return current && func(id);
-        });
+                               {
+                                   return current && func(id);
+                               });
     };
 
     auto imageExists = [idExists, imageTestFunc](const cwImage& image) {
@@ -273,17 +273,17 @@ TEST_CASE("Images should be removed correctly", "[cwProject]") {
 
     QList<int> ids = {
         firstImage.icon()
-    };
-    ids += firstImage.mipmaps();
+};
+ids += firstImage.mipmaps();
 
-    for(auto id : ids){
-        INFO("id:" << id);
-        CHECK(idExists(id));
-    }
+for(auto id : ids){
+    INFO("id:" << id);
+    CHECK(idExists(id));
+}
 
-    CHECK(idNotExists(firstImage.original()));
+CHECK(idNotExists(firstImage.original()));
 
-    database.close();
+database.close();
 }
 
 TEST_CASE("cwProject should add PDF correctly", "[cwProject]") {
@@ -377,7 +377,6 @@ TEST_CASE("Test save changes", "[cwProject]") {
         CHECK(QFileInfo::exists(project->filename()));
         // CHECK(project->filename() == cwSaveLoad::projectAbsolutePath(project.get()));
 
-        qDebug() << "File:" << cwSaveLoad::absolutePath(cave);
         auto testFilename = cwSaveLoad::absolutePath(cave);
         QFileInfo info(testFilename);
         auto oldDir = info.absoluteDir();
@@ -419,8 +418,6 @@ TEST_CASE("Test save changes", "[cwProject]") {
         CHECK(QFileInfo::exists(cwSaveLoad::absolutePath(cave)));
         CHECK(QFileInfo::exists(cwSaveLoad::absolutePath(trip)));
 
-        qDebug() << "Trip:" << cwSaveLoad::absolutePath(trip);
-
         SECTION("Rename the cave") {
             auto testFilename = cwSaveLoad::absolutePath(cave);
             QFileInfo info(testFilename);
@@ -437,5 +434,185 @@ TEST_CASE("Test save changes", "[cwProject]") {
             CHECK(cwSaveLoad::absolutePath(cave).toStdString() == oldDir.filePath("test2/test2.cwcave").toStdString());
             CHECK(cwSaveLoad::absolutePath(trip).toStdString() == oldDir.filePath("test2/trips/test trip/test trip.cwtrip").toStdString());
         }
+
+        SECTION("Make sure trip calibration changes are saved") {
+            trip->calibrations()->setDeclination(12.0);
+            project->waitSaveToFinish();
+
+            CHECK(QFileInfo::exists(cwSaveLoad::absolutePath(trip)));
+
+            auto loadingProject = std::make_unique<cwProject>();
+            loadingProject->loadOrConvert(project->filename());
+            loadingProject->waitLoadToFinish();
+
+            REQUIRE(loadingProject->cavingRegion()->caveCount() == 1);
+            auto loadCave = loadingProject->cavingRegion()->cave(0);
+
+            REQUIRE(loadCave->tripCount() == 1);
+            auto loadTrip = loadCave->trip(0);
+
+            CHECK(trip->calibrations()->declination() == 12.0);
+            CHECK(loadTrip->calibrations()->declination() == 12.0);
+        }
     }
+}
+
+TEST_CASE("Trip calibration persistence", "[cwProject]") {
+
+    // Fresh project with one cave + one trip
+    auto project = std::make_unique<cwProject>();
+    project->waitSaveToFinish();
+
+    cwCave* cave = new cwCave();
+    cave->setName("test-cal");
+
+    cwTrip* trip = new cwTrip();
+    trip->setName("trip-cal");
+    cave->addTrip(trip);
+
+    project->cavingRegion()->addCave(cave);
+    project->waitSaveToFinish();
+
+    REQUIRE(QFileInfo::exists(cwSaveLoad::absolutePath(trip)));
+
+    SECTION("Booleans persist") {
+        for(int i = 0; i < 100; i++) {
+            auto calibration = trip->calibrations();
+            calibration->setFrontSights(true);
+            calibration->setBackSights(true);
+            calibration->setCorrectedCompassFrontsight(true);
+            calibration->setCorrectedClinoFrontsight(true);
+            calibration->setCorrectedCompassBacksight(true);
+            calibration->setCorrectedClinoBacksight(true);
+
+            project->waitSaveToFinish();
+
+            // Reload and verify
+            auto loadingProject = std::make_unique<cwProject>();
+            loadingProject->loadOrConvert(project->filename());
+            loadingProject->waitLoadToFinish();
+
+            REQUIRE(loadingProject->cavingRegion()->caveCount() == 1);
+            auto loadCave = loadingProject->cavingRegion()->cave(0);
+            REQUIRE(loadCave->tripCount() == 1);
+            auto loadTrip = loadCave->trip(0);
+            auto loadCalibration = loadTrip->calibrations();
+
+            CHECK(loadCalibration->hasFrontSights());
+            CHECK(loadCalibration->hasBackSights());
+            CHECK(loadCalibration->hasCorrectedCompassFrontsight());
+            CHECK(loadCalibration->hasCorrectedClinoFrontsight());
+            CHECK(loadCalibration->hasCorrectedCompassBacksight());
+            CHECK(loadCalibration->hasCorrectedClinoBacksight());
+        }
+    }
+
+    SECTION("Not Booleans persist") {
+        auto calibration = trip->calibrations();
+        calibration->setFrontSights(false);
+        calibration->setBackSights(false);
+        calibration->setCorrectedCompassFrontsight(false);
+        calibration->setCorrectedClinoFrontsight(false);
+        calibration->setCorrectedCompassBacksight(false);
+        calibration->setCorrectedClinoBacksight(false);
+
+        project->waitSaveToFinish();
+
+        // Reload and verify
+        auto loadingProject = std::make_unique<cwProject>();
+        loadingProject->loadOrConvert(project->filename());
+        loadingProject->waitLoadToFinish();
+
+        REQUIRE(loadingProject->cavingRegion()->caveCount() == 1);
+        auto loadCave = loadingProject->cavingRegion()->cave(0);
+        REQUIRE(loadCave->tripCount() == 1);
+        auto loadTrip = loadCave->trip(0);
+        auto loadCalibration = loadTrip->calibrations();
+
+        CHECK(!loadCalibration->hasFrontSights());
+        CHECK(!loadCalibration->hasBackSights());
+        CHECK(!loadCalibration->hasCorrectedCompassFrontsight());
+        CHECK(!loadCalibration->hasCorrectedClinoFrontsight());
+        CHECK(!loadCalibration->hasCorrectedCompassBacksight());
+        CHECK(!loadCalibration->hasCorrectedClinoBacksight());
+    }
+
+    SECTION("Numeric values persist") {
+        const double tape = 1.0023;
+        const double fComp = -0.75;
+        const double fClino = 0.35;
+        const double bComp = 1.10;
+        const double bClino = -0.45;
+        const double decl = 13.25;
+
+        auto calibration = trip->calibrations();
+        calibration->setTapeCalibration(tape);
+        calibration->setFrontCompassCalibration(fComp);
+        calibration->setFrontClinoCalibration(fClino);
+        calibration->setBackCompassCalibration(bComp);
+        calibration->setBackClinoCalibration(bClino);
+        calibration->setDeclination(decl);
+
+        project->waitSaveToFinish();
+
+        auto loadingProject = std::make_unique<cwProject>();
+        loadingProject->loadOrConvert(project->filename());
+        loadingProject->waitLoadToFinish();
+
+        auto loadTrip = loadingProject->cavingRegion()->cave(0)->trip(0);
+        auto loadCalibration = loadTrip->calibrations();
+
+        CHECK(loadCalibration->tapeCalibration() == tape);
+        CHECK(loadCalibration->frontCompassCalibration() == fComp);
+        CHECK(loadCalibration->frontClinoCalibration() == fClino);
+        CHECK(loadCalibration->backCompassCalibration() == bComp);
+        CHECK(loadCalibration->backClinoCalibration() == bClino);
+        CHECK(loadCalibration->declination() == decl);
+    }
+
+    SECTION("Distance unit persists") {
+        // Pick a unit that differs from the default
+        const cwUnits::LengthUnit unit = cwUnits::LengthUnit::Feet;
+
+        auto calibration = trip->calibrations();
+        calibration->setDistanceUnit(unit);
+
+        project->waitSaveToFinish();
+
+        auto loadingProject = std::make_unique<cwProject>();
+        loadingProject->loadOrConvert(project->filename());
+        loadingProject->waitLoadToFinish();
+
+        auto loadTrip = loadingProject->cavingRegion()->cave(0)->trip(0);
+        auto loadCalibration = loadTrip->calibrations();
+
+        CHECK(loadCalibration->distanceUnit() == unit);
+    }
+
+    SECTION("Last write wins for calibration fields") {
+        auto calibration = trip->calibrations();
+
+        calibration->setDeclination(5.0);
+        project->waitSaveToFinish();
+
+        calibration->setDeclination(9.5);
+        calibration->setFrontCompassCalibration(0.2);
+        project->waitSaveToFinish();
+
+        // Final overwrite before reload
+        calibration->setDeclination(12.75);
+        calibration->setFrontCompassCalibration(-0.15);
+        project->waitSaveToFinish();
+
+        auto loadingProject = std::make_unique<cwProject>();
+        loadingProject->loadOrConvert(project->filename());
+        loadingProject->waitLoadToFinish();
+
+        auto loadTrip = loadingProject->cavingRegion()->cave(0)->trip(0);
+        auto loadCalibration = loadTrip->calibrations();
+
+        CHECK(loadCalibration->declination() == 12.75);
+        CHECK(loadCalibration->frontCompassCalibration() == -0.15);
+    }
+
 }

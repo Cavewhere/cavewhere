@@ -90,21 +90,11 @@ TEST_CASE("Trip Calibration Getters and setters should work", "[cwTripCalibratio
     CHECK(tripCalibration->hasBackSights() == false);
     CHECK(calibrationChanged.size() == 13);
 
-    SECTION("Check copy constructor") {
-        //Check copy operator
-        cwTripCalibration* calibration2 = new cwTripCalibration(*tripCalibration);
-
-        //Byte for byte comparison
-        propertyCompare(tripCalibration.get(), calibration2);
-
-        delete calibration2;
-    }
-
     SECTION("Check assignment operator") {
         //Check copy operator
         cwTripCalibration* calibration2 = new cwTripCalibration();
 
-        *calibration2 = *tripCalibration;
+        calibration2->setData(tripCalibration->data());
 
         //Byte for byte comparison
         propertyCompare(tripCalibration.get(), calibration2);

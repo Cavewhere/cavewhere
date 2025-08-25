@@ -44,10 +44,10 @@ class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
 
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
     Q_PROPERTY(QDateTime date READ date WRITE setDate NOTIFY dateChanged)
-    Q_PROPERTY(cwSurveyNoteModel* notes READ notes NOTIFY notesChanged)
-    Q_PROPERTY(cwTeam* team READ team WRITE setTeam NOTIFY teamChanged)
+    Q_PROPERTY(cwSurveyNoteModel* notes READ notes CONSTANT)
+    Q_PROPERTY(cwTeam* team READ team CONSTANT)
     Q_PROPERTY(int chunkCount READ chunkCount NOTIFY numberOfChunksChanged)
-    Q_PROPERTY(cwTripCalibration* calibration READ calibrations WRITE setCalibration NOTIFY calibrationChanged)  
+    Q_PROPERTY(cwTripCalibration* calibration READ calibrations CONSTANT)
     Q_PROPERTY(cwCave* parentCave READ parentCave WRITE setParentCave NOTIFY parentCaveChanged)
     Q_PROPERTY(cwErrorModel* errorModel READ errorModel CONSTANT)
 
@@ -67,10 +67,10 @@ public:
     QDateTime date() const;
     void setDate(QDateTime date);
 
-    void setTeam(cwTeam* team);
+    // void setTeam(cwTeam* team);
     cwTeam* team() const;
 
-    void setCalibration(cwTripCalibration* calibrations);
+    // void setCalibration(cwTripCalibration* calibrations);
     cwTripCalibration* calibrations() const;
 
     cwSurveyNoteModel* notes() const;
@@ -110,9 +110,9 @@ signals:
     void chunksInserted(int begin, int end);
     void chunksAboutToBeRemoved(int begin, int end);
     void chunksRemoved(int begin, int end);
-    void teamChanged();
-    void calibrationChanged();
-    void notesChanged();
+    // void teamChanged();
+    // void calibrationChanged();
+    // void notesChanged();
     void numberOfChunksChanged();
     void parentCaveChanged();
 

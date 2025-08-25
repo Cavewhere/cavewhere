@@ -272,7 +272,7 @@ void cwSurvexImporter::parseLine(QString line) {
         CurrentBlock->addChildNode(newBlock);
 
         //Copy the calibrations
-        *(newBlock->calibration()) = *(CurrentBlock->calibration());
+        newBlock->calibration()->setData(CurrentBlock->calibration()->data());
 
         //Make the newBlock the current block
         CurrentBlock = newBlock;
@@ -640,7 +640,7 @@ void cwSurvexImporter::addCalibrationToCurrentChunk(cwTripCalibration *calibrati
 
     //Couldn't find a valid shot to add the calibration
     //Copy the calibration into CurrentBlock's calibration
-    *CurrentBlock->calibration() = *calibration;
+    CurrentBlock->calibration()->setData(calibration->data());
     delete calibration;
 }
 

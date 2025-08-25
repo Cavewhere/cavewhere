@@ -77,7 +77,8 @@ void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves,
         currentTrip->team()->setData(currentBlock->team()->data());
 
         //Copy the calibration
-        currentTrip->setCalibration(new cwTripCalibration(*(currentBlock->calibration())));
+        currentTrip->calibrations()->setData(currentBlock->calibration()->data());
+        // currentTrip->setCalibration(new cwTripCalibration(*(currentBlock->calibration())));
 
         //Creates a cave for the trip if there isn't one
         if(currentCave == nullptr) {

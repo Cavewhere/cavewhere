@@ -1134,10 +1134,111 @@ void cwSaveLoad::connectCave(cwCave *cave)
     connect(cave, &cwCave::nameChanged, this, saveCaveName);
 }
 
-void cwSaveLoad::connectTrip(cwTrip *trip)
-{
 
+void cwSaveLoad::connectTrip(cwTrip* trip)
+{
+    if (trip == nullptr) {
+        return;
+    }
+
+    // Lambda that saves this specific trip
+    const auto saveTrip = [this, trip]() {
+        save(trip);
+    };
+
+    // Helper to connect a survey chunk to save on any data change
+    const auto connectChunk = [this, saveTrip](cwSurveyChunk* chunk) {
+        if (chunk == nullptr) {
+            return;
+        }
+
+        connect(chunk, &cwSurveyChunk::added, this, saveTrip);
+        connect(chunk, &cwSurveyChunk::aboutToRemove, this, saveTrip);
+        connect(chunk, &cwSurveyChunk::removed, this, saveTrip);
+
+        connect(chunk, &cwSurveyChunk::stationsAdded, this, saveTrip);
+        connect(chunk, &cwSurveyChunk::shotsAdded, this, saveTrip);
+        connect(chunk, &cwSurveyChunk::stationsRemoved, this, saveTrip);
+        connect(chunk, &cwSurveyChunk::shotsRemoved, this, saveTrip);
+
+        connect(chunk, &cwSurveyChunk::calibrationsChanged, this, saveTrip);
+        connect(chunk, &cwSurveyChunk::connectedChanged, this, saveTrip);
+        connect(chunk, &cwSurveyChunk::connectedStateChanged, this, saveTrip);
+        connect(chunk, &cwSurveyChunk::shotCountChanged, this, saveTrip);
+        connect(chunk, &cwSurveyChunk::stationCountChanged, this, saveTrip);
+
+        connect(chunk, &cwSurveyChunk::dataChanged, this, saveTrip);
+        connect(chunk, &cwSurveyChunk::errorsChanged, this, saveTrip);
+        // parentTripChanged intentionally not handled (no re-parenting)
+    };
+
+    // Trip-level changes
+    connect(trip, &cwTrip::nameChanged, this, saveTrip);
+    connect(trip, &cwTrip::dateChanged, this, saveTrip);
+    connect(trip, &cwTrip::numberOfChunksChanged, this, saveTrip);
+    connect(trip, &cwTrip::chunksAboutToBeRemoved, this, saveTrip);
+    connect(trip, &cwTrip::chunksRemoved, this, saveTrip);
+
+    // Newly inserted chunks → connect them and save
+    connect(trip, &cwTrip::chunksInserted, this,
+            [this, trip, connectChunk, saveTrip](int begin, int end) {
+                for (int i = begin; i <= end; ++i) {
+                    if (auto* chunk = trip->chunk(i)) { // adjust if accessor differs
+                        connectChunk(chunk);
+                    }
+                }
+                saveTrip();
+            });
+
+    // Connect all existing chunks
+    for (int i = 0; i < trip->chunkCount(); ++i) {
+        if (auto* chunk = trip->chunk(i)) {
+            connectChunk(chunk);
+        }
+    }
+
+    // Team model changes → save
+    if (QAbstractItemModel* const teamModel = trip->team()) {
+        connect(teamModel, &QAbstractItemModel::dataChanged, this, saveTrip);
+        connect(teamModel, &QAbstractItemModel::rowsInserted, this, saveTrip);
+        connect(teamModel, &QAbstractItemModel::rowsRemoved, this, saveTrip);
+        connect(teamModel, &QAbstractItemModel::modelReset, this, saveTrip);
+        connect(teamModel, &QAbstractItemModel::layoutChanged, this, saveTrip);
+    }
+
+    // Notes model changes → save
+    // if (QAbstractItemModel* const notesModel = trip->notes()) {
+    //     connect(notesModel, &QAbstractItemModel::dataChanged, this, saveTrip);
+    //     connect(notesModel, &QAbstractItemModel::rowsInserted, this, saveTrip);
+    //     connect(notesModel, &QAbstractItemModel::rowsRemoved, this, saveTrip);
+    //     connect(notesModel, &QAbstractItemModel::modelReset, this, saveTrip);
+    //     connect(notesModel, &QAbstractItemModel::layoutChanged, this, saveTrip);
+    // }
+
+    // Trip calibration changes → save
+    if (cwTripCalibration* const cal = trip->calibrations()) {
+        connect(cal, &cwTripCalibration::correctedCompassBacksightChanged, this, saveTrip);
+        connect(cal, &cwTripCalibration::correctedClinoBacksightChanged, this, saveTrip);
+        connect(cal, &cwTripCalibration::correctedCompassFrontsightChanged, this, saveTrip);
+        connect(cal, &cwTripCalibration::correctedClinoFrontsightChanged, this, saveTrip);
+
+        connect(cal, &cwTripCalibration::tapeCalibrationChanged, this, saveTrip);
+        connect(cal, &cwTripCalibration::frontCompassCalibrationChanged, this, saveTrip);
+        connect(cal, &cwTripCalibration::frontClinoCalibrationChanged, this, saveTrip);
+        connect(cal, &cwTripCalibration::backCompassCalibrationChanged, this, saveTrip);
+        connect(cal, &cwTripCalibration::backClinoCalibrationChanged, this, saveTrip);
+
+        connect(cal, &cwTripCalibration::declinationChanged, this, saveTrip);
+        connect(cal, &cwTripCalibration::distanceUnitChanged, this, saveTrip);
+        connect(cal, &cwTripCalibration::supportedUnitsChanged, this, saveTrip);
+        connect(cal, &cwTripCalibration::frontSightsChanged, this, saveTrip);
+        connect(cal, &cwTripCalibration::backSightsChanged, this, saveTrip);
+    }
+
+    // parentCaveChanged intentionally omitted (no re-parenting)
 }
+
+
 
 void cwSaveLoad::connectNote(cwNote *note)
 {
@@ -1359,7 +1460,8 @@ QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
     }
 
     //Make sure we're not saving to the same file at the same time
-    if (m_runningJobs.contains(filename) && !m_renameJobs.isEmpty()) {
+    if (m_runningJobs.contains(filename) || !m_renameJobs.isEmpty()) {
+
         auto deferred = AsyncFuture::Deferred<ResultBase>();
 
         m_waitingJobs[filename] = WaitingJob {
@@ -1370,7 +1472,6 @@ QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
         //Add defered here
         return deferred.future();
     } else {
-
 
         auto future = cwConcurrent::run([filename, message = std::move(message)]() {
             auto ensurePathForFile = [](const QString& filePath) {
@@ -1419,6 +1520,8 @@ QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
                     // Run waiting save jobs
                     for (auto it = m_waitingJobs.begin(); it != m_waitingJobs.end(); ++it) {
                         WaitingJob& job = it->second;
+
+
 
                         //Recursive call
                         auto future = saveProtoMessage(context, it->first, std::move(job.message));
