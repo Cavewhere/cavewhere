@@ -16,6 +16,7 @@
 #include "cwPDFSettings.h"
 #include "cwNote.h"
 #include "cwSaveLoad.h"
+#include "cwTeam.h"
 
 //Qt includes
 #include <QSqlQuery>
@@ -614,5 +615,194 @@ TEST_CASE("Trip calibration persistence", "[cwProject]") {
         CHECK(loadCalibration->declination() == 12.75);
         CHECK(loadCalibration->frontCompassCalibration() == -0.15);
     }
+}
 
+TEST_CASE("Trip team member role changes persist and trigger save", "[cwProject][cwTeam]") {
+    auto project = std::make_unique<cwProject>();
+    project->waitSaveToFinish();
+
+    cwCave* cave = new cwCave();
+    cave->setName("team-roles-cave");
+
+    cwTrip* trip = new cwTrip();
+    trip->setName("team-roles-trip");
+    cave->addTrip(trip);
+
+    project->cavingRegion()->addCave(cave);
+    project->waitSaveToFinish();
+
+    REQUIRE(QFileInfo::exists(cwSaveLoad::absolutePath(trip)));
+
+    // Use the concrete model so we can call add/remove helpers
+    cwTeam* const team = static_cast<cwTeam*>(trip->team());
+    REQUIRE(team != nullptr);
+
+    SECTION("Insert member and set NameRole + JobsRole → save + reload") {
+        team->addTeamMember(); // appends at end
+        const int rowInserted = team->rowCount() - 1;
+        REQUIRE(rowInserted >= 0);
+
+        // Set roles
+        const QString nameInserted = QStringLiteral("Alice Example");
+        const QStringList jobsInserted = QStringList{QStringLiteral("Sketcher"), QStringLiteral("Reader")};
+
+        QModelIndex nameIndex = team->index(rowInserted, 0);
+        REQUIRE(nameIndex.isValid());
+
+        bool okName = team->setData(nameIndex, nameInserted, cwTeam::NameRole);
+        REQUIRE(okName);
+
+        bool okJobs = team->setData(nameIndex, jobsInserted, cwTeam::JobsRole);
+        REQUIRE(okJobs);
+
+        project->waitSaveToFinish();
+
+        // Reload and verify both roles
+        auto reloaded = std::make_unique<cwProject>();
+        reloaded->loadOrConvert(project->filename());
+        reloaded->waitLoadToFinish();
+
+        cwTrip* const reloadedTrip = reloaded->cavingRegion()->cave(0)->trip(0);
+        REQUIRE(reloadedTrip != nullptr);
+
+        cwTeam* const reloadedTeam = static_cast<cwTeam*>(reloadedTrip->team());
+        REQUIRE(reloadedTeam != nullptr);
+
+        REQUIRE(reloadedTeam->rowCount() >= 1);
+        QModelIndex reloadedIndex = reloadedTeam->index(rowInserted, 0);
+        REQUIRE(reloadedIndex.isValid());
+
+        CHECK(reloadedTeam->data(reloadedIndex, cwTeam::NameRole).toString() == nameInserted);
+        CHECK(reloadedTeam->data(reloadedIndex, cwTeam::JobsRole).toStringList() == jobsInserted);
+    }
+
+    SECTION("Edit NameRole + JobsRole on existing member → save + reload") {
+        // Ensure one row exists
+        if (team->rowCount() == 0) {
+            team->addTeamMember();
+            const int newRow = team->rowCount() - 1;
+            QModelIndex idx = team->index(newRow, 0);
+            REQUIRE(idx.isValid());
+            REQUIRE(team->setData(idx, QStringLiteral("Temp Member"), cwTeam::NameRole));
+            REQUIRE(team->setData(idx, QStringList{QStringLiteral("Assistant")}, cwTeam::JobsRole));
+        }
+
+        const int rowToEdit = 0;
+        QModelIndex editIndex = team->index(rowToEdit, 0);
+        REQUIRE(editIndex.isValid());
+
+        const QString newName = QStringLiteral("Bob Renamed");
+        const QStringList newJobs = QStringList{QStringLiteral("Sketcher"), QStringLiteral("Instrument Person")};
+
+        REQUIRE(team->setData(editIndex, newName, cwTeam::NameRole));
+        REQUIRE(team->setData(editIndex, newJobs, cwTeam::JobsRole));
+
+        project->waitSaveToFinish();
+
+        auto reloaded = std::make_unique<cwProject>();
+        reloaded->loadOrConvert(project->filename());
+        reloaded->waitLoadToFinish();
+
+        cwTrip* const reloadedTrip = reloaded->cavingRegion()->cave(0)->trip(0);
+        REQUIRE(reloadedTrip != nullptr);
+
+        cwTeam* const reloadedTeam = static_cast<cwTeam*>(reloadedTrip->team());
+        REQUIRE(reloadedTeam != nullptr);
+
+        REQUIRE(reloadedTeam->rowCount() >= 1);
+        QModelIndex reloadedIndex = reloadedTeam->index(rowToEdit, 0);
+        REQUIRE(reloadedIndex.isValid());
+
+        CHECK(reloadedTeam->data(reloadedIndex, cwTeam::NameRole).toString() == newName);
+        CHECK(reloadedTeam->data(reloadedIndex, cwTeam::JobsRole).toStringList() == newJobs);
+    }
+
+    SECTION("Remove member → save + reload") {
+        // Ensure at least two members exist so removal changes the count
+        while (team->rowCount() < 2) {
+            team->addTeamMember();
+            const int r = team->rowCount() - 1;
+            QModelIndex idx = team->index(r, 0);
+            REQUIRE(idx.isValid());
+            REQUIRE(team->setData(idx, QStringLiteral("Member %1").arg(r + 1), cwTeam::NameRole));
+            REQUIRE(team->setData(idx, QStringList{QStringLiteral("Helper")}, cwTeam::JobsRole));
+        }
+
+        const int previousCount = team->rowCount();
+        const int removeRow = 0;
+        team->removeTeamMember(removeRow);
+
+        project->waitSaveToFinish();
+
+        auto reloaded = std::make_unique<cwProject>();
+        reloaded->loadOrConvert(project->filename());
+        reloaded->waitLoadToFinish();
+
+        cwTrip* const reloadedTrip = reloaded->cavingRegion()->cave(0)->trip(0);
+        REQUIRE(reloadedTrip != nullptr);
+
+        cwTeam* const reloadedTeam = static_cast<cwTeam*>(reloadedTrip->team());
+        REQUIRE(reloadedTeam != nullptr);
+
+        CHECK(reloadedTeam->rowCount() == previousCount - 1);
+    }
+}
+
+TEST_CASE("Trip date persistence", "[cwProject][cwTrip]") {
+    // Build project → cave → trip
+    auto project = std::make_unique<cwProject>();
+    project->waitSaveToFinish();
+
+    cwCave* cave = new cwCave();
+    cave->setName("date-persist-cave");
+
+    cwTrip* trip = new cwTrip();
+    trip->setName("date-persist-trip");
+    cave->addTrip(trip);
+
+    project->cavingRegion()->addCave(cave);
+    project->waitSaveToFinish();
+
+    REQUIRE(QFileInfo::exists(cwSaveLoad::absolutePath(trip)));
+
+    SECTION("Initial date persists after reload") {
+        const QDateTime dateUtc(QDate(2024, 5, 1), QTime());
+        trip->setDate(dateUtc);
+        project->waitSaveToFinish();
+
+        auto reloaded = std::make_unique<cwProject>();
+        reloaded->loadOrConvert(project->filename());
+        reloaded->waitLoadToFinish();
+
+        cwTrip* const loadTrip = reloaded->cavingRegion()->cave(0)->trip(0);
+        REQUIRE(loadTrip != nullptr);
+
+        const QDateTime loadedDate = loadTrip->date();
+        CHECK(loadedDate.toMSecsSinceEpoch() == dateUtc.toMSecsSinceEpoch());
+    }
+
+    SECTION("Last write wins for date field") {
+        const QDateTime firstDate(QDate(2023, 11, 23), QTime());
+        const QDateTime secondDate(QDate(2024, 1, 2), QTime());
+        const QDateTime finalDate(QDate(2025, 8, 25), QTime());
+
+        trip->setDate(firstDate);
+        project->waitSaveToFinish();
+
+        trip->setDate(secondDate);
+        project->waitSaveToFinish();
+
+        trip->setDate(finalDate);
+        project->waitSaveToFinish();
+
+        auto reloaded = std::make_unique<cwProject>();
+        reloaded->loadOrConvert(project->filename());
+        reloaded->waitLoadToFinish();
+
+        cwTrip* const loadTrip = reloaded->cavingRegion()->cave(0)->trip(0);
+        REQUIRE(loadTrip != nullptr);
+
+        const QDateTime loadedDate = loadTrip->date();
+        CHECK(loadedDate.toMSecsSinceEpoch() == finalDate.toMSecsSinceEpoch());
+    }
 }

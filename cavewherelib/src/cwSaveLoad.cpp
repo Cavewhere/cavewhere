@@ -1162,20 +1162,20 @@ void cwSaveLoad::connectTrip(cwTrip* trip)
         connect(chunk, &cwSurveyChunk::shotsRemoved, this, saveTrip);
 
         connect(chunk, &cwSurveyChunk::calibrationsChanged, this, saveTrip);
-        connect(chunk, &cwSurveyChunk::connectedChanged, this, saveTrip);
-        connect(chunk, &cwSurveyChunk::connectedStateChanged, this, saveTrip);
-        connect(chunk, &cwSurveyChunk::shotCountChanged, this, saveTrip);
-        connect(chunk, &cwSurveyChunk::stationCountChanged, this, saveTrip);
+        // connect(chunk, &cwSurveyChunk::connectedChanged, this, saveTrip);
+        // connect(chunk, &cwSurveyChunk::connectedStateChanged, this, saveTrip);
+        // connect(chunk, &cwSurveyChunk::shotCountChanged, this, saveTrip);
+        // connect(chunk, &cwSurveyChunk::stationCountChanged, this, saveTrip);
 
         connect(chunk, &cwSurveyChunk::dataChanged, this, saveTrip);
-        connect(chunk, &cwSurveyChunk::errorsChanged, this, saveTrip);
+        // connect(chunk, &cwSurveyChunk::errorsChanged, this, saveTrip);
         // parentTripChanged intentionally not handled (no re-parenting)
     };
 
     // Trip-level changes
     connect(trip, &cwTrip::nameChanged, this, saveTrip);
     connect(trip, &cwTrip::dateChanged, this, saveTrip);
-    connect(trip, &cwTrip::numberOfChunksChanged, this, saveTrip);
+    // connect(trip, &cwTrip::numberOfChunksChanged, this, saveTrip);
     connect(trip, &cwTrip::chunksAboutToBeRemoved, this, saveTrip);
     connect(trip, &cwTrip::chunksRemoved, this, saveTrip);
 
