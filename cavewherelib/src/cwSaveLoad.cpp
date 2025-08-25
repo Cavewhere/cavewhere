@@ -1156,10 +1156,10 @@ void cwSaveLoad::connectTrip(cwTrip* trip)
         connect(chunk, &cwSurveyChunk::aboutToRemove, this, saveTrip);
         connect(chunk, &cwSurveyChunk::removed, this, saveTrip);
 
-        connect(chunk, &cwSurveyChunk::stationsAdded, this, saveTrip);
-        connect(chunk, &cwSurveyChunk::shotsAdded, this, saveTrip);
-        connect(chunk, &cwSurveyChunk::stationsRemoved, this, saveTrip);
-        connect(chunk, &cwSurveyChunk::shotsRemoved, this, saveTrip);
+        // connect(chunk, &cwSurveyChunk::stationsAdded, this, saveTrip);
+        // connect(chunk, &cwSurveyChunk::shotsAdded, this, saveTrip);
+        // connect(chunk, &cwSurveyChunk::stationsRemoved, this, saveTrip);
+        // connect(chunk, &cwSurveyChunk::shotsRemoved, this, saveTrip);
 
         connect(chunk, &cwSurveyChunk::calibrationsChanged, this, saveTrip);
         // connect(chunk, &cwSurveyChunk::connectedChanged, this, saveTrip);

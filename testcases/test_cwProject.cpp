@@ -806,3 +806,386 @@ TEST_CASE("Trip date persistence", "[cwProject][cwTrip]") {
         CHECK(loadedDate.toMSecsSinceEpoch() == finalDate.toMSecsSinceEpoch());
     }
 }
+
+TEST_CASE("Survey chunk persistence", "[cwProject][cwTrip][cwSurveyChunk]") {
+    auto project = std::make_unique<cwProject>();
+    project->waitSaveToFinish();
+
+    cwCave* cave = new cwCave();
+    cave->setName("chunk-persist-cave");
+
+    cwTrip* trip = new cwTrip();
+    trip->setName("chunk-persist-trip");
+    cave->addTrip(trip);
+
+    project->cavingRegion()->addCave(cave);
+    project->waitSaveToFinish();
+
+    REQUIRE(QFileInfo::exists(cwSaveLoad::absolutePath(trip)));
+
+    SECTION("Add two chunks with data → save → reload → verify ALL fields") {
+        // ---------- Chunk 0 ----------
+        trip->addNewChunk();
+        cwSurveyChunk* c0 = trip->chunk(0);
+        REQUIRE(c0 != nullptr);
+
+        // Fill stations[0,1], LRUDs
+        c0->setData(cwSurveyChunk::StationNameRole, 0, "A");
+        c0->setData(cwSurveyChunk::StationLeftRole, 0, "0.10");
+        c0->setData(cwSurveyChunk::StationRightRole, 0, "0.20");
+        c0->setData(cwSurveyChunk::StationUpRole, 0, "0.30");
+        c0->setData(cwSurveyChunk::StationDownRole, 0, "0.40");
+
+        c0->setData(cwSurveyChunk::StationNameRole, 1, "B");
+        c0->setData(cwSurveyChunk::StationLeftRole, 1, "0.50");
+        c0->setData(cwSurveyChunk::StationRightRole, 1, "0.60");
+        c0->setData(cwSurveyChunk::StationUpRole, 1, "0.70");
+        c0->setData(cwSurveyChunk::StationDownRole, 1, "0.80");
+
+        // Shot 0 (A->B), include = true
+        c0->setData(cwSurveyChunk::ShotDistanceRole, 0, "10.50");
+        c0->setData(cwSurveyChunk::ShotCompassRole, 0, "12.30");
+        c0->setData(cwSurveyChunk::ShotBackCompassRole, 0, "12.40");
+        c0->setData(cwSurveyChunk::ShotClinoRole, 0, "-2.50");
+        c0->setData(cwSurveyChunk::ShotBackClinoRole, 0, "-2.60");
+        c0->setData(cwSurveyChunk::ShotDistanceIncludedRole, 0, true);
+
+        // Shot 1 (B->C), include = false + LRUDs for C
+        {
+            const cwStation from("B");
+            const cwStation to("C");
+            const cwShot shot("4.75","33.0","213.0","0.50","0.60");
+            c0->appendShot(from, to, shot);
+
+            const int shotIdx = 1;
+            const int stnIdx = 2;
+
+            c0->setData(cwSurveyChunk::ShotBackCompassRole, shotIdx, "213.2");
+            c0->setData(cwSurveyChunk::ShotBackClinoRole, shotIdx, "0.55");
+            c0->setData(cwSurveyChunk::ShotDistanceIncludedRole, shotIdx, false);
+
+            c0->setData(cwSurveyChunk::StationNameRole, stnIdx, "C");
+            c0->setData(cwSurveyChunk::StationLeftRole, stnIdx, "0.90");
+            c0->setData(cwSurveyChunk::StationRightRole, stnIdx, "1.00");
+            c0->setData(cwSurveyChunk::StationUpRole, stnIdx, "1.10");
+            c0->setData(cwSurveyChunk::StationDownRole, stnIdx, "1.20");
+        }
+
+        // ---------- Chunk 1 ----------
+        trip->addNewChunk();
+        cwSurveyChunk* c1 = trip->chunk(1);
+        REQUIRE(c1 != nullptr);
+
+        c1->setData(cwSurveyChunk::StationNameRole, 0, "C");
+        c1->setData(cwSurveyChunk::StationLeftRole, 0, "0.11");
+        c1->setData(cwSurveyChunk::StationRightRole, 0, "0.22");
+        c1->setData(cwSurveyChunk::StationUpRole, 0, "0.33");
+        c1->setData(cwSurveyChunk::StationDownRole, 0, "0.44");
+
+        c1->setData(cwSurveyChunk::StationNameRole, 1, "D");
+        c1->setData(cwSurveyChunk::StationLeftRole, 1, "0.55");
+        c1->setData(cwSurveyChunk::StationRightRole, 1, "0.66");
+        c1->setData(cwSurveyChunk::StationUpRole, 1, "0.77");
+        c1->setData(cwSurveyChunk::StationDownRole, 1, "0.88");
+
+        // Shot 0 (C->D), include = true
+        c1->setData(cwSurveyChunk::ShotDistanceRole, 0, "7.25");
+        c1->setData(cwSurveyChunk::ShotCompassRole, 0, "101.0");
+        c1->setData(cwSurveyChunk::ShotBackCompassRole, 0, "281.0");
+        c1->setData(cwSurveyChunk::ShotClinoRole, 0, "3.00");
+        c1->setData(cwSurveyChunk::ShotBackClinoRole, 0, "3.10");
+        c1->setData(cwSurveyChunk::ShotDistanceIncludedRole, 0, true);
+
+        // Shot 1 (D->E), include = false + LRUDs for E
+        {
+            const cwStation from("D");
+            const cwStation to("E");
+            const cwShot shot("2.10","280.0","100.0","-1.25","-1.20");
+            c1->appendShot(from, to, shot);
+
+            const int shotIdx = 1;
+            const int stnIdx = 2;
+
+            c1->setData(cwSurveyChunk::ShotBackCompassRole, shotIdx, "100.2");
+            c1->setData(cwSurveyChunk::ShotBackClinoRole, shotIdx, "-1.22");
+            c1->setData(cwSurveyChunk::ShotDistanceIncludedRole, shotIdx, false);
+
+            c1->setData(cwSurveyChunk::StationNameRole, stnIdx, "E");
+            c1->setData(cwSurveyChunk::StationLeftRole, stnIdx, "0.95");
+            c1->setData(cwSurveyChunk::StationRightRole, stnIdx, "1.05");
+            c1->setData(cwSurveyChunk::StationUpRole, stnIdx, "1.15");
+            c1->setData(cwSurveyChunk::StationDownRole, stnIdx, "1.25");
+        }
+
+        project->waitSaveToFinish();
+
+        // ---------- Reload & VERIFY EVERYTHING ----------
+        auto reloaded = std::make_unique<cwProject>();
+        reloaded->loadOrConvert(project->filename());
+        reloaded->waitLoadToFinish();
+
+        cwTrip* lt = reloaded->cavingRegion()->cave(0)->trip(0);
+        REQUIRE(lt != nullptr);
+        CHECK(lt->chunkCount() == 2);
+
+        cwSurveyChunk* rc0 = lt->chunk(0);
+        cwSurveyChunk* rc1 = lt->chunk(1);
+        REQUIRE(rc0 != nullptr);
+        REQUIRE(rc1 != nullptr);
+
+        // Chunk 0: counts
+        CHECK(rc0->stationCount() == 3);
+        CHECK(rc0->shotCount() == 2);
+
+        // Chunk 0: station 0 (A) + LRUD
+        CHECK(rc0->data(cwSurveyChunk::StationNameRole, 0).toString().toStdString() == "A");
+        CHECK(rc0->data(cwSurveyChunk::StationLeftRole, 0).toString().toStdString() == "0.10");
+        CHECK(rc0->data(cwSurveyChunk::StationRightRole, 0).toString().toStdString() == "0.20");
+        CHECK(rc0->data(cwSurveyChunk::StationUpRole, 0).toString().toStdString() == "0.30");
+        CHECK(rc0->data(cwSurveyChunk::StationDownRole, 0).toString().toStdString() == "0.40");
+
+        // Chunk 0: station 1 (B) + LRUD
+        CHECK(rc0->data(cwSurveyChunk::StationNameRole, 1).toString().toStdString() == "B");
+        CHECK(rc0->data(cwSurveyChunk::StationLeftRole, 1).toString().toStdString() == "0.50");
+        CHECK(rc0->data(cwSurveyChunk::StationRightRole, 1).toString().toStdString() == "0.60");
+        CHECK(rc0->data(cwSurveyChunk::StationUpRole, 1).toString().toStdString() == "0.70");
+        CHECK(rc0->data(cwSurveyChunk::StationDownRole, 1).toString().toStdString() == "0.80");
+
+        // Chunk 0: station 2 (C) + LRUD
+        CHECK(rc0->data(cwSurveyChunk::StationNameRole, 2).toString().toStdString() == "C");
+        CHECK(rc0->data(cwSurveyChunk::StationLeftRole, 2).toString().toStdString() == "0.90");
+        CHECK(rc0->data(cwSurveyChunk::StationRightRole, 2).toString().toStdString() == "1.00");
+        CHECK(rc0->data(cwSurveyChunk::StationUpRole, 2).toString().toStdString() == "1.10");
+        CHECK(rc0->data(cwSurveyChunk::StationDownRole, 2).toString().toStdString() == "1.20");
+
+        // Chunk 0: shot 0 fields (A->B)
+        CHECK(rc0->data(cwSurveyChunk::ShotDistanceRole, 0).toString().toStdString() == "10.50");
+        CHECK(rc0->data(cwSurveyChunk::ShotCompassRole, 0).toString().toStdString() == "12.30");
+        CHECK(rc0->data(cwSurveyChunk::ShotBackCompassRole, 0).toString().toStdString() == "12.40");
+        CHECK(rc0->data(cwSurveyChunk::ShotClinoRole, 0).toString().toStdString() == "-2.50");
+        CHECK(rc0->data(cwSurveyChunk::ShotBackClinoRole, 0).toString().toStdString() == "-2.60");
+        CHECK(rc0->data(cwSurveyChunk::ShotDistanceIncludedRole, 0).toBool() == true);
+
+        // Chunk 0: shot 1 fields (B->C)
+        CHECK(rc0->data(cwSurveyChunk::ShotDistanceRole, 1).toString().toStdString() == "4.75");
+        CHECK(rc0->data(cwSurveyChunk::ShotCompassRole, 1).toString().toStdString() == "33.0");
+        CHECK(rc0->data(cwSurveyChunk::ShotBackCompassRole, 1).toString().toStdString() == "213.2");
+        CHECK(rc0->data(cwSurveyChunk::ShotClinoRole, 1).toString().toStdString() == "0.50");
+        CHECK(rc0->data(cwSurveyChunk::ShotBackClinoRole, 1).toString().toStdString() == "0.55");
+        CHECK(rc0->data(cwSurveyChunk::ShotDistanceIncludedRole, 1).toBool() == false);
+
+        // Chunk 1: counts
+        CHECK(rc1->stationCount() == 3);
+        CHECK(rc1->shotCount() == 2);
+
+        // Chunk 1: station 0 (C) + LRUD
+        CHECK(rc1->data(cwSurveyChunk::StationNameRole, 0).toString().toStdString() == "C");
+        CHECK(rc1->data(cwSurveyChunk::StationLeftRole, 0).toString().toStdString() == "0.11");
+        CHECK(rc1->data(cwSurveyChunk::StationRightRole, 0).toString().toStdString() == "0.22");
+        CHECK(rc1->data(cwSurveyChunk::StationUpRole, 0).toString().toStdString() == "0.33");
+        CHECK(rc1->data(cwSurveyChunk::StationDownRole, 0).toString().toStdString() == "0.44");
+
+        // Chunk 1: station 1 (D) + LRUD
+        CHECK(rc1->data(cwSurveyChunk::StationNameRole, 1).toString().toStdString() == "D");
+        CHECK(rc1->data(cwSurveyChunk::StationLeftRole, 1).toString().toStdString() == "0.55");
+        CHECK(rc1->data(cwSurveyChunk::StationRightRole, 1).toString().toStdString() == "0.66");
+        CHECK(rc1->data(cwSurveyChunk::StationUpRole, 1).toString().toStdString() == "0.77");
+        CHECK(rc1->data(cwSurveyChunk::StationDownRole, 1).toString().toStdString() == "0.88");
+
+        // Chunk 1: station 2 (E) + LRUD
+        CHECK(rc1->data(cwSurveyChunk::StationNameRole, 2).toString().toStdString() == "E");
+        CHECK(rc1->data(cwSurveyChunk::StationLeftRole, 2).toString().toStdString() == "0.95");
+        CHECK(rc1->data(cwSurveyChunk::StationRightRole, 2).toString().toStdString() == "1.05");
+        CHECK(rc1->data(cwSurveyChunk::StationUpRole, 2).toString().toStdString() == "1.15");
+        CHECK(rc1->data(cwSurveyChunk::StationDownRole, 2).toString().toStdString() == "1.25");
+
+        // Chunk 1: shot 0 fields (C->D)
+        CHECK(rc1->data(cwSurveyChunk::ShotDistanceRole, 0).toString().toStdString() == "7.25");
+        CHECK(rc1->data(cwSurveyChunk::ShotCompassRole, 0).toString().toStdString() == "101.0");
+        CHECK(rc1->data(cwSurveyChunk::ShotBackCompassRole, 0).toString().toStdString() == "281.0");
+        CHECK(rc1->data(cwSurveyChunk::ShotClinoRole, 0).toString().toStdString() == "3.00");
+        CHECK(rc1->data(cwSurveyChunk::ShotBackClinoRole, 0).toString().toStdString() == "3.10");
+        CHECK(rc1->data(cwSurveyChunk::ShotDistanceIncludedRole, 0).toBool() == true);
+
+        // Chunk 1: shot 1 fields (D->E)
+        CHECK(rc1->data(cwSurveyChunk::ShotDistanceRole, 1).toString().toStdString() == "2.10");
+        CHECK(rc1->data(cwSurveyChunk::ShotCompassRole, 1).toString().toStdString() == "280.0");
+        CHECK(rc1->data(cwSurveyChunk::ShotBackCompassRole, 1).toString().toStdString() == "100.2");
+        CHECK(rc1->data(cwSurveyChunk::ShotClinoRole, 1).toString().toStdString() == "-1.25");
+        CHECK(rc1->data(cwSurveyChunk::ShotBackClinoRole, 1).toString().toStdString() == "-1.22");
+        CHECK(rc1->data(cwSurveyChunk::ShotDistanceIncludedRole, 1).toBool() == false);
+    }
+
+    SECTION("Edit one chunk: verify ALL changed fields survive reload") {
+        trip->addNewChunk();
+        cwSurveyChunk* c = trip->chunk(0);
+        REQUIRE(c != nullptr);
+
+        // Seed
+        c->setData(cwSurveyChunk::StationNameRole, 0, "S1");
+        c->setData(cwSurveyChunk::StationLeftRole, 0, "0.10");
+        c->setData(cwSurveyChunk::StationRightRole, 0, "0.20");
+        c->setData(cwSurveyChunk::StationUpRole, 0, "0.30");
+        c->setData(cwSurveyChunk::StationDownRole, 0, "0.40");
+        c->setData(cwSurveyChunk::StationNameRole, 1, "S2");
+
+        c->setData(cwSurveyChunk::ShotDistanceRole, 0, "5.00");
+        c->setData(cwSurveyChunk::ShotCompassRole, 0, "45.0");
+        c->setData(cwSurveyChunk::ShotBackCompassRole, 0, "225.0");
+        c->setData(cwSurveyChunk::ShotClinoRole, 0, "1.00");
+        c->setData(cwSurveyChunk::ShotBackClinoRole, 0, "1.10");
+        c->setData(cwSurveyChunk::ShotDistanceIncludedRole, 0, true);
+
+        // Edits
+        c->setData(cwSurveyChunk::StationNameRole, 0, "S1-renamed");
+        c->setData(cwSurveyChunk::StationLeftRole, 0, "0.15");
+        c->setData(cwSurveyChunk::StationRightRole, 0, "0.25");
+        c->setData(cwSurveyChunk::StationUpRole, 0, "0.35");
+        c->setData(cwSurveyChunk::StationDownRole, 0, "0.45");
+
+        c->setData(cwSurveyChunk::ShotDistanceRole, 0, "5.25");
+        c->setData(cwSurveyChunk::ShotCompassRole, 0, "46.5");
+        c->setData(cwSurveyChunk::ShotBackCompassRole, 0, "226.2");
+        c->setData(cwSurveyChunk::ShotClinoRole, 0, "0.75");
+        c->setData(cwSurveyChunk::ShotBackClinoRole, 0, "1.05");
+        c->setData(cwSurveyChunk::ShotDistanceIncludedRole, 0, false);
+
+        project->waitSaveToFinish();
+
+        auto reloaded = std::make_unique<cwProject>();
+        reloaded->loadOrConvert(project->filename());
+        reloaded->waitLoadToFinish();
+
+        cwTrip* lt = reloaded->cavingRegion()->cave(0)->trip(0);
+        cwSurveyChunk* rc = lt->chunk(0);
+
+        CHECK(rc->data(cwSurveyChunk::StationNameRole, 0).toString().toStdString() == "S1-renamed");
+        CHECK(rc->data(cwSurveyChunk::StationLeftRole, 0).toString().toStdString() == "0.15");
+        CHECK(rc->data(cwSurveyChunk::StationRightRole, 0).toString().toStdString() == "0.25");
+        CHECK(rc->data(cwSurveyChunk::StationUpRole, 0).toString().toStdString() == "0.35");
+        CHECK(rc->data(cwSurveyChunk::StationDownRole, 0).toString().toStdString() == "0.45");
+
+        CHECK(rc->data(cwSurveyChunk::ShotDistanceRole, 0).toString().toStdString() == "5.25");
+        CHECK(rc->data(cwSurveyChunk::ShotCompassRole, 0).toString().toStdString() == "46.5");
+        CHECK(rc->data(cwSurveyChunk::ShotBackCompassRole, 0).toString().toStdString() == "226.2");
+        CHECK(rc->data(cwSurveyChunk::ShotClinoRole, 0).toString().toStdString() == "0.75");
+        CHECK(rc->data(cwSurveyChunk::ShotBackClinoRole, 0).toString().toStdString() == "1.05");
+        CHECK(rc->data(cwSurveyChunk::ShotDistanceIncludedRole, 0).toBool() == false);
+    }
+
+    SECTION("Remove first chunk → save → reload → verify remaining chunk ALL fields") {
+        // Chunk 0
+        trip->addNewChunk();
+        {
+            cwSurveyChunk* ch = trip->chunk(0);
+            ch->setData(cwSurveyChunk::StationNameRole, 0, "X1");
+            ch->setData(cwSurveyChunk::StationNameRole, 1, "X2");
+            ch->setData(cwSurveyChunk::ShotDistanceRole, 0, "3.00");
+            ch->setData(cwSurveyChunk::ShotCompassRole, 0, "10.0");
+            ch->setData(cwSurveyChunk::ShotBackCompassRole, 0, "190.0");
+            ch->setData(cwSurveyChunk::ShotClinoRole, 0, "-1.00");
+            ch->setData(cwSurveyChunk::ShotBackClinoRole, 0, "-1.10");
+            ch->setData(cwSurveyChunk::ShotDistanceIncludedRole, 0, true);
+
+            // X2 -> X3
+            const cwStation from("X2");
+            const cwStation to("X3");
+            const cwShot shot("1.50","15.0","195.0","-0.50","-0.40");
+            ch->appendShot(from, to, shot);
+            ch->setData(cwSurveyChunk::ShotBackCompassRole, 1, "195.2");
+            ch->setData(cwSurveyChunk::ShotBackClinoRole, 1, "-0.45");
+            ch->setData(cwSurveyChunk::ShotDistanceIncludedRole, 1, false);
+        }
+
+        // Chunk 1
+        trip->addNewChunk();
+        {
+            cwSurveyChunk* ch = trip->chunk(1);
+            ch->setData(cwSurveyChunk::StationNameRole, 0, "Y1");
+            ch->setData(cwSurveyChunk::StationLeftRole, 0, "0.11");
+            ch->setData(cwSurveyChunk::StationRightRole, 0, "0.22");
+            ch->setData(cwSurveyChunk::StationUpRole, 0, "0.33");
+            ch->setData(cwSurveyChunk::StationDownRole, 0, "0.44");
+
+            ch->setData(cwSurveyChunk::StationNameRole, 1, "Y2");
+            ch->setData(cwSurveyChunk::StationLeftRole, 1, "0.55");
+            ch->setData(cwSurveyChunk::StationRightRole, 1, "0.66");
+            ch->setData(cwSurveyChunk::StationUpRole, 1, "0.77");
+            ch->setData(cwSurveyChunk::StationDownRole, 1, "0.88");
+
+            ch->setData(cwSurveyChunk::ShotDistanceRole, 0, "8.00");
+            ch->setData(cwSurveyChunk::ShotCompassRole, 0, "200.0");
+            ch->setData(cwSurveyChunk::ShotBackCompassRole, 0, "20.0");
+            ch->setData(cwSurveyChunk::ShotClinoRole, 0, "2.00");
+            ch->setData(cwSurveyChunk::ShotBackClinoRole, 0, "2.10");
+            ch->setData(cwSurveyChunk::ShotDistanceIncludedRole, 0, false);
+
+            const cwStation from("Y2");
+            const cwStation to("Y3");
+            const cwShot shot("2.10","205.0","25.0","2.10","2.05");
+            ch->appendShot(from, to, shot);
+            ch->setData(cwSurveyChunk::ShotBackCompassRole, 1, "25.2");
+            ch->setData(cwSurveyChunk::ShotBackClinoRole, 1, "2.06");
+            ch->setData(cwSurveyChunk::ShotDistanceIncludedRole, 1, true);
+
+            ch->setData(cwSurveyChunk::StationNameRole, 2, "Y3");
+            ch->setData(cwSurveyChunk::StationLeftRole, 2, "0.95");
+            ch->setData(cwSurveyChunk::StationRightRole, 2, "1.05");
+            ch->setData(cwSurveyChunk::StationUpRole, 2, "1.15");
+            ch->setData(cwSurveyChunk::StationDownRole, 2, "1.25");
+        }
+
+        REQUIRE(trip->chunkCount() == 2);
+        trip->removeChunks(0, 0);
+        project->waitSaveToFinish();
+
+        auto reloaded = std::make_unique<cwProject>();
+        reloaded->loadOrConvert(project->filename());
+        reloaded->waitLoadToFinish();
+
+        cwTrip* lt = reloaded->cavingRegion()->cave(0)->trip(0);
+        CHECK(lt->chunkCount() == 1);
+
+        cwSurveyChunk* r = lt->chunk(0);
+        REQUIRE(r != nullptr);
+
+        // Remaining chunk is Y*; verify ALL fields
+        CHECK(r->stationCount() == 3);
+        CHECK(r->shotCount() == 2);
+
+        CHECK(r->data(cwSurveyChunk::StationNameRole, 0).toString().toStdString() == "Y1");
+        CHECK(r->data(cwSurveyChunk::StationLeftRole, 0).toString().toStdString() == "0.11");
+        CHECK(r->data(cwSurveyChunk::StationRightRole, 0).toString().toStdString() == "0.22");
+        CHECK(r->data(cwSurveyChunk::StationUpRole, 0).toString().toStdString() == "0.33");
+        CHECK(r->data(cwSurveyChunk::StationDownRole, 0).toString().toStdString() == "0.44");
+
+        CHECK(r->data(cwSurveyChunk::StationNameRole, 1).toString().toStdString() == "Y2");
+        CHECK(r->data(cwSurveyChunk::StationLeftRole, 1).toString().toStdString() == "0.55");
+        CHECK(r->data(cwSurveyChunk::StationRightRole, 1).toString().toStdString() == "0.66");
+        CHECK(r->data(cwSurveyChunk::StationUpRole, 1).toString().toStdString() == "0.77");
+        CHECK(r->data(cwSurveyChunk::StationDownRole, 1).toString().toStdString() == "0.88");
+
+        CHECK(r->data(cwSurveyChunk::StationNameRole, 2).toString().toStdString() == "Y3");
+        CHECK(r->data(cwSurveyChunk::StationLeftRole, 2).toString().toStdString() == "0.95");
+        CHECK(r->data(cwSurveyChunk::StationRightRole, 2).toString().toStdString() == "1.05");
+        CHECK(r->data(cwSurveyChunk::StationUpRole, 2).toString().toStdString() == "1.15");
+        CHECK(r->data(cwSurveyChunk::StationDownRole, 2).toString().toStdString() == "1.25");
+
+        CHECK(r->data(cwSurveyChunk::ShotDistanceRole, 0).toString().toStdString() == "8.00");
+        CHECK(r->data(cwSurveyChunk::ShotCompassRole, 0).toString().toStdString() == "200.0");
+        CHECK(r->data(cwSurveyChunk::ShotBackCompassRole, 0).toString().toStdString() == "20.0");
+        CHECK(r->data(cwSurveyChunk::ShotClinoRole, 0).toString().toStdString() == "2.00");
+        CHECK(r->data(cwSurveyChunk::ShotBackClinoRole, 0).toString().toStdString() == "2.10");
+        CHECK(r->data(cwSurveyChunk::ShotDistanceIncludedRole, 0).toBool() == false);
+
+        CHECK(r->data(cwSurveyChunk::ShotDistanceRole, 1).toString().toStdString() == "2.10");
+        CHECK(r->data(cwSurveyChunk::ShotCompassRole, 1).toString().toStdString() == "205.0");
+        CHECK(r->data(cwSurveyChunk::ShotBackCompassRole, 1).toString().toStdString() == "25.2");
+        CHECK(r->data(cwSurveyChunk::ShotClinoRole, 1).toString().toStdString() == "2.10");
+        CHECK(r->data(cwSurveyChunk::ShotBackClinoRole, 1).toString().toStdString() == "2.06");
+        CHECK(r->data(cwSurveyChunk::ShotDistanceIncludedRole, 1).toBool() == true);
+    }
+}
+
+
+

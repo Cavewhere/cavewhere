@@ -143,9 +143,9 @@ signals:
 
     void dataChanged(cwSurveyChunk::DataRole mainRole, int index);
 
-    void connectedChanged();
+    // void connectedChanged();
 
-    void connectedStateChanged();
+    // void connectedStateChanged();
 
     void errorsChanged(cwSurveyChunk::DataRole mainRole, int index);
 
