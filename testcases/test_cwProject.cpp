@@ -1018,37 +1018,37 @@ TEST_CASE("Survey chunk persistence", "[cwProject][cwTrip][cwSurveyChunk]") {
 
     SECTION("Edit one chunk: verify ALL changed fields survive reload") {
         trip->addNewChunk();
-        cwSurveyChunk* c = trip->chunk(0);
-        REQUIRE(c != nullptr);
+        cwSurveyChunk* chunk = trip->chunk(0);
+        REQUIRE(chunk != nullptr);
 
         // Seed
-        c->setData(cwSurveyChunk::StationNameRole, 0, "S1");
-        c->setData(cwSurveyChunk::StationLeftRole, 0, "0.10");
-        c->setData(cwSurveyChunk::StationRightRole, 0, "0.20");
-        c->setData(cwSurveyChunk::StationUpRole, 0, "0.30");
-        c->setData(cwSurveyChunk::StationDownRole, 0, "0.40");
-        c->setData(cwSurveyChunk::StationNameRole, 1, "S2");
+        chunk->setData(cwSurveyChunk::StationNameRole, 0, "S1");
+        chunk->setData(cwSurveyChunk::StationLeftRole, 0, "0.10");
+        chunk->setData(cwSurveyChunk::StationRightRole, 0, "0.20");
+        chunk->setData(cwSurveyChunk::StationUpRole, 0, "0.30");
+        chunk->setData(cwSurveyChunk::StationDownRole, 0, "0.40");
+        chunk->setData(cwSurveyChunk::StationNameRole, 1, "S2");
 
-        c->setData(cwSurveyChunk::ShotDistanceRole, 0, "5.00");
-        c->setData(cwSurveyChunk::ShotCompassRole, 0, "45.0");
-        c->setData(cwSurveyChunk::ShotBackCompassRole, 0, "225.0");
-        c->setData(cwSurveyChunk::ShotClinoRole, 0, "1.00");
-        c->setData(cwSurveyChunk::ShotBackClinoRole, 0, "1.10");
-        c->setData(cwSurveyChunk::ShotDistanceIncludedRole, 0, true);
+        chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "5.00");
+        chunk->setData(cwSurveyChunk::ShotCompassRole, 0, "45.0");
+        chunk->setData(cwSurveyChunk::ShotBackCompassRole, 0, "225.0");
+        chunk->setData(cwSurveyChunk::ShotClinoRole, 0, "1.00");
+        chunk->setData(cwSurveyChunk::ShotBackClinoRole, 0, "1.10");
+        chunk->setData(cwSurveyChunk::ShotDistanceIncludedRole, 0, true);
 
         // Edits
-        c->setData(cwSurveyChunk::StationNameRole, 0, "S1-renamed");
-        c->setData(cwSurveyChunk::StationLeftRole, 0, "0.15");
-        c->setData(cwSurveyChunk::StationRightRole, 0, "0.25");
-        c->setData(cwSurveyChunk::StationUpRole, 0, "0.35");
-        c->setData(cwSurveyChunk::StationDownRole, 0, "0.45");
+        chunk->setData(cwSurveyChunk::StationNameRole, 0, "S1-renamed");
+        chunk->setData(cwSurveyChunk::StationLeftRole, 0, "0.15");
+        chunk->setData(cwSurveyChunk::StationRightRole, 0, "0.25");
+        chunk->setData(cwSurveyChunk::StationUpRole, 0, "0.35");
+        chunk->setData(cwSurveyChunk::StationDownRole, 0, "0.45");
 
-        c->setData(cwSurveyChunk::ShotDistanceRole, 0, "5.25");
-        c->setData(cwSurveyChunk::ShotCompassRole, 0, "46.5");
-        c->setData(cwSurveyChunk::ShotBackCompassRole, 0, "226.2");
-        c->setData(cwSurveyChunk::ShotClinoRole, 0, "0.75");
-        c->setData(cwSurveyChunk::ShotBackClinoRole, 0, "1.05");
-        c->setData(cwSurveyChunk::ShotDistanceIncludedRole, 0, false);
+        chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "5.25");
+        chunk->setData(cwSurveyChunk::ShotCompassRole, 0, "46.5");
+        chunk->setData(cwSurveyChunk::ShotBackCompassRole, 0, "226.2");
+        chunk->setData(cwSurveyChunk::ShotClinoRole, 0, "0.75");
+        chunk->setData(cwSurveyChunk::ShotBackClinoRole, 0, "1.05");
+        chunk->setData(cwSurveyChunk::ShotDistanceIncludedRole, 0, false);
 
         project->waitSaveToFinish();
 
@@ -1056,83 +1056,83 @@ TEST_CASE("Survey chunk persistence", "[cwProject][cwTrip][cwSurveyChunk]") {
         reloaded->loadOrConvert(project->filename());
         reloaded->waitLoadToFinish();
 
-        cwTrip* lt = reloaded->cavingRegion()->cave(0)->trip(0);
-        cwSurveyChunk* rc = lt->chunk(0);
+        cwTrip* reloadTrip = reloaded->cavingRegion()->cave(0)->trip(0);
+        cwSurveyChunk* reloadChunk = reloadTrip->chunk(0);
 
-        CHECK(rc->data(cwSurveyChunk::StationNameRole, 0).toString().toStdString() == "S1-renamed");
-        CHECK(rc->data(cwSurveyChunk::StationLeftRole, 0).toString().toStdString() == "0.15");
-        CHECK(rc->data(cwSurveyChunk::StationRightRole, 0).toString().toStdString() == "0.25");
-        CHECK(rc->data(cwSurveyChunk::StationUpRole, 0).toString().toStdString() == "0.35");
-        CHECK(rc->data(cwSurveyChunk::StationDownRole, 0).toString().toStdString() == "0.45");
+        CHECK(reloadChunk->data(cwSurveyChunk::StationNameRole, 0).toString().toStdString() == "S1-renamed");
+        CHECK(reloadChunk->data(cwSurveyChunk::StationLeftRole, 0).toString().toStdString() == "0.15");
+        CHECK(reloadChunk->data(cwSurveyChunk::StationRightRole, 0).toString().toStdString() == "0.25");
+        CHECK(reloadChunk->data(cwSurveyChunk::StationUpRole, 0).toString().toStdString() == "0.35");
+        CHECK(reloadChunk->data(cwSurveyChunk::StationDownRole, 0).toString().toStdString() == "0.45");
 
-        CHECK(rc->data(cwSurveyChunk::ShotDistanceRole, 0).toString().toStdString() == "5.25");
-        CHECK(rc->data(cwSurveyChunk::ShotCompassRole, 0).toString().toStdString() == "46.5");
-        CHECK(rc->data(cwSurveyChunk::ShotBackCompassRole, 0).toString().toStdString() == "226.2");
-        CHECK(rc->data(cwSurveyChunk::ShotClinoRole, 0).toString().toStdString() == "0.75");
-        CHECK(rc->data(cwSurveyChunk::ShotBackClinoRole, 0).toString().toStdString() == "1.05");
-        CHECK(rc->data(cwSurveyChunk::ShotDistanceIncludedRole, 0).toBool() == false);
+        CHECK(reloadChunk->data(cwSurveyChunk::ShotDistanceRole, 0).toString().toStdString() == "5.25");
+        CHECK(reloadChunk->data(cwSurveyChunk::ShotCompassRole, 0).toString().toStdString() == "46.5");
+        CHECK(reloadChunk->data(cwSurveyChunk::ShotBackCompassRole, 0).toString().toStdString() == "226.2");
+        CHECK(reloadChunk->data(cwSurveyChunk::ShotClinoRole, 0).toString().toStdString() == "0.75");
+        CHECK(reloadChunk->data(cwSurveyChunk::ShotBackClinoRole, 0).toString().toStdString() == "1.05");
+        CHECK(reloadChunk->data(cwSurveyChunk::ShotDistanceIncludedRole, 0).toBool() == false);
     }
 
     SECTION("Remove first chunk → save → reload → verify remaining chunk ALL fields") {
         // Chunk 0
         trip->addNewChunk();
         {
-            cwSurveyChunk* ch = trip->chunk(0);
-            ch->setData(cwSurveyChunk::StationNameRole, 0, "X1");
-            ch->setData(cwSurveyChunk::StationNameRole, 1, "X2");
-            ch->setData(cwSurveyChunk::ShotDistanceRole, 0, "3.00");
-            ch->setData(cwSurveyChunk::ShotCompassRole, 0, "10.0");
-            ch->setData(cwSurveyChunk::ShotBackCompassRole, 0, "190.0");
-            ch->setData(cwSurveyChunk::ShotClinoRole, 0, "-1.00");
-            ch->setData(cwSurveyChunk::ShotBackClinoRole, 0, "-1.10");
-            ch->setData(cwSurveyChunk::ShotDistanceIncludedRole, 0, true);
+            cwSurveyChunk* chunk = trip->chunk(0);
+            chunk->setData(cwSurveyChunk::StationNameRole, 0, "X1");
+            chunk->setData(cwSurveyChunk::StationNameRole, 1, "X2");
+            chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "3.00");
+            chunk->setData(cwSurveyChunk::ShotCompassRole, 0, "10.0");
+            chunk->setData(cwSurveyChunk::ShotBackCompassRole, 0, "190.0");
+            chunk->setData(cwSurveyChunk::ShotClinoRole, 0, "-1.00");
+            chunk->setData(cwSurveyChunk::ShotBackClinoRole, 0, "-1.10");
+            chunk->setData(cwSurveyChunk::ShotDistanceIncludedRole, 0, true);
 
             // X2 -> X3
             const cwStation from("X2");
             const cwStation to("X3");
             const cwShot shot("1.50","15.0","195.0","-0.50","-0.40");
-            ch->appendShot(from, to, shot);
-            ch->setData(cwSurveyChunk::ShotBackCompassRole, 1, "195.2");
-            ch->setData(cwSurveyChunk::ShotBackClinoRole, 1, "-0.45");
-            ch->setData(cwSurveyChunk::ShotDistanceIncludedRole, 1, false);
+            chunk->appendShot(from, to, shot);
+            chunk->setData(cwSurveyChunk::ShotBackCompassRole, 1, "195.2");
+            chunk->setData(cwSurveyChunk::ShotBackClinoRole, 1, "-0.45");
+            chunk->setData(cwSurveyChunk::ShotDistanceIncludedRole, 1, false);
         }
 
         // Chunk 1
         trip->addNewChunk();
         {
-            cwSurveyChunk* ch = trip->chunk(1);
-            ch->setData(cwSurveyChunk::StationNameRole, 0, "Y1");
-            ch->setData(cwSurveyChunk::StationLeftRole, 0, "0.11");
-            ch->setData(cwSurveyChunk::StationRightRole, 0, "0.22");
-            ch->setData(cwSurveyChunk::StationUpRole, 0, "0.33");
-            ch->setData(cwSurveyChunk::StationDownRole, 0, "0.44");
+            cwSurveyChunk* chunk = trip->chunk(1);
+            chunk->setData(cwSurveyChunk::StationNameRole, 0, "Y1");
+            chunk->setData(cwSurveyChunk::StationLeftRole, 0, "0.11");
+            chunk->setData(cwSurveyChunk::StationRightRole, 0, "0.22");
+            chunk->setData(cwSurveyChunk::StationUpRole, 0, "0.33");
+            chunk->setData(cwSurveyChunk::StationDownRole, 0, "0.44");
 
-            ch->setData(cwSurveyChunk::StationNameRole, 1, "Y2");
-            ch->setData(cwSurveyChunk::StationLeftRole, 1, "0.55");
-            ch->setData(cwSurveyChunk::StationRightRole, 1, "0.66");
-            ch->setData(cwSurveyChunk::StationUpRole, 1, "0.77");
-            ch->setData(cwSurveyChunk::StationDownRole, 1, "0.88");
+            chunk->setData(cwSurveyChunk::StationNameRole, 1, "Y2");
+            chunk->setData(cwSurveyChunk::StationLeftRole, 1, "0.55");
+            chunk->setData(cwSurveyChunk::StationRightRole, 1, "0.66");
+            chunk->setData(cwSurveyChunk::StationUpRole, 1, "0.77");
+            chunk->setData(cwSurveyChunk::StationDownRole, 1, "0.88");
 
-            ch->setData(cwSurveyChunk::ShotDistanceRole, 0, "8.00");
-            ch->setData(cwSurveyChunk::ShotCompassRole, 0, "200.0");
-            ch->setData(cwSurveyChunk::ShotBackCompassRole, 0, "20.0");
-            ch->setData(cwSurveyChunk::ShotClinoRole, 0, "2.00");
-            ch->setData(cwSurveyChunk::ShotBackClinoRole, 0, "2.10");
-            ch->setData(cwSurveyChunk::ShotDistanceIncludedRole, 0, false);
+            chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "8.00");
+            chunk->setData(cwSurveyChunk::ShotCompassRole, 0, "200.0");
+            chunk->setData(cwSurveyChunk::ShotBackCompassRole, 0, "20.0");
+            chunk->setData(cwSurveyChunk::ShotClinoRole, 0, "2.00");
+            chunk->setData(cwSurveyChunk::ShotBackClinoRole, 0, "2.10");
+            chunk->setData(cwSurveyChunk::ShotDistanceIncludedRole, 0, false);
 
             const cwStation from("Y2");
             const cwStation to("Y3");
             const cwShot shot("2.10","205.0","25.0","2.10","2.05");
-            ch->appendShot(from, to, shot);
-            ch->setData(cwSurveyChunk::ShotBackCompassRole, 1, "25.2");
-            ch->setData(cwSurveyChunk::ShotBackClinoRole, 1, "2.06");
-            ch->setData(cwSurveyChunk::ShotDistanceIncludedRole, 1, true);
+            chunk->appendShot(from, to, shot);
+            chunk->setData(cwSurveyChunk::ShotBackCompassRole, 1, "25.2");
+            chunk->setData(cwSurveyChunk::ShotBackClinoRole, 1, "2.06");
+            chunk->setData(cwSurveyChunk::ShotDistanceIncludedRole, 1, true);
 
-            ch->setData(cwSurveyChunk::StationNameRole, 2, "Y3");
-            ch->setData(cwSurveyChunk::StationLeftRole, 2, "0.95");
-            ch->setData(cwSurveyChunk::StationRightRole, 2, "1.05");
-            ch->setData(cwSurveyChunk::StationUpRole, 2, "1.15");
-            ch->setData(cwSurveyChunk::StationDownRole, 2, "1.25");
+            chunk->setData(cwSurveyChunk::StationNameRole, 2, "Y3");
+            chunk->setData(cwSurveyChunk::StationLeftRole, 2, "0.95");
+            chunk->setData(cwSurveyChunk::StationRightRole, 2, "1.05");
+            chunk->setData(cwSurveyChunk::StationUpRole, 2, "1.15");
+            chunk->setData(cwSurveyChunk::StationDownRole, 2, "1.25");
         }
 
         REQUIRE(trip->chunkCount() == 2);
@@ -1146,46 +1146,299 @@ TEST_CASE("Survey chunk persistence", "[cwProject][cwTrip][cwSurveyChunk]") {
         cwTrip* lt = reloaded->cavingRegion()->cave(0)->trip(0);
         CHECK(lt->chunkCount() == 1);
 
-        cwSurveyChunk* r = lt->chunk(0);
-        REQUIRE(r != nullptr);
+        cwSurveyChunk* reloadChunk = lt->chunk(0);
+        REQUIRE(reloadChunk != nullptr);
 
         // Remaining chunk is Y*; verify ALL fields
-        CHECK(r->stationCount() == 3);
-        CHECK(r->shotCount() == 2);
+        CHECK(reloadChunk->stationCount() == 3);
+        CHECK(reloadChunk->shotCount() == 2);
 
-        CHECK(r->data(cwSurveyChunk::StationNameRole, 0).toString().toStdString() == "Y1");
-        CHECK(r->data(cwSurveyChunk::StationLeftRole, 0).toString().toStdString() == "0.11");
-        CHECK(r->data(cwSurveyChunk::StationRightRole, 0).toString().toStdString() == "0.22");
-        CHECK(r->data(cwSurveyChunk::StationUpRole, 0).toString().toStdString() == "0.33");
-        CHECK(r->data(cwSurveyChunk::StationDownRole, 0).toString().toStdString() == "0.44");
+        CHECK(reloadChunk->data(cwSurveyChunk::StationNameRole, 0).toString().toStdString() == "Y1");
+        CHECK(reloadChunk->data(cwSurveyChunk::StationLeftRole, 0).toString().toStdString() == "0.11");
+        CHECK(reloadChunk->data(cwSurveyChunk::StationRightRole, 0).toString().toStdString() == "0.22");
+        CHECK(reloadChunk->data(cwSurveyChunk::StationUpRole, 0).toString().toStdString() == "0.33");
+        CHECK(reloadChunk->data(cwSurveyChunk::StationDownRole, 0).toString().toStdString() == "0.44");
 
-        CHECK(r->data(cwSurveyChunk::StationNameRole, 1).toString().toStdString() == "Y2");
-        CHECK(r->data(cwSurveyChunk::StationLeftRole, 1).toString().toStdString() == "0.55");
-        CHECK(r->data(cwSurveyChunk::StationRightRole, 1).toString().toStdString() == "0.66");
-        CHECK(r->data(cwSurveyChunk::StationUpRole, 1).toString().toStdString() == "0.77");
-        CHECK(r->data(cwSurveyChunk::StationDownRole, 1).toString().toStdString() == "0.88");
+        CHECK(reloadChunk->data(cwSurveyChunk::StationNameRole, 1).toString().toStdString() == "Y2");
+        CHECK(reloadChunk->data(cwSurveyChunk::StationLeftRole, 1).toString().toStdString() == "0.55");
+        CHECK(reloadChunk->data(cwSurveyChunk::StationRightRole, 1).toString().toStdString() == "0.66");
+        CHECK(reloadChunk->data(cwSurveyChunk::StationUpRole, 1).toString().toStdString() == "0.77");
+        CHECK(reloadChunk->data(cwSurveyChunk::StationDownRole, 1).toString().toStdString() == "0.88");
 
-        CHECK(r->data(cwSurveyChunk::StationNameRole, 2).toString().toStdString() == "Y3");
-        CHECK(r->data(cwSurveyChunk::StationLeftRole, 2).toString().toStdString() == "0.95");
-        CHECK(r->data(cwSurveyChunk::StationRightRole, 2).toString().toStdString() == "1.05");
-        CHECK(r->data(cwSurveyChunk::StationUpRole, 2).toString().toStdString() == "1.15");
-        CHECK(r->data(cwSurveyChunk::StationDownRole, 2).toString().toStdString() == "1.25");
+        CHECK(reloadChunk->data(cwSurveyChunk::StationNameRole, 2).toString().toStdString() == "Y3");
+        CHECK(reloadChunk->data(cwSurveyChunk::StationLeftRole, 2).toString().toStdString() == "0.95");
+        CHECK(reloadChunk->data(cwSurveyChunk::StationRightRole, 2).toString().toStdString() == "1.05");
+        CHECK(reloadChunk->data(cwSurveyChunk::StationUpRole, 2).toString().toStdString() == "1.15");
+        CHECK(reloadChunk->data(cwSurveyChunk::StationDownRole, 2).toString().toStdString() == "1.25");
 
-        CHECK(r->data(cwSurveyChunk::ShotDistanceRole, 0).toString().toStdString() == "8.00");
-        CHECK(r->data(cwSurveyChunk::ShotCompassRole, 0).toString().toStdString() == "200.0");
-        CHECK(r->data(cwSurveyChunk::ShotBackCompassRole, 0).toString().toStdString() == "20.0");
-        CHECK(r->data(cwSurveyChunk::ShotClinoRole, 0).toString().toStdString() == "2.00");
-        CHECK(r->data(cwSurveyChunk::ShotBackClinoRole, 0).toString().toStdString() == "2.10");
-        CHECK(r->data(cwSurveyChunk::ShotDistanceIncludedRole, 0).toBool() == false);
+        CHECK(reloadChunk->data(cwSurveyChunk::ShotDistanceRole, 0).toString().toStdString() == "8.00");
+        CHECK(reloadChunk->data(cwSurveyChunk::ShotCompassRole, 0).toString().toStdString() == "200.0");
+        CHECK(reloadChunk->data(cwSurveyChunk::ShotBackCompassRole, 0).toString().toStdString() == "20.0");
+        CHECK(reloadChunk->data(cwSurveyChunk::ShotClinoRole, 0).toString().toStdString() == "2.00");
+        CHECK(reloadChunk->data(cwSurveyChunk::ShotBackClinoRole, 0).toString().toStdString() == "2.10");
+        CHECK(reloadChunk->data(cwSurveyChunk::ShotDistanceIncludedRole, 0).toBool() == false);
 
-        CHECK(r->data(cwSurveyChunk::ShotDistanceRole, 1).toString().toStdString() == "2.10");
-        CHECK(r->data(cwSurveyChunk::ShotCompassRole, 1).toString().toStdString() == "205.0");
-        CHECK(r->data(cwSurveyChunk::ShotBackCompassRole, 1).toString().toStdString() == "25.2");
-        CHECK(r->data(cwSurveyChunk::ShotClinoRole, 1).toString().toStdString() == "2.10");
-        CHECK(r->data(cwSurveyChunk::ShotBackClinoRole, 1).toString().toStdString() == "2.06");
-        CHECK(r->data(cwSurveyChunk::ShotDistanceIncludedRole, 1).toBool() == true);
+        CHECK(reloadChunk->data(cwSurveyChunk::ShotDistanceRole, 1).toString().toStdString() == "2.10");
+        CHECK(reloadChunk->data(cwSurveyChunk::ShotCompassRole, 1).toString().toStdString() == "205.0");
+        CHECK(reloadChunk->data(cwSurveyChunk::ShotBackCompassRole, 1).toString().toStdString() == "25.2");
+        CHECK(reloadChunk->data(cwSurveyChunk::ShotClinoRole, 1).toString().toStdString() == "2.10");
+        CHECK(reloadChunk->data(cwSurveyChunk::ShotBackClinoRole, 1).toString().toStdString() == "2.06");
+        CHECK(reloadChunk->data(cwSurveyChunk::ShotDistanceIncludedRole, 1).toBool() == true);
     }
 }
 
+
+TEST_CASE("Note and Scrap persistence", "[cwProject][cwTrip][cwSurveyNoteModel][cwNote][cwScrap]") {
+    // Project → cave → trip
+    auto project = std::make_unique<cwProject>();
+    project->waitSaveToFinish();
+
+    cwCave* cave = new cwCave();
+    cave->setName("note-persist-cave");
+
+    cwTrip* trip = new cwTrip();
+    trip->setName("note-persist-trip");
+    cave->addTrip(trip);
+
+    project->cavingRegion()->addCave(cave);
+    project->waitSaveToFinish();
+
+    REQUIRE(QFileInfo::exists(cwSaveLoad::absolutePath(trip)));
+
+    // Use the trip's note model
+    cwSurveyNoteModel* const noteModel = trip->notes();
+    REQUIRE(noteModel != nullptr);
+    CHECK(noteModel->rowCount() == 0);
+
+    SECTION("Create note + scrap, save, reload, and verify all fields") {
+        // --- Create a note object and add via model ---
+        auto* note = new cwNote();
+        note->setName(QStringLiteral("Entrance Sketch"));
+        note->setRotate(12.5);
+
+        // Set an image path (no actual file required for persistence of the string path)
+        cwImage image;
+        image.setPath(QStringLiteral("relative/path/to/entrance.png"));
+        note->setImage(image);
+
+        // Attach the note to the trip via the model
+        noteModel->addNotes(QList<cwNote*>{note});
+        project->waitSaveToFinish();
+        CHECK(noteModel->rowCount() == 1);
+
+        // --- Add a scrap and populate data ---
+        auto* scrap = new cwScrap();
+        note->addScrap(scrap);
+
+        // Outline: insert 3 points and close; tweak one point
+        scrap->insertPoint(0, QPointF(0.10, 0.20));
+        scrap->insertPoint(1, QPointF(0.50, 0.20));
+        scrap->insertPoint(2, QPointF(0.50, 0.60));
+        CHECK(scrap->numberOfPoints() == 3);
+
+        // Change middle point slightly and close polygon
+        scrap->setPoint(1, QPointF(0.55, 0.20));
+        scrap->close();
+        CHECK(scrap->isClosed());
+
+        // Stations: add two and then adjust #0 name/position via setStationData
+        {
+            cwNoteStation stationA;
+            stationA.setName(QStringLiteral("A1"));
+            stationA.setPositionOnNote(QPointF(0.20, 0.25));
+            scrap->addStation(stationA);
+
+            cwNoteStation stationB;
+            stationB.setName(QStringLiteral("B1"));
+            stationB.setPositionOnNote(QPointF(0.80, 0.75));
+            scrap->addStation(stationB);
+
+            REQUIRE(scrap->numberOfStations() == 2);
+            // Edit station 0 to test stationNameChanged/stationPositionChanged
+            scrap->setStationData(cwScrap::StationName, 0, QVariant(QStringLiteral("A1-renamed")));
+            scrap->setStationData(cwScrap::StationPosition, 0, QVariant(QPointF(0.22, 0.28)));
+        }
+
+        // Leads: add one and then tweak it using setLeadData
+        {
+            cwLead lead;
+            lead.setDescription(QStringLiteral("Tight crawl"));
+            lead.setPositionOnNote(QPointF(0.60, 0.30));
+            lead.setSize(QSizeF(0.50, 0.30));
+            lead.setCompleted(false);
+            scrap->addLead(lead);
+
+            REQUIRE(scrap->numberOfLeads() == 1);
+            // Change description and completion flag via role-based API
+            scrap->setLeadData(cwScrap::LeadDesciption, 0, QVariant(QStringLiteral("Tight crawl amended")));
+            scrap->setLeadData(cwScrap::LeadCompleted, 0, QVariant(true));
+        }
+
+        // Flags / type: switch type and calc-transform flag
+        scrap->setType(cwScrap::RunningProfile);
+        scrap->setCalculateNoteTransform(true);
+
+        project->waitSaveToFinish();
+
+        // --- Reload and verify everything persisted ---
+        auto reloaded = std::make_unique<cwProject>();
+        reloaded->loadOrConvert(project->filename());
+        reloaded->waitLoadToFinish();
+
+        REQUIRE(reloaded->cavingRegion()->caveCount() == 1);
+        cwTrip* const loadTrip = reloaded->cavingRegion()->cave(0)->trip(0);
+        REQUIRE(loadTrip != nullptr);
+
+        cwSurveyNoteModel* const loadModel = loadTrip->notes();
+        REQUIRE(loadModel != nullptr);
+        CHECK(loadModel->rowCount() == 1);
+
+        // Access note via the convenience list
+        const QList<cwNote*>& loadedNotes = loadModel->notes();
+        REQUIRE(loadedNotes.size() == 1);
+        cwNote* const loadedNote = loadedNotes.at(0);
+        REQUIRE(loadedNote != nullptr);
+
+        // Note-level checks
+        CHECK(loadedNote->name().toStdString() == std::string("Entrance Sketch"));
+        CHECK(loadedNote->rotate() == 12.5);
+        // If cwImage exposes path(), verify it:
+        CHECK(loadedNote->image().path().toStdString() == std::string("relative/path/to/entrance.png"));
+
+        // Scrap-level checks
+        REQUIRE(loadedNote->hasScraps());
+        REQUIRE(loadedNote->scraps().size() == 1);
+        cwScrap* const loadedScrap = loadedNote->scrap(0);
+        REQUIRE(loadedScrap != nullptr);
+
+        // Outline
+        CHECK(loadedScrap->numberOfPoints() == 4);
+        CHECK(loadedScrap->points().at(0) == QPointF(0.10, 0.20));
+        CHECK(loadedScrap->points().at(1) == QPointF(0.55, 0.20));
+        CHECK(loadedScrap->points().at(2) == QPointF(0.50, 0.60));
+        CHECK(loadedScrap->points().at(3) == QPointF(0.10, 0.20));
+        CHECK(loadedScrap->isClosed());
+
+        // Stations
+        REQUIRE(loadedScrap->numberOfStations() == 2);
+        CHECK(loadedScrap->stationData(cwScrap::StationName, 0).toString().toStdString() == std::string("A1-renamed"));
+        CHECK(loadedScrap->stationData(cwScrap::StationPosition, 0).toPointF() == QPointF(0.22, 0.28));
+        CHECK(loadedScrap->stationData(cwScrap::StationName, 1).toString().toStdString() == std::string("B1"));
+        CHECK(loadedScrap->stationData(cwScrap::StationPosition, 1).toPointF() == QPointF(0.80, 0.75));
+
+        // Leads
+        REQUIRE(loadedScrap->numberOfLeads() == 1);
+        CHECK(loadedScrap->leadData(cwScrap::LeadDesciption, 0).toString().toStdString() == std::string("Tight crawl amended"));
+        CHECK(loadedScrap->leadData(cwScrap::LeadPositionOnNote, 0).toPointF() == QPointF(0.60, 0.30));
+        CHECK(loadedScrap->leadData(cwScrap::LeadSize, 0).toSizeF() == QSizeF(0.50, 0.30));
+        CHECK(loadedScrap->leadData(cwScrap::LeadCompleted, 0).toBool() == true);
+
+        // Flags / type
+        CHECK(loadedScrap->type() == cwScrap::RunningProfile);
+        CHECK(loadedScrap->calculateNoteTransform() == true);
+    }
+
+    SECTION("Edit and remove: last-write-wins + scrap removal persists") {
+        // Build a minimal note + scrap
+        auto* note = new cwNote();
+        note->setName(QStringLiteral("First Name"));
+        note->setRotate(1.0);
+        cwImage img; img.setPath(QStringLiteral("img/a.png")); note->setImage(img);
+        noteModel->addNotes(QList<cwNote*>{note});
+
+        auto* scrap = new cwScrap();
+        note->addScrap(scrap);
+        scrap->insertPoint(0, QPointF(0.1, 0.1));
+        scrap->insertPoint(1, QPointF(0.9, 0.1));
+        scrap->insertPoint(2, QPointF(0.9, 0.9));
+        scrap->close();
+
+        // Initial station/lead
+        {
+            cwNoteStation noteStation;
+            noteStation.setName(QStringLiteral("S0"));
+            noteStation.setPositionOnNote(QPointF(0.2, 0.2));
+            scrap->addStation(noteStation);
+
+            cwLead lead;
+            lead.setDescription(QStringLiteral("Lead 0"));
+            lead.setPositionOnNote(QPointF(0.3, 0.3));
+            lead.setSize(QSizeF(0.2, 0.1)); lead.setCompleted(false);
+            scrap->addLead(lead);
+        }
+        project->waitSaveToFinish();
+
+        // --- Edits (note + scrap) ---
+        qDebug() << "========= Rename to Final Name! ===========";
+        note->setName(QStringLiteral("Final Name"));
+        note->setRotate(33.0);
+        cwImage img2;
+        img2.setPath(QStringLiteral("img/b.png"));
+        note->setImage(img2);
+
+        scrap->setPoint(1, QPointF(0.85, 0.15));       // pointChanged
+        scrap->setStationData(cwScrap::StationName, 0, QVariant(QStringLiteral("S0-final")));
+        scrap->setStationData(cwScrap::StationPosition, 0, QVariant(QPointF(0.25, 0.22)));
+        scrap->setLeadData(cwScrap::LeadDesciption, 0, QVariant(QStringLiteral("Lead 0 final")));
+        scrap->setLeadData(cwScrap::LeadCompleted, 0, QVariant(true));
+        scrap->setType(cwScrap::ProjectedProfile);
+        scrap->setCalculateNoteTransform(false);
+
+        project->waitSaveToFinish();
+        qDebug() << "========= Finish! ===========";
+        qDebug() << "Finished:" << project->filename();
+
+        // --- Reload and verify edits (last write wins) ---
+        auto reloaded = std::make_unique<cwProject>();
+        reloaded->loadOrConvert(project->filename());
+        reloaded->waitLoadToFinish();
+
+        cwTrip* const loadedTrip1 = reloaded->cavingRegion()->cave(0)->trip(0);
+        REQUIRE(loadedTrip1 != nullptr);
+        cwSurveyNoteModel* const loadedNoteModel1 = loadedTrip1->notes();
+        REQUIRE(loadedNoteModel1 != nullptr);
+        REQUIRE(loadedNoteModel1->rowCount() == 1);
+
+        cwNote* const loadedNote1 = loadedNoteModel1->notes().at(0);
+        REQUIRE(loadedNote1 != nullptr);
+        CHECK(loadedNote1->name().toStdString() == std::string("Final Name"));
+        CHECK(loadedNote1->rotate() == 33.0);
+        CHECK(loadedNote1->image().path().toStdString() == std::string("img/b.png"));
+
+        REQUIRE(loadedNote1->hasScraps());
+        cwScrap* const loadedScrap1 = loadedNote1->scrap(0);
+        REQUIRE(loadedScrap1 != nullptr);
+
+        CHECK(loadedScrap1->points().at(1) == QPointF(0.85, 0.15));
+        CHECK(loadedScrap1->stationData(cwScrap::StationName, 0).toString().toStdString() == std::string("S0-final"));
+        CHECK(loadedScrap1->stationData(cwScrap::StationPosition, 0).toPointF() == QPointF(0.25, 0.22));
+        CHECK(loadedScrap1->leadData(cwScrap::LeadDesciption, 0).toString().toStdString() == std::string("Lead 0 final"));
+        CHECK(loadedScrap1->leadData(cwScrap::LeadCompleted, 0).toBool() == true);
+        CHECK(loadedScrap1->type() == cwScrap::ProjectedProfile);
+        CHECK(loadedScrap1->calculateNoteTransform() == false);
+
+        // --- Remove the scrap and verify persistence of removal ---
+        qDebug() << "Removing scrap!";
+        note->removeScraps(0, 0);
+        project->waitSaveToFinish();
+        qDebug() << "Finish removing scrap";
+
+
+        auto reloaded2 = std::make_unique<cwProject>();
+        reloaded2->loadOrConvert(project->filename());
+        reloaded2->waitLoadToFinish();
+
+        cwTrip* const loadedTrip2 = reloaded2->cavingRegion()->cave(0)->trip(0);
+        REQUIRE(loadedTrip2 != nullptr);
+        cwSurveyNoteModel* const lm2 = loadedTrip2->notes();
+        REQUIRE(lm2 != nullptr);
+        REQUIRE(lm2->rowCount() == 1);
+
+        cwNote* const loadedNote2 = lm2->notes().at(0);
+        REQUIRE(loadedNote2 != nullptr);
+        CHECK(loadedNote2->hasScraps() == false);
+        CHECK(loadedNote2->scraps().size() == 0);
+    }
+}
 
 

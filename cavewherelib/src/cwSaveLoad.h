@@ -227,6 +227,7 @@ private:
     // QFuture<Monad::ResultBase> saveTrip(const QDir& dir, const cwTrip* trip);
     // static std::unique_ptr<CavewhereProto::Trip> toProtoTrip(const cwTrip* trip);
 
+    void save(const cwNote* note);
     QFuture<Monad::ResultBase> save(const QDir& dir, const cwNote* note);
     static std::unique_ptr<CavewhereProto::Note> toProtoNote(const cwNote* note);
 

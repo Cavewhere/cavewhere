@@ -80,6 +80,7 @@ message Note {
     optional double rotation = 2;
     repeated Scrap scraps = 3;
     optional ImageResolution imageResolution = 4;
+    optional string name = 5;
 
 }
 

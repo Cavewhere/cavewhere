@@ -14,6 +14,7 @@
 #include "cwPlanScrapViewMatrix.h"
 #include "cwRunningProfileScrapViewMatrix.h"
 #include "cwRegionTreeModel.h"
+#include "cwScrap.h"
 
 //Async future
 #include <asyncfuture.h>
@@ -70,6 +71,7 @@ struct cwSaveLoad::Data {
         Kind kind = Kind::File;
 
         bool rename() const {
+            qDebug() << "Rename " << oldPath << "->" << newPath;
             return QDir().rename(oldPath, newPath);
         }
     };
@@ -192,7 +194,13 @@ struct cwSaveLoad::Data {
         Q_ASSERT(m_runningJobs.isEmpty());
 
         for(const auto& job : m_renameJobs) {
-            job.rename();
+            bool couldRename = job.rename();
+
+            qDebug() << "CouldRename:" << couldRename;
+
+            //Remove waiting job, because the should re-queue for save with the new name
+            // m_waitingJobs.at(job.oldPath).jobDeferred.cancel();
+            m_waitingJobs.erase(job.oldPath);
         }
 
         m_renameJobs.clear();
@@ -201,17 +209,32 @@ struct cwSaveLoad::Data {
     template<typename T>
     void saveObject(cwSaveLoad* context, const T* object) {
         // qDebug() << "Saving object:" << object << object->name() << dir(object);
+        auto filename = context->absolutePath(object);
+        context->d->m_fileLookup[object] = filename;
         auto saveFuture = context->save(dir(object), object);
 
-        QPointer<const T> ptr = object;
+        // QPointer<const T> ptr = object;
 
-        AsyncFuture::observe(saveFuture)
-            .context(context, [context, saveFuture, ptr](){
-                if(!saveFuture.result().hasError()) {
-                    auto filename = context->absolutePath(ptr);
-                    context->d->m_fileLookup[ptr] = filename;
-                }
-            });
+        // AsyncFuture::observe(saveFuture)
+        //     .context(context, [context, saveFuture, ptr](){
+        //         if(!saveFuture.result().hasError()) {
+        //         }
+        //     });
+    }
+
+    template<typename T>
+    void renameDirectoryAndFile(cwSaveLoad* context, const T* object) {
+        //We need to handle changing the directory and changing the name of the file
+        auto currentFileName = m_fileLookup.value(object);
+        QString folderName = QFileInfo(currentFileName).absolutePath();
+
+        auto fileRename = Data::RenameJob {currentFileName, absolutePath(object), Data::RenameJob::Kind::File};
+        auto folderRename = Data::RenameJob {folderName, dir(object).absolutePath(), Data::RenameJob::Kind::Directory};
+
+        addRenameJob(fileRename);
+        addRenameJob(folderRename);
+
+        context->save(object);
     }
 };
 
@@ -339,11 +362,16 @@ void cwSaveLoad::save(const cwTrip *trip)
     d->saveObject(this, trip);
 }
 
+void cwSaveLoad::save(const cwNote* note)
+{
+    d->saveObject(this, note);
+}
+
 QFuture<ResultBase> cwSaveLoad::save(const QDir &dir, const cwCave *cave)
 {
     return saveProtoMessage(
         dir,
-        QStringLiteral("%1.cwcave").arg(cave->name()),
+        fileName(cave),
         toProtoCave(cave));
 }
 
@@ -389,7 +417,7 @@ QFuture<ResultBase> cwSaveLoad::save(const QDir &dir, const cwNote *note)
 {
     return saveProtoMessage(
         dir,
-        QStringLiteral("%1.cwnote").arg(note->name()),
+        fileName(note),
         toProtoNote(note));
 }
 
@@ -407,6 +435,8 @@ std::unique_ptr<CavewhereProto::Note> cwSaveLoad::toProtoNote(const cwNote *note
         CavewhereProto::Scrap* protoScrap = protoNote->add_scraps();
         cwRegionSaveTask::saveScrap(protoScrap, scrap);
     }
+
+    *(protoNote->mutable_name()) = note->name().toStdString();
 
     return protoNote;
 }
@@ -695,6 +725,8 @@ Monad::Result<cwNoteData> cwSaveLoad::loadNote(const QString &filename, const QD
             auto scrap = fromProtoScrap(protoScrap);
             noteData.scraps.append(scrap);
         }
+
+        noteData.name = QString::fromStdString(protoNote.name());
 
         return noteData;
     });
@@ -1036,9 +1068,18 @@ void cwSaveLoad::connectTreeModel()
                         connectTrip(trip);
                         break;
                     }
-                    case cwRegionTreeModel::NoteType:
-                        connectNote(d->m_regionTreeModel->note(index));
+                    case cwRegionTreeModel::NoteType: {
+                        auto note = d->m_regionTreeModel->note(index);
+                        connectNote(note);
+                        save(note);
                         break;
+                    }
+                    case cwRegionTreeModel::ScrapType: {
+                        auto scrap = d->m_regionTreeModel->scrap(index);
+                        connectScrap(scrap);
+                        save(scrap->parentNote());
+                        break;
+                    }
                     default:
                         break;
                     }
@@ -1118,17 +1159,7 @@ void cwSaveLoad::connectCave(cwCave *cave)
     }
 
     auto saveCaveName = [cave, this]() {
-        //We need to handle changing the directory and changing the name of the file
-        auto currentFileName = d->m_fileLookup.value(cave);
-        QString folderName = QFileInfo(currentFileName).absolutePath();
-
-        auto fileRename = Data::RenameJob {currentFileName, absolutePath(cave), Data::RenameJob::Kind::File};
-        auto folderRename = Data::RenameJob {folderName, dir(cave).absolutePath(), Data::RenameJob::Kind::Directory};
-
-        d->addRenameJob(fileRename);
-        d->addRenameJob(folderRename);
-
-        save(cave);
+        d->renameDirectoryAndFile(this, cave);
     };
 
     connect(cave, &cwCave::nameChanged, this, saveCaveName);
@@ -1172,8 +1203,12 @@ void cwSaveLoad::connectTrip(cwTrip* trip)
         // parentTripChanged intentionally not handled (no re-parenting)
     };
 
+    auto saveTripName = [trip, this]() {
+        d->renameDirectoryAndFile(this, trip);
+    };
+    connect(trip, &cwTrip::nameChanged, this, saveTripName);
+
     // Trip-level changes
-    connect(trip, &cwTrip::nameChanged, this, saveTrip);
     connect(trip, &cwTrip::dateChanged, this, saveTrip);
     // connect(trip, &cwTrip::numberOfChunksChanged, this, saveTrip);
     connect(trip, &cwTrip::chunksAboutToBeRemoved, this, saveTrip);
@@ -1242,13 +1277,78 @@ void cwSaveLoad::connectTrip(cwTrip* trip)
 
 void cwSaveLoad::connectNote(cwNote *note)
 {
+    if (note == nullptr) {
+        return;
+    }
 
+    auto renameAndSaveNote = [this, note]() {
+        //Only rename if saved before
+        auto currentFileName = d->m_fileLookup.value(note);
+        auto fileRename = Data::RenameJob {currentFileName, absolutePath(note), Data::RenameJob::Kind::File};
+        d->addRenameJob(fileRename);
+
+        save(note);
+    };
+
+    // Note-level changes
+    connect(note, &cwNote::nameChanged, this, renameAndSaveNote);
+
+    // Lambda to save this specific note
+    const auto saveNote = [this, note]() {
+        save(note);
+    };
+    connect(note, &cwNote::imageChanged, this, saveNote);
+    connect(note, &cwNote::rotateChanged, this, saveNote);
+    connect(note, &cwNote::imageResolutionChanged, this, saveNote);
+
+    // connect(note, &cwNote::beginInsertingScraps, this, saveNote);
+    connect(note, &cwNote::insertedScraps, this, saveNote);
+    // connect(note, &cwNote::beginRemovingScraps, this, saveNote);
+    connect(note, &cwNote::removedScraps, this, saveNote);
+    // connect(note, &cwNote::scrapAdded, this, saveNote);
+    connect(note, &cwNote::scrapsReset, this, saveNote);
 }
 
 void cwSaveLoad::connectScrap(cwScrap *scrap)
 {
+    if (scrap == nullptr) {
+        return;
+    }
 
+    // Lambda to save this specific note
+    const auto saveNote = [this, scrap]() {
+        save(scrap->parentNote());
+    };
+
+    // Scrap outline changes
+    connect(scrap, &cwScrap::insertedPoints, this, saveNote);
+    connect(scrap, &cwScrap::removedPoints, this, saveNote);
+    connect(scrap, &cwScrap::pointChanged, this, saveNote);
+    connect(scrap, &cwScrap::pointsReset, this, saveNote);
+    connect(scrap, &cwScrap::closeChanged, this, saveNote);
+
+    // Scrap stations
+    connect(scrap, &cwScrap::stationAdded, this, saveNote);
+    connect(scrap, &cwScrap::stationPositionChanged, this, saveNote);
+    connect(scrap, &cwScrap::stationNameChanged, this, saveNote);
+    connect(scrap, &cwScrap::stationRemoved, this, saveNote);
+    connect(scrap, &cwScrap::stationsReset, this, saveNote);
+
+    // Scrap leads
+    connect(scrap, &cwScrap::leadsBeginInserted, this, saveNote);
+    connect(scrap, &cwScrap::leadsInserted, this, saveNote);
+    connect(scrap, &cwScrap::leadsBeginRemoved, this, saveNote);
+    connect(scrap, &cwScrap::leadsRemoved, this, saveNote);
+    connect(scrap, &cwScrap::leadsDataChanged, this, saveNote);
+    connect(scrap, &cwScrap::leadsReset, this, saveNote);
+
+    // Transformations / type / view matrix
+    connect(scrap, &cwScrap::noteTransformationChanged, this, saveNote);
+    connect(scrap, &cwScrap::calculateNoteTransformChanged, this, saveNote);
+    connect(scrap, &cwScrap::viewMatrixChanged, this, saveNote);
+    connect(scrap, &cwScrap::typeChanged, this, saveNote);
 }
+
 
 void cwSaveLoad::setFileNameHelper(const QString &fileName)
 {
@@ -1413,6 +1513,16 @@ QDir cwSaveLoad::dir(const cwTrip *trip)
     }
 }
 
+QString cwSaveLoad::fileName(const cwNote *note)
+{
+    return sanitizeFileName(note->name() + QStringLiteral(".cwnote"));
+}
+
+QString cwSaveLoad::absolutePath(const cwNote *note)
+{
+    return dir(note).absoluteFilePath(fileName(note));
+}
+
 QDir cwSaveLoad::dir(const cwNote *note)
 {
     if(note->parentTrip()) {
@@ -1454,6 +1564,8 @@ QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
     const QString &filename,
     std::unique_ptr<const google::protobuf::Message> message)
 {
+    qDebug () << "Try Saving to " << filename;
+
     if(!m_renameJobs.isEmpty() && m_runningJobs.isEmpty()) {
         //Rename files and directories
         renameFiles();
@@ -1461,6 +1573,8 @@ QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
 
     //Make sure we're not saving to the same file at the same time
     if (m_runningJobs.contains(filename) || !m_renameJobs.isEmpty()) {
+
+        qDebug() << "\twaiting runningJob:" << m_runningJobs.contains(filename) << "rename:" << !m_renameJobs.isEmpty();
 
         auto deferred = AsyncFuture::Deferred<ResultBase>();
 
@@ -1490,6 +1604,7 @@ QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
 
             return mbind(ensurePathForFile(filename), [&](ResultBase /*result*/) {
                 QSaveFile file(filename);
+                qDebug() << "Saving:" << filename;
                 if (!file.open(QFile::WriteOnly)) {
                     qWarning() << "Failed to write to " << filename << file.errorString();
                     return Monad::ResultBase(QStringLiteral("Failed to open file for writing: %1").arg(filename));
@@ -1514,14 +1629,15 @@ QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
 
         AsyncFuture::observe(future).context(
             context, [filename, this, context]() {
+                qDebug() << "job finished:" << filename;
                 m_runningJobs.remove(filename);
 
-                if(m_renameJobs.isEmpty()) {
+                auto runWaitingJobs = [this, context]() {
+                    Q_ASSERT(m_renameJobs.isEmpty());
+                    Q_ASSERT(m_runningJobs.isEmpty());
                     // Run waiting save jobs
                     for (auto it = m_waitingJobs.begin(); it != m_waitingJobs.end(); ++it) {
                         WaitingJob& job = it->second;
-
-
 
                         //Recursive call
                         auto future = saveProtoMessage(context, it->first, std::move(job.message));
@@ -1530,8 +1646,13 @@ QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
                         });
                     }
                     m_waitingJobs.clear();
-                } else if(!m_runningJobs.isEmpty()) {
+                };
+
+                if(m_renameJobs.isEmpty() && m_runningJobs.isEmpty()) {
+                    runWaitingJobs();
+                } else if(m_runningJobs.isEmpty()) {
                     renameFiles();
+                    runWaitingJobs();
                 }
             });
 
