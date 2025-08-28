@@ -329,7 +329,7 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
         FutureToken.addJob({QFuture<void>(loadFuture), QStringLiteral("Loading")});
 
         auto updateRegion = [this, filename](const cwRegionLoadResult& result) {
-            //Disable the m_saveLoad
+            //Disable the m_saveLoad, since this should be a temporary project
             m_saveLoad->setCavingRegion(nullptr);
 
             setFilename(result.filename());
@@ -383,9 +383,9 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
                 if(!regionDataFuture.result().hasError()) {
                     setFilename(filename);
                     setTemporaryProject(false);
-                    m_saveLoad->setCavingRegion(nullptr); //Disable the auto saving
+                    m_saveLoad->setSaveEnabled(false);
                     Region->setData(regionDataFuture.result().value());
-                    m_saveLoad->setCavingRegion(Region);
+                    m_saveLoad->setSaveEnabled(true);
                     return ResultBase();
                 } else {
                     auto error = QStringLiteral("Error loading: %1 : %2").arg(filename, regionDataFuture.result().errorMessage());

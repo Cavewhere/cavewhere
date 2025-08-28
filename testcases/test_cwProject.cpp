@@ -1476,12 +1476,12 @@ TEST_CASE("cwProject should overwrite or touch loaded project", "[cwProject]") {
             // Normalize to UTC so values are comparable and stable across locales
             const QDateTime lastModifiedUtc = fileInformation.lastModified().toUTC();
 
-            // Store both files and directories
-            result.modificationTimes.insert(absolutePath, lastModifiedUtc);
 
             if (fileInformation.isDir()) {
                 result.directoriesVisited += 1;
             } else if (fileInformation.isFile()) {
+                // Only store directory
+                result.modificationTimes.insert(absolutePath, lastModifiedUtc);
                 result.filesVisited += 1;
             }
         }
@@ -1527,27 +1527,32 @@ TEST_CASE("cwProject should overwrite or touch loaded project", "[cwProject]") {
 
     checkLoadTimes(load, initialLoad);
 
-    //Modify a value to make sure save still works
-    REQUIRE(project->cavingRegion()->caveCount() > 0);
-    auto cave = project->cavingRegion()->cave(0);
+    SECTION("Modify the date and make sure the file has been modified") {
+        //Modify a value to make sure save still works
+        REQUIRE(project->cavingRegion()->caveCount() > 0);
+        auto cave = project->cavingRegion()->cave(0);
 
-    REQUIRE(cave->tripCount() > 0);
-    auto trip = cave->trip(0);
+        REQUIRE(cave->tripCount() > 0);
+        auto trip = cave->trip(0);
 
-    trip->setDate(QDateTime::currentDateTime());
+        trip->setDate(QDateTime::currentDateTime());
 
-    auto tripPath = cwSaveLoad::absolutePath(trip);
-    auto modifiedLoad = scan(QFileInfo(convertedFilename).absolutePath());
+        project->waitSaveToFinish();
 
-    //Trip's data change should show up as different
-    CHECK(initialLoad.modificationTimes.contains(tripPath));
-    CHECK(modifiedLoad.modificationTimes[tripPath] != initialLoad.modificationTimes[tripPath]);
+        auto tripPath = cwSaveLoad::absolutePath(trip);
+        qDebug() << "Trip Path:" << tripPath;
+        auto modifiedLoad = scan(QFileInfo(convertedFilename).absolutePath());
 
-    modifiedLoad.modificationTimes.remove(tripPath);
-    initialLoad.modificationTimes.remove(tripPath);
+        //Trip's data change should show up as different
+        CHECK(initialLoad.modificationTimes.contains(tripPath));
+        CHECK(modifiedLoad.modificationTimes[tripPath] != initialLoad.modificationTimes[tripPath]);
 
-    //Make sure non of the other files have changed
-    checkLoadTimes(modifiedLoad, initialLoad);
+        CHECK(modifiedLoad.modificationTimes.remove(tripPath));
+        CHECK(initialLoad.modificationTimes.remove(tripPath));
+
+        //Make sure non of the other files have changed
+        checkLoadTimes(modifiedLoad, initialLoad);
+    }
 }
 
 

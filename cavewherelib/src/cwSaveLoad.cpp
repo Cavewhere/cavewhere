@@ -117,6 +117,7 @@ struct cwSaveLoad::Data {
     QHash<QString, QFuture<ResultBase>> m_runningJobs;
 
     bool isTemporary = true;
+    bool saveEnabled = true;
 
     static QList<cwSurveyChunkData> fromProtoSurveyChunks(const google::protobuf::RepeatedPtrField<CavewhereProto::SurveyChunk> & protoList);
 
@@ -208,10 +209,12 @@ struct cwSaveLoad::Data {
 
     template<typename T>
     void saveObject(cwSaveLoad* context, const T* object) {
-        // qDebug() << "Saving object:" << object << object->name() << dir(object);
-        auto filename = context->absolutePath(object);
-        context->d->m_fileLookup[object] = filename;
-        auto saveFuture = context->save(dir(object), object);
+        if(saveEnabled) {
+            // qDebug() << "Saving object:" << object << object->name() << dir(object);
+            auto filename = context->absolutePath(object);
+            context->d->m_fileLookup[object] = filename;
+            auto saveFuture = context->save(dir(object), object);
+        }
 
         // QPointer<const T> ptr = object;
 
@@ -328,6 +331,11 @@ void cwSaveLoad::setCavingRegion(cwCavingRegion *region)
 const cwCavingRegion *cwSaveLoad::cavingRegion() const
 {
     return d->m_regionTreeModel->cavingRegion();
+}
+
+void cwSaveLoad::setSaveEnabled(bool enabled)
+{
+    d->saveEnabled = enabled;
 }
 
 QFuture<ResultBase> cwSaveLoad::saveCavingRegion(const QDir &dir, const cwCavingRegion *region)
