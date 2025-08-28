@@ -345,8 +345,6 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
                      {
                          auto result = loadFuture.result();
 
-
-
                          if(result.errors().isEmpty()) {
                              updateRegion(result);
                          } else {
@@ -428,7 +426,7 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
 
                     //Use a shared pointer here, too keep saveLoad alive until, the project is fully saved
                     auto saveLoad = std::make_shared<cwSaveLoad>();
-                    auto filenameFuture = saveLoad->saveAllFromV6(newProjectDirectory, tempProject.get());
+                    auto filenameFuture = saveLoad->saveAllFromV6(newProjectDirectory, tempProject.get(), oldProjectFilename);
 
                     auto loadFuture
                         = AsyncFuture::observe(filenameFuture)
@@ -572,8 +570,8 @@ void cwProject::loadFile(QString filename) {
   */
 void cwProject::setFilename(QString newFilename) {
     if(newFilename != filename()) {
-        ProjectFile = newFilename;
-        emit filenameChanged(ProjectFile);
+        m_saveLoad->setFileName(newFilename);
+        emit filenameChanged(newFilename);
     }
 }
 
@@ -815,7 +813,7 @@ void cwProject::convertFromProjectV6(QString oldProjectFilename,
 
                                          //Use a shared pointer here, too keep saveLoad alive until, the project is fully saved
                                          auto saveLoad = std::make_shared<cwSaveLoad>();
-                                         auto filenameFuture = saveLoad->saveAllFromV6(newProjectDirectory, tempProject.get());
+                                         auto filenameFuture = saveLoad->saveAllFromV6(newProjectDirectory, tempProject.get(), oldProjectFilename);
                                          qDebug() << "I get here!";
 
                                          auto loadFuture = AsyncFuture::observe(filenameFuture)

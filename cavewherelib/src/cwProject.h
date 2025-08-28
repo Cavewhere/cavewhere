@@ -136,7 +136,7 @@ private:
     //If this is a temp project directory on not
     //Old save and load
     bool TempProject;
-    QString ProjectFile;
+    // QString ProjectFile;
     QSqlDatabase ProjectDatabase;
     int FileVersion;
 

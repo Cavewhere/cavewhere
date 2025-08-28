@@ -107,7 +107,7 @@ public:
     void setCavingRegion(cwCavingRegion *region);
     const cwCavingRegion* cavingRegion() const;
 
-    QFuture<Monad::ResultString> saveAllFromV6(const QDir& dir, const cwProject* region);
+    QFuture<Monad::ResultString> saveAllFromV6(const QDir& dir, const cwProject* region, const QString& projectFileName);
 
     static QFuture<Monad::Result<cwCavingRegionData>> loadAll(const QString& filename);
 

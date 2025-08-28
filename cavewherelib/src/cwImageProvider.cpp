@@ -47,6 +47,8 @@ cwImageProvider::cwImageProvider() :
   */
 QImage cwImageProvider::requestImage(const QString &path, QSize *size, const QSize &requestedSize) {
 
+    qDebug() << "Requesting path:" << path << ProjectPath;
+
     int maxSize = std::max(requestedSize.width(), requestedSize.height());
 
     if(maxSize > 0) {

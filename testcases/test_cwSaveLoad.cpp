@@ -515,7 +515,7 @@ TEST_CASE("cwSaveLoad should save old projects correctly", "[cwSaveLoad]") {
     cwSaveLoad save;
     auto dir = testDir();
 
-    save.saveAllFromV6(dir, root->project());
+    save.saveAllFromV6(dir, root->project(), filename);
     save.waitForFinished();
 }
 

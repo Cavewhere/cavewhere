@@ -317,7 +317,7 @@ QString cwSaveLoad::fileName() const
 
 void cwSaveLoad::setFileName(const QString &filename)
 {
-    Q_ASSERT(false);
+    d->projectFileName = filename;
 }
 
 void cwSaveLoad::setCavingRegion(cwCavingRegion *region)
@@ -447,18 +447,19 @@ std::unique_ptr<CavewhereProto::Note> cwSaveLoad::toProtoNote(const cwNote *note
  *
  * This is useful for converting older CaveWhere files to the new file format
  */
-QFuture<ResultString> cwSaveLoad::saveAllFromV6(const QDir &dir, const cwProject* project)
+QFuture<ResultString> cwSaveLoad::saveAllFromV6(
+    const QDir &dir,
+    const cwProject* project,
+    const QString& projectFileName)
 {
     auto makeDir = [](const QDir& dir) {
         dir.mkpath(QStringLiteral("."));
         return dir;
     };
 
-    const QString projectFilename = project->filename();
-
-    auto saveNoteImage = [projectFilename, dir](cwNoteData noteData, int imageIndex, QDir noteDir) {
+    auto saveNoteImage = [projectFileName, dir](cwNoteData noteData, int imageIndex, QDir noteDir) {
         cwImageProvider provider;
-        provider.setProjectPath(projectFilename);
+        provider.setProjectPath(projectFileName);
 
         cwNote noteCopy;
         noteCopy.setData(noteData);
@@ -472,6 +473,8 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(const QDir &dir, const cwProject
                                                      .arg(imageIndex)
                                                      .arg(imageData.format().toLower()));
 
+
+        qDebug() << "Saving image:" << filename;
 
         QSaveFile file(filename);
         file.open(QSaveFile::WriteOnly);
@@ -520,7 +523,7 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(const QDir &dir, const cwProject
         return noteFutures;
     };
 
-    auto saveTrips = [this, projectFilename, makeDir, saveNotes](const QDir& caveDir, const cwCave* cave) {
+    auto saveTrips = [this, projectFileName, makeDir, saveNotes](const QDir& caveDir, const cwCave* cave) {
         QList<QFuture<ResultBase>> tripFutures;
         tripFutures.reserve(cave->tripCount());
 
