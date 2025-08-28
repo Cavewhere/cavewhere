@@ -1515,14 +1515,39 @@ TEST_CASE("cwProject should overwrite or touch loaded project", "[cwProject]") {
 
     CHECK(initialLoad.modificationTimes.size() == load.modificationTimes.size());
 
-    for(const auto& keyValue : load.modificationTimes.asKeyValueRange()) {
-        qDebug() << "File:" << keyValue.first << (initialLoad.modificationTimes.value(keyValue.first) == keyValue.second) << initialLoad.modificationTimes.value(keyValue.first) << keyValue.second;
-        INFO("Filename:" << keyValue.first);
-        CHECK(initialLoad.modificationTimes.contains(keyValue.first));
-        CHECK(initialLoad.modificationTimes.value(keyValue.first) == keyValue.second);
-        CHECK(keyValue.second.isValid());
-        CHECK(initialLoad.modificationTimes.value(keyValue.first).isValid());
-    }
+    auto checkLoadTimes = [](const ScanResult& accutal, const ScanResult& expected) {
+        for(const auto& keyValue : accutal.modificationTimes.asKeyValueRange()) {
+            INFO("Filename:" << keyValue.first);
+            CHECK(expected.modificationTimes.contains(keyValue.first));
+            CHECK(expected.modificationTimes.value(keyValue.first) == keyValue.second);
+            CHECK(keyValue.second.isValid());
+            CHECK(expected.modificationTimes.value(keyValue.first).isValid());
+        }
+    };
+
+    checkLoadTimes(load, initialLoad);
+
+    //Modify a value to make sure save still works
+    REQUIRE(project->cavingRegion()->caveCount() > 0);
+    auto cave = project->cavingRegion()->cave(0);
+
+    REQUIRE(cave->tripCount() > 0);
+    auto trip = cave->trip(0);
+
+    trip->setDate(QDateTime::currentDateTime());
+
+    auto tripPath = cwSaveLoad::absolutePath(trip);
+    auto modifiedLoad = scan(QFileInfo(convertedFilename).absolutePath());
+
+    //Trip's data change should show up as different
+    CHECK(initialLoad.modificationTimes.contains(tripPath));
+    CHECK(modifiedLoad.modificationTimes[tripPath] != initialLoad.modificationTimes[tripPath]);
+
+    modifiedLoad.modificationTimes.remove(tripPath);
+    initialLoad.modificationTimes.remove(tripPath);
+
+    //Make sure non of the other files have changed
+    checkLoadTimes(modifiedLoad, initialLoad);
 }
 
 
