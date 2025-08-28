@@ -1186,6 +1186,8 @@ TEST_CASE("Survey chunk persistence", "[cwProject][cwTrip][cwSurveyChunk]") {
         CHECK(reloadChunk->data(cwSurveyChunk::ShotBackClinoRole, 1).toString().toStdString() == "2.06");
         CHECK(reloadChunk->data(cwSurveyChunk::ShotDistanceIncludedRole, 1).toBool() == true);
     }
+
+
 }
 
 
@@ -1538,7 +1540,7 @@ TEST_CASE("cwProject should overwrite or touch loaded project", "[cwProject]") {
         trip->setDate(QDateTime::currentDateTime());
 
         project->waitSaveToFinish();
-
+\
         auto tripPath = cwSaveLoad::absolutePath(trip);
         qDebug() << "Trip Path:" << tripPath;
         auto modifiedLoad = scan(QFileInfo(convertedFilename).absolutePath());
@@ -1553,6 +1555,33 @@ TEST_CASE("cwProject should overwrite or touch loaded project", "[cwProject]") {
         //Make sure non of the other files have changed
         checkLoadTimes(modifiedLoad, initialLoad);
     }
+}
+
+TEST_CASE("Caves should be removed correctly simple", "[cwProject]") {
+    auto filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+    auto project = std::make_unique<cwProject>();
+
+    project->loadOrConvert(filename);
+    project->waitLoadToFinish();
+    project->waitSaveToFinish();
+
+    REQUIRE(project->cavingRegion()->caveCount() > 0);
+    auto cave = project->cavingRegion()->cave(0);
+
+    auto caveFileName = cwSaveLoad::absolutePath(cave);
+    auto caveDir = QFileInfo(caveFileName).absoluteDir();
+
+
+    CHECK(QFileInfo::exists(caveFileName));
+    CHECK(QFileInfo::exists(caveDir.absolutePath()));
+
+    //Remove the cave
+    project->cavingRegion()->removeCave(0);
+
+    project->waitSaveToFinish();
+
+    CHECK(!QFileInfo::exists(caveFileName));
+    CHECK(!QFileInfo::exists(caveDir.absolutePath()));
 }
 
 

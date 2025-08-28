@@ -63,16 +63,44 @@ static Result<ProtoType> loadMessage(const QString& filename) {
 
 struct cwSaveLoad::Data {
 
-    struct RenameJob {
+    struct FileSystemJob {
         enum class Kind { File, Directory };
+        enum class Action { Rename, Remove };
 
         QString oldPath;
         QString newPath;
         Kind kind = Kind::File;
+        Action action = Action::Rename;
 
         bool rename() const {
-            qDebug() << "Rename " << oldPath << "->" << newPath;
             return QDir().rename(oldPath, newPath);
+        }
+
+        bool remove() const {
+            switch(kind) {
+            case Kind::File:
+                Q_ASSERT(QFileInfo::exists(oldPath));
+                Q_ASSERT(QFileInfo(oldPath).isFile());
+                return QFile::remove(oldPath);
+            case Kind::Directory:
+                Q_ASSERT(QFileInfo::exists(oldPath));
+                Q_ASSERT(QFileInfo(oldPath).isDir());
+                QDir dir(oldPath);
+                // qDebug() << "Removing dir:" << dir;
+                // return true;
+                return dir.removeRecursively();
+            }
+        }
+
+        bool execute() const {
+            switch(action) {
+            case Action::Rename:
+                rename();
+                break;
+            case Action::Remove:
+                remove();
+                break;
+            }
         }
     };
 
@@ -112,7 +140,7 @@ struct cwSaveLoad::Data {
     QFuture<void> newFileFuture;
 
     //Saving jobs
-    QList<RenameJob> m_renameJobs;
+    QList<FileSystemJob> m_fileSystemJobs;
     std::unordered_map<QString, WaitingJob> m_waitingJobs;
     QHash<QString, QFuture<ResultBase>> m_runningJobs;
 
@@ -121,8 +149,8 @@ struct cwSaveLoad::Data {
 
     static QList<cwSurveyChunkData> fromProtoSurveyChunks(const google::protobuf::RepeatedPtrField<CavewhereProto::SurveyChunk> & protoList);
 
-    void addRenameJob(const RenameJob& job) {
-        Q_ASSERT((job.kind == RenameJob::Kind::Directory) == QFileInfo(job.oldPath).isDir());
+    void addFileSystemJob(const FileSystemJob& job) {
+        Q_ASSERT((job.kind == FileSystemJob::Kind::Directory) == QFileInfo(job.oldPath).isDir());
 
         auto pathDepth = [](const QString& path) -> int {
             const QString cleaned = QDir::cleanPath(path);
@@ -136,42 +164,87 @@ struct cwSaveLoad::Data {
             return slashCount;
         };
 
-        auto kindRank = [](RenameJob::Kind kind) -> int {
+        auto kindRank = [](FileSystemJob::Kind kind) -> int {
             // Files first (0), directories second (1).
-            return (kind == RenameJob::Kind::File) ? 0 : 1;
+            return (kind == FileSystemJob::Kind::File) ? 0 : 1;
         };
 
-        auto lessThan = [&](const RenameJob& a, const RenameJob& b) -> bool {
-            const int aRank = kindRank(a.kind);
-            const int bRank = kindRank(b.kind);
-            if (aRank != bRank) {
-                return aRank < bRank;
+        auto actionRank = [](FileSystemJob::Action action) -> int {
+            return action == FileSystemJob::Action::Remove ? 0 : 1;
+        };
+
+        auto lessThan = [&](const FileSystemJob& a, const FileSystemJob& b) -> bool {
+            {
+                const int aRank = actionRank(a.action);
+                const int bRank = actionRank(b.action);
+                if (aRank != bRank) {
+                    return aRank < bRank;
+                }
             }
 
-            const int aDepth = pathDepth(a.oldPath);
-            const int bDepth = pathDepth(b.oldPath);
-            if (aDepth != bDepth) {
-                // Deeper first.
-                return aDepth > bDepth;
+            {
+                const int aRank = kindRank(a.kind);
+                const int bRank = kindRank(b.kind);
+                if (aRank != bRank) {
+                    return aRank < bRank;
+                }
+            }
+
+            {
+                const int aDepth = pathDepth(a.oldPath);
+                const int bDepth = pathDepth(b.oldPath);
+                if (aDepth != bDepth) {
+                    // Deeper first.
+                    return aDepth > bDepth;
+                }
             }
 
             // Stable lexical tie-breaker.
             return a.oldPath < b.oldPath;
         };
 
-        const auto beginIt = m_renameJobs.begin();
-        const auto endIt   = m_renameJobs.end();
+        const auto beginIt = m_fileSystemJobs.begin();
+        const auto endIt   = m_fileSystemJobs.end();
 
         const auto it = std::lower_bound(beginIt, endIt, job, lessThan);
 
         // If an element with the same oldPath already exists at this position, replace it.
+        // This should update with removes too
         if (it != endIt && it->oldPath == job.oldPath) {
             *it = job;
             return;
         }
 
+        //If we're removing directories
+        if(job.action == FileSystemJob::Action::Remove
+            && job.kind == FileSystemJob::Kind::Directory)
+        {
+            //Search for rename jobs that are a subdirectory
+
+            auto isParentOf = [](const QDir& parent, const QDir& child) {
+                QString parentPath = parent.canonicalPath();
+                QString childPath  = child.canonicalPath();
+
+                if (parentPath.isEmpty() || childPath.isEmpty()) {
+                    // canonicalPath() can fail if the directory doesn’t exist
+                    return false;
+                }
+
+                return childPath.startsWith(parentPath + QDir::separator());
+            };
+
+            QDir jobDir = QFileInfo(job.oldPath).absoluteDir();
+            auto removeJobs = std::ranges::remove_if(m_fileSystemJobs,
+                                                     [jobDir, isParentOf](const auto& currentJob) {
+                                                         auto currentDir = QFileInfo(currentJob.newPath).absoluteDir();
+                                                         return isParentOf(jobDir, currentDir);
+                                                     });
+            m_fileSystemJobs.erase(removeJobs.begin(), removeJobs.end());
+
+        }
+
         // Otherwise insert at the correct sorted position.
-        m_renameJobs.insert(static_cast<int>(it - beginIt), job);
+        m_fileSystemJobs.insert(static_cast<int>(it - beginIt), job);
     }
 
 
@@ -191,20 +264,19 @@ struct cwSaveLoad::Data {
         return saveProtoMessage(context, dir.absoluteFilePath(filename), std::move(message));
     }
 
-    void renameFiles() {
-        Q_ASSERT(m_runningJobs.isEmpty());
+    void excuteFileSystemActions() {
+        if(!m_fileSystemJobs.isEmpty() && m_runningJobs.isEmpty()) {
+            for(const auto& job : m_fileSystemJobs) {
+                job.execute();
 
-        for(const auto& job : m_renameJobs) {
-            bool couldRename = job.rename();
+                // qDebug() << "CouldRename:" << couldRename;
 
-            qDebug() << "CouldRename:" << couldRename;
+                //Remove waiting job, because the should re-queue for save with the new name
+                m_waitingJobs.erase(job.oldPath);
+            }
 
-            //Remove waiting job, because the should re-queue for save with the new name
-            // m_waitingJobs.at(job.oldPath).jobDeferred.cancel();
-            m_waitingJobs.erase(job.oldPath);
+            m_fileSystemJobs.clear();
         }
-
-        m_renameJobs.clear();
     }
 
     template<typename T>
@@ -231,11 +303,11 @@ struct cwSaveLoad::Data {
         auto currentFileName = m_fileLookup.value(object);
         QString folderName = QFileInfo(currentFileName).absolutePath();
 
-        auto fileRename = Data::RenameJob {currentFileName, absolutePath(object), Data::RenameJob::Kind::File};
-        auto folderRename = Data::RenameJob {folderName, dir(object).absolutePath(), Data::RenameJob::Kind::Directory};
+        auto fileRename = Data::FileSystemJob {currentFileName, absolutePath(object), Data::FileSystemJob::Kind::File};
+        auto folderRename = Data::FileSystemJob {folderName, dir(object).absolutePath(), Data::FileSystemJob::Kind::Directory};
 
-        addRenameJob(fileRename);
-        addRenameJob(folderRename);
+        addFileSystemJob(fileRename);
+        addFileSystemJob(folderRename);
 
         context->save(object);
     }
@@ -1087,7 +1159,6 @@ void cwSaveLoad::connectTreeModel()
                     }
                     case cwRegionTreeModel::ScrapType: {
                         auto scrap = d->m_regionTreeModel->scrap(index);
-                        qDebug() << "Connect and save scrap!" << scrap;
                         connectScrap(scrap);
                         save(scrap->parentNote());
                         break;
@@ -1103,7 +1174,41 @@ void cwSaveLoad::connectTreeModel()
                 for(int i = first; i <= last; i++) {
                     auto index = d->m_regionTreeModel->index(i, 0, parent);
                     auto object = index.data(cwRegionTreeModel::ObjectRole).value<QObject*>();
+
+                    switch(index.data(cwRegionTreeModel::TypeRole).toInt()) {
+                    case cwRegionTreeModel::CaveType: {
+                        auto cave = d->m_regionTreeModel->cave(index);
+                        auto caveDir = dir(cave);
+                        qDebug() << "Cave deleted:" << cave << caveDir;
+                        d->addFileSystemJob(Data::FileSystemJob
+                                            {
+                                                caveDir.canonicalPath(),
+                                                QString(),
+                                                Data::FileSystemJob::Kind::Directory,
+                                                Data::FileSystemJob::Action::Remove
+                                            });
+                        d->excuteFileSystemActions();
+                        break;
+                    }
+                    case cwRegionTreeModel::TripType: {
+                        auto trip = d->m_regionTreeModel->trip(index);
+                        break;
+                    }
+                    case cwRegionTreeModel::NoteType: {
+                        auto note = d->m_regionTreeModel->note(index);
+                        break;
+                    }
+                    case cwRegionTreeModel::ScrapType: {
+                        auto scrap = d->m_regionTreeModel->scrap(index);
+
+                        break;
+                    }
+                    default:
+                        break;
+                    }
+
                     disconnect(object, nullptr, this, nullptr);
+
                 }
             });
 
@@ -1296,8 +1401,8 @@ void cwSaveLoad::connectNote(cwNote *note)
     auto renameAndSaveNote = [this, note]() {
         //Only rename if saved before
         auto currentFileName = d->m_fileLookup.value(note);
-        auto fileRename = Data::RenameJob {currentFileName, absolutePath(note), Data::RenameJob::Kind::File};
-        d->addRenameJob(fileRename);
+        auto fileRename = Data::FileSystemJob {currentFileName, absolutePath(note), Data::FileSystemJob::Kind::File};
+        d->addFileSystemJob(fileRename);
 
         save(note);
     };
@@ -1578,15 +1683,13 @@ QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
 {
     qDebug () << "Try Saving to " << filename;
 
-    if(!m_renameJobs.isEmpty() && m_runningJobs.isEmpty()) {
-        //Rename files and directories
-        renameFiles();
-    }
+    //Rename or remove file and directories
+    excuteFileSystemActions();
 
     //Make sure we're not saving to the same file at the same time
-    if (m_runningJobs.contains(filename) || !m_renameJobs.isEmpty()) {
+    if (m_runningJobs.contains(filename) || !m_fileSystemJobs.isEmpty()) {
 
-        qDebug() << "\twaiting runningJob:" << m_runningJobs.contains(filename) << "rename:" << !m_renameJobs.isEmpty();
+        qDebug() << "\twaiting runningJob:" << m_runningJobs.contains(filename) << "rename:" << !m_fileSystemJobs.isEmpty();
 
         auto deferred = AsyncFuture::Deferred<ResultBase>();
 
@@ -1645,7 +1748,7 @@ QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
                 m_runningJobs.remove(filename);
 
                 auto runWaitingJobs = [this, context]() {
-                    Q_ASSERT(m_renameJobs.isEmpty());
+                    Q_ASSERT(m_fileSystemJobs.isEmpty());
                     Q_ASSERT(m_runningJobs.isEmpty());
                     // Run waiting save jobs
                     for (auto it = m_waitingJobs.begin(); it != m_waitingJobs.end(); ++it) {
@@ -1660,10 +1763,10 @@ QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
                     m_waitingJobs.clear();
                 };
 
-                if(m_renameJobs.isEmpty() && m_runningJobs.isEmpty()) {
+                if(m_fileSystemJobs.isEmpty() && m_runningJobs.isEmpty()) {
                     runWaitingJobs();
                 } else if(m_runningJobs.isEmpty()) {
-                    renameFiles();
+                    excuteFileSystemActions();
                     runWaitingJobs();
                 }
             });
