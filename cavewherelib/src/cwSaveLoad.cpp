@@ -1202,11 +1202,15 @@ void cwSaveLoad::connectTreeModel()
                     }
                     case cwRegionTreeModel::NoteType: {
                         auto note = d->m_regionTreeModel->note(index);
-                        break;
-                    }
-                    case cwRegionTreeModel::ScrapType: {
-                        auto scrap = d->m_regionTreeModel->scrap(index);
-
+                        auto noteFilename = absolutePath(note);
+                        d->addFileSystemJob(Data::FileSystemJob
+                                            {
+                                                noteFilename,
+                                                QString(),
+                                                Data::FileSystemJob::Kind::File,
+                                                Data::FileSystemJob::Action::Remove
+                                            });
+                        d->excuteFileSystemActions();
                         break;
                     }
                     default:

@@ -1614,4 +1614,38 @@ TEST_CASE("Trips should be removed correctly simple", "[cwProject]") {
     CHECK(!QFileInfo::exists(tripDir.absolutePath()));
 }
 
+TEST_CASE("Note should be removed correctly simple", "[cwProject]") {
+    auto filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+    auto project = std::make_unique<cwProject>();
+
+    project->loadOrConvert(filename);
+    project->waitLoadToFinish();
+    project->waitSaveToFinish();
+
+    REQUIRE(project->cavingRegion()->caveCount() > 0);
+    auto cave = project->cavingRegion()->cave(0);
+
+    REQUIRE(cave->tripCount() > 0);
+    auto trip = cave->trip(0);
+
+    REQUIRE(trip->notes()->rowCount() > 0);
+    auto note = trip->notes()->notes().at(0);
+
+    auto noteFileName = cwSaveLoad::absolutePath(note);
+    auto noteDir = QFileInfo(noteFileName).absoluteDir();
+
+    CHECK(QFileInfo::exists(noteFileName));
+    CHECK(QFileInfo::exists(noteDir.absolutePath()));
+
+    //Remove the note
+    trip->notes()->removeNote(0);
+
+    project->waitSaveToFinish();
+
+    CHECK(!QFileInfo::exists(noteFileName));
+
+    //Notes directory should still exist because we store multiple notes in it
+    CHECK(QFileInfo::exists(noteDir.absolutePath()));
+}
+
 
