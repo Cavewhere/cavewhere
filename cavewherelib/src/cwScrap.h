@@ -175,6 +175,8 @@ signals:
     void viewMatrixChanged();
     void typeChanged();
 
+    void triangulationDataChanged();
+
 private:
 
     /**

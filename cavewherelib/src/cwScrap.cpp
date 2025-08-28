@@ -1253,11 +1253,7 @@ void cwScrap::setParentCave(cwCave *cave) {
   */
 void cwScrap::setTriangulationData(cwTriangulatedData data) {
     TriangulationData = data;
-
-    QList<int> roles;
-    roles.append(cwScrap::LeadPosition);
-
-    emit leadsDataChanged(0, leads().size() - 1, roles);
+    emit triangulationDataChanged();
 }
 
 void cwScrap::updateImage()

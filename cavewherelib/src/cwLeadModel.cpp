@@ -227,6 +227,9 @@ void cwLeadModel::addScrap(cwScrap *scrap)
     connect(scrap, &cwScrap::leadsRemoved, this, &cwLeadModel::beginRemoveLeads);
     connect(scrap, &cwScrap::leadsRemoved, this, &cwLeadModel::endRemoveLeads);
     connect(scrap, &cwScrap::leadsDataChanged, this, &cwLeadModel::leadDataUpdated);
+    connect(scrap, &cwScrap::triangulationDataChanged, this, [this, scrap]() {
+        leadDataUpdated(0, scrap->leads().size(), {cwScrap::LeadPosition});
+    });
     connect(scrap, SIGNAL(destroyed(QObject*)), this, SLOT(scrapDeleted(QObject*)));
 }
 

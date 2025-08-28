@@ -1061,14 +1061,14 @@ void cwSaveLoad::connectTreeModel()
                     switch(index.data(cwRegionTreeModel::TypeRole).toInt()) {
                     case cwRegionTreeModel::CaveType: {
                         auto cave = d->m_regionTreeModel->cave(index);
-                        save(cave);
                         connectCave(cave);
+                        save(cave);
                         break;
                     }
                     case cwRegionTreeModel::TripType: {
                         auto trip = d->m_regionTreeModel->trip(index);
-                        save(trip);
                         connectTrip(trip);
+                        save(trip);
                         break;
                     }
                     case cwRegionTreeModel::NoteType: {
@@ -1079,6 +1079,7 @@ void cwSaveLoad::connectTreeModel()
                     }
                     case cwRegionTreeModel::ScrapType: {
                         auto scrap = d->m_regionTreeModel->scrap(index);
+                        qDebug() << "Connect and save scrap!" << scrap;
                         connectScrap(scrap);
                         save(scrap->parentNote());
                         break;
