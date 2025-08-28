@@ -1166,11 +1166,23 @@ void cwSaveLoad::connectTreeModel()
                     default:
                         break;
                     }
-        }
-    });
+                }
+            });
 
     connect(d->m_regionTreeModel, &cwRegionTreeModel::rowsAboutToBeRemoved,
             this, [this](const QModelIndex &parent, int first, int last) {
+
+                auto removeDirectory = [this](const QDir& dir) {
+                    d->addFileSystemJob(Data::FileSystemJob
+                                        {
+                                            dir.canonicalPath(),
+                                            QString(),
+                                            Data::FileSystemJob::Kind::Directory,
+                                            Data::FileSystemJob::Action::Remove
+                                        });
+                    d->excuteFileSystemActions();
+                };
+
                 for(int i = first; i <= last; i++) {
                     auto index = d->m_regionTreeModel->index(i, 0, parent);
                     auto object = index.data(cwRegionTreeModel::ObjectRole).value<QObject*>();
@@ -1179,19 +1191,13 @@ void cwSaveLoad::connectTreeModel()
                     case cwRegionTreeModel::CaveType: {
                         auto cave = d->m_regionTreeModel->cave(index);
                         auto caveDir = dir(cave);
-                        qDebug() << "Cave deleted:" << cave << caveDir;
-                        d->addFileSystemJob(Data::FileSystemJob
-                                            {
-                                                caveDir.canonicalPath(),
-                                                QString(),
-                                                Data::FileSystemJob::Kind::Directory,
-                                                Data::FileSystemJob::Action::Remove
-                                            });
-                        d->excuteFileSystemActions();
+                        removeDirectory(caveDir);
                         break;
                     }
                     case cwRegionTreeModel::TripType: {
                         auto trip = d->m_regionTreeModel->trip(index);
+                        auto tripDir = dir(trip);
+                        removeDirectory(tripDir);
                         break;
                     }
                     case cwRegionTreeModel::NoteType: {
@@ -1650,8 +1656,8 @@ QDir cwSaveLoad::dir(const cwNote *note)
 }
 
 QFuture<ResultBase> cwSaveLoad::saveProtoMessage(const QDir &dir,
-                                  const QString &filename,
-                                  std::unique_ptr<const google::protobuf::Message> message)
+                                                 const QString &filename,
+                                                 std::unique_ptr<const google::protobuf::Message> message)
 {
     Q_ASSERT(message);
     return d->saveProtoMessage(this,
