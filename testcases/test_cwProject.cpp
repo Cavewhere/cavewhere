@@ -1,4 +1,5 @@
 //Catch includes
+#include <QtCore/qdiriterator.h>
 #include <catch2/catch_test_macros.hpp>
 
 //Our includes
@@ -1438,6 +1439,89 @@ TEST_CASE("Note and Scrap persistence", "[cwProject][cwTrip][cwSurveyNoteModel][
         REQUIRE(loadedNote2 != nullptr);
         CHECK(loadedNote2->hasScraps() == false);
         CHECK(loadedNote2->scraps().size() == 0);
+    }
+}
+
+
+
+TEST_CASE("cwProject should overwrite or touch loaded project", "[cwProject]") {
+    struct ScanResult {
+        QHash<QString, QDateTime> modificationTimes; // key = absolute path, value = last-modified (UTC)
+        int filesVisited = 0;
+        int directoriesVisited = 0;
+    };
+
+    auto scan = [](const QString& rootPath,
+                   bool includeHidden = false,
+                   bool followSymbolicLinks = false)
+    {
+        ScanResult result;
+
+        QDir::Filters entryFilters = QDir::AllEntries | QDir::NoDotAndDotDot;
+        if (includeHidden) {
+            entryFilters |= QDir::Hidden;
+        }
+
+        QDirIterator::IteratorFlags iteratorFlags = QDirIterator::Subdirectories;
+        if (followSymbolicLinks) {
+            iteratorFlags |= QDirIterator::FollowSymlinks;
+        }
+
+        QDirIterator iterator(rootPath, entryFilters, iteratorFlags);
+        while (iterator.hasNext()) {
+            iterator.next();
+            const QFileInfo fileInformation = iterator.fileInfo();
+            const QString absolutePath = fileInformation.absoluteFilePath();
+
+            // Normalize to UTC so values are comparable and stable across locales
+            const QDateTime lastModifiedUtc = fileInformation.lastModified().toUTC();
+
+            // Store both files and directories
+            result.modificationTimes.insert(absolutePath, lastModifiedUtc);
+
+            if (fileInformation.isDir()) {
+                result.directoriesVisited += 1;
+            } else if (fileInformation.isFile()) {
+                result.filesVisited += 1;
+            }
+        }
+
+        return result;
+    };
+
+    QString convertedFilename = [](){
+        auto root = std::make_unique<cwRootData>();
+        auto filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+
+        root->project()->loadOrConvert(filename);
+        root->project()->waitLoadToFinish();
+        root->project()->waitSaveToFinish();
+
+        REQUIRE(root->project()->projectType(root->project()->filename()) == cwProject::GitFileType);
+
+        return root->project()->filename();
+    }();
+
+    auto initialLoad = scan(QFileInfo(convertedFilename).absolutePath());
+
+    auto project = std::make_unique<cwProject>();
+    project->loadFile(convertedFilename);
+    project->waitLoadToFinish();
+
+    auto load = scan(QFileInfo(convertedFilename).absolutePath());
+
+    CHECK(!initialLoad.modificationTimes.isEmpty());
+    CHECK(!load.modificationTimes.isEmpty());
+
+    CHECK(initialLoad.modificationTimes.size() == load.modificationTimes.size());
+
+    for(const auto& keyValue : load.modificationTimes.asKeyValueRange()) {
+        qDebug() << "File:" << keyValue.first << (initialLoad.modificationTimes.value(keyValue.first) == keyValue.second) << initialLoad.modificationTimes.value(keyValue.first) << keyValue.second;
+        INFO("Filename:" << keyValue.first);
+        CHECK(initialLoad.modificationTimes.contains(keyValue.first));
+        CHECK(initialLoad.modificationTimes.value(keyValue.first) == keyValue.second);
+        CHECK(keyValue.second.isValid());
+        CHECK(initialLoad.modificationTimes.value(keyValue.first).isValid());
     }
 }
 

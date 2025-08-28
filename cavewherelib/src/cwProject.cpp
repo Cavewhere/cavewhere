@@ -383,7 +383,9 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
                 if(!regionDataFuture.result().hasError()) {
                     setFilename(filename);
                     setTemporaryProject(false);
+                    m_saveLoad->setCavingRegion(nullptr); //Disable the auto saving
                     Region->setData(regionDataFuture.result().value());
+                    m_saveLoad->setCavingRegion(Region);
                     return ResultBase();
                 } else {
                     auto error = QStringLiteral("Error loading: %1 : %2").arg(filename, regionDataFuture.result().errorMessage());
