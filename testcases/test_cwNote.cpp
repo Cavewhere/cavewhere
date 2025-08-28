@@ -10,6 +10,7 @@
 #include "cwFutureManagerModel.h"
 #include "cwImageResolution.h"
 #include "cwNote.h"
+#include "cwCavingRegion.h"
 
 TEST_CASE("Note with zero DPI", "[cwNote]") {
     auto project = fileToProject("://datasets/test_cwNote/basic.cw");

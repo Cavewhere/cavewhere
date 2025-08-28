@@ -9,12 +9,13 @@
 #define CWXMLPROJECT_H
 
 //Our includes
-#include "cwTask.h"
+// #include "cwTask.h"
+// #include "GitRepository.h"
 #include "cwImage.h"
-#include "cwImageData.h"
+// #include "cwImageData.h"
 #include "cwGlobals.h"
-#include "cwRegionLoadResult.h"
-#include "cwError.h"
+// #include "cwRegionLoadResult.h"
+// #include "cwError.h"
 #include "cwFutureManagerToken.h"
 class cwCave;
 class cwCavingRegion;
@@ -27,6 +28,10 @@ class cwRegionSaveTask;
 class cwErrorListModel;
 class cwFutureManagerModel;
 class cwSaveLoad;
+
+namespace QQuickGit {
+class GitRepository;
+};
 
 //Qt includes
 #include <QSqlDatabase>
@@ -98,7 +103,7 @@ public:
     Q_INVOKABLE void waitLoadToFinish();
     void waitSaveToFinish();
 
-    Q_INVOKABLE bool isModified() const;
+    Q_INVOKABLE bool isModified();
 
 
     //Old cavewhere file handling
@@ -132,29 +137,31 @@ private:
      // QDir m_projectDir;
     cwSaveLoad* m_saveLoad;
 
-
-    //If this is a temp project directory on not
-    //Old save and load
-    bool TempProject;
-    // QString ProjectFile;
-    QSqlDatabase ProjectDatabase;
-    int FileVersion;
+    //save and load
+    QFuture<void> LoadFuture;
+    QFuture<void> SaveFuture;
 
     //The region that this project looks after
     cwCavingRegion* Region;
 
-    //Old save and load
-    QFuture<void> LoadFuture;
-    QFuture<void> SaveFuture;
-
     //The undo stack
     QUndoStack* UndoStack;
+
+    //Mark true if temp project
+    bool TempProject;
 
     //Task manager, for visualizing running tasks
     QPointer<cwTaskManagerModel> TaskManager;
     cwFutureManagerToken FutureToken; //!<
 
     cwErrorListModel* ErrorModel; //!<
+
+    //If this is a temp project directory on not
+    //Old save and load
+    // QString ProjectFile;
+    QSqlDatabase ProjectDatabase;
+    int FileVersion;
+
 
     //For keeping database connection unique
     static QAtomicInt ConnectionCounter;

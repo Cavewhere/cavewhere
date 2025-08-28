@@ -24,6 +24,7 @@
 #include <QVector2D>
 #include <QMatrix4x4>
 #include <QQmlEngine>
+#include <QModelIndex>
 
 //Our includes
 #include "cwStationPositionLookup.h"

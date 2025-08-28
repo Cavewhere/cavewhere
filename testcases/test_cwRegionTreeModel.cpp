@@ -9,6 +9,7 @@
 #include "cwCave.h"
 #include "cwNote.h"
 #include "cwSurveyNoteModel.h"
+#include "cwCavingRegion.h"
 
 TEST_CASE("cwRegionTreeModel all function should work correctly", "[cwRegionTreeModel]") {
 

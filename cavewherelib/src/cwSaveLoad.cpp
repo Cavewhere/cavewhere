@@ -95,12 +95,13 @@ struct cwSaveLoad::Data {
         bool execute() const {
             switch(action) {
             case Action::Rename:
-                rename();
+                return rename();
                 break;
             case Action::Remove:
-                remove();
+                return remove();
                 break;
             }
+            return false;
         }
     };
 
@@ -126,6 +127,7 @@ struct cwSaveLoad::Data {
         WaitingJob& operator=(const WaitingJob&) = delete;
     };
 
+    QQuickGit::GitRepository* repository;
 
     QString projectFileName;
 
@@ -320,6 +322,7 @@ cwSaveLoad::cwSaveLoad(QObject *parent) :
     d(std::make_unique<cwSaveLoad::Data>())
 {
     d->m_regionTreeModel = new cwRegionTreeModel(this);
+    d->repository = new QQuickGit::GitRepository(this);
 
     // newProject();
 
@@ -367,11 +370,6 @@ void cwSaveLoad::newProject()
                         //Create the temp directory
                         auto tempDir = createTemporaryDirectory(tempName);
 
-                        //Add repository
-                        QQuickGit::GitRepository repo;
-                        repo.setDirectory(tempDir);
-                        repo.initRepository();
-
                         //Save the project file
                         saveCavingRegion(tempDir, region);
 
@@ -379,7 +377,7 @@ void cwSaveLoad::newProject()
                         connectTreeModel();
 
                         setTemporary(true);
-                        setFileNameHelper(tempDir.absoluteFilePath(regionFileName(region)));
+                        setFileName(tempDir.absoluteFilePath(regionFileName(region)));
                     }
                 }).future();
     }
@@ -391,8 +389,15 @@ QString cwSaveLoad::fileName() const
 }
 
 void cwSaveLoad::setFileName(const QString &filename)
-{
-    d->projectFileName = filename;
+{  
+    if(d->projectFileName != filename) {
+        d->projectFileName = filename;
+
+        d->repository->setDirectory(QFileInfo(filename).absoluteDir());
+        d->repository->initRepository();
+
+        emit fileNameChanged();
+    }
 }
 
 void cwSaveLoad::setCavingRegion(cwCavingRegion *region)
@@ -408,6 +413,11 @@ const cwCavingRegion *cwSaveLoad::cavingRegion() const
 void cwSaveLoad::setSaveEnabled(bool enabled)
 {
     d->saveEnabled = enabled;
+}
+
+QQuickGit::GitRepository *cwSaveLoad::repository() const
+{
+    return d->repository;
 }
 
 QFuture<ResultBase> cwSaveLoad::saveCavingRegion(const QDir &dir, const cwCavingRegion *region)
@@ -1477,13 +1487,17 @@ void cwSaveLoad::connectScrap(cwScrap *scrap)
 }
 
 
-void cwSaveLoad::setFileNameHelper(const QString &fileName)
-{
-    if(d->projectFileName != fileName) {
-        d->projectFileName = fileName;
-        emit fileNameChanged();
-    }
-}
+// void cwSaveLoad::setFileNameHelper(const QString &fileName)
+// {
+//     if(d->projectFileName != fileName) {
+//         d->projectFileName = fileName;
+
+//         d->repository->setDirectory(QFileInfo(fileName).absoluteDir());
+//         d->repository->initRepository();
+
+//         emit fileNameChanged();
+//     }
+// }
 
 
 void cwSaveLoad::setTemporary(bool isTemp)

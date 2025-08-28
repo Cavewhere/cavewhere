@@ -76,6 +76,10 @@ namespace google::protobuf {
 class Message;
 }
 
+namespace QQuickGit {
+class GitRepository;
+}
+
 //Monad includes
 #include <Monad/Result.h>
 
@@ -108,6 +112,8 @@ public:
     const cwCavingRegion* cavingRegion() const;
 
     void setSaveEnabled(bool enabled);
+
+    QQuickGit::GitRepository* repository() const;
 
     QFuture<Monad::ResultString> saveAllFromV6(const QDir& dir, const cwProject* region, const QString& projectFileName);
 
@@ -180,7 +186,7 @@ private:
     void connectScrap(cwScrap* scrap);
     // void disconnectScrap(cwScrap* scrap);
 
-    void setFileNameHelper(const QString& fileName);
+    // void setFileNameHelper(const QString& fileName);
     void setTemporary(bool isTemp);
 
     // QString

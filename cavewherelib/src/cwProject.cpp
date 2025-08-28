@@ -27,6 +27,9 @@
 #include "cwConcurrent.h"
 #include "cwSaveLoad.h"
 
+//Quick Git
+#include <GitRepository.h>
+
 //Qt includes
 #include <QDir>
 #include <QTime>
@@ -59,7 +62,6 @@ QAtomicInt cwProject::ConnectionCounter;
 cwProject::cwProject(QObject* parent) :
     QObject(parent),
     m_saveLoad(new cwSaveLoad(this)),
-    TempProject(true),
     FileVersion(cwRegionIOTask::protoVersion()),
     Region(new cwCavingRegion(this)),
     UndoStack(new QUndoStack(this)),
@@ -573,6 +575,7 @@ void cwProject::loadFile(QString filename) {
 void cwProject::setFilename(QString newFilename) {
     if(newFilename != filename()) {
         m_saveLoad->setFileName(newFilename);
+
         emit filenameChanged(newFilename);
     }
 }
@@ -675,12 +678,16 @@ void cwProject::waitSaveToFinish()
 /**
  * Returns true if the user has modified the file, and false if haven't
  */
-bool cwProject::isModified() const
-{
+bool cwProject::isModified()
+{;
+    m_saveLoad->waitForFinished();
+    m_saveLoad->repository()->checkStatus();
+    return m_saveLoad->repository()->modifiedFileCount() > 0;
 
-    qDebug() << "TODO fix isModified!";
 
-    return true;
+    // qDebug() << "TODO fix isModified!";
+
+    // return true;
 
     // cwRegionSaveTask saveTask;
     // QByteArray saveData = saveTask.serializedData(Region);
