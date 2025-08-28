@@ -442,7 +442,7 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
 
         auto combine = AsyncFuture::combine() << allFutures;
 
-        auto finalFuture = combine.subscribe([this, dirtyScraps, allFutures]()
+        auto finalFuture = combine.context(this, [this, dirtyScraps, allFutures]()
         {
             auto scrapDatas = cw::transform(allFutures,
                                             [](const QFuture<cwTriangulatedData>& data)

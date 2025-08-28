@@ -281,28 +281,28 @@ void cwProject::addImageHelper(std::function<void (QList<cwImage>)> outputCallBa
     FutureToken.addJob({QFuture<void>(imagesFuture), "Adding Image"});
 
     AsyncFuture::observe(imagesFuture)
-            .context(this, [this, imagesFuture, outputCallBackFunc, format, setImagesFunc]()
-    {
-        if(cwTextureUploadTask::format() != format) {
-            //Format has changed, re-run (this isn't true recursion)
-            addImageHelper(outputCallBackFunc, setImagesFunc);
-            return;
-        }
+        .context(this, [this, imagesFuture, outputCallBackFunc, format, setImagesFunc]()
+                 {
+                     if(cwTextureUploadTask::format() != format) {
+                         //Format has changed, re-run (this isn't true recursion)
+                         addImageHelper(outputCallBackFunc, setImagesFunc);
+                         return;
+                     }
 
-        //Convert the images to cwImage
-        auto results = imagesFuture.results();
-        QList<cwImage> images = cw::transform(results, [](const cwTrackedImagePtr& imagePtr)
-        {
-            if(imagePtr) {
-                return imagePtr->take();
-            } else {
-                qDebug() << "FIXME: imagePtr is null" << LOCATION;
-                return cwImage();
-            }
-        });
+                     //Convert the images to cwImage
+                     auto results = imagesFuture.results();
+                     QList<cwImage> images = cw::transform(results, [](const cwTrackedImagePtr& imagePtr)
+                                                           {
+                                                               if(imagePtr) {
+                                                                   return imagePtr->take();
+                                                               } else {
+                                                                   qDebug() << "FIXME: imagePtr is null" << LOCATION;
+                                                                   return cwImage();
+                                                               }
+                                                           });
 
-        outputCallBackFunc(images);
-    });
+                     outputCallBackFunc(images);
+                 });
 }
 
 QFuture<ResultBase> cwProject::loadHelper(QString filename)
@@ -317,6 +317,8 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
     filename = cwGlobals::convertFromURL(filename);
 
     if(type == SqliteFileType) {
+
+
         //Run the load task async
         auto loadFuture = cwConcurrent::run([filename](){
             cwRegionLoadTask loadTask;
@@ -327,6 +329,9 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
         FutureToken.addJob({QFuture<void>(loadFuture), QStringLiteral("Loading")});
 
         auto updateRegion = [this, filename](const cwRegionLoadResult& result) {
+            //Disable the m_saveLoad
+            m_saveLoad->setCavingRegion(nullptr);
+
             setFilename(result.filename());
             setTemporaryProject(result.isTempFile());
             Region->setData(result.cavingRegion());
@@ -340,6 +345,8 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
                      {
                          auto result = loadFuture.result();
 
+
+
                          if(result.errors().isEmpty()) {
                              updateRegion(result);
                          } else {
@@ -350,8 +357,8 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
                                  updateRegion(result);
                              } else {
                                  auto errorRange = result.errors()
-                                            | std::views::filter(cwError::isFatal)
-                                            | std::views::transform([](const cwError& error)->QString { return error.message(); });
+                                 | std::views::filter(cwError::isFatal)
+                                     | std::views::transform([](const cwError& error)->QString { return error.message(); });
 
                                  fatalErrors = QStringList(errorRange.begin(), errorRange.end()).join('\n');
                              }
@@ -414,10 +421,10 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
     auto loadTempProjectFuture =
         AsyncFuture::observe(oldLoadFuture)
             .context(this, [this, oldLoadFuture, tempProject, oldProjectFilename, newProjectDirectory]() {
-                                         qDebug() << "oldLoadFuture:" << oldLoadFuture.result().hasError() << oldLoadFuture.result().errorMessage();
+                qDebug() << "oldLoadFuture:" << oldLoadFuture.result().hasError() << oldLoadFuture.result().errorMessage();
 
                 return mbind(oldLoadFuture, [=, this](const ResultBase& result){
-                                             qDebug() << "Save";
+                    qDebug() << "Save";
 
                     //Use a shared pointer here, too keep saveLoad alive until, the project is fully saved
                     auto saveLoad = std::make_shared<cwSaveLoad>();
@@ -739,12 +746,12 @@ void cwProject::addImages(QList<QUrl> noteImagePaths,
 
         AsyncFuture::observe(future).context(this, [this, future, outputCallBackFunc](){
             auto images = future.results();
-                addImageHelper(outputCallBackFunc,
-                               [images](cwAddImageTask* task)
-                               {
-                                   task->setNewImages(images);
-                               });
-            });
+            addImageHelper(outputCallBackFunc,
+                           [images](cwAddImageTask* task)
+                           {
+                               task->setNewImages(images);
+                           });
+        });
     }
 }
 
@@ -790,9 +797,9 @@ QString cwProject::supportedImageFormats()
     QStringList withWildCards;
     std::transform(formats.begin(), formats.end(), std::back_inserter(withWildCards),
                    [](const QString& format)
-    {
-        return "*." + format;
-    });
+                   {
+                       return "*." + format;
+                   });
 
     return withWildCards.join(' ');
 }
@@ -804,27 +811,27 @@ void cwProject::convertFromProjectV6(QString oldProjectFilename,
     //Make a temporary project
     auto tempProject = std::make_shared<cwProject>();
     auto loadTempProjectFuture = AsyncFuture::observe(tempProject.get(), &cwProject::loaded)
-        .context(this, [this, tempProject, oldProjectFilename, newProjectDirectory]()->QFuture<ResultBase> {
+                                     .context(this, [this, tempProject, oldProjectFilename, newProjectDirectory]()->QFuture<ResultBase> {
 
-            //Use a shared pointer here, too keep saveLoad alive until, the project is fully saved
-            auto saveLoad = std::make_shared<cwSaveLoad>();
-            auto filenameFuture = saveLoad->saveAllFromV6(newProjectDirectory, tempProject.get());
-            qDebug() << "I get here!";
+                                         //Use a shared pointer here, too keep saveLoad alive until, the project is fully saved
+                                         auto saveLoad = std::make_shared<cwSaveLoad>();
+                                         auto filenameFuture = saveLoad->saveAllFromV6(newProjectDirectory, tempProject.get());
+                                         qDebug() << "I get here!";
 
-            auto loadFuture = AsyncFuture::observe(filenameFuture)
-                                  .context(this, [saveLoad, filenameFuture, this]() {                                      
-                                      if(!filenameFuture.result().hasError()) {
-                                          //Load the project into this cwProject
-                                          qDebug() << "Loading project:" << filenameFuture.result().value();
-                                          return loadHelper(filenameFuture.result().value());
-                                      } else {
-                                          return QtFuture::makeReadyValueFuture<ResultBase>(filenameFuture.result());
-                                      }
-                                  }).future();
+                                         auto loadFuture = AsyncFuture::observe(filenameFuture)
+                                                               .context(this, [saveLoad, filenameFuture, this]() {
+                                                                   if(!filenameFuture.result().hasError()) {
+                                                                       //Load the project into this cwProject
+                                                                       qDebug() << "Loading project:" << filenameFuture.result().value();
+                                                                       return loadHelper(filenameFuture.result().value());
+                                                                   } else {
+                                                                       return QtFuture::makeReadyValueFuture<ResultBase>(filenameFuture.result());
+                                                                   }
+                                                               }).future();
 
-            FutureToken.addJob(cwFuture(QFuture<void>(loadFuture), QStringLiteral("Converting")));
-            return loadFuture;
-        }).future();
+                                         FutureToken.addJob(cwFuture(QFuture<void>(loadFuture), QStringLiteral("Converting")));
+                                         return loadFuture;
+                                     }).future();
 
     FutureToken.addJob(cwFuture(QFuture<void>(loadTempProjectFuture), QStringLiteral("Loading")));
 

@@ -55,23 +55,30 @@ QList<QFuture<cwTriangulatedData>> cwTriangulateTask::triangulate() const
                        {
 
                            cwTextureUploadTask uploadTask;
-                           cwImage croppedImage = *(cropFuture.result());
-                           uploadTask.setImage(croppedImage);
-                           uploadTask.setProjectFilename(projectFilename);
-                           uploadTask.setType(cwTextureUploadTask::OpenGL_RGBA);
-                           auto uploadFuture = uploadTask.mipmaps();
+                           auto croppedImagePtr = cropFuture.result();
 
-                           return AsyncFuture::observe(uploadFuture)
-                               .subscribe(
-                                   [scrap, cropFuture, uploadFuture]() {
+                           if(croppedImagePtr) {
+                               cwImage croppedImage = *(cropFuture.result());
+                               uploadTask.setImage(croppedImage);
+                               uploadTask.setProjectFilename(projectFilename);
+                               uploadTask.setType(cwTextureUploadTask::OpenGL_RGBA);
+                               auto uploadFuture = uploadTask.mipmaps();
 
-                                       return cwConcurrent::run([scrap, cropFuture, uploadFuture]()
-                                                                {
-                                                                    return triangulateGeometry(scrap,
-                                                                                               cropFuture.result(),
-                                                                                               uploadFuture.result());
-                                                                });
-                                   }).future();
+                               return AsyncFuture::observe(uploadFuture)
+                                   .subscribe(
+                                       [scrap, cropFuture, uploadFuture]() {
+
+                                           return cwConcurrent::run([scrap, cropFuture, uploadFuture]()
+                                                                    {
+                                                                        return triangulateGeometry(scrap,
+                                                                                                   cropFuture.result(),
+                                                                                                   uploadFuture.result());
+                                                                    });
+                                       }).future();
+                           }
+
+                           qDebug() << "Problem cropping image, does it not exist";
+                           return QtFuture::makeReadyValueFuture(cwTriangulatedData());
 
                        }).future();
     };
@@ -729,10 +736,10 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
             return profileStations;
         }
 
-//        //Figure out which stations are visible to this point
-//        stations = stationsVisibleToPoint(notePoints[i],
-//                                          scrapData.stations(),
-//                                          scrapData.outline());
+        //        //Figure out which stations are visible to this point
+        //        stations = stationsVisibleToPoint(notePoints[i],
+        //                                          scrapData.stations(),
+        //                                          scrapData.outline());
 
 
         return stations;
@@ -1108,8 +1115,8 @@ bool cwTriangulateTask::PointGrid::intersects(const cwTriangulateTask::Quad& qua
 bool cwTriangulateTask::PointGrid::quadContainInsideOfPolygon(const cwTriangulateTask::Quad& quad, const QPolygonF &polygon) const
 {
     return polygon.containsPoint(Points.at(quad.topLeft()), Qt::OddEvenFill) &&
-            polygon.containsPoint(Points.at(quad.topRight()), Qt::OddEvenFill) &&
-            polygon.containsPoint(Points.at(quad.bottomLeft()), Qt::OddEvenFill) &&
-            polygon.containsPoint(Points.at(quad.bottomRight()), Qt::OddEvenFill);
+           polygon.containsPoint(Points.at(quad.topRight()), Qt::OddEvenFill) &&
+           polygon.containsPoint(Points.at(quad.bottomLeft()), Qt::OddEvenFill) &&
+           polygon.containsPoint(Points.at(quad.bottomRight()), Qt::OddEvenFill);
 }
 
