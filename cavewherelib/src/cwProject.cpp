@@ -71,7 +71,6 @@ cwProject::cwProject(QObject* parent) :
     connect(m_saveLoad, &cwSaveLoad::isTemporaryProjectChanged, this, &cwProject::isTemporaryProjectChanged);
 
     newProject();
-
 }
 
 cwProject::~cwProject()
@@ -266,46 +265,46 @@ void cwProject::setTemporaryProject(bool isTemp)
     }
 }
 
-void cwProject::addImageHelper(std::function<void (QList<cwImage>)> outputCallBackFunc,
-                               std::function<void (cwAddImageTask *)> setImagesFunc)
-{
-    auto format = cwTextureUploadTask::format();
+// void cwProject::addImageHelper(std::function<void (QList<cwImage>)> outputCallBackFunc,
+//                                std::function<void (cwAddImageTask *)> setImagesFunc)
+// {
+//     auto format = cwTextureUploadTask::format();
 
-    cwAddImageTask addImageTask;
-    // addImageTask.setDatabaseFilename(filename());
-    addImageTask.setImageTypesWithFormat(format);
+//     cwAddImageTask addImageTask;
+//     // addImageTask.setDatabaseFilename(filename());
+//     addImageTask.setImageTypesWithFormat(format);
 
-    //Set all the noteImagePath
-    setImagesFunc(&addImageTask);
+//     //Set all the noteImagePath
+//     setImagesFunc(&addImageTask);
 
-    auto imagesFuture = addImageTask.images();
+//     auto imagesFuture = addImageTask.images();
 
-    FutureToken.addJob({QFuture<void>(imagesFuture), "Adding Image"});
+//     FutureToken.addJob({QFuture<void>(imagesFuture), "Adding Image"});
 
-    AsyncFuture::observe(imagesFuture)
-        .context(this, [this, imagesFuture, outputCallBackFunc, format, setImagesFunc]()
-                 {
-                     if(cwTextureUploadTask::format() != format) {
-                         //Format has changed, re-run (this isn't true recursion)
-                         addImageHelper(outputCallBackFunc, setImagesFunc);
-                         return;
-                     }
+//     AsyncFuture::observe(imagesFuture)
+//         .context(this, [this, imagesFuture, outputCallBackFunc, format, setImagesFunc]()
+//                  {
+//                      if(cwTextureUploadTask::format() != format) {
+//                          //Format has changed, re-run (this isn't true recursion)
+//                          addImageHelper(outputCallBackFunc, setImagesFunc);
+//                          return;
+//                      }
 
-                     //Convert the images to cwImage
-                     auto results = imagesFuture.results();
-                     QList<cwImage> images = cw::transform(results, [](const cwTrackedImagePtr& imagePtr)
-                                                           {
-                                                               if(imagePtr) {
-                                                                   return imagePtr->take();
-                                                               } else {
-                                                                   qDebug() << "FIXME: imagePtr is null" << LOCATION;
-                                                                   return cwImage();
-                                                               }
-                                                           });
+//                      //Convert the images to cwImage
+//                      auto results = imagesFuture.results();
+//                      QList<cwImage> images = cw::transform(results, [](const cwTrackedImagePtr& imagePtr)
+//                                                            {
+//                                                                if(imagePtr) {
+//                                                                    return imagePtr->take();
+//                                                                } else {
+//                                                                    qDebug() << "FIXME: imagePtr is null" << LOCATION;
+//                                                                    return cwImage();
+//                                                                }
+//                                                            });
 
-                     outputCallBackFunc(images);
-                 });
-}
+//                      outputCallBackFunc(images);
+//                  });
+// }
 
 QFuture<ResultBase> cwProject::loadHelper(QString filename)
 {
@@ -707,59 +706,18 @@ bool cwProject::isModified()
     // return saveData != currentData;
 }
 
+/**
+ * @brief cwProject::addImages
+ * @param noteImagePaths - Source location of the images
+ * @param dir - The destination dir of the image
+ * @param outputCallBackFunc - once the
+ *
+ */
 void cwProject::addImages(QList<QUrl> noteImagePaths,
+                          const QDir& dir,
                           std::function<void (QList<cwImage>)> outputCallBackFunc)
 {
-    auto isPDF = [](const QString& path) {
-        if(cwPDFConverter::isSupported()) {
-            QFileInfo info(path);
-            return info.suffix().compare("pdf", Qt::CaseInsensitive) == 0;
-        }
-        return false;
-    };
-
-    //Sort by images and pdf, pdf's last, but heemp the same image order
-    QVector<QString> images;
-    QVector<QString> pdfs;
-    images.reserve(noteImagePaths.size());
-    pdfs.reserve(noteImagePaths.size());
-    for(const QUrl& url : noteImagePaths) {
-        QString path = url.toLocalFile();
-        if(isPDF(path)) {
-            pdfs.append(path);
-        } else {
-            //Normal image
-            images.append(path);
-        }
-    }
-
-    //Add all the images
-    addImageHelper(outputCallBackFunc,
-                   [images](cwAddImageTask* task)
-                   {
-                       task->setNewImagesPath(images);
-                   });
-
-    //Add all the PDFS
-    for(const auto& pdf : pdfs) {
-        //Convert pdf to images
-        cwPDFConverter converter;
-        converter.setSource(pdf);
-        converter.setResolution(cwPDFSettings::instance()->resolutionImport());
-
-        auto future = converter.convert();
-
-        FutureToken.addJob({QFuture<void>(future), "Converting PDF"});
-
-        AsyncFuture::observe(future).context(this, [this, future, outputCallBackFunc](){
-            auto images = future.results();
-            addImageHelper(outputCallBackFunc,
-                           [images](cwAddImageTask* task)
-                           {
-                               task->setNewImages(images);
-                           });
-        });
-    }
+    m_saveLoad->addImages(noteImagePaths, dir, outputCallBackFunc);
 }
 
 void cwProject::loadOrConvert(const QString &filename)
@@ -903,8 +861,9 @@ void cwProject::setUndoStack(QUndoStack *undoStack) {
     }
 }
 
-void cwProject::setFutureManagerToken(cwFutureManagerToken token) {
+void cwProject::setFutureManagerToken(const cwFutureManagerToken &token) {
     FutureToken = token;
+    m_saveLoad->setFutureManagerToken(token);
 }
 
 cwFutureManagerToken cwProject::futureManagerToken() const {

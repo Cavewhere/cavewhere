@@ -33,8 +33,10 @@ QDebug operator<<(QDebug debug, const cwImage &image)
     QDebugStateSaver saver(debug);
     if(image.mode() == cwImage::Mode::Ids) {
         debug.nospace() << "original:" << image.original() << " icon:" << image.icon() << " mipmaps:" << image.mipmaps() << " size:" << image.originalSize() << " dotPerMeter:" << image.originalDotsPerMeter();;
-    }  else {
+    } else if(image.mode() == cwImage::Mode::Path) {
         debug.nospace() << "path:" << image.path() << " size:" << image.originalSize() << " dotPerMeter:" << image.originalDotsPerMeter();
+    } else {
+        debug.nospace() << "cwImage isn't valid";
     }
     return debug;
 }

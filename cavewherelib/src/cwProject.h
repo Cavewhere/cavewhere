@@ -81,7 +81,7 @@ public:
     void setUndoStack(QUndoStack* undoStack);
 
     cwFutureManagerToken futureManagerToken() const;
-    void setFutureManagerToken(cwFutureManagerToken futureManagerToken);
+    void setFutureManagerToken(const cwFutureManagerToken& futureManagerToken);
 
     cwErrorListModel* errorModel() const;
 
@@ -114,7 +114,9 @@ public:
     bool canSaveDirectly() const;
     bool isTemporaryProject() const;
 
-    void addImages(QList<QUrl> noteImagePath, std::function<void (QList<cwImage> images)> func);
+    void addImages(QList<QUrl> noteImagePath,
+                   const QDir &dir,
+                   std::function<void (QList<cwImage> images)> func);
 
     void loadOrConvert(const QString& filename);
 
@@ -179,8 +181,8 @@ private:
     bool saveWillCauseDataLoss() const;
     void setTemporaryProject(bool isTemp);
 
-    void addImageHelper(std::function<void (QList<cwImage>)> outputCallBackFunc,
-                        std::function<void (cwAddImageTask*)> setImagesFunc);
+    // void addImageHelper(std::function<void (QList<cwImage>)> outputCallBackFunc,
+    //                     std::function<void (cwAddImageTask*)> setImagesFunc);
 
     QFuture<Monad::ResultBase> loadHelper(QString filename);
     QFuture<Monad::ResultBase> convertFromProjectV6Helper(QString oldProjectFilename,

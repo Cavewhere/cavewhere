@@ -30,6 +30,7 @@ class cwCavingRegion;
 class cwProject;
 #include "cwCavingRegionData.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
+#include "cwFutureManagerToken.h"
 
 //Google protobuffer
 namespace CavewhereProto {
@@ -105,7 +106,7 @@ public:
     void setFileName(const QString& filename);
 
     // void setRootDir(const QDir& rootDir);
-    QDir rootDir() const;
+    // QDir rootDir() const;
 
     //Save when ever data has changed (remove save / load?)
     void setCavingRegion(cwCavingRegion *region);
@@ -114,6 +115,9 @@ public:
     void setSaveEnabled(bool enabled);
 
     QQuickGit::GitRepository* repository() const;
+
+    cwFutureManagerToken futureManagerToken() const;
+    void setFutureManagerToken(const cwFutureManagerToken& futureManagerToken);
 
     QFuture<Monad::ResultString> saveAllFromV6(const QDir& dir, const cwProject* region, const QString& projectFileName);
 
@@ -133,11 +137,16 @@ public:
 
     QFuture<Monad::ResultBase> save(const QDir& dir, const cwTrip* trip);
 
+    void addImages(QList<QUrl> noteImagePaths,
+                   const QDir& dir,
+                   std::function<void (QList<cwImage>)> outputCallBackFunc);
+
 
     //Returns the relative path to the project
     // static QString projectFileName(const cwProject* project);
     // static QString projectAbsolutePath(const cwProject* project);
     static QDir projectDir(const cwProject* project);
+    QDir projectDir() const;
 
     static QString regionFileName(const cwCavingRegion* region);
 
@@ -148,6 +157,8 @@ public:
     static QString fileName(const cwTrip* trip);
     static QString absolutePath(const cwTrip* trip);
     static QDir dir(const cwTrip* trip);
+
+    static QDir dir(cwSurveyNoteModel* notes);
 
     static QString fileName(const cwNote* note);
     static QString absolutePath(const cwNote* note);

@@ -7,12 +7,15 @@
 
 //Our inculdes
 #include "cwSurveyNoteModel.h"
+#include "cwDebug.h"
 #include "cwProject.h"
 #include "cwImageProvider.h"
 #include "cwTrip.h"
 #include "cwNote.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
+#include "cwSaveLoad.h"
+#include "cwConcurrent.h"
 
 //Qt includes
 #include <QDebug>
@@ -83,6 +86,7 @@ QList<cwNote *> cwSurveyNoteModel::validateNoteImages(QList<cwNote *> notes) con
             if(note->image().isValid()) {
                 validNotes.append(note);
             } else {
+                qWarning() << "Note image note valid, removing" << LOCATION;
                 note->deleteLater();
             }
         }
@@ -115,7 +119,6 @@ QVariant cwSurveyNoteModel::data(const QModelIndex &index, int role) const {
         cwImage imagePath = Notes[row]->image();
         return cwImageProvider::imageUrl(imagePath.path());
 
-
         //Get's the icon for the note
         // cwImage imagePath = Notes[row]->image();
         // return cwImageProvider::imageUrl(imagePath.icon());
@@ -146,8 +149,8 @@ QVariant cwSurveyNoteModel::data(const QModelIndex &index, int role) const {
   project.
   */
 void cwSurveyNoteModel::addFromFiles(QList<QUrl> files) {
-
     project()->addImages(files,
+                         cwSaveLoad::dir(this),
                          [this](QList<cwImage> notes)
     {
         addNotesWithNewImages(notes);
