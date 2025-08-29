@@ -1345,22 +1345,11 @@ cwLength::Data cwSaveLoad::fromProtoLength(const CavewhereProto::Length &protoLe
 
 void cwSaveLoad::waitForFinished()
 {
-
-    // auto waitOnRunningJobs = [this]() {
     cwFutureManagerModel model;
     auto saveJobs = completeSaveJobs();
     model.addJob(cwFuture(saveJobs, QStringLiteral()));
     model.addJob(cwFuture(d->newFileFuture, QStringLiteral()));
     model.waitForFinished();
-    //     }
-    // };
-
-    // AsyncFuture::observe(d->newFileFuture)
-    //     .context(this, waitOnRunningJobs)
-    //     .future();
-
-    // waitOnRunningJobs();
-    // waitOnRunningJobs();
 }
 
 void cwSaveLoad::disconnectTreeModel()
