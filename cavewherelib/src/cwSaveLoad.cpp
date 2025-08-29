@@ -400,33 +400,6 @@ void cwSaveLoad::newProject()
                 setFileName(tempDir.absoluteFilePath(regionFileName(region)));
             }
         });
-
-        // d->newFileFuture =
-        //     AsyncFuture::observe(future)
-        //         .context(this, [this]() {
-        //             //Clear the current data
-        //             auto region = d->m_regionTreeModel->cavingRegion();
-
-        //             if(region) [[likely]] {
-        //                 region->clearCaves();
-
-        //                 //Rename the region
-        //                 const auto tempName = randomName();
-        //                 region->setName(tempName);
-
-        //                 //Create the temp directory
-        //                 auto tempDir = createTemporaryDirectory(tempName);
-
-        //                 //Save the project file
-        //                 saveCavingRegion(tempDir, region);
-
-        //                 //Connect all for watching for saves
-        //                 connectTreeModel();
-
-        //                 setTemporary(true);
-        //                 setFileName(tempDir.absoluteFilePath(regionFileName(region)));
-        //             }
-        //         }).future();
     }
 }
 
@@ -1964,7 +1937,7 @@ QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
 
         auto future = cwConcurrent::run([filename, message = std::move(message)]() {
 
-            //enable this to simulate slow saves
+            //enable this to simulate slow saves, good for debugging thread code
             // QThread::currentThread()->msleep(100);
 
             return mbind(ensurePathForFile(filename), [&](ResultBase /*result*/) {

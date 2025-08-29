@@ -87,13 +87,6 @@ TEST_CASE("Image data should save and load correctly", "[cwProject]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
 
-    project->waitSaveToFinish();
-
-    //Fixme: this was calling saveAs
-    // REQUIRE(false);
-
-    // project->saveAs(prependTempFolder("imageTest-" + QUuid::createUuid().toString().left(5)));
-
     auto region = project->cavingRegion();
     region->addCave();
     auto cave = region->cave(0);
@@ -162,7 +155,8 @@ TEST_CASE("Images should load correctly", "[cwProject]") {
 
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
-    project->waitSaveToFinish();
+
+    CHECK(cwSaveLoad::projectDir(project).isAbsolute());
 
     int checked = 0;
     project->addImages(filenames, cwSaveLoad::projectDir(project), [&checked, testImages, project, size](QList<cwImage> images){
@@ -369,7 +363,6 @@ TEST_CASE("Test save changes", "[cwProject]") {
         auto project = std::make_unique<cwProject>();
         project->waitSaveToFinish();
 
-        INFO("Project name:" << project->filename().toStdString());
         CHECK(project->isTemporaryProject());
         CHECK(QFileInfo::exists(project->filename()));
 
@@ -1376,7 +1369,6 @@ TEST_CASE("Note and Scrap persistence", "[cwProject][cwTrip][cwSurveyNoteModel][
         project->waitSaveToFinish();
 
         // --- Edits (note + scrap) ---
-        qDebug() << "========= Rename to Final Name! ===========";
         note->setName(QStringLiteral("Final Name"));
         note->setRotate(33.0);
         cwImage img2;
@@ -1392,8 +1384,6 @@ TEST_CASE("Note and Scrap persistence", "[cwProject][cwTrip][cwSurveyNoteModel][
         scrap->setCalculateNoteTransform(false);
 
         project->waitSaveToFinish();
-        qDebug() << "========= Finish! ===========";
-        qDebug() << "Finished:" << project->filename();
 
         // --- Reload and verify edits (last write wins) ---
         auto reloaded = std::make_unique<cwProject>();
@@ -1425,10 +1415,8 @@ TEST_CASE("Note and Scrap persistence", "[cwProject][cwTrip][cwSurveyNoteModel][
         CHECK(loadedScrap1->calculateNoteTransform() == false);
 
         // --- Remove the scrap and verify persistence of removal ---
-        qDebug() << "Removing scrap!";
         note->removeScraps(0, 0);
         project->waitSaveToFinish();
-        qDebug() << "Finish removing scrap";
 
 
         auto reloaded2 = std::make_unique<cwProject>();
@@ -1546,7 +1534,6 @@ TEST_CASE("cwProject should overwrite or touch loaded project", "[cwProject]") {
         project->waitSaveToFinish();
 \
         auto tripPath = cwSaveLoad::absolutePath(trip);
-        qDebug() << "Trip Path:" << tripPath;
         auto modifiedLoad = scan(QFileInfo(convertedFilename).absolutePath());
 
         //Trip's data change should show up as different
