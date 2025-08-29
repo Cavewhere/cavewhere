@@ -154,6 +154,9 @@ struct cwSaveLoad::Data {
 
     cwFutureManagerToken futureToken;
 
+    //This is for bug checking, should be removed
+    bool clearingWait = false;
+
     static QList<cwSurveyChunkData> fromProtoSurveyChunks(const google::protobuf::RepeatedPtrField<CavewhereProto::SurveyChunk> & protoList);
 
     static ResultBase ensurePathForFile(const QString& filePath) {
@@ -373,32 +376,57 @@ void cwSaveLoad::newProject()
         //Wait for jobs to complete
         auto future = completeSaveJobs();
 
-        d->newFileFuture =
-            AsyncFuture::observe(future)
-                .context(this, [this]() {
-                    //Clear the current data
-                    auto region = d->m_regionTreeModel->cavingRegion();
+        d->newFileFuture = future.then(this, [this]() {
+            //Clear the current data
+            auto region = d->m_regionTreeModel->cavingRegion();
 
-                    if(region) [[likely]] {
-                        region->clearCaves();
+            if(region) [[likely]] {
+                region->clearCaves();
 
-                        //Rename the region
-                        const auto tempName = randomName();
-                        region->setName(tempName);
+                //Rename the region
+                const auto tempName = randomName();
+                region->setName(tempName);
 
-                        //Create the temp directory
-                        auto tempDir = createTemporaryDirectory(tempName);
+                //Create the temp directory
+                auto tempDir = createTemporaryDirectory(tempName);
 
-                        //Save the project file
-                        saveCavingRegion(tempDir, region);
+                //Save the project file
+                saveCavingRegion(tempDir, region);
 
-                        //Connect all for watching for saves
-                        connectTreeModel();
+                //Connect all for watching for saves
+                connectTreeModel();
 
-                        setTemporary(true);
-                        setFileName(tempDir.absoluteFilePath(regionFileName(region)));
-                    }
-                }).future();
+                setTemporary(true);
+                setFileName(tempDir.absoluteFilePath(regionFileName(region)));
+            }
+        });
+
+        // d->newFileFuture =
+        //     AsyncFuture::observe(future)
+        //         .context(this, [this]() {
+        //             //Clear the current data
+        //             auto region = d->m_regionTreeModel->cavingRegion();
+
+        //             if(region) [[likely]] {
+        //                 region->clearCaves();
+
+        //                 //Rename the region
+        //                 const auto tempName = randomName();
+        //                 region->setName(tempName);
+
+        //                 //Create the temp directory
+        //                 auto tempDir = createTemporaryDirectory(tempName);
+
+        //                 //Save the project file
+        //                 saveCavingRegion(tempDir, region);
+
+        //                 //Connect all for watching for saves
+        //                 connectTreeModel();
+
+        //                 setTemporary(true);
+        //                 setFileName(tempDir.absoluteFilePath(regionFileName(region)));
+        //             }
+        //         }).future();
     }
 }
 
@@ -1317,23 +1345,22 @@ cwLength::Data cwSaveLoad::fromProtoLength(const CavewhereProto::Length &protoLe
 
 void cwSaveLoad::waitForFinished()
 {
-    auto waitOnRunningJobs = [this]() {
-        cwFutureManagerModel model;
-        for(auto it = d->m_runningJobs.begin();
-             it != d->m_runningJobs.end();
-             ++it)
-        {
-            model.addJob(cwFuture(QFuture<void>(it.value()), QStringLiteral()));
-        }
-        model.addJob(cwFuture(d->newFileFuture, QStringLiteral()));
-        model.waitForFinished();
-    };
 
-    auto future = AsyncFuture::observe(d->newFileFuture)
-                      .context(this, waitOnRunningJobs)
-                      .future();
+    // auto waitOnRunningJobs = [this]() {
+    cwFutureManagerModel model;
+    auto saveJobs = completeSaveJobs();
+    model.addJob(cwFuture(saveJobs, QStringLiteral()));
+    model.addJob(cwFuture(d->newFileFuture, QStringLiteral()));
+    model.waitForFinished();
+    //     }
+    // };
 
-    waitOnRunningJobs();
+    // AsyncFuture::observe(d->newFileFuture)
+    //     .context(this, waitOnRunningJobs)
+    //     .future();
+
+    // waitOnRunningJobs();
+    // waitOnRunningJobs();
 }
 
 void cwSaveLoad::disconnectTreeModel()
@@ -1932,6 +1959,7 @@ QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
     //Make sure we're not saving to the same file at the same time
     if (m_runningJobs.contains(filename) || !m_fileSystemJobs.isEmpty()) {
 
+        Q_ASSERT(!clearingWait);
         qDebug() << "\twaiting runningJob:" << m_runningJobs.contains(filename) << "rename:" << !m_fileSystemJobs.isEmpty();
 
         auto deferred = AsyncFuture::Deferred<ResultBase>();
@@ -1946,6 +1974,9 @@ QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
     } else {
 
         auto future = cwConcurrent::run([filename, message = std::move(message)]() {
+
+            //enable this to simulate slow saves
+            // QThread::currentThread()->msleep(100);
 
             return mbind(ensurePathForFile(filename), [&](ResultBase /*result*/) {
                 QSaveFile file(filename);
@@ -1980,17 +2011,22 @@ QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
                 auto runWaitingJobs = [this, context]() {
                     Q_ASSERT(m_fileSystemJobs.isEmpty());
                     Q_ASSERT(m_runningJobs.isEmpty());
+
+                    clearingWait = true;
+
                     // Run waiting save jobs
                     for (auto it = m_waitingJobs.begin(); it != m_waitingJobs.end(); ++it) {
                         WaitingJob& job = it->second;
 
                         //Recursive call
                         auto future = saveProtoMessage(context, it->first, std::move(job.message));
-                        AsyncFuture::observe(future).context(context, [deferred = std::move(job.jobDeferred), future]() mutable {
+                        AsyncFuture::observe(future).context(context, [deferred = job.jobDeferred, future]() mutable {
                             deferred.complete(future.result());
                         });
                     }
                     m_waitingJobs.clear();
+
+                    clearingWait = false;
                 };
 
                 if(m_fileSystemJobs.isEmpty() && m_runningJobs.isEmpty()) {
@@ -1999,6 +2035,10 @@ QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
                     excuteFileSystemActions();
                     runWaitingJobs();
                 }
+            },
+            []() {
+                qDebug() << "Canceled!";
+                Q_ASSERT(false);
             });
 
         m_runningJobs.insert(filename, QFuture<void>(future));
