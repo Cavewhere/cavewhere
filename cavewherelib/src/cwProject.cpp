@@ -69,6 +69,10 @@ cwProject::cwProject(QObject* parent) :
 {
     m_saveLoad->setCavingRegion(Region);
     connect(m_saveLoad, &cwSaveLoad::isTemporaryProjectChanged, this, &cwProject::isTemporaryProjectChanged);
+    connect(m_saveLoad, &cwSaveLoad::fileNameChanged, this, [this]() {
+        qDebug() << "Changing filename:" << m_saveLoad->fileName();
+        emit filenameChanged(m_saveLoad->fileName());
+    });
 
     newProject();
 }
@@ -374,26 +378,7 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
                          return ResultBase();
                      }).future();
     } else if (type == GitFileType) {
-        //Find all the cave file
-        auto regionDataFuture = cwSaveLoad::loadAll(filename);
-
-        FutureToken.addJob({QFuture<void>(regionDataFuture), QStringLiteral("Loading")});
-
-        return AsyncFuture::observe(regionDataFuture)
-            .context(this, [this, regionDataFuture, filename]() {
-                if(!regionDataFuture.result().hasError()) {
-                    setFilename(filename);
-                    setTemporaryProject(false);
-                    m_saveLoad->setSaveEnabled(false);
-                    Region->setData(regionDataFuture.result().value());
-                    m_saveLoad->setSaveEnabled(true);
-                    return ResultBase();
-                } else {
-                    auto error = QStringLiteral("Error loading: %1 : %2").arg(filename, regionDataFuture.result().errorMessage());
-                    errorModel()->append(cwError(error, cwError::Fatal));
-                    return ResultBase(error);
-                }
-            }).future();
+        return m_saveLoad->load(filename);
     }
 
     QFileInfo info(filename);
@@ -574,7 +559,6 @@ void cwProject::loadFile(QString filename) {
 void cwProject::setFilename(QString newFilename) {
     if(newFilename != filename()) {
         m_saveLoad->setFileName(newFilename);
-
         emit filenameChanged(newFilename);
     }
 }

@@ -104,6 +104,7 @@ public:
 
     QString fileName() const;
     void setFileName(const QString& filename);
+    QFuture<Monad::ResultBase> load(const QString& filename);
 
     // void setRootDir(const QDir& rootDir);
     // QDir rootDir() const;
@@ -112,7 +113,6 @@ public:
     void setCavingRegion(cwCavingRegion *region);
     const cwCavingRegion* cavingRegion() const;
 
-    void setSaveEnabled(bool enabled);
 
     QQuickGit::GitRepository* repository() const;
 
@@ -130,7 +130,8 @@ public:
     QFuture<Monad::ResultBase> saveProtoMessage(
         const QDir& dir,
         const QString& filename,
-        std::unique_ptr<const google::protobuf::Message> message);
+        std::unique_ptr<const google::protobuf::Message> message,
+        const void* pointerId);
 
     static std::unique_ptr<CavewhereProto::Cave> toProtoCave(const cwCave* cave);
     static std::unique_ptr<CavewhereProto::Trip> toProtoTrip(const cwTrip* trip);
@@ -177,6 +178,9 @@ private:
     struct Data;
     friend struct Data;
     std::unique_ptr<Data> d;
+
+
+    void setSaveEnabled(bool enabled);
 
     void disconnectTreeModel();
     void connectTreeModel();

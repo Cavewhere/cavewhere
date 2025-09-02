@@ -1566,6 +1566,8 @@ TEST_CASE("Caves should be removed correctly simple", "[cwProject]") {
     CHECK(QFileInfo::exists(caveFileName));
     CHECK(QFileInfo::exists(caveDir.absolutePath()));
 
+    qDebug() << "Starting the remove!";
+
     //Remove the cave
     project->cavingRegion()->removeCave(0);
 
