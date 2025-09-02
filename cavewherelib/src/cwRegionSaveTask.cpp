@@ -209,7 +209,7 @@ void cwRegionSaveTask::saveSurveyChunk(CavewhereProto::SurveyChunk *protoChunk, 
     //     saveShot(protoShot, shot);
     // }
 
-    Q_ASSERT(chunk->stationCount() - 1 == chunk->shotCount());
+    Q_ASSERT(chunk->stationCount() - 1 == chunk->shotCount() || chunk->isStationAndShotsEmpty());
 
     saveQUuid(protoChunk->mutable_id(), chunk->id());
 
