@@ -1230,6 +1230,8 @@ TEST_CASE("Note and Scrap persistence", "[cwProject][cwTrip][cwSurveyNoteModel][
         auto* scrap = new cwScrap();
         note->addScrap(scrap);
 
+        // qDebug() << "DPI" << note->imageResolution()->value();
+
         // Outline: insert 3 points and close; tweak one point
         scrap->insertPoint(0, QPointF(0.10, 0.20));
         scrap->insertPoint(1, QPointF(0.50, 0.20));

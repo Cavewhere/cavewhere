@@ -195,6 +195,7 @@ void cwSurveyNoteModel::addNotesWithNewImages(QList<cwImage> images) {
     QList<cwNote*> newNotes;
     foreach(cwImage image, images) {
         cwNote* note = new cwNote(this);
+        note->setName(QFileInfo(image.path()).fileName());
         note->setImage(image);
         newNotes.append(note);
     }

@@ -77,6 +77,7 @@ public:
     static QStringList supportedImageFormats();
 
     static QImage imageWithAutoTransform(QByteArray& data, const QByteArray& format);
+    static cwImage originalMetaData(const QImage& image);
 
 signals:
     void addedImages(QList<cwImage> images);
@@ -126,7 +127,7 @@ private:
 
     static int half(int value);
 
-    static cwImage originalMetaData(const QImage& image);
+
 };
 
 /**

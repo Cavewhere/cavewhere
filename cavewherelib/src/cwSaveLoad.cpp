@@ -18,6 +18,7 @@
 #include "cwScrap.h"
 #include "cwPDFConverter.h"
 #include "cwPDFSettings.h"
+#include "cwAddImageTask.h"
 
 //Async future
 #include <asyncfuture.h>
@@ -32,6 +33,7 @@
 #include <QtConcurrent>
 #include <QSaveFile>
 #include <QSet>
+#include <QImageReader>
 
 //QQuickGit
 #include "GitRepository.h"
@@ -700,8 +702,11 @@ void cwSaveLoad::addImages(QList<QUrl> noteImagePaths,
             return mbind(Data::ensurePathForFile(newFileName), [rootDir, fileName, newFileName](const ResultBase& result) {
                 bool success = QFile::copy(fileName, newFileName);
                 if(success) {
-                    cwImage image;
-                    image.setPath(rootDir.relativeFilePath(fileName));
+                    QImage qimage(fileName);
+                    cwImage image = cwAddImageTask::originalMetaData(qimage);
+                    // cwImage image;
+                    image.setPath(rootDir.relativeFilePath(newFileName));
+
                     return Monad::Result<cwImage>(image);
                 } else {
                     qWarning() << "Can't copy!";

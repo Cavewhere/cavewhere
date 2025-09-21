@@ -159,6 +159,8 @@ void cwScrap::setPoint(int index, QPointF point)
         }
     }
 
+    qDebug() << "Set point:" << point << this;
+
     OutlinePoints[index] = point;
     emit pointChanged(index, index);
 }
@@ -1337,6 +1339,8 @@ cwNoteTransformationData cwScrap::ScrapShotTransform::toNoteTransform() const
     transformation.setNorthUp(northAngle);
     transformation.scaleNumerator()->setValue(1);
     transformation.scaleDenominator()->setValue(Scale);
+
+    // qDebug() << "Scale:" << Scale;
 
     return transformation.data();
 }
