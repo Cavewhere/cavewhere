@@ -33,4 +33,4 @@
 	url = https://github.com/vpicaver/QQuickGit
 [submodule "SignalSpyChecker"]
 	path = SignalSpyChecker
-	url = git@github.com:vpicaver/SignalSpyChecker.git
+	url = https://github.com/vpicaver/SignalSpyChecker
