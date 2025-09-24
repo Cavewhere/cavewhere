@@ -26,8 +26,6 @@ public:
     cwProject* project() const;
     void setProject(cwProject* project);
 
-    void setCavingRegion(cwCavingRegion* region);
-
     void addScrapToUpdate(cwScrap* scrap);
     void removeScrap(cwScrap* scrap);
 

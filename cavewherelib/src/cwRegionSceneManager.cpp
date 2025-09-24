@@ -12,6 +12,7 @@
 #include "cwRenderGridPlane.h"
 #include "cwRenderLinePlot.h"
 #include "cwRenderRadialGradient.h"
+#include "cwRenderGLTF.h"
 
 
 #include "cwCavingRegion.h"
@@ -28,6 +29,11 @@ cwRegionSceneManager::cwRegionSceneManager(QObject *parent) :
     m_scraps = new cwRenderScraps();
     m_plane = new cwRenderGridPlane();
 
+    //For testing
+    m_gltf = new cwRenderGLTF();
+    m_gltf->setGLTFFilePath("/Users/cave/Downloads/9_9_2025.glb");
+    qDebug() << "Do loading!";
+
     //    Terrain->setScene(scene());
 
     m_background->setScene(scene());
@@ -35,6 +41,7 @@ cwRegionSceneManager::cwRegionSceneManager(QObject *parent) :
     m_scraps->setScene(scene());
     m_plane->setScene(scene());
 
+    m_gltf->setScene(scene());
 }
 
 /**

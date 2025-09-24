@@ -24,6 +24,7 @@ class cwRenderObject;
 class cwRenderLinePlot;
 class cwRenderScraps;
 class cwRenderRadialGradient;
+class cwRenderGLTF;
 #include "cwRenderScraps.h"
 #include "cwRenderGridPlane.h"
 
@@ -76,6 +77,9 @@ private:
     cwRenderScraps* m_scraps;
     cwRenderGridPlane* m_plane;
     cwRenderRadialGradient* m_background;
+
+    //For testing gltf
+    cwRenderGLTF* m_gltf;
 
     //For rendering label
     QPointer<cwCavingRegion> Region;

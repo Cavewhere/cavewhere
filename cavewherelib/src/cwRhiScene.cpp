@@ -8,7 +8,7 @@
 
 cwRhiScene::~cwRhiScene()
 {
-    for(auto rhiObject : m_rhiObjects) {
+    for(auto rhiObject : std::as_const(m_rhiObjects)) {
         delete rhiObject;
     }
     delete m_globalUniformBuffer;
@@ -50,7 +50,7 @@ void cwRhiScene::synchroize(cwScene *scene, cwRhiItemRenderer *renderer)
 
     //Add new rendering object
     if(!scene->m_newRenderObjects.isEmpty()) {
-        for(auto object : scene->m_newRenderObjects) {
+        for(auto object : std::as_const(scene->m_newRenderObjects)) {
             auto rhiObject = object->createRHIObject();
             // qDebug() << "Creating rhiObject:" << object << "->" << rhiObject;
             m_rhiObjects.append(rhiObject);
@@ -64,7 +64,7 @@ void cwRhiScene::synchroize(cwScene *scene, cwRhiItemRenderer *renderer)
 
     //Remove old rendering objects
     if(!scene->m_toDeleteRenderObjects.isEmpty()) {
-        for(auto object : scene->m_toDeleteRenderObjects) {
+        for(auto object : std::as_const(scene->m_toDeleteRenderObjects)) {
             auto rhiObject = m_rhiObjectLookup[object];
             if(rhiObject != nullptr) {
                 auto it = std::remove_if(m_rhiObjects.begin(), m_rhiObjects.end(),
@@ -108,14 +108,14 @@ void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
     updateGlobalUniformBuffer(resources, rhi);
 
     if(!m_rhiObjectsToInitilize.isEmpty()) {
-        for(auto object : m_rhiObjectsToInitilize) {
+        for(auto object : std::as_const(m_rhiObjectsToInitilize)) {
             object->initialize(resourceUpdateData);
         }
         m_rhiObjectsToInitilize.clear();
     }
 
     if(!m_rhiNeedResourceUpdate.isEmpty()) {
-        for(auto object : m_rhiNeedResourceUpdate) {
+        for(auto object : std::as_const(m_rhiNeedResourceUpdate)) {
             object->updateResources(resourceUpdateData);
         }
         m_rhiNeedResourceUpdate.clear();
@@ -129,7 +129,7 @@ void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
     cb->setViewport(QRhiViewport(0, 0, outputSize.width(), outputSize.height()));
 
     //Render rendering objects
-    for(auto object : m_rhiObjects) {
+    for(auto object : std::as_const(m_rhiObjects)) {
         if(object->isVisible()) {
             object->render(renderData);
         }

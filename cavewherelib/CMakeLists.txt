@@ -21,6 +21,7 @@ find_package(Qt6
     ShaderTools
     REQUIRED)
 find_package(xxHash REQUIRED)
+find_package(TinyGLTF REQUIRED)
 
 qt_add_library(cavewherelib STATIC)
 
@@ -54,6 +55,7 @@ target_link_libraries(cavewherelib
     QuickQanavaplugin
     qquickgit
     PRIVATE
+    TinyGLTF::TinyGLTF
     protobuf::protobuf
     xxHash::xxhash
     # surveximg
@@ -184,6 +186,8 @@ qt_add_shaders(cavewherelib "cavewherelib_shaders"
         "shaders/compass/compass.vert"
         "shaders/compass/compass.frag"
         "shaders/toColor.frag"
+        "shaders/unlit.frag"
+        "shaders/unlit.vert"
     )
 
 #This is a hack to find the conan protoc and not the system protoc

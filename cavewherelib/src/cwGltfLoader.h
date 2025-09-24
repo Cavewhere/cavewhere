@@ -1,0 +1,151 @@
+#ifndef CWGLTFLOADER_H
+#define CWGLTFLOADER_H
+
+// Qt
+#include <QByteArray>
+#include <QMatrix4x4>
+#include <QPointer>
+#include <QQuaternion>
+#include <QVector>
+#include <QVector4D>
+
+// Qt RHI
+#include <rhi/qrhi.h>
+
+// tinygltf (forward declare to avoid heavy includes in headers)
+namespace tinygltf {
+class Model;
+class Node;
+class Accessor;
+class Primitive;
+}
+
+// Namespace wrapper so this doesn’t bleed into global
+namespace cw::gltf {
+
+// ---------- CPU-side data ----------
+
+struct AttributeView {
+    const uint8_t* data = nullptr;
+    qsizetype byteLength = 0;
+    qsizetype byteStride = 0;
+    int componentCount = 0;
+    int componentSize = 0;
+    bool normalized = false;
+};
+
+struct PrimitiveCPU {
+    QByteArray vertexInterleaved;
+    QByteArray indexData;
+    int vertexCount = 0;
+    int indexCount = 0;
+    QRhiCommandBuffer::IndexFormat indexFormat = QRhiCommandBuffer::IndexUInt16;
+
+    bool hasNormal = false;
+    bool hasTangent = false;
+    bool hasTexCoord0 = false;
+};
+
+struct TextureCPU {
+    QByteArray pixels; // RGBA8
+    int width = 0;
+    int height = 0;
+    bool isSRGB = false;
+};
+
+struct MaterialCPU {
+    int baseColorTextureIndex = -1;
+    QVector4D baseColorFactor = QVector4D(1, 1, 1, 1);
+    int metallicRoughnessTextureIndex = -1;
+    float metallicFactor = 1.0f;
+    float roughnessFactor = 1.0f;
+    int normalTextureIndex = -1;
+};
+
+struct MeshCPU {
+    QVector<PrimitiveCPU> primitives;
+    MaterialCPU material; // keep simple; promote to per-primitive if you prefer
+    QMatrix4x4 modelMatrix; // world transform (scene graph–accumulated)
+};
+
+struct SceneCPU {
+    QVector<MeshCPU> meshes;
+    QVector<TextureCPU> textures;
+
+    const bool operator==(const SceneCPU& other) {
+        return false;
+    }
+
+    const bool operator!=(const SceneCPU& other) {
+        return !operator==(other);
+    }
+
+    void dump() const; // declaration
+};
+
+// ---------- RHI-side data ----------
+
+struct PrimitiveRHI {
+    QRhiBuffer* vertexBuffer;
+    QRhiBuffer* indexBuffer;
+    int indexCount = 0;
+    int vertexStride = 0;
+    QRhiCommandBuffer::IndexFormat indexFormat = QRhiCommandBuffer::IndexUInt16;
+};
+
+struct TextureRHI {
+    QRhiTexture* texture;
+    QRhiSampler* sampler;
+};
+
+struct MaterialRHI {
+    int baseColor = -1;          // index into texturesRhi
+    int metallicRoughness = -1;
+    int normalMap = -1;
+    QVector4D baseColorFactor = QVector4D(1, 1, 1, 1);
+    float metallicFactor = 1.0f;
+    float roughnessFactor = 1.0f;
+};
+
+struct MeshRHI {
+    QVector<PrimitiveRHI> primitives;
+    MaterialRHI material;
+    QMatrix4x4 modelMatrix;
+};
+
+struct SceneRHI {
+    QVector<MeshRHI> meshes;
+    QVector<TextureRHI> textures;
+
+};
+
+// ---------- Result (multiple values via struct) ----------
+
+struct GLTFToRHIResult {
+    SceneCPU sceneCPU;
+    SceneRHI sceneRHI;
+    bool success = false;
+};
+
+// ---------- Loader API ----------
+
+class Loader
+{
+public:
+    // Build CPU + RHI data from a .gltf/.glb on disk.
+    // The caller must submit the returned resource update batch within a frame.
+    // If you already have a command buffer, you can call cb->resourceUpdate(result.resourceUpdates).
+    static GLTFToRHIResult buildRhiFromFile(QRhi* rhi,
+                                            const QString& filePath,
+                                            QRhiResourceUpdateBatch*& outResourceUpdates);
+
+    static SceneCPU loadGltf(const QString& filePath);
+
+private:
+    // No instances
+    Loader() = delete;
+};
+
+} // namespace cw::gltf
+
+#endif // CWGLTFLOADER_H
