@@ -84,7 +84,7 @@ private:
 
     struct PipelinePack {
         QRhiGraphicsPipeline* pipeline;
-        QRhiShaderResourceBindings* shaderResourceBindings; // set 0: 0 scene ubo, 1 model ubo, 2 material ubo, 3 baseColor
+        // QRhiShaderResourceBindings* shaderResourceBindings; // set 0: 0 scene ubo, 1 model ubo, 2 material ubo, 3 baseColor
     };
 
     // CPU data snapshot from cwRenderGLTF
@@ -108,6 +108,9 @@ private:
     // Shaders
     QShader m_vertexShader;
     QShader m_fragmentShader;
+
+    // Global shader resources
+    // QRhiShaderResourceBindings* m_globalShaderResourceBindings = nullptr;
 
     // Helpers
     void ensureShaders();

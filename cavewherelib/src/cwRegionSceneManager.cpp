@@ -31,7 +31,7 @@ cwRegionSceneManager::cwRegionSceneManager(QObject *parent) :
 
     //For testing
     m_gltf = new cwRenderGLTF();
-    m_gltf->setGLTFFilePath("/Users/cave/Downloads/9_9_2025.glb");
+    m_gltf->setGLTFFilePath("/Users/cave/Downloads/9_8_2025.glb");
     qDebug() << "Do loading!";
 
     //    Terrain->setScene(scene());
@@ -39,9 +39,9 @@ cwRegionSceneManager::cwRegionSceneManager(QObject *parent) :
     m_background->setScene(scene());
     m_linePlot->setScene(scene());
     m_scraps->setScene(scene());
+    m_gltf->setScene(scene());
     m_plane->setScene(scene());
 
-    m_gltf->setScene(scene());
 }
 
 /**

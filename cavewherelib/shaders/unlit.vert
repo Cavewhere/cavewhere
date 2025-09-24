@@ -3,7 +3,7 @@
 layout(location = 0) in vec3 inPosition;
 // layout(location = 1) in vec3 inNormal;   // optional
 // layout(location = 2) in vec4 inTangent;  // optional
-// layout(location = 3) in vec2 inTexCoord0;
+layout(location = 1) in vec2 inTexCoord0;
 
 layout(set = 0, binding = 0) uniform SceneUBO {
     mat4 viewProj;
@@ -16,6 +16,6 @@ layout(set = 0, binding = 1) uniform ModelUBO {
 layout(location = 0) out vec2 v_uv;
 
 void main() {
-    // v_uv = inTexCoord0;
+    v_uv = inTexCoord0;
     gl_Position = sceneUbo.viewProj * modelUbo.model * vec4(inPosition, 1.0);
 }

@@ -303,6 +303,15 @@ static QMatrix4x4 localMatrix(const tinygltf::Node& node)
         m.scale(scale);
     }
 
+
+    //I'm not sure why 45.0 degrees works it should be -90 or 90
+    QQuaternion rotateToZUp = QQuaternion::fromAxisAndAngle(QVector3D(1.0, 0.0, 0.0), 45.0);
+    // QMatrix
+
+    m.rotate(rotateToZUp);
+    // m.rotate(45.0, QVector3D(1.0, 0.0, 0.0));
+    // qDebug() << "Model matrix after:" << m;
+
     return m;
 }
 

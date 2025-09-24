@@ -155,22 +155,26 @@ void cwRHIGltf::render(const RenderData& data)
             srb->setBindings(bindings.cbegin(), bindings.cend());
             srb->create();
 
+            //This makes sure the pipeline matches
+            Q_ASSERT(srb->isLayoutCompatible(pack->pipeline->shaderResourceBindings()));
+
             // Issue draw
             data.cb->setGraphicsPipeline(pack->pipeline);
             data.cb->setShaderResources(srb.data());
 
-            //TODO: Figure out interleaving vertex attributes
             const QRhiCommandBuffer::VertexInput vbind(primitive.vertex, 0);
 
             // qDebug() << vbind.
+            qDebug() << "vbind:" << primitive.vertex << primitive.index->size() << primitive.indexFormat;
 
+            // data.cb->setVertexInput(0, 1, &vbind);
             data.cb->setVertexInput(0, 1, &vbind,
                                     primitive.index,
                                     0, //offset
                                     primitive.indexFormat);
 
             qDebug() << "Dram primative:" << primitive.indexCount;
-//            data.cb->drawIndexed(primitive.indexCount);
+           data.cb->drawIndexed(primitive.indexCount);
         }
     }
 
@@ -220,23 +224,30 @@ QRhiVertexInputLayout cwRHIGltf::makeInputLayout(const PipelineKey& key)
     attrs << QRhiVertexInputAttribute(0, 0, QRhiVertexInputAttribute::Float3, offset);
     offset += int(sizeof(float) * 3);
 
-    // location 1: normal (float3)
-    if (key.hasNormal) {
-        attrs << QRhiVertexInputAttribute(0, 1, QRhiVertexInputAttribute::Float3, offset);
-        offset += int(sizeof(float) * 3);
-    }
+    // // location 1: normal (float3)
+    // if (key.hasNormal) {
+    //     qDebug() << "Has normals!";
+    //     attrs << QRhiVertexInputAttribute(0, 1, QRhiVertexInputAttribute::Float3, offset);
+    //     offset += int(sizeof(float) * 3);
+    // }
 
-    // location 2: tangent (float4)
-    if (key.hasTangent) {
-        attrs << QRhiVertexInputAttribute(0, 2, QRhiVertexInputAttribute::Float4, offset);
-        offset += int(sizeof(float) * 4);
-    }
+    // // location 2: tangent (float4)
+    // if (key.hasTangent) {
+    //     qDebug() << "Has tangent!";
+    //     attrs << QRhiVertexInputAttribute(0, 2, QRhiVertexInputAttribute::Float4, offset);
+    //     offset += int(sizeof(float) * 4);
+    // }
 
     // location 3: texcoord0 (float2)
     if (key.hasTexCoord0) {
-        attrs << QRhiVertexInputAttribute(0, 3, QRhiVertexInputAttribute::Float2, offset);
+        qDebug() << "Has texcoord!";
+        attrs << QRhiVertexInputAttribute(0, 1, QRhiVertexInputAttribute::Float2, offset);
         offset += int(sizeof(float) * 2);
     }
+
+    qDebug() << "Stride:" << key.stride << offset;
+
+    Q_ASSERT(key.stride == offset);
 
     layout.setBindings({ QRhiVertexInputBinding(key.stride) });
     layout.setAttributes(attrs.begin(), attrs.end());
@@ -279,14 +290,14 @@ cwRHIGltf::PipelinePack* cwRHIGltf::ensurePipeline(QRhi* rhi,
 
 
     // Bind dynamic SRB (we clone the cached SRB and set texture if present)
-    QRhiShaderResourceBindings* srb = rhi->newShaderResourceBindings();
+    auto srb = rhi->newShaderResourceBindings();
     QVector<QRhiShaderResourceBinding> bindings;
     bindings << QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, nullptr);
     bindings << QRhiShaderResourceBinding::uniformBuffer(1, QRhiShaderResourceBinding::VertexStage, nullptr);
-    bindings << QRhiShaderResourceBinding::uniformBuffer(2, QRhiShaderResourceBinding::FragmentStage, nullptr);
+    bindings << QRhiShaderResourceBinding::uniformBuffer(1, QRhiShaderResourceBinding::FragmentStage, nullptr);
 
     // if (tex && samp) {
-    bindings << QRhiShaderResourceBinding::sampledTexture(3, QRhiShaderResourceBinding::FragmentStage, nullptr, nullptr);
+    bindings << QRhiShaderResourceBinding::sampledTexture(0, QRhiShaderResourceBinding::FragmentStage, nullptr, nullptr);
     // } else {
     //     // Bind a null texture slot if your shader expects it; or branch in shader.
     // }
