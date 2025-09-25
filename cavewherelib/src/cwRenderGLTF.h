@@ -6,9 +6,15 @@
 #include "cwGltfLoader.h"
 #include "cwTracked.h"
 
+//Qt include
+#include <QQmlEngine>
+#include <QtCore/qproperty.h>
+
 class cwRenderGLTF : public cwRenderObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(RenderGLTF)
+
     Q_PROPERTY(QString gltfFilePath READ gltfFilePath WRITE setGLTFFilePath NOTIFY gltfFilePathChanged)
 
     friend class cwRHIGltf;
@@ -27,6 +33,10 @@ public slots:
     // Convenience overload for QML/URLs
     void setGLTFUrl(const QUrl &url);
 
+    //This is for testing
+    Q_INVOKABLE void setRotation(float x, float y, float z, float angle);
+    Q_INVOKABLE void setTranslation(float x, float y, float z);
+
 signals:
     void gltfFilePathChanged();
 
@@ -36,7 +46,15 @@ protected:
 private:
     QString m_gltfFilePath;
 
-    cwTracked<cw::gltf::SceneCPU> m_data;
+    cw::gltf::SceneCPU m_data;
+    bool m_dataChanged = false;
+
+    cwTracked<QMatrix4x4> m_modelMatrix;
+
+    QProperty<QVector4D> m_rotation;
+    QProperty<QVector3D> m_translation;
+    QProperty<QMatrix4x4> m_modelMatrixProperty;
+
 
 };
 

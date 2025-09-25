@@ -60,6 +60,114 @@ QQ.Item {
                     viewer: itemId.viewer.renderer
                 }
             }
+
+            GridLayout {
+                id: gltfLayoutId
+
+                function updateGLTF() {
+                    RootData.regionSceneManager.gltf.setRotation(
+                                Number(xAxis.text),
+                                Number(yAxis.text),
+                                Number(zAxis.text),
+                                angleSliderId.value
+                                );
+                }
+
+                columns: 3
+                QC.Label {
+                    text: "x"
+                }
+                QC.Label {
+                    text: "y"
+                }
+                QC.Label {
+                    text: "z"
+                }
+                QC.TextField {
+                    id: xAxis
+                    text: "1.0"
+                    onTextEdited: {
+                        gltfLayoutId.updateGLTF()
+                    }
+                }
+                QC.TextField {
+                    id: yAxis
+                    text: "0.0"
+                    onTextEdited: {
+                        gltfLayoutId.updateGLTF()
+                    }
+                }
+                QC.TextField {
+                    id: zAxis
+                    text: "0.0"
+                    onTextEdited: {
+                        gltfLayoutId.updateGLTF()
+                    }
+                }
+            }
+
+            RowLayout {
+                QC.Label {
+                    text: "Angle"
+                }
+                QC.Slider {
+                    id: angleSliderId
+                    Layout.fillWidth: true
+                    from: -180.0
+                    to: 180.0
+                    value: 0.0
+                    onValueChanged:  {
+                        gltfLayoutId.updateGLTF()
+                    }
+                }
+                QC.Label {
+                    text: angleSliderId.value.toFixed(2)
+                }
+            }
+
+            GridLayout {
+                id: gltfTranslationLayoutId
+
+                function updateGLTF() {
+                    RootData.regionSceneManager.gltf.setTranslation(
+                                Number(xAxisTranslate.text),
+                                Number(yAxisTranslate.text),
+                                Number(zAxisTranslate.text),
+                                );
+                }
+
+                columns: 3
+                QC.Label {
+                    text: "x"
+                }
+                QC.Label {
+                    text: "y"
+                }
+                QC.Label {
+                    text: "z"
+                }
+                QC.TextField {
+                    id: xAxisTranslate
+                    text: "0.0"
+                    onTextEdited: {
+                        gltfTranslationLayoutId.updateGLTF()
+                    }
+                }
+                QC.TextField {
+                    id: yAxisTranslate
+                    text: "0.0"
+                    onTextEdited: {
+                        gltfTranslationLayoutId.updateGLTF()
+                    }
+                }
+                QC.TextField {
+                    id: zAxisTranslate
+                    text: "0.0"
+                    onTextEdited: {
+                        gltfTranslationLayoutId.updateGLTF()
+                    }
+                }
+            }
         }
     }
 }

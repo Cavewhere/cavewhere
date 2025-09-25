@@ -125,6 +125,9 @@ private:
 private: // member data last
     bool m_initialized = false;
     bool m_resourcesDirty = false;
+    // bool m_modelMatrixDirty = false;
+
+    QMatrix4x4 m_modelMatrix;
 };
 
 // inline size_t qHash(const cwRHIGltf::PipelineKey& k, size_t seed = 0) noexcept

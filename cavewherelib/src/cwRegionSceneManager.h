@@ -24,7 +24,7 @@ class cwRenderObject;
 class cwRenderLinePlot;
 class cwRenderScraps;
 class cwRenderRadialGradient;
-class cwRenderGLTF;
+#include "cwRenderGLTF.h"
 #include "cwRenderScraps.h"
 #include "cwRenderGridPlane.h"
 
@@ -41,6 +41,8 @@ class cwRegionSceneManager : public QObject
 
     Q_PROPERTY(bool capturing READ isCapturing WRITE setCapturing NOTIFY capturingChanged FINAL)
 
+    //For testing
+    Q_PROPERTY(cwRenderGLTF* gltf READ gltf CONSTANT)
 
 public:
     explicit cwRegionSceneManager(QObject *parent = 0);
@@ -57,6 +59,8 @@ public:
     void setCapturing(bool newCapturing);
 
     cwRenderGridPlane *gridPlane() const { return m_plane; }
+
+    cwRenderGLTF* gltf() const { return m_gltf; }
 
 signals:
     void sceneChanged();

@@ -39,10 +39,20 @@ void cwRHIGltf::initialize(const ResourceUpdateData& data)
 void cwRHIGltf::synchronize(const SynchronizeData& data)
 {
     // Pull CPU scene from cwRenderGLTF
-    if (auto* ro = dynamic_cast<cwRenderGLTF*>(data.object)) {
-        const cw::gltf::SceneCPU& scene = ro->m_data.value(); // cwTracked<T> accessor
-        m_sceneCPU = scene;
-        m_resourcesDirty = true;
+    if (auto* renderObject = dynamic_cast<cwRenderGLTF*>(data.object)) {
+
+        if(renderObject->m_dataChanged) {
+            const cw::gltf::SceneCPU& scene = renderObject->m_data; // cwTracked<T> accessor
+            m_sceneCPU = scene;
+            m_resourcesDirty = true;
+            renderObject->m_dataChanged = false;
+        }
+
+        if(renderObject->m_modelMatrix.isChanged()) {
+            m_modelMatrix = renderObject->m_modelMatrix.value();
+            // m_modelMatrixDirty = true;
+            renderObject->m_modelMatrix.resetChanged();
+        }
     }
 }
 
@@ -52,25 +62,31 @@ void cwRHIGltf::updateResources(const ResourceUpdateData& data)
         initialize(data);
     }
 
-    if (!m_resourcesDirty) {
-        return;
+    if (m_resourcesDirty) {
+
+        QRhi* rhi = data.renderData.renderer->rhi();
+        if (rhi == nullptr) {
+            return;
+        }
+
+        // Clear old GPU state (simple approach; you can make it incremental)
+        m_meshes.clear();
+        m_textures.clear();
+        m_pipelines.clear();
+
+        // Build textures and meshes from CPU snapshot
+        buildTextures(rhi, data.resourceUpdateBatch);
+        buildMeshes(rhi, data.resourceUpdateBatch);
+
+        m_resourcesDirty = false;
     }
 
-    QRhi* rhi = data.renderData.renderer->rhi();
-    if (rhi == nullptr) {
-        return;
-    }
+    // if(m_modelMatrixDirty) {
 
-    // Clear old GPU state (simple approach; you can make it incremental)
-    m_meshes.clear();
-    m_textures.clear();
-    m_pipelines.clear();
 
-    // Build textures and meshes from CPU snapshot
-    buildTextures(rhi, data.resourceUpdateBatch);
-    buildMeshes(rhi, data.resourceUpdateBatch);
 
-    m_resourcesDirty = false;
+    //     m_modelMatrixDirty = false;
+    // }
 }
 
 void cwRHIGltf::render(const RenderData& data)
@@ -105,7 +121,9 @@ void cwRHIGltf::render(const RenderData& data)
     for (const MeshGPU& mesh : m_meshes) {
 
         // Update model + material
-        rub->updateDynamicBuffer(m_modelUbo, 0, sizeof(QMatrix4x4), mesh.modelMatrix.constData());
+        auto finalModelMatrix = mesh.modelMatrix * m_modelMatrix;
+
+        rub->updateDynamicBuffer(m_modelUbo, 0, sizeof(QMatrix4x4), finalModelMatrix.constData());
         rub->updateDynamicBuffer(m_materialUbo, 0, sizeof(QVector4D), &mesh.baseColorFactor);
 
         data.cb->resourceUpdate(rub);
@@ -272,7 +290,10 @@ cwRHIGltf::PipelinePack* cwRHIGltf::ensurePipeline(QRhi* rhi,
     pipe->setTargetBlends({ blend });
     pipe->setDepthTest(true);
     pipe->setDepthWrite(true);
-    pipe->setCullMode(QRhiGraphicsPipeline::Back);
+
+    //TODO: this should be a user selected option
+    // pipe->setCullMode(QRhiGraphicsPipeline::Back);
+    pipe->setCullMode(QRhiGraphicsPipeline::None);
     pipe->setFrontFace(QRhiGraphicsPipeline::CCW);
 
     //TODO: This needs to be fix, see cwRhiScraps

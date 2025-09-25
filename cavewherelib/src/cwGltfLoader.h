@@ -72,14 +72,13 @@ struct SceneCPU {
     QVector<MeshCPU> meshes;
     QVector<TextureCPU> textures;
 
+    // const bool operator==(const SceneCPU& other) {
+    //     return meshes == other.meshes;
+    // }
 
-    const bool operator==(const SceneCPU& other) {
-        return false;
-    }
-
-    const bool operator!=(const SceneCPU& other) {
-        return !operator==(other);
-    }
+    // const bool operator!=(const SceneCPU& other) {
+    //     return !operator==(other);
+    // }
 
     void dump() const; // declaration
 };
