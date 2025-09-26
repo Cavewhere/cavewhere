@@ -100,6 +100,8 @@ public:
 
     QString filename() const;
 
+    Q_INVOKABLE QString absolutePath(const QString& relativePath) const;
+
     Q_INVOKABLE void waitLoadToFinish();
     void waitSaveToFinish();
 

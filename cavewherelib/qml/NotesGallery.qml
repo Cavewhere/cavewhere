@@ -19,6 +19,7 @@ QQ.Rectangle {
 
     property alias notesModel: galleryView.model;
     property Note currentNote
+    property NoteLiDAR currentNoteLiDAR
     property alias currentNoteIndex: galleryView.currentIndex
 
     readonly property string mode: {
@@ -74,7 +75,7 @@ QQ.Rectangle {
         objectName: "noteImage" + index
 
         property int border: 6
-        required property Note noteObject //This will be typecase other
+        required property QQ.QtObject noteObject //This will be typecase other
         required property url iconPath
         required property int index
         property real maxImageWidth: galleryView.width
@@ -261,10 +262,15 @@ QQ.Rectangle {
 
             function updateCurrentNote() {
                 if(currentItem != null) {
-                    noteGallery.currentNote = (currentItem as ListDelegate).noteObject;
+                    noteGallery.currentNote = (currentItem as ListDelegate).noteObject as Note;
+                    noteGallery.currentNoteLiDAR = (currentItem as ListDelegate).noteObject as NoteLiDAR;
+
+                    console.log("currentNote:" + (currentItem as ListDelegate).noteObject)
+
                     // noteArea.image = Qt.binding(function() { return currentItem.noteObject.image });
                 } else {
                     noteGallery.currentNote = null;
+                    noteGallery.currentNoteLiDAR = null;
                     // noteArea.clearImage();
                 }
             }
@@ -424,6 +430,8 @@ QQ.Rectangle {
     }
 
 
+
+
     Splitter {
         anchors.bottom: parent.bottom
         anchors.top: parent.top
@@ -443,6 +451,28 @@ QQ.Rectangle {
         visible: true
         scrapsVisible: false
         note: noteGallery.currentNote
+    }
+
+    RegionViewer {
+        id: rhiViewerId
+        anchors.fill: noteArea
+        visible: noteGallery.currentNoteLiDAR !== null
+        scene: GltfScene {
+            gltf.gltfFilePath: noteGallery.currentNoteLiDAR ? RootData.project.absolutePath(noteGallery.currentNoteLiDAR.filename) : ""
+        }
+
+        orthoProjection.enabled: true
+        perspectiveProjection.enabled: false
+        // orthoProjection.
+
+        TurnTableInteraction {
+            id: turnTableInteractionId
+            objectName: "turnTableInteraction"
+            anchors.fill: parent
+            camera: rhiViewerId.camera
+            scene: rhiViewerId.scene
+            // gridPlane: RootData.regionSceneManager.gridPlane.plane
+        }
     }
 
     QQ.SequentialAnimation {

@@ -292,8 +292,8 @@ cwRHIGltf::PipelinePack* cwRHIGltf::ensurePipeline(QRhi* rhi,
     pipe->setDepthWrite(true);
 
     //TODO: this should be a user selected option
-    // pipe->setCullMode(QRhiGraphicsPipeline::Back);
-    pipe->setCullMode(QRhiGraphicsPipeline::None);
+    pipe->setCullMode(QRhiGraphicsPipeline::Back);
+    // pipe->setCullMode(QRhiGraphicsPipeline::None);
     pipe->setFrontFace(QRhiGraphicsPipeline::CCW);
 
     //TODO: This needs to be fix, see cwRhiScraps

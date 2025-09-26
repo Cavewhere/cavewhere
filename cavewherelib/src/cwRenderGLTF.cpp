@@ -25,6 +25,8 @@ cwRenderGLTF::cwRenderGLTF(QObject *parent)
 
 void cwRenderGLTF::setGLTFFilePath(const QString &filePath)
 {
+    qDebug() << "Setting gltf path:" << filePath;
+
     m_data = cw::gltf::Loader::loadGltf(filePath);
     m_dataChanged = true;
     update();

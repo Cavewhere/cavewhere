@@ -868,3 +868,13 @@ bool cwProject::isTemporaryProject() const {
 QString cwProject::filename() const {
     return m_saveLoad->fileName();
 }
+
+/**
+ * Returns the absolute path of the file that has a relative path
+ * to the project
+ */
+QString cwProject::absolutePath(const QString &relativePath) const
+{
+    return m_saveLoad->projectDir().absoluteFilePath(relativePath);
+
+}

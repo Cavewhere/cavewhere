@@ -30,7 +30,7 @@ cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
     cwRhiViewer(parent)
 {
     //This doesn't work on macos
-    // setSampleCount(4); //MSAA sample count
+    setSampleCount(4); //MSAA sample count
 
     OrthognalProjection = new cwOrthogonalProjection(this);
     OrthognalProjection->setViewer(this);
