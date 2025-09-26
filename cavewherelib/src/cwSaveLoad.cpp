@@ -9,6 +9,7 @@
 #include "cwCavingRegion.h"
 #include "cwProject.h"
 #include "cwSurveyNoteModel.h"
+#include "cwSurveyNoteLiDARModel.h"
 #include "cwNote.h"
 #include "cwImageProvider.h"
 #include "cavewhereVersion.h"
@@ -2156,6 +2157,15 @@ QDir cwSaveLoad::dir(const cwTrip *trip)
 }
 
 QDir cwSaveLoad::dir(cwSurveyNoteModel *notes)
+{
+    if(notes->parentTrip()) {
+        return noteDirHelper(dir(notes->parentTrip()));
+    } else {
+        return QDir();
+    }
+}
+
+QDir cwSaveLoad::dir(cwSurveyNoteLiDARModel *notes)
 {
     if(notes->parentTrip()) {
         return noteDirHelper(dir(notes->parentTrip()));

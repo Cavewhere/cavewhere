@@ -122,7 +122,11 @@ StandardPage {
 
     NotesGallery {
         id: notesGallery
-        notesModel: area.currentTrip.notes
+        notesModel: SurveyNotesConcatModel {
+            id: surveyNoteConcatModelId
+            trip: area.currentTrip
+            // area.currentTrip.notes
+        }
         anchors.left: surveyEditor.right
         anchors.right: parent.right
         anchors.top: parent.top
@@ -130,7 +134,8 @@ StandardPage {
         clip: true
 
         onImagesAdded: (images) => {
-            area.currentTrip.notes.addFromFiles(images)
+                           console.log("Adding images:" + images)
+            surveyNoteConcatModelId.addFiles(images)
         }
 
         onBackClicked: {
@@ -138,14 +143,14 @@ StandardPage {
         }
 
         onModeChanged: {
-            if(mode === "CARPET" && area.viewMode === "") {
+            if(mode === "CARPET"
+                    && area.viewMode === "") {
                 var page = area.PageView.page
                 RootData.pageSelectionModel.gotoPageByName(area.PageView.page, "Carpet")
                 RootData.pageSelectionModel.currentPage.selectionProperties = page.selectionProperties
             }
         }
     }
-
 
 
 //    QQ.Component.onCompleted: {

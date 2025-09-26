@@ -402,92 +402,92 @@ static PrimitiveRHI createPrimitiveRhi(QRhi* rhi, QRhiResourceUpdateBatch* rub, 
 
 // ---------- Public API ----------
 
-GLTFToRHIResult Loader::buildRhiFromFile(QRhi* rhi,
-                                         const QString& filePath,
-                                         QRhiResourceUpdateBatch*& outResourceUpdates)
-{
-    GLTFToRHIResult result;
+// GLTFToRHIResult Loader::buildRhiFromFile(QRhi* rhi,
+//                                          const QString& filePath,
+//                                          QRhiResourceUpdateBatch*& outResourceUpdates)
+// {
+//     GLTFToRHIResult result;
 
-    // if (rhi == nullptr) {
-    //     return result;
-    // }
+//     // if (rhi == nullptr) {
+//     //     return result;
+//     // }
 
-    tinygltf::TinyGLTF loader;
-    tinygltf::Model model;
-    std::string error;
-    std::string warning;
+//     tinygltf::TinyGLTF loader;
+//     tinygltf::Model model;
+//     std::string error;
+//     std::string warning;
 
-    bool ok = false;
-    if (filePath.endsWith(".glb", Qt::CaseInsensitive)) {
-        ok = loader.LoadBinaryFromFile(&model, &error, &warning, filePath.toStdString());
-    } else {
-        ok = loader.LoadASCIIFromFile(&model, &error, &warning, filePath.toStdString());
-    }
-    if (!ok) {
-        return result;
-    }
+//     bool ok = false;
+//     if (filePath.endsWith(".glb", Qt::CaseInsensitive)) {
+//         ok = loader.LoadBinaryFromFile(&model, &error, &warning, filePath.toStdString());
+//     } else {
+//         ok = loader.LoadASCIIFromFile(&model, &error, &warning, filePath.toStdString());
+//     }
+//     if (!ok) {
+//         return result;
+//     }
 
-    // CPU: collect meshes via scene roots (supports full node parent->child transforms)
-    QVector<int> roots;
-    int sceneIndex = model.defaultScene >= 0 ? model.defaultScene : 0;
-    if (!model.scenes.empty()) {
-        const auto& scene = model.scenes[sceneIndex];
-        roots = QVector<int>(scene.nodes.begin(), scene.nodes.end());
-    }
+//     // CPU: collect meshes via scene roots (supports full node parent->child transforms)
+//     QVector<int> roots;
+//     int sceneIndex = model.defaultScene >= 0 ? model.defaultScene : 0;
+//     if (!model.scenes.empty()) {
+//         const auto& scene = model.scenes[sceneIndex];
+//         roots = QVector<int>(scene.nodes.begin(), scene.nodes.end());
+//     }
 
-    for (int n : std::as_const(roots)) {
-        gatherMeshesRecursive(model, n, QMatrix4x4(), result.sceneCPU.meshes);
-    }
+//     for (int n : std::as_const(roots)) {
+//         gatherMeshesRecursive(model, n, QMatrix4x4(), result.sceneCPU.meshes);
+//     }
 
-    // CPU: collect textures actually referenced by materials (here we provision array sized to textures count)
-    result.sceneCPU.textures.resize(static_cast<int>(model.textures.size()));
+//     // CPU: collect textures actually referenced by materials (here we provision array sized to textures count)
+//     result.sceneCPU.textures.resize(static_cast<int>(model.textures.size()));
 
-    // Load only the textures we actually need (baseColor here; extend as desired)
-    for (const MeshCPU& mesh : std::as_const(result.sceneCPU.meshes)) {
-        if (mesh.material.baseColorTextureIndex >= 0) {
-            const int ti = mesh.material.baseColorTextureIndex;
-            if (result.sceneCPU.textures[ti].width == 0) {
-                result.sceneCPU.textures[ti] = loadTextureCPU(model, ti, /*isSRGB*/ true);
-            }
-        }
-    }
+//     // Load only the textures we actually need (baseColor here; extend as desired)
+//     for (const MeshCPU& mesh : std::as_const(result.sceneCPU.meshes)) {
+//         if (mesh.material.baseColorTextureIndex >= 0) {
+//             const int ti = mesh.material.baseColorTextureIndex;
+//             if (result.sceneCPU.textures[ti].width == 0) {
+//                 result.sceneCPU.textures[ti] = loadTextureCPU(model, ti, /*isSRGB*/ true);
+//             }
+//         }
+//     }
 
-    // result.sceneCPU.dump();
+//     // result.sceneCPU.dump();
 
-    // // RHI: create resources + uploads
-    // outResourceUpdates = rhi->nextResourceUpdateBatch();
+//     // // RHI: create resources + uploads
+//     // outResourceUpdates = rhi->nextResourceUpdateBatch();
 
-    // result.sceneRHI.textures.resize(result.sceneCPU.textures.size());
-    // for (int i = 0; i < result.sceneCPU.textures.size(); i++) {
-    //     const TextureCPU& t = result.sceneCPU.textures[i];
-    //     if (t.width > 0) {
-    //         result.sceneRHI.textures[i] = createTextureRhi(rhi, outResourceUpdates, t);
-    //     }
-    // }
+//     // result.sceneRHI.textures.resize(result.sceneCPU.textures.size());
+//     // for (int i = 0; i < result.sceneCPU.textures.size(); i++) {
+//     //     const TextureCPU& t = result.sceneCPU.textures[i];
+//     //     if (t.width > 0) {
+//     //         result.sceneRHI.textures[i] = createTextureRhi(rhi, outResourceUpdates, t);
+//     //     }
+//     // }
 
-    // result.sceneRHI.meshes.reserve(result.sceneCPU.meshes.size());
-    // for (const MeshCPU& m : result.sceneCPU.meshes) {
-    //     MeshRHI mr;
-    //     mr.modelMatrix = m.modelMatrix;
+//     // result.sceneRHI.meshes.reserve(result.sceneCPU.meshes.size());
+//     // for (const MeshCPU& m : result.sceneCPU.meshes) {
+//     //     MeshRHI mr;
+//     //     mr.modelMatrix = m.modelMatrix;
 
-    //     for (const PrimitiveCPU& pcpu : m.primitives) {
-    //         mr.primitives.push_back(createPrimitiveRhi(rhi, outResourceUpdates, pcpu));
-    //     }
+//     //     for (const PrimitiveCPU& pcpu : m.primitives) {
+//     //         mr.primitives.push_back(createPrimitiveRhi(rhi, outResourceUpdates, pcpu));
+//     //     }
 
-    //     MaterialRHI matRhi;
-    //     matRhi.baseColor = m.material.baseColorTextureIndex;
-    //     matRhi.baseColorFactor = m.material.baseColorFactor;
-    //     matRhi.metallicFactor = m.material.metallicFactor;
-    //     matRhi.roughnessFactor = m.material.roughnessFactor;
-    //     // Extend: mr.material.metallicRoughness, mr.material.normalMap …
-    //     mr.material = matRhi;
+//     //     MaterialRHI matRhi;
+//     //     matRhi.baseColor = m.material.baseColorTextureIndex;
+//     //     matRhi.baseColorFactor = m.material.baseColorFactor;
+//     //     matRhi.metallicFactor = m.material.metallicFactor;
+//     //     matRhi.roughnessFactor = m.material.roughnessFactor;
+//     //     // Extend: mr.material.metallicRoughness, mr.material.normalMap …
+//     //     mr.material = matRhi;
 
-    //     result.sceneRHI.meshes.push_back(std::move(mr));
-    // }
+//     //     result.sceneRHI.meshes.push_back(std::move(mr));
+//     // }
 
-    result.success = true;
-    return result;
-}
+//     result.success = true;
+//     return result;
+// }
 
 SceneCPU Loader::loadGltf(const QString &filePath)
 {

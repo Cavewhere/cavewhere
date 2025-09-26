@@ -5,6 +5,7 @@
 class cwCave;
 class cwTrip;
 class cwSurveyNoteModel;
+class cwSurveyNoteLiDARModel;
 class cwTripCalibration;
 class cwSurveyChunk;
 class cwTeam;
@@ -164,6 +165,7 @@ public:
     static QDir dir(const cwTrip* trip);
 
     static QDir dir(cwSurveyNoteModel* notes);
+    static QDir dir(cwSurveyNoteLiDARModel* notes);
 
     static QString fileName(const cwNote* note);
     static QString absolutePath(const cwNote* note);

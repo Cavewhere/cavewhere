@@ -1,276 +1,236 @@
-/**************************************************************************
-**
-**    Copyright (C) 2013 by Philip Schuchardt
-**    www.cavewhere.com
-**
-**************************************************************************/
-
-//Our inculdes
 #include "cwSurveyNoteModel.h"
-#include "cwDebug.h"
-#include "cwProject.h"
-#include "cwImageProvider.h"
-#include "cwTrip.h"
-#include "cwNote.h"
-#include "cwCavingRegion.h"
-#include "cwCave.h"
-#include "cwSaveLoad.h"
-#include "cwConcurrent.h"
 
-//Qt includes
+// CaveWhere
+#include "cwNote.h"
+#include "cwImage.h"
+#include "cwImageProvider.h"
+#include "cwPDFConverter.h"
+#include "cwSaveLoad.h"
+#include "cwProject.h"
+#include "cwTrip.h"
+#include "cwCave.h"
+
+// Qt
+#include <QDir>
+#include <QFileInfo>
+#include <QImageReader>
+#include <QSet>
 #include <QDebug>
 
-cwSurveyNoteModel::cwSurveyNoteModel(QObject *parent) :
-    QAbstractListModel(parent),
-    ParentTrip(nullptr),
-    ParentCave(nullptr)
+cwSurveyNoteModel::cwSurveyNoteModel(QObject* parent)
+    : cwSurveyNoteModelBase(parent)
 {
-
 }
 
-QHash<int, QByteArray> cwSurveyNoteModel::roleNames() const
+QVariant cwSurveyNoteModel::data(const QModelIndex& index, int role) const
 {
-    QHash<int, QByteArray> roles;
-    roles[ImageOriginalPathRole] = "imageOriginalPath";
-    roles[ImageIconPathRole] = "imageIconPath";
-    roles[ImageRole] = "image";
-    roles[NoteObjectRole] = "noteObject";
-    return roles;
+    if (!index.isValid()) {
+        return QVariant();
+    }
+
+    // Always allow base to serve NoteObjectRole
+    if (role == NoteObjectRole) {
+        return cwSurveyNoteModelBase::data(index, role);
+    }
+
+    const auto* note = qobject_cast<cwNote*>(notes().value(index.row()));
+    if (note == nullptr) {
+        return QVariant();
+    }
+
+    switch (role) {
+    case PathRole: {
+        const cwImage image = note->image();
+        // present via image provider URL to keep QML bindings consistent
+        return cwImageProvider::imageUrl(image.path());
+    }
+    case IconPathRole: {
+        const cwImage image = note->image();
+        // TODO: replace with cached icon path when available
+        return cwImageProvider::imageUrl(image.path());
+    }
+    case ImageRole: {
+        return QVariant::fromValue(note->image());
+    }
+    default:
+        return QVariant();
+    }
 }
 
+void cwSurveyNoteModel::addFromFiles(QList<QUrl> files)
+{
+    QSet<QString> supportedSuffixes;
+    for (const QByteArray& fmt : QImageReader::supportedImageFormats()) {
+        supportedSuffixes.insert(QString::fromLatin1(fmt).toLower());
+    }
+
+    auto isPdfPath = [](const QString& path) {
+        if (!cwPDFConverter::isSupported()) {
+            return false;
+        }
+        const QFileInfo fi(path);
+        return fi.suffix().compare(QStringLiteral("pdf"), Qt::CaseInsensitive) == 0;
+    };
+
+    QList<QUrl> accepted;
+    accepted.reserve(files.size());
+    for (const QUrl& u : files) {
+        const QFileInfo fi(u.toLocalFile());
+        const QString suffixLower = fi.suffix().toLower();
+        if (supportedSuffixes.contains(suffixLower) || isPdfPath(fi.absoluteFilePath())) {
+            accepted.append(u);
+        }
+    }
+
+    if (accepted.isEmpty()) {
+        qWarning() << "No supported image/PDF files provided to cwSurveyNoteModel::addFromFiles";
+        return;
+    }
+
+    auto* proj = project();
+    if (proj == nullptr) {
+        qWarning() << "Project not found for cwSurveyNoteModel::addFromFiles";
+        return;
+    }
+
+    const QDir destinationDirectory = cwSaveLoad::dir(this);
+
+    proj->addImages(
+        accepted,
+        destinationDirectory,
+        [this](QList<cwImage> newImages) {
+            addNotesWithNewImages(newImages);
+        }
+        );
+}
+
+QList<cwNote *> cwSurveyNoteModel::notes() const
+{
+    auto baseNotes = cwSurveyNoteModelBase::notes();
+    QList<cwNote*> notes;
+    notes.reserve(baseNotes.size());
+    for(const auto note : std::as_const(baseNotes)) {
+        notes.append(static_cast<cwNote*>(note));
+    }
+    return notes;
+}
+
+void cwSurveyNoteModel::addNotes(const QList<cwNote *>& notes)
+{
+    QList<QObject*> baseNotes;
+    baseNotes.reserve(notes.size());
+    for(const auto note : notes) {
+        baseNotes.append(note);
+    }
+    cwSurveyNoteModelBase::addNotes(baseNotes);
+}
 
 void cwSurveyNoteModel::setData(const cwSurveyNoteModelData &data)
 {
-    beginResetModel();
+    clearNotes();
 
-    //Delete all the old notes
-    foreach(cwNote* note, Notes) {
-        delete note;
-    }
-    Notes.clear();
+    QList<QObject*> newNotes;
+    newNotes.reserve(data.notes.size());
 
-    Notes.reserve(data.notes.size());
-    for(const auto& noteData : data.notes) {
-        cwNote* newNote = new cwNote();
-        newNote->setParentTrip(parentTrip());
-        newNote->setData(noteData);
-        Notes.append(newNote);
+    for (const auto& noteData : data.notes) {
+        auto* note = new cwNote(this);
+        note->setParentTrip(parentTrip());
+        note->setParentCave(parentCave());
+        note->setData(noteData);
+        newNotes.append(note);
     }
 
-    endResetModel();
+    cwSurveyNoteModelBase::addNotes(newNotes);
 }
 
 cwSurveyNoteModelData cwSurveyNoteModel::data() const
 {
-    cwSurveyNoteModelData data;
-    data.notes.reserve(Notes.size());
-    for(cwNote* note : Notes) {
-        data.notes.append(note->data());
+    cwSurveyNoteModelData out;
+    const auto objNotes = notes();
+    out.notes.reserve(objNotes.size());
+
+    for (QObject* obj : objNotes) {
+        if (auto* note = qobject_cast<cwNote*>(obj)) {
+            out.notes.append(note->data());
+        }
     }
-    return data;
+    return out;
 }
 
-/**
- * @brief cwSurveyNoteModel::validateNoteImages
- * @param notes
- * @return A list of notes that are valid.  Valid notes are ones with valid original images.
- *
- * If it's note a valid note. The note will be deleted. nullptr notes aren't added to the the valid note
- * list
- */
-QList<cwNote *> cwSurveyNoteModel::validateNoteImages(QList<cwNote *> notes) const
+void cwSurveyNoteModel::onParentTripChanged()
 {
-    QList<cwNote*> validNotes;
-    foreach(cwNote* note, notes) {
-        if(note != nullptr) {
-            if(note->image().isValid()) {
-                validNotes.append(note);
-            } else {
-                qWarning() << "Note image note valid, removing" << LOCATION;
-                note->deleteLater();
+    const auto notes = this->notes();
+    for (QObject* obj : notes) {
+        if (auto* note = qobject_cast<cwNote*>(obj)) {
+            note->setParentTrip(parentTrip());
+            if (parentTrip() != nullptr) {
+                note->setParentCave(parentTrip()->parentCave());
             }
         }
     }
-    return validNotes;
 }
 
-/**
-  \brief Get's the number of row in the model
-  */
-int cwSurveyNoteModel::rowCount(const QModelIndex &parent) const {
-    if(parent != QModelIndex()) { return 0; } //There's data at the root
-    return Notes.size();
-}
-
-/**
-  \brief Get's the data in the model
-  */
-QVariant cwSurveyNoteModel::data(const QModelIndex &index, int role) const {
-    if(!index.isValid()) { return QVariant(); }
-    int row = index.row();
-
-    switch(role) {
-    case ImageOriginalPathRole: {
-        //Get's the full blown note
-        cwImage imagePath = Notes[row]->image();
-        return cwImageProvider::imageUrl(imagePath.path());
-    }
-    case ImageIconPathRole: {
-        cwImage imagePath = Notes[row]->image();
-        return cwImageProvider::imageUrl(imagePath.path());
-
-        //Get's the icon for the note
-        // cwImage imagePath = Notes[row]->image();
-        // return cwImageProvider::imageUrl(imagePath.icon());
-
-        //FIXME: Add icon support
-        // return QString();
-    }
-    case ImageRole: {
-        return QVariant::fromValue(Notes[row]->image());
-    }
-    case NoteObjectRole:
-        return QVariant::fromValue(qobject_cast<QObject*>(Notes[row]));
-    default:
-        qDebug() << "Return undefined variant";
-        return QVariant();
-    }
-    return QVariant();
-}
-
-/**
-  \brief This adds notes to the notes model
-
-  \param files - The files that'll be added to the notes model
-  \param project - The project where the files will be added to
-
-  This will create new notes objects for each file. This will mipmap the files and also
-  create a icon for each file.  The original file, icon, and mipmaps will be stored in the
-  project.
-  */
-void cwSurveyNoteModel::addFromFiles(QList<QUrl> files) {
-    project()->addImages(files,
-                         cwSaveLoad::dir(this),
-                         [this](QList<cwImage> notes)
-    {
-        addNotesWithNewImages(notes);
-    });
-}
-
-/**
- * @brief cwSurveyNoteModel::removeNote
- * @param index - This remove the note at index
- */
-void cwSurveyNoteModel::removeNote(int index)
+void cwSurveyNoteModel::onParentCaveChanged()
 {
-    QModelIndex modelIndex = this->index(index);
-    if(!modelIndex.isValid()) { return; } //Invalid index
-
-    beginRemoveRows(QModelIndex(), index, index);
-
-    cwNote* note = Notes.at(index);
-    Notes.removeAt(index);
-    note->deleteLater();
-
-    endRemoveRows();
-}
-
-/**
- * @brief cwTrip::stationPositionModelUpdated
- *
- * Called from the cwCave that the stations position model has updated
- */
-void cwSurveyNoteModel::stationPositionModelUpdated() {
-    foreach(cwNote* note, Notes) {
-        note->updateScrapNoteTransform(); //The note transform depends on the model's positions
+    const auto notes = this->notes();
+    for (QObject* obj : notes) {
+        if (auto* note = qobject_cast<cwNote*>(obj)) {
+            note->setParentCave(parentCave());
+        }
     }
 }
 
-/**
-  This will create new notes foreach cwImage.  This assumes the the cwImage is valid.
-  */
-void cwSurveyNoteModel::addNotesWithNewImages(QList<cwImage> images) {
-    if(images.empty()) { return; }
+QList<cwNote*> cwSurveyNoteModel::validateNoteImages(QList<cwNote*> noteList) const
+{
+    QList<cwNote*> valid;
+    valid.reserve(noteList.size());
+    for (cwNote* n : noteList) {
+        if (n != nullptr && n->image().isValid()) {
+            valid.append(n);
+        } else if (n != nullptr) {
+            qWarning() << "Note image not valid, removing";
+            n->deleteLater();
+        }
+    }
+    return valid;
+}
 
-    QList<cwNote*> newNotes;
-    foreach(cwImage image, images) {
-        cwNote* note = new cwNote(this);
+void cwSurveyNoteModel::addNotesWithNewImages(QList<cwImage> images)
+{
+    if (images.isEmpty()) {
+        return;
+    }
+
+    QList<QObject*> newNotes;
+    newNotes.reserve(images.size());
+
+    for (const cwImage& image : images) {
+        auto* note = new cwNote(this);
         note->setName(QFileInfo(image.path()).fileName());
         note->setImage(image);
+        note->setParentTrip(parentTrip());
+        note->setParentCave(parentCave());
         newNotes.append(note);
     }
 
-    addNotes(newNotes);
-}
-
-cwProject *cwSurveyNoteModel::project() const
-{
-    if(parentCave()) {
-        auto region = parentCave()->parentRegion();
-        if(region) {
-            return region->parentProject();
-        }
+    // Validate by image validity
+    QList<cwNote*> typed;
+    typed.reserve(newNotes.size());
+    for (QObject* o : newNotes) {
+        typed.append(static_cast<cwNote*>(o));
     }
-    return nullptr;
+    const QList<cwNote*> valid = validateNoteImages(typed);
+
+    QList<QObject*> validObjs;
+    validObjs.reserve(valid.size());
+    for (cwNote* n : valid) {
+        validObjs.append(n);
+    }
+
+    cwSurveyNoteModelBase::addNotes(validObjs);
 }
 
-QString cwSurveyNoteModel::imagePathString() {
+QString cwSurveyNoteModel::imagePathString()
+{
     return QLatin1String("image://") + cwImageProvider::name() + QLatin1String("/%1");
 }
-
-/**
-  This adds valid notes to the note model
-
-  The note model takes responibility for the notes, ie. it owns them
-  */
-void cwSurveyNoteModel::addNotes(QList<cwNote*> notes) {
-    int lastIndex = rowCount();
-
-    //Remove all invalid notes
-    QList<cwNote*> validNotes = validateNoteImages(notes);
-
-    if(validNotes.isEmpty()) { return; }
-
-    beginInsertRows(QModelIndex(), lastIndex, lastIndex + validNotes.size() - 1);
-
-    Notes.append(validNotes);
-
-    //Update the parent trips in the notes
-    foreach(cwNote* note, validNotes) {
-        note->setParentTrip(parentTrip());
-    }
-
-    endInsertRows();
-}
-
-/**
-  \brief Sets the survey trip for the notes model
-
-  This will update all the note's parents to the trip
-*/
-void cwSurveyNoteModel::setParentTrip(cwTrip* trip) {
-    if(ParentTrip != trip) {
-        ParentTrip = trip;
-        setParent(ParentTrip);
-        foreach(cwNote* note, Notes) {
-            note->setParentTrip(ParentTrip);
-            note->setParentCave(trip->parentCave());
-        }
-    }
-}
-
-/**
-  \brief Set the parent cave
-  */
-void cwSurveyNoteModel::setParentCave(cwCave *cave) {
-    if(ParentCave != cave) {
-        ParentCave = cave;
-        foreach(cwNote* note, Notes) {
-            note->setParentCave(ParentCave);
-        }
-    }
-}
-
-
-
-

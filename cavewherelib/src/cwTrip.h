@@ -23,6 +23,7 @@ class cwTripCalibration;
 class cwSurveyChunk;
 // class cwCave;
 class cwSurveyNoteModel;
+class cwSurveyNoteLiDARModel;
 class cwShot;
 class cwErrorModel;
 class cwTeam;
@@ -45,6 +46,7 @@ class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
     Q_PROPERTY(QDateTime date READ date WRITE setDate NOTIFY dateChanged)
     Q_PROPERTY(cwSurveyNoteModel* notes READ notes CONSTANT)
+    Q_PROPERTY(cwSurveyNoteLiDARModel* notesLiDAR READ notesLiDAR CONSTANT);
     Q_PROPERTY(cwTeam* team READ team CONSTANT)
     Q_PROPERTY(int chunkCount READ chunkCount NOTIFY numberOfChunksChanged)
     Q_PROPERTY(cwTripCalibration* calibration READ calibrations CONSTANT)
@@ -74,6 +76,7 @@ public:
     cwTripCalibration* calibrations() const;
 
     cwSurveyNoteModel* notes() const;
+    cwSurveyNoteLiDARModel* notesLiDAR() const;
 
     void addShotToLastChunk(const cwStation& fromStation, const cwStation& toStation, const cwShot& shot);
     void removeChunks(int begin, int end);
@@ -97,7 +100,7 @@ public:
     bool hasStation(QString stationName) const;
     QSet<cwStation> neighboringStations(QString stationName) const;
 
-    void stationPositionModelUpdated();
+    // void stationPositionModelUpdated();
 
     cwErrorModel* errorModel() const;
 
@@ -128,6 +131,7 @@ protected:
     cwTripCalibration* Calibration;
     QPointer<cwCave> ParentCave;
     cwSurveyNoteModel* Notes;
+    cwSurveyNoteLiDARModel* NotesLidar;
     cwErrorModel* ErrorModel; //!<
 
     //Units
@@ -212,6 +216,11 @@ inline cwTripCalibration* cwTrip::calibrations() const {
   */
 inline cwSurveyNoteModel* cwTrip::notes() const {
     return Notes;
+}
+
+inline cwSurveyNoteLiDARModel *cwTrip::notesLiDAR() const
+{
+    return NotesLidar;
 }
 
 /**

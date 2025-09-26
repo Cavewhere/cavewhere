@@ -22,8 +22,8 @@ IconButton {
 
     FileDialog {
         id: fileDialog;
-        nameFilters: [ "Images (" + RootData.supportImageFormats + ")" ];
-        title: "Load Images"
+        nameFilters: [ "All (" + RootData.supportImageFormats + " *.glb)"];
+        title: "Load Images or LiDAR scans"
         // selectMultiple: true
         fileMode: FileDialog.OpenFiles
         currentFolder: RootData.lastDirectory

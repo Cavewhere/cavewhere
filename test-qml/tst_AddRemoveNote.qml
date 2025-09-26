@@ -11,6 +11,32 @@ MainWindowTest {
         name: "AddRemoveNote"
         when: windowShown
 
+        function test_addNotes() {
+            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwScrapManager/ProjectProfile-test-v3.cw");
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
+
+            tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
+
+                    function toUrl(filePath) {
+                                return Qt.url("file://" + filePath)
+                    }
+
+            //Copy test data to another
+            let phakeCavePath = toUrl(TestHelper.copyToTempDir("://datasets/test_cwTextureUploadTask/PhakeCave.PNG"));
+            let bonesPath = toUrl(TestHelper.copyToTempDir("://datasets/test_cwSurveyNotesConcatModel/bones.glb"));
+
+            let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery");
+            noteGallery.imagesAdded([phakeCavePath, bonesPath]);
+
+            let noteGalleryView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView");
+            tryVerify(() => { return noteGalleryView.count === 3});
+
+            let noteImage2_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView->noteImage2")
+            mouseClick(noteImage2_obj1)
+
+            wait(100000)
+        }
+
         function test_removeNote() {
             TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwScrapManager/ProjectProfile-test-v3.cw");
             RootData.pageSelectionModel.currentPageAddress = "Data/Cave=Cave 1/Trip=Trip 1"

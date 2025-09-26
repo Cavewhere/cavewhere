@@ -12,6 +12,7 @@
 #include "cwTeam.h"
 #include "cwTripCalibration.h"
 #include "cwSurveyNoteModel.h"
+#include "cwSurveyNoteLiDARModel.h"
 #include "cwErrorModel.h"
 #include "cwData.h"
 
@@ -27,9 +28,11 @@ cwTrip::cwTrip(QObject *parent) :
     Calibration = new cwTripCalibration(this);
     DateTime = QDateTime(QDate::currentDate(), QTime());
     Notes = new cwSurveyNoteModel(this);
+    NotesLidar = new cwSurveyNoteLiDARModel(this);
     ErrorModel = new cwErrorModel(this);
 
     Notes->setParentTrip(this);
+    NotesLidar->setParentTrip(this);
 
 //    qDebug() << "Creating:" << this;
 }
@@ -115,6 +118,7 @@ void cwTrip::setDate(QDateTime date) {
         pushUndo(new DateCommand(this, QDateTime(date.date(), QTime()))); //Strips the time away
     }
 }
+
 
 // /**
 //   Sets the team for the trip
@@ -349,10 +353,10 @@ QSet<cwStation> cwTrip::neighboringStations(QString stationName) const {
  *
  * Called from the cwCave that the stations position model has updated
  */
-void cwTrip::stationPositionModelUpdated()
-{
-    Notes->stationPositionModelUpdated();
-}
+// void cwTrip::stationPositionModelUpdated()
+// {
+//     Notes->stationPositionModelUpdated();
+// }
 
 cwTripData cwTrip::data() const
 {
@@ -420,7 +424,7 @@ void cwTrip::setParentCave(cwCave* parentCave) {
         ParentCave = parentCave;
         setParent(parentCave);
 
-        Notes->setParentCave(ParentCave);
+        // Notes->setParentCave(ParentCave);
         emit parentCaveChanged();
     }
 }

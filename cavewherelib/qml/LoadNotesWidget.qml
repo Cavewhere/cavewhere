@@ -64,7 +64,7 @@ QQ.Item {
                     spacing: 5
 
                     Text {
-                        text: "Add scanned notes"
+                        text: "Add scanned notes\nAdd 3d Model"
                         anchors.verticalCenter: loadNoteButtonId.verticalCenter
                     }
 

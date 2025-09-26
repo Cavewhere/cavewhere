@@ -132,13 +132,6 @@ struct GLTFToRHIResult {
 class Loader
 {
 public:
-    // Build CPU + RHI data from a .gltf/.glb on disk.
-    // The caller must submit the returned resource update batch within a frame.
-    // If you already have a command buffer, you can call cb->resourceUpdate(result.resourceUpdates).
-    static GLTFToRHIResult buildRhiFromFile(QRhi* rhi,
-                                            const QString& filePath,
-                                            QRhiResourceUpdateBatch*& outResourceUpdates);
-
     static SceneCPU loadGltf(const QString& filePath);
 
 private:

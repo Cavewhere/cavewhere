@@ -74,8 +74,8 @@ QQ.Rectangle {
         objectName: "noteImage" + index
 
         property int border: 6
-        required property Note noteObject
-        required property url imageIconPath
+        required property Note noteObject //This will be typecase other
+        required property url iconPath
         required property int index
         property real maxImageWidth: galleryView.width
 
@@ -88,7 +88,7 @@ QQ.Rectangle {
 
             anchors.centerIn: parent
 
-            source: container.imageIconPath
+            source: container.iconPath
             sourceSize: Qt.size(width, height)
             width: container.maxImageWidth - 2 * container.border
             height: width;

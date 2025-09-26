@@ -1,121 +1,38 @@
-/**************************************************************************
-**
-**    Copyright (C) 2013 by Philip Schuchardt
-**    www.cavewhere.com
-**
-**************************************************************************/
+#pragma once
 
-#ifndef CWSURVEYNOTEMODEL_H
-#define CWSURVEYNOTEMODEL_H
-
-//Qt includes
-#include <QAbstractListModel>
-#include <QList>
-#include <QUrl>
-#include <QQmlEngine>
-
-//Our includes
-#include "cwImage.h"
-#include "cwGlobals.h"
+#include "cwSurveyNoteModelBase.h"
 #include "cwSurveyNoteModelData.h"
-class cwTrip;
-class cwCave;
-class cwNote;
-class cwProject;
 
-class CAVEWHERE_LIB_EXPORT cwSurveyNoteModel : public QAbstractListModel
+// Fwd
+class cwImage;
+class cwNote;
+
+/**
+ * @brief Model for image/PDF survey notes (cwNote).
+ */
+class CAVEWHERE_LIB_EXPORT cwSurveyNoteModel : public cwSurveyNoteModelBase
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(SurveyNoteModel)
 
 public:
+    explicit cwSurveyNoteModel(QObject* parent = nullptr);
 
-    enum Roles {
-        ImageOriginalPathRole = Qt::UserRole + 1,
-        ImageIconPathRole,
-        ImageRole,   //Just get's the QImage
-        NoteObjectRole //Gets the whole object
-    };
-
-    explicit cwSurveyNoteModel(QObject *parent = 0);
+    QVariant data(const QModelIndex& index, int role) const override;
+    Q_INVOKABLE void addFromFiles(QList<QUrl> files) override;
 
     QList<cwNote*> notes() const;
-    void addNotes(QList<cwNote*> notes);
-
-    void setParentTrip(cwTrip* trip);
-    cwTrip* parentTrip() const;
-
-    void setParentCave(cwCave* cave);
-    cwCave* parentCave() const;
-
-    Q_INVOKABLE int rowCount(const QModelIndex &parent = QModelIndex()) const;
-    Q_INVOKABLE QVariant data(const QModelIndex &index, int role) const;
-
-    Q_INVOKABLE void addFromFiles(QList<QUrl> files);
-    Q_INVOKABLE void removeNote(int index);
-
-    void stationPositionModelUpdated();
-    bool hasNotes() const;
-
-    virtual QHash<int, QByteArray> roleNames() const;
+    void addNotes(const QList<cwNote *> &notes);
 
     void setData(const cwSurveyNoteModelData& data);
     cwSurveyNoteModelData data() const;
 
-signals:
+protected:
+    void onParentTripChanged() override;
+    void onParentCaveChanged() override;
 
 private:
-    QList<cwNote*> Notes;
-
-    cwTrip* ParentTrip;
-    cwCave* ParentCave;
-
-    void initModel();
-    void copy(const cwSurveyNoteModel& object);
-
     QList<cwNote*> validateNoteImages(QList<cwNote*> notes) const;
     void addNotesWithNewImages(QList<cwImage> images);
-
-    cwProject* project() const;
-    void updateMipmaps();
-
     static QString imagePathString();
-
 };
-
-/**
-  \brief Gets all the survey notes in the model
-  */
-inline QList<cwNote*> cwSurveyNoteModel::notes() const {
-    return Notes;
-}
-
-/**
-  \brief Gets the parent trip for this chunk
-  */
-inline cwTrip* cwSurveyNoteModel::parentTrip() const {
-    return ParentTrip;
-}
-
-
-/**
-  \brief Gets the parent cave for the survey note model
-  */
-inline cwCave* cwSurveyNoteModel::parentCave() const {
-    return ParentCave;
-}
-
-/**
- * @brief cwSurveyNoteModel::hasNotes
- * @return True if the model has notes and false if it doesn't
- */
-inline bool cwSurveyNoteModel::hasNotes() const
-{
-    return !Notes.isEmpty();
-}
-
-
-
-
-
-#endif // CWSURVEYNOTEMODEL_H
