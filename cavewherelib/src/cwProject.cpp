@@ -704,6 +704,11 @@ void cwProject::addImages(QList<QUrl> noteImagePaths,
     m_saveLoad->addImages(noteImagePaths, dir, outputCallBackFunc);
 }
 
+void cwProject::addFiles(QList<QUrl> filePath, const QDir &dir, std::function<void (QList<QString>)> outputCallBackFunc)
+{
+    m_saveLoad->addFiles(filePath, dir, outputCallBackFunc);
+}
+
 void cwProject::loadOrConvert(const QString &filename)
 {
     if(filename.isEmpty()) { return; }

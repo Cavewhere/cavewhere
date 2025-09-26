@@ -662,128 +662,348 @@ std::unique_ptr<CavewhereProto::Trip> cwSaveLoad::toProtoTrip(const cwTrip *trip
     return protoTrip;
 }
 
-void cwSaveLoad::addImages(QList<QUrl> noteImagePaths,
-                           const QDir &dir,
-                           std::function<void (QList<cwImage>)> outputCallBackFunc)
+// Keep your original behavior: PDFs are detected but handled separately.
+inline bool isPDF(const QString& path) {
+    if (cwPDFConverter::isSupported()) {
+        QFileInfo info(path);
+        return info.suffix().compare(QStringLiteral("pdf"), Qt::CaseInsensitive) == 0;
+    }
+    return false;
+}
+
+struct CopyCommand {
+    QString sourceFilePath;
+    QString destinationFilePath;
+};
+
+
+// ------------------------
+// Generic copy-and-emit pipe
+// ------------------------
+template<typename ResultType, typename MakeResultFunc>
+void cwSaveLoad::copyFilesAndEmitResults(const QList<QString>& sourceFilePaths,
+                                         const QDir& destinationDirectory,
+                                         MakeResultFunc makeResult,
+                                         std::function<void (QList<ResultType>)> outputCallBackFunc)
 {
-    auto isPDF = [](const QString& path) {
-        if(cwPDFConverter::isSupported()) {
-            QFileInfo info(path);
-            return info.suffix().compare("pdf", Qt::CaseInsensitive) == 0;
-        }
-        return false;
+    auto destinationFor = [destinationDirectory](const QString& filePath) {
+        const QString baseName = QFileInfo(filePath).fileName();
+        return destinationDirectory.absoluteFilePath(baseName);
     };
 
-    //Sort by images and pdf, pdf's last, but heemp the same image order
-    QVector<QString> images;
-    QVector<QString> pdfs;
-    images.reserve(noteImagePaths.size());
-    pdfs.reserve(noteImagePaths.size());
-    for(const QUrl& url : noteImagePaths) {
-        QString path = url.toLocalFile();
-        if(isPDF(path)) {
-            pdfs.append(path);
+    const QDir rootDirectory = projectDir();
+    Q_ASSERT(rootDirectory.exists());
+    qDebug() << "RootDir:" << rootDirectory;
+
+    auto copyOne = [rootDirectory](const QString& sourceFilePath, const QString& destinationFilePath) {
+        return mbind(Data::ensurePathForFile(destinationFilePath),
+                     [rootDirectory, sourceFilePath, destinationFilePath](const ResultBase&) {
+                         const bool success = QFile::copy(sourceFilePath, destinationFilePath);
+                         if (success) {
+                             return Monad::ResultString(rootDirectory.relativeFilePath(destinationFilePath));
+                         } else {
+                             qWarning() << "Can't copy!" << sourceFilePath << "->" << destinationFilePath;
+                             return Monad::ResultString(QStringLiteral("Can't copy ")
+                                                            + sourceFilePath + QStringLiteral(" ")
+                                                            + destinationFilePath,
+                                                        Monad::ResultBase::Unknown);
+                         }
+                     });
+    };
+
+    const auto commands = [this, sourceFilePaths, destinationFor]() {
+        QList<CopyCommand> items;
+        items.reserve(sourceFilePaths.size());
+        for (const QString& source : sourceFilePaths) {
+            const QString destination = destinationFor(source);
+            if (!d->m_runningJobs.contains(destination)) {
+                items.append(CopyCommand{source, destination});
+            } else {
+                qWarning() << "Can't add" << source << "because it's already queued" << LOCATION;
+            }
+        }
+        return items;
+    }();
+
+    auto future = AsyncFuture::observe(d->newFileFuture)
+                      .context(this, [copyOne, commands]() {
+                          return cwConcurrent::mapped(commands, [copyOne](const CopyCommand& command) {
+                              return copyOne(command.sourceFilePath, command.destinationFilePath);
+                          });
+                      }).future();
+
+    qDebug() << "Adding files:" << sourceFilePaths;
+
+    for (const CopyCommand& command : commands) {
+        d->m_runningJobs.insert(command.destinationFilePath, QFuture<void>(future));
+    }
+
+    auto callBackFuture = AsyncFuture::observe(future)
+                              .context(this, [this, future, commands, rootDirectory, makeResult, outputCallBackFunc]() {
+                                  for (const CopyCommand& command : commands) {
+                                      d->m_runningJobs.remove(command.destinationFilePath);
+                                  }
+
+                                  const auto results = future.results(); // QList<Monad::Result<QString>> of relative paths
+
+                                  QList<ResultType> finalResults;
+                                  finalResults.reserve(results.size());
+
+                                  std::transform(results.begin(), results.end(),
+                                                 std::back_inserter(finalResults),
+                                                 [makeResult](const Monad::Result<QString>& relativePathResult) {
+                                                     if (!relativePathResult.hasError()) {
+                                                         return makeResult(relativePathResult.value()); // ResultType
+                                                     } else {
+                                                         qWarning() << "Error:" << relativePathResult.errorMessage() << LOCATION;
+                                                         return ResultType{};
+                                                     }
+                                                 });
+
+                                  outputCallBackFunc(finalResults);
+                              }).future();
+
+    d->futureToken.addJob(cwFuture(QFuture<void>(callBackFuture),
+                                   QStringLiteral("Adding files")));
+}
+
+// ------------------------
+// Specializations for cwImage and QString
+// ------------------------
+static auto makeImageFromRelativePath(const QDir& rootDirectory) {
+    return [rootDirectory](const QString& relativePath) -> cwImage {
+        const QString absolutePath = rootDirectory.absoluteFilePath(relativePath);
+        QImage qimage(absolutePath);
+        cwImage image = cwAddImageTask::originalMetaData(qimage);
+        image.setPath(relativePath);
+        qDebug() << "Returning image:" << image;
+        return image;
+    };
+}
+
+static auto makeRelativePathEcho() {
+    return [](const QString& relativePath) -> QString {
+        return relativePath;
+    };
+}
+
+// ------------------------
+// addImages: now uses the generic pipeline
+// ------------------------
+void cwSaveLoad::addImages(QList<QUrl> noteImagePaths,
+                           const QDir& dir,
+                           std::function<void (QList<cwImage>)> outputCallBackFunc)
+{
+    QVector<QString> imageFilePaths;
+    QVector<QString> pdfFilePaths;
+    imageFilePaths.reserve(noteImagePaths.size());
+    pdfFilePaths.reserve(noteImagePaths.size());
+
+    for (const QUrl& url : noteImagePaths) {
+        const QString path = url.toLocalFile();
+        if (isPDF(path)) {
+            pdfFilePaths.append(path);
         } else {
-            //Normal image
-            images.append(path);
+            imageFilePaths.append(path);
         }
     }
 
-    auto addImagesByPath = [this, dir, outputCallBackFunc](const QList<QString>& images) {
-        auto destFileName = [dir](const QString& fileName) {
-            return dir.absoluteFilePath(QFileInfo(fileName).fileName());
-        };
-
-        auto rootDir = projectDir();
-        Q_ASSERT(rootDir.exists());
-        qDebug() << "RootDir:" << rootDir;
-
-        auto copyFileToNote = [rootDir](const QString& fileName, const QString& newFileName) {
-            return mbind(Data::ensurePathForFile(newFileName), [rootDir, fileName, newFileName](const ResultBase& result) {
-                bool success = QFile::copy(fileName, newFileName);
-                if(success) {
-                    QImage qimage(fileName);
-                    cwImage image = cwAddImageTask::originalMetaData(qimage);
-                    // cwImage image;
-                    image.setPath(rootDir.relativeFilePath(newFileName));
-
-                    return Monad::Result<cwImage>(image);
-                } else {
-                    qWarning() << "Can't copy!";
-                    return Monad::Result<cwImage>(QStringLiteral("Can't copy ") + fileName + QStringLiteral(" ") + newFileName);
-                }
-            });
-        };
-
-        struct CopyCommand {
-            QString oldName;
-            QString newName;
-        };
-
-        auto commands = [destFileName, images, this]() {
-            QList<CopyCommand> commands;
-            commands.reserve(images.size());
-            for(const auto imagePath : images) {
-                const auto newName = destFileName(imagePath);
-                if(!d->m_runningJobs.contains(newName)) {
-                    commands.append({imagePath, newName});
-                } else {
-                    qWarning() << "Can't add" << imagePath << " because it's already queued" << LOCATION;
-                }
-            }
-            return commands;
-        }();
-
-        auto future = AsyncFuture::observe(d->newFileFuture)
-                          .context(this, [copyFileToNote, commands]() {
-                              return cwConcurrent::mapped(commands, [copyFileToNote](const CopyCommand& command) {
-                                  return copyFileToNote(command.oldName, command.newName);
-                              });
-
-                          }).future();
-
-
-        qDebug() << "Adding images:" << images;
-
-        for(const auto command : commands) {
-            d->m_runningJobs.insert(command.newName, QFuture<void>(future));
+    // Always process normal images first (original behavior).
+    {
+        QList<QString> batch;
+        batch.reserve(imageFilePaths.size());
+        for (const QString& s : imageFilePaths) {
+            batch.append(s);
         }
 
-        auto callBackFuture
-            = AsyncFuture::observe(future)
-                  .context(this, [future, commands, this, outputCallBackFunc]() {
-                      qDebug() << "Done!";
+        const QDir rootDirectory = projectDir();
+        copyFilesAndEmitResults<cwImage>(
+            batch,
+            dir,
+            makeImageFromRelativePath(rootDirectory),
+            outputCallBackFunc
+            );
+    }
 
-                      for(const auto command : commands) {
-                          d->m_runningJobs.remove(command.newName);
-                      }
+    // Optional: process PDFs into images, then emit. Kept separate to preserve ordering and avoid surprises.
+    if (!pdfFilePaths.isEmpty() && cwPDFConverter::isSupported()) {
+        // Convert each PDF to one or more image files in the destination directory, then re-use the same pipe.
+        QList<QString> convertedImageSources;
 
-                      const auto results = future.results();
+        //TODO: Add PDF support back in
+        // for (const QString& pdfPath : std::as_const(pdfFilePaths)) {
+        //     // Replace this with your real converter API.
+        //     // Expected: it writes image files into dir and returns absolute paths to those new images.
+        //     const QStringList newImages = cwPDFConverter::convertToImages(pdfPath, dir.absolutePath());
+        //     for (const QString& newImagePath : newImages) {
+        //         convertedImageSources.append(newImagePath);
+        //     }
+        // }
 
-                      QList<cwImage> images;
-                      images.reserve(results.size());
-                      std::transform(results.begin(), results.end(),
-                                     std::back_inserter(images),
-                                     [](const Monad::Result<cwImage>& image)
-                                     {
-                                         if(!image.hasError()) {
-                                             qDebug() << "Returning image:" << image.value();
-                                             return image.value();
-                                         } else {
-                                             qWarning() << "Error:" << image.errorMessage() << LOCATION;
-                                             return cwImage();
-                                         }
-                                     });
-
-                      outputCallBackFunc(images);
-                  }).future();
-
-        d->futureToken.addJob(cwFuture(QFuture<void>(callBackFuture), QStringLiteral("Adding images")));
-    };
-
-    addImagesByPath(images);
-
+        if (!convertedImageSources.isEmpty()) {
+            const QDir rootDirectory = projectDir();
+            copyFilesAndEmitResults<cwImage>(
+                convertedImageSources,
+                dir,
+                makeImageFromRelativePath(rootDirectory),
+                outputCallBackFunc
+                );
+        }
+    }
 }
+
+// ------------------------
+// addFiles: generic file ingest that returns relative paths
+// ------------------------
+void cwSaveLoad::addFiles(QList<QUrl> files,
+                          const QDir& dir,
+                          std::function<void (QList<QString>)> fileCallBackFunc)
+{
+    QList<QString> sourceFilePaths;
+    sourceFilePaths.reserve(files.size());
+    for (const QUrl& url : files) {
+        sourceFilePaths.append(url.toLocalFile());
+    }
+
+    // For generic files, we only copy and return the relative destination paths.
+    const QDir rootDirectory = projectDir();
+    copyFilesAndEmitResults<QString>(
+        sourceFilePaths,
+        dir,
+        makeRelativePathEcho(),
+        fileCallBackFunc
+        );
+}
+
+
+// void cwSaveLoad::addImages(QList<QUrl> noteImagePaths,
+//                            const QDir &dir,
+//                            std::function<void (QList<cwImage>)> outputCallBackFunc)
+// {
+//     auto isPDF = [](const QString& path) {
+//         if(cwPDFConverter::isSupported()) {
+//             QFileInfo info(path);
+//             return info.suffix().compare("pdf", Qt::CaseInsensitive) == 0;
+//         }
+//         return false;
+//     };
+
+//     //Sort by images and pdf, pdf's last, but them in the same image order
+//     QVector<QString> images;
+//     QVector<QString> pdfs;
+//     images.reserve(noteImagePaths.size());
+//     pdfs.reserve(noteImagePaths.size());
+//     for(const QUrl& url : noteImagePaths) {
+//         QString path = url.toLocalFile();
+//         if(isPDF(path)) {
+//             pdfs.append(path);
+//         } else {
+//             //Normal image
+//             images.append(path);
+//         }
+//     }
+
+//     auto addImagesByPath = [this, dir, outputCallBackFunc](const QList<QString>& images) {
+//         auto destFileName = [dir](const QString& fileName) {
+//             return dir.absoluteFilePath(QFileInfo(fileName).fileName());
+//         };
+
+//         auto rootDir = projectDir();
+//         Q_ASSERT(rootDir.exists());
+//         qDebug() << "RootDir:" << rootDir;
+
+//         auto copyFileToNote = [rootDir](const QString& fileName, const QString& newFileName) {
+//             return mbind(Data::ensurePathForFile(newFileName), [rootDir, fileName, newFileName](const ResultBase& result) {
+//                 bool success = QFile::copy(fileName, newFileName);
+//                 if(success) {
+//                     QImage qimage(fileName);
+//                     cwImage image = cwAddImageTask::originalMetaData(qimage);
+//                     // cwImage image;
+//                     image.setPath(rootDir.relativeFilePath(newFileName));
+
+//                     return Monad::Result<cwImage>(image);
+//                 } else {
+//                     qWarning() << "Can't copy!";
+//                     return Monad::Result<cwImage>(QStringLiteral("Can't copy ") + fileName + QStringLiteral(" ") + newFileName);
+//                 }
+//             });
+//         };
+
+//         struct CopyCommand {
+//             QString oldName;
+//             QString newName;
+//         };
+
+//         auto commands = [destFileName, images, this]() {
+//             QList<CopyCommand> commands;
+//             commands.reserve(images.size());
+//             for(const auto imagePath : images) {
+//                 const auto newName = destFileName(imagePath);
+//                 if(!d->m_runningJobs.contains(newName)) {
+//                     commands.append({imagePath, newName});
+//                 } else {
+//                     qWarning() << "Can't add" << imagePath << " because it's already queued" << LOCATION;
+//                 }
+//             }
+//             return commands;
+//         }();
+
+//         auto future = AsyncFuture::observe(d->newFileFuture)
+//                           .context(this, [copyFileToNote, commands]() {
+//                               return cwConcurrent::mapped(commands, [copyFileToNote](const CopyCommand& command) {
+//                                   return copyFileToNote(command.oldName, command.newName);
+//                               });
+
+//                           }).future();
+
+
+//         qDebug() << "Adding images:" << images;
+
+//         for(const auto command : commands) {
+//             d->m_runningJobs.insert(command.newName, QFuture<void>(future));
+//         }
+
+//         auto callBackFuture
+//             = AsyncFuture::observe(future)
+//                   .context(this, [future, commands, this, outputCallBackFunc]() {
+//                       qDebug() << "Done!";
+
+//                       for(const auto command : commands) {
+//                           d->m_runningJobs.remove(command.newName);
+//                       }
+
+//                       const auto results = future.results();
+
+//                       QList<cwImage> images;
+//                       images.reserve(results.size());
+//                       std::transform(results.begin(), results.end(),
+//                                      std::back_inserter(images),
+//                                      [](const Monad::Result<cwImage>& image)
+//                                      {
+//                                          if(!image.hasError()) {
+//                                              qDebug() << "Returning image:" << image.value();
+//                                              return image.value();
+//                                          } else {
+//                                              qWarning() << "Error:" << image.errorMessage() << LOCATION;
+//                                              return cwImage();
+//                                          }
+//                                      });
+
+//                       outputCallBackFunc(images);
+//                   }).future();
+
+//         d->futureToken.addJob(cwFuture(QFuture<void>(callBackFuture), QStringLiteral("Adding images")));
+//     };
+
+//     addImagesByPath(images);
+// }
+
+// void cwSaveLoad::addFiles(QList<QUrl> files, const QDir &dir, std::function<void (QList<QString>)> fileCallBackFunc)
+// {
+
+// }
+
+
 
 QFuture<ResultBase> cwSaveLoad::save(const QDir &dir, const cwNote *note)
 {

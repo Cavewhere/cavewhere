@@ -142,6 +142,10 @@ public:
                    const QDir& dir,
                    std::function<void (QList<cwImage>)> outputCallBackFunc);
 
+    void addFiles(QList<QUrl> files,
+                  const QDir& dir,
+                  std::function<void (QList<QString>)> fileCallBackFunc);
+
 
     //Returns the relative path to the project
     // static QString projectFileName(const cwProject* project);
@@ -273,7 +277,11 @@ private:
     static std::unique_ptr<cwProjectedProfileScrapViewMatrix::Data> fromProtoProjectedScraptViewMatrix(const CavewhereProto::ProjectedProfileScrapViewMatrix protoViewMatrix);
     static cwImageResolution::Data fromProtoImageResolution(const CavewhereProto::ImageResolution& protoImageResolution);
 
-
+    template<typename ResultType, typename MakeResultFunc>
+    void copyFilesAndEmitResults(const QList<QString>& sourceFilePaths,
+                                 const QDir& destinationDirectory,
+                                 MakeResultFunc makeResult,
+                                 std::function<void (QList<ResultType>)> outputCallBackFunc);
 
 };
 

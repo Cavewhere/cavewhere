@@ -183,6 +183,76 @@ TEST_CASE("Images should load correctly", "[cwProject]") {
     CHECK(filenames.size() > 0);
 }
 
+
+TEST_CASE("Files should be added to the project correctly", "[cwProject]") {
+    // Arrange: create a temporary file with some content
+    QTemporaryDir temporaryDirectory;
+    REQUIRE(temporaryDirectory.isValid());
+
+    const QString fileName = QStringLiteral("hello.txt");
+    const QString sourceFilePath = temporaryDirectory.filePath(fileName);
+
+    {
+        QFile file(sourceFilePath);
+        REQUIRE(file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text));
+        QTextStream stream(&file);
+        stream << QStringLiteral("hello world\n");
+        file.close();
+    }
+    REQUIRE(QFileInfo::exists(sourceFilePath));
+
+    // Arrange: project and root directory
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    const QDir projectRootDirectory = cwSaveLoad::projectDir(project);
+    CHECK(projectRootDirectory.isAbsolute());
+
+    // Act: call addFiles
+    int callbackCount = 0;
+    QList<QString> returnedRelativePaths;
+
+    const QList<QUrl> urls { QUrl::fromLocalFile(sourceFilePath) };
+    project->addFiles(urls, projectRootDirectory,
+                      [&callbackCount, &returnedRelativePaths](QList<QString> paths) {
+                          ++callbackCount;
+                          returnedRelativePaths = paths;
+                      });
+
+    // Wait for async jobs to finish
+    rootData->futureManagerModel()->waitForFinished();
+
+    // Assert: callback happened
+    REQUIRE(callbackCount == 1);
+    REQUIRE(returnedRelativePaths.size() == 1);
+
+    const QString relativePath = returnedRelativePaths.front();
+    CHECK(QDir::isRelativePath(relativePath));
+
+    const QString destinationFilePath = projectRootDirectory.absoluteFilePath(relativePath);
+    CHECK(QFileInfo::exists(destinationFilePath));
+
+    // Assert: filename preserved
+    CHECK(QFileInfo(destinationFilePath).fileName() == fileName);
+
+    // Assert: file contents preserved
+    auto readAllText = [](const QString& path) -> QString {
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            return QString();
+        }
+        QTextStream stream(&file);
+        return stream.readAll();
+    };
+
+    const QString sourceText = readAllText(sourceFilePath);
+    const QString destinationText = readAllText(destinationFilePath);
+
+    CHECK_FALSE(sourceText.isEmpty());
+    CHECK(sourceText == destinationText);
+}
+
+
 // TEST_CASE("Images should be removed correctly", "[cwProject]") {
 
 //     auto rootData = std::make_unique<cwRootData>();
