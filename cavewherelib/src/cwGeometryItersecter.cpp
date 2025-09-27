@@ -76,17 +76,27 @@ void cwGeometryItersecter::clear(cwRenderObject *parentObject)
  */
 void cwGeometryItersecter::removeObject(cwRenderObject *parentObject, uint64_t id)
 {
-    QList<Node>::iterator iter = Nodes.begin();
-    while(iter != Nodes.end()) {
-        Node& currentNode = *iter;
-        if(currentNode.Object.parent() == parentObject &&
-            currentNode.Object.id() == id)
-        {
-            Nodes.erase(iter);
-            break;
-        } else {
-            ++iter;
-        }
+    removeObject(Key(parentObject, id));
+}
+
+void cwGeometryItersecter::removeObject(const Key &objectKey)
+{
+    auto iter = findNode(objectKey);
+    if (iter != Nodes.end()) {
+        Nodes.erase(iter);
+    }
+}
+
+void cwGeometryItersecter::setModelMatrix(cwRenderObject *parentObject, uint64_t id, const QMatrix4x4 &modelMatrix)
+{
+    setModelMatrix(Key(parentObject, id), modelMatrix);
+}
+
+void cwGeometryItersecter::setModelMatrix(const Key &objectKey, const QMatrix4x4& modelMatrix)
+{
+    auto iter = findNode(objectKey);
+    if (iter != Nodes.end()) {
+        iter->Object.setMatrix(modelMatrix);
     }
 }
 
@@ -97,39 +107,50 @@ void cwGeometryItersecter::removeObject(cwRenderObject *parentObject, uint64_t i
  */
 double cwGeometryItersecter::intersects(const QRay3D &ray) const
 {
-    QList<double> intersections;
-
-    for(const Node& node : Nodes) {
-        double t = node.BoundingBox.intersection(ray);
-        if(!qIsNaN(t)) {
-            if(node.Object.type() == Triangles) {
-                Q_ASSERT(node.Object.indexes().size() % 3 == 0);
-                for(int i = 0; i < node.Object.indexes().size(); i+=3) {
-                    QBox3D box = Node::triangleToBoundingBox(node.Object, i);
-                    t = box.intersection(ray);
-                    if(!qIsNaN(t)) {
-                        intersections.append(t);
-                    }
-                }
-            } else {
-                //Line nodes, are direct
-                intersections.append(t);
-            }
-        }
+    const RayTriangleHit hit = intersectsTriangleDetailed(ray);
+    if (hit.hit) {
+        return hit.tWorld;
     }
+    return nearestNeighbor(ray);
 
-    //See if we've intersected anything
-    if(intersections.size() == 0) {
-        return nearestNeighbor(ray); //Do a nearest neighbor search
-    }
 
-    //Find the max value int intersections
-    double maxValue = -std::numeric_limits<double>::max();
-    for(double t : intersections) {
-        maxValue = std::max(t, maxValue);
-    }
+    // QList<double> intersections;
 
-    return maxValue;
+    // qDebug() << "Test!" << ray;
+    // for(const Node& node : Nodes) {
+    //     double t = node.BoundingBox.intersection(ray);
+    //     qDebug() << "Node:" << node.BoundingBox << t;
+    //     if(!qIsNaN(t)) {
+    //         if(node.Object.type() == Triangles) {
+    //             Q_ASSERT(node.Object.indexes().size() % 3 == 0);
+    //             for(int i = 0; i < node.Object.indexes().size(); i+=3) {
+    //                 QBox3D box = Node::triangleToBoundingBox(node.Object, i);
+    //                 t = box.intersection(ray);
+    //                 if(!qIsNaN(t)) {
+    //                     intersections.append(t);
+    //                 }
+    //             }
+    //         } else {
+    //             //Line nodes, are direct
+    //             intersections.append(t);
+    //         }
+    //     }
+    // }
+
+    // qDebug() << "Intersections:" << intersections.size() << intersections;
+
+    // //See if we've intersected anything
+    // if(intersections.size() == 0) {
+    //     return nearestNeighbor(ray); //Do a nearest neighbor search
+    // }
+
+    // //Find the max value int intersections
+    // double maxValue = -std::numeric_limits<double>::max();
+    // for(double t : intersections) {
+    //     maxValue = std::max(t, maxValue);
+    // }
+
+    // return maxValue;
 }
 
 /**
@@ -249,6 +270,110 @@ double cwGeometryItersecter::nearestNeighbor(const QRay3D &ray) const
     return bestT;
 }
 
+cwGeometryItersecter::RayTriangleHit cwGeometryItersecter::cwGeometryItersecter::intersectsTriangleDetailed(const QRay3D &ray) const
+{
+    RayTriangleHit best;
+
+    for (const Node& node : Nodes) {
+        if (node.Object.type() != Triangles) {
+            continue;
+        }
+
+        const QMatrix4x4& worldFromModel = node.Object.modelMatrix();
+        const QRay3D rayModel = transformRayToModel(worldFromModel, ray);
+
+        // Optional broad-phase: skip whole object if its model-space AABB misses
+        if (qIsNaN(node.BoundingBox.intersection(rayModel))) {
+            continue;
+        }
+
+        const QVector<QVector3D>& points = node.Object.points();
+        const QVector<uint>& indices = node.Object.indexes();
+
+        for (int i = 0; i < indices.size(); i += 3) {
+            const QVector3D a = points.at(indices.at(i + 0));
+            const QVector3D b = points.at(indices.at(i + 1));
+            const QVector3D c = points.at(indices.at(i + 2));
+
+            // Optional narrow-phase AABB check per triangle:
+            // if (qIsNaN(Node::triangleToBoundingBox(a, b, c).intersection(rayModel))) { continue; }
+
+            RayTriangleHit local = rayTriangleMT(rayModel, a, b, c, node.Object.cullBackfaces());
+            if (!local.hit) {
+                continue;
+            }
+
+            // Lift to world and compute world t
+            const QVector3D pWorld = mapPoint(worldFromModel, local.pointModel);
+            const QVector3D nWorld = transformNormalToWorld(worldFromModel, local.normalModel);
+            const double tWorld = ray.projectedDistance(pWorld);
+
+            if (tWorld > 0.0 && (!best.hit || tWorld < best.tWorld)) {
+                best = local;
+                best.hit = true;
+                best.pointWorld = pWorld;
+                best.normalWorld = nWorld;
+                best.tWorld = tWorld;
+                best.objectId = node.Object.id();
+                best.firstIndex = i;
+            }
+        }
+    }
+
+    return best;
+}
+
+cwGeometryItersecter::RayTriangleHit cwGeometryItersecter::rayTriangleMT(const QRay3D &rayModel, const QVector3D &a, const QVector3D &b, const QVector3D &c, bool cullBackfaces)
+{
+    RayTriangleHit result;
+
+    const QVector3D edge1 = b - a;
+    const QVector3D edge2 = c - a;
+
+    const QVector3D pvec = QVector3D::crossProduct(rayModel.direction(), edge2);
+    const float det = QVector3D::dotProduct(edge1, pvec);
+
+    const float kEps = 1e-7f;
+
+    if (cullBackfaces) {
+        if (det <= kEps) {
+            return result;
+        }
+    } else {
+        if (std::fabs(det) < kEps) {
+            return result; // parallel or nearly parallel
+        }
+    }
+
+    const float invDet = 1.0f / det;
+    const QVector3D tvec = rayModel.origin() - a;
+
+    const float u = QVector3D::dotProduct(tvec, pvec) * invDet;
+    if (u < 0.0f || u > 1.0f) {
+        return result;
+    }
+
+    const QVector3D qvec = QVector3D::crossProduct(tvec, edge1);
+    const float v = QVector3D::dotProduct(rayModel.direction(), qvec) * invDet;
+    if (v < 0.0f || u + v > 1.0f) {
+        return result;
+    }
+
+    const float t = QVector3D::dotProduct(edge2, qvec) * invDet;
+    if (t <= 0.0f) {
+        return result;
+    }
+
+    result.hit = true;
+    result.tModel = t;
+    result.u = u;
+    result.v = v;
+    result.pointModel = rayModel.origin() + t * rayModel.direction();
+    // Unnormalized normal; normalize for safety
+    result.normalModel = QVector3D::normal(a, b, c).normalized();
+    return result;
+}
+
 
 cwGeometryItersecter::Node::Node(const cwGeometryItersecter::Object &object, int indexInIndexes) :
     Object(object)
@@ -284,6 +409,15 @@ QBox3D cwGeometryItersecter::Node::triangleToBoundingBox(const cwGeometryItersec
     QVector3D p1 = object.points().at(object.indexes().at(indexInIndexes));
     QVector3D p2 = object.points().at(object.indexes().at(indexInIndexes + 1));
     QVector3D p3 = object.points().at(object.indexes().at(indexInIndexes + 2));
+
+    return triangleToBoundingBox(p1, p2, p3);
+}
+/**
+ * @brief cwGeometryItersecter::Node::triangleToBoundingBox
+ * @return Creates a bounding box around a triangle
+ */
+QBox3D cwGeometryItersecter::Node::triangleToBoundingBox(const QVector3D& p1, const QVector3D& p2, const QVector3D& p3)
+{
 
     QVector3D maxPoint(qMax(p1.x(), qMax(p2.x(), p3.x())),
                        qMax(p1.y(), qMax(p2.y(), p3.y())),

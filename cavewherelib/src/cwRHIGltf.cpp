@@ -42,8 +42,8 @@ void cwRHIGltf::synchronize(const SynchronizeData& data)
     if (auto* renderObject = dynamic_cast<cwRenderGLTF*>(data.object)) {
 
         if(renderObject->m_dataChanged) {
-            const cw::gltf::SceneCPU& scene = renderObject->m_data; // cwTracked<T> accessor
-            m_sceneCPU = scene;
+            m_sceneCPU = std::move(renderObject->m_data);
+            renderObject->m_data = {};
             m_resourcesDirty = true;
             renderObject->m_dataChanged = false;
         }
@@ -77,6 +77,9 @@ void cwRHIGltf::updateResources(const ResourceUpdateData& data)
         // Build textures and meshes from CPU snapshot
         buildTextures(rhi, data.resourceUpdateBatch);
         buildMeshes(rhi, data.resourceUpdateBatch);
+
+        //Deallocate
+        m_sceneCPU = {};
 
         m_resourcesDirty = false;
     }
@@ -183,7 +186,7 @@ void cwRHIGltf::render(const RenderData& data)
             const QRhiCommandBuffer::VertexInput vbind(primitive.vertex, 0);
 
             // qDebug() << vbind.
-            qDebug() << "vbind:" << primitive.vertex << primitive.index->size() << primitive.indexFormat;
+            // qDebug() << "vbind:" << primitive.vertex << primitive.index->size() << primitive.indexFormat;
 
             // data.cb->setVertexInput(0, 1, &vbind);
             data.cb->setVertexInput(0, 1, &vbind,
@@ -191,7 +194,7 @@ void cwRHIGltf::render(const RenderData& data)
                                     0, //offset
                                     primitive.indexFormat);
 
-            qDebug() << "Dram primative:" << primitive.indexCount;
+            // qDebug() << "Dram primative:" << primitive.indexCount;
            data.cb->drawIndexed(primitive.indexCount);
         }
     }

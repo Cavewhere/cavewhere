@@ -44,6 +44,8 @@ protected:
     cwRHIObject *createRHIObject() override;
 
 private:
+    void updateGeometryIntersector(const cw::gltf::SceneCPU& data);
+
     QString m_gltfFilePath;
 
     cw::gltf::SceneCPU m_data;
@@ -54,6 +56,14 @@ private:
     QProperty<QVector4D> m_rotation;
     QProperty<QVector3D> m_translation;
     QProperty<QMatrix4x4> m_modelMatrixProperty;
+
+    QPropertyNotifier m_modelMatrixUpdated;
+
+    QList<cwGeometryItersecter::Key> m_matrixObjects;
+
+    void updateModelMatrix();
+
+
 
 
 };

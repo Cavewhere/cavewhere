@@ -83,49 +83,49 @@ struct SceneCPU {
     void dump() const; // declaration
 };
 
-// ---------- RHI-side data ----------
+// // ---------- RHI-side data ----------
 
-struct PrimitiveRHI {
-    QRhiBuffer* vertexBuffer;
-    QRhiBuffer* indexBuffer;
-    int indexCount = 0;
-    int vertexStride = 0;
-    QRhiCommandBuffer::IndexFormat indexFormat = QRhiCommandBuffer::IndexUInt16;
-};
+// struct PrimitiveRHI {
+//     QRhiBuffer* vertexBuffer;
+//     QRhiBuffer* indexBuffer;
+//     int indexCount = 0;
+//     int vertexStride = 0;
+//     QRhiCommandBuffer::IndexFormat indexFormat = QRhiCommandBuffer::IndexUInt16;
+// };
 
-struct TextureRHI {
-    QRhiTexture* texture;
-    QRhiSampler* sampler;
-};
+// struct TextureRHI {
+//     QRhiTexture* texture;
+//     QRhiSampler* sampler;
+// };
 
-struct MaterialRHI {
-    int baseColor = -1;          // index into texturesRhi
-    int metallicRoughness = -1;
-    int normalMap = -1;
-    QVector4D baseColorFactor = QVector4D(1, 1, 1, 1);
-    float metallicFactor = 1.0f;
-    float roughnessFactor = 1.0f;
-};
+// struct MaterialRHI {
+//     int baseColor = -1;          // index into texturesRhi
+//     int metallicRoughness = -1;
+//     int normalMap = -1;
+//     QVector4D baseColorFactor = QVector4D(1, 1, 1, 1);
+//     float metallicFactor = 1.0f;
+//     float roughnessFactor = 1.0f;
+// };
 
-struct MeshRHI {
-    QVector<PrimitiveRHI> primitives;
-    MaterialRHI material;
-    QMatrix4x4 modelMatrix;
-};
+// struct MeshRHI {
+//     QVector<PrimitiveRHI> primitives;
+//     MaterialRHI material;
+//     QMatrix4x4 modelMatrix;
+// };
 
-struct SceneRHI {
-    QVector<MeshRHI> meshes;
-    QVector<TextureRHI> textures;
+// struct SceneRHI {
+//     QVector<MeshRHI> meshes;
+//     QVector<TextureRHI> textures;
 
-};
+// };
 
-// ---------- Result (multiple values via struct) ----------
+// // ---------- Result (multiple values via struct) ----------
 
-struct GLTFToRHIResult {
-    SceneCPU sceneCPU;
-    SceneRHI sceneRHI;
-    bool success = false;
-};
+// struct GLTFToRHIResult {
+//     SceneCPU sceneCPU;
+//     SceneRHI sceneRHI;
+//     bool success = false;
+// };
 
 // ---------- Loader API ----------
 

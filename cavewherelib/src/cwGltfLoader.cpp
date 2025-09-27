@@ -347,58 +347,58 @@ static void gatherMeshesRecursive(const tinygltf::Model& model,
 
 // ---------- RHI upload helpers ----------
 
-static TextureRHI createTextureRhi(QRhi* rhi, QRhiResourceUpdateBatch* rub, const TextureCPU& cpu)
-{
-    TextureRHI t;
-    if (cpu.width <= 0 || cpu.height <= 0 || cpu.pixels.isEmpty()) {
-        return t;
-    }
+// static TextureRHI createTextureRhi(QRhi* rhi, QRhiResourceUpdateBatch* rub, const TextureCPU& cpu)
+// {
+//     TextureRHI t;
+//     if (cpu.width <= 0 || cpu.height <= 0 || cpu.pixels.isEmpty()) {
+//         return t;
+//     }
 
-    // Prefer SRGB8A8 format if your backend/Qt exposes it; QRhi::RGBA8 is widely supported.
-    QRhiTexture::Format format = QRhiTexture::RGBA8;
+//     // Prefer SRGB8A8 format if your backend/Qt exposes it; QRhi::RGBA8 is widely supported.
+//     QRhiTexture::Format format = QRhiTexture::RGBA8;
 
-    t.texture = rhi->newTexture(format, QSize(cpu.width, cpu.height), 1,
-                                QRhiTexture::UsedAsTransferSource);
-                                    // | QRhiTexture::UsedWithTransferDestination
-                                    // | QRhiTexture::UsedWithSampled);
-    t.texture->create();
+//     t.texture = rhi->newTexture(format, QSize(cpu.width, cpu.height), 1,
+//                                 QRhiTexture::UsedAsTransferSource);
+//                                     // | QRhiTexture::UsedWithTransferDestination
+//                                     // | QRhiTexture::UsedWithSampled);
+//     t.texture->create();
 
-    t.sampler = rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Linear,
-                                QRhiSampler::Repeat, QRhiSampler::Repeat);
-    t.sampler->create();
+//     t.sampler = rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Linear,
+//                                 QRhiSampler::Repeat, QRhiSampler::Repeat);
+//     t.sampler->create();
 
-    QRhiTextureSubresourceUploadDescription subDesc(cpu.pixels);
-    QRhiTextureUploadEntry entry(0, 0, subDesc);
-    QRhiTextureUploadDescription desc({ entry });
+//     QRhiTextureSubresourceUploadDescription subDesc(cpu.pixels);
+//     QRhiTextureUploadEntry entry(0, 0, subDesc);
+//     QRhiTextureUploadDescription desc({ entry });
 
-    rub->uploadTexture(t.texture, desc);
+//     rub->uploadTexture(t.texture, desc);
 
-    return t;
-}
+//     return t;
+// }
 
-static PrimitiveRHI createPrimitiveRhi(QRhi* rhi, QRhiResourceUpdateBatch* rub, const PrimitiveCPU& cpu)
-{
-    PrimitiveRHI p;
+// static PrimitiveRHI createPrimitiveRhi(QRhi* rhi, QRhiResourceUpdateBatch* rub, const PrimitiveCPU& cpu)
+// {
+//     PrimitiveRHI p;
 
-    const int vertexStride = cpu.vertexCount > 0
-                                 ? cpu.vertexInterleaved.size() / cpu.vertexCount
-                                 : 0;
+//     const int vertexStride = cpu.vertexCount > 0
+//                                  ? cpu.vertexInterleaved.size() / cpu.vertexCount
+//                                  : 0;
 
-    p.vertexStride = vertexStride;
-    p.indexCount = cpu.indexCount;
-    p.indexFormat = cpu.indexFormat;
+//     p.vertexStride = vertexStride;
+//     p.indexCount = cpu.indexCount;
+//     p.indexFormat = cpu.indexFormat;
 
-    p.vertexBuffer = rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, cpu.vertexInterleaved.size());
-    p.vertexBuffer->create();
+//     p.vertexBuffer = rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, cpu.vertexInterleaved.size());
+//     p.vertexBuffer->create();
 
-    p.indexBuffer = rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::IndexBuffer, cpu.indexData.size());
-    p.indexBuffer->create();
+//     p.indexBuffer = rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::IndexBuffer, cpu.indexData.size());
+//     p.indexBuffer->create();
 
-    rub->uploadStaticBuffer(p.vertexBuffer, 0, cpu.vertexInterleaved.size(), cpu.vertexInterleaved.constData());
-    rub->uploadStaticBuffer(p.indexBuffer, 0, cpu.indexData.size(), cpu.indexData.constData());
+//     rub->uploadStaticBuffer(p.vertexBuffer, 0, cpu.vertexInterleaved.size(), cpu.vertexInterleaved.constData());
+//     rub->uploadStaticBuffer(p.indexBuffer, 0, cpu.indexData.size(), cpu.indexData.constData());
 
-    return p;
-}
+//     return p;
+// }
 
 // ---------- Public API ----------
 
