@@ -138,18 +138,18 @@ StandardPage {
             surveyNoteConcatModelId.addFiles(images)
         }
 
-        onBackClicked: {
-            RootData.pageSelectionModel.back()
-        }
+        // onBackClicked: {
+        //     RootData.pageSelectionModel.back()
+        // }
 
-        onModeChanged: {
-            if(mode === "CARPET"
-                    && area.viewMode === "") {
-                var page = area.PageView.page
-                RootData.pageSelectionModel.gotoPageByName(area.PageView.page, "Carpet")
-                RootData.pageSelectionModel.currentPage.selectionProperties = page.selectionProperties
-            }
-        }
+        // onModeChanged: {
+        //     if(mode === "CARPET"
+        //             && area.viewMode === "") {
+        //         var page = area.PageView.page
+        //         RootData.pageSelectionModel.gotoPageByName(area.PageView.page, "Carpet")
+        //         RootData.pageSelectionModel.currentPage.selectionProperties = page.selectionProperties
+        //     }
+        // }
     }
 
 
