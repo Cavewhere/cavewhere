@@ -459,6 +459,7 @@ QQ.Rectangle {
         visible: noteGallery.currentNoteLiDAR !== null
         scene: GltfScene {
             gltf.gltfFilePath: noteGallery.currentNoteLiDAR ? RootData.project.absolutePath(noteGallery.currentNoteLiDAR.filename) : ""
+            gltf.futureManagerToken: RootData.futureManagerModel.token
         }
 
         orthoProjection.enabled: true

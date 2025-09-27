@@ -6,6 +6,7 @@
 
 // Ours
 #include "cwScene.h"
+#include "cwFutureManagerToken.h"
 class cwRenderRadialGradient;
 class cwRenderGLTF;
 #include "cwGlobals.h"

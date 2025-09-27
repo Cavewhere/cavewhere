@@ -1,6 +1,10 @@
 //Our includes
 #include "cwRenderGLTF.h"
 #include "cwRHIGltf.h"
+#include "cwConcurrent.h"
+
+//Async includes
+#include <asyncfuture.h>
 
 using namespace cw::gltf;
 
@@ -35,13 +39,42 @@ cwRenderGLTF::cwRenderGLTF(QObject *parent)
 
 void cwRenderGLTF::setGLTFFilePath(const QString &filePath)
 {
-    qDebug() << "Setting gltf path:" << filePath;
-    m_data = cw::gltf::Loader::loadGltf(filePath);
+    if(m_gltfFilePath != filePath) {
+        qDebug() << "Setting gltf path:" << filePath;
+        auto renderObject = this;
+        auto modelMatrix = m_modelMatrix.value();
 
-    updateGeometryIntersector(m_data);
+        m_loadFuture.cancel();
 
-    m_dataChanged = true;
-    update();
+        auto future = cwConcurrent::run([filePath, renderObject, modelMatrix]()->Monad::Result<Load> {
+            auto data = cw::gltf::Loader::loadGltf(filePath);
+            auto load = toIntersectors(renderObject, data, modelMatrix);
+            load.scene = std::move(data);
+            return load;
+        });
+
+        m_loadFuture =
+            AsyncFuture::observe(future)
+                .context(this, [this, future]() {
+
+                    auto load = future.result().value();
+
+                    m_data = std::move(load.scene);
+                    m_matrixObjects = std::move(load.matrixObjects);
+
+                    auto intersector = geometryItersecter();
+                    intersector->clear(this);
+
+                    for(const auto& object : std::as_const(load.intersecterObjects)) {
+                        intersector->addObject(object);
+                    }
+
+                    m_dataChanged = true;
+                    update();
+                }).future();
+
+        m_futureManagerToken.addJob(cwFuture(m_loadFuture, QStringLiteral("Loading glTF")));
+    }
 }
 
 void cwRenderGLTF::setGLTFUrl(const QUrl &url)
@@ -64,7 +97,9 @@ cwRHIObject *cwRenderGLTF::createRHIObject()
     return new cwRHIGltf();
 }
 
-void cwRenderGLTF::updateGeometryIntersector(const cw::gltf::SceneCPU &data)
+cwRenderGLTF::Load cwRenderGLTF::toIntersectors(cwRenderObject* renderObject,
+                                                const cw::gltf::SceneCPU &data,
+                                                const QMatrix4x4 &modelMatrix)
 {
     // Helper: compute byte stride of an interleaved vertex (pos [+ normal] [+ tangent] [+ uv])
     auto vertexStrideBytes = [](const PrimitiveCPU& primitive) -> int {
@@ -153,31 +188,53 @@ void cwRenderGLTF::updateGeometryIntersector(const cw::gltf::SceneCPU &data)
         return indexes;
     };
 
-    auto intersector = geometryItersecter();
-    intersector->clear(this);
 
-    m_matrixObjects.clear();
-    m_matrixObjects.reserve(data.meshes.size());
+    QList<cwGeometryItersecter::Object> objects;
+    QList<cwGeometryItersecter::Key> keys;
+    objects.reserve(data.meshes.size());
+    keys.reserve(data.meshes.size());
 
     uint64_t meshId = 0;
     for (const MeshCPU& mesh : data.meshes) {
-        cwGeometryItersecter::Key key(this, meshId);
+        cwGeometryItersecter::Key key(renderObject, meshId);
         cwGeometryItersecter::Object object(
             key,
             extractPoints(mesh),
             extractIndexes(mesh),
             cwGeometryItersecter::Triangles,
-            m_modelMatrix.value(),
+            modelMatrix,
             /* cullbackfaces */ true
             );
-        m_matrixObjects.append(key);
-        intersector->addObject(object);
+        keys.append(key);
+        objects.append(object);
         ++meshId;
     }
+
+    return Load {
+        {}, //Empty scene
+        keys,
+        objects
+    };
+
+
 }
 
 void cwRenderGLTF::updateModelMatrix()
 {
     m_modelMatrix.setValue(m_modelMatrixProperty.value());
 
+}
+
+cwFutureManagerToken cwRenderGLTF::futureManagerToken() const
+{
+    return m_futureManagerToken;
+}
+
+void cwRenderGLTF::setFutureManagerToken(const cwFutureManagerToken &newFutureManagerToken)
+{
+    if (m_futureManagerToken == newFutureManagerToken) {
+        return;
+    }
+    m_futureManagerToken = newFutureManagerToken;
+    emit futureManagerTokenChanged();
 }

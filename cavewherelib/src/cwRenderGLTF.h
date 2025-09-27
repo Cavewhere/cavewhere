@@ -2,6 +2,8 @@
 #define CWRENDERGLTF_H
 
 //our includes
+#include "Monad/Result.h"
+#include "cwFutureManagerToken.h"
 #include "cwRenderObject.h"
 #include "cwGltfLoader.h"
 #include "cwTracked.h"
@@ -16,6 +18,7 @@ class cwRenderGLTF : public cwRenderObject
     QML_NAMED_ELEMENT(RenderGLTF)
 
     Q_PROPERTY(QString gltfFilePath READ gltfFilePath WRITE setGLTFFilePath NOTIFY gltfFilePathChanged)
+    Q_PROPERTY(cwFutureManagerToken futureManagerToken READ futureManagerToken WRITE setFutureManagerToken NOTIFY futureManagerTokenChanged FINAL)
 
     friend class cwRHIGltf;
 
@@ -25,6 +28,9 @@ public:
 
     // Accessor without "get" prefix (per your style)
     QString gltfFilePath() const { return m_gltfFilePath; }
+
+    cwFutureManagerToken futureManagerToken() const;
+    void setFutureManagerToken(const cwFutureManagerToken &newFutureManagerToken);
 
 public slots:
     // Setter to choose which glTF file to render
@@ -40,11 +46,22 @@ public slots:
 signals:
     void gltfFilePathChanged();
 
+    void futureManagerTokenChanged();
+
 protected:
     cwRHIObject *createRHIObject() override;
 
-private:
-    void updateGeometryIntersector(const cw::gltf::SceneCPU& data);
+private:    
+    struct Load {
+        cw::gltf::SceneCPU scene;
+        QList<cwGeometryItersecter::Key> matrixObjects;
+        QList<cwGeometryItersecter::Object> intersecterObjects;
+    };
+
+
+    static Load toIntersectors(cwRenderObject* renderObject,
+                               const cw::gltf::SceneCPU& data,
+                               const QMatrix4x4& modelMatrix);
 
     QString m_gltfFilePath;
 
@@ -60,6 +77,9 @@ private:
     QPropertyNotifier m_modelMatrixUpdated;
 
     QList<cwGeometryItersecter::Key> m_matrixObjects;
+
+    cwFutureManagerToken m_futureManagerToken;
+    QFuture<void> m_loadFuture;
 
     void updateModelMatrix();
 
