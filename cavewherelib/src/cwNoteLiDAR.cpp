@@ -23,6 +23,7 @@ void cwNoteLiDAR::setFilename(const QString& path) {
 }
 
 void cwNoteLiDAR::addStation(const cwNoteLiDARStation& station) {
+    qDebug() << "Add station:" << station.name() << station.positionOnNote();
     m_stations.append(station);
     // emit stationsChanged();
 }

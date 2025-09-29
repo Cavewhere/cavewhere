@@ -12,6 +12,7 @@
 #include "cwRenderLinePlot.h"
 #include "cwRHILinePlot.h"
 #include "cwScene.h"
+#include "cwGeometryItersecter.h"
 
 cwRenderLinePlot::cwRenderLinePlot(QObject *parent) :
     cwRenderObject(parent)

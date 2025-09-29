@@ -12,6 +12,8 @@
 #include "cwDebug.h"
 #include "cwRHIObject.h"
 #include "cwCamera.h"
+#include "cwGeometryItersecter.h"
+
 
 //Qt includes
 #include <rhi/qrhi.h>

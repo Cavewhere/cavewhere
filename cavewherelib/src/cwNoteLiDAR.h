@@ -35,7 +35,6 @@ public:
     void setParentCave(cwCave* cave);
     cwCave* parentCave() const { return m_parentCave; }
 
-
     // Stations API
     void addStation(const cwNoteLiDARStation& station);
     Q_INVOKABLE void removeStation(int stationId);         // removes by index

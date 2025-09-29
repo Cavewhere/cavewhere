@@ -35,6 +35,19 @@ MainWindowTest {
             let noteImage2_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView->noteImage2")
             mouseClick(noteImage2_obj1)
 
+                    //Zoom into the the model
+            let turnTable = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->turnTableInteraction")
+                    for(let i = 0; i < 75; i++) {
+                                console.log("Turn table");
+                                wait(20);
+                                mouseWheel(turnTable,
+                                           turnTable.width / 2.0, turnTable.height / 2.0,
+                                           0, 50);
+                    }
+
+
+
+
             wait(100000)
         }
 

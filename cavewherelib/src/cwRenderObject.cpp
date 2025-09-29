@@ -8,6 +8,7 @@
 //Our includes
 #include "cwRenderObject.h"
 #include "cwScene.h"
+#include "cwGeometryItersecter.h"
 
 //Qt includes
 #include <QFile>

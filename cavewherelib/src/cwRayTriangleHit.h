@@ -13,8 +13,6 @@
 //Our include
 #include "cwRenderObject.h"
 
-class cwRenderObject;
-
 class cwRayTriangleHit {
     Q_GADGET
     QML_VALUE_TYPE(cwRayTriangleHit)

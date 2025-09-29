@@ -43,12 +43,6 @@ BaseTurnTableInteraction {
 
     }
 
-    QQ.TapHandler {
-        onSingleTapped: {
-            console.log("Single tap")
-        }
-    }
-
     QQ.PinchHandler {
         target: null
 

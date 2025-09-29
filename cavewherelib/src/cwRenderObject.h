@@ -22,7 +22,7 @@ class cwScene;
 class cwUpdateDataCommand;
 class cwRHIObject;
 class cwRhiItemRenderer;
-#include "cwGeometryItersecter.h"
+class cwGeometryItersector;
 #include "cwScene.h"
 
 class cwRenderObject : public QObject {

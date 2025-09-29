@@ -7,6 +7,7 @@
 #include "cwRenderObject.h"
 #include "cwGltfLoader.h"
 #include "cwTracked.h"
+#include "cwGeometryItersecter.h"
 
 //Qt include
 #include <QQmlEngine>

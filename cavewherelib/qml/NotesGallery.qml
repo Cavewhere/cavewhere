@@ -453,46 +453,11 @@ QQ.Rectangle {
         note: noteGallery.currentNote
     }
 
-    RegionViewer {
-        id: rhiViewerId
+    NoteLiDARItem {
+        id: noteLidarArea
         anchors.fill: noteArea
         visible: noteGallery.currentNoteLiDAR !== null
-        scene: GltfScene {
-            gltf.gltfFilePath: noteGallery.currentNoteLiDAR ? RootData.project.absolutePath(noteGallery.currentNoteLiDAR.filename) : ""
-            gltf.futureManagerToken: RootData.futureManagerModel.token
-        }
-
-        orthoProjection.enabled: true
-        perspectiveProjection.enabled: false
-        // orthoProjection.
-
-        // QQ.TapHandler {
-        //     onSingleTapped: (eventPoint, button) => {
-        //         console.log("eventPoint:" + eventPoint + "button" + button)
-        //     }
-        //     target: rhiViewerId
-        // }
-
-
-
-        TurnTableInteraction {
-            id: turnTableInteractionId
-            objectName: "turnTableInteraction"
-            anchors.fill: parent
-            camera: rhiViewerId.camera
-            scene: rhiViewerId.scene
-            // gridPlane: RootData.regionSceneManager.gridPlane.plane
-        }
-
-        // QQ.MouseArea {
-        //     anchors.fill: parent
-        //     onClicked: (mouse) => {
-
-
-        //         console.log("clicked" + mouse)
-        //     }
-        // }
-
+        note: noteGallery.currentNoteLiDAR
     }
 
     QQ.SequentialAnimation {
@@ -609,6 +574,10 @@ QQ.Rectangle {
                 noteArea {
                     state: "SELECT"
                 }
+
+                noteLidarArea {
+                    state: "SELECT"
+                }
             }
         },
 
@@ -623,6 +592,10 @@ QQ.Rectangle {
 
             QQ.PropertyChanges {
                 noteArea {
+                    state: "ADD-STATION"
+                }
+
+                noteLidarArea {
                     state: "ADD-STATION"
                 }
             }
