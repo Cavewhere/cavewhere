@@ -401,6 +401,7 @@ QQ.Rectangle {
                     iconSource: "qrc:icons/svg/addScrap.svg"
                     sourceSize: mainToolBar.iconSize
                     text: "Scrap"
+                    visible: noteGallery.currentNote !== null
 
                     onClicked: noteGallery.state = "ADD-SCRAP"
                 }
@@ -422,14 +423,13 @@ QQ.Rectangle {
                     objectName: "addLeads"
                     sourceSize: mainToolBar.iconSize
                     text: "Lead"
+                    visible: noteGallery.currentNote !== null
 
                     onClicked: noteGallery.state = "ADD-LEAD"
                 }
             }
         }
     }
-
-
 
 
     Splitter {
@@ -448,7 +448,7 @@ QQ.Rectangle {
         anchors.right: galleryContainer.left
         anchors.bottom: parent.bottom
 
-        visible: true
+        visible: noteGallery.currentNote !== null
         scrapsVisible: false
         note: noteGallery.currentNote
     }
@@ -466,6 +466,15 @@ QQ.Rectangle {
         perspectiveProjection.enabled: false
         // orthoProjection.
 
+        // QQ.TapHandler {
+        //     onSingleTapped: (eventPoint, button) => {
+        //         console.log("eventPoint:" + eventPoint + "button" + button)
+        //     }
+        //     target: rhiViewerId
+        // }
+
+
+
         TurnTableInteraction {
             id: turnTableInteractionId
             objectName: "turnTableInteraction"
@@ -474,6 +483,16 @@ QQ.Rectangle {
             scene: rhiViewerId.scene
             // gridPlane: RootData.regionSceneManager.gridPlane.plane
         }
+
+        // QQ.MouseArea {
+        //     anchors.fill: parent
+        //     onClicked: (mouse) => {
+
+
+        //         console.log("clicked" + mouse)
+        //     }
+        // }
+
     }
 
     QQ.SequentialAnimation {

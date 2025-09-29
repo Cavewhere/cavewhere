@@ -15,6 +15,7 @@
 #include <QBox3D>
 
 //Our includes
+#include "cwRayTriangleHit.h"
 class cwRenderObject;
 
 class cwGeometryItersecter
@@ -88,25 +89,6 @@ public:
 
     };
 
-    struct RayTriangleHit {
-        bool hit = false;
-
-        // Model-space data
-        float tModel = std::numeric_limits<float>::quiet_NaN(); // param on rayModel
-        float u = std::numeric_limits<float>::quiet_NaN();      // barycentrics
-        float v = std::numeric_limits<float>::quiet_NaN();
-        QVector3D pointModel;
-        QVector3D normalModel; // unit-length
-
-        // World-space data
-        double tWorld = std::numeric_limits<double>::quiet_NaN(); // projectedDistance on input world ray
-        QVector3D pointWorld;
-        QVector3D normalWorld; // unit-length
-
-        uint64_t objectId = 0;
-        int firstIndex = -1; // first index of the triangle in object's index array
-    };
-
     cwGeometryItersecter();
 
     void addObject(const cwGeometryItersecter::Object& object);
@@ -118,7 +100,7 @@ public:
     void setModelMatrix(const Key& objectKey, const QMatrix4x4& modelMatrix);
 
     double intersects(const QRay3D& ray) const;
-    RayTriangleHit intersectsTriangleDetailed(const QRay3D& ray) const;
+    cwRayTriangleHit intersectsTriangleDetailed(const QRay3D& ray) const;
 
 
 private:
@@ -182,7 +164,7 @@ private:
         return hn.toVector3D().normalized();
     }
 
-    static RayTriangleHit rayTriangleMT(const QRay3D& rayModel,
+    static cwRayTriangleHit rayTriangleMT(const QRay3D& rayModel,
                                           const QVector3D& a,
                                           const QVector3D& b,
                                           const QVector3D& c,

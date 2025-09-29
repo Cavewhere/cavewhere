@@ -152,6 +152,18 @@ QVector3D cwCamera::mapNormalizeScreenToGLViewport(const QVector3D& point) const
  }
 
  /**
+  * Creates a ray from the front face to the back face
+  * This is useful for intersection
+  */
+ QRay3D cwCamera::frustrumRay(QPoint point) const
+ {
+     QVector3D frontPoint = unProject(point, 0.0);
+     QVector3D backPoint = unProject(point, 1.0);
+     QVector3D direction = QVector3D(backPoint - frontPoint).normalized();
+     return QRay3D(frontPoint, direction);
+ }
+
+ /**
   * @brief cwCamera::pixelsPerMeter
   * @return double - pixels per meter
   *

@@ -12,6 +12,9 @@
 #include "cwProjection.h"
 #include "cwGlobals.h"
 
+//Math 3D
+#include <qray3d.h>
+
 //Qt includes
 #include <QObject>
 #include <QRect>
@@ -60,6 +63,8 @@ public:
     QPointF project(QVector3D point) const;
     QPointF project(QVector3D point, QMatrix4x4 modelMatrix) const;
     QPointF project(QVector3D point, QMatrix4x4 viewMatrix, QMatrix4x4 modelMatrix) const;
+
+    QRay3D frustrumRay(QPoint point) const;
 
     static QVector3D mapNormalizeScreenToGLViewport(const QVector3D& point, const QRect& viewport);
     Q_INVOKABLE QVector3D mapNormalizeScreenToGLViewport(const QVector3D& point) const;

@@ -74,6 +74,8 @@ public:
     void setGridPlane(const QPlane3D& gridPlane) { m_gridPlane = gridPlane; }
     QBindable<QPlane3D> bindableGridPlane() { return &m_gridPlane; }
 
+    // cwRayTriangleHit pick
+
 signals:
     void cameraRotationChanged();
     void azimuthChanged();

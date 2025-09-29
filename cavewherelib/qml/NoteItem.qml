@@ -24,6 +24,19 @@ ImageItem {
 
     clip: true
 
+    onNoteChanged: {
+        console.log("Note changed" + note)
+    }
+
+    onVisibleChanged: {
+        console.log("Visible changed:" + visible)
+        if(!visible) {
+            interactionManagerId.active(null)
+        } else {
+            interactionManagerId.active(interactionManagerId.defaultInteraction)
+        }
+    }
+
     PanZoomInteraction {
         id: panZoomInteraction
         target: noteArea.targetItem
@@ -142,44 +155,6 @@ ImageItem {
         }
 
     }
-
-    // component PositionRectangle : Positioner {
-    //     id: posId
-    //     parent: noteArea.targetItem
-    //     QQ.Rectangle {
-    //         color: "green"
-    //         width: 5
-    //         height: width
-    //         anchors.centerIn: parent
-
-    //         onScaleChanged: {
-    //             console.log("Scale changed:" + scale)
-    //         }
-
-    //         Text {
-    //             text: "(" + posId.x + ", " + posId.y + ")"
-    //         }
-    //     }
-    // }
-
-    // PositionRectangle {
-    //     id: rectId0
-    //     parent: noteArea.targetItem
-
-    // }
-    // PositionRectangle {
-    //     id: rectId1
-    //     x: 500
-    //     y: 500
-    //     parent: noteArea.targetItem
-    // }
-
-    // PositionRectangle {
-    //     id: rectId2
-    //     x: 1000
-    //     y: 500
-    //     parent: noteArea.targetItem
-    // }
 
     ColumnLayout {
         anchors.top: parent.top

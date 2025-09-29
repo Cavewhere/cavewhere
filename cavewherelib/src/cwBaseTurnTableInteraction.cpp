@@ -88,10 +88,7 @@ QVector3D cwBaseTurnTableInteraction::unProject(QPoint point) {
     Q_ASSERT(scene()->geometryItersecter());
 
     //Create a ray from the back projection front and back plane
-    QVector3D frontPoint = Camera->unProject(point, 0.0);
-    QVector3D backPoint = Camera->unProject(point, 1.0);
-    QVector3D direction = QVector3D(backPoint - frontPoint).normalized();
-    QRay3D ray(frontPoint, direction);
+    auto ray = Camera->frustrumRay(point);
 
     //See if it hits any of the scraps or objects
     double t = scene()->geometryItersecter()->intersects(ray);

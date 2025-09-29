@@ -107,9 +107,9 @@ void cwGeometryItersecter::setModelMatrix(const Key &objectKey, const QMatrix4x4
  */
 double cwGeometryItersecter::intersects(const QRay3D &ray) const
 {
-    const RayTriangleHit hit = intersectsTriangleDetailed(ray);
-    if (hit.hit) {
-        return hit.tWorld;
+    const cwRayTriangleHit hit = intersectsTriangleDetailed(ray);
+    if (hit.hit()) {
+        return hit.tWorld();
     }
     return nearestNeighbor(ray);
 
@@ -270,9 +270,9 @@ double cwGeometryItersecter::nearestNeighbor(const QRay3D &ray) const
     return bestT;
 }
 
-cwGeometryItersecter::RayTriangleHit cwGeometryItersecter::cwGeometryItersecter::intersectsTriangleDetailed(const QRay3D &ray) const
+cwRayTriangleHit cwGeometryItersecter::cwGeometryItersecter::intersectsTriangleDetailed(const QRay3D &ray) const
 {
-    RayTriangleHit best;
+    cwRayTriangleHit best;
 
     for (const Node& node : Nodes) {
         if (node.Object.type() != Triangles) {
@@ -298,24 +298,24 @@ cwGeometryItersecter::RayTriangleHit cwGeometryItersecter::cwGeometryItersecter:
             // Optional narrow-phase AABB check per triangle:
             // if (qIsNaN(Node::triangleToBoundingBox(a, b, c).intersection(rayModel))) { continue; }
 
-            RayTriangleHit local = rayTriangleMT(rayModel, a, b, c, node.Object.cullBackfaces());
-            if (!local.hit) {
+            cwRayTriangleHit local = rayTriangleMT(rayModel, a, b, c, node.Object.cullBackfaces());
+            if (!local.hit()) {
                 continue;
             }
 
             // Lift to world and compute world t
-            const QVector3D pWorld = mapPoint(worldFromModel, local.pointModel);
-            const QVector3D nWorld = transformNormalToWorld(worldFromModel, local.normalModel);
+            const QVector3D pWorld = mapPoint(worldFromModel, local.pointModel());
+            const QVector3D nWorld = transformNormalToWorld(worldFromModel, local.normalModel());
             const double tWorld = ray.projectedDistance(pWorld);
 
-            if (tWorld > 0.0 && (!best.hit || tWorld < best.tWorld)) {
+            if (tWorld > 0.0 && (!best.hit() || tWorld < best.tWorld())) {
                 best = local;
-                best.hit = true;
-                best.pointWorld = pWorld;
-                best.normalWorld = nWorld;
-                best.tWorld = tWorld;
-                best.objectId = node.Object.id();
-                best.firstIndex = i;
+                best.m_hit = true;
+                best.m_pointWorld = pWorld;
+                best.m_normalWorld = nWorld;
+                best.m_tWorld = tWorld;
+                best.m_objectId = node.Object.id();
+                best.m_firstIndex = i;
             }
         }
     }
@@ -323,9 +323,13 @@ cwGeometryItersecter::RayTriangleHit cwGeometryItersecter::cwGeometryItersecter:
     return best;
 }
 
-cwGeometryItersecter::RayTriangleHit cwGeometryItersecter::rayTriangleMT(const QRay3D &rayModel, const QVector3D &a, const QVector3D &b, const QVector3D &c, bool cullBackfaces)
+cwRayTriangleHit cwGeometryItersecter::rayTriangleMT(const QRay3D &rayModel,
+                                                     const QVector3D &a,
+                                                     const QVector3D &b,
+                                                     const QVector3D &c,
+                                                     bool cullBackfaces)
 {
-    RayTriangleHit result;
+    cwRayTriangleHit result;
 
     const QVector3D edge1 = b - a;
     const QVector3D edge2 = c - a;
@@ -364,13 +368,13 @@ cwGeometryItersecter::RayTriangleHit cwGeometryItersecter::rayTriangleMT(const Q
         return result;
     }
 
-    result.hit = true;
-    result.tModel = t;
-    result.u = u;
-    result.v = v;
-    result.pointModel = rayModel.origin() + t * rayModel.direction();
+    result.m_hit = true;
+    result.m_tModel = t;
+    result.m_u = u;
+    result.m_v = v;
+    result.m_pointModel = rayModel.origin() + t * rayModel.direction();
     // Unnormalized normal; normalize for safety
-    result.normalModel = QVector3D::normal(a, b, c).normalized();
+    result.m_normalModel = QVector3D::normal(a, b, c).normalized();
     return result;
 }
 

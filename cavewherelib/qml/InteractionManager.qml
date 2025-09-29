@@ -10,24 +10,29 @@ import cavewherelib
 
 QQ.Item {
 
-    property var interactions: []
+    property list<Interaction> interactions: []
     property Interaction defaultInteraction
     property Interaction activeInteraction: null
 
     //This function hides all other interaction and shows the active interaction
     function active(interaction) {
 
-        //            Make sure the interaction exists
-        for(var i = 0; i < interactions.length; i++) {
-            var item = interactions[i];
+        //Make sure the interaction exists
+        for(let i = 0; i < interactions.length; i++) {
+            let item = interactions[i];
+
+            console.log("Disable:" + item)
+
             //Make all interaction invisible
             item.visible = false;
             item.enabled = false
         }
 
-        interaction.visible = true;
-        interaction.enabled = true;
-        interaction.forceActiveFocus();
+        if(interaction !== null) {
+            interaction.visible = true;
+            interaction.enabled = true;
+            interaction.forceActiveFocus();
+        }
         activeInteraction = interaction
     }
 
