@@ -430,8 +430,6 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
 
         QList<cwScrap*> dirtyScraps(dirtyScrapsRange.begin(), dirtyScrapsRange.end());
 
-        qDebug() << "UPdate scraps:" << dirtyScraps;
-
         if(dirtyScraps.isEmpty()) {
             return AsyncFuture::completed();
         }
