@@ -30,7 +30,7 @@ class cwProject;
 class CAVEWHERE_LIB_EXPORT cwSurveyNoteModelBase : public QAbstractListModel
 {
     Q_OBJECT
-    QML_NAMED_ELEMENT(SurveyNoteModelBase)
+    QML_UNCREATABLE("SurveyNoteModelBase is an abstract base class")
 
 public:
     enum Roles {
