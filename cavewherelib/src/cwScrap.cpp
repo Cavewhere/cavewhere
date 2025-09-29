@@ -36,7 +36,6 @@ cwScrap::cwScrap(QObject *parent) :
     CalculateNoteTransform(false),
     ViewMatrix(nullptr),
     ParentNote(nullptr),
-    ParentCave(nullptr),
     TriangulationDataDirty(false)
 {
     setCalculateNoteTransform(true);
@@ -158,8 +157,6 @@ void cwScrap::setPoint(int index, QPointF point)
             emit pointChanged(firstPointIndex, firstPointIndex);
         }
     }
-
-    qDebug() << "Set point:" << point << this;
 
     OutlinePoints[index] = point;
     emit pointChanged(index, index);
@@ -1030,9 +1027,9 @@ void cwScrap::setParentNote(cwNote* note) {
 
         ParentNote = note;
 
-        if(ParentNote != nullptr) {
-            ParentCave = parentNote()->parentCave();
-        }
+        // if(ParentNote != nullptr) {
+        //     ParentCave = parentNote()->parentCave();
+        // }
     }
 }
 
@@ -1238,15 +1235,6 @@ void cwScrap::setViewMatrix(cwAbstractScrapViewMatrix *viewMatrix)
 
         emit typeChanged();
         emit viewMatrixChanged();
-    }
-}
-
-/**
-    \brief Set the parent cave for the scrap
-  */
-void cwScrap::setParentCave(cwCave *cave) {
-    if(cave != ParentCave) {
-        ParentCave = cave;
     }
 }
 

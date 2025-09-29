@@ -22,7 +22,6 @@
 cwNote::cwNote(QObject *parent) :
     QObject(parent),
     ParentTrip(nullptr),
-    ParentCave(nullptr),
     ImageResolution(new cwImageResolution(this))
 {
     DisplayRotation = 0.0;
@@ -124,7 +123,6 @@ void cwNote::setParentTrip(cwTrip* trip) {
     if(ParentTrip != trip) {
         ParentTrip = trip;
         setParent(trip);
-        setParentCave(trip->parentCave());
     }
 }
 
@@ -235,7 +233,6 @@ cwScrap* cwNote::scrap(int scrapIndex) const {
 void cwNote::setupScrap(cwScrap *scrap) {
     scrap->setParent(this);
     scrap->setParentNote(this);
-    scrap->setParentCave(ParentCave);
 }
 
 /**
@@ -247,18 +244,6 @@ void cwNote::updateScrapNoteTransform()
 {
     foreach(cwScrap* scrap, scraps()) {
         scrap->updateNoteTransformation();
-    }
-}
-
-/**
-  \brief Sets the parent cave
-  */
-void cwNote::setParentCave(cwCave *cave) {
-    if(ParentCave != cave) {
-        ParentCave = cave;
-        foreach(cwScrap* scrap, Scraps) {
-            scrap->setParentCave(ParentCave);
-        }
     }
 }
 
@@ -346,4 +331,8 @@ void cwNote::setData(const cwNoteData &data)
     }
 
     emit scrapsReset();
+}
+
+cwCave *cwNote::parentCave() const {
+    return ParentTrip->parentCave();
 }

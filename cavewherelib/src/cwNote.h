@@ -58,7 +58,7 @@ public:
     void setParentTrip(cwTrip* trip);
     Q_INVOKABLE cwTrip* parentTrip() const;
 
-    void setParentCave(cwCave* cave);
+    // void setParentCave(cwCave* cave);
     cwCave* parentCave() const;
 
     QMatrix4x4 scaleMatrix() const;
@@ -110,7 +110,6 @@ private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwNote, QString, m_name, QString(), &cwNote::nameChanged);
 
     cwTrip* ParentTrip;
-    cwCave* ParentCave;
 
     cwImage ImageIds;
     float DisplayRotation;  //!< Display rotation of the notes, don't confuse this with NoteTransform's rotation
@@ -158,9 +157,7 @@ inline double cwNote::rotate() const {
 /**
   Sets the parent cave for the note
   */
-inline cwCave *cwNote::parentCave() const {
-    return ParentCave;
-}
+
 
 /**
  * @brief cwNote::indexOfScrap

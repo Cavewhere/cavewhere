@@ -19,6 +19,7 @@
 
 //Our includes
 #include "cwGlobals.h"
+#include "cwNote.h"
 #include "cwNoteStation.h"
 #include "cwTriangulatedData.h"
 #include "cwLead.h"
@@ -88,7 +89,7 @@ public:
     void setParentNote(cwNote* trip);
     cwNote* parentNote() const;
 
-    void setParentCave(cwCave* cave);
+    // void setParentCave(cwCave* cave);
     cwCave* parentCave() const;
 
     cwAbstractScrapViewMatrix* viewMatrix() const;
@@ -239,7 +240,7 @@ private:
 
     //The parent trip, this is for referencing the stations
     cwNote* ParentNote;
-    cwCave* ParentCave;
+    // cwCave* ParentCave;
 
     //For rendering, points in note coordinates
     cwTriangulatedData TriangulationData;
@@ -357,7 +358,8 @@ inline bool cwScrap::calculateNoteTransform() const {
     \brief Gets the parent cave
   */
 inline cwCave *cwScrap::parentCave() const {
-    return ParentCave;
+    return ParentNote->parentCave();
+    // return ParentCave;
 }
 
 inline cwAbstractScrapViewMatrix *cwScrap::viewMatrix() const

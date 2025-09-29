@@ -114,11 +114,3 @@ void cwSurveyNoteLiDARModel::onParentTripChanged()
     }
 }
 
-void cwSurveyNoteLiDARModel::onParentCaveChanged()
-{
-    for (QObject* obj : notes()) {
-        if (auto* note = qobject_cast<cwNoteLiDAR*>(obj)) {
-            note->setParentCave(parentCave());
-        }
-    }
-}

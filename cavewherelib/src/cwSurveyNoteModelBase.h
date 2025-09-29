@@ -70,7 +70,6 @@ protected:
 
     // Hooks for subclasses to push parents into notes
     virtual void onParentTripChanged();
-    virtual void onParentCaveChanged();
 
 private:
     QList<QObject*> m_notes;

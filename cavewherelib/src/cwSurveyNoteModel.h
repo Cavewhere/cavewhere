@@ -29,7 +29,6 @@ public:
 
 protected:
     void onParentTripChanged() override;
-    void onParentCaveChanged() override;
 
 private:
     QList<cwNote*> validateNoteImages(QList<cwNote*> notes) const;

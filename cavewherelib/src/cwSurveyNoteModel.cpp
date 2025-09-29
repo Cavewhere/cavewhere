@@ -120,6 +120,7 @@ void cwSurveyNoteModel::addNotes(const QList<cwNote *>& notes)
     QList<QObject*> baseNotes;
     baseNotes.reserve(notes.size());
     for(const auto note : notes) {
+        note->setParentTrip(parentTrip());
         baseNotes.append(note);
     }
     cwSurveyNoteModelBase::addNotes(baseNotes);
@@ -135,7 +136,6 @@ void cwSurveyNoteModel::setData(const cwSurveyNoteModelData &data)
     for (const auto& noteData : data.notes) {
         auto* note = new cwNote(this);
         note->setParentTrip(parentTrip());
-        note->setParentCave(parentCave());
         note->setData(noteData);
         newNotes.append(note);
     }
@@ -163,22 +163,10 @@ void cwSurveyNoteModel::onParentTripChanged()
     for (QObject* obj : notes) {
         if (auto* note = qobject_cast<cwNote*>(obj)) {
             note->setParentTrip(parentTrip());
-            if (parentTrip() != nullptr) {
-                note->setParentCave(parentTrip()->parentCave());
-            }
         }
     }
 }
 
-void cwSurveyNoteModel::onParentCaveChanged()
-{
-    const auto notes = this->notes();
-    for (QObject* obj : notes) {
-        if (auto* note = qobject_cast<cwNote*>(obj)) {
-            note->setParentCave(parentCave());
-        }
-    }
-}
 
 QList<cwNote*> cwSurveyNoteModel::validateNoteImages(QList<cwNote*> noteList) const
 {
@@ -209,7 +197,6 @@ void cwSurveyNoteModel::addNotesWithNewImages(QList<cwImage> images)
         note->setName(QFileInfo(image.path()).fileName());
         note->setImage(image);
         note->setParentTrip(parentTrip());
-        note->setParentCave(parentCave());
         newNotes.append(note);
     }
 

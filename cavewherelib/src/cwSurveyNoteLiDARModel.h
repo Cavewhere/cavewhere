@@ -20,5 +20,4 @@ public:
 
 protected:
     void onParentTripChanged() override;
-    void onParentCaveChanged() override;
 };

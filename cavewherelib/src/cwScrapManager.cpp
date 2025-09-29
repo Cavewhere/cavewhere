@@ -265,6 +265,7 @@ void cwScrapManager::inserted(QModelIndex parent, int begin, int end)
             switch(index.data(cwRegionTreeModel::TypeRole).toInt()) {
             case cwRegionTreeModel::NoteType: {
                 cwNote* note = index.data(cwRegionTreeModel::ObjectRole).value<cwNote*>();
+                // qDebug() << "Connect note:" << note;
                 connectNote(note);
                 break;
             }
@@ -419,6 +420,7 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
         scrap->setTriangulationData(oldData);
     }
 
+
     auto run = [this]() {
 
         //Running
@@ -427,6 +429,8 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
             | std::views::filter([](const cwScrap* scrap) { return scrap->parentCave() != nullptr; });
 
         QList<cwScrap*> dirtyScraps(dirtyScrapsRange.begin(), dirtyScrapsRange.end());
+
+        qDebug() << "UPdate scraps:" << dirtyScraps;
 
         if(dirtyScraps.isEmpty()) {
             return AsyncFuture::completed();

@@ -116,13 +116,6 @@ cwTrip* cwSurveyNoteModelBase::parentTrip() const
     return m_parentTrip;
 }
 
-// void cwSurveyNoteModelBase::setParentCave(cwCave* cave)
-// {
-//     if (m_parentCave != cave) {
-//         m_parentCave = cave;
-//         onParentCaveChanged();
-//     }
-// }
 
 cwCave* cwSurveyNoteModelBase::parentCave() const
 {
@@ -144,9 +137,4 @@ cwProject* cwSurveyNoteModelBase::project() const
 void cwSurveyNoteModelBase::onParentTripChanged()
 {
     // Subclasses push trip into their note type
-}
-
-void cwSurveyNoteModelBase::onParentCaveChanged()
-{
-    // Subclasses push cave into their note type
 }
