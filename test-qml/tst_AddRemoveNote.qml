@@ -24,6 +24,7 @@ MainWindowTest {
             //Copy test data to another
             let phakeCavePath = toUrl(TestHelper.copyToTempDir("://datasets/test_cwTextureUploadTask/PhakeCave.PNG"));
             let bonesPath = toUrl(TestHelper.copyToTempDir("://datasets/test_cwSurveyNotesConcatModel/bones.glb"));
+                    // let bonesPath = toUrl(TestHelper.copyToTempDir("/Users/cave/Downloads/9_8_2025 2.glb"));
 
             let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery");
             noteGallery.imagesAdded([phakeCavePath, bonesPath]);
