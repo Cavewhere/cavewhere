@@ -30,6 +30,7 @@ class cwCamera;
  * for each of the cwScrapLeadView to cwScrap::LeadPosition so it uses the global position of the
  * lead. This global position is calculated by the carpeting algorithm.
  */
+//TODO: convert this class to us cwItem3DRepeater
 class cwLeadView : public QQuickItem
 {
     Q_OBJECT

@@ -65,7 +65,7 @@ void cwLeadView::setRegionModel(cwRegionTreeModel* regionModel) {
             connect(RegionModel.data(), &cwRegionTreeModel::rowsAboutToBeRemoved, this, &cwLeadView::scrapsRemoved);
 
             QList<cwScrap*> scraps = RegionModel->all<cwScrap*>(QModelIndex(), &cwRegionTreeModel::scrap);
-            for(auto scrap : scraps) {
+            for(auto scrap : std::as_const(scraps)) {
                 addScrap(scrap);
             }
         }
