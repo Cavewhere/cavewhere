@@ -311,7 +311,7 @@ QVariantMap cwItem3DRepeater::initialItemProperties(QQuickItem *item, int index)
     }
 
     // Common convenience: row index if present
-    const auto indexPropertyName = QByteArrayLiteral("index");
+    const auto indexPropertyName = QByteArrayLiteral("pointIndex");
     if(hasWritable(item, indexPropertyName)) {
         out.insert(indexPropertyName, index);
     }

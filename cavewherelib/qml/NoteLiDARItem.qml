@@ -49,24 +49,17 @@ RegionViewer {
     }
 
     Item3DRepeater {
+        id: noteStationRepeaterId
         anchors.fill: parent
         camera: rhiViewerId.camera
         model: note
         positionRole: NoteLiDAR.ScenePositionRole
-        component: Item {
+        component: NoteLiDARStationItem {
             id: stationItemId
-            property vector3d position3D: Qt.vector3d(0, 0, 0)
-            required property int index
-            Rectangle {
-                width: 5
-                height: 5
-                color: "red"
-                anchors.centerIn: parent
 
-                Text {
-                    text: stationItemId.index
-                }
-            }
+
+            note: rhiViewerId.note
+            parentView: noteStationRepeaterId
         }
     }
 
