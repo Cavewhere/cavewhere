@@ -13,6 +13,7 @@
 cwScrapOutlinePointView::cwScrapOutlinePointView(QQuickItem *parent) :
     cwScrapPointView(parent)
 {
+    setQmlSource(QStringLiteral("qrc:/qt/qml/cavewherelib/qml/ScrapOutlinePoint.qml"));
 }
 
 

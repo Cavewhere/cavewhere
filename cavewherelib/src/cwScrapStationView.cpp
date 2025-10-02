@@ -32,6 +32,8 @@ cwScrapStationView::cwScrapStationView(QQuickItem *parent) :
     ScaleAnimation(new QVariantAnimation(this))
     // OldTransformUpdater(nullptr)
 {
+    setQmlSource(QStringLiteral("qrc:/qt/qml/cavewherelib/qml/NoteStation.qml"));
+
     setFlag(QQuickItem::ItemHasContents, true);
 
     ScaleAnimation->setStartValue(QPointF(0.0, 0.0));

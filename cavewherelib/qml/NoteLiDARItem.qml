@@ -54,12 +54,18 @@ RegionViewer {
         model: note
         positionRole: NoteLiDAR.ScenePositionRole
         component: Item {
+            id: stationItemId
             property vector3d position3D: Qt.vector3d(0, 0, 0)
+            required property int index
             Rectangle {
                 width: 5
                 height: 5
                 color: "red"
                 anchors.centerIn: parent
+
+                Text {
+                    text: stationItemId.index
+                }
             }
         }
     }

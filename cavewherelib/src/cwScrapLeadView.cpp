@@ -13,7 +13,7 @@
 cwScrapLeadView::cwScrapLeadView(QQuickItem *parent) :
     cwScrapPointView(parent)
 {
-
+    setQmlSource(QStringLiteral("qrc:/qt/qml/cavewherelib/qml/NoteLead.qml"));
 }
 
 cwScrapLeadView::~cwScrapLeadView()
@@ -58,11 +58,3 @@ void cwScrapLeadView::updateViewWithData(int begin, int end, QList<int> roles)
     }
 }
 
-/**
- * @brief cwScrapStationView::qmlSource
- * @return The qml source of the point that'll be rendered
- */
-QString cwScrapLeadView::qmlSource() const
-{
-    return QStringLiteral("qrc:/qt/qml/cavewherelib/qml/NoteLead.qml");
-}

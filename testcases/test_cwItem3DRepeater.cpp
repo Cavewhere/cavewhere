@@ -335,12 +335,13 @@ TEST_CASE("Item3DRepeater responds to rowsInserted and rowsRemoved", "[cwItem3DR
 
     // Remove row 0
     model.removeRowAt(0);
-    QCoreApplication::processEvents(); // process deleteLaters
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete); // process deleteLaters
+    // QCoreApplication::processEvents();
     items = repeaterChildren(rep);
     REQUIRE(items.size() == 1);
 
     // Remaining item should be "B"
-    REQUIRE(items[0]->property("displayName").toString() == QStringLiteral("B"));
+    REQUIRE(items[0]->property("displayName").toString().toStdString() == QStringLiteral("B").toStdString());
 
     delete root;
 }
@@ -366,6 +367,8 @@ TEST_CASE("Item3DRepeater rebuilds on modelReset", "[cwItem3DRepeater]") {
     model.resetWith({
         { QVector3D(9,9,9), QStringLiteral("C"), 3.0, QVector3D(0,0,0), true }
     });
+
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete); // process deleteLaters
 
     items = repeaterChildren(rep);
     REQUIRE(items.size() == 1);

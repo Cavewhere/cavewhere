@@ -60,8 +60,6 @@ private:
     // cwTransformItemUpdater* OldTransformUpdater;
 
     virtual void updateItemPosition(QQuickItem* item, int index);
-    virtual QString qmlSource() const;
-
 
 private slots:
     void updateShotLinesWithAnimation();
@@ -77,14 +75,6 @@ protected:
 
 // Q_DECLARE_METATYPE(cwScrapStationView*)
 
-/**
- * @brief cwScrapStationView::qmlSource
- * @return The qml source of the point that'll be rendered
- */
-inline QString cwScrapStationView::qmlSource() const
-{
-    return QStringLiteral("qrc:/qt/qml/cavewherelib/qml/NoteStation.qml");
-}
 
 
 

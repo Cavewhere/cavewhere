@@ -30,7 +30,6 @@ public:
     void setScrap(cwScrap* scrap);
 
 private:
-    virtual QString qmlSource() const;
     virtual void updateItemPosition(QQuickItem* item, int index);
 
 private slots:

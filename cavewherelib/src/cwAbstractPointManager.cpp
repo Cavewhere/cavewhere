@@ -16,7 +16,6 @@
 
 cwAbstractPointManager::cwAbstractPointManager(QQuickItem *parent) :
     QQuickItem(parent),
-    m_itemComponent(nullptr),
     m_selectionManager(nullptr),
     m_selectedItemIndex(-1)
 {
@@ -34,59 +33,153 @@ cwAbstractPointManager::cwAbstractPointManager(QQuickItem *parent) :
 /**
   This creates the station component used generate the station symobols
   */
-void cwAbstractPointManager::createComponent() {
-    //Make sure we have a note component so we can create it
-    if(m_itemComponent == nullptr) {
-        QQmlContext* context = QQmlEngine::contextForObject(this);
-        if(context == nullptr) {
-            qDebug() << "Context is nullptr, did you forget to set the context? THIS IS A BUG" << LOCATION;
-            return;
-        }
+// void cwAbstractPointManager::createComponent() {
+//     //Make sure we have a note component so we can create it
+//     if(m_itemComponent == nullptr) {
+//         QQmlContext* context = QQmlEngine::contextForObject(this);
+//         if(context == nullptr) {
+//             qDebug() << "Context is nullptr, did you forget to set the context? THIS IS A BUG" << LOCATION;
+//             return;
+//         }
 
-        m_itemComponent = new QQmlComponent(context->engine(), qmlSource(), this);
-        if(m_itemComponent->isError()) {
-            qDebug() << "Point errors:" << m_itemComponent->errorString();
-        }
-    }
+//         m_itemComponent = new QQmlComponent(context->engine(), qmlSource(), this);
+//         if(m_itemComponent->isError()) {
+//             qDebug() << "Point errors:" << m_itemComponent->errorString();
+//         }
+//     }
+// }
+
+QQmlComponent* cwAbstractPointManager::component() const
+{
+    return m_component;
 }
 
-/**
-  This is a private method, that adds a new station the end of the station list
+void cwAbstractPointManager::setComponent(QQmlComponent* comp)
+{
+    if(m_component == comp) {
+        return;
+    }
 
-    Returns a valid item if the item was create okay, and nullptr if it failed to be created
-*/
-QQuickItem *cwAbstractPointManager::createItem() {
+    m_component = comp;
+    emit componentChanged();
 
-    if(m_itemComponent == nullptr) {
-        qDebug() << "ItemComponent hasn't been created, call createComponent(). THIS IS A BUG" << LOCATION;
+    // Rebuild items because creation path may change
+    resizeNumberOfItems(m_items.size());
+    updateAllItemData();
+}
+
+QUrl cwAbstractPointManager::qmlSource() const
+{
+    // Default implementation returns the set URL (subclasses can override)
+    return m_qmlSourceUrl;
+}
+
+void cwAbstractPointManager::setQmlSource(const QUrl& source)
+{
+    if(m_qmlSourceUrl == source) {
+        return;
+    }
+    m_qmlSourceUrl = source;
+    emit qmlSourceChanged();
+
+    // If we are using URL path, clear any external component to avoid ambiguity
+    if(!m_qmlSourceUrl.isEmpty()) {
+        m_component = nullptr;
+        emit componentChanged();
+    }
+
+    resizeNumberOfItems(m_items.size());
+    updateAllItemData();
+}
+
+
+QQuickItem* cwAbstractPointManager::createItem(int index)
+{
+    ensureComponent();
+    if(!ensureComponentReady()) {
         return nullptr;
     }
 
     QQmlContext* context = QQmlEngine::contextForObject(this);
-    QQuickItem* item = qobject_cast<QQuickItem*>(m_itemComponent->create(context));
-    if(item == nullptr) {
-        qDebug() << "Problem creating new point item ... " << qmlSource() << "Didn't compile. THIS IS A BUG!" << LOCATION;
-        qDebug() << "Compiling errors:" << m_itemComponent->errorString();
+    if(context == nullptr) {
+        qDebug() << "Context is nullptr. THIS IS A BUG" << LOCATION;
         return nullptr;
     }
 
-    //Reparent the item so the reverse transform works correctly
-    //This will keep the item's size and rotation consistent
-    item->setParentItem(parentItem());
+    QObject* obj = m_component->beginCreate(context);
+    QQuickItem* item = qobject_cast<QQuickItem*>(obj);
+    if(item == nullptr) {
+        if(obj != nullptr) {
+            obj->deleteLater();
+        }
+        qDebug() << "Delegate isn't a QQuickItem" << LOCATION;
+        return nullptr;
+    }
 
-    // if(m_pointParentItem) {
-    //     item->setParentItem(m_pointParentItem);
-    // }
+    // NEW: seed required properties before completeCreate()
+    const QVariantMap props = initialItemProperties(item, index);
+    if(!props.isEmpty()) {
+        m_component->setInitialProperties(item, props);
+    }
 
-    //Add the point to the transform updater
-    // if(TransformUpdater != nullptr) {
-    //     TransformUpdater->addChildItem(item);
-    // } else {
-    //     qDebug() << "No transformUpdater, point's won't be positioned correctly, this is a bug" << LOCATION;
-    // }
+    item->setParentItem(this);
+    item->setParent(this);
+
+    m_component->completeCreate();
+
+    if(m_component->isError()) {
+        qDebug() << "Item component errors:" << m_component->errorString();
+        return nullptr;
+    }
 
     return item;
 }
+
+void cwAbstractPointManager::refreshItemAt(int index)
+{
+    if(index < 0 || index >= m_items.size()) {
+        return;
+    }
+    privateUpdateItemData(m_items.at(index), index);
+}
+
+// /**
+//   This is a private method, that adds a new station the end of the station list
+
+//     Returns a valid item if the item was create okay, and nullptr if it failed to be created
+// */
+// QQuickItem *cwAbstractPointManager::createItem() {
+
+//     if(m_itemComponent == nullptr) {
+//         qDebug() << "ItemComponent hasn't been created, call createComponent(). THIS IS A BUG" << LOCATION;
+//         return nullptr;
+//     }
+
+//     QQmlContext* context = QQmlEngine::contextForObject(this);
+//     QQuickItem* item = qobject_cast<QQuickItem*>(m_itemComponent->create(context));
+//     if(item == nullptr) {
+//         qDebug() << "Problem creating new point item ... " << qmlSource() << "Didn't compile. THIS IS A BUG!" << LOCATION;
+//         qDebug() << "Compiling errors:" << m_itemComponent->errorString();
+//         return nullptr;
+//     }
+
+//     //Reparent the item so the reverse transform works correctly
+//     //This will keep the item's size and rotation consistent
+//     item->setParentItem(parentItem());
+
+//     // if(m_pointParentItem) {
+//     //     item->setParentItem(m_pointParentItem);
+//     // }
+
+//     //Add the point to the transform updater
+//     // if(TransformUpdater != nullptr) {
+//     //     TransformUpdater->addChildItem(item);
+//     // } else {
+//     //     qDebug() << "No transformUpdater, point's won't be positioned correctly, this is a bug" << LOCATION;
+//     // }
+
+//     return item;
+// }
 
 /**
   Called when a point has been added
@@ -112,24 +205,46 @@ void cwAbstractPointManager::pointRemoved(int index) {
  */
 void cwAbstractPointManager::pointsInserted(int begin, int end)
 {
-    createComponent();
+    ensureComponent();
+    if(!ensureComponentReady()) {
+        return;
+    }
 
     for(int i = begin; i <= end; i++) {
-        auto item = createItem();
-
-        if(item != nullptr) {
-            m_items.insert(i, item);
-            privateUpdateItemData(item, i);
-        } else {
+        QQuickItem* item = createItem(i); // pass index
+        if(item == nullptr) {
             qDebug() << "Can't insert. Item is nullptr. THIS IS A BUG" << LOCATION;
             break;
         }
+
+        m_items.insert(i, item);
+        onItemCreated(item, i);
+        privateUpdateItemData(item, i);
     }
 
-    //Update indices for all items after end
     for(int i = end + 1; i < m_items.size(); i++) {
         privateUpdateItemData(m_items.at(i), i);
     }
+
+
+    // createComponent();
+
+    // for(int i = begin; i <= end; i++) {
+    //     auto item = createItem();
+
+    //     if(item != nullptr) {
+    //         m_items.insert(i, item);
+    //         privateUpdateItemData(item, i);
+    //     } else {
+    //         qDebug() << "Can't insert. Item is nullptr. THIS IS A BUG" << LOCATION;
+    //         break;
+    //     }
+    // }
+
+    // //Update indices for all items after end
+    // for(int i = end + 1; i < m_items.size(); i++) {
+    //     privateUpdateItemData(m_items.at(i), i);
+    // }
 }
 
 /**
@@ -147,12 +262,10 @@ void cwAbstractPointManager::pointsRemoved(int begin, int end)
     if(end >= m_items.size()) { return; }
 
     for(int index = end; index >= begin; index--) {
-        //Unselect the item that's going to be deleted
-
         if(selectedItemIndex() == index) {
             clearSelection();
         }
-
+        onItemAboutToBeDestroyed(m_items[index], index);
         m_items[index]->deleteLater();
         m_items.removeAt(index);
     }
@@ -185,6 +298,47 @@ void cwAbstractPointManager::updateSelection()
     }
 }
 
+void cwAbstractPointManager::ensureComponent()
+{
+    if(m_component) {
+        return;
+    }
+
+    if(!isComponentComplete()) {
+        return;
+    }
+
+    QQmlContext* context = QQmlEngine::contextForObject(this);
+    if(context == nullptr) {
+        qDebug() << "Context is nullptr. THIS IS A BUG" << LOCATION;
+        return;
+    }
+
+    const QUrl sourceUrl = !m_qmlSourceUrl.isEmpty() ? m_qmlSourceUrl : qmlSource();
+
+    if(!sourceUrl.isEmpty()) {
+        m_component = new QQmlComponent(context->engine(), sourceUrl, this);
+        if(m_component->isError()) {
+            qDebug() << "Point component errors:" << m_component->errorString();
+        }
+    } else {
+        // No provided component, no source URL: subclasses must override qmlSource() or set component
+        qDebug() << "No component or qmlSource provided for cwAbstractPointManager" << LOCATION;
+    }
+}
+
+bool cwAbstractPointManager::ensureComponentReady() const
+{
+    if(!m_component) {
+        return false;
+    }
+    if(m_component->isError()) {
+        qDebug() << "Item component errors:" << m_component->errorString();
+        return false;
+    }
+    return m_component->status() == QQmlComponent::Ready;
+}
+
 /**
  * @brief cwAbstractPointManager::updateAll
  * @param numberOfStations - The number of point item that should be created.
@@ -194,31 +348,57 @@ void cwAbstractPointManager::updateSelection()
  */
 void cwAbstractPointManager::resizeNumberOfItems(int numberOfPoints)
 {
-    //Make sure we have a note component so we can create it
-    createComponent();
+    ensureComponent();
 
     if(m_items.size() < numberOfPoints) {
-        int notesToAdd = numberOfPoints - m_items.size();
-        //Add more stations to the NoteStations
-        for(int i = 0; i < notesToAdd; i++) {
-            auto item = createItem();
-            m_items.append(item);
+        const int toAdd = numberOfPoints - m_items.size();
+        for(int k = 0; k < toAdd; k++) {
+            const int index = m_items.size(); // new item will be appended here
+            QQuickItem* item = createItem(index);
+            if(item != nullptr) {
+                m_items.append(item);
+                onItemCreated(item, index);
+            }
         }
-
     } else if(m_items.size() > numberOfPoints) {
-        //Remove stations from NoteStations
-        int notesToRemove = m_items.size() - numberOfPoints;
-
-        //Remove stations to the NoteStations
-        for(int i = 0; i < notesToRemove; i++) {
-            auto deleteStation = m_items.last();
+        const int toRemove = m_items.size() - numberOfPoints;
+        for(int k = 0; k < toRemove; k++) {
+            QQuickItem* deleteItem = m_items.last();
+            const int idx = m_items.size() - 1;
+            onItemAboutToBeDestroyed(deleteItem, idx);
             m_items.removeLast();
-            deleteStation->deleteLater();
+            deleteItem->deleteLater();
         }
     }
 
     updateAllItemData();
 }
+
+    // //Make sure we have a note component so we can create it
+    // createComponent();
+
+    // if(m_items.size() < numberOfPoints) {
+    //     int notesToAdd = numberOfPoints - m_items.size();
+    //     //Add more stations to the NoteStations
+    //     for(int i = 0; i < notesToAdd; i++) {
+    //         auto item = createItem();
+    //         m_items.append(item);
+    //     }
+
+    // } else if(m_items.size() > numberOfPoints) {
+    //     //Remove stations from NoteStations
+    //     int notesToRemove = m_items.size() - numberOfPoints;
+
+    //     //Remove stations to the NoteStations
+    //     for(int i = 0; i < notesToRemove; i++) {
+    //         auto deleteStation = m_items.last();
+    //         m_items.removeLast();
+    //         deleteStation->deleteLater();
+    //     }
+    // }
+
+    // updateAllItemData();
+// }
 
 
 /**
