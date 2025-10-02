@@ -107,9 +107,6 @@ QVariant cwNoteLiDAR::data(const QModelIndex& index, int role) const
         return {};
     }
     const int row = index.row();
-    if (row < 0 || row >= m_stations.size()) {
-        return {};
-    }
 
     const cwNoteLiDARStation& station = m_stations.at(row);
     switch (role) {
@@ -134,12 +131,48 @@ QVariant cwNoteLiDAR::data(const QModelIndex& index, int role) const
     }
 }
 
+bool cwNoteLiDAR::setData(const QModelIndex &index, const QVariant &value, int role)
+{
+    if (!index.isValid()) {
+        return false;
+    }
+    const int row = index.row();
+    cwNoteLiDARStation& station = m_stations[row];
+
+    switch (role) {
+    case NameRole: {
+        station.setName(value.toString());
+        emit dataChanged(index, index, {NameRole});
+        return true;
+    }
+    case PositionOnNoteRole: {
+        station.setPositionOnNote(value.value<QVector3D>());
+        emit dataChanged(index, index, {PositionOnNoteRole, ScenePositionRole});
+        return true;
+    }
+    case ScenePositionRole: {
+        return false;
+        // qDebug() << "ModelMatrix:" << m_modelMatrix.value();
+        // qDebug() << "Scene Point:" <<  m_modelMatrix.value().map(station.positionOnNote()) << station.positionOnNote();
+        // return m_modelMatrix.value().map(station.positionOnNote());
+    }
+    case StationRole: {
+        return false;
+    }
+    default: {
+        return false;
+    }
+    }
+    return false;
+}
+
 
 QHash<int, QByteArray> cwNoteLiDAR::roleNames() const
 {
     return {
         { NameRole, QByteArrayLiteral("name") },
         { PositionOnNoteRole, QByteArrayLiteral("positionOnNote") },
+        { ScenePositionRole, QByteArrayLiteral("scenePosition") },
         { StationRole, QByteArrayLiteral("station") },
 
     };

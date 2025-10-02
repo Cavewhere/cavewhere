@@ -15,7 +15,14 @@ QQ.Item {
 
     signal pointSelected()
     signal positionChanged(point position)
+    signal finishedMoving(point position)
     signal doubleClicked()
+
+    function position() {
+        return stationItem.mapToItem(stationItem.parentView,
+        stationDragHandler.centroid.position.x,
+        stationDragHandler.centroid.position.y)
+    }
 
     QQ.TapHandler {
         gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
@@ -34,14 +41,14 @@ QQ.Item {
             if (active) {
                 // Drag has started
                 stationItem.pointSelected()
+            } else {
+                stationItem.finishedMoving(position())
             }
         }
 
         onCentroidChanged: {
             if (active) {
-                let parentCoord = stationItem.mapToItem(stationItem.parentView, centroid.position.x, centroid.position.y)
-                positionChanged(parentCoord)
-                // stationItem.pointMoved(stationItem.scrapItem.toNoteCoordinates(parentCoord))
+                positionChanged(position())
             }
         }
     }

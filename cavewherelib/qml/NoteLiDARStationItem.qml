@@ -11,6 +11,8 @@ PointItem {
     width: 2
     height: 2
 
+    signal finishedMoving(point position)
+
     // onPointIndexChanged: updateItem()
 
     function select() {
@@ -26,6 +28,7 @@ PointItem {
                                note.removeStation(ponitIndex)
                            }
     }
+
 
     SelectedBackground {
         id: selectedBackground
@@ -47,8 +50,14 @@ PointItem {
             onPointSelected: noteStationId.select();
             parentView: noteStationId.parentView
             onPositionChanged: (point) => {
-                                   console.log("Position changed:" + point)
+                                   //This updates the position but doesn't do the ray casting
+                                   noteStationId.x = point.x
+                                   noteStationId.y = point.y
                           }
+            onFinishedMoving: (point) => {
+                                  noteStationId.finishedMoving(point)
+                              }
+
             onDoubleClicked: stationName.openEditor();
         }
     }
@@ -62,7 +71,10 @@ PointItem {
         text: name
 
         onFinishedEditting: (newText) => {
-                                console.log("Set newText:" + newText)
+                                let index = note.index(noteStationId.pointIndex, 0)
+                                note.setData(index, newText, NoteLiDAR.NameRole);
+
+
             // noteStationId.scrap.setStationData(Scrap.StationName, noteStationId.pointIndex, newText);
             // text = newText;
             // noteStationId.forceActiveFocus();
