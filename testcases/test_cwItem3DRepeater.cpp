@@ -158,23 +158,23 @@ private:
     // Private data at end
 };
 
-// ----------------------------
-// Delegate QML as data: URL
-// ----------------------------
-static QUrl makeDelegateUrl() {
-    const QString qml = QString::fromUtf8(
-        "import QtQuick 2.15\n"
-        "Item {\n"
-        "  id: root\n"
-        "  required property vector3d position3D\n"
-        "  required property string displayName\n"
-        "  required property real lengthMeters\n"
-        "  property int row\n"
-        "}\n"
-        );
-    const QByteArray encoded = QUrl::toPercentEncoding(qml);
-    return QUrl(QStringLiteral("data:text/plain,") + QString::fromLatin1(encoded));
-}
+// // ----------------------------
+// // Delegate QML as data: URL
+// // ----------------------------
+// static QUrl makeDelegateUrl() {
+//     const QString qml = QString::fromUtf8(
+//         "import QtQuick 2.15\n"
+//         "Item {\n"
+//         "  id: root\n"
+//         "  required property vector3d position3D\n"
+//         "  required property string displayName\n"
+//         "  required property real lengthMeters\n"
+//         "  property int row\n"
+//         "}\n"
+//         );
+//     const QByteArray encoded = QUrl::toPercentEncoding(qml);
+//     return QUrl(QStringLiteral("data:text/plain,") + QString::fromLatin1(encoded));
+// }
 
 // ----------------------------
 // Root QML that hosts repeater
@@ -197,6 +197,27 @@ static QObject* makeRootWithRepeater(QQmlEngine& engine) {
     QObject* root = comp.create();
     REQUIRE(root != nullptr);
     return root;
+}
+
+// ----------------------------
+// Delegate as QQmlComponent
+// ----------------------------
+static QQmlComponent* makeDelegateComponent(QQmlEngine& engine, QObject* parent)
+{
+    static const char* kDelegateQml =
+        "import QtQuick 2.15\n"
+        "Item {\n"
+        "  id: root\n"
+        "  required property vector3d position3D\n"
+        "  required property string displayName\n"
+        "  required property real lengthMeters\n"
+        "  property int row\n"
+        "}\n";
+
+    auto* comp = new QQmlComponent(&engine, parent); // parent for cleanup with 'root'
+    comp->setData(QByteArray(kDelegateQml), QUrl());
+    REQUIRE(comp->status() == QQmlComponent::Ready);
+    return comp;
 }
 
 static cwItem3DRepeater* findRepeater(QObject* root) {
@@ -226,7 +247,7 @@ TEST_CASE("Item3DRepeater creates items per row with all role properties", "[cwI
     QObject* root = makeRootWithRepeater(engine);
     auto* rep = findRepeater(root);
 
-    rep->setQmlSource(makeDelegateUrl());
+    rep->setComponent(makeDelegateComponent(engine, root));
 
     TestListModel model;
     model.resetWith({
@@ -264,7 +285,7 @@ TEST_CASE("Item3DRepeater updates changed roles on dataChanged", "[cwItem3DRepea
     QObject* root = makeRootWithRepeater(engine);
     auto* rep = findRepeater(root);
 
-    rep->setQmlSource(makeDelegateUrl());
+    rep->setComponent(makeDelegateComponent(engine, root));
 
     TestListModel model;
     model.resetWith({
@@ -295,7 +316,7 @@ TEST_CASE("Item3DRepeater responds to rowsInserted and rowsRemoved", "[cwItem3DR
     QQmlEngine engine;
     QObject* root = makeRootWithRepeater(engine);
     auto* rep = findRepeater(root);
-    rep->setQmlSource(makeDelegateUrl());
+    rep->setComponent(makeDelegateComponent(engine, root));
 
     TestListModel model;
     model.resetWith({
@@ -328,7 +349,7 @@ TEST_CASE("Item3DRepeater rebuilds on modelReset", "[cwItem3DRepeater]") {
     QQmlEngine engine;
     QObject* root = makeRootWithRepeater(engine);
     auto* rep = findRepeater(root);
-    rep->setQmlSource(makeDelegateUrl());
+    rep->setComponent(makeDelegateComponent(engine, root));
 
     TestListModel model;
     model.resetWith({
@@ -357,7 +378,7 @@ TEST_CASE("Item3DRepeater updates position when positionRole changes", "[cwItem3
     QQmlEngine engine;
     QObject* root = makeRootWithRepeater(engine);
     auto* rep = findRepeater(root);
-    rep->setQmlSource(makeDelegateUrl());
+    rep->setComponent(makeDelegateComponent(engine, root));
 
     TestListModel model;
     model.resetWith({

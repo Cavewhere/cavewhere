@@ -7,6 +7,9 @@
 #include <QUrl>
 #include <QString>
 #include <QtQml/qqmlregistration.h>
+#include <QAbstractListModel>
+#include <QProperty>
+#include <QMatrix4x4>
 
 // Our includes
 #include "cwGlobals.h"
@@ -14,16 +17,35 @@
 class cwTrip;
 class cwCave;
 
-class CAVEWHERE_LIB_EXPORT cwNoteLiDAR : public QObject
+class CAVEWHERE_LIB_EXPORT cwNoteLiDAR : public QAbstractListModel
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(NoteLiDAR)
 
     Q_PROPERTY(QString filename READ filename WRITE setFilename NOTIFY filenameChanged)
-    // Q_PROPERTY(QList<cwNoteLiDARStation> stations READ stations WRITE setStations NOTIFY stationsChanged)
+    Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
+
+    Q_PROPERTY(QMatrix4x4 modelMatrix READ modelMatrix WRITE setModelMatrix NOTIFY modelMatrixChanged BINDABLE bindableModelMatrix)
+
+    QMatrix4x4 modelMatrix() const { return m_modelMatrix.value(); }
+    void setModelMatrix(const QMatrix4x4& modelMatrix) { m_modelMatrix = modelMatrix; }
+    QBindable<QMatrix4x4> bindableModelMatrix() { return &m_modelMatrix; }
 
 public:
+    enum Role {
+        NameRole = Qt::UserRole + 1,
+        PositionOnNoteRole,
+        ScenePositionRole,
+        StationRole
+    };
+    Q_ENUM(Role)
+
     explicit cwNoteLiDAR(QObject* parent = nullptr);
+
+    // QAbstractListModel interface
+    int rowCount(const QModelIndex& parent = QModelIndex()) const override;
+    QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
+    QHash<int, QByteArray> roleNames() const override;
 
     // Property accessors
     QString filename() const;
@@ -32,8 +54,7 @@ public:
     void setParentTrip(cwTrip* trip);
     Q_INVOKABLE cwTrip* parentTrip() const { return m_parentTrip; }
 
-    void setParentCave(cwCave* cave);
-    cwCave* parentCave() const { return m_parentCave; }
+    cwCave* parentCave() const;
 
     // Stations API
     void addStation(const cwNoteLiDARStation& station);
@@ -44,6 +65,8 @@ public:
 
 signals:
     void filenameChanged();
+    void countChanged();
+    void modelMatrixChanged();
     // void stationsChanged();
 
 private:
@@ -51,9 +74,11 @@ private:
     QList<cwNoteLiDARStation> m_stations;       // stations associated with this LiDAR note
 
     cwTrip* m_parentTrip = nullptr;
-    cwCave* m_parentCave = nullptr;
+
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwNoteLiDAR, QMatrix4x4, m_modelMatrix, QMatrix4x4(), &cwNoteLiDAR::modelMatrixChanged);
+
+    int clampIndex(int stationId) const;
 };
 
-// Q_DECLARE_METATYPE(cwNoteLiDARStation)
 
 #endif // CWNOTELIDAR_H

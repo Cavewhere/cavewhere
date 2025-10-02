@@ -37,7 +37,8 @@ class CAVEWHERE_LIB_EXPORT cwItem3DRepeater : public QQuickItem
     QML_NAMED_ELEMENT(Item3DRepeater)
 
     Q_PROPERTY(QAbstractItemModel* model READ model WRITE setModel NOTIFY modelChanged)
-    Q_PROPERTY(QUrl qmlSource READ qmlSource WRITE setQmlSource NOTIFY qmlSourceChanged)
+    Q_PROPERTY(QQmlComponent* component READ component WRITE setComponent NOTIFY componentChanged)
+    // Q_PROPERTY(QUrl qmlSource READ qmlSource WRITE setQmlSource NOTIFY qmlSourceChanged)
     Q_PROPERTY(int positionRole READ positionRole WRITE setPositionRole NOTIFY positionRoleChanged)
     Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)
 
@@ -48,8 +49,11 @@ public:
     QAbstractItemModel* model() const;
     void setModel(QAbstractItemModel* model);
 
-    QUrl qmlSource() const;
-    void setQmlSource(const QUrl& source);
+    QQmlComponent* component() const;
+    void setComponent(QQmlComponent* component);
+
+    // QUrl qmlSource() const;
+    // void setQmlSource(const QUrl& source);
 
     int positionRole() const;
     void setPositionRole(int role);
@@ -64,6 +68,7 @@ signals:
     void qmlSourceChanged();
     void positionRoleChanged();
     void cameraChanged();
+    void componentChanged();
 
 protected:
     void componentComplete() override;
@@ -73,6 +78,7 @@ private slots:
     void onRowsRemoved(const QModelIndex& parent, int first, int last);
     void onDataChanged(const QModelIndex& topLeft, const QModelIndex& bottomRight, const QList<int>& roles);
     void onModelReset();
+    void onComponentStatusChanged(QQmlComponent::Status status);
 
 private:
 
@@ -80,14 +86,16 @@ private:
     cwTransformUpdater* m_transformUpdater;
     cwSelectionManager* m_selectionManager;
 
-    QUrl m_qmlSource;
-    QQmlComponent* m_itemComponent = nullptr;
+    // QUrl m_qmlSource;
+    // QQmlComponent* m_itemComponent = nullptr;
+    QPointer<QQmlComponent> m_component;
     int m_positionRole = -1;
 
     QVector<QQuickItem*> m_items;
 
     void ensureInfrastructure();
-    void ensureComponent();
+    // void ensureComponent();
+    bool ensureComponentReady() const;
     void clearAll();
     void rebuildAll();
 

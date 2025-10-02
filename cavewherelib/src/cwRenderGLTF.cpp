@@ -11,27 +11,30 @@ using namespace cw::gltf;
 cwRenderGLTF::cwRenderGLTF(QObject *parent)
     : cwRenderObject{parent}
 {
-    m_modelMatrixProperty.setBinding([this]() {
-        QMatrix4x4 matrix;
+    // m_modelMatrixProperty.setBinding([this]() {
+    //     QMatrix4x4 matrix;
 
-        //TODO: make this user define
-        //Default rotation for up
-        matrix.rotate(90.0, 1.0, 0.0, 0.0);
+    //     //TODO: make this user define
+    //     //Default rotation for up
+    //     matrix.rotate(90.0, 1.0, 0.0, 0.0);
 
-        matrix.translate(m_translation);
-        auto rotation = m_rotation.value();
-        matrix.rotate(rotation.w(), rotation.x(), rotation.y(), rotation.z());
-        return matrix;
-    });
+    //     matrix.translate(m_translation);
+    //     auto rotation = m_rotation.value();
+    //     matrix.rotate(rotation.w(), rotation.x(), rotation.y(), rotation.z());
+    //     return matrix;
+    // });
 
     m_modelMatrixUpdated = m_modelMatrixProperty.addNotifier([this]() {
         auto matrix = m_modelMatrixProperty.value();
         m_modelMatrix.setValue(matrix);
         for(const auto& key : std::as_const(m_matrixObjects)) {
+            qDebug() << "Update intersector:" << matrix;
             geometryItersecter()->setModelMatrix(key, matrix);
         }
         update();
     });
+
+    qDebug() << "Set m_modelMatrix:" << m_modelMatrixProperty.value();
 
     m_modelMatrix.setValue(m_modelMatrixProperty.value());
 
@@ -67,6 +70,11 @@ void cwRenderGLTF::setGLTFFilePath(const QString &filePath)
 
                     for(const auto& object : std::as_const(load.intersecterObjects)) {
                         intersector->addObject(object);
+                    }
+
+                    auto matrix = m_modelMatrixProperty.value();
+                    for(const auto& key : std::as_const(m_matrixObjects)) {
+                        geometryItersecter()->setModelMatrix(key, matrix);
                     }
 
                     m_dataChanged = true;

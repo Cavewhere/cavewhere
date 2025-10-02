@@ -67,21 +67,49 @@ void cwItem3DRepeater::setModel(QAbstractItemModel* model)
     emit modelChanged();
 }
 
-QUrl cwItem3DRepeater::qmlSource() const
+// QUrl cwItem3DRepeater::qmlSource() const
+// {
+//     return m_qmlSource;
+// }
+
+// void cwItem3DRepeater::setQmlSource(const QUrl& source)
+// {
+//     if(m_qmlSource == source) {
+//         return;
+//     }
+
+//     m_qmlSource = source;
+//     m_itemComponent = nullptr;
+//     rebuildAll();
+//     emit qmlSourceChanged();
+// }
+
+QQmlComponent* cwItem3DRepeater::component() const
 {
-    return m_qmlSource;
+    return m_component;
 }
 
-void cwItem3DRepeater::setQmlSource(const QUrl& source)
+void cwItem3DRepeater::setComponent(QQmlComponent* comp)
 {
-    if(m_qmlSource == source) {
+    if(m_component == comp) {
         return;
     }
 
-    m_qmlSource = source;
-    m_itemComponent = nullptr;
+    if(m_component) {
+        disconnect(m_component, &QQmlComponent::statusChanged,
+                   this, &cwItem3DRepeater::onComponentStatusChanged);
+    }
+
+    m_component = comp;
+
+    if(m_component) {
+        // Do not reparent: ownership typically belongs to QML.
+        connect(m_component, &QQmlComponent::statusChanged,
+                this, &cwItem3DRepeater::onComponentStatusChanged);
+    }
+
     rebuildAll();
-    emit qmlSourceChanged();
+    emit componentChanged();
 }
 
 int cwItem3DRepeater::positionRole() const
@@ -216,6 +244,13 @@ void cwItem3DRepeater::onModelReset()
     rebuildAll();
 }
 
+void cwItem3DRepeater::onComponentStatusChanged(QQmlComponent::Status status)
+{
+    if(status == QQmlComponent::Ready) {
+        rebuildAll();
+    }
+}
+
 void cwItem3DRepeater::ensureInfrastructure()
 {
     if(!m_transformUpdater) {
@@ -230,30 +265,45 @@ void cwItem3DRepeater::ensureInfrastructure()
     }
 }
 
-void cwItem3DRepeater::ensureComponent()
+bool cwItem3DRepeater::ensureComponentReady() const
 {
-    if(m_itemComponent) {
-        return;
+    if(!m_component) {
+        return false;
     }
     if(!isComponentComplete()) {
-        return;
+        return false;
     }
-
-    QQmlContext* context = QQmlEngine::contextForObject(this);
-    if(context == nullptr) {
-        qDebug() << "Context is nullptr, did you forget to set the context? THIS IS A BUG" << LOCATION;
-        return;
+    if(m_component->isError()) {
+        qDebug() << "Item component errors:" << m_component->errorString();
+        return false;
     }
-
-    if(!m_qmlSource.isEmpty()) {
-        m_itemComponent = new QQmlComponent(context->engine(), m_qmlSource, this);
-        if(m_itemComponent->isError()) {
-            qDebug() << "Item component errors:" << m_itemComponent->errorString();
-        }
-    } else {
-        qDebug() << "qmlSource is empty; cannot create row items." << LOCATION;
-    }
+    return m_component->status() == QQmlComponent::Ready;
 }
+
+// void cwItem3DRepeater::ensureComponent()
+// {
+//     if(m_component) {
+//         return;
+//     }
+//     if(!isComponentComplete()) {
+//         return;
+//     }
+
+//     QQmlContext* context = QQmlEngine::contextForObject(this);
+//     if(context == nullptr) {
+//         qDebug() << "Context is nullptr, did you forget to set the context? THIS IS A BUG" << LOCATION;
+//         return;
+//     }
+
+//     if(!m_qmlSource.isEmpty()) {
+//         m_component = new QQmlComponent(context->engine(), m_qmlSource, this);
+//         if(m_component->isError()) {
+//             qDebug() << "Item component errors:" << m_component->errorString();
+//         }
+//     } else {
+//         qDebug() << "qmlSource is empty; cannot create row items." << LOCATION;
+//     }
+// }
 
 void cwItem3DRepeater::clearAll()
 {
@@ -277,8 +327,9 @@ void cwItem3DRepeater::rebuildAll()
     if(!m_model || !isComponentComplete()) {
         return;
     }
-
-    ensureComponent();
+    if(!ensureComponentReady()) {
+        return;
+    }
 
     const int rowCount = m_model->rowCount();
     if(rowCount <= 0) {
@@ -296,8 +347,7 @@ bool cwItem3DRepeater::isFlatListModel(const QModelIndex& parent) const
 
 QQuickItem* cwItem3DRepeater::createItem(const QModelIndex& index)
 {
-    ensureComponent();
-    if(!m_itemComponent) {
+    if(!ensureComponentReady()) {
         return nullptr;
     }
 
@@ -307,7 +357,11 @@ QQuickItem* cwItem3DRepeater::createItem(const QModelIndex& index)
         return nullptr;
     }
 
-    QObject* obj = m_itemComponent->beginCreate(context);
+    if(m_component->isError()) {
+        qDebug() << "Item component errors!!!:" << m_component->errorString();
+    }
+
+    QObject* obj = m_component->beginCreate(context);
     QQuickItem* item = qobject_cast<QQuickItem*>(obj);
     if(item == nullptr) {
         if(obj) { obj->deleteLater(); }
@@ -316,10 +370,12 @@ QQuickItem* cwItem3DRepeater::createItem(const QModelIndex& index)
     }
 
     // helper that only writes if the property exists and is writable
-    auto writeIfExists = [item](const char* name, const QVariant& v) -> bool {
-        QQmlProperty prop(item, QString::fromLatin1(name));
+    QVariantMap initialProperties;
+
+    auto writeIfExists = [item, &initialProperties](const QString& propertyName, const QVariant& value) -> bool {
+        QQmlProperty prop(item, propertyName);
         if(prop.isValid() && prop.isWritable()) {
-            return prop.write(v);
+            initialProperties.insert(propertyName, value);
         }
         return false;
     };
@@ -339,11 +395,13 @@ QQuickItem* cwItem3DRepeater::createItem(const QModelIndex& index)
             continue; // skip unknown or read-only properties (avoids data() call)
         }
 
-        const QVariant variant = m_model->data(index, role);
-        if(variant.isValid()) {
-            QQmlProperty(item, QString::fromUtf8(roleName)).write(variant);
+        const QVariant value = m_model->data(index, role);
+
+        if(value.isValid()) {
+            writeIfExists(QString::fromUtf8(roleName), value);
         }
     }
+
 
     // if(m_positionRole >= 0) {
     //     const QByteArray posName = names.value(m_positionRole);
@@ -363,10 +421,17 @@ QQuickItem* cwItem3DRepeater::createItem(const QModelIndex& index)
     // }
 
     // optional convenience
-    writeIfExists("row", index.row());
+    writeIfExists(QStringLiteral("row"), index.row());
+
+    m_component->setInitialProperties(item, initialProperties);
 
     // complete construction (required props must be satisfied by now)
-    m_itemComponent->completeCreate();
+    m_component->completeCreate();
+
+    if(m_component->isError()) {
+        qDebug() << "Item component errors:" << m_component->errorString();
+        return nullptr;
+    }
 
     // parent + transform hookup
     item->setParentItem(this);
@@ -391,7 +456,6 @@ void cwItem3DRepeater::destroyItemAtRow(int row)
         item->setParentItem(nullptr);
         item->setParent(nullptr);
         item->deleteLater();
-        qDebug() << "Delete later" << item;
         m_items[row] = nullptr;
     }
 }

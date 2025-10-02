@@ -5,7 +5,6 @@
 #include "cwSaveLoad.h"
 #include "cwNoteLiDAR.h"
 #include "cwTrip.h"
-#include "cwCave.h"
 
 // Qt
 #include <QDir>
@@ -56,7 +55,6 @@ void cwSurveyNoteLiDARModel::addFromFiles(QList<QUrl> files)
             for (const QString& path : relativePaths) {
                 auto* note = new cwNoteLiDAR(this);
                 note->setParentTrip(parentTrip());
-                note->setParentCave(parentCave());
                 note->setFilename(path); // project-relative path
                 qDebug() << "lidar note path:" << path;
                 newNotes.append(note);
@@ -104,12 +102,10 @@ QVariant cwSurveyNoteLiDARModel::data(const QModelIndex& index, int role) const
 
 void cwSurveyNoteLiDARModel::onParentTripChanged()
 {
-    for (QObject* obj : notes()) {
+    const auto notes = this->notes();
+    for (QObject* obj : notes) {
         if (auto* note = qobject_cast<cwNoteLiDAR*>(obj)) {
             note->setParentTrip(parentTrip());
-            if (parentTrip() != nullptr) {
-                note->setParentCave(parentTrip()->parentCave());
-            }
         }
     }
 }

@@ -20,6 +20,7 @@ class cwRenderGLTF : public cwRenderObject
 
     Q_PROPERTY(QString gltfFilePath READ gltfFilePath WRITE setGLTFFilePath NOTIFY gltfFilePathChanged)
     Q_PROPERTY(cwFutureManagerToken futureManagerToken READ futureManagerToken WRITE setFutureManagerToken NOTIFY futureManagerTokenChanged FINAL)
+    Q_PROPERTY(QMatrix4x4 modelMatrix READ modelMatrix WRITE setModelMatrix NOTIFY modelMatrixChanged BINDABLE bindableModelMatrix)
 
     friend class cwRHIGltf;
 
@@ -32,6 +33,10 @@ public:
 
     cwFutureManagerToken futureManagerToken() const;
     void setFutureManagerToken(const cwFutureManagerToken &newFutureManagerToken);
+
+    QMatrix4x4 modelMatrix() const { return m_modelMatrixProperty.value(); }
+    void setModelMatrix(const QMatrix4x4& matrix) { m_modelMatrixProperty = matrix; }
+    QBindable<QMatrix4x4> bindableModelMatrix() { return &m_modelMatrixProperty; }
 
 public slots:
     // Setter to choose which glTF file to render
@@ -46,13 +51,14 @@ public slots:
 
 signals:
     void gltfFilePathChanged();
+    void modelMatrixChanged();
 
     void futureManagerTokenChanged();
 
 protected:
     cwRHIObject *createRHIObject() override;
 
-private:    
+private:
     struct Load {
         cw::gltf::SceneCPU scene;
         QList<cwGeometryItersecter::Key> matrixObjects;
@@ -73,7 +79,7 @@ private:
 
     QProperty<QVector4D> m_rotation;
     QProperty<QVector3D> m_translation;
-    QProperty<QMatrix4x4> m_modelMatrixProperty;
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwRenderGLTF, QMatrix4x4, m_modelMatrixProperty, QMatrix4x4(), &cwRenderGLTF::modelMatrixChanged);
 
     QPropertyNotifier m_modelMatrixUpdated;
 

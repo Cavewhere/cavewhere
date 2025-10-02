@@ -38,13 +38,21 @@ MainWindowTest {
                     //Zoom into the the model
             let turnTable = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->turnTableInteraction")
                     for(let i = 0; i < 75; i++) {
-                                console.log("Turn table");
                                 wait(20);
                                 mouseWheel(turnTable,
                                            turnTable.width / 2.0, turnTable.height / 2.0,
                                            0, 50);
                     }
 
+            let carpetButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
+            mouseClick(carpetButton)
+
+                    let addStationButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->addScrapStation")
+                    mouseClick(addStationButton)
+
+
+                    let turnTableInteraction_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->turnTableInteraction")
+                    mouseClick(turnTableInteraction_obj2, 150.418, 330.957)
 
 
 

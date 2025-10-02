@@ -582,8 +582,10 @@ cwRayTriangleHit cwBaseTurnTableInteraction::pick(QPointF qtViewPoint) const
     Q_ASSERT(scene());
     Q_ASSERT(scene()->geometryItersecter());
 
+    QPoint mappedPos = Camera->mapToGLViewport(qtViewPoint.toPoint());
+
     //Create a ray from the back projection front and back plane
-    const auto ray = Camera->frustrumRay(qtViewPoint.toPoint());
+    const auto ray = Camera->frustrumRay(mappedPos);
     return scene()->geometryItersecter()->intersectsTriangleDetailed(ray);
 }
 
