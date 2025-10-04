@@ -14,6 +14,9 @@ class cwTrip;
 class cwCave;
 class cwNote;
 class cwScrap;
+class cwNoteLiDAR;
+#include "cwSurveyNoteModel.h"
+#include "cwSurveyNoteLiDARModel.h"
 #include "cwGlobals.h"
 
 //Qt includes
@@ -48,9 +51,20 @@ public:
         CaveType,
         TripType,
         NoteType,
-        ScrapType
+        ScrapType,
+        NotesType,
+        NotesLiDARType,
+        NoteLiDARType
     };
     Q_ENUM(ItemType)
+
+    enum class TripRows : int {
+        NotesModel,
+        NotesLiDARModel,
+
+        //Add more rows above this
+        NumberOfRows
+    };
 
     explicit cwRegionTreeModel(QObject *parent = 0);
 
@@ -62,6 +76,9 @@ public:
     QModelIndex index (cwTrip* trip) const;
     QModelIndex index (cwNote* note) const;
     QModelIndex index (cwScrap* scrap) const;
+    QModelIndex index (cwNoteLiDAR* noteLiDAR) const;
+    QModelIndex index (cwSurveyNoteModel* model) const;
+    QModelIndex index (cwSurveyNoteLiDARModel* model) const;
 
     QModelIndex parent ( const QModelIndex & index ) const;
     int rowCount ( const QModelIndex & parent = QModelIndex() ) const;
@@ -72,13 +89,20 @@ public:
     Q_INVOKABLE cwCave* cave(const QModelIndex& index) const;
     Q_INVOKABLE cwNote* note(const QModelIndex& index) const;
     Q_INVOKABLE cwScrap* scrap(const QModelIndex& index) const;
+    Q_INVOKABLE cwSurveyNoteModel* notesModel(const QModelIndex& index) const;
+    Q_INVOKABLE cwSurveyNoteLiDARModel* notesLiDARModel(const QModelIndex& index) const;
+    Q_INVOKABLE cwNoteLiDAR* noteLiDAR(const QModelIndex& index) const;
     Q_INVOKABLE QObject* object(const QModelIndex& index) const;
+
 
     Q_INVOKABLE bool isScrap(const QModelIndex& index) const;
     Q_INVOKABLE bool isNote(const QModelIndex& index) const;
     Q_INVOKABLE bool isTrip(const QModelIndex& index) const;
     Q_INVOKABLE bool isCave(const QModelIndex& index) const;
     Q_INVOKABLE bool isRegion(const QModelIndex& index) const;
+    Q_INVOKABLE bool isNotes(const QModelIndex& index) const { return index.data(TypeRole).toInt() == NotesType; }
+    Q_INVOKABLE bool isNotesLiDAR(const QModelIndex& index) const { return index.data(TypeRole).toInt() == NotesLiDARType; }
+    Q_INVOKABLE bool isNoteLiDAR(const QModelIndex& index) const { return index.data(TypeRole).toInt() == NoteLiDARType; }
 
     template <typename ReturnType, typename GetFunc>
     QList<ReturnType> objects(const QModelIndex& parent,
@@ -103,6 +127,10 @@ public:
         QList<ReturnType> objects;
         for(int row = 0; row < rowCount(parent); row++) {
             auto rowIndex = index(row, 0, parent);
+
+            //This assert detect infinite recursive calls to all
+            Q_ASSERT(rowIndex != QModelIndex());
+
             auto obj = get<ReturnType>(rowIndex, func);
             if(obj) {
                 objects.append(obj);
@@ -111,8 +139,6 @@ public:
         }
         return objects;
     }
-
-
 
     virtual QHash<int, QByteArray> roleNames() const;
 

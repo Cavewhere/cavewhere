@@ -84,7 +84,6 @@ cwNoteLiDARStation cwNoteLiDAR::station(int stationId) const {
 void cwNoteLiDAR::setParentTrip(cwTrip* trip) {
     if(m_parentTrip != trip) {
         m_parentTrip = trip;
-        setParent(trip);
     }
 }
 

@@ -14,6 +14,8 @@
 #include "cwSurveyNoteModel.h"
 #include "cwNote.h"
 #include "cwGlobalIcons.h"
+#include "cwSurveyNoteLiDARModel.h"
+#include "cwNoteLiDAR.h"
 
 //Qt include
 #include <QUrl>
@@ -399,11 +401,11 @@ QModelIndex cwRegionTreeModel::index ( int row, int column, const QModelIndex & 
     case TripType: {
         cwTrip* parentTrip = qobject_cast<cwTrip*>((QObject*)parent.internalPointer());
         if(parentTrip != nullptr) {
-            if(row >= parentTrip->notes()->notes().size()) {
-                return QModelIndex();
+            if(row == static_cast<int>(TripRows::NotesModel)) {
+                return createIndex(row, column, parentTrip->notes());
+            } else if(row == static_cast<int>(TripRows::NotesLiDARModel)) {
+                return createIndex(row, column, parentTrip->notesLiDAR());
             }
-
-            return createIndex(row, column, parentTrip->notes()->notes().at(row));
         }
         Q_ASSERT(false);
         break;
@@ -421,6 +423,29 @@ QModelIndex cwRegionTreeModel::index ( int row, int column, const QModelIndex & 
         Q_ASSERT(false);
         break;
     }
+
+    case NotesType: {
+        // Children are cwNote* from the paper notes model
+        auto* model = qobject_cast<cwSurveyNoteModel*>((QObject*)parent.internalPointer());
+        Q_ASSERT(model);
+        if (!model) { return QModelIndex(); }
+        if (row >= model->notes().size()) { return QModelIndex(); }
+        return createIndex(row, column, model->notes().at(row));
+    }
+
+    case NotesLiDARType: {
+        // Children are cwNote* from the paper notes model
+        auto* model = qobject_cast<cwSurveyNoteLiDARModel*>((QObject*)parent.internalPointer());
+        Q_ASSERT(model);
+        if (!model) { return QModelIndex(); }
+        if (row >= model->notes().size()) { return QModelIndex(); }
+        return createIndex(row, column, model->notes().at(row));
+    }
+
+    case ScrapType:
+    case NoteLiDARType:
+        // These are leaf nodes; they should not have children
+        return QModelIndex();
 
     default:
         break;
@@ -460,6 +485,20 @@ QModelIndex cwRegionTreeModel::index (cwTrip* trip) const {
     return index(tripIndex, 0, parentIndex);
 }
 
+template<typename NoteModel, typename Note>
+QModelIndex indexOfNote(const cwRegionTreeModel* thiz, const Note* note) {
+    auto parent = qobject_cast<NoteModel*>(note->parent());
+    if(parent == nullptr) { return QModelIndex(); }
+    int noteIndex = parent->notes().indexOf(note);
+
+    QModelIndex parentIndex = thiz->index(parent);
+    if(!parentIndex.isValid()) { return QModelIndex(); }
+
+    if(noteIndex < 0) { return QModelIndex(); }
+
+    return thiz->index(noteIndex, 0, parentIndex);
+}
+
 /**
  * @brief cwRegionTreeModel::index
  * @param note
@@ -467,16 +506,7 @@ QModelIndex cwRegionTreeModel::index (cwTrip* trip) const {
  */
 QModelIndex cwRegionTreeModel::index(cwNote *note) const
 {
-    cwTrip* parentTrip = note->parentTrip();
-    if(parentTrip == nullptr) { return QModelIndex(); }
-    int noteIndex = parentTrip->notes()->notes().indexOf(note);
-
-    QModelIndex parentIndex = index(parentTrip);
-    if(!parentIndex.isValid()) { return QModelIndex(); }
-
-    if(noteIndex < 0) { return QModelIndex(); }
-
-    return index(noteIndex, 0, parentIndex);
+    return indexOfNote<cwSurveyNoteModel, cwNote>(this, note);
 }
 
 /**
@@ -498,12 +528,55 @@ QModelIndex cwRegionTreeModel::index(cwScrap *scrap) const
     return index(scrapIndex, 0, parentIndex);
 }
 
+QModelIndex cwRegionTreeModel::index(cwSurveyNoteModel* model) const {
+    if(model == nullptr) {
+        return QModelIndex();
+    }
+
+    cwTrip* parentTrip = model->parentTrip();
+    if(parentTrip == nullptr) {
+        return QModelIndex();
+    }
+
+    QModelIndex tripIndex = index(parentTrip);
+    if(!tripIndex.isValid()) {
+        return QModelIndex();
+    }
+
+    // The NotesType container is always row 0 under Trip
+    return index(static_cast<int>(TripRows::NotesModel), 0, tripIndex);
+}
+
+QModelIndex cwRegionTreeModel::index(cwSurveyNoteLiDARModel* model) const {
+    if(model == nullptr) {
+        return QModelIndex();
+    }
+
+    cwTrip* parentTrip = model->parentTrip();
+    if(parentTrip == nullptr) {
+        return QModelIndex();
+    }
+
+    QModelIndex tripIndex = index(parentTrip);
+    if(!tripIndex.isValid()) {
+        return QModelIndex();
+    }
+
+    // The NotesLiDARType container is always row 1 under Trip
+    return index(static_cast<int>(TripRows::NotesLiDARModel), 0, tripIndex);
+}
+
+QModelIndex cwRegionTreeModel::index(cwNoteLiDAR* lidar) const {
+    return indexOfNote<cwSurveyNoteLiDARModel, cwNoteLiDAR>(this, lidar);
+}
+
 /**
  * @brief cwRegionTreeModel::parent
  * @param index
  * @return
  */
 QModelIndex cwRegionTreeModel::parent ( const QModelIndex & index ) const {
+
     switch(index.data(TypeRole).toInt()) {
     case RegionType:
         return QModelIndex();
@@ -528,10 +601,55 @@ QModelIndex cwRegionTreeModel::parent ( const QModelIndex & index ) const {
     case NoteType: {
         cwNote* note = qobject_cast<cwNote*>(static_cast<QObject*>(index.internalPointer()));
         if(note != nullptr) {
-            cwTrip* parentTrip = note->parentTrip();
-            int row = parentTrip->notes()->notes().indexOf(note);
+
+            auto noteModel = qobject_cast<cwSurveyNoteModel*>(note->parent());
+            Q_ASSERT(noteModel);
+
+            int row = noteModel->notes().indexOf(note);
             Q_ASSERT(row >= 0);
 
+            return createIndex(static_cast<int>(TripRows::NotesModel), 0, noteModel);
+        }
+
+        Q_ASSERT(false);
+        break;
+    }
+
+    case NoteLiDARType: {
+        cwNoteLiDAR* note = qobject_cast<cwNoteLiDAR*>(static_cast<QObject*>(index.internalPointer()));
+        if(note != nullptr) {
+
+            auto noteModel = qobject_cast<cwSurveyNoteLiDARModel*>(note->parent());
+            Q_ASSERT(noteModel);
+
+            int row = noteModel->notes().indexOf(note);
+            Q_ASSERT(row >= 0);
+
+            return createIndex(static_cast<int>(TripRows::NotesLiDARModel), 0, noteModel);
+        }
+
+        Q_ASSERT(false);
+        break;
+    }
+
+    case NotesType: {
+        cwSurveyNoteModel* notes = qobject_cast<cwSurveyNoteModel*>(static_cast<QObject*>(index.internalPointer()));
+        if(notes != nullptr) {
+            auto parentTrip = notes->parentTrip();
+            int row = parentTrip->parentCave()->indexOf(parentTrip);
+            return createIndex(row, 0, parentTrip);
+        }
+
+        Q_ASSERT(false);
+        break;
+
+    }
+
+    case NotesLiDARType: {
+        cwSurveyNoteLiDARModel* notes = qobject_cast<cwSurveyNoteLiDARModel*>(static_cast<QObject*>(index.internalPointer()));
+        if(notes != nullptr) {
+            auto parentTrip = notes->parentTrip();
+            int row = parentTrip->parentCave()->indexOf(parentTrip);
             return createIndex(row, 0, parentTrip);
         }
 
@@ -543,7 +661,7 @@ QModelIndex cwRegionTreeModel::parent ( const QModelIndex & index ) const {
         cwScrap* scrap = qobject_cast<cwScrap*>(static_cast<QObject*>(index.internalPointer()));
         if(scrap != nullptr) {
             cwNote* parentNote = scrap->parentNote();
-            int row = parentNote->scraps().indexOf(scrap);
+            int row = parentNote->parentTrip()->notes()->notes().indexOf(parentNote);
             Q_ASSERT(row >= 0);
 
             return createIndex(row, 0, parentNote);
@@ -587,13 +705,19 @@ int cwRegionTreeModel::rowCount ( const QModelIndex & parent ) const {
 
     }
 
-    case TripType: {
-        cwTrip* parentTrip = qobject_cast<cwTrip*>((QObject*)parent.internalPointer());
-        if(parentTrip != nullptr) {
-            return parentTrip->notes()->rowCount();
-        }
-        Q_ASSERT(false);
-        break;
+    case TripType:
+        return static_cast<int>(TripRows::NumberOfRows);
+
+    case NotesType: {
+        auto* model = qobject_cast<cwSurveyNoteModel*>((QObject*)parent.internalPointer());
+        Q_ASSERT(model);
+        return model ? model->rowCount() : 0;
+    }
+
+    case NotesLiDARType: {
+        auto* model = qobject_cast<cwSurveyNoteLiDARModel*>((QObject*)parent.internalPointer());
+        Q_ASSERT(model);
+        return model ? model->rowCount() : 0;
     }
 
     case NoteType: {
@@ -661,6 +785,13 @@ QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
         }
     }
 
+    if (auto* noteModel = qobject_cast<cwSurveyNoteModel*>((QObject*)index.internalPointer())) {
+        if (role == ObjectRole) { return QVariant::fromValue(noteModel); }
+        if (role == TypeRole)   { return NotesType; }
+        return QVariant();
+    }
+
+
     cwNote* note = qobject_cast<cwNote*>(static_cast<QObject*>(index.internalPointer()));
     if(note != nullptr) {
         switch(role) {
@@ -685,7 +816,29 @@ QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
         }
     }
 
+    if (auto* lidarModel = qobject_cast<cwSurveyNoteLiDARModel*>((QObject*)index.internalPointer())) {
+        if (role == ObjectRole) { return QVariant::fromValue(lidarModel); }
+        if (role == TypeRole)   { return NotesLiDARType; }
+        return QVariant();
+    }
+
+    if (auto* lidarNote = qobject_cast<cwNoteLiDAR*>((QObject*)index.internalPointer())) {
+        if (role == ObjectRole) { return QVariant::fromValue(lidarNote); }
+        if (role == TypeRole)   { return NoteLiDARType; }
+        return QVariant();
+    }
+
     return QVariant();
+}
+
+template <typename T>
+T* indexToObject(const cwRegionTreeModel* thiz, const QModelIndex& index) {
+    QVariant tripVariant = thiz->data(index, cwRegionTreeModel::ObjectRole);
+    if(tripVariant.canConvert<T*>()) {
+        T* trip = tripVariant.value<T*>();
+        return trip;
+    }
+    return nullptr;
 }
 
 /**
@@ -694,54 +847,36 @@ QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
   If index isn't a trip, then this returns null
   */
 cwTrip* cwRegionTreeModel::trip(const QModelIndex& index) const {
-    QVariant tripVariant = data(index, ObjectRole);
-    if(tripVariant.canConvert<cwTrip*>()) {
-        cwTrip* trip = tripVariant.value<cwTrip*>();
-        return trip;
-    }
-    return nullptr;
+    return indexToObject<cwTrip>(this, index);
 }
 
 /**
   \brief Gets the cave at inde
   */
 cwCave* cwRegionTreeModel::cave(const QModelIndex& index) const {
-    QVariant caveVariant = data(index, ObjectRole);
-    if(caveVariant.canConvert<cwCave*>()) {
-        cwCave* cave = caveVariant.value<cwCave*>();
-        return cave;
-    }
-    return nullptr;
+    return indexToObject<cwCave>(this, index);
 }
 
-/**
- * @brief cwRegionTreeModel::note
- * @param index
- * @return
- */
 cwNote *cwRegionTreeModel::note(const QModelIndex &index) const
 {
-    QVariant noteVariant = data(index, ObjectRole);
-    if(noteVariant.canConvert<cwNote*>()) {
-        cwNote* note = noteVariant.value<cwNote*>();
-        return note;
-    }
-    return nullptr;
+    return indexToObject<cwNote>(this, index);
 }
 
-/**
- * @brief cwRegionTreeModel::scrap
- * @param index
- * @return
- */
 cwScrap *cwRegionTreeModel::scrap(const QModelIndex &index) const
 {
-    QVariant scrapVariant = data(index, ObjectRole);
-    if(scrapVariant.canConvert<cwScrap*>()) {
-        cwScrap* note = scrapVariant.value<cwScrap*>();
-        return note;
-    }
-    return nullptr;
+    return indexToObject<cwScrap>(this, index);
+}
+
+cwSurveyNoteModel* cwRegionTreeModel::notesModel(const QModelIndex& index) const {
+    return indexToObject<cwSurveyNoteModel>(this, index);
+}
+
+cwSurveyNoteLiDARModel* cwRegionTreeModel::notesLiDARModel(const QModelIndex& index) const {
+    return indexToObject<cwSurveyNoteLiDARModel>(this, index);
+}
+
+cwNoteLiDAR* cwRegionTreeModel::noteLiDAR(const QModelIndex& index) const {
+    return indexToObject<cwNoteLiDAR>(this, index);
 }
 
 QObject *cwRegionTreeModel::object(const QModelIndex &index) const
@@ -795,6 +930,36 @@ void cwRegionTreeModel::addTripConnections(cwCave* parentCave, int beginIndex, i
         connect(currentTrip->notes(), SIGNAL(rowsRemoved(QModelIndex,int,int)),
                 this, SLOT(removeNotes(QModelIndex,int,int)), Qt::UniqueConnection);
 
+        // --- LiDAR notes (flat model) ---
+        auto* lidars = currentTrip->notesLiDAR();
+        Q_ASSERT(lidars);
+        connect(lidars, &cwSurveyNoteLiDARModel::rowsAboutToBeInserted,
+                this, [this, lidars](const QModelIndex& parent, int first, int last) {
+                    Q_UNUSED(parent);
+                    QModelIndex parentIndex = index(lidars);
+                    beginInsertRows(parentIndex, first, last);
+                });
+
+        connect(lidars, &cwSurveyNoteLiDARModel::rowsInserted,
+                this, [this](const QModelIndex& parent, int first, int last) {
+                    Q_UNUSED(parent); Q_UNUSED(first); Q_UNUSED(last);
+                    endInsertRows();
+                });
+
+        connect(lidars, &cwSurveyNoteLiDARModel::rowsAboutToBeRemoved,
+                this, [this, lidars](const QModelIndex& parent, int first, int last) {
+                    Q_UNUSED(parent);
+                    QModelIndex parentIndex = index(lidars);
+                    beginRemoveRows(parentIndex, first, last);
+                });
+
+        connect(lidars, &cwSurveyNoteLiDARModel::rowsRemoved,
+                this, [this](const QModelIndex& parent, int first, int last) {
+                    Q_UNUSED(parent); Q_UNUSED(first); Q_UNUSED(last);
+                    endRemoveRows();
+                });
+
+
         addNoteConnections(currentTrip, 0, currentTrip->notes()->notes().size() - 1);
     }
 }
@@ -805,9 +970,10 @@ void cwRegionTreeModel::addTripConnections(cwCave* parentCave, int beginIndex, i
 void cwRegionTreeModel::removeTripConnections(cwCave* parentCave, int beginIndex, int endIndex) {
     for(int i = beginIndex; i <= endIndex; i++) {
         cwTrip* trip = parentCave->trip(i);
-        disconnect(trip, 0, this, 0); //disconnect signals and slots to this object
+        disconnect(trip, nullptr, this, nullptr); //disconnect signals and slots to this object
+        disconnect(trip->notes(), nullptr, this, nullptr);
+        disconnect(trip->notesLiDAR(), nullptr, this, nullptr);
     }
-
 }
 
 /**

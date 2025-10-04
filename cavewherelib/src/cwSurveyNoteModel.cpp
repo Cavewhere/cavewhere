@@ -117,13 +117,7 @@ QList<cwNote *> cwSurveyNoteModel::notes() const
 
 void cwSurveyNoteModel::addNotes(const QList<cwNote *>& notes)
 {
-    QList<QObject*> baseNotes;
-    baseNotes.reserve(notes.size());
-    for(const auto note : notes) {
-        note->setParentTrip(parentTrip());
-        baseNotes.append(note);
-    }
-    cwSurveyNoteModelBase::addNotes(baseNotes);
+    addNotesHelper(notes);
 }
 
 void cwSurveyNoteModel::setData(const cwSurveyNoteModelData &data)

@@ -85,6 +85,10 @@ void cwSurveyNoteModelBase::addNotes(QList<QObject*> newNotes)
     const int first = m_notes.size();
     const int last = first + newNotes.size() - 1;
 
+    for(auto object : std::as_const(newNotes)) {
+        object->setParent(this);
+    }
+
     beginInsertRows(QModelIndex(), first, last);
     m_notes.append(newNotes);
     endInsertRows();

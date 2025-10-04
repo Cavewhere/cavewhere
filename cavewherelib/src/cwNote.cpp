@@ -122,7 +122,7 @@ void cwNote::setRotate(double degrees) {
 void cwNote::setParentTrip(cwTrip* trip) {
     if(ParentTrip != trip) {
         ParentTrip = trip;
-        setParent(trip);
+        // setParent(trip);
     }
 }
 

@@ -18,6 +18,8 @@ public:
     Q_INVOKABLE void addFromFiles(QList<QUrl> files) override;
     QVariant data(const QModelIndex& index, int role) const override;
 
+    void addNotes(const QList<cwNoteLiDAR*> lidarNotes);
+
 protected:
     void onParentTripChanged() override;
 };

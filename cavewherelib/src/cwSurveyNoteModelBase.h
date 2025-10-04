@@ -64,6 +64,17 @@ public:
 
 protected:
     // Helpers for subclasses
+    template<typename T>
+    void addNotesHelper(QList<T> notes) {
+        QList<QObject*> baseNotes;
+        baseNotes.reserve(notes.size());
+        for(const auto note : notes) {
+            note->setParentTrip(parentTrip());
+            baseNotes.append(note);
+        }
+        cwSurveyNoteModelBase::addNotes(baseNotes);
+    }
+
     void addNotes(QList<QObject*> newNotes);
     void clearNotes();
     cwProject* project() const;
