@@ -37,7 +37,7 @@ void cwRenderScraps::addScrapToUpdate(cwScrap *scrap)
                                                                      scrapId,
                                                                      triangleData.points(),
                                                                      triangleData.indices(),
-                                                                     cwGeometryItersecter::Triangles));
+                                                                     cwGeometry::Triangles));
     }
 }
 

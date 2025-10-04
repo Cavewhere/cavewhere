@@ -12,28 +12,40 @@ public:
     cwTriangulatePrivateData() {}
     cwTriangulatePrivateData(cwTriangulatePrivateData& other) :
         QSharedData(other),
-        NoteImage(other.NoteImage),
-        DotPerMeter(other.DotPerMeter),
-        Outline(other.Outline),
-        NoteTransform(other.NoteTransform),
-        Stations(other.Stations),
-        Leads(other.Leads),
-        Type(other.Type),
-        LookDirection(other.LookDirection),
-        ViewMatrix(other.ViewMatrix->clone())
+        noteImage(other.noteImage),
+        dotPerMeter(other.dotPerMeter),
+        outline(other.outline),
+        noteTransform(other.noteTransform),
+        stations(other.stations),
+        leads(other.leads),
+        type(other.type),
+        lookDirection(other.lookDirection),
+        viewMatrix(other.viewMatrix->clone())
     {
 
     }
 
-    cwImage NoteImage;
-    double DotPerMeter = 0;
-    QPolygonF Outline;
-    cwNoteTransformationData NoteTransform;
-    QList<cwTriangulateStation> Stations;
-    QList<cwLead> Leads;
-    cwScrap::ScrapType Type;
-    QVector3D LookDirection;
-    std::unique_ptr<cwAbstractScrapViewMatrix::Data> ViewMatrix;
+    // Optional: you can allow moves, but they're not typically used on QSharedData:
+    cwTriangulatePrivateData(cwTriangulatePrivateData&&) noexcept = default;
+
+    ~cwTriangulatePrivateData() = default;
+
+    // Strongly recommended for QSharedData subclasses:
+    cwTriangulatePrivateData& operator=(const cwTriangulatePrivateData&) = delete;
+    cwTriangulatePrivateData& operator=(cwTriangulatePrivateData&&) = delete;
+
+    cwImage noteImage;
+    double dotPerMeter = 0;
+    QPolygonF outline;
+    cwNoteTransformationData noteTransform;
+    QList<cwNoteStation> noteStations;
+    cwStationPositionLookup stationLookup;
+    cwSurveyNetwork surveyNetwork;
+    QList<cwTriangulateStation> stations;
+    QList<cwLead> leads;
+    cwScrap::ScrapType type;
+    QVector3D lookDirection;
+    std::unique_ptr<cwAbstractScrapViewMatrix::Data> viewMatrix;
 };
 
 cwTriangulateInData::cwTriangulateInData() :
@@ -61,68 +73,98 @@ cwTriangulateInData::~cwTriangulateInData()
 
 void cwTriangulateInData::setLookDirection(QVector3D eyeVector)
 {
-    data->LookDirection = eyeVector;
+    data->lookDirection = eyeVector;
 }
 
 QVector3D cwTriangulateInData::lookDirection() const
 {
-    return data->LookDirection;
+    return data->lookDirection;
 }
 
 /**
-Get NoteImage
+Get noteImage
 */
 cwImage cwTriangulateInData::noteImage() const {
-    return data->NoteImage;
+    return data->noteImage;
 }
 
 /**
-Sets NoteImage
+Sets noteImage
 */
 void cwTriangulateInData::setNoteImage(cwImage noteImage) {
-    data->NoteImage = noteImage;
+    data->noteImage = noteImage;
 }
 
 /**
 Get variableName
 */
 QPolygonF cwTriangulateInData::outline() const {
-    return data->Outline;
+    return data->outline;
 }
 
 /**
 Sets variableName
 */
 void cwTriangulateInData::setOutline(QPolygonF outline) {
-    data->Outline = outline;
+    data->outline = outline;
 }
 
 /**
   Get variableName
   */
 QList<cwTriangulateStation> cwTriangulateInData::stations() const {
-    return data->Stations;
+    return data->stations;
 }
 
 /**
   Sets variableName
   */
 void cwTriangulateInData::setStations(QList<cwTriangulateStation> stations) {
-    data->Stations = stations;
+    data->stations = stations;
+}
+
+QList<cwNoteStation> cwTriangulateInData::noteStations() const
+{
+    return data->noteStations;
+}
+
+void cwTriangulateInData::setNoteStation(const QList<cwNoteStation>& noteStations)
+{
+    data->noteStations = noteStations;
+}
+
+cwStationPositionLookup cwTriangulateInData::stationLookup() const
+{
+    return data->stationLookup;
+}
+
+void cwTriangulateInData::setStationLookup(const cwStationPositionLookup& lookup)
+{
+    data->stationLookup = lookup;
+}
+
+cwSurveyNetwork cwTriangulateInData::surveyNetwork() const
+{
+    return data->surveyNetwork;
+}
+
+void cwTriangulateInData::setSurveyNetwork(const cwSurveyNetwork& network)
+{
+    data->surveyNetwork = network;
 }
 
 /**
   Get variableName
   */
 cwNoteTransformationData cwTriangulateInData::noteTransform() const {
-    return data->NoteTransform;
+    return data->noteTransform;
 }
 
 /**
   Sets variableName
   */
 void cwTriangulateInData::setNoteTransform(const cwNoteTransformationData& noteTransform) {
-    data->NoteTransform = noteTransform;
+    data->noteTransform = noteTransform;
 }
 
 /**
@@ -131,7 +173,7 @@ void cwTriangulateInData::setNoteTransform(const cwNoteTransformationData& noteT
  */
 double cwTriangulateInData::noteImageResolution() const
 {
-    return data->DotPerMeter;
+    return data->dotPerMeter;
 }
 
 /**
@@ -140,12 +182,12 @@ double cwTriangulateInData::noteImageResolution() const
  */
 void cwTriangulateInData::setNoteImageResolution(double dotsPerMeter)
 {
-    data->DotPerMeter = dotsPerMeter;
+    data->dotPerMeter = dotsPerMeter;
 }
 
 cwAbstractScrapViewMatrix::Data* cwTriangulateInData::viewMatrix() const
 {
-    return data->ViewMatrix.get();
+    return data->viewMatrix.get();
 }
 
 /**
@@ -154,7 +196,7 @@ cwAbstractScrapViewMatrix::Data* cwTriangulateInData::viewMatrix() const
  */
 void cwTriangulateInData::setViewMatrix(cwAbstractScrapViewMatrix::Data *view)
 {
-    data->ViewMatrix = std::unique_ptr<cwAbstractScrapViewMatrix::Data>(view);
+    data->viewMatrix = std::unique_ptr<cwAbstractScrapViewMatrix::Data>(view);
 }
 
 /**
@@ -163,7 +205,7 @@ void cwTriangulateInData::setViewMatrix(cwAbstractScrapViewMatrix::Data *view)
  */
 QList<cwLead> cwTriangulateInData::leads() const
 {
-    return data->Leads;
+    return data->leads;
 }
 
 /**
@@ -172,7 +214,7 @@ QList<cwLead> cwTriangulateInData::leads() const
  */
 void cwTriangulateInData::setLeads(QList<cwLead> leads)
 {
-    data->Leads = leads;
+    data->leads = leads;
 }
 
 

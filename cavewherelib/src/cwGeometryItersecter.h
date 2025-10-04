@@ -16,18 +16,12 @@
 
 //Our includes
 #include "cwRayTriangleHit.h"
+#include "cwGeometry.h"
 class cwRenderObject;
 
 class cwGeometryItersecter
 {
 public:
-
-    enum PrimitiveType {
-        Triangles,
-        Lines,
-        None
-    };
-
     struct Key {
         cwRenderObject* parentObject = nullptr;
         uint64_t id = 0;
@@ -35,58 +29,42 @@ public:
 
     class Object {
     public:
-        Object() : m_parent(nullptr), m_id(-1), m_type(None) { }
+        Object() { }
         Object(cwRenderObject* parent,
                uint64_t id,
                QVector<QVector3D> points,
                QVector<uint> indexes,
-               PrimitiveType type,
+               cwGeometry::PrimitiveType type,
                const QMatrix4x4& modelMatrix = QMatrix4x4(),
                bool cullBackfaces = false) :
-            m_parent(parent),
-            m_id(id),
-            m_points(points),
-            m_indexes(indexes),
-            m_type(type),
-            m_modelMatrix(modelMatrix),
-            m_cullBackfaces(cullBackfaces)
+            m_key(parent, id),
+            m_geometry(type, points, indexes, modelMatrix, cullBackfaces)
 
         {}
         Object(Key key,
-               QVector<QVector3D> points,
-               QVector<uint> indexes,
-               PrimitiveType type,
-               const QMatrix4x4& modelMatrix = QMatrix4x4(),
-               bool cullBackfaces = false) :
-            m_parent(key.parentObject),
-            m_id(key.id),
-            m_points(points),
-            m_indexes(indexes),
-            m_type(type),
-            m_modelMatrix(modelMatrix),
-            m_cullBackfaces(cullBackfaces)
+               cwGeometry geometry) :
+            m_key(key),
+            m_geometry(geometry)
         {}
 
-        cwRenderObject* parent() const { return m_parent; }
-        uint64_t id() const { return m_id; }
-        const QVector<QVector3D>& points() const { return m_points; }
-        const QVector<uint>& indexes() const { return m_indexes; }
-        PrimitiveType type() const { return m_type; }
-        bool cullBackfaces() const { return m_cullBackfaces; }
+        Key key() const { return m_key; }
+        cwGeometry geometry() const { return m_geometry; }
 
-        const QMatrix4x4& modelMatrix() const { return m_modelMatrix; }
-        void setMatrix(const QMatrix4x4& modelMatrix) { m_modelMatrix = modelMatrix; }
+        cwRenderObject* parent() const { return m_key.parentObject; }
+        uint64_t id() const { return m_key.id; }
+
+        const QVector<QVector3D>& points() const { return m_geometry.vertices; }
+        const QVector<uint>& indexes() const { return m_geometry.indices; }
+        cwGeometry::PrimitiveType type() const { return m_geometry.type; }
+        bool cullBackfaces() const { return m_geometry.cullBackfaces; }
+
+        const QMatrix4x4& modelMatrix() const { return m_geometry.transform; }
+        void setMatrix(const QMatrix4x4& modelMatrix) { m_geometry.transform = modelMatrix; }
 
     private:
 
-        cwRenderObject* m_parent;
-        uint64_t m_id;
-        QVector<QVector3D> m_points;
-        QVector<uint> m_indexes;
-        PrimitiveType m_type;
-        QMatrix4x4 m_modelMatrix;
-        bool m_cullBackfaces = false;
-
+        Key m_key;
+        cwGeometry m_geometry;
     };
 
     cwGeometryItersecter();
@@ -101,7 +79,6 @@ public:
 
     double intersects(const QRay3D& ray) const;
     cwRayTriangleHit intersectsTriangleDetailed(const QRay3D& ray) const;
-
 
 private:
 

@@ -30,10 +30,10 @@ cwGeometryItersecter::cwGeometryItersecter()
 void cwGeometryItersecter::addObject(const cwGeometryItersecter::Object &object)
 {
     switch(object.type()) {
-    case Triangles:
+    case cwGeometry::Triangles:
         addTriangles(object);
         break;
-    case Lines:
+    case cwGeometry::Lines:
         addLines(object);
         break;
     default:
@@ -235,7 +235,7 @@ double cwGeometryItersecter::nearestNeighbor(const QRay3D &ray) const
     double bestDistance = std::numeric_limits<double>::max();
 
     for(const Node& node : Nodes) {
-        if(node.Object.type() == Triangles) {
+        if(node.Object.type() == cwGeometry::Triangles) {
             continue;
         }
 
@@ -275,7 +275,7 @@ cwRayTriangleHit cwGeometryItersecter::cwGeometryItersecter::intersectsTriangleD
     cwRayTriangleHit best;
 
     for (const Node& node : Nodes) {
-        if (node.Object.type() != Triangles) {
+        if (node.Object.type() != cwGeometry::Triangles) {
             continue;
         }
 
@@ -384,10 +384,10 @@ cwGeometryItersecter::Node::Node(const cwGeometryItersecter::Object &object, int
 {
 
     switch(object.type()) {
-    case Triangles:
+    case cwGeometry::Triangles:
         BoundingBox = triangleToBoundingBox(object, indexInIndexes);
         break;
-    case Lines:
+    case cwGeometry::Lines:
         BoundingBox = lineToBoundingBox(object, indexInIndexes);
         break;
     default:

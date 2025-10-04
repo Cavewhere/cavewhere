@@ -19,6 +19,8 @@
 #include "cwLead.h"
 #include "cwScrap.h"
 #include "cwAbstractScrapViewMatrix.h"
+#include "cwStationPositionLookup.h"
+#include "cwSurveyNetwork.h"
 
 class cwTriangulatePrivateData;
 
@@ -36,8 +38,19 @@ public:
     QPolygonF outline() const;
     void setOutline(QPolygonF outline);
 
-    QList<cwTriangulateStation> stations() const;
+    [[deprecated("Use note stations, network, and lookup instead")]]
+    QList<cwTriangulateStation> stations() const;    
+    [[deprecated("Use note stations, network, and lookup instead")]]
     void setStations(QList<cwTriangulateStation> stations);
+
+    QList<cwNoteStation> noteStations() const;
+    void setNoteStation(const QList<cwNoteStation>& noteStations);
+
+    cwStationPositionLookup stationLookup() const;
+    void setStationLookup(const cwStationPositionLookup& lookup);
+
+    cwSurveyNetwork surveyNetwork() const;
+    void setSurveyNetwork(const cwSurveyNetwork& network);
 
     cwNoteTransformationData noteTransform() const;
     void setNoteTransform(const cwNoteTransformationData& noteTransform);

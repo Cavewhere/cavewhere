@@ -12,6 +12,9 @@
 // Qt RHI
 #include <rhi/qrhi.h>
 
+// Our includes
+#include "cwGeometry.h"
+
 // tinygltf (forward declare to avoid heavy includes in headers)
 namespace tinygltf {
 class Model;
@@ -66,6 +69,8 @@ struct MeshCPU {
     QVector<PrimitiveCPU> primitives;
     MaterialCPU material; // keep simple; promote to per-primitive if you prefer
     QMatrix4x4 modelMatrix; // world transform (scene graph–accumulated)
+
+    cwGeometry toGeometry() const;
 };
 
 struct SceneCPU {
