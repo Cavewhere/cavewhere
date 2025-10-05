@@ -14,23 +14,22 @@ template <typename PositionType>
 class CAVEWHERE_LIB_EXPORT NoteStationBase
 {
 public:
-    NoteStationBase()
-        : m_data(new PrivateData()) { }
+    NoteStationBase() {}
 
     void setPositionOnNote(const PositionType& point) {
-        m_data->PositionOnNote = point;
+        m_positionOnNote = point;
     }
 
     PositionType positionOnNote() const {
-        return m_data->PositionOnNote;
+        return m_positionOnNote;
     }
 
     void setName(const QString& name) {
-        m_data->StationName = name;
+        m_stationName = name;
     }
 
     QString name() const {
-        return m_data->StationName;
+        return m_stationName;
     }
 
     bool isValid() const {
@@ -42,14 +41,8 @@ public:
     }
 
 private:
-    class PrivateData : public QSharedData {
-    public:
-        PrivateData() { }
-        PositionType PositionOnNote;
-        QString StationName;
-    };
-
-    QSharedDataPointer<PrivateData> m_data;
+    PositionType m_positionOnNote;
+    QString m_stationName;
 };
 
 // qHash overload (hash by name only, matches your existing behavior)

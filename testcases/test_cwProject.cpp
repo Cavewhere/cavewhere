@@ -18,8 +18,10 @@
 #include "cwNote.h"
 #include "cwSaveLoad.h"
 #include "cwTeam.h"
+#include "cwNoteLiDAR.h"
 
 //Qt includes
+#include <QCryptographicHash>
 #include <QSqlQuery>
 #include <QSqlDatabase>
 #include <QSqlResult>
@@ -1508,6 +1510,127 @@ TEST_CASE("Note and Scrap persistence", "[cwProject][cwTrip][cwSurveyNoteModel][
     }
 }
 
+// Small helper
+static QByteArray fileSha256(const QString& absolutePath) {
+    QFile file(absolutePath);
+    if(!file.open(QIODevice::ReadOnly)) {
+        return {};
+    }
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    while(!file.atEnd()) {
+        hash.addData(file.read(256 * 1024));
+    }
+    return hash.result();
+}
+
+TEST_CASE("LiDAR GLB persistence: file copy + stations", "[cwProject][cwTrip][cwSurveyNoteLiDARModel][cwNoteLiDAR]") {
+    // ---- Project → cave → trip ----
+    auto project = std::make_unique<cwProject>();
+    project->waitSaveToFinish();
+
+    cwCave* cave = new cwCave();
+    cave->setName("lidar-persist-cave");
+
+    cwTrip* trip = new cwTrip();
+    trip->setName("lidar-persist-trip");
+    cave->addTrip(trip);
+
+    project->cavingRegion()->addCave(cave);
+    project->waitSaveToFinish();
+
+    REQUIRE(QFileInfo::exists(cwSaveLoad::absolutePath(trip)));
+
+    // ---- LiDAR model ----
+    cwSurveyNoteLiDARModel* const lidarModel = trip->notesLiDAR();
+    REQUIRE(lidarModel != nullptr);
+    CHECK(lidarModel->rowCount() == 0);
+
+    // ---- Prepare a GLB file in temp (you can duplicate/rename if needed) ----
+    const QString originalGlbPath = copyToTempFolder("://datasets/test_cwSurveyNotesConcatModel/bones.glb");
+    REQUIRE(QFileInfo::exists(originalGlbPath));
+    const QByteArray originalHash = fileSha256(originalGlbPath);
+    REQUIRE(!originalHash.isEmpty());
+
+    // ---- Add via addFromFiles (required) ----
+    {
+        const QList<QUrl> files{ QUrl::fromLocalFile(originalGlbPath) };
+        lidarModel->addFromFiles(files);
+    }
+    project->waitSaveToFinish();
+    REQUIRE(lidarModel->rowCount() == 1);
+
+    // Access the LiDAR note (assuming convenience accessor; adapt if your API differs)
+    cwNoteLiDAR* const lidarNote = dynamic_cast<cwNoteLiDAR*>(lidarModel->notes().at(0));
+    REQUIRE(lidarNote != nullptr);
+
+    // ---- Add three stations ----
+    {
+        cwNoteLiDARStation station0;
+        station0.setName(QStringLiteral("S0"));
+        station0.setPositionOnNote(QVector3D(0.10, 0.20, 0.30));
+        lidarNote->addStation(station0);
+
+        cwNoteLiDARStation station1;
+        station1.setName(QStringLiteral("S1"));
+        station1.setPositionOnNote(QVector3D(0.50, 0.40, 0.6));
+        lidarNote->addStation(station1);
+
+        cwNoteLiDARStation station2;
+        station2.setName(QStringLiteral("S2"));
+        station2.setPositionOnNote(QVector3D(0.85, 0.75, 0.95));
+        lidarNote->addStation(station2);
+    }
+    project->waitSaveToFinish();
+
+    // ---- Reload and verify ----
+    auto reloaded = std::make_unique<cwProject>();
+    reloaded->loadOrConvert(project->filename());
+    reloaded->waitLoadToFinish();
+
+    REQUIRE(reloaded->cavingRegion()->caveCount() == 1);
+    cwTrip* const loadedTrip = reloaded->cavingRegion()->cave(0)->trip(0);
+    REQUIRE(loadedTrip != nullptr);
+
+    cwSurveyNoteLiDARModel* const loadedModel = loadedTrip->notesLiDAR();
+    REQUIRE(loadedModel != nullptr);
+    REQUIRE(loadedModel->rowCount() == 1);
+
+    cwNoteLiDAR* const loadedNote = dynamic_cast<cwNoteLiDAR*>(loadedModel->notes().at(0));
+    REQUIRE(loadedNote != nullptr);
+
+    CHECK(lidarNote != loadedNote);
+
+    // Stations persisted?
+    {
+        const QList<cwNoteLiDARStation> stations = loadedNote->stations();
+        REQUIRE(stations.size() == 3);
+
+        CHECK(stations.at(0).name().toStdString() == std::string("S0"));
+        CHECK(stations.at(0).positionOnNote() == QVector3D(0.10, 0.20, 0.30));
+
+        CHECK(stations.at(1).name().toStdString() == std::string("S1"));
+        CHECK(stations.at(1).positionOnNote() == QVector3D(0.50, 0.40, 0.6));
+
+        CHECK(stations.at(2).name().toStdString() == std::string("S2"));
+        CHECK(stations.at(2).positionOnNote() == QVector3D(0.85, 0.75, 0.95));
+    }
+
+    // ---- File copy checks: exists in the project and matches bytes ----
+    // Assume cwNoteLiDAR::filename() returns a path relative to the trip directory.
+    {
+        const QString relativeGlb = loadedNote->filename();          // e.g. "lidar/bones.glb"
+        REQUIRE(!relativeGlb.isEmpty());
+
+        const QString copiedAbs = project->absolutePath(relativeGlb);
+        REQUIRE(QFileInfo::exists(copiedAbs));
+
+        const QByteArray copiedHash = fileSha256(copiedAbs);
+        REQUIRE(!copiedHash.isEmpty());
+
+        // Same bytes as the original source GLB?
+        CHECK(copiedHash == originalHash);
+    }
+}
 
 
 TEST_CASE("cwProject should overwrite or touch loaded project", "[cwProject]") {

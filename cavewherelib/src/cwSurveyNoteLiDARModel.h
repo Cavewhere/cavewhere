@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cwSurveyNoteModelBase.h"
+#include "cwSurveyNoteLiDARModelData.h"
 
 class cwNoteLiDAR;
 
@@ -19,6 +20,9 @@ public:
     QVariant data(const QModelIndex& index, int role) const override;
 
     void addNotes(const QList<cwNoteLiDAR*> lidarNotes);
+
+    void setData(const cwSurveyNoteLiDARModelData& data);
+    cwSurveyNoteLiDARModelData data() const;
 
 protected:
     void onParentTripChanged() override;

@@ -347,6 +347,19 @@ message ClinoReading {
     optional QtProto.QString legacy_value = 1;
 }
 
+message NoteLiDARStation {
+    optional string name = 1; //Relative path to 3d asset
+    optional QtProto.QVector3D positionOnNote = 2;
+}
+
+message NoteLiDAR {
+    optional string name = 1;
+    optional string fileName = 2;
+    repeated NoteLiDARStation noteStations = 3;
+
+    //TODO: probably need to save user defined rotations and translation
+}
+
 ///////////////////////////////////////////////////
 // Messages below this are for cacheing data, this data is stored locally
 // reduces recomputing when loading a project

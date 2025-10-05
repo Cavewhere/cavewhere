@@ -75,6 +75,37 @@ protected:
         cwSurveyNoteModelBase::addNotes(baseNotes);
     }
 
+    template<typename Data, typename Note>
+    void setDataHelper(const Data& data) {
+        clearNotes();
+
+        QList<QObject*> newNotes;
+        newNotes.reserve(data.notes.size());
+
+        for (const auto& noteData : data.notes) {
+            auto* note = new Note(this);
+            note->setData(noteData);
+            note->setParentTrip(parentTrip());
+            newNotes.append(note);
+        }
+
+        addNotes(newNotes);
+    }
+
+    template<typename Data, typename Note>
+    Data dataHelper() const {
+        Data out;
+        const auto objNotes = notes();
+        out.notes.reserve(objNotes.size());
+
+        for (QObject* obj : objNotes) {
+            if (auto* note = qobject_cast<Note*>(obj)) {
+                out.notes.append(note->data());
+            }
+        }
+        return out;
+    }
+
     void addNotes(QList<QObject*> newNotes);
     void clearNotes();
     cwProject* project() const;

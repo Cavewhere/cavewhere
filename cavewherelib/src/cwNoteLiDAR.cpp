@@ -78,6 +78,22 @@ cwNoteLiDARStation cwNoteLiDAR::station(int stationId) const {
     return m_stations.at(stationId);
 }
 
+cwNoteLiDARData cwNoteLiDAR::data() const
+{
+    return {
+        m_name.value(),
+        m_filename,
+        m_stations
+    };
+}
+
+void cwNoteLiDAR::setData(const cwNoteLiDARData &data)
+{
+    setName(data.name);
+    setFilename(data.filename);
+    setStations(data.stations);
+}
+
 /**
   \brief Sets the parent trip for this note
   */

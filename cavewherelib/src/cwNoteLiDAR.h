@@ -14,6 +14,7 @@
 // Our includes
 #include "cwGlobals.h"
 #include "cwNoteLiDARStation.h"
+#include "cwNoteLiDARData.h"
 class cwTrip;
 class cwCave;
 
@@ -21,6 +22,8 @@ class CAVEWHERE_LIB_EXPORT cwNoteLiDAR : public QAbstractListModel
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(NoteLiDAR)
+
+    Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged BINDABLE bindableName)
 
     Q_PROPERTY(QString filename READ filename WRITE setFilename NOTIFY filenameChanged)
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
@@ -50,6 +53,10 @@ public:
     QHash<int, QByteArray> roleNames() const override;
 
     // Property accessors
+    QString name() const { return m_name.value(); }
+    void setName(const QString& name) { m_name = name; }
+    QBindable<QString> bindableName() { return &m_name; }
+
     QString filename() const;
     void setFilename(const QString& path);
 
@@ -65,11 +72,15 @@ public:
     void setStations(const QList<cwNoteLiDARStation>& stations);
     Q_INVOKABLE cwNoteLiDARStation station(int stationId) const;
 
+    cwNoteLiDARData data() const;
+    void setData(const cwNoteLiDARData& data);
+
 signals:
+    void nameChanged();
+
     void filenameChanged();
     void countChanged();
     void modelMatrixChanged();
-    // void stationsChanged();
 
 private:
     QString m_filename;                         // glTF binary file path (.glb)
@@ -77,6 +88,7 @@ private:
 
     cwTrip* m_parentTrip = nullptr;
 
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwNoteLiDAR, QString, m_name, QString(), &cwNoteLiDAR::nameChanged);
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwNoteLiDAR, QMatrix4x4, m_modelMatrix, QMatrix4x4(), &cwNoteLiDAR::modelMatrixChanged);
 
     int clampIndex(int stationId) const;

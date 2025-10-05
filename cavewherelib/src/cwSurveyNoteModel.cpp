@@ -122,33 +122,12 @@ void cwSurveyNoteModel::addNotes(const QList<cwNote *>& notes)
 
 void cwSurveyNoteModel::setData(const cwSurveyNoteModelData &data)
 {
-    clearNotes();
-
-    QList<QObject*> newNotes;
-    newNotes.reserve(data.notes.size());
-
-    for (const auto& noteData : data.notes) {
-        auto* note = new cwNote(this);
-        note->setParentTrip(parentTrip());
-        note->setData(noteData);
-        newNotes.append(note);
-    }
-
-    cwSurveyNoteModelBase::addNotes(newNotes);
+    setDataHelper<cwSurveyNoteModelData, cwNote>(data);
 }
 
 cwSurveyNoteModelData cwSurveyNoteModel::data() const
 {
-    cwSurveyNoteModelData out;
-    const auto objNotes = notes();
-    out.notes.reserve(objNotes.size());
-
-    for (QObject* obj : objNotes) {
-        if (auto* note = qobject_cast<cwNote*>(obj)) {
-            out.notes.append(note->data());
-        }
-    }
-    return out;
+    return dataHelper<cwSurveyNoteModelData, cwNote>();
 }
 
 void cwSurveyNoteModel::onParentTripChanged()

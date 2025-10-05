@@ -29,6 +29,8 @@ class cwClinoReading;
 class cwCompassReading;
 class cwCavingRegion;
 class cwProject;
+class cwNoteLiDAR;
+class cwNoteLiDARData;
 #include "cwCavingRegionData.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
 #include "cwFutureManagerToken.h"
@@ -61,6 +63,7 @@ class DistanceReading;
 class CompassReading;
 class ClinoReading;
 class StationShot;
+class NoteLiDAR;
 };
 
 namespace QtProto {
@@ -171,6 +174,10 @@ public:
     static QString absolutePath(const cwNote* note);
     static QDir dir(const cwNote* note);
 
+    static QString fileName(const cwNoteLiDAR* note);
+    static QString absolutePath(const cwNoteLiDAR* note);
+    static QDir dir(const cwNoteLiDAR* note);
+
     //For testing
     void waitForFinished();
 
@@ -206,6 +213,8 @@ private:
 
     void connectScrap(cwScrap* scrap);
     // void disconnectScrap(cwScrap* scrap);
+
+    void connectNoteLiDAR(cwNoteLiDAR * lidarNote);
 
     // void setFileNameHelper(const QString& fileName);
     void setTemporary(bool isTemp);
@@ -260,9 +269,14 @@ private:
     QFuture<Monad::ResultBase> save(const QDir& dir, const cwNote* note);
     static std::unique_ptr<CavewhereProto::Note> toProtoNote(const cwNote* note);
 
+    void save(const cwNoteLiDAR* note);
+    QFuture<Monad::ResultBase> save(const QDir& dir, const cwNoteLiDAR* note);
+    static std::unique_ptr<CavewhereProto::NoteLiDAR> toProtoNoteLiDAR(const cwNoteLiDAR* note);
+
     static Monad::Result<cwCaveData> loadCave(const QString& filename);
     static Monad::Result<cwTripData> loadTrip(const QString& filename);
     static Monad::Result<cwNoteData> loadNote(const QString& filename, const QDir &projectDir);
+    static Monad::Result<cwNoteLiDARData> loadNoteLiDAR(const QString& filename, const QDir &projectDir);
 
     static cwTripCalibrationData fromProtoTripCalibration(const CavewhereProto::TripCalibration& proto);
     static cwTeamData fromProtoTeam(const CavewhereProto::Team& proto);
@@ -284,6 +298,7 @@ private:
                                  const QDir& destinationDirectory,
                                  MakeResultFunc makeResult,
                                  std::function<void (QList<ResultType>)> outputCallBackFunc);
+    
 
 };
 

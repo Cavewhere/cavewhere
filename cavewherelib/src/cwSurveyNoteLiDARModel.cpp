@@ -55,6 +55,7 @@ void cwSurveyNoteLiDARModel::addFromFiles(QList<QUrl> files)
             for (const QString& path : relativePaths) {
                 auto* note = new cwNoteLiDAR(this);
                 note->setParentTrip(parentTrip());
+                note->setName(QFileInfo(path).fileName());
                 note->setFilename(path); // project-relative path
                 qDebug() << "lidar note path:" << path;
                 newNotes.append(note);
@@ -102,6 +103,16 @@ QVariant cwSurveyNoteLiDARModel::data(const QModelIndex& index, int role) const
 
 void cwSurveyNoteLiDARModel::addNotes(const QList<cwNoteLiDAR *> lidarNotes) {
     addNotesHelper(lidarNotes);
+}
+
+void cwSurveyNoteLiDARModel::setData(const cwSurveyNoteLiDARModelData &data)
+{
+    setDataHelper<cwSurveyNoteLiDARModelData, cwNoteLiDAR>(data);
+}
+
+cwSurveyNoteLiDARModelData cwSurveyNoteLiDARModel::data() const
+{
+    return dataHelper<cwSurveyNoteLiDARModelData, cwNoteLiDAR>();
 }
 
 void cwSurveyNoteLiDARModel::onParentTripChanged()

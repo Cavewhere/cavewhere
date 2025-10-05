@@ -369,7 +369,8 @@ cwTripData cwTrip::data() const
         Team->data(),
         Calibration->data(),
         cwData::toDataList<cwSurveyChunkData>(Chunks),
-        Notes->data()
+        Notes->data(),
+        NotesLidar->data()
     };
 }
 
@@ -380,6 +381,7 @@ void cwTrip::setData(const cwTripData &data)
     Team->setData(data.team);
     Calibration->setData(data.calibrations);
     Notes->setData(data.noteModel);
+    NotesLidar->setData(data.noteLiDARModel);
 
     removeChunks(0, Chunks.size() - 1);
     for(const auto& chunk : data.chunks) {

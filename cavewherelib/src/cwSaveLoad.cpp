@@ -20,6 +20,7 @@
 #include "cwPDFConverter.h"
 #include "cwPDFSettings.h"
 #include "cwAddImageTask.h"
+#include "cwNoteLiDAR.h"
 
 //Async future
 #include <asyncfuture.h>
@@ -1035,6 +1036,48 @@ std::unique_ptr<CavewhereProto::Note> cwSaveLoad::toProtoNote(const cwNote *note
     return protoNote;
 }
 
+void cwSaveLoad::save(const cwNoteLiDAR *note)
+{
+    d->saveObject(this, note);
+}
+
+QFuture<ResultBase> cwSaveLoad::save(const QDir &dir, const cwNoteLiDAR *note)
+{
+    return saveProtoMessage(
+        dir,
+        fileName(note),
+        toProtoNoteLiDAR(note),
+        note);
+}
+
+std::unique_ptr<CavewhereProto::NoteLiDAR> cwSaveLoad::toProtoNoteLiDAR(const cwNoteLiDAR *note)
+{
+    //Copy trip data into proto, on the main thread
+    auto protoNote = std::make_unique<CavewhereProto::NoteLiDAR>();
+
+    // cwRegionSaveTask::saveImage(protoNote->mutable_image(), note->image());
+
+    // protoNote->set_rotation(note->rotate());
+    // cwRegionSaveTask::saveImageResolution(protoNote->mutable_imageresolution(), note->imageResolution());
+
+    // foreach(cwScrap* scrap, note->scraps()) {
+    //     CavewhereProto::Scrap* protoScrap = protoNote->add_scraps();
+    //     cwRegionSaveTask::saveScrap(protoScrap, scrap);
+    // }
+
+    *(protoNote->mutable_name()) = note->name().toStdString();
+    *(protoNote->mutable_filename()) = note->filename().toStdString();
+
+    for(const auto& noteStation : note->stations()) {
+        //Save the note stations
+        auto protoNoteStation = protoNote->add_notestations();
+        *(protoNoteStation->mutable_name()) = noteStation.name().toStdString();
+        cwRegionSaveTask::saveVector3D(protoNoteStation->mutable_positiononnote(), noteStation.positionOnNote());
+    }
+
+    return protoNote;
+}
+
 
 /**
  * This saves all the data in region into directory
@@ -1211,6 +1254,37 @@ QFuture<Monad::Result<cwCavingRegionData>> cwSaveLoad::loadAll(const QString &fi
 
                             cwTripData trip = tripResult.value();
 
+                            auto loadObjectsFromNotesDir = [=](const QString& fileSuffix,
+                                                               auto&& loadFunc,
+                                                               auto& destinationList)
+                            {
+                                QDir notesDir = tripDir.filePath("notes");
+                                if (!notesDir.exists()) {
+                                    return;
+                                }
+
+                                QFileInfoList files = notesDir.entryInfoList(QStringList() << ("*" + fileSuffix), QDir::Files);
+                                for (const QFileInfo& fileInfo : files) {
+                                    auto result = loadFunc(fileInfo.absoluteFilePath(), regionDir);
+                                    if (result.hasError()) {
+                                        // FIXME: log or collect the error
+                                        continue;
+                                    }
+
+                                    destinationList.append(result.value());
+                                }
+                            };
+
+                            //Load 2D notes
+                            loadObjectsFromNotesDir(QStringLiteral("cwnote"),
+                                                    loadNote,
+                                                    trip.noteModel.notes);
+
+                            //Load 3D lidar notes
+                            loadObjectsFromNotesDir(QStringLiteral("cwnote3d"),
+                                                    loadNoteLiDAR,
+                                                    trip.noteLiDARModel.notes);
+
                             // Load notes inside the notes subfolder
                             QDir notesDir = tripDir.filePath("notes");
                             if (notesDir.exists()) {
@@ -1328,8 +1402,33 @@ Monad::Result<cwNoteData> cwSaveLoad::loadNote(const QString &filename, const QD
 
         return noteData;
     });
+}
+
+Monad::Result<cwNoteLiDARData> cwSaveLoad::loadNoteLiDAR(const QString& filename, const QDir &projectDir) {
+    auto noteResult = loadMessage<CavewhereProto::NoteLiDAR>(filename);
+
+    return Monad::mbind(noteResult, [filename, projectDir](const Result<CavewhereProto::NoteLiDAR>& result) -> Monad::Result<cwNoteLiDARData> {
+        const CavewhereProto::NoteLiDAR& protoNote = result.value();
+
+        cwNoteLiDARData noteData;
+
+        noteData.filename = QString::fromStdString(protoNote.filename());
+        noteData.name = QString::fromStdString(protoNote.name());
+
+        noteData.stations.reserve(protoNote.notestations_size());
+        for(const auto& protoNoteStation : protoNote.notestations()) {
+            cwNoteLiDARStation newStation;
+            newStation.setPositionOnNote(cwRegionLoadTask::loadVector3D(protoNoteStation.positiononnote()));
+            newStation.setName(QString::fromStdString(protoNoteStation.name()));
+            noteData.stations.append(std::move(newStation));
+        }
+
+        return noteData;
+    });
+
 
 }
+
 
 cwTripCalibrationData cwSaveLoad::fromProtoTripCalibration(const CavewhereProto::TripCalibration &proto)
 {
@@ -1666,6 +1765,11 @@ void cwSaveLoad::connectTreeModel()
                         save(scrap->parentNote());
                         break;
                     }
+                    case cwRegionTreeModel::NoteLiDARType: {
+                        auto noteLiDAR = d->m_regionTreeModel->noteLiDAR(index);
+                        connectNoteLiDAR(noteLiDAR);
+                        save(noteLiDAR);
+                    }
                     default:
                         break;
                     }
@@ -1983,6 +2087,45 @@ void cwSaveLoad::connectScrap(cwScrap *scrap)
     connect(scrap, &cwScrap::typeChanged, this, saveNote);
 }
 
+void cwSaveLoad::connectNoteLiDAR(cwNoteLiDAR *lidarNote)
+{
+    if (lidarNote == nullptr) {
+        return;
+    }
+
+    // Lambda to save this specific note
+    const auto saveNote = [this, lidarNote]() {
+        save(lidarNote);
+    };
+
+    connect(lidarNote, &cwNoteLiDAR::filenameChanged, this, saveNote);
+    connect(lidarNote, &cwNoteLiDAR::dataChanged,
+            this, [saveNote](const QModelIndex &topLeft,
+                       const QModelIndex &bottomRight,
+                       const QList<int> &roles) {
+                Q_UNUSED(topLeft);
+                Q_UNUSED(bottomRight);
+                Q_UNUSED(roles);
+                saveNote();
+    });
+    connect(lidarNote, &cwNoteLiDAR::rowsInserted,
+            this, [saveNote](const QModelIndex &parent, int first, int last) {
+                Q_UNUSED(parent);
+                Q_UNUSED(first);
+                Q_UNUSED(last);
+                saveNote();
+    });
+    connect(lidarNote, &cwNoteLiDAR::rowsRemoved,
+            this, [saveNote](const QModelIndex &parent, int first, int last) {
+                Q_UNUSED(parent);
+                Q_UNUSED(first);
+                Q_UNUSED(last);
+                saveNote();
+    });
+
+
+}
+
 
 // void cwSaveLoad::setFileNameHelper(const QString &fileName)
 // {
@@ -2185,6 +2328,25 @@ QString cwSaveLoad::absolutePath(const cwNote *note)
 }
 
 QDir cwSaveLoad::dir(const cwNote *note)
+{
+    if(note->parentTrip()) {
+        return noteDirHelper(dir(note->parentTrip()));
+    } else {
+        return QDir();
+    }
+}
+
+QString cwSaveLoad::fileName(const cwNoteLiDAR *note)
+{
+    return sanitizeFileName(note->name() + QStringLiteral(".cwnote3d"));
+}
+
+QString cwSaveLoad::absolutePath(const cwNoteLiDAR *note)
+{
+    return dir(note).absoluteFilePath(fileName(note));
+}
+
+QDir cwSaveLoad::dir(const cwNoteLiDAR *note)
 {
     if(note->parentTrip()) {
         return noteDirHelper(dir(note->parentTrip()));

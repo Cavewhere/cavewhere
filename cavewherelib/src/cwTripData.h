@@ -9,6 +9,7 @@
 #include "cwTripCalibration.h"
 #include "cwSurveyChunkData.h"
 #include "cwSurveyNoteModelData.h"
+#include "cwSurveyNoteLiDARModelData.h"
 
 struct cwTripData {
     QString name;
@@ -17,10 +18,7 @@ struct cwTripData {
     cwTripCalibrationData calibrations;
     QList<cwSurveyChunkData> chunks;
     cwSurveyNoteModelData noteModel;
-
-
-
-
+    cwSurveyNoteLiDARModelData noteLiDARModel;
 
 };
 
