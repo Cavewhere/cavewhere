@@ -22,6 +22,7 @@ find_package(Qt6
     REQUIRED)
 find_package(xxHash REQUIRED)
 find_package(TinyGLTF REQUIRED)
+find_package(minizip REQUIRED)
 
 qt_add_library(cavewherelib STATIC)
 
@@ -58,6 +59,7 @@ target_link_libraries(cavewherelib
     TinyGLTF::TinyGLTF
     protobuf::protobuf
     xxHash::xxhash
+    MINIZIP::minizip
     # surveximg
 )
 
