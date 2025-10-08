@@ -9,18 +9,19 @@
 using namespace cw::gltf;
 
 cwRenderGLTF::cwRenderGLTF(QObject *parent)
-    : cwRenderObject{parent}
+    : cwRenderObject{parent},
+    m_loadRestarter(this)
 {
     // m_modelMatrixProperty.setBinding([this]() {
     //     QMatrix4x4 matrix;
 
     //     //TODO: make this user define
-    //     //Default rotation for up
-    //     matrix.rotate(90.0, 1.0, 0.0, 0.0);
 
     //     matrix.translate(m_translation);
     //     auto rotation = m_rotation.value();
     //     matrix.rotate(rotation.w(), rotation.x(), rotation.y(), rotation.z());
+    //     //Default rotation for up
+    //     matrix.rotate(90.0, 1.0, 0.0, 0.0);
     //     return matrix;
     // });
 
@@ -38,50 +39,31 @@ cwRenderGLTF::cwRenderGLTF(QObject *parent)
 
     m_modelMatrix.setValue(m_modelMatrixProperty.value());
 
+    m_loadRestarter.onFutureChanged([this]() {
+        m_futureManagerToken.addJob(cwFuture(m_loadRestarter.future(), QStringLiteral("Loading glTF")));
+    });
+
 }
 
 void cwRenderGLTF::setGLTFFilePath(const QString &filePath)
 {
     if(m_gltfFilePath != filePath) {
         qDebug() << "Setting gltf path:" << filePath;
-        auto renderObject = this;
-        auto modelMatrix = m_modelMatrix.value();
+        auto run = [this, filePath]() {
+            auto renderObject = this;
+            auto modelMatrix = m_modelMatrix.value();
 
-        m_loadFuture.cancel();
+            auto future = cwConcurrent::run([filePath, renderObject, modelMatrix]()->Monad::Result<Load> {
+                auto data = cw::gltf::Loader::loadGltf(filePath);
+                auto load = toIntersectors(renderObject, data, modelMatrix);
+                load.scene = std::move(data);
+                return load;
+            });
 
-        auto future = cwConcurrent::run([filePath, renderObject, modelMatrix]()->Monad::Result<Load> {
-            auto data = cw::gltf::Loader::loadGltf(filePath);
-            auto load = toIntersectors(renderObject, data, modelMatrix);
-            load.scene = std::move(data);
-            return load;
-        });
+            return handleLoadFuture(future);
+        };
 
-        m_loadFuture =
-            AsyncFuture::observe(future)
-                .context(this, [this, future]() {
-
-                    auto load = future.result().value();
-
-                    m_data = std::move(load.scene);
-                    m_matrixObjects = std::move(load.matrixObjects);
-
-                    auto intersector = geometryItersecter();
-                    intersector->clear(this);
-
-                    for(const auto& object : std::as_const(load.intersecterObjects)) {
-                        intersector->addObject(object);
-                    }
-
-                    auto matrix = m_modelMatrixProperty.value();
-                    for(const auto& key : std::as_const(m_matrixObjects)) {
-                        geometryItersecter()->setModelMatrix(key, matrix);
-                    }
-
-                    m_dataChanged = true;
-                    update();
-                }).future();
-
-        m_futureManagerToken.addJob(cwFuture(m_loadFuture, QStringLiteral("Loading glTF")));
+        m_loadRestarter.restart(run);
     }
 }
 
@@ -103,6 +85,34 @@ void cwRenderGLTF::setTranslation(float x, float y, float z)
 cwRHIObject *cwRenderGLTF::createRHIObject()
 {
     return new cwRHIGltf();
+}
+
+QFuture<void> cwRenderGLTF::handleLoadFuture(QFuture<Monad::Result<Load> > loadFuture)
+{
+    return AsyncFuture::observe(loadFuture)
+    .context(this, [this, loadFuture]() {
+
+        auto load = loadFuture.result().value();
+
+        m_data = std::move(load.scene);
+        m_matrixObjects = std::move(load.matrixObjects);
+
+        auto intersector = geometryItersecter();
+        intersector->clear(this);
+
+        for(const auto& object : std::as_const(load.intersecterObjects)) {
+            intersector->addObject(object);
+        }
+
+        auto matrix = m_modelMatrixProperty.value();
+        for(const auto& key : std::as_const(m_matrixObjects)) {
+            geometryItersecter()->setModelMatrix(key, matrix);
+        }
+
+        m_dataChanged = true;
+        update();
+    }).future();
+
 }
 
 cwRenderGLTF::Load cwRenderGLTF::toIntersectors(cwRenderObject* renderObject,
@@ -155,4 +165,28 @@ void cwRenderGLTF::setFutureManagerToken(const cwFutureManagerToken &newFutureMa
     }
     m_futureManagerToken = newFutureManagerToken;
     emit futureManagerTokenChanged();
+}
+
+void cwRenderGLTF::setGltf(const QFuture<Monad::Result<cw::gltf::SceneCPU> > &gltfFuture)
+{
+    auto run = [this, gltfFuture]() {
+        return AsyncFuture::observe(gltfFuture)
+        .context(this, [gltfFuture, this]() {
+
+            auto renderObject = this;
+            auto modelMatrix = m_modelMatrix.value();
+            auto gltf = gltfFuture.result().value();
+
+            auto future = cwConcurrent::run([gltf, renderObject, modelMatrix]()->Monad::Result<Load> {
+                auto load = toIntersectors(renderObject, gltf, modelMatrix);
+                load.scene = std::move(gltf);
+                return load;
+            });
+
+            return handleLoadFuture(future);
+        }).future();
+    };
+
+    m_loadRestarter.restart(run);
+
 }

@@ -1,8 +1,12 @@
 #ifndef CWRENDERGLTF_H
 #define CWRENDERGLTF_H
 
-//our includes
+
+//Monad includes
 #include "Monad/Result.h"
+
+//our includes
+#include "asyncfuture.h"
 #include "cwFutureManagerToken.h"
 #include "cwRenderObject.h"
 #include "cwGltfLoader.h"
@@ -28,6 +32,7 @@ public:
 
     explicit cwRenderGLTF(QObject *parent = nullptr);
 
+
     // Accessor without "get" prefix (per your style)
     QString gltfFilePath() const { return m_gltfFilePath; }
 
@@ -37,6 +42,8 @@ public:
     QMatrix4x4 modelMatrix() const { return m_modelMatrixProperty.value(); }
     void setModelMatrix(const QMatrix4x4& matrix) { m_modelMatrixProperty = matrix; }
     QBindable<QMatrix4x4> bindableModelMatrix() { return &m_modelMatrixProperty; }
+
+    void setGltf(const QFuture<Monad::Result<cw::gltf::SceneCPU>>& gltfFuture);
 
 public slots:
     // Setter to choose which glTF file to render
@@ -65,6 +72,7 @@ private:
         QList<cwGeometryItersecter::Object> intersecterObjects;
     };
 
+    QFuture<void> handleLoadFuture(QFuture<Monad::Result<Load>> loadFuture);
 
     static Load toIntersectors(cwRenderObject* renderObject,
                                const cw::gltf::SceneCPU& data,
@@ -86,7 +94,9 @@ private:
     QList<cwGeometryItersecter::Key> m_matrixObjects;
 
     cwFutureManagerToken m_futureManagerToken;
-    QFuture<void> m_loadFuture;
+    AsyncFuture::Restarter<void> m_loadRestarter;
+
+    // QFuture<void> m_loadFuture;
 
     void updateModelMatrix();
 

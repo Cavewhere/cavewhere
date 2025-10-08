@@ -47,6 +47,9 @@ public:
     QString gltfFilename() const;
     void setGltfFilename(const QString& filename);
 
+    QMatrix4x4 modelMatrix() const;
+    void setModelMatrix(const QMatrix4x4& matrix);
+
 private:
     QSharedDataPointer<cwTriangulateLiDARPrivateData> data;
 };

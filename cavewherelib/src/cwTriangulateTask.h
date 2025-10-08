@@ -38,6 +38,11 @@ public:
     //Outputs of the task
     QList<QFuture<cwTriangulatedData> > triangulate() const;
 
+    static QVector3D morphPoint(const QList<cwTriangulateStation>& visibleStations,
+                                const QMatrix4x4 &toWorldCoords,
+                                const QMatrix4x4 &viewMatrix,
+                                const QVector3D &point);
+
 signals:
     
 public slots:
@@ -161,10 +166,10 @@ private:
     static QList<cwTriangulateStation> stationsVisibleToPoint(const QVector3D& point,
                                                               const QList<cwTriangulateStation>& stations,
                                                               const QPolygonF& scrapOutline);
-    static QVector3D morphPoint(const QList<cwTriangulateStation>& visibleStations,
-                                const QMatrix4x4 &toWorldCoords,
-                                const QMatrix4x4 &viewMatrix,
-                                const QVector3D &point);
+    // static QVector3D morphPoint(const QList<cwTriangulateStation>& visibleStations,
+    //                             const QMatrix4x4 &toWorldCoords,
+    //                             const QMatrix4x4 &viewMatrix,
+    //                             const QVector3D &point);
 
     //For lead handling
     static QVector<QVector3D> leadPositionToVector3D(const QList<cwLead>& leads);

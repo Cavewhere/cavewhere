@@ -3,16 +3,20 @@
 
 //Our includes
 #include "cwTriangulateLiDARInData.h"
+#include "cwRenderGLTF.h"
 
 //Qt includes
 #include <QFuture>
+
+//Monad includes
+#include <Monad/Monad.h>
 
 class cwTriangulateLiDARTask
 {
 public:
     cwTriangulateLiDARTask() = delete;
 
-    static QFuture<void> triangulate(QList<cwTriangulateLiDARInData> liDARs);
+    static QFuture<Monad::Result<cw::gltf::SceneCPU>> triangulate(const QList<cwTriangulateLiDARInData>& liDARs);
 };
 
 #endif // CWTRIANGULATELIDARTASK_H

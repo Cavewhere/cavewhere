@@ -679,8 +679,8 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
             auto profileCompare = [&scrapData](const cwTriangulateStation& left, const cwTriangulateStation& right)->bool {
                 QMatrix4x4 rotation = toNoteMatrix(scrapData.noteTransform());
 
-                QPointF leftPoint = rotation.map(left.notePosition());
-                QPointF rightPoint = rotation.map(right.notePosition());
+                QVector3D leftPoint = rotation.map(left.notePosition());
+                QVector3D rightPoint = rotation.map(right.notePosition());
 
                 return leftPoint.x() < rightPoint.x();
             };
@@ -712,7 +712,7 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
             auto compare = [&scrapData](const cwTriangulateStation& station, const QVector3D& point)->bool {
                 QMatrix4x4 rotation = toNoteMatrix(scrapData.noteTransform());
 
-                QPointF left = rotation.map(station.notePosition());
+                QVector3D left = rotation.map(station.notePosition());
                 QVector3D right = rotation.map(point);
 
                 return left.x() < right.x();
@@ -849,7 +849,7 @@ QList<cwTriangulateStation> cwTriangulateTask::stationsVisibleToPoint(const QVec
     foreach(cwTriangulateStation station, stations) {
 
         //Create a line between the point and the station
-        QLineF ray(point2D,station.notePosition());
+        QLineF ray(point2D,station.notePosition().toPointF());
 
         //The flag if the station should be added
         bool shouldAdd = true;
@@ -889,7 +889,7 @@ QList<cwTriangulateStation> cwTriangulateTask::stationsVisibleToPoint(const QVec
         double distance2 = distance1;
 
         foreach(cwTriangulateStation station, stations) {
-            double length = QLineF(point2D, station1.notePosition()).length();
+            double length = QLineF(point2D, station1.notePosition().toPointF()).length();
 
             //Heristic
             if(station1.name().isEmpty()) {
@@ -951,7 +951,8 @@ QVector3D cwTriangulateTask::morphPoint(const QList<cwTriangulateStation> &visib
     distances.reserve(visibleStations.size());
     int onTopOfStationIndex = -1;
     for(int i = 0; i < visibleStations.size(); i++) {
-        double distance = QLineF(visibleStations[i].notePosition(), point.toPointF()).length();
+        double distance = (visibleStations[i].notePosition() - point).length();
+        // double distance = QLineF(visibleStations[i].notePosition(), point.toPointF()).length();
         if(distance != 0.0) {
 
             //The inverse distance is give a high weight for points near stations

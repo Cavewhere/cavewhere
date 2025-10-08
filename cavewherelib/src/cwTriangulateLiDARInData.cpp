@@ -9,6 +9,7 @@
 
 // Qt includes
 #include <QSharedData>
+#include <QMatrix4x4>
 
 // Our includes
 #include "cwNoteLiDARStation.h"
@@ -35,6 +36,7 @@ public:
     cwStationPositionLookup m_stationLookup;
     cwSurveyNetwork m_surveyNetwork;
     QString m_gltfFilename;
+    QMatrix4x4 m_modelMatrix;
 };
 
 // ---------------------------------------------------------------------
@@ -103,4 +105,14 @@ QString cwTriangulateLiDARInData::gltfFilename() const
 void cwTriangulateLiDARInData::setGltfFilename(const QString& filename)
 {
     data->m_gltfFilename = filename;
+}
+
+QMatrix4x4 cwTriangulateLiDARInData::modelMatrix() const
+{
+    return data->m_modelMatrix;
+}
+
+void cwTriangulateLiDARInData::setModelMatrix(const QMatrix4x4 &matrix)
+{
+    data->m_modelMatrix = matrix;
 }

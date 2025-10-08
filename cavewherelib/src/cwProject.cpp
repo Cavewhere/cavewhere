@@ -323,7 +323,6 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
 
     if(type == SqliteFileType) {
 
-
         //Run the load task async
         auto loadFuture = cwConcurrent::run([filename](){
             cwRegionLoadTask loadTask;

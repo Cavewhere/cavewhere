@@ -495,7 +495,7 @@ QList<cwTriangulateStation> cwScrapManager::mapNoteStationsToTriangulateStation(
         if(positionLookup.hasPosition(noteStation.name())) {
             cwTriangulateStation station;
             station.setName(noteStation.name());
-            station.setNotePosition(noteStation.positionOnNote());
+            station.setNotePosition(QVector3D(noteStation.positionOnNote()));
             station.setPosition(positionLookup.position(noteStation.name()));
             stations.append(cwTriangulateStation(station));
         }

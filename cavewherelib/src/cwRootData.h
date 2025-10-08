@@ -23,6 +23,7 @@
 #include "cwCavingRegion.h"
 #include "cwLinePlotManager.h"
 #include "cwScrapManager.h"
+#include "cwNoteLiDARManager.h"
 #include "cwProject.h"
 #include "cwTripCalibration.h"
 #include "cwTrip.h"
@@ -55,6 +56,7 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
     Q_PROPERTY(cwCavingRegion* region READ region NOTIFY regionChanged)
     Q_PROPERTY(cwLinePlotManager* linePlotManager READ linePlotManager NOTIFY linePlotManagerChanged)
     Q_PROPERTY(cwScrapManager* scrapManager READ scrapManager NOTIFY scrapManagerChanged)
+    Q_PROPERTY(cwNoteLiDARManager* noteLiDARManager READ noteLiDARManager NOTIFY noteLiDARManagerChanged FINAL)
     Q_PROPERTY(cwProject* project READ project NOTIFY projectChanged)
     Q_PROPERTY(cwTripCalibration* defaultTripCalibration READ defaultTripCalibration NOTIFY defaultTripCalibrationChanged)
     Q_PROPERTY(cwTrip* defaultTrip READ defaultTrip NOTIFY defaultTripChanged)
@@ -152,6 +154,8 @@ public:
 
     static bool isMobileBuild();
 
+    cwNoteLiDARManager *noteLiDARManager() const;
+
 signals:
     void regionChanged();
     void linePlotManagerChanged();
@@ -171,12 +175,15 @@ signals:
     void stationsVisibleChanged();
     void pageViewChanged();
 
+    void noteLiDARManagerChanged();
+
 public slots:
 
 private:
     cwCavingRegion* Region; //!< Where all the data is stored
     cwLinePlotManager* LinePlotManager; //!< For keeping the lineplot updated
     cwScrapManager* ScrapManager; //!< For keeping all the scraps updated (carpeting)
+    cwNoteLiDARManager* NoteLiDARManager; //!< For carpeting lidar scans
     cwProject* Project; //!< For saving and loading, image saving and loading
     cwSurveyImportManager* SurveyImportManager; //!< For importing survey data from survex, etc
     QQuickView* QuickView; //!< For exporting the 3d screen to a file

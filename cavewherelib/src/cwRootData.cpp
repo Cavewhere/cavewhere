@@ -79,6 +79,13 @@ cwRootData::cwRootData(QObject *parent) :
     ScrapManager->setLinePlotManager(LinePlotManager);
     ScrapManager->setFutureManagerToken(FutureManagerModel->token());
 
+    //Setup the note lidar manager
+    NoteLiDARManager = new cwNoteLiDARManager(Project);
+    NoteLiDARManager->setProject(Project);
+    NoteLiDARManager->setLinePlotManager(LinePlotManager);
+    NoteLiDARManager->setRegionTreeModel(RegionTreeModel);
+    NoteLiDARManager->setFutureManagerToken(FutureManagerModel->token());
+
     //Setup the survey import manager
     SurveyImportManager = new cwSurveyImportManager(Project);
     SurveyImportManager->setCavingRegion(Region);
@@ -102,6 +109,7 @@ cwRootData::cwRootData(QObject *parent) :
 
     ScrapManager->setRenderScraps(RegionSceneManager->scraps());
     LinePlotManager->setRenderLinePlot(RegionSceneManager->linePlot());
+    NoteLiDARManager->setRenderGLTF(RegionSceneManager->gltf());
 
     PageSelectionModel = new cwPageSelectionModel(this);
 
@@ -298,3 +306,8 @@ bool cwRootData::isMobileBuild()
 }
 
 
+
+cwNoteLiDARManager *cwRootData::noteLiDARManager() const
+{
+    return NoteLiDARManager;
+}

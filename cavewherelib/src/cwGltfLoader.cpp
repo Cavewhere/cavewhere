@@ -431,23 +431,23 @@ void SceneCPU::dump() const
 
 cwGeometry MeshCPU::toGeometry() const
 {
-    // Helper: compute byte stride of an interleaved vertex (pos [+ normal] [+ tangent] [+ uv])
-    auto vertexStrideBytes = [](const PrimitiveCPU& primitive) -> int {
-        int floatComponentCount = 3; // position: vec3 (always present)
-        if (primitive.hasNormal) {
-            floatComponentCount += 3; // normal: vec3
-        }
-        if (primitive.hasTangent) {
-            floatComponentCount += 4; // tangent: vec4
-        }
-        if (primitive.hasTexCoord0) {
-            floatComponentCount += 2; // uv0: vec2
-        }
-        return static_cast<int>(floatComponentCount * sizeof(float));
-    };
+    // // Helper: compute byte stride of an interleaved vertex (pos [+ normal] [+ tangent] [+ uv])
+    // auto vertexStrideBytes = [](const PrimitiveCPU& primitive) -> int {
+    //     int floatComponentCount = 3; // position: vec3 (always present)
+    //     if (primitive.hasNormal) {
+    //         floatComponentCount += 3; // normal: vec3
+    //     }
+    //     if (primitive.hasTangent) {
+    //         floatComponentCount += 4; // tangent: vec4
+    //     }
+    //     if (primitive.hasTexCoord0) {
+    //         floatComponentCount += 2; // uv0: vec2
+    //     }
+    //     return static_cast<int>(floatComponentCount * sizeof(float));
+    // };
 
     // Lambda: extract and transform positions from all primitives in a mesh
-    auto extractPoints = [vertexStrideBytes](const MeshCPU& mesh) -> QVector<QVector3D> {
+    auto extractPoints = [](const MeshCPU& mesh) -> QVector<QVector3D> {
         // Pre-reserve to avoid reallocations
         int totalVertexCount = 0;
         for (const PrimitiveCPU& primitive : mesh.primitives) {
@@ -458,15 +458,17 @@ cwGeometry MeshCPU::toGeometry() const
         points.reserve(totalVertexCount);
 
         for (const PrimitiveCPU& primitive : mesh.primitives) {
-            const int stride = vertexStrideBytes(primitive);
-            const char* const raw = primitive.vertexInterleaved.constData();
+            // const int stride = primitive.vertexStrideBytes();
+            // const char* const raw = primitive.vertexInterleaved.constData();
 
             for (int vertexIndex = 0; vertexIndex < primitive.vertexCount; ++vertexIndex) {
-                const char* const vptr = raw + vertexIndex * stride;
-                const float* const floats = reinterpret_cast<const float*>(vptr);
+
+
+                // const char* const vptr = raw + vertexIndex * stride;
+                // const float* const floats = reinterpret_cast<const float*>(vptr);
 
                 // position is always the first 3 floats in the interleaved layout
-                QVector3D position(floats[0], floats[1], floats[2]);
+                QVector3D position = primitive.vertex(vertexIndex);
 
                 // apply world transform (modelMatrix is already world from scene graph)
                 const QVector4D transformed = mesh.modelMatrix * QVector4D(position, 1.0f);
@@ -527,5 +529,11 @@ cwGeometry MeshCPU::toGeometry() const
     };
 
 }
+
+
+
+
+
+
 
 } // namespace cw::gltf

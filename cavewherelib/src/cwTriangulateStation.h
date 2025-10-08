@@ -17,10 +17,19 @@
 class cwTriangulateStation
 {
 public:
-    cwTriangulateStation();
+    cwTriangulateStation() = default;
+    cwTriangulateStation(const QString& name,
+                             QVector3D notePosition,
+                         QVector3D position) :
+        m_notePosition(notePosition),
+        m_position(position),
+        m_name(name)
+    {
 
-    QPointF notePosition() const;
-    void setNotePosition(QPointF position);
+    }
+
+    QVector3D notePosition() const;
+    void setNotePosition(QVector3D position);
 
     QVector3D position() const;
     void setPosition(QVector3D position);
@@ -30,39 +39,34 @@ public:
 
 
 private:
-    class PrivateData : public QSharedData {
-    public:
-        QPointF NotePosition;
-        QVector3D Position;
-        QString Name;
-    };
-
-    QSharedDataPointer<PrivateData> Data;
+    QVector3D m_notePosition;
+    QVector3D m_position;
+    QString m_name;
 
 };
 
-inline QPointF cwTriangulateStation::notePosition() const {
-    return Data->NotePosition;
+inline QVector3D cwTriangulateStation::notePosition() const {
+    return m_notePosition;
 }
 
-inline void cwTriangulateStation::setNotePosition(QPointF position) {
-    Data->NotePosition = position;
+inline void cwTriangulateStation::setNotePosition(QVector3D position) {
+    m_notePosition = position;
 }
 
 inline QVector3D cwTriangulateStation::position() const {
-    return Data->Position;
+    return m_position;
 }
 
 inline void cwTriangulateStation::setPosition(QVector3D position) {
-    Data->Position = position;
+    m_position = position;
 }
 
 inline QString cwTriangulateStation::name() const {
-    return Data->Name;
+    return m_name;
 }
 
 inline void cwTriangulateStation::setName(QString name) {
-    Data->Name = name;
+    m_name = name;
 }
 
 
