@@ -19,25 +19,6 @@ cwScale::cwScale(QObject *parent) :
     connectLengthObjects();
 }
 
-// cwScale::cwScale(const cwScale &other) :
-//     QObject(nullptr),
-//     ScaleNumerator(new cwLength(*(other.ScaleNumerator))),
-//     ScaleDenominator(new cwLength(*(other.ScaleDenominator)))
-// {
-//     ScaleNumerator->setParent(this);
-//     ScaleDenominator->setParent(this);
-//     connectLengthObjects();
-// }
-
-// const cwScale& cwScale::operator =(const cwScale &other)
-// {
-//     if(this != &other) {
-//         *ScaleNumerator = *(other.ScaleNumerator);
-//         *ScaleDenominator = *(other.ScaleDenominator);
-//     }
-//     return *this;
-// }
-
 /**
   This connects the length objects when the scale has changed.
   */
@@ -107,5 +88,6 @@ void cwScale::setScale(double newScale)
     connect(ScaleNumerator, SIGNAL(valueChanged()), SIGNAL(scaleChanged()));
     connect(ScaleDenominator, SIGNAL(valueChanged()), SIGNAL(scaleChanged()));
 
+    qDebug() << "Scale changed!";
     emit scaleChanged();
 }

@@ -19,7 +19,7 @@
 
 //Our includes
 #include "cwGlobals.h"
-#include "cwNoteTransformationData.h"
+#include "cwAbstractNoteTransformation.h"
 class cwLength;
 class cwImageResolution;
 class cwScale;
@@ -31,31 +31,13 @@ class cwScale;
   The scale can be set throught the scaleNumerator : scaleDenominator.  When one of those change, the
   unitless scale will also change.
   */
-class CAVEWHERE_LIB_EXPORT cwNoteTranformation : public QObject
+class CAVEWHERE_LIB_EXPORT cwNoteTranformation : public cwAbstractNoteTransformation
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(NoteTranformation)
 
-    Q_PROPERTY(double scale READ scale WRITE setScale NOTIFY scaleChanged)
-    Q_PROPERTY(double northUp READ northUp WRITE setNorthUp NOTIFY northUpChanged)
-    Q_PROPERTY(cwLength* scaleNumerator READ scaleNumerator CONSTANT)
-    Q_PROPERTY(cwLength* scaleDenominator READ scaleDenominator CONSTANT)
-    Q_PROPERTY(cwScale* scaleObject READ scaleObject NOTIFY scaleObjectChanged)
-
-    Q_ENUMS(ProfileDirection)
 public:
     cwNoteTranformation(QObject* parent = 0);
-
-    cwLength* scaleNumerator() const;
-    cwLength* scaleDenominator() const;
-
-    cwScale* scaleObject() const;
-
-    void setScale(double scale);
-    double scale() const;
-
-    double northUp() const;
-    void setNorthUp(double degrees);
 
     Q_INVOKABLE double calculateNorth(QPointF noteP1, QPointF noteP2) const;
     Q_INVOKABLE double calculateScale(QPointF noteP1, QPointF noteP2,
@@ -63,37 +45,9 @@ public:
                                       QSize imageSize,
                                       cwImageResolution* resolution);
 
-    QMatrix4x4 matrix() const;
-
-    void setData(const cwNoteTransformationData& data);
-    cwNoteTransformationData data() const;
-
-signals:
-    void scaleChanged();
-    void northUpChanged();
-    void scaleObjectChanged();
-
-private:
-    double North;
-    cwScale* Scale;
+    QMatrix4x4 matrix() const override;
 };
 
-//Q_DECLARE_METATYPE(cwNoteTranformation*)
-
-/**
-  In degrees, the rotation of the page of notes such that north is aligned with the y axis.
-  */
-inline double cwNoteTranformation::northUp() const {
-    return North;
-}
-
-/**
-* @brief class::scaleObject
-* @return
-*/
-inline cwScale* cwNoteTranformation::scaleObject() const {
-    return Scale;
-}
 
 
 #endif // CWNOTETRANFORMATION_H

@@ -184,7 +184,7 @@ private:
      * @brief The ScrapShot class
      *
      * This is for averaging shot transform.  This class has the scale of the shot and the
-     * QVector2D of how far off shot drawn on paper compared the shot's data.  The QVector2D
+     * QVector2D of how far off shot drawn on paper compared the shot's data.  The QVector3D
      * has no error when it's equal to (0.0, 1.0, 0.0)
      */
     class ScrapShotTransform {

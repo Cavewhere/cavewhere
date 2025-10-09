@@ -20,39 +20,10 @@
 #include "cwMath.h"
 
 cwNoteTranformation::cwNoteTranformation(QObject* parent) :
-    QObject(parent),
-    North(0.0),
-    Scale(new cwScale(this))
+    cwAbstractNoteTransformation(parent)
 {
-    connect(Scale, &cwScale::scaleChanged, this, &cwNoteTranformation::scaleChanged);
 }
 
-
-// cwNoteTranformation::cwNoteTranformation(const cwNoteTranformation& other) :
-//     QObject(nullptr),
-//     North(other.North),
-//     Scale(new cwScale(*(other.Scale)))
-// {
-//     Scale->setParent(this);
-// }
-
-// const cwNoteTranformation& cwNoteTranformation::operator =(const cwNoteTranformation& other) {
-//     if(this != &other) {
-//         setNorthUp(other.northUp());
-//         *Scale = *(other.Scale);
-//     }
-//     return *this;
-// }
-
-/**
-  In degrees, the rotation of the page of notes such that north is aligned with the y axis.
-  */
-void cwNoteTranformation::setNorthUp(double degrees) {
-    if(North != degrees) {
-        North = degrees;
-        emit northUpChanged();
-    }
-}
 
 /**
   This calculates the north up based on two point in note transformation
@@ -120,50 +91,4 @@ QMatrix4x4 cwNoteTranformation::matrix() const {
     matrix.rotate(northUp(), 0.0, 0.0, 1.0);
     matrix.scale(1.0 / scale(), 1.0 / scale(), 1.0);
     return matrix;
-}
-
-void cwNoteTranformation::setData(const cwNoteTransformationData &data)
-{
-    setNorthUp(data.north);
-    Scale->setData(data.scale);
-}
-
-cwNoteTransformationData cwNoteTranformation::data() const
-{
-    return {
-        North,
-        Scale->data()
-    };
-}
-
-/**
-Gets scaleDenominator
-*/
-cwLength* cwNoteTranformation::scaleDenominator() const {
-    return Scale->scaleDenominator();
-}
-
-/**
- * @brief cwNoteTranformation::setScale
- * @param scale
- */
-void cwNoteTranformation::setScale(double scale)
-{
-    Scale->setScale(scale);
-}
-
-/**
- * @brief cwNoteTranformation::scale
- * @return
- */
-double cwNoteTranformation::scale() const
-{
-    return Scale->scale();
-}
-
-/**
-Gets scaleNumerator
-*/
-cwLength* cwNoteTranformation::scaleNumerator() const {
-    return Scale->scaleNumerator();
 }

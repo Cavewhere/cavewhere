@@ -10,6 +10,7 @@
 #include <QAbstractListModel>
 #include <QProperty>
 #include <QMatrix4x4>
+#include <QQuaternion>
 
 // Our includes
 #include "cwGlobals.h"
@@ -28,8 +29,8 @@ class CAVEWHERE_LIB_EXPORT cwNoteLiDAR : public QAbstractListModel
     Q_PROPERTY(QString filename READ filename WRITE setFilename NOTIFY filenameChanged)
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
 
-    Q_PROPERTY(QMatrix4x4 modelMatrix READ modelMatrix WRITE setModelMatrix NOTIFY modelMatrixChanged BINDABLE bindableModelMatrix)
 
+    Q_PROPERTY(QMatrix4x4 modelMatrix READ modelMatrix WRITE setModelMatrix NOTIFY modelMatrixChanged BINDABLE bindableModelMatrix)
 
 public:
     enum Role {
@@ -74,6 +75,7 @@ public:
     void setModelMatrix(const QMatrix4x4& modelMatrix) { m_modelMatrix = modelMatrix; }
     QBindable<QMatrix4x4> bindableModelMatrix() { return &m_modelMatrix; }
 
+
     cwNoteLiDARData data() const;
     void setData(const cwNoteLiDARData& data);
 
@@ -83,6 +85,7 @@ signals:
     void filenameChanged();
     void countChanged();
     void modelMatrixChanged();
+    void upRotationChanged();
 
 private:
     QString m_filename;                         // glTF binary file path (.glb)
