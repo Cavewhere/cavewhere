@@ -523,6 +523,8 @@ QFuture<ResultBase> cwSaveLoad::load(const QString &filename)
 
                     setSaveEnabled(true);
 
+                    connectTreeModel();
+
                     qDebug() << "Finished loading!";
 
                     return ResultBase();
@@ -1769,6 +1771,7 @@ void cwSaveLoad::connectTreeModel()
                         auto noteLiDAR = d->m_regionTreeModel->noteLiDAR(index);
                         connectNoteLiDAR(noteLiDAR);
                         save(noteLiDAR);
+                        break;
                     }
                     default:
                         break;
@@ -1885,6 +1888,13 @@ void cwSaveLoad::connectObjects()
         auto notes = d->m_regionTreeModel->all<cwNote*>(QModelIndex(), &cwRegionTreeModel::note);
         for(auto note : notes) {
             connectNote(note);
+        }
+    }
+
+    {
+        auto notes = d->m_regionTreeModel->all<cwNoteLiDAR*>(QModelIndex(), &cwRegionTreeModel::noteLiDAR);
+        for(auto note : notes) {
+            connectNoteLiDAR(note);
         }
     }
 

@@ -1523,7 +1523,7 @@ static QByteArray fileSha256(const QString& absolutePath) {
     return hash.result();
 }
 
-TEST_CASE("LiDAR GLB persistence: file copy + stations", "[cwProject][cwTrip][cwSurveyNoteLiDARModel][cwNoteLiDAR]") {
+TEST_CASE("LiDAR GLB persistence: file copy + stations", "[cwProject]") {
     // ---- Project → cave → trip ----
     auto project = std::make_unique<cwProject>();
     project->waitSaveToFinish();
@@ -1629,6 +1629,92 @@ TEST_CASE("LiDAR GLB persistence: file copy + stations", "[cwProject][cwTrip][cw
 
         // Same bytes as the original source GLB?
         CHECK(copiedHash == originalHash);
+    }
+
+    SECTION("Make sure changing station positions and name are update in reload") {
+        auto firstStation = loadedNote->index(0);
+        CHECK(loadedNote->setData(firstStation, "T0", cwNoteLiDAR::NameRole));
+        CHECK(loadedNote->setData(firstStation, QVector3D(0.15, 0.25, 0.35), cwNoteLiDAR::PositionOnNoteRole));
+
+        const QList<cwNoteLiDARStation> stations = loadedNote->stations();
+        REQUIRE(stations.size() == 3);
+
+        CHECK(stations.at(0).name().toStdString() == std::string("T0"));
+        CHECK(stations.at(0).positionOnNote() == QVector3D(0.15, 0.25, 0.35));
+
+        CHECK(stations.at(1).name().toStdString() == std::string("S1"));
+        CHECK(stations.at(1).positionOnNote() == QVector3D(0.50, 0.40, 0.6));
+
+        CHECK(stations.at(2).name().toStdString() == std::string("S2"));
+        CHECK(stations.at(2).positionOnNote() == QVector3D(0.85, 0.75, 0.95));
+
+        reloaded->waitSaveToFinish();
+
+        auto reloaded2 = std::make_unique<cwProject>();
+        reloaded2->loadOrConvert(project->filename());
+        reloaded2->waitLoadToFinish();
+
+        REQUIRE(reloaded2->cavingRegion()->caveCount() == 1);
+        cwTrip* const loadedTrip2 = reloaded2->cavingRegion()->cave(0)->trip(0);
+        REQUIRE(loadedTrip != nullptr);
+
+        cwSurveyNoteLiDARModel* const loadedModel2 = loadedTrip2->notesLiDAR();
+        REQUIRE(loadedModel2 != nullptr);
+        REQUIRE(loadedModel2->rowCount() == 1);
+
+        cwNoteLiDAR* const loadedNote2 = dynamic_cast<cwNoteLiDAR*>(loadedModel2->notes().at(0));
+        REQUIRE(loadedNote2 != nullptr);
+
+        const QList<cwNoteLiDARStation> stations2 = loadedNote2->stations();
+        REQUIRE(stations2.size() == 3);
+
+        CHECK(stations2.at(0).name().toStdString() == std::string("T0"));
+        CHECK(stations2.at(0).positionOnNote() == QVector3D(0.15, 0.25, 0.35));
+
+        CHECK(stations2.at(1).name().toStdString() == std::string("S1"));
+        CHECK(stations2.at(1).positionOnNote() == QVector3D(0.50, 0.40, 0.6));
+
+        CHECK(stations2.at(2).name().toStdString() == std::string("S2"));
+        CHECK(stations2.at(2).positionOnNote() == QVector3D(0.85, 0.75, 0.95));
+    }
+
+    SECTION("Make sure adding station update in reload") {
+        cwNoteLiDARStation stationNew3;
+        stationNew3.setName(QStringLiteral("N0"));
+        stationNew3.setPositionOnNote(QVector3D(0.11, 0.22, 0.33));
+        loadedNote->addStation(stationNew3);
+
+        reloaded->waitSaveToFinish();
+
+        auto reloaded2 = std::make_unique<cwProject>();
+        reloaded2->loadOrConvert(project->filename());
+        reloaded2->waitLoadToFinish();
+
+        REQUIRE(reloaded2->cavingRegion()->caveCount() == 1);
+        cwTrip* const loadedTrip2 = reloaded2->cavingRegion()->cave(0)->trip(0);
+        REQUIRE(loadedTrip != nullptr);
+
+        cwSurveyNoteLiDARModel* const loadedModel2 = loadedTrip2->notesLiDAR();
+        REQUIRE(loadedModel2 != nullptr);
+        REQUIRE(loadedModel2->rowCount() == 1);
+
+        cwNoteLiDAR* const loadedNote2 = dynamic_cast<cwNoteLiDAR*>(loadedModel2->notes().at(0));
+        REQUIRE(loadedNote2 != nullptr);
+
+        const QList<cwNoteLiDARStation> stations2 = loadedNote2->stations();
+        REQUIRE(stations2.size() == 4);
+
+        CHECK(stations2.at(0).name().toStdString() == std::string("S0"));
+        CHECK(stations2.at(0).positionOnNote() == QVector3D(0.10, 0.20, 0.30));
+
+        CHECK(stations2.at(1).name().toStdString() == std::string("S1"));
+        CHECK(stations2.at(1).positionOnNote() == QVector3D(0.50, 0.40, 0.6));
+
+        CHECK(stations2.at(2).name().toStdString() == std::string("S2"));
+        CHECK(stations2.at(2).positionOnNote() == QVector3D(0.85, 0.75, 0.95));
+
+        CHECK(stations2.at(3).name().toStdString() == std::string("N0"));
+        CHECK(stations2.at(3).positionOnNote() == QVector3D(0.11, 0.22, 0.33));
     }
 }
 
