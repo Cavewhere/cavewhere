@@ -321,8 +321,7 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
 
     filename = cwGlobals::convertFromURL(filename);
 
-    if(type == SqliteFileType) {
-
+    auto loadFromSQL = [this](const QString& filename) {
         //Run the load task async
         auto loadFuture = cwConcurrent::run([filename](){
             cwRegionLoadTask loadTask;
@@ -376,6 +375,10 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
 
                          return ResultBase();
                      }).future();
+    };
+
+    if(type == SqliteFileType) {
+        return loadFromSQL(filename);
     } else if (type == GitFileType) {
         return m_saveLoad->load(filename);
     }

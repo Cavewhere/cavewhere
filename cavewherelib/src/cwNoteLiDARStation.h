@@ -8,10 +8,10 @@
 #include "cwGlobals.h"
 #include "cwNoteStationBase.h"
 
-class CAVEWHERE_LIB_EXPORT cwNoteLiDARStation : public NoteStationBase<QVector3D>
+class CAVEWHERE_LIB_EXPORT cwNoteLiDARStation : public cwNoteStationBase<QVector3D>
 {
 public:
-    cwNoteLiDARStation() : NoteStationBase<QVector3D>() { }
+    cwNoteLiDARStation() : cwNoteStationBase<QVector3D>() { }
 };
 
 #endif // CWNOTELIDARSTATION_H

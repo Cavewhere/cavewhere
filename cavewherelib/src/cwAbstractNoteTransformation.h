@@ -29,6 +29,7 @@ class CAVEWHERE_LIB_EXPORT cwAbstractNoteTransformation : public QObject
     Q_PROPERTY(cwLength* scaleNumerator READ scaleNumerator CONSTANT)
     Q_PROPERTY(cwLength* scaleDenominator READ scaleDenominator CONSTANT)
     Q_PROPERTY(cwScale* scaleObject READ scaleObject NOTIFY scaleObjectChanged)
+    Q_PROPERTY(QMatrix4x4 matrix READ matrix NOTIFY matrixChanged);
 
 public:
     explicit cwAbstractNoteTransformation(QObject* parent = nullptr);
@@ -56,6 +57,7 @@ signals:
     void scaleChanged();
     void northUpChanged();
     void scaleObjectChanged();
+    void matrixChanged();
 
 protected:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwAbstractNoteTransformation, double, m_northUp, 0.0, &cwAbstractNoteTransformation::northUpChanged);

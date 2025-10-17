@@ -30,7 +30,7 @@ public:
     enum class UpMode : int {
         Custom,
         XisUp,
-        YisUp,
+        YisUp, //This is the default direction for PolyCam and Scaniverse
         ZisUp
     };
     Q_ENUM(UpMode)
@@ -65,7 +65,7 @@ private:
     QQuaternion upQuaternion() const;
 
     Q_OBJECT_BINDABLE_PROPERTY(cwNoteLiDARTransformation, QQuaternion, m_upRotation, &cwNoteLiDARTransformation::upRotationChanged)
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwNoteLiDARTransformation, cwNoteLiDARTransformation::UpMode, m_upMode, UpMode::ZisUp, &cwNoteLiDARTransformation::upModeChanged);
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwNoteLiDARTransformation, cwNoteLiDARTransformation::UpMode, m_upMode, UpMode::YisUp, &cwNoteLiDARTransformation::upModeChanged);
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwNoteLiDARTransformation, float, m_upSign, 1.0f, &cwNoteLiDARTransformation::upSignChanged)
 
     //Private property

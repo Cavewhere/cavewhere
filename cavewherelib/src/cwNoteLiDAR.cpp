@@ -2,29 +2,28 @@
 #include "cwNoteLiDAR.h"
 #include "cwTrip.h"
 #include "cwCave.h"
+#include "cwNoteLiDARTransformation.h"
 
 #include <QMetaType>
 
 cwNoteLiDAR::cwNoteLiDAR(QObject* parent)
-    : QAbstractListModel(parent)
+    : QAbstractListModel(parent),
+    m_noteTransformation(new cwNoteLiDARTransformation(this))
 {
     connect(this, &cwNoteLiDAR::modelMatrixChanged, this, [this]() {
         QList<int> roles = {ScenePositionRole};
         emit dataChanged(index(0), index(rowCount() - 1), roles);
     });
 
-    m_modelMatrix.setBinding([this]() {
-        QMatrix4x4 matrix;
+    // m_modelMatrix.setBinding([this]() {
+    //     QMatrix4x4 matrix;
 
-        //TODO: make this user define
-        //Default rotation for up
-        matrix.rotate(90.0, 1.0, 0.0, 0.0);
+    //     //TODO: make this user define
+    //     //Default rotation for up
+    //     matrix.rotate(90.0, 1.0, 0.0, 0.0);
 
-        // matrix.translate(m_translation);
-        // auto rotation = m_rotation.value();
-        // matrix.rotate(rotation.w(), rotation.x(), rotation.y(), rotation.z());
-        return matrix;
-    });
+    //     return matrix;
+    // });
 }
 
 QString cwNoteLiDAR::filename() const {
@@ -133,9 +132,8 @@ QVariant cwNoteLiDAR::data(const QModelIndex& index, int role) const
         return station.positionOnNote();
     }
     case ScenePositionRole: {
-        qDebug() << "ModelMatrix:" << m_modelMatrix.value();
-        qDebug() << "Scene Point:" <<  m_modelMatrix.value().map(station.positionOnNote()) << station.positionOnNote();
-        return m_modelMatrix.value().map(station.positionOnNote());
+        //We might want to cache the matrix inside of m_noteTransformation
+        return m_noteTransformation->matrix().map(station.positionOnNote());
     }
     case StationRole: {
         return QVariant::fromValue(station);
@@ -204,3 +202,8 @@ int cwNoteLiDAR::clampIndex(int stationId) const
     return stationId;
 }
 
+
+cwNoteLiDARTransformation *cwNoteLiDAR::noteTransformation() const
+{
+    return m_noteTransformation;
+}

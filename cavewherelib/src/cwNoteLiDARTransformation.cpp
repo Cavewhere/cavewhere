@@ -13,6 +13,9 @@ cwNoteLiDARTransformation::cwNoteLiDARTransformation(QObject* parent)
         QQuaternion up = upQuaternion();
         return up * northUp;
     });
+
+    connect(this, &cwNoteLiDARTransformation::upRotationChanged, this, &cwNoteLiDARTransformation::matrixChanged);
+    connect(this, &cwNoteLiDARTransformation::scaleChanged, this, &cwNoteLiDARTransformation::matrixChanged);
 }
 
 

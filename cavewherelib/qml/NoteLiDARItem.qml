@@ -11,7 +11,7 @@ RegionViewer {
         id: sceneId
         gltf.gltfFilePath: note ? RootData.project.absolutePath(note.filename) : ""
         gltf.futureManagerToken: RootData.futureManagerModel.token
-        gltf.modelMatrix: note ? note.modelMatrix : Qt.matrix4x4()
+        gltf.modelMatrix: note ? note.noteTransformation.matrix : Qt.matrix4x4()
     }
 
     orthoProjection.enabled: true

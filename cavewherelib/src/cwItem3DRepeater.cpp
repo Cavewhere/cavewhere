@@ -239,12 +239,12 @@ void cwItem3DRepeater::updateItemPosition(QQuickItem* item, int pointIndex)
         return;
     }
 
-    const QVariant posVar = m_model->data(idx, m_positionRole);
-    if(!posVar.isValid()) {
+    const QVariant postionVar = m_model->data(idx, m_positionRole);
+    if(!postionVar.isValid()) {
         return;
     }
 
-    const QVector3D position = posVar.value<QVector3D>();
+    const QVector3D position = postionVar.value<QVector3D>();
     item->setProperty("position3D", position);
 }
 

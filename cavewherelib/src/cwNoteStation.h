@@ -8,10 +8,10 @@
 #include "cwGlobals.h"
 #include "cwNoteStationBase.h"
 
-class CAVEWHERE_LIB_EXPORT cwNoteStation : public NoteStationBase<QPointF>
+class CAVEWHERE_LIB_EXPORT cwNoteStation : public cwNoteStationBase<QPointF>
 {
 public:
-    cwNoteStation() : NoteStationBase<QPointF>() { }
+    cwNoteStation() : cwNoteStationBase<QPointF>() { }
 };
 
 #endif // CWNOTESTATION_H

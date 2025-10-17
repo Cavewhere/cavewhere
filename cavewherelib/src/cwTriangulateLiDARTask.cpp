@@ -13,7 +13,7 @@ QFuture<Result<cw::gltf::SceneCPU>> cwTriangulateLiDARTask::triangulate(const QL
 
     return cwConcurrent::mapped(liDARs, [](const cwTriangulateLiDARInData& data) {
 
-        qDebug() << "I get here! Mapped!" << data.gltfFilename();
+        qDebug() << "I get here! Mapped!" << data.gltfFilename() << data.stationLookup().positions().size();
 
         if(data.stationLookup().positions().size() == 0) {
             return Result<cw::gltf::SceneCPU>("Station Lookup not set");
@@ -28,7 +28,7 @@ QFuture<Result<cw::gltf::SceneCPU>> cwTriangulateLiDARTask::triangulate(const QL
         QMatrix4x4 northMatrix;
         northMatrix.rotate(-88.34, QVector3D(0.0, 0.0, 1.0));
 
-        QMatrix4x4 worldMatrix = northMatrix * data.modelMatrix(); // * northMatrix;
+        QMatrix4x4 worldMatrix = northMatrix * data.modelMatrix();
 
 
         auto visibleStations = cw::transform(data.noteStations(), [&](const cwNoteLiDARStation& station) {
@@ -46,9 +46,10 @@ QFuture<Result<cw::gltf::SceneCPU>> cwTriangulateLiDARTask::triangulate(const QL
                 for(size_t index = 0; index < primitive.vertexCount; index++) {
                     QVector3D vertex = primitive.vertex(index);
                     QVector3D newVertex = cwTriangulateTask::morphPoint(visibleStations,
-                                                           worldMatrix,
-                                                           QMatrix4x4(),
-                                                           vertex);
+                                                                        // data.modelMatrix(),
+                                                                        worldMatrix,
+                                                                        QMatrix4x4(),
+                                                                        vertex);
 
                     // qDebug() << "New:" << newVertex << "old:" << vertex;
 
@@ -57,14 +58,7 @@ QFuture<Result<cw::gltf::SceneCPU>> cwTriangulateLiDARTask::triangulate(const QL
             }
         }
 
-        // return Result<cw::gltf::SceneCPU>("Station Lookup not set");
-
         return Result<cw::gltf::SceneCPU>(std::move(gltf));
 
     });
-
-
-
-
-    // return QtFuture::makeReadyVoidFuture();
 }

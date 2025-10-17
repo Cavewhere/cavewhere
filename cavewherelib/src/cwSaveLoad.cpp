@@ -1287,21 +1287,6 @@ QFuture<Monad::Result<cwCavingRegionData>> cwSaveLoad::loadAll(const QString &fi
                                                     loadNoteLiDAR,
                                                     trip.noteLiDARModel.notes);
 
-                            // Load notes inside the notes subfolder
-                            QDir notesDir = tripDir.filePath("notes");
-                            if (notesDir.exists()) {
-                                QFileInfoList noteFiles = notesDir.entryInfoList(QStringList() << "*.cwnote", QDir::Files);
-                                for (const QFileInfo &noteFileInfo : noteFiles) {
-                                    auto noteResult = loadNote(noteFileInfo.absoluteFilePath(), regionDir);
-                                    if (noteResult.hasError()) {
-                                        // FIXME: log or collect the error
-                                        continue;
-                                    }
-
-                                    trip.noteModel.notes.append(noteResult.value());
-                                }
-                            }
-
                             cave.trips.append(trip);
                         }
                     }

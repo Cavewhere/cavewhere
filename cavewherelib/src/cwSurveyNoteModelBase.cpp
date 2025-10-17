@@ -82,6 +82,7 @@ void cwSurveyNoteModelBase::addNotes(QList<QObject*> newNotes)
         return;
     }
 
+
     const int first = m_notes.size();
     const int last = first + newNotes.size() - 1;
 

@@ -13,6 +13,7 @@
 #include <QDebug>
 
 // Ours
+#include "cwNoteLiDARTransformation.h"
 #include "cwRegionTreeModel.h"
 #include "cwTriangulateLiDARTask.h"
 #include "cwCavingRegion.h"
@@ -23,6 +24,7 @@
 #include "cwLinePlotManager.h"
 #include "cwProject.h"
 #include "cwAsyncFuture.h"
+#include "cwNoteLiDARTransformation.h"
 
 // Async
 #include "asyncfuture.h"
@@ -309,7 +311,7 @@ cwTriangulateLiDARInData cwNoteLiDARManager::mapNoteToInData(const cwNoteLiDAR* 
     in.setNoteStations(note->stations());
 
     // Model matrix for lidar
-    in.setModelMatrix(note->modelMatrix());
+    in.setModelMatrix(note->noteTransformation()->matrix());
 
     // Station lookup and network from cave when available
     if (cave != nullptr) {

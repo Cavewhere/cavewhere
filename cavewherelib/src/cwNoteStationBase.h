@@ -11,10 +11,10 @@
 #include "cwGlobals.h"
 
 template <typename PositionType>
-class CAVEWHERE_LIB_EXPORT NoteStationBase
+class CAVEWHERE_LIB_EXPORT cwNoteStationBase
 {
 public:
-    NoteStationBase() {}
+    cwNoteStationBase() {}
 
     void setPositionOnNote(const PositionType& point) {
         m_positionOnNote = point;
@@ -36,7 +36,7 @@ public:
         return !name().isEmpty();
     }
 
-    bool operator==(const NoteStationBase& other) const {
+    bool operator==(const cwNoteStationBase& other) const {
         return other.name() == name() && other.positionOnNote() == positionOnNote();
     }
 
@@ -47,7 +47,7 @@ private:
 
 // qHash overload (hash by name only, matches your existing behavior)
 template <typename PositionType>
-inline size_t qHash(const NoteStationBase<PositionType>& note) {
+inline size_t qHash(const cwNoteStationBase<PositionType>& note) {
     return qHash(note.name());
 }
 
