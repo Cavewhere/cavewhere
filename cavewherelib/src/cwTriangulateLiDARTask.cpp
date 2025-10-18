@@ -9,26 +9,26 @@ using namespace Monad;
 QFuture<Result<cw::gltf::SceneCPU>> cwTriangulateLiDARTask::triangulate(const QList<cwTriangulateLiDARInData>& liDARs)
 {
 
-    qDebug() << "I get here!";
+    // qDebug() << "I get here!";
 
     return cwConcurrent::mapped(liDARs, [](const cwTriangulateLiDARInData& data) {
 
-        qDebug() << "I get here! Mapped!" << data.gltfFilename() << data.stationLookup().positions().size();
+        // qDebug() << "I get here! Mapped!" << data.gltfFilename() << data.stationLookup().positions().size();
 
         if(data.stationLookup().positions().size() == 0) {
             return Result<cw::gltf::SceneCPU>("Station Lookup not set");
         }
 
         auto gltf = cw::gltf::Loader::loadGltf(data.gltfFilename());
-        gltf.dump();
+        // gltf.dump();
 
         //Solve for rotation matrix,
 
         //THIS IS FOR TESTING, remove
-        QMatrix4x4 northMatrix;
-        northMatrix.rotate(-88.34, QVector3D(0.0, 0.0, 1.0));
+        // QMatrix4x4 northMatrix;
+        // northMatrix.rotate(-88.34, QVector3D(0.0, 0.0, 1.0));
 
-        QMatrix4x4 worldMatrix = northMatrix * data.modelMatrix();
+        // QMatrix4x4 worldMatrix = northMatrix * data.modelMatrix();
 
 
         auto visibleStations = cw::transform(data.noteStations(), [&](const cwNoteLiDARStation& station) {
@@ -46,8 +46,8 @@ QFuture<Result<cw::gltf::SceneCPU>> cwTriangulateLiDARTask::triangulate(const QL
                 for(size_t index = 0; index < primitive.vertexCount; index++) {
                     QVector3D vertex = primitive.vertex(index);
                     QVector3D newVertex = cwTriangulateTask::morphPoint(visibleStations,
-                                                                        // data.modelMatrix(),
-                                                                        worldMatrix,
+                                                                        data.modelMatrix(),
+                                                                        // worldMatrix,
                                                                         QMatrix4x4(),
                                                                         vertex);
 

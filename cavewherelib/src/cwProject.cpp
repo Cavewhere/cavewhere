@@ -70,7 +70,6 @@ cwProject::cwProject(QObject* parent) :
     m_saveLoad->setCavingRegion(Region);
     connect(m_saveLoad, &cwSaveLoad::isTemporaryProjectChanged, this, &cwProject::isTemporaryProjectChanged);
     connect(m_saveLoad, &cwSaveLoad::fileNameChanged, this, [this]() {
-        qDebug() << "Changing filename:" << m_saveLoad->fileName();
         emit filenameChanged(m_saveLoad->fileName());
     });
 
@@ -404,15 +403,15 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
     //Load the old project into the temp project
     auto oldLoadFuture = tempProject->loadHelper(oldProjectFilename);
 
-    qDebug() << "oldLoadFuture:" << oldLoadFuture.isFinished();
+    // qDebug() << "oldLoadFuture:" << oldLoadFuture.isFinished();
 
     auto loadTempProjectFuture =
         AsyncFuture::observe(oldLoadFuture)
             .context(this, [this, oldLoadFuture, tempProject, oldProjectFilename, newProjectDirectory]() {
-                qDebug() << "oldLoadFuture:" << oldLoadFuture.result().hasError() << oldLoadFuture.result().errorMessage();
+                // qDebug() << "oldLoadFuture:" << oldLoadFuture.result().hasError() << oldLoadFuture.result().errorMessage();
 
                 return mbind(oldLoadFuture, [=, this](const ResultBase& result){
-                    qDebug() << "Save";
+                    // qDebug() << "Save";
 
                     //Use a shared pointer here, too keep saveLoad alive until, the project is fully saved
                     auto saveLoad = std::make_shared<cwSaveLoad>();

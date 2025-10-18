@@ -21,8 +21,6 @@ QQ.Item {
         for(let i = 0; i < interactions.length; i++) {
             let item = interactions[i];
 
-            console.log("Disable:" + item)
-
             //Make all interaction invisible
             item.visible = false;
             item.enabled = false

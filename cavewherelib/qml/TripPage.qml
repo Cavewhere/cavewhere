@@ -134,7 +134,7 @@ StandardPage {
         clip: true
 
         onImagesAdded: (images) => {
-                           console.log("Adding images:" + images)
+                           // console.log("Adding images:" + images)
             surveyNoteConcatModelId.addFiles(images)
         }
 

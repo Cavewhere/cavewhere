@@ -10,7 +10,8 @@ cwNoteLiDAR::cwNoteLiDAR(QObject* parent)
     : QAbstractListModel(parent),
     m_noteTransformation(new cwNoteLiDARTransformation(this))
 {
-    connect(this, &cwNoteLiDAR::modelMatrixChanged, this, [this]() {
+    connect(m_noteTransformation, &cwNoteLiDARTransformation::matrixChanged, this, [this]() {
+        qDebug() << "Matrix changed!!!";
         QList<int> roles = {ScenePositionRole};
         emit dataChanged(index(0), index(rowCount() - 1), roles);
     });
@@ -128,7 +129,6 @@ QVariant cwNoteLiDAR::data(const QModelIndex& index, int role) const
         return station.name();
     }
     case PositionOnNoteRole: {
-        // QVector3D is a Qt metatype; it converts to QVariant cleanly
         return station.positionOnNote();
     }
     case ScenePositionRole: {
@@ -159,6 +159,7 @@ bool cwNoteLiDAR::setData(const QModelIndex &index, const QVariant &value, int r
         return true;
     }
     case PositionOnNoteRole: {
+        qDebug() << "Note Position role changed:" << this; //0x60b0004cf120
         station.setPositionOnNote(value.value<QVector3D>());
         emit dataChanged(index, index, {PositionOnNoteRole, ScenePositionRole});
         return true;

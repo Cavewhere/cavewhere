@@ -29,7 +29,6 @@ BaseTurnTableInteraction {
         acceptedButtons: Qt.RightButton
 
         onActiveTranslationChanged: {
-            console.log("Drag right:" + activeTranslation)
             interactionId.rotate(Qt.point(persistentTranslation.x, persistentTranslation.y));
         }
 

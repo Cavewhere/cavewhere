@@ -24,12 +24,7 @@ ImageItem {
 
     clip: true
 
-    onNoteChanged: {
-        console.log("Note changed" + note)
-    }
-
     onVisibleChanged: {
-        console.log("Visible changed:" + visible)
         if(!visible) {
             interactionManagerId.active(null)
         } else {
@@ -153,7 +148,6 @@ ImageItem {
                 }
             }
         }
-
     }
 
     ColumnLayout {

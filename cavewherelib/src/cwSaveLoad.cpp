@@ -469,7 +469,7 @@ QString cwSaveLoad::fileName() const
 
 QFuture<ResultBase> cwSaveLoad::load(const QString &filename)
 {
-    qDebug() << "---- Loading: " << filename;
+    // qDebug() << "---- Loading: " << filename;
 
     auto oldJobs = completeSaveJobs();
 
@@ -697,7 +697,7 @@ void cwSaveLoad::copyFilesAndEmitResults(const QList<QString>& sourceFilePaths,
 
     const QDir rootDirectory = projectDir();
     Q_ASSERT(rootDirectory.exists());
-    qDebug() << "RootDir:" << rootDirectory;
+    // qDebug() << "RootDir:" << rootDirectory;
 
     auto copyOne = [rootDirectory](const QString& sourceFilePath, const QString& destinationFilePath) {
         return mbind(Data::ensurePathForFile(destinationFilePath),
@@ -736,7 +736,7 @@ void cwSaveLoad::copyFilesAndEmitResults(const QList<QString>& sourceFilePaths,
                           });
                       }).future();
 
-    qDebug() << "Adding files:" << sourceFilePaths;
+    // qDebug() << "Adding files:" << sourceFilePaths;
 
     for (const CopyCommand& command : commands) {
         d->m_runningJobs.insert(command.destinationFilePath, QFuture<void>(future));
@@ -1119,7 +1119,7 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
         file.write(imageData.data());
         file.commit();
 
-        qDebug() << "Saving image:" << filename << file.errorString();
+        // qDebug() << "Saving image:" << filename << file.errorString();
 
         cwImage noteImage = noteCopy.image();
         QString relativeFilename = dir.relativeFilePath(filename);
@@ -2385,11 +2385,8 @@ QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
     std::unique_ptr<const google::protobuf::Message> message,
     const void* objectId)
 {
-    if(filename.contains("1.cwnote")) {
-        qDebug() << "break";
-    }
 
-    qDebug () << "Try Saving to " << filename << objectId;
+    // qDebug () << "Try Saving to " << filename << objectId;
 
     //Rename or remove file and directories
     excuteFileSystemActions();
@@ -2398,7 +2395,7 @@ QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
     if (m_runningJobs.contains(filename) || !m_fileSystemJobs.isEmpty()) {
 
         Q_ASSERT(!clearingWait);
-        qDebug() << "\twaiting runningJob:" << m_runningJobs.contains(filename) << "rename:" << !m_fileSystemJobs.isEmpty();
+        // qDebug() << "\twaiting runningJob:" << m_runningJobs.contains(filename) << "rename:" << !m_fileSystemJobs.isEmpty();
 
         auto deferred = AsyncFuture::Deferred<ResultBase>();
 
@@ -2436,7 +2433,7 @@ QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
                 file.write(json_output.c_str(), json_output.size());
                 file.commit();
 
-                qDebug() << "Saving:" << filename << "error code:" << file.error();
+                // qDebug() << "Saving:" << filename << "error code:" << file.error();
 
                 return Monad::ResultBase();
             });
@@ -2444,7 +2441,7 @@ QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
 
         AsyncFuture::observe(future).context(
             context, [filename, this, context, objectId]() {
-                qDebug() << "job finished:" << filename << objectId;
+                // qDebug() << "job finished:" << filename << objectId;
                 m_runningJobs.remove(filename);
                 m_fileLookup[objectId] = filename;
 

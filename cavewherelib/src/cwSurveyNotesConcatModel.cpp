@@ -138,7 +138,7 @@ void cwSurveyNotesConcatModel::addFiles(QList<QUrl> files)
 
     QList<QUrl> fileUrls = files; // mutable copy
 
-    qDebug() << "FileUrls:" << fileUrls;
+    // qDebug() << "FileUrls:" << fileUrls;
 
     const auto middle = std::partition(fileUrls.begin(), fileUrls.end(),
                                        [this](const QUrl& url) {
@@ -156,8 +156,8 @@ void cwSurveyNotesConcatModel::addFiles(QList<QUrl> files)
         }
     }
 
-    qDebug() << "Images:" << imageLikeUrls;
-    qDebug() << "Glb:" << glbUrls;
+    // qDebug() << "Images:" << imageLikeUrls;
+    // qDebug() << "Glb:" << glbUrls;
 
     if (!imageLikeUrls.isEmpty() && m_trip->notes() != nullptr) {
         m_trip->notes()->addFromFiles(imageLikeUrls);

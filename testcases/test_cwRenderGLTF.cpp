@@ -13,7 +13,7 @@ TEST_CASE("GLTF file should be loaded correctly", "[cwRenderGLTF]") {
     // render.setGLTFFilePath("/Users/cave/Downloads/9_8_2025.glb");
 
     auto scene = cw::gltf::Loader::loadGltf("/Users/cave/Downloads/9_8_2025.glb");
-    scene.dump();
+    // scene.dump();
 
 
 }

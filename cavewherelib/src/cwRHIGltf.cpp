@@ -261,12 +261,12 @@ QRhiVertexInputLayout cwRHIGltf::makeInputLayout(const PipelineKey& key)
 
     // location 3: texcoord0 (float2)
     if (key.hasTexCoord0) {
-        qDebug() << "Has texcoord!";
+        // qDebug() << "Has texcoord!";
         attrs << QRhiVertexInputAttribute(0, 1, QRhiVertexInputAttribute::Float2, offset);
         offset += int(sizeof(float) * 2);
     }
 
-    qDebug() << "Stride:" << key.stride << offset;
+    // qDebug() << "Stride:" << key.stride << offset;
 
     Q_ASSERT(key.stride == offset);
 
@@ -330,8 +330,8 @@ cwRHIGltf::PipelinePack* cwRHIGltf::ensurePipeline(QRhi* rhi,
 
     pipe->setShaderResourceBindings(srb);
 
-    qDebug() << "glTF shaders:" << m_vertexShader.isValid() << m_fragmentShader.isValid();
-    qDebug() << m_vertexShader.description();
+    // qDebug() << "glTF shaders:" << m_vertexShader.isValid() << m_fragmentShader.isValid();
+    // qDebug() << m_vertexShader.description();
 
     pipe->setRenderPassDescriptor(renderPassDesc);
     if (!pipe->create()) {

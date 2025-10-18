@@ -265,7 +265,7 @@ QQ.Rectangle {
                     noteGallery.currentNote = (currentItem as ListDelegate).noteObject as Note;
                     noteGallery.currentNoteLiDAR = (currentItem as ListDelegate).noteObject as NoteLiDAR;
 
-                    console.log("currentNote:" + (currentItem as ListDelegate).noteObject)
+                    // console.log("currentNote:" + (currentItem as ListDelegate).noteObject)
 
                     // noteArea.image = Qt.binding(function() { return currentItem.noteObject.image });
                 } else {

@@ -107,6 +107,8 @@ private:
     void connectTrip(cwTrip* trip);
     void disconnectTrip(cwTrip* trip);
 
+    void connectNote(cwNoteLiDAR* note);
+
     // Utilities
     static QList<cwNoteLiDAR*> collectAllNotes(cwRegionTreeModel* regionModel);
     static QList<cwNoteLiDAR*> notesFromModel(cwSurveyNoteLiDARModel* model);

@@ -38,12 +38,12 @@ RegionViewer {
             onSingleTapped: (eventPoint, button) =>
                             {
                                 let rayHit = turnTableInteractionId.pick(eventPoint.position);
-                                console.log("RayHit:" + eventPoint.position + " " + rayHit.hit + " " + rayHit.pointModel)
+                                // console.log("RayHit:" + eventPoint.position + " " + rayHit.hit + " " + rayHit.pointModel)
                                 if(rayHit.hit) {
                                     stationInteraction.addPoint(rayHit.pointModel, note);
                                 }
 
-                                console.log("Single tap")
+                                // console.log("Single tap")
                             }
         }
     }
@@ -61,6 +61,8 @@ RegionViewer {
         component: NoteLiDARStationItem {
             id: stationItemId
 
+            objectName: "noteLiDARStation_" + pointIndex
+
             note: rhiViewerId.note
             parentView: noteStationRepeaterId
             onFinishedMoving:
@@ -74,6 +76,15 @@ RegionViewer {
 
                 }
         }
+    }
+
+    NoteLiDARTransformEditor {
+        noteTransform: note ? note.noteTransformation : null
+
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.leftMargin: 5
+        anchors.topMargin: 5
     }
 
     states: [

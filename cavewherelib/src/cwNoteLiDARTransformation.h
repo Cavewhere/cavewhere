@@ -69,5 +69,5 @@ private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwNoteLiDARTransformation, float, m_upSign, 1.0f, &cwNoteLiDARTransformation::upSignChanged)
 
     //Private property
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwNoteLiDARTransformation, QQuaternion, m_rotation, QQuaternion());
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwNoteLiDARTransformation, QQuaternion, m_rotation, QQuaternion(), &cwNoteLiDARTransformation::matrixChanged);
 };

@@ -11,10 +11,11 @@ cwNoteLiDARTransformation::cwNoteLiDARTransformation(QObject* parent)
     m_rotation.setBinding([this]() {
         QQuaternion northUp = QQuaternion::fromAxisAndAngle(QVector3D(0.0f, 0.0f, 1.0f), m_northUp.value());
         QQuaternion up = upQuaternion();
-        return up * northUp;
+        return northUp * up;
+        // return upQuaternion();
     });
 
-    connect(this, &cwNoteLiDARTransformation::upRotationChanged, this, &cwNoteLiDARTransformation::matrixChanged);
+    // connect(this, &cwNoteLiDARTransformation::upRotationChanged, this, &cwNoteLiDARTransformation::matrixChanged);
     connect(this, &cwNoteLiDARTransformation::scaleChanged, this, &cwNoteLiDARTransformation::matrixChanged);
 }
 

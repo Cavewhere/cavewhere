@@ -247,8 +247,7 @@ void cwNoteLiDARManager::liDARRowsInserted(const QModelIndex& parent, int begin,
         }
         QObject* obj = model->data(idx, cwSurveyNoteModelBase::NoteObjectRole).value<QObject*>();
         if (auto* note = qobject_cast<cwNoteLiDAR*>(obj)) {
-            connect(note, &QObject::destroyed, this, &cwNoteLiDARManager::noteDestroyed, Qt::UniqueConnection);
-            markDirty(note);
+            connectNote(note);
         }
     }
 
@@ -273,6 +272,9 @@ void cwNoteLiDARManager::liDARRowsAboutToBeRemoved(const QModelIndex& parent, in
         if (auto* note = qobject_cast<cwNoteLiDAR*>(obj)) {
             m_deletedNotes.insert(note);
             m_dirtyNotes.remove(note);
+
+            disconnect(note->noteTransformation(), nullptr, this, nullptr);
+            disconnect(note, nullptr, this, nullptr);
         }
     }
 }
@@ -387,9 +389,6 @@ void cwNoteLiDARManager::runBatch()
                      [this, notes, future]() {
                          // Remove processed from dirty, clear deleted set entries
                          for (cwNoteLiDAR* n : notes) {
-                             disconnect(n, nullptr, this, nullptr); // remove destroyed handler uniqueness if desired
-                         }
-                         for (cwNoteLiDAR* n : notes) {
                              m_dirtyNotes.remove(n);
                          }
                          for (cwNoteLiDAR* d : std::as_const(m_deletedNotes)) {
@@ -414,15 +413,15 @@ void cwNoteLiDARManager::connectTrip(cwTrip* trip)
         qDebug() << "Connecting model" << model;
 
         connect(model, &QAbstractItemModel::rowsInserted,
-                this, &cwNoteLiDARManager::liDARRowsInserted, Qt::UniqueConnection);
+                this, &cwNoteLiDARManager::liDARRowsInserted);
         connect(model, &QAbstractItemModel::rowsAboutToBeRemoved,
-                this, &cwNoteLiDARManager::liDARRowsAboutToBeRemoved, Qt::UniqueConnection);
+                this, &cwNoteLiDARManager::liDARRowsAboutToBeRemoved);
 
         // Existing notes
-        for (cwNoteLiDAR* note : notesFromModel(model)) {
+        const auto notes = notesFromModel(model);
+        for (cwNoteLiDAR* note : notes) {
             qDebug() << "Connecting note" << note;
-            connect(note, &QObject::destroyed, this, &cwNoteLiDARManager::noteDestroyed, Qt::UniqueConnection);
-            markDirty(note);
+            connectNote(note);
         }
 
         runIfNeeded();
@@ -443,9 +442,30 @@ void cwNoteLiDARManager::disconnectTrip(cwTrip* trip)
 
         for (cwNoteLiDAR* note : notesFromModel(model)) {
             disconnect(note, &QObject::destroyed, this, &cwNoteLiDARManager::noteDestroyed);
+            disconnect(note->noteTransformation(), nullptr, this, nullptr);
+            disconnect(note, nullptr, this, nullptr);
             m_dirtyNotes.remove(note);
         }
     }
+}
+
+void cwNoteLiDARManager::connectNote(cwNoteLiDAR *note)
+{
+    qDebug() << "Note connect:" << note;
+
+    auto handleNoteChange = [note, this]() {
+        qDebug() << "Data changed on note:" << note;
+        markDirty(note);
+        runIfNeeded();
+    };
+
+    connect(note, &QObject::destroyed, this, &cwNoteLiDARManager::noteDestroyed, Qt::UniqueConnection);
+    connect(note->noteTransformation(), &cwNoteLiDARTransformation::matrixChanged, this, handleNoteChange);
+    bool connected = connect(note, &cwNoteLiDAR::dataChanged, this, [handleNoteChange](QModelIndex, QModelIndex, QVector<int>) { handleNoteChange(); });
+    connect(note, &cwNoteLiDAR::rowsInserted, this, handleNoteChange);
+    connect(note, &cwNoteLiDAR::rowsRemoved, this, handleNoteChange);
+
+    markDirty(note);
 }
 
 // ---------------------- Utilities ----------------------

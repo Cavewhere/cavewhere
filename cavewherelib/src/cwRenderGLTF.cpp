@@ -12,19 +12,6 @@ cwRenderGLTF::cwRenderGLTF(QObject *parent)
     : cwRenderObject{parent},
     m_loadRestarter(this)
 {
-    // m_modelMatrixProperty.setBinding([this]() {
-    //     QMatrix4x4 matrix;
-
-    //     //TODO: make this user define
-
-    //     matrix.translate(m_translation);
-    //     auto rotation = m_rotation.value();
-    //     matrix.rotate(rotation.w(), rotation.x(), rotation.y(), rotation.z());
-    //     //Default rotation for up
-    //     matrix.rotate(90.0, 1.0, 0.0, 0.0);
-    //     return matrix;
-    // });
-
     m_modelMatrixUpdated = m_modelMatrixProperty.addNotifier([this]() {
         auto matrix = m_modelMatrixProperty.value();
         m_modelMatrix.setValue(matrix);
@@ -34,8 +21,6 @@ cwRenderGLTF::cwRenderGLTF(QObject *parent)
         }
         update();
     });
-
-    qDebug() << "Set m_modelMatrix:" << m_modelMatrixProperty.value();
 
     m_modelMatrix.setValue(m_modelMatrixProperty.value());
 

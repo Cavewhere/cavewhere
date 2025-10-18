@@ -51,8 +51,33 @@ MainWindowTest {
                     mouseClick(addStationButton)
 
 
-                    let turnTableInteraction_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->turnTableInteraction")
-                    mouseClick(turnTableInteraction_obj2, 150.418, 330.957)
+                    // let turnTableInteraction_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->turnTableInteraction")
+                    // mouseClick(turnTableInteraction_obj2, 150.418, 330.957)
+
+
+                    let turnTableInteraction_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->turnTableInteraction")
+                    mouseClick(turnTableInteraction_obj1, 175.258, 373.625)
+
+                    wait(100)
+
+                    let stationIconHandler_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARStation_0->coreTextInput")
+                    stationIconHandler_obj1.openEditor();
+                    // mouseDoubleClickSequence(stationIconHandler_obj1, 11.4141, 10.332)
+
+                    keyClick("a")
+                    keyClick(51, 0) //3
+                    keyClick(16777220, 0) //Return
+
+                    // wait(100000)
+
+                    // let turnTableInteraction_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->turnTableInteraction")
+                    mouseClick(turnTableInteraction_obj1, 185.238, 194.926)
+
+                    let _obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARStation_1->coreTextInput")
+                    _obj1.openEditor()
+                    keyClick("a")
+                    keyClick(52, 0) //4
+                    keyClick(16777220, 0) //Return
 
 
 
