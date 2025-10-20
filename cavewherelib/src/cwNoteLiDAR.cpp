@@ -159,7 +159,7 @@ bool cwNoteLiDAR::setData(const QModelIndex &index, const QVariant &value, int r
         return true;
     }
     case PositionOnNoteRole: {
-        qDebug() << "Note Position role changed:" << this; //0x60b0004cf120
+        qDebug() << "Note Position role changed:" << this;
         station.setPositionOnNote(value.value<QVector3D>());
         emit dataChanged(index, index, {PositionOnNoteRole, ScenePositionRole});
         return true;

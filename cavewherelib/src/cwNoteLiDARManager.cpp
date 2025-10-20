@@ -373,16 +373,15 @@ void cwNoteLiDARManager::runBatch()
         return mapNoteToInData(note, m_project);
     });
 
-    // Fire task
-    auto future = cwTriangulateLiDARTask::triangulate(inputs);
-
-    m_futureManagerToken.addJob({ QFuture<void>(future), "Triangulating LiDAR notes" });
-
-    m_renderGltf->setGltf(future);
-
     // Wrap in restarter so subsequent calls coalesce
-    m_restarter.restart([this, notes, future]() mutable {
+    m_restarter.restart([this, notes, inputs]() mutable {
         // Observe and fan-out completion, then signal
+        // Fire task
+        auto future = cwTriangulateLiDARTask::triangulate(inputs);
+
+        // m_futureManagerToken.addJob({ QFuture<void>(future), "Triangulating LiDAR notes" });
+
+        m_renderGltf->setGltf(future);
 
         return AsyncFuture::observe(future)
             .context(this,
