@@ -13,6 +13,9 @@
 #include <QFileDialog>
 #include <QDir>
 
+//Std includes
+#include <numbers>
+
 /**
   These are required defines for exporting symbols in the cavewhere lib for
   windows. These do nothing on other platforms like mac and linux
@@ -24,9 +27,11 @@ class CAVEWHERE_LIB_EXPORT cwGlobals
 public:
     cwGlobals();
 
-    static double pi();
-    static double radiansToDegrees() { return 180.0 / cwGlobals::pi(); }
-    static double degreesToRadians() { return cwGlobals::pi() / 180.0; }
+    constexpr static double pi() {
+        return std::numbers::pi;
+    }
+    constexpr static double radiansToDegrees() { return 180.0 / cwGlobals::pi(); }
+    constexpr static double degreesToRadians() { return cwGlobals::pi() / 180.0; }
 
     static QString addExtension(QString filename, QString extensionHint);
     static QString convertFromURL(QString filenameUrl);

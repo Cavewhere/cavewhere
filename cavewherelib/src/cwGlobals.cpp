@@ -170,9 +170,3 @@ void cwGlobals::loadFonts()
     }
 }
 
-
-double cwGlobals::pi()
-{
-    static const double pi = acos(-1.0);
-    return pi;
-}
