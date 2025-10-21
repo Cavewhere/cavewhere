@@ -379,8 +379,6 @@ void cwNoteLiDARManager::runBatch()
         // Fire task
         auto future = cwTriangulateLiDARTask::triangulate(inputs);
 
-        // m_futureManagerToken.addJob({ QFuture<void>(future), "Triangulating LiDAR notes" });
-
         m_renderGltf->setGltf(future);
 
         return AsyncFuture::observe(future)

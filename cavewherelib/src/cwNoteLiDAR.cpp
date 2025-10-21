@@ -3,6 +3,7 @@
 #include "cwTrip.h"
 #include "cwCave.h"
 #include "cwNoteLiDARTransformation.h"
+#include "cwNoteTransformCalculator.h"
 
 #include <QMetaType>
 
@@ -11,9 +12,10 @@ cwNoteLiDAR::cwNoteLiDAR(QObject* parent)
     m_noteTransformation(new cwNoteLiDARTransformation(this))
 {
     connect(m_noteTransformation, &cwNoteLiDARTransformation::matrixChanged, this, [this]() {
-        qDebug() << "Matrix changed!!!";
         QList<int> roles = {ScenePositionRole};
         emit dataChanged(index(0), index(rowCount() - 1), roles);
+
+        updateNoteTransformion();
     });
 
     // m_modelMatrix.setBinding([this]() {
@@ -45,6 +47,8 @@ void cwNoteLiDAR::addStation(const cwNoteLiDARStation& station) {
     m_stations.append(station);
     endInsertRows();
     emit countChanged();
+
+    updateNoteTransformion();
 }
 
 void cwNoteLiDAR::removeStation(int stationId) {
@@ -55,6 +59,8 @@ void cwNoteLiDAR::removeStation(int stationId) {
     m_stations.removeAt(stationId);
     endRemoveRows();
     emit countChanged();
+
+    updateNoteTransformion();
 }
 
 const QList<cwNoteLiDARStation>& cwNoteLiDAR::stations() const {
@@ -156,12 +162,14 @@ bool cwNoteLiDAR::setData(const QModelIndex &index, const QVariant &value, int r
     case NameRole: {
         station.setName(value.toString());
         emit dataChanged(index, index, {NameRole});
+        updateNoteTransformion();
         return true;
     }
     case PositionOnNoteRole: {
         qDebug() << "Note Position role changed:" << this;
         station.setPositionOnNote(value.value<QVector3D>());
         emit dataChanged(index, index, {PositionOnNoteRole, ScenePositionRole});
+        updateNoteTransformion();
         return true;
     }
     case ScenePositionRole: {
@@ -201,6 +209,35 @@ int cwNoteLiDAR::clampIndex(int stationId) const
         return m_stations.size() - 1;
     }
     return stationId;
+}
+
+void cwNoteLiDAR::updateNoteTransformion()
+{
+    if(parentTrip() == nullptr) {
+        return;
+    }
+
+    if(parentCave() == nullptr) {
+        return;
+    }
+
+    QMatrix4x4 upMatrix;
+    upMatrix.rotate(m_noteTransformation->up());
+    // upMatrix = m_noteTransformation->matrix();
+
+    cwNoteTransformCalculator::ProfileTransform profileTransform {
+                                                                 cwScrapType::LiDAR,
+                                                                 QMatrix4x4(),
+                                                                 QMatrix4x4(),
+                                                                 QMatrix4x4(), //View matrix on the real survey data
+                                                                 upMatrix, //Up matrix
+                                                                 parentCave()->stationPositionLookup()};
+
+
+
+    auto shotStations = cwNoteTransformCalculator::noteShots(stations(), parentCave()->network());
+    auto transform = cwNoteTransformCalculator::projectedAverageTransform(shotStations, profileTransform);
+    m_noteTransformation->setNorthUp(transform.north);
 }
 
 

@@ -6,7 +6,8 @@ namespace cwScrapType {
 enum Type {
     Plan,
     RunningProfile,
-    ProjectedProfile
+    ProjectedProfile,
+    LiDAR
 };
 
 }

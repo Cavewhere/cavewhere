@@ -32,7 +32,7 @@ TEST_CASE("cwNoteLiDARTransformation defaults are sane", "[cwNoteLiDARTransforma
 
     cwNoteLiDARTransformation t;
     REQUIRE(t.upMode() == cwNoteLiDARTransformation::UpMode::ZisUp);
-    REQUIRE(t.upRotation().isIdentity());
+    REQUIRE(t.upCustom().isIdentity());
     REQUIRE_THAT(t.upSign(), WithinAbs(1.0f, 1e-6f)); // default is +1
 
     const QMatrix4x4 M = t.matrix();
@@ -78,7 +78,7 @@ TEST_CASE("cwNoteLiDARTransformation UpMode transformations", "[cwNoteLiDARTrans
         QQuaternion rotation = QQuaternion::rotationTo(localUp, upZ);
 
         t.setUpMode(cwNoteLiDARTransformation::UpMode::Custom);
-        t.setUpRotation(rotation);
+        t.setUpCustom(rotation);
         const QVector3D out = t.matrix().map(localUp);
         vecApprox(out.normalized(), upZ);
     }
@@ -122,7 +122,7 @@ TEST_CASE("cwNoteLiDARTransformation UpMode transformations (upSign=-1)", "[cwNo
 
         // Measure output with upSign = -1, then +1; they should be equal.
         t.setUpMode(cwNoteLiDARTransformation::UpMode::Custom);
-        t.setUpRotation(rotation);
+        t.setUpCustom(rotation);
         const QVector3D outNeg = t.matrix().map(localUp);
 
         t.setUpSign(+1.0f);
@@ -144,7 +144,7 @@ TEST_CASE("cwNoteLiDARTransformation composition of upRotation, northUp, and sca
     const QVector3D localUp(.1, .2, .3);
     const QVector3D upZ(0, 0, 1);
     QQuaternion rotation = QQuaternion::rotationTo(localUp, upZ);
-    t.setUpRotation(rotation);
+    t.setUpCustom(rotation);
     t.setNorthUp(90.0);
     t.setScale(2.0);
 
@@ -184,10 +184,10 @@ TEST_CASE("cwNoteLiDARTransformation data roundtrip", "[cwNoteLiDARTransformatio
 // ------------------------------------------------------
 TEST_CASE("cwNoteLiDARTransformation signals fire correctly", "[cwNoteLiDARTransformation]") {
     cwNoteLiDARTransformation t;
-    QSignalSpy spyRot(&t, &cwNoteLiDARTransformation::upRotationChanged);
+    QSignalSpy spyRot(&t, &cwNoteLiDARTransformation::upCustomChanged);
     QSignalSpy spyMode(&t, &cwNoteLiDARTransformation::upModeChanged);
 
-    t.setUpRotation(fromAxisDeg({0,1,0}, 15.0f));
+    t.setUpCustom(fromAxisDeg({0,1,0}, 15.0f));
     t.setUpMode(cwNoteLiDARTransformation::UpMode::XisUp);
 
     REQUIRE(spyRot.count() >= 1);

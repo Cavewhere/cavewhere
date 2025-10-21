@@ -105,6 +105,7 @@ private:
 
     int clampIndex(int stationId) const;
 
+    void updateNoteTransformion();
 
 };
 

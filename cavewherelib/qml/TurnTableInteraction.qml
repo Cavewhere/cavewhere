@@ -10,13 +10,13 @@ BaseTurnTableInteraction {
         acceptedButtons: Qt.LeftButton
 
         onActiveTranslationChanged: {
-            console.log("Drag left:" + activeTranslation + persistentTranslation)
+            // console.log("Drag left:" + activeTranslation + persistentTranslation)
             interactionId.pan(Qt.point(persistentTranslation.x, persistentTranslation.y))
         }
 
         onGrabChanged: (transition, point) => {
                            if(transition === QQ.PointerDevice.GrabExclusive) {
-                               console.log("Start panning:" + point.pressPosition);
+                               // console.log("Start panning:" + point.pressPosition);
                                persistentTranslation = point.pressPosition
                                interactionId.startPanning(point.pressPosition);
                            }
@@ -34,7 +34,7 @@ BaseTurnTableInteraction {
 
         onGrabChanged: (transition, point) => {
                            if(transition === QQ.PointerDevice.GrabExclusive) {
-                               console.log("Start panning:" + point.pressPosition);
+                               // console.log("Start panning:" + point.pressPosition);
                                persistentTranslation = point.pressPosition
                                interactionId.startRotating(point.pressPosition);
                            }

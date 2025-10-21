@@ -6,13 +6,14 @@
 cwNoteLiDARTransformation::cwNoteLiDARTransformation(QObject* parent)
     : cwAbstractNoteTransformation(parent)
 {
-    // Default to ZisUp (identity)
+
+    m_up.setBinding([this]() {
+        return upQuaternion();
+    });
 
     m_rotation.setBinding([this]() {
         QQuaternion northUp = QQuaternion::fromAxisAndAngle(QVector3D(0.0f, 0.0f, 1.0f), m_northUp.value());
-        QQuaternion up = upQuaternion();
-        return northUp * up;
-        // return upQuaternion();
+        return northUp * m_up;
     });
 
     // connect(this, &cwNoteLiDARTransformation::upRotationChanged, this, &cwNoteLiDARTransformation::matrixChanged);
@@ -38,7 +39,7 @@ QMatrix4x4 cwNoteLiDARTransformation::matrix() const
 void cwNoteLiDARTransformation::setData(const cwNoteLiDARTransformationData &data)
 {
     cwAbstractNoteTransformation::setData(data);
-    m_upRotation = data.upRotation;
+    m_upCustom = data.upRotation;
     m_upMode = static_cast<cwNoteLiDARTransformation::UpMode>(data.upMode);
 }
 
@@ -46,7 +47,7 @@ cwNoteLiDARTransformationData cwNoteLiDARTransformation::data() const
 {
    return {
        cwAbstractNoteTransformation::data(),
-       m_upRotation,
+       m_upCustom,
         static_cast<cwNoteLiDARTransformationData::UpMode>(m_upMode.value())
     };
 }
@@ -59,7 +60,7 @@ QQuaternion cwNoteLiDARTransformation::upQuaternion() const
     switch (m_upMode) {
     case UpMode::Custom:
         // Sign has no effect in Custom mode
-        return m_upRotation;
+        return m_upCustom;
 
     case UpMode::XisUp:
         // +X to +Z: rotate -90° about Y; flip sign inverts to +90°

@@ -20,10 +20,10 @@ class CAVEWHERE_LIB_EXPORT cwNoteLiDARTransformation : public cwAbstractNoteTran
     Q_OBJECT
     QML_NAMED_ELEMENT(NoteLiDARTransformation)
 
-    Q_PROPERTY(QQuaternion upRotation READ upRotation WRITE setUpRotation NOTIFY upRotationChanged  BINDABLE bindableUpRotation)
+    Q_PROPERTY(QQuaternion upRotation READ upCustom WRITE setUpCustom NOTIFY upCustomChanged  BINDABLE bindableUpCustom)
     Q_PROPERTY(UpMode upMode READ upMode WRITE setUpMode NOTIFY upModeChanged BINDABLE bindableUpMode)
-    Q_PROPERTY(float upSign READ upSign WRITE setUpSign NOTIFY upSignChanged BINDABLE bindableUpSign)
-
+    Q_PROPERTY(float upSign READ upSign WRITE setUpSign NOTIFY upSignChanged BINDABLE bindableUpSign)    
+    Q_PROPERTY(QQuaternion up READ up NOTIFY upChanged )
 
 public:
     //BEFORE EDITING: make sure you match with cwNoteLidarTransformationData
@@ -38,9 +38,13 @@ public:
     explicit cwNoteLiDARTransformation(QObject* parent = nullptr);
 
     // Property
-    QQuaternion upRotation() const { return m_upRotation; }
-    void setUpRotation(const QQuaternion& q) { m_upRotation = q; }
-    QBindable<QQuaternion> bindableUpRotation() { return QBindable<QQuaternion>(&m_upRotation); }
+    QQuaternion upCustom() const { return m_upCustom; }
+    void setUpCustom(const QQuaternion& q) { m_upCustom = q; }
+    QBindable<QQuaternion> bindableUpCustom() { return QBindable<QQuaternion>(&m_upCustom); }
+
+    QQuaternion up() const { return m_up.value(); }
+    void setUp(const QQuaternion& up) { m_up = up; }
+    QBindable<QQuaternion> bindableUp() { return &m_up; }
 
     cwNoteLiDARTransformation::UpMode upMode() const { return m_upMode.value(); }
     void setUpMode(const cwNoteLiDARTransformation::UpMode& upMode) { m_upMode = upMode; }
@@ -57,14 +61,16 @@ public:
     cwNoteLiDARTransformationData data() const;
 
 signals:
-    void upRotationChanged();
+    void upCustomChanged();
     void upModeChanged();
     void upSignChanged();
+    void upChanged();
 
 private:
     QQuaternion upQuaternion() const;
 
-    Q_OBJECT_BINDABLE_PROPERTY(cwNoteLiDARTransformation, QQuaternion, m_upRotation, &cwNoteLiDARTransformation::upRotationChanged)
+    Q_OBJECT_BINDABLE_PROPERTY(cwNoteLiDARTransformation, QQuaternion, m_upCustom, &cwNoteLiDARTransformation::upCustomChanged)
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwNoteLiDARTransformation, QQuaternion, m_up, QQuaternion(), &cwNoteLiDARTransformation::upChanged);
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwNoteLiDARTransformation, cwNoteLiDARTransformation::UpMode, m_upMode, UpMode::YisUp, &cwNoteLiDARTransformation::upModeChanged);
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwNoteLiDARTransformation, float, m_upSign, 1.0f, &cwNoteLiDARTransformation::upSignChanged)
 

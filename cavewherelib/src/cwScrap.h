@@ -27,6 +27,7 @@
 #include "cwScrapData.h"
 #include "cwScrapType.h"
 #include "cwNoteTransformationData.h"
+#include "cwNoteTransformCalculator.h"
 class cwNoteTranformation;
 class cwAbstractScrapViewMatrix;
 class cwPlanScrapViewMatrix;
@@ -78,6 +79,27 @@ public:
         LeadNumberOfRoles
     };
     Q_ENUM(LeadDataRole)
+
+    // /**
+    //  * @brief The ScrapShot class
+    //  *
+    //  * This is for averaging shot transform.  This class has the scale of the shot and the
+    //  * QVector2D of how far off shot drawn on paper compared the shot's data.  The QVector3D
+    //  * has no error when it's equal to (0.0, 1.0, 0.0)
+    //  */
+    // class ScrapShotTransform {
+    // public:
+    //     ScrapShotTransform() : Scale(0.0), RotationDiff(0.0) { }
+    //     ScrapShotTransform(double scale, QVector3D errorVector) : Scale(scale), ErrorVector(errorVector), RotationDiff(0.0) {}
+    //     ScrapShotTransform(double scale, QVector3D errorVector, double rotationDiff) : Scale(scale), ErrorVector(errorVector), RotationDiff(rotationDiff) {}
+
+    //     double Scale;
+    //     QVector3D ErrorVector;
+    //     double RotationDiff;
+
+    //     cwNoteTransformationData toNoteTransform() const;
+    // };
+
 
     explicit cwScrap(QObject *parent = 0);
     // cwScrap(const cwScrap& other);
@@ -145,6 +167,7 @@ public:
     void setData(const cwScrapData& data);
     cwScrapData data() const;
 
+
 public slots:
     void updateNoteTransformation();
 
@@ -187,33 +210,33 @@ private:
      * QVector2D of how far off shot drawn on paper compared the shot's data.  The QVector3D
      * has no error when it's equal to (0.0, 1.0, 0.0)
      */
-    class ScrapShotTransform {
-    public:
-        ScrapShotTransform() : Scale(0.0), RotationDiff(0.0) { }
-        ScrapShotTransform(double scale, QVector3D errorVector) : Scale(scale), ErrorVector(errorVector), RotationDiff(0.0) {}
-        ScrapShotTransform(double scale, QVector3D errorVector, double rotationDiff) : Scale(scale), ErrorVector(errorVector), RotationDiff(rotationDiff) {}
+    // class ScrapShotTransform {
+    // public:
+    //     ScrapShotTransform() : Scale(0.0), RotationDiff(0.0) { }
+    //     ScrapShotTransform(double scale, QVector3D errorVector) : Scale(scale), ErrorVector(errorVector), RotationDiff(0.0) {}
+    //     ScrapShotTransform(double scale, QVector3D errorVector, double rotationDiff) : Scale(scale), ErrorVector(errorVector), RotationDiff(rotationDiff) {}
 
-        double Scale;
-        QVector3D ErrorVector;
-        double RotationDiff;
+    //     double Scale;
+    //     QVector3D ErrorVector;
+    //     double RotationDiff;
 
-        cwNoteTransformationData toNoteTransform() const;
-    };
+    //     cwNoteTransformationData toNoteTransform() const;
+    // };
 
-    /**
-     * @brief The ProfileTransform class
-     *
-     * This class is used to re-project the x-axis for drawing running profile. Rotation is what
-     * direction up is, and mirror is left to right, or right to left (mirror on x-axis)
-     */
-    class ProfileTransform {
-    public:
-        ProfileTransform() {}
-        ProfileTransform(QMatrix4x4 rotation, QMatrix4x4 mirror) : Rotation(rotation), Mirror(mirror) {}
+    // /**
+    //  * @brief The ProfileTransform class
+    //  *
+    //  * This class is used to re-project the x-axis for drawing running profile. Rotation is what
+    //  * direction up is, and mirror is left to right, or right to left (mirror on x-axis)
+    //  */
+    // class ProfileTransform {
+    // public:
+    //     ProfileTransform() {}
+    //     ProfileTransform(QMatrix4x4 rotation, QMatrix4x4 mirror) : Rotation(rotation), Mirror(mirror) {}
 
-        QMatrix4x4 Rotation;
-        QMatrix4x4 Mirror;
-    };
+    //     QMatrix4x4 Rotation;
+    //     QMatrix4x4 Mirror;
+    // };
 
     //The object id
     QUuid m_id;
@@ -252,13 +275,14 @@ private:
 
     //For note station transformation, automatic calculation
     QList< QPair <cwNoteStation, cwNoteStation> > noteShots() const;
-    QList<ScrapShotTransform> calculateShotTransformations(QList< QPair <cwNoteStation, cwNoteStation> > shots,
-                                                           const ProfileTransform& profileTransform = ProfileTransform()) const;
-    ScrapShotTransform calculateShotTransformation(cwNoteStation station1,
-                                                   cwNoteStation station2,
-                                                   const ProfileTransform& profileTransform) const;
-    ScrapShotTransform averageTransformations(QList< ScrapShotTransform > shotTransforms) const;
-    cwNoteTransformationData projectedAverageTransform(QList< QPair<cwNoteStation, cwNoteStation> > shotStations) const;
+    cwNoteTransformCalculator::ProfileTransform profileTransform() const;
+    // QList<ScrapShotTransform> calculateShotTransformations(QList< QPair <cwNoteStation, cwNoteStation> > shots,
+    //                                                        const ProfileTransform& profileTransform = ProfileTransform()) const;
+    // ScrapShotTransform calculateShotTransformation(cwNoteStation station1,
+    //                                                cwNoteStation station2,
+    //                                                const ProfileTransform& profileTransform) const;
+
+    // cwNoteTransformationData projectedAverageTransform(QList< QPair<cwNoteStation, cwNoteStation> > shotStations) const;
     cwNoteTransformationData runningProfileAverageTransform(QList< QPair<cwNoteStation, cwNoteStation> > shotStations) const;
 
     const cwScrap& copy(const cwScrap& other);
