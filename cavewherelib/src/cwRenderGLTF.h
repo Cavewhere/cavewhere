@@ -25,13 +25,21 @@ class cwRenderGLTF : public cwRenderObject
     Q_PROPERTY(QString gltfFilePath READ gltfFilePath WRITE setGLTFFilePath NOTIFY gltfFilePathChanged)
     Q_PROPERTY(cwFutureManagerToken futureManagerToken READ futureManagerToken WRITE setFutureManagerToken NOTIFY futureManagerTokenChanged FINAL)
     Q_PROPERTY(QMatrix4x4 modelMatrix READ modelMatrix WRITE setModelMatrix NOTIFY modelMatrixChanged BINDABLE bindableModelMatrix)
+    Q_PROPERTY(Status status READ status NOTIFY statusChanged)
 
     friend class cwRHIGltf;
 
 public:
+    enum class Status {
+        Null,
+        Ready,
+        Loading,
+        Error
+    };
+    Q_ENUM(Status)
+
 
     explicit cwRenderGLTF(QObject *parent = nullptr);
-
 
     // Accessor without "get" prefix (per your style)
     QString gltfFilePath() const { return m_gltfFilePath; }
@@ -43,7 +51,11 @@ public:
     void setModelMatrix(const QMatrix4x4& matrix) { m_modelMatrixProperty = matrix; }
     QBindable<QMatrix4x4> bindableModelMatrix() { return &m_modelMatrixProperty; }
 
+    Status status() const { return m_status.value(); }
+
     void setGltf(const QFuture<Monad::Result<cw::gltf::SceneCPU>>& gltfFuture);
+
+    Q_INVOKABLE QBox3D boundingBox() const;
 
 public slots:
     // Setter to choose which glTF file to render
@@ -61,6 +73,7 @@ signals:
     void modelMatrixChanged();
 
     void futureManagerTokenChanged();
+    void statusChanged();
 
 protected:
     cwRHIObject *createRHIObject() override;
@@ -88,6 +101,7 @@ private:
     QProperty<QVector4D> m_rotation;
     QProperty<QVector3D> m_translation;
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwRenderGLTF, QMatrix4x4, m_modelMatrixProperty, QMatrix4x4(), &cwRenderGLTF::modelMatrixChanged);
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwRenderGLTF, cwRenderGLTF::Status, m_status, Status::Null, &cwRenderGLTF::statusChanged);
 
     QPropertyNotifier m_modelMatrixUpdated;
 

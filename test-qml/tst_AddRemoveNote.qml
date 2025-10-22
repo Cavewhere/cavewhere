@@ -12,76 +12,78 @@ MainWindowTest {
         when: windowShown
 
         function test_addNotes() {
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwScrapManager/ProjectProfile-test-v3.cw");
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
+                    // TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwScrapManager/ProjectProfile-test-v3.cw");
+                    TestHelper.loadProjectFromZip(RootData.project, "://datasets/lidarProjects/jaws of the beast.zip");
+                    RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Jaws of the Beast/Trip=2019c154_-_party_fault"
 
-            tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
+                    tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
                     function toUrl(filePath) {
                                 return Qt.url("file://" + filePath)
                     }
 
-            //Copy test data to another
-            let phakeCavePath = toUrl(TestHelper.copyToTempDir("://datasets/test_cwTextureUploadTask/PhakeCave.PNG"));
-            let bonesPath = toUrl(TestHelper.copyToTempDir("://datasets/test_cwSurveyNotesConcatModel/bones.glb"));
-                    // let bonesPath = toUrl(TestHelper.copyToTempDir("/Users/cave/Downloads/9_8_2025 2.glb"));
+                    // //Copy test data to another
+                    let phakeCavePath = toUrl(TestHelper.copyToTempDir("://datasets/test_cwTextureUploadTask/PhakeCave.PNG"));
+                    let bonesPath = toUrl(TestHelper.copyToTempDir("://datasets/lidarProjects/9_15_2025 3.glb"));
 
-            let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery");
-            noteGallery.imagesAdded([phakeCavePath, bonesPath]);
+                    let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery");
+                    noteGallery.imagesAdded([phakeCavePath, bonesPath]);
 
-            let noteGalleryView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView");
-            tryVerify(() => { return noteGalleryView.count === 3});
+                    let noteGalleryView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView");
+                    tryVerify(() => { return noteGalleryView.count === 2});
 
-            let noteImage2_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView->noteImage2")
-            mouseClick(noteImage2_obj1)
+                    let noteImage2_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView->noteImage1")
+                    mouseClick(noteImage2_obj1)
 
-                    //Zoom into the the model
-            let turnTable = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->turnTableInteraction")
-                    for(let i = 0; i < 75; i++) {
-                                wait(20);
-                                mouseWheel(turnTable,
-                                           turnTable.width / 2.0, turnTable.height / 2.0,
-                                           0, 50);
-                    }
+                    let noteLiDARItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId")
 
-            let carpetButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
-            mouseClick(carpetButton)
+                    tryVerify(() => { return noteLiDARItem.scene.gltf.status === RenderGLTF.Ready })
+
+                    //         //Zoom into the the model
+                    // let turnTable = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->turnTableInteraction")
+                    //         for(let i = 0; i < 40; i++) {
+                    //                     wait(20);
+                    //                     mouseWheel(turnTable,
+                    //                                turnTable.width / 2.0, turnTable.height / 2.0,
+                    //                                0, 50);
+                    //         }
+
+                    let carpetButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
+                    mouseClick(carpetButton)
+
+                    wait(200)
 
                     let addStationButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->addScrapStation")
                     mouseClick(addStationButton)
 
 
-                    // let turnTableInteraction_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->turnTableInteraction")
-                    // mouseClick(turnTableInteraction_obj2, 150.418, 330.957)
-
-
-                    let turnTableInteraction_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->turnTableInteraction")
-                    mouseClick(turnTableInteraction_obj1, 175.258, 373.625)
-
-                    wait(100)
+                    let turnTableInteraction_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->turnTableInteraction")
+                    mouseClick(turnTableInteraction_obj2, 203.117, 244.969)
 
                     let stationIconHandler_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARStation_0->coreTextInput")
                     stationIconHandler_obj1.openEditor();
-                    // mouseDoubleClickSequence(stationIconHandler_obj1, 11.4141, 10.332)
+                    keyClick(54, 0) //6
+                    keyClick(16777220, 0) //Return
+                    // wait(10000)
 
-                    keyClick("a")
-                    keyClick(51, 0) //3
+                    let turnTableInteraction_obj3 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->turnTableInteraction")
+                    mouseClick(turnTableInteraction_obj3, 333.148, 541.453)
+
+                    let stationIconHandler_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARStation_1->coreTextInput")
+                    stationIconHandler_obj2.openEditor();
+                    keyClick(55, 0) //7
                     keyClick(16777220, 0) //Return
 
-                    // wait(100000)
-
-                    // let turnTableInteraction_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->turnTableInteraction")
-                    mouseClick(turnTableInteraction_obj1, 185.238, 194.926)
-
-                    let _obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARStation_1->coreTextInput")
-                    _obj1.openEditor()
-                    keyClick("a")
-                    keyClick(52, 0) //4
+                    //Add the 3rd station
+                    mouseClick(turnTableInteraction_obj3, 58.7891, 196.809)
+                    let stationIconHandler_obj3 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARStation_2->coreTextInput")
+                    stationIconHandler_obj3.openEditor();
+                    keyClick(53, 0) //5
                     keyClick(16777220, 0) //Return
 
+                    let northFieldObject = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->northField")
+                    tryVerify(() => { return northFieldObject.text === "272.7" })
 
-
-            wait(100000)
         }
 
         function test_removeNote() {

@@ -11,7 +11,19 @@ RegionViewer {
         id: sceneId
         gltf.gltfFilePath: note ? RootData.project.absolutePath(note.filename) : ""
         gltf.futureManagerToken: RootData.futureManagerModel.token
-        gltf.modelMatrix: note ? note.noteTransformation.matrix : Qt.matrix4x4()
+        gltf.modelMatrix: {
+            let mat = Qt.matrix4x4()
+            if(note) {
+                mat.rotate(note.noteTransformation.up)
+            }
+            return mat
+        }
+
+        gltf.onStatusChanged: () => {
+                                  if(gltf.status == RenderGLTF.Ready) {
+                                      turnTableInteractionId.zoomTo(gltf.boundingBox())
+                                  }
+                              }
     }
 
     orthoProjection.enabled: true
@@ -53,7 +65,7 @@ RegionViewer {
         anchors.fill: parent
         camera: rhiViewerId.camera
         model: note
-        positionRole: NoteLiDAR.ScenePositionRole
+        positionRole: NoteLiDAR.UpPositionRole
         selectionManager: SelectionManager {
             id: selectionManagerId
         }

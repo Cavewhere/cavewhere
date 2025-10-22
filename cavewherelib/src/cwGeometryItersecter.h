@@ -77,6 +77,8 @@ public:
     void setModelMatrix(cwRenderObject* parentObject, uint64_t id, const QMatrix4x4& modelMatrix);
     void setModelMatrix(const Key& objectKey, const QMatrix4x4& modelMatrix);
 
+    QBox3D boundingBox(const Key& objectKey) const;
+
     double intersects(const QRay3D& ray) const;
     cwRayTriangleHit intersectsTriangleDetailed(const QRay3D& ray) const;
 
@@ -98,12 +100,20 @@ private:
 
     QList<Node> Nodes;
 
+    template <typename Iterator>
+    Iterator findNodeImpl(Iterator begin, Iterator end, const Key& objectKey) const {
+        return std::find_if(begin, end, [&](const Node& node) {
+            return node.Object.parent() == objectKey.parentObject &&
+                   node.Object.id() == objectKey.id;
+        });
+    }
+
     auto findNode(const Key& objectKey) {
-        return std::find_if(Nodes.begin(), Nodes.end(),
-                            [=](const Node& node) {
-                                return node.Object.parent() == objectKey.parentObject &&
-                                       node.Object.id() == objectKey.id;
-                            });
+        return findNodeImpl(Nodes.begin(), Nodes.end(), objectKey);
+    }
+
+    auto findNode(const Key& objectKey) const {
+        return findNodeImpl(Nodes.cbegin(), Nodes.cend(), objectKey);
     }
 
     void addTriangles(const cwGeometryItersecter::Object& object);

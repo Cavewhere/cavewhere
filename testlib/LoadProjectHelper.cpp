@@ -2,6 +2,10 @@
 
 //Qt includes
 #include <QStandardPaths>
+#include <QDirIterator>
+
+//Our includes
+#include "cwZip.h"
 
 std::shared_ptr<cwProject> fileToProject(QString filename) {
     auto project = std::make_shared<cwProject>();
@@ -20,8 +24,11 @@ QString fileToProject(cwProject *project, const QString &filename) {
 
 QString copyToTempFolder(QString filename) {
 
+    QTemporaryDir tempDir;
+    tempDir.setAutoRemove(false);
+
     QFileInfo info(filename);
-    QString newFileLocation = QDir::tempPath() + "/" + info.fileName();
+    QString newFileLocation = tempDir.path() + "/" + info.fileName();
 
     if(!info.exists(filename)) {
         qFatal() << "file doesnt' exist:" << filename;
@@ -53,6 +60,28 @@ QString copyToTempFolder(QString filename) {
 QString prependTempFolder(QString filename)
 {
     return QStandardPaths::writableLocation(QStandardPaths::TempLocation) + "/" + filename;
+}
+
+void TestHelper::loadProjectFromZip(cwProject *project, const QString &filename) {
+    QString datasetFileZip = copyToTempFolder(filename);
+
+    QFileInfo info(datasetFileZip);
+    auto result = cwZip::extractAll(datasetFileZip, info.canonicalPath());
+
+    // Find the first .cw file
+    QDirIterator it(info.canonicalPath(), {"*.cw"}, QDir::Files, QDirIterator::Subdirectories);
+    if (it.hasNext()) {
+        QString filePath = it.next();
+        qDebug() << "Found .cw file:" << filePath;
+
+
+        // Optionally, load it
+        project->loadOrConvert(filePath);
+        project->waitLoadToFinish();
+    } else {
+        qFatal() << "No .cw file found in:" << info.canonicalPath();
+    }
+
 }
 
 QString TestHelper::copyToTempDir(const QString &filename)

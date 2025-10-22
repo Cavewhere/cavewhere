@@ -47,6 +47,8 @@ public:
         fileToProject(project, filename);
     }
 
+    Q_INVOKABLE void loadProjectFromZip(cwProject* project, const QString& filename);
+
     Q_INVOKABLE QString copyToTempDir(const QString& filename);
 
     Q_INVOKABLE bool fileExists(const QUrl& filename) const;

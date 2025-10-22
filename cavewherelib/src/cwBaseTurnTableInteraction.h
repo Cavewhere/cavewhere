@@ -77,6 +77,8 @@ public:
 
     Q_INVOKABLE cwRayTriangleHit pick(QPointF qtViewPoint) const;
 
+    Q_INVOKABLE void zoomTo(const QBox3D& box);
+
 signals:
     void cameraRotationChanged();
     void azimuthChanged();

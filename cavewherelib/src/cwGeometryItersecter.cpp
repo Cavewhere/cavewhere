@@ -100,6 +100,16 @@ void cwGeometryItersecter::setModelMatrix(const Key &objectKey, const QMatrix4x4
     }
 }
 
+QBox3D cwGeometryItersecter::boundingBox(const Key &objectKey) const
+{
+    auto iter = findNode(objectKey);
+    if (iter != Nodes.end()) {
+        return iter->BoundingBox;
+    } else {
+        return QBox3D();
+    }
+}
+
 /**
  * @brief cwGeometryItersecter::intersects
  * @param ray

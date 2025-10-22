@@ -39,6 +39,7 @@ public:
         NameRole = Qt::UserRole + 1,
         PositionOnNoteRole,
         ScenePositionRole,
+        UpPositionRole,
         StationRole
     };
     Q_ENUM(Role)
@@ -71,11 +72,6 @@ public:
     const QList<cwNoteLiDARStation>& stations() const;
     void setStations(const QList<cwNoteLiDARStation>& stations);
     Q_INVOKABLE cwNoteLiDARStation station(int stationId) const;
-
-    // modelMatrix
-    // QMatrix4x4 modelMatrix() const { return m_modelMatrix.value(); }
-    // void setModelMatrix(const QMatrix4x4& modelMatrix) { m_modelMatrix = modelMatrix; }
-    // QBindable<QMatrix4x4> bindableModelMatrix() { return &m_modelMatrix; }
 
 
     cwNoteLiDARData data() const;

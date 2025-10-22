@@ -14,19 +14,13 @@ cwNoteLiDAR::cwNoteLiDAR(QObject* parent)
     connect(m_noteTransformation, &cwNoteLiDARTransformation::matrixChanged, this, [this]() {
         QList<int> roles = {ScenePositionRole};
         emit dataChanged(index(0), index(rowCount() - 1), roles);
-
         updateNoteTransformion();
     });
 
-    // m_modelMatrix.setBinding([this]() {
-    //     QMatrix4x4 matrix;
-
-    //     //TODO: make this user define
-    //     //Default rotation for up
-    //     matrix.rotate(90.0, 1.0, 0.0, 0.0);
-
-    //     return matrix;
-    // });
+    connect(m_noteTransformation, &cwNoteLiDARTransformation::upChanged, this, [this]() {
+        QList<int> roles = {UpPositionRole};
+        emit dataChanged(index(0), index(rowCount() - 1), roles);
+    });
 }
 
 QString cwNoteLiDAR::filename() const {
@@ -141,6 +135,9 @@ QVariant cwNoteLiDAR::data(const QModelIndex& index, int role) const
         //We might want to cache the matrix inside of m_noteTransformation
         return m_noteTransformation->matrix().map(station.positionOnNote());
     }
+    case UpPositionRole: {
+        return m_noteTransformation->up() * station.positionOnNote();
+    }
     case StationRole: {
         return QVariant::fromValue(station);
     }
@@ -171,12 +168,6 @@ bool cwNoteLiDAR::setData(const QModelIndex &index, const QVariant &value, int r
         emit dataChanged(index, index, {PositionOnNoteRole, ScenePositionRole});
         updateNoteTransformion();
         return true;
-    }
-    case ScenePositionRole: {
-        return false;
-        // qDebug() << "ModelMatrix:" << m_modelMatrix.value();
-        // qDebug() << "Scene Point:" <<  m_modelMatrix.value().map(station.positionOnNote()) << station.positionOnNote();
-        // return m_modelMatrix.value().map(station.positionOnNote());
     }
     case StationRole: {
         return false;
@@ -221,9 +212,12 @@ void cwNoteLiDAR::updateNoteTransformion()
         return;
     }
 
+    if(m_stations.size() < 2) {
+        return;
+    }
+
     QMatrix4x4 upMatrix;
     upMatrix.rotate(m_noteTransformation->up());
-    // upMatrix = m_noteTransformation->matrix();
 
     cwNoteTransformCalculator::ProfileTransform profileTransform {
                                                                  cwScrapType::LiDAR,

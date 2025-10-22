@@ -34,6 +34,8 @@ void cwRenderGLTF::setGLTFFilePath(const QString &filePath)
 {
     if(m_gltfFilePath != filePath) {
         qDebug() << "Setting gltf path:" << filePath;
+        m_status = Status::Loading;
+
         auto run = [this, filePath]() {
             auto renderObject = this;
             auto modelMatrix = m_modelMatrix.value();
@@ -96,6 +98,8 @@ QFuture<void> cwRenderGLTF::handleLoadFuture(QFuture<Monad::Result<Load> > loadF
 
         m_dataChanged = true;
         update();
+
+        m_status = Status::Ready;
     }).future();
 
 }
@@ -154,6 +158,8 @@ void cwRenderGLTF::setFutureManagerToken(const cwFutureManagerToken &newFutureMa
 
 void cwRenderGLTF::setGltf(const QFuture<Monad::Result<cw::gltf::SceneCPU> > &gltfFuture)
 {
+    m_status = Status::Loading;
+
     auto run = [this, gltfFuture]() {
         return AsyncFuture::observe(gltfFuture)
         .context(this, [gltfFuture, this]() {
@@ -173,5 +179,17 @@ void cwRenderGLTF::setGltf(const QFuture<Monad::Result<cw::gltf::SceneCPU> > &gl
     };
 
     m_loadRestarter.restart(run);
+}
 
+/**
+Returns the full bounding box of the GLTF object
+ */
+QBox3D cwRenderGLTF::boundingBox() const
+{
+    QBox3D boundingBox;
+    for(const auto& key : std::as_const(m_matrixObjects)) {
+        auto box = geometryItersecter()->boundingBox(key);
+        boundingBox.unite(box);
+    }
+    return boundingBox;
 }
