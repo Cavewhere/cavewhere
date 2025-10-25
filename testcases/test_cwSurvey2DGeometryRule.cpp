@@ -97,7 +97,7 @@ TEST_CASE("cwSurvey2DGeometryRule: simple network yields non-empty 2D geometry",
 }
 
 TEST_CASE("SVG export test", "[Survey2DGeometryRule]") {
-    auto project = fileToProject(QDir::homePath() + "/Desktop/nimbus.cw"); //"://datasets/test_cwProject/Phake Cave 3000.cw");
+    auto project = fileToProject("://datasets/test_cwProject/Phake Cave 3000.cw");
     auto cavingRegion = project->cavingRegion();
 
     // Create a survey data artifact and set the region
