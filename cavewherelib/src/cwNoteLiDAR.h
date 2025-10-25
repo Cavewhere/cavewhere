@@ -31,6 +31,8 @@ class CAVEWHERE_LIB_EXPORT cwNoteLiDAR : public QAbstractListModel
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
 
     Q_PROPERTY(cwNoteLiDARTransformation* noteTransformation READ noteTransformation NOTIFY noteTransformationChanged FINAL)
+    Q_PROPERTY(bool autoCalculateNorth READ autoCalculateNorth WRITE setAutoCalculateNorth NOTIFY autoCalculateNorthChanged BINDABLE bindableAutoCalculateNorth)
+
 
     // Q_PROPERTY(QMatrix4x4 modelMatrix READ modelMatrix WRITE setModelMatrix NOTIFY modelMatrixChanged BINDABLE bindableModelMatrix)
 
@@ -79,6 +81,10 @@ public:
 
     cwNoteLiDARTransformation *noteTransformation() const;
 
+    bool autoCalculateNorth() const { return m_autoCalculateNorth.value(); }
+    void setAutoCalculateNorth(const bool& autoCalculateNorth) { m_autoCalculateNorth = autoCalculateNorth; }
+    QBindable<bool> bindableAutoCalculateNorth() { return &m_autoCalculateNorth; }
+
 signals:
     void nameChanged();
 
@@ -88,6 +94,7 @@ signals:
     void upRotationChanged();
 
     void noteTransformationChanged();
+    void autoCalculateNorthChanged();
 
 private:
     QString m_filename;                         // glTF binary file path (.glb)
@@ -97,6 +104,7 @@ private:
     cwNoteLiDARTransformation *m_noteTransformation = nullptr;
 
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwNoteLiDAR, QString, m_name, QString(), &cwNoteLiDAR::nameChanged);
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwNoteLiDAR, bool, m_autoCalculateNorth, true, &cwNoteLiDAR::autoCalculateNorthChanged);
     // Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwNoteLiDAR, QMatrix4x4, m_modelMatrix, QMatrix4x4(), &cwNoteLiDAR::modelMatrixChanged);
 
     int clampIndex(int stationId) const;

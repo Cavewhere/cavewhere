@@ -15,6 +15,7 @@ class cwScrap;
 class cwImageResolution;
 class cwNoteStation;
 class cwNoteTranformation;
+class cwNoteLiDARTransformation;
 class cwTriangulatedData;
 class cwLength;
 class cwTeamMember;
@@ -64,6 +65,7 @@ class CompassReading;
 class ClinoReading;
 class StationShot;
 class NoteLiDAR;
+class NoteLiDARTransformation;
 };
 
 namespace QtProto {
@@ -75,6 +77,7 @@ class QPointF;
 class QVector3D;
 class QVector2D;
 class QStringList;
+class QQuaternion;
 };
 
 namespace google::protobuf {
@@ -289,9 +292,17 @@ private:
     static cwNoteStation fromProtoNoteStation(const CavewhereProto::NoteStation& protoNoteStation);
     static cwLead fromProtoLead(const CavewhereProto::Lead& protoLead);
     static cwNoteTransformationData fromProtoNoteTransformation(const CavewhereProto::NoteTranformation& protoNoteTransform);
+    static cwNoteLiDARTransformationData fromProtoLiDARNoteTransformation(const CavewhereProto::NoteLiDARTransformation& protoNoteTransform);
     static cwLength::Data fromProtoLength(const CavewhereProto::Length& protoLength);
     static std::unique_ptr<cwProjectedProfileScrapViewMatrix::Data> fromProtoProjectedScraptViewMatrix(const CavewhereProto::ProjectedProfileScrapViewMatrix protoViewMatrix);
     static cwImageResolution::Data fromProtoImageResolution(const CavewhereProto::ImageResolution& protoImageResolution);
+    static QQuaternion fromProtoQuaternion(const QtProto::QQuaternion& protoQuaternion);
+
+    static void saveNoteLiDARTranformation(CavewhereProto::NoteLiDARTransformation *protoNoteTransformation,
+                                           cwNoteLiDARTransformation *noteTransformation);
+    static void saveQQuaternion(QtProto::QQuaternion* protoQuaternion,
+                                const QQuaternion& quaternion);
+
 
     template<typename ResultType, typename MakeResultFunc>
     void copyFilesAndEmitResults(const QList<QString>& sourceFilePaths,

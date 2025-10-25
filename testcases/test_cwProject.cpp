@@ -1,6 +1,7 @@
 //Catch includes
-#include <QtCore/qdiriterator.h>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
+using namespace Catch;
 
 //Our includes
 #include "cwProject.h"
@@ -21,6 +22,7 @@
 #include "cwNoteLiDAR.h"
 
 //Qt includes
+#include <QtCore/qdiriterator.h>
 #include <QCryptographicHash>
 #include <QSqlQuery>
 #include <QSqlDatabase>
@@ -1715,6 +1717,139 @@ TEST_CASE("LiDAR GLB persistence: file copy + stations", "[cwProject]") {
 
         CHECK(stations2.at(3).name().toStdString() == std::string("N0"));
         CHECK(stations2.at(3).positionOnNote() == QVector3D(0.11, 0.22, 0.33));
+    }
+
+    SECTION("LiDAR transform: persist northUp & scale (non-Custom mode)") {
+        // Mutate transform on the original note, then reload and verify
+        cwNoteLiDARTransformation* const xform = lidarNote->noteTransformation();
+        REQUIRE(xform != nullptr);
+
+        qDebug() << "Start change" << xform;
+        lidarNote->setAutoCalculateNorth(false);
+        xform->setScale(2.5);
+        xform->setNorthUp(33.0);
+        qDebug() << "end change";
+
+        project->waitSaveToFinish();
+
+        auto reloadedT = std::make_unique<cwProject>();
+        reloadedT->loadOrConvert(project->filename());
+        reloadedT->waitLoadToFinish();
+
+        cwTrip* const tripT = reloadedT->cavingRegion()->cave(0)->trip(0);
+        REQUIRE(tripT != nullptr);
+
+        cwSurveyNoteLiDARModel* const modelT = tripT->notesLiDAR();
+        REQUIRE(modelT != nullptr);
+        REQUIRE(modelT->rowCount() == 1);
+
+        cwNoteLiDAR* const noteT = dynamic_cast<cwNoteLiDAR*>(modelT->notes().at(0));
+        REQUIRE(noteT != nullptr);
+
+        cwNoteLiDARTransformation* const xformT = noteT->noteTransformation();
+        REQUIRE(xformT != nullptr);
+
+        CHECK(xformT->scale() == Approx(2.5));
+        CHECK(xformT->northUp() == Approx(33.0));
+        CHECK(xformT->upMode() == cwNoteLiDARTransformation::UpMode::YisUp);
+        CHECK(xformT->upSign() == Approx(1.0f));
+        CHECK(noteT->autoCalculateNorth() == false);
+    }
+
+    SECTION("LiDAR transform: persist Custom up quaternion") {
+        cwNoteLiDARTransformation* const xform = lidarNote->noteTransformation();
+        REQUIRE(xform != nullptr);
+
+        lidarNote->setAutoCalculateNorth(false);
+
+        // Choose a non-trivial quaternion and non-default sign
+        const QQuaternion q = QQuaternion::fromAxisAndAngle(QVector3D(0.3f, 0.8f, 0.5f).normalized(), 47.5f).normalized();
+        xform->setUpMode(cwNoteLiDARTransformation::UpMode::Custom);
+        xform->setUpCustom(q);
+
+        // Also change base props so we verify they round-trip together
+        xform->setScale(0.75);
+        xform->setNorthUp(-12.0);
+
+        project->waitSaveToFinish();
+
+        auto reloadedT = std::make_unique<cwProject>();
+        reloadedT->loadOrConvert(project->filename());
+        reloadedT->waitLoadToFinish();
+
+        cwTrip* const tripT = reloadedT->cavingRegion()->cave(0)->trip(0);
+        REQUIRE(tripT != nullptr);
+
+        cwSurveyNoteLiDARModel* const modelT = tripT->notesLiDAR();
+        REQUIRE(modelT != nullptr);
+        REQUIRE(modelT->rowCount() == 1);
+
+        cwNoteLiDAR* const noteT = dynamic_cast<cwNoteLiDAR*>(modelT->notes().at(0));
+        REQUIRE(noteT != nullptr);
+
+        cwNoteLiDARTransformation* const xformT = noteT->noteTransformation();
+        REQUIRE(xformT != nullptr);
+
+        CHECK(xformT->upMode() == cwNoteLiDARTransformation::UpMode::Custom);
+        CHECK(xformT->upSign() == Approx(1.0f));
+        CHECK(xformT->scale() == Approx(0.75));
+        CHECK(xformT->northUp() == Approx(-12.0));
+
+        const QQuaternion qT = xformT->upCustom().normalized();
+        CHECK(qT.x() == Approx(q.x()));
+        CHECK(qT.y() == Approx(q.y()));
+        CHECK(qT.z() == Approx(q.z()));
+        CHECK(qT.scalar() == Approx(q.scalar()));
+        CHECK(noteT->autoCalculateNorth() == false);
+    }
+
+    SECTION("LiDAR transform: persist upMode toggles across reloads") {
+        // Flip through non-Custom modes and ensure the last one sticks.
+        cwNoteLiDARTransformation* const xform = lidarNote->noteTransformation();
+        REQUIRE(xform != nullptr);
+
+        xform->setUpMode(cwNoteLiDARTransformation::UpMode::XisUp);
+        qDebug() << "Changing to 2.0f";
+        xform->setUpSign(2.0f);
+        project->waitSaveToFinish();
+
+        // First reload
+        {
+            auto r1 = std::make_unique<cwProject>();
+            r1->loadOrConvert(project->filename());
+            r1->waitLoadToFinish();
+
+            cwTrip* const t1 = r1->cavingRegion()->cave(0)->trip(0);
+            REQUIRE(t1 != nullptr);
+            cwNoteLiDARTransformation* const xf1 =
+                dynamic_cast<cwNoteLiDAR*>(t1->notesLiDAR()->notes().at(0))->noteTransformation();
+            REQUIRE(xf1 != nullptr);
+            CHECK(xf1->upMode() == cwNoteLiDARTransformation::UpMode::XisUp);
+            CHECK(xf1->upSign() == Approx(2.0f));
+
+            // Change again and save for the second round-trip
+            xf1->setUpMode(cwNoteLiDARTransformation::UpMode::ZisUp);
+            xf1->setUpSign(-0.5f);
+            CHECK(dynamic_cast<cwNoteLiDAR*>(t1->notesLiDAR()->notes().at(0))->autoCalculateNorth() == true);
+            r1->waitSaveToFinish();
+        }
+
+        // Second reload
+        {
+            auto r2 = std::make_unique<cwProject>();
+            r2->loadOrConvert(project->filename());
+            r2->waitLoadToFinish();
+
+            cwTrip* const t2 = r2->cavingRegion()->cave(0)->trip(0);
+            REQUIRE(t2 != nullptr);
+            cwNoteLiDARTransformation* const xf2 =
+                dynamic_cast<cwNoteLiDAR*>(t2->notesLiDAR()->notes().at(0))->noteTransformation();
+            REQUIRE(xf2 != nullptr);
+
+            CHECK(xf2->upMode() == cwNoteLiDARTransformation::UpMode::ZisUp);
+            CHECK(xf2->upSign() == Approx(-0.5f));
+            CHECK(dynamic_cast<cwNoteLiDAR*>(t2->notesLiDAR()->notes().at(0))->autoCalculateNorth() == true);
+        }
     }
 }
 

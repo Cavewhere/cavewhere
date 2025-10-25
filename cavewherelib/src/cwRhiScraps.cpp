@@ -60,7 +60,7 @@ void cwRhiScraps::initializePipeline(const ResourceUpdateData& data)
 
     // Create the loading texture here
     // Create the loading texture
-    auto createLoadingTexture = [this, rhi, &data]() {
+    {
         // Create an image with text "Loading"
         QImage image(256, 256, QImage::Format_RGBA8888);
         image.fill(Qt::transparent);
@@ -78,8 +78,7 @@ void cwRhiScraps::initializePipeline(const ResourceUpdateData& data)
         // Upload the texture data
         data.resourceUpdateBatch->uploadTexture(m_sharedScrapData.m_loadingTexture, image);
         data.resourceUpdateBatch->generateMips(m_sharedScrapData.m_loadingTexture);
-    };
-    createLoadingTexture();
+    }
 
 
     //Shader binding layout, this will be update for each scrap

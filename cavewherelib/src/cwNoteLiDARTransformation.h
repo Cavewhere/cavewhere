@@ -20,7 +20,7 @@ class CAVEWHERE_LIB_EXPORT cwNoteLiDARTransformation : public cwAbstractNoteTran
     Q_OBJECT
     QML_NAMED_ELEMENT(NoteLiDARTransformation)
 
-    Q_PROPERTY(QQuaternion upRotation READ upCustom WRITE setUpCustom NOTIFY upCustomChanged  BINDABLE bindableUpCustom)
+    Q_PROPERTY(QQuaternion upCustom READ upCustom WRITE setUpCustom NOTIFY upCustomChanged  BINDABLE bindableUpCustom)
     Q_PROPERTY(UpMode upMode READ upMode WRITE setUpMode NOTIFY upModeChanged BINDABLE bindableUpMode)
     Q_PROPERTY(float upSign READ upSign WRITE setUpSign NOTIFY upSignChanged BINDABLE bindableUpSign)    
     Q_PROPERTY(QQuaternion up READ up NOTIFY upChanged )

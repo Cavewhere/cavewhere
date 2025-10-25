@@ -83,13 +83,6 @@ void cwRHIGltf::updateResources(const ResourceUpdateData& data)
 
         m_resourcesDirty = false;
     }
-
-    // if(m_modelMatrixDirty) {
-
-
-
-    //     m_modelMatrixDirty = false;
-    // }
 }
 
 void cwRHIGltf::render(const RenderData& data)

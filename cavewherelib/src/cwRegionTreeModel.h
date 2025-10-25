@@ -18,6 +18,7 @@ class cwNoteLiDAR;
 #include "cwSurveyNoteModel.h"
 #include "cwSurveyNoteLiDARModel.h"
 #include "cwGlobals.h"
+#include "cwUniqueConnectionChecker.h"
 
 //Qt includes
 #include <QAbstractItemModel>
@@ -171,10 +172,13 @@ private:
 
     QPointer<cwCavingRegion> Region;
 
-    void addCaveConnections(int beginIndex, int endIndex);
+    //For debugging connections, this will no-op in release mode
+    cwUniqueConnectionChecker m_connectionChecker;
+
+    void addCaveConnections(int beginIndex, int endIndex, bool recusive = true);
     void removeCaveConnections(int beginIndex, int endIndex);
 
-    void addTripConnections(cwCave* parentCave, int beginIndex, int endIndex);
+    void addTripConnections(cwCave* parentCave, int beginIndex, int endIndex, bool recursive = true);
     void removeTripConnections(cwCave* parentCave, int beginIndex, int endIndex);
 
     void addNoteConnections(cwTrip* parentTrip, int beginIndex, int endIndex);

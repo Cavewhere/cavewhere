@@ -69,7 +69,7 @@ void cwRegionTreeModel::insertedCaves(QModelIndex parent, int begin, int end)
     Q_ASSERT(parent == QModelIndex());
     Q_ASSERT(begin <= end);
 
-    addCaveConnections(begin, end);
+    addCaveConnections(begin, end, false /* recusive */);
     endInsertRows();
 
     for(int i = begin; i <= end; i++) {
@@ -887,9 +887,13 @@ QObject *cwRegionTreeModel::object(const QModelIndex &index) const
 /**
   \brief Adds all the connection for a cave
   */
-void cwRegionTreeModel::addCaveConnections(int beginIndex, int endIndex) {
+void cwRegionTreeModel::addCaveConnections(int beginIndex, int endIndex, bool recusive) {
     for(int i = beginIndex; i <= endIndex; i++) {
         cwCave* cave = Region->cave(i);
+
+        if(!m_connectionChecker.add(cave)) {
+            continue;
+        }
 
         connect(cave, SIGNAL(rowsAboutToBeInserted(QModelIndex,int,int)),
                 this, SLOT(beginInsertTrips(QModelIndex,int,int)), Qt::UniqueConnection);
@@ -900,7 +904,9 @@ void cwRegionTreeModel::addCaveConnections(int beginIndex, int endIndex) {
         connect(cave, SIGNAL(rowsRemoved(QModelIndex,int,int)),
                 this, SLOT(removedTrips(QModelIndex,int,int)), Qt::UniqueConnection);
 
-        addTripConnections(cave, 0, cave->tripCount() - 1);
+        if(recusive) {
+            addTripConnections(cave, 0, cave->tripCount() - 1);
+        }
     }
 }
 
@@ -910,6 +916,7 @@ void cwRegionTreeModel::addCaveConnections(int beginIndex, int endIndex) {
 void cwRegionTreeModel::removeCaveConnections(int beginIndex, int endIndex) {
     for(int i = beginIndex; i <= endIndex; i++) {
         cwCave* cave = Region->cave(i);
+        m_connectionChecker.remove(cave);
         disconnect(cave, 0, this, 0); //disconnect signals and slots to this object
     }
 }
@@ -917,9 +924,13 @@ void cwRegionTreeModel::removeCaveConnections(int beginIndex, int endIndex) {
 /**
   \brief Adds connection for the trips between beginIndex and endIndex
   */
-void cwRegionTreeModel::addTripConnections(cwCave* parentCave, int beginIndex, int endIndex) {
+void cwRegionTreeModel::addTripConnections(cwCave* parentCave, int beginIndex, int endIndex, bool recursive) {
     for(int i = beginIndex; i <= endIndex; i++) {
         cwTrip* currentTrip = parentCave->trip(i);
+
+        if(!m_connectionChecker.add(currentTrip)) {
+            continue;
+        }
 
         connect(currentTrip->notes(), SIGNAL(rowsAboutToBeInserted(QModelIndex,int,int)),
                 this, SLOT(beginInsertNotes(QModelIndex,int,int)), Qt::UniqueConnection);
@@ -932,6 +943,9 @@ void cwRegionTreeModel::addTripConnections(cwCave* parentCave, int beginIndex, i
 
         // --- LiDAR notes (flat model) ---
         auto* lidars = currentTrip->notesLiDAR();
+
+        m_connectionChecker.add(lidars);
+
         Q_ASSERT(lidars);
         connect(lidars, &cwSurveyNoteLiDARModel::rowsAboutToBeInserted,
                 this, [this, lidars](const QModelIndex& parent, int first, int last) {
@@ -970,6 +984,9 @@ void cwRegionTreeModel::addTripConnections(cwCave* parentCave, int beginIndex, i
 void cwRegionTreeModel::removeTripConnections(cwCave* parentCave, int beginIndex, int endIndex) {
     for(int i = beginIndex; i <= endIndex; i++) {
         cwTrip* trip = parentCave->trip(i);
+
+        m_connectionChecker.remove(trip);
+
         disconnect(trip, nullptr, this, nullptr); //disconnect signals and slots to this object
         disconnect(trip->notes(), nullptr, this, nullptr);
         disconnect(trip->notesLiDAR(), nullptr, this, nullptr);
@@ -986,6 +1003,11 @@ void cwRegionTreeModel::addNoteConnections(cwTrip *parentTrip, int beginIndex, i
 {
    for(int i = beginIndex; i <= endIndex; i++) {
        cwNote* note = parentTrip->notes()->notes().at(i);
+
+       if(!m_connectionChecker.add(note)) {
+           continue;
+       }
+
        connect(note, SIGNAL(beginInsertingScraps(int,int)),
                this, SLOT(beginInsertScraps(int,int)), Qt::UniqueConnection);
        connect(note, SIGNAL(insertedScraps(int,int)),
@@ -1007,6 +1029,9 @@ void cwRegionTreeModel::removeNoteConnections(cwTrip *parentTrip, int beginIndex
 {
     for(int i = beginIndex; i <= endIndex; i++) {
         cwNote* note = parentTrip->notes()->notes().at(i);
+
+        m_connectionChecker.remove(note);
+
         disconnect(note, 0, this, 0);
     }
 }
@@ -1080,7 +1105,7 @@ void cwRegionTreeModel::beginRemoveScraps(cwNote *parentNote, int begin, int end
 void cwRegionTreeModel::insertedTrips(cwCave *parentCave, int begin, int end)
 {
     Q_ASSERT(begin <= end);
-    addTripConnections(parentCave, begin, end);
+    addTripConnections(parentCave, begin, end, false);
     endInsertRows();
 
     for(int i = begin; i <= end; i++) {
@@ -1092,6 +1117,7 @@ void cwRegionTreeModel::insertedTrips(cwCave *parentCave, int begin, int end)
             insertedNotes(trip, 0, lastIndex);
         }
     }
+
 }
 
 /**
@@ -1116,6 +1142,7 @@ void cwRegionTreeModel::insertedNotes(cwTrip *parentTrip, int begin, int end)
             insertedScraps(note, 0, lastIndex);
         }
     }
+
 }
 
 /**

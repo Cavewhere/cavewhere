@@ -21,6 +21,10 @@ cwNoteLiDAR::cwNoteLiDAR(QObject* parent)
         QList<int> roles = {UpPositionRole};
         emit dataChanged(index(0), index(rowCount() - 1), roles);
     });
+
+    connect(this, &cwNoteLiDAR::autoCalculateNorthChanged, this, [this]() {
+        updateNoteTransformion();
+    });
 }
 
 QString cwNoteLiDAR::filename() const {
@@ -83,7 +87,9 @@ cwNoteLiDARData cwNoteLiDAR::data() const
     return {
         m_name.value(),
         m_filename,
-        m_stations
+        m_stations,
+        m_noteTransformation->data(),
+        m_autoCalculateNorth
     };
 }
 
@@ -92,6 +98,8 @@ void cwNoteLiDAR::setData(const cwNoteLiDARData &data)
     setName(data.name);
     setFilename(data.filename);
     setStations(data.stations);
+    setAutoCalculateNorth(data.autoCalculateNorth); //This should be set before m_noteTransformation because auto calucaltion
+    m_noteTransformation->setData(data.transfrom);
 }
 
 /**
@@ -204,6 +212,10 @@ int cwNoteLiDAR::clampIndex(int stationId) const
 
 void cwNoteLiDAR::updateNoteTransformion()
 {
+    if(!m_autoCalculateNorth) {
+        return;
+    }
+
     if(parentTrip() == nullptr) {
         return;
     }

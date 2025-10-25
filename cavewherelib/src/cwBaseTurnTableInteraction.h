@@ -18,6 +18,7 @@ class cwMatrix4x4Animation;
 
 //Qt 3D
 #include <QPlane3D>
+#include <qbox3d.h>
 
 //Qt includes
 #include <QTimer>

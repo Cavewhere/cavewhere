@@ -344,7 +344,7 @@ void cwRegionSaveTask::saveNoteStation(CavewhereProto::NoteStation* protoNoteSta
  * @param noteTransformation
  */
 void cwRegionSaveTask::saveNoteTranformation(CavewhereProto::NoteTranformation *protoNoteTransformation,
-                                             cwNoteTranformation *noteTransformation)
+                                             cwAbstractNoteTransformation *noteTransformation)
 {
     protoNoteTransformation->set_northup(noteTransformation->northUp());
     saveLength(protoNoteTransformation->mutable_scalenumerator(),

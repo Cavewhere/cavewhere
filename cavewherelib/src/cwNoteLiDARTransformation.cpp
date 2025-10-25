@@ -41,6 +41,7 @@ void cwNoteLiDARTransformation::setData(const cwNoteLiDARTransformationData &dat
     cwAbstractNoteTransformation::setData(data);
     m_upCustom = data.upRotation;
     m_upMode = static_cast<cwNoteLiDARTransformation::UpMode>(data.upMode);
+    m_upSign = data.upSign;
 }
 
 cwNoteLiDARTransformationData cwNoteLiDARTransformation::data() const

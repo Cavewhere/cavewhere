@@ -45,3 +45,10 @@ message QStringList {
 message QUuid {
     required bytes uuid = 1;  // store QUuid as 16 raw bytes
 }
+
+message QQuaternion {
+    required float x = 1;
+    required float y = 2;
+    required float z = 3;
+    required float scalar = 4;
+}

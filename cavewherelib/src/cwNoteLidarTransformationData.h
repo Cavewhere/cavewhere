@@ -16,7 +16,8 @@ struct cwNoteLiDARTransformationData : public cwNoteTransformationData {
     };
 
     QQuaternion upRotation;
-    UpMode upMode;
+    UpMode upMode = UpMode::YisUp;
+    float upSign = 1.0f;
 
 };
 

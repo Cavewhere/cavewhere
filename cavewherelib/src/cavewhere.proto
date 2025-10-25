@@ -352,12 +352,26 @@ message NoteLiDARStation {
     optional QtProto.QVector3D positionOnNote = 2;
 }
 
+message NoteLiDARTransformation {
+    enum UpMode {
+        Custom = 0;
+        XisUp = 1;
+        YisUp = 2;
+        ZisUp = 3;
+    };
+
+    optional NoteTranformation planTransform = 1;
+    optional UpMode upMode = 2;
+    optional float upSign = 3;
+    optional QtProto.QQuaternion upCustom = 4;
+}
+
 message NoteLiDAR {
     optional string name = 1;
     optional string fileName = 2;
     repeated NoteLiDARStation noteStations = 3;
-
-    //TODO: probably need to save user defined rotations and translation
+    optional NoteLiDARTransformation noteTransformation = 4;
+    optional bool autoCalculateNorth = 5;
 }
 
 ///////////////////////////////////////////////////

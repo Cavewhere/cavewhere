@@ -21,7 +21,7 @@ class cwImage;
 class cwScrap;
 class cwImageResolution;
 class cwNoteStation;
-class cwNoteTranformation;
+class cwAbstractNoteTransformation;
 class cwTriangulatedData;
 class cwLength;
 class cwTeamMember;
@@ -117,7 +117,7 @@ public:
     static void saveNoteStation(CavewhereProto::NoteStation* protoNoteStation,
                          const cwNoteStation& noteStation);
     static void saveNoteTranformation(CavewhereProto::NoteTranformation* protoNoteTransformation,
-                               cwNoteTranformation* noteTransformation);
+                                      cwAbstractNoteTransformation *noteTransformation);
     static void saveTriangulatedData(CavewhereProto::TriangulatedData* protoTriangulatedData,
                               const cwTriangulatedData& triangluatedData);
     static void saveLength(CavewhereProto::Length* protoLength,

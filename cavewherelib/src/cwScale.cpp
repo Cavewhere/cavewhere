@@ -88,6 +88,5 @@ void cwScale::setScale(double newScale)
     connect(ScaleNumerator, SIGNAL(valueChanged()), SIGNAL(scaleChanged()));
     connect(ScaleDenominator, SIGNAL(valueChanged()), SIGNAL(scaleChanged()));
 
-    qDebug() << "Scale changed!";
     emit scaleChanged();
 }

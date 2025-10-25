@@ -21,6 +21,7 @@
 #include "cwPDFSettings.h"
 #include "cwAddImageTask.h"
 #include "cwNoteLiDAR.h"
+#include "cwUniqueConnectionChecker.h"
 
 //Async future
 #include <asyncfuture.h>
@@ -212,6 +213,9 @@ struct cwSaveLoad::Data {
     bool saveEnabled = true;
 
     cwFutureManagerToken futureToken;
+
+    //Helps watch if we already has objects connected, this is for debugging only
+    cwUniqueConnectionChecker connectionChecker;
 
     //This is for bug checking, should be removed
     bool clearingWait = false;
@@ -422,6 +426,8 @@ cwSaveLoad::cwSaveLoad(QObject *parent) :
     d->m_regionTreeModel = new cwRegionTreeModel(this);
     d->repository = new QQuickGit::GitRepository(this);
 
+    //Connect all for watching for saves
+    connectTreeModel();
 }
 
 void cwSaveLoad::newProject()
@@ -471,34 +477,10 @@ QFuture<ResultBase> cwSaveLoad::load(const QString &filename)
 {
     // qDebug() << "---- Loading: " << filename;
 
+    //Disconnect all connections
+    disconnectTreeModel();
+
     auto oldJobs = completeSaveJobs();
-
-    // return AsyncFuture::observe(oldJobs)
-    //     .context(this, [this, filename]
-    // {
-    //     //Find all the cave file
-    //     auto regionDataFuture = cwSaveLoad::loadAll(filename);
-
-    //     d->futureToken.addJob({QFuture<void>(regionDataFuture), QStringLiteral("Loading")});
-
-    //     return AsyncFuture::observe(regionDataFuture)
-    //         .context(this, [this, regionDataFuture, filename]() {
-    //             return mbind(regionDataFuture, [this, regionDataFuture, filename](const ResultBase&) {
-    //                 // setFilename(filename);
-    //                 // setTemporaryProject(false);
-    //                 setSaveEnabled(false);
-    //                 d->m_regionTreeModel->cavingRegion()->setData(regionDataFuture.result().value());
-
-    //                 setFileName(filename);
-    //                 // d->projectFileName = filename;
-
-    //                 d->resetFileLookup();
-
-    //                 setSaveEnabled(true);
-    //                 return ResultBase();
-    //             });
-    //         }).future();
-    //     }).future();
 
     QFuture<ResultBase> future = oldJobs.then(this, [this, filename]() {
         //Find all the cave file
@@ -736,9 +718,9 @@ void cwSaveLoad::copyFilesAndEmitResults(const QList<QString>& sourceFilePaths,
                           });
                       }).future();
 
-    // qDebug() << "Adding files:" << sourceFilePaths;
 
     for (const CopyCommand& command : commands) {
+        qDebug() << "Adding files:" << sourceFilePaths << command.destinationFilePath;
         d->m_runningJobs.insert(command.destinationFilePath, QFuture<void>(future));
     }
 
@@ -1070,12 +1052,16 @@ std::unique_ptr<CavewhereProto::NoteLiDAR> cwSaveLoad::toProtoNoteLiDAR(const cw
     *(protoNote->mutable_name()) = note->name().toStdString();
     *(protoNote->mutable_filename()) = note->filename().toStdString();
 
+    protoNote->set_autocalculatenorth(note->autoCalculateNorth());
+
     for(const auto& noteStation : note->stations()) {
         //Save the note stations
         auto protoNoteStation = protoNote->add_notestations();
         *(protoNoteStation->mutable_name()) = noteStation.name().toStdString();
         cwRegionSaveTask::saveVector3D(protoNoteStation->mutable_positiononnote(), noteStation.positionOnNote());
     }
+
+    saveNoteLiDARTranformation(protoNote->mutable_notetransformation(), note->noteTransformation());
 
     return protoNote;
 }
@@ -1410,10 +1396,16 @@ Monad::Result<cwNoteLiDARData> cwSaveLoad::loadNoteLiDAR(const QString& filename
             noteData.stations.append(std::move(newStation));
         }
 
+        if(protoNote.has_autocalculatenorth()) {
+            noteData.autoCalculateNorth = protoNote.autocalculatenorth();
+        }
+
+        if(protoNote.has_notetransformation()) {
+            noteData.transfrom = fromProtoLiDARNoteTransformation(protoNote.notetransformation());
+        }
+
         return noteData;
     });
-
-
 }
 
 
@@ -1677,6 +1669,33 @@ cwNoteTransformationData cwSaveLoad::fromProtoNoteTransformation(const Cavewhere
     return data;
 }
 
+cwNoteLiDARTransformationData cwSaveLoad::fromProtoLiDARNoteTransformation(const CavewhereProto::NoteLiDARTransformation &protoNoteTransform)
+{
+    cwNoteLiDARTransformationData data;
+
+    if(protoNoteTransform.has_plantransform()) {
+        //Do a slice
+        cwNoteTransformationData& base = data;
+        base = fromProtoNoteTransformation(protoNoteTransform.plantransform());
+    }
+
+    if(protoNoteTransform.has_upsign()) {
+        data.upSign = protoNoteTransform.upsign();
+        qDebug() << "Loaded upSign:" << data.upSign;
+    }
+
+    if(protoNoteTransform.has_upmode()) {
+        data.upMode = static_cast<cwNoteLiDARTransformationData::UpMode>(protoNoteTransform.upmode());
+
+        if(data.upMode == cwNoteLiDARTransformationData::UpMode::Custom
+            && protoNoteTransform.has_upcustom()) {
+            data.upRotation = fromProtoQuaternion(protoNoteTransform.upcustom());
+        }
+    }
+
+    return data;
+}
+
 std::unique_ptr<cwProjectedProfileScrapViewMatrix::Data> cwSaveLoad::fromProtoProjectedScraptViewMatrix(const CavewhereProto::ProjectedProfileScrapViewMatrix protoViewMatrix)
 {
     auto matrix = std::make_unique<cwProjectedProfileScrapViewMatrix::Data>();
@@ -1691,6 +1710,45 @@ cwImageResolution::Data cwSaveLoad::fromProtoImageResolution(const CavewhereProt
     resolution.value = protoImageResolution.value();
     resolution.unit = static_cast<cwUnits::ImageResolutionUnit>(protoImageResolution.unit());
     return resolution;
+}
+
+QQuaternion cwSaveLoad::fromProtoQuaternion(const QtProto::QQuaternion &protoQuaternion)
+{
+    return QQuaternion(protoQuaternion.scalar(), protoQuaternion.x(), protoQuaternion.y(), protoQuaternion.z());
+}
+
+void cwSaveLoad::saveNoteLiDARTranformation(CavewhereProto::NoteLiDARTransformation *protoNoteTransformation, cwNoteLiDARTransformation *noteTransformation)
+{
+    if (!protoNoteTransformation || !noteTransformation) { return; }
+
+    //Save the base class
+    cwRegionSaveTask::saveNoteTranformation(protoNoteTransformation->mutable_plantransform(), noteTransformation);
+
+    // upMode (enum)
+    // The enum values appear to align (Custom=0, XisUp=1, YisUp=2, ZisUp=3). If they differ,
+    // add a mapping switch here instead of static_cast.
+    protoNoteTransformation->set_upmode(
+        static_cast<CavewhereProto::NoteLiDARTransformation_UpMode>(noteTransformation->upMode())
+        );
+
+    // upSign (float)
+    qDebug() << "Saving upSign:" << noteTransformation->upSign();
+    protoNoteTransformation->set_upsign(noteTransformation->upSign());
+
+    // upCustom (QtProto::QQuaternion) — only meaningful when mode is Custom; safe to always write.
+    if(noteTransformation->upMode() == cwNoteLiDARTransformation::UpMode::Custom) {
+        saveQQuaternion(protoNoteTransformation->mutable_upcustom(), noteTransformation->upCustom());
+    }
+}
+
+void cwSaveLoad::saveQQuaternion(QtProto::QQuaternion *protoQuaternion, const QQuaternion &quaternion)
+{
+    if (!protoQuaternion) { return; }
+
+    protoQuaternion->set_x(quaternion.x());
+    protoQuaternion->set_y(quaternion.y());
+    protoQuaternion->set_z(quaternion.z());
+    protoQuaternion->set_scalar(quaternion.scalar());
 }
 
 cwLength::Data cwSaveLoad::fromProtoLength(const CavewhereProto::Length &protoLength)
@@ -1715,12 +1773,18 @@ void cwSaveLoad::disconnectTreeModel()
     //Disconnect from the tree model
     disconnect(d->m_regionTreeModel, nullptr, this, nullptr);
 
+    d->connectionChecker.remove(d->m_regionTreeModel);
+
     //Disconnect all the objects watch in the tree
     disconnectObjects();
 }
 
 void cwSaveLoad::connectTreeModel()
 {
+
+    if(!d->connectionChecker.add(d->m_regionTreeModel)) {
+        return;
+    }
 
     //Connect when region has changed
     connect(d->m_regionTreeModel, &cwRegionTreeModel::rowsInserted,
@@ -1816,6 +1880,7 @@ void cwSaveLoad::connectTreeModel()
                         break;
                     }
 
+                    d->connectionChecker.remove(object);
                     disconnect(object, nullptr, this, nullptr);
 
                 }
@@ -1848,6 +1913,7 @@ void cwSaveLoad::disconnectObjects()
     //Disconnect from all the objects
     QList<QObject*> objects = d->m_regionTreeModel->all<QObject*>(QModelIndex(), &cwRegionTreeModel::object);
     for(auto obj : objects) {
+        d->connectionChecker.remove(obj);
         disconnect(obj, nullptr, this, nullptr);
     }
 }
@@ -1858,6 +1924,7 @@ void cwSaveLoad::connectObjects()
     {
         auto caves = d->m_regionTreeModel->all<cwCave*>(QModelIndex(), &cwRegionTreeModel::cave);
         for(auto cave : caves) {
+            qDebug() << "Connect cave:" << this << cave << caves.size();
             connectCave(cave);
         }
     }
@@ -1895,6 +1962,12 @@ void cwSaveLoad::connectCave(cwCave *cave)
         d->renameDirectoryAndFile(this, cave);
     };
 
+    if(!d->connectionChecker.add(cave)) {
+        return;
+    }
+
+    qDebug() << "Connecting cave for real:" << cave;
+
     connect(cave, &cwCave::nameChanged, this, saveCaveName);
 }
 
@@ -1913,6 +1986,10 @@ void cwSaveLoad::connectTrip(cwTrip* trip)
     // Helper to connect a survey chunk to save on any data change
     const auto connectChunk = [this, saveTrip](cwSurveyChunk* chunk) {
         if (chunk == nullptr) {
+            return;
+        }
+
+        if(!d->connectionChecker.add(chunk)) {
             return;
         }
 
@@ -1935,6 +2012,10 @@ void cwSaveLoad::connectTrip(cwTrip* trip)
         // connect(chunk, &cwSurveyChunk::errorsChanged, this, saveTrip);
         // parentTripChanged intentionally not handled (no re-parenting)
     };
+
+    if(!d->connectionChecker.add(trip)) {
+        return;
+    }
 
     auto saveTripName = [trip, this]() {
         d->renameDirectoryAndFile(this, trip);
@@ -1967,6 +2048,11 @@ void cwSaveLoad::connectTrip(cwTrip* trip)
 
     // Team model changes → save
     if (QAbstractItemModel* const teamModel = trip->team()) {
+
+        if(!d->connectionChecker.add(teamModel)) {
+            return;
+        }
+
         connect(teamModel, &QAbstractItemModel::dataChanged, this, saveTrip);
         connect(teamModel, &QAbstractItemModel::rowsInserted, this, saveTrip);
         connect(teamModel, &QAbstractItemModel::rowsRemoved, this, saveTrip);
@@ -1985,6 +2071,11 @@ void cwSaveLoad::connectTrip(cwTrip* trip)
 
     // Trip calibration changes → save
     if (cwTripCalibration* const cal = trip->calibrations()) {
+
+        if(!d->connectionChecker.add(cal)) {
+            return;
+        }
+
         connect(cal, &cwTripCalibration::correctedCompassBacksightChanged, this, saveTrip);
         connect(cal, &cwTripCalibration::correctedClinoBacksightChanged, this, saveTrip);
         connect(cal, &cwTripCalibration::correctedCompassFrontsightChanged, this, saveTrip);
@@ -2023,6 +2114,10 @@ void cwSaveLoad::connectNote(cwNote *note)
         save(note);
     };
 
+    if(!d->connectionChecker.add(note)) {
+        return;
+    }
+
     // Note-level changes
     connect(note, &cwNote::nameChanged, this, renameAndSaveNote);
 
@@ -2052,6 +2147,10 @@ void cwSaveLoad::connectScrap(cwScrap *scrap)
     const auto saveNote = [this, scrap]() {
         save(scrap->parentNote());
     };
+
+    if(!d->connectionChecker.add(scrap)) {
+        return;
+    }
 
     // Scrap outline changes
     connect(scrap, &cwScrap::insertedPoints, this, saveNote);
@@ -2090,18 +2189,26 @@ void cwSaveLoad::connectNoteLiDAR(cwNoteLiDAR *lidarNote)
 
     // Lambda to save this specific note
     const auto saveNote = [this, lidarNote]() {
+        // qDebug() << "Save lidar:" << lidarNote << lidarNote->noteTransformation()->upSign();
         save(lidarNote);
     };
+
+    if(!d->connectionChecker.add(lidarNote)) {
+        return;
+    }
 
     connect(lidarNote, &cwNoteLiDAR::filenameChanged, this, saveNote);
     connect(lidarNote, &cwNoteLiDAR::dataChanged,
             this, [saveNote](const QModelIndex &topLeft,
                        const QModelIndex &bottomRight,
                        const QList<int> &roles) {
-                Q_UNUSED(topLeft);
-                Q_UNUSED(bottomRight);
-                Q_UNUSED(roles);
-                saveNote();
+        if(roles.contains(cwNoteLiDAR::NameRole)
+            || roles.contains(cwNoteLiDAR::PositionOnNoteRole)) {
+            Q_UNUSED(topLeft);
+            Q_UNUSED(bottomRight);
+            Q_UNUSED(roles);
+            saveNote();
+        }
     });
     connect(lidarNote, &cwNoteLiDAR::rowsInserted,
             this, [saveNote](const QModelIndex &parent, int first, int last) {
@@ -2117,8 +2224,17 @@ void cwSaveLoad::connectNoteLiDAR(cwNoteLiDAR *lidarNote)
                 Q_UNUSED(last);
                 saveNote();
     });
+    connect(lidarNote, &cwNoteLiDAR::autoCalculateNorthChanged, this, saveNote);
 
+    if(!d->connectionChecker.add(lidarNote->noteTransformation())) {
+        return;
+    }
 
+    connect(lidarNote->noteTransformation(), &cwNoteLiDARTransformation::upSignChanged, this, saveNote);
+    connect(lidarNote->noteTransformation(), &cwNoteLiDARTransformation::upModeChanged, this, saveNote);
+    connect(lidarNote->noteTransformation(), &cwNoteLiDARTransformation::upCustomChanged, this, saveNote);
+    connect(lidarNote->noteTransformation(), &cwNoteLiDARTransformation::northUpChanged, this, saveNote);
+    connect(lidarNote->noteTransformation(), &cwNoteLiDARTransformation::scaleChanged, this, saveNote);
 }
 
 
@@ -2386,7 +2502,7 @@ QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
     const void* objectId)
 {
 
-    // qDebug () << "Try Saving to " << filename << objectId;
+    qDebug () << "Try Saving to " << filename << objectId;
 
     //Rename or remove file and directories
     excuteFileSystemActions();
