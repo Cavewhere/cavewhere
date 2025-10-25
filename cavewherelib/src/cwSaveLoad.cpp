@@ -507,8 +507,6 @@ QFuture<ResultBase> cwSaveLoad::load(const QString &filename)
 
                     connectTreeModel();
 
-                    qDebug() << "Finished loading!";
-
                     return ResultBase();
                 });
             }).future();
@@ -720,7 +718,7 @@ void cwSaveLoad::copyFilesAndEmitResults(const QList<QString>& sourceFilePaths,
 
 
     for (const CopyCommand& command : commands) {
-        qDebug() << "Adding files:" << sourceFilePaths << command.destinationFilePath;
+        // qDebug() << "Adding files:" << sourceFilePaths << command.destinationFilePath;
         d->m_runningJobs.insert(command.destinationFilePath, QFuture<void>(future));
     }
 
@@ -1681,7 +1679,6 @@ cwNoteLiDARTransformationData cwSaveLoad::fromProtoLiDARNoteTransformation(const
 
     if(protoNoteTransform.has_upsign()) {
         data.upSign = protoNoteTransform.upsign();
-        qDebug() << "Loaded upSign:" << data.upSign;
     }
 
     if(protoNoteTransform.has_upmode()) {
@@ -1732,7 +1729,6 @@ void cwSaveLoad::saveNoteLiDARTranformation(CavewhereProto::NoteLiDARTransformat
         );
 
     // upSign (float)
-    qDebug() << "Saving upSign:" << noteTransformation->upSign();
     protoNoteTransformation->set_upsign(noteTransformation->upSign());
 
     // upCustom (QtProto::QQuaternion) — only meaningful when mode is Custom; safe to always write.
@@ -1924,7 +1920,6 @@ void cwSaveLoad::connectObjects()
     {
         auto caves = d->m_regionTreeModel->all<cwCave*>(QModelIndex(), &cwRegionTreeModel::cave);
         for(auto cave : caves) {
-            qDebug() << "Connect cave:" << this << cave << caves.size();
             connectCave(cave);
         }
     }
@@ -1965,8 +1960,6 @@ void cwSaveLoad::connectCave(cwCave *cave)
     if(!d->connectionChecker.add(cave)) {
         return;
     }
-
-    qDebug() << "Connecting cave for real:" << cave;
 
     connect(cave, &cwCave::nameChanged, this, saveCaveName);
 }
@@ -2502,7 +2495,7 @@ QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
     const void* objectId)
 {
 
-    qDebug () << "Try Saving to " << filename << objectId;
+    // qDebug () << "Try Saving to " << filename << objectId;
 
     //Rename or remove file and directories
     excuteFileSystemActions();

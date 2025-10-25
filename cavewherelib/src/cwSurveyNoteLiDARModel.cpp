@@ -57,7 +57,6 @@ void cwSurveyNoteLiDARModel::addFromFiles(QList<QUrl> files)
                 note->setParentTrip(parentTrip());
                 note->setName(QFileInfo(path).fileName());
                 note->setFilename(path); // project-relative path
-                qDebug() << "lidar note path:" << path;
                 newNotes.append(note);
             }
 

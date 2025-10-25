@@ -1724,11 +1724,9 @@ TEST_CASE("LiDAR GLB persistence: file copy + stations", "[cwProject]") {
         cwNoteLiDARTransformation* const xform = lidarNote->noteTransformation();
         REQUIRE(xform != nullptr);
 
-        qDebug() << "Start change" << xform;
         lidarNote->setAutoCalculateNorth(false);
         xform->setScale(2.5);
         xform->setNorthUp(33.0);
-        qDebug() << "end change";
 
         project->waitSaveToFinish();
 
@@ -1809,7 +1807,6 @@ TEST_CASE("LiDAR GLB persistence: file copy + stations", "[cwProject]") {
         REQUIRE(xform != nullptr);
 
         xform->setUpMode(cwNoteLiDARTransformation::UpMode::XisUp);
-        qDebug() << "Changing to 2.0f";
         xform->setUpSign(2.0f);
         project->waitSaveToFinish();
 
