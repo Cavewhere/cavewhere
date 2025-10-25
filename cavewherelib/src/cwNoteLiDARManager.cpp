@@ -350,8 +350,6 @@ void cwNoteLiDARManager::runIfNeeded()
 
 void cwNoteLiDARManager::runBatch()
 {
-    qDebug() << "Run batch!";
-
     if (m_dirtyNotes.isEmpty()) {
         return;
     }
@@ -407,8 +405,6 @@ void cwNoteLiDARManager::connectTrip(cwTrip* trip)
     }
 
     if (auto* model = trip->notesLiDAR()) {
-        qDebug() << "Connecting model" << model;
-
         connect(model, &QAbstractItemModel::rowsInserted,
                 this, &cwNoteLiDARManager::liDARRowsInserted);
         connect(model, &QAbstractItemModel::rowsAboutToBeRemoved,

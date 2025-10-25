@@ -405,8 +405,12 @@ QModelIndex cwRegionTreeModel::index ( int row, int column, const QModelIndex & 
                 return createIndex(row, column, parentTrip->notes());
             } else if(row == static_cast<int>(TripRows::NotesLiDARModel)) {
                 return createIndex(row, column, parentTrip->notesLiDAR());
+            } else {
+                //Bad, row isn't a NotesModel or NotesLiDARModel
+                Q_ASSERT(false);
             }
         }
+        //Bad cast / internal pointer
         Q_ASSERT(false);
         break;
     }
@@ -1126,8 +1130,8 @@ void cwRegionTreeModel::insertedTrips(cwCave *parentCave, int begin, int end)
         cwTrip* trip = parentCave->trip(i);
         int lastIndex = trip->notes()->rowCount() - 1;
         if(lastIndex >= 0) {
-            QModelIndex parentTripIndex = index(trip);
-            beginInsertRows(parentTripIndex, 0, lastIndex);
+            QModelIndex parenIndex = index(trip->notes());
+            beginInsertRows(parenIndex, 0, lastIndex);
             insertedNotes(trip, 0, lastIndex);
         }
     }
