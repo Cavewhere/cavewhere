@@ -1086,7 +1086,7 @@ void cwRegionTreeModel::beginRemoveTrips(cwCave *parentCave, int begin, int end)
 void cwRegionTreeModel::beginRemoveNotes(cwTrip *parentTrip, int begin, int end)
 {
     Q_ASSERT(begin <= end);
-    QModelIndex parentIndex = index(parentTrip);
+    QModelIndex parentIndex = index(parentTrip->notes());
 
     for(int i = begin; i <= end; i++) {
         cwNote* note = index(i, 0, parentIndex).data(ObjectRole).value<cwNote*>();
