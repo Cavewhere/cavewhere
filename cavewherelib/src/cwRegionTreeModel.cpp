@@ -333,7 +333,7 @@ void cwRegionTreeModel::removedScraps(int begin, int end)
  * @param region
  */
 void cwRegionTreeModel::setCavingRegion(cwCavingRegion* region) {
-   //Remove all the connections
+    //Remove all the connections
     if(rowCount() > 0) {
         removeCaveConnections(0, rowCount() - 1);
     }
@@ -932,51 +932,65 @@ void cwRegionTreeModel::addTripConnections(cwCave* parentCave, int beginIndex, i
             continue;
         }
 
-        connect(currentTrip->notes(), SIGNAL(rowsAboutToBeInserted(QModelIndex,int,int)),
-                this, SLOT(beginInsertNotes(QModelIndex,int,int)), Qt::UniqueConnection);
-        connect(currentTrip->notes(), SIGNAL(rowsInserted(QModelIndex,int,int)),
-                this, SLOT(insertedNotes(QModelIndex,int,int)), Qt::UniqueConnection);
-        connect(currentTrip->notes(), SIGNAL(rowsAboutToBeRemoved(QModelIndex,int,int)),
-                this, SLOT(beginRemoveNotes(QModelIndex,int,int)), Qt::UniqueConnection);
-        connect(currentTrip->notes(), SIGNAL(rowsRemoved(QModelIndex,int,int)),
-                this, SLOT(removeNotes(QModelIndex,int,int)), Qt::UniqueConnection);
+        { //Add the notes
+            auto notes = currentTrip->notes();
 
-        // --- LiDAR notes (flat model) ---
-        auto* lidars = currentTrip->notesLiDAR();
+            if(!m_connectionChecker.add(notes)) {
+                continue;
+            }
 
-        m_connectionChecker.add(lidars);
+            connect(notes, SIGNAL(rowsAboutToBeInserted(QModelIndex,int,int)),
+                    this, SLOT(beginInsertNotes(QModelIndex,int,int)), Qt::UniqueConnection);
+            connect(notes, SIGNAL(rowsInserted(QModelIndex,int,int)),
+                    this, SLOT(insertedNotes(QModelIndex,int,int)), Qt::UniqueConnection);
+            connect(notes, SIGNAL(rowsAboutToBeRemoved(QModelIndex,int,int)),
+                    this, SLOT(beginRemoveNotes(QModelIndex,int,int)), Qt::UniqueConnection);
+            connect(notes, SIGNAL(rowsRemoved(QModelIndex,int,int)),
+                    this, SLOT(removeNotes(QModelIndex,int,int)), Qt::UniqueConnection);
 
-        Q_ASSERT(lidars);
-        connect(lidars, &cwSurveyNoteLiDARModel::rowsAboutToBeInserted,
-                this, [this, lidars](const QModelIndex& parent, int first, int last) {
-                    Q_UNUSED(parent);
-                    QModelIndex parentIndex = index(lidars);
-                    beginInsertRows(parentIndex, first, last);
-                });
+            if(recursive) {
+                addNoteConnections(currentTrip, 0, notes->notes().size() - 1);
+            }
+        }
 
-        connect(lidars, &cwSurveyNoteLiDARModel::rowsInserted,
-                this, [this](const QModelIndex& parent, int first, int last) {
-                    Q_UNUSED(parent); Q_UNUSED(first); Q_UNUSED(last);
-                    endInsertRows();
-                });
+        { // --- LiDAR notes (flat model) ---
+            auto* lidars = currentTrip->notesLiDAR();
 
-        connect(lidars, &cwSurveyNoteLiDARModel::rowsAboutToBeRemoved,
-                this, [this, lidars](const QModelIndex& parent, int first, int last) {
-                    Q_UNUSED(parent);
-                    QModelIndex parentIndex = index(lidars);
-                    beginRemoveRows(parentIndex, first, last);
-                });
+            if(!m_connectionChecker.add(lidars)) {
+                continue;
+            }
 
-        connect(lidars, &cwSurveyNoteLiDARModel::rowsRemoved,
-                this, [this](const QModelIndex& parent, int first, int last) {
-                    Q_UNUSED(parent); Q_UNUSED(first); Q_UNUSED(last);
-                    endRemoveRows();
-                });
+            Q_ASSERT(lidars);
+            connect(lidars, &cwSurveyNoteLiDARModel::rowsAboutToBeInserted,
+                    this, [this, lidars](const QModelIndex& parent, int first, int last) {
+                        Q_UNUSED(parent);
+                        QModelIndex parentIndex = index(lidars);
+                        beginInsertRows(parentIndex, first, last);
+                    });
 
+            connect(lidars, &cwSurveyNoteLiDARModel::rowsInserted,
+                    this, [this](const QModelIndex& parent, int first, int last) {
+                        Q_UNUSED(parent); Q_UNUSED(first); Q_UNUSED(last);
+                        endInsertRows();
+                    });
 
-        addNoteConnections(currentTrip, 0, currentTrip->notes()->notes().size() - 1);
+            connect(lidars, &cwSurveyNoteLiDARModel::rowsAboutToBeRemoved,
+                    this, [this, lidars](const QModelIndex& parent, int first, int last) {
+                        Q_UNUSED(parent);
+                        QModelIndex parentIndex = index(lidars);
+                        beginRemoveRows(parentIndex, first, last);
+                    });
+
+            connect(lidars, &cwSurveyNoteLiDARModel::rowsRemoved,
+                    this, [this](const QModelIndex& parent, int first, int last) {
+                        Q_UNUSED(parent); Q_UNUSED(first); Q_UNUSED(last);
+                        endRemoveRows();
+                    });
+        }
+
     }
 }
+
 
 /**
   \brief Removes the connections for a trips between beginIndex and endIndex
@@ -1001,22 +1015,22 @@ void cwRegionTreeModel::removeTripConnections(cwCave* parentCave, int beginIndex
  */
 void cwRegionTreeModel::addNoteConnections(cwTrip *parentTrip, int beginIndex, int endIndex)
 {
-   for(int i = beginIndex; i <= endIndex; i++) {
-       cwNote* note = parentTrip->notes()->notes().at(i);
+    for(int i = beginIndex; i <= endIndex; i++) {
+        cwNote* note = parentTrip->notes()->notes().at(i);
 
-       if(!m_connectionChecker.add(note)) {
-           continue;
-       }
+        if(!m_connectionChecker.add(note)) {
+            continue;
+        }
 
-       connect(note, SIGNAL(beginInsertingScraps(int,int)),
-               this, SLOT(beginInsertScraps(int,int)), Qt::UniqueConnection);
-       connect(note, SIGNAL(insertedScraps(int,int)),
-               this, SLOT(insertedScraps(int,int)), Qt::UniqueConnection);
-       connect(note, SIGNAL(beginRemovingScraps(int,int)),
-               this, SLOT(beginRemoveScraps(int,int)), Qt::UniqueConnection);
-       connect(note, SIGNAL(removedScraps(int,int)),
-               this, SLOT(removedScraps(int,int)), Qt::UniqueConnection);
-   }
+        connect(note, SIGNAL(beginInsertingScraps(int,int)),
+                this, SLOT(beginInsertScraps(int,int)), Qt::UniqueConnection);
+        connect(note, SIGNAL(insertedScraps(int,int)),
+                this, SLOT(insertedScraps(int,int)), Qt::UniqueConnection);
+        connect(note, SIGNAL(beginRemovingScraps(int,int)),
+                this, SLOT(beginRemoveScraps(int,int)), Qt::UniqueConnection);
+        connect(note, SIGNAL(removedScraps(int,int)),
+                this, SLOT(removedScraps(int,int)), Qt::UniqueConnection);
+    }
 }
 
 /**
