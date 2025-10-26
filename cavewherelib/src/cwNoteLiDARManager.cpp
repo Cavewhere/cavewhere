@@ -25,6 +25,7 @@
 #include "cwProject.h"
 #include "cwAsyncFuture.h"
 #include "cwNoteLiDARTransformation.h"
+#include "cwUniqueConnectionChecker.h"
 
 // Async
 #include "asyncfuture.h"
@@ -405,6 +406,11 @@ void cwNoteLiDARManager::connectTrip(cwTrip* trip)
     }
 
     if (auto* model = trip->notesLiDAR()) {
+        if(!m_connectionChecker.add(model)) {
+            return;
+        }
+
+
         connect(model, &QAbstractItemModel::rowsInserted,
                 this, &cwNoteLiDARManager::liDARRowsInserted);
         connect(model, &QAbstractItemModel::rowsAboutToBeRemoved,
@@ -428,12 +434,15 @@ void cwNoteLiDARManager::disconnectTrip(cwTrip* trip)
     }
 
     if (auto* model = trip->notesLiDAR()) {
+        m_connectionChecker.remove(model);
         disconnect(model, &QAbstractItemModel::rowsInserted,
                    this, &cwNoteLiDARManager::liDARRowsInserted);
         disconnect(model, &QAbstractItemModel::rowsAboutToBeRemoved,
                    this, &cwNoteLiDARManager::liDARRowsAboutToBeRemoved);
 
         for (cwNoteLiDAR* note : notesFromModel(model)) {
+            m_connectionChecker.remove(note);
+
             disconnect(note, &QObject::destroyed, this, &cwNoteLiDARManager::noteDestroyed);
             disconnect(note->noteTransformation(), nullptr, this, nullptr);
             disconnect(note, nullptr, this, nullptr);
@@ -445,6 +454,10 @@ void cwNoteLiDARManager::disconnectTrip(cwTrip* trip)
 void cwNoteLiDARManager::connectNote(cwNoteLiDAR *note)
 {
     qDebug() << "Note connect:" << note;
+
+    if(!m_connectionChecker.add(note)) {
+        return;
+    }
 
     auto handleNoteChange = [note, this]() {
         qDebug() << "Data changed on note:" << note;

@@ -33,6 +33,7 @@ class cwNoteLiDAR;
 #include "cwAsyncFuture.h"
 #include "cwTriangulateLiDARInData.h"
 #include "cwRenderGLTF.h"
+#include "cwUniqueConnectionChecker.h"
 
 
 /**
@@ -128,6 +129,9 @@ private:
     QPointer<cwRenderGLTF> m_renderGltf;
 
     bool m_automaticUpdate = true;
+
+    //For checking duplicate connections
+    cwUniqueConnectionChecker m_connectionChecker;
 };
 
 #endif // CWNOTELIDARMANAGER_H
