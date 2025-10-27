@@ -18,13 +18,8 @@ class cwRenderScraps : public cwRenderObject
     Q_OBJECT
     QML_NAMED_ELEMENT(RenderScraps)
 
-    Q_PROPERTY(cwProject* project READ project WRITE setProject NOTIFY projectChanged)
-
 public:
     explicit cwRenderScraps(QObject *parent = nullptr);
-
-    cwProject* project() const;
-    void setProject(cwProject* project);
 
     void addScrapToUpdate(cwScrap* scrap);
     void removeScrap(cwScrap* scrap);
@@ -33,11 +28,7 @@ public:
 
     cwRHIObject* createRHIObject() override;
 
-signals:
-    void projectChanged();
-
 private:
-    cwProject* m_project = nullptr; //!< The project file for loading textures
 
     // Pending data to update
     class PendingScrapCommand {

@@ -64,8 +64,6 @@ private:
     bool m_resourcesInitialized = false;
 
 
-    cwProject* m_project = nullptr;
-    // cwFutureManagerToken m_futureManagerToken;
     bool m_visible = true;
 
     QPointer<cwRenderScraps> m_renderScraps;

@@ -4,20 +4,8 @@
 #include "cwScene.h"
 
 cwRenderScraps::cwRenderScraps(QObject *parent) :
-    cwRenderObject(parent),
-    m_project(nullptr)
+    cwRenderObject(parent)
 {
-}
-
-cwProject* cwRenderScraps::project() const {
-    return m_project;
-}
-
-void cwRenderScraps::setProject(cwProject* project) {
-    if(m_project != project) {
-        m_project = project;
-        emit projectChanged();
-    }
 }
 
 void cwRenderScraps::addScrapToUpdate(cwScrap *scrap)
@@ -25,6 +13,10 @@ void cwRenderScraps::addScrapToUpdate(cwScrap *scrap)
     if(!scrap->triangulationData().isNull()) {
 
         auto triangleData = scrap->triangulationData();
+
+        //This reduces the CPU memory, but this probably isn't the best place to do this
+        //Probably need pipeline arch, with artifacts
+        //scrap->setTriangulationData({}); //Clear the triangulation data
 
         PendingScrapCommand command = PendingScrapCommand(PendingScrapCommand::AddScrap,
                                                           scrap,

@@ -839,7 +839,6 @@ void cwScrapManager::taskFinished(const QList<cwScrap*>& scrapsToUpdate,
 void cwScrapManager::setRenderScraps(cwRenderScraps *scraps)
 {
     m_renderScraps = scraps;
-    m_renderScraps->setProject(Project);
 }
 
 /**

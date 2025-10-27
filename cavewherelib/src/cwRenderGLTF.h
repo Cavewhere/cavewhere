@@ -41,7 +41,6 @@ public:
 
     explicit cwRenderGLTF(QObject *parent = nullptr);
 
-    // Accessor without "get" prefix (per your style)
     QString gltfFilePath() const { return m_gltfFilePath; }
 
     cwFutureManagerToken futureManagerToken() const;
