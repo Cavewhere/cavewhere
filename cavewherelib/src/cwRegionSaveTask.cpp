@@ -364,19 +364,21 @@ void cwRegionSaveTask::saveTriangulatedData(CavewhereProto::TriangulatedData *pr
     saveImage(protoTriangulatedData->mutable_croppedimage(),
               triangluatedData.croppedImage());
 
-    foreach(QVector3D point, triangluatedData.points()) {
-        QtProto::QVector3D* protoVector3D = protoTriangulatedData->add_points();
-        saveVector3D(protoVector3D, point);
-    }
+    //FIXME: save cwGeometry
 
-    foreach(QVector2D texCoord, triangluatedData.texCoords()) {
-        QtProto::QVector2D* protoVector2D = protoTriangulatedData->add_texcoords();
-        saveVector2D(protoVector2D, texCoord);
-    }
+    // foreach(QVector3D point, triangluatedData.points()) {
+    //     QtProto::QVector3D* protoVector3D = protoTriangulatedData->add_points();
+    //     saveVector3D(protoVector3D, point);
+    // }
 
-    foreach(uint index, triangluatedData.indices()) {
-        protoTriangulatedData->add_indices(index);
-    }
+    // foreach(QVector2D texCoord, triangluatedData.texCoords()) {
+    //     QtProto::QVector2D* protoVector2D = protoTriangulatedData->add_texcoords();
+    //     saveVector2D(protoVector2D, texCoord);
+    // }
+
+    // foreach(uint32_t index, triangluatedData.indices()) {
+    //     protoTriangulatedData->add_indices(index);
+    // }
 
     foreach(QVector3D leadPoint, triangluatedData.leadPoints()) {
         QtProto::QVector3D* protoVector3D = protoTriangulatedData->add_leadpositions();

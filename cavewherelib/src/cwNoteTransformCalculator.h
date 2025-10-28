@@ -5,6 +5,7 @@
 #include <QList>
 #include <QPair>
 #include <QVector3D>
+#include <QQuaternion>
 
 //Our includes
 #include "cwNoteTranformation.h"

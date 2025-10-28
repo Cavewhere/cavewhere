@@ -385,26 +385,26 @@ void cwRHIGltf::buildMeshes(QRhi* rhi, QRhiResourceUpdateBatch* resources)
         mgpu.baseColorFactor = m.material.baseColorFactor;
         mgpu.baseColorTextureIndex = m.material.baseColorTextureIndex;
 
-        mgpu.primitives.reserve(m.primitives.size());
-        for (const auto& p : m.primitives) {
+        mgpu.primitives.reserve(m.geometries.size());
+        for (const auto& p : m.geometries) {
             PrimitiveGPU pg;
 
-            const int stride = (p.vertexCount > 0) ? p.vertexInterleaved.size() / p.vertexCount : 0;
+            const int stride = p.vertexStride(); //p.vertexCount > 0) ? p.vertexInterleaved.size() / p.vertexCount : 0;
             pg.vertexStride = stride;
-            pg.indexCount = p.indexCount;
-            pg.indexFormat = p.indexFormat;
-            pg.hasNormal = p.hasNormal;
-            pg.hasTangent = p.hasTangent;
-            pg.hasTexCoord0 = p.hasTexCoord0;
+            pg.indexCount = p.indices().size();
+            pg.indexFormat = QRhiCommandBuffer::IndexFormat::IndexUInt32;
+            pg.hasNormal = p.attribute(cwGeometry::Semantic::Normal) != nullptr;
+            pg.hasTangent = p.attribute(cwGeometry::Semantic::Tangent) != nullptr;
+            pg.hasTexCoord0 = p.attribute(cwGeometry::Semantic::TexCoord0) != nullptr;
 
-            pg.vertex = rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, p.vertexInterleaved.size());
+            pg.vertex = rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, p.vertexData().size());
             pg.vertex->create();
 
-            pg.index = rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::IndexBuffer, p.indexData.size());
+            pg.index = rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::IndexBuffer, p.indices().size() * sizeof(uint32_t));
             pg.index->create();
 
-            resources->uploadStaticBuffer(pg.vertex, 0, p.vertexInterleaved.size(), p.vertexInterleaved.constData());
-            resources->uploadStaticBuffer(pg.index, 0, p.indexData.size(), p.indexData.constData());
+            resources->uploadStaticBuffer(pg.vertex, 0, p.vertexData().size(), p.vertexData().constData());
+            resources->uploadStaticBuffer(pg.index, 0, p.indices().size() * sizeof(uint32_t), p.indices().constData());
 
             mgpu.primitives.push_back(pg);
         }

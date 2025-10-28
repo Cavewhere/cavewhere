@@ -25,11 +25,8 @@ void cwRenderScraps::addScrapToUpdate(cwScrap *scrap)
         addCommand(command);
 
         uint64_t scrapId = reinterpret_cast<uint64_t>(scrap);
-        geometryItersecter()->addObject(cwGeometryItersecter::Object(this,
-                                                                     scrapId,
-                                                                     triangleData.points(),
-                                                                     triangleData.indices(),
-                                                                     cwGeometry::Triangles));
+        geometryItersecter()->addObject(cwGeometryItersecter::Object({this, scrapId},
+                                                                     triangleData.scrapGeometry()));
     }
 }
 

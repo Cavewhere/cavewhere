@@ -2,6 +2,9 @@
 #include "cwRunningProfileScrapViewMatrix.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
 
+//Qt includes
+#include <QQuaternion>
+
 cwRunningProfileScrapViewMatrix::cwRunningProfileScrapViewMatrix(QObject* parent) :
     cwAbstractScrapViewMatrix(parent, new Data())
 {

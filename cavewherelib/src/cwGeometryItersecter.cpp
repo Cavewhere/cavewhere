@@ -29,11 +29,11 @@ cwGeometryItersecter::cwGeometryItersecter()
  */
 void cwGeometryItersecter::addObject(const cwGeometryItersecter::Object &object)
 {
-    switch(object.type()) {
-    case cwGeometry::Triangles:
+    switch(object.geometry().type()) {
+    case cwGeometry::Type::Triangles:
         addTriangles(object);
         break;
-    case cwGeometry::Lines:
+    case cwGeometry::Type::Lines:
         addLines(object);
         break;
     default:
@@ -96,7 +96,7 @@ void cwGeometryItersecter::setModelMatrix(const Key &objectKey, const QMatrix4x4
 {
     auto iter = findNode(objectKey);
     if (iter != Nodes.end()) {
-        iter->Object.setMatrix(modelMatrix);
+        iter->Object.setModelMatrix(modelMatrix);
     }
 }
 
@@ -173,7 +173,7 @@ double cwGeometryItersecter::intersects(const QRay3D &ray) const
 void cwGeometryItersecter::addTriangles(const cwGeometryItersecter::Object &object)
 {
     //Make sure the object has the right number of indices
-    if(object.indexes().size() % 3 != 0) {
+    if(object.geometry().indices().size() % 3 != 0) {
         qDebug() << "Can't add object" << object.parent() << object.id() << "because it has an invalid indexes" << LOCATION;
         return;
     }
@@ -186,7 +186,11 @@ void cwGeometryItersecter::addTriangles(const cwGeometryItersecter::Object &obje
     QVector3D maxPosition(min, min, min);
     QVector3D minPosition(max, max, max);
 
-    for(const QVector3D position : object.points()) {
+    auto positionAttribute = object.geometry().attribute(cwGeometry::Semantic::Position);
+    Q_ASSERT(positionAttribute);
+
+    for(int i = 0; i < object.geometry().vertexCount(); i++) {
+        auto position = object.geometry().value<QVector3D>(positionAttribute, i);
         maxPosition = QVector3D(std::max(maxPosition.x(), position.x()),
                                 std::max(maxPosition.y(), position.y()),
                                 std::max(maxPosition.z(), position.z()));
@@ -214,14 +218,14 @@ void cwGeometryItersecter::addTriangles(const cwGeometryItersecter::Object &obje
 void cwGeometryItersecter::addLines(const cwGeometryItersecter::Object &object)
 {
     //Make sure the object has the right number of indices
-    if(object.indexes().size() % 2 != 0) {
+    if(object.geometry().indices().size() % 2 != 0) {
         qDebug() << "Can't add object" << object.parent() << object.id() << "because it has an invalid indexes" << LOCATION;
         return;
     }
 
     removeObject(object.parent(), object.id());
 
-    for(int i = 0; i < object.indexes().size(); i+=2) {
+    for(int i = 0; i < object.geometry().indices().size(); i+=2) {
         Node node = Node(object, i);
 
         //Make sure the node is valid
@@ -245,7 +249,7 @@ double cwGeometryItersecter::nearestNeighbor(const QRay3D &ray) const
     double bestDistance = std::numeric_limits<double>::max();
 
     for(const Node& node : Nodes) {
-        if(node.Object.type() == cwGeometry::Triangles) {
+        if(node.Object.geometry().type() == cwGeometry::Type::Triangles) {
             continue;
         }
 
@@ -285,7 +289,7 @@ cwRayTriangleHit cwGeometryItersecter::cwGeometryItersecter::intersectsTriangleD
     cwRayTriangleHit best;
 
     for (const Node& node : Nodes) {
-        if (node.Object.type() != cwGeometry::Triangles) {
+        if (node.Object.geometry().type() != cwGeometry::Type::Triangles) {
             continue;
         }
 
@@ -297,18 +301,21 @@ cwRayTriangleHit cwGeometryItersecter::cwGeometryItersecter::intersectsTriangleD
             continue;
         }
 
-        const QVector<QVector3D>& points = node.Object.points();
-        const QVector<uint>& indices = node.Object.indexes();
+        const cwGeometry& geometry = node.Object.geometry();
+        const QVector<uint32_t>& indices = geometry.indices();
+
+        auto positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
+        Q_ASSERT(positionAttribute);
 
         for (int i = 0; i < indices.size(); i += 3) {
-            const QVector3D a = points.at(indices.at(i + 0));
-            const QVector3D b = points.at(indices.at(i + 1));
-            const QVector3D c = points.at(indices.at(i + 2));
+            const QVector3D a = geometry.value<QVector3D>(positionAttribute, indices.at(i + 0));
+            const QVector3D b = geometry.value<QVector3D>(positionAttribute, indices.at(i + 1));
+            const QVector3D c = geometry.value<QVector3D>(positionAttribute, indices.at(i + 2));
 
             // Optional narrow-phase AABB check per triangle:
             // if (qIsNaN(Node::triangleToBoundingBox(a, b, c).intersection(rayModel))) { continue; }
 
-            cwRayTriangleHit local = rayTriangleMT(rayModel, a, b, c, node.Object.cullBackfaces());
+            cwRayTriangleHit local = rayTriangleMT(rayModel, a, b, c, node.Object.geometry().cullBackfaces());
             if (!local.hit()) {
                 continue;
             }
@@ -393,11 +400,11 @@ cwGeometryItersecter::Node::Node(const cwGeometryItersecter::Object &object, int
     Object(object)
 {
 
-    switch(object.type()) {
-    case cwGeometry::Triangles:
+    switch(object.geometry().type()) {
+    case cwGeometry::Type::Triangles:
         BoundingBox = triangleToBoundingBox(object, indexInIndexes);
         break;
-    case cwGeometry::Lines:
+    case cwGeometry::Type::Lines:
         BoundingBox = lineToBoundingBox(object, indexInIndexes);
         break;
     default:
@@ -420,9 +427,11 @@ cwGeometryItersecter::Node::Node(const QBox3D boundingBox,
  */
 QBox3D cwGeometryItersecter::Node::triangleToBoundingBox(const cwGeometryItersecter::Object & object, int indexInIndexes)
 {
-    QVector3D p1 = object.points().at(object.indexes().at(indexInIndexes));
-    QVector3D p2 = object.points().at(object.indexes().at(indexInIndexes + 1));
-    QVector3D p3 = object.points().at(object.indexes().at(indexInIndexes + 2));
+    auto positionAttribute = object.geometry().attribute(cwGeometry::Semantic::Position);
+    Q_ASSERT(positionAttribute);
+    QVector3D p1 = object.geometry().value<QVector3D>(positionAttribute, object.geometry().indices().at(indexInIndexes));
+    QVector3D p2 = object.geometry().value<QVector3D>(positionAttribute, object.geometry().indices().at(indexInIndexes + 1));
+    QVector3D p3 = object.geometry().value<QVector3D>(positionAttribute, object.geometry().indices().at(indexInIndexes + 2));
 
     return triangleToBoundingBox(p1, p2, p3);
 }
@@ -450,8 +459,10 @@ QBox3D cwGeometryItersecter::Node::triangleToBoundingBox(const QVector3D& p1, co
  */
 QBox3D cwGeometryItersecter::Node::lineToBoundingBox(const cwGeometryItersecter::Object & object, int indexInIndexes)
 {
-    QVector3D p1 = object.points().at(object.indexes().at(indexInIndexes));
-    QVector3D p2 = object.points().at(object.indexes().at(indexInIndexes + 1));
+    auto positionAttribute = object.geometry().attribute(cwGeometry::Semantic::Position);
+    Q_ASSERT(positionAttribute);
+    QVector3D p1 = object.geometry().value<QVector3D>(positionAttribute, object.geometry().indices().at(indexInIndexes));
+    QVector3D p2 = object.geometry().value<QVector3D>(positionAttribute, object.geometry().indices().at(indexInIndexes + 1));
 
     QVector3D maxPoint(qMax(p1.x(), p2.x()),
                        qMax(p1.y(), p2.y()),

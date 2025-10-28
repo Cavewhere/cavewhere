@@ -40,7 +40,7 @@ private:
 
         QRhiBuffer* vertexBuffer = nullptr;
         QRhiBuffer* indexBuffer = nullptr;
-        QRhiBuffer* texCoordBuffer = nullptr;
+        // QRhiBuffer* texCoordBuffer = nullptr;
         // QRhiBuffer* uniformBuffer = nullptr;
         QRhiTexture* texture = nullptr;
         QRhiSampler* sampler = nullptr;

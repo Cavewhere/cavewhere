@@ -29,7 +29,7 @@ private:
         QRhiBuffer* index;
         int vertexStride = 0;
         int indexCount = 0;
-        QRhiCommandBuffer::IndexFormat indexFormat = QRhiCommandBuffer::IndexUInt16;
+        QRhiCommandBuffer::IndexFormat indexFormat = QRhiCommandBuffer::IndexUInt32;
         // Attribute mask (which streams are present in the interleaved buffer)
         bool hasNormal = false;
         bool hasTangent = false;

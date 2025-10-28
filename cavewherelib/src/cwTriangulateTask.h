@@ -123,6 +123,14 @@ private:
         QList<Quad> PartialQuads;
     };
 
+    /**
+     *
+     */
+    struct ScrapGeomtery {
+        QVector<QVector3D> points;
+        QVector<quint32> indices;
+    };
+
     //Inputs
     QList<cwTriangulateInData> Scraps;
     QString ProjectFilename;
@@ -145,12 +153,12 @@ private:
     static QuadDatabase createQuads(const PointGrid& grid, const QPolygonF& polygon);
 
     //For triangulation
-    static cwTriangulatedData createTriangles(const PointGrid& grid, const QSet<int> pointsInOutline, const QuadDatabase& database, const cwTriangulateInData& inScrapData);
-    static QVector<uint> createTrianglesFull(const QuadDatabase& database, const QHash<int, int>& mapGridToOut);
+    static ScrapGeomtery createTriangles(const PointGrid& grid, const QSet<int> pointsInOutline, const QuadDatabase& database, const cwTriangulateInData& inScrapData);
+    static QVector<uint32_t> createTrianglesFull(const QuadDatabase& database, const QHash<int, int>& mapGridToOut);
     static QVector<QPointF> createTrianglesPartial(const PointGrid& grid, const QuadDatabase &database, const QPolygonF& scrapOutline);
     static QPolygonF addPointsOnOverlapingEdges(QPolygonF polygon);
     static QList<QPolygonF> createSimplePolygons(QPolygonF polygon);
-    static void mergeFullAndPartialTriangles(QVector<QVector3D>& pointSet, QVector<uint>& indices, const QVector<QPointF>& unAddedTriangles);
+    static void mergeFullAndPartialTriangles(QVector<QVector3D>& pointSet, QVector<uint32_t>& indices, const QVector<QPointF>& unAddedTriangles);
 
     //For transformation from note coords to local note coords
     static QMatrix4x4 mapToScrapCoordinates(const QRectF& bounds);

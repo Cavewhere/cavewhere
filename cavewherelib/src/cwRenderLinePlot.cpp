@@ -38,10 +38,15 @@ void cwRenderLinePlot::setGeometry(QVector<QVector3D> pointData,
 
     m_data.setValue(data);
 
-    geometryItersecter()->addObject(cwGeometryItersecter::Object(this, 0,
-                                                                 pointData,
-                                                                 indexData,
-                                                                 cwGeometry::Lines));
+    cwGeometry geometry {
+        { cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3 }
+    };
+    geometry.set(cwGeometry::Semantic::Position, pointData);
+    geometry.setIndices(indexData);
+    geometry.setType(cwGeometry::Type::Lines);
+
+    geometryItersecter()->addObject(cwGeometryItersecter::Object(cwGeometryItersecter::Key{this, 0},
+                                                                 std::move(geometry)));
 
     update();
 }

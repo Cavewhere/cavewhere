@@ -117,19 +117,19 @@ cwTriangulatedData cwTriangulateTask::triangulateGeometry(const cwTriangulateInD
     QuadDatabase quads = createQuads(pointGrid, scrap.outline());
 
     //Triangulate the quads (this will update the outputs data)
-    cwTriangulatedData triangleData = createTriangles(pointGrid, gridPointsInScrap, quads, scrap);
+    ScrapGeomtery scrapGeometry = createTriangles(pointGrid, gridPointsInScrap, quads, scrap);
 
     //Create the matrix that converts the normalized note coords to normalized scrap coords
     QMatrix4x4 toLocal = mapToScrapCoordinates(bounds);
 
     //Convert the normalized points to local note points
-    QVector<QVector3D> localNotePoints = mapToLocalNoteCoordinates(toLocal, triangleData.points());
+    QVector<QVector3D> localNotePoints = mapToLocalNoteCoordinates(toLocal, scrapGeometry.points);
 
     //Create the texture coordinates
     QVector<QVector2D> texCoords = mapTexCoordinates(localNotePoints);
 
     //Morph the points for the scrap
-    QVector<QVector3D> points = morphPoints(triangleData.points(), scrap, toLocal, *croppedImage);
+    QVector<QVector3D> points = morphPoints(scrapGeometry.points, scrap, toLocal, *croppedImage);
 
     //Morph the lead points for the scrap
     QVector<QVector3D> leadPoints = morphPoints(leadPositionToVector3D(scrap.leads()),
@@ -138,12 +138,19 @@ cwTriangulatedData cwTriangulateTask::triangulateGeometry(const cwTriangulateInD
                                                 *croppedImage);
 
 
+    cwGeometry geometry {
+        { cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3 },
+        { cwGeometry::Semantic::TexCoord0, cwGeometry::AttributeFormat::Vec2 }
+    };
+    geometry.set(cwGeometry::Semantic::Position, points);
+    geometry.set(cwGeometry::Semantic::TexCoord0, texCoords);
+    geometry.setIndices(scrapGeometry.indices);
+    geometry.setCullBackfaces(false);
+
     cwTriangulatedData outputData;
     outputData.setCroppedImageData(imageData);
     outputData.setCroppedImage(croppedImage);
-    outputData.setIndices(triangleData.indices());
-    outputData.setPoints(points);
-    outputData.setTexCoords(texCoords);
+    outputData.setScrapGeometry(geometry);
     outputData.setLeadPoints(leadPoints);
 
     return outputData;
@@ -293,7 +300,7 @@ cwTriangulateTask::QuadDatabase cwTriangulateTask::createQuads(const cwTriangula
 
     This returns the points that make up the polygon (these are in original note cooridates, before cropping)
  */
-cwTriangulatedData cwTriangulateTask::createTriangles(const cwTriangulateTask::PointGrid &grid,
+cwTriangulateTask::ScrapGeomtery cwTriangulateTask::createTriangles(const cwTriangulateTask::PointGrid &grid,
                                                       const QSet<int> pointsContainedInOutline,
                                                       const cwTriangulateTask::QuadDatabase &database,
                                                       const cwTriangulateInData &inScrapData) {
@@ -312,14 +319,14 @@ cwTriangulatedData cwTriangulateTask::createTriangles(const cwTriangulateTask::P
     }
 
     //Do triangulation
-    QVector<uint> fullTriangleIndices = createTrianglesFull(database, mapGridToOutputIndices);
+    QVector<uint32_t> fullTriangleIndices = createTrianglesFull(database, mapGridToOutputIndices);
     QVector<QPointF> partialTriangles = createTrianglesPartial(grid, database, inScrapData.outline());
 
     //Get the final triangle set
     mergeFullAndPartialTriangles(points, fullTriangleIndices, partialTriangles);
 
     //Optimize triangle indices for graphics card triangle cache preformance
-    QVector<uint> optimizedIndices;
+    QVector<uint32_t> optimizedIndices;
     optimizedIndices.reserve(fullTriangleIndices.size());
     optimizedIndices.resize(fullTriangleIndices.size());
 
@@ -335,11 +342,22 @@ cwTriangulatedData cwTriangulateTask::createTriangles(const cwTriangulateTask::P
     //                        24); //Optimize for 24 triangle count
 #endif
 
-    //Set the output's data
-    cwTriangulatedData data;
-    data.setIndices(optimizedIndices);
-    data.setPoints(points);
-    return data;
+    return {
+        points,
+        optimizedIndices
+    };
+
+    // //Set the output's data
+    // cwGeometry geometry {
+    //     { cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3 },
+    //     { cwGeometry::Semantic::TexCoord0, cwGeometry::AttributeFormat::Vec2 }
+    // };
+    // geometry.setIndexes(optimizedIndices);
+    // geometry.set(cwGeometry::Semantic::Position, points);
+
+    // cwTriangulatedData data;
+    // data.setScrapGeometry(std::move(geometry));
+    // return data;
 }
 
 /**
@@ -349,18 +367,18 @@ cwTriangulatedData cwTriangulateTask::createTriangles(const cwTriangulateTask::P
 
     The grid is used to get the quad
   */
-QVector<uint> cwTriangulateTask::createTrianglesFull(const cwTriangulateTask::QuadDatabase &database,
+QVector<uint32_t> cwTriangulateTask::createTrianglesFull(const cwTriangulateTask::QuadDatabase &database,
                                                      const QHash<int, int> &mapGridToOutput) {
 
-    QVector<uint> triangles;
+    QVector<uint32_t> triangles;
 
     //For all the quads
     foreach(const Quad& quad, database.FullQuads) {
         //Map the quad to the new outputIndices
-        uint topLeft = (uint)mapGridToOutput.value(quad.topLeft(), 0);
-        uint topRight = (uint)mapGridToOutput.value(quad.topRight(), 0);
-        uint bottomLeft = (uint)mapGridToOutput.value(quad.bottomLeft(), 0);
-        uint bottomRight = (uint)mapGridToOutput.value(quad.bottomRight(), 0);
+        uint32_t topLeft = (uint32_t)mapGridToOutput.value(quad.topLeft(), 0);
+        uint32_t topRight = (uint32_t)mapGridToOutput.value(quad.topRight(), 0);
+        uint32_t bottomLeft = (uint32_t)mapGridToOutput.value(quad.bottomLeft(), 0);
+        uint32_t bottomRight = (uint32_t)mapGridToOutput.value(quad.bottomRight(), 0);
 
         //Top triangle
         triangles.append(topLeft);
@@ -572,7 +590,7 @@ QList<QPolygonF> cwTriangulateTask::createSimplePolygons(QPolygonF polygon) {
     This function assumes that the points in pointSet are already unique before calling this functions.
   */
 void cwTriangulateTask::mergeFullAndPartialTriangles(QVector<QVector3D> &pointSet,
-                                                     QVector<uint> &indices,
+                                                     QVector<uint32_t> &indices,
                                                      const QVector<QPointF>& unAddedTriangles)
 {
     static const float PointTolerance = 0.000001f;
@@ -580,7 +598,7 @@ void cwTriangulateTask::mergeFullAndPartialTriangles(QVector<QVector3D> &pointSe
     foreach(QPointF unAddedPoint, unAddedTriangles) {
 
         bool foundExistIndex = false;
-        uint index;
+        uint32_t index;
 
         //Search for the point in the point set
         //This is a slow linear search, could be replace with a kd-tree of the pointSet
@@ -592,7 +610,7 @@ void cwTriangulateTask::mergeFullAndPartialTriangles(QVector<QVector3D> &pointSe
 
             if(xDelta <= PointTolerance && yDelta <= PointTolerance) {
                 //Hey we found the point
-                index = (uint)i;
+                index = (uint32_t)i;
                 foundExistIndex = true;
                 break;
             }
@@ -600,7 +618,7 @@ void cwTriangulateTask::mergeFullAndPartialTriangles(QVector<QVector3D> &pointSe
 
         //If we didn't find the index this is a new point, so add it to the pointSet
         if(!foundExistIndex) {
-            index = (uint)pointSet.size(); //The last index
+            index = (uint32_t)pointSet.size(); //The last index
             pointSet.append(QVector3D(unAddedPoint));
         }
 

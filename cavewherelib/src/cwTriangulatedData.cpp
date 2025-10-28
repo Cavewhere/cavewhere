@@ -21,7 +21,5 @@ cwTriangulatedData::cwTriangulatedData() :
 bool cwTriangulatedData::isNull() const
 {
     return !Data->croppedImage->isValid() &&
-            Data->indices.isEmpty() &&
-            Data->points.isEmpty() &&
-            Data->texCoords.isEmpty();
+           Data->scrapGeometry.isEmpty();
 }

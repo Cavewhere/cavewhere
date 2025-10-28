@@ -93,12 +93,11 @@ void cwRhiScraps::initializePipeline(const ResourceUpdateData& data)
     // Input layout
     QRhiVertexInputLayout inputLayout;
     inputLayout.setBindings({
-        { sizeof(QVector3D) }, // Vertex positions
-        { sizeof(QVector2D) }  // Texture coordinates
+        sizeof(QVector3D) + sizeof(QVector2D), // Vertex positions and Texture coordinates
     });
     inputLayout.setAttributes({
         { 0, 0, QRhiVertexInputAttribute::Float3, 0 },
-        { 1, 1, QRhiVertexInputAttribute::Float2, 0 }
+        { 0, 1, QRhiVertexInputAttribute::Float2, sizeof(QVector3D) /*offset*/ }
     });
     m_pipeline->setVertexInputLayout(inputLayout);
     m_pipeline->setTopology(QRhiGraphicsPipeline::Triangles);
@@ -115,7 +114,7 @@ void cwRhiScraps::synchronize(const SynchronizeData& data)
     cwRenderScraps* renderScraps = static_cast<cwRenderScraps*>(data.object);
 
     m_renderScraps = renderScraps;
-    m_project = renderScraps->project();
+
     // m_futureManagerToken = renderScraps->m_futureManagerToken;
     m_visible = renderScraps->isVisible();
 
@@ -183,29 +182,30 @@ void cwRhiScraps::updateResources(const ResourceUpdateData& data)
             // Update buffers
             const cwTriangulatedData& td = scrap->geometry;
 
-            int vertexBufferSize = td.points().size() * sizeof(QVector3D);
-            int texCoordBufferSize = td.texCoords().size() * sizeof(QVector2D);
-            int indexBufferSize = td.indices().size() * sizeof(uint);
+            // int vertexBufferSize = td.points().size() * sizeof(QVector3D);
+            int vertexBufferSize = td.scrapGeometry().vertexData().size();
+            // int texCoordBufferSize = td.texCoords().size() * sizeof(QVector2D);
+            int indexBufferSize = td.scrapGeometry().indices().size() * sizeof(uint32_t);
 
             if (scrap->vertexBuffer->size() != vertexBufferSize) {
                 scrap->vertexBuffer->setSize(vertexBufferSize);
                 scrap->vertexBuffer->create();
             }
-            batch->updateDynamicBuffer(scrap->vertexBuffer, 0, vertexBufferSize, td.points().constData());
+            batch->updateDynamicBuffer(scrap->vertexBuffer, 0, vertexBufferSize, td.scrapGeometry().vertexData());
 
-            if (scrap->texCoordBuffer->size() != texCoordBufferSize) {
-                scrap->texCoordBuffer->setSize(texCoordBufferSize);
-                scrap->texCoordBuffer->create();
-            }
-            batch->updateDynamicBuffer(scrap->texCoordBuffer, 0, texCoordBufferSize, td.texCoords().constData());
+            // if (scrap->texCoordBuffer->size() != texCoordBufferSize) {
+            //     scrap->texCoordBuffer->setSize(texCoordBufferSize);
+            //     scrap->texCoordBuffer->create();
+            // }
+            // batch->updateDynamicBuffer(scrap->texCoordBuffer, 0, texCoordBufferSize, td.texCoords().constData());
 
             if (scrap->indexBuffer->size() != indexBufferSize) {
                 scrap->indexBuffer->setSize(indexBufferSize);
                 scrap->indexBuffer->create();
             }
-            batch->updateDynamicBuffer(scrap->indexBuffer, 0, indexBufferSize, td.indices().constData());
+            batch->updateDynamicBuffer(scrap->indexBuffer, 0, indexBufferSize, td.scrapGeometry().indices().constData());
 
-            scrap->numberOfIndices = td.indices().size();
+            scrap->numberOfIndices = td.scrapGeometry().indices().size();
             scrap->geometryNeedsUpdate = false;
         }
 
@@ -249,6 +249,9 @@ void cwRhiScraps::updateResources(const ResourceUpdateData& data)
             }
             scrap->textureNeedsUpdate = false;
         }
+
+        //Deallocate to scrap geometry
+        scrap->geometry = {};
     }
 }
 
@@ -267,11 +270,14 @@ void cwRhiScraps::render(const RenderData& data)
         if(scrap->numberOfIndices > 0) {
             data.cb->setShaderResources(scrap->srb);
 
-            const QRhiCommandBuffer::VertexInput vertexInputs[] = {
-                { scrap->vertexBuffer, 0 },
-                { scrap->texCoordBuffer, 0 }
-            };
-            data.cb->setVertexInput(0, 2, vertexInputs, scrap->indexBuffer, 0, QRhiCommandBuffer::IndexUInt32);
+            // const QRhiCommandBuffer::VertexInput vertexInputs[] = {
+            //     { scrap->vertexBuffer, 0 },
+            //     { scrap->texCoordBuffer, 0 }
+            // };
+
+            const QRhiCommandBuffer::VertexInput vbind(scrap->vertexBuffer, 0);
+
+            data.cb->setVertexInput(0, 1, &vbind, scrap->indexBuffer, 0, QRhiCommandBuffer::IndexUInt32);
 
             // Q_ASSERT(scrap->numberOfIndices > 0); //If this fails the scrap isn't generated correctly
             data.cb->drawIndexed(scrap->numberOfIndices);
@@ -286,7 +292,7 @@ cwRhiScraps::RhiScrap::RhiScrap()
 cwRhiScraps::RhiScrap::~RhiScrap()
 {
     delete vertexBuffer;
-    delete texCoordBuffer;
+    // delete texCoordBuffer;
     delete indexBuffer;
     delete texture;
     delete srb;
@@ -304,8 +310,8 @@ void cwRhiScraps::RhiScrap::initializeResources(const ResourceUpdateData& data, 
     vertexBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, 0);
     vertexBuffer->create();
 
-    texCoordBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, 0);
-    texCoordBuffer->create();
+    // texCoordBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, 0);
+    // texCoordBuffer->create();
 
     indexBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::IndexBuffer, 0);
     indexBuffer->create();

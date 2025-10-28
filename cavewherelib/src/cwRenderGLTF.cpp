@@ -115,18 +115,21 @@ cwRenderGLTF::Load cwRenderGLTF::toIntersectors(cwRenderObject* renderObject,
 
     uint64_t meshId = 0;
     for (const MeshCPU& mesh : data.meshes) {
-        cwGeometryItersecter::Key key(renderObject, meshId);
+        for(const auto& geometry : mesh.geometries) {
+            cwGeometryItersecter::Key key(renderObject, meshId);
 
-        auto geometry = mesh.toGeometry();
-        geometry.transform = geometry.transform * modelMatrix;
+            // geometry.transform = geometry.transform * modelMatrix;
 
-        cwGeometryItersecter::Object object(
-            key,
-            std::move(geometry)
-            );
-        keys.append(key);
-        objects.append(object);
-        ++meshId;
+            cwGeometryItersecter::Object object(
+                key,
+                std::move(geometry),
+                modelMatrix
+                );
+
+            keys.append(key);
+            objects.append(object);
+            ++meshId;
+        }
     }
 
     return Load {

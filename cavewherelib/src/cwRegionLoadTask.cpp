@@ -578,7 +578,7 @@ cwTriangulatedData cwRegionLoadTask::loadTriangulatedData(const CavewhereProto::
         texCoords[i] = loadVector2D(protoTriangulatedData.texcoords(i));
     }
 
-    QVector<uint> indexes;
+    QVector<uint32_t> indexes;
     indexes.resize(protoTriangulatedData.indices_size());
     for(int i = 0; i < protoTriangulatedData.indices_size(); i++) {
         indexes[i] = protoTriangulatedData.indices(i);
@@ -592,9 +592,12 @@ cwTriangulatedData cwRegionLoadTask::loadTriangulatedData(const CavewhereProto::
 
     bool stale = protoTriangulatedData.stale();
 
-    data.setPoints(points);
-    data.setTexCoords(texCoords);
-    data.setIndices(indexes);
+    //FIXME: save cwGeometry
+
+    // data.setPoints(points);
+    // data.setTexCoords(texCoords);
+    // data.setIndices(indexes);
+
     data.setLeadPoints(leadPositions);
     data.setStale(stale);
 

@@ -156,7 +156,7 @@ private slots:
  * @param scrapPointer
  * @return The hash for a weak pointer cwScrap
  */
-inline uint qHash(const QWeakPointer<cwScrap> &scrapPointer)
+inline uint32_t qHash(const QWeakPointer<cwScrap> &scrapPointer)
 {
     return qHash(scrapPointer.toStrongRef().data());
 }

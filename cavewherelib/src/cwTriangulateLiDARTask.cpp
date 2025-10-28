@@ -42,9 +42,11 @@ QFuture<Result<cw::gltf::SceneCPU>> cwTriangulateLiDARTask::triangulate(const QL
 
         //Morph the vertexes
         for(auto& mesh : gltf.meshes) {
-            for(auto& primitive : mesh.primitives) {
-                for(size_t index = 0; index < primitive.vertexCount; index++) {
-                    QVector3D vertex = primitive.vertex(index);
+            for(auto& geometry : mesh.geometries) {
+
+                const auto positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
+                for(size_t index = 0; index < geometry.vertexCount(); index++) {
+                    QVector3D vertex = geometry.value<QVector3D>(positionAttribute, index);
                     QVector3D newVertex = cwTriangulateTask::morphPoint(visibleStations,
                                                                         data.modelMatrix(),
                                                                         // worldMatrix,
@@ -52,8 +54,7 @@ QFuture<Result<cw::gltf::SceneCPU>> cwTriangulateLiDARTask::triangulate(const QL
                                                                         vertex);
 
                     // qDebug() << "New:" << newVertex << "old:" << vertex;
-
-                    primitive.setVertex(newVertex, index);
+                    geometry.set(positionAttribute, index, newVertex);
                 }
             }
         }

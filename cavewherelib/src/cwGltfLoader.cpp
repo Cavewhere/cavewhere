@@ -58,161 +58,177 @@ static QRhiCommandBuffer::IndexFormat toRhiIndexFormat(int gltfComponentType)
 
 // ---------- CPU builders ----------
 
-static PrimitiveCPU buildPrimitiveCPU(const tinygltf::Model& model,
-                                      const tinygltf::Primitive& prim)
+// Build a cwGeometry from a glTF primitive
+static cwGeometry buildGeometryFromPrimitive(const tinygltf::Model& model,
+                                             const tinygltf::Primitive& prim)
 {
+    // POSITION (required)
     const auto posIt = prim.attributes.find("POSITION");
     Q_ASSERT(posIt != prim.attributes.end());
-
     const tinygltf::Accessor& posAcc = model.accessors[posIt->second];
-    AttributeView posView = attributeView(model, posAcc);
     Q_ASSERT(posAcc.type == TINYGLTF_TYPE_VEC3);
 
-    AttributeView norView;
-    bool hasNormal = false;
-    if (auto it = prim.attributes.find("NORMAL"); it != prim.attributes.end()) {
-        const tinygltf::Accessor& acc = model.accessors[it->second];
+    // Optional attributes
+    const bool hasNormal   = prim.attributes.find("NORMAL")      != prim.attributes.end();
+    const bool hasTangent  = prim.attributes.find("TANGENT")     != prim.attributes.end();
+    const bool hasTex0     = prim.attributes.find("TEXCOORD_0")  != prim.attributes.end();
+
+    // Views
+    AttributeView posView = attributeView(model, posAcc);
+
+    AttributeView norView{};
+    if (hasNormal) {
+        const tinygltf::Accessor& acc = model.accessors.at(prim.attributes.at("NORMAL"));
         norView = attributeView(model, acc);
-        hasNormal = true;
     }
 
-    AttributeView tanView;
-    bool hasTangent = false;
-    if (auto it = prim.attributes.find("TANGENT"); it != prim.attributes.end()) {
-        const tinygltf::Accessor& acc = model.accessors[it->second];
-        tanView = attributeView(model, acc); // vec4
-        hasTangent = true;
+    AttributeView tanView{};
+    if (hasTangent) {
+        const tinygltf::Accessor& acc = model.accessors.at(prim.attributes.at("TANGENT"));
+        tanView = attributeView(model, acc);
     }
 
-    AttributeView uv0View;
-    bool hasTexCoord0 = false;
-    if (auto it = prim.attributes.find("TEXCOORD_0"); it != prim.attributes.end()) {
-        const tinygltf::Accessor& acc = model.accessors[it->second];
-        uv0View = attributeView(model, acc); // vec2
-        hasTexCoord0 = true;
+    AttributeView uv0View{};
+    if (hasTex0) {
+        const tinygltf::Accessor& acc = model.accessors.at(prim.attributes.at("TEXCOORD_0"));
+        uv0View = attributeView(model, acc);
     }
 
     const int vertexCount = posAcc.count;
 
-    struct Layout {
-        int positionOffset = 0;
-        int normalOffset = -1;
-        int tangentOffset = -1;
-        int texCoord0Offset = -1;
-        int stride = 0;
-    } layout;
-
-    layout.positionOffset = 0;
-    layout.stride = sizeof(float) * 3;
-    if (hasNormal) {
-        layout.normalOffset = layout.stride;
-        layout.stride += sizeof(float) * 3;
-    }
-    if (hasTangent) {
-        layout.tangentOffset = layout.stride;
-        layout.stride += sizeof(float) * 4;
-    }
-    if (hasTexCoord0) {
-        layout.texCoord0Offset = layout.stride;
-        layout.stride += sizeof(float) * 2;
-    }
-
-    QByteArray interleaved;
-    interleaved.resize(layout.stride * vertexCount);
-
-    auto writeVec = [&](uint8_t* dst, const AttributeView& src, int vertexIndex, int requiredComps, bool isNormalized) {
-        const uint8_t* srcPtr = src.data + vertexIndex * src.byteStride;
-
-        for (int c = 0; c < requiredComps; c++) {
-            float f = 0.0f;
-
-            switch (src.componentSize) {
-            case 1: {
-                const uint8_t* v = reinterpret_cast<const uint8_t*>(srcPtr) + c;
-                if (isNormalized) {
-                    f = static_cast<float>(*v) / 255.0f;
-                } else {
-                    f = static_cast<float>(*v);
-                }
-            } break;
-            case 2: {
-                const uint16_t* v = reinterpret_cast<const uint16_t*>(srcPtr);
-                if (isNormalized) {
-                    f = static_cast<float>(v[c]) / 65535.0f;
-                } else {
-                    f = static_cast<float>(v[c]);
-                }
-            } break;
-            case 4: {
-                const float* v = reinterpret_cast<const float*>(srcPtr);
-                f = v[c];
-            } break;
-            default: {
-                // Extend for other component sizes if needed.
-            } break;
-            }
-
-            reinterpret_cast<float*>(dst)[c] = f;
-        }
+    // Build geometry with a declarative layout
+    QVector<cwGeometry::AttributeDesc> geometryDescription {
+        { cwGeometry::Semantic::Position,  cwGeometry::AttributeFormat::Vec3 }
     };
 
-    for (int i = 0; i < vertexCount; i++) {
-        uint8_t* base = reinterpret_cast<uint8_t*>(interleaved.data()) + i * layout.stride;
+    if(hasNormal) {
+        geometryDescription.append({cwGeometry::Semantic::Normal, cwGeometry::AttributeFormat::Vec3});
+    }
 
-        // POSITION (float3)
-        std::memcpy(base + layout.positionOffset,
-                    posView.data + i * posView.byteStride,
-                    sizeof(float) * 3);
+    if(hasTangent) {
+        geometryDescription.append({cwGeometry::Semantic::Tangent, cwGeometry::AttributeFormat::Vec4});
+    }
 
-        if (hasNormal) {
-            writeVec(base + layout.normalOffset, norView, i, 3, norView.normalized);
+    if(hasTex0) {
+        geometryDescription.append({cwGeometry::Semantic::TexCoord0, cwGeometry::AttributeFormat::Vec2});
+    }
+
+    cwGeometry geometry(geometryDescription);
+
+    // Pre-size
+    geometry.resizeVertices(vertexCount);
+
+    // Helper to read a vector attribute into a QVector<T> with normalization support
+    auto readVec = [](const AttributeView& src, int count, int comps, bool normalized) -> QVector<float> {
+        QVector<float> out;
+        out.resize(count * comps);
+        for (int i = 0; i < count; i++) {
+            const uint8_t* srcPtr = src.data + i * src.byteStride;
+            for (int c = 0; c < comps; c++) {
+                float f = 0.0f;
+                switch (src.componentSize) {
+                case 1: {
+                    const uint8_t* v = reinterpret_cast<const uint8_t*>(srcPtr) + c;
+                    f = normalized ? (static_cast<float>(*v) / 255.0f) : static_cast<float>(*v);
+                } break;
+                case 2: {
+                    const uint16_t* v = reinterpret_cast<const uint16_t*>(srcPtr);
+                    f = normalized ? (static_cast<float>(v[c]) / 65535.0f) : static_cast<float>(v[c]);
+                } break;
+                case 4: {
+                    const float* v = reinterpret_cast<const float*>(srcPtr);
+                    f = v[c];
+                } break;
+                default: {
+                    Q_ASSERT(false);
+                } break;
+                }
+                out[i * comps + c] = f;
+            }
         }
-        if (hasTangent) {
-            writeVec(base + layout.tangentOffset, tanView, i, 4, tanView.normalized);
-        }
-        if (hasTexCoord0) {
-            writeVec(base + layout.texCoord0Offset, uv0View, i, 2, uv0View.normalized);
+        return out;
+    };
+
+    // Positions (vec3). glTF requires float here, but we still use the generic path.
+    {
+        QVector<float> flat = readVec(posView, vertexCount, 3, posView.normalized);
+        auto attribute = geometry.attribute(cwGeometry::Semantic::Position);
+        for (int i = 0; i < vertexCount; i++) {
+            geometry.set(attribute, i, QVector3D(flat[i*3+0], flat[i*3+1], flat[i*3+2]));
         }
     }
 
-    PrimitiveCPU out;
-    out.vertexInterleaved = interleaved;
-    out.vertexCount = vertexCount;
-    out.hasNormal = hasNormal;
-    out.hasTangent = hasTangent;
-    out.hasTexCoord0 = hasTexCoord0;
+    if (hasNormal) {
+        QVector<float> flat = readVec(norView, vertexCount, 3, norView.normalized);
+        auto attribute = geometry.attribute(cwGeometry::Semantic::Normal);
+        for (int i = 0; i < vertexCount; i++) {
+            geometry.set(attribute, i, QVector3D(flat[i * 3 + 0], flat[i * 3 + 1], flat[i * 3 + 2]));
+        }
+    }
 
+    if (hasTangent) {
+        QVector<float> flat = readVec(tanView, vertexCount, 4, tanView.normalized);
+        auto attribute = geometry.attribute(cwGeometry::Semantic::Tangent);
+        for (int i = 0; i < vertexCount; i++) {
+            geometry.set(attribute, i, QVector4D(flat[i * 4 + 0], flat[i * 4 + 1], flat[i * 4 + 2], flat[i * 4 + 3]));
+        }
+    }
+
+    if (hasTex0) {
+        QVector<float> flat = readVec(uv0View, vertexCount, 2, uv0View.normalized);
+        auto attribute = geometry.attribute(cwGeometry::Semantic::TexCoord0);
+        for (int i = 0; i < vertexCount; i++) {
+            geometry.set(attribute, i, QVector2D(flat[i * 2 + 0], flat[i * 2 + 1]));
+        }
+    }
+
+    // Primitive type
+    switch (prim.mode) {
+    case TINYGLTF_MODE_TRIANGLES: geometry.setType(cwGeometry::Type::Triangles); break;
+    // case TINYGLTF_MODE_LINES:     geometry.setType(cwGeometry::Type::Lines);     break;
+    default:                      geometry.setType(cwGeometry::Type::None);      break;
+    }
+
+    // Indices
+    QVector<uint32_t> indices;
     if (prim.indices >= 0) {
         const tinygltf::Accessor& idxAcc = model.accessors[prim.indices];
         AttributeView idxView = attributeView(model, idxAcc);
+        indices.resize(idxAcc.count);
 
-        // Expand 8-bit indices to 16-bit (QRhi has no 8-bit index format)
-        if (idxAcc.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE) {
-            out.indexFormat = QRhiCommandBuffer::IndexUInt16;
-            out.indexCount = idxAcc.count;
-            out.indexData.resize(sizeof(uint16_t) * idxAcc.count);
-            const uint8_t* src = reinterpret_cast<const uint8_t*>(idxView.data);
-            uint16_t* dst = reinterpret_cast<uint16_t*>(out.indexData.data());
+        const uint8_t* base = idxView.data;
+        switch (idxAcc.componentType) {
+        case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE: {
             for (int i = 0; i < idxAcc.count; i++) {
-                dst[i] = static_cast<uint16_t>(src[i]);
+                indices[i] = static_cast<uint32_t>(*(base + i));
             }
-        } else {
-            out.indexFormat = toRhiIndexFormat(idxAcc.componentType);
-            out.indexCount = idxAcc.count;
-            out.indexData = QByteArray(reinterpret_cast<const char*>(idxView.data), idxView.byteLength);
+        } break;
+        case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT: {
+            const uint16_t* src = reinterpret_cast<const uint16_t*>(base);
+            for (int i = 0; i < idxAcc.count; i++) {
+                indices[i] = static_cast<uint32_t>(src[i]);
+            }
+        } break;
+        case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT: {
+            const uint32_t* src = reinterpret_cast<const uint32_t*>(base);
+            for (int i = 0; i < idxAcc.count; i++) {
+                indices[i] = static_cast<uint32_t>(src[i]);
+            }
+        } break;
+        default: {
+            Q_ASSERT(false);
+        } break;
         }
     } else {
-        // Generate 0..N-1 indices
-        out.indexFormat = QRhiCommandBuffer::IndexUInt32;
-        out.indexCount = vertexCount;
-        out.indexData.resize(sizeof(uint32_t) * vertexCount);
-        auto* dst = reinterpret_cast<uint32_t*>(out.indexData.data());
+        // 0..N-1
+        indices.resize(vertexCount);
         for (int i = 0; i < vertexCount; i++) {
-            dst[i] = static_cast<uint32_t>(i);
+            indices[i] = static_cast<uint32_t>(i);
         }
     }
+    geometry.setIndices(std::move(indices));
 
-    return out;
+    return geometry;
 }
 
 static TextureCPU loadTextureCPU(const tinygltf::Model& model,
@@ -323,7 +339,7 @@ static void gatherMeshesRecursive(const tinygltf::Model& model,
         m.modelMatrix = world;
 
         for (const auto& prim : gltfMesh.primitives) {
-            m.primitives.push_back(buildPrimitiveCPU(model, prim));
+            m.geometries.push_back(buildGeometryFromPrimitive(model, prim));
             // Simple “dominant” material; switch to per-primitive if needed
             m.material = loadMaterialCPU(model, prim.material);
         }
@@ -392,7 +408,7 @@ void SceneCPU::dump() const
     for (int mi = 0; mi < meshes.size(); ++mi) {
         const MeshCPU& mesh = meshes[mi];
         qDebug() << "  Mesh" << mi
-                 << "Primitives:" << mesh.primitives.size()
+                 << "Primitives:" << mesh.geometries.size()
                  << "Matrix:" << mesh.modelMatrix;
 
         // Material
@@ -405,18 +421,9 @@ void SceneCPU::dump() const
                  << " metallic=" << mat.metallicFactor
                  << " roughness=" << mat.roughnessFactor;
 
-        // Primitives
-        for (int pi = 0; pi < mesh.primitives.size(); ++pi) {
-            const PrimitiveCPU& prim = mesh.primitives[pi];
-            qDebug() << "    Primitive" << pi
-                     << " verts=" << prim.vertexCount
-                     << " idx=" << prim.indexCount
-                     << " stride=" << (prim.vertexCount > 0
-                                           ? prim.vertexInterleaved.size() / prim.vertexCount
-                                           : 0)
-                     << " hasNormal=" << prim.hasNormal
-                     << " hasTangent=" << prim.hasTangent
-                     << " hasTexCoord0=" << prim.hasTexCoord0;
+        // Geometry
+        for (int pi = 0; pi < mesh.geometries.size(); ++pi) {
+            mesh.geometries[pi].dump();
         }
     }
 
@@ -428,112 +435,6 @@ void SceneCPU::dump() const
                  << " isSRGB=" << tex.isSRGB;
     }
 }
-
-cwGeometry MeshCPU::toGeometry() const
-{
-    // // Helper: compute byte stride of an interleaved vertex (pos [+ normal] [+ tangent] [+ uv])
-    // auto vertexStrideBytes = [](const PrimitiveCPU& primitive) -> int {
-    //     int floatComponentCount = 3; // position: vec3 (always present)
-    //     if (primitive.hasNormal) {
-    //         floatComponentCount += 3; // normal: vec3
-    //     }
-    //     if (primitive.hasTangent) {
-    //         floatComponentCount += 4; // tangent: vec4
-    //     }
-    //     if (primitive.hasTexCoord0) {
-    //         floatComponentCount += 2; // uv0: vec2
-    //     }
-    //     return static_cast<int>(floatComponentCount * sizeof(float));
-    // };
-
-    // Lambda: extract and transform positions from all primitives in a mesh
-    auto extractPoints = [](const MeshCPU& mesh) -> QVector<QVector3D> {
-        // Pre-reserve to avoid reallocations
-        int totalVertexCount = 0;
-        for (const PrimitiveCPU& primitive : mesh.primitives) {
-            totalVertexCount += primitive.vertexCount;
-        }
-
-        QVector<QVector3D> points;
-        points.reserve(totalVertexCount);
-
-        for (const PrimitiveCPU& primitive : mesh.primitives) {
-            // const int stride = primitive.vertexStrideBytes();
-            // const char* const raw = primitive.vertexInterleaved.constData();
-
-            for (int vertexIndex = 0; vertexIndex < primitive.vertexCount; ++vertexIndex) {
-
-
-                // const char* const vptr = raw + vertexIndex * stride;
-                // const float* const floats = reinterpret_cast<const float*>(vptr);
-
-                // position is always the first 3 floats in the interleaved layout
-                QVector3D position = primitive.vertex(vertexIndex);
-
-                // apply world transform (modelMatrix is already world from scene graph)
-                const QVector4D transformed = mesh.modelMatrix * QVector4D(position, 1.0f);
-                points.append(transformed.toVector3D());
-            }
-        }
-
-        return points;
-    };
-
-    // Lambda: extract (and rebase) indices from all primitives in a mesh
-    auto extractIndexes = [](const MeshCPU& mesh) -> QVector<uint> {
-        // Pre-reserve to avoid reallocations
-        int totalIndexCount = 0;
-        for (const PrimitiveCPU& primitive : mesh.primitives) {
-            totalIndexCount += primitive.indexCount;
-        }
-
-        QVector<uint> indexes;
-        indexes.reserve(totalIndexCount);
-
-        uint baseVertex = 0; // increases after each primitive to rebase indices
-
-        for (const PrimitiveCPU& primitive : mesh.primitives) {
-            const bool isUint32 = (primitive.indexFormat == QRhiCommandBuffer::IndexUInt32);
-
-            if (isUint32) {
-                const uint32_t* const data32 =
-                    reinterpret_cast<const uint32_t*>(primitive.indexData.constData());
-                const int count = primitive.indexCount;
-
-                for (int i = 0; i < count; ++i) {
-                    indexes.append(static_cast<uint>(data32[i]) + baseVertex);
-                }
-            } else {
-                // default/other → treat as 16-bit
-                const uint16_t* const data16 =
-                    reinterpret_cast<const uint16_t*>(primitive.indexData.constData());
-                const int count = primitive.indexCount;
-
-                for (int i = 0; i < count; ++i) {
-                    indexes.append(static_cast<uint>(data16[i]) + baseVertex);
-                }
-            }
-
-            baseVertex += static_cast<uint>(primitive.vertexCount);
-        }
-
-        return indexes;
-    };
-
-    return cwGeometry{
-        cwGeometry::Triangles,
-        extractPoints(*this),
-        extractIndexes(*this),
-        modelMatrix,
-        true /* cullbackfaces */
-    };
-
-}
-
-
-
-
-
 
 
 } // namespace cw::gltf

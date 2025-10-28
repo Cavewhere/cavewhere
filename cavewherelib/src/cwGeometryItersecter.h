@@ -30,41 +30,47 @@ public:
     class Object {
     public:
         Object() { }
-        Object(cwRenderObject* parent,
-               uint64_t id,
-               QVector<QVector3D> points,
-               QVector<uint> indexes,
-               cwGeometry::PrimitiveType type,
-               const QMatrix4x4& modelMatrix = QMatrix4x4(),
-               bool cullBackfaces = false) :
-            m_key(parent, id),
-            m_geometry(type, points, indexes, modelMatrix, cullBackfaces)
+        // Object(cwRenderObject* parent,
+        //        uint64_t id,
+        //        QVector<QVector3D> points,
+        //        QVector<uint32_t> indexes,
+        //        cwGeometry::PrimitiveType type,
+        //        const QMatrix4x4& modelMatrix = QMatrix4x4(),
+        //        bool cullBackfaces = false) :
+        //     m_key(parent, id),
+        //     m_geometry(type, points, indexes, modelMatrix, cullBackfaces)
 
-        {}
+        // {}
         Object(Key key,
-               cwGeometry geometry) :
+               cwGeometry geometry,
+               QMatrix4x4 modelMatrix = QMatrix4x4()) :
             m_key(key),
-            m_geometry(geometry)
+            m_geometry(geometry),
+            m_modelMatrix(modelMatrix)
         {}
 
         Key key() const { return m_key; }
-        cwGeometry geometry() const { return m_geometry; }
+        const cwGeometry& geometry() const { return m_geometry; }
 
         cwRenderObject* parent() const { return m_key.parentObject; }
         uint64_t id() const { return m_key.id; }
 
-        const QVector<QVector3D>& points() const { return m_geometry.vertices; }
-        const QVector<uint>& indexes() const { return m_geometry.indices; }
-        cwGeometry::PrimitiveType type() const { return m_geometry.type; }
-        bool cullBackfaces() const { return m_geometry.cullBackfaces; }
+        void setModelMatrix(const QMatrix4x4 matrix) { m_modelMatrix = matrix; }
+        const QMatrix4x4& modelMatrix() const { return m_modelMatrix; }
 
-        const QMatrix4x4& modelMatrix() const { return m_geometry.transform; }
-        void setMatrix(const QMatrix4x4& modelMatrix) { m_geometry.transform = modelMatrix; }
+        // const QVector<QVector3D>& points() const { return m_geometry.vertices; }
+        // const QVector<uint32_t>& indexes() const { return m_geometry.indices; }
+        // cwGeometry::PrimitiveType type() const { return m_geometry.type; }
+        // bool cullBackfaces() const { return m_geometry.cullBackfaces; }
+
+        // const QMatrix4x4& modelMatrix() const { return m_geometry.transform; }
+        // void setMatrix(const QMatrix4x4& modelMatrix) { m_geometry.transform = modelMatrix; }
 
     private:
 
         Key m_key;
         cwGeometry m_geometry;
+        QMatrix4x4 m_modelMatrix;
     };
 
     cwGeometryItersecter();
@@ -165,7 +171,7 @@ private:
 
 };
 
-inline uint qHash(const cwGeometryItersecter::Object& object) {
+inline uint32_t qHash(const cwGeometryItersecter::Object& object) {
     return object.id();
 }
 

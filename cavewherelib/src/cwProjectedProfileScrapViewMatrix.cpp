@@ -4,6 +4,9 @@
 //std includes
 #include <limits>
 
+//Qt include
+#include <QQuaternion>
+
 cwProjectedProfileScrapViewMatrix::cwProjectedProfileScrapViewMatrix(QObject *parent) :
     cwAbstractScrapViewMatrix(parent, new cwProjectedProfileScrapViewMatrix::Data())
 {

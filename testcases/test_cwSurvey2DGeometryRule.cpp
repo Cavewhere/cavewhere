@@ -9,6 +9,7 @@
 #include <QSvgGenerator>
 #include <QPainter>
 #include <QTemporaryFile>
+#include <QQuaternion>
 
 //Our includes
 #include "cwSurvey2DGeometryRule.h"

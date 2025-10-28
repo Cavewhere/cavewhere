@@ -9,6 +9,7 @@
 #define CWTRIANGULATEDATA_H
 
 //Our includes
+#include "cwGeometry.h"
 #include "cwTrackedImage.h"
 #include "cwTextureUploadTask.h"
 
@@ -30,14 +31,17 @@ public:
     cwTextureUploadTask::UploadResult croppedImageData() const;
     void setCroppedImageData(const cwTextureUploadTask::UploadResult& imageData);
 
-    QVector<QVector3D> points() const;
-    void setPoints(QVector<QVector3D> points);
+    void setScrapGeometry(cwGeometry scrapGeometry) { Data->scrapGeometry = scrapGeometry; }
+    const cwGeometry& scrapGeometry() const { return Data->scrapGeometry; }
 
-    QVector<QVector2D> texCoords() const;
-    void setTexCoords(QVector<QVector2D> texCoords);
+    // QVector<QVector3D> points() const;
+    // void setPoints(QVector<QVector3D> points);
 
-    QVector<uint> indices() const;
-    void setIndices(QVector<uint> indices);
+    // QVector<QVector2D> texCoords() const;
+    // void setTexCoords(QVector<QVector2D> texCoords);
+
+    // QVector<uint32_t> indices() const;
+    // void setIndices(QVector<uint32_t> indices);
 
     QVector<QVector3D> leadPoints() const;
     void setLeadPoints(QVector<QVector3D> points);
@@ -56,9 +60,11 @@ private:
 
         cwTrackedImagePtr croppedImage = cwTrackedImagePtr::create();
         cwTextureUploadTask::UploadResult croppedImageData;
-        QVector<QVector3D> points;
-        QVector<QVector2D> texCoords;
-        QVector<uint> indices;
+        cwGeometry scrapGeometry;
+
+        // QVector<QVector3D> points;
+        // QVector<QVector2D> texCoords;
+        // QVector<uint32_t> indices;
         QVector<QVector3D> leadPoints;
         bool Stale;
     };
@@ -95,47 +101,47 @@ inline void cwTriangulatedData::setCroppedImageData(const cwTextureUploadTask::U
     Data->croppedImageData = imageData;
 }
 
-/**
-  Get variableName
-  */
-inline QVector<QVector3D> cwTriangulatedData::points() const {
-    return Data->points;
-}
+// /**
+//   Get variableName
+//   */
+// inline QVector<QVector3D> cwTriangulatedData::points() const {
+//     return Data->points;
+// }
 
-/**
-  Sets variableName
-  */
-inline void cwTriangulatedData::setPoints(QVector<QVector3D> points) {
-    Data->points = points;
-}
+// /**
+//   Sets variableName
+//   */
+// inline void cwTriangulatedData::setPoints(QVector<QVector3D> points) {
+//     Data->points = points;
+// }
 
-/**
-Get variableName
-*/
-inline QVector<QVector2D> cwTriangulatedData::texCoords() const {
-    return Data->texCoords;
-}
+// /**
+// Get variableName
+// */
+// inline QVector<QVector2D> cwTriangulatedData::texCoords() const {
+//     return Data->texCoords;
+// }
 
-/**
-Sets variableName
-*/
-inline void cwTriangulatedData::setTexCoords(QVector<QVector2D> texCoords) {
-    Data->texCoords = texCoords;
-}
+// /**
+// Sets variableName
+// */
+// inline void cwTriangulatedData::setTexCoords(QVector<QVector2D> texCoords) {
+//     Data->texCoords = texCoords;
+// }
 
-/**
-  Get variableName
-  */
-inline QVector<uint> cwTriangulatedData::indices() const {
-    return Data->indices;
-}
+// /**
+//   Get variableName
+//   */
+// inline QVector<uint32_t> cwTriangulatedData::indices() const {
+//     return Data->indices;
+// }
 
-/**
-  Sets variableName
-  */
-inline void cwTriangulatedData::setIndices(QVector<uint> indices) {
-    Data->indices = indices;
-}
+// /**
+//   Sets variableName
+//   */
+// inline void cwTriangulatedData::setIndices(QVector<uint32_t> indices) {
+//     Data->indices = indices;
+// }
 
 /**
  * @brief cwTriangulatedData::leadPoints

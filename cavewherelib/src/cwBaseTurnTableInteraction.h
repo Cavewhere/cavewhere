@@ -25,6 +25,7 @@ class cwMatrix4x4Animation;
 #include <QPointer>
 #include <QQmlEngine>
 #include <QObjectBindableProperty>
+#include <QQuaternion>
 
 class cwBaseTurnTableInteraction : public cwInteraction
 {
