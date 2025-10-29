@@ -9,6 +9,7 @@
 #define CWSCRAPMANAGER_H
 
 //Qt includes
+#include "cwRenderTexturedItems.h"
 #include <QObject>
 #include <QModelIndex>
 #include <QSet>
@@ -59,7 +60,7 @@ public:
     void setLinePlotManager(cwLinePlotManager* linePlotManager);
     void setFutureManagerToken(cwFutureManagerToken token);
 
-    Q_INVOKABLE void setRenderScraps(cwRenderScraps* glScraps);
+    Q_INVOKABLE void setRenderScraps(cwRenderTexturedItems* glScraps);
 
     bool automaticUpdate() const;
     void setAutomaticUpdate(bool automaticUpdate);
@@ -78,6 +79,7 @@ private:
 
     QSet<cwScrap*> DirtyScraps; //These are the scraps that need to be updated
     QSet<cwScrap*> DeletedScraps; //All the deleted scraps
+    QHash<cwScrap*, uint32_t> m_scrapToRenderId; //The render id of the scrap
 
     //The task that'll be run
     cwProject* Project;
@@ -86,7 +88,7 @@ private:
     cwFutureManagerToken FutureManagerToken;
 
     //The render scraps that need updating
-    cwRenderScraps* m_renderScraps;
+    QPointer<cwRenderTexturedItems> m_renderScraps;
 
     bool AutomaticUpdate; //!<
 

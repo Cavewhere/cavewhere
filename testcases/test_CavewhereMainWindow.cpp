@@ -194,22 +194,23 @@ TEST_CASE("Load project with no images for scraps", "[CavewhereMainWindow]") {
         CHECK(note->scraps().size() == 2);
 
         for(const auto& scrap : note->scraps()) {
-            auto triangleData = scrap->triangulationData();
+            REQUIRE(false); //FIXME, this is a break api change
+            // auto triangleData = scrap->triangulationData();
 
-            REQUIRE(triangleData.croppedImage().mode() == cwImage::Mode::Path);
+            // REQUIRE(triangleData.croppedImage().mode() == cwImage::Mode::Path);
 
-            QList<QString> paths = {
-                triangleData.croppedImage().path(),
-            };
+            // QList<QString> paths = {
+            //     triangleData.croppedImage().path(),
+            // };
 
-            // CHECK(!triangleData.croppedImage().isIconValid());
-            CHECK((triangleData.croppedImage().isValid()));
+            // // CHECK(!triangleData.croppedImage().isIconValid());
+            // CHECK((triangleData.croppedImage().isValid()));
 
-            for(const auto& path : paths) {
-                auto data = imageProvider.data(path);
-                INFO("Id:" << path << " isValid:" << data.size().isValid());
-                CHECK((data.size().isValid()));
-            }
+            // for(const auto& path : paths) {
+            //     auto data = imageProvider.data(path);
+            //     INFO("Id:" << path << " isValid:" << data.size().isValid());
+            //     CHECK((data.size().isValid()));
+            // }
         }
 
         QTimer::singleShot(1000, qApp, [&loop, firstAppEngine]() {

@@ -344,8 +344,8 @@ QVariant cwScrap::leadData(cwScrap::LeadDataRole role, int leadIndex) const
 
     switch(role) {
     case LeadPosition:
-        if(leadIndex < triangulationData().leadPoints().size()) {
-            return triangulationData().leadPoints().at(leadIndex);
+        if(leadIndex < m_leadPositions.size()) {
+            return m_leadPositions.at(leadIndex);
         }
         return QVector3D();
     case LeadPositionOnNote:
@@ -1006,6 +1006,13 @@ QMatrix4x4 cwScrap::mapWorldToNoteMatrix(const cwNoteStation& referenceStation) 
     return toNormalizedNote;
 }
 
+void cwScrap::setLeadPositions(const QVector<QVector3D> &leadPositions)
+{
+    Q_ASSERT(leadPositions.size() == Leads.size());
+    m_leadPositions = leadPositions;
+    emit leadsDataChanged(0, Leads.size() - 1, {LeadPosition});
+}
+
 /**
   \brief Sets the parent trip
   */
@@ -1228,13 +1235,13 @@ void cwScrap::setViewMatrix(cwAbstractScrapViewMatrix *viewMatrix)
     }
 }
 
-/**
-  \brief Sets the triangulation data
-  */
-void cwScrap::setTriangulationData(cwTriangulatedData data) {
-    TriangulationData = data;
-    emit triangulationDataChanged();
-}
+// /**
+//   \brief Sets the triangulation data
+//   */
+// void cwScrap::setTriangulationData(cwTriangulatedData data) {
+//     TriangulationData = data;
+//     emit triangulationDataChanged();
+// }
 
 void cwScrap::updateImage()
 {

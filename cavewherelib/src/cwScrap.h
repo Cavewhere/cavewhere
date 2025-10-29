@@ -157,8 +157,10 @@ public:
 
     QMatrix4x4 mapWorldToNoteMatrix(const cwNoteStation &referenceStation) const;
 
-    void setTriangulationData(cwTriangulatedData data);
-    cwTriangulatedData triangulationData() const;
+    void setLeadPositions(const QVector<QVector3D>& leadPositions);
+    QVector<QVector3D> leadPositions() const { return m_leadPositions; }
+    // void setTriangulationData(cwTriangulatedData data);
+    // cwTriangulatedData triangulationData() const;
 
 //    static QMatrix4x4 toProfileRotation(QVector3D fromStationPos, QVector3D toStationPos);
 
@@ -249,6 +251,7 @@ private:
 
     //All the leads that are with this scrap
     QList<cwLead> Leads;
+    QList<QVector3D> m_leadPositions;
 
     //The note transform, this is used for guessing the station name's for the user
     cwNoteTranformation* NoteTransformation;
@@ -394,9 +397,9 @@ inline cwAbstractScrapViewMatrix *cwScrap::viewMatrix() const
 /**
   \brief Gets the triangulation data
   */
-inline cwTriangulatedData cwScrap::triangulationData() const {
-    return TriangulationData;
-}
+// inline cwTriangulatedData cwScrap::triangulationData() const {
+//     return TriangulationData;
+// }
 
 /**
 *

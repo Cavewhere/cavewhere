@@ -32,7 +32,7 @@ class cwNoteLiDAR;
 #include "cwFutureManagerToken.h"
 #include "cwAsyncFuture.h"
 #include "cwTriangulateLiDARInData.h"
-#include "cwRenderGLTF.h"
+#include "cwRenderTexturedItems.h"
 #include "cwUniqueConnectionChecker.h"
 
 
@@ -59,7 +59,7 @@ public:
     void setLinePlotManager(cwLinePlotManager* linePlotManager);
     void setFutureManagerToken(cwFutureManagerToken token);
 
-    void setRenderGLTF(cwRenderGLTF* renderGltf);
+    void setRender(cwRenderTexturedItems* renderGltf);
 
     bool automaticUpdate() const;
     void setAutomaticUpdate(bool automaticUpdate);
@@ -125,8 +125,9 @@ private:
 
     QSet<cwNoteLiDAR*> m_dirtyNotes;
     QSet<cwNoteLiDAR*> m_deletedNotes;
+    QHash<cwNoteLiDAR*, QVector<uint32_t>> m_noteToRender;
 
-    QPointer<cwRenderGLTF> m_renderGltf;
+    QPointer<cwRenderTexturedItems> m_render;
 
     bool m_automaticUpdate = true;
 

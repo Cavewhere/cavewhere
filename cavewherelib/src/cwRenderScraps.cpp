@@ -10,45 +10,45 @@ cwRenderScraps::cwRenderScraps(QObject *parent) :
 
 void cwRenderScraps::addScrapToUpdate(cwScrap *scrap)
 {
-    if(!scrap->triangulationData().isNull()) {
+    // if(!scrap->triangulationData().isNull()) {
 
-        auto triangleData = scrap->triangulationData();
+    //     auto triangleData = scrap->triangulationData();
 
-        //This reduces the CPU memory, but this probably isn't the best place to do this
-        //Probably need pipeline arch, with artifacts
-        //scrap->setTriangulationData({}); //Clear the triangulation data
+    //     //This reduces the CPU memory, but this probably isn't the best place to do this
+    //     //Probably need pipeline arch, with artifacts
+    //     //scrap->setTriangulationData({}); //Clear the triangulation data
 
-        PendingScrapCommand command = PendingScrapCommand(PendingScrapCommand::AddScrap,
-                                                          scrap,
-                                                          triangleData);
+    //     PendingScrapCommand command = PendingScrapCommand(PendingScrapCommand::AddScrap,
+    //                                                       scrap,
+    //                                                       triangleData);
 
-        addCommand(command);
+    //     addCommand(command);
 
-        uint64_t scrapId = reinterpret_cast<uint64_t>(scrap);
-        geometryItersecter()->addObject(cwGeometryItersecter::Object({this, scrapId},
-                                                                     triangleData.scrapGeometry()));
-    }
+    //     uint64_t scrapId = reinterpret_cast<uint64_t>(scrap);
+    //     geometryItersecter()->addObject(cwGeometryItersecter::Object({this, scrapId},
+    //                                                                  triangleData.scrapGeometry()));
+    // }
 }
 
 void cwRenderScraps::removeScrap(cwScrap *scrap)
 {
-    PendingScrapCommand command = PendingScrapCommand(PendingScrapCommand::RemoveScrap,
-                                                      scrap,
-                                                      cwTriangulatedData());
+    // PendingScrapCommand command = PendingScrapCommand(PendingScrapCommand::RemoveScrap,
+    //                                                   scrap,
+    //                                                   cwTriangulatedData());
 
-    addCommand(command);
+    // addCommand(command);
 
-    uint64_t scrapId = reinterpret_cast<uint64_t>(scrap);
-    geometryItersecter()->removeObject(this, scrapId);
+    // uint64_t scrapId = reinterpret_cast<uint64_t>(scrap);
+    // geometryItersecter()->removeObject(this, scrapId);
 }
 
 void cwRenderScraps::addScrapTextureToUpdate(cwScrap *scrap)
 {
-    PendingScrapCommand command = PendingScrapCommand(PendingScrapCommand::UpdateScrapTexture,
-                                                      scrap,
-                                                      scrap->triangulationData());
+    // PendingScrapCommand command = PendingScrapCommand(PendingScrapCommand::UpdateScrapTexture,
+    //                                                   scrap,
+    //                                                   scrap->triangulationData());
 
-    addCommand(command);
+    // addCommand(command);
 
 }
 

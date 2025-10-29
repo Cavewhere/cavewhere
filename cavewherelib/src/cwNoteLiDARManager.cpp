@@ -115,9 +115,9 @@ void cwNoteLiDARManager::setFutureManagerToken(cwFutureManagerToken token)
     m_futureManagerToken = token;
 }
 
-void cwNoteLiDARManager::setRenderGLTF(cwRenderGLTF *renderGltf)
+void cwNoteLiDARManager::setRender(cwRenderTexturedItems *render)
 {
-    m_renderGltf = renderGltf;
+    m_render = render;
 }
 
 bool cwNoteLiDARManager::automaticUpdate() const
@@ -373,16 +373,50 @@ void cwNoteLiDARManager::runBatch()
     });
 
     // Wrap in restarter so subsequent calls coalesce
-    m_restarter.restart([this, notes, inputs]() mutable {
-        // Observe and fan-out completion, then signal
-        // Fire task
+    m_restarter.restart([this, notes, inputs]() {
         auto future = cwTriangulateLiDARTask::triangulate(inputs);
-
-        m_renderGltf->setGltf(future);
 
         return AsyncFuture::observe(future)
             .context(this,
                      [this, notes, future]() {
+
+                         Q_ASSERT(notes.size() == future.resultCount());
+
+                         //Update the rendering scene
+                         for(int i = 0; i < future.resultCount(); i++) {
+                             auto note = notes.at(i);
+                             if(m_deletedNotes.contains(note)) {
+                                 //Note deleted, just skip the result
+                                 continue;
+                             }
+
+
+                             QVector<cwRenderTexturedItems::Item> items = future.resultAt(i).value();
+
+                             auto addItems = [this, note](const QVector<cwRenderTexturedItems::Item>& items) {
+                                 QVector<uint32_t> newIds = cw::transform(items, [this](const cwRenderTexturedItems::Item& item) {
+                                     return m_render->addItem(item);
+                                 });
+
+                                 m_noteToRender[note] = newIds;
+                             };
+
+                             if(m_noteToRender.contains(note)) {
+                                 //Update the existing note
+                                 auto renderIds = m_noteToRender.value(note);
+
+                                 //For now just remove all the old ids
+                                 //not very efficient
+                                 for(auto id : renderIds) {
+                                     m_render->removeItem(id);
+                                 }
+
+                                 addItems(items);
+                             } else {
+                                 addItems(items);
+                             }
+                         }
+
                          // Remove processed from dirty, clear deleted set entries
                          for (cwNoteLiDAR* n : notes) {
                              m_dirtyNotes.remove(n);

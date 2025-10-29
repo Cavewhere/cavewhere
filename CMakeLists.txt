@@ -219,7 +219,7 @@ endif()
 
 if(APPLE)
 
-    # set(MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/Info.plist.in)
+    set(MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/Info.plist.in)
 
     # set_source_files_properties(${MACOSX_BUNDLE_INFO_PLIST} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
 
@@ -238,8 +238,8 @@ if(APPLE)
         #XCODE_ATTRIBUTE_ENABLE_BITCODE "NO"
         XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "com.cavewhere.CaveWhere"
 
-        # MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/Info.plist"
-        #RESOURCE "${CMAKE_CURRENT_SOURCE_DIR}/cavewhereIcon.icns"
+        #MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/Info.plist"
+        RESOURCE "${CMAKE_CURRENT_SOURCE_DIR}/cavewhereIcon.icns"
     )
 
     #Post build install for APP resources

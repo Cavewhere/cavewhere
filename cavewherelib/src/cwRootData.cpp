@@ -107,9 +107,9 @@ cwRootData::cwRootData(QObject *parent) :
     RegionSceneManager = new cwRegionSceneManager(this);
     RegionSceneManager->setCavingRegion(Region);
 
-    ScrapManager->setRenderScraps(RegionSceneManager->scraps());
+    ScrapManager->setRenderScraps(RegionSceneManager->items()); //scraps());
     LinePlotManager->setRenderLinePlot(RegionSceneManager->linePlot());
-    NoteLiDARManager->setRenderGLTF(RegionSceneManager->gltf());
+    NoteLiDARManager->setRender(RegionSceneManager->items());
 
     PageSelectionModel = new cwPageSelectionModel(this);
 

@@ -385,7 +385,7 @@ void cwRegionSaveTask::saveTriangulatedData(CavewhereProto::TriangulatedData *pr
         saveVector3D(protoVector3D, leadPoint);
     }
 
-    protoTriangulatedData->set_stale(triangluatedData.isStale());
+    // protoTriangulatedData->set_stale(triangluatedData.isStale());
 }
 
 /**

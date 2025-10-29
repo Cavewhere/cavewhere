@@ -10,7 +10,7 @@ find_package(Qt6
     COMPONENTS
     Core
     Gui
-    GuiPrivate
+    # GuiPrivate
     Widgets
     Quick
     Sql

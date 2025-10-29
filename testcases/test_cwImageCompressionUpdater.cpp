@@ -51,7 +51,8 @@ TEST_CASE("cwRootData should automatically update compression for scaps", "[cwIm
         provider.setProjectPath(project->filename());
 
         for(cwScrap* scrap : scraps) {
-            CHECK(QFileInfo::exists(provider.absoluteImagePath(scrap->triangulationData().croppedImage())));
+            REQUIRE(false); //FIXME, this is a break api change
+            // CHECK(QFileInfo::exists(provider.absoluteImagePath(scrap->triangulationData().croppedImage())));
         }
     };
 

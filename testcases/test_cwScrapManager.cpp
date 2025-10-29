@@ -122,11 +122,13 @@ TEST_CASE("cwScrapManager auto update should work propertly", "[cwScrapManager]"
         CHECK(addRowSpy.count() == 0);
 
         scrapManager->setAutomaticUpdate(true);
-        CHECK(trip->notes()->notes().first()->scraps().first()->triangulationData().isStale());
+        REQUIRE(false); //FIXME, this is a break api change
+        // CHECK(trip->notes()->notes().first()->scraps().first()->triangulationData().isStale());
 
         rootData->futureManagerModel()->waitForFinished();
 
-        CHECK(!trip->notes()->notes().first()->scraps().first()->triangulationData().isStale());
+        REQUIRE(false); //FIXME, this is a break api change
+        // CHECK(!trip->notes()->notes().first()->scraps().first()->triangulationData().isStale());
 
         loop.quit();
     });
@@ -202,28 +204,28 @@ TEST_CASE("cwScrapManager should update on viewMatrix change", "[cwScrapManager]
     CHECK(profile->azimuth() == 135.0);
 
     CHECK(rootData->futureManagerModel()->rowCount() == 0);
-    CHECK(scrap->triangulationData().isStale() == false);
+    // CHECK(scrap->triangulationData().isStale() == false);
     profile->setAzimuth(136.0);
 
 
     CHECK(rootData->futureManagerModel()->rowCount() == 1);
-    CHECK(scrap->triangulationData().isStale() == true);
+    // CHECK(scrap->triangulationData().isStale() == true);
 
     rootData->futureManagerModel()->waitForFinished();
 
     CHECK(rootData->futureManagerModel()->rowCount() == 0);
-    CHECK(scrap->triangulationData().isStale() == false);
+    // CHECK(scrap->triangulationData().isStale() == false);
 
     SECTION("Switch to running profile") {
         scrap->setType(cwScrap::RunningProfile);
         CHECK(dynamic_cast<cwRunningProfileScrapViewMatrix*>(scrap->viewMatrix()));
 
         CHECK(rootData->futureManagerModel()->rowCount() == 1);
-        CHECK(scrap->triangulationData().isStale() == true);
+        // CHECK(scrap->triangulationData().isStale() == true);
 
         rootData->futureManagerModel()->waitForFinished();
 
         CHECK(rootData->futureManagerModel()->rowCount() == 0);
-        CHECK(scrap->triangulationData().isStale() == false);
+        // CHECK(scrap->triangulationData().isStale() == false);
     }
 }

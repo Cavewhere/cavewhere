@@ -216,12 +216,12 @@ void cwScrapManager::addToDeletedScraps(cwScrap *scrap)
  * @param scrap
  * @return Returns true if the scrap's cropped image is in the database, and false if it's missing
  */
-bool cwScrapManager::scrapImagesOkay(cwScrap *scrap)
-{
-    auto image = scrap->triangulationData().croppedImage();
-    return cwImageDatabase(Project->filename()).mipmapsValid(image,
-                                                             false);
-}
+// bool cwScrapManager::scrapImagesOkay(cwScrap *scrap)
+// {
+//     auto image = scrap->triangulationData().croppedImage();
+//     return cwImageDatabase(Project->filename()).mipmapsValid(image,
+//                                                              false);
+// }
 
 bool cwScrapManager::isScrapGeometryValid(const cwScrap *scrap) const
 {
@@ -414,11 +414,11 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
     }
 
     //Union NeedUpdate list with scraps, these are the scraps that need to be updated
-    for(cwScrap* scrap : scraps) {
-        cwTriangulatedData oldData = scrap->triangulationData();
-        oldData.setStale(true);
-        scrap->setTriangulationData(oldData);
-    }
+    // for(cwScrap* scrap : scraps) {
+    //     cwTriangulatedData oldData = scrap->triangulationData();
+    //     oldData.setStale(true);
+    //     scrap->setTriangulationData(oldData);
+    // }
 
 
     auto run = [this]() {
@@ -520,42 +520,44 @@ void cwScrapManager::scrapInsertedHelper(cwNote *parentNote, int begin, int end)
         connectScrap(scrap);
 
         //Add the scrap data that's already in it
-        m_renderScraps->addScrapToUpdate(scrap);
+        m_scrapToRenderId.insert(scrap,
+                                 m_renderScraps->addItem({cwGeometry(), QImage()}));
+
+        scrapsToUpdate.append(scrap);
 
         //Pull data from data cache, make sure the checksum is good too
 
-        //Make sure the scrap's previously calculated data is okay.
-        if((scrap->triangulationData().isStale() ||
-                scrap->triangulationData().isNull() ||
-                !scrapImagesOkay(scrap))
-                &&
-                isScrapGeometryValid(scrap))
-        {   
-            //Isn't okay, we need to recalculate it
-            scrapsToUpdate.append(scrap);
-        } else if(scrap->triangulationData().croppedImageData().isNull()
-                   && scrap->triangulationData().croppedImage().isValid()) {
-            //Load the image data from disk, async
-            cwTextureUploadTask uploadTask;
-            uploadTask.setImage(scrap->triangulationData().croppedImage());
-            uploadTask.setProjectFilename(Project->filename());
-            uploadTask.setType(cwTextureUploadTask::OpenGL_RGBA);
-            auto future = uploadTask.mipmaps();
-            FutureManagerToken.addJob(cwFuture(QFuture<void>(future), "Updating Texture"));
+        // //Make sure the scrap's previously calculated data is okay.
+        // if((scrap->triangulationData().isStale() ||
+        //         scrap->triangulationData().isNull()
+        //         &&
+        //         isScrapGeometryValid(scrap))
+        // {
+        //     //Isn't okay, we need to recalculate it
+        //     scrapsToUpdate.append(scrap);
+        // } else if(scrap->triangulationData().croppedImageData().isNull()
+        //            && scrap->triangulationData().croppedImage().isValid()) {
+        //     //Load the image data from disk, async
+        //     cwTextureUploadTask uploadTask;
+        //     uploadTask.setImage(scrap->triangulationData().croppedImage());
+        //     uploadTask.setProjectFilename(Project->filename());
+        //     uploadTask.setType(cwTextureUploadTask::OpenGL_RGBA);
+        //     auto future = uploadTask.mipmaps();
+        //     FutureManagerToken.addJob(cwFuture(QFuture<void>(future), "Updating Texture"));
 
-            QPointer<cwScrap> weakPtrScrap = scrap;
+        //     QPointer<cwScrap> weakPtrScrap = scrap;
 
-            AsyncFuture::observe(future).subscribe([weakPtrScrap, future, this](){
-                if(weakPtrScrap) {
-                    auto triangleData = weakPtrScrap->triangulationData();
-                    if(triangleData.croppedImageData().isNull()) {
-                        triangleData.setCroppedImageData(future.result());
-                        weakPtrScrap->setTriangulationData(triangleData);
-                        m_renderScraps->addScrapToUpdate(weakPtrScrap);
-                    }
-                }
-            });
-        }
+        //     AsyncFuture::observe(future).subscribe([weakPtrScrap, future, this](){
+        //         if(weakPtrScrap) {
+        //             auto triangleData = weakPtrScrap->triangulationData();
+        //             if(triangleData.croppedImageData().isNull()) {
+        //                 triangleData.setCroppedImageData(future.result());
+        //                 weakPtrScrap->setTriangulationData(triangleData);
+        //                 m_renderScraps->addScrapToUpdate(weakPtrScrap);
+        //             }
+        //         }
+        //     });
+        // }
     }
 
     //Update all the scrap geometry for the scrap
@@ -577,7 +579,10 @@ void cwScrapManager::scrapRemovedHelper(cwNote *parentNote, int begin, int end)
         //Connect the scrap
         disconnectScrap(scrap);
 
-        m_renderScraps->removeScrap(scrap);
+        if(m_scrapToRenderId.contains(scrap)) {
+            auto id = m_scrapToRenderId.take(scrap);
+            m_renderScraps->removeItem(id);
+        }
     }
 }
 
@@ -823,20 +828,25 @@ void cwScrapManager::taskFinished(const QList<cwScrap*>& scrapsToUpdate,
         cwScrap* scrap = validScraps.at(i);
 
         cwTriangulatedData triangleData = validScrapTriangleDataset.at(i);
-        Q_ASSERT(!triangleData.isStale());
+        // Q_ASSERT(!triangleData.isStale());
 
         //Remove the ownership requirements, so it doesn't get delete from database
         triangleData.croppedImagePtr()->take();
 
-        scrap->setTriangulationData(triangleData);
-        m_renderScraps->addScrapToUpdate(scrap);
+        // scrap->setTriangulationData(triangleData);
+        scrap->setLeadPositions(triangleData.leadPoints());
+
+        Q_ASSERT(m_scrapToRenderId.contains(scrap));
+        auto id = m_scrapToRenderId.value(scrap);
+        m_renderScraps->updateGeometry(id, triangleData.scrapGeometry());
+        m_renderScraps->updateTexture(id, triangleData.croppedImageData().image);
     }
 }
 
 /**
   \brief Sets the gl scraps for the manager
   */
-void cwScrapManager::setRenderScraps(cwRenderScraps *scraps)
+void cwScrapManager::setRenderScraps(cwRenderTexturedItems *scraps)
 {
     m_renderScraps = scraps;
 }

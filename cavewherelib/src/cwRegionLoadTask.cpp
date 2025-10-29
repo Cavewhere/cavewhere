@@ -499,7 +499,7 @@ void cwRegionLoadTask::loadScrap(const CavewhereProto::Scrap& protoScrap, cwScra
 
     loadNoteTranformation(protoScrap.notetransformation(), scrap->noteTransformation());
     scrap->setCalculateNoteTransform(protoScrap.calculatenotetransform());
-    scrap->setTriangulationData(loadTriangulatedData(protoScrap.triangledata()));
+    // scrap->setTriangulationData(loadTriangulatedData(protoScrap.triangledata()));
     scrap->setType(static_cast<cwScrap::ScrapType>(protoScrap.type()));
 
     if(protoScrap.type() == CavewhereProto::Scrap_ScrapType::Scrap_ScrapType_ProjectedProfile) {
@@ -590,7 +590,7 @@ cwTriangulatedData cwRegionLoadTask::loadTriangulatedData(const CavewhereProto::
         leadPositions[i] = loadVector3D(protoTriangulatedData.leadpositions(i));
     }
 
-    bool stale = protoTriangulatedData.stale();
+    // bool stale = protoTriangulatedData.stale();
 
     //FIXME: save cwGeometry
 
@@ -599,7 +599,7 @@ cwTriangulatedData cwRegionLoadTask::loadTriangulatedData(const CavewhereProto::
     // data.setIndices(indexes);
 
     data.setLeadPoints(leadPositions);
-    data.setStale(stale);
+    // data.setStale(stale);
 
     return data;
 }

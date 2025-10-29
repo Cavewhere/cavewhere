@@ -13,6 +13,7 @@
 #include "cwRenderLinePlot.h"
 #include "cwRenderRadialGradient.h"
 #include "cwRenderGLTF.h"
+#include "cwRenderTexturedItems.h"
 
 
 #include "cwCavingRegion.h"
@@ -26,8 +27,8 @@ cwRegionSceneManager::cwRegionSceneManager(QObject *parent) :
     //Renders the background, should be drawn first
     m_background = new cwRenderRadialGradient();
     m_linePlot = new cwRenderLinePlot();
-    m_scraps = new cwRenderScraps();
     m_plane = new cwRenderGridPlane();
+    m_items = new cwRenderTexturedItems();
 
     //For testing
     m_gltf = new cwRenderGLTF();
@@ -43,9 +44,16 @@ cwRegionSceneManager::cwRegionSceneManager(QObject *parent) :
 
     m_background->setScene(scene());
     m_linePlot->setScene(scene());
+    m_items->setScene(scene());
+    // m_gltf->setScene(scene());
+
+    //For testing
+    m_scraps = new cwRenderTexturedItems();
     m_scraps->setScene(scene());
-    m_gltf->setScene(scene());
+
+    //Render the plane last
     m_plane->setScene(scene());
+
 
 }
 
@@ -77,5 +85,6 @@ void cwRegionSceneManager::setCapturing(bool newCapturing)
     m_plane->setVisible(!m_capturing);
     emit capturingChanged();
 }
+
 
 

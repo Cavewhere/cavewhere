@@ -24,6 +24,7 @@ class cwRenderObject;
 class cwRenderLinePlot;
 class cwRenderScraps;
 class cwRenderRadialGradient;
+#include "cwRenderTexturedItems.h"
 #include "cwRenderGLTF.h"
 #include "cwRenderScraps.h"
 #include "cwRenderGridPlane.h"
@@ -35,9 +36,10 @@ class cwRegionSceneManager : public QObject
 
     Q_PROPERTY(cwCavingRegion* cavingRegion READ cavingRegion WRITE setCavingRegion NOTIFY cavingRegionChanged)
     Q_PROPERTY(cwRenderLinePlot* linePlot READ linePlot NOTIFY linePlotChanged)
-    Q_PROPERTY(cwRenderScraps* scraps READ scraps NOTIFY scrapsChanged)
+    Q_PROPERTY(cwRenderTexturedItems* scraps READ scraps NOTIFY scrapsChanged)
     Q_PROPERTY(cwScene* scene READ scene NOTIFY sceneChanged)
     Q_PROPERTY(cwRenderGridPlane* gridPlane READ gridPlane CONSTANT)
+    Q_PROPERTY(cwRenderTexturedItems* items READ items CONSTANT)
 
     Q_PROPERTY(bool capturing READ isCapturing WRITE setCapturing NOTIFY capturingChanged FINAL)
 
@@ -48,7 +50,7 @@ public:
     explicit cwRegionSceneManager(QObject *parent = 0);
 
     cwRenderLinePlot* linePlot();
-    cwRenderScraps* scraps() const;
+    cwRenderTexturedItems* scraps() const { return m_scraps; }
 
     void setCavingRegion(cwCavingRegion* region);
     cwCavingRegion* cavingRegion() const;
@@ -61,6 +63,8 @@ public:
     cwRenderGridPlane *gridPlane() const { return m_plane; }
 
     cwRenderGLTF* gltf() const { return m_gltf; }
+
+    cwRenderTexturedItems *items() const;
 
 signals:
     void sceneChanged();
@@ -78,11 +82,13 @@ private:
     //The terrain that's rendered
     cwGLTerrain* Terrain;
     cwRenderLinePlot* m_linePlot;
-    cwRenderScraps* m_scraps;
+    cwRenderTexturedItems* m_items;
+    // cwRenderScraps* m_scraps;
     cwRenderGridPlane* m_plane;
     cwRenderRadialGradient* m_background;
 
     //For testing gltf
+    cwRenderTexturedItems* m_scraps;
     cwRenderGLTF* m_gltf;
 
     //For rendering label
@@ -107,15 +113,21 @@ inline cwRenderLinePlot* cwRegionSceneManager::linePlot() { return m_linePlot; }
  * @brief cwScene::scraps
  * @return Returns the GL scraps of the scene
  */
-inline cwRenderScraps* cwRegionSceneManager::scraps() const
-{
-    return m_scraps;
-}
+// inline cwRenderScraps* cwRegionSceneManager::scraps() const
+// {
+//     return m_scraps;
+// }
 
 inline bool cwRegionSceneManager::isCapturing() const
 {
     return m_capturing;
 }
+
+inline cwRenderTexturedItems *cwRegionSceneManager::items() const
+{
+    return m_items;
+}
+
 
 
 #endif // CWREGIONSCENEMANAGER_H

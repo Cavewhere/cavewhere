@@ -46,8 +46,8 @@ public:
     QVector<QVector3D> leadPoints() const;
     void setLeadPoints(QVector<QVector3D> points);
 
-    bool isStale() const;
-    void setStale(bool isStale);
+    // bool isStale() const;
+    // void setStale(bool isStale);
 
     bool isNull() const;
 
@@ -164,26 +164,26 @@ inline void cwTriangulatedData::setLeadPoints(QVector<QVector3D> points)
 }
 
 
-/**
- * @brief cwTriangulatedData::stale
- * @return True if the data is old and should be recalculated
- */
-inline bool cwTriangulatedData::isStale() const
-{
-    return Data->Stale;
-}
+// /**
+//  * @brief cwTriangulatedData::stale
+//  * @return True if the data is old and should be recalculated
+//  */
+// inline bool cwTriangulatedData::isStale() const
+// {
+//     return Data->Stale;
+// }
 
-/**
- * @brief cwTriangulatedData::setStale
- * @param isStale
- *
- * This is used by cwScrapManager to keep track, if the triangulatedData is old or not.
- * This is set to true if it should be recalculated and false if it shouldn't. It is
- * useful to keep track of this incase cavewhere shuts down before the scrap calculation
- * have been completed.
- */
-inline void cwTriangulatedData::setStale(bool isStale)
-{
-    Data->Stale = isStale;
-}
+// /**
+//  * @brief cwTriangulatedData::setStale
+//  * @param isStale
+//  *
+//  * This is used by cwScrapManager to keep track, if the triangulatedData is old or not.
+//  * This is set to true if it should be recalculated and false if it shouldn't. It is
+//  * useful to keep track of this incase cavewhere shuts down before the scrap calculation
+//  * have been completed.
+//  */
+// inline void cwTriangulatedData::setStale(bool isStale)
+// {
+//     Data->Stale = isStale;
+// }
 #endif // CWTRIANGULATEDATA_H

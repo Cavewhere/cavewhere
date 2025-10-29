@@ -42,6 +42,8 @@ struct TextureCPU {
     int width = 0;
     int height = 0;
     bool isSRGB = false;
+
+    QImage toImage() const;
 };
 
 struct MaterialCPU {

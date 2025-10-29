@@ -111,9 +111,10 @@ QSet<int> cwImageCleanupTask::extractAllValidImageIds()
                 ids = ids.unite(imageIds);
 
                 foreach(cwScrap* scrap, note->scraps()) {
-                    image = scrap->triangulationData().croppedImage();
-                    imageIds = imageToSet(image);
-                    ids = ids.unite(imageIds);
+                    //FIXME: Remove this class
+                    // image = scrap->triangulationData().croppedImage();
+                    // imageIds = imageToSet(image);
+                    // ids = ids.unite(imageIds);
                 }
             }
         }

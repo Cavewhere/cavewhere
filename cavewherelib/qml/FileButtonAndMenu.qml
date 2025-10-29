@@ -139,7 +139,7 @@ MenuBar {
             checked: RootData.regionSceneManager.scraps.visible
             checkable: true
             onTriggered: {
-                RootData.regionSceneManager.scraps.visible = !RootData.regionSceneManager.scraps.visible
+                RootData.regionSceneManager.items.visible = !RootData.regionSceneManager.items.visible
                 // terrainRenderer.update()
             }
         }

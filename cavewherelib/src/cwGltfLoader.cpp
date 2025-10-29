@@ -10,6 +10,7 @@
 // Qt
 #include <QtGlobal>
 #include <QFileInfo>
+#include <QColorSpace>
 
 // Local helpers kept in the same namespace
 namespace cw::gltf {
@@ -435,6 +436,39 @@ void SceneCPU::dump() const
                  << " isSRGB=" << tex.isSRGB;
     }
 }
+
+
+QImage TextureCPU::toImage() const
+{
+    if (width <= 0 || height <= 0) {
+        return {};
+    }
+
+    const qsizetype expectedSize = qsizetype(width) * qsizetype(height) * 4;
+    if (pixels.size() < expectedSize) {
+        return {};
+    }
+
+    QImage image(width, height, QImage::Format_RGBA8888);
+    const int dstStride = image.bytesPerLine();
+    const int srcStride = width * 4;
+
+    if (dstStride == srcStride) {
+        std::memcpy(image.bits(), pixels.constData(), size_t(expectedSize));
+    } else {
+        const unsigned char* src = reinterpret_cast<const unsigned char*>(pixels.constData());
+        unsigned char* dst = image.bits();
+        for (int y = 0; y < height; y++) {
+            std::memcpy(dst + y * dstStride, src + y * srcStride, size_t(srcStride));
+        }
+    }
+
+    image.setColorSpace(isSRGB ? QColorSpace::SRgb : QColorSpace::SRgbLinear);
+
+
+    return image;
+}
+
 
 
 } // namespace cw::gltf

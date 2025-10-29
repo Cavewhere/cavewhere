@@ -114,7 +114,7 @@ QList<QDir> cwGlobals::systemPaths()
     if(env.contains("PATH") && !seperator.isEmpty()) {
         QString path = env.value("PATH");
         QStringList dirStringList = path.split(seperator);
-	for(auto dirStr : dirStringList) {
+        for(auto dirStr : dirStringList) {
             QDir dir(dirStr);
             if(dir.exists()) {
                 dirs.append(dir);
