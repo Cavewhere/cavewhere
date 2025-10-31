@@ -219,12 +219,6 @@ endif()
 
 if(APPLE)
 
-    set(MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/Info.plist.in)
-
-    # set_source_files_properties(${MACOSX_BUNDLE_INFO_PLIST} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
-
-    # set(CMAKE_MACOSX_BUNDLE_ICON_FILE "cavewhereIcon.icns")
-
     set_target_properties(CaveWhere PROPERTIES
         MACOSX_BUNDLE TRUE
         # MACOSX_BUNDLE_INFO_PLIST ${MACOSX_BUNDLE_INFO_PLIST}
@@ -232,15 +226,20 @@ if(APPLE)
         # MACOSX_BUNDLE_BUNDLE_NAME "CaveWhere"
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.cavewhere.CaveWhere"
         #Enables instruments to run correctly in macos
-        #XCODE_ATTRIBUTE_CODE_SIGN_ENTITLEMENTS "${CMAKE_SOURCE_DIR}/entitlements.plist"
+        XCODE_ATTRIBUTE_CODE_SIGN_ENTITLEMENTS "${CMAKE_SOURCE_DIR}/entitlements.plist"
         #XCODE_ATTRIBUTE_DEVELOPMENT_TEAM
         XCODE_ATTRIBUTE_OTHER_CODE_SIGN_FLAGS "--deep"
         #XCODE_ATTRIBUTE_ENABLE_BITCODE "NO"
         XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "com.cavewhere.CaveWhere"
 
-        #MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/Info.plist"
+        MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/Info.plist.in"
         RESOURCE "${CMAKE_CURRENT_SOURCE_DIR}/cavewhereIcon.icns"
     )
+
+    # set(MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/Info.plist.in)
+    # set(CMAKE_MACOSX_BUNDLE_ICON_FILE "cavewhereIcon.icns")
+
+    # set_source_files_properties(${MACOSX_BUNDLE_INFO_PLIST} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
 
     #Post build install for APP resources
     # Define paths
