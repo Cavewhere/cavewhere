@@ -519,9 +519,14 @@ void cwScrapManager::scrapInsertedHelper(cwNote *parentNote, int begin, int end)
         //Connect the scrap
         connectScrap(scrap);
 
+        cwRenderMaterialState state;
+        state.cullMode = cwRenderMaterialState::CullMode::None;
+
         //Add the scrap data that's already in it
         m_scrapToRenderId.insert(scrap,
-                                 m_renderScraps->addItem({cwGeometry(), QImage()}));
+                                 m_renderScraps->addItem({cwGeometry(),
+                                                          QImage(),
+                                                          state}));
 
         scrapsToUpdate.append(scrap);
 

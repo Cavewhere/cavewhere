@@ -1,8 +1,11 @@
 #ifndef CWRENDERTEXTUREDITEMS_H
 #define CWRENDERTEXTUREDITEMS_H
 
+#include "cwRenderMaterialState.h"
 #include "cwRenderObject.h"
 #include "cwGeometry.h"
+#include <QHash>
+#include <QByteArray>
 #include <QtGui/qimage.h>
 
 class cwRenderTexturedItems : public cwRenderObject
@@ -10,18 +13,15 @@ class cwRenderTexturedItems : public cwRenderObject
     Q_OBJECT
 
 public:
-    enum class Culling {
-        None,
-        Front,
-        Back,
-    };
+    using CullMode = cwRenderMaterialState::CullMode;
 
     cwRenderTexturedItems();
 
     struct Item {
         cwGeometry geometry;
         QImage texture;
-        cwRenderTexturedItems::Culling culling = cwRenderTexturedItems::Culling::None;
+        cwRenderMaterialState material;
+        QByteArray uniformBlock;
         bool visible = true;
     };
 
@@ -29,7 +29,9 @@ public:
     void updateGeometry(uint32_t id, const cwGeometry& geometry);
     void updateTexture(uint32_t id, const QImage& image);
     void setVisible(uint32_t id, bool visible);
-    void setCulling(uint32_t id, Culling culling);
+    void setCulling(uint32_t id, CullMode culling);
+    void setMaterial(uint32_t id, const cwRenderMaterialState& material);
+    void setUniformBlock(uint32_t id, const QByteArray& uniformBlock);
     void removeItem(uint32_t id);
 
     //For testing
@@ -47,7 +49,8 @@ private:
             Remove,
             UpdateGeometry,
             UpdateTexture,
-            UpdateCulling,
+            UpdateMaterial,
+            UpdateUniformBlock,
             UpdateVisiblity,
             Unknown
         };
@@ -82,6 +85,7 @@ private:
     // Simple ID generator for items
     uint32_t m_nextId = 1;
     QSet<uint32_t> m_ids;
+    QHash<uint32_t, Item> m_frontState;
 
     void addCommand(const PendingCommand &&command);
 
