@@ -20,8 +20,8 @@ cwRhiTexturedItems::~cwRhiTexturedItems()
         delete scrap;
     }
     delete m_pipeline;
-    delete m_sharedScrapData.m_sampler;
-    delete m_sharedScrapData.m_loadingTexture;
+    delete m_sharedData.m_sampler;
+    delete m_sharedData.m_loadingTexture;
     delete m_globalSrb;
     // delete m_globalSrb;
 }
@@ -55,9 +55,9 @@ void cwRhiTexturedItems::initializePipeline(const ResourceUpdateData& data)
     m_pipeline->setCullMode(QRhiGraphicsPipeline::Back);
 
     // Create sampler
-    m_sharedScrapData.m_sampler = rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Linear,
+    m_sharedData.m_sampler = rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Linear,
                                                   QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge);
-    m_sharedScrapData.m_sampler->create();
+    m_sharedData.m_sampler->create();
 
     // Create the loading texture here
     // Create the loading texture
@@ -74,12 +74,12 @@ void cwRhiTexturedItems::initializePipeline(const ResourceUpdateData& data)
 
         // Create QRhiTexture
         // m_sharedScrapData.m_loadingTexture = rhi->newTexture(QRhiTexture::RGBA8, image.size(), 1, QRhiTexture::MipMapped | QRhiTexture::UsedWithGenerateMips);
-        m_sharedScrapData.m_loadingTexture = rhi->newTexture(QRhiTexture::RGBA8, image.size(), 1, QRhiTexture::MipMapped | QRhiTexture::UsedWithGenerateMips);
-        m_sharedScrapData.m_loadingTexture->create();
+        m_sharedData.m_loadingTexture = rhi->newTexture(QRhiTexture::RGBA8, image.size(), 1, QRhiTexture::MipMapped | QRhiTexture::UsedWithGenerateMips);
+        m_sharedData.m_loadingTexture->create();
 
         // Upload the texture data
-        data.resourceUpdateBatch->uploadTexture(m_sharedScrapData.m_loadingTexture, image);
-        data.resourceUpdateBatch->generateMips(m_sharedScrapData.m_loadingTexture);
+        data.resourceUpdateBatch->uploadTexture(m_sharedData.m_loadingTexture, image);
+        data.resourceUpdateBatch->generateMips(m_sharedData.m_loadingTexture);
     }
 
 
@@ -185,7 +185,7 @@ void cwRhiTexturedItems::updateResources(const ResourceUpdateData& data)
         Item* item = it.value();
 
         if (!item->resourcesInitialized) {
-            item->initializeResources(data, m_sharedScrapData);
+            item->initializeResources(data, m_sharedData);
         }
 
         if(item->geometryNeedsUpdate) {
@@ -220,23 +220,37 @@ void cwRhiTexturedItems::updateResources(const ResourceUpdateData& data)
         }
 
         if(item->textureNeedsUpdate) {
-            const auto image = item->image;
+            auto image = item->image;
+
+            //Try rescaling the images
+            //Resize images
+            if(!image.size().isNull()) {
+                // image = image.scaled(1024, 1024, Qt::AspectRatioMode::KeepAspectRatio, Qt::TransformationMode::SmoothTransformation);
+
+                item->memoryUsaged = (double)image.sizeInBytes() / 1024.0 / 1024.0;
+                qDebug() << "image size:" << image.size() << item->memoryUsaged << "mb";
+
+                qDebug() << "Total memory used:" << std::accumulate(m_items.begin(), m_items.end(), 0.0, [](double value, const auto& item) {
+                    return value + item->memoryUsaged;
+                });
+            }
+
 
             auto uploadTextureData = [batch, item, &image]() {
                 Q_ASSERT(image.size() == item->texture->pixelSize());
                 batch->uploadTexture(item->texture, image);
-                // batch->generateMips(item->texture);
+                batch->generateMips(item->texture);
             };
 
             auto createTexture = [item, &data, uploadTextureData, this](const QSize& size){
                 if(!size.isEmpty()) {
-                    // item->texture = data.renderData.cb->rhi()->newTexture(QRhiTexture::RGBA8, size, 1, QRhiTexture::MipMapped | QRhiTexture::UsedWithGenerateMips);
-                    item->texture = data.renderData.cb->rhi()->newTexture(QRhiTexture::RGBA8, size, 1); //, QRhiTexture::MipMapped | QRhiTexture::UsedWithGenerateMips);
+                    item->texture = data.renderData.cb->rhi()->newTexture(QRhiTexture::RGBA8, size, 1, QRhiTexture::MipMapped | QRhiTexture::UsedWithGenerateMips);
+                    // item->texture = data.renderData.cb->rhi()->newTexture(QRhiTexture::RGBA8, size, 1); //, QRhiTexture::MipMapped | QRhiTexture::UsedWithGenerateMips);
                     item->texture->create();
                     uploadTextureData();
 
                     //Update the bindings
-                    item->createShadeResourceBindings(data, m_sharedScrapData);
+                    item->createShadeResourceBindings(data, m_sharedData);
                 }
             };
 

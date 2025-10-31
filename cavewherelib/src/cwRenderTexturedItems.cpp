@@ -11,7 +11,7 @@ cwRHIObject* cwRenderTexturedItems::createRHIObject()
     return new cwRhiTexturedItems();
 }
 
-void cwRenderTexturedItems::addCommand(const PendingCommand& command)
+void cwRenderTexturedItems::addCommand(const PendingCommand&& command)
 {
     m_pendingChanges.append(command);
     update(); // schedule a render sync just like cwRenderScraps
@@ -48,7 +48,29 @@ void cwRenderTexturedItems::updateTexture(uint32_t id, const QImage& image)
 
     Item payload;
     payload.texture = image; // geometry left default
-    addCommand(PendingCommand(PendingCommand::UpdateTexture, id, payload));
+    addCommand(PendingCommand(PendingCommand::UpdateTexture, id, std::move(payload)));
+}
+
+void cwRenderTexturedItems::setVisible(uint32_t id, bool visible)
+{
+    if(!m_ids.contains(id)) {
+        return;
+    }
+
+    Item payload;
+    payload.visible = visible;
+    addCommand(PendingCommand(PendingCommand::UpdateVisiblity, id, std::move(payload)));
+}
+
+void cwRenderTexturedItems::setCulling(uint32_t id, Culling culling)
+{
+    if(!m_ids.contains(id)) {
+        return;
+    }
+
+    Item payload;
+    payload.culling = culling;
+    addCommand(PendingCommand(PendingCommand::UpdateCulling, id, std::move(payload)));
 }
 
 void cwRenderTexturedItems::removeItem(uint32_t id)
@@ -56,7 +78,6 @@ void cwRenderTexturedItems::removeItem(uint32_t id)
     if(!m_ids.contains(id)) {
         return;
     }
-
 
     addCommand(PendingCommand(PendingCommand::Remove, id, Item{}));
 

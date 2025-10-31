@@ -10,16 +10,26 @@ class cwRenderTexturedItems : public cwRenderObject
     Q_OBJECT
 
 public:
+    enum class Culling {
+        None,
+        Front,
+        Back,
+    };
+
     cwRenderTexturedItems();
 
     struct Item {
         cwGeometry geometry;
         QImage texture;
+        cwRenderTexturedItems::Culling culling = cwRenderTexturedItems::Culling::None;
+        bool visible = true;
     };
 
     uint32_t addItem(const Item& item);
     void updateGeometry(uint32_t id, const cwGeometry& geometry);
     void updateTexture(uint32_t id, const QImage& image);
+    void setVisible(uint32_t id, bool visible);
+    void setCulling(uint32_t id, Culling culling);
     void removeItem(uint32_t id);
 
     //For testing
@@ -37,6 +47,8 @@ private:
             Remove,
             UpdateGeometry,
             UpdateTexture,
+            UpdateCulling,
+            UpdateVisiblity,
             Unknown
         };
 
@@ -58,9 +70,10 @@ private:
 
 
     private:
+        Item m_item;
+
         Type m_commandType;
         uint32_t m_id = 0;
-        Item m_item;
 
     };
 
@@ -70,9 +83,10 @@ private:
     uint32_t m_nextId = 1;
     QSet<uint32_t> m_ids;
 
-    void addCommand(const PendingCommand& command);
+    void addCommand(const PendingCommand &&command);
 
     friend class cwRhiTexturedItems;
 };
+
 
 #endif // CWRENDERTEXTUREDITEMS_H
