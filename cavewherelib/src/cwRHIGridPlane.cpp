@@ -149,8 +149,6 @@ bool cwRHIGridPlane::gather(const GatherContext& context, QVector<PipelineBatch>
         return false;
     }
 
-    qDebug() << "Gather:" << this << m_modelMatrix.value();
-
     cwRHIObject::PipelineState state;
     state.pipeline = pipeline;
     const quint64 pipelineKey = quint64(quintptr(pipeline));
