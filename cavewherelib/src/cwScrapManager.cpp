@@ -581,7 +581,9 @@ void cwScrapManager::scrapInsertedHelper(cwNote *parentNote, int begin, int end)
                                                           QImage(),
                                                           state}));
 
-        scrapsToUpdate.append(scrap);
+        if(isScrapGeometryValid(scrap)) {
+            scrapsToUpdate.append(scrap);
+        }
 
         //Pull data from data cache, make sure the checksum is good too
 
