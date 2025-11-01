@@ -16,6 +16,7 @@
 #include <QWeakPointer>
 #include <QPointer>
 #include <QQmlEngine>
+#include <QFuture>
 
 //Our includes
 class cwCavingRegion;
@@ -35,6 +36,7 @@ class cwRegionTreeModel;
 class cwRenderScraps;
 #include "cwNoteStation.h"
 #include "cwTriangulateInData.h"
+#include "cwTriangulatedData.h"
 #include "cwImageProvider.h"
 #include "cwFutureManagerToken.h"
 #include "cwGlobals.h"
@@ -55,6 +57,11 @@ public:
     explicit cwScrapManager(QObject *parent = 0);
     ~cwScrapManager();
 
+    struct TriangulatedScrapResult {
+        cwScrap* scrap = nullptr;
+        QFuture<cwTriangulatedData> data;
+    };
+
     void setProject(cwProject* project);
     void setRegionTreeModel(cwRegionTreeModel* regionTreeModel);
     void setLinePlotManager(cwLinePlotManager* linePlotManager);
@@ -66,6 +73,8 @@ public:
     void setAutomaticUpdate(bool automaticUpdate);
 
     void waitForFinish();
+
+    QList<TriangulatedScrapResult> triangulateScraps(const QList<cwScrap*>& scraps) const;
 
 signals:
     void automaticUpdateChanged();

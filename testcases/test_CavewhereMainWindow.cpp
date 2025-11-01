@@ -17,6 +17,7 @@
 #include "cwScrap.h"
 #include "cwNote.h"
 #include "cwErrorListModel.h"
+#include "cwScrapManager.h"
 // #include "cwOpenGLSettings.h"
 
 //Qt includes
@@ -193,24 +194,31 @@ TEST_CASE("Load project with no images for scraps", "[CavewhereMainWindow]") {
 
         CHECK(note->scraps().size() == 2);
 
-        for(const auto& scrap : note->scraps()) {
-            REQUIRE(false); //FIXME, this is a break api change
-            // auto triangleData = scrap->triangulationData();
+        auto scrapManager = rootData->scrapManager();
+        REQUIRE(scrapManager != nullptr);
 
-            // REQUIRE(triangleData.croppedImage().mode() == cwImage::Mode::Path);
+        auto triangulationResults = scrapManager->triangulateScraps(note->scraps());
+        for(auto& result : triangulationResults) {
+            AsyncFuture::waitForFinished(result.data);
+        }
 
-            // QList<QString> paths = {
-            //     triangleData.croppedImage().path(),
-            // };
+        REQUIRE(triangulationResults.size() == note->scraps().size());
 
-            // // CHECK(!triangleData.croppedImage().isIconValid());
-            // CHECK((triangleData.croppedImage().isValid()));
+        for(const auto& result : std::as_const(triangulationResults)) {
+            REQUIRE(result.scrap != nullptr);
+            REQUIRE(note->scraps().contains(result.scrap));
 
-            // for(const auto& path : paths) {
-            //     auto data = imageProvider.data(path);
-            //     INFO("Id:" << path << " isValid:" << data.size().isValid());
-            //     CHECK((data.size().isValid()));
-            // }
+            const auto triangleData = result.data.result();
+            INFO("Scrap:" << result.scrap);
+
+            REQUIRE_FALSE(triangleData.isNull());
+            REQUIRE(triangleData.croppedImage().mode() == cwImage::Mode::Path);
+            CHECK(triangleData.croppedImage().isValid());
+
+            const QString path = triangleData.croppedImage().path();
+            auto data = imageProvider.data(path);
+            INFO("Id:" << path << " isValid:" << data.size().isValid());
+            CHECK(data.size().isValid());
         }
 
         QTimer::singleShot(1000, qApp, [&loop, firstAppEngine]() {
@@ -225,4 +233,3 @@ TEST_CASE("Load project with no images for scraps", "[CavewhereMainWindow]") {
     QFile file(filename);
     CHECK(file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ReadGroup | QFileDevice::ReadUser));
 }
-

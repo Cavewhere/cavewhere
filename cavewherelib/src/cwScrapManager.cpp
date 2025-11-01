@@ -402,6 +402,43 @@ void cwScrapManager::updateScrapGeometry(QList<cwScrap *> scraps) {
     }
 }
 
+QList<cwScrapManager::TriangulatedScrapResult> cwScrapManager::triangulateScraps(const QList<cwScrap *> &scraps) const
+{
+    QList<TriangulatedScrapResult> results;
+
+    if(scraps.isEmpty() || Project == nullptr) {
+        return results;
+    }
+
+    QList<cwTriangulateInData> scrapData = cw::transform(scraps, mapScrapToTriangulateInData);
+
+    if(scrapData.isEmpty()) {
+        return results;
+    }
+
+    cwTriangulateTask task;
+    task.setProjectFilename(Project->filename());
+    task.setScrapData(scrapData);
+    task.setFormatType(cwTextureUploadTask::format());
+    auto triangulatedFutures = task.triangulate();
+
+    if(triangulatedFutures.isEmpty()) {
+        return results;
+    }
+
+    const int count = qMin(scraps.size(), triangulatedFutures.size());
+    results.reserve(count);
+
+    for(int i = 0; i < count; i++) {
+        TriangulatedScrapResult entry;
+        entry.scrap = scraps.at(i);
+        entry.data = triangulatedFutures.at(i);
+        results.append(entry);
+    }
+
+    return results;
+}
+
 /**
  * @brief cwScrapManager::updateScrapGeometryHelper
  * @param scraps
@@ -433,28 +470,45 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
             return AsyncFuture::completed();
         }
 
-        QList<cwTriangulateInData> scrapData = cw::transform(dirtyScraps, mapScrapToTriangulateInData);
+        auto triangulationResults = triangulateScraps(dirtyScraps);
 
-        cwTriangulateTask task;
-        task.setProjectFilename(Project->filename());
-        task.setScrapData(scrapData);
-        task.setFormatType(cwTextureUploadTask::format());
-        auto allFutures = task.triangulate();
+        if(triangulationResults.isEmpty()) {
+            return AsyncFuture::completed();
+        }
 
-        auto combine = AsyncFuture::combine() << allFutures;
+        QList<QFuture<cwTriangulatedData>> futures;
+        futures.reserve(triangulationResults.size());
+        for(const auto& result : std::as_const(triangulationResults)) {
+            futures.append(result.data);
+        }
 
-        auto finalFuture = combine.context(this, [this, dirtyScraps, allFutures]()
+        auto combine = AsyncFuture::combine() << futures;
+
+        auto finalFuture = combine.context(this, [this, triangulationResults]()
         {
-            auto scrapDatas = cw::transform(allFutures,
-                                            [](const QFuture<cwTriangulatedData>& data)
-            {
-                Q_ASSERT(data.resultCount() == 1);
-                Q_ASSERT(data.isFinished());
+            QList<cwScrap*> scrapsToUpdate;
+            QList<cwTriangulatedData> scrapDataset;
 
-                return data.result();
-            });
+            scrapsToUpdate.reserve(triangulationResults.size());
+            scrapDataset.reserve(triangulationResults.size());
 
-            taskFinished(dirtyScraps, scrapDatas);
+            for(const auto& result : triangulationResults) {
+                if(result.scrap == nullptr) {
+                    continue;
+                }
+
+                cwTriangulatedData data;
+                const auto& future = result.data;
+
+                if(future.isFinished() && future.resultCount() == 1) {
+                    data = future.result();
+                }
+
+                scrapsToUpdate.append(result.scrap);
+                scrapDataset.append(data);
+            }
+
+            taskFinished(scrapsToUpdate, scrapDataset);
         }).future();
 
         return finalFuture;
