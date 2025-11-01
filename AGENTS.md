@@ -9,10 +9,10 @@ From a clean checkout:
 git submodule update --init --recursive
 conan profile detect --force
 conan install . -o "&:system_qt=False" --build=missing -of conan_deps
-cmake -G Ninja --preset conan-release -DCMAKE_TOOLCHAIN_FILE=conan_deps/conan_toolchain.cmake -S . -B build
-cmake --build build
+cmake --preset conan-release -DCMAKE_TOOLCHAIN_FILE=conan_deps/conan_toolchain.cmake
+cmake --build build/Qt_6_8_3_for_macOS-Debug --target all
 ```
-Run the app via `./build/CaveWhere`. Build the test runners with `cmake --build build --target cavewhere-test cavewhere-qml-test`. Execute C++ unit tests through `./build/cavewhere-test` and QML tests via `./build/cavewhere-qml-test --platform offscreen`.
+Run the app via `./build/Qt_6_8_3_for_macOS-Debug/CaveWhere`. Build the test runners with `cmake --build build/Qt_6_8_3_for_macOS-Debug --target cavewhere-test cavewhere-qml-test`. Execute C++ unit tests through `./build/Qt_6_8_3_for_macOS-Debug/cavewhere-test` and QML tests via `./build/Qt_6_8_3_for_macOS-Debug/cavewhere-qml-test --platform offscreen`.
 
 ## Coding Style & Naming Conventions
 Follow Qt’s 4-space indentation and brace-on-next-line style seen in `cavewherelib/src`. Classes and QObjects use UpperCamelCase (`cwProject` retains the legacy `cw` prefix). Member variables take a trailing underscore; helpers use lowerCamelCase. QML components follow the `Thing.qml` pattern, expose lowerCamelCase properties, and are exported through `qt_add_qml_module`. Keep user-facing strings translatable and bundle assets through the existing `.qrc` files.
