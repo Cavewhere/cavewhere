@@ -260,10 +260,11 @@ bool cwRhiTexturedItems::gather(const GatherContext& context, QVector<PipelineBa
             continue;
         }
 
+        auto* pipeline = item->pipelineRecord->pipeline;
+
         cwRHIObject::PipelineState state;
-        state.pipeline = item->pipelineRecord->pipeline;
-        const quint64 pipelineKey = quint64(quintptr(state.pipeline));
-        state.sortKey = (quint64(context.objectOrder) << 32) | (pipelineKey & 0xffffffffu);
+        state.pipeline = pipeline;
+        state.sortKey = cwRHIObject::makeSortKey(context.objectOrder, pipeline);
 
         auto& batch = acquirePipelineBatch(batches, state);
 

@@ -159,8 +159,7 @@ bool cwRHILinePlot::gather(const GatherContext& context, QVector<PipelineBatch>&
 
     cwRHIObject::PipelineState state;
     state.pipeline = pipeline;
-    const quint64 pipelineKey = quint64(quintptr(pipeline));
-    state.sortKey = (quint64(context.objectOrder) << 32) | (pipelineKey & 0xffffffffu);
+    state.sortKey = cwRHIObject::makeSortKey(context.objectOrder, pipeline);
 
     auto& batch = acquirePipelineBatch(batches, state);
     cwRHIObject::Drawable drawable;

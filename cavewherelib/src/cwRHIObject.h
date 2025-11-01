@@ -83,6 +83,13 @@ public:
         QVector<Drawable> drawables;
     };
 
+    static quint64 makeSortKey(quint32 objectOrder, QRhiGraphicsPipeline* pipeline)
+    {
+        const quint64 orderPart = quint64(objectOrder) << 32;
+        const quint64 pipelinePart = quint64(quintptr(pipeline)) & 0xffffffffull;
+        return orderPart | pipelinePart;
+    }
+
     virtual void initialize(const ResourceUpdateData& data) = 0;
     virtual void synchronize(const SynchronizeData& data) = 0;
     virtual void updateResources(const ResourceUpdateData& data) = 0;
