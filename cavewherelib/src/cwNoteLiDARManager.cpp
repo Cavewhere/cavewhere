@@ -487,14 +487,11 @@ void cwNoteLiDARManager::disconnectTrip(cwTrip* trip)
 
 void cwNoteLiDARManager::connectNote(cwNoteLiDAR *note)
 {
-    qDebug() << "Note connect:" << note;
-
     if(!m_connectionChecker.add(note)) {
         return;
     }
 
     auto handleNoteChange = [note, this]() {
-        qDebug() << "Data changed on note:" << note;
         markDirty(note);
         runIfNeeded();
     };
