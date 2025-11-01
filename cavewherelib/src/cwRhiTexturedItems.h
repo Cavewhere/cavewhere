@@ -22,6 +22,35 @@ private:
         QRhiTexture* loadingTexture = nullptr;
     };
 
+    struct PipelineKey {
+        QRhiRenderPassDescriptor* renderPass = nullptr;
+        int sampleCount = 1;
+        QString vertexShader;
+        QString fragmentShader;
+        quint8 cullMode = 0;
+        quint8 frontFace = 0;
+        quint8 blendMode = 0;
+        quint8 depthTest = 0;
+        quint8 depthWrite = 0;
+        quint8 globalBinding = 0;
+        quint8 perDrawBinding = 0;
+        quint8 textureBinding = 0;
+        quint8 globalStages = 0;
+        quint8 perDrawStages = 0;
+        quint8 textureStages = 0;
+        quint8 hasPerDraw = 0;
+        bool operator==(const PipelineKey& other) const = default;
+    };
+
+    friend uint qHash(const PipelineKey& key, uint seed) noexcept;
+
+    struct PipelineRecord {
+        PipelineKey key;
+        QRhiGraphicsPipeline* pipeline = nullptr;
+        QRhiShaderResourceBindings* layout = nullptr;
+        int refCount = 0;
+    };
+
     struct Item {
         Item();
         ~Item();
@@ -31,11 +60,7 @@ private:
         QRhiBuffer* uniformBuffer = nullptr;
         QRhiTexture* texture = nullptr;
         QRhiShaderResourceBindings* srb = nullptr;
-        QRhiGraphicsPipeline* pipeline = nullptr;
-        QRhiShaderResourceBindings* canonicalLayout = nullptr;
-
-        QRhiRenderPassDescriptor* renderPass = nullptr;
-        int sampleCount = 1;
+        PipelineRecord* pipelineRecord = nullptr;
 
         int numberOfIndices = 0;
 
@@ -54,13 +79,15 @@ private:
 
         bool visible = true;
 
+        cwRhiTexturedItems* owner = nullptr;
+
         void initializeResources(const ResourceUpdateData &data, const SharedItemData &sharedData);
         void ensurePipeline(const ResourceUpdateData& data, const SharedItemData &sharedData, const QRhiVertexInputLayout& layout);
         void updateGeometryBuffers(const ResourceUpdateData& data);
         void updateTextureResource(const ResourceUpdateData& data, const SharedItemData &sharedData);
         void updateUniformBuffer(const ResourceUpdateData& data);
         void createShaderResourceBindings(const ResourceUpdateData& data, const SharedItemData &sharedData);
-        void destroyPipeline();
+        void releasePipeline();
     };
 
     QHash<uint32_t, Item*> m_items;
@@ -69,11 +96,23 @@ private:
     QPointer<cwRenderTexturedItems> m_renderItems;
     SharedItemData m_sharedData;
     QRhiVertexInputLayout m_inputLayout;
+    QHash<PipelineKey, PipelineRecord*> m_pipelineCache;
 
     static QRhiShaderResourceBinding::StageFlags toRhiStages(cwRenderMaterialState::ShaderStages stages);
     static QRhiGraphicsPipeline::CullMode toRhiCullMode(cwRenderMaterialState::CullMode mode);
     static QRhiGraphicsPipeline::FrontFace toRhiFrontFace(cwRenderMaterialState::FrontFace face);
     static QRhiGraphicsPipeline::TargetBlend toBlendState(const cwRenderMaterialState& material);
+    static quint8 toStageMask(cwRenderMaterialState::ShaderStages stages);
+
+    PipelineKey makePipelineKey(QRhiRenderPassDescriptor* renderPass,
+                                int sampleCount,
+                                const cwRenderMaterialState& material) const;
+    PipelineRecord* acquirePipeline(const PipelineKey& key,
+                                    const cwRenderMaterialState& material,
+                                    QRhi* rhi,
+                                    const QRhiVertexInputLayout& layout,
+                                    const SharedItemData& sharedData);
+    void releasePipeline(PipelineRecord* record);
 };
 
 

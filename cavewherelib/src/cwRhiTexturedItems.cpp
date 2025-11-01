@@ -7,9 +7,32 @@
 #include <QFont>
 #include <QImage>
 #include <QPainter>
+#include <algorithm>
+#include <utility>
 
 namespace {
 constexpr int kFallbackUniformSize = 16; // minimum to satisfy uniform alignment
+}
+
+uint qHash(const cwRhiTexturedItems::PipelineKey& key, uint seed) noexcept
+{
+    seed = qHash(quintptr(key.renderPass), seed);
+    seed = qHash(key.sampleCount, seed);
+    seed = qHash(key.vertexShader, seed);
+    seed = qHash(key.fragmentShader, seed);
+    seed = qHash(key.cullMode, seed);
+    seed = qHash(key.frontFace, seed);
+    seed = qHash(key.blendMode, seed);
+    seed = qHash(key.depthTest, seed);
+    seed = qHash(key.depthWrite, seed);
+    seed = qHash(key.globalBinding, seed);
+    seed = qHash(key.perDrawBinding, seed);
+    seed = qHash(key.textureBinding, seed);
+    seed = qHash(key.globalStages, seed);
+    seed = qHash(key.perDrawStages, seed);
+    seed = qHash(key.textureStages, seed);
+    seed = qHash(key.hasPerDraw, seed);
+    return seed;
 }
 
 cwRhiTexturedItems::cwRhiTexturedItems() = default;
@@ -22,6 +45,13 @@ cwRhiTexturedItems::~cwRhiTexturedItems()
 
     delete m_sharedData.sampler;
     delete m_sharedData.loadingTexture;
+
+    for (auto record : std::as_const(m_pipelineCache)) {
+        delete record->pipeline;
+        delete record->layout;
+        delete record;
+    }
+    m_pipelineCache.clear();
 }
 
 void cwRhiTexturedItems::initialize(const ResourceUpdateData& data)
@@ -79,6 +109,7 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
         switch (command.type()) {
         case cwRenderTexturedItems::PendingCommand::Add: {
             auto* item = new Item;
+            item->owner = this;
             item->material = command.item().material;
             item->geometry = command.item().geometry;
             item->geometryNeedsUpdate = !item->geometry.indices().isEmpty();
@@ -152,6 +183,10 @@ void cwRhiTexturedItems::updateResources(const ResourceUpdateData& data)
             continue;
         }
 
+        if (!item->owner) {
+            item->owner = this;
+        }
+
         if (!item->resourcesInitialized) {
             item->initializeResources(data, m_sharedData);
         }
@@ -183,17 +218,36 @@ void cwRhiTexturedItems::render(const RenderData& data)
         return;
     }
 
+    QVector<Item*> drawList;
+    drawList.reserve(m_items.size());
     for (auto it = m_items.constBegin(); it != m_items.constEnd(); ++it) {
-        const Item* item = it.value();
+        Item* item = it.value();
         if (!item || !item->visible) {
             continue;
         }
 
-        if (item->numberOfIndices <= 0 || !item->pipeline || !item->srb) {
+        if (item->numberOfIndices <= 0 || !item->pipelineRecord || !item->pipelineRecord->pipeline || !item->srb) {
             continue;
         }
 
-        data.cb->setGraphicsPipeline(item->pipeline);
+        drawList.append(item);
+    }
+
+    if (drawList.isEmpty()) {
+        return;
+    }
+
+    std::sort(drawList.begin(), drawList.end(), [](const Item* lhs, const Item* rhs) {
+        return lhs->pipelineRecord->pipeline < rhs->pipelineRecord->pipeline;
+    });
+
+    QRhiGraphicsPipeline* boundPipeline = nullptr;
+    for (Item* item : std::as_const(drawList)) {
+        if (item->pipelineRecord->pipeline != boundPipeline) {
+            boundPipeline = item->pipelineRecord->pipeline;
+            data.cb->setGraphicsPipeline(boundPipeline);
+        }
+
         data.cb->setShaderResources(item->srb);
 
         const QRhiCommandBuffer::VertexInput vbind(item->vertexBuffer, 0);
@@ -207,13 +261,12 @@ cwRhiTexturedItems::Item::Item() = default;
 
 cwRhiTexturedItems::Item::~Item()
 {
+    releasePipeline();
     delete vertexBuffer;
     delete indexBuffer;
     delete uniformBuffer;
     delete texture;
     delete srb;
-    delete pipeline;
-    delete canonicalLayout;
 }
 
 void cwRhiTexturedItems::Item::initializeResources(const ResourceUpdateData& data, const SharedItemData&)
@@ -316,89 +369,45 @@ void cwRhiTexturedItems::Item::ensurePipeline(const ResourceUpdateData& data,
                                               const SharedItemData& sharedData,
                                               const QRhiVertexInputLayout& layout)
 {
-    QRhi* rhi = data.renderData.cb->rhi();
+    if (!owner) {
+        pipelineNeedsUpdate = false;
+        return;
+    }
+
     auto* renderer = data.renderData.renderer;
     auto* renderTarget = renderer->renderTarget();
     auto* currentPass = renderTarget->renderPassDescriptor();
     const int currentSampleCount = renderTarget->sampleCount();
 
-    const bool needsRebuild =
-        pipeline == nullptr ||
-        canonicalLayout == nullptr ||
-        renderPass != currentPass ||
-        sampleCount != currentSampleCount;
+    const PipelineKey key = owner->makePipelineKey(currentPass, currentSampleCount, material);
 
-    if (!needsRebuild && !pipelineNeedsUpdate) {
+    if (!pipelineNeedsUpdate && pipelineRecord && pipelineRecord->key == key) {
         return;
     }
 
-    destroyPipeline();
-
-    renderPass = currentPass;
-    sampleCount = currentSampleCount;
+    releasePipeline();
+    pipelineRecord = owner->acquirePipeline(key, material, data.renderData.cb->rhi(), layout, sharedData);
+    pipelineNeedsUpdate = false;
 
     if (!material.wantsPerDrawUniform()) {
         delete uniformBuffer;
         uniformBuffer = nullptr;
+        uniformNeedsUpdate = false;
     }
+}
 
-    const QShader vertex = loadShader(material.vertexShader);
-    const QShader fragment = loadShader(material.fragmentShader);
-
-    pipeline = rhi->newGraphicsPipeline();
-    pipeline->setShaderStages({
-        { QRhiShaderStage::Vertex, vertex },
-        { QRhiShaderStage::Fragment, fragment }
-    });
-    pipeline->setCullMode(toRhiCullMode(material.cullMode));
-    pipeline->setFrontFace(toRhiFrontFace(material.frontFace));
-    pipeline->setTopology(QRhiGraphicsPipeline::Triangles);
-    pipeline->setDepthTest(material.depthTest);
-    pipeline->setDepthWrite(material.depthWrite);
-    pipeline->setSampleCount(sampleCount);
-
-    if (material.requiresBlending()) {
-        auto blend = toBlendState(material);
-        pipeline->setTargetBlends({ blend });
-    } else {
-        pipeline->setTargetBlends({});
+void cwRhiTexturedItems::Item::releasePipeline()
+{
+    if (owner && pipelineRecord) {
+        owner->releasePipeline(pipelineRecord);
     }
-
-    QRhiShaderResourceBinding::StageFlags globalStages = toRhiStages(material.globalUniformStages);
-    QRhiShaderResourceBinding::StageFlags textureStages = toRhiStages(material.textureStages);
-
-    QVector<QRhiShaderResourceBinding> layoutBindings;
-    layoutBindings.append(QRhiShaderResourceBinding::uniformBuffer(material.globalUniformBinding,
-                                                                   globalStages,
-                                                                   nullptr));
-
-    if (material.wantsPerDrawUniform()) {
-        layoutBindings.append(QRhiShaderResourceBinding::uniformBuffer(material.perDrawUniformBinding,
-                                                                       toRhiStages(material.perDrawUniformStages),
-                                                                       nullptr));
-    }
-
-    layoutBindings.append(QRhiShaderResourceBinding::sampledTexture(material.textureBinding,
-                                                                    textureStages,
-                                                                    nullptr,
-                                                                    sharedData.sampler));
-
-    canonicalLayout = rhi->newShaderResourceBindings();
-    canonicalLayout->setBindings(layoutBindings.cbegin(), layoutBindings.cend());
-    canonicalLayout->create();
-
-    pipeline->setVertexInputLayout(layout);
-    pipeline->setShaderResourceBindings(canonicalLayout);
-    pipeline->setRenderPassDescriptor(renderPass);
-    pipeline->create();
-
-    pipelineNeedsUpdate = false;
+    pipelineRecord = nullptr;
 }
 
 void cwRhiTexturedItems::Item::createShaderResourceBindings(const ResourceUpdateData& data,
                                                              const SharedItemData& sharedData)
 {
-    if (!pipeline || !canonicalLayout) {
+    if (!pipelineRecord || !pipelineRecord->pipeline) {
         return;
     }
 
@@ -438,15 +447,131 @@ void cwRhiTexturedItems::Item::createShaderResourceBindings(const ResourceUpdate
     srb = rhi->newShaderResourceBindings();
     srb->setBindings(bindings.cbegin(), bindings.cend());
     srb->create();
+    Q_ASSERT(!pipelineRecord->layout || pipelineRecord->layout->isLayoutCompatible(srb));
 }
 
-void cwRhiTexturedItems::Item::destroyPipeline()
+quint8 cwRhiTexturedItems::toStageMask(cwRenderMaterialState::ShaderStages stages)
 {
-    delete pipeline;
-    pipeline = nullptr;
+    using Stage = cwRenderMaterialState::ShaderStage;
+    quint8 mask = 0;
+    if (stages.testFlag(Stage::Vertex)) {
+        mask |= 0x1;
+    }
+    if (stages.testFlag(Stage::Fragment)) {
+        mask |= 0x2;
+    }
+    return mask;
+}
 
-    delete canonicalLayout;
-    canonicalLayout = nullptr;
+cwRhiTexturedItems::PipelineKey cwRhiTexturedItems::makePipelineKey(QRhiRenderPassDescriptor* renderPass,
+                                                                    int sampleCount,
+                                                                    const cwRenderMaterialState& material) const
+{
+    PipelineKey key;
+    key.renderPass = renderPass;
+    key.sampleCount = sampleCount;
+    key.vertexShader = material.vertexShader;
+    key.fragmentShader = material.fragmentShader;
+    key.cullMode = static_cast<quint8>(material.cullMode);
+    key.frontFace = static_cast<quint8>(material.frontFace);
+    key.blendMode = static_cast<quint8>(material.blendMode);
+    key.depthTest = material.depthTest ? 1 : 0;
+    key.depthWrite = material.depthWrite ? 1 : 0;
+    key.globalBinding = static_cast<quint8>(material.globalUniformBinding);
+    key.perDrawBinding = material.wantsPerDrawUniform() ? static_cast<quint8>(material.perDrawUniformBinding) : 0xFF;
+    key.textureBinding = static_cast<quint8>(material.textureBinding);
+    key.globalStages = toStageMask(material.globalUniformStages);
+    key.perDrawStages = toStageMask(material.perDrawUniformStages);
+    key.textureStages = toStageMask(material.textureStages);
+    key.hasPerDraw = material.wantsPerDrawUniform() ? 1 : 0;
+    return key;
+}
+
+cwRhiTexturedItems::PipelineRecord *cwRhiTexturedItems::acquirePipeline(const PipelineKey& key,
+                                                                        const cwRenderMaterialState& material,
+                                                                        QRhi* rhi,
+                                                                        const QRhiVertexInputLayout& layout,
+                                                                        const SharedItemData& sharedData)
+{
+    auto it = m_pipelineCache.find(key);
+    if (it != m_pipelineCache.end()) {
+        it.value()->refCount += 1;
+        return it.value();
+    }
+
+    auto* record = new PipelineRecord;
+    record->key = key;
+    record->refCount = 1;
+    record->pipeline = rhi->newGraphicsPipeline();
+
+    QShader vertex = loadShader(material.vertexShader);
+    QShader fragment = loadShader(material.fragmentShader);
+
+    record->pipeline->setShaderStages({
+        { QRhiShaderStage::Vertex, vertex },
+        { QRhiShaderStage::Fragment, fragment }
+    });
+    record->pipeline->setCullMode(toRhiCullMode(material.cullMode));
+    record->pipeline->setFrontFace(toRhiFrontFace(material.frontFace));
+    record->pipeline->setTopology(QRhiGraphicsPipeline::Triangles);
+    record->pipeline->setDepthTest(material.depthTest);
+    record->pipeline->setDepthWrite(material.depthWrite);
+    record->pipeline->setSampleCount(key.sampleCount);
+
+    if (material.requiresBlending()) {
+        record->pipeline->setTargetBlends({ toBlendState(material) });
+    } else {
+        record->pipeline->setTargetBlends({});
+    }
+
+    QVector<QRhiShaderResourceBinding> layoutBindings;
+    layoutBindings.append(QRhiShaderResourceBinding::uniformBuffer(material.globalUniformBinding,
+                                                                   toRhiStages(material.globalUniformStages),
+                                                                   nullptr));
+
+    if (material.wantsPerDrawUniform()) {
+        layoutBindings.append(QRhiShaderResourceBinding::uniformBuffer(material.perDrawUniformBinding,
+                                                                       toRhiStages(material.perDrawUniformStages),
+                                                                       nullptr));
+    }
+
+    layoutBindings.append(QRhiShaderResourceBinding::sampledTexture(material.textureBinding,
+                                                                    toRhiStages(material.textureStages),
+                                                                    nullptr,
+                                                                    sharedData.sampler));
+
+    record->layout = rhi->newShaderResourceBindings();
+    record->layout->setBindings(layoutBindings.cbegin(), layoutBindings.cend());
+    record->layout->create();
+
+    record->pipeline->setVertexInputLayout(layout);
+    record->pipeline->setShaderResourceBindings(record->layout);
+    record->pipeline->setRenderPassDescriptor(key.renderPass);
+    record->pipeline->create();
+
+    m_pipelineCache.insert(record->key, record);
+    return record;
+}
+
+void cwRhiTexturedItems::releasePipeline(PipelineRecord* record)
+{
+    if (!record) {
+        return;
+    }
+
+    record->refCount -= 1;
+    if (record->refCount > 0) {
+        return;
+    }
+
+    auto it = m_pipelineCache.find(record->key);
+    if (it != m_pipelineCache.end() && it.value() == record) {
+        m_pipelineCache.erase(it);
+    }
+
+    delete record->pipeline;
+    delete record->layout;
+    delete record;
 }
 
 QRhiShaderResourceBinding::StageFlags cwRhiTexturedItems::toRhiStages(cwRenderMaterialState::ShaderStages stages)
