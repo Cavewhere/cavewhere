@@ -497,8 +497,8 @@ TEST_CASE("cwSaveLoad should save and load cwTrip - complex", "[cwSaveLoad]") {
 
 TEST_CASE("cwSaveLoad should save old projects correctly", "[cwSaveLoad]") {
     auto root = std::make_unique<cwRootData>();
-    // auto filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
-    auto filename = "/Users/cave/Desktop/BlankenshipBlowhole.cw";
+    auto filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+    // auto filename = "/Users/cave/Desktop/BlankenshipBlowhole.cw";
 
     //Prevents loop closure from happening
     root->settings()->jobSettings()->setAutomaticUpdate(false);

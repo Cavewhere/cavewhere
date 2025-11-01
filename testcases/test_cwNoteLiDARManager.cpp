@@ -10,6 +10,9 @@ TEST_CASE("cwNoteLiDARManager should warp and fit lidar data", "[cwNoteLiDARMana
     // Set up the root data and project
     auto root = std::make_unique<cwRootData>();
 
+
+    //Remove local directory, use zip version of jaws of the beast
+    CHECK(false);
     root->project()->loadFile("/Users/cave/Desktop/lidarTest/jaws of the beast/jaws of the beast.cw");
     root->project()->waitLoadToFinish();
 
