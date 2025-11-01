@@ -6,6 +6,25 @@
 #include "cwScene.h"
 #include "cwCamera.h"
 
+#include <algorithm>
+#include <array>
+
+namespace {
+cwRHIObject::PipelineBatch& ensurePipelineBatch(QVector<cwRHIObject::PipelineBatch>& batches,
+                                                const cwRHIObject::PipelineState& state)
+{
+    for (auto& existing : batches) {
+        if (existing.state.pipeline == state.pipeline &&
+            existing.state.sortKey == state.sortKey) {
+            return existing;
+        }
+    }
+
+    batches.append({state, {}});
+    return batches.last();
+}
+}
+
 cwRhiScene::~cwRhiScene()
 {
     for(auto rhiObject : std::as_const(m_rhiObjects)) {
@@ -121,17 +140,139 @@ void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
         m_rhiNeedResourceUpdate.clear();
     }
 
-    //This is a very basic framegraph with 1 rendering pass.
+    constexpr int kPassCount = static_cast<int>(cwRHIObject::RenderPass::Count);
+    using PassBatchesArray = std::array<QVector<cwRHIObject::PipelineBatch>, kPassCount>;
+    PassBatchesArray passBatches;
+
+    //For future implementations
+    // const std::array<cwRHIObject::RenderPass, 3> passOrder = {
+    //     cwRHIObject::RenderPass::Opaque,
+    //     cwRHIObject::RenderPass::Transparent,
+    //     cwRHIObject::RenderPass::Overlay
+    // };
+
+    const std::array<cwRHIObject::RenderPass, 1> passOrder = {
+        cwRHIObject::RenderPass::Opaque,
+    };
+
+    quint32 objectOrder = 0;
+    for (auto object : std::as_const(m_rhiObjects)) {
+        if(!object->isVisible()) {
+            ++objectOrder;
+            continue;
+        }
+
+        bool gathered = false;
+        for (cwRHIObject::RenderPass pass : passOrder) {
+            const int passIndex = static_cast<int>(pass);
+            auto& batches = passBatches[passIndex];
+            const cwRHIObject::GatherContext context { &renderData, pass, objectOrder };
+            gathered |= object->gather(context, batches);
+        }
+
+        //Generate renderables for older rendering path
+        if (!gathered) {
+            const int defaultPassIndex = static_cast<int>(cwRHIObject::RenderPass::Opaque);
+            const quint64 baseSortKey = (quint64(objectOrder) << 32);
+            cwRHIObject::PipelineState state;
+            state.pipeline = nullptr;
+            state.sortKey = baseSortKey;
+
+            auto& batch = ensurePipelineBatch(passBatches[defaultPassIndex], state);
+            cwRHIObject::Drawable draw;
+            draw.type = cwRHIObject::Drawable::Type::Custom;
+            draw.customDraw = [object](const cwRHIObject::RenderData& data) {
+                object->render(data);
+            };
+
+            batch.drawables.append(draw);
+        }
+
+        ++objectOrder;
+    }
+
     const QColor clearColor = QColor::fromRgbF(0.0, 0.0, 0.0, 0.0); //0.33, 0.66, 1.0, 1.0);
     cb->beginPass(renderer->renderTarget(), clearColor, { 1.0f, 0 }, resources);
 
     const QSize outputSize = renderer->renderTarget()->pixelSize();
     cb->setViewport(QRhiViewport(0, 0, outputSize.width(), outputSize.height()));
 
-    //Render rendering objects
-    for(auto object : std::as_const(m_rhiObjects)) {
-        if(object->isVisible()) {
-            object->render(renderData);
+    QRhiGraphicsPipeline* boundPipeline = nullptr;
+    for (cwRHIObject::RenderPass pass : passOrder) {
+        const int passIndex = static_cast<int>(pass);
+        auto& batches = passBatches[passIndex];
+        if (batches.isEmpty()) {
+            continue;
+        }
+
+        std::sort(batches.begin(), batches.end(), [](const cwRHIObject::PipelineBatch& a,
+                                                     const cwRHIObject::PipelineBatch& b) {
+            if (a.state.sortKey != b.state.sortKey) {
+                return a.state.sortKey < b.state.sortKey;
+            }
+            return a.state.pipeline < b.state.pipeline;
+        });
+
+        for (const auto& batch : std::as_const(batches)) {
+            if (batch.state.pipeline && batch.state.pipeline != boundPipeline) {
+                boundPipeline = batch.state.pipeline;
+                cb->setGraphicsPipeline(boundPipeline);
+            } else if (!batch.state.pipeline) {
+                boundPipeline = nullptr;
+            }
+
+            for (const auto& drawable : batch.drawables) {
+                switch (drawable.type) {
+                case cwRHIObject::Drawable::Type::Custom:
+                    boundPipeline = nullptr;
+                    if (drawable.customDraw) {
+                        drawable.customDraw(renderData);
+                    }
+                    break;
+                case cwRHIObject::Drawable::Type::Indexed: {
+                    if (drawable.bindings) {
+                        cb->setShaderResources(drawable.bindings);
+                    } else {
+                        cb->setShaderResources();
+                    }
+
+                    if (!drawable.vertexBindings.isEmpty()) {
+                        cb->setVertexInput(0,
+                                           static_cast<int>(drawable.vertexBindings.size()),
+                                           drawable.vertexBindings.constData(),
+                                           drawable.indexBuffer,
+                                           drawable.indexOffset,
+                                           drawable.indexFormat);
+                    }
+
+                    cb->drawIndexed(drawable.indexCount,
+                                    drawable.instanceCount,
+                                    drawable.indexOffset,
+                                    drawable.vertexOffset,
+                                    drawable.firstInstance);
+                    break;
+                }
+                case cwRHIObject::Drawable::Type::NonIndexed: {
+                    if (drawable.bindings) {
+                        cb->setShaderResources(drawable.bindings);
+                    } else {
+                        cb->setShaderResources();
+                    }
+
+                    if (!drawable.vertexBindings.isEmpty()) {
+                        cb->setVertexInput(0,
+                                           static_cast<int>(drawable.vertexBindings.size()),
+                                           drawable.vertexBindings.constData());
+                    }
+
+                    cb->draw(drawable.vertexCount,
+                             drawable.instanceCount,
+                             static_cast<quint32>(drawable.vertexOffset),
+                             drawable.firstInstance);
+                    break;
+                }
+                }
+            }
         }
     }
 
@@ -173,4 +314,3 @@ void cwRhiScene::updateGlobalUniformBuffer(QRhiResourceUpdateBatch* batch, QRhi*
 
     m_updateFlags = cwSceneUpdate::Flag::None;
 }
-

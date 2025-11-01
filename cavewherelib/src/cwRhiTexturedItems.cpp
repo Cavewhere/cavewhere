@@ -7,6 +7,7 @@
 #include <QFont>
 #include <QImage>
 #include <QPainter>
+#include <QtGlobal>
 #include <algorithm>
 #include <utility>
 
@@ -214,47 +215,97 @@ void cwRhiTexturedItems::updateResources(const ResourceUpdateData& data)
 
 void cwRhiTexturedItems::render(const RenderData& data)
 {
+    // if (!m_visible) {
+    //     return;
+    // }
+
+    // QVector<Item*> drawList;
+    // drawList.reserve(m_items.size());
+    // for (auto it = m_items.constBegin(); it != m_items.constEnd(); ++it) {
+    //     Item* item = it.value();
+    //     if (!item || !item->visible) {
+    //         continue;
+    //     }
+
+    //     if (item->numberOfIndices <= 0 || !item->pipelineRecord || !item->pipelineRecord->pipeline || !item->srb) {
+    //         continue;
+    //     }
+
+    //     drawList.append(item);
+    // }
+
+    // if (drawList.isEmpty()) {
+    //     return;
+    // }
+
+    // std::sort(drawList.begin(), drawList.end(), [](const Item* lhs, const Item* rhs) {
+    //     return lhs->pipelineRecord->pipeline < rhs->pipelineRecord->pipeline;
+    // });
+
+    // QRhiGraphicsPipeline* boundPipeline = nullptr;
+    // for (Item* item : std::as_const(drawList)) {
+    //     if (item->pipelineRecord->pipeline != boundPipeline) {
+    //         boundPipeline = item->pipelineRecord->pipeline;
+    //         data.cb->setGraphicsPipeline(boundPipeline);
+    //     }
+
+    //     data.cb->setShaderResources(item->srb);
+
+    //     const QRhiCommandBuffer::VertexInput vbind(item->vertexBuffer, 0);
+    //     data.cb->setVertexInput(0, 1, &vbind, item->indexBuffer, 0, QRhiCommandBuffer::IndexUInt32);
+
+    //     data.cb->drawIndexed(item->numberOfIndices);
+    // }
+}
+
+bool cwRhiTexturedItems::gather(const GatherContext& context, QVector<PipelineBatch>& batches)
+{
     if (!m_visible) {
-        return;
+        return false;
     }
 
-    QVector<Item*> drawList;
-    drawList.reserve(m_items.size());
+    const auto desiredPass = context.renderPass;
+    bool appended = false;
+
     for (auto it = m_items.constBegin(); it != m_items.constEnd(); ++it) {
-        Item* item = it.value();
+        const Item* item = it.value();
         if (!item || !item->visible) {
             continue;
         }
 
-        if (item->numberOfIndices <= 0 || !item->pipelineRecord || !item->pipelineRecord->pipeline || !item->srb) {
+        if (item->numberOfIndices <= 0 ||
+            !item->pipelineRecord ||
+            !item->pipelineRecord->pipeline ||
+            !item->srb ||
+            !item->vertexBuffer ||
+            !item->indexBuffer) {
             continue;
         }
 
-        drawList.append(item);
-    }
-
-    if (drawList.isEmpty()) {
-        return;
-    }
-
-    std::sort(drawList.begin(), drawList.end(), [](const Item* lhs, const Item* rhs) {
-        return lhs->pipelineRecord->pipeline < rhs->pipelineRecord->pipeline;
-    });
-
-    QRhiGraphicsPipeline* boundPipeline = nullptr;
-    for (Item* item : std::as_const(drawList)) {
-        if (item->pipelineRecord->pipeline != boundPipeline) {
-            boundPipeline = item->pipelineRecord->pipeline;
-            data.cb->setGraphicsPipeline(boundPipeline);
+        if (toRenderPass(item->material.renderPass) != desiredPass) {
+            continue;
         }
 
-        data.cb->setShaderResources(item->srb);
+        cwRHIObject::PipelineState state;
+        state.pipeline = item->pipelineRecord->pipeline;
+        const quint64 pipelineKey = quint64(quintptr(state.pipeline));
+        state.sortKey = (quint64(context.objectOrder) << 32) | (pipelineKey & 0xffffffffu);
 
-        const QRhiCommandBuffer::VertexInput vbind(item->vertexBuffer, 0);
-        data.cb->setVertexInput(0, 1, &vbind, item->indexBuffer, 0, QRhiCommandBuffer::IndexUInt32);
+        auto& batch = acquirePipelineBatch(batches, state);
 
-        data.cb->drawIndexed(item->numberOfIndices);
+        cwRHIObject::Drawable drawable;
+        drawable.type = cwRHIObject::Drawable::Type::Indexed;
+        drawable.bindings = item->srb;
+        drawable.indexBuffer = item->indexBuffer;
+        drawable.indexFormat = QRhiCommandBuffer::IndexUInt32;
+        drawable.indexCount = static_cast<quint32>(item->numberOfIndices);
+        drawable.vertexBindings.append(QRhiCommandBuffer::VertexInput(item->vertexBuffer, 0));
+
+        batch.drawables.append(drawable);
+        appended = true;
     }
+
+    return appended;
 }
 
 cwRhiTexturedItems::Item::Item() = default;
@@ -634,4 +685,16 @@ QRhiGraphicsPipeline::TargetBlend cwRhiTexturedItems::toBlendState(const cwRende
     }
 
     return blend;
+}
+
+cwRHIObject::RenderPass cwRhiTexturedItems::toRenderPass(cwRenderMaterialState::RenderPass pass)
+{
+    using MaterialPass = cwRenderMaterialState::RenderPass;
+    switch (pass) {
+    case MaterialPass::Opaque:      return cwRHIObject::RenderPass::Opaque;
+    case MaterialPass::Transparent: return cwRHIObject::RenderPass::Transparent;
+    case MaterialPass::Overlay:     return cwRHIObject::RenderPass::Overlay;
+    case MaterialPass::ShadowMap:   return cwRHIObject::RenderPass::ShadowMap;
+    }
+    return cwRHIObject::RenderPass::Opaque;
 }

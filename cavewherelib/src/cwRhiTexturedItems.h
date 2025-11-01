@@ -15,6 +15,7 @@ public:
     void synchronize(const SynchronizeData& data) override;
     void updateResources(const ResourceUpdateData& data) override;
     void render(const RenderData& data) override;
+    bool gather(const GatherContext& context, QVector<PipelineBatch>& batches) override;
 
 private:
     struct SharedItemData {
@@ -113,6 +114,7 @@ private:
                                     const QRhiVertexInputLayout& layout,
                                     const SharedItemData& sharedData);
     void releasePipeline(PipelineRecord* record);
+    static cwRHIObject::RenderPass toRenderPass(cwRenderMaterialState::RenderPass pass);
 };
 
 
