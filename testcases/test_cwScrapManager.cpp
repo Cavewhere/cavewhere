@@ -205,6 +205,8 @@ TEST_CASE("cwScrapManager should update on viewMatrix change", "[cwScrapManager]
     auto note = notes.at(0);
     REQUIRE(note->scraps().size() == 1);
     auto scrap = note->scraps().at(0);
+    auto scrapManager = rootData->scrapManager();
+    REQUIRE(scrapManager != nullptr);
 
     CHECK(scrap->type() == cwScrap::ProjectedProfile);
     auto profile = dynamic_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix());
@@ -212,28 +214,30 @@ TEST_CASE("cwScrapManager should update on viewMatrix change", "[cwScrapManager]
     CHECK(profile->azimuth() == 135.0);
 
     CHECK(rootData->futureManagerModel()->rowCount() == 0);
-    // CHECK(scrap->triangulationData().isStale() == false);
+    CHECK(scrapManager->dirtyScraps().contains(scrap) == false);
     profile->setAzimuth(136.0);
 
 
     CHECK(rootData->futureManagerModel()->rowCount() == 1);
-    // CHECK(scrap->triangulationData().isStale() == true);
+    CHECK(scrapManager->dirtyScraps().contains(scrap));
 
     rootData->futureManagerModel()->waitForFinished();
+    scrapManager->waitForFinish();
 
     CHECK(rootData->futureManagerModel()->rowCount() == 0);
-    // CHECK(scrap->triangulationData().isStale() == false);
+    CHECK(scrapManager->dirtyScraps().contains(scrap) == false);
 
     SECTION("Switch to running profile") {
         scrap->setType(cwScrap::RunningProfile);
         CHECK(dynamic_cast<cwRunningProfileScrapViewMatrix*>(scrap->viewMatrix()));
 
         CHECK(rootData->futureManagerModel()->rowCount() == 1);
-        // CHECK(scrap->triangulationData().isStale() == true);
+        CHECK(scrapManager->dirtyScraps().contains(scrap));
 
         rootData->futureManagerModel()->waitForFinished();
+        scrapManager->waitForFinish();
 
         CHECK(rootData->futureManagerModel()->rowCount() == 0);
-        // CHECK(scrap->triangulationData().isStale() == false);
+        CHECK(scrapManager->dirtyScraps().contains(scrap) == false);
     }
 }
