@@ -202,6 +202,9 @@ private:
 
     void setSaveEnabled(bool enabled);
 
+    enum class ProjectTransferMode { Move, Copy };
+    Monad::ResultBase transferProjectTo(const QString& destinationFileUrl, ProjectTransferMode mode);
+
     void disconnectTreeModel();
     void connectTreeModel();
 

@@ -515,6 +515,83 @@ ResultBase copyDirectoryRecursively(const QDir& sourceDir, const QDir& destinati
 
 }
 
+ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, ProjectTransferMode mode)
+{
+    const auto destinationResult = projectDestination(destinationFileUrl);
+    if (destinationResult.hasError()) {
+        return ResultBase(destinationResult.errorMessage());
+    }
+
+    const auto destination = destinationResult.value();
+
+    const QString currentProjectFile = fileName();
+    if (currentProjectFile.isEmpty()) {
+        return ResultBase(QStringLiteral("Project does not have an associated file."));
+    }
+
+    const QString currentRootPath = projectDir().absolutePath();
+    const QString targetRootPath = destination.rootDirPath;
+    const QString normalizedCurrentRoot = QDir(currentRootPath).absolutePath();
+    const QString normalizedTargetRoot = QDir(targetRootPath).absolutePath();
+    const bool sameRoot = normalizedCurrentRoot == normalizedTargetRoot;
+
+    if (!sameRoot && QFileInfo::exists(targetRootPath)) {
+        return ResultBase(QStringLiteral("Destination folder '%1' already exists.").arg(targetRootPath));
+    }
+
+    setSaveEnabled(false);
+    auto enableGuard = qScopeGuard([this]() { setSaveEnabled(true); });
+
+    waitForFinished();
+
+    if (!sameRoot) {
+        if (mode == ProjectTransferMode::Move) {
+            if (!QDir().rename(currentRootPath, targetRootPath)) {
+                return ResultBase(QStringLiteral("Couldn't move project to '%1'.").arg(targetRootPath));
+            }
+        } else if (mode == ProjectTransferMode::Copy) {
+            auto copyResult = copyDirectoryRecursively(QDir(currentRootPath), QDir(targetRootPath));
+            if (copyResult.hasError()) {
+                return copyResult;
+            }
+        } else {
+            return ResultBase(QStringLiteral("Unknown ProjectTransferMode, this is a bug"));
+        }
+    }
+
+    QDir targetRootDir(sameRoot ? normalizedCurrentRoot : normalizedTargetRoot);
+    const QString sourceFileName = QFileInfo(currentProjectFile).fileName();
+    QString sourceFilePath = targetRootDir.absoluteFilePath(sourceFileName);
+
+    if (!QFileInfo::exists(sourceFilePath)) {
+        const QString label = mode == ProjectTransferMode::Move ? QStringLiteral("Moved") : QStringLiteral("Copied");
+        return ResultBase(QStringLiteral("%1 project file '%2' is missing.").arg(label, sourceFilePath));
+    }
+
+    const QString desiredFilePath = destination.projectFilePath;
+    const QString desiredFileName = QFileInfo(desiredFilePath).fileName();
+    const QString desiredPath = targetRootDir.absoluteFilePath(desiredFileName);
+
+    if (sourceFilePath != desiredPath) {
+        if (QFileInfo::exists(desiredPath) && !QFile::remove(desiredPath)) {
+            return ResultBase(QStringLiteral("Couldn't overwrite '%1'.").arg(desiredPath));
+        }
+        if (!QFile::rename(sourceFilePath, desiredPath)) {
+            return ResultBase(QStringLiteral("Couldn't rename project file to '%1'.").arg(desiredPath));
+        }
+        sourceFilePath = desiredPath;
+    }
+
+    setFileName(desiredFilePath);
+    setTemporary(false);
+    d->resetFileLookup();
+
+    setSaveEnabled(true);
+    enableGuard.dismiss();
+
+    return ResultBase();
+}
+
 cwSaveLoad::cwSaveLoad(QObject *parent) :
     QObject(parent),
     d(std::make_unique<cwSaveLoad::Data>())
@@ -934,135 +1011,12 @@ void cwSaveLoad::addImages(QList<QUrl> noteImagePaths,
 
 ResultBase cwSaveLoad::moveProjectTo(const QString& destinationFileUrl)
 {
-    const auto destinationResult = projectDestination(destinationFileUrl);
-    if (destinationResult.hasError()) {
-        return ResultBase(destinationResult.errorMessage());
-    }
-
-    const auto destination = destinationResult.value();
-
-    const QString currentProjectFile = fileName();
-    if (currentProjectFile.isEmpty()) {
-        return ResultBase(QStringLiteral("Project does not have an associated file."));
-    }
-
-    const QString currentRootPath = projectDir().absolutePath();
-    const QString targetRootPath = destination.rootDirPath;
-    const QString normalizedCurrentRoot = QDir(currentRootPath).absolutePath();
-    const QString normalizedTargetRoot = QDir(targetRootPath).absolutePath();
-    const bool sameRoot = normalizedCurrentRoot == normalizedTargetRoot;
-
-    if (!sameRoot && QFileInfo::exists(targetRootPath)) {
-        return ResultBase(QStringLiteral("Destination folder '%1' already exists.").arg(targetRootPath));
-    }
-
-    setSaveEnabled(false);
-    auto enableGuard = qScopeGuard([this]() { setSaveEnabled(true); });
-
-    waitForFinished();
-
-    if (!sameRoot) {
-        if (!QDir().rename(currentRootPath, targetRootPath)) {
-            return ResultBase(QStringLiteral("Couldn't move project to '%1'.").arg(targetRootPath));
-        }
-    }
-
-    const QString desiredFilePath = destination.projectFilePath;
-    const QString desiredFileName = QFileInfo(desiredFilePath).fileName();
-
-    QDir newRootDir(sameRoot ? normalizedCurrentRoot : normalizedTargetRoot);
-    const QString oldFileName = QFileInfo(currentProjectFile).fileName();
-    const QString movedFilePath = newRootDir.absoluteFilePath(oldFileName);
-
-    if (!QFileInfo::exists(movedFilePath)) {
-        return ResultBase(QStringLiteral("Moved project file '%1' is missing.").arg(movedFilePath));
-    }
-
-    if (oldFileName != desiredFileName) {
-        const QString desiredPath = newRootDir.absoluteFilePath(desiredFileName);
-        if (QFileInfo::exists(desiredPath) && !QFile::remove(desiredPath)) {
-            return ResultBase(QStringLiteral("Couldn't overwrite '%1'.").arg(desiredPath));
-        }
-        if (!QFile::rename(movedFilePath, desiredPath)) {
-            return ResultBase(QStringLiteral("Couldn't rename project file to '%1'.").arg(desiredPath));
-        }
-    }
-
-    setFileName(desiredFilePath);
-    setTemporary(false);
-    d->resetFileLookup();
-
-    setSaveEnabled(true);
-    enableGuard.dismiss();
-
-    return ResultBase();
+    return transferProjectTo(destinationFileUrl, ProjectTransferMode::Move);
 }
 
 ResultBase cwSaveLoad::copyProjectTo(const QString& destinationFileUrl)
 {
-    const auto destinationResult = projectDestination(destinationFileUrl);
-    if (destinationResult.hasError()) {
-        return ResultBase(destinationResult.errorMessage());
-    }
-
-    const auto destination = destinationResult.value();
-
-    const QString currentProjectFile = fileName();
-    if (currentProjectFile.isEmpty()) {
-        return ResultBase(QStringLiteral("Project does not have an associated file."));
-    }
-
-    const QString currentRootPath = projectDir().absolutePath();
-    const QString targetRootPath = destination.rootDirPath;
-    const QString normalizedCurrentRoot = QDir(currentRootPath).absolutePath();
-    const QString normalizedTargetRoot = QDir(targetRootPath).absolutePath();
-    const bool sameRoot = normalizedCurrentRoot == normalizedTargetRoot;
-
-    if (!sameRoot && QFileInfo::exists(targetRootPath)) {
-        return ResultBase(QStringLiteral("Destination folder '%1' already exists.").arg(targetRootPath));
-    }
-
-    setSaveEnabled(false);
-    auto enableGuard = qScopeGuard([this]() { setSaveEnabled(true); });
-
-    waitForFinished();
-
-    if (!sameRoot) {
-        auto copyResult = copyDirectoryRecursively(QDir(currentRootPath), QDir(targetRootPath));
-        if (copyResult.hasError()) {
-            return copyResult;
-        }
-    }
-
-    const QString desiredFilePath = destination.projectFilePath;
-    const QString desiredFileName = QFileInfo(desiredFilePath).fileName();
-
-    QDir newRootDir(sameRoot ? normalizedCurrentRoot : normalizedTargetRoot);
-    const QString oldFileName = QFileInfo(currentProjectFile).fileName();
-    const QString copiedFilePath = newRootDir.absoluteFilePath(oldFileName);
-
-    if (!QFileInfo::exists(copiedFilePath)) {
-        return ResultBase(QStringLiteral("Copied project file '%1' is missing.").arg(copiedFilePath));
-    }
-
-    if (oldFileName != desiredFileName) {
-        const QString desiredPath = newRootDir.absoluteFilePath(desiredFileName);
-        if (QFileInfo::exists(desiredPath) && !QFile::remove(desiredPath)) {
-            return ResultBase(QStringLiteral("Couldn't overwrite '%1'.").arg(desiredPath));
-        }
-        if (!QFile::rename(copiedFilePath, desiredPath)) {
-            return ResultBase(QStringLiteral("Couldn't rename project file to '%1'.").arg(desiredPath));
-        }
-    }
-
-    setFileName(desiredFilePath);
-    setTemporary(false);
-    d->resetFileLookup();
-
-    setSaveEnabled(true);
-    enableGuard.dismiss();
-
-    return ResultBase();
+    return transferProjectTo(destinationFileUrl, ProjectTransferMode::Copy);
 }
 
 ResultBase cwSaveLoad::deleteTemporaryProject()
