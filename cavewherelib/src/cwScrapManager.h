@@ -74,6 +74,8 @@ public:
 
     void waitForFinish();
 
+    QList<cwScrap*> dirtyScraps() const;
+
     QList<TriangulatedScrapResult> triangulateScraps(const QList<cwScrap*>& scraps) const;
 
 signals:

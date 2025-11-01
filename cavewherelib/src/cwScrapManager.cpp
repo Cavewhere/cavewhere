@@ -927,3 +927,8 @@ void cwScrapManager::waitForFinish()
 {
     cwAsyncFuture::waitForFinished(TriangulateRestarter.future());
 }
+
+QList<cwScrap*> cwScrapManager::dirtyScraps() const
+{
+    return DirtyScraps.values();
+}

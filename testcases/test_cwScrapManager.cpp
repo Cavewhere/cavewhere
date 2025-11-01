@@ -111,24 +111,32 @@ TEST_CASE("cwScrapManager auto update should work propertly", "[cwScrapManager]"
     auto chunk = trip->chunk(0);
     chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "10.0");
 
+    auto notes = trip->notes()->notes();
+    REQUIRE(notes.size() > 0);
+    auto note = notes.first();
+    REQUIRE(note->scraps().size() > 0);
+    auto scraps = note->scraps();
+    auto scrap = scraps.first();
+
     CHECK(rootData->futureManagerModel()->rowCount() == 0);
     CHECK(addRowSpy.count() == 0);
 
     QEventLoop loop;
 
-    QTimer::singleShot(1, [&](){
+    QTimer::singleShot(1, qApp, [&](){
         rootData->linePlotManager()->waitToFinish();
         CHECK(rootData->futureManagerModel()->rowCount() == 0);
         CHECK(addRowSpy.count() == 0);
 
+        auto pendingScraps = scrapManager->dirtyScraps();
+        CHECK(pendingScraps.contains(scrap));
+
         scrapManager->setAutomaticUpdate(true);
-        REQUIRE(false); //FIXME, this is a break api change
-        // CHECK(trip->notes()->notes().first()->scraps().first()->triangulationData().isStale());
 
         rootData->futureManagerModel()->waitForFinished();
+        scrapManager->waitForFinish();
 
-        REQUIRE(false); //FIXME, this is a break api change
-        // CHECK(!trip->notes()->notes().first()->scraps().first()->triangulationData().isStale());
+        CHECK_FALSE(scrapManager->dirtyScraps().contains(scrap));
 
         loop.quit();
     });
