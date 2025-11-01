@@ -108,8 +108,6 @@ private:
 
     QPropertyNotifier m_modelMatrixUpdated;
 
-    QList<cwGeometryItersecter::Key> m_matrixObjects;
-
     cwFutureManagerToken m_futureManagerToken;
     AsyncFuture::Restarter<void> m_loadRestarter;
 

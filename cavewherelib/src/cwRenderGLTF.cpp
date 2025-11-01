@@ -16,8 +16,8 @@ cwRenderGLTF::cwRenderGLTF(QObject *parent)
     m_modelMatrixUpdated = m_modelMatrixProperty.addNotifier([this]() {
         auto matrix = m_modelMatrixProperty.value();
         m_modelMatrix.setValue(matrix);
-        for(const auto& key : std::as_const(m_matrixObjects)) {
-            geometryItersecter()->setModelMatrix(key, matrix);
+        for (auto id : std::as_const(m_items)) {
+            cwRenderTexturedItems::setModelMatrix(id, matrix);
         }
         update();
     });
@@ -37,6 +37,7 @@ void cwRenderGLTF::setGLTFFilePath(const QString &filePath)
         for(auto id : m_items) {
             removeItem(id);
         }
+        m_items.clear();
 
         m_status = Status::Loading;
 
@@ -110,7 +111,8 @@ QFuture<void> cwRenderGLTF::handleLoadFuture(QFuture<Monad::Result<Load> > loadF
         for(auto& item : load.items) {
             item.modelMatrix = m_modelMatrix.value();
             item.material = material;
-            addItem(std::move(item));
+            const auto id = addItem(std::move(item));
+            m_items.append(id);
         }
 
         m_status = Status::Ready;
@@ -144,7 +146,8 @@ Returns the full bounding box of the GLTF object
 QBox3D cwRenderGLTF::boundingBox() const
 {
     QBox3D boundingBox;
-    for(const auto& key : std::as_const(m_matrixObjects)) {
+    for (const auto id : m_items) {
+        cwGeometryItersecter::Key key{const_cast<cwRenderGLTF*>(this), id};
         auto box = geometryItersecter()->boundingBox(key);
         boundingBox.unite(box);
     }
