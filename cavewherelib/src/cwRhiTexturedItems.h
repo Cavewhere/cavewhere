@@ -5,6 +5,7 @@
 #include "cwRHIObject.h"
 #include "cwRenderTexturedItems.h"
 #include "cwRhiScene.h"
+#include <QMatrix4x4>
 
 class cwRhiTexturedItems : public cwRHIObject
 {
@@ -40,12 +41,14 @@ private:
         QImage image;
         QByteArray uniformBlock;
         cwRenderMaterialState material;
+        QMatrix4x4 modelMatrix;
 
         bool resourcesInitialized = false;
         bool geometryNeedsUpdate = false;
         bool textureNeedsUpdate = false;
         bool uniformNeedsUpdate = false;
         bool pipelineNeedsUpdate = true;
+        bool modelMatrixNeedsUpdate = true;
 
         double memoryUsageMb = 0.0;
 
@@ -60,6 +63,7 @@ private:
         void updateUniformBuffer(const ResourceUpdateData& data);
         void createShaderResourceBindings(const ResourceUpdateData& data, const SharedItemData &sharedData);
         void releasePipeline();
+        QByteArray buildPerDrawUniformPayload() const;
     };
 
     QHash<uint32_t, Item*> m_items;

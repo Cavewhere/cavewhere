@@ -26,7 +26,6 @@ class cwRenderScraps;
 class cwRenderRadialGradient;
 #include "cwRenderTexturedItems.h"
 #include "cwRenderGLTF.h"
-#include "cwRenderScraps.h"
 #include "cwRenderGridPlane.h"
 
 class cwRegionSceneManager : public QObject
@@ -83,7 +82,6 @@ private:
     cwGLTerrain* Terrain;
     cwRenderLinePlot* m_linePlot;
     cwRenderTexturedItems* m_items;
-    // cwRenderScraps* m_scraps;
     cwRenderGridPlane* m_plane;
     cwRenderRadialGradient* m_background;
 

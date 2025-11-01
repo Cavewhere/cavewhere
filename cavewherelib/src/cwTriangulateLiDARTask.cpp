@@ -58,13 +58,7 @@ QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item> > > cwTriangulateLiDA
         };
 
 
-        QVector<cwRenderTexturedItems::Item> renderItems = [&]() {
-            int size = 0;
-            for(const auto& mesh : std::as_const(gltf.meshes)) {
-                size += mesh.geometries.size();
-            }
-            return QVector<cwRenderTexturedItems::Item>(size);
-        }();
+        QVector<cwRenderTexturedItems::Item> renderItems = reserveRenderItems(gltf.meshes);
 
         auto toImage = [&](uint64_t textureIndex) {
             //Probably should use caching so we don't have duplicate
@@ -85,4 +79,16 @@ QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item> > > cwTriangulateLiDA
         return Monad::Result<QVector<cwRenderTexturedItems::Item> >(renderItems);
 
     });
+}
+
+QVector<cwRenderTexturedItems::Item> cwTriangulateLiDARTask::reserveRenderItems(const QVector<cw::gltf::MeshCPU> &meshes)
+{
+    size_t size = 0;
+    for(const auto& mesh : std::as_const(meshes)) {
+        size += mesh.geometries.size();
+    }
+
+    QVector<cwRenderTexturedItems::Item> items;
+    items.reserve(size);
+    return items;
 }

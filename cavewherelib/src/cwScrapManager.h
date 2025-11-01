@@ -150,8 +150,6 @@ private slots:
 
 };
 
-//This enable moc to work with forward declaration
-#include "cwRenderScraps.h"
 
 /**
  * @brief qHash

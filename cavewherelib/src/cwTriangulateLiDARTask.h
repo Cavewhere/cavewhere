@@ -18,6 +18,7 @@ public:
     cwTriangulateLiDARTask() = delete;
 
     static QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item>>> triangulate(const QList<cwTriangulateLiDARInData>& liDARs);
+    static QVector<cwRenderTexturedItems::Item> reserveRenderItems(const QVector<cw::gltf::MeshCPU>& meshes);
 };
 
 #endif // CWTRIANGULATELIDARTASK_H

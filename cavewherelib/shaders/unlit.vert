@@ -17,5 +17,6 @@ layout(location = 0) out vec2 v_uv;
 
 void main() {
     v_uv = inTexCoord0;
+    // gl_Position = sceneUbo.viewProj * modelUbo.model * vec4(inPosition, 1.0);
     gl_Position = sceneUbo.viewProj * modelUbo.model * vec4(inPosition, 1.0);
 }

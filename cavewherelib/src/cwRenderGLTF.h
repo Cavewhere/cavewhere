@@ -12,12 +12,13 @@
 #include "cwGltfLoader.h"
 #include "cwTracked.h"
 #include "cwGeometryItersecter.h"
+#include "cwRenderTexturedItems.h"
 
 //Qt include
 #include <QQmlEngine>
 #include <QtCore/qproperty.h>
 
-class cwRenderGLTF : public cwRenderObject
+class cwRenderGLTF : public cwRenderTexturedItems
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(RenderGLTF)
@@ -52,7 +53,7 @@ public:
 
     Status status() const { return m_status.value(); }
 
-    void setGltf(const QFuture<Monad::Result<cw::gltf::SceneCPU>>& gltfFuture);
+    // void setGltf(const QFuture<Monad::Result<cw::gltf::SceneCPU>>& gltfFuture);
 
     Q_INVOKABLE QBox3D boundingBox() const;
 
@@ -79,21 +80,24 @@ protected:
 
 private:
     struct Load {
-        cw::gltf::SceneCPU scene;
-        QList<cwGeometryItersecter::Key> matrixObjects;
-        QList<cwGeometryItersecter::Object> intersecterObjects;
+        QVector<cwRenderTexturedItems::Item> items;
+        // cw::gltf::SceneCPU scene;
+        // QList<cwGeometryItersecter::Key> matrixObjects;
+        // QList<cwGeometryItersecter::Object> intersecterObjects;
     };
 
     QFuture<void> handleLoadFuture(QFuture<Monad::Result<Load>> loadFuture);
 
-    static Load toIntersectors(cwRenderObject* renderObject,
-                               const cw::gltf::SceneCPU& data,
-                               const QMatrix4x4& modelMatrix);
+    // static Load toIntersectors(cwRenderObject* renderObject,
+    //                            const cw::gltf::SceneCPU& data,
+    //                            const QMatrix4x4& modelMatrix);
 
     QString m_gltfFilePath;
 
-    cw::gltf::SceneCPU m_data;
-    bool m_dataChanged = false;
+    QVector<uint32_t> m_items;
+
+    // cw::gltf::SceneCPU m_data;
+    // bool m_dataChanged = false;
 
     cwTracked<QMatrix4x4> m_modelMatrix;
 

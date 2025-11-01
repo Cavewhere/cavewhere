@@ -8,7 +8,6 @@
 
 #include "cwRegionSceneManager.h"
 #include "cwScene.h"
-#include "cwRenderScraps.h"
 #include "cwRenderGridPlane.h"
 #include "cwRenderLinePlot.h"
 #include "cwRenderRadialGradient.h"

@@ -1,7 +1,8 @@
 //Our includes
 #include "cwRenderGLTF.h"
-#include "cwRHIGltf.h"
+#include "cwRhiTexturedItems.h"
 #include "cwConcurrent.h"
+#include "cwTriangulateLiDARTask.h"
 
 //Async includes
 #include <asyncfuture.h>
@@ -9,14 +10,13 @@
 using namespace cw::gltf;
 
 cwRenderGLTF::cwRenderGLTF(QObject *parent)
-    : cwRenderObject{parent},
+    : cwRenderTexturedItems{parent},
     m_loadRestarter(this)
 {
     m_modelMatrixUpdated = m_modelMatrixProperty.addNotifier([this]() {
         auto matrix = m_modelMatrixProperty.value();
         m_modelMatrix.setValue(matrix);
         for(const auto& key : std::as_const(m_matrixObjects)) {
-            qDebug() << "Update intersector:" << matrix;
             geometryItersecter()->setModelMatrix(key, matrix);
         }
         update();
@@ -34,6 +34,10 @@ void cwRenderGLTF::setGLTFFilePath(const QString &filePath)
 {
     if(m_gltfFilePath != filePath) {
         qDebug() << "Setting gltf path:" << filePath;
+        for(auto id : m_items) {
+            removeItem(id);
+        }
+
         m_status = Status::Loading;
 
         auto run = [this, filePath]() {
@@ -42,8 +46,25 @@ void cwRenderGLTF::setGLTFFilePath(const QString &filePath)
 
             auto future = cwConcurrent::run([filePath, renderObject, modelMatrix]()->Monad::Result<Load> {
                 auto data = cw::gltf::Loader::loadGltf(filePath);
-                auto load = toIntersectors(renderObject, data, modelMatrix);
-                load.scene = std::move(data);
+
+                Load load;
+                load.items = cwTriangulateLiDARTask::reserveRenderItems(data.meshes);
+
+                auto toImage = [&](uint64_t textureIndex) {
+                    //Probably should use caching so we don't have duplicate
+                    return data.textures.at(textureIndex).toImage();
+                };
+
+                //Morph the vertexes
+                for(auto& mesh : data.meshes) {
+                    for(auto& geometry : mesh.geometries) {
+
+                        //Add the render item
+                        load.items.emplaceBack(std::move(geometry),
+                                               toImage(mesh.material.baseColorTextureIndex));
+                    }
+                }
+
                 return load;
             });
 
@@ -71,7 +92,7 @@ void cwRenderGLTF::setTranslation(float x, float y, float z)
 
 cwRHIObject *cwRenderGLTF::createRHIObject()
 {
-    return new cwRHIGltf();
+    return new cwRhiTexturedItems();
 }
 
 QFuture<void> cwRenderGLTF::handleLoadFuture(QFuture<Monad::Result<Load> > loadFuture)
@@ -81,62 +102,20 @@ QFuture<void> cwRenderGLTF::handleLoadFuture(QFuture<Monad::Result<Load> > loadF
 
         auto load = loadFuture.result().value();
 
-        m_data = std::move(load.scene);
-        m_matrixObjects = std::move(load.matrixObjects);
+        cwRenderMaterialState material;
+        material.perDrawUniformBinding = 1;
+        material.vertexShader = QStringLiteral(":/shaders/unlit.vert.qsb");
+        material.fragmentShader = QStringLiteral(":/shaders/scrap.frag.qsb");
 
-        auto intersector = geometryItersecter();
-        intersector->clear(this);
-
-        for(const auto& object : std::as_const(load.intersecterObjects)) {
-            intersector->addObject(object);
+        for(auto& item : load.items) {
+            item.modelMatrix = m_modelMatrix.value();
+            item.material = material;
+            addItem(std::move(item));
         }
-
-        auto matrix = m_modelMatrixProperty.value();
-        for(const auto& key : std::as_const(m_matrixObjects)) {
-            geometryItersecter()->setModelMatrix(key, matrix);
-        }
-
-        m_dataChanged = true;
-        update();
 
         m_status = Status::Ready;
     }).future();
 
-}
-
-cwRenderGLTF::Load cwRenderGLTF::toIntersectors(cwRenderObject* renderObject,
-                                                const cw::gltf::SceneCPU &data,
-                                                const QMatrix4x4 &modelMatrix)
-{
-    QList<cwGeometryItersecter::Object> objects;
-    QList<cwGeometryItersecter::Key> keys;
-    objects.reserve(data.meshes.size());
-    keys.reserve(data.meshes.size());
-
-    uint64_t meshId = 0;
-    for (const MeshCPU& mesh : data.meshes) {
-        for(const auto& geometry : mesh.geometries) {
-            cwGeometryItersecter::Key key(renderObject, meshId);
-
-            // geometry.transform = geometry.transform * modelMatrix;
-
-            cwGeometryItersecter::Object object(
-                key,
-                std::move(geometry),
-                modelMatrix
-                );
-
-            keys.append(key);
-            objects.append(object);
-            ++meshId;
-        }
-    }
-
-    return Load {
-        {}, //Empty scene
-        keys,
-        objects
-    };
 }
 
 void cwRenderGLTF::updateModelMatrix()
@@ -157,31 +136,6 @@ void cwRenderGLTF::setFutureManagerToken(const cwFutureManagerToken &newFutureMa
     }
     m_futureManagerToken = newFutureManagerToken;
     emit futureManagerTokenChanged();
-}
-
-void cwRenderGLTF::setGltf(const QFuture<Monad::Result<cw::gltf::SceneCPU> > &gltfFuture)
-{
-    m_status = Status::Loading;
-
-    auto run = [this, gltfFuture]() {
-        return AsyncFuture::observe(gltfFuture)
-        .context(this, [gltfFuture, this]() {
-
-            auto renderObject = this;
-            auto modelMatrix = m_modelMatrix.value();
-            auto gltf = gltfFuture.result().value();
-
-            auto future = cwConcurrent::run([gltf, renderObject, modelMatrix]()->Monad::Result<Load> {
-                auto load = toIntersectors(renderObject, gltf, modelMatrix);
-                load.scene = std::move(gltf);
-                return load;
-            });
-
-            return handleLoadFuture(future);
-        }).future();
-    };
-
-    m_loadRestarter.restart(run);
 }
 
 /**

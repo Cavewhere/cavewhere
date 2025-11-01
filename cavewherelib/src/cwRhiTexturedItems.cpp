@@ -9,6 +9,7 @@
 #include <QPainter>
 #include <QtGlobal>
 #include <algorithm>
+#include <cstring>
 #include <utility>
 
 namespace {
@@ -87,9 +88,11 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
             item->image = command.item().texture;
             item->textureNeedsUpdate = !item->image.isNull();
             item->uniformBlock = command.item().uniformBlock;
-            item->uniformNeedsUpdate = !item->uniformBlock.isEmpty();
+            item->uniformNeedsUpdate = true;
             item->visible = command.item().visible;
             item->pipelineNeedsUpdate = true;
+            item->modelMatrix = command.item().modelMatrix;
+            item->modelMatrixNeedsUpdate = true;
 
             m_items.insert(id, item);
             break;
@@ -121,6 +124,7 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
                 if (!(item->material == command.item().material)) {
                     item->material = command.item().material;
                     item->pipelineNeedsUpdate = true;
+                    item->uniformNeedsUpdate = true;
                 }
             }
             break;
@@ -135,6 +139,14 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
         case cwRenderTexturedItems::PendingCommand::UpdateVisiblity: {
             if (auto* item = m_items.value(id, nullptr)) {
                 item->visible = command.item().visible;
+            }
+            break;
+        }
+        case cwRenderTexturedItems::PendingCommand::UpdateModelMatrix: {
+            if (auto* item = m_items.value(id, nullptr)) {
+                item->modelMatrix = command.item().modelMatrix;
+                item->modelMatrixNeedsUpdate = true;
+                item->uniformNeedsUpdate = true;
             }
             break;
         }
@@ -175,7 +187,7 @@ void cwRhiTexturedItems::updateResources(const ResourceUpdateData& data)
             item->createShaderResourceBindings(data, m_sharedData);
         }
 
-        if (item->uniformNeedsUpdate) {
+        if (item->uniformNeedsUpdate || item->modelMatrixNeedsUpdate) {
             item->updateUniformBuffer(data);
             item->createShaderResourceBindings(data, m_sharedData);
         }
@@ -370,25 +382,33 @@ void cwRhiTexturedItems::Item::updateUniformBuffer(const ResourceUpdateData& dat
 {
     if (!material.wantsPerDrawUniform()) {
         uniformNeedsUpdate = false;
+        modelMatrixNeedsUpdate = false;
         return;
     }
 
     QRhi* rhi = data.renderData.cb->rhi();
-    QByteArray payload = uniformBlock;
+    QByteArray payload = buildPerDrawUniformPayload();
     if (payload.isEmpty()) {
-        payload.resize(kFallbackUniformSize);
-        payload.fill(0);
+        payload.resize(sizeof(float) * 16);
+        std::memcpy(payload.data(), modelMatrix.constData(), sizeof(float) * 16);
     }
 
     const qsizetype alignedSize = rhi->ubufAligned(payload.size());
+    if (payload.size() < alignedSize) {
+        const qsizetype originalSize = payload.size();
+        payload.resize(alignedSize);
+        std::memset(payload.data() + originalSize, 0, alignedSize - originalSize);
+    }
+
     if (!uniformBuffer || uniformBuffer->size() != alignedSize) {
         delete uniformBuffer;
         uniformBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, alignedSize);
         uniformBuffer->create();
     }
 
-    data.resourceUpdateBatch->updateDynamicBuffer(uniformBuffer, 0, payload.size(), payload.constData());
+    data.resourceUpdateBatch->updateDynamicBuffer(uniformBuffer, 0, alignedSize, payload.constData());
     uniformNeedsUpdate = false;
+    modelMatrixNeedsUpdate = false;
 }
 
 void cwRhiTexturedItems::Item::ensurePipeline(const ResourceUpdateData& data,
@@ -419,6 +439,10 @@ void cwRhiTexturedItems::Item::ensurePipeline(const ResourceUpdateData& data,
         delete uniformBuffer;
         uniformBuffer = nullptr;
         uniformNeedsUpdate = false;
+        modelMatrixNeedsUpdate = false;
+    } else {
+        uniformNeedsUpdate = true;
+        modelMatrixNeedsUpdate = true;
     }
 }
 
@@ -428,6 +452,10 @@ void cwRhiTexturedItems::Item::releasePipeline()
         owner->releasePipeline(pipelineRecord);
     }
     pipelineRecord = nullptr;
+    if (material.wantsPerDrawUniform()) {
+        modelMatrixNeedsUpdate = true;
+        uniformNeedsUpdate = true;
+    }
 }
 
 void cwRhiTexturedItems::Item::createShaderResourceBindings(const ResourceUpdateData& data,
@@ -478,6 +506,20 @@ void cwRhiTexturedItems::Item::createShaderResourceBindings(const ResourceUpdate
     srb->setBindings(bindings.cbegin(), bindings.cend());
     srb->create();
     Q_ASSERT(!pipelineRecord->layout || pipelineRecord->layout->isLayoutCompatible(srb));
+}
+
+QByteArray cwRhiTexturedItems::Item::buildPerDrawUniformPayload() const
+{
+    QByteArray payload;
+    const int matrixBytes = sizeof(float) * 16;
+    payload.resize(matrixBytes + uniformBlock.size());
+
+    std::memcpy(payload.data(), modelMatrix.constData(), matrixBytes);
+    if (!uniformBlock.isEmpty()) {
+        std::memcpy(payload.data() + matrixBytes, uniformBlock.constData(), uniformBlock.size());
+    }
+
+    return payload;
 }
 
 quint8 cwRhiTexturedItems::toStageMask(cwRenderMaterialState::ShaderStages stages)

@@ -7,6 +7,7 @@
 #include <QHash>
 #include <QByteArray>
 #include <QtGui/qimage.h>
+#include <QMatrix4x4>
 
 class cwRenderTexturedItems : public cwRenderObject
 {
@@ -15,13 +16,14 @@ class cwRenderTexturedItems : public cwRenderObject
 public:
     using CullMode = cwRenderMaterialState::CullMode;
 
-    cwRenderTexturedItems();
+    cwRenderTexturedItems(QObject* parent = nullptr);
 
     struct Item {
         cwGeometry geometry;
         QImage texture;
         cwRenderMaterialState material;
         QByteArray uniformBlock;
+        QMatrix4x4 modelMatrix;
         bool visible = true;
     };
 
@@ -32,6 +34,7 @@ public:
     void setCulling(uint32_t id, CullMode culling);
     void setMaterial(uint32_t id, const cwRenderMaterialState& material);
     void setUniformBlock(uint32_t id, const QByteArray& uniformBlock);
+    void setModelMatrix(uint32_t id, const QMatrix4x4& modelMatrix);
     void removeItem(uint32_t id);
 
     //For testing
@@ -52,6 +55,7 @@ private:
             UpdateMaterial,
             UpdateUniformBlock,
             UpdateVisiblity,
+            UpdateModelMatrix,
             Unknown
         };
 

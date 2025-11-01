@@ -24,7 +24,6 @@
 #include "cwImageDatabase.h"
 #include "cwAsyncFuture.h"
 #include "cwAbstractScrapViewMatrix.h"
-#include "cwRenderScraps.h"
 #include "cwConcurrent.h"
 
 //Async future

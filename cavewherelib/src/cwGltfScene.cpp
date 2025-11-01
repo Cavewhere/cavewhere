@@ -7,6 +7,7 @@ cwGltfScene::cwGltfScene(QObject* parent)
     : cwScene(parent)
 {
     m_background = new cwRenderRadialGradient();
+
     m_gltf = new cwRenderGLTF(this);
     addItem(m_background);
     addItem(m_gltf);

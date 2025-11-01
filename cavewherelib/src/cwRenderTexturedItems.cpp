@@ -2,7 +2,7 @@
 #include "cwGeometryItersecter.h"
 #include "cwRhiTexturedItems.h"
 
-cwRenderTexturedItems::cwRenderTexturedItems() {}
+cwRenderTexturedItems::cwRenderTexturedItems(QObject *parent) : cwRenderObject(parent) {}
 
 cwRHIObject* cwRenderTexturedItems::createRHIObject()
 {
@@ -26,6 +26,8 @@ uint32_t cwRenderTexturedItems::addItem(const Item& item)
 
     m_ids.insert(id);
 
+    geometryItersecter()->addObject(cwGeometryItersecter::Object({this, id}, item.geometry, item.modelMatrix));
+
     return id;
 }
 
@@ -44,7 +46,8 @@ void cwRenderTexturedItems::updateGeometry(uint32_t id, const cwGeometry& geomet
         entry->geometry = geometry;
     }
 
-    geometryItersecter()->addObject(cwGeometryItersecter::Object({this, id}, geometry));
+    QMatrix4x4 modelMatrix = entry != m_frontState.end() ? entry->modelMatrix : QMatrix4x4();
+    geometryItersecter()->addObject(cwGeometryItersecter::Object({this, id}, geometry, modelMatrix));
 }
 
 void cwRenderTexturedItems::updateTexture(uint32_t id, const QImage& image)
@@ -124,6 +127,24 @@ void cwRenderTexturedItems::setUniformBlock(uint32_t id, const QByteArray& unifo
     if (entry != m_frontState.end()) {
         entry->uniformBlock = uniformBlock;
     }
+}
+
+void cwRenderTexturedItems::setModelMatrix(uint32_t id, const QMatrix4x4& modelMatrix)
+{
+    if (!m_ids.contains(id)) {
+        return;
+    }
+
+    Item payload;
+    payload.modelMatrix = modelMatrix;
+    addCommand(PendingCommand(PendingCommand::UpdateModelMatrix, id, payload));
+
+    auto entry = m_frontState.find(id);
+    if (entry != m_frontState.end()) {
+        entry->modelMatrix = modelMatrix;
+    }
+
+    geometryItersecter()->setModelMatrix({this, id}, modelMatrix);
 }
 
 void cwRenderTexturedItems::removeItem(uint32_t id)
