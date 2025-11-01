@@ -20,6 +20,8 @@ using namespace Catch;
 #include "cwSaveLoad.h"
 #include "cwTeam.h"
 #include "cwNoteLiDAR.h"
+#include "cwError.h"
+#include "cwErrorListModel.h"
 
 //Qt includes
 #include <QtCore/qdiriterator.h>
@@ -28,6 +30,7 @@ using namespace Catch;
 #include <QSqlDatabase>
 #include <QSqlResult>
 #include <QSqlRecord>
+#include <QDir>
 #include <QTemporaryDir>
 
 // TEST_CASE("cwProject isModified should work correctly", "[cwProject]") {
@@ -298,6 +301,65 @@ TEST_CASE("Temporary project saveAs should move the project directory", "[cwProj
     CHECK_FALSE(QFileInfo::exists(markerFilePath));
 
     CHECK(newFileInfo.fileName() == QStringLiteral("SavedProject.cw"));
+}
+
+TEST_CASE("Temporary project saveAs reports error when destination exists", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    REQUIRE(project->isTemporaryProject());
+    project->errorModel()->clear();
+
+    QTemporaryDir destinationParent;
+    REQUIRE(destinationParent.isValid());
+
+    const QString baseName = QStringLiteral("ExistingProject");
+    const QString existingRoot = destinationParent.filePath(baseName);
+    REQUIRE(QDir().mkpath(existingRoot));
+
+    const QString targetProjectFile = destinationParent.filePath(baseName + QStringLiteral(".cw"));
+
+    CHECK_FALSE(project->saveAs(targetProjectFile));
+
+    REQUIRE(project->errorModel()->count() > 0);
+    const auto error = project->errorModel()->last();
+    CHECK(error.type() == cwError::Fatal);
+    CHECK(error.message() == QStringLiteral("Destination folder '%1' already exists.").arg(existingRoot));
+    CHECK(project->isTemporaryProject());
+}
+
+TEST_CASE("Non-temporary project saveAs reports error when destination exists", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    REQUIRE(project->isTemporaryProject());
+
+    QTemporaryDir moveDestinationParent;
+    REQUIRE(moveDestinationParent.isValid());
+
+    const QString initialTarget = moveDestinationParent.filePath(QStringLiteral("PersistentProject.cw"));
+    REQUIRE(project->saveAs(initialTarget));
+    rootData->futureManagerModel()->waitForFinished();
+    project->errorModel()->clear();
+
+    REQUIRE(project->canSaveDirectly());
+    REQUIRE_FALSE(project->isTemporaryProject());
+
+    QTemporaryDir copyDestinationParent;
+    REQUIRE(copyDestinationParent.isValid());
+
+    const QString baseName = QStringLiteral("AlreadyThere");
+    const QString existingRoot = copyDestinationParent.filePath(baseName);
+    REQUIRE(QDir().mkpath(existingRoot));
+
+    const QString targetProjectFile = copyDestinationParent.filePath(baseName + QStringLiteral(".cw"));
+
+    CHECK_FALSE(project->saveAs(targetProjectFile));
+
+    REQUIRE(project->errorModel()->count() > 0);
+    const auto error = project->errorModel()->last();
+    CHECK(error.type() == cwError::Fatal);
+    CHECK(error.message() == QStringLiteral("Destination folder '%1' already exists.").arg(existingRoot));
 }
 
 
