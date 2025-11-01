@@ -9,6 +9,28 @@
 #include <algorithm>
 #include <array>
 
+uint qHash(const cwRhiPipelineKey& key, uint seed) noexcept
+{
+    seed = qHash(quintptr(key.renderPass), seed);
+    seed = qHash(key.sampleCount, seed);
+    seed = qHash(key.vertexShader, seed);
+    seed = qHash(key.fragmentShader, seed);
+    seed = qHash(key.cullMode, seed);
+    seed = qHash(key.frontFace, seed);
+    seed = qHash(key.blendMode, seed);
+    seed = qHash(key.depthTest, seed);
+    seed = qHash(key.depthWrite, seed);
+    seed = qHash(key.globalBinding, seed);
+    seed = qHash(key.perDrawBinding, seed);
+    seed = qHash(key.textureBinding, seed);
+    seed = qHash(key.globalStages, seed);
+    seed = qHash(key.perDrawStages, seed);
+    seed = qHash(key.textureStages, seed);
+    seed = qHash(key.hasPerDraw, seed);
+    seed = qHash(key.topology, seed);
+    return seed;
+}
+
 namespace {
 cwRHIObject::PipelineBatch& ensurePipelineBatch(QVector<cwRHIObject::PipelineBatch>& batches,
                                                 const cwRHIObject::PipelineState& state)
@@ -31,6 +53,16 @@ cwRhiScene::~cwRhiScene()
         delete rhiObject;
     }
     delete m_globalUniformBuffer;
+
+    for (auto record : std::as_const(m_pipelineCache)) {
+        delete record->pipeline;
+        delete record->layout;
+        delete record;
+    }
+    m_pipelineCache.clear();
+
+    delete m_sharedLinearSampler;
+    m_sharedLinearSampler = nullptr;
 }
 
 void cwRhiScene::initialize(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
@@ -313,4 +345,77 @@ void cwRhiScene::updateGlobalUniformBuffer(QRhiResourceUpdateBatch* batch, QRhi*
     }
 
     m_updateFlags = cwSceneUpdate::Flag::None;
+}
+
+cwRhiScene::PipelineRecord* cwRhiScene::acquirePipeline(const cwRhiPipelineKey& key,
+                                                        QRhi* rhi,
+                                                        const std::function<PipelineRecord*(QRhi*)>& createFn)
+{
+    auto it = m_pipelineCache.find(key);
+    if (it != m_pipelineCache.end()) {
+        auto* record = it.value();
+        record->refCount += 1;
+        return record;
+    }
+
+    if (!createFn) {
+        return nullptr;
+    }
+
+    PipelineRecord* record = createFn(rhi);
+    if (!record) {
+        return nullptr;
+    }
+
+    record->key = key;
+    record->refCount = 1;
+    m_pipelineCache.insert(key, record);
+    return record;
+}
+
+void cwRhiScene::releasePipeline(PipelineRecord* record)
+{
+    if (!record) {
+        return;
+    }
+
+    if (record->refCount == 0) {
+        return;
+    }
+
+    record->refCount -= 1;
+    if (record->refCount > 0) {
+        return;
+    }
+
+    auto it = m_pipelineCache.find(record->key);
+    if (it != m_pipelineCache.end() && it.value() == record) {
+        m_pipelineCache.erase(it);
+    }
+
+    delete record->pipeline;
+    delete record->layout;
+    delete record;
+}
+
+QRhiSampler* cwRhiScene::sharedLinearClampSampler(QRhi* rhi)
+{
+    if (m_sharedLinearSampler) {
+        return m_sharedLinearSampler;
+    }
+
+    if (!rhi) {
+        return nullptr;
+    }
+
+    m_sharedLinearSampler = rhi->newSampler(QRhiSampler::Linear,
+                                            QRhiSampler::Linear,
+                                            QRhiSampler::Linear,
+                                            QRhiSampler::ClampToEdge,
+                                            QRhiSampler::ClampToEdge);
+    if (m_sharedLinearSampler) {
+        m_sharedLinearSampler->create();
+    }
+
+    return m_sharedLinearSampler;
 }

@@ -44,6 +44,7 @@ public:
     QMatrix4x4 viewProjectionMatrix() const { return m_sceneRenderer->viewProjectionMatrix(); }
     float devicePixelRatio() const { return m_sceneRenderer->devicePixelRatio(); }
     QRhiBuffer* globalUniformBuffer() const { return m_sceneRenderer->globalUniformBuffer(); }
+    cwRhiScene* sceneBackend() const { return m_sceneRenderer; }
 
 protected:
     void initialize(QRhiCommandBuffer *cb) override;
