@@ -11,6 +11,7 @@
 #include "cwRHIGridPlane.h"
 
 //Qt includes
+#include <QQuaternion>
 #include <QVector3D>
 
 //Std includes
@@ -51,9 +52,18 @@ cwRenderGridPlane::cwRenderGridPlane(QObject* parent) :
 
     m_modelMatrixProperty.setBinding([this](){
         QMatrix4x4 modelMatrix;
+        const QPlane3D plane = m_plane.value();
 
         //Position
-        modelMatrix.translate(m_plane.value().origin());
+        modelMatrix.translate(plane.origin());
+
+        //Rotate so that the plane's local +Z aligns with the plane normal
+        const QVector3D normal = plane.normal();
+        if (!normal.isNull()) {
+            const QVector3D defaultNormal(0.0f, 0.0f, 1.0f);
+            const QQuaternion rotation = QQuaternion::rotationTo(defaultNormal, normal.normalized());
+            modelMatrix.rotate(rotation);
+        }
 
         //Scale the plane
         modelMatrix.scale(m_extent);
@@ -61,10 +71,21 @@ cwRenderGridPlane::cwRenderGridPlane(QObject* parent) :
         return modelMatrix;
     });
 
+    m_scaleMatrixProperty.setBinding([this]() {
+        QMatrix4x4 scaleMatrix;
+        scaleMatrix.scale(m_extent.value());
+        return scaleMatrix;
+    });
+
     //For updating the backend, the backend get data on a seperate thread
     m_modelMatrix.setValue(m_modelMatrixProperty.value());
-    m_modelMatrixProperty.onValueChanged([this]() {
+    m_modelMatrixNotifier = m_modelMatrixProperty.addNotifier([this]() {
         m_modelMatrix.setValue(m_modelMatrixProperty.value());
+    });
+
+    m_scaleMatrix.setValue(m_scaleMatrixProperty.value());
+    m_scaleMatrixNotifier = m_scaleMatrixProperty.addNotifier([this]() {
+        m_scaleMatrix.setValue(m_scaleMatrixProperty.value());
     });
 }
 

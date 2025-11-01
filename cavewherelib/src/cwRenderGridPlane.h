@@ -13,8 +13,9 @@
 #include "cwTracked.h"
 
 //Qt includes
-#include <QPlane3D>
+#include <QMatrix4x4>
 #include <QObjectBindableProperty>
+#include <QPlane3D>
 
 class cwRenderGridPlane : public cwRenderObject {
     Q_OBJECT
@@ -59,7 +60,11 @@ private:
                                          &cwRenderGridPlane::extentChanged);
 
     QProperty<QMatrix4x4> m_modelMatrixProperty;
+    QProperty<QMatrix4x4> m_scaleMatrixProperty;
     cwTracked<QMatrix4x4> m_modelMatrix;
+    cwTracked<QMatrix4x4> m_scaleMatrix;
+    QPropertyNotifier m_modelMatrixNotifier;
+    QPropertyNotifier m_scaleMatrixNotifier;
 
     //Camera connection
     QMetaObject::Connection m_sceneConnection;

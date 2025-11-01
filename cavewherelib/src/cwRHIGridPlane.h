@@ -4,8 +4,10 @@
 //Our includes
 #include "cwRHIObject.h"
 #include "cwRenderGridPlane.h"
+#include "cwRhiScene.h"
 
 //Qt includes
+#include <rhi/qrhi.h>
 class QRhi;
 class QRhiBuffer;
 class QRhiGraphicsPipeline;
@@ -22,27 +24,33 @@ public:
     virtual void synchronize(const SynchronizeData& data) override;
     virtual void updateResources(const ResourceUpdateData&) override;
     virtual void render(const RenderData& data) override;
+    bool gather(const GatherContext& context, QVector<PipelineBatch>& batches) override;
 
 private:
     //Shader layout
     struct UniformData {
         float mvpMatrix[16];
-        float modelMatrix[16];
+        float modelMatrix[16]; // scale-only matrix used for contour sampling
     };
 
-    QRhi* m_rhi = nullptr;
+    QRhiVertexInputLayout m_inputLayout;
     QRhiBuffer* m_vertexBuffer = nullptr;
     QRhiBuffer* m_uniformBuffer = nullptr;
-    QRhiGraphicsPipeline* m_pipeline = nullptr;
     QRhiShaderResourceBindings* m_srb = nullptr;
+    cwRhiScene* m_scene = nullptr;
+    cwRhiScene::PipelineRecord* m_pipelineRecord = nullptr;
+    cwRhiPipelineKey m_pipelineKey;
+    bool m_hasPipelineKey = false;
 
     cwTracked<QMatrix4x4> m_modelMatrix;
-    QMatrix4x4 m_mvpMatrix;
-
+    cwTracked<QMatrix4x4> m_scaleMatrix;
     bool m_resourcesInitialized = false;
 
     void initializeResources(const ResourceUpdateData& data);
-    void updateUniforms(QRhiResourceUpdateBatch* resourceUpdates);
+    void releasePipeline();
+    bool ensurePipeline(const RenderData& data);
+    bool ensureShaderResources(QRhi* rhi);
+    cwRhiPipelineKey buildPipelineKey(QRhiRenderTarget* target) const;
 };
 
 #endif // CWRHIGRIDPLANE_H
