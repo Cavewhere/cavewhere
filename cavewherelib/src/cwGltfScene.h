@@ -8,7 +8,7 @@
 #include "cwScene.h"
 #include "cwFutureManagerToken.h"
 class cwRenderRadialGradient;
-class cwRenderGLTF;
+#include "cwRenderGLTF.h"
 #include "cwGlobals.h"
 
 class CAVEWHERE_LIB_EXPORT cwGltfScene : public cwScene

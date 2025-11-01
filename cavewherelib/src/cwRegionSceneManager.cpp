@@ -11,7 +11,6 @@
 #include "cwRenderGridPlane.h"
 #include "cwRenderLinePlot.h"
 #include "cwRenderRadialGradient.h"
-#include "cwRenderGLTF.h"
 #include "cwRenderTexturedItems.h"
 
 
@@ -29,26 +28,11 @@ cwRegionSceneManager::cwRegionSceneManager(QObject *parent) :
     m_plane = new cwRenderGridPlane();
     m_items = new cwRenderTexturedItems();
 
-    //For testing
-    m_gltf = new cwRenderGLTF();
-    // m_gltf->setGLTFFilePath("/Users/cave/Desktop/lidarTest/jaws of the beast/Jaws of the Beast/trips/2019c154_-_party_fault/notes/9_15_2025 3.glb");
-
-    // QMatrix4x4 matrix;
-    // matrix.rotate(90.0, 1.0, 0.0, 0.0);
-    // m_gltf->setModelMatrix(matrix);
-    // m_gltf->setGLTFFilePath("/Users/cave/Downloads/9_9_2025.glb");
-    // qDebug() << "Do loading!";
-
     //    Terrain->setScene(scene());
 
     m_background->setScene(scene());
     m_linePlot->setScene(scene());
     m_items->setScene(scene());
-    // m_gltf->setScene(scene());
-
-    //For testing
-    m_scraps = new cwRenderTexturedItems();
-    m_scraps->setScene(scene());
 
     //Render the plane last
     m_plane->setScene(scene());

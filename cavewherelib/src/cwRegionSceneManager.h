@@ -25,7 +25,6 @@ class cwRenderLinePlot;
 class cwRenderScraps;
 class cwRenderRadialGradient;
 #include "cwRenderTexturedItems.h"
-#include "cwRenderGLTF.h"
 #include "cwRenderGridPlane.h"
 
 class cwRegionSceneManager : public QObject
@@ -42,14 +41,11 @@ class cwRegionSceneManager : public QObject
 
     Q_PROPERTY(bool capturing READ isCapturing WRITE setCapturing NOTIFY capturingChanged FINAL)
 
-    //For testing
-    Q_PROPERTY(cwRenderGLTF* gltf READ gltf CONSTANT)
-
 public:
     explicit cwRegionSceneManager(QObject *parent = 0);
 
     cwRenderLinePlot* linePlot();
-    cwRenderTexturedItems* scraps() const { return m_scraps; }
+    cwRenderTexturedItems* scraps() const { return m_items; }
 
     void setCavingRegion(cwCavingRegion* region);
     cwCavingRegion* cavingRegion() const;
@@ -60,8 +56,6 @@ public:
     void setCapturing(bool newCapturing);
 
     cwRenderGridPlane *gridPlane() const { return m_plane; }
-
-    cwRenderGLTF* gltf() const { return m_gltf; }
 
     cwRenderTexturedItems *items() const;
 
@@ -85,10 +79,6 @@ private:
     cwRenderGridPlane* m_plane;
     cwRenderRadialGradient* m_background;
 
-    //For testing gltf
-    cwRenderTexturedItems* m_scraps;
-    cwRenderGLTF* m_gltf;
-
     //For rendering label
     QPointer<cwCavingRegion> Region;
     bool m_capturing;
@@ -106,15 +96,6 @@ inline cwScene* cwRegionSceneManager::scene() const {
   \brief Returns the object that renderes the line plot
   */
 inline cwRenderLinePlot* cwRegionSceneManager::linePlot() { return m_linePlot; }
-
-/**
- * @brief cwScene::scraps
- * @return Returns the GL scraps of the scene
- */
-// inline cwRenderScraps* cwRegionSceneManager::scraps() const
-// {
-//     return m_scraps;
-// }
 
 inline bool cwRegionSceneManager::isCapturing() const
 {
