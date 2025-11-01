@@ -28,6 +28,7 @@ using namespace Catch;
 #include <QSqlDatabase>
 #include <QSqlResult>
 #include <QSqlRecord>
+#include <QTemporaryDir>
 
 // TEST_CASE("cwProject isModified should work correctly", "[cwProject]") {
 //     cwProject project;
@@ -254,6 +255,49 @@ TEST_CASE("Files should be added to the project correctly", "[cwProject]") {
 
     CHECK_FALSE(sourceText.isEmpty());
     CHECK(sourceText == destinationText);
+}
+
+TEST_CASE("Temporary project saveAs should move the project directory", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    REQUIRE(project->isTemporaryProject());
+
+    const QDir originalRoot = cwSaveLoad::projectDir(project);
+    REQUIRE(originalRoot.exists());
+
+    const QString markerFilePath = originalRoot.absoluteFilePath(QStringLiteral("marker.txt"));
+    {
+        QFile marker(markerFilePath);
+        REQUIRE(marker.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text));
+        marker.write("temporary marker\n");
+        marker.close();
+    }
+    REQUIRE(QFileInfo::exists(markerFilePath));
+
+    QTemporaryDir destinationParent;
+    REQUIRE(destinationParent.isValid());
+
+    const QString targetProjectFile = destinationParent.filePath(QStringLiteral("SavedProject.cw"));
+
+    REQUIRE(project->saveAs(targetProjectFile));
+
+    rootData->futureManagerModel()->waitForFinished();
+
+    CHECK(project->canSaveDirectly());
+    CHECK_FALSE(project->isTemporaryProject());
+
+    const QString newProjectFile = project->filename();
+    QFileInfo newFileInfo(newProjectFile);
+    REQUIRE(newFileInfo.exists());
+
+    const QDir newRootDir = newFileInfo.absoluteDir();
+    REQUIRE(newRootDir.exists());
+
+    CHECK(QFileInfo::exists(newRootDir.absoluteFilePath(QStringLiteral("marker.txt"))));
+    CHECK_FALSE(QFileInfo::exists(markerFilePath));
+
+    CHECK(newFileInfo.fileName() == QStringLiteral("SavedProject.cw"));
 }
 
 
@@ -2053,5 +2097,3 @@ TEST_CASE("Note should be removed correctly simple", "[cwProject]") {
     //Notes directory should still exist because we store multiple notes in it
     CHECK(QFileInfo::exists(noteDir.absolutePath()));
 }
-
-

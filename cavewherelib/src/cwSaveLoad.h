@@ -149,6 +149,10 @@ public:
                    const QDir& dir,
                    std::function<void (QList<cwImage>)> outputCallBackFunc);
 
+    Monad::ResultBase moveProjectTo(const QString& destinationFileUrl);
+    Monad::ResultBase copyProjectTo(const QString& destinationFileUrl);
+    Monad::ResultBase deleteTemporaryProject();
+
     void addFiles(QList<QUrl> files,
                   const QDir& dir,
                   std::function<void (QList<QString>)> fileCallBackFunc);

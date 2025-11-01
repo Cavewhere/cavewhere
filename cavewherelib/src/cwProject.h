@@ -97,6 +97,9 @@ public:
     // Q_INVOKABLE void save();
     // Q_INVOKABLE void saveAs(QString newFilename);
     Q_INVOKABLE void newProject();
+    Q_INVOKABLE bool save();
+    Q_INVOKABLE bool saveAs(QString newFilename);
+    Q_INVOKABLE bool deleteTemporaryProject();
 
     QString filename() const;
 

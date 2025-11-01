@@ -190,8 +190,8 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
 
             //Fix me, this was calling saveAs
             REQUIRE(false);
-
             // root->project()->saveAs(root->project()->filename());
+
             REQUIRE(errorModel->size() == 1);
             expectErrorMessage = QString("Can't overwrite %1 because file is newer that the current version of CaveWhere. To solve this, save it somewhere else").arg(root->project()->filename());
             CHECK(errorModel->at(0) == cwError(expectErrorMessage, cwError::Fatal));
