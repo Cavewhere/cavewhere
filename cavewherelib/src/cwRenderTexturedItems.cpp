@@ -20,20 +20,29 @@ void cwRenderTexturedItems::addCommand(const PendingCommand&& command)
 uint32_t cwRenderTexturedItems::addItem(const Item& item)
 {
     const uint32_t id = m_nextId++;
-    Item copy = item;
-    m_frontState.insert(id, copy);
-    addCommand(PendingCommand(PendingCommand::Add, id, copy));
+    Item commandItem = item;
+    addCommand(PendingCommand(PendingCommand::Add, id, commandItem));
 
-    m_ids.insert(id);
+    Item storedItem = item;
+    if (!storedItem.storeGeometry) {
+        storedItem.geometry = cwGeometry();
+    }
+    if (!storedItem.storeTexture) {
+        storedItem.texture = QImage();
+    }
+    m_frontState.insert(id, storedItem);
 
-    geometryItersecter()->addObject(cwGeometryItersecter::Object({this, id}, item.geometry, item.modelMatrix));
+    if (auto* intersector = geometryItersecter()) {
+        intersector->addObject(cwGeometryItersecter::Object({this, id}, item.geometry, item.modelMatrix));
+    }
 
     return id;
 }
 
 void cwRenderTexturedItems::updateGeometry(uint32_t id, const cwGeometry& geometry)
 {
-    if(!m_ids.contains(id)) {
+    auto entry = m_frontState.find(id);
+    if (entry == m_frontState.end()) {
         return;
     }
 
@@ -41,18 +50,22 @@ void cwRenderTexturedItems::updateGeometry(uint32_t id, const cwGeometry& geomet
     payload.geometry = geometry; // texture left empty; RHI side should only consume what's needed
     addCommand(PendingCommand(PendingCommand::UpdateGeometry, id, payload));
 
-    auto entry = m_frontState.find(id);
-    if (entry != m_frontState.end()) {
+    const QMatrix4x4 modelMatrix = entry->modelMatrix;
+    if (entry->storeGeometry) {
         entry->geometry = geometry;
+    } else {
+        entry->geometry = cwGeometry();
     }
 
-    QMatrix4x4 modelMatrix = entry != m_frontState.end() ? entry->modelMatrix : QMatrix4x4();
-    geometryItersecter()->addObject(cwGeometryItersecter::Object({this, id}, geometry, modelMatrix));
+    if (auto* intersector = geometryItersecter()) {
+        intersector->addObject(cwGeometryItersecter::Object({this, id}, geometry, modelMatrix));
+    }
 }
 
 void cwRenderTexturedItems::updateTexture(uint32_t id, const QImage& image)
 {
-    if(!m_ids.contains(id)) {
+    auto entry = m_frontState.find(id);
+    if (entry == m_frontState.end()) {
         return;
     }
 
@@ -60,15 +73,17 @@ void cwRenderTexturedItems::updateTexture(uint32_t id, const QImage& image)
     payload.texture = image; // geometry left default
     addCommand(PendingCommand(PendingCommand::UpdateTexture, id, payload));
 
-    auto entry = m_frontState.find(id);
-    if (entry != m_frontState.end()) {
+    if (entry->storeTexture) {
         entry->texture = image;
+    } else {
+        entry->texture = QImage();
     }
 }
 
 void cwRenderTexturedItems::setVisible(uint32_t id, bool visible)
 {
-    if(!m_ids.contains(id)) {
+    auto entry = m_frontState.find(id);
+    if (entry == m_frontState.end()) {
         return;
     }
 
@@ -76,18 +91,11 @@ void cwRenderTexturedItems::setVisible(uint32_t id, bool visible)
     payload.visible = visible;
     addCommand(PendingCommand(PendingCommand::UpdateVisiblity, id, payload));
 
-    auto entry = m_frontState.find(id);
-    if (entry != m_frontState.end()) {
-        entry->visible = visible;
-    }
+    entry->visible = visible;
 }
 
 void cwRenderTexturedItems::setCulling(uint32_t id, CullMode culling)
 {
-    if(!m_ids.contains(id)) {
-        return;
-    }
-
     auto entry = m_frontState.find(id);
     if (entry == m_frontState.end()) {
         return;
@@ -102,7 +110,8 @@ void cwRenderTexturedItems::setCulling(uint32_t id, CullMode culling)
 
 void cwRenderTexturedItems::setMaterial(uint32_t id, const cwRenderMaterialState& material)
 {
-    if(!m_ids.contains(id)) {
+    auto entry = m_frontState.find(id);
+    if (entry == m_frontState.end()) {
         return;
     }
 
@@ -110,12 +119,13 @@ void cwRenderTexturedItems::setMaterial(uint32_t id, const cwRenderMaterialState
     payload.material = material;
     addCommand(PendingCommand(PendingCommand::UpdateMaterial, id, payload));
 
-    m_frontState[id].material = material;
+    entry->material = material;
 }
 
 void cwRenderTexturedItems::setUniformBlock(uint32_t id, const QByteArray& uniformBlock)
 {
-    if(!m_ids.contains(id)) {
+    auto entry = m_frontState.find(id);
+    if (entry == m_frontState.end()) {
         return;
     }
 
@@ -123,15 +133,13 @@ void cwRenderTexturedItems::setUniformBlock(uint32_t id, const QByteArray& unifo
     payload.uniformBlock = uniformBlock;
     addCommand(PendingCommand(PendingCommand::UpdateUniformBlock, id, payload));
 
-    auto entry = m_frontState.find(id);
-    if (entry != m_frontState.end()) {
-        entry->uniformBlock = uniformBlock;
-    }
+    entry->uniformBlock = uniformBlock;
 }
 
 void cwRenderTexturedItems::setModelMatrix(uint32_t id, const QMatrix4x4& modelMatrix)
 {
-    if (!m_ids.contains(id)) {
+    auto entry = m_frontState.find(id);
+    if (entry == m_frontState.end()) {
         return;
     }
 
@@ -139,23 +147,33 @@ void cwRenderTexturedItems::setModelMatrix(uint32_t id, const QMatrix4x4& modelM
     payload.modelMatrix = modelMatrix;
     addCommand(PendingCommand(PendingCommand::UpdateModelMatrix, id, payload));
 
-    auto entry = m_frontState.find(id);
-    if (entry != m_frontState.end()) {
-        entry->modelMatrix = modelMatrix;
-    }
+    entry->modelMatrix = modelMatrix;
 
-    geometryItersecter()->setModelMatrix({this, id}, modelMatrix);
+    if (auto* intersector = geometryItersecter()) {
+        intersector->setModelMatrix({this, id}, modelMatrix);
+    }
 }
 
 void cwRenderTexturedItems::removeItem(uint32_t id)
 {
-    if(!m_ids.contains(id)) {
+    if (!m_frontState.contains(id)) {
         return;
     }
 
     addCommand(PendingCommand(PendingCommand::Remove, id, Item{}));
 
-    geometryItersecter()->removeObject({this, id});
-    m_ids.remove(id);
+    if (auto* intersector = geometryItersecter()) {
+        intersector->removeObject({this, id});
+    }
     m_frontState.remove(id);
+}
+
+cwRenderTexturedItems::Item cwRenderTexturedItems::item(uint32_t id) const
+{
+    return m_frontState.value(id);
+}
+
+bool cwRenderTexturedItems::hasItem(uint32_t id) const
+{
+    return m_frontState.contains(id);
 }
