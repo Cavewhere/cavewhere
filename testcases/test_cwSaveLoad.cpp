@@ -10,9 +10,18 @@
 #include "cwDiff.h"
 #include "cwJobSettings.h"
 #include "cwSurveyChunk.h"
+#include "cwSurveyNoteModel.h"
+#include "cwSurveyNoteLiDARModel.h"
+#include "cwNote.h"
+#include "cwNoteLiDAR.h"
+#include "cwTeam.h"
+#include "cwTeamMember.h"
 
 //Qt includes
 #include <QStandardPaths>
+#include <QFileInfo>
+
+#include <set>
 
 //Test includes
 #include "TestHelper.h"
@@ -486,6 +495,7 @@ TEST_CASE("cwSaveLoad should save and load cwTrip - complex", "[cwSaveLoad]") {
 
     REQUIRE(cave->tripCount() >= 1);
     auto trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
 
     cwSaveLoad save;
     auto dir = testDir();
@@ -495,7 +505,7 @@ TEST_CASE("cwSaveLoad should save and load cwTrip - complex", "[cwSaveLoad]") {
 
 }
 
-TEST_CASE("cwSaveLoad should save old projects correctly", "[cwSaveLoad]") {
+TEST_CASE("cwSaveLoad should save and load old projects correctly", "[cwSaveLoad]") {
     auto root = std::make_unique<cwRootData>();
     auto filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
     // auto filename = "/Users/cave/Desktop/BlankenshipBlowhole.cw";
@@ -505,18 +515,122 @@ TEST_CASE("cwSaveLoad should save old projects correctly", "[cwSaveLoad]") {
 
     root->project()->loadOrConvert(filename);
     root->project()->waitLoadToFinish();
+    root->futureManagerModel()->waitForFinished();
+    root->project()->waitSaveToFinish();
 
     REQUIRE(root->project()->cavingRegion()->caveCount() >= 1);
     auto cave = root->project()->cavingRegion()->cave(0);
 
     REQUIRE(cave->tripCount() >= 1);
     auto trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
 
-    cwSaveLoad save;
-    auto dir = testDir();
+    auto root2 = std::make_unique<cwRootData>();
 
-    save.saveAllFromV6(dir, root->project(), filename);
-    save.waitForFinished();
+    CHECK(root->project()->projectType(filename) == cwProject::SqliteFileType);
+
+    QString convertedFilename = root->project()->filename();
+    REQUIRE(!convertedFilename.isEmpty());
+    CHECK(QFileInfo::exists(convertedFilename));
+    CHECK(root->project()->projectType(convertedFilename) == cwProject::GitFileType);
+
+    root2->settings()->jobSettings()->setAutomaticUpdate(false);
+    root2->project()->loadFile(convertedFilename);
+    root2->project()->waitLoadToFinish();
+    root2->futureManagerModel()->waitForFinished();
+    root2->project()->waitSaveToFinish();
+
+    REQUIRE(root2->project()->cavingRegion()->caveCount() >= 1);
+
+    auto region1 = root->project()->cavingRegion();
+    auto region2 = root2->project()->cavingRegion();
+
+    REQUIRE(region1->caveCount() == region2->caveCount());
+
+    auto compareNoteImages = [](const cwSurveyNoteModel* expected, const cwSurveyNoteModel* actual) {
+        REQUIRE(expected->notes().size() == actual->notes().size());
+        for (int i = 0; i < expected->notes().size(); ++i) {
+            const auto* expectedNote = expected->notes().at(i);
+            const auto* actualNote = actual->notes().at(i);
+
+            REQUIRE(actualNote != nullptr);
+
+            CHECK(expectedNote->name() == actualNote->name());
+            CHECK(qFuzzyCompare(expectedNote->rotate(), actualNote->rotate()));
+            CHECK(expectedNote->image().mode() == actualNote->image().mode());
+            CHECK(expectedNote->image().path() == actualNote->image().path());
+        }
+    };
+
+    auto compareNoteLiDAR = [](const cwSurveyNoteLiDARModel* expected, const cwSurveyNoteLiDARModel* actual) {
+        const auto expectedNotes = expected->notes();
+        const auto actualNotes = actual->notes();
+
+        REQUIRE(expectedNotes.size() == actualNotes.size());
+
+        for (int i = 0; i < expectedNotes.size(); ++i) {
+            auto* expectedNote = qobject_cast<cwNoteLiDAR*>(expectedNotes.at(i));
+            auto* actualNote = qobject_cast<cwNoteLiDAR*>(actualNotes.at(i));
+
+            REQUIRE(expectedNote != nullptr);
+            REQUIRE(actualNote != nullptr);
+
+            CHECK(expectedNote->name() == actualNote->name());
+            CHECK(expectedNote->filename() == actualNote->filename());
+            CHECK(expectedNote->autoCalculateNorth() == actualNote->autoCalculateNorth());
+            CHECK(expectedNote->stations().size() == actualNote->stations().size());
+        }
+    };
+
+    auto compareTrips = [&](const cwTrip* expectedTrip, const cwTrip* actualTrip) {
+        REQUIRE(actualTrip != nullptr);
+        CHECK(expectedTrip->name() == actualTrip->name());
+        CHECK(expectedTrip->date() == actualTrip->date());
+        CHECK(expectedTrip->chunks().size() == actualTrip->chunks().size());
+
+        auto expectedProto = cwSaveLoad::toProtoTrip(expectedTrip);
+        auto actualProto = cwSaveLoad::toProtoTrip(actualTrip);
+        std::set<const FieldDescriptor*> ignoredFields;
+        CHECK(compareMessagesIgnoring(*expectedProto, *actualProto, ignoredFields));
+
+        compareNoteImages(expectedTrip->notes(), actualTrip->notes());
+        compareNoteLiDAR(expectedTrip->notesLiDAR(), actualTrip->notesLiDAR());
+
+        auto compareTeams = [](cwTeam* expected, cwTeam* actual) {
+            REQUIRE(actual != nullptr);
+
+            const auto expectedMembers = expected->teamMembers();
+            const auto actualMembers = actual->teamMembers();
+
+            REQUIRE(expectedMembers.size() == actualMembers.size());
+
+            for (int i = 0; i < expectedMembers.size(); ++i) {
+                const auto& expectedMember = expectedMembers.at(i);
+                const auto& actualMember = actualMembers.at(i);
+
+                CHECK(expectedMember.name() == actualMember.name());
+                CHECK(expectedMember.jobs() == actualMember.jobs());
+            }
+        };
+
+        compareTeams(expectedTrip->team(), actualTrip->team());
+    };
+
+    for (int caveIndex = 0; caveIndex < region1->caveCount(); ++caveIndex) {
+        auto cave1 = region1->cave(caveIndex);
+        auto cave2 = region2->cave(caveIndex);
+
+        REQUIRE(cave1 != nullptr);
+        REQUIRE(cave2 != nullptr);
+
+        CHECK(cave1->name() == cave2->name());
+        CHECK(cave1->tripCount() == cave2->tripCount());
+        checkStationLookup(cave1->stationPositionLookup(), cave2->stationPositionLookup());
+
+        for (int tripIndex = 0; tripIndex < cave1->tripCount(); ++tripIndex) {
+            compareTrips(cave1->trip(tripIndex), cave2->trip(tripIndex));
+        }
+    }
 }
 
 
@@ -1239,6 +1353,3 @@ TEST_CASE("cwSaveLoad should 3-way merge cwTrip correctly", "[cwSaveLoad]") {
         }
     }
 }
-
-
-
