@@ -44,17 +44,14 @@ MenuBar {
             text: "&Open"
             shortcut: "Ctrl+O"
             onTriggered: {
-                RootData.pageSelectionModel.currentPageAddress = "Source"
-                loadFileDialog.open();
+                const openDialog = function() {
+                    RootData.pageSelectionModel.currentPageAddress = "Source";
+                    loadFileDialog.open();
+                }
 
-                //TODO, ask user to sync, uncommit changes?
-
-                // menuBarId.askToSaveDialog.taskName = "opening";
-                // menuBarId.askToSaveDialog.afterSaveFunc = function() {
-                //     loadFileDialog.open()
-                // }
-
-                // menuBarId.askToSaveDialog.askToSave();
+                menuBarId.askToSaveDialog.taskName = "opening a project";
+                menuBarId.askToSaveDialog.afterSaveFunc = openDialog;
+                menuBarId.askToSaveDialog.askToSave();
             }
         }
 

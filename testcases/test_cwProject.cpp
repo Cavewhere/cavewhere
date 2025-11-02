@@ -136,6 +136,20 @@ TEST_CASE("New temporary project detection works", "[cwProject]") {
     CHECK(project->isNewProject() == false);
 }
 
+TEST_CASE("Loading a project clears temporary flag", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    REQUIRE(project->isTemporaryProject());
+
+    QString source = copyToTempFolder("://datasets/test_cwProject/v7.cw");
+    project->loadOrConvert(source);
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitLoadToFinish();
+
+    CHECK(project->isTemporaryProject() == false);
+}
+
 TEST_CASE("Images should load correctly", "[cwProject]") {
 
     QSize size(1024, 1024);

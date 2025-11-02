@@ -16,7 +16,7 @@ QQ.Loader {
     property AskToSaveInteralDialog _dialog: null
 
     function askToSave() {
-        if (RootData.project.isNewProject()) {
+        if (RootData.project.isNewProject() || !RootData.project.isTemporaryProject) {
             afterSaveFunc();
             closeDialog();
             return;

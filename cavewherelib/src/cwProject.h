@@ -101,6 +101,7 @@ public:
     Q_INVOKABLE bool saveAs(QString newFilename);
     Q_INVOKABLE bool deleteTemporaryProject();
     Q_INVOKABLE bool isNewProject() const;
+    Q_INVOKABLE bool isModified();
 
     QString filename() const;
 
@@ -108,9 +109,6 @@ public:
 
     Q_INVOKABLE void waitLoadToFinish();
     void waitSaveToFinish();
-
-    Q_INVOKABLE bool isModified();
-
 
     //Old cavewhere file handling
     // static void createDefaultSchema(const QSqlDatabase& database);

@@ -668,6 +668,7 @@ QFuture<ResultBase> cwSaveLoad::load(const QString &filename)
                     //The filename needs to be set first because, image providers should
                     //have the filename before the region model is set
                     setFileName(filename);
+                    setTemporary(false);
 
                     setSaveEnabled(false);
                     d->m_regionTreeModel->cavingRegion()->setData(regionDataFuture.result().value());
