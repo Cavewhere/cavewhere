@@ -36,6 +36,10 @@ Item {
 
             case Project.GitFileType:
                 RootData.project.loadFile(selectedFile);
+                const repoResult = RootData.repositoryModel.addRepositoryFromProjectFile(selectedFile);
+                if (repoResult.hasError) {
+                    console.warn("Failed to add repository to recent list:", repoResult.errorMessage);
+                }
                 break;
             }
         }

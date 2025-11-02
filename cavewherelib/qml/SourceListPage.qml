@@ -65,12 +65,28 @@ StandardPage {
                     elide: Text.ElideRight
 
                     onClicked: {
-                        //Load the cwCavingRegion, go to
-                        console.log("Clicked area:");
+                        const result = RootData.repositoryModel.openRepository(index, RootData.project)
+                        if (result.hasError) {
+                            console.warn("Failed to open repository:", result.errorMessage)
+                            return;
+                        }
                         RootData.pageSelectionModel.gotoPageByName(null, "Area")
                     }
                 }
 
+                LinkText {
+                    id: pathTextId
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.left: parent.left
+                    anchors.leftMargin: 10
+                    text: delegateId.pathRole
+                    elide: Text.ElideRight
+
+                    onClicked: {
+                        //Use desktop services to open the link
+
+                    }
+                }
             }
         }
     }

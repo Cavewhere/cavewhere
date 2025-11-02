@@ -7,6 +7,8 @@
 #include <QModelIndex>
 #include <QUrl>
 #include <QStandardPaths>
+#include <QFile>
+#include <QFileInfo>
 
 //Our includes
 #include "cwRepositoryModel.h"
@@ -126,4 +128,87 @@ TEST_CASE("cwRepositoryModel make sure defaultDepositoryDir works", "[cwReposito
     cwRepositoryModel model2;
     CHECK(model2.defaultRepositoryDir().toLocalFile().toStdString() == saucePath.toStdString());
 
+}
+
+TEST_CASE("cwRepositoryModel repositoryProjectFile locates project file", "[cwRepositoryModel]") {
+    QSettings settings;
+    settings.clear();
+
+    cwRepositoryModel model;
+
+    QTemporaryDir tmpDir;
+    REQUIRE(tmpDir.isValid());
+
+    QFile projectFile(tmpDir.filePath("Sample.cw"));
+    REQUIRE(projectFile.open(QIODevice::WriteOnly));
+    REQUIRE(projectFile.write("{}") != -1);
+    projectFile.close();
+
+    auto addResult = model.addRepository(QDir(tmpDir.path()));
+    INFO(addResult.errorMessage().toStdString());
+    REQUIRE(addResult.hasError() == false);
+
+    const auto fileResult = model.repositoryProjectFile(0);
+    INFO(fileResult.errorMessage().toStdString());
+    REQUIRE(fileResult.hasError() == false);
+    CHECK(fileResult.value() == QFileInfo(projectFile).absoluteFilePath());
+}
+
+TEST_CASE("cwRepositoryModel repositoryProjectFile reports missing or duplicate projects", "[cwRepositoryModel]") {
+    QSettings settings;
+    settings.clear();
+
+    cwRepositoryModel model;
+
+    QTemporaryDir tmpDir;
+    REQUIRE(tmpDir.isValid());
+    const QDir repoDir(tmpDir.path());
+
+    REQUIRE_FALSE(model.addRepository(repoDir).hasError());
+
+    SECTION("missing project file") {
+        const auto result = model.repositoryProjectFile(0);
+        CHECK(result.hasError());
+    }
+
+    SECTION("duplicate project files") {
+        QFile first(repoDir.filePath("one.cw"));
+        QFile second(repoDir.filePath("two.cw"));
+        REQUIRE(first.open(QIODevice::WriteOnly));
+        REQUIRE(second.open(QIODevice::WriteOnly));
+        first.close();
+        second.close();
+
+        const auto result = model.repositoryProjectFile(0);
+        CHECK(result.hasError());
+    }
+}
+
+TEST_CASE("cwRepositoryModel addRepositoryFromProjectFile adds repositories once", "[cwRepositoryModel]") {
+    QSettings settings;
+    settings.clear();
+
+    cwRepositoryModel model;
+
+    QTemporaryDir tmpDir;
+    REQUIRE(tmpDir.isValid());
+
+    QFile projectFile(tmpDir.filePath("Repo.cw"));
+    REQUIRE(projectFile.open(QIODevice::WriteOnly));
+    projectFile.close();
+
+    const QUrl projectUrl = QUrl::fromLocalFile(projectFile.fileName());
+
+    auto addResult = model.addRepositoryFromProjectFile(projectUrl);
+    INFO(addResult.errorMessage().toStdString());
+    CHECK(addResult.hasError() == false);
+    REQUIRE(model.rowCount() == 1);
+
+    auto addAgainResult = model.addRepositoryFromProjectFile(projectUrl);
+    INFO(addAgainResult.errorMessage().toStdString());
+    CHECK(addAgainResult.hasError() == false);
+    CHECK(model.rowCount() == 1);
+
+    const auto remoteResult = model.addRepositoryFromProjectFile(QUrl(QStringLiteral("https://example.com/remote.cw")));
+    CHECK(remoteResult.hasError());
 }

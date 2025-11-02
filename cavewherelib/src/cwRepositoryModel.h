@@ -14,6 +14,8 @@
 //Our
 #include "cwResultDir.h"
 
+class cwProject;
+
 class cwRepositoryModel : public QAbstractListModel
 {
     Q_OBJECT
@@ -47,6 +49,9 @@ public:
 
     Q_INVOKABLE cwResultDir repositoryDir(const QUrl &localDir, const QString &name) const;
     Q_INVOKABLE Monad::ResultBase addRepository(const cwResultDir& dir);
+    Q_INVOKABLE Monad::ResultString repositoryProjectFile(int index) const;
+    Q_INVOKABLE Monad::ResultBase openRepository(int index, cwProject* project) const;
+    Q_INVOKABLE Monad::ResultBase addRepositoryFromProjectFile(const QUrl& projectFileUrl);
 
     Q_INVOKABLE void clear();
 
@@ -65,4 +70,3 @@ private:
     static constexpr char SettingsKey[] = "repositories";
     static constexpr char DefaultDirKey[] = "defaultRepositoryDir";
 };
-
