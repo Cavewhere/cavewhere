@@ -10,31 +10,42 @@ StandardPage {
     id: pageId
 
     ColumnLayout {
-        anchors.fill: parent
+        width: listViewId.implicitWidth
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
         anchors.margins: 10
 
-        QC.Button {
-            objectName: "newCavingAreaButton"
-            text: "New Caving Area"
-            icon.source: "qrc:/twbs-icons/icons/plus.svg"
+        RowLayout {
+            id: rowLayoutId
+            implicitWidth: listViewId.implicitWidth
 
-            onClicked: {
-                whereDialogId.open()
-            }
-        }
+            spacing: 12
 
-        QC.Button {
-            objectName: "openCavingAreaButton"
-            text: "Open"
-            onClicked: {
-                const openDialog = function() {
-                    RootData.pageSelectionModel.currentPageAddress = "Source";
-                    loadProjectDialogId.loadFileDialog.open();
+            QC.Button {
+                objectName: "newCavingAreaButton"
+                text: "New Caving Area"
+                icon.source: "qrc:/twbs-icons/icons/plus.svg"
+
+                onClicked: {
+                    whereDialogId.open()
                 }
+            }
 
-                askToSaveDialogId.taskName = "opening a project"
-                askToSaveDialogId.afterSaveFunc = openDialog
-                askToSaveDialogId.askToSave()
+            Item { Layout.fillWidth: true }
+
+            QC.Button {
+                objectName: "openCavingAreaButton"
+                text: "Open"
+                onClicked: {
+                    const openDialog = function() {
+                        RootData.pageSelectionModel.currentPageAddress = "Source";
+                        loadProjectDialogId.loadFileDialog.open();
+                    }
+
+                    askToSaveDialogId.taskName = "opening a project"
+                    askToSaveDialogId.afterSaveFunc = openDialog
+                    askToSaveDialogId.askToSave()
+                }
             }
         }
 
@@ -42,7 +53,7 @@ StandardPage {
             id: listViewId
             objectName: "repositoryListView"
 
-            width: Math.max(parent.width, 300)
+            implicitWidth: Math.min(pageId.width, 500)
             Layout.fillHeight: true
             // Layout.leftMargin: 10
             // Layout.rightMargin: 10
@@ -58,18 +69,18 @@ StandardPage {
                 required property int index
 
                 width: listViewId.width
-                height: Math.max(30, linkTextId.height)
-
+                implicitHeight: contentColumn.implicitHeight + 12
                 color: index % 2 === 0 ? "#ffffff" : "#eeeeee"
 
-                RowLayout {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    spacing: 12
+                ColumnLayout {
+                    id: contentColumn
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    spacing: 4
 
                     LinkText {
                         id: linkTextId
+                        Layout.fillWidth: true
                         text: delegateId.nameRole
                         elide: Text.ElideRight
 
@@ -85,9 +96,11 @@ StandardPage {
 
                     Text {
                         id: pathTextId
-                        text: delegateId.pathRole
-                        elide: Text.ElideRight
                         Layout.fillWidth: true
+                        Layout.leftMargin: 16
+                        text: delegateId.pathRole
+                        elide: Text.ElideMiddle
+                        color: Qt.darkGray
 
                         QC.Menu {
                             id: contextMenu
@@ -97,16 +110,15 @@ StandardPage {
                             }
                         }
 
+                        TapHandler {
+                            acceptedDevices: PointerDevice.Mouse
+                            acceptedButtons: Qt.RightButton
+                            gesturePolicy: TapHandler.WithinBounds
+                            onTapped: {
+                                contextMenu.popup(pathTextId)
+                            }
+                        }
                     }
-                }
-
-
-                TapHandler {
-                    acceptedDevices: PointerDevice.Mouse
-                    acceptedButtons: Qt.RightButton
-                    onTapped: (eventPoint) => {
-                                  contextMenu.popup(pathTextId)
-                              }
                 }
 
             }
