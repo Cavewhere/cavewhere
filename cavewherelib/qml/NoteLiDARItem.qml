@@ -60,6 +60,44 @@ RegionViewer {
         }
     }
 
+    NoteLiDARNorthInteraction {
+        id: lidarNorthInteraction
+        anchors.fill: parent
+        viewer: rhiViewerId
+        turnTableInteraction: turnTableInteractionId
+        scene: sceneId
+        note: rhiViewerId.note
+    }
+
+    NoteLiDARUpInteraction {
+        id: lidarUpInteraction
+        anchors.fill: parent
+        viewer: rhiViewerId
+        turnTableInteraction: turnTableInteractionId
+        scene: sceneId
+        note: rhiViewerId.note
+    }
+
+    NoteLiDARScaleInteraction {
+        id: lidarScaleInteraction
+        anchors.fill: parent
+        viewer: rhiViewerId
+        turnTableInteraction: turnTableInteractionId
+        scene: sceneId
+        note: rhiViewerId.note
+    }
+
+    InteractionManager {
+        id: interactionManagerId
+        interactions: [
+            turnTableInteractionId,
+            lidarNorthInteraction,
+            lidarUpInteraction,
+            lidarScaleInteraction
+        ]
+        defaultInteraction: turnTableInteractionId
+    }
+
     Item3DRepeater {
         id: noteStationRepeaterId
         anchors.fill: parent
@@ -92,6 +130,10 @@ RegionViewer {
 
     NoteLiDARTransformEditor {
         noteTransform: note ? note.noteTransformation : null
+        interactionManager: interactionManagerId
+        northInteraction: lidarNorthInteraction
+        upInteraction: lidarUpInteraction
+        scaleInteraction: lidarScaleInteraction
 
         anchors.top: parent.top
         anchors.left: parent.left

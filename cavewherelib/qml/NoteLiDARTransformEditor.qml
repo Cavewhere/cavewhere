@@ -19,9 +19,10 @@ QQ.Item {
     // ---- Required/expected API ------------------------------------------------
     required property NoteLiDARTransformation noteTransform
     // Optional, for interactive “set north with tool”
-    property NoteNorthInteraction northInteraction
+    property NoteLiDARNorthInteraction northInteraction
     // Optional, if you still want to expose scale interaction
-    property NoteScaleInteraction scaleInteraction
+    property NoteLiDARScaleInteraction scaleInteraction
+    property NoteLiDARUpInteraction upInteraction
     property InteractionManager interactionManager
 
     visible: noteTransform !== null
@@ -43,25 +44,39 @@ QQ.Item {
         when: editor.scaleInteraction !== null
     }
 
+    QQ.Binding {
+        target: editor.upInteraction
+        property: "noteTransform"
+        value: editor.noteTransform
+        when: editor.upInteraction !== null
+    }
+
     // ---- Helpers --------------------------------------------------------------
     readonly property var upModeEntries: [
-        { label: "Custom",        value: NoteLiDARTransformation.UpMode.Custom },
-        { label: "X is up",       value: NoteLiDARTransformation.UpMode.XisUp },
-        { label: "Y is up (PolyCam)", value: NoteLiDARTransformation.UpMode.YisUp },
-        { label: "Z is up",       value: NoteLiDARTransformation.UpMode.ZisUp }
+        { label: "+Y is up (PolyCam)",   mode: NoteLiDARTransformation.UpMode.YisUp, sign: 1.0 },
+        { label: "-Y is up",             mode: NoteLiDARTransformation.UpMode.YisUp, sign: -1.0 },
+        { label: "+Z is up",             mode: NoteLiDARTransformation.UpMode.ZisUp, sign: 1.0 },
+        { label: "-Z is up",             mode: NoteLiDARTransformation.UpMode.ZisUp, sign: -1.0 },
+        { label: "+X is up",             mode: NoteLiDARTransformation.UpMode.XisUp, sign: 1.0 },
+        { label: "-X is up",             mode: NoteLiDARTransformation.UpMode.XisUp, sign: -1.0 },
+        { label: "Custom",               mode: NoteLiDARTransformation.UpMode.Custom }
     ]
 
-    function upModeToIndex(mode) {
+    function upModeToIndex(mode, sign) {
+        const clampedSign = (typeof sign === "number" && sign < 0) ? -1.0 : 1.0
         for (let i = 0; i < upModeEntries.length; ++i) {
-            if (upModeEntries[i].value === mode) {
-                return i
+            const entry = upModeEntries[i]
+            if (entry.mode === mode) {
+                if (!("sign" in entry) || entry.sign === clampedSign) {
+                    return i
+                }
             }
         }
         return 0
     }
 
-    function indexToUpMode(idx) {
-        return upModeEntries[Math.max(0, Math.min(idx, upModeEntries.length - 1))].value
+    function indexToUpConfig(idx) {
+        return upModeEntries[Math.max(0, Math.min(idx, upModeEntries.length - 1))]
     }
 
     FloatingGroupBox {
@@ -99,10 +114,11 @@ QQ.Item {
                 Text { text: "°" }
 
                 // Optional tool hook (mouse interaction to set north)
-                Controls.Button {
+                NoteToolIconButton {
                     id: setNorthToolBtn
                     visible: editor.interactionManager && editor.northInteraction
-                    text: "Set with tool"
+                    iconSource: "qrc:/icons/svg/north.svg"
+                    toolTipText: "Set north with tool"
                     onClicked: editor.interactionManager.active(editor.northInteraction)
                 }
             }
@@ -114,7 +130,7 @@ QQ.Item {
                       "(or your chosen reference). This writes <code>northUp</code> on the base transform."
             }
 
-            // --- Up direction (mode + sign) ------------------------------------
+            // --- Up direction (axis + sign) ------------------------------------
             RowLayout {
                 spacing: 8
 
@@ -124,17 +140,12 @@ QQ.Item {
                     helpArea: upModeHelp
                 }
 
-                Controls.ComboBox {
-                    id: upSignCombo
-                    objectName: "upSignCombo"
-                    // implicitWidth: 10
-                    model: ["+", "- (flip)"]
-                    currentIndex: editor.noteTransform && editor.noteTransform.upSign < 0 ? 1 : 0
-                    onActivated: {
-                        if (editor.noteTransform) {
-                            editor.noteTransform.upSign = (currentIndex === 1) ? -1.0 : 1.0
-                        }
-                    }
+                NoteToolIconButton {
+                    id: setUpToolBtn
+                    visible: editor.interactionManager && editor.upInteraction
+                    iconSource: "qrc:/icons/svg/up.svg"
+                    toolTipText: "Set up direction with tool"
+                    onClicked: editor.interactionManager.active(editor.upInteraction)
                 }
 
                 Controls.ComboBox {
@@ -142,10 +153,16 @@ QQ.Item {
                     objectName: "upModeCombo"
                     implicitWidth: 300
                     model: upModeEntries.map(e => e.label)
-                    currentIndex: editor.noteTransform ? editor.upModeToIndex(editor.noteTransform.upMode) : 0
+                    currentIndex: editor.noteTransform ? editor.upModeToIndex(editor.noteTransform.upMode, editor.noteTransform.upSign) : 0
                     onActivated: {
                         if (editor.noteTransform) {
-                            editor.noteTransform.upMode = editor.indexToUpMode(currentIndex)
+                            const entry = editor.indexToUpConfig(currentIndex)
+                            editor.noteTransform.upMode = entry.mode
+                            if ("sign" in entry) {
+                                editor.noteTransform.upSign = entry.sign
+                            } else {
+                                editor.noteTransform.upSign = 1.0
+                            }
                         }
                     }
                 }
@@ -158,9 +175,8 @@ QQ.Item {
                 Layout.fillWidth: true
                 text: "Choose which source axis represents <b>Up</b> before north rotation and scaling. " +
                       "<ul>" +
-                      "<li><b>X is up / Y is up / Z is up</b>: Treat the chosen axis as 'up'.</li>" +
-                      "<li><b>Custom</b>: Use the <code>upRotation</code> quaternion (advanced rigs).</li>" +
-                      "<li><b>Flip</b> with <i>up sign</i> = -1 to invert the chosen up axis.</li>" +
+                      "<li><b>±X / ±Y / ±Z is up</b>: Pick the source axis and sign that should point up.</li>" +
+                      "<li><b>Custom</b>: Use the arrow tool button to orient the LiDAR and update the <code>upRotation</code> quaternion.</li>" +
                       "</ul>"
             }
 
@@ -178,28 +194,23 @@ QQ.Item {
 
                 ClickTextInput {
                     id: quatX; Layout.preferredWidth: 70
+                    readOnly: true
                     text: editor.noteTransform ? editor.noteTransform.upRotation.x.toFixed(4) : "0.0000"
-                    onFinishedEditting: (t) => { if (editor.noteTransform) {
-                            let q = editor.noteTransform.upRotation; q.x = Number(t); editor.noteTransform.upRotation = q; } }
                 }
                 ClickTextInput {
                     id: quatY; Layout.preferredWidth: 70
+                    readOnly: true
                     text: editor.noteTransform ? editor.noteTransform.upRotation.y.toFixed(4) : "0.0000"
-                    onFinishedEditting: (t) => { if (editor.noteTransform) {
-                            let q = editor.noteTransform.upRotation; q.y = Number(t); editor.noteTransform.upRotation = q; } }
                 }
                 ClickTextInput {
                     id: quatZ; Layout.preferredWidth: 70
+                    readOnly: true
                     text: editor.noteTransform ? editor.noteTransform.upRotation.z.toFixed(4) : "0.0000"
-                    onFinishedEditting: (t) => { if (editor.noteTransform) {
-                            let q = editor.noteTransform.upRotation; q.z = Number(t); editor.noteTransform.upRotation = q; } }
                 }
                 ClickTextInput {
                     id: quatW; Layout.preferredWidth: 70
+                    readOnly: true
                     text: editor.noteTransform ? editor.noteTransform.upRotation.scalar.toFixed(4) : "1.0000"
-                    onFinishedEditting: (t) => { if (editor.noteTransform) {
-                            // QQuaternion uses (scalar=w) + vector (x,y,z)
-                            let q = editor.noteTransform.upRotation; q.scalar = Number(t); editor.noteTransform.upRotation = q; } }
                 }
             }
 
@@ -208,7 +219,7 @@ QQ.Item {
                 visible: quatRow.visible
                 Layout.fillWidth: true
                 text: "Quaternion applied first to align the LiDAR’s native up to your desired 'page up'. " +
-                      "Use only if <b>UpMode = Custom</b>."
+                      "Use the up-direction tool button while in Custom mode to adjust it."
             }
 
             // --- Scale (should generally be 1:1 for LiDAR) ----------------------
