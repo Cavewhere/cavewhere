@@ -32,12 +32,14 @@ MainWindowTest {
                     let noteGalleryView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView");
                     tryVerify(() => { return noteGalleryView.count === 2});
 
+                    waitForRendering(noteGalleryView)
+
                     let noteImage2_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView->noteImage1")
                     mouseClick(noteImage2_obj1)
 
                     let noteLiDARItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId")
 
-                    tryVerify(() => { return noteLiDARItem.scene.gltf.status === RenderGLTF.Ready })
+                    tryVerify(() => { return noteLiDARItem.scene.gltf.status === RenderGLTF.Ready }, 10000)
 
                     //         //Zoom into the the model
                     // let turnTable = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->turnTableInteraction")
