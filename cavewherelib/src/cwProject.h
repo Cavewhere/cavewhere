@@ -100,6 +100,7 @@ public:
     Q_INVOKABLE bool save();
     Q_INVOKABLE bool saveAs(QString newFilename);
     Q_INVOKABLE bool deleteTemporaryProject();
+    Q_INVOKABLE bool isNewProject() const;
 
     QString filename() const;
 

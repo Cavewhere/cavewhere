@@ -124,6 +124,18 @@ TEST_CASE("Image data should save and load correctly", "[cwProject]") {
     CHECK(originalImage == sqlImage);
 }
 
+TEST_CASE("New temporary project detection works", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    REQUIRE(project->isTemporaryProject());
+    REQUIRE(project->cavingRegion()->caveCount() == 0);
+    CHECK(project->isNewProject() == true);
+
+    project->cavingRegion()->addCave();
+    CHECK(project->isNewProject() == false);
+}
+
 TEST_CASE("Images should load correctly", "[cwProject]") {
 
     QSize size(1024, 1024);
@@ -326,6 +338,7 @@ TEST_CASE("Temporary project saveAs reports error when destination exists", "[cw
     CHECK(error.type() == cwError::Fatal);
     CHECK(error.message() == QStringLiteral("Destination folder '%1' already exists.").arg(existingRoot));
     CHECK(project->isTemporaryProject());
+    CHECK(project->isNewProject());
 }
 
 TEST_CASE("Non-temporary project saveAs reports error when destination exists", "[cwProject]") {

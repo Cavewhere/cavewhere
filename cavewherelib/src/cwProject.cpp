@@ -716,32 +716,28 @@ void cwProject::waitSaveToFinish()
  * Returns true if the user has modified the file, and false if haven't
  */
 bool cwProject::isModified()
-{;
+{
     m_saveLoad->waitForFinished();
     m_saveLoad->repository()->checkStatus();
     return m_saveLoad->repository()->modifiedFileCount() > 0;
+}
 
+bool cwProject::isNewProject() const
+{
+    if(!isTemporaryProject()) {
+        return false;
+    }
 
-    // qDebug() << "TODO fix isModified!";
+    auto repository = m_saveLoad->repository();
+    if(!repository) {
+        return false;
+    }
 
-    // return true;
+    if(repository->hasCommits()) {
+        return false;
+    }
 
-    // cwRegionSaveTask saveTask;
-    // QByteArray saveData = saveTask.serializedData(Region);
-
-    // if(isTemporaryProject()) {
-    //     return Region->caveCount() > 0;
-    // }
-
-    // cwRegionLoadTask loadTask;
-    // loadTask.setDatabaseFilename(filename());
-    // loadTask.setDeleteOldImages(false);
-    // auto result = loadTask.load();
-    // loadTask.waitToFinish();
-
-    // QByteArray currentData = saveTask.serializedData(result.cavingRegion().data());
-
-    // return saveData != currentData;
+    return Region->caveCount() == 0;
 }
 
 /**
