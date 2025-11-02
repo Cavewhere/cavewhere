@@ -26,6 +26,16 @@ StandardPage {
         QC.Button {
             objectName: "openCavingAreaButton"
             text: "Open"
+            onClicked: {
+                const openDialog = function() {
+                    RootData.pageSelectionModel.currentPageAddress = "Source";
+                    loadProjectDialogId.loadFileDialog.open();
+                }
+
+                askToSaveDialogId.taskName = "opening a project"
+                askToSaveDialogId.afterSaveFunc = openDialog
+                askToSaveDialogId.askToSave()
+            }
         }
 
         ListView {
@@ -106,6 +116,16 @@ StandardPage {
     SourceLocationDialog {
         id: whereDialogId
         anchors.fill: parent
+    }
+
+    SaveAsDialog {
+        id: saveAsDialogId
+    }
+
+    AskToSaveDialog {
+        id: askToSaveDialogId
+        saveAsDialog: saveAsDialogId
+        taskName: "opening a project"
     }
 
     LoadProjectDialog {
