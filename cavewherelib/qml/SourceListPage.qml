@@ -11,6 +11,7 @@ StandardPage {
 
     ColumnLayout {
         anchors.fill: parent
+        anchors.margins: 10
 
         QC.Button {
             objectName: "newCavingAreaButton"
@@ -31,6 +32,7 @@ StandardPage {
             id: listViewId
             objectName: "repositoryListView"
 
+            width: Math.max(parent.width, 300)
             Layout.fillHeight: true
             // Layout.leftMargin: 10
             // Layout.rightMargin: 10
@@ -42,51 +44,61 @@ StandardPage {
                 id: delegateId
 
                 required property string nameRole
+                required property string pathRole
                 required property int index
 
-                width: 150
+                width: listViewId.width
                 height: Math.max(30, linkTextId.height)
 
                 color: index % 2 === 0 ? "#ffffff" : "#eeeeee"
 
-                // MouseArea {
-                //     anchors.fill: parent
-                //     onClicked: {
-
-                //     }
-                // }
-
-                LinkText {
-                    id: linkTextId
-                    anchors.verticalCenter: parent.verticalCenter
+                RowLayout {
                     anchors.left: parent.left
-                    anchors.leftMargin: 10
-                    text: delegateId.nameRole
-                    elide: Text.ElideRight
+                    anchors.right: parent.right
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 12
 
-                    onClicked: {
-                        const result = RootData.repositoryModel.openRepository(index, RootData.project)
-                        if (result.hasError) {
-                            console.warn("Failed to open repository:", result.errorMessage)
-                            return;
+                    LinkText {
+                        id: linkTextId
+                        text: delegateId.nameRole
+                        elide: Text.ElideRight
+
+                        onClicked: {
+                            const result = RootData.repositoryModel.openRepository(index, RootData.project)
+                            if (result.hasError) {
+                                console.warn("Failed to open repository:", result.errorMessage)
+                                return;
+                            }
+                            RootData.pageSelectionModel.gotoPageByName(null, "Area")
                         }
-                        RootData.pageSelectionModel.gotoPageByName(null, "Area")
+                    }
+
+                    Text {
+                        id: pathTextId
+                        text: delegateId.pathRole
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+
+                        QC.Menu {
+                            id: contextMenu
+
+                            RevealInFileManagerMenuItem {
+                                filePath: delegateId.pathRole
+                            }
+                        }
+
                     }
                 }
 
-                LinkText {
-                    id: pathTextId
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.left: parent.left
-                    anchors.leftMargin: 10
-                    text: delegateId.pathRole
-                    elide: Text.ElideRight
 
-                    onClicked: {
-                        //Use desktop services to open the link
-
-                    }
+                TapHandler {
+                    acceptedDevices: PointerDevice.Mouse
+                    acceptedButtons: Qt.RightButton
+                    onTapped: (eventPoint) => {
+                                  contextMenu.popup(pathTextId)
+                              }
                 }
+
             }
         }
     }

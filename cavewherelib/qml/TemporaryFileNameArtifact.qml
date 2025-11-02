@@ -60,21 +60,8 @@ Qan.NodeItem {
                 Qt.openUrlExternally("file:///" + artifact.filename);
             }
         }
-        MenuItem {
-            text: {
-                if (Qt.platform.os === "osx") {
-                    return "Show in Finder";
-                } else if (Qt.platform.os === "windows") {
-                    return "Show in Explorer";
-                } else {
-                    return "Show in File Manager";
-                }
-            }
-
-            onTriggered: {
-                // Assuming cavewherelib provides showInFinder() to reveal the file's directory
-                RootData.showInFolder(artifact.filename)
-            }
+        RevealInFileManagerMenuItem {
+            filePath: artifact.filename
         }
     }
 }
