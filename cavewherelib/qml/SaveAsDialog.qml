@@ -9,7 +9,9 @@ FileDialog {
     fileMode: FileDialog.SaveFile
     currentFolder: RootData.lastDirectory
     onAccepted: {
-        RootData.lastDirectory = selectedFile
-        RootData.project.saveAs(selectedFile)
+        const chosenFile = selectedFile;
+        if (RootData.project.saveAs(chosenFile)) {
+            RootData.lastDirectory = chosenFile;
+        }
     }
 }

@@ -20,6 +20,8 @@ using namespace Catch;
 #include "cwSaveLoad.h"
 #include "cwTeam.h"
 #include "cwNoteLiDAR.h"
+#include "cwError.h"
+#include "cwErrorListModel.h"
 
 //Qt includes
 #include <QtCore/qdiriterator.h>
@@ -28,6 +30,8 @@ using namespace Catch;
 #include <QSqlDatabase>
 #include <QSqlResult>
 #include <QSqlRecord>
+#include <QDir>
+#include <QTemporaryDir>
 
 // TEST_CASE("cwProject isModified should work correctly", "[cwProject]") {
 //     cwProject project;
@@ -118,6 +122,32 @@ TEST_CASE("Image data should save and load correctly", "[cwProject]") {
 
     CHECK(!sqlImage.isNull());
     CHECK(originalImage == sqlImage);
+}
+
+TEST_CASE("New temporary project detection works", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    REQUIRE(project->isTemporaryProject());
+    REQUIRE(project->cavingRegion()->caveCount() == 0);
+    CHECK(project->isNewProject() == true);
+
+    project->cavingRegion()->addCave();
+    CHECK(project->isNewProject() == false);
+}
+
+TEST_CASE("Loading a project clears temporary flag", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    REQUIRE(project->isTemporaryProject());
+
+    QString source = copyToTempFolder("://datasets/test_cwProject/v7.cw");
+    project->loadOrConvert(source);
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitLoadToFinish();
+
+    CHECK(project->isTemporaryProject() == false);
 }
 
 TEST_CASE("Images should load correctly", "[cwProject]") {
@@ -254,6 +284,109 @@ TEST_CASE("Files should be added to the project correctly", "[cwProject]") {
 
     CHECK_FALSE(sourceText.isEmpty());
     CHECK(sourceText == destinationText);
+}
+
+TEST_CASE("Temporary project saveAs should move the project directory", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    REQUIRE(project->isTemporaryProject());
+
+    const QDir originalRoot = cwSaveLoad::projectDir(project);
+    REQUIRE(originalRoot.exists());
+
+    const QString markerFilePath = originalRoot.absoluteFilePath(QStringLiteral("marker.txt"));
+    {
+        QFile marker(markerFilePath);
+        REQUIRE(marker.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text));
+        marker.write("temporary marker\n");
+        marker.close();
+    }
+    REQUIRE(QFileInfo::exists(markerFilePath));
+
+    QTemporaryDir destinationParent;
+    REQUIRE(destinationParent.isValid());
+
+    const QString targetProjectFile = destinationParent.filePath(QStringLiteral("SavedProject.cw"));
+
+    REQUIRE(project->saveAs(targetProjectFile));
+
+    rootData->futureManagerModel()->waitForFinished();
+
+    CHECK(project->canSaveDirectly());
+    CHECK_FALSE(project->isTemporaryProject());
+
+    const QString newProjectFile = project->filename();
+    QFileInfo newFileInfo(newProjectFile);
+    REQUIRE(newFileInfo.exists());
+
+    const QDir newRootDir = newFileInfo.absoluteDir();
+    REQUIRE(newRootDir.exists());
+
+    CHECK(QFileInfo::exists(newRootDir.absoluteFilePath(QStringLiteral("marker.txt"))));
+    CHECK_FALSE(QFileInfo::exists(markerFilePath));
+
+    CHECK(newFileInfo.fileName() == QStringLiteral("SavedProject.cw"));
+}
+
+TEST_CASE("Temporary project saveAs reports error when destination exists", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    REQUIRE(project->isTemporaryProject());
+    project->errorModel()->clear();
+
+    QTemporaryDir destinationParent;
+    REQUIRE(destinationParent.isValid());
+
+    const QString baseName = QStringLiteral("ExistingProject");
+    const QString existingRoot = destinationParent.filePath(baseName);
+    REQUIRE(QDir().mkpath(existingRoot));
+
+    const QString targetProjectFile = destinationParent.filePath(baseName + QStringLiteral(".cw"));
+
+    CHECK_FALSE(project->saveAs(targetProjectFile));
+
+    REQUIRE(project->errorModel()->count() > 0);
+    const auto error = project->errorModel()->last();
+    CHECK(error.type() == cwError::Fatal);
+    CHECK(error.message() == QStringLiteral("Destination folder '%1' already exists.").arg(existingRoot));
+    CHECK(project->isTemporaryProject());
+    CHECK(project->isNewProject());
+}
+
+TEST_CASE("Non-temporary project saveAs reports error when destination exists", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    REQUIRE(project->isTemporaryProject());
+
+    QTemporaryDir moveDestinationParent;
+    REQUIRE(moveDestinationParent.isValid());
+
+    const QString initialTarget = moveDestinationParent.filePath(QStringLiteral("PersistentProject.cw"));
+    REQUIRE(project->saveAs(initialTarget));
+    rootData->futureManagerModel()->waitForFinished();
+    project->errorModel()->clear();
+
+    REQUIRE(project->canSaveDirectly());
+    REQUIRE_FALSE(project->isTemporaryProject());
+
+    QTemporaryDir copyDestinationParent;
+    REQUIRE(copyDestinationParent.isValid());
+
+    const QString baseName = QStringLiteral("AlreadyThere");
+    const QString existingRoot = copyDestinationParent.filePath(baseName);
+    REQUIRE(QDir().mkpath(existingRoot));
+
+    const QString targetProjectFile = copyDestinationParent.filePath(baseName + QStringLiteral(".cw"));
+
+    CHECK_FALSE(project->saveAs(targetProjectFile));
+
+    REQUIRE(project->errorModel()->count() > 0);
+    const auto error = project->errorModel()->last();
+    CHECK(error.type() == cwError::Fatal);
+    CHECK(error.message() == QStringLiteral("Destination folder '%1' already exists.").arg(existingRoot));
 }
 
 
@@ -2053,5 +2186,3 @@ TEST_CASE("Note should be removed correctly simple", "[cwProject]") {
     //Notes directory should still exist because we store multiple notes in it
     CHECK(QFileInfo::exists(noteDir.absolutePath()));
 }
-
-

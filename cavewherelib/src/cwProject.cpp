@@ -68,7 +68,10 @@ cwProject::cwProject(QObject* parent) :
     ErrorModel(new cwErrorListModel(this))
 {
     m_saveLoad->setCavingRegion(Region);
-    connect(m_saveLoad, &cwSaveLoad::isTemporaryProjectChanged, this, &cwProject::isTemporaryProjectChanged);
+    connect(m_saveLoad, &cwSaveLoad::isTemporaryProjectChanged, this, [this]() {
+        emit isTemporaryProjectChanged();
+        emit canSaveDirectlyChanged();
+    });
     connect(m_saveLoad, &cwSaveLoad::fileNameChanged, this, [this]() {
         emit filenameChanged(m_saveLoad->fileName());
     });
@@ -255,9 +258,59 @@ void cwProject::privateSave() {
     // }).future();
 }
 
+bool cwProject::save()
+{
+    if(!canSaveDirectly()) {
+        return false;
+    }
+
+    m_saveLoad->waitForFinished();
+    emit fileSaved();
+    return true;
+}
+
 bool cwProject::saveWillCauseDataLoss() const
 {
     return FileVersion > cwRegionIOTask::protoVersion();
+}
+
+bool cwProject::saveAs(QString newFilename)
+{
+    newFilename = cwGlobals::convertFromURL(newFilename);
+    if(newFilename.isEmpty()) {
+        ErrorModel->append(cwError(QStringLiteral("Save location can't be empty."), cwError::Fatal));
+        return false;
+    }
+
+    newFilename = cwGlobals::addExtension(newFilename, QStringLiteral("cw"));
+
+    Monad::ResultBase result = isTemporaryProject()
+        ? m_saveLoad->moveProjectTo(newFilename)
+        : m_saveLoad->copyProjectTo(newFilename);
+
+    if(result.hasError()) {
+        ErrorModel->append(cwError(result.errorMessage(), cwError::Fatal));
+        return false;
+    }
+
+    emit fileSaved();
+    return true;
+}
+
+bool cwProject::deleteTemporaryProject()
+{
+    if(!isTemporaryProject()) {
+        ErrorModel->append(cwError(QStringLiteral("Current project is not temporary."), cwError::Warning));
+        return false;
+    }
+
+    auto result = m_saveLoad->deleteTemporaryProject();
+    if(result.hasError()) {
+        ErrorModel->append(cwError(result.errorMessage(), cwError::Fatal));
+        return false;
+    }
+
+    return true;
 }
 
 void cwProject::setTemporaryProject(bool isTemp)
@@ -663,32 +716,28 @@ void cwProject::waitSaveToFinish()
  * Returns true if the user has modified the file, and false if haven't
  */
 bool cwProject::isModified()
-{;
+{
     m_saveLoad->waitForFinished();
     m_saveLoad->repository()->checkStatus();
     return m_saveLoad->repository()->modifiedFileCount() > 0;
+}
 
+bool cwProject::isNewProject() const
+{
+    if(!isTemporaryProject()) {
+        return false;
+    }
 
-    // qDebug() << "TODO fix isModified!";
+    auto repository = m_saveLoad->repository();
+    if(!repository) {
+        return false;
+    }
 
-    // return true;
+    if(repository->hasCommits()) {
+        return false;
+    }
 
-    // cwRegionSaveTask saveTask;
-    // QByteArray saveData = saveTask.serializedData(Region);
-
-    // if(isTemporaryProject()) {
-    //     return Region->caveCount() > 0;
-    // }
-
-    // cwRegionLoadTask loadTask;
-    // loadTask.setDatabaseFilename(filename());
-    // loadTask.setDeleteOldImages(false);
-    // auto result = loadTask.load();
-    // loadTask.waitToFinish();
-
-    // QByteArray currentData = saveTask.serializedData(result.cavingRegion().data());
-
-    // return saveData != currentData;
+    return Region->caveCount() == 0;
 }
 
 /**

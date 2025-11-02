@@ -16,6 +16,12 @@ QQ.Loader {
     property AskToSaveInteralDialog _dialog: null
 
     function askToSave() {
+        if (RootData.project.isNewProject() || !RootData.project.isTemporaryProject) {
+            afterSaveFunc();
+            closeDialog();
+            return;
+        }
+
         if(RootData.project.isModified()) {
             loaderId.sourceComponent = null;
             loaderId._dialog = null;
@@ -40,6 +46,18 @@ QQ.Loader {
         closeDialog();
     }
 
+    function handleTemporarySaveRequest() {
+        if (loaderId.saveAsDialog) {
+            loaderId.saveAsDialog.open();
+        }
+    }
+
+    function handleTemporaryDeleteRequest() {
+        if (RootData.project.deleteTemporaryProject()) {
+            loaderId._privateAfterSave();
+        }
+    }
+
     anchors.centerIn: parent
 
     component AskToSaveInteralDialog :
@@ -48,6 +66,7 @@ QQ.Loader {
         QQ.Item {
             id: itemId
             property alias askToSaveDialog: askToSaveDialogId
+            property bool isTemporaryProject: RootData.project.isTemporaryProject
 
             anchors.centerIn: parent
 
@@ -69,10 +88,27 @@ QQ.Loader {
                 id: askToSaveDialogId
                 anchors.centerIn: parent
                 modal: true
-                standardButtons: QC.Dialog.Save | QC.Dialog.Discard | QC.Dialog.Cancel
-                title: "Save before " + loaderId.taskName + "?"
+                standardButtons: itemId.isTemporaryProject ? QC.DialogButtonBox.NoButton : (QC.DialogButtonBox.Save | QC.DialogButtonBox.Discard | QC.DialogButtonBox.Cancel)
+                title: (itemId.isTemporaryProject ? "Save temporary project before " : "Save before ") + loaderId.taskName + "?"
+
+                contentItem: QQ.Column {
+                    width: Math.max(implicitWidth, 360)
+                    spacing: 8
+
+                    QC.Label {
+                        text: itemId.isTemporaryProject
+                              ? "This project lives in a <b>temporary folder</b>.<br>Save to move it somewhere permanent"
+                              : "Do you want to save your changes before " + loaderId.taskName + "?"
+                        wrapMode: QQ.Text.WordWrap
+                    }
+                }
+
+                footer: QQ.Loader {
+                    active: itemId.isTemporaryProject
+                    sourceComponent: temporaryFooterComponent
+                }
+
                 onAccepted: {
-                    //Save an close
                     if(RootData.project.canSaveDirectly) {
                         RootData.project.save();
                     } else {
@@ -80,7 +116,11 @@ QQ.Loader {
                     }
                 }
 
-                onDiscarded: loaderId._privateAfterSave();
+                onDiscarded: {
+                    if(!itemId.isTemporaryProject) {
+                        loaderId._privateAfterSave();
+                    }
+                }
             }
         }
     // }
@@ -89,5 +129,40 @@ QQ.Loader {
         id: askToSaveDialogComponent
         AskToSaveInteralDialog {}
     }
-}
 
+    QQ.Component {
+        id: temporaryFooterComponent
+        QC.DialogButtonBox {
+            alignment: Qt.AlignRight
+
+            QC.Button {
+                text: "Delete"
+                QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.DestructiveRole
+                onClicked: loaderId.handleTemporaryDeleteRequest()
+                // contentItem.color "#D32F2F"
+
+                contentItem: Text {
+                    text: parent.text
+                    color: "#D32F2F"
+                    font: parent.font
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    elide: Text.ElideRight
+                }
+            }
+
+            QC.Button {
+                text: "Cancel"
+                QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.RejectRole
+                onClicked: loaderId.closeDialog()
+            }
+
+            QC.Button {
+                text: "Save"
+                QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.AcceptRole
+                onClicked: loaderId.handleTemporarySaveRequest()
+                font.bold: true
+            }
+        }
+    }
+}

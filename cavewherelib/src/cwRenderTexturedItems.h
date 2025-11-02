@@ -25,6 +25,8 @@ public:
         QByteArray uniformBlock;
         QMatrix4x4 modelMatrix;
         bool visible = true;
+        bool storeGeometry = false; // Keep CPU-side geometry when tests need it
+        bool storeTexture = false;  // Keep CPU-side texture when tests need it
     };
 
     uint32_t addItem(const Item& item);
@@ -38,6 +40,8 @@ public:
     void removeItem(uint32_t id);
 
     //For testing
+    Item item(uint32_t id) const;
+    bool hasItem(uint32_t id) const;
 
 
 protected:
@@ -88,7 +92,6 @@ private:
 
     // Simple ID generator for items
     uint32_t m_nextId = 1;
-    QSet<uint32_t> m_ids;
     QHash<uint32_t, Item> m_frontState;
 
     void addCommand(const PendingCommand &&command);
