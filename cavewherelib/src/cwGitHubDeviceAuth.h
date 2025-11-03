@@ -38,7 +38,7 @@ signals:
     void accessTokenReceived(const cwGitHubDeviceAuth::AccessTokenResult& result);
 
 private slots:
-    void pollOnce();
+    void poll();
 
 private:
     QByteArray buildFormBody(const QList<QPair<QString, QString>>& items) const;

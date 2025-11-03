@@ -18,33 +18,54 @@ StandardPage {
         RowLayout {
             id: rowLayoutId
             implicitWidth: listViewId.implicitWidth
-
             spacing: 12
 
             QC.Button {
-                objectName: "newCavingAreaButton"
-                text: "New Caving Area"
+                id: addButton
+                objectName: "addRepositoryButton"
+                text: "Add"
                 icon.source: "qrc:/twbs-icons/icons/plus.svg"
-
-                onClicked: {
-                    whereDialogId.open()
-                }
+                onClicked: addMenu.popup(addButton)
             }
 
             Item { Layout.fillWidth: true }
 
-            QC.Button {
-                objectName: "openCavingAreaButton"
-                text: "Open"
-                onClicked: {
-                    const openDialog = function() {
-                        RootData.pageSelectionModel.currentPageAddress = "Source";
-                        loadProjectDialogId.loadFileDialog.open();
-                    }
+            QC.Menu {
+                id: addMenu
 
-                    askToSaveDialogId.taskName = "opening a project"
-                    askToSaveDialogId.afterSaveFunc = openDialog
-                    askToSaveDialogId.askToSave()
+                QC.MenuItem {
+                    objectName: "addMenuNew"
+                    text: "Create New Caving Area"
+                    onTriggered: {
+                        whereDialogId.repositoryName = ""
+                        whereDialogId.description = ""
+                        whereDialogId.open()
+                    }
+                }
+
+                QC.MenuItem {
+                    objectName: "addMenuOpen"
+                    text: "Open Existing Project"
+                    onTriggered: {
+                        const openDialog = function() {
+                            RootData.pageSelectionModel.currentPageAddress = "Source";
+                            loadProjectDialogId.loadFileDialog.open();
+                        }
+
+                        askToSaveDialogId.taskName = "opening a project"
+                        askToSaveDialogId.afterSaveFunc = openDialog
+                        askToSaveDialogId.askToSave()
+                    }
+                }
+
+                QC.MenuSeparator {}
+
+                QC.MenuItem {
+                    objectName: "addMenuRemote"
+                    text: "Connect to Remote Project"
+                    onTriggered: {
+                        RootData.pageSelectionModel.gotoPageByName(null, "Remote");
+                    }
                 }
             }
         }
@@ -91,7 +112,7 @@ StandardPage {
                                 console.warn("Failed to open repository:", result.errorMessage)
                                 return;
                             }
-                            RootData.pageSelectionModel.gotoPageByName(RootData.pageSelectionModel.currentPage, "Data")
+                            RootData.pageSelectionModel.gotoPageByName(null, "Area")
                         }
                     }
 

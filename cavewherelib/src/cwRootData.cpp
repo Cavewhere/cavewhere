@@ -23,6 +23,7 @@
 #include "cwTaskManagerModel.h"
 #include "cwPageSelectionModel.h"
 #include "cwSettings.h"
+#include "cwGitHubIntegration.h"
 // #include "cwImageCompressionUpdater.h"
 #include "cwAddImageTask.h"
 #include "cwJobSettings.h"
@@ -47,6 +48,7 @@ cwRootData::cwRootData(QObject *parent) :
     m_account(new QQuickGit::Account(this)),
     m_accountWatcher(new QQuickGit::AccountSettingWatcher(this)),
     m_repositoryModel(new cwRepositoryModel(this)),
+    m_gitHubIntegration(new cwGitHubIntegration(this)),
     DefaultTrip(new cwTrip(this)),
     DefaultTripCalibration(new cwTripCalibration(this))
 {

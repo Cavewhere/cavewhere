@@ -17,7 +17,7 @@ cwGitHubDeviceAuth::cwGitHubDeviceAuth(QString clientIdentifier, QObject* parent
     : QObject(parent),
     m_clientIdentifier(std::move(clientIdentifier)) {
 
-    QObject::connect(&m_pollTimer, &QTimer::timeout, this, &cwGitHubDeviceAuth::pollOnce);
+    QObject::connect(&m_pollTimer, &QTimer::timeout, this, &cwGitHubDeviceAuth::poll);
 }
 
 QByteArray cwGitHubDeviceAuth::buildFormBody(const QList<QPair<QString, QString>>& items) const {
@@ -81,7 +81,7 @@ void cwGitHubDeviceAuth::startPollingForAccessToken(const DeviceCodeInfo& info) 
     m_currentDeviceInfo = info;
     m_isPolling = true;
     m_pollTimer.start(m_currentDeviceInfo.pollIntervalSeconds * 1000);
-    pollOnce();
+    poll();
 }
 
 void cwGitHubDeviceAuth::cancel() {
@@ -89,7 +89,7 @@ void cwGitHubDeviceAuth::cancel() {
     m_pollTimer.stop();
 }
 
-void cwGitHubDeviceAuth::pollOnce() {
+void cwGitHubDeviceAuth::poll() {
     if (!m_isPolling) {
         return;
     }
@@ -105,6 +105,8 @@ void cwGitHubDeviceAuth::pollOnce() {
     QObject::connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         const QByteArray data = reply->readAll();
         reply->deleteLater();
+
+        qDebug() << "Poll reply:" << data;
 
         QJsonParseError parseError{};
         const QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
@@ -122,12 +124,18 @@ void cwGitHubDeviceAuth::pollOnce() {
 
         if (obj.contains(QStringLiteral("error"))) {
             result.success = false;
+
             result.errorName = obj.value(QStringLiteral("error")).toString();
             result.errorDescription = obj.value(QStringLiteral("error_description")).toString();
 
             if (result.errorName == QStringLiteral("slow_down")) {
-                const int current = m_pollTimer.interval();
-                m_pollTimer.start(current + 5000);
+                // const int current = m_pollTimer.interval();
+                const QJsonObject obj = doc.object();
+                int intervalSec = obj.value(QStringLiteral("interval")).toInt(5);
+                constexpr int buffer = 50;
+                constexpr int secToMsec = 1000;
+                m_pollTimer.start(intervalSec * secToMsec + buffer);
+                qDebug() << "Slow down";
             } else if (result.errorName == QStringLiteral("expired_token") ||
                        result.errorName == QStringLiteral("access_denied")) {
                 cancel();

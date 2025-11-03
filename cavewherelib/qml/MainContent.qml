@@ -130,6 +130,13 @@ QQ.Item {
     }
 
     QQ.Component {
+        id: remoteRepositoryPageComponent
+        RemoteRepositoryPage {
+            anchors.fill: parent
+        }
+    }
+
+    QQ.Component {
         id: pipelinePageComponent
         PipelinePage {
             anchors.fill: parent
@@ -143,6 +150,7 @@ QQ.Item {
         pageView.unknownPageComponent = unknownPageComponent
         let viewPage = RootData.pageSelectionModel.registerPage(null, "View", renderingComponent);
         let repositoryPage = RootData.pageSelectionModel.registerPage(null, "Source", sourceComponent);
+        RootData.pageSelectionModel.registerPage(null, "Remote", remoteRepositoryPageComponent);
         let dataPage = RootData.pageSelectionModel.registerPage(repositoryPage, "Data", dataMainPageComponent);
         let mapPage = RootData.pageSelectionModel.registerPage(null, "Map", mapPageComponent)
         RootData.pageSelectionModel.registerPage(null, "Testcases", testcasesPageComponent);
