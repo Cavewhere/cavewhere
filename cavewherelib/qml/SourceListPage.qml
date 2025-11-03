@@ -91,7 +91,7 @@ StandardPage {
                                 console.warn("Failed to open repository:", result.errorMessage)
                                 return;
                             }
-                            RootData.pageSelectionModel.gotoPageByName(null, "Area")
+                            RootData.pageSelectionModel.gotoPageByName(RootData.pageSelectionModel.currentPage, "Data")
                         }
                     }
 
