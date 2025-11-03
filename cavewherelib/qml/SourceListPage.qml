@@ -55,6 +55,7 @@ StandardPage {
 
             implicitWidth: Math.min(pageId.width, 500)
             Layout.fillHeight: true
+            visible: count > 0
             // Layout.leftMargin: 10
             // Layout.rightMargin: 10
             // Layout.topMargin: 10
@@ -122,6 +123,16 @@ StandardPage {
                 }
 
             }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            wrapMode: Text.WordWrap
+            horizontalAlignment: Text.AlignHCenter
+            visible: listViewId.count === 0
+            text: qsTr("No caving areas created or opened yet.")
+            color: Qt.darkGray
         }
     }
 
