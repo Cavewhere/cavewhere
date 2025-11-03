@@ -72,8 +72,6 @@ void TestHelper::loadProjectFromZip(cwProject *project, const QString &filename)
     QDirIterator it(info.canonicalPath(), {"*.cw"}, QDir::Files, QDirIterator::Subdirectories);
     if (it.hasNext()) {
         QString filePath = it.next();
-        qDebug() << "Found .cw file:" << filePath;
-
 
         // Optionally, load it
         project->loadOrConvert(filePath);

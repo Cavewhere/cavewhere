@@ -14,33 +14,20 @@ QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item> > > cwTriangulateLiDA
     // qDebug() << "I get here!";
 
     return cwConcurrent::mapped(liDARs, [](const cwTriangulateLiDARInData& data) {
-
-        // qDebug() << "I get here! Mapped!" << data.gltfFilename() << data.stationLookup().positions().size();
-
         if(data.stationLookup().positions().size() == 0) {
             return Monad::Result<QVector<cwRenderTexturedItems::Item> >("Station Lookup not set");
         }
 
         auto gltf = cw::gltf::Loader::loadGltf(data.gltfFilename());
-        // gltf.dump();
 
-        //Solve for rotation matrix,
-
-            //THIS IS FOR TESTING, remove
-            // QMatrix4x4 northMatrix;
-            // northMatrix.rotate(-88.34, QVector3D(0.0, 0.0, 1.0));
-
-            // QMatrix4x4 worldMatrix = northMatrix * data.modelMatrix();
-
-
-            auto visibleStations = cw::transform(data.noteStations(), [&](const cwNoteLiDARStation& station) {
-                const QString stationName = station.name();
-                return cwTriangulateStation(
-                    stationName,
-                    station.positionOnNote(),
-                    data.stationLookup().position(stationName)
-                    );
-            });
+        auto visibleStations = cw::transform(data.noteStations(), [&](const cwNoteLiDARStation& station) {
+            const QString stationName = station.name();
+            return cwTriangulateStation(
+                stationName,
+                station.positionOnNote(),
+                data.stationLookup().position(stationName)
+                );
+        });
 
         auto morphPositions = [&](cwGeometry& geometry) {
             const auto positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
