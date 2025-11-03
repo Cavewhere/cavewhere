@@ -33,6 +33,14 @@ cwGitHubIntegration::cwGitHubIntegration(QObject* parent)
 
     QObject::connect(&m_deviceAuth, &cwGitHubDeviceAuth::accessTokenReceived,
                      this, &cwGitHubIntegration::handleAccessToken);
+
+    QObject::connect(&m_deviceAuth, &cwGitHubDeviceAuth::secondsUntilNextPollChanged,
+                     this, [this](int seconds) {
+                         if (m_secondsUntilNextPoll != seconds) {
+                             m_secondsUntilNextPoll = seconds;
+                             emit secondsUntilNextPollChanged();
+                         }
+                     });
 }
 
 void cwGitHubIntegration::startDeviceLogin()
@@ -41,9 +49,15 @@ void cwGitHubIntegration::startDeviceLogin()
         return;
     }
 
-    qDebug() << "Start device login!";
-
     setErrorMessage({});
+    if (m_hasOpenedVerificationUrl) {
+        m_hasOpenedVerificationUrl = false;
+        emit verificationOpenedChanged();
+    }
+    if (m_secondsUntilNextPoll != 0) {
+        m_secondsUntilNextPoll = 0;
+        emit secondsUntilNextPollChanged();
+    }
     setAuthState(AuthState::RequestingCode);
     m_deviceAuth.requestDeviceCode({QStringLiteral("repo"), QStringLiteral("read:user")});
 }
@@ -59,6 +73,15 @@ void cwGitHubIntegration::cancelLogin()
     emit accessTokenChanged();
     emit repositoriesChanged();
     setAuthState(AuthState::Idle);
+
+    if (m_secondsUntilNextPoll != 0) {
+        m_secondsUntilNextPoll = 0;
+        emit secondsUntilNextPollChanged();
+    }
+    if (m_hasOpenedVerificationUrl) {
+        m_hasOpenedVerificationUrl = false;
+        emit verificationOpenedChanged();
+    }
 }
 
 void cwGitHubIntegration::refreshRepositories()
@@ -182,9 +205,9 @@ void cwGitHubIntegration::handleAccessToken(const cwGitHubDeviceAuth::AccessToke
             return;
         }
 
-        setErrorMessage(result.errorDescription.isEmpty() ? result.errorName : result.errorDescription);
-        setAuthState(AuthState::Error);
-        return;
+    setErrorMessage(result.errorDescription.isEmpty() ? result.errorName : result.errorDescription);
+    setAuthState(AuthState::Error);
+    return;
     }
 
     qDebug() << "Logged in!";
@@ -194,6 +217,14 @@ void cwGitHubIntegration::handleAccessToken(const cwGitHubDeviceAuth::AccessToke
     setAuthState(AuthState::Authorized);
     setErrorMessage({});
     refreshRepositories();
+}
+
+void cwGitHubIntegration::markVerificationOpened()
+{
+    if (!m_hasOpenedVerificationUrl) {
+        m_hasOpenedVerificationUrl = true;
+        emit verificationOpenedChanged();
+    }
 }
 
 void cwGitHubIntegration::handleRepositoryReply(QNetworkReply* reply)

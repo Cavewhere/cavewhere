@@ -22,6 +22,7 @@ class cwGitHubIntegration : public QObject
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(GitHubIntegration)
+    QML_UNCREATABLE("Access via RootData.gitHubIntegration")
 
     Q_PROPERTY(AuthState authState READ authState NOTIFY authStateChanged)
     Q_PROPERTY(QString userCode READ userCode NOTIFY deviceCodeChanged)
@@ -29,6 +30,8 @@ class cwGitHubIntegration : public QObject
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY errorMessageChanged)
     Q_PROPERTY(QVariantList repositories READ repositories NOTIFY repositoriesChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
+    Q_PROPERTY(int secondsUntilNextPoll READ secondsUntilNextPoll NOTIFY secondsUntilNextPollChanged)
+    Q_PROPERTY(bool verificationOpened READ verificationOpened NOTIFY verificationOpenedChanged)
 
 public:
     enum class AuthState {
@@ -48,6 +51,8 @@ public:
     QString errorMessage() const { return m_errorMessage; }
     QVariantList repositories() const { return m_repositories; }
     bool busy() const { return m_busy; }
+    int secondsUntilNextPoll() const { return m_secondsUntilNextPoll; }
+    bool verificationOpened() const { return m_hasOpenedVerificationUrl; }
 
     Q_INVOKABLE void startDeviceLogin();
     Q_INVOKABLE void cancelLogin();
@@ -55,6 +60,7 @@ public:
     Q_INVOKABLE QVariantMap ensureKeyPair();
     Q_INVOKABLE void uploadPublicKey(const QString& title);
     Q_INVOKABLE void clearSession();
+    Q_INVOKABLE void markVerificationOpened();
 
 signals:
     void authStateChanged();
@@ -63,6 +69,8 @@ signals:
     void errorMessageChanged();
     void repositoriesChanged();
     void busyChanged();
+    void secondsUntilNextPollChanged();
+    void verificationOpenedChanged();
 
 private:
     void setAuthState(AuthState state);
@@ -89,4 +97,6 @@ private:
     QNetworkAccessManager m_network;
 
     std::unique_ptr<QQuickGit::RSAKeyGenerator> m_keyGenerator;
+    int m_secondsUntilNextPoll = 0;
+    bool m_hasOpenedVerificationUrl = false;
 };

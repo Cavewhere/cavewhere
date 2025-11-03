@@ -4,6 +4,7 @@
 #include <QNetworkReply>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QtGlobal>
 
 static QUrl deviceCodeUrl() {
     return QUrl(QStringLiteral("https://github.com/login/device/code"));
@@ -15,9 +16,12 @@ static QUrl accessTokenUrl() {
 
 cwGitHubDeviceAuth::cwGitHubDeviceAuth(QString clientIdentifier, QObject* parent)
     : QObject(parent),
-    m_clientIdentifier(std::move(clientIdentifier)) {
-
+      m_clientIdentifier(std::move(clientIdentifier))
+{
     QObject::connect(&m_pollTimer, &QTimer::timeout, this, &cwGitHubDeviceAuth::poll);
+
+    m_countdownTimer.setInterval(1000);
+    QObject::connect(&m_countdownTimer, &QTimer::timeout, this, &cwGitHubDeviceAuth::updateCountdown);
 }
 
 QByteArray cwGitHubDeviceAuth::buildFormBody(const QList<QPair<QString, QString>>& items) const {
@@ -81,12 +85,14 @@ void cwGitHubDeviceAuth::startPollingForAccessToken(const DeviceCodeInfo& info) 
     m_currentDeviceInfo = info;
     m_isPolling = true;
     m_pollTimer.start(m_currentDeviceInfo.pollIntervalSeconds * 1000);
+    resetCountdown(m_currentDeviceInfo.pollIntervalSeconds);
     poll();
 }
 
 void cwGitHubDeviceAuth::cancel() {
     m_isPolling = false;
     m_pollTimer.stop();
+    resetCountdown(0);
 }
 
 void cwGitHubDeviceAuth::poll() {
@@ -129,16 +135,17 @@ void cwGitHubDeviceAuth::poll() {
             result.errorDescription = obj.value(QStringLiteral("error_description")).toString();
 
             if (result.errorName == QStringLiteral("slow_down")) {
-                // const int current = m_pollTimer.interval();
-                const QJsonObject obj = doc.object();
-                int intervalSec = obj.value(QStringLiteral("interval")).toInt(5);
-                constexpr int buffer = 50;
+                const int intervalSec = obj.value(QStringLiteral("interval")).toInt(m_currentDeviceInfo.pollIntervalSeconds);
+                constexpr int bufferMs = 50;
                 constexpr int secToMsec = 1000;
-                m_pollTimer.start(intervalSec * secToMsec + buffer);
+                m_pollTimer.start(intervalSec * secToMsec + bufferMs);
+                resetCountdown(intervalSec);
                 qDebug() << "Slow down";
             } else if (result.errorName == QStringLiteral("expired_token") ||
                        result.errorName == QStringLiteral("access_denied")) {
                 cancel();
+            } else {
+                resetCountdown(qMax(1, m_pollTimer.interval() / 1000));
             }
             emit accessTokenReceived(result);
             return;
@@ -152,4 +159,44 @@ void cwGitHubDeviceAuth::poll() {
         cancel();
         emit accessTokenReceived(result);
     });
+
+    if (m_isPolling) {
+        const int intervalSec = qMax(1, m_pollTimer.interval() / 1000);
+        resetCountdown(intervalSec);
+    }
+}
+
+void cwGitHubDeviceAuth::updateCountdown()
+{
+    if (!m_isPolling) {
+        resetCountdown(0);
+        return;
+    }
+
+    if (m_secondsUntilNextPoll > 0) {
+        --m_secondsUntilNextPoll;
+        emit secondsUntilNextPollChanged(m_secondsUntilNextPoll);
+        if (m_secondsUntilNextPoll == 0) {
+            m_countdownTimer.stop();
+        }
+    } else {
+        m_countdownTimer.stop();
+    }
+}
+
+void cwGitHubDeviceAuth::resetCountdown(int seconds)
+{
+    seconds = qMax(0, seconds);
+    if (m_secondsUntilNextPoll != seconds) {
+        m_secondsUntilNextPoll = seconds;
+        emit secondsUntilNextPollChanged(m_secondsUntilNextPoll);
+    }
+
+    if (m_secondsUntilNextPoll > 0) {
+        if (!m_countdownTimer.isActive()) {
+            m_countdownTimer.start();
+        }
+    } else {
+        m_countdownTimer.stop();
+    }
 }

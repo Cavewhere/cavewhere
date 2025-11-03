@@ -20,17 +20,17 @@ StandardPage {
             Layout.fillWidth: true
         }
 
-        Text {
-            text: "Sign in with GitHub to pick from your repositories or paste a repository URL to clone directly."
-            wrapMode: Text.WordWrap
-            color: "#666666"
-            Layout.fillWidth: true
-        }
+        // Text {
+        //     text: "Sign in with GitHub to pick from your repositories or paste a repository URL to clone directly."
+        //     wrapMode: Text.WordWrap
+        //     color: "#666666"
+        //     Layout.fillWidth: true
+        // }
 
         QC.GroupBox {
             Layout.fillWidth: true
-            title: "GitHub Sign-In"
-            visible: gitHub.authState !== gitHub.Authorized
+            title: "GitHub"
+            visible: gitHub.authState !== GitHubIntegration.Authorized
 
             ColumnLayout {
                 // anchors.fill: parent
@@ -68,14 +68,27 @@ StandardPage {
                     }
 
                     QC.Button {
-                        text: "Open GitHub"
-                        onClicked: Qt.openUrlExternally(gitHub.verificationUrl)
+                        text: "Copy and Open GitHub"
+                        onClicked: {
+                            if (gitHub.userCode && gitHub.userCode.length > 0) {
+                                RootData.copyText(gitHub.userCode)
+                            }
+                            gitHub.markVerificationOpened()
+                            Qt.openUrlExternally(gitHub.verificationUrl)
+                        }
+                        // QC.ToolTip.visible: hovered
+                        // QC.ToolTip.text: "Copy the code and open github.com/device"
                     }
+                }
 
-                    QC.Button {
-                        text: "Copy"
-                        onClicked: RootData.copyText(gitHub.userCode)
-                    }
+                Text {
+                    Layout.fillWidth: true
+                    visible: gitHub.authState === GitHubIntegration.AwaitingVerification
+                              && gitHub.verificationOpened
+                              && gitHub.secondsUntilNextPoll > 0
+                    color: "#666666"
+                    font.pixelSize: 12
+                    text: qsTr("Trying connection in %1 s").arg(gitHub.secondsUntilNextPoll)
                 }
 
                 RowLayout {
@@ -83,12 +96,9 @@ StandardPage {
                     visible: gitHub.authState !== GitHubIntegration.AwaitingVerification
 
                     QC.Button {
-                        text: gitHub.authState === GitHubIntegration.Error ? "Try Again" : "Sign in with GitHub"
+                        text: gitHub.authState === GitHubIntegration.Error ? "Try Again" : "Connect to GitHub"
                         enabled: !gitHub.busy
-                        onClicked: {
-                            console.log("Clicked!")
-                            gitHub.startDeviceLogin()
-                        }
+                        onClicked: gitHub.startDeviceLogin()
                     }
 
                     QC.Button {
