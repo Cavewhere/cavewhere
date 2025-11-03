@@ -50,7 +50,7 @@ RegionViewer {
             onSingleTapped: (eventPoint, button) =>
                             {
                                 let rayHit = turnTableInteractionId.pick(eventPoint.position);
-                                // console.log("RayHit:" + eventPoint.position + " " + rayHit.hit + " " + rayHit.pointModel)
+                                 // console.log("RayHit:" + eventPoint.position + " " + rayHit.hit + " triangle index: " + rayHit.firstIndex + " render object id:" + rayHit.objectId)
                                 if(rayHit.hit) {
                                     stationInteraction.addPoint(rayHit.pointModel, note);
                                 }
@@ -118,7 +118,7 @@ RegionViewer {
             onFinishedMoving:
                 (position) => {
                     let rayHit = turnTableInteractionId.pick(position);
-                    console.log("Finished moving:" + rayHit.hit + " " + rayHit.pointModel);
+                    // console.log("Finished moving:" + rayHit.hit + " " + rayHit.pointModel);
                     if(rayHit.hit) {
                         let index = note.index(stationItemId.pointIndex, 0)
                         note.setData(index, rayHit.pointModel, NoteLiDAR.PositionOnNoteRole);

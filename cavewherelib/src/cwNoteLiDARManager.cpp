@@ -120,6 +120,16 @@ void cwNoteLiDARManager::setRender(cwRenderTexturedItems *render)
     m_render = render;
 }
 
+void cwNoteLiDARManager::setKeepRenderGeometry(bool keepGeometry)
+{
+    m_keepRenderGeometry = keepGeometry;
+}
+
+bool cwNoteLiDARManager::keepRenderGeometry() const
+{
+    return m_keepRenderGeometry;
+}
+
 bool cwNoteLiDARManager::automaticUpdate() const
 {
     return m_automaticUpdate;
@@ -331,8 +341,6 @@ cwTriangulateLiDARInData cwNoteLiDARManager::mapNoteToInData(const cwNoteLiDAR* 
 
 void cwNoteLiDARManager::markDirty(cwNoteLiDAR* note)
 {
-    qDebug() << "Mark as dirty:" << note;
-
     if (note == nullptr) {
         return;
     }
@@ -358,12 +366,18 @@ void cwNoteLiDARManager::runBatch()
     // Snapshot and clear “deleted” guard
     NotePtrList notes;
     notes.reserve(m_dirtyNotes.size());
-    for (cwNoteLiDAR* n : std::as_const(m_dirtyNotes)) {
-        if (n != nullptr && n->parentTrip() != nullptr && n->parentCave() != nullptr) {
-            notes.append(n);
+    for (cwNoteLiDAR* note : std::as_const(m_dirtyNotes)) {
+        if (note != nullptr
+            && note->parentTrip() != nullptr
+            && note->parentCave() != nullptr
+            && note->rowCount() > 0 //Make sure there's stations
+            )
+        {
+            notes.append(note);
         }
     }
-    if (notes.isEmpty()) {
+
+    if (notes.isEmpty()) {        
         return;
     }
 
@@ -379,7 +393,6 @@ void cwNoteLiDARManager::runBatch()
         return AsyncFuture::observe(future)
             .context(this,
                      [this, notes, future]() {
-
                          Q_ASSERT(notes.size() == future.resultCount());
 
                          //Update the rendering scene
@@ -390,8 +403,19 @@ void cwNoteLiDARManager::runBatch()
                                  continue;
                              }
 
+                             auto result = future.resultAt(i);
+                             if(result.hasError()) {
+                                 qWarning() << "Warning: Note triangle at i:" << i << result.errorMessage();
+                                 continue;
+                             }
 
                              QVector<cwRenderTexturedItems::Item> items = future.resultAt(i).value();
+
+                             if (m_keepRenderGeometry) {
+                                 for (auto& item : items) {
+                                     item.storeGeometry = true;
+                                 }
+                             }
 
                              auto addItems = [this, note](const QVector<cwRenderTexturedItems::Item>& items) {
                                  QVector<uint32_t> newIds = cw::transform(items, [this](const cwRenderTexturedItems::Item& item) {
@@ -554,4 +578,12 @@ NotePtrList cwNoteLiDARManager::collectAllNotes(cwRegionTreeModel* regionModel)
         }
     }
     return out;
+}
+
+QVector<uint32_t> cwNoteLiDARManager::renderItemIds(cwNoteLiDAR* note) const
+{
+    if (note == nullptr) {
+        return {};
+    }
+    return m_noteToRender.value(note);
 }

@@ -60,6 +60,8 @@ public:
     void setFutureManagerToken(cwFutureManagerToken token);
 
     void setRender(cwRenderTexturedItems* renderGltf);
+    void setKeepRenderGeometry(bool keepGeometry);
+    bool keepRenderGeometry() const;
 
     bool automaticUpdate() const;
     void setAutomaticUpdate(bool automaticUpdate);
@@ -73,6 +75,8 @@ public:
 
     // Blocks until outstanding batch finishes
     void waitForFinish();
+
+    QVector<uint32_t> renderItemIds(cwNoteLiDAR* note) const;
 
 signals:
     void automaticUpdateChanged();
@@ -130,6 +134,7 @@ private:
     QPointer<cwRenderTexturedItems> m_render;
 
     bool m_automaticUpdate = true;
+    bool m_keepRenderGeometry = false;
 
     //For checking duplicate connections
     cwUniqueConnectionChecker m_connectionChecker;
