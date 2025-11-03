@@ -10,6 +10,8 @@
 #include <QSettings>
 #include <QPropertyBinding>
 #include <QQmlEngine>
+#include <QPointer>
+#include <QMetaObject>
 
 //Our
 #include "cwResultDir.h"
@@ -54,6 +56,7 @@ public:
     Q_INVOKABLE Monad::ResultBase addRepositoryFromProjectFile(const QUrl& projectFileUrl);
 
     Q_INVOKABLE void clear();
+    void setProject(cwProject* project);
 
 signals:
     void defaultRepositoryDirChanged();
@@ -61,8 +64,12 @@ signals:
 private:
     void loadSettings();
     void saveRepositories() const;
+    void handleProjectStateChanged();
+    void clearProjectConnections();
 
     QList<QDir> m_repositories;
+    QPointer<cwProject> m_project;
+    QList<QMetaObject::Connection> m_projectConnections;
 
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwRepositoryModel, QUrl, m_defaultRepositoryDir, QUrl(), &cwRepositoryModel::defaultRepositoryDirChanged);
     QPropertyNotifier m_defaultRepositoryDirNotifier;

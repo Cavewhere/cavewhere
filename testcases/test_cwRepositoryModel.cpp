@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 //Qt includes
+#include <memory>
 #include <QSettings>
 #include <QTemporaryDir>
 #include <QModelIndex>
@@ -9,9 +10,12 @@
 #include <QStandardPaths>
 #include <QFile>
 #include <QFileInfo>
+#include <QCoreApplication>
 
 //Our includes
 #include "cwRepositoryModel.h"
+#include "cwProject.h"
+#include "cwErrorListModel.h"
 
 TEST_CASE("cwRepositoryModel initial state", "[cwRepositoryModel]") {
     // Ensure settings are clean
@@ -211,4 +215,29 @@ TEST_CASE("cwRepositoryModel addRepositoryFromProjectFile adds repositories once
 
     const auto remoteResult = model.addRepositoryFromProjectFile(QUrl(QStringLiteral("https://example.com/remote.cw")));
     CHECK(remoteResult.hasError());
+}
+
+TEST_CASE("cwRepositoryModel adds saved current project", "[cwRepositoryModel]") {
+    QSettings settings;
+    settings.clear();
+
+    cwRepositoryModel model;
+    auto project = std::make_unique<cwProject>();
+    model.setProject(project.get());
+
+    REQUIRE(model.rowCount() == 0);
+
+    QTemporaryDir saveRoot;
+    REQUIRE(saveRoot.isValid());
+
+    const QString destinationBase = saveRoot.filePath("SavedProject/SavedProject");
+    bool success = project->saveAs(destinationBase);
+    CHECK(success);
+    project->waitSaveToFinish();
+
+    CHECK(project->errorModel()->count() == 0);
+
+    REQUIRE(model.rowCount() == 1);
+    const QString expectedPath = QFileInfo(project->filename()).absoluteDir().absolutePath();
+    CHECK(model.data(model.index(0, 0), cwRepositoryModel::PathRole).toString() == expectedPath);
 }

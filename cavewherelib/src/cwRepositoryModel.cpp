@@ -12,6 +12,7 @@
 #include <QStandardPaths>
 #include <QFileInfo>
 #include <QUrl>
+#include <QDebug>
 
 using namespace Monad;
 
@@ -164,6 +165,30 @@ void cwRepositoryModel::clear()
     endResetModel();
 }
 
+void cwRepositoryModel::setProject(cwProject* project)
+{
+    if (m_project == project) {
+        return;
+    }
+
+    clearProjectConnections();
+    m_project = project;
+
+    if (!m_project) {
+        return;
+    }
+
+    m_projectConnections.append(QObject::connect(m_project, &cwProject::filenameChanged, this, [this]() {
+        handleProjectStateChanged();
+    }));
+
+    m_projectConnections.append(QObject::connect(m_project, &cwProject::isTemporaryProjectChanged, this, [this]() {
+        handleProjectStateChanged();
+    }));
+
+    handleProjectStateChanged();
+}
+
 cwResultDir cwRepositoryModel::repositoryDir(const QUrl &localDir, const QString &name) const
 {
     if(name.isEmpty()) {
@@ -223,4 +248,33 @@ void cwRepositoryModel::saveRepositories() const
         list.append(dir.absolutePath());
     }
     settings.setValue(SettingsKey, list);
+}
+
+void cwRepositoryModel::handleProjectStateChanged()
+{
+    if (!m_project) {
+        return;
+    }
+
+    if (m_project->isTemporaryProject()) {
+        return;
+    }
+
+    const QString filename = m_project->filename();
+    if (filename.isEmpty()) {
+        return;
+    }
+
+    const auto result = addRepositoryFromProjectFile(QUrl::fromLocalFile(filename));
+    if (result.hasError()) {
+        qWarning() << "Failed to add repository for project" << filename << ":" << result.errorMessage();
+    }
+}
+
+void cwRepositoryModel::clearProjectConnections()
+{
+    for (const auto& connection : m_projectConnections) {
+        QObject::disconnect(connection);
+    }
+    m_projectConnections.clear();
 }

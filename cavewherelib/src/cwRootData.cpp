@@ -60,6 +60,7 @@ cwRootData::cwRootData(QObject *parent) :
     Project = new cwProject(this);
     // Project->setTaskManager(TaskManagerModel);
     Project->setFutureManagerToken(FutureManagerModel);
+    m_repositoryModel->setProject(Project);
 
     Region = Project->cavingRegion();
     Region->setUndoStack(undoStack());
