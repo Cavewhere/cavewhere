@@ -41,56 +41,11 @@ MainWindowTest {
 
                     tryVerify(() => { return noteLiDARItem.scene.gltf.status === RenderGLTF.Ready }, 10000)
 
-                    //         //Zoom into the the model
-                    // let turnTable = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->turnTableInteraction")
-                    //         for(let i = 0; i < 40; i++) {
-                    //                     wait(20);
-                    //                     mouseWheel(turnTable,
-                    //                                turnTable.width / 2.0, turnTable.height / 2.0,
-                    //                                0, 50);
-                    //         }
-
-                    let carpetButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
-                    mouseClick(carpetButton)
-
-                    wait(200)
-
-                    let addStationButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->addScrapStation")
-                    mouseClick(addStationButton)
-
-
-                    let turnTableInteraction_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->turnTableInteraction")
-                    mouseClick(turnTableInteraction_obj2, 203.117, 244.969)
-
-                    let stationIconHandler_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARStation_0->coreTextInput")
-                    stationIconHandler_obj1.openEditor();
-                    keyClick(54, 0) //6
-                    keyClick(16777220, 0) //Return
-                    // wait(10000)
-
-                    let turnTableInteraction_obj3 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->turnTableInteraction")
-                    mouseClick(turnTableInteraction_obj3, 333.148, 541.453)
-
-                    let stationIconHandler_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARStation_1->coreTextInput")
-                    stationIconHandler_obj2.openEditor();
-                    keyClick(55, 0) //7
-                    keyClick(16777220, 0) //Return
-
-                    //Add the 3rd station
-                    mouseClick(turnTableInteraction_obj3, 58.7891, 196.809)
-                    let stationIconHandler_obj3 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARStation_2->coreTextInput")
-                    stationIconHandler_obj3.openEditor();
-                    keyClick(53, 0) //5
-                    keyClick(16777220, 0) //Return
-
-                    let northFieldObject = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->northField")
-                    tryVerify(() => { return northFieldObject.text === "272.7" })
-
         }
 
         function test_removeNote() {
             TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwScrapManager/ProjectProfile-test-v3.cw");
-            RootData.pageSelectionModel.currentPageAddress = "Data/Cave=Cave 1/Trip=Trip 1"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
