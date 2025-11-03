@@ -82,15 +82,15 @@ MainWindowTest {
         }
 
         function test_northInteraction() {
-            wait(100000)
+            wait(1000000)
         }
 
         function test_scaleInteraction() {
-            wait(100000)
+            wait(100)
         }
 
         function test_upInteraction() {
-            wait(100000)
+            wait(100)
         }
     }
 }

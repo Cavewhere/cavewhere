@@ -17,7 +17,9 @@ QQ.Item {
     objectName: "noteLiDARTransformEditor"
 
     // ---- Required/expected API ------------------------------------------------
-    required property NoteLiDARTransformation noteTransform
+    required property NoteLiDAR note
+    // Derived convenience handle
+    readonly property NoteLiDARTransformation noteTransform: note ? note.noteTransformation : null
     // Optional, for interactive “set north with tool”
     property NoteLiDARNorthInteraction northInteraction
     // Optional, if you still want to expose scale interaction
@@ -25,7 +27,7 @@ QQ.Item {
     property NoteLiDARUpInteraction upInteraction
     property InteractionManager interactionManager
 
-    visible: noteTransform !== null
+    visible: note !== null
     implicitHeight: floatingBox.implicitHeight
     implicitWidth: floatingBox.implicitWidth
 
@@ -89,69 +91,90 @@ QQ.Item {
             Layout.margins: 0
             spacing: 10
 
-            // --- North (degrees) ------------------------------------------------
-            RowLayout {
-                spacing: 8
-
-                LabelWithHelp {
-                    id: northLabel
-                    text: "North (°)"
-                    helpArea: northHelp
-                }
-
-                ClickTextInput {
-                    id: northField
-                    objectName: "northField"
-                    text: editor.noteTransform ? editor.noteTransform.northUp.toFixed(1) : "0.0"
-                    onFinishedEditting: (newText) => {
-                        if (editor.noteTransform) {
-                            editor.noteTransform.northUp = Number(newText)
-                        }
-                    }
-                    Layout.preferredWidth: 90
-                }
-
-                Text { text: "°" }
-
-                // Optional tool hook (mouse interaction to set north)
-                NoteToolIconButton {
-                    id: setNorthToolBtn
-                    visible: editor.interactionManager && editor.northInteraction
-                    iconSource: "qrc:/icons/svg/north.svg"
-                    toolTipText: "Set north with tool"
-                    onClicked: editor.interactionManager.active(editor.northInteraction)
-                }
-            }
-
-            HelpArea {
-                id: northHelp
+            // --- North (auto/manual control) -----------------------------------
+            CheckableGroupBox {
+                id: northAutoGroup
+                text: "Auto Calculate"
+                backgroundColor: Theme.floatingWidgetColor
+                checked: editor.note ? editor.note.autoCalculateNorth : true
+                contentsVisible: true
+                enabled: editor.note !== null
                 Layout.fillWidth: true
-                text: "Rotate the LiDAR note so that map-up corresponds to <b>true north</b> " +
-                      "(or your chosen reference). This writes <code>northUp</code> on the base transform."
+
+                onCheckedChanged: {
+                    if (editor.note && editor.note.autoCalculateNorth !== checkbox.checked) {
+                        editor.note.autoCalculateNorth = checkbox.checked
+                    }
+                }
+
+                ColumnLayout {
+                    spacing: 8
+
+                    RowLayout {
+                        spacing: 8
+
+                        // Optional tool hook (mouse interaction to set north)
+                        NoteToolIconButton {
+                            id: setNorthToolBtn
+                            enabled: !northAutoGroup.checked && editor.interactionManager && editor.northInteraction
+                            iconSource: "qrc:/icons/svg/north.svg"
+                            toolTipText: enabled ? "Set north with tool" : "To enable tool, uncheck Auto Calculate"
+                            onClicked: editor.interactionManager.active(editor.northInteraction)
+                        }
+
+                        LabelWithHelp {
+                            id: northLabel
+                            text: "North"
+                            helpArea: northHelp
+                        }
+
+                        ClickTextInput {
+                            id: northField
+                            objectName: "northField"
+                            readOnly: northAutoGroup.checked
+                            text: editor.noteTransform ? editor.noteTransform.northUp.toFixed(1) : "0.0"
+                            onFinishedEditting: (newText) => {
+                                if (editor.noteTransform && !northAutoGroup.checked) {
+                                    editor.noteTransform.northUp = Number(newText)
+                                }
+                            }
+                            Layout.preferredWidth: 90
+                        }
+
+                    }
+
+                    HelpArea {
+                        id: northHelp
+                        Layout.fillWidth: true
+                        text: "Rotate the LiDAR note so that map-up corresponds to <b>true north</b> " +
+                              "(or your chosen reference). This writes <code>northUp</code> on the base transform."
+                    }
+                }
             }
 
             // --- Up direction (axis + sign) ------------------------------------
             RowLayout {
                 spacing: 8
 
-                LabelWithHelp {
-                    id: upModeLabel
-                    text: "Up direction"
-                    helpArea: upModeHelp
-                }
-
                 NoteToolIconButton {
                     id: setUpToolBtn
-                    visible: editor.interactionManager && editor.upInteraction
+                    enabled: editor.interactionManager && editor.upInteraction &&
+                             editor.noteTransform && editor.noteTransform.upMode === NoteLiDARTransformation.UpMode.Custom
                     iconSource: "qrc:/icons/svg/up.svg"
-                    toolTipText: "Set up direction with tool"
+                    toolTipText: enabled ? "Set up direction with tool" : "To enable tool, set up direction to Custom"
                     onClicked: editor.interactionManager.active(editor.upInteraction)
+                }
+
+                LabelWithHelp {
+                    id: upModeLabel
+                    text: "Up"
+                    helpArea: upModeHelp
                 }
 
                 Controls.ComboBox {
                     id: upModeCombo
                     objectName: "upModeCombo"
-                    implicitWidth: 300
+                    implicitWidth: 200
                     model: upModeEntries.map(e => e.label)
                     currentIndex: editor.noteTransform ? editor.upModeToIndex(editor.noteTransform.upMode, editor.noteTransform.upSign) : 0
                     onActivated: {
@@ -223,46 +246,39 @@ QQ.Item {
             }
 
             // --- Scale (should generally be 1:1 for LiDAR) ----------------------
-            CheckableGroupBox {
-                id: scaleBox
-                objectName: "scaleGroup"
-                backgroundColor: Theme.floatingWidgetColor
-                text: "Scale"
-                checked: false   // keep manual by default for LiDAR
-                // When checked, PaperScaleInput becomes 'auto scaling' (disabled edits)
+            ColumnLayout {
+                spacing: 6
 
-                ColumnLayout {
-                    spacing: 6
-
-                    PaperScaleInput {
-                        id: scaleInput
-                        scaleObject: editor.noteTransform ? editor.noteTransform.scaleObject : null
-                        scaleHelp: scaleHelp
-                        autoScaling: scaleBox.checked
-                        onScaleInteractionActivated: if (editor.interactionManager && editor.scaleInteraction) {
-                            editor.interactionManager.active(editor.scaleInteraction)
-                        }
-                    }
-
-                    HelpArea {
-                        id: scaleHelp
-                        Layout.fillWidth: true
-                        text: "LiDAR notes should typically be <b>1:1</b>. If your source is already metrically " +
-                              "correct, leave scale at 1. Adjust only if your capture app exported in pixels or " +
-                              "non-metric units."
-                    }
-
-                    ErrorHelpArea {
-                        Layout.fillWidth: true
-                        visible: {
-                            if (scaleInput.scaleObject) {
-                                return Math.abs(scaleInput.scaleObject.scale - 1.0) > 1e-6
-                            }
-                            return false
-                        }
-                        text: "Warning: scale is not 1:1. Verify your LiDAR export units."
+                PaperScaleInput {
+                    id: scaleInput
+                    scaleObject: editor.noteTransform ? editor.noteTransform.scaleObject : null
+                    scaleHelp: scaleHelp
+                    autoScaling: false
+                    usingInteraction: !!(editor.interactionManager && editor.scaleInteraction)
+                    onPaperLabel: "In Model"
+                    onScaleInteractionActivated: if (editor.interactionManager && editor.scaleInteraction) {
+                        editor.interactionManager.active(editor.scaleInteraction)
                     }
                 }
+
+                HelpArea {
+                    id: scaleHelp
+                    Layout.fillWidth: true
+                    text: "LiDAR notes should typically be <b>1:1</b>. If your source is already metrically " +
+                          "correct, leave scale at 1. Adjust only if your capture app exported in pixels or " +
+                          "non-metric units."
+                }
+
+                // ErrorHelpArea {
+                //     Layout.fillWidth: true
+                //     visible: {
+                //         if (scaleInput.scaleObject) {
+                //             return Math.abs(scaleInput.scaleObject.scale - 1.0) > 1e-6
+                //         }
+                //         return false
+                //     }
+                //     text: "Warning: scale is not 1:1. Verify your LiDAR export units."
+                // }
             }
         }
     }

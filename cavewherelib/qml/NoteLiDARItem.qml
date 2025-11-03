@@ -129,7 +129,7 @@ RegionViewer {
     }
 
     NoteLiDARTransformEditor {
-        noteTransform: note ? note.noteTransformation : null
+        note: rhiViewerId.note
         interactionManager: interactionManagerId
         northInteraction: lidarNorthInteraction
         upInteraction: lidarUpInteraction

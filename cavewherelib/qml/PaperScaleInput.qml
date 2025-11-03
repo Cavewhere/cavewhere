@@ -19,6 +19,8 @@ QQ.Item {
     property HelpArea scaleHelp
     property bool autoScaling: false
     property bool usingInteraction: true
+    property alias onPaperLabel: onPaperRect.title
+    property alias inCaveLabel: inCaveRect.title
 
     signal scaleInteractionActivated()
 
@@ -29,13 +31,13 @@ QQ.Item {
         id: inputRow
         spacing: 5
 
-        QC.RoundButton {
+        NoteToolIconButton {
             id: setLength
             objectName: "setLengthButton"
-            radius: 2
-            icon.source: "qrc:/icons/svg/measurement.svg"
+            iconSource: "qrc:/icons/svg/measurement.svg"
             visible: !scaleInput.autoScaling && scaleInput.usingInteraction
             onClicked: scaleInput.scaleInteractionActivated()
+            toolTipText: "Find the scale tool"
         }
 
         RowLayout {
@@ -48,6 +50,7 @@ QQ.Item {
             }
 
             TitledRectangle {
+                id: onPaperRect
                 title: "On Paper"
                 UnitValueInput {
                     id: onPaperLengthInput
@@ -65,6 +68,7 @@ QQ.Item {
             }
 
             TitledRectangle {
+                id: inCaveRect
                 title: "In Cave"
                 UnitValueInput {
                     id: inCaveLengthInput
