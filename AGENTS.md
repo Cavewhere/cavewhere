@@ -27,4 +27,4 @@ Recent history favors short, capitalized summaries (`Refactored to use cwGeometr
 The project relies on Conan-managed Qt 6 packages; edit the default profile to pin `cmake/<4.0` before installing dependencies. If using system Qt, ensure the distro ships Qt ≥6.8 or expect build errors. macOS builds use `entitlements.plist`, while Windows packaging depends on `installer/windows`. Rebuild after merges so `GitHash.cmake` refreshes the revision shown in the About dialog.
 
 ## QML Guidelines
-Do not use opacity where not needed. 
+Do not use opacity where not needed.  
