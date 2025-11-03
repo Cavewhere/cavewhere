@@ -10,9 +10,13 @@
 #include <QSettings>
 #include <QPropertyBinding>
 #include <QQmlEngine>
+#include <QPointer>
+#include <QMetaObject>
 
 //Our
 #include "cwResultDir.h"
+
+class cwProject;
 
 class cwRepositoryModel : public QAbstractListModel
 {
@@ -47,8 +51,12 @@ public:
 
     Q_INVOKABLE cwResultDir repositoryDir(const QUrl &localDir, const QString &name) const;
     Q_INVOKABLE Monad::ResultBase addRepository(const cwResultDir& dir);
+    Q_INVOKABLE Monad::ResultString repositoryProjectFile(int index) const;
+    Q_INVOKABLE Monad::ResultBase openRepository(int index, cwProject* project) const;
+    Q_INVOKABLE Monad::ResultBase addRepositoryFromProjectFile(const QUrl& projectFileUrl);
 
     Q_INVOKABLE void clear();
+    void setProject(cwProject* project);
 
 signals:
     void defaultRepositoryDirChanged();
@@ -56,8 +64,12 @@ signals:
 private:
     void loadSettings();
     void saveRepositories() const;
+    void handleProjectStateChanged();
+    void clearProjectConnections();
 
     QList<QDir> m_repositories;
+    QPointer<cwProject> m_project;
+    QList<QMetaObject::Connection> m_projectConnections;
 
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwRepositoryModel, QUrl, m_defaultRepositoryDir, QUrl(), &cwRepositoryModel::defaultRepositoryDirChanged);
     QPropertyNotifier m_defaultRepositoryDirNotifier;
@@ -65,4 +77,3 @@ private:
     static constexpr char SettingsKey[] = "repositories";
     static constexpr char DefaultDirKey[] = "defaultRepositoryDir";
 };
-

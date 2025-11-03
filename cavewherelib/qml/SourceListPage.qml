@@ -10,28 +10,73 @@ StandardPage {
     id: pageId
 
     ColumnLayout {
-        anchors.fill: parent
+        width: listViewId.implicitWidth
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.margins: 10
 
-        QC.Button {
-            objectName: "newCavingAreaButton"
-            text: "New Caving Area"
-            icon.source: "qrc:/twbs-icons/icons/plus.svg"
+        RowLayout {
+            id: rowLayoutId
+            implicitWidth: listViewId.implicitWidth
+            spacing: 12
 
-            onClicked: {
-                whereDialogId.open()
+            QC.Button {
+                id: addButton
+                objectName: "addRepositoryButton"
+                text: "Add"
+                icon.source: "qrc:/twbs-icons/icons/plus.svg"
+                onClicked: addMenu.popup(addButton)
             }
-        }
 
-        QC.Button {
-            objectName: "openCavingAreaButton"
-            text: "Open"
+            Item { Layout.fillWidth: true }
+
+            QC.Menu {
+                id: addMenu
+
+                QC.MenuItem {
+                    objectName: "addMenuNew"
+                    text: "Create New Caving Area"
+                    onTriggered: {
+                        whereDialogId.repositoryName = ""
+                        whereDialogId.description = ""
+                        whereDialogId.open()
+                    }
+                }
+
+                QC.MenuItem {
+                    objectName: "addMenuOpen"
+                    text: "Open Existing Project"
+                    onTriggered: {
+                        const openDialog = function() {
+                            RootData.pageSelectionModel.currentPageAddress = "Source";
+                            loadProjectDialogId.loadFileDialog.open();
+                        }
+
+                        askToSaveDialogId.taskName = "opening a project"
+                        askToSaveDialogId.afterSaveFunc = openDialog
+                        askToSaveDialogId.askToSave()
+                    }
+                }
+
+                QC.MenuSeparator {}
+
+                QC.MenuItem {
+                    objectName: "addMenuRemote"
+                    text: "Connect to Remote Project"
+                    onTriggered: {
+                        RootData.pageSelectionModel.gotoPageByName(null, "Remote");
+                    }
+                }
+            }
         }
 
         ListView {
             id: listViewId
             objectName: "repositoryListView"
 
+            implicitWidth: Math.min(pageId.width, 500)
             Layout.fillHeight: true
+            visible: count > 0
             // Layout.leftMargin: 10
             // Layout.rightMargin: 10
             // Layout.topMargin: 10
@@ -42,42 +87,89 @@ StandardPage {
                 id: delegateId
 
                 required property string nameRole
+                required property string pathRole
                 required property int index
 
-                width: 150
-                height: Math.max(30, linkTextId.height)
-
+                width: listViewId.width
+                implicitHeight: contentColumn.implicitHeight + 12
                 color: index % 2 === 0 ? "#ffffff" : "#eeeeee"
 
-                // MouseArea {
-                //     anchors.fill: parent
-                //     onClicked: {
+                ColumnLayout {
+                    id: contentColumn
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    spacing: 4
 
-                //     }
-                // }
+                    LinkText {
+                        id: linkTextId
+                        Layout.fillWidth: true
+                        text: delegateId.nameRole
+                        elide: Text.ElideRight
 
-                LinkText {
-                    id: linkTextId
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.left: parent.left
-                    anchors.leftMargin: 10
-                    text: delegateId.nameRole
-                    elide: Text.ElideRight
+                        onClicked: {
+                            const result = RootData.repositoryModel.openRepository(index, RootData.project)
+                            if (result.hasError) {
+                                console.warn("Failed to open repository:", result.errorMessage)
+                                return;
+                            }
+                            RootData.pageSelectionModel.gotoPageByName(null, "Area")
+                        }
+                    }
 
-                    onClicked: {
-                        //Load the cwCavingRegion, go to
-                        console.log("Clicked area:");
-                        RootData.pageSelectionModel.gotoPageByName(null, "Area")
+                    Text {
+                        id: pathTextId
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 16
+                        text: delegateId.pathRole
+                        elide: Text.ElideMiddle
+                        color: Qt.darkGray
+
+                        QC.Menu {
+                            id: contextMenu
+
+                            RevealInFileManagerMenuItem {
+                                filePath: delegateId.pathRole
+                            }
+                        }
+
+                        TapHandler {
+                            acceptedDevices: PointerDevice.Mouse
+                            acceptedButtons: Qt.RightButton
+                            gesturePolicy: TapHandler.WithinBounds
+                            onTapped: {
+                                contextMenu.popup(pathTextId)
+                            }
+                        }
                     }
                 }
 
             }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            wrapMode: Text.WordWrap
+            horizontalAlignment: Text.AlignHCenter
+            visible: listViewId.count === 0
+            text: qsTr("No caving areas created or opened yet.")
+            color: Qt.darkGray
         }
     }
 
     SourceLocationDialog {
         id: whereDialogId
         anchors.fill: parent
+    }
+
+    SaveAsDialog {
+        id: saveAsDialogId
+    }
+
+    AskToSaveDialog {
+        id: askToSaveDialogId
+        saveAsDialog: saveAsDialogId
+        taskName: "opening a project"
     }
 
     LoadProjectDialog {
