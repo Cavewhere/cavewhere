@@ -6,9 +6,8 @@
 **************************************************************************/
 
 //Qt includes
-#include <QGuiApplication>
 #include <QPainter>
-#include <QScreen>
+#include <QFontMetricsF>
 
 //Our includes
 #include "cwScaleBarItem.h"
@@ -24,6 +23,7 @@ namespace {
     constexpr double kPaddingInches = 0.25;
     constexpr double kLabelSpacingInches = 0.05;
     constexpr double kBarHeightInches = 0.1;
+    constexpr double kPointsPerInch = 72.0;
 }
 
 cwScaleBarItem::cwScaleBarItem(QGraphicsItem *parent) :
@@ -178,33 +178,32 @@ void cwScaleBarItem::updateLayout()
         labelText = tr("%1 m").arg(QString::number(static_cast<int>(selectedMeters)));
     }
 
-    m_labelFont.setPointSizeF(m_labelPointSize);
-
-    auto screen = QGuiApplication::primaryScreen();
-    double dpiX = screen ? screen->logicalDotsPerInchX() : 96.0;
-    double dpiY = screen ? screen->logicalDotsPerInchY() : 96.0;
-    if(qFuzzyIsNull(dpiX)) { dpiX = 96.0; }
-    if(qFuzzyIsNull(dpiY)) { dpiY = 96.0; }
-
-    auto labelSizeFromFont = [&](const QFont& font) {
-        QFontMetricsF metrics(font);
-        double width = metrics.horizontalAdvance(labelText) / dpiX;
-        double height = metrics.height() / dpiY;
-        return QSizeF(width, height);
-    };
-
-    QSizeF labelSize = labelSizeFromFont(m_labelFont);
-    if(labelSize.width() > availableWidth && availableWidth > 0.0) {
-        double scale = availableWidth / labelSize.width();
-        double newPointSize = std::max(1.0, m_labelFont.pointSizeF() * scale);
-        m_labelFont.setPointSizeF(newPointSize);
-        labelSize = labelSizeFromFont(m_labelFont);
+    QFontMetricsF metrics(m_labelFont);
+    const double pointSize = m_labelFont.pointSizeF();
+    const double targetHeightInches = pointSize > 0.0 ? pointSize / kPointsPerInch : 0.0;
+    double metricsHeight = metrics.height();
+    double unitToInches = 0.0;
+    if(metricsHeight > 0.0 && targetHeightInches > 0.0) {
+        unitToInches = targetHeightInches / metricsHeight;
     }
 
-    labelSize.setWidth(std::max(labelSize.width(), 0.01));
-    labelSize.setHeight(std::max(labelSize.height(), 0.01));
+    double labelWidth = metrics.horizontalAdvance(labelText) * unitToInches;
+    double labelHeight = targetHeightInches;
 
-    double requiredHeight = kBarHeightInches + kLabelSpacingInches + labelSize.height() + kPaddingInches;
+    if(labelWidth <= 0.0) {
+        labelWidth = std::min(selectedWidth, availableWidth);
+    }
+
+    if(availableWidth > 0.0) {
+        labelWidth = std::min(labelWidth, availableWidth);
+    }
+
+    labelWidth = std::min(labelWidth, selectedWidth);
+
+    labelWidth = std::max(labelWidth, 0.01);
+    labelHeight = std::max(labelHeight, 0.01);
+
+    double requiredHeight = kBarHeightInches + kLabelSpacingInches + labelHeight + kPaddingInches;
     if(requiredHeight > m_borderRect.height()) {
         hideScale();
         return;
@@ -217,7 +216,7 @@ void cwScaleBarItem::updateLayout()
         // rectRight = rectLeft + selectedWidth;
     }
 
-    double rectBottom = m_borderRect.bottom() - kPaddingInches - labelSize.height() - kLabelSpacingInches;
+    double rectBottom = m_borderRect.bottom() - kPaddingInches - labelHeight - kLabelSpacingInches;
     double rectTop = rectBottom - kBarHeightInches;
     if(rectTop < m_borderRect.top() + kPaddingInches) {
         rectTop = m_borderRect.top() + kPaddingInches;
@@ -226,21 +225,15 @@ void cwScaleBarItem::updateLayout()
 
     QRectF barRectScene(QPointF(rectLeft, rectTop), QSizeF(selectedWidth, kBarHeightInches));
 
-    double labelWidth = labelSize.width();
-    if(labelWidth <= 0.0) {
-        hideScale();
-        return;
-    }
-
     double labelLeft = barRectScene.center().x() - labelWidth / 2.0;
     double minLabelLeft = m_borderRect.left() + kPaddingInches;
     double maxLabelLeft = m_borderRect.right() - kPaddingInches - labelWidth;
     labelLeft = std::clamp(labelLeft, minLabelLeft, maxLabelLeft);
 
     double labelY = barRectScene.bottom() + kLabelSpacingInches;
-    double maxLabelY = m_borderRect.bottom() - kPaddingInches - labelSize.height();
+    double maxLabelY = m_borderRect.bottom() - kPaddingInches - labelHeight;
     labelY = std::min(labelY, maxLabelY);
-    QRectF labelRectScene(QPointF(labelLeft, labelY), QSizeF(labelWidth, labelSize.height()));
+    QRectF labelRectScene(QPointF(labelLeft, labelY), QSizeF(labelWidth, labelHeight));
 
     QRectF geometryRect = barRectScene.united(labelRectScene);
     if(!geometryRect.isValid() || geometryRect.isEmpty()) {
