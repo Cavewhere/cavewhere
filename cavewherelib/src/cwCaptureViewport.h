@@ -19,6 +19,7 @@
 
 //Our includes
 class cwCamera;
+#include "cwScaleBarItem.h"
 #include "cwScale.h"
 #include "cw3dRegionViewer.h"
 #include "cwProjection.h"
@@ -65,6 +66,7 @@ public:
 
     QGraphicsItem* previewItem() const;
     QGraphicsItem* fullResolutionItem() const;
+    cwScaleBarItem* scaleBarItem() const;
 
     Q_INVOKABLE void capture(); //This should be called by the
 
@@ -122,6 +124,7 @@ private:
 
     QGraphicsItemGroup* PreviewItem; //This is the preview item
     QGraphicsItemGroup* Item; //This is the full resultion item
+    cwScaleBarItem* m_scaleBar;
 
     cwProjection tileProjection(QRectF tileViewport,
                                 QSizeF imageSize,
@@ -139,6 +142,8 @@ private slots:
     // void capturedImage(QImage image, int id);
     void updateTransformForItems();
     void updateItemsPosition();
+    void updateScaleBarScale();
+    void updateScaleBarGeometry();
 };
 
 /**
@@ -196,6 +201,10 @@ inline QGraphicsItem* cwCaptureViewport::previewItem() const {
 */
 inline QGraphicsItem* cwCaptureViewport::fullResolutionItem() const {
     return Item;
+}
+
+inline cwScaleBarItem* cwCaptureViewport::scaleBarItem() const {
+    return m_scaleBar;
 }
 
 /**

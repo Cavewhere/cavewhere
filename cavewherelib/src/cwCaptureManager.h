@@ -26,8 +26,6 @@
 #include "cwCaptureGroupModel.h"
 #include "cwCaptureViewport.h"
 // class cwCaptureViewport;
-
-#include "cwScaleBarItem.h"
 class cwCaptureItem;
 
 class CAVEWHERE_LIB_EXPORT cwCaptureManager : public QAbstractListModel
@@ -188,7 +186,6 @@ private:
     QGraphicsScene* Scene;
     QGraphicsRectItem* PaperRectangle;
     QGraphicsRectItem* BorderRectangle;
-    cwScaleBarItem* ScaleBarItem;
     double Scale;
 
     QList<cwCaptureViewport*> Captures;
@@ -210,14 +207,10 @@ private:
     void addFullResultionCaptureItemHelper(cwCaptureViewport* capture);
 
     void updateBorderRectangle();
-    void updateScaleBar();
 
     qint64 requiredSizeInBytes() const;
 
     QUrl appendExtention(const QUrl& filename, FileType fileType) const;
-
-    cwCaptureViewport* referenceCapture() const;
-    void connectScaleSignals(cwCaptureViewport* capture);
 
 };
 

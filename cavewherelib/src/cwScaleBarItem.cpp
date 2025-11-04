@@ -214,14 +214,14 @@ void cwScaleBarItem::updateLayout()
     double rectLeft = rectRight - selectedWidth;
     if(rectLeft < m_borderRect.left() + kPaddingInches) {
         rectLeft = m_borderRect.left() + kPaddingInches;
-        rectRight = rectLeft + selectedWidth;
+        // rectRight = rectLeft + selectedWidth;
     }
 
     double rectBottom = m_borderRect.bottom() - kPaddingInches - labelSize.height() - kLabelSpacingInches;
     double rectTop = rectBottom - kBarHeightInches;
     if(rectTop < m_borderRect.top() + kPaddingInches) {
         rectTop = m_borderRect.top() + kPaddingInches;
-        rectBottom = rectTop + kBarHeightInches;
+        // rectBottom = rectTop + kBarHeightInches;
     }
 
     QRectF barRectScene(QPointF(rectLeft, rectTop), QSizeF(selectedWidth, kBarHeightInches));

@@ -20,7 +20,6 @@
 #include "cwMappedQImage.h"
 #include "cwErrorListModel.h"
 #include "cwUnits.h"
-#include "cwScaleBarItem.h"
 
 //Qt includes
 #include <QLabel>
@@ -54,15 +53,10 @@ cwCaptureManager::cwCaptureManager(QObject *parent) :
     Scene(new QGraphicsScene(this)),
     PaperRectangle(new QGraphicsRectItem()),
     BorderRectangle(new QGraphicsRectItem()),
-    ScaleBarItem(nullptr),
     Scale(1.0)
 {
     Scene->addItem(PaperRectangle);
     Scene->addItem(BorderRectangle);
-
-    ScaleBarItem = new cwScaleBarItem();
-    ScaleBarItem->setZValue(1000.0);
-    Scene->addItem(ScaleBarItem);
 
     QPen pen;
     pen.setCosmetic(true);
@@ -84,8 +78,6 @@ cwCaptureManager::cwCaptureManager(QObject *parent) :
             this, &cwCaptureManager::memoryRequiredChanged);
     connect(this, &cwCaptureManager::resolutionChanged,
             this, &cwCaptureManager::memoryRequiredChanged);
-
-    updateScaleBar();
 }
 
 /**
@@ -312,9 +304,6 @@ void cwCaptureManager::addCaptureViewport(cwCaptureViewport *capture)
     QModelIndex firstGroupIndex = groupModel()->index(0, 0, QModelIndex());
     groupModel()->addCapture(firstGroupIndex, capture);
 
-    connectScaleSignals(capture);
-    updateScaleBar();
-
 }
 
 /**
@@ -330,6 +319,10 @@ void cwCaptureManager::removeCaptureViewport(cwCaptureViewport *capture)
         return;
     }
 
+    if(capture->scaleBarItem() != nullptr && capture->scaleBarItem()->scene() == Scene) {
+        Scene->removeItem(capture->scaleBarItem());
+    }
+
     int rowIndex = Layers.indexOf(capture);
     beginRemoveRows(QModelIndex(), rowIndex, rowIndex);
     Captures.removeAt(rowIndex);
@@ -339,8 +332,6 @@ void cwCaptureManager::removeCaptureViewport(cwCaptureViewport *capture)
     groupModel()->removeCapture(capture);
 
     capture->deleteLater();
-
-    updateScaleBar();
 }
 
 /**
@@ -712,6 +703,9 @@ void cwCaptureManager::addPreviewCaptureItemHelper(cwCaptureViewport *capture)
 {
     if(capture->previewItem() != nullptr) {
         Scene->addItem(capture->previewItem());
+        if(capture->scaleBarItem() != nullptr && capture->scaleBarItem()->scene() != Scene) {
+            Scene->addItem(capture->scaleBarItem());
+        }
         scaleCaptureToFitPage(capture);
     }
 }
@@ -727,41 +721,6 @@ void cwCaptureManager::addFullResultionCaptureItemHelper(cwCaptureViewport *capt
     }
 }
 
-cwCaptureViewport *cwCaptureManager::referenceCapture() const
-{
-    if(Captures.isEmpty()) {
-        return nullptr;
-    }
-    return Captures.first();
-}
-
-void cwCaptureManager::connectScaleSignals(cwCaptureViewport *capture)
-{
-    if(capture == nullptr || capture->scaleOrtho() == nullptr) {
-        return;
-    }
-
-    connect(capture->scaleOrtho(), &cwScale::scaleChanged,
-            this, &cwCaptureManager::updateScaleBar);
-}
-
-void cwCaptureManager::updateScaleBar()
-{
-    if(ScaleBarItem == nullptr) {
-        return;
-    }
-
-    ScaleBarItem->setBorderRect(BorderRectangle->rect());
-
-    auto capture = referenceCapture();
-    double ratio = 0.0;
-    if(capture != nullptr && capture->scaleOrtho() != nullptr) {
-        ratio = capture->scaleOrtho()->scale();
-    }
-
-    ScaleBarItem->setScaleRatio(ratio);
-}
-
 /**
  * @brief cwCaptureManager::updateBorderRectangle
  */
@@ -774,7 +733,6 @@ void cwCaptureManager::updateBorderRectangle()
     borderRectangle.setBottom(paperSize().height() - bottomMargin());
 
     BorderRectangle->setRect(borderRectangle);
-    updateScaleBar();
 }
 
 /**
