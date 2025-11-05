@@ -38,26 +38,13 @@ RegionViewer {
         camera: rhiViewerId.camera
         scene: rhiViewerId.scene
         // gridPlane: RootData.regionSceneManager.gridPlane.plane
+    }
 
-        BaseNoteLiDARStationInteraction {
-            id: stationInteraction
-
-        }
-
-        TapHandler {
-            id: addStationTapHandler
-            enabled: false
-            onSingleTapped: (eventPoint, button) =>
-                            {
-                                let rayHit = turnTableInteractionId.pick(eventPoint.position);
-                                 // console.log("RayHit:" + eventPoint.position + " " + rayHit.hit + " triangle index: " + rayHit.firstIndex + " render object id:" + rayHit.objectId)
-                                if(rayHit.hit) {
-                                    stationInteraction.addPoint(rayHit.pointModel, note);
-                                }
-
-                                // console.log("Single tap")
-                            }
-        }
+    NoteLiDARAddStationInteraction {
+        id: lidarAddStationInteraction
+        anchors.fill: parent
+        note: rhiViewerId.note
+        turnTableInteraction: turnTableInteractionId
     }
 
     NoteLiDARNorthInteraction {
@@ -91,6 +78,7 @@ RegionViewer {
         id: interactionManagerId
         interactions: [
             turnTableInteractionId,
+            lidarAddStationInteraction,
             lidarNorthInteraction,
             lidarUpInteraction,
             lidarScaleInteraction
@@ -144,20 +132,12 @@ RegionViewer {
     states: [
         State {
             name: "SELECT"
-            PropertyChanges {
-                addStationTapHandler {
-                    enabled: false
-                }
-            }
+            PropertyChanges { target: lidarAddStationInteraction; enabled: false; visible: false }
         },
 
         State {
             name: "ADD-STATION"
-            PropertyChanges {
-                addStationTapHandler {
-                    enabled: true
-                }
-            }
+            PropertyChanges { target: lidarAddStationInteraction; enabled: true; visible: true }
         }
     ]
 }
