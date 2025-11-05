@@ -54,6 +54,10 @@ void cwGitHubIntegration::startDeviceLogin()
         m_hasOpenedVerificationUrl = false;
         emit verificationOpenedChanged();
     }
+    if (!m_deviceInfo.deviceCode.isEmpty() || !m_deviceInfo.userCode.isEmpty()) {
+        m_deviceInfo = {};
+        emit deviceCodeChanged();
+    }
     if (m_secondsUntilNextPoll != 0) {
         m_secondsUntilNextPoll = 0;
         emit secondsUntilNextPollChanged();
@@ -65,11 +69,12 @@ void cwGitHubIntegration::startDeviceLogin()
 void cwGitHubIntegration::cancelLogin()
 {
     m_deviceAuth.cancel();
-    m_userCode.clear();
-    m_verificationUrl = QUrl();
+    if (!m_deviceInfo.deviceCode.isEmpty() || !m_deviceInfo.userCode.isEmpty()) {
+        m_deviceInfo = {};
+        emit deviceCodeChanged();
+    }
     m_accessToken.clear();
     m_repositories.clear();
-    emit deviceCodeChanged();
     emit accessTokenChanged();
     emit repositoriesChanged();
     setAuthState(AuthState::Idle);
@@ -188,12 +193,13 @@ void cwGitHubIntegration::setErrorMessage(const QString& message)
 
 void cwGitHubIntegration::handleDeviceCode(const cwGitHubDeviceAuth::DeviceCodeInfo& info)
 {
-    m_userCode = info.userCode;
-    m_verificationUrl = info.verificationWebAddress;
+    m_deviceInfo = info;
     emit deviceCodeChanged();
 
     setAuthState(AuthState::AwaitingVerification);
-    m_deviceAuth.startPollingForAccessToken(info);
+    if (m_hasOpenedVerificationUrl && !m_deviceInfo.deviceCode.isEmpty()) {
+        m_deviceAuth.startPollingForAccessToken(m_deviceInfo);
+    }
 }
 
 void cwGitHubIntegration::handleAccessToken(const cwGitHubDeviceAuth::AccessTokenResult& result)
@@ -217,6 +223,11 @@ void cwGitHubIntegration::handleAccessToken(const cwGitHubDeviceAuth::AccessToke
     setAuthState(AuthState::Authorized);
     setErrorMessage({});
     refreshRepositories();
+
+    if (!m_deviceInfo.deviceCode.isEmpty() || !m_deviceInfo.userCode.isEmpty()) {
+        m_deviceInfo = {};
+        emit deviceCodeChanged();
+    }
 }
 
 void cwGitHubIntegration::markVerificationOpened()
@@ -224,6 +235,9 @@ void cwGitHubIntegration::markVerificationOpened()
     if (!m_hasOpenedVerificationUrl) {
         m_hasOpenedVerificationUrl = true;
         emit verificationOpenedChanged();
+        if (m_authState == AuthState::AwaitingVerification && !m_deviceInfo.deviceCode.isEmpty()) {
+            m_deviceAuth.startPollingForAccessToken(m_deviceInfo);
+        }
     }
 }
 

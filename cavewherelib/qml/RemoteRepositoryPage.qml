@@ -27,6 +27,38 @@ StandardPage {
         //     Layout.fillWidth: true
         // }
 
+
+        QC.GroupBox {
+            Layout.fillWidth: true
+            title: "Clone from HTTP/SSH"
+
+            RowLayout {
+                // anchors.fill: parent
+                // Layout.fillWidth: true
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.margins: 12
+                spacing: 8
+
+                TextFieldWithError {
+                    id: manualUrlField
+                    // width: 100
+                    Layout.fillWidth: true
+                    textField.placeholderText: "https://github.com/user/repo.git"
+                }
+
+                // Item { Layout.fillWidth: true }
+
+                QC.Button {
+                    text: "Clone"
+                    enabled: manualUrlField.textField.text.length > 0
+                    onClicked: {
+                        console.log("TODO: clone", manualUrlField.textField.text)
+                    }
+                }
+            }
+        }
+
         QC.GroupBox {
             Layout.fillWidth: true
             title: "GitHub"
@@ -34,6 +66,8 @@ StandardPage {
 
             ColumnLayout {
                 // anchors.fill: parent
+                anchors.left: parent.left
+                anchors.right: parent.right
                 anchors.margins: 12
                 spacing: 8
 
@@ -215,42 +249,7 @@ StandardPage {
             }
         }
 
-        // QC.GroupBox {
-        //     Layout.fillWidth: true
-        //     title: "Clone from URL"
 
-        //     ColumnLayout {
-        //         // anchors.fill: parent
-        //         anchors.margins: 12
-        //         spacing: 8
-
-        //         Text {
-        //             text: "Paste any HTTPS or SSH repository URL."
-        //             wrapMode: Text.WordWrap
-        //             color: "#666666"
-        //         }
-
-        //         TextFieldWithError {
-        //             id: manualUrlField
-        //             Layout.fillWidth: true
-        //             textField.placeholderText: "https://github.com/user/repo.git"
-        //         }
-
-        //         RowLayout {
-        //             Layout.fillWidth: true
-
-        //             Item { Layout.fillWidth: true }
-
-        //             QC.Button {
-        //                 text: "Clone"
-        //                 enabled: manualUrlField.textField.text.length > 0
-        //                 onClicked: {
-        //                     console.log("TODO: clone", manualUrlField.textField.text)
-        //                 }
-        //             }
-        //         }
-        //     }
-        // }
 
         // Text {
         //     Layout.fillWidth: true

@@ -46,8 +46,8 @@ public:
     explicit cwGitHubIntegration(QObject* parent = nullptr);
 
     AuthState authState() const { return m_authState; }
-    QString userCode() const { return m_userCode; }
-    QUrl verificationUrl() const { return m_verificationUrl; }
+    QString userCode() const { return m_deviceInfo.userCode; }
+    QUrl verificationUrl() const { return m_deviceInfo.verificationWebAddress; }
     QString errorMessage() const { return m_errorMessage; }
     QVariantList repositories() const { return m_repositories; }
     bool busy() const { return m_busy; }
@@ -89,8 +89,7 @@ private:
     cwGitHubDeviceAuth m_deviceAuth;
     AuthState m_authState = AuthState::Idle;
     bool m_busy = false;
-    QString m_userCode;
-    QUrl m_verificationUrl;
+    cwGitHubDeviceAuth::DeviceCodeInfo m_deviceInfo;
     QString m_accessToken;
     QString m_errorMessage;
     QVariantList m_repositories;
