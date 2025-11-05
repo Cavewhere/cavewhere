@@ -111,7 +111,6 @@ RegionViewer {
                         let index = note.index(stationItemId.pointIndex, 0)
                         note.setData(index, rayHit.pointModel, NoteLiDAR.PositionOnNoteRole);
                     }
-
                 }
         }
     }

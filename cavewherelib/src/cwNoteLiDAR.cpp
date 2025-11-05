@@ -172,7 +172,7 @@ bool cwNoteLiDAR::setData(const QModelIndex &index, const QVariant &value, int r
     }
     case PositionOnNoteRole: {
         station.setPositionOnNote(value.value<QVector3D>());
-        emit dataChanged(index, index, {PositionOnNoteRole, ScenePositionRole});
+        emit dataChanged(index, index, {PositionOnNoteRole, ScenePositionRole, UpPositionRole});
         updateNoteTransformion();
         return true;
     }
@@ -193,6 +193,7 @@ QHash<int, QByteArray> cwNoteLiDAR::roleNames() const
         { NameRole, QByteArrayLiteral("name") },
         { PositionOnNoteRole, QByteArrayLiteral("positionOnNote") },
         { ScenePositionRole, QByteArrayLiteral("scenePosition") },
+        { UpPositionRole, QByteArrayLiteral("upPosition") },
         { StationRole, QByteArrayLiteral("station") },
 
     };
