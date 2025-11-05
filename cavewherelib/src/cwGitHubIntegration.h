@@ -82,6 +82,9 @@ private:
     void handleUploadReply(QNetworkReply* reply);
     QByteArray authorizationHeader() const;
     QString defaultKeyTitle() const;
+    void storeAccessToken(const QString& token);
+    void loadStoredAccessToken();
+    void clearStoredAccessToken();
 
     static QString resolveClientId();
 

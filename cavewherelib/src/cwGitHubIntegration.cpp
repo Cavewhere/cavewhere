@@ -5,6 +5,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QDebug>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QRegularExpression>
@@ -12,6 +13,7 @@
 #include <QUrlQuery>
 #include <QScopedPointer>
 #include <QScopedPointerDeleteLater>
+#include <qtkeychain/keychain.h>
 
 //Our
 #include "RSAKeyGenerator.h"
@@ -22,6 +24,8 @@ namespace {
 static constexpr auto GitHubDeviceClientIdEnv = "CAVEWHERE_GITHUB_CLIENT_ID";
 static constexpr auto DefaultGitHubClientId = "Ov23ctOCCgOdD9y2mSs9";
 static const QString GitHubApiBase = QStringLiteral("https://api.github.com");
+static const QString KeychainService = QStringLiteral("CaveWhere");
+static const QString KeychainTokenKey = QStringLiteral("GitHubAccessToken");
 }
 
 cwGitHubIntegration::cwGitHubIntegration(QObject* parent)
@@ -41,6 +45,8 @@ cwGitHubIntegration::cwGitHubIntegration(QObject* parent)
                              emit secondsUntilNextPollChanged();
                          }
                      });
+
+    loadStoredAccessToken();
 }
 
 void cwGitHubIntegration::startDeviceLogin()
@@ -211,15 +217,16 @@ void cwGitHubIntegration::handleAccessToken(const cwGitHubDeviceAuth::AccessToke
             return;
         }
 
-    setErrorMessage(result.errorDescription.isEmpty() ? result.errorName : result.errorDescription);
-    setAuthState(AuthState::Error);
-    return;
+        setErrorMessage(result.errorDescription.isEmpty() ? result.errorName : result.errorDescription);
+        setAuthState(AuthState::Error);
+        return;
     }
 
     qDebug() << "Logged in!";
 
     m_accessToken = result.accessToken;
     emit accessTokenChanged();
+    storeAccessToken(result.accessToken);
     setAuthState(AuthState::Authorized);
     setErrorMessage({});
     refreshRepositories();
@@ -239,6 +246,62 @@ void cwGitHubIntegration::markVerificationOpened()
             m_deviceAuth.startPollingForAccessToken(m_deviceInfo);
         }
     }
+}
+
+void cwGitHubIntegration::storeAccessToken(const QString& token)
+{
+    if (token.isEmpty()) {
+        clearStoredAccessToken();
+        return;
+    }
+
+    auto* job = new QKeychain::WritePasswordJob(KeychainService, this);
+    job->setAutoDelete(true);
+    job->setKey(KeychainTokenKey);
+    job->setTextData(token);
+    QObject::connect(job, &QKeychain::Job::finished, this, [job]() {
+        if (job->error() != QKeychain::NoError) {
+            qWarning() << "Failed to save GitHub token:" << job->errorString();
+        }
+    });
+    job->start();
+}
+
+void cwGitHubIntegration::clearStoredAccessToken()
+{
+    auto* job = new QKeychain::DeletePasswordJob(KeychainService, this);
+    job->setAutoDelete(true);
+    job->setKey(KeychainTokenKey);
+    QObject::connect(job, &QKeychain::Job::finished, this, [job]() {
+        if (job->error() != QKeychain::NoError && job->error() != QKeychain::EntryNotFound) {
+            qWarning() << "Failed to clear GitHub token:" << job->errorString();
+        }
+    });
+    job->start();
+}
+
+void cwGitHubIntegration::loadStoredAccessToken()
+{
+    auto* job = new QKeychain::ReadPasswordJob(KeychainService, this);
+    job->setAutoDelete(true);
+    job->setKey(KeychainTokenKey);
+    QObject::connect(job, &QKeychain::Job::finished, this, [this, job]() {
+        if (job->error() == QKeychain::NoError) {
+            const QString token = job->textData();
+            if (!token.isEmpty()) {
+                m_accessToken = token;
+                emit accessTokenChanged();
+                setAuthState(AuthState::Authorized);
+                setErrorMessage({});
+                m_secondsUntilNextPoll = 0;
+                emit secondsUntilNextPollChanged();
+                refreshRepositories();
+            }
+        } else if (job->error() != QKeychain::EntryNotFound) {
+            qWarning() << "Failed to read GitHub token:" << job->errorString();
+        }
+    });
+    job->start();
 }
 
 void cwGitHubIntegration::handleRepositoryReply(QNetworkReply* reply)

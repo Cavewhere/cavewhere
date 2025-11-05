@@ -25,6 +25,12 @@ find_package(xxHash REQUIRED)
 find_package(TinyGLTF REQUIRED)
 find_package(minizip REQUIRED)
 
+set(BUILD_WITH_QT6 ON CACHE BOOL "Build qtkeychain with Qt 6" FORCE)
+set(BUILD_TRANSLATIONS OFF CACHE BOOL "Disable qtkeychain translations" FORCE)
+set(BUILD_TRANSLATIONS_AS_RESOURCES OFF CACHE BOOL "" FORCE)
+set(BUILD_TEST_APPLICATION OFF CACHE BOOL "" FORCE)
+add_subdirectory(${CMAKE_SOURCE_DIR}/qtkeychain ${CMAKE_BINARY_DIR}/qtkeychain_build)
+
 qt_add_library(cavewherelib STATIC)
 
 #RESOURCE_PREFIX defaults to /qt/qml/ which is the default import path of the QML engine
@@ -56,6 +62,7 @@ target_link_libraries(cavewherelib
     QuickQanava
     QuickQanavaplugin
     qquickgit
+    qt6keychain
     PRIVATE
     TinyGLTF::TinyGLTF
     protobuf::protobuf
