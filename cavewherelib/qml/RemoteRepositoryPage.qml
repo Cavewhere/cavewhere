@@ -8,6 +8,8 @@ StandardPage {
     id: page
 
     property GitHubIntegration gitHub: RootData.gitHubIntegration
+    property int selectedRepoIndex: -1
+    signal repositoryPicked(string cloneUrl)
 
     ColumnLayout {
         anchors.fill: parent
@@ -50,8 +52,10 @@ StandardPage {
                 // Item { Layout.fillWidth: true }
 
                 QC.Button {
+                    id: cloneButton
                     text: "Clone"
                     enabled: manualUrlField.textField.text.length > 0
+                    transformOrigin: Item.Center
                     onClicked: {
                         console.log("TODO: clone", manualUrlField.textField.text)
                     }
@@ -183,11 +187,17 @@ StandardPage {
 
                 ListView {
                     id: repoList
+                    currentIndex: page.selectedRepoIndex
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     // Layout.preferredHeight: 240
                     clip: true
                     model: gitHub.repositories
+                    onCountChanged: {
+                        if (page.selectedRepoIndex >= count) {
+                            page.selectedRepoIndex = -1
+                        }
+                    }
 
                     delegate: Rectangle {
                         required property var modelData
@@ -195,7 +205,9 @@ StandardPage {
 
                         width: repoList.width
                         height: layoutId.height + 10
-                        color: index % 2 === 0 ? "#ffffff" : "#f7f7f7"
+                        color: page.selectedRepoIndex === index
+                               ? "#d6ecff"
+                               : (index % 2 === 0 ? "#ffffff" : "#f7f7f7")
 
                         RowLayout {
                             id: layoutId
@@ -203,8 +215,11 @@ StandardPage {
                             anchors.right: parent.right
 
                             ColumnLayout {
-                                // anchors.fill: parent
-                                anchors.margins: 8
+                                Layout.fillWidth: true
+                                Layout.leftMargin: 8
+                                Layout.rightMargin: 8
+                                Layout.topMargin: 8
+                                Layout.bottomMargin: 8
                                 spacing: 4
 
                                 RowLayout {
@@ -229,13 +244,14 @@ StandardPage {
                                 }
                             }
 
-                            Item { Layout.fillWidth: true }
+                        }
 
-                            QC.Button {
-                                text: "Clone"
-                                enabled: false
-                                // ToolTip.visible: hovered
-                                // ToolTip.text: "Cloning will be available in a later update."
+                        TapHandler {
+                            acceptedButtons: Qt.LeftButton
+                            cursorShape: Qt.PointingHandCursor
+                            onTapped: {
+                                page.selectedRepoIndex = index
+                                page.repositoryPicked(modelData.cloneUrl)
                             }
                         }
                     }
@@ -266,5 +282,35 @@ StandardPage {
         // }
 
         // Item { Layout.fillHeight: true }
+    }
+
+    SequentialAnimation {
+        id: cloneButtonPulse
+        loops: 2
+        running: false
+        NumberAnimation {
+            target: cloneButton
+            property: "scale"
+            from: 1.0
+            to: 1.15
+            duration: 140
+            easing.type: Easing.OutQuad
+        }
+        NumberAnimation {
+            target: cloneButton
+            property: "scale"
+            from: 1.15
+            to: 1.0
+            duration: 220
+            easing.type: Easing.InOutQuad
+        }
+        onStopped: cloneButton.scale = 1.0
+    }
+
+    onRepositoryPicked: {
+        manualUrlField.textField.text = cloneUrl
+        manualUrlField.textField.focus = true
+        manualUrlField.textField.selectAll()
+        cloneButtonPulse.restart()
     }
 }
