@@ -193,6 +193,9 @@ StandardPage {
                     // Layout.preferredHeight: 240
                     clip: true
                     model: gitHub.repositories
+                    QC.ScrollBar.vertical: QC.ScrollBar {
+                        policy: ScrollBar.AsNeeded
+                    }
                     onCountChanged: {
                         if (page.selectedRepoIndex >= count) {
                             page.selectedRepoIndex = -1
