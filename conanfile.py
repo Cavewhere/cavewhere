@@ -34,7 +34,11 @@ class CaveWhereConan(ConanFile):
         self.requires("proj/[>=9.3.1]")
 
         #Fixes a build issue on macos
-        self.requires("abseil/[>=20250127.0]")
+        if self.settings.os == "Macos":
+            # Fixes a build issue on macOS
+            self.requires("abseil/[>=20250127.0]")
+        else:
+            self.requires("abseil/[>=20240116.2]")
 
         # Or add a new requirement!
         if not self.options.system_qt:
