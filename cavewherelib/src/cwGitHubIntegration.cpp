@@ -170,6 +170,20 @@ void cwGitHubIntegration::clearSession()
     cancelLogin();
 }
 
+void cwGitHubIntegration::logout()
+{
+    cancelLogin();
+    m_hasOpenedVerificationUrl = false;
+    emit verificationOpenedChanged();
+    setAuthState(AuthState::Idle);
+    clearStoredAccessToken();
+    m_accessToken.clear();
+    emit accessTokenChanged();
+    m_repositories.clear();
+    emit repositoriesChanged();
+    setErrorMessage({});
+}
+
 void cwGitHubIntegration::setAuthState(AuthState state)
 {
     if (m_authState == state) {

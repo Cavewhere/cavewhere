@@ -61,6 +61,7 @@ public:
     Q_INVOKABLE void uploadPublicKey(const QString& title);
     Q_INVOKABLE void clearSession();
     Q_INVOKABLE void markVerificationOpened();
+    Q_INVOKABLE void logout();
 
 signals:
     void authStateChanged();

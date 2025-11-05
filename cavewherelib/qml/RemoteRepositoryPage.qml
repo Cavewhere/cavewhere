@@ -173,6 +173,12 @@ StandardPage {
                         enabled: !gitHub.busy
                         onClicked: gitHub.uploadPublicKey("")
                     }
+
+                    QC.Button {
+                        text: "Logout"
+                        enabled: !gitHub.busy
+                        onClicked: gitHub.logout()
+                    }
                 }
 
                 ListView {
