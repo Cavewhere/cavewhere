@@ -9,7 +9,7 @@ StandardPage {
 
     property GitHubIntegration gitHub: RootData.gitHubIntegration
     property int selectedRepoIndex: -1
-    signal repositoryPicked(string cloneUrl)
+    signal repositoryPicked(string repositoryUrl)
 
     ColumnLayout {
         anchors.fill: parent
@@ -251,7 +251,7 @@ StandardPage {
                             cursorShape: Qt.PointingHandCursor
                             onTapped: {
                                 page.selectedRepoIndex = index
-                                page.repositoryPicked(modelData.cloneUrl)
+                                page.repositoryPicked(modelData.sshUrl)
                             }
                         }
                     }
@@ -308,7 +308,7 @@ StandardPage {
     }
 
     onRepositoryPicked: {
-        manualUrlField.textField.text = cloneUrl
+        manualUrlField.textField.text = repositoryUrl
         manualUrlField.textField.focus = true
         manualUrlField.textField.selectAll()
         cloneButtonPulse.restart()
