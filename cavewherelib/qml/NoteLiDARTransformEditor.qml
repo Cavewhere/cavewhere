@@ -102,8 +102,8 @@ QQ.Item {
                 Layout.fillWidth: true
 
                 onCheckedChanged: {
-                    if (editor.note && editor.note.autoCalculateNorth !== checkbox.checked) {
-                        editor.note.autoCalculateNorth = checkbox.checked
+                    if (editor.note && editor.note.autoCalculateNorth !== checked) {
+                        editor.note.autoCalculateNorth = checked
                     }
                 }
 

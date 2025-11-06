@@ -24,7 +24,7 @@ Interaction {
 
     readonly property bool hasFirstPoint: firstPick !== null
 
-    property cwRayTriangleHit firstPick: null
+    property var firstPick: null //type: cwRayTriangleHit
     property point firstScreenPoint: Qt.point(0, 0)
     property point secondScreenPoint: Qt.point(0, 0)
     property QQ.vector3d secondPoint: Qt.vector3d(0, 0, 0)
@@ -200,17 +200,23 @@ Interaction {
                 northArrow.visible: false
                 azimuthPanel.visible: false
                 helpBox.text: "<b>Click</b> first north reference point"
-                firstPick: null
-                firstScreenPoint: Qt.point(0, 0)
-                secondScreenPoint: Qt.point(0, 0)
-                secondPoint: Qt.vector3d(0, 0, 0)
-                measuredBearing: 0.0
-                userAzimuth: 0.0
                 azimuthInput.text: "0.0"
                 tapHandler.onTapped: function(eventPoint, button) {
                     handleFirstTap(eventPoint)
                 }
                 azimuthApplyButton.onClicked: function() {}
+            }
+
+            //initilization script
+            QQ.StateChangeScript {
+                script: () => {
+                    firstPick = null
+                    firstScreenPoint = Qt.point(0, 0)
+                    secondScreenPoint = Qt.point(0, 0)
+                    secondPoint = Qt.vector3d(0, 0, 0)
+                    measuredBearing = 0.0
+                    userAzimuth = 0.0
+                }
             }
         },
         QQ.State {
@@ -222,13 +228,18 @@ Interaction {
                 }
                 northArrow.visible: true
                 northArrow.p1: firstScreenPoint
-                northArrow.p2: firstScreenPoint
                 azimuthPanel.visible: false
                 helpBox.text: "<b>Click</b> second point to set north"
                 tapHandler.onTapped: function(eventPoint, button) {
                     handleSecondTap(eventPoint)
                 }
                 azimuthApplyButton.onClicked: function() {}
+
+                QQ.StateChangeScript {
+                    script: () => {
+                        northArrow.p2 = firstScreenPoint
+                    }
+                }
             }
         },
         QQ.State {
