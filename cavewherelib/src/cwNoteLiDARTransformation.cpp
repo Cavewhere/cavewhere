@@ -2,6 +2,8 @@
 
 // Qt
 #include <QVector3D>
+#include <QVector2D>
+#include <QtMath>
 
 cwNoteLiDARTransformation::cwNoteLiDARTransformation(QObject* parent)
     : cwAbstractNoteTransformation(parent)
@@ -79,4 +81,26 @@ QQuaternion cwNoteLiDARTransformation::upQuaternion() const
     default:
         return QQuaternion();
     }
+}
+
+double cwNoteLiDARTransformation::calculateNorth(const QVector3D &firstPoint, const QVector3D &secondPoint) const
+{
+    QVector3D delta = secondPoint - firstPoint;
+    if (delta.lengthSquared() < 1e-12f) {
+        return northUp();
+    }
+
+    // Rotate into the note's up-aligned space so Z is the chosen up axis
+    const QVector3D rotated = upQuaternion() * delta;
+    QVector2D planar(rotated.x(), rotated.y());
+    if (planar.lengthSquared() < 1e-12f) {
+        return northUp();
+    }
+
+    planar.normalize();
+    double angle = qRadiansToDegrees(qAtan2(planar.x(), planar.y()));
+    if (angle < 0.0) {
+        angle += 360.0;
+    }
+    return angle;
 }

@@ -6,6 +6,7 @@
 
 // Qt
 #include <QQuaternion>
+#include <QVector3D>
 #include <QProperty>
 #include <QQmlEngine>
 
@@ -59,6 +60,8 @@ public:
 
     void setData(const cwNoteLiDARTransformationData& data);
     cwNoteLiDARTransformationData data() const;
+
+    Q_INVOKABLE double calculateNorth(const QVector3D& firstPoint, const QVector3D& secondPoint) const;
 
 signals:
     void upCustomChanged();
