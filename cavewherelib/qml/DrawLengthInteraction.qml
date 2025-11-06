@@ -69,43 +69,19 @@ PanZoomInteraction {
         parent: interaction.target
     }
 
-    ShadowRectangle {
+    InteractionFloatingPanel {
         id: lengthRect
 
         visible: false
-
-        radius: Theme.floatingWidgetRadius
-        color: Theme.floatingWidgetColor
-
-        width: row.width + row.x * 2
-        height: row.height + row.y * 2
-
-        QQ.MouseArea {
-            //This mouse area prevents the interaction from using the mouse,
-            //when the user clicks in the area of the input
-            anchors.fill: parent
-            onPressed: (mouse) => {
-                mouse.accepted = true
-            }
-
-            onReleased: (mouse) => {
-                mouse.accepted = true;
-            }
-        }
 
         Length {
             id: length
             unit: Units.Meters
         }
 
-        QQ.Row {
+        content: QQ.Row {
             id: row
-
-            x: 3
-            y: 3
-
             spacing: 3
-
             Text {
                 id: lengthText
                 anchors.verticalCenter: parent.verticalCenter
@@ -123,7 +99,6 @@ PanZoomInteraction {
                 id: doneId
                 objectName: "doneButton"
                 anchors.verticalCenter: parent.verticalCenter
-
                 text: "Done"
                 onClicked: interaction.doneButtonPressed()
             }

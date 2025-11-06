@@ -7,11 +7,14 @@
 **************************************************************************/
 
 import QtQuick as QQ
+import QtQuick.Controls as QC
+import QtQuick.Layouts
 import cavewherelib
 
 Interaction {
     id: lidarNorthInteraction
     objectName: "noteLiDARNorthInteraction"
+    state: "Idle"
 
     property NoteLiDARTransformation noteTransform
     property NoteLiDAR note
@@ -20,8 +23,14 @@ Interaction {
     property GltfScene scene
 
     readonly property bool hasFirstPoint: firstPick !== null
-    property var firstPick: null
+
+    property cwRayTriangleHit firstPick: null
     property point firstScreenPoint: Qt.point(0, 0)
+    property point secondScreenPoint: Qt.point(0, 0)
+    property QQ.vector3d secondPoint: Qt.vector3d(0, 0, 0)
+    property real measuredBearing: 0.0
+    property real userAzimuth: NaN
+
     property real originalPitch: 0.0
     property bool originalPitchValid: false
     property bool previousPitchLocked: false
@@ -31,10 +40,47 @@ Interaction {
     enabled: false
     focus: visible
 
-    function resetState() {
-        firstPick = null
-        northArrow.visible = false
-        helpBox.text = "Activate to set LiDAR north"
+    function pickHit(eventPoint) {
+        if (!turnTableInteraction) {
+            return null
+        }
+        const hit = turnTableInteraction.pick(eventPoint.position)
+        if (!hit.hit) {
+            helpBox.text = "No LiDAR geometry under cursor. Try again."
+            return null
+        }
+        return hit
+    }
+
+    function handleFirstTap(eventPoint) {
+        if (!noteTransform) {
+            return
+        }
+        const hit = pickHit(eventPoint)
+        if (!hit) {
+            return
+        }
+        firstPick = hit
+        firstScreenPoint = eventPoint.position
+        state = "AwaitSecondPick"
+    }
+
+    function handleSecondTap(eventPoint) {
+        if (!noteTransform || !hasFirstPoint) {
+            return
+        }
+        const hit = pickHit(eventPoint)
+        if (!hit) {
+            return
+        }
+        secondScreenPoint = eventPoint.position
+        secondPoint = hit.pointModel
+        measuredBearing = noteTransform.calculateNorth(firstPick.pointModel, secondPoint)
+        if (isNaN(measuredBearing)) {
+            measuredBearing = noteTransform.northUp
+        }
+        userAzimuth = 0.0 //Start off with north
+        state = "AwaitAzimuth"
     }
 
     function finish() {
@@ -56,22 +102,16 @@ Interaction {
         pitchAnimator.start()
     }
 
-    function handleSecondPoint(pointModel) {
-        if (!noteTransform || !hasFirstPoint) {
-            return
-        }
-        const angle = noteTransform.calculateNorth(firstPick.pointModel, pointModel)
-        if (!isNaN(angle)) {
-            noteTransform.northUp = angle
-        }
-        finish()
+    function setAzimuthPanelPosition(screenPoint) {
+        const pos = lidarNorthInteraction.mapToItem(parent, screenPoint.x, screenPoint.y)
+        azimuthPanel.x = pos.x - azimuthPanel.width * 0.5
+        azimuthPanel.y = pos.y + 12
     }
 
     onTurnTableInteractionChanged: pitchAnimator.target = turnTableInteraction
 
     onActivated: {
-        resetState()
-        helpBox.text = "<b>Click</b> first north reference point"
+        state = "Idle"
         if (turnTableInteraction) {
             originalPitch = turnTableInteraction.pitch
             originalPitchValid = true
@@ -84,14 +124,13 @@ Interaction {
     }
 
     onDeactivated: {
-        northArrow.visible = false
         if (turnTableInteraction) {
             turnTableInteraction.pitchLocked = previousPitchLocked
         }
         if (turnTableInteraction && originalPitchValid) {
             animatePitch(originalPitch)
         }
-        resetState()
+        state = ""
     }
 
     QQ.NumberAnimation {
@@ -106,40 +145,12 @@ Interaction {
         target: lidarNorthInteraction
         acceptedButtons: Qt.LeftButton
         enabled: lidarNorthInteraction.enabled
-        onTapped: (eventPoint, button) => {
-            if (!turnTableInteraction || !noteTransform) {
-                return
-            }
-
-            const hit = turnTableInteraction.pick(eventPoint.position)
-            if (!hit.hit) {
-                helpBox.text = "No LiDAR geometry under cursor. Try again."
-                return
-            }
-
-            if (!hasFirstPoint) {
-                firstPick = hit
-                firstScreenPoint = eventPoint.position
-                northArrow.p1 = firstScreenPoint
-                northArrow.p2 = firstScreenPoint
-                northArrow.visible = true
-                helpBox.text = "<b>Click</b> second point to set north"
-            } else {
-                northArrow.p2 = eventPoint.position
-                handleSecondPoint(hit.pointModel)
-            }
-        }
     }
 
     QQ.HoverHandler {
         id: hoverHandler
         target: lidarNorthInteraction
-        enabled: lidarNorthInteraction.enabled && lidarNorthInteraction.hasFirstPoint
-        onPointChanged: {
-            if (northArrow.visible) {
-                northArrow.p2 = hoverHandler.point.position
-            }
-        }
+        enabled: false
     }
 
     NorthArrowItem {
@@ -149,6 +160,29 @@ Interaction {
         parent: lidarNorthInteraction
     }
 
+    RowLayoutPanel {
+        id: azimuthPanel
+        visible: false
+
+        Text {
+            text: "Azimuth"
+            Layout.alignment: Qt.AlignVCenter
+        }
+
+        ClickNumberInput {
+            id: azimuthInput
+            onFinishedEditting: (newText) => {
+                lidarNorthInteraction.userAzimuth = Number(newText)
+            }
+        }
+
+        QC.Button {
+            id: azimuthApplyButton
+            text: "Apply"
+            Layout.alignment: Qt.AlignVCenter
+        }
+    }
+
     HelpBox {
         id: helpBox
         text: "Activate to set LiDAR north"
@@ -156,4 +190,69 @@ Interaction {
     }
 
     QQ.Keys.onEscapePressed: finish()
+
+    states: [
+        QQ.State {
+            name: "Idle"
+            QQ.PropertyChanges {
+                hoverHandler.enabled: false
+                hoverHandler.onPointChanged: function() {}
+                northArrow.visible: false
+                azimuthPanel.visible: false
+                helpBox.text: "<b>Click</b> first north reference point"
+                firstPick: null
+                firstScreenPoint: Qt.point(0, 0)
+                secondScreenPoint: Qt.point(0, 0)
+                secondPoint: Qt.vector3d(0, 0, 0)
+                measuredBearing: 0.0
+                userAzimuth: 0.0
+                azimuthInput.text: "0.0"
+                tapHandler.onTapped: function(eventPoint, button) {
+                    handleFirstTap(eventPoint)
+                }
+                azimuthApplyButton.onClicked: function() {}
+            }
+        },
+        QQ.State {
+            name: "AwaitSecondPick"
+            QQ.PropertyChanges {
+                hoverHandler.enabled: true
+                hoverHandler.onPointChanged: function(event) {
+                    northArrow.p2 = hoverHandler.point.position
+                }
+                northArrow.visible: true
+                northArrow.p1: firstScreenPoint
+                northArrow.p2: firstScreenPoint
+                azimuthPanel.visible: false
+                helpBox.text: "<b>Click</b> second point to set north"
+                tapHandler.onTapped: function(eventPoint, button) {
+                    handleSecondTap(eventPoint)
+                }
+                azimuthApplyButton.onClicked: function() {}
+            }
+        },
+        QQ.State {
+            name: "AwaitAzimuth"
+            QQ.PropertyChanges {
+                hoverHandler.enabled: false
+                hoverHandler.onPointChanged: function() {}
+                northArrow.visible: true
+                northArrow.p1: firstScreenPoint
+                northArrow.p2: secondScreenPoint
+                azimuthPanel.visible: true
+                azimuthInput.text: Number(lidarNorthInteraction.userAzimuth).toFixed(1)
+                helpBox.text: "Confirm or adjust measured azimuth"
+                tapHandler.onTapped: function(eventPoint, button) {
+                    handleFirstTap(eventPoint)
+                }
+                azimuthApplyButton.onClicked: function() {
+                    noteTransform.northUp = lidarNorthInteraction.measuredBearing + lidarNorthInteraction.userAzimuth
+                    finish()
+                }
+            }
+            QQ.StateChangeScript {
+                script: setAzimuthPanelPosition(secondScreenPoint)
+            }
+        }
+    ]
 }
