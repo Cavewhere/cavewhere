@@ -28,3 +28,8 @@ The project relies on Conan-managed Qt 6 packages; edit the default profile to p
 
 ## QML Guidelines
 Do not use `opacity` where not needed. Do not use `property var` instead use strict typing. 
+
+### State Management
+- Prefer declarative `State { PropertyChanges { ... } }` blocks instead of branching on `state` in signal handlers.
+- When behaviour must differ per state, re-bind the handler inside each `State` (e.g. `tapHandler.onTapped:`) rather than checking conditions inside the callback.
+- Use `StateChangeScript` for one-off effects (positioning, animations) that should run when entering a state.
