@@ -235,10 +235,11 @@ Interaction {
                 }
                 azimuthApplyButton.onClicked: function() {}
 
-                QQ.StateChangeScript {
-                    script: () => {
-                        northArrow.p2 = firstScreenPoint
-                    }
+            }
+
+            QQ.StateChangeScript {
+                script: () => {
+                    northArrow.p2 = firstScreenPoint
                 }
             }
         },

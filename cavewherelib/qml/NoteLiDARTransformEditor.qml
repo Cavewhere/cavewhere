@@ -116,6 +116,7 @@ QQ.Item {
                         // Optional tool hook (mouse interaction to set north)
                         NoteToolIconButton {
                             id: setNorthToolBtn
+                            objectName: "northToolButton"
                             enabled: !northAutoGroup.checked && editor.interactionManager && editor.northInteraction
                             iconSource: "qrc:/icons/svg/north.svg"
                             toolTipText: enabled ? "Set north with tool" : "To enable tool, uncheck Auto Calculate"

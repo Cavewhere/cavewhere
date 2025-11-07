@@ -129,7 +129,28 @@ MainWindowTest {
         }
 
         function test_northInteraction() {
-            wait(100)
+
+                    let _obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->checkBox")
+                    mouseClick(_obj1)
+
+                    //Go through the tool
+                    let northToolButton_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->northToolButton")
+                    mouseClick(northToolButton_obj2)
+
+                    let noteLiDARNorthInteraction_obj3 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARNorthInteraction")
+                    mouseClick(noteLiDARNorthInteraction_obj3, 203.246, 244.637)
+                    mouseClick(noteLiDARNorthInteraction_obj3, 319.91, 514.371)
+
+                    //Escape out of the tool
+                    keyClick(16777216, 0) //Esc
+
+                    //Make sure the tool works again
+
+
+                    // keyClick()
+
+
+            wait(1000000)
         }
 
         function test_scaleInteraction() {
