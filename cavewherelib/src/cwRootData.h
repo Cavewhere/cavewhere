@@ -39,6 +39,8 @@
 #include "cwPageView.h"
 #include "cwRepositoryModel.h"
 #include "cwGitHubIntegration.h"
+class cwRemoteAccountModel;
+class cwRemoteAccountSelectionModel;
 
 //QQuickGit inculdes
 #include "Account.h"
@@ -73,6 +75,7 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
     Q_PROPERTY(QQuickGit::Account* account READ account CONSTANT)
     Q_PROPERTY(cwRepositoryModel* repositoryModel READ repositoryModel CONSTANT)
     Q_PROPERTY(cwGitHubIntegration* gitHubIntegration READ gitHubIntegration CONSTANT)
+    Q_PROPERTY(cwRemoteAccountModel* remoteAccountModel READ remoteAccountModel CONSTANT)
 
     Q_PROPERTY(cwPageSelectionModel* pageSelectionModel READ pageSelectionModel CONSTANT)
     Q_PROPERTY(cwPageView* pageView READ pageView WRITE setPageView NOTIFY pageViewChanged)
@@ -117,6 +120,7 @@ public:
     QQuickGit::Account *account() const { return m_account; }
     cwRepositoryModel* repositoryModel() const { return m_repositoryModel; }
     cwGitHubIntegration* gitHubIntegration() const;
+    cwRemoteAccountModel* remoteAccountModel() const;
 
     cwPageView* pageView() const { return m_pageView; }
     void setPageView(cwPageView* value);
@@ -203,6 +207,7 @@ private:
     QQuickGit::Account* m_account;
     QQuickGit::AccountSettingWatcher* m_accountWatcher;
     mutable cwGitHubIntegration* m_gitHubIntegration;
+    mutable cwRemoteAccountModel* m_remoteAccountModel = nullptr; //mutable for lazy creation
 
     QPointer<cwPageView> m_pageView;
 

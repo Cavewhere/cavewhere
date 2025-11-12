@@ -24,6 +24,8 @@
 #include "cwPageSelectionModel.h"
 #include "cwSettings.h"
 #include "cwGitHubIntegration.h"
+#include "cwRemoteAccountModel.h"
+#include "cwRemoteAccountSelectionModel.h"
 // #include "cwImageCompressionUpdater.h"
 #include "cwAddImageTask.h"
 #include "cwJobSettings.h"
@@ -322,3 +324,12 @@ cwGitHubIntegration* cwRootData::gitHubIntegration() const
     }
     return m_gitHubIntegration;
 }
+
+cwRemoteAccountModel* cwRootData::remoteAccountModel() const
+{
+    if (!m_remoteAccountModel) {
+        m_remoteAccountModel = new cwRemoteAccountModel(const_cast<cwRootData*>(this));
+    }
+    return m_remoteAccountModel;
+}
+

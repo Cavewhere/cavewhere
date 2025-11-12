@@ -160,40 +160,67 @@ StandardPage {
                 id: accountCombo
                 Layout.fillWidth: true
                 textRole: "label"
-                valueRole: "value"
-                property var accountModel: []
 
-                function rebuildModel() {
-                    const entries = [{ label: "None", value: "none" }]
-                    if (gitHub.authState === GitHubIntegration.Authorized && gitHub.username.length > 0) {
-                        entries.push({ label: "GitHub (" + gitHub.username + ")", value: "github" })
+                model: RemoteAccountSelectionModel {
+                    id: accountSelectionModel
+                    sourceModel: RootData.remoteAccountModel
+                    onEntriesChanged: accountCombo.currentIndex = 0
+                }
+
+                // Component.onCompleted: currentIndex = 0
+
+                delegate: Loader {
+                    required property int entryType
+                    required property int provider
+                    required property string label
+                    required property int index
+
+                    width: accountCombo.width
+                    // sourceComponent: separatorDelegate
+                    sourceComponent: entryType === RemoteAccountSelectionModel.SeparatorEntry ? separatorDelegate : accountEntryDelegate
+                }
+
+                Component {
+                    id: accountEntryDelegate
+                    QC.ItemDelegate {
+                        text: parent.label
+
+                        property int entryType: parent.entryType
+                        property int provider: parent.provider
+
+                        enabled: entryType !== RemoteAccountSelectionModel.AccountEntry || provider !== RemoteAccountModel.Unknown
+                        onClicked: {
+                            accountCombo.currentIndex = parent.index
+
+                            if (entryType === RemoteAccountSelectionModel.NoneEntry) {
+                                return
+                            } else if (entryType === RemoteAccountSelectionModel.AddEntry) {
+                                gitHub.startDeviceLogin()
+                            } else if (entryType === RemoteAccountSelectionModel.AccountEntry) {
+                                if (provider === RemoteAccountModel.GitHub) {
+                                    if (gitHub.authState === GitHubIntegration.Authorized) {
+                                        gitHub.refreshRepositories()
+                                    } else {
+                                        gitHub.startDeviceLogin()
+                                    }
+                                }
+                            }
+                            accountCombo.popup.close()
+                        }
+
+                        highlighted: hovered
                     }
-                    entries.push({ label: "Add GitHub Account", value: "add" })
-                    accountCombo.accountModel = entries
-                    accountCombo.currentIndex = 0
                 }
 
-                model: accountModel
+                Component {
+                    id: separatorDelegate
 
-                Component.onCompleted: rebuildModel()
-
-                Connections {
-                    target: gitHub
-                    function onUsernameChanged() { accountCombo.rebuildModel() }
-                    function onAuthStateChanged() { accountCombo.rebuildModel() }
-                }
-
-                onActivated: (index) => {
-                    const entry = model[index]
-                    if (!entry)
-                        return
-
-                    if (entry.value === "none") {
-                        return
-                    } else if (entry.value === "add") {
-                        gitHub.startDeviceLogin()
-                    } else if (entry.value === "github" && gitHub.authState === GitHubIntegration.Authorized) {
-                        gitHub.refreshRepositories()
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.margins: 5
+                        height: 1
+                        color: "black"
                     }
                 }
             }
