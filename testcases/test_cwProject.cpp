@@ -563,6 +563,94 @@ TEST_CASE("cwProject should detect the correct file type", "[cwProject]") {
     CHECK(project->projectType(datasetFile) == cwProject::UnknownFileType);
 }
 
+TEST_CASE("Updating scrap data from a loaded project should save", "[cwProject]") {
+    auto root = std::make_unique<cwRootData>();
+    REQUIRE(root != nullptr);
+
+    TestHelper helper;
+    helper.loadProjectFromZip(root->project(), QStringLiteral("://datasets/test_cwProject/jaws of the beast with scrap.zip"));
+    root->project()->waitLoadToFinish();
+
+    root->futureManagerModel()->waitForFinished();
+
+    cwProject* const project = root->project();
+    REQUIRE(project != nullptr);
+    REQUIRE_FALSE(project->filename().isEmpty());
+    REQUIRE(project->cavingRegion()->caveCount() == 1);
+
+    cwCave* const cave = project->cavingRegion()->cave(0);
+    REQUIRE(cave != nullptr);
+    REQUIRE(cave->tripCount() == 1);
+
+    cwTrip* const trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
+
+    cwSurveyNoteModel* const notesModel = trip->notes();
+    REQUIRE(notesModel != nullptr);
+    REQUIRE(notesModel->rowCount() == 1);
+
+    cwNote* const note = notesModel->notes().at(0);
+    REQUIRE(note != nullptr);
+    REQUIRE(note->scraps().size() == 1);
+
+    cwScrap* const scrap = note->scrap(0);
+    REQUIRE(scrap != nullptr);
+
+    const QString filename = project->filename();
+    const QVector<QPointF> originalPoints = scrap->points();
+    REQUIRE_FALSE(originalPoints.isEmpty());
+
+    const QPointF originalPoint = originalPoints.first();
+    const double delta = 0.05;
+
+    double newX = originalPoint.x() + delta;
+    if(newX >= 1.0) {
+        newX = originalPoint.x() - delta;
+    }
+
+    double newY = originalPoint.y() - delta;
+    if(newY <= 0.0) {
+        newY = originalPoint.y() + delta;
+    }
+
+    const QPointF updatedPoint(newX, newY);
+    REQUIRE(updatedPoint != originalPoint);
+
+    scrap->setPoint(0, updatedPoint);
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+
+    auto reloadedProject = std::make_unique<cwProject>();
+    reloadedProject->loadOrConvert(filename);
+    reloadedProject->waitLoadToFinish();
+
+    REQUIRE(reloadedProject->cavingRegion()->caveCount() == 1);
+    cwCave* const reloadedCave = reloadedProject->cavingRegion()->cave(0);
+    REQUIRE(reloadedCave != nullptr);
+    REQUIRE(reloadedCave->tripCount() == 1);
+
+    cwTrip* const reloadedTrip = reloadedCave->trip(0);
+    REQUIRE(reloadedTrip != nullptr);
+
+    cwSurveyNoteModel* const reloadedNotes = reloadedTrip->notes();
+    REQUIRE(reloadedNotes != nullptr);
+    REQUIRE(reloadedNotes->rowCount() == 1);
+
+    cwNote* const reloadedNote = reloadedNotes->notes().at(0);
+    REQUIRE(reloadedNote != nullptr);
+    REQUIRE(reloadedNote->scraps().size() == 1);
+
+    cwScrap* const reloadedScrap = reloadedNote->scrap(0);
+    REQUIRE(reloadedScrap != nullptr);
+
+    const QVector<QPointF> reloadedPoints = reloadedScrap->points();
+    REQUIRE_FALSE(reloadedPoints.isEmpty());
+    const QPointF reloadedFirstPoint = reloadedPoints.first();
+
+    CHECK(reloadedFirstPoint.x() == Catch::Approx(updatedPoint.x()));
+    CHECK(reloadedFirstPoint.y() == Catch::Approx(updatedPoint.y()));
+}
+
 TEST_CASE("Test save changes", "[cwProject]") {
 
     SECTION("Simple cave name change") {

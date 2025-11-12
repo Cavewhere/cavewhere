@@ -2331,6 +2331,12 @@ void cwSaveLoad::connectNote(cwNote *note)
     connect(note, &cwNote::removedScraps, this, saveNote);
     // connect(note, &cwNote::scrapAdded, this, saveNote);
     connect(note, &cwNote::scrapsReset, this, saveNote);
+
+    //Connect scraps
+    const auto scraps = note->scraps();
+    for(auto scrap : scraps) {
+        connectScrap(scrap);
+    }
 }
 
 void cwSaveLoad::connectScrap(cwScrap *scrap)
