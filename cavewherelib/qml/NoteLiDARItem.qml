@@ -31,34 +31,7 @@ RegionViewer {
 
     state: "SELECT"
 
-    Item3DRepeater {
-        id: noteStationRepeaterId
-        anchors.fill: parent
-        camera: rhiViewerId.camera
-        model: note
-        positionRole: NoteLiDAR.UpPositionRole
-        selectionManager: SelectionManager {
-            id: selectionManagerId
-        }
 
-        component: NoteLiDARStationItem {
-            id: stationItemId
-
-            objectName: "noteLiDARStation_" + pointIndex
-
-            note: rhiViewerId.note
-            parentView: noteStationRepeaterId
-            onFinishedMoving:
-                (position) => {
-                    let rayHit = turnTableInteractionId.pick(position);
-                    // console.log("Finished moving:" + rayHit.hit + " " + rayHit.pointModel);
-                    if(rayHit.hit) {
-                        let index = note.index(stationItemId.pointIndex, 0)
-                        note.setData(index, rayHit.pointModel, NoteLiDAR.PositionOnNoteRole);
-                    }
-                }
-        }
-    }
 
     TurnTableInteraction {
         id: turnTableInteractionId
@@ -113,6 +86,35 @@ RegionViewer {
             lidarScaleInteraction
         ]
         defaultInteraction: turnTableInteractionId
+    }
+
+    Item3DRepeater {
+        id: noteStationRepeaterId
+        anchors.fill: parent
+        camera: rhiViewerId.camera
+        model: note
+        positionRole: NoteLiDAR.UpPositionRole
+        selectionManager: SelectionManager {
+            id: selectionManagerId
+        }
+
+        component: NoteLiDARStationItem {
+            id: stationItemId
+
+            objectName: "noteLiDARStation_" + pointIndex
+
+            note: rhiViewerId.note
+            parentView: noteStationRepeaterId
+            onFinishedMoving:
+                (position) => {
+                    let rayHit = turnTableInteractionId.pick(position);
+                    // console.log("Finished moving:" + rayHit.hit + " " + rayHit.pointModel);
+                    if(rayHit.hit) {
+                        let index = note.index(stationItemId.pointIndex, 0)
+                        note.setData(index, rayHit.pointModel, NoteLiDAR.PositionOnNoteRole);
+                    }
+                }
+        }
     }
 
 
