@@ -1,4 +1,5 @@
 #include "cwNoteLiDARTransformation.h"
+#include "cwSurveyNetwork.h"
 
 // Qt
 #include <QVector3D>
@@ -85,6 +86,8 @@ QQuaternion cwNoteLiDARTransformation::upQuaternion() const
 
 double cwNoteLiDARTransformation::calculateNorth(const QVector3D &firstPoint, const QVector3D &secondPoint) const
 {
+
+
     QVector3D delta = secondPoint - firstPoint;
     if (delta.lengthSquared() < 1e-12f) {
         return northUp();
