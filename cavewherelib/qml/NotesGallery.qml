@@ -94,7 +94,7 @@ QQ.Rectangle {
             width: container.maxImageWidth - 2 * container.border
             height: width;
             fillMode: QQ.Image.PreserveAspectFit
-            rotation: container.noteObject === null ? 0 : container.noteObject.rotate
+            rotation: container.noteObject === null || container.noteObject.rotate == undefined ? 0 : container.noteObject.rotate
             smooth: true
 
             function updateHeight() {
