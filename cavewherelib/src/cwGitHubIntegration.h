@@ -32,6 +32,7 @@ class cwGitHubIntegration : public QObject
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
     Q_PROPERTY(int secondsUntilNextPoll READ secondsUntilNextPoll NOTIFY secondsUntilNextPollChanged)
     Q_PROPERTY(bool verificationOpened READ verificationOpened NOTIFY verificationOpenedChanged)
+    Q_PROPERTY(QString username READ username NOTIFY usernameChanged)
 
 public:
     enum class AuthState {
@@ -53,6 +54,7 @@ public:
     bool busy() const { return m_busy; }
     int secondsUntilNextPoll() const { return m_secondsUntilNextPoll; }
     bool verificationOpened() const { return m_hasOpenedVerificationUrl; }
+    QString username() const { return m_username; }
 
     Q_INVOKABLE void startDeviceLogin();
     Q_INVOKABLE void cancelLogin();
@@ -72,6 +74,7 @@ signals:
     void busyChanged();
     void secondsUntilNextPollChanged();
     void verificationOpenedChanged();
+    void usernameChanged();
 
 private:
     void setAuthState(AuthState state);
@@ -81,11 +84,13 @@ private:
     void handleAccessToken(const cwGitHubDeviceAuth::AccessTokenResult& result);
     void handleRepositoryReply(QNetworkReply* reply);
     void handleUploadReply(QNetworkReply* reply);
+    void handleUserProfileReply(QNetworkReply* reply);
     QByteArray authorizationHeader() const;
     QString defaultKeyTitle() const;
     void storeAccessToken(const QString& token);
     void loadStoredAccessToken();
     void clearStoredAccessToken();
+    void fetchUserProfile();
 
     static QString resolveClientId();
 
@@ -102,4 +107,5 @@ private:
     std::unique_ptr<QQuickGit::RSAKeyGenerator> m_keyGenerator;
     int m_secondsUntilNextPoll = 0;
     bool m_hasOpenedVerificationUrl = false;
+    QString m_username;
 };

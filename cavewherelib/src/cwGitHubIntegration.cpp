@@ -182,6 +182,10 @@ void cwGitHubIntegration::logout()
     m_repositories.clear();
     emit repositoriesChanged();
     setErrorMessage({});
+    if (!m_username.isEmpty()) {
+        m_username.clear();
+        emit usernameChanged();
+    }
 }
 
 void cwGitHubIntegration::setAuthState(AuthState state)
@@ -243,6 +247,7 @@ void cwGitHubIntegration::handleAccessToken(const cwGitHubDeviceAuth::AccessToke
     storeAccessToken(result.accessToken);
     setAuthState(AuthState::Authorized);
     setErrorMessage({});
+    fetchUserProfile();
     refreshRepositories();
 
     if (!m_deviceInfo.deviceCode.isEmpty() || !m_deviceInfo.userCode.isEmpty()) {
@@ -309,6 +314,7 @@ void cwGitHubIntegration::loadStoredAccessToken()
                 setErrorMessage({});
                 m_secondsUntilNextPoll = 0;
                 emit secondsUntilNextPollChanged();
+                fetchUserProfile();
                 refreshRepositories();
             }
         } else if (job->error() != QKeychain::EntryNotFound) {
@@ -316,6 +322,47 @@ void cwGitHubIntegration::loadStoredAccessToken()
         }
     });
     job->start();
+}
+
+void cwGitHubIntegration::fetchUserProfile()
+{
+    if (m_accessToken.isEmpty()) {
+        return;
+    }
+
+    QNetworkRequest request(QUrl(GitHubApiBase + QStringLiteral("/user")));
+    request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    request.setRawHeader("Accept", "application/vnd.github+json");
+    request.setRawHeader("User-Agent", QByteArrayLiteral("CaveWhere"));
+    request.setRawHeader("Authorization", authorizationHeader());
+
+    QNetworkReply* reply = m_network.get(request);
+    QObject::connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        handleUserProfileReply(reply);
+    });
+}
+
+void cwGitHubIntegration::handleUserProfileReply(QNetworkReply* reply)
+{
+    QScopedPointer<QNetworkReply, QScopedPointerDeleteLater> guard(reply);
+    if (reply->error() != QNetworkReply::NoError) {
+        qWarning() << "Failed to fetch GitHub profile:" << reply->errorString();
+        return;
+    }
+
+    const QByteArray data = reply->readAll();
+    QJsonParseError parseError{};
+    const QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        qWarning() << "Failed to parse GitHub profile:" << parseError.errorString();
+        return;
+    }
+
+    const QString login = doc.object().value(QStringLiteral("login")).toString();
+    if (login != m_username) {
+        m_username = login;
+        emit usernameChanged();
+    }
 }
 
 void cwGitHubIntegration::handleRepositoryReply(QNetworkReply* reply)

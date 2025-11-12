@@ -149,6 +149,56 @@ StandardPage {
         }
 
 
+        RowLayout {
+            Layout.fillWidth: true
+
+            Text {
+                text: "Account:"
+            }
+
+            QC.ComboBox {
+                id: accountCombo
+                Layout.fillWidth: true
+                textRole: "label"
+                valueRole: "value"
+                property var accountModel: []
+
+                function rebuildModel() {
+                    const entries = [{ label: "None", value: "none" }]
+                    if (gitHub.authState === GitHubIntegration.Authorized && gitHub.username.length > 0) {
+                        entries.push({ label: "GitHub (" + gitHub.username + ")", value: "github" })
+                    }
+                    entries.push({ label: "Add GitHub Account", value: "add" })
+                    accountCombo.accountModel = entries
+                    accountCombo.currentIndex = 0
+                }
+
+                model: accountModel
+
+                Component.onCompleted: rebuildModel()
+
+                Connections {
+                    target: gitHub
+                    function onUsernameChanged() { accountCombo.rebuildModel() }
+                    function onAuthStateChanged() { accountCombo.rebuildModel() }
+                }
+
+                onActivated: (index) => {
+                    const entry = model[index]
+                    if (!entry)
+                        return
+
+                    if (entry.value === "none") {
+                        return
+                    } else if (entry.value === "add") {
+                        gitHub.startDeviceLogin()
+                    } else if (entry.value === "github" && gitHub.authState === GitHubIntegration.Authorized) {
+                        gitHub.refreshRepositories()
+                    }
+                }
+            }
+        }
+
         Loader {
             active: gitHub.authState === GitHubIntegration.Authorized
             Layout.fillWidth: true
@@ -194,7 +244,7 @@ StandardPage {
                     clip: true
                     model: gitHub.repositories
                     QC.ScrollBar.vertical: QC.ScrollBar {
-                        policy: ScrollBar.AsNeeded
+                        policy: QC.ScrollBar.AsNeeded
                     }
                     onCountChanged: {
                         if (page.selectedRepoIndex >= count) {
