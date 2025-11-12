@@ -116,7 +116,7 @@ public:
     cwSettings* settings() const;
     QQuickGit::Account *account() const { return m_account; }
     cwRepositoryModel* repositoryModel() const { return m_repositoryModel; }
-    cwGitHubIntegration* gitHubIntegration() const { return m_gitHubIntegration; }
+    cwGitHubIntegration* gitHubIntegration() const;
 
     cwPageView* pageView() const { return m_pageView; }
     void setPageView(cwPageView* value);
@@ -202,7 +202,7 @@ private:
     //Git account settings
     QQuickGit::Account* m_account;
     QQuickGit::AccountSettingWatcher* m_accountWatcher;
-    cwGitHubIntegration* m_gitHubIntegration;
+    mutable cwGitHubIntegration* m_gitHubIntegration;
 
     QPointer<cwPageView> m_pageView;
 

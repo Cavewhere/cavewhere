@@ -48,7 +48,7 @@ cwRootData::cwRootData(QObject *parent) :
     m_account(new QQuickGit::Account(this)),
     m_accountWatcher(new QQuickGit::AccountSettingWatcher(this)),
     m_repositoryModel(new cwRepositoryModel(this)),
-    m_gitHubIntegration(new cwGitHubIntegration(this)),
+    m_gitHubIntegration(nullptr),
     DefaultTrip(new cwTrip(this)),
     DefaultTripCalibration(new cwTripCalibration(this))
 {
@@ -313,4 +313,12 @@ bool cwRootData::isMobileBuild()
 cwNoteLiDARManager *cwRootData::noteLiDARManager() const
 {
     return NoteLiDARManager;
+}
+
+cwGitHubIntegration* cwRootData::gitHubIntegration() const
+{
+    if (!m_gitHubIntegration) {
+        m_gitHubIntegration = new cwGitHubIntegration(const_cast<cwRootData*>(this));
+    }
+    return m_gitHubIntegration;
 }
