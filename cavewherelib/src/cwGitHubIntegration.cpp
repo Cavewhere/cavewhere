@@ -5,6 +5,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QDebug>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QRegularExpression>
@@ -12,6 +13,7 @@
 #include <QUrlQuery>
 #include <QScopedPointer>
 #include <QScopedPointerDeleteLater>
+#include <qtkeychain/keychain.h>
 
 //Our
 #include "RSAKeyGenerator.h"
@@ -22,6 +24,8 @@ namespace {
 static constexpr auto GitHubDeviceClientIdEnv = "CAVEWHERE_GITHUB_CLIENT_ID";
 static constexpr auto DefaultGitHubClientId = "Ov23ctOCCgOdD9y2mSs9";
 static const QString GitHubApiBase = QStringLiteral("https://api.github.com");
+static const QString KeychainService = QStringLiteral("CaveWhere");
+static const QString KeychainTokenKey = QStringLiteral("GitHubAccessToken");
 }
 
 cwGitHubIntegration::cwGitHubIntegration(QObject* parent)
@@ -41,6 +45,8 @@ cwGitHubIntegration::cwGitHubIntegration(QObject* parent)
                              emit secondsUntilNextPollChanged();
                          }
                      });
+
+    loadStoredAccessToken();
 }
 
 void cwGitHubIntegration::startDeviceLogin()
@@ -164,6 +170,24 @@ void cwGitHubIntegration::clearSession()
     cancelLogin();
 }
 
+void cwGitHubIntegration::logout()
+{
+    cancelLogin();
+    m_hasOpenedVerificationUrl = false;
+    emit verificationOpenedChanged();
+    setAuthState(AuthState::Idle);
+    clearStoredAccessToken();
+    m_accessToken.clear();
+    emit accessTokenChanged();
+    m_repositories.clear();
+    emit repositoriesChanged();
+    setErrorMessage({});
+    if (!m_username.isEmpty()) {
+        m_username.clear();
+        emit usernameChanged();
+    }
+}
+
 void cwGitHubIntegration::setAuthState(AuthState state)
 {
     if (m_authState == state) {
@@ -211,17 +235,19 @@ void cwGitHubIntegration::handleAccessToken(const cwGitHubDeviceAuth::AccessToke
             return;
         }
 
-    setErrorMessage(result.errorDescription.isEmpty() ? result.errorName : result.errorDescription);
-    setAuthState(AuthState::Error);
-    return;
+        setErrorMessage(result.errorDescription.isEmpty() ? result.errorName : result.errorDescription);
+        setAuthState(AuthState::Error);
+        return;
     }
 
     qDebug() << "Logged in!";
 
     m_accessToken = result.accessToken;
     emit accessTokenChanged();
+    storeAccessToken(result.accessToken);
     setAuthState(AuthState::Authorized);
     setErrorMessage({});
+    fetchUserProfile();
     refreshRepositories();
 
     if (!m_deviceInfo.deviceCode.isEmpty() || !m_deviceInfo.userCode.isEmpty()) {
@@ -238,6 +264,104 @@ void cwGitHubIntegration::markVerificationOpened()
         if (m_authState == AuthState::AwaitingVerification && !m_deviceInfo.deviceCode.isEmpty()) {
             m_deviceAuth.startPollingForAccessToken(m_deviceInfo);
         }
+    }
+}
+
+void cwGitHubIntegration::storeAccessToken(const QString& token)
+{
+    if (token.isEmpty()) {
+        clearStoredAccessToken();
+        return;
+    }
+
+    auto* job = new QKeychain::WritePasswordJob(KeychainService, this);
+    job->setAutoDelete(true);
+    job->setKey(KeychainTokenKey);
+    job->setTextData(token);
+    QObject::connect(job, &QKeychain::Job::finished, this, [job]() {
+        if (job->error() != QKeychain::NoError) {
+            qWarning() << "Failed to save GitHub token:" << job->errorString();
+        }
+    });
+    job->start();
+}
+
+void cwGitHubIntegration::clearStoredAccessToken()
+{
+    auto* job = new QKeychain::DeletePasswordJob(KeychainService, this);
+    job->setAutoDelete(true);
+    job->setKey(KeychainTokenKey);
+    QObject::connect(job, &QKeychain::Job::finished, this, [job]() {
+        if (job->error() != QKeychain::NoError && job->error() != QKeychain::EntryNotFound) {
+            qWarning() << "Failed to clear GitHub token:" << job->errorString();
+        }
+    });
+    job->start();
+}
+
+void cwGitHubIntegration::loadStoredAccessToken()
+{
+    auto* job = new QKeychain::ReadPasswordJob(KeychainService, this);
+    job->setAutoDelete(true);
+    job->setKey(KeychainTokenKey);
+    QObject::connect(job, &QKeychain::Job::finished, this, [this, job]() {
+        if (job->error() == QKeychain::NoError) {
+            const QString token = job->textData();
+            if (!token.isEmpty()) {
+                m_accessToken = token;
+                emit accessTokenChanged();
+                setAuthState(AuthState::Authorized);
+                setErrorMessage({});
+                m_secondsUntilNextPoll = 0;
+                emit secondsUntilNextPollChanged();
+                fetchUserProfile();
+                refreshRepositories();
+            }
+        } else if (job->error() != QKeychain::EntryNotFound) {
+            qWarning() << "Failed to read GitHub token:" << job->errorString();
+        }
+    });
+    job->start();
+}
+
+void cwGitHubIntegration::fetchUserProfile()
+{
+    if (m_accessToken.isEmpty()) {
+        return;
+    }
+
+    QNetworkRequest request(QUrl(GitHubApiBase + QStringLiteral("/user")));
+    request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    request.setRawHeader("Accept", "application/vnd.github+json");
+    request.setRawHeader("User-Agent", QByteArrayLiteral("CaveWhere"));
+    request.setRawHeader("Authorization", authorizationHeader());
+
+    QNetworkReply* reply = m_network.get(request);
+    QObject::connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        handleUserProfileReply(reply);
+    });
+}
+
+void cwGitHubIntegration::handleUserProfileReply(QNetworkReply* reply)
+{
+    QScopedPointer<QNetworkReply, QScopedPointerDeleteLater> guard(reply);
+    if (reply->error() != QNetworkReply::NoError) {
+        qWarning() << "Failed to fetch GitHub profile:" << reply->errorString();
+        return;
+    }
+
+    const QByteArray data = reply->readAll();
+    QJsonParseError parseError{};
+    const QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        qWarning() << "Failed to parse GitHub profile:" << parseError.errorString();
+        return;
+    }
+
+    const QString login = doc.object().value(QStringLiteral("login")).toString();
+    if (login != m_username) {
+        m_username = login;
+        emit usernameChanged();
     }
 }
 
