@@ -7,6 +7,10 @@
 // Qt
 #include <QVector2D>
 #include <QLineF>
+#include <QtGlobal>
+
+// Std
+#include <cmath>
 
 cwAbstractNoteTransformation::cwAbstractNoteTransformation(QObject* parent)
     : QObject(parent)
@@ -31,4 +35,9 @@ void cwAbstractNoteTransformation::setData(const cwNoteTransformationData& d)
 cwNoteTransformationData cwAbstractNoteTransformation::data() const
 {
     return { m_northUp, Scale->data() };
+}
+
+double cwAbstractNoteTransformation::wrapDegrees360(double degrees) const
+{
+    return cwWrapDegrees360(degrees);
 }

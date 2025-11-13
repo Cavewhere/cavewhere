@@ -14,5 +14,5 @@ ClickTextInput {
     objectName: "clickNumberInput"
     validator: CompassValidator {  }
     readOnly: false
-    Layout.preferredWidth: 70
+    // Layout.preferredWidth: 70
 }

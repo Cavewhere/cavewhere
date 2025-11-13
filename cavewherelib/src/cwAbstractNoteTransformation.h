@@ -45,6 +45,7 @@ public:
     double northUp() const { return m_northUp.value(); }
     void setNorthUp(const double& northUpDegrees) { m_northUp = northUpDegrees; }
     QBindable<double> bindableNorthUp() { return &m_northUp; }
+    Q_INVOKABLE double wrapDegrees360(double degrees) const;
 
     // Persist/restore the common part
     void setData(const cwNoteTransformationData& data);

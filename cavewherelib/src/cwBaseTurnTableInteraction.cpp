@@ -12,6 +12,7 @@
 #include "cwScene.h"
 #include "cwGeometryItersecter.h"
 #include "cwMatrix4x4Animation.h"
+#include "cwMath.h"
 
 //Std includes
 #include "math.h"
@@ -403,11 +404,7 @@ void cwBaseTurnTableInteraction::updateRotationMatrix()
  */
 double cwBaseTurnTableInteraction::clampAzimuth(double azimuth) const
 {
-    azimuth = fmod(azimuth, 360.0);
-    if(azimuth < 0) {
-        azimuth += 360.0;
-    }
-    return azimuth;
+    return cwWrapDegrees360(azimuth);
 }
 
 /**
@@ -686,5 +683,4 @@ void cwBaseTurnTableInteraction::zoomTo(const QBox3D &box)
         break;
     }
 }
-
 

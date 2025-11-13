@@ -167,6 +167,7 @@ Interaction {
 
         ClickNumberInput {
             id: azimuthInput
+            objectName: "azimuthInput"
             onFinishedEditting: (newText) => {
                 lidarNorthInteraction.userAzimuth = Number(newText)
             }
@@ -174,8 +175,15 @@ Interaction {
 
         QC.Button {
             id: azimuthApplyButton
+            objectName: "apply"
             text: "Apply"
             Layout.alignment: Qt.AlignVCenter
+            onClicked: {
+                console.log("Measured bearing:" + lidarNorthInteraction.measuredBearing + " userAzimuth:" + lidarNorthInteraction.userAzimuth)
+                noteTransform.northUp = noteTransform ? noteTransform.wrapDegrees360(lidarNorthInteraction.measuredBearing - lidarNorthInteraction.userAzimuth) : 0.0
+                // noteTransform.northUp = wrappedNorth
+                finish()
+            }
         }
     }
 
@@ -200,7 +208,7 @@ Interaction {
                 tapHandler.onTapped: function(eventPoint, button) {
                     handleFirstTap(eventPoint)
                 }
-                azimuthApplyButton.onClicked: function() {}
+                // azimuthApplyButton.onClicked: function() {}
             }
 
             //initilization script
@@ -231,7 +239,7 @@ Interaction {
                 tapHandler.onTapped: function(eventPoint, button) {
                     handleSecondTap(eventPoint)
                 }
-                azimuthApplyButton.onClicked: function() {}
+                // azimuthApplyButton.onClicked: function() {}
 
             }
 
@@ -254,10 +262,10 @@ Interaction {
                 tapHandler.onTapped: function(eventPoint, button) {
                     handleFirstTap(eventPoint)
                 }
-                azimuthApplyButton.onClicked: function() {
-                    noteTransform.northUp = lidarNorthInteraction.measuredBearing + lidarNorthInteraction.userAzimuth
-                    finish()
-                }
+                // azimuthApplyButton.onClicked: function() {
+                //     noteTransform.northUp = lidarNorthInteraction.measuredBearing + lidarNorthInteraction.userAzimuth
+                //     finish()
+                // }
             }
             QQ.StateChangeScript {
                 script: setAzimuthPanelPosition(secondScreenPoint)

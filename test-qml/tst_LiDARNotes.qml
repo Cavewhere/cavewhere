@@ -145,12 +145,39 @@ MainWindowTest {
                     keyClick(16777216, 0) //Esc
 
                     //Make sure the tool works again
+                    //Go through the tool
+                     northToolButton_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->northToolButton")
+                    mouseClick(northToolButton_obj2)
 
+                    noteLiDARNorthInteraction_obj3 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARNorthInteraction")
+                    mouseClick(noteLiDARNorthInteraction_obj3, 319.91, 514.371)
+                    mouseClick(noteLiDARNorthInteraction_obj3, 203.246, 244.637)
 
-                    // keyClick()
+                    // wait(3000)
 
+                    let azimuth = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARNorthInteraction->azimuthInput")
+                    mouseClick(azimuth)
 
-            wait(1000000)
+                    waitForRendering(azimuth);
+
+                    keyClick(54, 0) //6
+                    keyClick(50, 0) //2
+                    keyClick(16777220, 0) //Return
+
+                    tryVerify(() => { return azimuth.text === "62.0"; })
+
+                    // wait(100000)
+                    // wait(100)
+
+                    let apply = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARNorthInteraction->apply")
+                    mouseClick(apply)
+
+                    let northFieldObject = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->northField")
+                    tryVerify(() => {
+                                          console.log("North feild:" + northFieldObject.text + "=== 272.7")
+                                          return northFieldObject.text === "274.5"
+                              })
+
         }
 
         function test_scaleInteraction() {

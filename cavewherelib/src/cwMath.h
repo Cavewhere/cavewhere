@@ -14,6 +14,24 @@
 
 #include <math.h>
 #include <QtGlobal>
+#include <cmath>
+
+inline double cwWrapDegrees360(double degrees) {
+    if(!std::isfinite(degrees)) {
+        return 0.0;
+    }
+
+    double wrapped = std::fmod(degrees, 360.0);
+    if(wrapped < 0.0) {
+        wrapped += 360.0;
+    }
+
+    if(wrapped >= 360.0) {
+        wrapped -= 360.0;
+    }
+
+    return wrapped;
+}
 
 // #ifdef Q_OS_WIN //Need this for x86 windows
 // inline double exp2(double value) {
