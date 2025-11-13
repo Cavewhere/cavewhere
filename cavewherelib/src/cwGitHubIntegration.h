@@ -22,7 +22,6 @@ class cwGitHubIntegration : public QObject
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(GitHubIntegration)
-    QML_UNCREATABLE("Access via RootData.gitHubIntegration")
 
     Q_PROPERTY(AuthState authState READ authState NOTIFY authStateChanged)
     Q_PROPERTY(QString userCode READ userCode NOTIFY deviceCodeChanged)

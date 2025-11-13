@@ -7,9 +7,68 @@ import QQuickGit
 StandardPage {
     id: page
 
-    property GitHubIntegration gitHub: RootData.gitHubIntegration
     property int selectedRepoIndex: -1
+    property GitHubIntegration gitHub: gitHubLoader.item
     signal repositoryPicked(string repositoryUrl)
+
+    Loader {
+        id: gitHubLoader
+        active: false
+        sourceComponent: GitHubIntegration {
+            id: gitHubInstance
+
+            onAuthStateChanged: page.registerAuthorizedAccount()
+
+            onUsernameChanged: page.registerAuthorizedAccount()
+        }
+    }
+
+    function withGitHubIntegration(action) {
+        if (!gitHubLoader.active) {
+            gitHubLoader.active = true
+        }
+
+        if (!action) {
+            return
+        }
+
+        Qt.callLater(function() {
+            if (gitHub) {
+                action(gitHub)
+            }
+        })
+    }
+
+    function registerAuthorizedAccount() {
+        if (!gitHub || gitHub.authState !== GitHubIntegration.Authorized) {
+            return
+        }
+        if (!gitHub.username || gitHub.username.length === 0) {
+            return
+        }
+        RootData.remoteAccountModel.addOrUpdateAccount(RemoteAccountModel.GitHub, gitHub.username)
+    }
+
+    function beginAddAccountFlow() {
+        withGitHubIntegration(function(instance) {
+            instance.clearSession()
+            instance.startDeviceLogin()
+        })
+    }
+
+    function activateAccount(provider, username) {
+        if (provider !== RemoteAccountModel.GitHub) {
+            return
+        }
+
+        withGitHubIntegration(function(instance) {
+            if (instance.authState === GitHubIntegration.Authorized) {
+                instance.refreshRepositories()
+            } else {
+                instance.startDeviceLogin()
+            }
+        })
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -66,7 +125,7 @@ StandardPage {
         QC.GroupBox {
             Layout.fillWidth: true
             title: "GitHub"
-            visible: gitHub.authState !== GitHubIntegration.Authorized
+            visible: gitHubLoader.active && gitHub && gitHub.authState !== GitHubIntegration.Authorized
 
             ColumnLayout {
                 // anchors.fill: parent
@@ -80,6 +139,9 @@ StandardPage {
                     wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                     color: "#444444"
                     text: {
+                        if (!gitHub) {
+                            return "Use your GitHub account to access remote repositories."
+                        }
                         switch (gitHub.authState) {
                         case GitHubIntegration.RequestingCode:
                             return "Requesting a sign-in code from GitHub…";
@@ -95,11 +157,11 @@ StandardPage {
 
                 RowLayout {
                     Layout.fillWidth: true
-                    visible: gitHub.authState === GitHubIntegration.AwaitingVerification
+                    visible: gitHub && gitHub.authState === GitHubIntegration.AwaitingVerification
 
                     QC.TextField {
                         Layout.fillWidth: true
-                        text: gitHub.userCode
+                        text: gitHub ? gitHub.userCode : ""
                         readOnly: true
                         horizontalAlignment: Text.AlignHCenter
                         font.bold: true
@@ -108,11 +170,13 @@ StandardPage {
                     QC.Button {
                         text: "Copy and Open GitHub"
                         onClicked: {
-                            if (gitHub.userCode && gitHub.userCode.length > 0) {
+                            if (gitHub && gitHub.userCode && gitHub.userCode.length > 0) {
                                 RootData.copyText(gitHub.userCode)
                             }
-                            gitHub.markVerificationOpened()
-                            Qt.openUrlExternally(gitHub.verificationUrl)
+                            if (gitHub) {
+                                gitHub.markVerificationOpened()
+                                Qt.openUrlExternally(gitHub.verificationUrl)
+                            }
                         }
                         // QC.ToolTip.visible: hovered
                         // QC.ToolTip.text: "Copy the code and open github.com/device"
@@ -121,28 +185,31 @@ StandardPage {
 
                 Text {
                     Layout.fillWidth: true
-                    visible: gitHub.authState === GitHubIntegration.AwaitingVerification
+                    visible: gitHub
+                              && gitHub.authState === GitHubIntegration.AwaitingVerification
                               && gitHub.verificationOpened
                               && gitHub.secondsUntilNextPoll > 0
                     color: "#666666"
                     font.pixelSize: 12
-                    text: qsTr("Trying connection in %1 s").arg(gitHub.secondsUntilNextPoll)
+                    text: gitHub ? qsTr("Trying connection in %1 s").arg(gitHub.secondsUntilNextPoll) : ""
                 }
 
                 RowLayout {
                     Layout.fillWidth: true
-                    visible: gitHub.authState !== GitHubIntegration.AwaitingVerification
+                    visible: gitHub && gitHub.authState !== GitHubIntegration.AwaitingVerification
 
                     QC.Button {
-                        text: gitHub.authState === GitHubIntegration.Error ? "Try Again" : "Connect to GitHub"
-                        enabled: !gitHub.busy
-                        onClicked: gitHub.startDeviceLogin()
+                        text: gitHub && gitHub.authState === GitHubIntegration.Error ? "Try Again" : "Connect to GitHub"
+                        enabled: gitHub && !gitHub.busy
+                        onClicked: gitHub && gitHub.startDeviceLogin()
                     }
 
                     QC.Button {
                         text: "Cancel"
-                        visible: gitHub.authState === GitHubIntegration.AwaitingVerification || gitHub.authState === GitHubIntegration.RequestingCode
-                        onClicked: gitHub.cancelLogin()
+                        visible: gitHub
+                                 && (gitHub.authState === GitHubIntegration.AwaitingVerification
+                                     || gitHub.authState === GitHubIntegration.RequestingCode)
+                        onClicked: gitHub && gitHub.cancelLogin()
                     }
                 }
             }
@@ -173,6 +240,7 @@ StandardPage {
                     required property int entryType
                     required property int provider
                     required property string label
+                    required property string username
                     required property int index
 
                     width: accountCombo.width
@@ -187,6 +255,7 @@ StandardPage {
 
                         property int entryType: parent.entryType
                         property int provider: parent.provider
+                        property string username: parent.username
 
                         enabled: entryType !== RemoteAccountSelectionModel.AccountEntry || provider !== RemoteAccountModel.Unknown
                         onClicked: {
@@ -195,14 +264,10 @@ StandardPage {
                             if (entryType === RemoteAccountSelectionModel.NoneEntry) {
                                 return
                             } else if (entryType === RemoteAccountSelectionModel.AddEntry) {
-                                gitHub.startDeviceLogin()
+                                page.beginAddAccountFlow()
                             } else if (entryType === RemoteAccountSelectionModel.AccountEntry) {
                                 if (provider === RemoteAccountModel.GitHub) {
-                                    if (gitHub.authState === GitHubIntegration.Authorized) {
-                                        gitHub.refreshRepositories()
-                                    } else {
-                                        gitHub.startDeviceLogin()
-                                    }
+                                    page.activateAccount(provider, username)
                                 }
                             }
                             accountCombo.popup.close()
@@ -227,7 +292,7 @@ StandardPage {
         }
 
         Loader {
-            active: gitHub.authState === GitHubIntegration.Authorized
+            active: gitHub && gitHub.authState === GitHubIntegration.Authorized
             Layout.fillWidth: true
             Layout.fillHeight: true
 
@@ -244,21 +309,21 @@ StandardPage {
                     }
 
                     QC.Button {
-                        text: gitHub.busy ? "Refreshing…" : "Refresh"
-                        enabled: !gitHub.busy
-                        onClicked: gitHub.refreshRepositories()
+                        text: gitHub && gitHub.busy ? "Refreshing…" : "Refresh"
+                        enabled: gitHub && !gitHub.busy
+                        onClicked: gitHub && gitHub.refreshRepositories()
                     }
 
                     QC.Button {
                         text: "Upload SSH Key"
-                        enabled: !gitHub.busy
-                        onClicked: gitHub.uploadPublicKey("")
+                        enabled: gitHub && !gitHub.busy
+                        onClicked: gitHub && gitHub.uploadPublicKey("")
                     }
 
                     QC.Button {
                         text: "Logout"
-                        enabled: !gitHub.busy
-                        onClicked: gitHub.logout()
+                        enabled: gitHub && !gitHub.busy
+                        onClicked: gitHub && gitHub.logout()
                     }
                 }
 
@@ -269,7 +334,7 @@ StandardPage {
                     Layout.fillHeight: true
                     // Layout.preferredHeight: 240
                     clip: true
-                    model: gitHub.repositories
+                    model: gitHub ? gitHub.repositories : []
                     QC.ScrollBar.vertical: QC.ScrollBar {
                         policy: QC.ScrollBar.AsNeeded
                     }
@@ -338,12 +403,12 @@ StandardPage {
 
                     footer: Item {
                         width: repoList.width
-                        height: gitHub.repositories.length === 0 ? 40 : 0
+                        height: gitHub && gitHub.repositories.length === 0 ? 40 : 0
 
                         Text {
                             anchors.centerIn: parent
                             text: "No repositories found."
-                            visible: gitHub.repositories.length === 0
+                            visible: gitHub && gitHub.repositories.length === 0
                             color: "#666666"
                         }
                     }

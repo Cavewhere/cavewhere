@@ -23,7 +23,6 @@
 #include "cwTaskManagerModel.h"
 #include "cwPageSelectionModel.h"
 #include "cwSettings.h"
-#include "cwGitHubIntegration.h"
 #include "cwRemoteAccountModel.h"
 #include "cwRemoteAccountSelectionModel.h"
 // #include "cwImageCompressionUpdater.h"
@@ -50,7 +49,6 @@ cwRootData::cwRootData(QObject *parent) :
     m_account(new QQuickGit::Account(this)),
     m_accountWatcher(new QQuickGit::AccountSettingWatcher(this)),
     m_repositoryModel(new cwRepositoryModel(this)),
-    m_gitHubIntegration(nullptr),
     DefaultTrip(new cwTrip(this)),
     DefaultTripCalibration(new cwTripCalibration(this))
 {
@@ -317,14 +315,6 @@ cwNoteLiDARManager *cwRootData::noteLiDARManager() const
     return NoteLiDARManager;
 }
 
-cwGitHubIntegration* cwRootData::gitHubIntegration() const
-{
-    if (!m_gitHubIntegration) {
-        m_gitHubIntegration = new cwGitHubIntegration(const_cast<cwRootData*>(this));
-    }
-    return m_gitHubIntegration;
-}
-
 cwRemoteAccountModel* cwRootData::remoteAccountModel() const
 {
     if (!m_remoteAccountModel) {
@@ -332,4 +322,3 @@ cwRemoteAccountModel* cwRootData::remoteAccountModel() const
     }
     return m_remoteAccountModel;
 }
-
