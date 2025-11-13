@@ -79,7 +79,7 @@ RegionViewer {
     InteractionManager {
         id: interactionManagerId
         interactions: [
-            turnTableInteractionId,
+            // turnTableInteractionId, //Don't add, adding this turns off turnTableInteraction for other tools
             lidarAddStationInteraction,
             lidarNorthInteraction,
             lidarUpInteraction,
@@ -103,6 +103,7 @@ RegionViewer {
 
             objectName: "noteLiDARStation_" + pointIndex
 
+            enabled: turnTableInteractionId.enabled
             note: rhiViewerId.note
             parentView: noteStationRepeaterId
             onFinishedMoving:

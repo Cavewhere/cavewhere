@@ -110,26 +110,30 @@ Interaction {
 
     onTurnTableInteractionChanged: pitchAnimator.target = turnTableInteraction
 
-    onActivated: {
-        state = "Idle"
-        if (turnTableInteraction) {
-            originalPitch = turnTableInteraction.pitch
-            originalPitchValid = true
-            previousPitchLocked = turnTableInteraction.pitchLocked
-            turnTableInteraction.pitchLocked = true
-            animatePitch(90.0)
-        } else {
-            originalPitchValid = false
-        }
-    }
+    // onActivated: {
+    //     console.log("Active!")
+    //     state = ""
+    //     turnTableInteraction.visible = true;
+    //     turnTableInteraction.enable = true;
+
+    //     // if (turnTableInteraction) {
+    //     //     originalPitch = turnTableInteraction.pitch
+    //     //     originalPitchValid = true
+    //     //     previousPitchLocked = turnTableInteraction.pitchLocked
+    //     //     turnTableInteraction.pitchLocked = true
+    //     //     animatePitch(90.0)
+    //     // } else {
+    //     //     originalPitchValid = false
+    //     // }
+    // }
 
     onDeactivated: {
-        if (turnTableInteraction) {
-            turnTableInteraction.pitchLocked = previousPitchLocked
-        }
-        if (turnTableInteraction && originalPitchValid) {
-            animatePitch(originalPitch)
-        }
+        // if (turnTableInteraction) {
+        //     turnTableInteraction.pitchLocked = previousPitchLocked
+        // }
+        // if (turnTableInteraction && originalPitchValid) {
+        //     animatePitch(originalPitch)
+        // }
         state = ""
     }
 
@@ -193,7 +197,7 @@ Interaction {
 
     states: [
         QQ.State {
-            name: "Idle"
+            name: ""
             QQ.PropertyChanges {
                 hoverHandler.enabled: false
                 hoverHandler.onPointChanged: function() {}
