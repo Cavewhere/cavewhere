@@ -27,7 +27,7 @@ Recent history favors short, capitalized summaries (`Refactored to use cwGeometr
 The project relies on Conan-managed Qt 6 packages; edit the default profile to pin `cmake/<4.0` before installing dependencies. If using system Qt, ensure the distro ships Qt ≥6.8 or expect build errors. macOS builds use `entitlements.plist`, while Windows packaging depends on `installer/windows`. Rebuild after merges so `GitHash.cmake` refreshes the revision shown in the About dialog.
 
 ## QML Guidelines
-Do not use `opacity` where not needed. Do not use `property var` instead use strict typing. 
+Do not use `opacity` where not needed. Do not use `property var`; favor strict typing and `required property` when the value must exist. Pass only the data a component truly needs (e.g., a `matrix4x4` instead of a whole viewer/scene object) to reduce coupling. Private, interaction-local properties should use an `_underscorePrefix` so their scope is explicit, and leaning on `required` props should eliminate most null checks.
 
 ### State Management
 - Prefer declarative `State { PropertyChanges { ... } }` blocks instead of branching on `state` in signal handlers.
