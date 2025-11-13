@@ -16,24 +16,19 @@ Interaction {
     objectName: "noteLiDARNorthInteraction"
     state: "Idle"
 
-    property NoteLiDARTransformation noteTransform
-    property NoteLiDAR note
-    property RegionViewer viewer
-    property TurnTableInteraction turnTableInteraction
-    property GltfScene scene
+    required property NoteLiDAR note
+    required property TurnTableInteraction turnTableInteraction
+    required property QQ.matrix4x4 modelMatrix
 
-    readonly property bool hasFirstPoint: firstPick !== null
+    //Private properties
+    readonly property bool _hasFirstPoint: _firstPick !== null
 
-    property var firstPick: null //type: cwRayTriangleHit
-    property point firstScreenPoint: Qt.point(0, 0)
-    property point secondScreenPoint: Qt.point(0, 0)
-    property QQ.vector3d secondPoint: Qt.vector3d(0, 0, 0)
-    property real measuredBearing: 0.0
-    property real userAzimuth: NaN
-
-    property real originalPitch: 0.0
-    property bool originalPitchValid: false
-    property bool previousPitchLocked: false
+    property var _firstPick: null //type: cwRayTriangleHit
+    property point _firstScreenPoint: Qt.point(0, 0)
+    property point _secondScreenPoint: Qt.point(0, 0)
+    property QQ.vector3d _secondPoint: Qt.vector3d(0, 0, 0)
+    property real _measuredBearing: 0.0
+    property real _userAzimuth: NaN
 
     anchors.fill: parent
     visible: false
@@ -41,9 +36,6 @@ Interaction {
     focus: visible
 
     function pickHit(eventPoint) {
-        if (!turnTableInteraction) {
-            return null
-        }
         const hit = turnTableInteraction.pick(eventPoint.position)
         if (!hit.hit) {
             helpBox.text = "No LiDAR geometry under cursor. Try again."
@@ -53,40 +45,38 @@ Interaction {
     }
 
     function handleFirstTap(eventPoint) {
-        if (!noteTransform) {
-            return
-        }
         const hit = pickHit(eventPoint)
         if (!hit) {
             return
         }
-        firstPick = hit
-        firstScreenPoint = eventPoint.position
+        _firstPick = hit
+        _firstScreenPoint = eventPoint.position
         northArrowProjector.enabled = true
         northArrowProjector.p1World = hit.pointModel
-        northArrow.p1 = firstScreenPoint
-        northArrow.p2 = firstScreenPoint
+        northArrow.p1 = _firstScreenPoint
+        northArrow.p2 = _firstScreenPoint
         state = "AwaitSecondPick"
     }
 
     function handleSecondTap(eventPoint) {
-        if (!noteTransform || !hasFirstPoint) {
+        if (!_hasFirstPoint) {
             return
         }
         const hit = pickHit(eventPoint)
         if (!hit) {
             return
         }
-        secondScreenPoint = eventPoint.position
-        secondPoint = hit.pointModel
-        northArrowProjector.p1World = firstPick.pointModel
-        northArrowProjector.p2World = secondPoint
+        const noteTransform = note.noteTransformation
+        _secondScreenPoint = eventPoint.position
+        _secondPoint = hit.pointModel
+        northArrowProjector.p1World = _firstPick.pointModel
+        northArrowProjector.p2World = _secondPoint
         northArrowProjector.enabled = true
-        measuredBearing = noteTransform.calculateNorth(firstPick.pointModel, secondPoint)
-        if (isNaN(measuredBearing)) {
-            measuredBearing = noteTransform.northUp
+        _measuredBearing = noteTransform.calculateNorth(_firstPick.pointModel, _secondPoint)
+        if (isNaN(_measuredBearing)) {
+            _measuredBearing = noteTransform.northUp
         }
-        userAzimuth = 0.0 //Start off with north
+        _userAzimuth = 0.0 //Start off with north
         state = "AwaitAzimuth"
     }
 
@@ -95,9 +85,6 @@ Interaction {
     }
 
     function animatePitch(targetPitch) {
-        if (!turnTableInteraction) {
-            return
-        }
         pitchAnimator.stop()
         if (Math.abs(turnTableInteraction.pitch - targetPitch) < 0.01) {
             turnTableInteraction.pitch = targetPitch
@@ -151,8 +138,8 @@ Interaction {
     TwoPointProjector {
         id: northArrowProjector
         target: northArrow
-        camera: viewer ? viewer.camera : null
-        modelMatrix: scene && scene.gltf ? scene.gltf.modelMatrix : Qt.matrix4x4()
+        camera: lidarNorthInteraction.turnTableInteraction.camera
+        modelMatrix: lidarNorthInteraction.modelMatrix
         enabled: false
     }
 
@@ -169,7 +156,7 @@ Interaction {
             id: azimuthInput
             objectName: "azimuthInput"
             onFinishedEditting: (newText) => {
-                lidarNorthInteraction.userAzimuth = Number(newText)
+                lidarNorthInteraction._userAzimuth = Number(newText)
             }
         }
 
@@ -179,9 +166,8 @@ Interaction {
             text: "Apply"
             Layout.alignment: Qt.AlignVCenter
             onClicked: {
-                console.log("Measured bearing:" + lidarNorthInteraction.measuredBearing + " userAzimuth:" + lidarNorthInteraction.userAzimuth)
-                noteTransform.northUp = noteTransform ? noteTransform.wrapDegrees360(lidarNorthInteraction.measuredBearing - lidarNorthInteraction.userAzimuth) : 0.0
-                // noteTransform.northUp = wrappedNorth
+                const noteTransform = lidarNorthInteraction.note.noteTransformation
+                noteTransform.northUp = noteTransform.wrapDegrees360(lidarNorthInteraction._measuredBearing - lidarNorthInteraction._userAzimuth)
                 finish()
             }
         }
@@ -208,18 +194,17 @@ Interaction {
                 tapHandler.onTapped: function(eventPoint, button) {
                     handleFirstTap(eventPoint)
                 }
-                // azimuthApplyButton.onClicked: function() {}
             }
 
             //initilization script
             QQ.StateChangeScript {
                 script: () => {
-                    firstPick = null
-                    firstScreenPoint = Qt.point(0, 0)
-                    secondScreenPoint = Qt.point(0, 0)
-                    secondPoint = Qt.vector3d(0, 0, 0)
-                    measuredBearing = 0.0
-                    userAzimuth = 0.0
+                    _firstPick = null
+                    _firstScreenPoint = Qt.point(0, 0)
+                    _secondScreenPoint = Qt.point(0, 0)
+                    _secondPoint = Qt.vector3d(0, 0, 0)
+                    _measuredBearing = 0.0
+                    _userAzimuth = 0.0
                     northArrowProjector.enabled = false
                     northArrowProjector.p1World = Qt.vector3d(0, 0, 0)
                     northArrowProjector.p2World = Qt.vector3d(0, 0, 0)
@@ -239,14 +224,13 @@ Interaction {
                 tapHandler.onTapped: function(eventPoint, button) {
                     handleSecondTap(eventPoint)
                 }
-                // azimuthApplyButton.onClicked: function() {}
 
             }
 
             QQ.StateChangeScript {
                 script: () => {
-                    northArrow.p1 = firstScreenPoint
-                    northArrow.p2 = firstScreenPoint
+                    northArrow.p1 = _firstScreenPoint
+                    northArrow.p2 = _firstScreenPoint
                 }
             }
         },
@@ -257,18 +241,14 @@ Interaction {
                 hoverHandler.onPointChanged: function() {}
                 northArrow.visible: true
                 azimuthPanel.visible: true
-                azimuthInput.text: Number(lidarNorthInteraction.userAzimuth).toFixed(1)
+                azimuthInput.text: Number(lidarNorthInteraction._userAzimuth).toFixed(1)
                 helpBox.text: "Confirm or adjust measured azimuth"
                 tapHandler.onTapped: function(eventPoint, button) {
                     handleFirstTap(eventPoint)
                 }
-                // azimuthApplyButton.onClicked: function() {
-                //     noteTransform.northUp = lidarNorthInteraction.measuredBearing + lidarNorthInteraction.userAzimuth
-                //     finish()
-                // }
             }
             QQ.StateChangeScript {
-                script: setAzimuthPanelPosition(secondScreenPoint)
+                script: setAzimuthPanelPosition(_secondScreenPoint)
             }
         }
     ]

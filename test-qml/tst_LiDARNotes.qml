@@ -153,8 +153,6 @@ MainWindowTest {
                     mouseClick(noteLiDARNorthInteraction_obj3, 319.91, 514.371)
                     mouseClick(noteLiDARNorthInteraction_obj3, 203.246, 244.637)
 
-                    // wait(3000)
-
                     let azimuth = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARNorthInteraction->azimuthInput")
                     mouseClick(azimuth)
 
@@ -166,15 +164,11 @@ MainWindowTest {
 
                     tryVerify(() => { return azimuth.text === "62.0"; })
 
-                    // wait(100000)
-                    // wait(100)
-
                     let apply = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARNorthInteraction->apply")
                     mouseClick(apply)
 
                     let northFieldObject = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->northField")
                     tryVerify(() => {
-                                          console.log("North feild:" + northFieldObject.text + "=== 272.7")
                                           return northFieldObject.text === "274.5"
                               })
 

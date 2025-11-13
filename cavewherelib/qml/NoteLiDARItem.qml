@@ -52,9 +52,8 @@ RegionViewer {
     NoteLiDARNorthInteraction {
         id: lidarNorthInteraction
         anchors.fill: parent
-        viewer: rhiViewerId
+        modelMatrix: sceneId.gltf.modelMatrix
         turnTableInteraction: turnTableInteractionId
-        scene: sceneId
         note: rhiViewerId.note
     }
 
