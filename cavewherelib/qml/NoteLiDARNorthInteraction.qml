@@ -62,6 +62,10 @@ Interaction {
         }
         firstPick = hit
         firstScreenPoint = eventPoint.position
+        northArrowProjector.enabled = true
+        northArrowProjector.p1World = hit.pointModel
+        northArrow.p1 = firstScreenPoint
+        northArrow.p2 = firstScreenPoint
         state = "AwaitSecondPick"
     }
 
@@ -75,6 +79,9 @@ Interaction {
         }
         secondScreenPoint = eventPoint.position
         secondPoint = hit.pointModel
+        northArrowProjector.p1World = firstPick.pointModel
+        northArrowProjector.p2World = secondPoint
+        northArrowProjector.enabled = true
         measuredBearing = noteTransform.calculateNorth(firstPick.pointModel, secondPoint)
         if (isNaN(measuredBearing)) {
             measuredBearing = noteTransform.northUp
@@ -110,30 +117,7 @@ Interaction {
 
     onTurnTableInteractionChanged: pitchAnimator.target = turnTableInteraction
 
-    // onActivated: {
-    //     console.log("Active!")
-    //     state = ""
-    //     turnTableInteraction.visible = true;
-    //     turnTableInteraction.enable = true;
-
-    //     // if (turnTableInteraction) {
-    //     //     originalPitch = turnTableInteraction.pitch
-    //     //     originalPitchValid = true
-    //     //     previousPitchLocked = turnTableInteraction.pitchLocked
-    //     //     turnTableInteraction.pitchLocked = true
-    //     //     animatePitch(90.0)
-    //     // } else {
-    //     //     originalPitchValid = false
-    //     // }
-    // }
-
     onDeactivated: {
-        // if (turnTableInteraction) {
-        //     turnTableInteraction.pitchLocked = previousPitchLocked
-        // }
-        // if (turnTableInteraction && originalPitchValid) {
-        //     animatePitch(originalPitch)
-        // }
         state = ""
     }
 
@@ -162,6 +146,14 @@ Interaction {
         anchors.fill: parent
         visible: false
         parent: lidarNorthInteraction
+    }
+
+    TwoPointProjector {
+        id: northArrowProjector
+        target: northArrow
+        camera: viewer ? viewer.camera : null
+        modelMatrix: scene && scene.gltf ? scene.gltf.modelMatrix : Qt.matrix4x4()
+        enabled: false
     }
 
     RowLayoutPanel {
@@ -220,6 +212,9 @@ Interaction {
                     secondPoint = Qt.vector3d(0, 0, 0)
                     measuredBearing = 0.0
                     userAzimuth = 0.0
+                    northArrowProjector.enabled = false
+                    northArrowProjector.p1World = Qt.vector3d(0, 0, 0)
+                    northArrowProjector.p2World = Qt.vector3d(0, 0, 0)
                 }
             }
         },
@@ -231,7 +226,6 @@ Interaction {
                     northArrow.p2 = hoverHandler.point.position
                 }
                 northArrow.visible: true
-                northArrow.p1: firstScreenPoint
                 azimuthPanel.visible: false
                 helpBox.text: "<b>Click</b> second point to set north"
                 tapHandler.onTapped: function(eventPoint, button) {
@@ -243,6 +237,7 @@ Interaction {
 
             QQ.StateChangeScript {
                 script: () => {
+                    northArrow.p1 = firstScreenPoint
                     northArrow.p2 = firstScreenPoint
                 }
             }
@@ -253,8 +248,6 @@ Interaction {
                 hoverHandler.enabled: false
                 hoverHandler.onPointChanged: function() {}
                 northArrow.visible: true
-                northArrow.p1: firstScreenPoint
-                northArrow.p2: secondScreenPoint
                 azimuthPanel.visible: true
                 azimuthInput.text: Number(lidarNorthInteraction.userAzimuth).toFixed(1)
                 helpBox.text: "Confirm or adjust measured azimuth"
