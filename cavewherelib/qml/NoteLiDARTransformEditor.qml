@@ -32,26 +32,26 @@ QQ.Item {
     implicitWidth: floatingBox.implicitWidth
 
     // ---- Bind interactions to the active transformation ----------------------
-    QQ.Binding {
-        target: editor.northInteraction
-        property: "noteTransform"
-        value: editor.noteTransform
-        when: editor.northInteraction !== null
-    }
+    // QQ.Binding {
+    //     target: editor.northInteraction
+    //     property: "noteTransform"
+    //     value: editor.noteTransform
+    //     when: editor.northInteraction !== null
+    // }
 
-    QQ.Binding {
-        target: editor.scaleInteraction
-        property: "noteTransform"
-        value: editor.noteTransform
-        when: editor.scaleInteraction !== null
-    }
+    // QQ.Binding {
+    //     target: editor.scaleInteraction
+    //     property: "noteTransform"
+    //     value: editor.noteTransform
+    //     when: editor.scaleInteraction !== null
+    // }
 
-    QQ.Binding {
-        target: editor.upInteraction
-        property: "noteTransform"
-        value: editor.noteTransform
-        when: editor.upInteraction !== null
-    }
+    // QQ.Binding {
+    //     target: editor.upInteraction
+    //     property: "noteTransform"
+    //     value: editor.noteTransform
+    //     when: editor.upInteraction !== null
+    // }
 
     // ---- Helpers --------------------------------------------------------------
     readonly property var upModeEntries: [
