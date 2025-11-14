@@ -5,6 +5,7 @@
 // Qt
 #include <QMatrix4x4>
 #include <QQuaternion>
+#include <QVector2D>
 #include <QVector3D>
 #include <QSignalSpy>
 
@@ -192,4 +193,32 @@ TEST_CASE("cwNoteLiDARTransformation signals fire correctly", "[cwNoteLiDARTrans
 
     REQUIRE(spyRot.count() >= 1);
     REQUIRE(spyMode.count() >= 1);
+}
+
+TEST_CASE("cwNoteLiDARTransformation calculated angles and quaternions", "[cwNoteLiDARTransformation]") {
+    cwNoteLiDARTransformation t;
+    t.setUpMode(cwNoteLiDARTransformation::UpMode::Custom);
+    t.setUpCustom(QQuaternion()); // identity for predictable results
+
+    const QVector3D origin(0, 0, 0);
+
+    SECTION("calculateUpQuaternion tilts to requested vertical angle") {
+        const QVector3D endpoint(0, 2, 2); // ~45 degree incline in +Y
+
+        const QQuaternion q = t.calculateUpQuaternion(origin, endpoint, 80.0);
+        const QVector3D rotated = q.rotatedVector(endpoint - origin);
+        const QVector2D planar(rotated.x(), rotated.y());
+        const double newAngle = qRadiansToDegrees(qAtan2(rotated.z(), planar.length()));
+        REQUIRE_THAT(newAngle, WithinAbs(80.0, 1e-3));
+    }
+
+    SECTION("calculateUpQuaternion clamps beyond +/-90 degrees") {
+        const QVector3D endpoint(0, 1, 0.5);
+        const QQuaternion q = t.calculateUpQuaternion(origin, endpoint, 150.0);
+        const QVector3D rotated = q.rotatedVector(endpoint - origin);
+        const QVector2D planar(rotated.x(), rotated.y());
+        const double newAngle = qRadiansToDegrees(qAtan2(rotated.z(), planar.length()));
+        REQUIRE(newAngle <= 90.0);
+        REQUIRE_THAT(newAngle, WithinAbs(90.0, 1e-3));
+    }
 }

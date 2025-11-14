@@ -144,17 +144,27 @@ MainWindowTest {
                     //Escape out of the tool
                     keyClick(16777216, 0) //Esc
 
+                    wait(100)
+
                     //Make sure the tool works again
                     //Go through the tool
                      northToolButton_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->northToolButton")
                     mouseClick(northToolButton_obj2)
 
+                    wait(100)
+
                     noteLiDARNorthInteraction_obj3 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARNorthInteraction")
                     mouseClick(noteLiDARNorthInteraction_obj3, 319.91, 514.371)
+                    mouseMove(noteLiDARNorthInteraction_obj3, 203.246, 244.637, 100)
                     mouseClick(noteLiDARNorthInteraction_obj3, 203.246, 244.637)
 
+                    wait(100)
+
                     let azimuth = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARNorthInteraction->azimuthInput")
+
                     mouseClick(azimuth)
+
+                    wait(100)
 
                     waitForRendering(azimuth);
 
@@ -162,10 +172,13 @@ MainWindowTest {
                     keyClick(50, 0) //2
                     keyClick(16777220, 0) //Return
 
+                    wait(100)
+
                     tryVerify(() => { return azimuth.text === "62.0"; })
 
                     let apply = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARNorthInteraction->apply")
                     mouseClick(apply)
+
 
                     let northFieldObject = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->northField")
                     tryVerify(() => {
@@ -179,7 +192,7 @@ MainWindowTest {
         }
 
         function test_upInteraction() {
-            wait(100)
+            wait(1000000)
         }
     }
 }

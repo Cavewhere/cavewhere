@@ -20,7 +20,7 @@ RegionViewer {
         }
 
         gltf.onStatusChanged: () => {
-                                  if(gltf.status == RenderGLTF.Ready) {
+                                  if(gltf.status === RenderGLTF.Ready) {
                                       turnTableInteractionId.zoomTo(gltf.boundingBox())
                                   }
                               }
@@ -60,9 +60,8 @@ RegionViewer {
     NoteLiDARUpInteraction {
         id: lidarUpInteraction
         anchors.fill: parent
-        viewer: rhiViewerId
+        modelMatrix: sceneId.gltf.modelMatrix
         turnTableInteraction: turnTableInteractionId
-        scene: sceneId
         note: rhiViewerId.note
     }
 

@@ -62,6 +62,9 @@ public:
     cwNoteLiDARTransformationData data() const;
 
     Q_INVOKABLE double calculateNorth(const QVector3D& firstPoint, const QVector3D& secondPoint) const;
+    Q_INVOKABLE QQuaternion calculateUpQuaternion(const QVector3D& firstPoint,
+                                                  const QVector3D& secondPoint,
+                                                  double targetVerticalAngleDegrees) const;
 
 signals:
     void upCustomChanged();

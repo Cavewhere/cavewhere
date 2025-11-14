@@ -158,12 +158,18 @@ QQ.Item {
                 spacing: 8
 
                 NoteToolIconButton {
-                    id: setUpToolBtn
-                    enabled: editor.interactionManager && editor.upInteraction &&
+                    id: setUpToolButton
+                    visible: editor.interactionManager && editor.upInteraction &&
                              editor.noteTransform && editor.noteTransform.upMode === NoteLiDARTransformation.UpMode.Custom
                     iconSource: "qrc:/icons/svg/up.svg"
                     toolTipText: enabled ? "Set up direction with tool" : "To enable tool, set up direction to Custom"
                     onClicked: editor.interactionManager.active(editor.upInteraction)
+                }
+
+                QQ.Item {
+                    visible: !setUpToolButton.visible
+                    width: setUpToolButton.width
+                    height: setNorthToolBtn.height
                 }
 
                 LabelWithHelp {
@@ -217,22 +223,22 @@ QQ.Item {
                 }
 
                 ClickTextInput {
-                    id: quatX; Layout.preferredWidth: 70
+                    id: quatX; //Layout.preferredWidth: 70
                     readOnly: true
                     text: editor.noteTransform ? editor.noteTransform.upRotation.x.toFixed(4) : "0.0000"
                 }
                 ClickTextInput {
-                    id: quatY; Layout.preferredWidth: 70
+                    id: quatY; //Layout.preferredWidth: 70
                     readOnly: true
                     text: editor.noteTransform ? editor.noteTransform.upRotation.y.toFixed(4) : "0.0000"
                 }
                 ClickTextInput {
-                    id: quatZ; Layout.preferredWidth: 70
+                    id: quatZ; //Layout.preferredWidth: 70
                     readOnly: true
                     text: editor.noteTransform ? editor.noteTransform.upRotation.z.toFixed(4) : "0.0000"
                 }
                 ClickTextInput {
-                    id: quatW; Layout.preferredWidth: 70
+                    id: quatW; //Layout.preferredWidth: 70
                     readOnly: true
                     text: editor.noteTransform ? editor.noteTransform.upRotation.scalar.toFixed(4) : "1.0000"
                 }

@@ -1,37 +1,48 @@
+
 /**************************************************************************
 **
 **    NoteLiDARUpInteraction.qml
-**    Placeholder interaction for setting the LiDAR up direction.
+**    Interactive tool for aligning LiDAR up rotation via two picked points.
 **
 **************************************************************************/
 
-import QtQuick as QQ
 import cavewherelib
 
-Interaction {
+NoteLiDARTwoPointInteraction {
     id: lidarUpInteraction
     objectName: "noteLiDARUpInteraction"
 
-    property NoteLiDARTransformation noteTransform
-    property NoteLiDAR note
-    property RegionViewer viewer
-    property TurnTableInteraction turnTableInteraction
-    property GltfScene scene
+    panelLabel: "Vertical"
+    firstHelpText: "<b>Click</b> first up reference point"
+    secondHelpText: "<b>Click</b> second point to set up"
+    adjustHelpText: "Confirm or adjust vertical angle"
+    defaultUserValue: 90.0
+    valueValidator: ClinoValidator {}
 
-    anchors.fill: parent
-    visible: false
-    enabled: false
-    focus: visible
+    // measurementCalculator: (firstPoint, secondPoint) => {
+    //                            return 0.0; //Unused
 
-    // TODO: Replace with LiDAR up-direction handling workflow.
-    HelpBox {
-        id: helpBox
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: parent.top
-        text: "LiDAR up-direction tool coming soon."
-        visible: lidarUpInteraction.visible
+    //     const noteTransform = note ? note.noteTransformation : null
+    //     if (!noteTransform) {
+    //         return defaultUserValue
+    //     }
+    //     let measured = noteTransform.calculateVerticalAngle(firstPoint, secondPoint)
+    //     if (!Number.isFinite(measured)) {
+    //         measured = defaultUserValue
+    //     }
+    //     return measured
+    // }
+
+    applyHandler: (context) => {
+        const noteTransform = note ? note.noteTransformation : null
+        if (!noteTransform || !context.firstPoint || !context.secondPoint) {
+            return
+        }
+        const upQuaternion = noteTransform.calculateUpQuaternion(context.firstPoint,
+                                                                context.secondPoint,
+                                                                context.userValue)
+        noteTransform.upMode = NoteLiDARTransformation.UpMode.Custom
+        noteTransform.upCustom = upQuaternion
+        noteTransform.upSign = 1.0
     }
-
-    QQ.Keys.onEscapePressed: lidarUpInteraction.deactivate()
 }
-
