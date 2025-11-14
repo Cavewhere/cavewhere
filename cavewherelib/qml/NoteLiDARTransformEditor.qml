@@ -81,6 +81,13 @@ QQ.Item {
         return upModeEntries[Math.max(0, Math.min(idx, upModeEntries.length - 1))]
     }
 
+    component ButtonSpacer: QQ.Item {
+        required property QQ.Item button
+        visible: !button.visible
+        width: button.width
+        height: button.height
+    }
+
     FloatingGroupBox {
         id: floatingBox
         title: "LiDAR Note Transform"
@@ -117,11 +124,15 @@ QQ.Item {
                         NoteToolIconButton {
                             id: setNorthToolBtn
                             objectName: "northToolButton"
-                            enabled: !northAutoGroup.checked && editor.interactionManager && editor.northInteraction
+                            visible: !northAutoGroup.checked && editor.interactionManager && editor.northInteraction
                             iconSource: "qrc:/icons/svg/north.svg"
                             toolTipText: enabled ? "Set north with tool" : "To enable tool, uncheck Auto Calculate"
                             onClicked: editor.interactionManager.active(editor.northInteraction)
                         }
+
+                        // ButtonSpacer {
+                        //     button: setNorthToolBtn
+                        // }
 
                         LabelWithHelp {
                             id: northLabel
@@ -166,11 +177,9 @@ QQ.Item {
                     onClicked: editor.interactionManager.active(editor.upInteraction)
                 }
 
-                QQ.Item {
-                    visible: !setUpToolButton.visible
-                    width: setUpToolButton.width
-                    height: setNorthToolBtn.height
-                }
+                // ButtonSpacer {
+                //     button: setUpToolButton
+                // }
 
                 LabelWithHelp {
                     id: upModeLabel
@@ -225,22 +234,22 @@ QQ.Item {
                 ClickTextInput {
                     id: quatX; //Layout.preferredWidth: 70
                     readOnly: true
-                    text: editor.noteTransform ? editor.noteTransform.upRotation.x.toFixed(4) : "0.0000"
+                    text: editor.noteTransform ? editor.noteTransform.up.x.toFixed(4) : "0.0000"
                 }
                 ClickTextInput {
                     id: quatY; //Layout.preferredWidth: 70
                     readOnly: true
-                    text: editor.noteTransform ? editor.noteTransform.upRotation.y.toFixed(4) : "0.0000"
+                    text: editor.noteTransform ? editor.noteTransform.up.y.toFixed(4) : "0.0000"
                 }
                 ClickTextInput {
                     id: quatZ; //Layout.preferredWidth: 70
                     readOnly: true
-                    text: editor.noteTransform ? editor.noteTransform.upRotation.z.toFixed(4) : "0.0000"
+                    text: editor.noteTransform ? editor.noteTransform.up.z.toFixed(4) : "0.0000"
                 }
                 ClickTextInput {
                     id: quatW; //Layout.preferredWidth: 70
                     readOnly: true
-                    text: editor.noteTransform ? editor.noteTransform.upRotation.scalar.toFixed(4) : "1.0000"
+                    text: editor.noteTransform ? editor.noteTransform.up.scalar.toFixed(4) : "1.0000"
                 }
             }
 
