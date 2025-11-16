@@ -159,7 +159,7 @@ QQ.Item {
                         id: northHelp
                         Layout.fillWidth: true
                         text: "Rotate the LiDAR note so that map-up corresponds to <b>true north</b> " +
-                              "(or your chosen reference). This writes <code>northUp</code> on the base transform."
+                              "Auto calculate need at least 2 survey stations to calculate this."
                     }
                 }
             }
@@ -212,11 +212,9 @@ QQ.Item {
             HelpArea {
                 id: upModeHelp
                 Layout.fillWidth: true
-                text: "Choose which source axis represents <b>Up</b> before north rotation and scaling. " +
-                      "<ul>" +
-                      "<li><b>±X / ±Y / ±Z is up</b>: Pick the source axis and sign that should point up.</li>" +
-                      "<li><b>Custom</b>: Use the arrow tool button to orient the LiDAR and update the <code>upRotation</code> quaternion.</li>" +
-                      "</ul>"
+                text: "Tell CaveWhere which way is up before it rotates north or rescales the scan. " +
+                      "<b>±X / ±Y / ±Z is up</b> works when you know which axis from the capture should point skyward. " +
+                      "Choose <b>Custom</b> when you need to eyeball it—click the arrow tool to tilt the LiDAR until it looks right."
             }
 
             // --- Custom up rotation (quaternion) --------------------------------
@@ -257,8 +255,8 @@ QQ.Item {
                 id: customQuatHelp
                 visible: quatRow.visible
                 Layout.fillWidth: true
-                text: "Quaternion applied first to align the LiDAR’s native up to your desired 'page up'. " +
-                      "Use the up-direction tool button while in Custom mode to adjust it."
+                text: "These four numbers describe the tilt CaveWhere applies before north/scale—think of them as 'which way is up.' " +
+                      "If they look intimidating, just stay in Custom mode and drag the arrow tool; the fields update automatically."
             }
 
             // --- Scale (should generally be 1:1 for LiDAR) ----------------------
