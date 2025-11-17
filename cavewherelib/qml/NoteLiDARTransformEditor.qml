@@ -170,6 +170,7 @@ QQ.Item {
 
                 NoteToolIconButton {
                     id: setUpToolButton
+                    objectName: "setUpToolButton"
                     visible: editor.interactionManager && editor.upInteraction &&
                              editor.noteTransform && editor.noteTransform.upMode === NoteLiDARTransformation.UpMode.Custom
                     iconSource: "qrc:/icons/svg/up.svg"

@@ -6,9 +6,6 @@
 #include <QVector2D>
 #include <QtMath>
 
-// STL
-#include <algorithm>
-
 cwNoteLiDARTransformation::cwNoteLiDARTransformation(QObject* parent)
     : cwAbstractNoteTransformation(parent)
 {
@@ -89,8 +86,6 @@ QQuaternion cwNoteLiDARTransformation::upQuaternion() const
 
 double cwNoteLiDARTransformation::calculateNorth(const QVector3D &firstPoint, const QVector3D &secondPoint) const
 {
-
-
     QVector3D delta = secondPoint - firstPoint;
     if (delta.lengthSquared() < 1e-12f) {
         return northUp();
@@ -111,50 +106,36 @@ double cwNoteLiDARTransformation::calculateNorth(const QVector3D &firstPoint, co
     return angle;
 }
 
-QQuaternion cwNoteLiDARTransformation::calculateUpQuaternion(const QVector3D &firstPoint,
-                                                             const QVector3D &secondPoint,
-                                                             double targetVerticalAngleDegrees) const
+double cwNoteLiDARTransformation::calculateVerticalAngle(const QVector3D &firstPoint, const QVector3D &secondPoint) const
 {
     QVector3D delta = secondPoint - firstPoint;
     if (delta.lengthSquared() < 1e-12f) {
-        return up();
+        return 90.0;
     }
 
-    const QQuaternion currentUp = up();
-    QVector3D rotated = currentUp.rotatedVector(delta);
-    if (rotated.lengthSquared() < 1e-12f) {
-        return currentUp;
-    }
-    rotated.normalize();
-
-    QVector2D planar(rotated.x(), rotated.y());
-    QVector2D planarNorm;
-    if (planar.lengthSquared() < 1e-6f) {
-        planarNorm = QVector2D(0.0f, 1.0f);
-    } else {
-        planarNorm = planar.normalized();
+    QVector3D normalized = delta.normalized();
+    QVector2D planar(normalized.x(), normalized.y());
+    const float planarLen = planar.length();
+    if (planarLen < 1e-6f) {
+        return (normalized.z() >= 0.0f) ? 90.0 : -90.0;
     }
 
-    const double clampedAngle = std::clamp(targetVerticalAngleDegrees, -90.0, 90.0);
-    const double radians = qDegreesToRadians(clampedAngle);
-    const float cosVert = float(qCos(radians));
-    const float sinVert = float(qSin(radians));
+    const double angle = qRadiansToDegrees(qAtan2(normalized.z(), planarLen));
+    return angle;
+}
 
-    QVector3D targetDir(planarNorm.x() * cosVert,
-                        planarNorm.y() * cosVert,
-                        sinVert);
-    if (targetDir.lengthSquared() < 1e-12f) {
-        targetDir = QVector3D(0.0f, 0.0f, sinVert >= 0.0f ? 1.0f : -1.0f);
-    } else {
-        targetDir.normalize();
+QQuaternion cwNoteLiDARTransformation::calculateUpQuaternion(const QVector3D &firstPoint,
+                                                             const QVector3D &secondPoint) const
+{
+    QVector3D delta = secondPoint - firstPoint;
+    if (delta.lengthSquared() < 1e-12f) {
+        return upQuaternion();
     }
 
-    QQuaternion rotation = QQuaternion::rotationTo(rotated, targetDir);
-    if (rotation.isIdentity()) {
-        return currentUp;
-    }
+    QVector3D normalized = delta.normalized();
+    const QVector3D target(0.0f, 0.0f, 1.0f);
 
-    QQuaternion result = rotation * currentUp;
-    result.normalize();
-    return result;
+    QQuaternion rotation = QQuaternion::rotationTo(normalized, target);
+    rotation.normalize();
+    return rotation;
 }

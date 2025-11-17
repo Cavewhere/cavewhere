@@ -53,6 +53,14 @@ MainWindowTest {
                    Math.abs(a.z - b.z) < epsilon;
         }
 
+        function quatMultiply(a, b) {
+            return Qt.quaternion(
+                        a.scalar * b.scalar - a.x * b.x - a.y * b.y - a.z * b.z,
+                        a.scalar * b.x + a.x * b.scalar + a.y * b.z - a.z * b.y,
+                        a.scalar * b.y - a.x * b.z + a.y * b.scalar + a.z * b.x,
+                        a.scalar * b.z + a.x * b.y - a.y * b.x + a.z * b.scalar);
+        }
+
         function test_lidarCarpeting() {
             let carpetButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
             mouseClick(carpetButton)
@@ -192,7 +200,32 @@ MainWindowTest {
         }
 
         function test_upInteraction() {
-            wait(1000000)
+            let noteTransform = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor").noteTransform
+            let oldUp = noteTransform.up;
+
+            let upModeCombo_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->upModeCombo")
+            let index = upModeCombo_obj1.find("Custom", Qt.MatchExactly)
+            upModeCombo_obj1.currentIndex = index
+            upModeCombo_obj1.activated(index)
+
+            verify(upModeCombo_obj1.displayText === "Custom");
+
+            wait(100)
+
+            let setUpToolButton_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->setUpToolButton")
+            mouseClick(setUpToolButton_obj1)
+
+            wait(100)
+
+            let noteLiDARUpInteraction_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARUpInteraction")
+            mouseClick(noteLiDARUpInteraction_obj1, 60.8242, 396.969)
+            mouseClick(noteLiDARUpInteraction_obj1, 56.8516, 300.746)
+
+            let newUp = noteTransform.up
+            let dot = Math.abs(oldUp.scalar * newUp.scalar + oldUp.x * newUp.x + oldUp.y * newUp.y + oldUp.z * newUp.z)
+            dot = Math.min(1.0, Math.max(-1.0, dot))
+            let angleDiff = 2.0 * Math.acos(dot) * 180.0 / Math.PI
+            verify(angleDiff < 0.1);
         }
     }
 }

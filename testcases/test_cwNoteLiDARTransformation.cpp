@@ -5,7 +5,6 @@
 // Qt
 #include <QMatrix4x4>
 #include <QQuaternion>
-#include <QVector2D>
 #include <QVector3D>
 #include <QSignalSpy>
 
@@ -32,6 +31,7 @@ static inline QQuaternion fromAxisDeg(const QVector3D& axis, float deg) {
 TEST_CASE("cwNoteLiDARTransformation defaults are sane", "[cwNoteLiDARTransformation]") {
 
     cwNoteLiDARTransformation t;
+    t.setUpMode(cwNoteLiDARTransformation::UpMode::ZisUp);
     REQUIRE(t.upMode() == cwNoteLiDARTransformation::UpMode::ZisUp);
     REQUIRE(t.upCustom().isIdentity());
     REQUIRE_THAT(t.upSign(), WithinAbs(1.0f, 1e-6f)); // default is +1
@@ -202,23 +202,29 @@ TEST_CASE("cwNoteLiDARTransformation calculated angles and quaternions", "[cwNot
 
     const QVector3D origin(0, 0, 0);
 
-    SECTION("calculateUpQuaternion tilts to requested vertical angle") {
-        const QVector3D endpoint(0, 2, 2); // ~45 degree incline in +Y
-
-        const QQuaternion q = t.calculateUpQuaternion(origin, endpoint, 80.0);
-        const QVector3D rotated = q.rotatedVector(endpoint - origin);
-        const QVector2D planar(rotated.x(), rotated.y());
-        const double newAngle = qRadiansToDegrees(qAtan2(rotated.z(), planar.length()));
-        REQUIRE_THAT(newAngle, WithinAbs(80.0, 1e-3));
+    SECTION("Horizontal segment returns zero vertical angle") {
+        const QVector3D endpoint(5, 0, 0);
+        REQUIRE_THAT(t.calculateVerticalAngle(origin, endpoint), WithinAbs(0.0, 1e-5));
     }
 
-    SECTION("calculateUpQuaternion clamps beyond +/-90 degrees") {
-        const QVector3D endpoint(0, 1, 0.5);
-        const QQuaternion q = t.calculateUpQuaternion(origin, endpoint, 150.0);
+    SECTION("Vertical segment reports +/-90 degrees") {
+        REQUIRE_THAT(t.calculateVerticalAngle(origin, QVector3D(0, 0, 5)), WithinAbs(90.0, 1e-5));
+        REQUIRE_THAT(t.calculateVerticalAngle(origin, QVector3D(0, 0, -5)), WithinAbs(-90.0, 1e-5));
+    }
+
+    SECTION("calculateUpQuaternion aligns the picked vector to +Z") {
+        const QVector3D endpoint(1, 2, 0.5f);
+        const QQuaternion q = t.calculateUpQuaternion(origin, endpoint);
         const QVector3D rotated = q.rotatedVector(endpoint - origin);
-        const QVector2D planar(rotated.x(), rotated.y());
-        const double newAngle = qRadiansToDegrees(qAtan2(rotated.z(), planar.length()));
-        REQUIRE(newAngle <= 90.0);
-        REQUIRE_THAT(newAngle, WithinAbs(90.0, 1e-3));
+        REQUIRE_THAT(rotated.x(), WithinAbs(0.0, 1e-4));
+        REQUIRE_THAT(rotated.y(), WithinAbs(0.0, 1e-4));
+        REQUIRE(rotated.z() > 0.0f);
+    }
+
+    SECTION("calculateUpQuaternion returns current up when delta is degenerate") {
+        t.setUpCustom(fromAxisDeg({0, 1, 0}, 33.0f));
+        t.setUpMode(cwNoteLiDARTransformation::UpMode::Custom);
+        const QQuaternion q = t.calculateUpQuaternion(origin, origin);
+        REQUIRE(q == t.up());
     }
 }

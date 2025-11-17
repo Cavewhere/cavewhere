@@ -30,6 +30,8 @@ Interaction {
     property string valueInputObjectName: "valueInput"
     property string applyButtonObjectName: "apply"
     property alias valueValidator: valueInput.validator
+    property bool showAdjustmentPanel: true
+    property bool autoApplyAfterSecondPick: false
 
     readonly property bool _hasFirstPoint: _firstPick !== null
 
@@ -104,6 +106,11 @@ Interaction {
         }
         _measuredValue = measured
         _userValue = defaultUserValue
+        if (autoApplyAfterSecondPick) {
+            applyMeasurement()
+            finish()
+            return
+        }
         state = "AwaitAdjust"
     }
 
@@ -115,6 +122,17 @@ Interaction {
         const pos = twoPointInteraction.mapToItem(parent, screenPoint.x, screenPoint.y)
         valuePanel.x = pos.x - valuePanel.width * 0.5
         valuePanel.y = pos.y + 12
+    }
+
+    function applyMeasurement() {
+        if (typeof applyHandler === "function") {
+            applyHandler({
+                             measuredValue: _measuredValue,
+                             userValue: _userValue,
+                             firstPoint: _firstPick ? _firstPick.pointModel : null,
+                             secondPoint: _secondPoint
+                         })
+        }
     }
 
     QQ.TapHandler {
@@ -171,14 +189,7 @@ Interaction {
             text: "Apply"
             Layout.alignment: Qt.AlignVCenter
             onClicked: {
-                if (typeof twoPointInteraction.applyHandler === "function") {
-                    twoPointInteraction.applyHandler({
-                                                    measuredValue: twoPointInteraction._measuredValue,
-                                                    userValue: twoPointInteraction._userValue,
-                                                    firstPoint: twoPointInteraction._firstPick ? twoPointInteraction._firstPick.pointModel : null,
-                                                    secondPoint: twoPointInteraction._secondPoint
-                                                })
-                }
+                applyMeasurement()
                 finish()
             }
         }
@@ -205,7 +216,6 @@ Interaction {
             //     helpBox.text: twoPointInteraction.firstHelpText
             //     valueInput.text: twoPointInteraction._formatValue(twoPointInteraction.defaultUserValue)
             //     tapHandler.onTapped: function(eventPoint, button) {
-            //         console.log("First tap")
             //         handleFirstTap(eventPoint)
             //     }
             // }
@@ -252,7 +262,7 @@ Interaction {
                 hoverHandler.enabled: false
                 hoverHandler.onPointChanged: function() {}
                 guideArrow.visible: true
-                valuePanel.visible: true
+                valuePanel.visible: twoPointInteraction.showAdjustmentPanel
                 valueInput.text: twoPointInteraction._formatValue(twoPointInteraction._userValue)
                 helpBox.text: twoPointInteraction.adjustHelpText
                 tapHandler.onTapped: function(eventPoint, button) {
@@ -261,7 +271,7 @@ Interaction {
             }
             QQ.StateChangeScript {
                 script: {
-                    if (twoPointInteraction._hasFirstPoint) {
+                    if (twoPointInteraction.showAdjustmentPanel && twoPointInteraction._hasFirstPoint) {
                         setPanelPosition(twoPointInteraction._secondScreenPoint)
                     }
                 }
