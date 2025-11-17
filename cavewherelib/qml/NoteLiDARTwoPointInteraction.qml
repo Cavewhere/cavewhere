@@ -27,8 +27,8 @@ Interaction {
     property var measurementCalculator //type: call back function
     property var applyHandler //type: call back function
     property var valueFormatter //type: call back function
-    property string valueInputObjectName: "valueInput"
-    property string applyButtonObjectName: "apply"
+    property alias valueInputObjectName: valueInput.objectName
+    property alias applyButtonObjectName: valueApplyButton.objectName
     property alias valueValidator: valueInput.validator
     property bool showAdjustmentPanel: true
     property bool autoApplyAfterSecondPick: false
@@ -177,7 +177,7 @@ Interaction {
 
         ClickNumberInput {
             id: valueInput
-            objectName: twoPointInteraction.valueInputObjectName
+            objectName: "valueInput"
             onFinishedEditting: (newText) => {
                 twoPointInteraction._userValue = Number(newText)
             }
@@ -185,7 +185,7 @@ Interaction {
 
         QC.Button {
             id: valueApplyButton
-            objectName: twoPointInteraction.applyButtonObjectName
+            objectName: "apply"
             text: "Apply"
             Layout.alignment: Qt.AlignVCenter
             onClicked: {

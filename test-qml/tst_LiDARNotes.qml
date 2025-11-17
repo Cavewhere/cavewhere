@@ -49,8 +49,8 @@ MainWindowTest {
             }
             epsilon = epsilon || 0.001;
             return Math.abs(a.x - b.x) < epsilon &&
-                   Math.abs(a.y - b.y) < epsilon &&
-                   Math.abs(a.z - b.z) < epsilon;
+                    Math.abs(a.y - b.y) < epsilon &&
+                    Math.abs(a.z - b.z) < epsilon;
         }
 
         function quatMultiply(a, b) {
@@ -126,72 +126,72 @@ MainWindowTest {
                       40, 30,
                       Qt.LeftButton, Qt.NoModifier, 100)
 
-                    wait(100);
+            wait(100);
 
             tryVerify(() => {
-                let current3D = stationIconHandler.position3D !== undefined ? stationIconHandler.position3D : stationItem.position3D
-                let mapping = stationIconHandler.mapToItem(stationIconHandler.parentView, stationIconHandler.parent.x, stationIconHandler.parent.y)
-                let pick = turnTableInteraction_obj3.pick(Qt.point(stationIconHandler.x, stationIconHandler.y))
-                return pick.hit && !vecClose(current3D, oldVec, 0.0001) && vecClose(current3D, pick.pointWorld, 0.0001)
-            })
+                          let current3D = stationIconHandler.position3D !== undefined ? stationIconHandler.position3D : stationItem.position3D
+                          let mapping = stationIconHandler.mapToItem(stationIconHandler.parentView, stationIconHandler.parent.x, stationIconHandler.parent.y)
+                          let pick = turnTableInteraction_obj3.pick(Qt.point(stationIconHandler.x, stationIconHandler.y))
+                          return pick.hit && !vecClose(current3D, oldVec, 0.0001) && vecClose(current3D, pick.pointWorld, 0.0001)
+                      })
         }
 
         function test_northInteraction() {
 
-                    let _obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->checkBox")
-                    mouseClick(_obj1)
+            let _obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->checkBox")
+            mouseClick(_obj1)
 
-                    //Go through the tool
-                    let northToolButton_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->northToolButton")
-                    mouseClick(northToolButton_obj2)
+            //Go through the tool
+            let northToolButton_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->northToolButton")
+            mouseClick(northToolButton_obj2)
 
-                    let noteLiDARNorthInteraction_obj3 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARNorthInteraction")
-                    mouseClick(noteLiDARNorthInteraction_obj3, 203.246, 244.637)
-                    mouseClick(noteLiDARNorthInteraction_obj3, 319.91, 514.371)
+            let noteLiDARNorthInteraction_obj3 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARNorthInteraction")
+            mouseClick(noteLiDARNorthInteraction_obj3, 203.246, 244.637)
+            mouseClick(noteLiDARNorthInteraction_obj3, 319.91, 514.371)
 
-                    //Escape out of the tool
-                    keyClick(16777216, 0) //Esc
+            //Escape out of the tool
+            keyClick(16777216, 0) //Esc
 
-                    wait(100)
+            wait(100)
 
-                    //Make sure the tool works again
-                    //Go through the tool
-                     northToolButton_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->northToolButton")
-                    mouseClick(northToolButton_obj2)
+            //Make sure the tool works again
+            //Go through the tool
+            northToolButton_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->northToolButton")
+            mouseClick(northToolButton_obj2)
 
-                    wait(100)
+            wait(100)
 
-                    noteLiDARNorthInteraction_obj3 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARNorthInteraction")
-                    mouseClick(noteLiDARNorthInteraction_obj3, 319.91, 514.371)
-                    mouseMove(noteLiDARNorthInteraction_obj3, 203.246, 244.637, 100)
-                    mouseClick(noteLiDARNorthInteraction_obj3, 203.246, 244.637)
+            noteLiDARNorthInteraction_obj3 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARNorthInteraction")
+            mouseClick(noteLiDARNorthInteraction_obj3, 319.91, 514.371)
+            mouseMove(noteLiDARNorthInteraction_obj3, 203.246, 244.637, 100)
+            mouseClick(noteLiDARNorthInteraction_obj3, 203.246, 244.637)
 
-                    wait(100)
+            wait(100)
 
-                    let azimuth = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARNorthInteraction->azimuthInput")
+            let azimuth = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARNorthInteraction->azimuthInput")
 
-                    mouseClick(azimuth)
+            mouseClick(azimuth)
 
-                    wait(100)
+            wait(100)
 
-                    waitForRendering(azimuth);
+            waitForRendering(azimuth);
 
-                    keyClick(54, 0) //6
-                    keyClick(50, 0) //2
-                    keyClick(16777220, 0) //Return
+            keyClick(54, 0) //6
+            keyClick(50, 0) //2
+            keyClick(16777220, 0) //Return
 
-                    wait(100)
+            wait(100)
 
-                    tryVerify(() => { return azimuth.text === "62.0"; })
+            tryVerify(() => { return azimuth.text === "62.0"; })
 
-                    let apply = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARNorthInteraction->apply")
-                    mouseClick(apply)
+            let apply = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARNorthInteraction->apply")
+            mouseClick(apply)
 
 
-                    let northFieldObject = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->northField")
-                    tryVerify(() => {
-                                          return northFieldObject.text === "274.5"
-                              })
+            let northFieldObject = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->northField")
+            tryVerify(() => {
+                          return northFieldObject.text === "274.5"
+                      })
 
         }
 
