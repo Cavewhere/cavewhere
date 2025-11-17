@@ -56,7 +56,7 @@ BaseTurnTableInteraction {
     QQ.WheelHandler {
         id: wheelHandlerId
         target: interactionId
-        acceptedDevices: QQ.PointerDevice.Mouse //| QQ.PointerDevice.TouchPad
+        acceptedDevices: QQ.PointerDevice.Mouse | QQ.PointerDevice.TouchPad
         property double lastRotation: 0.0
         rotationScale: 0.1
         onRotationChanged: {
