@@ -32,6 +32,10 @@ Interaction {
     property alias valueValidator: valueInput.validator
     property bool showAdjustmentPanel: true
     property bool autoApplyAfterSecondPick: false
+    property QQ.Component guideItemComponent: null
+    property QQ.Component valueEntryComponent: null
+    readonly property bool hasCustomValueEntry: valueEntryComponent !== null
+    readonly property real measuredValue: _measuredValue
 
     readonly property bool _hasFirstPoint: _firstPick !== null
 
@@ -41,6 +45,8 @@ Interaction {
     property QQ.vector3d _secondPoint: Qt.vector3d(0, 0, 0)
     property real _measuredValue: 0.0
     property real _userValue: defaultUserValue
+
+    signal measurementReady(real measuredValue)
 
     anchors.fill: parent
     visible: false
@@ -55,6 +61,43 @@ Interaction {
             return ""
         }
         return Number(value).toFixed(valuePrecision)
+    }
+
+    function _guideItemObject() {
+        return guideItemLoader.item
+    }
+
+    function _setGuideVisible(visible) {
+        const guideItem = _guideItemObject()
+        if (guideItem) {
+            guideItem.visible = visible
+        }
+    }
+
+    function _setGuideScreenPoints(p1, p2) {
+        const guideItem = _guideItemObject()
+        if (!guideItem) {
+            return
+        }
+        if (p1) {
+            guideItem.p1 = p1
+        }
+        if (p2) {
+            guideItem.p2 = p2
+        }
+    }
+
+    function _updateGuideHover(point) {
+        const guideItem = _guideItemObject()
+        if (guideItem) {
+            guideItem.p2 = point
+        }
+    }
+
+    function _updateDefaultValueInput(value) {
+        if (!hasCustomValueEntry && valueInput) {
+            valueInput.text = _formatValue(value)
+        }
     }
 
     function pickHit(eventPoint) {
@@ -75,8 +118,7 @@ Interaction {
         _firstScreenPoint = eventPoint.position
         guideArrowProjector.enabled = true
         guideArrowProjector.p1World = hit.pointModel
-        guideArrow.p1 = _firstScreenPoint
-        guideArrow.p2 = _firstScreenPoint
+        _setGuideScreenPoints(_firstScreenPoint, _firstScreenPoint)
         state = "AwaitSecondPick"
     }
 
@@ -106,6 +148,8 @@ Interaction {
         }
         _measuredValue = measured
         _userValue = defaultUserValue
+        _updateDefaultValueInput(_userValue)
+        measurementReady(_measuredValue)
         if (autoApplyAfterSecondPick) {
             applyMeasurement()
             finish()
@@ -151,16 +195,33 @@ Interaction {
         enabled: false
     }
 
-    NorthArrowItem {
-        id: guideArrow
+    QQ.Component {
+        id: defaultGuideItemComponent
+        NorthArrowItem {
+            anchors.fill: parent
+            visible: false
+            parent: twoPointInteraction
+        }
+    }
+
+    QQ.Loader {
+        id: guideItemLoader
+        active: true
         anchors.fill: parent
-        visible: false
-        parent: twoPointInteraction
+        sourceComponent: twoPointInteraction.guideItemComponent !== null ?
+                             twoPointInteraction.guideItemComponent :
+                             defaultGuideItemComponent
+        onItemChanged: {
+            if (item) {
+                item.visible = false
+                item.parent = twoPointInteraction
+            }
+        }
     }
 
     TwoPointProjector {
         id: guideArrowProjector
-        target: guideArrow
+        target: guideItemLoader.item
         camera: twoPointInteraction.turnTableInteraction.camera
         modelMatrix: twoPointInteraction.modelMatrix
         enabled: false
@@ -178,9 +239,20 @@ Interaction {
         ClickNumberInput {
             id: valueInput
             objectName: "valueInput"
+            visible: !twoPointInteraction.hasCustomValueEntry
+            Layout.alignment: Qt.AlignVCenter
             onFinishedEditting: (newText) => {
                 twoPointInteraction._userValue = Number(newText)
+                text = twoPointInteraction._userValue.toFixed(1)
             }
+        }
+
+        QQ.Loader {
+            id: valueEntryLoader
+            visible: twoPointInteraction.hasCustomValueEntry
+            active: twoPointInteraction.hasCustomValueEntry
+            Layout.alignment: Qt.AlignVCenter
+            sourceComponent: twoPointInteraction.valueEntryComponent
         }
 
         QC.Button {
@@ -231,6 +303,8 @@ Interaction {
                     guideArrowProjector.enabled = false
                     guideArrowProjector.p1World = Qt.vector3d(0, 0, 0)
                     guideArrowProjector.p2World = Qt.vector3d(0, 0, 0)
+                    twoPointInteraction._setGuideVisible(false)
+                    twoPointInteraction._updateDefaultValueInput(twoPointInteraction.defaultUserValue)
                 }
             }
         },
@@ -239,9 +313,8 @@ Interaction {
             QQ.PropertyChanges {
                 hoverHandler.enabled: true
                 hoverHandler.onPointChanged: function(event) {
-                    guideArrow.p2 = hoverHandler.point.position
+                    twoPointInteraction._updateGuideHover(hoverHandler.point.position)
                 }
-                guideArrow.visible: true
                 valuePanel.visible: false
                 helpBox.text: twoPointInteraction.secondHelpText
                 tapHandler.onTapped: function(eventPoint, button) {
@@ -251,8 +324,9 @@ Interaction {
 
             QQ.StateChangeScript {
                 script: {
-                    guideArrow.p1 = twoPointInteraction._firstScreenPoint
-                    guideArrow.p2 = twoPointInteraction._firstScreenPoint
+                    twoPointInteraction._setGuideVisible(true)
+                    twoPointInteraction._setGuideScreenPoints(twoPointInteraction._firstScreenPoint,
+                                                              twoPointInteraction._firstScreenPoint)
                 }
             }
         },
@@ -261,9 +335,7 @@ Interaction {
             QQ.PropertyChanges {
                 hoverHandler.enabled: false
                 hoverHandler.onPointChanged: function() {}
-                guideArrow.visible: true
                 valuePanel.visible: twoPointInteraction.showAdjustmentPanel
-                valueInput.text: twoPointInteraction._formatValue(twoPointInteraction._userValue)
                 helpBox.text: twoPointInteraction.adjustHelpText
                 tapHandler.onTapped: function(eventPoint, button) {
                     handleFirstTap(eventPoint)
@@ -274,6 +346,7 @@ Interaction {
                     if (twoPointInteraction.showAdjustmentPanel && twoPointInteraction._hasFirstPoint) {
                         setPanelPosition(twoPointInteraction._secondScreenPoint)
                     }
+                    twoPointInteraction._setGuideVisible(true)
                 }
             }
         }

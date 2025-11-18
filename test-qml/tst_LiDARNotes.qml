@@ -53,14 +53,6 @@ MainWindowTest {
                     Math.abs(a.z - b.z) < epsilon;
         }
 
-        function quatMultiply(a, b) {
-            return Qt.quaternion(
-                        a.scalar * b.scalar - a.x * b.x - a.y * b.y - a.z * b.z,
-                        a.scalar * b.x + a.x * b.scalar + a.y * b.z - a.z * b.y,
-                        a.scalar * b.y - a.x * b.z + a.y * b.scalar + a.z * b.x,
-                        a.scalar * b.z + a.x * b.y - a.y * b.x + a.z * b.scalar);
-        }
-
         function test_lidarCarpeting() {
             let carpetButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
             mouseClick(carpetButton)
@@ -196,7 +188,48 @@ MainWindowTest {
         }
 
         function test_scaleInteraction() {
+            let transformEditor = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor")
+            let noteTransform = transformEditor.noteTransform
+            verify(noteTransform !== null)
+
+            let setLengthButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->setLengthButton")
+            mouseClick(setLengthButton)
+
             wait(100)
+
+            let scaleInteraction = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARScaleInteraction")
+            tryVerify(() => scaleInteraction.visible)
+            mouseClick(scaleInteraction, 203.246, 244.637)
+            mouseClick(scaleInteraction, 319.91, 514.371)
+
+            wait(100)
+
+            let measured = scaleInteraction.measuredValue
+            verify(measured > 0)
+
+            let lengthInput = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARScaleInteraction->scaleLengthInput->coreTextInput")
+            mouseClick(lengthInput)
+
+            keyClick(49, 0) //1
+            keyClick(48, 0) //0
+            keyClick(16777220, 0) //Return
+
+            let applyButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARScaleInteraction->apply")
+            mouseClick(applyButton)
+
+            let expectedScale = measured / 10.0
+
+            tryVerify(() => {
+                          return Math.abs(noteTransform.scale - expectedScale) < 0.0001
+                      })
+
+            tryVerify(() => {
+                          let numerator = noteTransform.scaleNumerator
+                          let denominator = noteTransform.scaleDenominator
+                          return numerator.unit === Units.LengthUnitless &&
+                                  Math.abs(numerator.value - measured) < 0.0001 &&
+                                  Math.abs(denominator.value - 10.0) < 0.0001
+                      })
         }
 
         function test_upInteraction() {
