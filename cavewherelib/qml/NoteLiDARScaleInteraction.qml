@@ -16,8 +16,8 @@ NoteLiDARTwoPointInteraction {
     required property RegionViewer viewer
     property GltfScene scene
 
-    panelLabel: measuredValue > 0
-                ? `Real length (model ${formatModelLength(measuredValue)} units)`
+    panelLabel: _measuredValue > 0
+                ? `${formatModelLength(_measuredValue)} units in model = Real length`
                 : "Real length"
     firstHelpText: "<b>Click</b> the first point to define scale"
     secondHelpText: "<b>Click</b> the second point"
@@ -35,7 +35,7 @@ NoteLiDARTwoPointInteraction {
         value: 1.0
     }
 
-    measurementCalculator: (firstPoint, secondPoint) => {
+    function measurementCalculator(firstPoint, secondPoint)  {
         return firstPoint.minus(secondPoint).length();
     }
 
@@ -52,14 +52,12 @@ NoteLiDARTwoPointInteraction {
         return value.toFixed(3)
     }
 
-    applyHandler: (context) => {
+    function applyHandler(context) {
         if (!noteTransform || !context) {
             return
         }
+
         const scaleObj = noteTransform.scaleObject
-        if (!scaleObj) {
-            return
-        }
         const measured = Number(context.measuredValue)
         const realLength = Number(realWorldLength.value)
         if (!Number.isFinite(measured) || measured <= 0.0 ||
@@ -84,6 +82,11 @@ NoteLiDARTwoPointInteraction {
         ScaleLengthItem {
             anchors.fill: parent
             visible: false
+
+            //Don't add zoom, operate in screenspace
+            // zoom: (lidarScaleInteraction.viewer && lidarScaleInteraction.viewer.camera)
+            //       ? lidarScaleInteraction.viewer.camera.zoomScale
+            //       : 1.0
         }
     }
 

@@ -17,6 +17,7 @@ Interaction {
     required property NoteLiDAR note
     required property TurnTableInteraction turnTableInteraction
     required property QQ.matrix4x4 modelMatrix
+    required property QQ.Component guideItemComponent
 
     property string firstHelpText: "<b>Click</b> first reference point"
     property string secondHelpText: "<b>Click</b> second reference point"
@@ -24,20 +25,12 @@ Interaction {
     property string panelLabel: "Value"
     property real defaultUserValue: 0.0
     property int valuePrecision: 1
-    property var measurementCalculator //type: call back function
-    property var applyHandler //type: call back function
-    property var valueFormatter //type: call back function
-    property alias valueInputObjectName: valueInput.objectName
-    property alias applyButtonObjectName: valueApplyButton.objectName
     property alias valueValidator: valueInput.validator
     property bool showAdjustmentPanel: true
     property bool autoApplyAfterSecondPick: false
-    property QQ.Component guideItemComponent: null
     property QQ.Component valueEntryComponent: null
     readonly property bool hasCustomValueEntry: valueEntryComponent !== null
     readonly property real measuredValue: _measuredValue
-
-    readonly property bool _hasFirstPoint: _firstPick !== null
 
     property var _firstPick: null // type: cwRayTriangleHit
     property point _firstScreenPoint: Qt.point(0, 0)
@@ -46,21 +39,30 @@ Interaction {
     property real _measuredValue: 0.0
     property real _userValue: defaultUserValue
 
-    signal measurementReady(real measuredValue)
-
     anchors.fill: parent
     visible: false
     enabled: false
     focus: visible
 
-    function _formatValue(value) {
-        if (typeof valueFormatter === "function") {
-            return valueFormatter(value)
-        }
+    function measurementCalculator(firstPoint, secondPoint) {
+        // firstPoint
+        // secondPoint
+        return NaN
+    }
+
+    function applyHandler(context) {
+        // context
+    }
+
+    function valueFormatter(value) {
         if (!Number.isFinite(value)) {
             return ""
         }
         return Number(value).toFixed(valuePrecision)
+    }
+
+    function _formatValue(value) {
+        return valueFormatter(value)
     }
 
     function _guideItemObject() {
@@ -122,17 +124,7 @@ Interaction {
         state = "AwaitSecondPick"
     }
 
-    function _calculateMeasurement(firstPoint, secondPoint) {
-        if (typeof measurementCalculator === "function") {
-            return measurementCalculator(firstPoint, secondPoint)
-        }
-        return NaN
-    }
-
     function handleSecondTap(eventPoint) {
-        if (!_hasFirstPoint) {
-            return
-        }
         const hit = pickHit(eventPoint)
         if (!hit) {
             return
@@ -142,14 +134,10 @@ Interaction {
         guideArrowProjector.p1World = _firstPick.pointModel
         guideArrowProjector.p2World = _secondPoint
         guideArrowProjector.enabled = true
-        let measured = _calculateMeasurement(_firstPick.pointModel, _secondPoint)
-        if (!Number.isFinite(measured)) {
-            measured = defaultUserValue
-        }
-        _measuredValue = measured
+        const measured = measurementCalculator(_firstPick.pointModel, _secondPoint)
+        _measuredValue = Number.isFinite(measured) ? measured : defaultUserValue
         _userValue = defaultUserValue
         _updateDefaultValueInput(_userValue)
-        measurementReady(_measuredValue)
         if (autoApplyAfterSecondPick) {
             applyMeasurement()
             finish()
@@ -169,14 +157,12 @@ Interaction {
     }
 
     function applyMeasurement() {
-        if (typeof applyHandler === "function") {
-            applyHandler({
-                             measuredValue: _measuredValue,
-                             userValue: _userValue,
-                             firstPoint: _firstPick ? _firstPick.pointModel : null,
-                             secondPoint: _secondPoint
-                         })
-        }
+        applyHandler({
+                         measuredValue: _measuredValue,
+                         userValue: _userValue,
+                         firstPoint: _firstPick ? _firstPick.pointModel : null,
+                         secondPoint: _secondPoint
+                     })
     }
 
     QQ.TapHandler {
@@ -195,22 +181,11 @@ Interaction {
         enabled: false
     }
 
-    QQ.Component {
-        id: defaultGuideItemComponent
-        NorthArrowItem {
-            anchors.fill: parent
-            visible: false
-            parent: twoPointInteraction
-        }
-    }
-
     QQ.Loader {
         id: guideItemLoader
         active: true
         anchors.fill: parent
-        sourceComponent: twoPointInteraction.guideItemComponent !== null ?
-                             twoPointInteraction.guideItemComponent :
-                             defaultGuideItemComponent
+        sourceComponent: twoPointInteraction.guideItemComponent
         onItemChanged: {
             if (item) {
                 item.visible = false
@@ -243,7 +218,6 @@ Interaction {
             Layout.alignment: Qt.AlignVCenter
             onFinishedEditting: (newText) => {
                 twoPointInteraction._userValue = Number(newText)
-                text = twoPointInteraction._userValue.toFixed(1)
             }
         }
 
@@ -305,6 +279,7 @@ Interaction {
                     guideArrowProjector.p2World = Qt.vector3d(0, 0, 0)
                     twoPointInteraction._setGuideVisible(false)
                     twoPointInteraction._updateDefaultValueInput(twoPointInteraction.defaultUserValue)
+                    helpBox.text = twoPointInteraction.firstHelpText
                 }
             }
         },
@@ -340,13 +315,15 @@ Interaction {
                 tapHandler.onTapped: function(eventPoint, button) {
                     handleFirstTap(eventPoint)
                 }
+                valueInput.text: twoPointInteraction._formatValue(twoPointInteraction._userValue)
             }
             QQ.StateChangeScript {
                 script: {
-                    if (twoPointInteraction.showAdjustmentPanel && twoPointInteraction._hasFirstPoint) {
+                    if (twoPointInteraction.showAdjustmentPanel && twoPointInteraction._firstPick) {
                         setPanelPosition(twoPointInteraction._secondScreenPoint)
                     }
                     twoPointInteraction._setGuideVisible(true)
+                    helpBox.text = twoPointInteraction.adjustHelpText
                 }
             }
         }

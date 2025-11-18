@@ -74,7 +74,7 @@ QQ.Row {
 
         unit: updateUnit()
 
-        onNewUnit: {
+        onNewUnit: function(unit) {
             if(itemId.unitValue !== null) {
                 itemId.unitValue.unit = privateData.customUnitsToValue[unit]
                 unitInput.unit = updateUnit()

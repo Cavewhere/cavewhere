@@ -5,21 +5,22 @@
 **
 **************************************************************************/
 
+import QtQuick as QQ
 import cavewherelib
 
 NoteLiDARTwoPointInteraction {
     id: lidarNorthInteraction
     objectName: "noteLiDARNorthInteraction"
 
+    guideItemComponent: northGuideComponent
     panelLabel: "Arrow's Azimuth"
     firstHelpText: "<b>Click</b> the first point"
     secondHelpText: "<b>Click</b> the second point"
     adjustHelpText: "What is azimuth of the arrow?"
     defaultUserValue: 0.0
-    valueInputObjectName: "azimuthInput"
     valueValidator: CompassValidator {}
 
-    measurementCalculator: (firstPoint, secondPoint) => {
+    function measurementCalculator(firstPoint, secondPoint) {
         const noteTransform = note ? note.noteTransformation : null
         if (!noteTransform) {
             return NaN
@@ -31,12 +32,20 @@ NoteLiDARTwoPointInteraction {
         return measured
     }
 
-    applyHandler: (context) => {
+    function applyHandler(context) {
         const noteTransform = note ? note.noteTransformation : null
         if (!noteTransform) {
             return
         }
 
         noteTransform.northUp = noteTransform.wrapDegrees360(context.measuredValue - context.userValue)
+    }
+
+    QQ.Component {
+        id: northGuideComponent
+        NorthArrowItem {
+            anchors.fill: parent
+            visible: false
+        }
     }
 }

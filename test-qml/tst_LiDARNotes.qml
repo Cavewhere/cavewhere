@@ -160,7 +160,7 @@ MainWindowTest {
 
             wait(100)
 
-            let azimuth = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARNorthInteraction->azimuthInput")
+            let azimuth = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARNorthInteraction->valueInput")
 
             mouseClick(azimuth)
 
@@ -205,7 +205,7 @@ MainWindowTest {
             wait(100)
 
             let measured = scaleInteraction.measuredValue
-            verify(measured > 0)
+            verify(measured > 1.0) //if this is 1.0 the measuredValue isn't right
 
             let lengthInput = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARScaleInteraction->scaleLengthInput->coreTextInput")
             mouseClick(lengthInput)
