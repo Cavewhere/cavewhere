@@ -32,6 +32,7 @@ class cwGitHubIntegration : public QObject
     Q_PROPERTY(int secondsUntilNextPoll READ secondsUntilNextPoll NOTIFY secondsUntilNextPollChanged)
     Q_PROPERTY(bool verificationOpened READ verificationOpened NOTIFY verificationOpenedChanged)
     Q_PROPERTY(QString username READ username NOTIFY usernameChanged)
+    Q_PROPERTY(bool autoLoadStoredAccount READ autoLoadStoredAccount WRITE setAutoLoadStoredAccount NOTIFY autoLoadStoredAccountChanged)
 
 public:
     enum class AuthState {
@@ -54,6 +55,8 @@ public:
     int secondsUntilNextPoll() const { return m_secondsUntilNextPoll; }
     bool verificationOpened() const { return m_hasOpenedVerificationUrl; }
     QString username() const { return m_username; }
+    bool autoLoadStoredAccount() const { return m_autoLoadStoredAccount; }
+    void setAutoLoadStoredAccount(bool enabled);
 
     Q_INVOKABLE void startDeviceLogin();
     Q_INVOKABLE void cancelLogin();
@@ -74,6 +77,7 @@ signals:
     void secondsUntilNextPollChanged();
     void verificationOpenedChanged();
     void usernameChanged();
+    void autoLoadStoredAccountChanged();
 
 private:
     void setAuthState(AuthState state);
@@ -90,6 +94,7 @@ private:
     void loadStoredAccessToken();
     void clearStoredAccessToken();
     void fetchUserProfile();
+    void maybeLoadStoredAccessToken();
 
     static QString resolveClientId();
 
@@ -107,4 +112,6 @@ private:
     int m_secondsUntilNextPoll = 0;
     bool m_hasOpenedVerificationUrl = false;
     QString m_username;
+    bool m_autoLoadStoredAccount = false;
+    bool m_loadedStoredAccessToken = false;
 };

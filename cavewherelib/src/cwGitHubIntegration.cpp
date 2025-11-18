@@ -46,7 +46,6 @@ cwGitHubIntegration::cwGitHubIntegration(QObject* parent)
                          }
                      });
 
-    loadStoredAccessToken();
 }
 
 void cwGitHubIntegration::startDeviceLogin()
@@ -83,6 +82,7 @@ void cwGitHubIntegration::cancelLogin()
     m_repositories.clear();
     emit accessTokenChanged();
     emit repositoriesChanged();
+    m_loadedStoredAccessToken = false;
     setAuthState(AuthState::Idle);
 
     if (m_secondsUntilNextPoll != 0) {
@@ -215,6 +215,16 @@ void cwGitHubIntegration::setErrorMessage(const QString& message)
     emit errorMessageChanged();
 }
 
+void cwGitHubIntegration::setAutoLoadStoredAccount(bool enabled)
+{
+    if (m_autoLoadStoredAccount == enabled) {
+        return;
+    }
+    m_autoLoadStoredAccount = enabled;
+    emit autoLoadStoredAccountChanged();
+    maybeLoadStoredAccessToken();
+}
+
 void cwGitHubIntegration::handleDeviceCode(const cwGitHubDeviceAuth::DeviceCodeInfo& info)
 {
     m_deviceInfo = info;
@@ -244,6 +254,7 @@ void cwGitHubIntegration::handleAccessToken(const cwGitHubDeviceAuth::AccessToke
 
     m_accessToken = result.accessToken;
     emit accessTokenChanged();
+    m_loadedStoredAccessToken = true;
     storeAccessToken(result.accessToken);
     setAuthState(AuthState::Authorized);
     setErrorMessage({});
@@ -301,6 +312,7 @@ void cwGitHubIntegration::clearStoredAccessToken()
 
 void cwGitHubIntegration::loadStoredAccessToken()
 {
+    m_loadedStoredAccessToken = true;
     auto* job = new QKeychain::ReadPasswordJob(KeychainService, this);
     job->setAutoDelete(true);
     job->setKey(KeychainTokenKey);
@@ -448,4 +460,19 @@ QString cwGitHubIntegration::resolveClientId()
         return QString::fromUtf8(envValue);
     }
     return QString::fromUtf8(DefaultGitHubClientId);
+}
+
+void cwGitHubIntegration::maybeLoadStoredAccessToken()
+{
+    if (!m_autoLoadStoredAccount) {
+        return;
+    }
+    if (m_loadedStoredAccessToken) {
+        return;
+    }
+    if (!m_accessToken.isEmpty()) {
+        return;
+    }
+
+    loadStoredAccessToken();
 }

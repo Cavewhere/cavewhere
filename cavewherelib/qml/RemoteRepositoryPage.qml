@@ -9,6 +9,7 @@ StandardPage {
 
     property int selectedRepoIndex: -1
     property GitHubIntegration gitHub: gitHubLoader.item
+    property bool addingGitHubAccount: false
     signal repositoryPicked(string repositoryUrl)
 
     Loader {
@@ -20,6 +21,8 @@ StandardPage {
             onAuthStateChanged: page.registerAuthorizedAccount()
 
             onUsernameChanged: page.registerAuthorizedAccount()
+
+            autoLoadStoredAccount: false
         }
     }
 
@@ -46,11 +49,14 @@ StandardPage {
         if (!gitHub.username || gitHub.username.length === 0) {
             return
         }
+        addingGitHubAccount = false
         RootData.remoteAccountModel.addOrUpdateAccount(RemoteAccountModel.GitHub, gitHub.username)
     }
 
     function beginAddAccountFlow() {
+        addingGitHubAccount = true
         withGitHubIntegration(function(instance) {
+            instance.autoLoadStoredAccount = false
             instance.clearSession()
             instance.startDeviceLogin()
         })
@@ -61,11 +67,12 @@ StandardPage {
             return
         }
 
+        addingGitHubAccount = false
         withGitHubIntegration(function(instance) {
             if (instance.authState === GitHubIntegration.Authorized) {
                 instance.refreshRepositories()
             } else {
-                instance.startDeviceLogin()
+                instance.autoLoadStoredAccount = true
             }
         })
     }
@@ -125,7 +132,10 @@ StandardPage {
         QC.GroupBox {
             Layout.fillWidth: true
             title: "GitHub"
-            visible: gitHubLoader.active && gitHub && gitHub.authState !== GitHubIntegration.Authorized
+            visible: gitHubLoader.active
+                     && gitHub
+                     && gitHub.authState !== GitHubIntegration.Authorized
+                     && addingGitHubAccount
 
             ColumnLayout {
                 // anchors.fill: parent
@@ -209,7 +219,12 @@ StandardPage {
                         visible: gitHub
                                  && (gitHub.authState === GitHubIntegration.AwaitingVerification
                                      || gitHub.authState === GitHubIntegration.RequestingCode)
-                        onClicked: gitHub && gitHub.cancelLogin()
+                        onClicked: {
+                            addingGitHubAccount = false
+                            if (gitHub) {
+                                gitHub.cancelLogin()
+                            }
+                        }
                     }
                 }
             }
@@ -262,6 +277,7 @@ StandardPage {
                             accountCombo.currentIndex = parent.index
 
                             if (entryType === RemoteAccountSelectionModel.NoneEntry) {
+                                page.addingGitHubAccount = false
                                 return
                             } else if (entryType === RemoteAccountSelectionModel.AddEntry) {
                                 page.beginAddAccountFlow()
