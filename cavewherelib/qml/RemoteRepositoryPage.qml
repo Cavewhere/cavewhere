@@ -10,6 +10,7 @@ StandardPage {
     property int selectedRepoIndex: -1
     property GitHubIntegration gitHub: gitHubLoader.item
     property bool addingGitHubAccount: false
+    property int activeAccountProvider: RemoteAccountModel.Unknown
     signal repositoryPicked(string repositoryUrl)
 
     Loader {
@@ -55,6 +56,7 @@ StandardPage {
 
     function beginAddAccountFlow() {
         addingGitHubAccount = true
+        setActiveAccount(RemoteAccountModel.Unknown)
         withGitHubIntegration(function(instance) {
             instance.autoLoadStoredAccount = false
             instance.clearSession()
@@ -67,6 +69,7 @@ StandardPage {
             return
         }
 
+        setActiveAccount(provider)
         addingGitHubAccount = false
         withGitHubIntegration(function(instance) {
             if (instance.authState === GitHubIntegration.Authorized) {
@@ -75,6 +78,10 @@ StandardPage {
                 instance.autoLoadStoredAccount = true
             }
         })
+    }
+
+    function setActiveAccount(provider) {
+        activeAccountProvider = provider
     }
 
     ColumnLayout {
@@ -175,6 +182,7 @@ StandardPage {
                             accountCombo.currentIndex = parent.index
 
                             if (entryType === RemoteAccountSelectionModel.NoneEntry) {
+                                page.setActiveAccount(RemoteAccountModel.Unknown)
                                 page.addingGitHubAccount = false
                                 return
                             } else if (entryType === RemoteAccountSelectionModel.AddEntry) {
@@ -306,7 +314,9 @@ StandardPage {
 
 
         Loader {
-            active: gitHub && gitHub.authState === GitHubIntegration.Authorized
+            active: gitHub
+                    && gitHub.authState === GitHubIntegration.Authorized
+                    && activeAccountProvider === RemoteAccountModel.GitHub
             Layout.fillWidth: true
             Layout.fillHeight: true
 
