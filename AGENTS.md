@@ -1,35 +1,109 @@
-# Repository Guidelines
+# AGENTS.md
 
-## Project Structure & Module Organization
-cavewhere is a Qt/C++ desktop app. Top-level `main.cpp` boots the QML UI. Core engine code lives in `cavewherelib/src`, with shared resources under `cavewherelib/qml`, `cavewherelib/shaders`, and `cavewherelib/fonts`. Primary tests are under `testcases/` (C++) and `test-qml/` (QML), with fixtures in `test-qml/datasets`. Auxiliary math and survey logic sit in `QMath3d`, `dewalls`, and other submodules—update them with `git submodule update --init --recursive`. Packaging scripts reside in `installer/`, while Conan configuration sits in `conan/` and `conanfile.py`.
+## Repository Guidelines
+
+## Project Structure and Module Organization
+cavewhere is a Qt and C++ desktop application. The `main.cpp` file launches the QML user interface. Core engine code is located in `cavewherelib/src`, with shared resources in `cavewherelib/qml`, `cavewherelib/shaders`, and `cavewherelib/fonts`. Tests are located in `testcases/` for C++ and `test-qml/` for QML, with supporting datasets in `test-qml/datasets`.
+
+Additional math and survey logic resides in modules such as `QMath3d` and `dewalls`. Make sure to keep these updated using:
+```
+git submodule update --init --recursive
+```
+
+Packaging scripts are found in `installer/`. Conan configuration lives in `conan/` and `conanfile.py`.
 
 ## Build, Test, and Development Commands
-From a clean checkout:
-```bash
+
+From a fresh checkout:
+```
 git submodule update --init --recursive
 conan profile detect --force
 conan install . -o "&:system_qt=False" --build=missing -of conan_deps
 cmake --preset conan-release -DCMAKE_TOOLCHAIN_FILE=conan_deps/conan_toolchain.cmake
 cmake --build build/Qt_6_8_3_for_macOS-Debug --target all
 ```
-Run the app via `./build/Qt_6_8_3_for_macOS-Debug/CaveWhere`. Build the test runners with `cmake --build build/Qt_6_8_3_for_macOS-Debug --target cavewhere-test cavewhere-qml-test`. Execute C++ unit tests through `./build/Qt_6_8_3_for_macOS-Debug/cavewhere-test` and QML tests via `./build/Qt_6_8_3_for_macOS-Debug/cavewhere-qml-test --platform offscreen`.
 
-## Coding Style & Naming Conventions
-Follow Qt’s 4-space indentation and brace-on-next-line style seen in `cavewherelib/src`. Classes and QObjects use UpperCamelCase (`cwProject` retains the legacy `cw` prefix). Member variables take a prefix m_ follow by a lowercase letter and camel case, for example m_myVar; helpers use lowerCamelCase. QML components follow the `Thing.qml` pattern, expose lowerCamelCase properties, and are exported through `qt_add_qml_module`. Keep user-facing strings translatable and bundle assets through the existing `.qrc` files.
+Run the application with:
+```
+./build/Qt_6_8_3_for_macOS-Debug/CaveWhere
+```
+
+Tests:
+```
+cmake --build build/Qt_6_8_3_for_macOS-Debug --target cavewhere-test cavewhere-qml-test
+./build/Qt_6_8_3_for_macOS-Debug/cavewhere-test
+./build/Qt_6_8_3_for_macOS-Debug/cavewhere-qml-test --platform offscreen
+```
+
+## Coding Style and Naming Conventions
+
+### C++
+Follow Qt’s standard conventions:
+- Use 4 spaces for indentation.
+- Opening braces on the next line.
+- Class names and QObject types use UpperCamelCase.
+- Member variables use the `m_` prefix.
+- Helper functions use lowerCamelCase.
+- Use clear and complete variable names.
+- Prefer `const` correctness.
+
+### QML
+Follow Qt Quick coding conventions:
+- Use strict property types rather than `var`.
+- Use lowerCamelCase for property names.
+- Capitalize QML component filenames.
+- Only use `opacity` when necessary.
+- Keep bindings simple and avoid binding loops.
+- Prefer `id` selectors instead of `objectName`.
+- Group related properties together.
+- Export modules using `qt_add_qml_module`.
+- Keep QML files small and focused.
+- Use JavaScript only for simple logic.
+
+### Performance Guidelines for QML
+Based on Qt Quick performance best practices:
+- Minimize the number of QML items.
+- Avoid unnecessary nesting.
+- Prefer `Item` instead of `Rectangle` when no visual is needed.
+- Avoid expensive operations in bindings.
+- Cache values when possible instead of recalculating.
+- Use `Loader` for deferred or conditional loading.
+- Prefer `Image` with texture caching enabled.
+- Use `implicitWidth` and `implicitHeight` consistently.
+- Avoid anchors in tight loops; prefer layout items for dynamic sizing.
+- Animate only properties that are GPU efficient, such as `opacity` and `scale`.
+- Avoid animating layout changes.
+- Use `Layer.enabled: true` carefully and only when it improves rendering.
 
 ## Testing Guidelines
-C++ coverage lives in `cavewherelib/src` and is exercised by `cavewhere-test`; add new Qt Test cases alongside existing suites. QML behaviors belong in `test-qml/tst_*.qml`; mirror the `tst_Feature.qml` structure and keep fixtures deterministic in `test-qml/datasets`. Always run `./build/cavewhere-test` and `./build/cavewhere-qml-test --platform offscreen` before pushing. Submodule test harnesses (e.g., `QMath3d/tests`) are optional unless you touch those modules.
 
-## Commit & Pull Request Guidelines
-Recent history favors short, capitalized summaries (`Refactored to use cwGeometry`). Use the imperative, skip trailing punctuation, and keep subjects under ~60 characters. In PRs, summarize the change, list build/test commands run, call out data migrations, and attach UI screenshots when QML views change. Link related issues and flag dependency or submodule updates.
+C++ tests live under `cavewherelib/src` and are run through `cavewhere-test`. Add new test files following existing patterns.
 
-## Dependencies & Environment Notes
-The project relies on Conan-managed Qt 6 packages; edit the default profile to pin `cmake/<4.0` before installing dependencies. If using system Qt, ensure the distro ships Qt ≥6.8 or expect build errors. macOS builds use `entitlements.plist`, while Windows packaging depends on `installer/windows`. Rebuild after merges so `GitHash.cmake` refreshes the revision shown in the About dialog.
+QML tests go in `test-qml/tst_*.qml`. Use deterministic datasets stored in `test-qml/datasets`. Run tests with the offscreen platform.
 
-## QML Guidelines
-Do not use `opacity` where not needed. Do not use `property var`; favor strict typing and `required property` when the value must exist. Pass only the data a component truly needs (e.g., a `matrix4x4` instead of a whole viewer/scene object) to reduce coupling. Private, interaction-local properties should use an `_underscorePrefix` so their scope is explicit, and leaning on `required` props should eliminate most null checks.
+Always run both C++ and QML test suites before pushing changes.
 
-### State Management
-- Prefer declarative `State { PropertyChanges { ... } }` blocks instead of branching on `state` in signal handlers.
-- When behaviour must differ per state, re-bind the handler inside each `State` (e.g. `tapHandler.onTapped:`) rather than checking conditions inside the callback.
-- Use `StateChangeScript` for one-off effects (positioning, animations) that should run when entering a state.
+## Commit and Pull Request Guidelines
+- Keep commit subjects short and capitalized.
+- Use imperative phrasing.
+- Avoid trailing periods.
+- Describe what changed and why.
+- List the build and test commands executed.
+- Attach screenshots for QML UI changes.
+- Link any related issues.
+- Clearly note changes involving submodules or dependencies.
+
+## Dependencies and Environment Notes
+The project uses Conan for managing Qt 6 packages. Pin CMake to versions below 4.0 in the Conan profile. If choosing to use a system Qt installation, ensure Qt 6.8 or above.
+
+macOS builds use `entitlements.plist`. Windows installers live under `installer/windows`.
+
+`GitHash.cmake` is updated on build and displayed in the About dialog.
+
+## QML Guidelines Summary
+- Avoid unnecessary opacity usage.
+- Avoid `property var` and favor typed properties.
+- Keep bindings efficient.
+- Avoid deep nesting.
+- Follow Qt’s coding conventions.
+
