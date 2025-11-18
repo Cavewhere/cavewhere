@@ -129,108 +129,6 @@ StandardPage {
             }
         }
 
-        QC.GroupBox {
-            Layout.fillWidth: true
-            title: "GitHub"
-            visible: gitHubLoader.active
-                     && gitHub
-                     && gitHub.authState !== GitHubIntegration.Authorized
-                     && addingGitHubAccount
-
-            ColumnLayout {
-                // anchors.fill: parent
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.margins: 12
-                spacing: 8
-
-                Text {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-                    color: "#444444"
-                    text: {
-                        if (!gitHub) {
-                            return "Use your GitHub account to access remote repositories."
-                        }
-                        switch (gitHub.authState) {
-                        case GitHubIntegration.RequestingCode:
-                            return "Requesting a sign-in code from GitHub…";
-                        case GitHubIntegration.AwaitingVerification:
-                            return "Enter the code below at GitHub to finish signing in.";
-                        case GitHubIntegration.Error:
-                            return gitHub.errorMessage.length > 0 ? gitHub.errorMessage : "Something went wrong.";
-                        default:
-                            return "Use your GitHub account to access remote repositories.";
-                        }
-                    }
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    visible: gitHub && gitHub.authState === GitHubIntegration.AwaitingVerification
-
-                    QC.TextField {
-                        Layout.fillWidth: true
-                        text: gitHub ? gitHub.userCode : ""
-                        readOnly: true
-                        horizontalAlignment: Text.AlignHCenter
-                        font.bold: true
-                    }
-
-                    QC.Button {
-                        text: "Copy and Open GitHub"
-                        onClicked: {
-                            if (gitHub && gitHub.userCode && gitHub.userCode.length > 0) {
-                                RootData.copyText(gitHub.userCode)
-                            }
-                            if (gitHub) {
-                                gitHub.markVerificationOpened()
-                                Qt.openUrlExternally(gitHub.verificationUrl)
-                            }
-                        }
-                        // QC.ToolTip.visible: hovered
-                        // QC.ToolTip.text: "Copy the code and open github.com/device"
-                    }
-                }
-
-                Text {
-                    Layout.fillWidth: true
-                    visible: gitHub
-                              && gitHub.authState === GitHubIntegration.AwaitingVerification
-                              && gitHub.verificationOpened
-                              && gitHub.secondsUntilNextPoll > 0
-                    color: "#666666"
-                    font.pixelSize: 12
-                    text: gitHub ? qsTr("Trying connection in %1 s").arg(gitHub.secondsUntilNextPoll) : ""
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    visible: gitHub && gitHub.authState !== GitHubIntegration.AwaitingVerification
-
-                    QC.Button {
-                        text: gitHub && gitHub.authState === GitHubIntegration.Error ? "Try Again" : "Connect to GitHub"
-                        enabled: gitHub && !gitHub.busy
-                        onClicked: gitHub && gitHub.startDeviceLogin()
-                    }
-
-                    QC.Button {
-                        text: "Cancel"
-                        visible: gitHub
-                                 && (gitHub.authState === GitHubIntegration.AwaitingVerification
-                                     || gitHub.authState === GitHubIntegration.RequestingCode)
-                        onClicked: {
-                            addingGitHubAccount = false
-                            if (gitHub) {
-                                gitHub.cancelLogin()
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-
         RowLayout {
             Layout.fillWidth: true
 
@@ -306,6 +204,106 @@ StandardPage {
                 }
             }
         }
+
+        QC.GroupBox {
+            Layout.fillWidth: true
+            title: "GitHub"
+            visible: gitHubLoader.active
+                     && gitHub
+                     && gitHub.authState !== GitHubIntegration.Authorized
+                     && addingGitHubAccount
+
+            ColumnLayout {
+                // anchors.fill: parent
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.margins: 12
+                spacing: 8
+
+                Text {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                    color: "#444444"
+                    text: {
+                        if (!gitHub) {
+                            return "Use your GitHub account to access remote repositories."
+                        }
+                        switch (gitHub.authState) {
+                        case GitHubIntegration.RequestingCode:
+                            return "Requesting a sign-in code from GitHub…";
+                        case GitHubIntegration.AwaitingVerification:
+                            return "Enter the code below at GitHub to finish signing in.";
+                        case GitHubIntegration.Error:
+                            return gitHub.errorMessage.length > 0 ? gitHub.errorMessage : "Something went wrong.";
+                        default:
+                            return "Use your GitHub account to access remote repositories.";
+                        }
+                    }
+                }
+
+                RowLayout {
+                    visible: gitHub && gitHub.authState === GitHubIntegration.AwaitingVerification
+
+                    QC.TextField {
+                        text: gitHub ? gitHub.userCode : ""
+                        readOnly: true
+                        horizontalAlignment: Text.AlignHCenter
+                        font.bold: true
+                    }
+
+                    QC.Button {
+                        text: "Copy and Open GitHub"
+                        onClicked: {
+                            if (gitHub && gitHub.userCode && gitHub.userCode.length > 0) {
+                                RootData.copyText(gitHub.userCode)
+                            }
+                            if (gitHub) {
+                                gitHub.markVerificationOpened()
+                                Qt.openUrlExternally(gitHub.verificationUrl)
+                            }
+                        }
+                        // QC.ToolTip.visible: hovered
+                        // QC.ToolTip.text: "Copy the code and open github.com/device"
+                    }
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    visible: gitHub
+                              && gitHub.authState === GitHubIntegration.AwaitingVerification
+                              && gitHub.verificationOpened
+                              && gitHub.secondsUntilNextPoll > 0
+                    color: "#666666"
+                    font.pixelSize: 12
+                    text: gitHub ? qsTr("Trying connection in %1 s").arg(gitHub.secondsUntilNextPoll) : ""
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: gitHub && gitHub.authState !== GitHubIntegration.AwaitingVerification
+
+                    QC.Button {
+                        text: gitHub && gitHub.authState === GitHubIntegration.Error ? "Try Again" : "Connect to GitHub"
+                        enabled: gitHub && !gitHub.busy
+                        onClicked: gitHub && gitHub.startDeviceLogin()
+                    }
+
+                    QC.Button {
+                        text: "Cancel"
+                        visible: gitHub
+                                 && (gitHub.authState === GitHubIntegration.AwaitingVerification
+                                     || gitHub.authState === GitHubIntegration.RequestingCode)
+                        onClicked: {
+                            addingGitHubAccount = false
+                            if (gitHub) {
+                                gitHub.cancelLogin()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
 
         Loader {
             active: gitHub && gitHub.authState === GitHubIntegration.Authorized
