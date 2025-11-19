@@ -372,6 +372,7 @@ message NoteLiDAR {
     repeated NoteLiDARStation noteStations = 3;
     optional NoteLiDARTransformation noteTransformation = 4;
     optional bool autoCalculateNorth = 5;
+    optional string iconPath = 6;
 }
 
 ///////////////////////////////////////////////////
@@ -382,4 +383,3 @@ message DiskCacheEntry {
     optional string checksum = 1;
     optional bytes entry = 2;
 }
-

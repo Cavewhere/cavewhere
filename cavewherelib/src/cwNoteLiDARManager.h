@@ -16,6 +16,7 @@
 #include <QSet>
 #include <QModelIndex>
 #include <QQmlEngine>
+#include <QImage>
 
 // Fwd decls
 class cwProject;
@@ -26,7 +27,6 @@ class cwCave;
 class cwTrip;
 class cwSurveyNoteLiDARModel;
 class cwNoteLiDAR;
-
 // Ours
 #include "cwGlobals.h"
 #include "cwFutureManagerToken.h"
@@ -75,6 +75,8 @@ public:
 
     // Blocks until outstanding batch finishes
     void waitForFinish();
+
+    Q_INVOKABLE void saveIcon(const QImage& icon, cwNoteLiDAR* note);
 
     QVector<uint32_t> renderItemIds(cwNoteLiDAR* note) const;
 
@@ -130,6 +132,7 @@ private:
     QSet<cwNoteLiDAR*> m_dirtyNotes;
     QSet<cwNoteLiDAR*> m_deletedNotes;
     QHash<cwNoteLiDAR*, QVector<uint32_t>> m_noteToRender;
+    // QSet<cwNoteLiDAR*> m_iconCaptureInFlight;
 
     QPointer<cwRenderTexturedItems> m_render;
 

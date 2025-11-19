@@ -95,6 +95,8 @@ class GitRepository;
 #include <QDir>
 #include <QFuture>
 #include <QHash>
+#include <QImage>
+#include <functional>
 
 class cwSaveLoad : public QObject
 {
@@ -148,6 +150,10 @@ public:
     void addImages(QList<QUrl> noteImagePaths,
                    const QDir& dir,
                    std::function<void (QList<cwImage>)> outputCallBackFunc);
+
+    void saveImage(const QImage& image,
+                   const QDir& dir,
+                   std::function<void (cwImage)> outputCallBackFunc);
 
     Monad::ResultBase moveProjectTo(const QString& destinationFileUrl);
     Monad::ResultBase copyProjectTo(const QString& destinationFileUrl);

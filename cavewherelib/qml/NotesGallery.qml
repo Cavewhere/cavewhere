@@ -79,6 +79,26 @@ QQ.Rectangle {
         required property url iconPath
         required property int index
         property real maxImageWidth: galleryView.width
+        readonly property bool hasIconSource: iconPath !== undefined && iconPath.toString().length > 0
+        readonly property string fallbackFileName: {
+            if (!noteObject) {
+                return ""
+            }
+            if (noteObject.filename !== undefined && noteObject.filename !== "") {
+                return RootData.fileName(noteObject.filename)
+            }
+            if (noteObject.name !== undefined && noteObject.name !== "") {
+                return noteObject.name
+            }
+            return ""
+        }
+        readonly property string fallbackFileExtension: {
+            const dotIndex = fallbackFileName.lastIndexOf(".")
+            if (dotIndex > 0 && dotIndex < fallbackFileName.length - 1) {
+                return fallbackFileName.slice(dotIndex + 1).toUpperCase()
+            }
+            return qsTr("GLB")
+        }
 
         width: maxImageWidth
         height: maxImageWidth
@@ -90,12 +110,14 @@ QQ.Rectangle {
             anchors.centerIn: parent
 
             source: container.iconPath
+
             sourceSize: Qt.size(width, height)
             width: container.maxImageWidth - 2 * container.border
             height: width;
             fillMode: QQ.Image.PreserveAspectFit
             rotation: container.noteObject === null || container.noteObject.rotate == undefined ? 0 : container.noteObject.rotate
             smooth: true
+            visible: container.hasIconSource
 
             function updateHeight() {
                 if(paintedHeight == 0.0 || paintedWidth == 0.0) {
@@ -119,11 +141,46 @@ QQ.Rectangle {
             }
 
             onRotationChanged:  {
-                updateHeight();
-            }
+                updateHeight(); }
 
             QQ.Component.onCompleted: {
                 updateHeight();
+            }
+        }
+
+        QQ.Rectangle {
+            id: placeholderIcon
+            anchors.fill: imageItem
+            anchors.margins: 6
+            radius: 6
+            visible: !container.hasIconSource || imageItem.status === QQ.Image.Error
+            color: "#2c3037"
+            border.color: "#5a6170"
+            border.width: 2
+
+            QQ.Column {
+                anchors.centerIn: parent
+                spacing: 6
+                width: parent.width - 16
+
+                QQ.Text {
+                    text: container.fallbackFileExtension
+                    font.bold: true
+                    font.pixelSize: 32
+                    color: "#f2f4f8"
+                    horizontalAlignment: Text.AlignHCenter
+                    width: parent.width
+                }
+
+                QQ.Text {
+                    text: container.fallbackFileName
+                    font.bold: true
+                    font.pixelSize: 16
+                    color: "#cbd0da"
+                    wrapMode: Text.WordWrap
+                    horizontalAlignment: Text.AlignHCenter
+                    width: parent.width
+                }
             }
         }
 
@@ -158,7 +215,7 @@ QQ.Rectangle {
 
         QC.BusyIndicator {
             anchors.centerIn: parent
-            running: imageItem.status == QQ.Image.Loading
+            running: imageItem.visible && imageItem.status == QQ.Image.Loading
         }
 
         QQ.TapHandler {

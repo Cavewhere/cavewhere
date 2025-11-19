@@ -7,6 +7,21 @@ RegionViewer {
 
     property NoteLiDAR note
 
+    function captureIconIfNeeded() {
+        if (RootData.project.imagePathExists(note.iconImagePath)) {
+            return
+        }
+
+        const targetNote = note
+
+        rhiViewerId.grabToImage(function(result) {
+            if (!targetNote) {
+                return
+            }
+            RootData.noteLiDARManager.saveIcon(result.image, targetNote)
+        })
+    }
+
     scene: GltfScene {
         id: sceneId
         gltf.gltfFilePath: note ? RootData.project.absolutePath(note.filename) : ""
@@ -22,6 +37,7 @@ RegionViewer {
         gltf.onStatusChanged: () => {
                                   if(gltf.status === RenderGLTF.Ready) {
                                       turnTableInteractionId.zoomTo(gltf.boundingBox())
+                                      captureIconIfNeeded()
                                   }
                               }
     }
@@ -30,8 +46,6 @@ RegionViewer {
     perspectiveProjection.enabled: false
 
     state: "SELECT"
-
-
 
     TurnTableInteraction {
         id: turnTableInteractionId
@@ -117,7 +131,6 @@ RegionViewer {
     }
 
 
-
     NoteLiDARTransformEditor {
         note: rhiViewerId.note
         interactionManager: interactionManagerId
@@ -142,4 +155,6 @@ RegionViewer {
             PropertyChanges { target: lidarAddStationInteraction; enabled: true; visible: true }
         }
     ]
+
+
 }

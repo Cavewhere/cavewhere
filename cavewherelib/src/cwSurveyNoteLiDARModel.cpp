@@ -5,12 +5,14 @@
 #include "cwSaveLoad.h"
 #include "cwNoteLiDAR.h"
 #include "cwTrip.h"
+#include "cwImageProvider.h"
 
 // Qt
 #include <QDir>
 #include <QFileInfo>
 #include <QUrl>
 #include <QDebug>
+#include <QImageReader>
 
 cwSurveyNoteLiDARModel::cwSurveyNoteLiDARModel(QObject* parent)
     : cwSurveyNoteModelBase(parent)
@@ -87,9 +89,11 @@ QVariant cwSurveyNoteLiDARModel::data(const QModelIndex& index, int role) const
         return note->filename();
     }
     case IconPathRole: {
-        // Optional: return a qrc-based generic LiDAR icon (leave empty if none)
-        // return QStringLiteral("qrc:/icons/lidar.png");
-        return QString();
+        const QString iconPath = note->iconImagePath();
+        if (iconPath.isEmpty()) {
+            return QString();
+        }
+        return cwImageProvider::imageUrl(iconPath);
     }
     case ImageRole: {
         // Not applicable for LiDAR notes (no cwImage). Return empty.
@@ -101,12 +105,14 @@ QVariant cwSurveyNoteLiDARModel::data(const QModelIndex& index, int role) const
 }
 
 void cwSurveyNoteLiDARModel::addNotes(const QList<cwNoteLiDAR *> lidarNotes) {
+    connectNotes(lidarNotes);
     addNotesHelper(lidarNotes);
 }
 
 void cwSurveyNoteLiDARModel::setData(const cwSurveyNoteLiDARModelData &data)
 {
     setDataHelper<cwSurveyNoteLiDARModelData, cwNoteLiDAR>(data);
+    connectNotes(notes());
 }
 
 cwSurveyNoteLiDARModelData cwSurveyNoteLiDARModel::data() const
@@ -123,4 +129,3 @@ void cwSurveyNoteLiDARModel::onParentTripChanged()
         }
     }
 }
-

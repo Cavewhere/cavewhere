@@ -14,6 +14,7 @@ struct cwNoteLiDARData {
     QList<cwNoteLiDARStation> stations;
     cwNoteLiDARTransformationData transfrom;
     bool autoCalculateNorth = true;
+    QString iconImagePath;
 };
 
 #endif // CWNOTELIDARDATA_H

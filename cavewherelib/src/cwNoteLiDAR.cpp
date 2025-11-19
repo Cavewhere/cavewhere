@@ -5,6 +5,7 @@
 #include "cwNoteLiDARTransformation.h"
 #include "cwNoteTransformCalculator.h"
 
+//Qt includes
 #include <QMetaType>
 
 cwNoteLiDAR::cwNoteLiDAR(QObject* parent)
@@ -89,7 +90,8 @@ cwNoteLiDARData cwNoteLiDAR::data() const
         m_filename,
         m_stations,
         m_noteTransformation->data(),
-        m_autoCalculateNorth
+        m_autoCalculateNorth,
+        m_iconImagePath.value()
     };
 }
 
@@ -100,6 +102,7 @@ void cwNoteLiDAR::setData(const cwNoteLiDARData &data)
     setStations(data.stations);
     setAutoCalculateNorth(data.autoCalculateNorth); //This should be set before m_noteTransformation because auto calucaltion
     m_noteTransformation->setData(data.transfrom);
+    setIconImagePath(data.iconImagePath);
 }
 
 /**

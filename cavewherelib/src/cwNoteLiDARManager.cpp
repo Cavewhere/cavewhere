@@ -11,6 +11,8 @@
 // Qt
 #include <QAbstractItemModel>
 #include <QDebug>
+#include <QDir>
+#include <QImage>
 
 // Ours
 #include "cwNoteLiDARTransformation.h"
@@ -26,6 +28,8 @@
 #include "cwAsyncFuture.h"
 #include "cwNoteLiDARTransformation.h"
 #include "cwUniqueConnectionChecker.h"
+#include "cwSaveLoad.h"
+#include "cwImage.h"
 
 // Async
 #include "asyncfuture.h"
@@ -186,6 +190,40 @@ void cwNoteLiDARManager::waitForFinish()
     cwAsyncFuture::waitForFinished(m_restarter.future());
 }
 
+void cwNoteLiDARManager::saveIcon(const QImage& icon, cwNoteLiDAR* note)
+{
+    if (note == nullptr || m_project == nullptr || icon.isNull()) {
+        return;
+    }
+
+    // if (!note->iconImagePath().isEmpty() || m_iconCaptureInFlight.contains(note)) {
+    //     return;
+    // }
+
+    const QDir destinationDir = cwSaveLoad::dir(note);
+    QPointer<cwNoteLiDAR> notePtr(note);
+    // cwNoteLiDAR* const rawNote = note;
+
+    // m_iconCaptureInFlight.insert(note);
+
+    m_project->saveImage(
+        icon,
+        destinationDir,
+        [this, notePtr](const cwImage& savedImage) {
+            // m_iconCaptureInFlight.remove(rawNote);
+
+            if (notePtr.isNull()) {
+                return;
+            }
+
+
+            if (savedImage.isValid()) {
+                qDebug() << "Save image valid:" << savedImage << savedImage.isValid();
+                notePtr->setIconImagePath(savedImage.path());
+            }
+        });
+}
+
 // ---------------------- Region model wiring ----------------------
 
 void cwNoteLiDARManager::handleRegionReset()
@@ -304,6 +342,7 @@ void cwNoteLiDARManager::noteDestroyed(QObject* noteObj)
     if (auto* note = static_cast<cwNoteLiDAR*>(noteObj)) {
         m_deletedNotes.insert(note);
         m_dirtyNotes.remove(note);
+        // m_iconCaptureInFlight.remove(note);
     }
 }
 
@@ -477,7 +516,6 @@ void cwNoteLiDARManager::connectTrip(cwTrip* trip)
         // Existing notes
         const auto notes = notesFromModel(model);
         for (cwNoteLiDAR* note : notes) {
-            qDebug() << "Connecting note" << note;
             connectNote(note);
         }
 
