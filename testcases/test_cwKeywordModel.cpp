@@ -1,10 +1,10 @@
 //Catch includes
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 //Our includes
 #include "cwKeywordModel.h"
 #include "TestHelper.h"
-#include "SpyChecker.h"
+#include "SignalSpyChecker.h"
 
 //Qt includes
 #include <QSignalSpy>
@@ -265,13 +265,13 @@ TEST_CASE("cwKeywordModel should add and remove keywords correctly", "[cwKeyword
 
             checkRows(keywordModelScrap.get());
 
-            QSignalSpy aboutinsertSpy(keywordModelScrap.get(), &cwKeywordModel::rowsAboutToBeInserted);
-            QSignalSpy insertSpy(keywordModelScrap.get(), &cwKeywordModel::rowsInserted);
-            QSignalSpy aboutRemovedSpy(keywordModelScrap.get(), &cwKeywordModel::rowsAboutToBeRemoved);
-            QSignalSpy removeSpy(keywordModelScrap.get(), &cwKeywordModel::rowsRemoved);
-            QSignalSpy dataChanged(keywordModelScrap.get(), &cwKeywordModel::dataChanged);
+            SignalSpyChecker::SignalSpy aboutinsertSpy(keywordModelScrap.get(), &cwKeywordModel::rowsAboutToBeInserted);
+            SignalSpyChecker::SignalSpy insertSpy(keywordModelScrap.get(), &cwKeywordModel::rowsInserted);
+            SignalSpyChecker::SignalSpy aboutRemovedSpy(keywordModelScrap.get(), &cwKeywordModel::rowsAboutToBeRemoved);
+            SignalSpyChecker::SignalSpy removeSpy(keywordModelScrap.get(), &cwKeywordModel::rowsRemoved);
+            SignalSpyChecker::SignalSpy dataChanged(keywordModelScrap.get(), &cwKeywordModel::dataChanged);
 
-            SpyChecker spyChecker {
+            SignalSpyChecker::Constant spyChecker {
                 {&aboutinsertSpy, 0},
                 {&insertSpy, 0},
                 {&aboutRemovedSpy, 0},

@@ -5,10 +5,10 @@
 #include "cwKeywordItemModel.h"
 #include "cwKeywordGroupByKeyModel.h"
 #include "cwUniqueValueFilterModel.h"
-#include "SpyChecker.h"
+#include "SignalSpyChecker.h"
 
 //Catch includes
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 TEST_CASE("cwKeywordFilterPipelineModel should initilize correctly", "[cwKeywordFilterPipelineModel]") {
     cwKeywordFilterPipelineModel model;
@@ -82,8 +82,8 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
     keywordEntityModel->addItem(component3);
     keywordEntityModel->addItem(component4);
 
-    auto pipelineSpy = SpyChecker::makeChecker(&model);
-    auto acceptedSpy = SpyChecker::makeChecker(model.acceptedModel());
+    auto pipelineSpy = SignalSpyChecker::Constant::makeChecker(&model);
+    auto acceptedSpy = SignalSpyChecker::Constant::makeChecker(model.acceptedModel());
 
     model.setKeywordModel(keywordEntityModel.get());
 

@@ -12,7 +12,6 @@
 //Qt includes
 #include <QtConcurrent>
 #include <QQuickItem>
-#include <QEntity>
 
 cwKeywordGroupByKeyModel::cwKeywordGroupByKeyModel(QObject *parent) :
     QAbstractListModel(parent),
@@ -85,9 +84,11 @@ void cwKeywordGroupByKeyModel::setVisiblityProperty(QObject *object, bool accept
 {
     if(auto item = dynamic_cast<QQuickItem*>(object)) {
         item->setVisible(accepted);
-    } else if(auto entity = dynamic_cast<Qt3DCore::QEntity*>(object)) {
-        item->setEnabled(accepted);
     }
+    //TODO: update the visiblity of the rendering elements
+    /*else if(auto entity = dynamic_cast<Qt3DCore::QEntity*>(object)) {
+        item->setEnabled(accepted);
+    }*/
 }
 
 void cwKeywordGroupByKeyModel::updateAllRows()

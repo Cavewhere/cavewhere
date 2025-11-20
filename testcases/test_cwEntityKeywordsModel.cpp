@@ -1,10 +1,10 @@
 //Our includes
 #include "cwEntityAndKeywords.h"
 #include "cwEntityKeywordsModel.h"
-#include "SpyChecker.h"
+#include "SignalSpyChecker.h"
 
 //Catch includes
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 //Qt includes
 #include <QSignalSpy>
@@ -18,7 +18,7 @@ TEST_CASE("cwEntityKeywordsModel should add and remove cwEntityAndKeywords corre
 
     cwEntityKeywordsModel model;
 
-    auto spyChecker = SpyChecker::makeChecker(&model);
+    auto spyChecker = SignalSpyChecker::Constant::makeChecker(&model);
 
     struct Row {
         QSharedPointer<QObject> obj;

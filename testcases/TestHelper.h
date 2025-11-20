@@ -67,7 +67,7 @@ inline std::ostream& operator << ( std::ostream& os, QMetaProperty const& value 
     return os;
 }
 
-inline std::ostream& operator << ( std::ostream& os, QModelIndex value) {
+inline std::ostream& operator << ( std::ostream& os, const QModelIndex& value) {
 
     auto printIndex = [&]() {
         os << "(" << value.row() << "," << value.column() << ")";
@@ -118,10 +118,10 @@ inline std::ostream& operator << ( std::ostream& os, QList<cwImageData> const& v
     return os;
 }
 
-inline std::ostream& operator << ( std::ostream& os, const QModelIndex& index) {
-    os << "model:" << index.model() << "[" << index.row() << "," << index.column() << "," << index.internalId() << "]";
-    return os;
-}
+// inline std::ostream& operator << ( std::ostream& os, const QModelIndex& index) {
+//     os << "model:" << index.model() << "[" << index.row() << "," << index.column() << "," << index.internalId() << "]";
+//     return os;
+// }
 
  std::ostream& operator << ( std::ostream& os, QList<int> const& value);
 

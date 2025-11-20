@@ -1,9 +1,9 @@
 //Catch includes
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 //Our includes
 #include "cwKeywordGroupByKeyModel.h"
-#include "SpyChecker.h"
+#include "SignalSpyChecker.h"
 #include "cwKeywordItem.h"
 #include "cwKeywordModel.h"
 #include "cwKeywordItemModel.h"
@@ -92,7 +92,7 @@ TEST_CASE("cwKeyordItemKeyFilter should categorize objects correctly", "[cwKeywo
         }
     };
 
-    auto spyCheck = SpyChecker::makeChecker(model.get());
+    auto spyCheck = SignalSpyChecker::Constant::makeChecker(model.get());
 
     auto addSpy = spyCheck.findSpy(&cwKeywordGroupByKeyModel::rowsInserted);
     auto removeSpy = spyCheck.findSpy(&cwKeywordGroupByKeyModel::rowsRemoved);

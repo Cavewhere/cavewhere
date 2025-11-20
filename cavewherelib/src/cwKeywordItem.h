@@ -6,7 +6,7 @@
 
 //Our includes
 #include "cwGlobals.h"
-class cwKeywordModel;
+#include "cwKeywordModel.h"
 
 class CAVEWHERE_LIB_EXPORT cwKeywordItem : public QObject
 {

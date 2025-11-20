@@ -253,7 +253,7 @@ void cwKeywordItemFilterModel::updateAllRows()
         insertRow.lastKey = lastKey;
         insertRow.data = &newModelData;
 
-        for(const auto& entity : qAsConst(entities)) {
+        for(const auto& entity : std::as_const(entities)) {
             insertRow.filterEntity(entity);
         }
 
@@ -272,7 +272,7 @@ void cwKeywordItemFilterModel::updateAllRows()
     auto runFuture = QtConcurrent::run(filterRows);
     LastModelData = runFuture;
 
-    LastRun = AsyncFuture::observe(runFuture).subscribe([=]()
+    LastRun = AsyncFuture::observe(runFuture).subscribe([this, runFuture]()
     {
         //Updated the model will new filtered results
         beginResetModel();

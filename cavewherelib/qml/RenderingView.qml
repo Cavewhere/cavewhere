@@ -46,10 +46,6 @@ SplitView {
                 }
 
                 KeywordTab { }
-
-                ExportViewTab {
-                    view: rendererId
-                }
             }
         }
     }

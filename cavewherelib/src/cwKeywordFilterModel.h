@@ -1,7 +1,7 @@
 #ifndef CWKEYWORDFILTERMODEL_H
 #define CWKEYWORDFILTERMODEL_H
 
-#include <QAbstractProxyModel>
+#include <QtCore/qabstractproxymodel.h>
 #include <QObject>
 #include <QDebug>
 

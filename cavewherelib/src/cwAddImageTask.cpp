@@ -46,9 +46,9 @@ cwAddImageTask::cwAddImageTask(QObject* parent) : QObject(parent)
 
 }
 
-cwAddImageTask::~cwAddImageTask()
-{
-}
+// cwAddImageTask::~cwAddImageTask()
+// {
+// }
 
 void cwAddImageTask::setRegenerateMipmapsOn(cwImage image)
 {

@@ -1,14 +1,14 @@
 import QtQuick 2.0
 import QtQuick.Layouts 1.12
-import QtQuick.Controls 2.15
-import Cavewhere 1.0
+import QtQuick.Controls 2.15 as QC
+import cavewherelib 1.0
 
 Item {
     id: keywordTabId
 
     KeywordFilterPipelineModel {
         id: pipelineModelId
-        keywordModel: rootData.keywordItemModel
+        keywordModel: RootData.keywordItemModel
 
         onPossibleKeysChanged: {
 
@@ -35,7 +35,7 @@ Item {
                 Layout.fillHeight: true
 
                 RowLayout {
-                    ComboBox {
+                    QC.ComboBox {
                         id: comboBoxId
                         model: pipelineModelId.possibleKeys //TODO: need possible keys
 
@@ -45,7 +45,7 @@ Item {
                     }
 
                     ColumnLayout {
-                        Button {
+                        QC.Button {
                             width: 20
                             text: "Or"
                             onClicked: {
@@ -56,7 +56,7 @@ Item {
                             }
                         }
 
-                        Button {
+                        QC.Button {
                             width: 20
                             text: "And"
                             onClicked: {
@@ -66,8 +66,6 @@ Item {
                     }
                 }
 
-
-
                 ListView {
                     model: filterModelObjectRole
 
@@ -75,7 +73,7 @@ Item {
                     Layout.fillWidth: true
 
                     delegate: RowLayout {
-                        CheckBox {
+                        QC.CheckBox {
                             checked: acceptedRole
                             onCheckedChanged: {
                                 var modelIndex = filterModelObjectRole.index(index, 0);

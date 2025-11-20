@@ -1,12 +1,12 @@
 //Catch includes
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 //Our includes
 #include "cwKeywordFilterModel.h"
 #include "cwKeywordItemModel.h"
 #include "cwKeywordModel.h"
 #include "cwKeywordItem.h"
-#include "SpyChecker.h"
+#include "SignalSpyChecker.h"
 #include "TestHelper.h"
 
 TEST_CASE("cwKeywordFilterModel should filter and sort cwKeywordItemModel rows correctly", "[cwKeywordFilterModel]") {
@@ -40,7 +40,7 @@ TEST_CASE("cwKeywordFilterModel should filter and sort cwKeywordItemModel rows c
     auto filter = std::make_unique<cwKeywordFilterModel>();
     filter->setSourceModel(model.get());
 
-    auto spyChecker = SpyChecker::makeChecker(filter.get());
+    auto spyChecker = SignalSpyChecker::Constant::makeChecker(filter.get());
 
     CHECK(filter->rowCount() == 0);
 

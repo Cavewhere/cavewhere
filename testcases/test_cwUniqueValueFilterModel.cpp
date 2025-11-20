@@ -1,9 +1,9 @@
 //Catch includes
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 //Our includes
 #include "cwUniqueValueFilterModel.h"
-#include "SpyChecker.h"
+#include "SignalSpyChecker.h"
 
 //Qt includes
 #include <QStandardItemModel>
@@ -76,7 +76,7 @@ TEST_CASE("cwUniqueValueFilterModel should filter values correctly", "[cwUniqueV
         }
     };
 
-    auto spyChecker = SpyChecker::makeChecker(&filter);
+    auto spyChecker = SignalSpyChecker::Constant::makeChecker(&filter);
 
     auto uniqueRoleSpy = spyChecker.findSpy(&cwUniqueValueFilterModel::uniqueRoleChanged);
     auto rowsInsertedSpy = spyChecker.findSpy(&cwUniqueValueFilterModel::rowsInserted);
@@ -240,4 +240,3 @@ TEST_CASE("cwUniqueValueFilterModel should filter values correctly", "[cwUniqueV
         delete obj;
     }
 }
-

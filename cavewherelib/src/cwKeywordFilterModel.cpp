@@ -99,8 +99,14 @@ QVector<QPersistentModelIndex>::iterator cwKeywordFilterModel::findAcceptedObjec
 
 QVector<QPersistentModelIndex>::const_iterator cwKeywordFilterModel::findAcceptedObject(QObject *object) const
 {
-    //Use the non-const version
-    return const_cast<QVector<QPersistentModelIndex>::const_iterator>(const_cast<cwKeywordFilterModel*>(this)->findAcceptedObject(object));
+    return std::lower_bound(mAcceptedSourceIndexes.cbegin(),
+                            mAcceptedSourceIndexes.cend(),
+                            object,
+                            [](const QPersistentModelIndex& modelIndex, QObject* obj)
+    {
+        Q_ASSERT(modelIndex.isValid());
+        return cwKeywordFilterModel::toObject(modelIndex) < obj;
+    });
 }
 
 void cwKeywordFilterModel::setSourceModel(QAbstractItemModel *sourceModel)

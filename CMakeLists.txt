@@ -37,6 +37,7 @@ option(MOBILE_BUILD "Builds as mobile: for ios or android" OFF)
 
 add_subdirectory(MarkScope)
 add_subdirectory(QuickQanava)
+# add_subdirectory(SignalSpyChecker)
 
 if(NOT MOBILE_BUILD)
     add_subdirectory(survex)
@@ -127,6 +128,8 @@ target_link_libraries(cavewhere-test
     cavewhere-testlib
     cavewherelib
     protobuf::protobuf
+    SignalSpyChecker
+
 )
 
 #### Cavewhere qml tests ####

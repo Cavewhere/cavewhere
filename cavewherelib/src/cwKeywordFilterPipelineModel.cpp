@@ -1,4 +1,5 @@
-//
+//Std includse
+#include <algorithm>
 
 //Our includes
 #include "cwKeywordFilterPipelineModel.h"
@@ -201,7 +202,7 @@ void cwKeywordFilterPipelineModel::setKeywordModel(cwKeywordItemModel* keywordMo
 
     void cwKeywordFilterPipelineModel::insertRow(int i)
     {
-        i = std::max(0, std::min(mRows.size(), i));
+        i = std::max(0, std::min((int)mRows.size(), i));
         beginInsertRows(QModelIndex(), i, i);
         mRows.insert(i,
                      {

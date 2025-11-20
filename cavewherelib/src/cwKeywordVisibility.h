@@ -5,6 +5,7 @@
 #include <QAbstractItemModel>
 #include <QObject>
 #include <QPointer>
+#include <QQMLEngine>
 
 //Our includes
 #include "cwGlobals.h"
@@ -14,6 +15,7 @@ class cwRenderObject;
 class CAVEWHERE_LIB_EXPORT cwKeywordVisibility : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(KeywordVisibility)
 
     Q_PROPERTY(QAbstractItemModel* visibleModel READ visibleModel WRITE setVisibleModel NOTIFY visibleModelChanged)
     Q_PROPERTY(QAbstractItemModel* hideModel READ hideModel WRITE setHideModel NOTIFY hideModelChanged)

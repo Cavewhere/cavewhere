@@ -21,10 +21,6 @@
 #include "cwDebug.h"
 #include "math.h"
 
-cwGlobals::cwGlobals()
-{
-}
-
 /**
   If filename doesn't have an extension, the this function will try to add the
   extensionHint to the filename.

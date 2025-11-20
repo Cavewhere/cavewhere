@@ -8,9 +8,10 @@
 #include <QSortFilterProxyModel>
 #include <QSet>
 #include <QMap>
+#include <QQmlEngine>
 
 //Our includes
-class cwKeywordItemModel;
+#include "cwKeywordItemModel.h"
 class cwKeywordGroupByKeyModel;
 class cwKeywordFilterModel;
 class cwUniqueValueFilterModel;
@@ -19,6 +20,7 @@ class cwUniqueValueFilterModel;
 class CAVEWHERE_LIB_EXPORT cwKeywordFilterPipelineModel : public QAbstractListModel
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(KeywordFilterPipelineModel)
 
     Q_PROPERTY(cwKeywordItemModel* keywordModel READ keywordModel WRITE setKeywordModel NOTIFY keywordModelChanged)
     Q_PROPERTY(QStringList operators READ operators CONSTANT)
