@@ -104,7 +104,7 @@ QBox3D cwGeometryItersecter::boundingBox(const Key &objectKey) const
 {
     auto iter = findNode(objectKey);
     if (iter != Nodes.end()) {
-        return iter->BoundingBox;
+        return iter->BoundingBox.transformed(iter->Object.modelMatrix());
     } else {
         return QBox3D();
     }
