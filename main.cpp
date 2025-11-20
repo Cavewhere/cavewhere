@@ -14,6 +14,7 @@
 #include <QThreadPool>
 #include <QQuickWindow>
 #include <QCommandLineParser>
+#include <QFileInfo>
 
 //Our includes
 //#include "cwMainWindow.h"
@@ -21,6 +22,7 @@
 #include "cwRootData.h"
 #include "cwProject.h"
 #include "cwImageProvider.h"
+#include "cwCacheImageProvider.h"
 #include "cwOpenFileEventHandler.h"
 #include "cwApplication.h"
 #include "cwGlobals.h"
@@ -171,6 +173,9 @@ int main(int argc, char *argv[])
     cwImageProvider* imageProvider = new cwImageProvider();
     context->engine()->addImageProvider(cwImageProvider::name(), imageProvider);
 
+    cwCacheImageProvider* cacheImageProvider = new cwCacheImageProvider();
+    context->engine()->addImageProvider(cwCacheImageProvider::name(), cacheImageProvider);
+
     applicationEngine->loadFromModule(QStringLiteral("cavewherelib"),
                                        QStringLiteral("CavewhereMainWindow"));
     auto id = qmlTypeId("cavewherelib", 1, 0, "RootData");
@@ -191,6 +196,11 @@ int main(int argc, char *argv[])
     //Hookup the image provider now that the rootdata is create
     imageProvider->setProjectPath(rootData->project()->filename());
     QObject::connect(rootData->project(), SIGNAL(filenameChanged(QString)), imageProvider, SLOT(setProjectPath(QString)));
+
+    cacheImageProvider->setProjectDirectory(QFileInfo(rootData->project()->filename()).absoluteDir());
+    QObject::connect(rootData->project(), &cwProject::filenameChanged, cacheImageProvider, [cacheImageProvider](const QString& filename) {
+        cacheImageProvider->setProjectDirectory(QFileInfo(filename).absoluteDir());
+    });
 
     auto quit = [&a, rootData, applicationEngine]() {
         delete applicationEngine;

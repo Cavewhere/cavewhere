@@ -97,6 +97,12 @@ QByteArray cwDiskCacher::entry(const QString &cacheFile, const QString& checksum
     return result;
 }
 
+bool cwDiskCacher::hasEntry(const Key& key) const
+{
+    QFileInfo info(filePath(key));
+    return info.exists() && info.isFile();
+}
+
 void cwDiskCacher::insert(const Key& key, const QByteArray& data)
 {
     // Determine cache file path under global lock

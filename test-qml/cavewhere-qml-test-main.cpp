@@ -9,6 +9,7 @@
 
 //Our inculdes
 #include "cwImageProvider.h"
+#include "cwCacheImageProvider.h"
 #include "cwRootData.h"
 #include "cwGlobals.h"
 #include "cwMetaTypeSystem.h"
@@ -43,6 +44,9 @@ public slots:
         cwImageProvider* imageProvider = new cwImageProvider();
         engine->addImageProvider(cwImageProvider::name(), imageProvider);
 
+        cwCacheImageProvider* cacheImageProvider = new cwCacheImageProvider();
+        engine->addImageProvider(cwCacheImageProvider::name(), cacheImageProvider);
+
         //Init libgit2
         QQuickGit::GitRepository::initGitEngine();
 
@@ -51,8 +55,14 @@ public slots:
 
         if(rootData) {
             //Hookup the image provider now that the rootdata is create
-            imageProvider->setProjectPath(rootData->project()->filename());
+            const QString filename = rootData->project()->filename();
+            imageProvider->setProjectPath(filename);
             QObject::connect(rootData->project(), SIGNAL(filenameChanged(QString)), imageProvider, SLOT(setProjectPath(QString)));
+
+            cacheImageProvider->setProjectDirectory(QFileInfo(filename).absoluteDir());
+            QObject::connect(rootData->project(), &cwProject::filenameChanged, cacheImageProvider, [cacheImageProvider](const QString& newFilename) {
+                cacheImageProvider->setProjectDirectory(QFileInfo(newFilename).absoluteDir());
+            });
         } else {
             qFatal("RootData didn't load correctly, check qml import path / build setup");
         }
@@ -84,3 +94,4 @@ int main(int argc, char **argv) \
 
 
 #include "cavewhere-qml-test-main.moc"
+#include <QFileInfo>

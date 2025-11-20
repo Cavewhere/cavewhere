@@ -1012,68 +1012,6 @@ void cwSaveLoad::addImages(QList<QUrl> noteImagePaths,
     }
 }
 
-void cwSaveLoad::saveImage(const QImage& image,
-                           const QDir& dir,
-                           std::function<void (cwImage)> outputCallBackFunc)
-{
-    if (image.isNull()) {
-        if (outputCallBackFunc) {
-            outputCallBackFunc(cwImage());
-        }
-        return;
-    }
-
-    const QString destinationDirPath = dir.absolutePath();
-    if (destinationDirPath.isEmpty()) {
-        qWarning() << "cwSaveLoad::saveImage called with empty destination directory";
-        if (outputCallBackFunc) {
-            outputCallBackFunc(cwImage());
-        }
-        return;
-    }
-
-    const QDir rootDirectory = projectDir();
-
-    auto saveFuture = cwConcurrent::run([image, destinationDirPath]() -> Monad::ResultString {
-        QDir destinationDir(destinationDirPath);
-        if (!destinationDir.exists()) {
-            if (!destinationDir.mkpath(QStringLiteral("."))) {
-                return ResultString(QStringLiteral("Unable to create directory %1").arg(destinationDirPath));
-            }
-        }
-
-        const QString filename = QStringLiteral("note-icon-%1.png")
-                                     .arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
-        const QString absolutePath = destinationDir.absoluteFilePath(filename);
-
-        if (!image.save(absolutePath, "PNG")) {
-            return ResultString(QStringLiteral("Failed to save image to %1").arg(absolutePath));
-        }
-
-        return ResultString(absolutePath);
-    });
-
-    auto observedFuture = AsyncFuture::observe(saveFuture)
-                              .context(this, [outputCallBackFunc, rootDirectory, image, saveFuture]() {
-                                  cwImage savedImage;
-                                  const auto result = saveFuture.result();
-                                  if (result.hasError()) {
-                                      qWarning() << "cwSaveLoad::saveImage failed:" << result.errorMessage();
-                                  } else {
-                                      savedImage = cwAddImageTask::originalMetaData(image);
-                                      const QString relativePath = rootDirectory.relativeFilePath(result.value());
-                                      savedImage.setPath(relativePath);
-                                  }
-
-                                  if (outputCallBackFunc) {
-                                      outputCallBackFunc(savedImage);
-                                  }
-                              }).future();
-
-    d->futureToken.addJob(cwFuture(QFuture<void>(observedFuture),
-                                   QStringLiteral("Saving image")));
-}
-
 ResultBase cwSaveLoad::moveProjectTo(const QString& destinationFileUrl)
 {
     return transferProjectTo(destinationFileUrl, ProjectTransferMode::Move);
@@ -1327,10 +1265,6 @@ std::unique_ptr<CavewhereProto::NoteLiDAR> cwSaveLoad::toProtoNoteLiDAR(const cw
     }
 
     saveNoteLiDARTranformation(protoNote->mutable_notetransformation(), note->noteTransformation());
-
-    if(!note->iconImagePath().isEmpty()) {
-        protoNote->set_iconpath(note->iconImagePath().toStdString());
-    }
 
     return protoNote;
 }
@@ -1671,10 +1605,6 @@ Monad::Result<cwNoteLiDARData> cwSaveLoad::loadNoteLiDAR(const QString& filename
 
         if(protoNote.has_notetransformation()) {
             noteData.transfrom = fromProtoLiDARNoteTransformation(protoNote.notetransformation());
-        }
-
-        if(protoNote.has_iconpath()) {
-            noteData.iconImagePath = QString::fromStdString(protoNote.iconpath());
         }
 
         return noteData;
@@ -2499,7 +2429,6 @@ void cwSaveLoad::connectNoteLiDAR(cwNoteLiDAR *lidarNote)
                 saveNote();
     });
     connect(lidarNote, &cwNoteLiDAR::autoCalculateNorthChanged, this, saveNote);
-    connect(lidarNote, &cwNoteLiDAR::iconImagePathChanged, this, saveNote);
 
     if(!d->connectionChecker.add(lidarNote->noteTransformation())) {
         return;

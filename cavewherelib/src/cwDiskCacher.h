@@ -22,6 +22,8 @@ public:
     QByteArray entry(const Key& key) const;
     QByteArray entry(const QString& cacheFile, const QString &checksum = QString()) const;
 
+    bool hasEntry(const Key& key) const;
+
     void insert(const Key& key, const QByteArray& data);
 
     QDir dir() const;

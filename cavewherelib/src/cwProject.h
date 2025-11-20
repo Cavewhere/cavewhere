@@ -43,7 +43,6 @@ class GitRepository;
 #include <QQmlEngine>
 #include <functional>
 class QUndoStack;
-class QImage;
 
 //Monad
 #include "Monad/Result.h"
@@ -108,7 +107,6 @@ public:
     QString filename() const;
 
     Q_INVOKABLE QString absolutePath(const QString& relativePath) const;
-    Q_INVOKABLE bool imagePathExists(const QString& relativePath) const;
 
     Q_INVOKABLE void waitLoadToFinish();
     void waitSaveToFinish();
@@ -124,10 +122,6 @@ public:
     void addImages(QList<QUrl> noteImagePath,
                    const QDir &dir,
                    std::function<void (QList<cwImage> images)> outputCallBackFunc);
-
-    void saveImage(const QImage& image,
-                   const QDir& dir,
-                   std::function<void (cwImage image)> outputCallBackFunc);
 
     void addFiles(QList<QUrl> filePath,
                   const QDir& dir,

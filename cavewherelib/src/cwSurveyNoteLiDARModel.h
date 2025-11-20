@@ -36,18 +36,14 @@ private:
                 continue;
             }
 
-            qDebug() << "Connectiong note:" << note;
             Q_ASSERT(dynamic_cast<cwNoteLiDAR*>(note));
             connect(static_cast<cwNoteLiDAR*>(note), &cwNoteLiDAR::iconImagePathChanged,
                     this, [this, note]()
                     {
-                        qDebug() << "I get here!" << this;
                         const QList<QObject*> objNotes = this->notes();
                         const int row = objNotes.indexOf(static_cast<QObject*>(note));
                         const QModelIndex modelIndex = index(row);
-                        qDebug() << "Icon path change!" << modelIndex;
                         if (modelIndex.isValid()) {
-                            qDebug() << "Real change!" << modelIndex;
                             emit dataChanged(modelIndex, modelIndex, { IconPathRole });
                         }
                     });

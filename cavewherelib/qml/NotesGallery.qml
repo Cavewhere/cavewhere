@@ -105,6 +105,7 @@ QQ.Rectangle {
 
         QQ.Image {
             id: imageItem
+            objectName: "noteImageItem"
             asynchronous: true
 
             anchors.centerIn: parent

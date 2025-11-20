@@ -24,6 +24,12 @@ TEST_CASE("cwDiskCacher single-threaded insert and entry", "[cwDiskCacher]") {
     auto result = cacher.entry(key);
     CHECK(result == data);
 
+    SECTION("hasEntry reflects cache presence") {
+        cwDiskCacher::Key missing{QStringLiteral("missing"), QDir(), QStringLiteral("chk")};
+        CHECK_FALSE(cacher.hasEntry(missing));
+        CHECK(cacher.hasEntry(key));
+    }
+
     SECTION("Change the checksum") {
         key.checksum = "different";
         auto result = cacher.entry(key);

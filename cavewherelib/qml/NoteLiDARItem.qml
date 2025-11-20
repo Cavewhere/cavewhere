@@ -8,14 +8,22 @@ RegionViewer {
     property NoteLiDAR note
 
     function captureIconIfNeeded() {
-        if (RootData.project.imagePathExists(note.iconImagePath)) {
+        if (!note || !RootData.noteLiDARManager) {
+            return
+        }
+
+        if (note.iconImagePath && note.iconImagePath.length > 0) {
+            return
+        }
+
+        if (sceneId.gltf.status !== RenderGLTF.Ready) {
             return
         }
 
         const targetNote = note
 
         rhiViewerId.grabToImage(function(result) {
-            if (!targetNote) {
+            if (!targetNote || !result || !result.image) {
                 return
             }
             RootData.noteLiDARManager.saveIcon(result.image, targetNote)

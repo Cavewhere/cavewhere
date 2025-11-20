@@ -5,7 +5,6 @@
 #include "cwSaveLoad.h"
 #include "cwNoteLiDAR.h"
 #include "cwTrip.h"
-#include "cwImageProvider.h"
 
 // Qt
 #include <QDir>
@@ -89,11 +88,7 @@ QVariant cwSurveyNoteLiDARModel::data(const QModelIndex& index, int role) const
         return note->filename();
     }
     case IconPathRole: {
-        const QString iconPath = note->iconImagePath();
-        if (iconPath.isEmpty()) {
-            return QString();
-        }
-        return cwImageProvider::imageUrl(iconPath);
+        return note->iconImagePath();
     }
     case ImageRole: {
         // Not applicable for LiDAR notes (no cwImage). Return empty.

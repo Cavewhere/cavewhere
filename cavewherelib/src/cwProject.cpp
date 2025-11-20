@@ -44,9 +44,6 @@
 #include <QtConcurrent>
 #include <QSharedPointer>
 #include <QSqlRecord>
-#include <QImage>
-#include <QImageReader>
-#include <QFileInfo>
 
 //Async Future
 #include <asyncfuture.h>
@@ -757,13 +754,6 @@ void cwProject::addImages(QList<QUrl> noteImagePaths,
     m_saveLoad->addImages(noteImagePaths, dir, outputCallBackFunc);
 }
 
-void cwProject::saveImage(const QImage& image,
-                          const QDir& dir,
-                          std::function<void (cwImage)> outputCallBackFunc)
-{
-    m_saveLoad->saveImage(image, dir, outputCallBackFunc);
-}
-
 void cwProject::addFiles(QList<QUrl> filePath, const QDir &dir, std::function<void (QList<QString>)> outputCallBackFunc)
 {
     m_saveLoad->addFiles(filePath, dir, outputCallBackFunc);
@@ -937,20 +927,4 @@ QString cwProject::absolutePath(const QString &relativePath) const
 {
     return m_saveLoad->projectDir().absoluteFilePath(relativePath);
 
-}
-
-bool cwProject::imagePathExists(const QString& relativePath) const
-{
-    if (relativePath.isEmpty()) {
-        return false;
-    }
-
-    const QString absolute = absolutePath(relativePath);
-    QFileInfo info(absolute);
-    if (!info.exists() || !info.isFile()) {
-        return false;
-    }
-
-    QImageReader reader(absolute);
-    return reader.canRead();
 }

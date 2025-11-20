@@ -115,6 +115,7 @@ private:
     void disconnectTrip(cwTrip* trip);
 
     void connectNote(cwNoteLiDAR* note);
+    void updateIconFromCache(cwNoteLiDAR* note);
 
     // Utilities
     static QList<cwNoteLiDAR*> collectAllNotes(cwRegionTreeModel* regionModel);
@@ -132,7 +133,6 @@ private:
     QSet<cwNoteLiDAR*> m_dirtyNotes;
     QSet<cwNoteLiDAR*> m_deletedNotes;
     QHash<cwNoteLiDAR*, QVector<uint32_t>> m_noteToRender;
-    // QSet<cwNoteLiDAR*> m_iconCaptureInFlight;
 
     QPointer<cwRenderTexturedItems> m_render;
 

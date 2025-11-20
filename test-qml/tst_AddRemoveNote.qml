@@ -41,6 +41,10 @@ MainWindowTest {
 
                     tryVerify(() => { return noteLiDARItem.scene.gltf.status === RenderGLTF.Ready }, 10000)
 
+                    let noteImageItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView->noteImage1->noteImageItem")
+                    tryVerify(() => { return noteImageItem !== null })
+                    tryVerify(() => { return noteImageItem.status === Image.Ready })
+
         }
 
         function test_removeNote() {

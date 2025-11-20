@@ -13,6 +13,11 @@
 #include <QDebug>
 #include <QDir>
 #include <QImage>
+#include <QFileInfo>
+#include <QFile>
+#include <QBuffer>
+#include <QUrl>
+#include <QtGlobal>
 
 // Ours
 #include "cwNoteLiDARTransformation.h"
@@ -26,15 +31,89 @@
 #include "cwLinePlotManager.h"
 #include "cwProject.h"
 #include "cwAsyncFuture.h"
-#include "cwNoteLiDARTransformation.h"
 #include "cwUniqueConnectionChecker.h"
 #include "cwSaveLoad.h"
-#include "cwImage.h"
+#include "cwDiskCacher.h"
+#include "cwCacheImageProvider.h"
+#include "xxhash.h"
 
 // Async
 #include "asyncfuture.h"
 
 using NotePtrList = QList<cwNoteLiDAR*>;
+
+namespace {
+
+cwDiskCacher::Key iconCacheKey(const cwNoteLiDAR* note)
+{
+    cwDiskCacher::Key key;
+
+    QString relativePath = note ? note->filename() : QString();
+    if (!relativePath.isEmpty()) {
+        QFileInfo fi(relativePath);
+        key.path = QDir(fi.path());
+        QString baseName = fi.fileName();
+        if (baseName.isEmpty()) {
+            baseName = fi.completeBaseName();
+        }
+    key.id = baseName + QStringLiteral(".icon.png");
+    } else {
+        key.path = QDir(QStringLiteral("lidar-icons"));
+        QString name = note ? note->name() : QString();
+        if (name.isEmpty()) {
+            name = QStringLiteral("note-%1").arg(reinterpret_cast<quintptr>(note), 0, 16);
+        }
+        key.id = name + QStringLiteral(".icon.png");
+    }
+
+    return key;
+}
+
+QString sourceChecksum(const cwProject* project, const cwNoteLiDAR* note)
+{
+    if (project == nullptr || note == nullptr) {
+        return {};
+    }
+
+    const QString relativePath = note->filename();
+    if (relativePath.isEmpty()) {
+        return {};
+    }
+
+    const QDir projectDir = cwSaveLoad::projectDir(project);
+    const QString absolutePath = projectDir.absoluteFilePath(relativePath);
+    QFile file(absolutePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return {};
+    }
+
+    XXH3_state_t* state = XXH3_createState();
+    if (!state) {
+        return {};
+    }
+    XXH3_64bits_reset(state);
+
+    while (!file.atEnd()) {
+        QByteArray chunk = file.read(1024 * 1024);
+        if (chunk.isEmpty()) {
+            break;
+        }
+        XXH3_64bits_update(state, chunk.constData(), static_cast<size_t>(chunk.size()));
+    }
+
+    const XXH64_hash_t hashValue = XXH3_64bits_digest(state);
+    XXH3_freeState(state);
+
+    return QString::number(static_cast<qulonglong>(hashValue), 16);
+}
+
+QString cacheUrlForKey(const cwDiskCacher::Key& key)
+{
+    const QString encoded = cwCacheImageProvider::encodeKey(key);
+    const QByteArray escaped = QUrl::toPercentEncoding(encoded);
+    return QStringLiteral("image://%1/%2").arg(cwCacheImageProvider::name(), QString::fromLatin1(escaped));
+}
+}
 
 cwNoteLiDARManager::cwNoteLiDARManager(QObject* parent) :
     QObject(parent),
@@ -196,32 +275,46 @@ void cwNoteLiDARManager::saveIcon(const QImage& icon, cwNoteLiDAR* note)
         return;
     }
 
-    // if (!note->iconImagePath().isEmpty() || m_iconCaptureInFlight.contains(note)) {
+    cwDiskCacher cacher(cwSaveLoad::projectDir(m_project));
+    auto key = iconCacheKey(note);
+    // key.checksum = sourceChecksum(m_project, note);
+    // if (key.checksum.isEmpty()) {
     //     return;
     // }
 
-    const QDir destinationDir = cwSaveLoad::dir(note);
-    QPointer<cwNoteLiDAR> notePtr(note);
-    // cwNoteLiDAR* const rawNote = note;
+    QByteArray pngData;
+    QBuffer buffer(&pngData);
+    buffer.open(QIODevice::WriteOnly);
+    if (!icon.save(&buffer, "PNG")) {
+        return;
+    }
 
-    // m_iconCaptureInFlight.insert(note);
+    cacher.insert(key, pngData);
+    note->setIconImagePath(cacheUrlForKey(key));
+}
 
-    m_project->saveImage(
-        icon,
-        destinationDir,
-        [this, notePtr](const cwImage& savedImage) {
-            // m_iconCaptureInFlight.remove(rawNote);
+void cwNoteLiDARManager::updateIconFromCache(cwNoteLiDAR* note)
+{
+    if (note == nullptr || m_project == nullptr) {
+        return;
+    }
 
-            if (notePtr.isNull()) {
-                return;
-            }
+    cwDiskCacher::Key key = iconCacheKey(note);
+    qDebug() << "Key:" << key.path << key.id;
 
+    //Don't checksum, it's slow
+    // key.checksum = sourceChecksum(m_project, note);
+    // if (key.checksum.isEmpty()) {
+    //     note->setIconImagePath(QString());
+    //     return;
+    // }
 
-            if (savedImage.isValid()) {
-                qDebug() << "Save image valid:" << savedImage << savedImage.isValid();
-                notePtr->setIconImagePath(savedImage.path());
-            }
-        });
+    cwDiskCacher cacher(cwSaveLoad::projectDir(m_project));
+    if (cacher.hasEntry(key)) {
+        note->setIconImagePath(cacheUrlForKey(key));
+    } else {
+        note->setIconImagePath(QString());
+    }
 }
 
 // ---------------------- Region model wiring ----------------------
@@ -342,7 +435,6 @@ void cwNoteLiDARManager::noteDestroyed(QObject* noteObj)
     if (auto* note = static_cast<cwNoteLiDAR*>(noteObj)) {
         m_deletedNotes.insert(note);
         m_dirtyNotes.remove(note);
-        // m_iconCaptureInFlight.remove(note);
     }
 }
 
@@ -563,8 +655,13 @@ void cwNoteLiDARManager::connectNote(cwNoteLiDAR *note)
     bool connected = connect(note, &cwNoteLiDAR::dataChanged, this, [handleNoteChange](QModelIndex, QModelIndex, QVector<int>) { handleNoteChange(); });
     connect(note, &cwNoteLiDAR::rowsInserted, this, handleNoteChange);
     connect(note, &cwNoteLiDAR::rowsRemoved, this, handleNoteChange);
+    connect(note, &cwNoteLiDAR::filenameChanged, this, [this, note, handleNoteChange]() {
+        updateIconFromCache(note);
+        handleNoteChange();
+    });
 
     markDirty(note);
+    updateIconFromCache(note);
 }
 
 // ---------------------- Utilities ----------------------
