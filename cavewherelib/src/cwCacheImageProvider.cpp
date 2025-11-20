@@ -8,6 +8,8 @@
 #include <QUrl>
 
 #include "cwDiskCacher.h"
+#include "cwImageProvider.h"
+#include <algorithm>
 
 namespace {
 
@@ -97,10 +99,34 @@ QImage cwCacheImageProvider::requestImage(const QString& id, QSize* size, const 
         return {};
     }
 
-    QImage image;
-    image.loadFromData(data);
-    if (size != nullptr) {
-        *size = image.size();
+    const int maxSize = std::max(requestedSize.width(), requestedSize.height());
+    if (maxSize <= 0) {
+        QImage image;
+        image.loadFromData(data);
+        if (size != nullptr) {
+            *size = image.size();
+        }
+        return image;
     }
-    return image;
+
+    const QString prefix = QStringLiteral("scaled-%1_%2")
+                               .arg(requestedSize.width())
+                               .arg(requestedSize.height());
+    cwDiskCacher::Key scaledKey = key;
+    scaledKey.id = prefix + QStringLiteral("-") + key.id + QStringLiteral(".") + cwImageProvider::imageCacheExtension();
+
+    auto loadOriginal = [data]() {
+        QImage image;
+        image.loadFromData(data);
+        return image;
+    };
+
+    qDebug() << "Requesting scaled image:" << requestedSize;
+
+    return cwImageProvider::requestScaledImageFromCache(
+        requestedSize,
+        size,
+        loadOriginal,
+        scaledKey,
+        baseDir);
 }

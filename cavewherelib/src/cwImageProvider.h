@@ -15,6 +15,7 @@
 #include <QDebug>
 #include <QVector2D>
 #include <QStringLiteral>
+#include <functional>
 
 //Our includes
 #include "cwImage.h"
@@ -67,10 +68,21 @@ public:
         const QString& projectPath,
         const QImage& image,
         const cwDiskCacher::Key& key);
+    static cwDiskCacher::Key addToImageCache(
+        const QDir& projectDir,
+        const QImage& image,
+        const cwDiskCacher::Key& key);
 
     static cwDiskCacher::Key imageCacheKey(const QString& pathToImage,
                                            const QString& keyPrefix,
                                            quint64 parentImageHash);
+
+    static QImage requestScaledImageFromCache(
+        const QSize& requestedSize,
+        QSize* size,
+        const std::function<QImage()>& loadOriginalImage,
+        const cwDiskCacher::Key& cacheKey,
+        const QDir& cacheDir);
 
 public slots:
     void setProjectPath(QString projectPath);
@@ -89,4 +101,3 @@ private:
 };
 
 #endif // CWPROJECTIMAGEPROVIDER_H
-

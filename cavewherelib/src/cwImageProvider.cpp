@@ -49,7 +49,7 @@ QImage cwImageProvider::requestImage(const QString &path, QSize *size, const QSi
 
     // qDebug() << "Requesting path:" << path << ProjectPath;
 
-    int maxSize = std::max(requestedSize.width(), requestedSize.height());
+    const int maxSize = std::max(requestedSize.width(), requestedSize.height());
 
     if(maxSize > 0) {
         //Generate a smaller image than the original, this could be an icon
@@ -57,27 +57,16 @@ QImage cwImageProvider::requestImage(const QString &path, QSize *size, const QSi
         QString prefix = QStringLiteral("scaled-") + QString::number(requestedSize.width()) + QStringLiteral("_") + QString::number(requestedSize.height());
         auto key = imageCacheKey(path, prefix, hash);
 
-        cwDiskCacher cacher(QFileInfo(ProjectPath).absoluteDir());
-        auto entry = cacher.entry(key);
-        if(entry.isEmpty()) {
-            //Read the image in
-            QImage image = this->image(path);
-
-            //Get the size of the image, scale it and return it.
-            QImage scaledImage = image.scaled(QSize(maxSize, maxSize), Qt::KeepAspectRatio, Qt::SmoothTransformation);
-            *size = scaledImage.size();
-
-            //Add to the cache
-            addToImageCache(ProjectPath, scaledImage, key);
-
-            //Return the scaled image
-            return scaledImage;
-        } else {
-            //Found the scaled image in cache
-            auto image = this->image(cwImageData(QSize(), -1, imageCacheExtension().toUtf8(), entry));
-            *size = image.size();
-            return image;
+        const QString projectFile = projectPath();
+        if (projectFile.isEmpty()) {
+            return {};
         }
+        const QDir cacheDir = QFileInfo(projectFile).absoluteDir();
+        auto loadOriginal = [this, path]() {
+            return this->image(path);
+        };
+
+        return requestScaledImageFromCache(requestedSize, size, loadOriginal, key, cacheDir);
     } else {
         QImage image = this->image(path);
 
@@ -374,12 +363,10 @@ quint64 cwImageProvider::toHash(const QByteArray &data)
 }
 
 cwDiskCacher::Key cwImageProvider::addToImageCache(
-    const QString& projectFilename,
+    const QDir& projectDir,
     const QImage& image,
     const cwDiskCacher::Key& key)
 {
-    QFileInfo info(projectFilename);
-
     QByteArray imageData;
     QBuffer buffer(&imageData);
     buffer.open(QIODevice::WriteOnly);
@@ -387,9 +374,18 @@ cwDiskCacher::Key cwImageProvider::addToImageCache(
     buffer.close();
 
     //Save image data into the disk cacher
-    cwDiskCacher cacher(info.dir());
+    cwDiskCacher cacher(projectDir);
     cacher.insert(key, imageData);
     return key;
+}
+
+cwDiskCacher::Key cwImageProvider::addToImageCache(
+    const QString& projectFilename,
+    const QImage& image,
+    const cwDiskCacher::Key& key)
+{
+    QFileInfo info(projectFilename);
+    return addToImageCache(info.dir(), image, key);
 }
 
 cwDiskCacher::Key cwImageProvider::imageCacheKey(const QString &pathToImage, const QString &keyPrefix, quint64 parentImageHash)
@@ -403,4 +399,52 @@ cwDiskCacher::Key cwImageProvider::imageCacheKey(const QString &pathToImage, con
     };
 
     return key;
+}
+
+QImage cwImageProvider::requestScaledImageFromCache(
+    const QSize& requestedSize,
+    QSize* size,
+    const std::function<QImage()>& loadOriginalImage,
+    const cwDiskCacher::Key& cacheKey,
+    const QDir& cacheDir)
+{
+    const int maxSize = std::max(requestedSize.width(), requestedSize.height());
+    if (maxSize <= 0) {
+        QImage original = loadOriginalImage();
+        if (size != nullptr) {
+            *size = original.size();
+        }
+        return original;
+    }
+
+    cwDiskCacher cacher(cacheDir);
+    const QByteArray entry = cacher.entry(cacheKey);
+    if (!entry.isEmpty()) {
+        QByteArray dataCopy = entry;
+        QImage cachedImage = cwAddImageTask::imageWithAutoTransform(
+            dataCopy,
+            cwImageProvider::imageCacheExtension().toUtf8());
+        if (size != nullptr) {
+            *size = cachedImage.size();
+        }
+        return cachedImage;
+    }
+
+    QImage original = loadOriginalImage();
+    if (original.isNull()) {
+        if (size != nullptr) {
+            *size = QSize();
+        }
+        return original;
+    }
+
+    QImage scaledImage = original.scaled(QSize(maxSize, maxSize),
+                                         Qt::KeepAspectRatio,
+                                         Qt::SmoothTransformation);
+    if (size != nullptr) {
+        *size = scaledImage.size();
+    }
+
+    addToImageCache(cacheDir, scaledImage, cacheKey);
+    return scaledImage;
 }
