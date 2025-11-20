@@ -80,10 +80,19 @@ private:
     static QRhiGraphicsPipeline::TargetBlend toBlendState(const cwRenderMaterialState& material);
     static quint8 toStageMask(cwRenderMaterialState::ShaderStages stages);
 
+    QString effectiveFragmentShader(const cwRenderMaterialState& material) const;
+    QVector<QRhiGraphicsPipeline::TargetBlend> buildTargetBlends(const cwRenderMaterialState& material,
+                                                                 cwRHIObject::RenderPass pass,
+                                                                 int attachmentCount) const;
+
     cwRhiPipelineKey makePipelineKey(QRhiRenderPassDescriptor* renderPass,
                                      int sampleCount,
+                                     int attachmentCount,
+                                     const QString& fragmentShader,
                                      const cwRenderMaterialState& material) const;
     cwRhiScene::PipelineRecord* acquirePipeline(const cwRhiPipelineKey& key,
+                                                cwRHIObject::RenderPass pass,
+                                                int attachmentCount,
                                                 const cwRenderMaterialState& material,
                                                 QRhi* rhi,
                                                 const QRhiVertexInputLayout& layout,

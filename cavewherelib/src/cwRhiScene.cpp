@@ -28,6 +28,7 @@ uint qHash(const cwRhiPipelineKey& key, uint seed) noexcept
     seed = qHash(key.textureStages, seed);
     seed = qHash(key.hasPerDraw, seed);
     seed = qHash(key.topology, seed);
+    seed = qHash(key.colorAttachmentCount, seed);
     return seed;
 }
 
@@ -60,6 +61,10 @@ cwRhiScene::~cwRhiScene()
         delete record;
     }
     m_pipelineCache.clear();
+
+    releaseTransparentResources();
+    delete m_transparent.fullscreenQuad;
+    m_transparent.fullscreenQuad = nullptr;
 
     delete m_sharedLinearSampler;
     m_sharedLinearSampler = nullptr;
@@ -147,11 +152,31 @@ void cwRhiScene::synchroize(cwScene *scene, cwRhiItemRenderer *renderer)
 
 }
 
+QRhiRenderTarget* cwRhiScene::renderTargetForPass(cwRHIObject::RenderPass pass) const
+{
+    const int idx = passIndex(pass);
+    if (idx < 0 || idx >= m_passStates.size()) {
+        return nullptr;
+    }
+    return m_passStates[idx].target;
+}
+
+int cwRhiScene::colorAttachmentCountForPass(cwRHIObject::RenderPass pass) const
+{
+    const int idx = passIndex(pass);
+    if (idx < 0 || idx >= m_passStates.size()) {
+        return 1;
+    }
+    return m_passStates[idx].colorAttachmentCount;
+}
+
 void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
 {
-    auto renderData = cwRHIObject::RenderData({cb, renderer, m_updateFlags});
+    auto renderData = cwRHIObject::RenderData({cb, renderer, this, m_updateFlags});
 
     auto rhi = cb->rhi();
+    preparePassStates(rhi, renderer, cb);
+
     QRhiResourceUpdateBatch* resources = rhi->nextResourceUpdateBatch();
     auto resourceUpdateData = cwRHIObject::ResourceUpdateData({resources, renderData});
 
@@ -183,8 +208,10 @@ void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
     //     cwRHIObject::RenderPass::Overlay
     // };
 
-    const std::array<cwRHIObject::RenderPass, 1> passOrder = {
+    const std::array<cwRHIObject::RenderPass, 3> passOrder = {
         cwRHIObject::RenderPass::Opaque,
+        cwRHIObject::RenderPass::Transparent,
+        cwRHIObject::RenderPass::Overlay
     };
 
     quint32 objectOrder = 0;
@@ -223,92 +250,345 @@ void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
         ++objectOrder;
     }
 
-    const QColor clearColor = QColor::fromRgbF(0.0, 0.0, 0.0, 0.0); //0.33, 0.66, 1.0, 1.0);
-    cb->beginPass(renderer->renderTarget(), clearColor, { 1.0f, 0 }, resources);
+    const QColor clearColor = QColor::fromRgbF(0.0, 0.0, 0.0, 0.0);
+    QRhiRenderTarget* opaqueTarget = renderer->renderTarget();
+    const QSize outputSize = opaqueTarget ? opaqueTarget->pixelSize() : QSize();
 
-    const QSize outputSize = renderer->renderTarget()->pixelSize();
-    cb->setViewport(QRhiViewport(0, 0, outputSize.width(), outputSize.height()));
+    if (opaqueTarget) {
+        cb->beginPass(opaqueTarget, clearColor, { 1.0f, 0 }, resources);
+        cb->setViewport(QRhiViewport(0, 0, outputSize.width(), outputSize.height()));
+        executeBatches(cb, renderData, passBatches[passIndex(cwRHIObject::RenderPass::Opaque)]);
+        cb->endPass();
+    }
 
-    QRhiGraphicsPipeline* boundPipeline = nullptr;
-    for (cwRHIObject::RenderPass pass : passOrder) {
-        const int passIndex = static_cast<int>(pass);
-        auto& batches = passBatches[passIndex];
-        if (batches.isEmpty()) {
-            continue;
+    const bool hasTransparent = !passBatches[passIndex(cwRHIObject::RenderPass::Transparent)].isEmpty();
+    if (hasTransparent && m_transparent.renderTarget) {
+        cb->beginPass(m_transparent.renderTarget,
+                      QColor::fromRgbF(0.0, 0.0, 0.0, 0.0),
+                      { 1.0f, 0 },
+                      nullptr);
+        cb->setViewport(QRhiViewport(0, 0, outputSize.width(), outputSize.height()));
+        executeBatches(cb, renderData, passBatches[passIndex(cwRHIObject::RenderPass::Transparent)]);
+        cb->endPass();
+    }
+
+    auto& overlayBatches = passBatches[passIndex(cwRHIObject::RenderPass::Overlay)];
+    const bool needsFinalPass = (hasTransparent && m_transparent.compositePipeline && m_transparent.compositeBindings)
+                                || !overlayBatches.isEmpty();
+
+    if (needsFinalPass && opaqueTarget) {
+        cb->beginPass(opaqueTarget,
+                      clearColor,
+                      { 1.0f, 0 },
+                      nullptr,
+                      QRhiCommandBuffer::BeginPassFlag::ExternalContent);
+        cb->setViewport(QRhiViewport(0, 0, outputSize.width(), outputSize.height()));
+
+        if (hasTransparent && m_transparent.compositePipeline && m_transparent.compositeBindings && m_transparent.fullscreenQuad) {
+            cb->setGraphicsPipeline(m_transparent.compositePipeline);
+            cb->setShaderResources(m_transparent.compositeBindings);
+            const QRhiCommandBuffer::VertexInput vbuf(m_transparent.fullscreenQuad, 0);
+            cb->setVertexInput(0, 1, &vbuf);
+            cb->draw(4);
         }
 
-        std::sort(batches.begin(), batches.end(), [](const cwRHIObject::PipelineBatch& a,
-                                                     const cwRHIObject::PipelineBatch& b) {
-            if (a.state.sortKey != b.state.sortKey) {
-                return a.state.sortKey < b.state.sortKey;
-            }
-            return a.state.pipeline < b.state.pipeline;
-        });
+        executeBatches(cb, renderData, overlayBatches);
+        cb->endPass();
+    }
+}
 
-        for (const auto& batch : std::as_const(batches)) {
-            if (batch.state.pipeline && batch.state.pipeline != boundPipeline) {
-                boundPipeline = batch.state.pipeline;
-                cb->setGraphicsPipeline(boundPipeline);
-            } else if (!batch.state.pipeline) {
-                boundPipeline = nullptr;
-            }
+int cwRhiScene::passIndex(cwRHIObject::RenderPass pass)
+{
+    return static_cast<int>(pass);
+}
 
-            for (const auto& drawable : batch.drawables) {
-                switch (drawable.type) {
-                case cwRHIObject::Drawable::Type::Custom:
-                    boundPipeline = nullptr;
-                    if (drawable.customDraw) {
-                        drawable.customDraw(renderData);
-                    }
-                    break;
-                case cwRHIObject::Drawable::Type::Indexed: {
-                    if (drawable.bindings) {
-                        cb->setShaderResources(drawable.bindings);
-                    } else {
-                        cb->setShaderResources();
-                    }
+void cwRhiScene::preparePassStates(QRhi* rhi,
+                                   cwRhiItemRenderer* renderer,
+                                   QRhiCommandBuffer* cb)
+{
+    if (!renderer) {
+        return;
+    }
 
-                    if (!drawable.vertexBindings.isEmpty()) {
-                        cb->setVertexInput(0,
-                                           static_cast<int>(drawable.vertexBindings.size()),
-                                           drawable.vertexBindings.constData(),
-                                           drawable.indexBuffer,
-                                           drawable.indexOffset,
-                                           drawable.indexFormat);
-                    }
+    auto* target = renderer->renderTarget();
+    const int opaqueIdx = passIndex(cwRHIObject::RenderPass::Opaque);
+    const int overlayIdx = passIndex(cwRHIObject::RenderPass::Overlay);
 
-                    cb->drawIndexed(drawable.indexCount,
-                                    drawable.instanceCount,
-                                    drawable.indexOffset,
-                                    drawable.vertexOffset,
-                                    drawable.firstInstance);
-                    break;
-                }
-                case cwRHIObject::Drawable::Type::NonIndexed: {
-                    if (drawable.bindings) {
-                        cb->setShaderResources(drawable.bindings);
-                    } else {
-                        cb->setShaderResources();
-                    }
+    m_passStates[opaqueIdx].target = target;
+    m_passStates[opaqueIdx].colorAttachmentCount = 1;
+    m_passStates[overlayIdx] = m_passStates[opaqueIdx];
 
-                    if (!drawable.vertexBindings.isEmpty()) {
-                        cb->setVertexInput(0,
-                                           static_cast<int>(drawable.vertexBindings.size()),
-                                           drawable.vertexBindings.constData());
-                    }
+    ensureTransparentResources(rhi, renderer, cb);
+}
 
-                    cb->draw(drawable.vertexCount,
-                             drawable.instanceCount,
-                             static_cast<quint32>(drawable.vertexOffset),
-                             drawable.firstInstance);
-                    break;
-                }
-                }
-            }
+void cwRhiScene::ensureTransparentResources(QRhi* rhi,
+                                            cwRhiItemRenderer* renderer,
+                                            QRhiCommandBuffer* cb)
+{
+    const int transparentIdx = passIndex(cwRHIObject::RenderPass::Transparent);
+    if (!renderer || !renderer->renderTarget() || !renderer->depthStencilBuffer()) {
+        m_passStates[transparentIdx].target = nullptr;
+        releaseTransparentResources();
+        return;
+    }
+
+    const QSize size = renderer->renderTarget()->pixelSize();
+    QRhiRenderBuffer* depthBuffer = renderer->depthStencilBuffer();
+
+    const bool sizeChanged = size != m_transparent.size;
+    const bool depthChanged = depthBuffer != m_transparent.depthBuffer;
+
+    if (sizeChanged || depthChanged) {
+        releaseTransparentResources();
+    }
+
+    if (!m_transparent.renderTarget) {
+        if (size.isEmpty()) {
+            m_passStates[transparentIdx].target = nullptr;
+            return;
+        }
+
+        m_transparent.size = size;
+        m_transparent.depthBuffer = depthBuffer;
+
+        m_transparent.accumulationTexture = rhi->newTexture(QRhiTexture::RGBA16F,
+                                                            size,
+                                                            1,
+                                                            QRhiTexture::RenderTarget | QRhiTexture::UsedWithLoadStore);
+        if (!m_transparent.accumulationTexture || !m_transparent.accumulationTexture->create()) {
+            releaseTransparentResources();
+            m_passStates[transparentIdx].target = nullptr;
+            return;
+        }
+
+        QRhiColorAttachment colorAttachment(m_transparent.accumulationTexture);
+        QRhiTextureRenderTargetDescription desc(colorAttachment);
+        desc.setDepthStencilBuffer(depthBuffer);
+
+        m_transparent.renderTarget = rhi->newTextureRenderTarget(desc);
+        m_transparent.renderTarget->setFlags(QRhiTextureRenderTarget::PreserveDepthStencilContents);
+        m_transparent.renderPassDesc = m_transparent.renderTarget->newCompatibleRenderPassDescriptor();
+        m_transparent.renderTarget->setRenderPassDescriptor(m_transparent.renderPassDesc);
+        if (!m_transparent.renderTarget->create()) {
+            releaseTransparentResources();
+            m_passStates[transparentIdx].target = nullptr;
+            return;
         }
     }
 
-    cb->endPass();
+    if (cb) {
+        ensureFullscreenQuad(rhi, cb);
+    }
+
+    m_passStates[transparentIdx].target = m_transparent.renderTarget;
+    m_passStates[transparentIdx].colorAttachmentCount = 1;
+
+    ensureCompositePipeline(rhi, renderer);
+}
+
+void cwRhiScene::releaseTransparentResources()
+{
+    delete m_transparent.renderTarget;
+    m_transparent.renderTarget = nullptr;
+    delete m_transparent.renderPassDesc;
+    m_transparent.renderPassDesc = nullptr;
+    delete m_transparent.accumulationTexture;
+    m_transparent.accumulationTexture = nullptr;
+    m_transparent.boundAccumulationTexture = nullptr;
+    m_transparent.size = {};
+    m_transparent.depthBuffer = nullptr;
+    m_passStates[passIndex(cwRHIObject::RenderPass::Transparent)].target = nullptr;
+    releaseCompositePipeline();
+}
+
+void cwRhiScene::ensureCompositePipeline(QRhi* rhi, cwRhiItemRenderer* renderer)
+{
+    if (!renderer || !renderer->renderTarget() || !m_transparent.accumulationTexture) {
+        releaseCompositePipeline();
+        return;
+    }
+
+    auto* sampler = sharedLinearClampSampler(rhi);
+    if (!sampler) {
+        return;
+    }
+
+    if (!m_transparent.compositeBindings || m_transparent.boundAccumulationTexture != m_transparent.accumulationTexture) {
+        delete m_transparent.compositeBindings;
+        m_transparent.compositeBindings = nullptr;
+
+        m_transparent.compositeBindings = rhi->newShaderResourceBindings();
+        m_transparent.compositeBindings->setBindings({
+            QRhiShaderResourceBinding::sampledTexture(0,
+                                                      QRhiShaderResourceBinding::FragmentStage,
+                                                      m_transparent.accumulationTexture,
+                                                      sampler)
+        });
+        m_transparent.compositeBindings->create();
+        m_transparent.boundAccumulationTexture = m_transparent.accumulationTexture;
+    }
+
+    QRhiRenderPassDescriptor* finalPassDesc = renderer->renderTarget()->renderPassDescriptor();
+    if (m_transparent.compositePipeline && m_transparent.compositePassDescriptor == finalPassDesc) {
+        return;
+    }
+
+    delete m_transparent.compositePipeline;
+    m_transparent.compositePipeline = nullptr;
+    m_transparent.compositePassDescriptor = finalPassDesc;
+
+    QRhiGraphicsPipeline* pipeline = rhi->newGraphicsPipeline();
+    pipeline->setCullMode(QRhiGraphicsPipeline::None);
+    pipeline->setDepthTest(false);
+    pipeline->setDepthWrite(false);
+    pipeline->setSampleCount(renderer->renderTarget()->sampleCount());
+    pipeline->setTopology(QRhiGraphicsPipeline::TriangleStrip);
+
+    QShader vertex = cwRHIObject::loadShader(QStringLiteral(":/shaders/oit_composite.vert.qsb"));
+    QShader fragment = cwRHIObject::loadShader(QStringLiteral(":/shaders/oit_composite.frag.qsb"));
+    pipeline->setShaderStages({
+        { QRhiShaderStage::Vertex, vertex },
+        { QRhiShaderStage::Fragment, fragment }
+    });
+
+    QRhiVertexInputLayout layout;
+    layout.setBindings({ int(sizeof(float) * 4) });
+    layout.setAttributes({
+        { 0, 0, QRhiVertexInputAttribute::Float2, 0 },
+        { 0, 1, QRhiVertexInputAttribute::Float2, int(sizeof(float) * 2) }
+    });
+
+    pipeline->setVertexInputLayout(layout);
+
+    QRhiGraphicsPipeline::TargetBlend blend;
+    blend.enable = true;
+    blend.srcColor = QRhiGraphicsPipeline::One;
+    blend.dstColor = QRhiGraphicsPipeline::One;
+    blend.srcAlpha = QRhiGraphicsPipeline::Zero;
+    blend.dstAlpha = QRhiGraphicsPipeline::One;
+    pipeline->setTargetBlends({ blend });
+
+    pipeline->setShaderResourceBindings(m_transparent.compositeBindings);
+    pipeline->setRenderPassDescriptor(finalPassDesc);
+    pipeline->create();
+
+    m_transparent.compositePipeline = pipeline;
+}
+
+void cwRhiScene::releaseCompositePipeline()
+{
+    delete m_transparent.compositePipeline;
+    m_transparent.compositePipeline = nullptr;
+    delete m_transparent.compositeBindings;
+    m_transparent.compositeBindings = nullptr;
+    m_transparent.boundAccumulationTexture = nullptr;
+    m_transparent.compositePassDescriptor = nullptr;
+}
+
+void cwRhiScene::executeBatches(QRhiCommandBuffer* cb,
+                                const cwRHIObject::RenderData& renderData,
+                                QVector<cwRHIObject::PipelineBatch>& batches)
+{
+    if (batches.isEmpty()) {
+        return;
+    }
+
+    std::sort(batches.begin(), batches.end(), [](const cwRHIObject::PipelineBatch& a,
+                                                 const cwRHIObject::PipelineBatch& b) {
+        if (a.state.sortKey != b.state.sortKey) {
+            return a.state.sortKey < b.state.sortKey;
+        }
+        return a.state.pipeline < b.state.pipeline;
+    });
+
+    QRhiGraphicsPipeline* boundPipeline = nullptr;
+    for (const auto& batch : std::as_const(batches)) {
+        if (batch.state.pipeline && batch.state.pipeline != boundPipeline) {
+            boundPipeline = batch.state.pipeline;
+            cb->setGraphicsPipeline(boundPipeline);
+        } else if (!batch.state.pipeline) {
+            boundPipeline = nullptr;
+        }
+
+        for (const auto& drawable : batch.drawables) {
+            switch (drawable.type) {
+            case cwRHIObject::Drawable::Type::Custom:
+                boundPipeline = nullptr;
+                if (drawable.customDraw) {
+                    drawable.customDraw(renderData);
+                }
+                break;
+            case cwRHIObject::Drawable::Type::Indexed: {
+                if (drawable.bindings) {
+                    cb->setShaderResources(drawable.bindings);
+                } else {
+                    cb->setShaderResources();
+                }
+
+                if (!drawable.vertexBindings.isEmpty()) {
+                    cb->setVertexInput(0,
+                                       static_cast<int>(drawable.vertexBindings.size()),
+                                       drawable.vertexBindings.constData(),
+                                       drawable.indexBuffer,
+                                       drawable.indexOffset,
+                                       drawable.indexFormat);
+                }
+
+                cb->drawIndexed(drawable.indexCount,
+                                drawable.instanceCount,
+                                drawable.indexOffset,
+                                drawable.vertexOffset,
+                                drawable.firstInstance);
+                break;
+            }
+            case cwRHIObject::Drawable::Type::NonIndexed: {
+                if (drawable.bindings) {
+                    cb->setShaderResources(drawable.bindings);
+                } else {
+                    cb->setShaderResources();
+                }
+
+                if (!drawable.vertexBindings.isEmpty()) {
+                    cb->setVertexInput(0,
+                                       static_cast<int>(drawable.vertexBindings.size()),
+                                       drawable.vertexBindings.constData());
+                }
+
+                cb->draw(drawable.vertexCount,
+                         drawable.instanceCount,
+                         static_cast<quint32>(drawable.vertexOffset),
+                         drawable.firstInstance);
+                break;
+            }
+            }
+        }
+    }
+}
+
+void cwRhiScene::ensureFullscreenQuad(QRhi* rhi, QRhiCommandBuffer* cb)
+{
+    if (m_transparent.fullscreenQuad || !cb) {
+        return;
+    }
+
+    static const float quadVertices[] = {
+        -1.0f, -1.0f, 0.0f, 0.0f,
+         1.0f, -1.0f, 1.0f, 0.0f,
+        -1.0f,  1.0f, 0.0f, 1.0f,
+         1.0f,  1.0f, 1.0f, 1.0f,
+    };
+
+    m_transparent.fullscreenQuad = rhi->newBuffer(QRhiBuffer::Immutable,
+                                                  QRhiBuffer::VertexBuffer,
+                                                  sizeof(quadVertices));
+    if (!m_transparent.fullscreenQuad) {
+        return;
+    }
+    m_transparent.fullscreenQuad->create();
+
+    QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
+    batch->uploadStaticBuffer(m_transparent.fullscreenQuad, quadVertices);
+    cb->resourceUpdate(batch);
 }
 
 void cwRhiScene::updateGlobalUniformBuffer(QRhiResourceUpdateBatch* batch, QRhi* rhi)

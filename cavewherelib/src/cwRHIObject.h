@@ -12,6 +12,7 @@ class QRhiResourceUpdateBatch;
 
 //Our includes
 class cwRhiItemRenderer;
+class cwRhiScene;
 class cwRenderObject;
 
 class cwRHIObject {
@@ -22,6 +23,7 @@ public:
     struct RenderData {
         QRhiCommandBuffer* cb;
         cwRhiItemRenderer* renderer;
+        cwRhiScene* scene;
         cwSceneUpdate::Flag updateFlag;
     };
 

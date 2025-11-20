@@ -7,6 +7,8 @@ class QRhiCommandBuffer;
 
 //Our includes
 #include "cwSceneUpdate.h"
+#include "cwRHIObject.h"
+#include <array>
 #include <QHash>
 #include <QString>
 #include <functional>
@@ -33,6 +35,7 @@ struct cwRhiPipelineKey {
     quint8 textureStages = 0;
     quint8 hasPerDraw = 0;
     quint8 topology = static_cast<quint8>(QRhiGraphicsPipeline::Triangles);
+    quint8 colorAttachmentCount = 1;
     bool operator==(const cwRhiPipelineKey& other) const = default;
 };
 
@@ -46,6 +49,9 @@ uint qHash(const cwRhiPipelineKey& key, uint seed) noexcept;
 class cwRhiScene {
 public:
     friend class cwRhiItemRenderer;
+
+    QRhiRenderTarget* renderTargetForPass(cwRHIObject::RenderPass pass) const;
+    int colorAttachmentCountForPass(cwRHIObject::RenderPass pass) const;
 
     struct PipelineRecord {
         cwRhiPipelineKey key;
@@ -97,6 +103,42 @@ private:
     QRhiBuffer* m_globalUniformBuffer = nullptr;
     QHash<cwRhiPipelineKey, PipelineRecord*> m_pipelineCache;
     QRhiSampler* m_sharedLinearSampler = nullptr;
+
+    struct PassState {
+        QRhiRenderTarget* target = nullptr;
+        int colorAttachmentCount = 1;
+    };
+
+    struct TransparentResources {
+        QRhiTexture* accumulationTexture = nullptr;
+        QRhiTexture* boundAccumulationTexture = nullptr;
+        QRhiTextureRenderTarget* renderTarget = nullptr;
+        QRhiRenderPassDescriptor* renderPassDesc = nullptr;
+        QSize size;
+        QRhiRenderBuffer* depthBuffer = nullptr;
+        QRhiGraphicsPipeline* compositePipeline = nullptr;
+        QRhiShaderResourceBindings* compositeBindings = nullptr;
+        QRhiBuffer* fullscreenQuad = nullptr;
+        QRhiRenderPassDescriptor* compositePassDescriptor = nullptr;
+    };
+
+    std::array<PassState, static_cast<int>(cwRHIObject::RenderPass::Count)> m_passStates;
+    TransparentResources m_transparent;
+
+    void preparePassStates(QRhi* rhi,
+                           cwRhiItemRenderer* renderer,
+                           QRhiCommandBuffer* cb);
+    void ensureTransparentResources(QRhi* rhi,
+                                     cwRhiItemRenderer* renderer,
+                                     QRhiCommandBuffer* cb);
+    void releaseTransparentResources();
+    void ensureCompositePipeline(QRhi* rhi, cwRhiItemRenderer* renderer);
+    void releaseCompositePipeline();
+    void executeBatches(QRhiCommandBuffer* cb,
+                        const cwRHIObject::RenderData& renderData,
+                        QVector<cwRHIObject::PipelineBatch>& batches);
+    void ensureFullscreenQuad(QRhi* rhi, QRhiCommandBuffer* cb);
+    static int passIndex(cwRHIObject::RenderPass pass);
 
     void updateGlobalUniformBuffer(QRhiResourceUpdateBatch* batch, QRhi* rhi);
     bool needsUpdate(cwSceneUpdate::Flag flag) const { return (m_updateFlags & flag) == flag; }

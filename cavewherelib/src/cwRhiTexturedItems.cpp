@@ -14,6 +14,7 @@
 
 namespace {
 constexpr int kFallbackUniformSize = 16; // minimum to satisfy uniform alignment
+const QString kWeightedOitFragmentShader = QStringLiteral(":/shaders/oit_weighted.frag.qsb");
 }
 
 cwRhiTexturedItems::cwRhiTexturedItems() = default;
@@ -421,18 +422,47 @@ void cwRhiTexturedItems::Item::ensurePipeline(const ResourceUpdateData& data,
     }
 
     auto* renderer = data.renderData.renderer;
-    auto* renderTarget = renderer->renderTarget();
+    auto* scene = data.renderData.scene;
+    const cwRHIObject::RenderPass pass = toRenderPass(material.renderPass);
+
+    QRhiRenderTarget* renderTarget = nullptr;
+    int attachmentCount = 1;
+    if (scene) {
+        renderTarget = scene->renderTargetForPass(pass);
+        attachmentCount = scene->colorAttachmentCountForPass(pass);
+    }
+    if (!renderTarget && renderer) {
+        renderTarget = renderer->renderTarget();
+        attachmentCount = 1;
+    }
+
+    if (!renderTarget) {
+        pipelineNeedsUpdate = true;
+        return;
+    }
+
     auto* currentPass = renderTarget->renderPassDescriptor();
     const int currentSampleCount = renderTarget->sampleCount();
+    const QString fragmentShader = owner->effectiveFragmentShader(material);
 
-    const cwRhiPipelineKey key = owner->makePipelineKey(currentPass, currentSampleCount, material);
+    const cwRhiPipelineKey key = owner->makePipelineKey(currentPass,
+                                                        currentSampleCount,
+                                                        attachmentCount,
+                                                        fragmentShader,
+                                                        material);
 
     if (!pipelineNeedsUpdate && pipelineRecord && pipelineRecord->key == key) {
         return;
     }
 
     releasePipeline();
-    pipelineRecord = owner->acquirePipeline(key, material, data.renderData.cb->rhi(), layout, sharedData);
+    pipelineRecord = owner->acquirePipeline(key,
+                                            pass,
+                                            attachmentCount,
+                                            material,
+                                            data.renderData.cb->rhi(),
+                                            layout,
+                                            sharedData);
     pipelineNeedsUpdate = (pipelineRecord == nullptr);
 
     if (!material.wantsPerDrawUniform()) {
@@ -537,13 +567,15 @@ quint8 cwRhiTexturedItems::toStageMask(cwRenderMaterialState::ShaderStages stage
 
 cwRhiPipelineKey cwRhiTexturedItems::makePipelineKey(QRhiRenderPassDescriptor* renderPass,
                                                      int sampleCount,
+                                                     int attachmentCount,
+                                                     const QString& fragmentShader,
                                                      const cwRenderMaterialState& material) const
 {
     cwRhiPipelineKey key;
     key.renderPass = renderPass;
     key.sampleCount = sampleCount;
     key.vertexShader = material.vertexShader;
-    key.fragmentShader = material.fragmentShader;
+    key.fragmentShader = fragmentShader;
     key.cullMode = static_cast<quint8>(material.cullMode);
     key.frontFace = static_cast<quint8>(material.frontFace);
     key.blendMode = static_cast<quint8>(material.blendMode);
@@ -557,10 +589,13 @@ cwRhiPipelineKey cwRhiTexturedItems::makePipelineKey(QRhiRenderPassDescriptor* r
     key.textureStages = toStageMask(material.textureStages);
     key.hasPerDraw = material.wantsPerDrawUniform() ? 1 : 0;
     key.topology = static_cast<quint8>(QRhiGraphicsPipeline::Triangles);
+    key.colorAttachmentCount = static_cast<quint8>(attachmentCount);
     return key;
 }
 
 cwRhiScene::PipelineRecord *cwRhiTexturedItems::acquirePipeline(const cwRhiPipelineKey& key,
+                                                                cwRHIObject::RenderPass pass,
+                                                                int attachmentCount,
                                                                 const cwRenderMaterialState& material,
                                                                 QRhi* rhi,
                                                                 const QRhiVertexInputLayout& layout,
@@ -577,7 +612,7 @@ cwRhiScene::PipelineRecord *cwRhiTexturedItems::acquirePipeline(const cwRhiPipel
         return nullptr;
     }
 
-    auto createFn = [material, layout, sampler, key](QRhi* localRhi) -> cwRhiScene::PipelineRecord* {
+    auto createFn = [this, material, layout, sampler, key, pass, attachmentCount](QRhi* localRhi) -> cwRhiScene::PipelineRecord* {
         if (!localRhi) {
             return nullptr;
         }
@@ -586,7 +621,7 @@ cwRhiScene::PipelineRecord *cwRhiTexturedItems::acquirePipeline(const cwRhiPipel
         record->pipeline = localRhi->newGraphicsPipeline();
 
         QShader vertex = loadShader(material.vertexShader);
-        QShader fragment = loadShader(material.fragmentShader);
+        QShader fragment = loadShader(key.fragmentShader);
 
         record->pipeline->setShaderStages({
             { QRhiShaderStage::Vertex, vertex },
@@ -599,10 +634,13 @@ cwRhiScene::PipelineRecord *cwRhiTexturedItems::acquirePipeline(const cwRhiPipel
         record->pipeline->setDepthWrite(material.depthWrite);
         record->pipeline->setSampleCount(key.sampleCount);
 
-        if (material.requiresBlending()) {
-            record->pipeline->setTargetBlends({ toBlendState(material) });
-        } else {
+        const QVector<QRhiGraphicsPipeline::TargetBlend> blends = buildTargetBlends(material,
+                                                                                   pass,
+                                                                                   attachmentCount);
+        if (blends.isEmpty()) {
             record->pipeline->setTargetBlends({});
+        } else {
+            record->pipeline->setTargetBlends(blends.cbegin(), blends.cend());
         }
 
         QVector<QRhiShaderResourceBinding> layoutBindings;
@@ -704,6 +742,43 @@ QRhiGraphicsPipeline::TargetBlend cwRhiTexturedItems::toBlendState(const cwRende
     }
 
     return blend;
+}
+
+QString cwRhiTexturedItems::effectiveFragmentShader(const cwRenderMaterialState& material) const
+{
+    if (material.renderPass == cwRenderMaterialState::RenderPass::Transparent) {
+        return kWeightedOitFragmentShader;
+    }
+    return material.fragmentShader;
+}
+
+QVector<QRhiGraphicsPipeline::TargetBlend> cwRhiTexturedItems::buildTargetBlends(const cwRenderMaterialState& material,
+                                                                                 cwRHIObject::RenderPass pass,
+                                                                                 int attachmentCount) const
+{
+    const int count = qMax(1, attachmentCount);
+    QVector<QRhiGraphicsPipeline::TargetBlend> blends(count);
+
+    if (pass == cwRHIObject::RenderPass::Transparent) {
+        QRhiGraphicsPipeline::TargetBlend blend;
+        blend.enable = true;
+        blend.srcColor = QRhiGraphicsPipeline::One;
+        blend.dstColor = QRhiGraphicsPipeline::One;
+        blend.srcAlpha = QRhiGraphicsPipeline::One;
+        blend.dstAlpha = QRhiGraphicsPipeline::One;
+        blends[0] = blend;
+    } else if (material.requiresBlending()) {
+        blends[0] = toBlendState(material);
+    } else {
+        blends[0].enable = false;
+    }
+
+    for (int i = 1; i < count; ++i) {
+        blends[i].enable = false;
+        blends[i].colorWrite = QRhiGraphicsPipeline::ColorMask(0);
+    }
+
+    return blends;
 }
 
 cwRHIObject::RenderPass cwRhiTexturedItems::toRenderPass(cwRenderMaterialState::RenderPass pass)
