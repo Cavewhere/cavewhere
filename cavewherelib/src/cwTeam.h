@@ -15,6 +15,7 @@
 //Our includes
 #include "cwTeamMember.h"
 #include "cwTeamData.h"
+class cwKeywordModel;
 
 class cwTeam : public QAbstractListModel
 {
@@ -50,6 +51,7 @@ public:
     Q_INVOKABLE void setData(int index, cwTeam::TeamModelRoles role, const QVariant& data);
 
     virtual QHash<int, QByteArray> roleNames() const;
+    cwKeywordModel* keywordModel() const;
 
     void setData(const cwTeamData &data);
     cwTeamData data() const { return {Team}; };
@@ -60,6 +62,9 @@ public slots:
 
 private:
     QList<cwTeamMember> Team;
+    cwKeywordModel* m_keywordModel = nullptr;
+
+    void updateKeywords();
 };
 
 /**

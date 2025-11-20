@@ -27,6 +27,7 @@ class cwSurveyNoteLiDARModel;
 class cwShot;
 class cwErrorModel;
 class cwTeam;
+class cwKeywordModel;
 
 //Qt include
 #include <QObject>
@@ -52,6 +53,7 @@ class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
     Q_PROPERTY(cwTripCalibration* calibration READ calibrations CONSTANT)
     Q_PROPERTY(cwCave* parentCave READ parentCave WRITE setParentCave NOTIFY parentCaveChanged)
     Q_PROPERTY(cwErrorModel* errorModel READ errorModel CONSTANT)
+    Q_PROPERTY(cwKeywordModel* keywordModel READ keywordModel CONSTANT)
 
 public:
     explicit cwTrip(QObject *parent = 0);
@@ -77,6 +79,7 @@ public:
 
     cwSurveyNoteModel* notes() const;
     cwSurveyNoteLiDARModel* notesLiDAR() const;
+    cwKeywordModel* keywordModel() const;
 
     void addShotToLastChunk(const cwStation& fromStation, const cwStation& toStation, const cwShot& shot);
     void removeChunks(int begin, int end);
@@ -133,6 +136,7 @@ protected:
     cwSurveyNoteModel* Notes;
     cwSurveyNoteLiDARModel* NotesLidar;
     cwErrorModel* ErrorModel; //!<
+    cwKeywordModel* KeywordModel;
 
     //Units
 
@@ -164,6 +168,7 @@ private:
     };
 
 
+    void updateKeywordMetadata();
 };
 
 // Q_DECLARE_METATYPE(cwTrip*)
@@ -229,6 +234,11 @@ inline cwSurveyNoteLiDARModel *cwTrip::notesLiDAR() const
 */
 inline cwErrorModel* cwTrip::errorModel() const {
     return ErrorModel;
+}
+
+inline cwKeywordModel* cwTrip::keywordModel() const
+{
+    return KeywordModel;
 }
 
 #endif // CWSURVERYCHUNKGROUP_H

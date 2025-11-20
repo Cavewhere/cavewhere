@@ -15,6 +15,7 @@
 #include "cwSurveyNoteLiDARModel.h"
 #include "cwErrorModel.h"
 #include "cwData.h"
+#include "cwKeywordModel.h"
 
 //Qt includes
 #include <QMap>
@@ -30,9 +31,13 @@ cwTrip::cwTrip(QObject *parent) :
     Notes = new cwSurveyNoteModel(this);
     NotesLidar = new cwSurveyNoteLiDARModel(this);
     ErrorModel = new cwErrorModel(this);
+    KeywordModel = new cwKeywordModel(this);
 
     Notes->setParentTrip(this);
     NotesLidar->setParentTrip(this);
+
+    KeywordModel->addExtension(Team->keywordModel());
+    updateKeywordMetadata();
 
 //    qDebug() << "Creating:" << this;
 }
@@ -389,6 +394,8 @@ void cwTrip::setData(const cwTripData &data)
         chunkObj->setData(chunk);
         addChunk(chunkObj);
     }
+
+    updateKeywordMetadata();
 }
 
 /**
@@ -431,6 +438,25 @@ void cwTrip::setParentCave(cwCave* parentCave) {
     }
 }
 
+void cwTrip::updateKeywordMetadata()
+{
+    if(!KeywordModel) {
+        return;
+    }
+
+    KeywordModel->replace({cwKeywordModel::TripNameKey, Name});
+
+    const auto year = DateTime.toString(QStringLiteral("yyyy"));
+    if(!year.isEmpty()) {
+        KeywordModel->replace({cwKeywordModel::YearKey, year});
+    }
+
+    const auto fullDate = DateTime.toString(QStringLiteral("yyyy-MM-dd"));
+    if(!fullDate.isEmpty()) {
+        KeywordModel->replace({cwKeywordModel::DateKey, fullDate});
+    }
+}
+
 cwTrip::NameCommand::NameCommand(cwTrip* trip, QString name) {
     Trip = trip;
     NewName = name;
@@ -440,11 +466,13 @@ cwTrip::NameCommand::NameCommand(cwTrip* trip, QString name) {
 
 void cwTrip::NameCommand::redo() {
     Trip->Name = NewName;
+    Trip->updateKeywordMetadata();
     emit Trip->nameChanged();
 }
 
 void cwTrip::NameCommand::undo() {
     Trip->Name = OldName;
+    Trip->updateKeywordMetadata();
     emit Trip->nameChanged();
 }
 
@@ -457,11 +485,13 @@ cwTrip::DateCommand::DateCommand(cwTrip* trip, QDateTime date) {
 
 void cwTrip::DateCommand::redo() {
     Trip->DateTime = NewDate;
+    Trip->updateKeywordMetadata();
     emit Trip->dateChanged(Trip->DateTime);
 }
 
 void cwTrip::DateCommand::undo() {
     Trip->DateTime = OldDate;
+    Trip->updateKeywordMetadata();
     emit Trip->dateChanged(Trip->DateTime);
 }
 
