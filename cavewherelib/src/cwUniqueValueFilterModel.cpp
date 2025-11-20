@@ -47,7 +47,7 @@ int cwUniqueValueFilterModel::columnCount(const QModelIndex &parent) const
 
 QVariant cwUniqueValueFilterModel::data(const QModelIndex &index, int role) const
 {
-    if(index.isValid()) {
+    if(index.isValid() && index.row() < mUniqueIndex.size()) {
         return mUniqueIndex.at(index.row()).index.data(role);
     }
     return QVariant();
@@ -155,7 +155,7 @@ void cwUniqueValueFilterModel::connectSourceModel()
                             [this, sourceIndex](auto iter) { return !contains(iter, sourceIndex); },
         [this, sourceIndex](auto iter)
         {
-            mUniqueIndex.insert(iter, toRow(sourceIndex));
+            iter = mUniqueIndex.insert(iter, toRow(sourceIndex));
             auto row = iteratorToRow(iter);
 
             beginInsertRows(QModelIndex(), row, row);

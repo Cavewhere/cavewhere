@@ -15,6 +15,7 @@ class cwKeywordFilterModel;
 #include <QList>
 #include <QAbstractListModel>
 #include <QFuture>
+#include <QQmlEngine>
 
 //Std includes
 #include <memory>
@@ -22,6 +23,8 @@ class cwKeywordFilterModel;
 class CAVEWHERE_LIB_EXPORT cwKeywordGroupByKeyModel : public QAbstractListModel
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(KeywordGroupByKeyModel)
+
 
     Q_PROPERTY(QAbstractItemModel* sourceModel READ sourceModel WRITE setSourceModel NOTIFY sourceChanged)
     Q_PROPERTY(cwKeywordFilterModel* acceptedModel READ acceptedModel CONSTANT)
