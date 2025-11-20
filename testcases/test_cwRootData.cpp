@@ -1,12 +1,11 @@
 //Catch includes
-#include <catch.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 //Our includes
 #include "cwRootData.h"
 #include "cwJobSettings.h"
 #include "cwScrapManager.h"
 #include "cwLinePlotManager.h"
-#include "cwGLLinePlot.h"
 
 TEST_CASE("cwRootData should update the managers with auto update correctly", "[cwRootData]") {
 

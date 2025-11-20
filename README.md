@@ -1,8 +1,6 @@
 # CaveWhere
 
-[![Build Status](https://travis-ci.org/Cavewhere/cavewhere.svg?branch=master)](https://travis-ci.org/Cavewhere/cavewhere)
-
-![CaveWhere Logo](/icons/githubPage.png)
+![CaveWhere Logo](cavewhere_about.png)
 
 ## Cave Mapping software
 
@@ -14,90 +12,117 @@ Loop closures re-morph effected scan scraps automatically so your map is always 
 
 [CaveWhere Downloads](https://cavewhere.com/downloads/)
 
-## Building from Source on Ubuntu 18.04
+## Building CaveWhere from source
 
-CaveWhere is built around Qt and QBS.
 
-### Get all dependencies
-```{sh}
-sudo add-apt-repository -y ppa:beineri/opt-qt-5.14.1-bionic
-sudo apt-get -y update
-sudo apt-get -y install git build-essential qt514-meta-minimal qt514svg qt514quickcontrols qt514quickcontrols2 qt514graphicaleffects qt514script qt514imageformats libgl1-mesa-glx libgl1-mesa-dev
+GitHub Actions provide the most up-to-date instructions for building CaveWhere. 
+You can check the latest workflow file here:  
+[Linux Build Workflow](https://github.com/cavewhere/CaveWhere/blob/master/.github/workflows/build-linux.yml)
+
+[Windows Build Workflow](https://github.com/cavewhere/CaveWhere/blob/master/.github/workflows/build-windows.yml)
+
+## Building and Running CaveWhere on Ubuntu 23
+
+This guide outlines the steps to build and run CaveWhere, a cave mapping software, on Ubuntu 23.
+
+## Dependencies Installation
+
+First, update your package list and install all necessary dependencies with the following command:
+
+```bash
+sudo apt update && sudo apt install -y build-essential cmake ninja-build pipx liblocale-po-perl git
 ```
 
-### Make sure libGL.so exists.
+## Conan Package Manager Installation
 
-If you're on a x86_64 linux box. Make sure `/usr/lib/x86_64-linux-gnu/libGL.so` exists. If
-doesn't you simply need to create a symbolic link to it.
+Conan is required for managing packages and dependencies. If you have Conan installed, skip this step. Otherwise, uninstall any existing Conan versions and install the specified version using `pipx`:
 
-```{sh}
-ls -l /usr/lib/x86_64-linux-gnu/libGL.so
-sudo ln -s /usr/lib/x86_64-linux-gnu/libGL.so.1 /usr/lib/x86_64-linux-gnu/libGL.so
+```bash
+pipx install conan
+pipx ensurepath
 ```
 
-### Building QBS
+Restart your terminal or you'll get:
 
-Ubuntu 18.04 comes with QBS 1.10. This version doesn't build CaveWhere. CaveWhere is typically built with
-QBS 1.14 or later. Ubuntu 19.04, does come with QBS 1.13, which will probably work. For Ubuntu 18.04,
-building it from source is the way to go.
-
-```{sh}
-git clone https://github.com/qbs/qbs.git
-cd qbs
-git checkout v1.15.0
-/opt/qt514/bin/qmake -r qbs.pro && make -j `nproc`
-sudo make install
-cd ..
-qbs --version
+```bash
+bash: conan: command not found
 ```
 
-### Building CaveWhere
-Once Qt and QBS have been installed, you can build CaveWhere with the following:
+## Building CaveWhere
 
-```{sh}
-qbs setup-toolchains --detect
-qbs setup-qt /opt/qt514/bin/qmake qt5
-qbs config profiles.qt5.baseProfile x86_64-linux-gnu-gcc-7
-qbs config defaultProfile qt5
-qbs resolve profile:qt5 config:release
-qbs build --products CaveWhere profile:qt5 config:release
-```
+1. **Clone the Repository and Prepare the Environment**
 
-### Running CaveWhere
+   Clone the CaveWhere repository and checkout the correct branch (assuming `master` in this case). Initialize and update the submodules:
 
-```{sh}
-qbs run --products CaveWhere profile:qt5 config:release
-```
-
-### Running Unit Testcases
-
-```{sh}
-qbs run --products cavewhere-test profile:qt5 config:release
-```
-
-### Building CaveWhere and running in debug
-
-```{sh}
-git clone --branch=master https://github.com/Cavewhere/cavewhere.git cavewhere
+```bash
+git clone https://github.com/Cavewhere/cavewhere.git
 cd cavewhere
 git submodule update --init --recursive
-qbs resolve profile:qt5 config:debug
-qbs build --products profile:qt5 config:debug
-qbs run --products CaveWhere profile:qt5 config:debug
-```
-By default in linux and macos, in debug mode, CaveWhere uses -faddress-santizer for
-detecting memory bugs and memory leaks.  You might get the following message when
-running CaveWhere in debug:
-
-```{sh}
-==48458==ASan runtime does not come first in initial library list; you should either link runtime to your application or manually preload it with LD_PRELOAD.
+cd ..
 ```
 
-To resolve this issue on Ubuntu 18.04, run the following:
+2. **Create a Build Directory**
 
-```{sh}
-export LD_PRELOAD=/usr/lib/gcc/x86_64-linux-gnu/7/libasan.so
-qbs run --products CaveWhere profile:qt5 config:debug
+   Create a separate directory for the build to keep it clean from the source code:
+
+```bash
+mkdir cavewhere-build-release && cd cavewhere-build-release
+```
+
+3. **Install Dependencies with Conan**
+
+   Use Conan to install the project dependencies:
+
+```bash
+conan profile detect --force
+```
+
+4. **Modify the default Conan profile** due to this issue: https://github.com/conan-io/conan-center-index/issues/26878.
+   Without this modification, wxWidgets will fail to build with CMake 4.0.
+
+```
+PROFILE_PATH="$(conan config home)/profiles/default"
+echo >> "$PROFILE_PATH"          # ensure a blank line
+echo "[tool_requires]" >> "$PROFILE_PATH"
+echo '!cmake/*: cmake/[>=3 <4]' >> "$PROFILE_PATH"
+```
+
+5. **Install CaveWhere dependancies through Conan**
+
+```
+conan install ../cavewhere -o "&:system_qt=False" --build=missing -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True -of conan_deps
+```
+        
+   Conan will try to use the local package manager to install compatible dependencies. If a dependency isn't compatible, it will download it from Conan Center or build it from source.
+
+   Conan may also build Qt from source, which can take a long time and use a large amount of ram (16GB recommend for the build, 2GB VM will not cut it). However, this ensures you get the correct version of Qt that has been tested with Cavewhere. To use the system's Qt, set ```system_qt=False```.
+
+   **To use the system Qt libraries (note that you might encounter build errors, as Qt is typically outdated on most Linux distributions 2025.2 will build and run on 6.8 or later):**
+
+```
+sudo apt install -y qt6-base-dev qt6-declarative-dev qt6-svg-dev qt6-shadertools-dev
+ ```
+    
+6. **Configure the Project with CMake**
+
+```bash
+cmake -G Ninja --preset conan-release -DCMAKE_TOOLCHAIN_FILE=conan_deps/conan_toolchain.cmake -S ../cavewhere -B .
+```
+
+7. **Build the Project**
+
+   Now, build the project using CMake:
+
+```bash
+cmake --build .
+```
+
+## Running CaveWhere
+
+After a successful build, run CaveWhere directly from the build directory:
+
+```bash
+./CaveWhere
 ```
 
 

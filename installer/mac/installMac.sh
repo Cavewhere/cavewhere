@@ -1,42 +1,67 @@
 #!/bin/bash
 
-set -e
+# Ensure all arguments are provided
+if [[ -z "$1" || -z "$2" || -z "$3" || -z "$4" ]]; then
+    echo "Error: Missing arguments."
+    echo "Usage: $0 <macdeployqt_path> <email> <code_sign_id> <teamid>"
+    echo "Current code sign id's:"
+    security find-identity -v -p codesigning
+    exit 1
+fi
 
-echo "Source directory" $2
+version=`git describe`
+macdeployqt_path=$1
+email=$2
+codesignid=$3
+team=$4
 
-echo "Code Sign" $3
+security find-identity -v -p codesigning
+echo "Version:" $version
+echo "macdeployqt:" $macdeployqt_path
+echo "email:" $email
+echo "code sign id:" $codesignid
+echo "team:" $team
 
-echo "Cavewhere Mac Installer"
 
-echo "Adding rpath to plotSauce"
-install_name_tool -add_rpath @executable_path/../Frameworks Cavewhere.app/Contents/MacOS/CaveWhere
+$macdeployqt_path CaveWhere.app -qmldir=cavewherelib -executable=CaveWhere.app/Contents/MacOS/cavewhere-test
 
-echo "Adding rpath to plotSauce"
-install_name_tool -add_rpath @executable_path/../Frameworks Cavewhere.app/Contents/MacOS/plotsauce
+#Code sign the bundle
+find CaveWhere.app/Contents/Plugins -type f -name "*.dylib" -exec codesign --force --options runtime --deep --sign $codesignid {} \;
+codesign --force --deep --options runtime --verbose --sign $codesignid CaveWhere.app
+#codesign --force --deep --options runtime --verbose --sign $codesignid CaveWhere.app/Contents/MacOS/CaveWhere
 
->&2 echo "Adding rpath to cavewhere-test"
->&2 echo "$4/lib/cavewhere-lib.framework/Versions/A/cavewhere-lib"
-install_name_tool -add_rpath @executable_path/../Frameworks Cavewhere.app/Contents/MacOS/cavewhere-test
-install_name_tool -change $4/lib/cavewhere-lib.framework/Versions/A/cavewhere-lib @executable_path/../Frameworks/cavewhere-lib.framework/Versions/A/cavewhere-lib Cavewhere.app/Contents/MacOS/cavewhere-test
-install_name_tool -change $4/lib/s3tc-dxt-decompression.framework/Versions/A/s3tc-dxt-decompression @executable_path/../Frameworks/s3tc-dxt-decompression.framework/Versions/A/s3tc-dxt-decompression Cavewhere.app/Contents/MacOS/cavewhere-test
-install_name_tool -change $4/lib/dewalls.framework/Versions/A/dewalls @executable_path/../Frameworks/dewalls.framework/Versions/A/dewalls Cavewhere.app/Contents/MacOS/cavewhere-test
-install_name_tool -change $4/lib/QMath3d.framework/Versions/A/QMath3d @executable_path/../Frameworks/QMath3d.framework/Versions/A/QMath3d Cavewhere.app/Contents/MacOS/cavewhere-test
+#codesign --verify --deep --strict --verbose=2 CaveWhere.app
 
-echo "Deleting old DMG"
-rm -rvf "CaveWhere $1.dmg"
+#Notrize the bundle
+ditto -c -k --keepParent CaveWhere.app CaveWhere.zip
+echo xcrun notarytool submit CaveWhere.zip --apple-id "$email" --team-id "$team"
+xcrun notarytool submit CaveWhere.zip --apple-id "$email" --team-id "$team"
 
-echo "Code Signing"
-codesign --deep --force --verify --verbose --sign "$3" --options runtime CaveWhere.app
+echo ""
+echo "Check the submitting history with this:"
+echo xcrun notarytool history --apple-id "$email" --team-id "$team" "| head"
 
-echo "Verifying Signing"
-codesign --verify --verbose=4 CaveWhere.app
+echo ""
+echo "Check the log with this:"
+echo xcrun notarytool log "<id>" --apple-id "$email" --team-id "$team"
 
+echo ""
+echo "After being accepted run staple"
+echo xcrun stapler staple CaveWhere.app
+
+echo ""
+echo "Verify the app"
+echo spctl --assess --verbose=4 CaveWhere.app
+
+echo ""
 echo "Creating Cavewhere DMG"
-$2/mac/create-dmg/create-dmg \
+echo create-dmg \
     --window-size 615 379 \
     --app-drop-link 440 175 \
-    --background $2/mac/dmgBackground.png \
+    --background ../../installer/mac/dmgBackground.png \
     --icon "Cavewhere.app" 170 175 \
     --no-internet-enable \
-    "CaveWhere $1.dmg" \
+    \""CaveWhere $version.dmg"\" \
     "CaveWhere.app"
+
+echo ""

@@ -6,7 +6,8 @@
 **************************************************************************/
 
 //Catch includes
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 //Cavewhere includes
 #include "cwLinePlotManager.h"
@@ -27,7 +28,7 @@
 //Qt includes
 #include <QThread>
 #include <QApplication>
-#include <QSignalSpy>
+#include "cwSignalSpy.h"
 
 TEST_CASE("Survey network are returned", "[LinePlotManager]") {
     auto project = fileToProject(":/datasets/network.cw");
@@ -50,12 +51,12 @@ TEST_CASE("Survey network are returned", "[LinePlotManager]") {
         CHECK(foundNeighbors == checkNeigbbors);
     };
 
-    testStationNeigbors("a1", QStringList() << "A2" << "A4");
-    testStationNeigbors("a2", QStringList() << "A1" << "A3");
-    testStationNeigbors("a3", QStringList() << "A2" << "A4" << "A5");
-    testStationNeigbors("a4", QStringList() << "A1" << "A3");
-    testStationNeigbors("a5", QStringList() << "A3" << "A6");
-    testStationNeigbors("a6", QStringList() << "A5");
+    testStationNeigbors("a1", QStringList() << "a2" << "a4");
+    testStationNeigbors("a2", QStringList() << "a1" << "a3");
+    testStationNeigbors("a3", QStringList() << "a2" << "a4" << "a5");
+    testStationNeigbors("a4", QStringList() << "a1" << "a3");
+    testStationNeigbors("a5", QStringList() << "a3" << "a6");
+    testStationNeigbors("a6", QStringList() << "a5");
 }
 
 TEST_CASE("Changing data adding and removing caves trips survey chunks should run plotting", "[LinePlotManager]")
@@ -76,9 +77,9 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
     cwStation s1("a1");
     cwStation s2("a2");
     cwShot shot1;
-    shot1.setDistance("10.0");
-    shot1.setCompass("0.0");
-    shot1.setClino("0.0");
+    shot1.setDistance(cwDistanceReading("10.0"));
+    shot1.setCompass(cwCompassReading("0.0"));
+    shot1.setClino(cwClinoReading("0.0"));
 
     chunk->appendShot(s1, s2, shot1);
 
@@ -105,7 +106,7 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
             CHECK(cave->length()->value() == 10.0);
             CHECK(cave->depth()->value() == 0.0);
             CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 0.0, 0.0)); //B2 should no-longer exists
+            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 0.0, 0.0)); //a2 should no-longer exists
             CHECK(cave->stationPositionLookup().position("b2") == QVector3D(0.0, 10.0, 0.0));
         }
 
@@ -136,7 +137,7 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
             plotManager->waitToFinish();
 
-            CHECK(cave->length()->value() == Approx(9.9984903336));
+            CHECK(cave->length()->value() == Catch::Approx(9.9984903336));
             CHECK(cave->depth()->value() == 0.0);
             CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
             CHECK(cave->stationPositionLookup().position("a2") == QVector3D(-7.07, 7.07, 0.0));
@@ -147,7 +148,7 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
             plotManager->waitToFinish();
 
-            CHECK(cave->length()->value() == Approx(10.0));
+            CHECK(cave->length()->value() == Catch::Approx(10.0));
             CHECK(cave->depth()->value() == 10.0);
             CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
             CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 0.0, 10.0));
@@ -158,8 +159,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
             plotManager->waitToFinish();
 
-            CHECK(cave->length()->value() == Approx(10.0).epsilon(0.01));
-            CHECK(cave->depth()->value() == Approx(3.8299).epsilon(0.01));
+            CHECK(cave->length()->value() == Catch::Approx(10.0).epsilon(0.01));
+            CHECK(cave->depth()->value() == Catch::Approx(3.8299).epsilon(0.01));
             CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
             CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 9.24, -3.83));
         }
@@ -169,8 +170,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
             plotManager->waitToFinish();
 
-            CHECK(cave->length()->value() == Approx(0.0).epsilon(0.01));
-            CHECK(cave->depth()->value() == Approx(0.0).epsilon(0.01));
+            CHECK(cave->length()->value() == Catch::Approx(0.0).epsilon(0.01));
+            CHECK(cave->depth()->value() == Catch::Approx(0.0).epsilon(0.01));
             CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
             CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, 0.0));
         }
@@ -182,9 +183,9 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
             //is restarted
             for(int i = 0; i < total; i++) {
                 cwShot shot;
-                shot.setDistance(20);
-                shot.setCompass(90.0);
-                shot.setClino(0.0);
+                shot.setDistance(cwDistanceReading(20));
+                shot.setCompass(cwCompassReading("90.0"));
+                shot.setClino(cwClinoReading("0.0"));
                 cwStation station(QString("a3-%1").arg(i));
 
                 chunk->appendShot(chunk->stations().last(), station, shot);
@@ -193,8 +194,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
                 INFO("i:" << i);
 
-                CHECK(cave->length()->value() == Approx(10.0 + 20.0 * (i + 1)).epsilon(0.01));
-                CHECK(cave->depth()->value() == Approx(0.0).epsilon(0.01));
+                CHECK(cave->length()->value() == Catch::Approx(10.0 + 20.0 * (i + 1)).epsilon(0.01));
+                CHECK(cave->depth()->value() == Catch::Approx(0.0).epsilon(0.01));
                 CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
                 CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, 0.0));
 
@@ -210,8 +211,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
                 int i = total - 2;
 
-                CHECK(cave->length()->value() == Approx(10.0 + 20.0 * (i + 1)).epsilon(0.01));
-                CHECK(cave->depth()->value() == Approx(0.0).epsilon(0.01));
+                CHECK(cave->length()->value() == Catch::Approx(10.0 + 20.0 * (i + 1)).epsilon(0.01));
+                CHECK(cave->depth()->value() == Catch::Approx(0.0).epsilon(0.01));
 
                 CHECK(cave->stationPositionLookup().hasPosition(QString("a3-%1").arg(i)) == true);
 
@@ -231,9 +232,9 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
             cwStation s2a("a2");
             cwStation s3("a3");
             cwShot shot1;
-            shot1.setDistance("15.0");
-            shot1.setCompass("0.0");
-            shot1.setClino("0.0");
+            shot1.setDistance(cwDistanceReading("15.0"));
+            shot1.setCompass(cwCompassReading("0.0"));
+            shot1.setClino(cwClinoReading("0.0"));
 
             chunk2->appendShot(s2a, s3, shot1);
 
@@ -275,7 +276,7 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
             plotManager->waitToFinish();
 
-            CHECK(cave->length()->value() == Approx(10.0).epsilon(0.01));
+            CHECK(cave->length()->value() == Catch::Approx(10.0).epsilon(0.01));
             CHECK(cave->depth()->value() == 0.0);
             CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
             CHECK(cave->stationPositionLookup().position("a2") == QVector3D(7.07, 7.07, 0.0));
@@ -296,9 +297,9 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
             cwStation s1("a1");
             cwStation s2("a2");
             cwShot shot1;
-            shot1.setDistance("10.0");
-            shot1.setCompass("0.0");
-            shot1.setClino("0.0");
+            shot1.setDistance(cwDistanceReading("10.0"));
+            shot1.setCompass(cwCompassReading("0.0"));
+            shot1.setClino(cwClinoReading("0.0"));
 
             chunk->appendShot(s1, s2, shot1);
 
@@ -738,9 +739,9 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
             cwStation a3("a3");
             cwStation a4("a4");
             cwShot shot2;
-            shot2.setDistance("20.0");
-            shot2.setCompass("40.0");
-            shot2.setClino("2.0");
+            shot2.setDistance(cwDistanceReading("20.0"));
+            shot2.setCompass(cwCompassReading("40.0"));
+            shot2.setClino(cwClinoReading("2.0"));
 
             chunk2->appendShot(a3, a4, shot2);
 
@@ -789,17 +790,17 @@ TEST_CASE("cwLinePlotManager automatic update should work", "[cwLinePlotManager]
     cwStation s1("a1");
     cwStation s2("a2");
     cwShot shot1;
-    shot1.setDistance("10.0");
-    shot1.setCompass("0.0");
-    shot1.setClino("0.0");
+    shot1.setDistance(cwDistanceReading("10.0"));
+    shot1.setCompass(cwCompassReading("0.0"));
+    shot1.setClino(cwClinoReading("0.0"));
 
     chunk->appendShot(s1, s2, shot1);
 
     auto plotManager = std::make_unique<cwLinePlotManager>();
-    QSignalSpy autoUpdateSpy(plotManager.get(), &cwLinePlotManager::automaticUpdateChanged);
+    cwSignalSpy autoUpdateSpy(plotManager.get(), &cwLinePlotManager::automaticUpdateChanged);
     autoUpdateSpy.setObjectName("autoUpdateSpy");
 
-    QSignalSpy stationPositionSpy(cave, &cwCave::stationPositionPositionChanged);
+    cwSignalSpy stationPositionSpy(cave, &cwCave::stationPositionPositionChanged);
     stationPositionSpy.setObjectName("stationPositionSpy");
 
     SpyChecker spyChecker {

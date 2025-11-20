@@ -1,0 +1,31 @@
+<RCC>
+    <qresource prefix="/">
+        <file>datasets/network.cw</file>
+        <file>datasets/scrapAutoCalculate/runningProfileRotateMirror.cw</file>
+        <file>datasets/scrapAutoCalculate/runningProfileMirror.cw</file>
+        <file>datasets/scrapAutoCalculate/runningProfile.cw</file>
+        <file>datasets/scrapAutoCalculate/runningProfileRotate.cw</file>
+        <file>datasets/scrapGuessNeighbor/scrapGuessNeigborPlan.cw</file>
+        <file>datasets/scrapGuessNeighbor/scrapGuessNeigborProfile.cw</file>
+        <file>datasets/scrapGuessNeighbor/scrapGuessNeigborProfileRotate90.cw</file>
+        <file>datasets/scrapGuessNeighbor/scrapGuessNeigborProfileContinuous.cw</file>
+        <file>datasets/scrapGuessNeighbor/scrapGuessNeigborPlanContinuous.cw</file>
+        <file>datasets/scrapAutoCalculate/exact/profile-0rot-0mirror.cw</file>
+        <file>datasets/scrapAutoCalculate/exact/profile-0rot-1mirror.cw</file>
+        <file>datasets/scrapAutoCalculate/exact/profile-90rot-0mirror.cw</file>
+        <file>datasets/scrapAutoCalculate/exact/profile-90rot-1mirror.cw</file>
+        <file>datasets/scrapAutoCalculate/exact/profile-180rot-0mirror.cw</file>
+        <file>datasets/scrapAutoCalculate/exact/profile-180rot-1mirror.cw</file>
+        <file>datasets/scrapAutoCalculate/exact/profile-270rot-0mirror.cw</file>
+        <file>datasets/scrapAutoCalculate/exact/profile-270rot-1mirror.cw</file>
+        <file>datasets/compass/missingDataValidated.dat</file>
+        <file>datasets/compass/compassExportMissingLRUD.cw</file>
+        <file>datasets/compass/compassImportExport.cw</file>
+        <file>datasets/survex/issue118.svx</file>
+        <file>datasets/survex/dakeng.svx</file>
+        <file>datasets/test_cwSurvexport/data.svx</file>
+        <file>datasets/test_cwSurvexport/cwSurvexport_data.3d.csv</file>
+        <file>datasets/test_cwSurvexportCSVTask/cwSurvexport_data.3d.csv</file>
+        <file>datasets/test_cwCavePageModel/cwCavePageModel.cw</file>
+    </qresource>
+</RCC>

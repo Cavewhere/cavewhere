@@ -6,7 +6,8 @@
 **************************************************************************/
 
 #define CATCH_CONFIG_RUNNER
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_session.hpp>
 
 //Qt includes
 #include <QApplication>
@@ -15,61 +16,48 @@
 #include <QMetaObject>
 #include <QThreadPool>
 #include <QSettings>
-#include <QSurfaceFormat>
-#include <QAbstractItemModel>
 
 //Our includes
 #include "cwSettings.h"
 #include "cwTask.h"
-#include "cwOpenGLSettings.h"
+#include "cwMetaTypeSystem.h"
+
+//QQuickGit
+#include "GitRepository.h"
 
 int main( int argc, char* argv[] )
-{    
-    QApplication::setOrganizationName("Vadose Solutions");
-    QApplication::setOrganizationDomain("cavewhere.com");
-    QApplication::setApplicationName("cavewhere-test");
-    QApplication::setApplicationVersion("1.0");
+{
+  QApplication app(argc, argv);
 
-    cwOpenGLSettings::setApplicationRenderer();
-    QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
-    QCoreApplication::setAttribute(Qt::AA_DisableShaderDiskCache);
+  QApplication::setOrganizationName("Vadose Solutions");
+  QApplication::setOrganizationDomain("cavewhere.com");
+  QApplication::setApplicationName("cavewhere-test");
+  QApplication::setApplicationVersion("1.0");
 
-    qRegisterMetaType<Qt::Orientation>();
-    qRegisterMetaType<QList<QPersistentModelIndex>>();
-    qRegisterMetaType<QAbstractItemModel::LayoutChangeHint>();
+  cwMetaTypeSystem::registerTypes();
 
-    //This is a workaround to https://bugreports.qt.io/browse/QTBUG-83871
-    qputenv("QT3D_SCENE3D_STOP_RENDER_HIDDEN", "1");
+  //initilize git
+  QQuickGit::GitRepository::initGitEngine();
 
-    QApplication app(argc, argv);
+  {
+      QSettings settings;
+      settings.clear();
+  }
 
-    {
-        QSettings settings;
-        settings.clear();
-    }
+  cwSettings::initialize();
 
-    cwSettings::initialize();
+  app.thread()->setObjectName("Main QThread");
 
-    QSurfaceFormat format = QSurfaceFormat::defaultFormat();
-    format.setAlphaBufferSize(8);
-    format.setRedBufferSize(8);
-    format.setGreenBufferSize(8);
-    format.setBlueBufferSize(8);
-    //    format.setSamples(4);
-    QSurfaceFormat::setDefaultFormat(format);
+  int result = 0;
+  QMetaObject::invokeMethod(&app, [&result, argc, argv]() {
+      result = Catch::Session().run( argc, argv );
+      QThreadPool::globalInstance()->waitForDone();
+      cwTask::threadPool()->waitForDone();
+      QApplication::quit();
+  }, Qt::QueuedConnection);
 
-    app.thread()->setObjectName("Main QThread");
+  app.exec();
 
-    int result = 0;
-    QMetaObject::invokeMethod(&app, [&result, argc, argv]() {
-        result = Catch::Session().run( argc, argv );
-        QThreadPool::globalInstance()->waitForDone();
-        cwTask::threadPool()->waitForDone();
-        QApplication::quit();
-    }, Qt::QueuedConnection);
-
-    app.exec();
-
-    return result;
+  return result;
 }
 

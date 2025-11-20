@@ -2,5 +2,8 @@
     <qresource prefix="/">
         <file>datasets/test_cwProject/crashMap.png</file>
         <file>datasets/test_cwProject/Phake Cave 3000.cw</file>
+        <file>datasets/test_cwProject/v7.cw</file>
+        <file>datasets/test_cwProject/Phake Cave 3000 2024.2.cw</file>
+        <file>datasets/test_cwProject/jaws of the beast with scrap.zip</file>
     </qresource>
 </RCC>

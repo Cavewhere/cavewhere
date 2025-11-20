@@ -3,7 +3,6 @@
 
 //Our includes
 #include "cwRegionLoadTask.h"
-#include "cwRegionSaveTask.h"
 #include "cwRootData.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
@@ -18,13 +17,13 @@
 #include "cwTaskManagerModel.h"
 #include "cwImageProvider.h"
 #include "cwTripCalibration.h"
-#include "cwReadingStates.h"
 #include "cwTeam.h"
 #include "cwSurveyNoteModel.h"
 #include "cwNote.h"
 #include "cwScrap.h"
 #include "cwRunningProfileScrapViewMatrix.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
+#include "cwRegionSaveTask.h"
 
 //std includes
 #include <memory>
@@ -33,67 +32,70 @@
 
 //Qt includes
 #include <QUuid>
+#include <QDirIterator>
+#include <QFileInfo>
 
 //catch includes
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
-TEST_CASE("Save / Load should work with cwSurveyNetwork", "[ProtoSaveLoad]") {
+//Survey networks should be saved in the cache, so this testcase no longer make sense
+// TEST_CASE("Save / Load should work with cwSurveyNetwork", "[ProtoSaveLoad]") {
 
-    auto root = std::make_unique<cwRootData>();
+//     auto root = std::make_unique<cwRootData>();
 
-    cwCave* cave = new cwCave();
-    cwTrip* trip = new cwTrip();
+//     cwCave* cave = new cwCave();
+//     cwTrip* trip = new cwTrip();
 
-    cave->addTrip(trip);
-    root->region()->addCave(cave);
+//     cave->addTrip(trip);
+//     root->region()->addCave(cave);
 
-    cwSurveyChunk* chunk = new cwSurveyChunk;
+//     cwSurveyChunk* chunk = new cwSurveyChunk;
 
-    cwStation a1("a1");
-    cwStation a2("a2");
-    cwStation a3("a3");
+//     cwStation a1("a1");
+//     cwStation a2("a2");
+//     cwStation a3("a3");
 
-    cwShot a1_to_a2("100", "0.0", "0.0", "0.0", "0.0");
-    cwShot a2_to_a3("50", "0.0", "0.0", "0.0", "0.0");
+//     cwShot a1_to_a2("100", "0.0", "0.0", "0.0", "0.0");
+//     cwShot a2_to_a3("50", "0.0", "0.0", "0.0", "0.0");
 
-    chunk->appendShot(a1, a2, a1_to_a2);
-    chunk->appendShot(a2, a3, a2_to_a3);
+//     chunk->appendShot(a1, a2, a1_to_a2);
+//     chunk->appendShot(a2, a3, a2_to_a3);
 
-    trip->addChunk(chunk);
+//     trip->addChunk(chunk);
 
-    root->linePlotManager()->waitToFinish();
+//     root->linePlotManager()->waitToFinish();
 
-    CHECK(root->project()->isTemporaryProject() == true);
+//     CHECK(root->project()->isTemporaryProject() == true);
 
-    auto filename = prependTempFolder(QString("test_cwSurveyNetwork-") + QUuid::createUuid().toString().remove(QRegularExpression("{|}|-")) + ".cw");
-    root->project()->saveAs(filename);
-    root->project()->waitSaveToFinish();
+//     auto filename = prependTempFolder(QString("test_cwSurveyNetwork-") + QUuid::createUuid().toString().remove(QRegularExpression("{|}|-")) + ".cw");
+//     root->project()->saveAs(filename);
+//     root->project()->waitSaveToFinish();
 
-    root->project()->newProject();
-    root->project()->waitSaveToFinish();
+//     root->project()->newProject();
+//     root->project()->waitSaveToFinish();
 
-    CHECK(root->region()->caveCount() == 0);
+//     CHECK(root->region()->caveCount() == 0);
 
-    root->project()->loadFile(filename);
-    root->project()->waitLoadToFinish();
-    REQUIRE(root->region()->caveCount() == 1);
-    CHECK(root->project()->isTemporaryProject() == false);
+//     root->project()->loadOrConvert(filename);
+//     root->project()->waitLoadToFinish();
+//     REQUIRE(root->region()->caveCount() == 1);
+//     CHECK(root->project()->isTemporaryProject() == false);
 
-    auto loadCave = root->region()->cave(0);
-    auto network = loadCave->network();
+//     auto loadCave = root->region()->cave(0);
+//     auto network = loadCave->network();
 
-    auto testStationNeigbors = [=](QString stationName, QStringList
-            neighbors) {
-        auto neighborsAtStation = network.neighbors(stationName);
-        auto foundNeighbors = QSet<QString>(neighborsAtStation.begin(), neighborsAtStation.end());
-        auto checkNeigbbors = QSet<QString>(neighbors.begin(), neighbors.end());
-        CHECK(foundNeighbors == checkNeigbbors);
-    };
+//     auto testStationNeigbors = [=](QString stationName, QStringList
+//             neighbors) {
+//         auto neighborsAtStation = network.neighbors(stationName);
+//         auto foundNeighbors = QSet<QString>(neighborsAtStation.begin(), neighborsAtStation.end());
+//         auto checkNeigbbors = QSet<QString>(neighbors.begin(), neighbors.end());
+//         CHECK(foundNeighbors == checkNeigbbors);
+//     };
 
-    testStationNeigbors("a1", {"A2"});
-    testStationNeigbors("a2", {"A1", "A3"});
-    testStationNeigbors("a3", {"A2"});
-}
+//     testStationNeigbors("a1", {"a2"});
+//     testStationNeigbors("a2", {"a1", "a3"});
+//     testStationNeigbors("a3", {"a2"});
+// }
 
 TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
     auto root = std::make_unique<cwRootData>();
@@ -106,7 +108,7 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
         auto errorModel = root->project()->errorModel();
         CHECK(errorModel->size() == 0);
 
-        root->project()->loadFile(filename);
+        root->project()->loadOrConvert(filename);
         root->project()->waitLoadToFinish();
 
         REQUIRE(errorModel->size() == 1);
@@ -116,13 +118,32 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
     }
 
     SECTION("Bad file that does exist") {
-        fileToProject(root->project(), "://datasets/test_ProtoBufferSaveLoad/badFile.cw");
+        auto allResourcePaths = [](const QString& root = QStringLiteral(":/")) {
+            QStringList paths;
+            QDirIterator it(
+                root,
+                QStringList{},                                // match all
+                QDir::AllEntries | QDir::NoDotAndDotDot,     // include files and dirs
+                QDirIterator::Subdirectories
+                );
+            while (it.hasNext()) {
+                paths.push_back(it.next());
+            }
+            paths.sort();
+            return paths;
+        };
+
+        auto filename = fileToProject(root->project(), "://datasets/test_ProtoBufferSaveLoad/badFile.cw");
         root->project()->waitLoadToFinish();
         auto errorModel = root->project()->errorModel();
 
         REQUIRE(errorModel->size() == 1);
 
-        CHECK(errorModel->at(0) == cwError("Couldn't prepare select Caving Region:'file is not a database' sql:'SELECT protoBuffer FROM ObjectData where id = 1'", cwError::Fatal));
+        cwError expectedError = cwError(QStringLiteral("Couldn't open '%1' because it has a unknown file type. Is it corrupted!?").arg(filename), cwError::Fatal);
+        INFO("Model:" << errorModel->at(0));
+        INFO("expected:" << expectedError);
+
+        CHECK(errorModel->at(0) == expectedError);
 
         CHECK(root->project()->isTemporaryProject());
     }
@@ -134,6 +155,7 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
 
         REQUIRE(errorModel->size() == 1);
 
+        INFO("Model:" << errorModel->at(0));
         CHECK(errorModel->at(0) == cwError("Couldn't read proto buffer. Corrupted?!", cwError::Fatal));
 
         CHECK(root->project()->isTemporaryProject());
@@ -144,8 +166,10 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
 
         fileToProject(root->project(), "://datasets/test_ProtoBufferSaveLoad/newerVersion.cw");
         root->project()->waitLoadToFinish();
+
         auto errorModel = root->project()->errorModel();
 
+        INFO("Model:" << errorModel->at(0));
         REQUIRE(errorModel->size() == 1);
 
         QString expectErrorMessage = QString("Upgrade CaveWhere to 0.08-70-g20d1d7c to load this file! Current file version is 10000. CaveWhere %1 supports up to file version %2. You are loading a newer CaveWhere file than this version supports. You will loss data if you save")
@@ -155,16 +179,25 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
         errorModel->clear();
 
         CHECK(root->project()->cavingRegion()->caveCount() == 1);
-        CHECK(root->project()->isTemporaryProject() == false);
+        CHECK(root->project()->isTemporaryProject() == true); //All old testcase files are temporary because they need to be converted
         CHECK(root->project()->canSaveDirectly() == false);
 
         SECTION("Check that saveAs fails to the file") {
-            root->project()->saveAs(root->project()->filename());
+            QFileInfo info(root->project()->filename());
+            auto lastModifiedTime = info.lastModified();
+
+            QThread::msleep(10);
+
+            //Fix me, this was calling saveAs
+            REQUIRE(false);
+            // root->project()->saveAs(root->project()->filename());
+
             REQUIRE(errorModel->size() == 1);
             expectErrorMessage = QString("Can't overwrite %1 because file is newer that the current version of CaveWhere. To solve this, save it somewhere else").arg(root->project()->filename());
             CHECK(errorModel->at(0) == cwError(expectErrorMessage, cwError::Fatal));
 
-            CHECK(root->project()->isModified() == false);
+            //Make sure the file hasen't be modified
+            CHECK(lastModifiedTime == info.lastModified());
         }
     }
 
@@ -181,13 +214,15 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
         QFileInfo info(filename);
         REQUIRE(!info.isReadable());
 
-        root->project()->loadFile(filename);
+        root->project()->loadOrConvert(filename);
         root->project()->waitLoadToFinish();
         auto errorModel = root->project()->errorModel();
 
         REQUIRE(errorModel->size() == 1);
 
         QString expectErrorMessage = QString("Couldn't open '%1' because you don't have permission to read it").arg(filename);
+
+        INFO("Error-at(0):" << errorModel->at(0));
 
         CHECK(errorModel->at(0) == cwError(expectErrorMessage, cwError::Fatal));
 
@@ -208,7 +243,7 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
         REQUIRE(!info.isWritable());
         REQUIRE(info.isReadable());
 
-        root->project()->loadFile(filename);
+        root->project()->loadOrConvert(filename);
         root->project()->waitLoadToFinish();
         auto errorModel = root->project()->errorModel();
 
@@ -229,6 +264,7 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
     root->futureManagerModel()->waitForFinished();
 }
 
+//This also test v3->v6
 TEST_CASE("Save and load should work correctly for Projected Profile v3->v5", "[ProtoSaveLoad]") {
 
     auto fileCheck = [](QString filename, auto scrapCheckFunc) {
@@ -241,7 +277,7 @@ TEST_CASE("Save and load should work correctly for Projected Profile v3->v5", "[
         if(isResourceFile(filename)) {
             fileToProject(root->project(), filename);
         } else {
-            root->project()->loadFile(filename);
+            root->project()->loadOrConvert(filename);
             root->project()->waitLoadToFinish();
         }
 
@@ -280,14 +316,14 @@ TEST_CASE("Save and load should work correctly for Projected Profile v3->v5", "[
 
         struct Station {
             QString stationName;
-            std::optional<double> left;
-            std::optional<double> right;
-            std::optional<double> up;
-            std::optional<double> down;
+            QString left;
+            QString right;
+            QString up;
+            QString down;
         };
 
         QList<Station> stations {
-            {"a1", 1, 2, 3, 4},
+            {"a1", "1", "2", "3", "4"},
             {"a2", {},{},{},{}},
             {"a3", {},{},{},{}},
             {"a4", {},{},{},{}},
@@ -302,31 +338,31 @@ TEST_CASE("Save and load should work correctly for Projected Profile v3->v5", "[
             auto station = stations.at(stationIndex);
             CHECK(chunkStation.name().toStdString() == station.stationName.toStdString());
 
-            auto checkLRUD = [](auto stateFunc, auto valueFunc, std::optional<double> checkValue) {
-                if(checkValue.has_value()) {
-                    CHECK(stateFunc() == cwDistanceStates::Valid);
-                    CHECK(valueFunc() == checkValue.value());
+            auto checkLRUD = [](auto stateFunc, auto valueFunc, const QString& checkValue) {
+                if(!checkValue.isEmpty()) {
+                    CHECK(stateFunc() == cwDistanceReading::State::Valid);
+                    CHECK(valueFunc().value() == checkValue);
                 } else {
-                    CHECK(stateFunc() == cwDistanceStates::Empty);
+                    CHECK(stateFunc() == cwDistanceReading::State::Empty);
                 }
             };
 
-            checkLRUD([chunkStation]() { return chunkStation.leftInputState();},
-            [chunkStation]() { return chunkStation.left(); },
-            station.left
-            );
-            checkLRUD([chunkStation]() { return chunkStation.rightInputState();},
-            [chunkStation]() { return chunkStation.right(); },
-            station.right
-            );
-            checkLRUD([chunkStation]() { return chunkStation.upInputState();},
-            [chunkStation]() { return chunkStation.up(); },
-            station.up
-            );
-            checkLRUD([chunkStation]() { return chunkStation.downInputState();},
-            [chunkStation]() { return chunkStation.down(); },
-            station.down
-            );
+            checkLRUD([chunkStation]() { return chunkStation.left().state();},
+                      [chunkStation]() { return chunkStation.left(); },
+                      station.left
+                      );
+            checkLRUD([chunkStation]() { return chunkStation.right().state();},
+                      [chunkStation]() { return chunkStation.right(); },
+                      station.right
+                      );
+            checkLRUD([chunkStation]() { return chunkStation.up().state();},
+                      [chunkStation]() { return chunkStation.up(); },
+                      station.up
+                      );
+            checkLRUD([chunkStation]() { return chunkStation.down().state();},
+                      [chunkStation]() { return chunkStation.down(); },
+                      station.down
+                      );
         };
 
         struct Clino {
@@ -338,69 +374,69 @@ TEST_CASE("Save and load should work correctly for Projected Profile v3->v5", "[
             };
 
             Type type;
-            std::optional<double> value;
+            QString value;
         };
 
         struct Shot {
-            double distance;
-            std::optional<double> compass;
-            std::optional<double> backCompass;
+            QString distance;
+            QString compass;
+            QString backCompass;
             Clino clino;
             Clino backClino;
         };
 
         QList<Shot> shots {
-            { 10, {}, {}, {Clino::Down, {}}, {Clino::Up, {}}},
-            { 7.3, 50, 50.1, {Clino::Value, {-75}}, {Clino::Value, {-74}}},
-            { 4, 220, 219, {Clino::Value, {10}}, {Clino::Value, {11}}},
-            { 6, 46, 46.2, {Clino::Value, {-85}}, {Clino::Value, {-84.5}}},
-            { 21.5, 35, 34, {Clino::Value, {-78}}, {Clino::Value, {-77}}}
+            { "10", {}, {}, {Clino::Down, {}}, {Clino::Up, {}}},
+            { "7.3", "50", "50.1", {Clino::Value, "-75"}, {Clino::Value, "-74"}},
+            { "4", "220", "219", {Clino::Value, "10"}, {Clino::Value, "11"}},
+            { "6", "46", "46.2", {Clino::Value, "-85"}, {Clino::Value, "-84.5"}},
+            { "21.5", "35", "34", {Clino::Value, "-78"}, {Clino::Value, "-77"}}
         };
 
         REQUIRE(chunk->shotCount() == shots.size());
 
         auto checkShot = [=](int shotIndex) {
             auto chunkShot = chunk->shot(shotIndex);
-            auto shot = shots .at(shotIndex);
-            CHECK(chunkShot.distance() == shot.distance);
-            if(shot.compass.has_value()) {
-                CHECK(chunkShot.compassState() == cwCompassStates::Valid);
-                CHECK(shot.compass == chunkShot.compass());
+            auto shot = shots.at(shotIndex);
+            CHECK(chunkShot.distance().value().toStdString() == shot.distance.toStdString());
+            if(!shot.compass.isEmpty()) {
+                CHECK(chunkShot.compass().state() == cwCompassReading::State::Valid);
+                CHECK(shot.compass.toStdString() == chunkShot.compass().value().toStdString());
             } else {
-                CHECK(chunkShot.compassState() == cwCompassStates::Empty);
+                CHECK(chunkShot.compass().state() == cwCompassReading::State::Empty);
             }
 
-            if(shot.backCompass.has_value()) {
-                CHECK(chunkShot.backCompassState() == cwCompassStates::Valid);
-                CHECK(shot.backCompass == chunkShot.backCompass());
+            if(!shot.backCompass.isEmpty()) {
+                CHECK(chunkShot.backCompass().state() == cwCompassReading::State::Valid);
+                CHECK(shot.backCompass.toStdString() == chunkShot.backCompass().value().toStdString());
             } else {
-                CHECK(chunkShot.backCompassState() == cwCompassStates::Empty);
+                CHECK(chunkShot.backCompass().state() == cwCompassReading::State::Empty);
             }
 
             auto checkClino = [](Clino clino, auto clinoStateFunc, auto clinoValueFunc) {
                 switch(clino.type) {
                 case Clino::Up:
-                    CHECK(clinoStateFunc() == cwClinoStates::Up);
+                    CHECK(clinoStateFunc() == cwClinoReading::State::Up);
                     break;
                 case Clino::Down:
-                    CHECK(clinoStateFunc() == cwClinoStates::Down);
+                    CHECK(clinoStateFunc() == cwClinoReading::State::Down);
                     break;
                 case Clino::Value:
-                    CHECK(clinoStateFunc() == cwClinoStates::Valid);
-                    CHECK(clinoValueFunc() == clino.value.value());
+                    CHECK(clinoStateFunc() == cwClinoReading::State::Valid);
+                    CHECK(clinoValueFunc().value().toStdString() == clino.value.toStdString());
                     break;
                 }
             };
 
             INFO("Front Clino");
             checkClino(shot.clino,
-                       [chunkShot]() { return chunkShot.clinoState(); },
+                       [chunkShot]() { return chunkShot.clino().state(); },
             [chunkShot]() { return chunkShot.clino(); }
             );
 
             INFO("Back clino");
             checkClino(shot.backClino,
-                       [chunkShot]() { return chunkShot.backClinoState(); },
+                       [chunkShot]() { return chunkShot.backClino().state(); },
             [chunkShot]() { return chunkShot.backClino(); }
             );
 
@@ -425,7 +461,9 @@ TEST_CASE("Save and load should work correctly for Projected Profile v3->v5", "[
         root->taskManagerModel()->waitForTasks();
         root->futureManagerModel()->waitForFinished();
 
-        root->project()->save();
+        //Fixme: this was calling save
+        REQUIRE(false);
+
         root->futureManagerModel()->waitForFinished();
 
         CHECK(root->project()->canSaveDirectly() == true);

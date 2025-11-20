@@ -1,5 +1,5 @@
 //Catch includes
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 //Our includes
 #include "cwRunningProfileScrapViewMatrix.h"
@@ -8,13 +8,13 @@
 TEST_CASE("Running profile scrap view matrix should produce the correct ViewMatrix", "[cwRunningProfileScrapViewMatrix]") {
 
     cwRunningProfileScrapViewMatrix matrix;
-    CHECK(matrix.type() == cwScrap::RunningProfile);
-    CHECK(matrix.data()->type() == cwScrap::RunningProfile);
+    CHECK(matrix.type() == cwScrapType::RunningProfile);
+    CHECK(matrix.data()->type() == cwScrapType::RunningProfile);
     CHECK(matrix.matrix() == QMatrix4x4());
 
     QVector3D origin;
 
-    INFO("Invalid")
+    INFO("Invalid");
     cwRunningProfileScrapViewMatrix::Data invalid(QVector3D(1.0, 2.0, 3.0), QVector3D(1.0, 2.0, 3.0));
     fuzzyCompareVector(invalid.from(), QVector3D(1.0, 2.0, 3.0));
     fuzzyCompareVector(invalid.to(), QVector3D(1.0, 2.0, 3.0));
@@ -25,33 +25,33 @@ TEST_CASE("Running profile scrap view matrix should produce the correct ViewMatr
     cwRunningProfileScrapViewMatrix::Data north(origin, QVector3D(0.0, 1.0, 0.0));
     fuzzyCompareVector(north.from(), QVector3D(0.0, 0.0, 0.0));
     fuzzyCompareVector(north.to(), QVector3D(0.0, 1.0, 0.0));
-    fuzzyCompareVector(north.matrix() * QVector3D(0.0, 0.0, -1.0), QVector3D(0.0, -1.0, 0.0));
-    fuzzyCompareVector(north.matrix() * QVector3D(1.0, 0.0, 0.0), QVector3D(0.0, 0.0, 1.0));
-    fuzzyCompareVector(north.matrix() * QVector3D(0.0, 1.0, 0.0), QVector3D(1.0, 0.0, 0.0));
+    fuzzyCompareVector(north.matrix().map(QVector3D(0.0, 0.0, -1.0)), QVector3D(0.0, -1.0, 0.0));
+    fuzzyCompareVector(north.matrix().map(QVector3D(1.0, 0.0, 0.0)), QVector3D(0.0, 0.0, 1.0));
+    fuzzyCompareVector(north.matrix().map(QVector3D(0.0, 1.0, 0.0)), QVector3D(1.0, 0.0, 0.0));
 
     INFO("East");
     cwRunningProfileScrapViewMatrix::Data east(origin, QVector3D(1.0, 0.0, 0.0));
     fuzzyCompareVector(east.from(), QVector3D(0.0, 0.0, 0.0));
     fuzzyCompareVector(east.to(), QVector3D(1.0, 0.0, 0.0));
-    fuzzyCompareVector(east.matrix() * QVector3D(0.0, 0.0, -1.0), QVector3D(0.0, -1.0, 0.0));
-    fuzzyCompareVector(east.matrix() * QVector3D(1.0, 0.0, 0.0), QVector3D(1.0, 0.0, 0.0));
-    fuzzyCompareVector(east.matrix() * QVector3D(0.0, 1.0, 0.0), QVector3D(0.0, 0.0, -1.0));
+    fuzzyCompareVector(east.matrix().map(QVector3D(0.0, 0.0, -1.0)), QVector3D(0.0, -1.0, 0.0));
+    fuzzyCompareVector(east.matrix().map(QVector3D(1.0, 0.0, 0.0)), QVector3D(1.0, 0.0, 0.0));
+    fuzzyCompareVector(east.matrix().map(QVector3D(0.0, 1.0, 0.0)), QVector3D(0.0, 0.0, -1.0));
 
     INFO("South");
     cwRunningProfileScrapViewMatrix::Data south(origin, QVector3D(0.0, -1.0, 0.0));
     fuzzyCompareVector(south.from(), QVector3D(0.0, 0.0, 0.0));
     fuzzyCompareVector(south.to(), QVector3D(0.0, -1.0, 0.0));
-    fuzzyCompareVector(south.matrix() * QVector3D(0.0, 0.0, -1.0), QVector3D(0.0, -1.0, 0.0));
-    fuzzyCompareVector(south.matrix() * QVector3D(1.0, 0.0, 0.0), QVector3D(0.0, 0.0, -1.0));
-    fuzzyCompareVector(south.matrix() * QVector3D(0.0, 1.0, 0.0), QVector3D(-1.0, 0.0, 0.0));
+    fuzzyCompareVector(south.matrix().map(QVector3D(0.0, 0.0, -1.0)), QVector3D(0.0, -1.0, 0.0));
+    fuzzyCompareVector(south.matrix().map(QVector3D(1.0, 0.0, 0.0)), QVector3D(0.0, 0.0, -1.0));
+    fuzzyCompareVector(south.matrix().map(QVector3D(0.0, 1.0, 0.0)), QVector3D(-1.0, 0.0, 0.0));
 
     INFO("West");
     cwRunningProfileScrapViewMatrix::Data west(origin, QVector3D(-1.0, 0.0, 0.0));
     fuzzyCompareVector(west.from(), QVector3D(0.0, 0.0, 0.0));
     fuzzyCompareVector(west.to(), QVector3D(-1.0, 0.0, 0.0));
-    fuzzyCompareVector(west.matrix() * QVector3D(0.0, 0.0, -1.0), QVector3D(0.0, -1.0, 0.0));
-    fuzzyCompareVector(west.matrix() * QVector3D(1.0, 0.0, 0.0), QVector3D(-1.0, 0.0, 0.0));
-    fuzzyCompareVector(west.matrix() * QVector3D(0.0, 1.0, 0.0), QVector3D(0.0, 0.0, 1.0));
+    fuzzyCompareVector(west.matrix().map(QVector3D(0.0, 0.0, -1.0)), QVector3D(0.0, -1.0, 0.0));
+    fuzzyCompareVector(west.matrix().map(QVector3D(1.0, 0.0, 0.0)), QVector3D(-1.0, 0.0, 0.0));
+    fuzzyCompareVector(west.matrix().map(QVector3D(0.0, 1.0, 0.0)), QVector3D(0.0, 0.0, 1.0));
 
 }
 
@@ -97,7 +97,7 @@ TEST_CASE("Test profile view rotation", "[cwRunningProfileScrapViewMatrix]") {
 
         QMatrix4x4 matrix = rotate * tranlate;
 
-        QVector3D calculatedResult = matrix * row.ToStation;
+        QVector3D calculatedResult = matrix.map(row.ToStation);
 
         checkQVector3D(calculatedResult, row.Result, 5);
     }

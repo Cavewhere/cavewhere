@@ -6,7 +6,7 @@
 **************************************************************************/
 
 //Catch includes
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 //Our includes
 #include "cwFindUnconnectedSurveyChunksTask.h"
@@ -28,21 +28,21 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
     for(int i = 0; i < numStations; i++) {
         cwStation station;
         station.setName(QString("%1").arg(i+1));
-        station.setLeft("0");
-        station.setRight("0");
-        station.setUp("0");
-        station.setDown("0");
+        station.setLeft(cwDistanceReading("0"));
+        station.setRight(cwDistanceReading("0"));
+        station.setUp(cwDistanceReading("0"));
+        station.setDown(cwDistanceReading("0"));
 
         stations.append(station);
     }
 
 
     cwShot shot;
-    shot.setDistance("10");
-    shot.setCompass("0");
-    shot.setBackCompass("180");
-    shot.setClino("0");
-    shot.setBackClino("0");
+    shot.setDistance(cwDistanceReading("10"));
+    shot.setCompass(cwCompassReading("0"));
+    shot.setBackCompass(cwCompassReading("180"));
+    shot.setClino(cwClinoReading("0"));
+    shot.setBackClino(cwClinoReading("0"));
 
     auto task = std::make_unique<cwFindUnconnectedSurveyChunksTask>();
 
@@ -55,7 +55,7 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
             chunk->appendShot(stations.at(i), stations.at(i+1), shot);
         }
 
-        task->setCave(cave.get());
+        task->setCave(cave->data());
         task->start();
         task->waitToFinish();
 
@@ -93,7 +93,7 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
             chunk2->appendShot(withoutCapitals.at(i), withoutCapitals.at(i+1), shot);
         }
 
-        task->setCave(cave.get());
+        task->setCave(cave->data());
         task->start();
         task->waitToFinish();
 
@@ -104,6 +104,7 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
 
         chunk1->appendShot(chunk1->stations().last(), newCaptical, shot);
 
+        task->setCave(cave->data());
         task->start();
         task->waitToFinish();
         CHECK(task->results().size() == 0);
@@ -125,7 +126,7 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
             chunk2->appendShot(stations.at(i), stations.at(i+1), shot);
         }
 
-        task->setCave(cave.get());
+        task->setCave(cave->data());
         task->start();
         task->waitToFinish();
 
@@ -143,6 +144,7 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
                 chunk3->appendShot(stations.at(i), stations.at(i+1), shot);
             }
 
+            task->setCave(cave->data());
             task->start();
             task->waitToFinish();
 
@@ -160,6 +162,7 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
                     chunk4->appendShot(stations.at(i), stations.at(i+1), shot);
                 }
 
+                task->setCave(cave->data());
                 task->start();
                 task->waitToFinish();
 
@@ -180,6 +183,7 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
                         chunk5->appendShot(stations.at(i), stations.at(i+1), shot);
                     }
 
+                    task->setCave(cave->data());
                     task->start();
                     task->waitToFinish();
 
@@ -197,6 +201,7 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
                         chunk6->appendShot(stations.at(i), stations.at(i+1), shot);
                     }
 
+                    task->setCave(cave->data());
                     task->start();
                     task->waitToFinish();
 
@@ -212,6 +217,10 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
                     trip2->addChunk(chunk5);
 
                     chunk5->appendNewShot(); //Black shot
+
+                    task->setCave(cave->data());
+                    task->start();
+                    task->waitToFinish();
 
                     //All connected should have no errors
                     REQUIRE(task->results().size() == 0);

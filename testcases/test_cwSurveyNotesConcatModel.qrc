@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/">
+        <file>datasets/test_cwSurveyNotesConcatModel/bones.glb</file>
+    </qresource>
+</RCC>

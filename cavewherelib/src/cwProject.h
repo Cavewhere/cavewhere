@@ -1,0 +1,237 @@
+/**************************************************************************
+**
+**    Copyright (C) 2013 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
+#ifndef CWXMLPROJECT_H
+#define CWXMLPROJECT_H
+
+//Our includes
+// #include "cwTask.h"
+// #include "GitRepository.h"
+#include "cwImage.h"
+// #include "cwImageData.h"
+#include "cwGlobals.h"
+// #include "cwRegionLoadResult.h"
+// #include "cwError.h"
+#include "cwFutureManagerToken.h"
+class cwCave;
+class cwCavingRegion;
+class cwAddImageTask;
+class cwTrip;
+class cwScrapManager;
+class cwTaskManagerModel;
+class cwRegionLoadTask;
+class cwRegionSaveTask;
+class cwErrorListModel;
+class cwFutureManagerModel;
+class cwSaveLoad;
+
+namespace QQuickGit {
+class GitRepository;
+};
+
+//Qt includes
+#include <QSqlDatabase>
+#include <QDir>
+#include <QMap>
+#include <QHash>
+#include <QPointer>
+#include <QFuture>
+#include <QQmlEngine>
+#include <functional>
+class QUndoStack;
+
+//Monad
+#include "Monad/Result.h"
+
+/**
+  This class saves and load a cavewhere project using xml and sqlite
+
+  The file format is create
+  */
+class CAVEWHERE_LIB_EXPORT cwProject :  public QObject{
+    Q_OBJECT
+    QML_NAMED_ELEMENT(Project)
+
+    Q_PROPERTY(QUndoStack* undoStack READ undoStack WRITE setUndoStack NOTIFY undoStackChanged)
+    Q_PROPERTY(cwErrorListModel* errorModel READ errorModel CONSTANT)
+
+    //Older save and load
+    Q_PROPERTY(QString filename READ filename NOTIFY filenameChanged)
+    Q_PROPERTY(bool canSaveDirectly READ canSaveDirectly NOTIFY canSaveDirectlyChanged)
+    Q_PROPERTY(bool isTemporaryProject READ isTemporaryProject NOTIFY isTemporaryProjectChanged)
+
+public:
+    enum FileType {
+        UnknownFileType,
+        SqliteFileType, //V6 and below
+        GitFileType, //V7 and above
+    };
+    Q_ENUM(FileType);
+
+    cwProject(QObject* parent = nullptr);
+    ~cwProject();
+
+    //! The project owns the region
+    cwCavingRegion* cavingRegion() const;
+
+    QUndoStack* undoStack() const;
+    void setUndoStack(QUndoStack* undoStack);
+
+    cwFutureManagerToken futureManagerToken() const;
+    void setFutureManagerToken(const cwFutureManagerToken& futureManagerToken);
+
+    cwErrorListModel* errorModel() const;
+
+    static QString supportedImageFormats();
+
+    Q_INVOKABLE FileType projectType(QString filename) const;
+
+    Q_INVOKABLE void convertFromProjectV6(QString oldProjectFilename,
+                                          const QDir &newProjectDirectory);
+
+
+    //Older save and load
+    // Q_INVOKABLE void save();
+    // Q_INVOKABLE void saveAs(QString newFilename);
+    Q_INVOKABLE void newProject();
+    Q_INVOKABLE bool save();
+    Q_INVOKABLE bool saveAs(QString newFilename);
+    Q_INVOKABLE bool deleteTemporaryProject();
+    Q_INVOKABLE bool isNewProject() const;
+    Q_INVOKABLE bool isModified();
+
+    QString filename() const;
+
+    Q_INVOKABLE QString absolutePath(const QString& relativePath) const;
+
+    Q_INVOKABLE void waitLoadToFinish();
+    void waitSaveToFinish();
+
+    //Old cavewhere file handling
+    // static void createDefaultSchema(const QSqlDatabase& database);
+    // static QString createTemporaryFilename();
+    static QSqlDatabase createDatabaseConnection(const QString& connectionName, const QString& databasePath);
+
+    bool canSaveDirectly() const;
+    bool isTemporaryProject() const;
+
+    void addImages(QList<QUrl> noteImagePath,
+                   const QDir &dir,
+                   std::function<void (QList<cwImage> images)> outputCallBackFunc);
+
+    void addFiles(QList<QUrl> filePath,
+                  const QDir& dir,
+                  std::function<void (QList<QString> paths)> outputCallBackFunc);
+
+    void loadOrConvert(const QString& filename);
+
+signals:
+    void undoStackChanged();
+    void regionChanged();
+
+    // -----Old save and load
+    void filenameChanged(QString newFilename);
+    void canSaveDirectlyChanged();
+    void isTemporaryProjectChanged();
+    void fileSaved();
+    void loaded();
+
+public slots:
+    void loadFile(QString filename);
+
+private:
+
+     // QDir m_projectDir;
+    cwSaveLoad* m_saveLoad;
+
+    //save and load
+    QFuture<void> LoadFuture;
+    QFuture<void> SaveFuture;
+
+    //The region that this project looks after
+    cwCavingRegion* Region;
+
+    //The undo stack
+    QUndoStack* UndoStack;
+
+    //Mark true if temp project
+    bool TempProject;
+
+    //Task manager, for visualizing running tasks
+    QPointer<cwTaskManagerModel> TaskManager;
+    cwFutureManagerToken FutureToken; //!<
+
+    cwErrorListModel* ErrorModel; //!<
+
+    //If this is a temp project directory on not
+    //Old save and load
+    // QString ProjectFile;
+    QSqlDatabase ProjectDatabase;
+    int FileVersion;
+
+
+    //For keeping database connection unique
+    static QAtomicInt ConnectionCounter;
+
+    // void createTempProjectFile();
+    // void createDefaultSchema();
+
+    // static void createTable(const QSqlDatabase& database, QString sql); //Helpers to createDefaultSchema
+    // static void insertDocumentation(const QSqlDatabase& database, QList<QPair<QString, QString> > filenames); //Helpers to createDefaultSchema
+
+    void setFilename(QString newFilename);
+
+    void privateSave();
+
+    bool saveWillCauseDataLoss() const;
+    void setTemporaryProject(bool isTemp);
+
+    // void addImageHelper(std::function<void (QList<cwImage>)> outputCallBackFunc,
+    //                     std::function<void (cwAddImageTask*)> setImagesFunc);
+
+    QFuture<Monad::ResultBase> loadHelper(QString filename);
+    QFuture<Monad::ResultBase> convertFromProjectV6Helper(QString oldProjectFilename,
+                                                          const QDir &newProjectDirectory,
+                                                          bool isTemporary = false);
+};
+
+/**
+  \brief Get's the caving region
+  */
+inline cwCavingRegion* cwProject::cavingRegion() const {
+    return Region;
+}
+
+inline QUndoStack *cwProject::undoStack() const
+{
+    return UndoStack;
+}
+
+/**
+  \brief Returns the open project path
+
+  This should always be valid
+  */
+
+
+/**
+  Returns true if the user hasn't save the project and false if they have
+  */
+
+
+inline cwErrorListModel* cwProject::errorModel() const {
+    return ErrorModel;
+}
+
+inline bool cwProject::canSaveDirectly() const {
+    return !saveWillCauseDataLoss() && !isTemporaryProject();
+}
+
+
+
+
+#endif // CWXMLPROJECT_H

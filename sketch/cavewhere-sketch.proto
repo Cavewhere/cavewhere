@@ -1,0 +1,17 @@
+syntax = "proto2";
+import "qt.proto";
+
+package CavewhereSketchProto;
+
+message PenPoint {
+    required QtProto.QPointF position = 1;
+    required double pressure = 2;
+}
+
+message PenLine {
+    repeated PenPoint points = 1;
+}
+
+message PenLineModel {
+    repeated PenLine lines = 1;
+}

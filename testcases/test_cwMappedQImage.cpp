@@ -1,5 +1,5 @@
 //Catch includes
-#include <catch.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 //Qt includes
 #include <QFile>
@@ -29,6 +29,7 @@ TEST_CASE("cwMappedQImage should create mapped QImage", "[cwMappedQImage]") {
         };
 
         QImage bitMapFromDisk(reinterpret_cast<uchar*>(fileData.data()), refImage.width(), refImage.height(), refImage.format());
+        bitMapFromDisk.setColorSpace(refImage.colorSpace());
 
         CHECK(diskImage.size() == refImage.size());
         CHECK(diskImage == refImage);
@@ -102,6 +103,7 @@ TEST_CASE("CreateDiskImageWithTempFile should work correctly with QImage", "[cwM
         };
 
         QImage bitMapFromDisk(reinterpret_cast<uchar*>(fileData.data()), refImage.width(), refImage.height(), refImage.format());
+        bitMapFromDisk.setColorSpace(refImage.colorSpace());
 
         CHECK(diskImage.size() == refImage.size());
         CHECK(diskImage == refImage);

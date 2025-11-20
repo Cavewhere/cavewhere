@@ -1,0 +1,283 @@
+cmake_minimum_required(VERSION 3.23)
+
+project(CaveWhereSketch VERSION 0.1 LANGUAGES CXX)
+
+#Add address sanitizer for clang build only
+if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    add_compile_options($<$<CONFIG:Debug>:-fsanitize=address>)
+    add_link_options($<$<CONFIG:Debug>:-fsanitize=address>)
+endif()
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(QT_QML_GENERATE_QMLLS_INI ON CACHE BOOL "Generate QMLLS INI file")
+
+# Include the GenerateExportHeader module
+include(GenerateExportHeader)
+
+# Include cavewhere
+add_subdirectory(cavewhere/cavewherelib)
+add_subdirectory(cavewhere/asyncfuture)
+add_subdirectory(cavewhere/QMath3d)
+add_subdirectory(cavewhere/monad)
+add_subdirectory(cavewhere/QuickQanava)
+add_subdirectory(cavewhere/dewalls)
+add_subdirectory(cavewhere/MarkScope)
+
+add_subdirectory(QQuickGit)
+
+find_package(Catch2 REQUIRED)
+find_package(openssl)
+
+# Normally, Catch2 is expected to be installed locally;
+# if you'd rather not do that (e.g. for cross compilation
+# or environment reasons) you may replace the find_package()
+# call above with this, to download and build from source:
+#
+# include(FetchContent)
+# FetchContent_Declare(
+#     Catch2
+#     GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+#     GIT_TAG 2b60af89e23d28eefc081bc930831ee9d45ea58b # v3.8.1
+#     GIT_SHALLOW TRUE
+# )
+# FetchContent_MakeAvailable(Catch2)
+
+
+find_package(Qt6
+    REQUIRED COMPONENTS
+    Core
+    Quick
+    QuickShapesPrivate
+    Test
+)
+
+find_package(Protobuf REQUIRED)
+
+qt_standard_project_setup(REQUIRES 6.7)
+
+qt_add_executable(CaveWhereSketch
+    main.cpp
+)
+
+# Collect source files qquickgitLib
+file(GLOB cwsketch_CPP_FILES "src/*.cpp")
+file(GLOB cwsketch_H_FILES "src/*.h")
+
+# Make the file paths relative to the project directory
+set(cwsketch_RELATIVE_CPP_FILES "")
+foreach(file ${cwsketch_CPP_FILES})
+    file(RELATIVE_PATH relFile "${CMAKE_CURRENT_SOURCE_DIR}" "${file}")
+    list(APPEND cwsketch_RELATIVE_CPP_FILES "${relFile}")
+endforeach()
+
+set(cwsketch_RELATIVE_H_FILES "")
+foreach(file ${cwsketch_H_FILES})
+    file(RELATIVE_PATH relFile "${CMAKE_CURRENT_SOURCE_DIR}" "${file}")
+    list(APPEND cwsketch_RELATIVE_H_FILES "${relFile}")
+endforeach()
+
+# Get all QML and JS files
+file(GLOB cwsketch_QML_FILES "qml/*.qml" "qml/*.js")
+
+# Define the list of QML singletons
+set(qml_singletons
+    # "UnitDefaults.qml"
+)
+
+# Remove the singleton files from the regular QML file list
+foreach(singleton ${qml_singletons})
+    list(REMOVE_ITEM cwsketch_QML_FILES "${CMAKE_CURRENT_SOURCE_DIR}/qml/${singleton}")
+endforeach()
+
+# Make the remaining QML files relative to the project directory
+set(cwsketch_RELATIVE_QML_FILES "")
+foreach(file ${cwsketch_QML_FILES})
+    file(RELATIVE_PATH relFile "${CMAKE_CURRENT_SOURCE_DIR}" "${file}")
+    message(STATUS "Adding QML file: ${relFile}")
+    list(APPEND cwsketch_RELATIVE_QML_FILES "${relFile}")
+endforeach()
+
+qt_add_qml_module(cavewhere_sketch
+    URI CaveWhereSketch
+    VERSION 1.0
+    OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/CaveWhereSketch
+    DEPENDENCIES
+        QtQuick
+    SOURCES
+        ${cwsketch_RELATIVE_CPP_FILES}
+        ${cwsketch_RELATIVE_H_FILES}
+    QML_FILES
+        ${cwsketch_RELATIVE_QML_FILES}
+        ${qml_singletons}
+)
+
+target_sources(cavewhere_sketch PRIVATE ${cavewherelib_CPP_FILES} ${cavewherelib_H_FILES})
+
+target_include_directories(cavewhere_sketch
+    PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+# get_target_property(CURRENT_PROTOC_EXECUTABLE protobuf::protoc IMPORTED_LOCATION)
+
+# Protobuf files
+file(GLOB protobuf_FILES "*.proto")
+set(Protobuf_IMPORT_DIRS ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/cavewhere/cavewherelib/src )
+protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${protobuf_FILES})
+target_sources(cavewhere_sketch PRIVATE ${protobuf_FILES} ${protobuf_FILES})
+
+# Add the generated files to your target
+set_source_files_properties(${PROTO_SRCS} ${PROTO_HDRS} PROPERTIES SKIP_AUTOMOC TRUE SKIP_AUTOUIC TRUE)
+target_sources(cavewhere_sketch PRIVATE ${PROTO_SRCS} ${PROTO_HDRS})
+
+# Generate the export header for windows
+generate_export_header(cavewhere_sketch
+    BASE_NAME CAVEWHERE_SKETCH_LIB
+    EXPORT_MACRO_NAME CAVEWHERE_SKETCH_LIB_EXPORT
+    EXPORT_FILE_NAME CaveWhereSketchLibExport.h
+)
+
+# For including the CaveWhereSketchLibExport.h
+target_include_directories(cavewhere_sketch PUBLIC
+    ${CMAKE_CURRENT_BINARY_DIR}
+)
+
+# Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
+# If you are developing for iOS or macOS you should consider setting an
+# explicit, fixed bundle identifier manually though.
+set_target_properties(CaveWhereSketch PROPERTIES
+    # MACOSX_BUNDLE_GUI_IDENTIFIER com.vadosesolutions.CaveWhereSketch
+    # MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
+    # XCODE_ATTRIBUTE_PRODUCT_NAME "CaveWhere Sketch"
+    #XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "com.vadosesolutions.CaveWhereSketch"
+    # MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
+    MACOSX_BUNDLE TRUE
+    # WIN32_EXECUTABLE TRUE
+)
+
+target_link_libraries(cavewhere_sketch
+    PUBLIC
+    Qt6::Quick
+    Qt6::Core
+    cavewherelib
+    qquickgit
+    PRIVATE
+    Qt6::QuickPrivate
+    Qt6::QuickShapesPrivate
+    protobuf::protobuf
+    openssl::openssl
+)
+
+target_include_directories(cavewhere_sketch
+    PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_BINARY_DIR}
+    PRIVATE
+    ${Qt6Quick_PRIVATE_INCLUDE_DIRS}
+)
+
+target_link_libraries(CaveWhereSketch
+    PRIVATE
+    cavewhere_sketch
+)
+
+target_compile_definitions(cavewhere_sketch
+    PRIVATE QT_USE_PRIVATE_HEADERS
+)
+
+# if(ANDROID)
+#     # #qt_android_generate_deployment_settings(MapWhere)
+#     set(openssl_libdir ${OpenSSL_INCLUDE_DIRS}/../lib)
+#     message(STATUS "OpenSSL lib dirs: ${openssl_libdir}")
+
+#     # #SSL needs to be copied into bundle directory so it gets copied to the phone
+#     set(ANDROID_BUILD_DIR ${CMAKE_CURRENT_BINARY_DIR}/android-build-CaveWhereSketch)
+
+#     file(MAKE_DIRECTORY "${ANDROID_BUILD_DIR}/libs/${ANDROID_ABI}")
+
+#     # copy-and-rename in one step
+#     configure_file(
+#         "${openssl_libdir}/libssl.so.3"
+#         "${ANDROID_BUILD_DIR}/libs/${ANDROID_ABI}/libssl.s.so"
+#         COPYONLY
+#     )
+
+#     configure_file(
+#         "${openssl_libdir}/libcrypto.so.3"
+#         "${ANDROID_BUILD_DIR}/libs/${ANDROID_ABI}/libcrypto.s.so"
+#         COPYONLY
+#     )
+
+#     # file(REMOVE ${ANDROID_BUID_DIR}/libs/${ANDROID_ABI}/libssl.so)
+#     # file(REMOVE ${ANDROID_BUID_DIR}/libs/${ANDROID_ABI}/libcrypto.so)
+# endif()
+
+if(IOS)
+    set_target_properties(CaveWhereSketch PROPERTIES
+       MACOSX_BUNDLE_GUI_IDENTIFIER solutions.vadose.cavewheresketch
+        MACOSX_BUNDLE_BUNDLE_VERSION 1 #The build version
+        MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
+       MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/ios/MacOSXBundleInfo.plist.in
+        MACOSX_BUNDLE TRUE
+        XCODE_ATTRIBUTE_ENABLE_BITCODE "NO"
+        # XCODE_ATTRIBUTE_INFOPLIST_KEY_CFBundleDisplayName "cwSketch"
+    )
+
+    #For launch screen
+    set(asset_catalog_path "ios/Assets.xcassets")
+    target_sources(CaveWhereSketch PRIVATE "${asset_catalog_path}")
+
+    set_source_files_properties(
+        ${asset_catalog_path}
+        PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+
+    set_target_properties(CaveWhereSketch PROPERTIES
+      QT_IOS_LAUNCH_SCREEN "${CMAKE_SOURCE_DIR}/ios/LaunchScreen.storyboard"
+    )
+
+    # 2. Add the storyboard as a bundled resource
+    # set(LAUNCH_SB ${CMAKE_SOURCE_DIR}/ios/LaunchScreen.storyboard)
+    # target_sources(CaveWhereSketch PRIVATE ${LAUNCH_SB})
+
+    #For app icon
+    file(GLOB_RECURSE app_icons CONFIGURE_DEPENDS "ios/Icons/*.png")
+    #message("App_icons:${app_icons}")
+    if(app_icons)
+        target_sources(CaveWhereSketch PRIVATE ${app_icons})
+        set_source_files_properties(
+            ${app_icons}
+            PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+        set_target_properties(CaveWhereSketch PROPERTIES XCODE_ATTRIBUTE_ASSETCATALOG_COMPILER_APPICON_NAME "AppIcon")
+    endif()
+
+    qt_import_plugins(CaveWhereSketch INCLUDE Qt::QIosOptionalPlugin_NSPhotoLibraryPlugin)
+endif()
+
+
+qt_add_executable(cavewhere-sketch-test
+    testcases/test_CenterlinePainterModel.cpp
+    testcases/test_FixedGridModel.cpp
+    testcases/test_WorldToScreenMatrix.cpp
+    testcases/test_TextModel.cpp
+    testcases/test_InfiniteGridModel.cpp
+    testcases/test_RepositoryModel.cpp)
+
+set_target_properties(cavewhere-sketch-test PROPERTIES
+    AUTOMOC ON
+    AUTORCC ON
+    AUTOUIC ON
+)
+
+file(GLOB cavewhere_sketch_test_CPP_FILES "testcases/*.cpp")
+file(GLOB cavewhere_sketch_test_H_FILES "testcases/*.h")
+target_sources(cavewhere-sketch-test PRIVATE ${cavewhere_sketch_test_CPP_FILES} ${cavewhere_sketch_test_H_FILES})
+
+target_link_libraries(cavewhere-sketch-test
+    PRIVATE
+    cavewhere_sketch
+    Catch2::Catch2
+    Qt6::Test
+)
+
+

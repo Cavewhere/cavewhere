@@ -2,18 +2,15 @@
 #include "SpyChecker.h"
 
 //Catch includes
-#include "catch.hpp"
-
-//Qt includes
-#include <QDebug>
+#include <catch2/catch_test_macros.hpp>
 
 SpyChecker::SpyChecker()
 {
 
 }
 
-SpyChecker::SpyChecker(const std::initializer_list<std::pair<QSignalSpy *, int> > &list) :
-    QHash<QSignalSpy *, int> (list)
+SpyChecker::SpyChecker(const std::initializer_list<std::pair<cwSignalSpy *, int> > &list) :
+    QHash<cwSignalSpy *, int> (list)
 {
 
 }
@@ -22,10 +19,6 @@ void SpyChecker::checkSpies() const
 {
     for(auto iter = begin(); iter != end(); iter++) {
         INFO("Key:" << iter.key()->objectName().toStdString());
-        if(iter.key()->size() != iter.value()) {
-            qDebug() << "Spy checker will fail. Place breakpoint here to debug. checkSpies()";
-        }
-        INFO("SignalSpy:" << iter.key()->size() << " expected:" << iter.value());
         CHECK(iter.key()->size() == iter.value());
     }
 }
@@ -33,10 +26,13 @@ void SpyChecker::checkSpies() const
 void SpyChecker::requireSpies() const
 {
     for(auto iter = begin(); iter != end(); iter++) {
-        INFO("Key:" << iter.key()->objectName().toStdString())
+        INFO("Key:" << iter.key()->objectName().toStdString());
+
         if(iter.key()->size() != iter.value()) {
-            qDebug() << "Spy checker will fail. Place breakpoint here to debug. requireSpies()";
+            //Uncomment and place break point here to debug and get a stacktrace
+             qDebug() << "Key:" << iter.key()->objectName() << iter.key()->size() << "==" << iter.value();
         }
+
         REQUIRE(iter.key()->size() == iter.value());
     }
 }
@@ -47,27 +43,4 @@ void SpyChecker::clearSpyCounts()
         iter.key()->clear();
         iter.value() = 0;
     }
-}
-
-SpyChecker SpyChecker::makeChecker(QObject *object)
-{
-    SpyChecker checker;
-
-    QSet<QString> spyNames;
-    auto metaObject = object->metaObject();
-    spyNames.reserve(metaObject->methodCount());
-    for(int i = 0; i < metaObject->methodCount(); i++) {
-        auto method = metaObject->method(i);
-        if(method.methodType() == QMetaMethod::Signal) {
-            QString objName = method.name() + "Spy";
-            if(!spyNames.contains(objName)) {
-                QSignalSpy* spy = new QSignalSpy(object, method);
-                spy->setObjectName(objName);
-                spyNames.insert(spy->objectName());
-                checker.insert(spy, 0);
-            }
-        }
-    }
-
-    return checker;
 }

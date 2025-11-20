@@ -7,7 +7,7 @@
 
 //Catch includes
 #define CATCH_CONFIG_SFINAE
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 //Cavewhere includes
 #include "cwError.h"
@@ -22,13 +22,13 @@
 #include "TestHelper.h"
 
 //Qt includes
-#include <QSignalSpy>
+#include "cwSignalSpy.h"
 
 std::ostream& operator << ( std::ostream& os, QMap<int, cwTripCalibration*> const& value ) {
     os << "QMap<int, cwTripCalibration*>:[";
     for(auto iter = value.begin(); iter != value.end(); ++iter) {
         os << iter.key() << ":" << iter.value();
-        if(iter + 1 != value.end()) {
+        if(std::next(iter, 1) != value.end()) {
             os << ", ";
         }
     }
@@ -595,7 +595,7 @@ TEST_CASE("Checks cwSurveyChunk errors", "[cwSurveyChunk]")
 TEST_CASE("Tests adding removing and getting copying cwSurveyChunk calibrations", "[cwSurveyChunk]") {
 
     cwSurveyChunk chunk;
-    QSignalSpy spy(&chunk, SIGNAL(calibrationsChanged()));
+    cwSignalSpy spy(&chunk, SIGNAL(calibrationsChanged()));
 
     chunk.appendNewShot();
     chunk.setData(cwSurveyChunk::StationNameRole, 0, "a1");
@@ -645,7 +645,8 @@ TEST_CASE("Tests adding removing and getting copying cwSurveyChunk calibrations"
         CHECK(chunk.calibrations().value(2) == nullptr);
 
         SECTION("Copy calibration") {
-            cwSurveyChunk chunkCopy(chunk);
+            cwSurveyChunk chunkCopy;
+            chunkCopy.setData(chunk.data());
 
             CHECK(chunkCopy.calibrations().size() == 3);
             auto calibrations = chunkCopy.calibrations();
@@ -753,4 +754,24 @@ TEST_CASE("Tests adding removing and getting copying cwSurveyChunk calibrations"
             CHECK(calibrations3 == chunk.calibrations());
         }
     }
+
+}
+
+TEST_CASE("Fix to abort - Test cwSurveyChunk with mostly empty data and copy", "[cwSurveyChunk]") {
+    cwSurveyChunk chunk;
+    chunk.appendNewShot();
+
+    REQUIRE(chunk.stationCount() == 2);
+    REQUIRE(chunk.shotCount() == 1);
+
+    chunk.setData(cwSurveyChunk::StationNameRole, 1, "b2");
+    CHECK(chunk.data(cwSurveyChunk::StationNameRole, 1).toString().toStdString() == "b2");
+
+    cwSurveyChunk chunkCopy;
+    chunkCopy.setData(chunk.data());
+
+    REQUIRE(chunkCopy.stationCount() == 2);
+    REQUIRE(chunkCopy.shotCount() == 1);
+
+    CHECK(chunkCopy.data(cwSurveyChunk::StationNameRole, 1).toString().toStdString() == "b2");
 }

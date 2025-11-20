@@ -1,5 +1,5 @@
 //Catch includes
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 //Our includes
 #include "cwTrackedImage.h"
@@ -11,20 +11,16 @@
 #include "cwImageProvider.h"
 #include "cwAsyncFuture.h"
 #include "cwImageDatabase.h"
-#include "cwOpenGLSettings.h"
+#include "cwSaveLoad.h"
 
 //Qt includes
 #include <QDebug>
+#include <QtConcurrent/QtConcurrentRun>
 
 //Async includes
 #include "asyncfuture.h"
 
 TEST_CASE("cwTrackedImage should delete images from database", "[cwTrackedImage]") {
-
-    cwOpenGLSettings::instance()->setToDefault();
-
-    REQUIRE(cwOpenGLSettings::instance()->useDXT1Compression() == true);
-    REQUIRE(cwOpenGLSettings::instance()->useMipmaps() == true);
 
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
@@ -33,15 +29,18 @@ TEST_CASE("cwTrackedImage should delete images from database", "[cwTrackedImage]
 
     int count = 0;
     project->addImages({QUrl::fromLocalFile(copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG"))},
+                       cwSaveLoad::projectDir(project),
                        [project, &trackedImage, &count](QList<cwImage> newImages)
     {
         REQUIRE(newImages.size() == 1);
 
         auto newImage = newImages.first();
 
-        CHECK(newImage.isIconValid());
-        CHECK(newImage.isMipmapsValid());
-        CHECK(newImage.isOriginalValid());
+        //FIXME!
+        REQUIRE(false);
+
+        // CHECK(newImage.isIconValid());
+        // CHECK(newImage.isOriginalValid());
 
         trackedImage = cwTrackedImage(newImage, project->filename());
         count++;
@@ -50,9 +49,12 @@ TEST_CASE("cwTrackedImage should delete images from database", "[cwTrackedImage]
     rootData->futureManagerModel()->waitForFinished();
 
     CHECK(count == 1);
-    CHECK(trackedImage.isIconValid());
-    CHECK(trackedImage.isMipmapsValid());
-    CHECK(trackedImage.isOriginalValid());
+
+    //FIXME!
+    REQUIRE(false);
+
+    // CHECK(trackedImage.isIconValid());
+    // CHECK(trackedImage.isOriginalValid());
 
     trackedImage.deleteImagesFromDatabase();
 
@@ -68,11 +70,6 @@ TEST_CASE("cwTrackedImage should delete images from database", "[cwTrackedImage]
 
 TEST_CASE("cwTrackImage should work with QSharedPointer's custom delete function", "[cwTrackedImage]") {
 
-    cwOpenGLSettings::instance()->setToDefault();
-
-    REQUIRE(cwOpenGLSettings::instance()->useDXT1Compression() == true);
-    REQUIRE(cwOpenGLSettings::instance()->useMipmaps() == true);
-
     QSharedPointer<cwTrackedImage> trackedImage;
 
     auto rootData = std::make_unique<cwRootData>();
@@ -84,14 +81,18 @@ TEST_CASE("cwTrackImage should work with QSharedPointer's custom delete function
         QEventLoop loop;
 
         project->addImages({QUrl::fromLocalFile(copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG"))},
+                           cwSaveLoad::projectDir(project),
                            [project, &loop, &trackImagePtr](QList<cwImage> newImages)
         {
             REQUIRE(newImages.size() == 1);
 
             auto newImage = newImages.first();
 
+            //FIXME!
+            loop.quit();
+            REQUIRE(false);
+
             CHECK(newImage.isIconValid());
-            CHECK(newImage.isMipmapsValid());
             CHECK(newImage.isOriginalValid());
 
             trackImagePtr = cwTrackedImage::createShared(newImage, project->filename());
@@ -106,6 +107,9 @@ TEST_CASE("cwTrackImage should work with QSharedPointer's custom delete function
     cwAsyncFuture::waitForFinished(future);
 
     REQUIRE(!trackImagePtr.isNull());
+
+    //FIXME!
+    REQUIRE(false);
 
     auto checkThatImageExist = [project](int id) {
         cwImageDatabase database(project->filename());

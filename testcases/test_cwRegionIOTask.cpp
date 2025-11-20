@@ -1,5 +1,5 @@
 //catch inculdes
-#include <catch.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 //Our includes
 #include "cwRegionIOTask.h"

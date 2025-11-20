@@ -6,8 +6,8 @@
 **************************************************************************/
 
 
-#ifndef STREAMOPERATOR
-#define STREAMOPERATOR
+#ifndef TEST_HELPER
+#define TEST_HELPER
 
 //Qt includes
 #include <QVector3D>
@@ -24,6 +24,8 @@
 #include <QTextStream>
 #include <QVector2D>
 #include <QMatrix4x4>
+#include <QQmlEngine>
+#include <QModelIndex>
 
 //Our includes
 #include "cwStationPositionLookup.h"
@@ -31,9 +33,13 @@
 #include "cwKeyword.h"
 #include "cwError.h"
 #include "cwImageData.h"
+#include "CaveWhereTestLibExport.h"
+#include "LoadProjectHelper.h"
 
 //Std includes
 #include <iostream>
+
+
 
 inline std::ostream& operator << ( std::ostream& os, QVector3D const& value ) {
     os << "(" << value.x() << ", " << value.y() << ", " << value.z() << ")";
@@ -106,11 +112,18 @@ inline std::ostream& operator << ( std::ostream& os, QVector2D const& value ) {
 }
 
 inline std::ostream& operator << ( std::ostream& os, QList<cwImageData> const& value ) {
-    for(auto image : value) {
+    for(const auto& image : value) {
         os << image << ",";
     }
     return os;
 }
+
+inline std::ostream& operator << ( std::ostream& os, const QModelIndex& index) {
+    os << "model:" << index.model() << "[" << index.row() << "," << index.column() << "," << index.internalId() << "]";
+    return os;
+}
+
+ std::ostream& operator << ( std::ostream& os, QList<int> const& value);
 
 inline std::ostream& operator << ( std::ostream& os, const QMatrix4x4& matrix) {
     os << "[\n";
@@ -129,7 +142,12 @@ inline std::ostream& operator << ( std::ostream& os, const QMatrix4x4& matrix) {
 }
 
 
-std::ostream &operator << ( std::ostream& os, cwError const& error);
+ std::ostream &operator << ( std::ostream& os, cwError const& error);
+
+inline std::ostream &operator << (std::ostream& os, QPointF point) {
+    os << "(" << point.x() << ", " << point.y() << ")";
+    return os;
+}
 
 void propertyCompare(QObject* tc1, QObject* tc2);
 
@@ -150,23 +168,12 @@ void fuzzyCompareVector(QVector3D v1, QVector3D v2, double delta = 0.000001);
  * equal to the stations in lookup2. Lookup2 could have extra stations that aren't checked. We
  * need this exact functionality for compass import export test. The compass exporter creates
  * extra stations at the end of the survey that has lrud data.
+ *`
+ * This needs to be inline for catch to work on windows (because this is a library)
  */
 void checkStationLookup(cwStationPositionLookup lookup1, cwStationPositionLookup lookup2);
 
-/**
- * Copyies filename to the temp folder
- */
-QString copyToTempFolder(QString filename);
 
-QString prependTempFolder(QString filename);
-
-/**
- * @brief fileToProject
- * @param filename
- * @return A new project generate from filename
- */
-std::shared_ptr<cwProject> fileToProject(QString filename);
-void fileToProject(cwProject* project, const QString& filename);
 
 #endif // STREAMOPERATOR
 

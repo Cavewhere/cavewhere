@@ -1,5 +1,6 @@
 //Catch includes
-#include <catch.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 //Our includes
 #include "cwScrapManager.h"
@@ -23,7 +24,7 @@
 #include <QElapsedTimer>
 #include <QThread>
 #include <QThreadPool>
-#include <QSignalSpy>
+#include "cwSignalSpy.h"
 
 //Std includes
 #include <random>
@@ -87,7 +88,7 @@ TEST_CASE("cwScrapManager should make the file size grow when re-calculaing scra
 
     auto nextSize = file.size();
     double ratio = nextSize / static_cast<double>(firstSize);
-    CHECK(ratio <= Approx(1.01));
+    CHECK(ratio <= Catch::Approx(1.01));
 }
 
 TEST_CASE("cwScrapManager auto update should work propertly", "[cwScrapManager]") {
@@ -97,7 +98,7 @@ TEST_CASE("cwScrapManager auto update should work propertly", "[cwScrapManager]"
 
     rootData->futureManagerModel()->waitForFinished();
 
-    QSignalSpy addRowSpy(rootData->futureManagerModel(), &cwFutureManagerModel::rowsInserted);
+    cwSignalSpy addRowSpy(rootData->futureManagerModel(), &cwFutureManagerModel::rowsInserted);
 
     auto scrapManager = rootData->scrapManager();
     CHECK(scrapManager->automaticUpdate() == true);
@@ -111,22 +112,32 @@ TEST_CASE("cwScrapManager auto update should work propertly", "[cwScrapManager]"
     auto chunk = trip->chunk(0);
     chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "10.0");
 
+    auto notes = trip->notes()->notes();
+    REQUIRE(notes.size() > 0);
+    auto note = notes.first();
+    REQUIRE(note->scraps().size() > 0);
+    auto scraps = note->scraps();
+    auto scrap = scraps.first();
+
     CHECK(rootData->futureManagerModel()->rowCount() == 0);
     CHECK(addRowSpy.count() == 0);
 
     QEventLoop loop;
 
-    QTimer::singleShot(1, [&](){
+    QTimer::singleShot(1, qApp, [&](){
         rootData->linePlotManager()->waitToFinish();
         CHECK(rootData->futureManagerModel()->rowCount() == 0);
         CHECK(addRowSpy.count() == 0);
 
+        auto pendingScraps = scrapManager->dirtyScraps();
+        CHECK(pendingScraps.contains(scrap));
+
         scrapManager->setAutomaticUpdate(true);
-        CHECK(trip->notes()->notes().first()->scraps().first()->triangulationData().isStale());
 
         rootData->futureManagerModel()->waitForFinished();
+        scrapManager->waitForFinish();
 
-        CHECK(!trip->notes()->notes().first()->scraps().first()->triangulationData().isStale());
+        CHECK_FALSE(scrapManager->dirtyScraps().contains(scrap));
 
         loop.quit();
     });
@@ -196,6 +207,9 @@ TEST_CASE("cwScrapManager should update on viewMatrix change", "[cwScrapManager]
     auto project = rootData->project();
 
     fileToProject(project, "://datasets/test_cwScrapManager/ProjectProfile-test-v3.cw");
+    if(rootData->futureManagerModel()->rowCount() >= 0) {
+        rootData->futureManagerModel()->waitForFinished();
+    }
 
     REQUIRE(project->cavingRegion()->caveCount() == 1);
     auto cave = project->cavingRegion()->cave(0);
@@ -206,6 +220,8 @@ TEST_CASE("cwScrapManager should update on viewMatrix change", "[cwScrapManager]
     auto note = notes.at(0);
     REQUIRE(note->scraps().size() == 1);
     auto scrap = note->scraps().at(0);
+    auto scrapManager = rootData->scrapManager();
+    REQUIRE(scrapManager != nullptr);
 
     CHECK(scrap->type() == cwScrap::ProjectedProfile);
     auto profile = dynamic_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix());
@@ -213,28 +229,30 @@ TEST_CASE("cwScrapManager should update on viewMatrix change", "[cwScrapManager]
     CHECK(profile->azimuth() == 135.0);
 
     CHECK(rootData->futureManagerModel()->rowCount() == 0);
-    CHECK(scrap->triangulationData().isStale() == false);
+    CHECK(scrapManager->dirtyScraps().contains(scrap) == false);
     profile->setAzimuth(136.0);
 
 
     CHECK(rootData->futureManagerModel()->rowCount() == 1);
-    CHECK(scrap->triangulationData().isStale() == true);
+    CHECK(scrapManager->dirtyScraps().contains(scrap));
 
     rootData->futureManagerModel()->waitForFinished();
+    scrapManager->waitForFinish();
 
     CHECK(rootData->futureManagerModel()->rowCount() == 0);
-    CHECK(scrap->triangulationData().isStale() == false);
+    CHECK(scrapManager->dirtyScraps().contains(scrap) == false);
 
     SECTION("Switch to running profile") {
         scrap->setType(cwScrap::RunningProfile);
         CHECK(dynamic_cast<cwRunningProfileScrapViewMatrix*>(scrap->viewMatrix()));
 
         CHECK(rootData->futureManagerModel()->rowCount() == 1);
-        CHECK(scrap->triangulationData().isStale() == true);
+        CHECK(scrapManager->dirtyScraps().contains(scrap));
 
         rootData->futureManagerModel()->waitForFinished();
+        scrapManager->waitForFinish();
 
         CHECK(rootData->futureManagerModel()->rowCount() == 0);
-        CHECK(scrap->triangulationData().isStale() == false);
+        CHECK(scrapManager->dirtyScraps().contains(scrap) == false);
     }
 }

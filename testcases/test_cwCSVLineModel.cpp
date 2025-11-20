@@ -1,8 +1,8 @@
 //Catch includes
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 //Qt includes
-#include <QSignalSpy>
+#include "cwSignalSpy.h"
 #include <QHash>
 
 //Our includes
@@ -54,11 +54,11 @@ TEST_CASE("cwCSVLineModel should return the correct cells", "[cwCSVLineModel]") 
         }
     };
 
-    QSignalSpy resetSpy(&model, SIGNAL(modelReset()));
-    QSignalSpy rowsRemoveSpy(&model, SIGNAL(rowsRemoved(QModelIndex, int, int)));
-    QSignalSpy rowsInsertedSpy(&model, SIGNAL(rowsInserted(QModelIndex, int, int)));
-    QSignalSpy columnsRemoveSpy(&model, SIGNAL(columnsRemoved(QModelIndex, int, int)));
-    QSignalSpy columnsInsertedSpy(&model, SIGNAL(columnsInserted(QModelIndex, int, int)));
+    cwSignalSpy resetSpy(&model, SIGNAL(modelReset()));
+    cwSignalSpy rowsRemoveSpy(&model, SIGNAL(rowsRemoved(QModelIndex, int, int)));
+    cwSignalSpy rowsInsertedSpy(&model, SIGNAL(rowsInserted(QModelIndex, int, int)));
+    cwSignalSpy columnsRemoveSpy(&model, SIGNAL(columnsRemoved(QModelIndex, int, int)));
+    cwSignalSpy columnsInsertedSpy(&model, SIGNAL(columnsInserted(QModelIndex, int, int)));
 
     SpyChecker spyCounts {
         {&resetSpy, 0},

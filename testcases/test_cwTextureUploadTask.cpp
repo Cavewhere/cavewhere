@@ -1,5 +1,6 @@
 //Catch includes
-#include <catch.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 //Our includes
 #include "TestHelper.h"
@@ -11,7 +12,6 @@
 #include "cwNote.h"
 #include "cwTextureUploadTask.h"
 #include "cwAsyncFuture.h"
-#include "cwOpenGLSettings.h"
 
 //Qt includes
 #include <QSqlDatabase>
@@ -19,8 +19,6 @@
 #include <QSqlError>
 
 TEST_CASE("cwTextureUploadTask should run correctly", "[cwTextureUploadTask]") {
-
-    cwOpenGLSettings::instance()->setToDefault();
 
     auto project = fileToProject("://datasets/test_cwTextureUploadTask/cwTextureUploadTask.cw");
 
@@ -47,60 +45,55 @@ TEST_CASE("cwTextureUploadTask should run correctly", "[cwTextureUploadTask]") {
         }
     };
 
-    SECTION("DXT1 extraction should work correctly") {
-        cwTextureUploadTask task;
-        task.setImage(note->image());
-        task.setProjectFilename(project->filename());
-        task.setFormat(cwTextureUploadTask::DXT1Mipmaps);
-        auto resultsFuture = task.mipmaps();
+    // SECTION("DXT1 extraction should work correctly") {
+    //     cwTextureUploadTask task;
+    //     task.setImage(note->image());
+    //     task.setProjectFilename(project->filename());
+    //     task.setType(cwTextureUploadTask::DXT1Mipmaps);
+    //     auto resultsFuture = task.mipmaps();
 
-        cwAsyncFuture::waitForFinished(resultsFuture);
-        REQUIRE(resultsFuture.resultCount() == 1);
-        REQUIRE(resultsFuture.isFinished());
-        auto results = resultsFuture.result();
+    //     cwAsyncFuture::waitForFinished(resultsFuture);
+    //     REQUIRE(resultsFuture.resultCount() == 1);
+    //     REQUIRE(resultsFuture.isFinished());
+    //     auto results = resultsFuture.result();
 
-        QList< QPair< int, QSize > > mipmaps({
-                                                 { 411264 , QSize(1008, 816) },
-                                                 { 102816 , QSize(504, 408) },
-                                                 { 25704 , QSize(252, 204) },
-                                                 { 6656 , QSize(126, 102) },
-                                                 { 1664 , QSize(63, 51) },
-                                                 { 448 , QSize(31, 25) },
-                                                 { 96 , QSize(15, 12) },
-                                                 { 32 , QSize(7, 6) },
-                                                 { 8 , QSize(3, 3) },
-                                                 { 8 , QSize(1, 1) },
-                                             });
+    //     QList< QPair< int, QSize > > mipmaps({
+    //                                              { 411264 , QSize(1008, 816) },
+    //                                              { 102816 , QSize(504, 408) },
+    //                                              { 25704 , QSize(252, 204) },
+    //                                              { 6656 , QSize(126, 102) },
+    //                                              { 1664 , QSize(63, 51) },
+    //                                              { 448 , QSize(31, 25) },
+    //                                              { 96 , QSize(15, 12) },
+    //                                              { 32 , QSize(7, 6) },
+    //                                              { 8 , QSize(3, 3) },
+    //                                              { 8 , QSize(1, 1) },
+    //                                          });
 
-        CHECK(results.format == cwTextureUploadTask::DXT1Mipmaps);
-        CHECK(results.scaleTexCoords.x() == Approx(0.997024));
-        CHECK(results.scaleTexCoords.y() == Approx(1.0));
+    //     CHECK(results.type == cwTextureUploadTask::DXT1Mipmaps);
+    //     CHECK(results.scaleTexCoords.x() == Catch::Approx(0.997024));
+    //     CHECK(results.scaleTexCoords.y() == Catch::Approx(1.0));
 
-        checkMipmaps(results, mipmaps);
-    }
+    //     checkMipmaps(results, mipmaps);
+    // }
 
     SECTION("RGBA extraction should work correctly") {
         cwTextureUploadTask task;
         task.setImage(note->image());
         task.setProjectFilename(project->filename());
-        task.setFormat(cwTextureUploadTask::OpenGL_RGBA);
+        task.setType(cwTextureUploadTask::OpenGL_RGBA);
         auto resultsFuture = task.mipmaps();
 
         cwAsyncFuture::waitForFinished(resultsFuture);
         auto results = resultsFuture.result();
 
-        QList< QPair< int, QSize > > mipmaps({
-                                                 { 3280320 , QSize(1005, 816) }
-                                             });
-
-        CHECK(results.format == cwTextureUploadTask::OpenGL_RGBA);
-        CHECK(results.scaleTexCoords.x() == Approx(1.0));
-        CHECK(results.scaleTexCoords.y() == Approx(1.0));
-        checkMipmaps(results, mipmaps);
+        CHECK(results.type == cwTextureUploadTask::OpenGL_RGBA);
+        CHECK(results.scaleTexCoords.x() == Catch::Approx(1.0));
+        CHECK(results.scaleTexCoords.y() == Catch::Approx(1.0));
 
         QImage image("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
         image = image.convertToFormat(QImage::Format_RGBA8888).mirrored();
-        CHECK(results.mipmaps.first().first == QByteArray(reinterpret_cast<const char*>(image.bits()), image.sizeInBytes()));
+        CHECK(results.image == image);
     }
 }
 

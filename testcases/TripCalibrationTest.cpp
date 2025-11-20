@@ -6,13 +6,13 @@
 **************************************************************************/
 
 //Catch includes
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 //Cavewhere includes
 #include <cwTripCalibration.h>
 
 //Qt inculdes
-#include <QSignalSpy>
+#include "cwSignalSpy.h"
 
 //Our includes
 #include "TestHelper.h"
@@ -36,7 +36,7 @@ TEST_CASE("Trip Calibration Getters and setters should work", "[cwTripCalibratio
     CHECK(tripCalibration->hasFrontSights() == true);
     CHECK(tripCalibration->hasBackSights() == true);
 
-    QSignalSpy calibrationChanged(tripCalibration.get(), SIGNAL(calibrationsChanged()));
+    cwSignalSpy calibrationChanged(tripCalibration.get(), SIGNAL(calibrationsChanged()));
 
     tripCalibration->setCorrectedClinoBacksight(true);
     CHECK(tripCalibration->hasCorrectedClinoBacksight() == true);
@@ -90,21 +90,11 @@ TEST_CASE("Trip Calibration Getters and setters should work", "[cwTripCalibratio
     CHECK(tripCalibration->hasBackSights() == false);
     CHECK(calibrationChanged.size() == 13);
 
-    SECTION("Check copy constructor") {
-        //Check copy operator
-        cwTripCalibration* calibration2 = new cwTripCalibration(*tripCalibration);
-
-        //Byte for byte comparison
-        propertyCompare(tripCalibration.get(), calibration2);
-
-        delete calibration2;
-    }
-
     SECTION("Check assignment operator") {
         //Check copy operator
         cwTripCalibration* calibration2 = new cwTripCalibration();
 
-        *calibration2 = *tripCalibration;
+        calibration2->setData(tripCalibration->data());
 
         //Byte for byte comparison
         propertyCompare(tripCalibration.get(), calibration2);

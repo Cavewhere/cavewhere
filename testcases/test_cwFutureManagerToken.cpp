@@ -1,5 +1,5 @@
 //Catch includes
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 //Our includes
 #include "cwFutureManagerToken.h"
@@ -22,7 +22,7 @@ TEST_CASE("cwFutureManagerToken should be thread safe", "[cwFutureManagerToken]"
         cwFutureManagerToken token(model.get());
 
         auto def = AsyncFuture::deferred<int>();
-        token.addJob({def.future(), "Current Thread"});
+        token.addJob({QFuture<void>(def.future()), "Current Thread"});
 
         REQUIRE(model->rowCount() == 1);
         CHECK(model->index(0).data(cwFutureManagerModel::NameRole).toString().toStdString() == "Current Thread");
@@ -38,7 +38,7 @@ TEST_CASE("cwFutureManagerToken should be thread safe", "[cwFutureManagerToken]"
         cwFutureManagerToken token = model->token();
 
         auto def = AsyncFuture::deferred<int>();
-        token.addJob({def.future(), "Current Thread"});
+        token.addJob({QFuture<void>(def.future()), "Current Thread"});
 
         REQUIRE(model->rowCount() == 1);
         CHECK(model->index(0).data(cwFutureManagerModel::NameRole).toString().toStdString() == "Current Thread");
@@ -55,7 +55,7 @@ TEST_CASE("cwFutureManagerToken should be thread safe", "[cwFutureManagerToken]"
         auto def = AsyncFuture::deferred<int>();
         auto future = QtConcurrent::run([def, token](){
             auto localToken = token;
-            localToken.addJob({def.future(), "Other Thread"});
+            localToken.addJob({QFuture<void>(def.future()), "Other Thread"});
             QThread::msleep(50);
         });
 
@@ -75,7 +75,7 @@ TEST_CASE("cwFutureManagerToken should be thread safe", "[cwFutureManagerToken]"
         cwFutureManagerModel token;
 
         auto def = AsyncFuture::deferred<int>();
-        token.addJob({def.future(), "Current Thread"});
+        token.addJob({QFuture<void>(def.future()), "Current Thread"});
 
         CHECK(model->rowCount() == 0);
     }
