@@ -21,8 +21,12 @@ RegionViewer {
         }
 
         const targetNote = note
+        const previousState = state
+
+        state = "CAPTURE_ICON"
 
         rhiViewerId.grabToImage(function(result) {
+            rhiViewerId.state = previousState
             if (!targetNote || !result || !result.image) {
                 return
             }
@@ -114,6 +118,7 @@ RegionViewer {
         camera: rhiViewerId.camera
         model: note
         positionRole: NoteLiDAR.UpPositionRole
+        visible: true
         selectionManager: SelectionManager {
             id: selectionManagerId
         }
@@ -140,11 +145,13 @@ RegionViewer {
 
 
     NoteLiDARTransformEditor {
+        id: transformEditorId
         note: rhiViewerId.note
         interactionManager: interactionManagerId
         northInteraction: lidarNorthInteraction
         upInteraction: lidarUpInteraction
         scaleInteraction: lidarScaleInteraction
+        visible: true
 
         anchors.top: parent.top
         anchors.left: parent.left
@@ -154,13 +161,31 @@ RegionViewer {
 
     states: [
         State {
+            name: "BASE"
+            PropertyChanges {
+                transformEditorId.visible: true
+                noteStationRepeaterId.visible: true
+            }
+        },
+
+        State {
             name: "SELECT"
+            extend: "BASE"
             PropertyChanges { target: lidarAddStationInteraction; enabled: false; visible: false }
         },
 
         State {
             name: "ADD-STATION"
+            extend: "BASE"
             PropertyChanges { target: lidarAddStationInteraction; enabled: true; visible: true }
+        },
+
+        State {
+            name: "CAPTURE_ICON"
+            PropertyChanges {
+                transformEditorId.visible: false
+                noteStationRepeaterId.visible: false
+            }
         }
     ]
 
