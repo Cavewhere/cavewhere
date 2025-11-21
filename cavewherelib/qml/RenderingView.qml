@@ -33,7 +33,6 @@ SplitView {
 
                 TabButton { text: qsTr("View") }
                 TabButton { text: qsTr("Layers") }
-                TabButton { text: qsTr("Export") }
             }
 
             StackLayout {
