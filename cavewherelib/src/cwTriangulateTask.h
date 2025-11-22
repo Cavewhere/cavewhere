@@ -15,6 +15,7 @@
 #include "cwImage.h"
 #include "cwNoteTranformation.h"
 #include "cwTextureUploadTask.h"
+#include "cwTriangulateLiDARInData.h"
 class cwCropImageTask;
 
 //Qt include
@@ -42,6 +43,86 @@ public:
                                 const QMatrix4x4 &toWorldCoords,
                                 const QMatrix4x4 &viewMatrix,
                                 const QVector3D &point);
+
+    template<typename T>
+    static QList<cwTriangulateStation> buildStationsWithInterpolatedShots(const T& data) {
+        const auto stationLookup = data.stationLookup();
+
+        QList<cwTriangulateStation> stations;
+        stations.reserve(data.noteStations().size());
+
+        const QHash<QString, QVector3D> notePositions = [&]() {
+            QHash<QString, QVector3D> notePositions;
+            notePositions.reserve(data.noteStations().size());
+
+            for (const auto& station : data.noteStations()) {
+                const QString stationName = station.name();
+                const QString normalizedName = stationName.toLower();
+                notePositions.insert(normalizedName, QVector3D(station.positionOnNote()));
+                stations.append(cwTriangulateStation(
+                    stationName,
+                    QVector3D(station.positionOnNote()),
+                    stationLookup.position(stationName)));
+            }
+
+            return notePositions;
+        }();
+
+        const auto network = data.surveyNetwork();
+
+        //This could potentially be a parameter
+        constexpr double kDummySpacingMeters = 0.1;
+        QSet<QString> processedShots;
+
+        const auto noteStations = data.noteStations();
+        for(const auto& noteStation : noteStations) {
+
+            const QString from = noteStation.name();
+            const QVector3D fromNote = QVector3D(noteStation.positionOnNote());
+            const QVector3D fromWorld = stationLookup.position(from);
+
+            for (const QString& toStation : network.neighbors(from)) {
+                if(!notePositions.contains(toStation)) {
+                    continue;
+                }
+
+                const QString to = toStation.toLower();
+                QString shotKey = from < to ? from + "|" + to : to + "|" + from;
+                if (processedShots.contains(shotKey)) {
+                    continue;
+                }
+                processedShots.insert(shotKey);
+
+                Q_ASSERT(stationLookup.hasPosition(to));
+
+                const QVector3D toNote = notePositions.value(to);
+                const QVector3D toWorld = stationLookup.position(to);
+
+                const double shotLength = static_cast<double>((toWorld - fromWorld).length());
+                if (shotLength <= 0.0) {
+                    continue;
+                }
+
+                const int segmentCount = static_cast<int>(std::ceil(shotLength / kDummySpacingMeters));
+                if (segmentCount <= 1) {
+                    continue;
+                }
+
+                const QVector3D noteStep = (toNote - fromNote) / static_cast<float>(segmentCount);
+                const QVector3D worldStep = (toWorld - fromWorld) / static_cast<float>(segmentCount);
+
+                for (int i = 1; i < segmentCount; ++i) {
+                    const float t = static_cast<float>(i);
+                    QVector3D notePos = fromNote + noteStep * t;
+                    QVector3D worldPos = fromWorld + worldStep * t;
+                    const QString dummyName = QString("%1_%2_%3").arg(from, to).arg(i);
+                    stations.append(cwTriangulateStation(dummyName, notePos, worldPos));
+                }
+            }
+        }
+
+        return stations;
+    }
 
 signals:
     

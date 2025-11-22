@@ -105,6 +105,9 @@ cwTriangulatedData cwTriangulateTask::triangulateGeometry(const cwTriangulateInD
                                                           cwTrackedImagePtr croppedImage,
                                                           const cwTextureUploadTask::UploadResult& imageData)
 {
+    qDebug() << "Scrap Data!:" << scrap.noteStations().size() << "Network:" << scrap.surveyNetwork().stations().size() << "Lookup:" << scrap.stationLookup().positions().size();
+
+
     QRectF bounds = scrap.outline().boundingRect();
 
     //Create the regualar mesh that covers the croppedImage
@@ -176,7 +179,7 @@ cwTriangulateTask::PointGrid cwTriangulateTask::createPointGrid(QRectF bounds, c
     double sizeOnPaperY = scrapImageSize.height() / scrapData.noteImageResolution(); //in meters
 
     //TODO: Make distance between points an option that can be adjusted
-    double distanceBetweenPoints = 5.0; //In meters
+    double distanceBetweenPoints = 2.0; //In meters
     double pointsPerMeter = 1.0 / distanceBetweenPoints; //Grid resolution
 
     cwScale noteScale;
@@ -685,6 +688,7 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
                                                   const QMatrix4x4& toLocal,
                                                   const cwImage& croppedImage) {
 
+
     /**
       This sorts scrapData stations if the scrap is in running profile mode.
 
@@ -754,13 +758,97 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
             return profileStations;
         }
 
-        //        //Figure out which stations are visible to this point
-        //        stations = stationsVisibleToPoint(notePoints[i],
-        //                                          scrapData.stations(),
-        //                                          scrapData.outline());
+        auto findClosestInterpolatedStations = [](const QList<cwTriangulateStation>& stations,
+                                                  const QVector3D& point,
+                                                  int stationCount)->QList<cwTriangulateStation>
+        {
+            if(stationCount <= 0 || stations.isEmpty()) {
+                return QList<cwTriangulateStation>();
+            }
 
+            QList<cwTriangulateStation> closestStations;
+            closestStations.reserve(stationCount);
+            QVector<double> closestDistances;
+            closestDistances.reserve(stationCount);
 
-        return stations;
+            for(const auto& station : stations) {
+                const double distance = (station.notePosition() - point).lengthSquared();
+
+                if(closestStations.size() < stationCount) {
+                    closestStations.append(station);
+                    closestDistances.append(distance);
+                    continue;
+                }
+
+                int worstIndex = 0;
+                double worstDistance = closestDistances[0];
+                for(int i = 1; i < closestDistances.size(); ++i) {
+                    if(closestDistances[i] > worstDistance) {
+                        worstDistance = closestDistances[i];
+                        worstIndex = i;
+                    }
+                }
+
+                if(distance < worstDistance) {
+                    closestStations[worstIndex] = station;
+                    closestDistances[worstIndex] = distance;
+                }
+            }
+
+            return closestStations;
+        };
+
+        auto findInterpolatedStationsWithinRadius = [](const QList<cwTriangulateStation>& stations,
+                                                       const QVector3D& point,
+                                                       double radius)->QList<cwTriangulateStation>
+        {
+            if(radius <= 0.0 || stations.isEmpty()) {
+                return QList<cwTriangulateStation>();
+            }
+
+            QList<cwTriangulateStation> stationsInRadius;
+            stationsInRadius.reserve(stations.size());
+
+            const double radiusSquared = radius * radius;
+            for(const auto& station : stations) {
+                const double distanceSquared = (station.notePosition() - point).lengthSquared();
+                if(distanceSquared <= radiusSquared) {
+                    stationsInRadius.append(station);
+                }
+            }
+
+            return stationsInRadius;
+        };
+
+        auto interpolatedStations = buildStationsWithInterpolatedShots(scrapData);
+
+        constexpr int kClosestStationCount = 2;
+        constexpr double kStationSearchRadius = .1;
+
+        // double currentRadius = kStationSearchRadius;
+        // QList<cwTriangulateStation> stationWithinRadius;
+        // do {
+        //     stationWithinRadius = findInterpolatedStationsWithinRadius(interpolatedStations,
+        //                                                                      notePoint,
+        //                                                                      currentRadius);
+        //     currentRadius *= 1.25; //Double the radius
+        // } while (stationWithinRadius.size() < 1);
+
+        // if(stationsWithinRadius.isEmpty()) {
+        return  findClosestInterpolatedStations(interpolatedStations,
+                                               notePoint,
+                                               kClosestStationCount);
+        // } else {
+        //     interpolatedStations = stationsWithinRadius;
+        // }
+
+        // return stationWithinRadius;
+
+        //Figure out which stations are visible to this point
+        // stations = stationsVisibleToPoint(notePoint,
+        //                                   interpolatedStations,
+        //                                   scrapData.outline());
+        // return stations;
     };
 
     /**
@@ -798,6 +886,7 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
         }
         return scrapData.viewMatrix()->matrix();
     };
+
 
 
     QSize imageSize = croppedImage.originalSize();
@@ -973,8 +1062,24 @@ QVector3D cwTriangulateTask::morphPoint(const QList<cwTriangulateStation> &visib
         // double distance = QLineF(visibleStations[i].notePosition(), point.toPointF()).length();
         if(distance != 0.0) {
 
+            // auto weightFromDistance = [](const double distance) {
+            //     const double innerRadius = 0.01;
+            //     const double maximumWeight = 1.0; // or whatever scale you want
+
+            //     const double effectiveDistance = std::max(distance, innerRadius);
+            //     const double ratio = innerRadius / effectiveDistance;
+            //     return maximumWeight * ratio * ratio;
+            // };
+
+            // qDebug() << "Adding weight:" << weightFromDistance(distance);
+            // distances.append(weightFromDistance(distance));
+
+            // double radius = 1.0; //1.0m
+            // double clamped = std::max(distance, );
+            // double inverseDistance = 1.0 / (clamped * clamped);
+
             //The inverse distance is give a high weight for points near stations
-            double inverseDistance = 1.0 / (distance * distance);  //This is the function that allows the weight to be calculated correctly
+            double inverseDistance = 1 / (distance * distance);  //This is the function that allows the weight to be calculated correctly
             distances.append(inverseDistance);
         } else {
             //This is a special case where the point is on station
@@ -1138,4 +1243,3 @@ bool cwTriangulateTask::PointGrid::quadContainInsideOfPolygon(const cwTriangulat
            polygon.containsPoint(Points.at(quad.bottomLeft()), Qt::OddEvenFill) &&
            polygon.containsPoint(Points.at(quad.bottomRight()), Qt::OddEvenFill);
 }
-
