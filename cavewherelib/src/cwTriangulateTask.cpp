@@ -22,6 +22,7 @@
 
 //Qt includes
 #include <QDebug>
+#include <cmath>
 
 void cwTriangulateTask::setScrapData(QList<cwTriangulateInData> scraps) {
     Scraps = scraps;
@@ -822,7 +823,7 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
 
         auto interpolatedStations = buildStationsWithInterpolatedShots(scrapData);
 
-        constexpr int kClosestStationCount = 2;
+        constexpr int kClosestStationCount = 20;
         constexpr double kStationSearchRadius = .1;
 
         // double currentRadius = kStationSearchRadius;
@@ -862,7 +863,7 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
      */
     auto calculateViewMatrix = [&scrapData](const QList<cwTriangulateStation>& stations) {
 
-        if(scrapData.viewMatrix()->type() == cwScrap::RunningProfile) {
+        if(scrapData.viewMatrix()->type() == cwAbstractScrapViewMatrix::RunningProfile) {
             //Calculate the rotation matrix for the profile for this point (could be looked up)
             if(stations.size() < 2) {
                 return QMatrix4x4();
@@ -887,7 +888,61 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
         return scrapData.viewMatrix()->matrix();
     };
 
+    //Smooth points in world space to soften z variation near each point.
+    auto smoothZ = [&scrapData](const QVector<QVector3D>& worldPoints, const QMatrix4x4 viewMatrix, double maxDistanceMeters) {
+        //Running profile not supported for smoothing
+        if(scrapData.viewMatrix()->type() == cwAbstractScrapViewMatrix::RunningProfile) {
+            return worldPoints;
+        }
 
+        if(worldPoints.isEmpty() || maxDistanceMeters <= 0.0) {
+            return worldPoints;
+        }
+
+        QVector<QVector3D> smoothed;
+        smoothed.reserve(worldPoints.size());
+        smoothed.resize(worldPoints.size());
+
+        const double maxDistanceSquared = maxDistanceMeters * maxDistanceMeters;
+        const double sigma = maxDistanceMeters * 0.5;
+        const double twoSigmaSquared = 2.0 * sigma * sigma;
+
+        const QMatrix4x4 viewMatrixInv = viewMatrix.inverted();
+
+        for(int i = 0; i < worldPoints.size(); ++i) {
+            double weightedZ = 0.0;
+            double weightSum = 0.0;
+            const QVector3D localI = viewMatrix.map(worldPoints[i]); //Rotate into eye space
+            const QVector3D xyi = {localI.x(), localI.y(), 0.0};
+
+            for(int j = 0; j < worldPoints.size(); ++j) {
+                const QVector3D localJ = viewMatrix.map(worldPoints[j]);
+                const QVector3D xyj = {localJ.x(), localJ.y(), 0.0};
+
+                const QVector3D delta = xyj - xyi;
+                const double distanceSquared = delta.lengthSquared();
+                if(distanceSquared > maxDistanceSquared) {
+                    continue;
+                }
+
+                //Gaussian kernel that favors neighbors closest to the current point.
+                const double weight = std::exp(-distanceSquared / twoSigmaSquared);
+                weightedZ += weight * static_cast<double>(localJ.z());
+                weightSum += weight;
+            }
+
+            if(weightSum > 0.0) {
+                const double blendedZ = weightedZ / weightSum;
+                smoothed[i] = viewMatrixInv.map(QVector3D(localI.x(),
+                                                          localI.y(),
+                                                          static_cast<float>(blendedZ)));
+            } else {
+                smoothed[i] = worldPoints[i];
+            }
+        }
+
+        return smoothed;
+    };
 
     QSize imageSize = croppedImage.originalSize();
     double metersPerDot = 1.0 / (double)scrapData.noteImageResolution();
@@ -919,6 +974,9 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
         //Based on the visible stations morph point into the scene coords
         points[i] = morphPoint(stationsUsedToMorph, toWorldCoords, viewMatrix, notePoints[i]);
     }
+
+    constexpr double kMaxSmoothingDistanceMeters = 3.0;
+    points = smoothZ(points, scrapData.viewMatrix()->matrix(), kMaxSmoothingDistanceMeters);
 
     return points;
 }
