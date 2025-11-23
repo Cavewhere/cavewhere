@@ -106,9 +106,6 @@ cwTriangulatedData cwTriangulateTask::triangulateGeometry(const cwTriangulateInD
                                                           cwTrackedImagePtr croppedImage,
                                                           const cwTextureUploadTask::UploadResult& imageData)
 {
-    qDebug() << "Scrap Data!:" << scrap.noteStations().size() << "Network:" << scrap.surveyNetwork().stations().size() << "Lookup:" << scrap.stationLookup().positions().size();
-
-
     QRectF bounds = scrap.outline().boundingRect();
 
     //Create the regualar mesh that covers the croppedImage
@@ -799,32 +796,32 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
             return closestStations;
         };
 
-        auto findInterpolatedStationsWithinRadius = [](const QList<cwTriangulateStation>& stations,
-                                                       const QVector3D& point,
-                                                       double radius)->QList<cwTriangulateStation>
-        {
-            if(radius <= 0.0 || stations.isEmpty()) {
-                return QList<cwTriangulateStation>();
-            }
+        // auto findInterpolatedStationsWithinRadius = [](const QList<cwTriangulateStation>& stations,
+        //                                                const QVector3D& point,
+        //                                                double radius)->QList<cwTriangulateStation>
+        // {
+        //     if(radius <= 0.0 || stations.isEmpty()) {
+        //         return QList<cwTriangulateStation>();
+        //     }
 
-            QList<cwTriangulateStation> stationsInRadius;
-            stationsInRadius.reserve(stations.size());
+        //     QList<cwTriangulateStation> stationsInRadius;
+        //     stationsInRadius.reserve(stations.size());
 
-            const double radiusSquared = radius * radius;
-            for(const auto& station : stations) {
-                const double distanceSquared = (station.notePosition() - point).lengthSquared();
-                if(distanceSquared <= radiusSquared) {
-                    stationsInRadius.append(station);
-                }
-            }
+        //     const double radiusSquared = radius * radius;
+        //     for(const auto& station : stations) {
+        //         const double distanceSquared = (station.notePosition() - point).lengthSquared();
+        //         if(distanceSquared <= radiusSquared) {
+        //             stationsInRadius.append(station);
+        //         }
+        //     }
 
-            return stationsInRadius;
-        };
+        //     return stationsInRadius;
+        // };
 
         auto interpolatedStations = buildStationsWithInterpolatedShots(scrapData);
 
-        constexpr int kClosestStationCount = 20;
-        constexpr double kStationSearchRadius = .1;
+        constexpr int kClosestStationCount = 10;
+        // constexpr double kStationSearchRadius = .1;
 
         // double currentRadius = kStationSearchRadius;
         // QList<cwTriangulateStation> stationWithinRadius;

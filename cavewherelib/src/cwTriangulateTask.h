@@ -48,6 +48,10 @@ public:
     static QList<cwTriangulateStation> buildStationsWithInterpolatedShots(const T& data) {
         const auto stationLookup = data.stationLookup();
 
+        if(stationLookup.isEmpty()) {
+            return QList<cwTriangulateStation>();
+        }
+
         QList<cwTriangulateStation> stations;
         stations.reserve(data.noteStations().size());
 
@@ -58,11 +62,13 @@ public:
             for (const auto& station : data.noteStations()) {
                 const QString stationName = station.name();
                 const QString normalizedName = stationName.toLower();
-                notePositions.insert(normalizedName, QVector3D(station.positionOnNote()));
-                stations.append(cwTriangulateStation(
-                    stationName,
-                    QVector3D(station.positionOnNote()),
-                    stationLookup.position(stationName)));
+                if(stationLookup.hasPosition(normalizedName)) [[likely]] {
+                    notePositions.insert(normalizedName, QVector3D(station.positionOnNote()));
+                    stations.append(cwTriangulateStation(
+                        stationName,
+                        QVector3D(station.positionOnNote()),
+                        stationLookup.position(stationName)));
+                }
             }
 
             return notePositions;
@@ -71,13 +77,17 @@ public:
         const auto network = data.surveyNetwork();
 
         //This could potentially be a parameter
-        constexpr double kDummySpacingMeters = 0.1;
+        constexpr double kDummySpacingMeters = 1.0;
         QSet<QString> processedShots;
 
         const auto noteStations = data.noteStations();
         for(const auto& noteStation : noteStations) {
-
             const QString from = noteStation.name();
+
+            if(!stationLookup.hasPosition(from)) [[unlikely]] {
+                continue;
+            }
+
             const QVector3D fromNote = QVector3D(noteStation.positionOnNote());
             const QVector3D fromWorld = stationLookup.position(from);
 
