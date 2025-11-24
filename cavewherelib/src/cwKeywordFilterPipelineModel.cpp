@@ -5,10 +5,7 @@
 #include "cwKeywordFilterPipelineModel.h"
 #include "cwKeywordFilterModel.h"
 #include "cwKeywordItemModel.h"
-#include "cwEntityKeywordsModel.h"
 #include "cwKeywordGroupByKeyModel.h"
-#include "cwKeywordItem.h"
-#include "cwKeywordModel.h"
 #include "cwUniqueValueFilterModel.h"
 
 cwKeywordFilterPipelineModel::cwKeywordFilterPipelineModel(QObject *parent) :
@@ -225,7 +222,10 @@ void cwKeywordFilterPipelineModel::setKeywordModel(cwKeywordItemModel* keywordMo
     {
         beginRemoveRows(QModelIndex(), i, i);
         const auto& row = mRows.at(i);
-        mAcceptedModel->removeSourceModel(row.filter);
+        // Q_ASSERT();
+        if(mAcceptedModel->sourceModels().contains(row.filter)) {
+            mAcceptedModel->removeSourceModel(row.filter);
+        }
         row.filter->deleteLater();
         mRows.removeAt(i);
         link(i-1); //Update the pointers between model rows
@@ -302,8 +302,8 @@ void cwKeywordFilterPipelineModel::setKeywordModel(cwKeywordItemModel* keywordMo
         QSet<QString> keys;
         for(int i = 0; i < mKeywordModel->rowCount(); i++) {
             auto index = mKeywordModel->index(i, 0, QModelIndex());
-            auto keywords = index.data(cwKeywordItemModel::KeywordsRole).value<QVector<cwKeyword>>();
-            for(auto keyword : keywords) {
+            const auto keywords = index.data(cwKeywordItemModel::KeywordsRole).value<QVector<cwKeyword>>();
+            for(const auto& keyword : keywords) {
                 keys.insert(keyword.key());
             }
         }
