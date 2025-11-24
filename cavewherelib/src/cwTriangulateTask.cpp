@@ -196,32 +196,6 @@ cwTriangulateTask::PointGrid cwTriangulateTask::createPointGrid(QRectF bounds, c
     double xDelta = bounds.width() / numberOfPointsX;
     double yDelta = bounds.height() / numberOfPointsY;
 
-    //Solve for delta in p
-
-    // auto paperBounds = toPaper.map(bounds);
-    // double sizeInCaveX = sizeOnPaperX / scale; //in meters in cave
-    // double sizeInCaveY = sizeOnPaperY / scale; //in meters in cave
-
-    // double pointsPerMeter = 1.0 / gridResolutionMeters; //Grid resolution
-
-
-    // double numberOfPointsX = sizeInCaveX * gridResolutionMeters;
-    // double numberOfPointsY = sizeInCaveY * gridResolutionMeters;
-
-    // double xDelta = bounds.width() / sizeInCaveX / pointsPerMeter;
-    // double yDelta = bounds.height() / sizeInCaveY / pointsPerMeter;
-
-
-    qDebug() << "----------------------------------";
-    qDebug() << "inCave:" << inCave;
-    qDebug() << "ScrapImageSize:" << scrapImageSize;
-    qDebug() << "SizeOnPaperX and Y:" << sizeOnPaperX << sizeOnPaperY;
-    // qDebug() << "pointsPerMeter:" << pointsPerMeter;
-    qDebug() << "scale:" << scale;
-    // qDebug() << "sizeInCaveX and Y:" << sizeInCaveX << sizeInCaveY;
-    qDebug() << "delta x and y:" << xDelta << yDelta;
-    qDebug() << "number points x and y:" << numberOfPointsX << numberOfPointsY;
-    qDebug() << "bounds:" << bounds;
 
     grid.GridSize.setWidth((int)(numberOfPointsX) + 2);
     grid.GridSize.setHeight((int)(numberOfPointsY) + 2);
