@@ -33,7 +33,7 @@ StandardPage {
                 }
 
                 WarpingSettingsItem {
-
+                    warpingSettings: RootData.scrapManager.warpingSettings
                 }
 
                 // RenderingSettingsItem {

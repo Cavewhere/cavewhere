@@ -6,11 +6,10 @@ import cavewherelib
 ColumnLayout {
     id: root
 
-    property ScrapManager scrapManager: RootData.scrapManager
-    property var warpingSettings: scrapManager ? scrapManager.warpingSettings : null
+    required property TriangulateWarping warpingSettings
 
     function parseDistance(text) {
-        var value = Number(text);
+        let value = Number(text);
         if (isNaN(value)) {
             return null;
         }
@@ -23,7 +22,10 @@ ColumnLayout {
 
         ColumnLayout {
             spacing: 8
-            Layout.fillWidth: true
+            anchors {
+                left: parent.left
+                right: parent.right
+            }
 
             RowLayout {
                 spacing: 6
@@ -38,11 +40,11 @@ ColumnLayout {
                     validator: DistanceValidator {}
                     text: root.warpingSettings ? root.warpingSettings.gridResolutionMeters.toFixed(2) : ""
                     onFinishedEditting: (newText) => {
-                        if(!root.warpingSettings) return;
-                        const value = root.parseDistance(newText);
-                        if(value === null || value <= 0.0) return;
-                        root.warpingSettings.gridResolutionMeters = value
-                    }
+                                            if(!root.warpingSettings) return;
+                                            const value = root.parseDistance(newText);
+                                            if(value === null || value <= 0.0) return;
+                                            root.warpingSettings.gridResolutionMeters = value
+                                        }
                 }
             }
 
@@ -65,31 +67,38 @@ ColumnLayout {
                     }
                 }
 
-                RowLayout {
-                    spacing: 6
-                    Layout.fillWidth: true
+                ColumnLayout {
+                    anchors {
+                        left: parent.left
+                        right: parent.right
+                    }
 
-                    InformationButton { showItemOnClick: shotSpacingHelp }
-
-                    ClickTextInput {
+                    RowLayout {
+                        spacing: 6
                         Layout.fillWidth: true
-                        validator: DistanceValidator {}
-                        enabled: shotSpacingBox.checked
-                        text: root.warpingSettings ? root.warpingSettings.shotInterpolationSpacingMeters.toFixed(2) : ""
-                        onFinishedEditting: (newText) => {
-                            if(!root.warpingSettings) return;
-                            const value = root.parseDistance(newText);
-                            if(value === null || value <= 0.0) return;
-                            root.warpingSettings.shotInterpolationSpacingMeters = value;
+
+                        InformationButton { showItemOnClick: shotSpacingHelp }
+
+                        ClickTextInput {
+                            Layout.fillWidth: true
+                            validator: DistanceValidator {}
+                            enabled: shotSpacingBox.checked
+                            text: root.warpingSettings ? root.warpingSettings.shotInterpolationSpacingMeters.toFixed(2) : ""
+                            onFinishedEditting: (newText) => {
+                                                    if(!root.warpingSettings) return;
+                                                    const value = root.parseDistance(newText);
+                                                    if(value === null || value <= 0.0) return;
+                                                    root.warpingSettings.shotInterpolationSpacingMeters = value;
+                                                }
                         }
                     }
-                }
-            }
 
-            HelpArea {
-                id: shotSpacingHelp
-                Layout.fillWidth: true
-                text: "Controls how densely dummy stations are inserted along survey shots for morphing. Smaller spacing gives smoother warps but costs performance."
+                    HelpArea {
+                        id: shotSpacingHelp
+                        Layout.fillWidth: true
+                        text: "Controls how densely dummy stations are inserted along survey shots for morphing. Smaller spacing gives smoother warps but costs performance."
+                    }
+                }
             }
 
             CheckableGroupBox {
@@ -105,30 +114,39 @@ ColumnLayout {
                     }
                 }
 
-                RowLayout {
-                    spacing: 6
-                    Layout.fillWidth: true
+                ColumnLayout {
+                    anchors {
+                        left: parent.left
+                        right: parent.right
+                    }
 
-                    InformationButton { showItemOnClick: closestStationsHelp }
 
-                    ClickNumberInput {
+                    RowLayout {
+                        spacing: 6
                         Layout.fillWidth: true
-                        text: root.warpingSettings ? root.warpingSettings.maxClosestStations : 1
-                        enabled: closestStationsBox.checked
-                        onFinishedEditting: (newText) => {
-                                                if(root.warpingSettings && Number(newText) >= 1) {
-                                                    root.warpingSettings.maxClosestStations = newText
+
+                        InformationButton { showItemOnClick: closestStationsHelp }
+
+                        ClickNumberInput {
+                            Layout.fillWidth: true
+                            text: root.warpingSettings ? root.warpingSettings.maxClosestStations : 1
+                            enabled: closestStationsBox.checked
+                            onFinishedEditting: (newText) => {
+                                                    if(root.warpingSettings && Number(newText) >= 1) {
+                                                        root.warpingSettings.maxClosestStations = newText
+                                                    }
                                                 }
                         }
+                    }
+
+                    HelpArea {
+                        id: closestStationsHelp
+                        Layout.fillWidth: true
+                        text: "Number of nearby stations considered when warping texture points in plan view. More stations can stabilize the warp but may flatten sharp features."
                     }
                 }
             }
 
-            HelpArea {
-                id: closestStationsHelp
-                Layout.fillWidth: true
-                text: "Number of nearby stations considered when warping texture points in plan view. More stations can stabilize the warp but may flatten sharp features."
-            }
 
             CheckableGroupBox {
                 id: smoothingBox
@@ -143,32 +161,54 @@ ColumnLayout {
                     }
                 }
 
-                RowLayout {
-                    spacing: 6
-                    Layout.fillWidth: true
+                ColumnLayout {
+                    anchors {
+                        left: parent.left
+                        right: parent.right
+                    }
 
-                    InformationButton { showItemOnClick: smoothingRadiusHelp }
-
-                    ClickTextInput {
+                    RowLayout {
+                        spacing: 6
                         Layout.fillWidth: true
-                        validator: DistanceValidator {}
-                        enabled: smoothingBox.checked
-                        text: root.warpingSettings ? root.warpingSettings.smoothingRadiusMeters.toFixed(2) : ""
-                        onFinishedEditting: (newText) => {
-                            if(!root.warpingSettings) return;
-                            const value = root.parseDistance(newText);
-                            if(value === null || value <= 0.0) return;
-                            root.warpingSettings.smoothingRadiusMeters = value;
-                            // text = value.toFixed(2);
+
+                        InformationButton { showItemOnClick: smoothingRadiusHelp }
+
+                        ClickTextInput {
+                            Layout.fillWidth: true
+                            validator: DistanceValidator {}
+                            enabled: smoothingBox.checked
+                            text: root.warpingSettings ? root.warpingSettings.smoothingRadiusMeters.toFixed(2) : ""
+                            onFinishedEditting: (newText) => {
+                                                    if(!root.warpingSettings) return;
+                                                    const value = root.parseDistance(newText);
+                                                    if(value === null || value <= 0.0) return;
+                                                    root.warpingSettings.smoothingRadiusMeters = value;
+                                                    // text = value.toFixed(2);
+                                                }
                         }
+                    }
+
+                    HelpArea {
+                        id: smoothingRadiusHelp
+                        Layout.fillWidth: true
+                        text: "Applies Gaussian smoothing to Z values over this radius to reduce surface noise."
                     }
                 }
             }
 
-            HelpArea {
-                id: smoothingRadiusHelp
+            RowLayout {
                 Layout.fillWidth: true
-                text: "Applies Gaussian smoothing to Z values over this radius to reduce surface noise."
+                Layout.alignment: Qt.AlignRight
+                spacing: 8
+
+                QC.Button {
+                    text: "Restore Defaults"
+                    onClicked: {
+                        if(root.warpingSettings) {
+                            root.warpingSettings.resetToDefaults()
+                        }
+                    }
+                }
             }
         }
     }

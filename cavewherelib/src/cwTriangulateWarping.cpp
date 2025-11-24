@@ -125,3 +125,8 @@ void cwTriangulateWarping::setUseSmoothingRadius(bool enabled)
     m_settings.useSmoothingRadius = enabled;
     emit useSmoothingRadiusChanged();
 }
+
+void cwTriangulateWarping::resetToDefaults()
+{
+    setData(cwTriangulateWarpingData());
+}

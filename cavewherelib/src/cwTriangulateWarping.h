@@ -2,6 +2,7 @@
 
 // Qt
 #include <QObject>
+#include <QQmlEngine>
 
 // Ours
 #include "cwGlobals.h"
@@ -10,6 +11,8 @@
 class CAVEWHERE_LIB_EXPORT cwTriangulateWarping : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(TriangulateWarping)
+
 
     Q_PROPERTY(double gridResolutionMeters READ gridResolutionMeters WRITE setGridResolutionMeters NOTIFY gridResolutionMetersChanged)
     Q_PROPERTY(int maxClosestStations READ maxClosestStations WRITE setMaxClosestStations NOTIFY maxClosestStationsChanged)
@@ -45,6 +48,8 @@ public:
 
     bool useSmoothingRadius() const;
     void setUseSmoothingRadius(bool enabled);
+
+    Q_INVOKABLE void resetToDefaults();
 
 signals:
     void gridResolutionMetersChanged();
