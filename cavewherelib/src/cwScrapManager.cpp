@@ -28,6 +28,7 @@
 #include "cwAsyncFuture.h"
 #include "cwAbstractScrapViewMatrix.h"
 #include "cwConcurrent.h"
+#include "cwTriangulateWarping.h"
 
 //Async future
 #include "asyncfuture.h"
@@ -41,11 +42,31 @@ cwScrapManager::cwScrapManager(QObject *parent) :
     Project(nullptr),
     TriangulateRestarter(this),
     m_renderScraps(nullptr),
-    AutomaticUpdate(true)
+    AutomaticUpdate(true),
+    m_warpingSettings(new cwTriangulateWarping(this))
 {
     TriangulateRestarter.onFutureChanged([this](){
         FutureManagerToken.addJob({TriangulateRestarter.future(), "Updating Scaps"});
     });
+
+    auto notifyWarpingChanged = [this]() {
+        updateAllScraps();
+    };
+
+    connect(m_warpingSettings, &cwTriangulateWarping::gridResolutionMetersChanged,
+            this, notifyWarpingChanged);
+    connect(m_warpingSettings, &cwTriangulateWarping::shotInterpolationSpacingMetersChanged,
+            this, notifyWarpingChanged);
+    connect(m_warpingSettings, &cwTriangulateWarping::maxClosestStationsChanged,
+            this, notifyWarpingChanged);
+    connect(m_warpingSettings, &cwTriangulateWarping::smoothingRadiusMetersChanged,
+            this, notifyWarpingChanged);
+    connect(m_warpingSettings, &cwTriangulateWarping::useShotInterpolationSpacingChanged,
+            this, notifyWarpingChanged);
+    connect(m_warpingSettings, &cwTriangulateWarping::useMaxClosestStationsChanged,
+            this, notifyWarpingChanged);
+    connect(m_warpingSettings, &cwTriangulateWarping::useSmoothingRadiusChanged,
+            this, notifyWarpingChanged);
 }
 
 cwScrapManager::~cwScrapManager()
@@ -443,7 +464,9 @@ QList<cwScrapManager::TriangulatedScrapResult> cwScrapManager::triangulateScraps
         return results;
     }
 
-    QList<cwTriangulateInData> scrapData = cw::transform(scraps, mapScrapToTriangulateInData);
+    QList<cwTriangulateInData> scrapData = cw::transform(scraps, [this](cwScrap* scrap) {
+        return mapScrapToTriangulateInData(scrap);
+    });
 
     if(scrapData.isEmpty()) {
         return results;
@@ -553,7 +576,7 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
 /**
     Extracts data from the cwScrap and puts it into a cwTriangulateInData
   */
-cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) {
+cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) const {
     cwTriangulateInData data;
     cwCave* cave = scrap->parentNote()->parentTrip()->parentCave();
 
@@ -570,6 +593,7 @@ cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) 
     data.setNoteImageResolution(dotsPerMeter);
 
     data.setLeads(scrap->leads());
+    data.setMorphingSettings(m_warpingSettings->data());
 
     return data;
 }

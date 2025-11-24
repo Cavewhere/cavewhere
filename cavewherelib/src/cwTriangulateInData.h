@@ -21,6 +21,7 @@
 #include "cwAbstractScrapViewMatrix.h"
 #include "cwStationPositionLookup.h"
 #include "cwSurveyNetwork.h"
+#include "cwTriangulateWarpingData.h"
 
 class cwTriangulatePrivateData;
 
@@ -66,6 +67,9 @@ public:
 
     QList<cwLead> leads() const;
     void setLeads(QList<cwLead> leads);
+
+    cwTriangulateWarpingData morphingSettings() const;
+    void setMorphingSettings(const cwTriangulateWarpingData& morphingSettings);
 
 private:
     QSharedDataPointer<cwTriangulatePrivateData> data;

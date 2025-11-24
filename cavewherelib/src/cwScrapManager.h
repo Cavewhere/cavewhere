@@ -44,6 +44,7 @@ class cwRenderTexturedItemVisibility;
 #include "cwFutureManagerToken.h"
 #include "cwGlobals.h"
 #include "cwAsyncFuture.h"
+#include "cwTriangulateWarping.h"
 
 /**
     The scrap manager listens to changes in the notes and creates all
@@ -55,6 +56,7 @@ class CAVEWHERE_LIB_EXPORT cwScrapManager : public QObject
     QML_NAMED_ELEMENT(ScrapManager)
 
     Q_PROPERTY(bool automaticUpdate READ automaticUpdate WRITE setAutomaticUpdate NOTIFY automaticUpdateChanged)
+    Q_PROPERTY(cwTriangulateWarping* warpingSettings READ warpingSettings CONSTANT)
 
 public:
     explicit cwScrapManager(QObject *parent = 0);
@@ -81,6 +83,8 @@ public:
     QList<cwScrap*> dirtyScraps() const;
 
     QList<TriangulatedScrapResult> triangulateScraps(const QList<cwScrap*>& scraps) const;
+
+    cwTriangulateWarping* warpingSettings() const { return m_warpingSettings; }
 
 signals:
     void automaticUpdateChanged();
@@ -111,7 +115,9 @@ private:
     //The render scraps that need updating
     QPointer<cwRenderTexturedItems> m_renderScraps;
 
-    bool AutomaticUpdate; //!<
+    bool AutomaticUpdate; //!< 
+
+    cwTriangulateWarping* m_warpingSettings = nullptr;
 
     void connectNote(cwNote* note);
     void connectScrap(cwScrap* scrap);
@@ -121,7 +127,7 @@ private:
 
     void updateScrapGeometry(QList<cwScrap *> scraps = QList<cwScrap*>());
     void updateScrapGeometryHelper(QList<cwScrap *> scraps);
-    static cwTriangulateInData mapScrapToTriangulateInData(cwScrap *scrap);
+    cwTriangulateInData mapScrapToTriangulateInData(cwScrap *scrap) const;
     static QList<cwTriangulateStation> mapNoteStationsToTriangulateStation(QList<cwNoteStation> noteStations,
                                                                            const cwStationPositionLookup& positionLookup);
 

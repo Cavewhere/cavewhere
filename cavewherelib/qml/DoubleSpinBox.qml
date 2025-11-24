@@ -3,15 +3,17 @@ import QtQuick.Controls
 
 SpinBox {
     id: spinBox
-    from: 0
+    from: decimalToInt(realFrom)
     value: decimalToInt(realValue)
-    to: decimalToInt(100)
+    to: decimalToInt(realTo)
     stepSize: decimalToInt(realStepSize)
     editable: true
 
     property int decimals: 2
     property real realValue: 0.0
     property real realStepSize: 0.1
+    property real realFrom: 0.0
+    property real realTo: 100.0
     readonly property int decimalFactor: Math.pow(10, decimals)
 
     function decimalToInt(decimal) {

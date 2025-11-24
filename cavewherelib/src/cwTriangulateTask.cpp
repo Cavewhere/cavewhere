@@ -176,22 +176,52 @@ cwTriangulateTask::PointGrid cwTriangulateTask::createPointGrid(QRectF bounds, c
     double sizeOnPaperX = scrapImageSize.width() / scrapData.noteImageResolution(); //in meters
     double sizeOnPaperY = scrapImageSize.height() / scrapData.noteImageResolution(); //in meters
 
-    //TODO: Make distance between points an option that can be adjusted
-    double distanceBetweenPoints = 2.0; //In meters
-    double pointsPerMeter = 1.0 / distanceBetweenPoints; //Grid resolution
-
     cwScale noteScale;
     noteScale.setData(noteTransform.scale);
     double scale = noteScale.scale(); //scale for the notes
 
-    double sizeInCaveX = sizeOnPaperX / scale; //in meters in cave
-    double sizeInCaveY = sizeOnPaperY / scale; //in meters in cave
+    QTransform toCave;
+    toCave.scale(sizeOnPaperX / scale, sizeOnPaperY / scale);
 
-    double xDelta = bounds.width() / sizeInCaveX / pointsPerMeter;
-    double yDelta = bounds.height() / sizeInCaveY / pointsPerMeter;
+    QRectF inCave = toCave.mapRect(bounds);
 
-    double numberOfPointsX = sizeInCaveX * (double)pointsPerMeter;
-    double numberOfPointsY = sizeInCaveY * (double)pointsPerMeter;
+    const auto morphingSettings = scrapData.morphingSettings();
+    const double gridResolutionMeters = morphingSettings.gridResolutionMeters > 0.0
+            ? morphingSettings.gridResolutionMeters
+            : cwTriangulateWarpingData().gridResolutionMeters;
+
+    double numberOfPointsX = inCave.width() / gridResolutionMeters;
+    double numberOfPointsY = inCave.height() / gridResolutionMeters;
+
+    double xDelta = bounds.width() / numberOfPointsX;
+    double yDelta = bounds.height() / numberOfPointsY;
+
+    //Solve for delta in p
+
+    // auto paperBounds = toPaper.map(bounds);
+    // double sizeInCaveX = sizeOnPaperX / scale; //in meters in cave
+    // double sizeInCaveY = sizeOnPaperY / scale; //in meters in cave
+
+    // double pointsPerMeter = 1.0 / gridResolutionMeters; //Grid resolution
+
+
+    // double numberOfPointsX = sizeInCaveX * gridResolutionMeters;
+    // double numberOfPointsY = sizeInCaveY * gridResolutionMeters;
+
+    // double xDelta = bounds.width() / sizeInCaveX / pointsPerMeter;
+    // double yDelta = bounds.height() / sizeInCaveY / pointsPerMeter;
+
+
+    qDebug() << "----------------------------------";
+    qDebug() << "inCave:" << inCave;
+    qDebug() << "ScrapImageSize:" << scrapImageSize;
+    qDebug() << "SizeOnPaperX and Y:" << sizeOnPaperX << sizeOnPaperY;
+    // qDebug() << "pointsPerMeter:" << pointsPerMeter;
+    qDebug() << "scale:" << scale;
+    // qDebug() << "sizeInCaveX and Y:" << sizeInCaveX << sizeInCaveY;
+    qDebug() << "delta x and y:" << xDelta << yDelta;
+    qDebug() << "number points x and y:" << numberOfPointsX << numberOfPointsY;
+    qDebug() << "bounds:" << bounds;
 
     grid.GridSize.setWidth((int)(numberOfPointsX) + 2);
     grid.GridSize.setHeight((int)(numberOfPointsY) + 2);
@@ -200,6 +230,7 @@ cwTriangulateTask::PointGrid cwTriangulateTask::createPointGrid(QRectF bounds, c
 
     for(int y = 0; y < grid.GridSize.height(); y++) {
         for(int x = 0; x < grid.GridSize.width(); x++) {
+            //Grid point is normalized to the paper [0, 1]
             QPointF gridPoint = bounds.topLeft() + QPointF(x * xDelta, y * yDelta);
             int index = grid.index(x, y);
             grid.Points[index] = gridPoint;
@@ -820,7 +851,11 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
 
         auto interpolatedStations = buildStationsWithInterpolatedShots(scrapData);
 
-        constexpr int kClosestStationCount = 10;
+        const auto morphingSettings = scrapData.morphingSettings();
+        const bool useMaxClosestStations = morphingSettings.useMaxClosestStations;
+        const int maxClosestStations = morphingSettings.maxClosestStations > 0
+                ? morphingSettings.maxClosestStations
+                : cwTriangulateWarpingData().maxClosestStations;
         // constexpr double kStationSearchRadius = .1;
 
         // double currentRadius = kStationSearchRadius;
@@ -833,9 +868,12 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
         // } while (stationWithinRadius.size() < 1);
 
         // if(stationsWithinRadius.isEmpty()) {
-        return  findClosestInterpolatedStations(interpolatedStations,
+        const int stationCount = useMaxClosestStations ? maxClosestStations
+                                                       : interpolatedStations.size();
+
+        return findClosestInterpolatedStations(interpolatedStations,
                                                notePoint,
-                                               kClosestStationCount);
+                                               stationCount);
         // } else {
         //     interpolatedStations = stationsWithinRadius;
         // }
@@ -972,8 +1010,14 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
         points[i] = morphPoint(stationsUsedToMorph, toWorldCoords, viewMatrix, notePoints[i]);
     }
 
-    constexpr double kMaxSmoothingDistanceMeters = 3.0;
-    points = smoothZ(points, scrapData.viewMatrix()->matrix(), kMaxSmoothingDistanceMeters);
+    const auto morphingSettings = scrapData.morphingSettings();
+    double smoothingRadiusMeters = 0.0;
+    if(morphingSettings.useSmoothingRadius) {
+        smoothingRadiusMeters = morphingSettings.smoothingRadiusMeters > 0.0
+                ? morphingSettings.smoothingRadiusMeters
+                : cwTriangulateWarpingData().smoothingRadiusMeters;
+    }
+    points = smoothZ(points, scrapData.viewMatrix()->matrix(), smoothingRadiusMeters);
 
     return points;
 }

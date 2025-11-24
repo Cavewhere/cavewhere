@@ -17,7 +17,7 @@ StandardPage {
             implicitWidth: 200
 
             // model: ["Jobs", "Rendering", "PDF"]
-            model: ["Jobs", "PDF"]
+            model: ["Jobs", "Warping", "PDF"]
         }
 
         QC.ScrollView {
@@ -29,6 +29,10 @@ StandardPage {
 
 
                 JobSettingsItem {
+
+                }
+
+                WarpingSettingsItem {
 
                 }
 

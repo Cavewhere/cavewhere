@@ -16,6 +16,7 @@
 #include "cwNoteTranformation.h"
 #include "cwTextureUploadTask.h"
 #include "cwTriangulateLiDARInData.h"
+#include "cwTriangulateWarpingData.h"
 class cwCropImageTask;
 
 //Qt include
@@ -24,6 +25,25 @@ class cwCropImageTask;
 #include <QVector3D>
 #include <QSet>
 #include <QPoint>
+#include <cmath>
+#include <type_traits>
+#include <utility>
+
+namespace cwTriangulateTaskDetail {
+template<typename T, typename = void>
+struct WarpingSettingsAccessor {
+    static cwTriangulateWarpingData get(const T&) {
+        return cwTriangulateWarpingData();
+    }
+};
+
+template<typename T>
+struct WarpingSettingsAccessor<T, std::void_t<decltype(std::declval<const T&>().morphingSettings())>> {
+    static cwTriangulateWarpingData get(const T& data) {
+        return data.morphingSettings();
+    }
+};
+}
 
 class cwTriangulateTask
 {
@@ -74,10 +94,19 @@ public:
             return notePositions;
         }();
 
+        const auto morphingSettings = cwTriangulateTaskDetail::WarpingSettingsAccessor<T>::get(data);
+        const bool useShotInterpolation = morphingSettings.useShotInterpolationSpacing;
+        const double shotInterpolationSpacingMeters = morphingSettings.shotInterpolationSpacingMeters > 0.0
+                                                          ? morphingSettings.shotInterpolationSpacingMeters
+                                                          : cwTriangulateWarpingData().shotInterpolationSpacingMeters;
+        if(!useShotInterpolation || shotInterpolationSpacingMeters <= 0.0) {
+            //Skip adding interpolated points
+            return stations;
+        }
+
         const auto network = data.surveyNetwork();
 
-        //This could potentially be a parameter
-        constexpr double kDummySpacingMeters = 1.0;
+
         QSet<QString> processedShots;
 
         const auto noteStations = data.noteStations();
@@ -113,7 +142,7 @@ public:
                     continue;
                 }
 
-                const int segmentCount = static_cast<int>(std::ceil(shotLength / kDummySpacingMeters));
+                const int segmentCount = static_cast<int>(std::ceil(shotLength / shotInterpolationSpacingMeters));
                 if (segmentCount <= 1) {
                     continue;
                 }
