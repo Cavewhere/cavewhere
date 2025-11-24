@@ -29,6 +29,7 @@
 #include "cwAbstractScrapViewMatrix.h"
 #include "cwConcurrent.h"
 #include "cwTriangulateWarping.h"
+#include "cwTriangulateWarpingSettings.h"
 
 //Async future
 #include "asyncfuture.h"
@@ -67,6 +68,8 @@ cwScrapManager::cwScrapManager(QObject *parent) :
             this, notifyWarpingChanged);
     connect(m_warpingSettings, &cwTriangulateWarping::useSmoothingRadiusChanged,
             this, notifyWarpingChanged);
+
+    m_warpingSettingsStore = std::make_unique<cwTriangulateWarpingSettings>(m_warpingSettings, this);
 }
 
 cwScrapManager::~cwScrapManager()
@@ -180,6 +183,9 @@ void cwScrapManager::setKeywordItemModel(cwKeywordItemModel *keywordItemModel)
   all there geometry
   */
 void cwScrapManager::updateAllScraps() {
+    if(!RegionModel) {
+        return;
+    }
 
     //Get all the scraps for the whole region
     foreach(cwCave* cave, RegionModel->cavingRegion()->caves()) {

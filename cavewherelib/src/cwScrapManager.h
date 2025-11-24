@@ -45,6 +45,7 @@ class cwRenderTexturedItemVisibility;
 #include "cwGlobals.h"
 #include "cwAsyncFuture.h"
 #include "cwTriangulateWarping.h"
+#include <memory>
 
 /**
     The scrap manager listens to changes in the notes and creates all
@@ -118,6 +119,7 @@ private:
     bool AutomaticUpdate; //!< 
 
     cwTriangulateWarping* m_warpingSettings = nullptr;
+    std::unique_ptr<class cwTriangulateWarpingSettings> m_warpingSettingsStore;
 
     void connectNote(cwNote* note);
     void connectScrap(cwScrap* scrap);
