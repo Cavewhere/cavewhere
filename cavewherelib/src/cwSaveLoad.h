@@ -180,11 +180,15 @@ public:
 
     static QString fileName(const cwNote* note);
     static QString absolutePath(const cwNote* note);
+    static QString absolutePath(const cwNote* note, const QString& imageFilename);
     static QDir dir(const cwNote* note);
 
     static QString fileName(const cwNoteLiDAR* note);
     static QString absolutePath(const cwNoteLiDAR* note);
+    static QString absolutePath(const cwNoteLiDAR* note, const QString& lidarFilename);
     static QDir dir(const cwNoteLiDAR* note);
+
+    static cwImage absolutePathNoteImage(const cwNote* note);
 
     //For testing
     void waitForFinished();

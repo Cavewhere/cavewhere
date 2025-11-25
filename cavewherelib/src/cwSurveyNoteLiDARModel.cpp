@@ -57,7 +57,7 @@ void cwSurveyNoteLiDARModel::addFromFiles(QList<QUrl> files)
                 auto* note = new cwNoteLiDAR(this);
                 note->setParentTrip(parentTrip());
                 note->setName(QFileInfo(path).fileName());
-                note->setFilename(path); // project-relative path
+                note->setFilename(QFileInfo(path).fileName()); // store filename only; runtime resolution happens via noteLiDARRelativePath
                 newNotes.append(note);
             }
 
@@ -85,7 +85,7 @@ QVariant cwSurveyNoteLiDARModel::data(const QModelIndex& index, int role) const
     switch (role) {
     case PathRole: {
         // For LiDAR, expose the stored project-relative filename (.glb)
-        return note->filename();
+        return cwSaveLoad::absolutePath(note, note->filename());
     }
     case IconPathRole: {
         return note->iconImagePath();

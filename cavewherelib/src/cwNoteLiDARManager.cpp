@@ -48,9 +48,9 @@ cwDiskCacher::Key iconCacheKey(const cwNoteLiDAR* note)
 {
     cwDiskCacher::Key key;
 
-    QString relativePath = note ? note->filename() : QString();
-    if (!relativePath.isEmpty()) {
-        QFileInfo fi(relativePath);
+    QString path = note ? cwSaveLoad::absolutePath(note, note->filename()) : QString();
+    if (!path.isEmpty()) {
+        QFileInfo fi(path);
         key.path = QDir(fi.path());
         QString baseName = fi.fileName();
         if (baseName.isEmpty()) {
@@ -75,13 +75,13 @@ QString sourceChecksum(const cwProject* project, const cwNoteLiDAR* note)
         return {};
     }
 
-    const QString relativePath = note->filename();
-    if (relativePath.isEmpty()) {
+    const QString path = cwSaveLoad::absolutePath(note, note->filename());
+    if (path.isEmpty()) {
         return {};
     }
 
     const QDir projectDir = cwSaveLoad::projectDir(project);
-    const QString absolutePath = projectDir.absoluteFilePath(relativePath);
+    const QString absolutePath = projectDir.absoluteFilePath(path);
     QFile file(absolutePath);
     if (!file.open(QIODevice::ReadOnly)) {
         return {};
@@ -464,8 +464,8 @@ cwTriangulateLiDARInData cwNoteLiDARManager::mapNoteToInData(const cwNoteLiDAR* 
     }
 
     // GLTF path (if the note exposes one via filename())
-    in.setGltfFilename(project->absolutePath(note->filename()));
-
+    const QString path = cwSaveLoad::absolutePath(note, note->filename());
+    in.setGltfFilename(path);
 
     return in;
 }

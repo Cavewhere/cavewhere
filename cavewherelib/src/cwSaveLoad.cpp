@@ -41,6 +41,7 @@
 #include <QImage>
 #include <QUuid>
 #include <QtCore/qscopeguard.h>
+#include <QFileInfo>
 
 //QQuickGit
 #include "GitRepository.h"
@@ -55,7 +56,8 @@ using namespace Monad;
 
 static QStringList fromProtoStringList(const google::protobuf::RepeatedPtrField<std::string> &protoStringList);
 
-
+// template<typename NoteT>
+// static QString noteRelativePathHelper(const NoteT* note, const QString& storedPath);
 
 
 template<typename ProtoType>
@@ -76,6 +78,30 @@ static Result<ProtoType> loadMessage(const QString& filename) {
     return Result<ProtoType>(proto);
 }
 
+// template<typename NoteT>
+// static QString noteRelativePathHelper(const NoteT* note, const QString& storedPath)
+// {
+//     const QString fileName = QFileInfo(storedPath).fileName();
+//     const QString nameToUse = fileName.isEmpty() ? storedPath : fileName;
+
+//     if (!note) {
+//         return nameToUse;
+//     }
+
+//     const cwTrip* trip = note->parentTrip();
+//     const cwCave* cave = trip ? trip->parentCave() : nullptr;
+//     const cwCavingRegion* region = cave ? cave->parentRegion() : nullptr;
+//     const cwProject* project = region ? region->parentProject() : nullptr;
+
+//     if (project == nullptr || project->filename().isEmpty()) {
+//         return QString();
+//     }
+
+//     const QDir projectDir = QFileInfo(project->filename()).absoluteDir();
+//     const QString absolutePath = cwSaveLoad::dir(note).absoluteFilePath(nameToUse);
+//     return projectDir.relativeFilePath(absolutePath);
+// }
+
 struct cwSaveLoad::Data {
 
     struct FileSystemJob {
@@ -89,6 +115,7 @@ struct cwSaveLoad::Data {
         Action action = Action::Rename;
 
         bool rename() const {
+            qDebug() << "Renaming: " << oldPath << "to" << newPath;
             return QDir().rename(oldPath, newPath);
         }
 
@@ -328,13 +355,30 @@ struct cwSaveLoad::Data {
 
             // 1) Deduplicate by 'object', keeping the *last* occurrence
             {
-                std::unordered_set<const QObject*> seenObjects;
+                struct JobIdentity {
+                    const QObject* object = nullptr;
+                    FileSystemJob::Kind kind = FileSystemJob::Kind::File;
+
+                    bool operator==(const JobIdentity&) const = default;
+                };
+
+                struct JobIdentityHash {
+                    std::size_t operator()(const JobIdentity& id) const noexcept {
+                        return qHash(qMakePair(reinterpret_cast<quintptr>(id.object),
+                                               static_cast<int>(id.kind)));
+                    }
+                };
+
+                std::unordered_set<JobIdentity, JobIdentityHash> seenObjects;
                 QList<FileSystemJob> deduplicated;
                 deduplicated.reserve(m_fileSystemJobs.size());
 
                 for (const auto& job : std::views::reverse(m_fileSystemJobs)) {
-                    if (seenObjects.insert(job.object).second) {
+                    JobIdentity id{job.object, job.kind};
+                    if (seenObjects.insert(id).second) {
                         deduplicated.push_back(job); // collected in reverse order
+                    } else {
+                        qDebug() << "Rejecting:" << job.object << (int)job.kind;
                     }
                 }
 
@@ -349,7 +393,7 @@ struct cwSaveLoad::Data {
             auto setOldPath = [this](FileSystemJob& job) {
                 qDebug() << "SetOldPath:" << m_fileLookup[job.object] << job.object;
                 Q_ASSERT(m_fileLookup.contains(job.object));
-                Q_ASSERT(QFileInfo::exists(m_fileLookup[job.object]));
+                // Q_ASSERT(QFileInfo::exists(m_fileLookup[job.object]));
                 auto oldPath = m_fileLookup[job.object];
 
                 if(job.kind == FileSystemJob::Kind::Directory) {
@@ -368,7 +412,8 @@ struct cwSaveLoad::Data {
                 //Resolve the oldPath
                 setOldPath(job);
 
-                job.execute();
+                bool success = job.execute();
+                qDebug() << "Success:" << job.newPath << success;
 
                 // qDebug() << "CouldRename:" << couldRename;
 
@@ -411,7 +456,7 @@ struct cwSaveLoad::Data {
         // auto currentFileName = m_fileLookup.value(object);
         // QString folderName = QFileInfo(currentFileName).absolutePath();
 
-        auto fileRename = Data::FileSystemJob {object, QString(), absolutePath(object), Data::FileSystemJob::Kind::File};
+        auto fileRename = Data::FileSystemJob {object, QString(), QString(), Data::FileSystemJob::Kind::File, Data::FileSystemJob::Action::Remove};
         auto folderRename = Data::FileSystemJob {object, QString(), dir(object).absolutePath(), Data::FileSystemJob::Kind::Directory};
 
         addFileSystemJob(fileRename);
@@ -1563,8 +1608,11 @@ Monad::Result<cwNoteData> cwSaveLoad::loadNote(const QString &filename, const QD
         // Load image resolution
         noteData.imageResolution = fromProtoImageResolution(protoNote.imageresolution());
 
-        // Load the image
-        noteData.image.setPath(QString::fromStdString(protoNote.image().path()));
+        // Load the image: older saves may store a relative path; strip to filename for consistency.
+        const QString rawImagePath = QString::fromStdString(protoNote.image().path());
+        const QString imageFileName = QFileInfo(rawImagePath).fileName();
+        noteData.image.setPath(imageFileName.isEmpty() ? rawImagePath : imageFileName);
+
         noteData.image.setOriginalSize(cwRegionLoadTask::loadSize(protoNote.image().size()));
         noteData.image.setOriginalDotsPerMeter(protoNote.image().dotpermeter());
 
@@ -1588,7 +1636,9 @@ Monad::Result<cwNoteLiDARData> cwSaveLoad::loadNoteLiDAR(const QString& filename
 
         cwNoteLiDARData noteData;
 
-        noteData.filename = QString::fromStdString(protoNote.filename());
+        const QString rawFilename = QString::fromStdString(protoNote.filename());
+        // Older saves may contain project-relative paths; normalize to just the filename to stay resilient to renames.
+        noteData.filename = QFileInfo(rawFilename).fileName().isEmpty() ? rawFilename : QFileInfo(rawFilename).fileName();
         noteData.name = QString::fromStdString(protoNote.name());
 
         noteData.stations.reserve(protoNote.notestations_size());
@@ -2637,10 +2687,40 @@ QString cwSaveLoad::fileName(const cwNote *note)
     return sanitizeFileName(note->name() + QStringLiteral(".cwnote"));
 }
 
+cwImage cwSaveLoad::absolutePathNoteImage(const cwNote* note)
+{
+    if (!note) {
+        return cwImage();
+    }
+
+    const QString path = absolutePath(note, note->image().path());
+    if (path.isEmpty()) {
+        return cwImage();
+    }
+
+    cwImage image = note->image();
+    image.setPath(path);
+    return image;
+}
+
 QString cwSaveLoad::absolutePath(const cwNote *note)
 {
     return dir(note).absoluteFilePath(fileName(note));
 }
+
+QString cwSaveLoad::absolutePath(const cwNote *note, const QString& imageFilename)
+{
+    if(note == nullptr) {
+        return QString();
+    }
+
+    if(!imageFilename.isEmpty()) {
+        return dir(note).absoluteFilePath(imageFilename);
+    }
+
+    return QString();
+}
+
 
 QDir cwSaveLoad::dir(const cwNote *note)
 {
@@ -2659,6 +2739,19 @@ QString cwSaveLoad::fileName(const cwNoteLiDAR *note)
 QString cwSaveLoad::absolutePath(const cwNoteLiDAR *note)
 {
     return dir(note).absoluteFilePath(fileName(note));
+}
+
+QString cwSaveLoad::absolutePath(const cwNoteLiDAR *note, const QString& lidarFilename)
+{
+    if(note == nullptr) {
+        return QString();
+    }
+
+    if(lidarFilename.isEmpty()) {
+        return QString();
+    }
+
+    return dir(note).absoluteFilePath(lidarFilename);
 }
 
 QDir cwSaveLoad::dir(const cwNoteLiDAR *note)

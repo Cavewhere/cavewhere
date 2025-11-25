@@ -120,10 +120,9 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
     };
 
     auto cropImage = [filename, originalImage, cropRect, addCropToDatabase, hash]()->Image {
-            cwImageProvider provider;
-            provider.setProjectPath(filename);
-            cwImageData imageData = provider.data(originalImage.path());
-            QImage image = provider.image(imageData);
+            // cwImageProvider provider;
+            // provider.setProjectPath(filename);
+            QImage image = QImage(originalImage.path());
             image.setColorSpace(QColorSpace());
             QRect cropArea = nearestDXT1Rect(mapNormalizedToIndex(cropRect,
                                                                   image.size()));

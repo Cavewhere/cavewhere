@@ -30,6 +30,7 @@
 #include "cwConcurrent.h"
 #include "cwTriangulateWarping.h"
 #include "cwTriangulateWarpingSettings.h"
+#include "cwSaveLoad.h"
 
 //Async future
 #include "asyncfuture.h"
@@ -586,7 +587,8 @@ cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) 
     cwTriangulateInData data;
     cwCave* cave = scrap->parentNote()->parentTrip()->parentCave();
 
-    data.setNoteImage(scrap->parentNote()->image());
+    cwImage noteImage = scrap->parentNote()->image();
+    data.setNoteImage(cwSaveLoad::absolutePathNoteImage(scrap->parentNote()));
     data.setOutline(scrap->points());
     data.setNoteStation(scrap->stations());
     data.setStationLookup(cave->stationPositionLookup());

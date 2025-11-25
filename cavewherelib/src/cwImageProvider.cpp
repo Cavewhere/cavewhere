@@ -53,7 +53,7 @@ QImage cwImageProvider::requestImage(const QString &path, QSize *size, const QSi
 
     if(maxSize > 0) {
         //Generate a smaller image than the original, this could be an icon
-        auto hash = fileHash(imagePath(path));
+        auto hash = fileHash(relativeImagePath(path));
         QString prefix = QStringLiteral("scaled-") + QString::number(requestedSize.width()) + QStringLiteral("_") + QString::number(requestedSize.height());
         auto key = imageCacheKey(path, prefix, hash);
 
@@ -88,11 +88,8 @@ QImage cwImageProvider::requestImage(const QString &path, QSize *size, const QSi
 
 QImage cwImageProvider::image(const QString &path) const
 {
-    QString fullPath = imagePath(path);
-    // qDebug() << "FullPath:" << fullPath;
-
     //Extract the image data from the disk
-    auto imageData = data(fullPath);
+    auto imageData = data(path);
 
     //Read the image in
     QImage image = this->image(imageData);
@@ -116,14 +113,14 @@ QString cwImageProvider::projectPath() const {
     return ProjectPath;
 }
 
-QString cwImageProvider::imagePath(const QString &relativeImagePath) const
+QString cwImageProvider::relativeImagePath(const QString &absolutePath) const
 {
     QMutexLocker locker(&ProjectPathMutex);
 
     QFileInfo info(ProjectPath);
     QDir dir = info.absoluteDir();
 
-    return dir.absoluteFilePath(relativeImagePath);
+    return dir.relativeFilePath(absolutePath);
 }
 
 /**
@@ -259,7 +256,7 @@ cwImageData cwImageProvider::data(QString filename) const
 
 QString cwImageProvider::absoluteImagePath(const cwImage &image) const
 {
-    return imagePath(image.path());
+    return image.path();
 }
 
 // /**
@@ -301,7 +298,7 @@ QImage cwImageProvider::image(const cwImageData &imageData) const
             int height = getValue(cropHeightKey());
 
             QRect cropRect(x, y, width, height);
-            QImage originalImage(imagePath(path));
+            QImage originalImage(path);
             return originalImage.copy(cropRect);
         } catch(std::runtime_error error) {
             qDebug() << "Error:" << error.what();

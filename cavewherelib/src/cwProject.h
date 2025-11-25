@@ -28,6 +28,8 @@ class cwRegionSaveTask;
 class cwErrorListModel;
 class cwFutureManagerModel;
 class cwSaveLoad;
+class cwNote;
+class cwNoteLiDAR;
 
 namespace QQuickGit {
 class GitRepository;
@@ -107,6 +109,9 @@ public:
     QString filename() const;
 
     Q_INVOKABLE QString absolutePath(const QString& relativePath) const;
+    Q_INVOKABLE QString absolutePath(const cwNote* note) const;
+    Q_INVOKABLE QString absolutePath(const cwNoteLiDAR* noteLiDAR) const;
+
 
     Q_INVOKABLE void waitLoadToFinish();
     void waitSaveToFinish();

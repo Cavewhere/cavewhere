@@ -97,7 +97,7 @@ private:
     static QAtomicInt ConnectionCounter;
 
     QString projectPath() const;
-    QString imagePath(const QString& relativeImagePath) const;
+    QString relativeImagePath(const QString& absolutePath) const;
 };
 
 #endif // CWPROJECTIMAGEPROVIDER_H

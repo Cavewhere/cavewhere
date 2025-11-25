@@ -36,7 +36,10 @@ RegionViewer {
 
     scene: GltfScene {
         id: sceneId
-        gltf.gltfFilePath: note ? RootData.project.absolutePath(note.filename) : ""
+        gltf.gltfFilePath: {
+            console.log("LiDAR note path:" + RootData.project.absolutePath(note))
+            return note ? RootData.project.absolutePath(note) : ""
+        }
         gltf.futureManagerToken: RootData.futureManagerModel.token
         gltf.modelMatrix: {
             let mat = Qt.matrix4x4()
