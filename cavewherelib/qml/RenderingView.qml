@@ -26,14 +26,16 @@ SplitView {
 
         ColumnLayout {
             anchors.fill: parent
+            objectName: "renderingSidePanel"
 
             TabBar {
                 id: tabBarId
+                objectName: "renderingTabBar"
                 Layout.fillWidth: true
 
-                TabButton { text: qsTr("View") }
-                TabButton { text: qsTr("Layers") }
-                TabButton { text: qsTr("Export") }
+                TabButton { objectName: "viewTabButton"; text: qsTr("View") }
+                TabButton { objectName: "layersTabButton"; text: qsTr("Layers") }
+                TabButton { objectName: "exportTabButton"; text: qsTr("Export") }
             }
 
             StackLayout {

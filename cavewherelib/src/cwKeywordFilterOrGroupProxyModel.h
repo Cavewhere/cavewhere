@@ -19,7 +19,10 @@ public:
 
     enum ExtraRoles {
         GroupIndexRole = Qt::UserRole + 1000,
-        IsGroupRole
+        IsGroupRole,
+        FirstSourceRowRole,
+        LastSourceRowRole,
+        SourceRowRole
     };
     Q_ENUM(ExtraRoles)
 
@@ -36,6 +39,7 @@ public:
     void setSourceModel(QAbstractItemModel* sourceModel) override;
     QModelIndex mapToSource(const QModelIndex& proxyIndex) const override;
     QModelIndex mapFromSource(const QModelIndex& sourceIndex) const override;
+    Q_INVOKABLE QModelIndex groupModelIndex(int row) const;
 
 private:
     struct GroupRange {

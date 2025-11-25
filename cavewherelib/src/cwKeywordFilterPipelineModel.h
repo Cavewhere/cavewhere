@@ -56,7 +56,7 @@ public:
 
     QStringList operators() const;
 
-    void insertRow(int i);
+    Q_INVOKABLE void insertRow(int i);
     Q_INVOKABLE void addRow();
 
     void removeRow(int i );

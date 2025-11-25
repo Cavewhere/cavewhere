@@ -92,6 +92,10 @@ QVariant cwKeywordFilterOrGroupProxyModel::data(const QModelIndex& index, int ro
             return true;
         case GroupIndexRole:
             return index.row();
+        case FirstSourceRowRole:
+            return mGroups.value(index.row()).start;
+        case LastSourceRowRole:
+            return mGroups.value(index.row()).end;
         default:
             return QVariant();
         }
@@ -110,11 +114,16 @@ QVariant cwKeywordFilterOrGroupProxyModel::data(const QModelIndex& index, int ro
         return false;
     }
 
-    if(role == GroupIndexRole) {
+    switch(role) {
+    case IsGroupRole:
+        return false;
+    case GroupIndexRole:
         return parent(index).row();
+    case SourceRowRole:
+        return sourceIndex.row();
+    default:
+        return sourceIndex.data(role);
     }
-
-    return sourceIndex.data(role);
 }
 
 QHash<int, QByteArray> cwKeywordFilterOrGroupProxyModel::roleNames() const
@@ -126,6 +135,9 @@ QHash<int, QByteArray> cwKeywordFilterOrGroupProxyModel::roleNames() const
 
     names.insert(GroupIndexRole, "groupIndex");
     names.insert(IsGroupRole, "isGroup");
+    names.insert(FirstSourceRowRole, "firstSourceRow");
+    names.insert(LastSourceRowRole, "lastSourceRow");
+    names.insert(SourceRowRole, "sourceRow");
     return names;
 }
 
@@ -223,6 +235,14 @@ QModelIndex cwKeywordFilterOrGroupProxyModel::mapFromSource(const QModelIndex& s
     const auto& range = mGroups.at(group);
     const auto childRow = sourceIndex.row() - range.start;
     return createIndex(childRow, sourceIndex.column(), static_cast<quintptr>(sourceIndex.row() + 1));
+}
+
+QModelIndex cwKeywordFilterOrGroupProxyModel::groupModelIndex(int row) const
+{
+    if(row < 0 || row >= mGroups.size()) {
+        return QModelIndex();
+    }
+    return createGroupIndex(row);
 }
 
 bool cwKeywordFilterOrGroupProxyModel::isGroupIndex(const QModelIndex& index) const

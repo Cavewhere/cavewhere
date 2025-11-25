@@ -1,6 +1,7 @@
 import QtQuick 2.0
 import QtQuick.Layouts 1.12
 import QtQuick.Controls 2.15 as QC
+import QtQml.Models 2.15
 import cavewherelib 1.0
 
 Item {
@@ -9,10 +10,11 @@ Item {
     KeywordFilterPipelineModel {
         id: pipelineModelId
         keywordModel: RootData.keywordItemModel
+    }
 
-        onPossibleKeysChanged: {
-
-        }
+    KeywordFilterOrGroupProxyModel {
+        id: orProxyModelId
+        sourceModel: pipelineModelId
     }
 
     KeywordVisibility {
@@ -20,176 +22,122 @@ Item {
         hideModel: pipelineModelId.rejectedModel
     }
 
-//    KeywordItemFilterModel {
-//        id: filterModel
-//        keywordModel: rootData.keywordItemModel
-//        lastKey: comboBoxId.currentText
-//    }
-
-    RowLayout {
+    ColumnLayout {
         anchors.fill: parent
+        spacing: 12
 
-        Repeater {
-            model: pipelineModelId
+        ListView {
+            id: groupListView
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            clip: true
+            spacing: 12
+            model: orProxyModelId
+
             delegate: ColumnLayout {
-                Layout.fillHeight: true
+                required property int groupIndex
+                required property int firstSourceRow
+                required property int lastSourceRow
+
+                spacing: 6
+                width: ListView.view ? ListView.view.width : parent.width
 
                 RowLayout {
-                    QC.ComboBox {
-                        id: comboBoxId
-                        model: pipelineModelId.possibleKeys //TODO: need possible keys
-
-                        onCurrentTextChanged: {
-                            filterModelObjectRole.key = currentText
-                        }
+                    Text {
+                        text: qsTr("Match all of these")
+                        font.bold: true
                     }
 
-                    ColumnLayout {
-                        QC.Button {
-                            width: 20
-                            text: "Or"
-                            onClicked: {
-                                pipelineModelId.addRow();
-                                var lastRow = pipelineModelId.rowCount() - 1;
-                                var index = pipelineModelId.index(lastRow, 0);
-                                pipelineModelId.setData(index, KeywordFilterPipelineModel.Or, KeywordFilterPipelineModel.OperatorRole);
-                            }
-                        }
-
-                        QC.Button {
-                            width: 20
-                            text: "And"
-                            onClicked: {
-                                pipelineModelId.addRow();
-                            }
-                        }
+                    QC.Button {
+                        text: qsTr("Add")
+                        onClicked: pipelineModelId.insertRow(lastSourceRow + 1)
                     }
                 }
 
                 ListView {
-                    model: filterModelObjectRole
-
-                    Layout.fillHeight: true
+                    id: andListView
+                    orientation: ListView.Horizontal
+                    spacing: 12
+                    clip: true
                     Layout.fillWidth: true
-
-                    delegate: RowLayout {
-                        QC.CheckBox {
-                            checked: acceptedRole
-                            onCheckedChanged: {
-                                var modelIndex = filterModelObjectRole.index(index, 0);
-                                filterModelObjectRole.setData(modelIndex, checked, KeywordGroupByKeyModel.AcceptedRole);
-                            }
+                    height: 400
+                    model: DelegateModel {
+                        model: orProxyModelId
+                        rootIndex: {
+                            console.log("RootIndex:" + orProxyModelId.groupModelIndex(groupIndex))
+                            return orProxyModelId.groupModelIndex(groupIndex)
                         }
+                        delegate: ColumnLayout {
+                            required property int sourceRow
+                            required property KeywordGroupByKeyModel filterModelObjectRole
 
-                        Text {
-                            text: valueRole + " (" + objectCountRole + ")"
+                            spacing: 4
+                            width: 220
+
+                            QC.ComboBox {
+                                id: keyCombo
+                                Layout.fillWidth: true
+                                model: pipelineModelId.possibleKeys
+                                currentIndex: filterModelObjectRole.key && model.indexOf(filterModelObjectRole.key) >= 0
+                                              ? model.indexOf(filterModelObjectRole.key)
+                                              : 0
+                                Component.onCompleted: {
+                                    if(!filterModelObjectRole.key && model.length > 0) {
+                                        filterModelObjectRole.key = model[0]
+                                    }
+                                }
+                                onActivated: filterModelObjectRole.key = currentText
+                            }
+
+                            ListView {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                implicitHeight: contentItem.childrenRect.height
+                                model: filterModelObjectRole
+                                clip: true
+                                spacing: 4
+
+                                delegate: RowLayout {
+                                    required property bool acceptedRole
+                                    required property string valueRole
+                                    required property int objectCountRole
+                                    required property int index
+                                    spacing: 6
+
+                                    QC.CheckBox {
+                                        checked: acceptedRole
+                                        onToggled: {
+                                            var modelIndex = filterModelObjectRole.index(index, 0);
+                                            filterModelObjectRole.setData(modelIndex, checked, KeywordGroupByKeyModel.AcceptedRole);
+                                        }
+                                    }
+
+                                    Text {
+                                        text: valueRole + " (" + objectCountRole + ")"
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
         }
 
+        RowLayout {
+            Layout.alignment: Qt.AlignLeft
+            spacing: 8
 
-//        Repeater {
-//            model: filterModel.filterKeywords
-//            delegate: RowLayout {
-//                Layout.fillHeight: true
-//                Layout.fillWidth: true
-
-//                RoundButton {
-//                    id: xButtonId
-//                    icon.source: "qrc:///icons/x.png"
-//                    icon.width: 32
-//                    icon.height: 32
-//                    onClicked: {
-//                        filterModel.filterKeywords.remove(index)
-//                    }
-//                }
-
-//                Text {
-//                    text: keyRole + " = " + valueRole
-//                }
-//            }
-//        }
-
-
-//        ListView {
-//            model: filterModel
-
-//            Layout.fillHeight: true
-//            Layout.fillWidth: true
-
-//            delegate: RowLayout {
-//                CheckBox {
-//                    checked: Qt.Checked
-//                    {
-
-//                        var visible = 0;
-//                        var hidden = 0;
-
-//                        for(var i in objectsRole) {
-//                            var obj = objectsRole[i]
-//                            if('visible' in obj) {
-//                                if(obj.visible) {
-//                                    visible++
-//                                } else {
-//                                    hidden++
-//                                }
-//                            } else if('enabled' in obj) {
-//                                if(obj.enabled) {
-//                                    visible++
-//                                } else {
-//                                    hidden++;
-//                                }
-//                            }
-
-//                            if(visible > 0 && hidden > 0) {
-//                                return Qt.PartiallyChecked
-//                            }
-//                        }
-
-//                        if(visible > 0) {
-//                            return Qt.Checked
-//                        } else {
-//                            return Qt.Unchecked
-//                        }
-//                    }
-
-//                    onCheckedChanged: {
-//                        for(var i in objectsRole) {
-//                            var obj = objectsRole[i];
-//                            console.log("Changing visiblity of " + obj)
-//                            if('enabled' in obj) {
-//                                obj.enabled = checked
-//                            }
-
-//                            if('visible' in obj) {
-//                                obj.visible = checked
-//                            }
-//                        }
-//                    }
-//                }
-
-//                RoundButton {
-//                    width: 32
-//                    height: 32
-
-//                    visible: objectCountRole > 1
-
-//                    icon.source: "qrc:///icons/rightCircleArrow-32x32.png"
-//                    icon.width: 32
-//                    icon.height: 32
-
-//                    onClicked: {
-//                        filterModel.addKeywordFromLastKey(valueRole);
-//                    }
-//                }
-
-//                Text {
-//                    text: valueRole + " (" + objectCountRole + ")"
-//                }
-
-//            }
-//        }
+            QC.Button {
+                text: qsTr("Also Include")
+                onClicked: {
+                    pipelineModelId.addRow();
+                    var last = pipelineModelId.rowCount() - 1;
+                    var idx = pipelineModelId.index(last, 0);
+                    pipelineModelId.setData(idx, KeywordFilterPipelineModel.Or, KeywordFilterPipelineModel.OperatorRole);
+                }
+            }
+        }
     }
 }
