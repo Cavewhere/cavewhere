@@ -31,6 +31,8 @@ using namespace Catch;
 #include <QSqlResult>
 #include <QSqlRecord>
 #include <QDir>
+#include <QFileInfo>
+#include <QSet>
 #include <QTemporaryDir>
 
 // TEST_CASE("cwProject isModified should work correctly", "[cwProject]") {
@@ -749,6 +751,169 @@ TEST_CASE("Test save changes", "[cwProject]") {
             CHECK(loadTrip->calibrations()->declination() == 12.0);
         }
     }
+}
+
+TEST_CASE("Renaming a trip moves its files and note assets", "[cwProject][cwTrip]") {
+
+    auto root = std::make_unique<cwRootData>();
+    REQUIRE(root != nullptr);
+
+    TestHelper helper;
+    helper.loadProjectFromZip(root->project(), QStringLiteral("://datasets/test_cwProject/jaws of the beast with scrap.zip"));
+    root->project()->waitLoadToFinish();
+    root->futureManagerModel()->waitForFinished();
+
+    cwProject* const project = root->project();
+    REQUIRE(project != nullptr);
+    REQUIRE_FALSE(project->filename().isEmpty());
+
+    REQUIRE(project->cavingRegion()->caveCount() == 1);
+    cwCave* const cave = project->cavingRegion()->cave(0);
+    REQUIRE(cave != nullptr);
+    REQUIRE(cave->tripCount() == 1);
+
+    cwTrip* const trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
+
+    cwSurveyNoteModel* const notesModel = trip->notes();
+    REQUIRE(notesModel != nullptr);
+    const int originalNoteCount = notesModel->rowCount();
+    REQUIRE(originalNoteCount >= 1);
+
+    cwSurveyNoteLiDARModel* const lidarModel = trip->notesLiDAR();
+    REQUIRE(lidarModel != nullptr);
+
+    const QString originalTripName = trip->name();
+    REQUIRE(originalTripName.toStdString() == QStringLiteral("2019c154_-_party_fault").toStdString());
+
+    const QString originalTripFile = cwSaveLoad::absolutePath(trip);
+    QFileInfo originalTripInfo(originalTripFile);
+    const QString originalTripDirPath = originalTripInfo.absoluteDir().absolutePath();
+
+    const QString originalNotesDirPath = QDir(originalTripDirPath).filePath(QStringLiteral("notes"));
+    QDir originalNotesDir(originalNotesDirPath);
+
+    const QStringList noteAssetFilters = {
+        QStringLiteral("*.cwnote"),
+        QStringLiteral("*.svg"),
+        QStringLiteral("*.png"),
+        QStringLiteral("*.jpg"),
+        QStringLiteral("*.jpeg"),
+        QStringLiteral("*.tif"),
+        QStringLiteral("*.tiff")
+    };
+
+    const QStringList originalNoteFiles = originalNotesDir.entryList(noteAssetFilters, QDir::Files | QDir::NoDotAndDotDot);
+    REQUIRE_FALSE(originalNoteFiles.isEmpty());
+
+    QSet<QString> expectedNoteImages;
+    for(cwNote* note : notesModel->notes()) {
+        REQUIRE(note != nullptr);
+        expectedNoteImages.insert(QFileInfo(note->image().path()).fileName());
+    }
+
+    // Add a LiDAR note with a copied GLB so rename covers LiDAR assets too
+    const QString glbSource = copyToTempFolder(":/datasets/test_cwSurveyNotesConcatModel/bones.glb");
+    REQUIRE(QFileInfo::exists(glbSource));
+
+    lidarModel->addFromFiles({QUrl::fromLocalFile(glbSource)});
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+
+    REQUIRE(lidarModel->rowCount() == 1);
+    cwNoteLiDAR* lidarNote = dynamic_cast<cwNoteLiDAR*>(lidarModel->notes().at(0));
+    REQUIRE(lidarNote != nullptr);
+    const QString lidarFileName = QFileInfo(glbSource).fileName();
+
+    const QString originalLidarPath = cwSaveLoad::dir(lidarNote).absoluteFilePath(lidarFileName);
+    REQUIRE(QFileInfo::exists(originalLidarPath));
+
+    trip->setName(QStringLiteral("Trip 2"));
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+
+    const QString renamedTripFile = cwSaveLoad::absolutePath(trip);
+    QFileInfo renamedTripInfo(renamedTripFile);
+    const QString renamedTripDirPath = renamedTripInfo.absoluteDir().absolutePath();
+    const QString renamedNotesDirPath = QDir(renamedTripDirPath).filePath(QStringLiteral("notes"));
+
+    CHECK_FALSE(QFileInfo::exists(originalTripFile));
+    CHECK_FALSE(QDir(originalTripDirPath).exists());
+    CHECK(QFileInfo::exists(renamedTripFile));
+    CHECK(renamedTripInfo.completeBaseName() == QStringLiteral("Trip 2"));
+
+    QDir tripsDirAfter = renamedTripInfo.dir();
+    tripsDirAfter.cdUp();
+    const QStringList tripDirs = tripsDirAfter.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    CHECK(tripDirs.contains(QStringLiteral("Trip 2")));
+    CHECK_FALSE(tripDirs.contains(originalTripName));
+
+    QDir renamedTripDir(renamedTripDirPath);
+    const QStringList renamedCwFiles = renamedTripDir.entryList(QStringList() << "*.cwtrip" << "*.cw",
+                                                                QDir::Files | QDir::NoDotAndDotDot);
+    INFO("Files:" << renamedCwFiles.join(",").toStdString());
+
+    REQUIRE(renamedCwFiles.size() == 1);
+    CHECK(renamedCwFiles.first() == renamedTripInfo.fileName());
+
+    QDir renamedNotesDir(renamedNotesDirPath);
+    REQUIRE(renamedNotesDir.exists());
+    const QStringList renamedNoteFiles = renamedNotesDir.entryList(noteAssetFilters, QDir::Files | QDir::NoDotAndDotDot);
+
+    auto toSet = [](const QStringList& files) {
+        QSet<QString> result;
+        for(const auto& file : files) {
+            result.insert(file);
+        }
+        return result;
+    };
+
+    CHECK(toSet(originalNoteFiles) == toSet(renamedNoteFiles));
+    CHECK_FALSE(QDir(originalNotesDirPath).exists());
+
+    const QString renamedLidarPath = cwSaveLoad::dir(lidarNote).absoluteFilePath(lidarFileName);
+    CHECK_FALSE(QFileInfo::exists(originalLidarPath));
+    CHECK(QFileInfo::exists(renamedLidarPath));
+    CHECK(lidarNote->filename().toStdString() == QFileInfo(lidarNote->filename()).fileName().toStdString());
+
+    auto reloadedProject = std::make_unique<cwProject>();
+    reloadedProject->loadOrConvert(project->filename());
+    reloadedProject->waitLoadToFinish();
+
+    REQUIRE(reloadedProject->cavingRegion()->caveCount() == 1);
+    cwCave* const reloadedCave = reloadedProject->cavingRegion()->cave(0);
+    REQUIRE(reloadedCave != nullptr);
+    REQUIRE(reloadedCave->tripCount() == 1);
+
+    cwTrip* const reloadedTrip = reloadedCave->trip(0);
+    REQUIRE(reloadedTrip != nullptr);
+    CHECK(reloadedTrip->name() == QStringLiteral("Trip 2"));
+
+    cwSurveyNoteModel* const reloadedNotes = reloadedTrip->notes();
+    REQUIRE(reloadedNotes != nullptr);
+    REQUIRE(reloadedNotes->rowCount() == originalNoteCount);
+
+    for(cwNote* note : reloadedNotes->notes()) {
+        REQUIRE(note != nullptr);
+        const QString imagePath = note->image().path();
+        CHECK_FALSE(imagePath.isEmpty());
+        const QString fileName = QFileInfo(imagePath).fileName();
+        CHECK(expectedNoteImages.contains(fileName));
+        const QDir projectDir = QFileInfo(reloadedProject->filename()).absoluteDir();
+        const QString expectedPath = cwSaveLoad::dir(note).absoluteFilePath(fileName);
+        CHECK(cwSaveLoad::absolutePathNoteImage(note).path().toStdString() == expectedPath.toStdString());
+    }
+
+    cwSurveyNoteLiDARModel* const reloadedLidarModel = reloadedTrip->notesLiDAR();
+    REQUIRE(reloadedLidarModel != nullptr);
+    REQUIRE(reloadedLidarModel->rowCount() == 1);
+    cwNoteLiDAR* const reloadedLidarNote = dynamic_cast<cwNoteLiDAR*>(reloadedLidarModel->notes().at(0));
+    REQUIRE(reloadedLidarNote != nullptr);
+    const QString reloadedLidarAbsolute1 = cwSaveLoad::absolutePath(reloadedLidarNote, reloadedLidarNote->filename());
+    CHECK(!reloadedLidarAbsolute1.isEmpty());
+    CHECK(QFileInfo::exists(reloadedLidarAbsolute1));
+    const QString reloadedLidarAbsolute = cwSaveLoad::dir(reloadedLidarNote).absoluteFilePath(QFileInfo(reloadedLidarAbsolute1).fileName());
+    CHECK(QFileInfo::exists(reloadedLidarAbsolute));
 }
 
 TEST_CASE("Trip calibration persistence", "[cwProject]") {
@@ -1513,7 +1678,7 @@ TEST_CASE("Note and Scrap persistence", "[cwProject][cwTrip][cwSurveyNoteModel][
 
         // Set an image path (no actual file required for persistence of the string path)
         cwImage image;
-        image.setPath(QStringLiteral("relative/path/to/entrance.png"));
+        image.setPath(QStringLiteral("entrance.png"));
         note->setImage(image);
 
         // Attach the note to the trip via the model
@@ -1600,7 +1765,7 @@ TEST_CASE("Note and Scrap persistence", "[cwProject][cwTrip][cwSurveyNoteModel][
         CHECK(loadedNote->name().toStdString() == std::string("Entrance Sketch"));
         CHECK(loadedNote->rotate() == 12.5);
         // If cwImage exposes path(), verify it:
-        CHECK(loadedNote->image().path().toStdString() == std::string("relative/path/to/entrance.png"));
+        CHECK(loadedNote->image().path().toStdString() == std::string("entrance.png"));
 
         // Scrap-level checks
         REQUIRE(loadedNote->hasScraps());
@@ -1669,7 +1834,7 @@ TEST_CASE("Note and Scrap persistence", "[cwProject][cwTrip][cwSurveyNoteModel][
         note->setName(QStringLiteral("Final Name"));
         note->setRotate(33.0);
         cwImage img2;
-        img2.setPath(QStringLiteral("img/b.png"));
+        img2.setPath(QStringLiteral("b.png"));
         note->setImage(img2);
 
         scrap->setPoint(1, QPointF(0.85, 0.15));       // pointChanged
@@ -1697,7 +1862,7 @@ TEST_CASE("Note and Scrap persistence", "[cwProject][cwTrip][cwSurveyNoteModel][
         REQUIRE(loadedNote1 != nullptr);
         CHECK(loadedNote1->name().toStdString() == std::string("Final Name"));
         CHECK(loadedNote1->rotate() == 33.0);
-        CHECK(loadedNote1->image().path().toStdString() == std::string("img/b.png"));
+        CHECK(loadedNote1->image().path().toStdString() == std::string("b.png"));
 
         REQUIRE(loadedNote1->hasScraps());
         cwScrap* const loadedScrap1 = loadedNote1->scrap(0);
@@ -1841,13 +2006,12 @@ TEST_CASE("LiDAR GLB persistence: file copy + stations", "[cwProject]") {
     // ---- File copy checks: exists in the project and matches bytes ----
     // Assume cwNoteLiDAR::filename() returns a path relative to the trip directory.
     {
-        const QString relativeGlb = loadedNote->filename();          // e.g. "lidar/bones.glb"
-        REQUIRE(!relativeGlb.isEmpty());
+        const QString glb = cwSaveLoad::absolutePath(loadedNote, loadedNote->filename());          // e.g. "lidar/bones.glb"
+        REQUIRE(!glb.isEmpty());
 
-        const QString copiedAbs = project->absolutePath(relativeGlb);
-        REQUIRE(QFileInfo::exists(copiedAbs));
+        REQUIRE(QFileInfo::exists(glb));
 
-        const QByteArray copiedHash = fileSha256(copiedAbs);
+        const QByteArray copiedHash = fileSha256(glb);
         REQUIRE(!copiedHash.isEmpty());
 
         // Same bytes as the original source GLB?

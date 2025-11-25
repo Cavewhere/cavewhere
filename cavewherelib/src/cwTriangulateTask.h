@@ -15,6 +15,8 @@
 #include "cwImage.h"
 #include "cwNoteTranformation.h"
 #include "cwTextureUploadTask.h"
+#include "cwTriangulateLiDARInData.h"
+#include "cwTriangulateWarpingData.h"
 class cwCropImageTask;
 
 //Qt include
@@ -23,6 +25,25 @@ class cwCropImageTask;
 #include <QVector3D>
 #include <QSet>
 #include <QPoint>
+#include <cmath>
+#include <type_traits>
+#include <utility>
+
+namespace cwTriangulateTaskDetail {
+template<typename T, typename = void>
+struct WarpingSettingsAccessor {
+    static cwTriangulateWarpingData get(const T&) {
+        return cwTriangulateWarpingData();
+    }
+};
+
+template<typename T>
+struct WarpingSettingsAccessor<T, std::void_t<decltype(std::declval<const T&>().morphingSettings())>> {
+    static cwTriangulateWarpingData get(const T& data) {
+        return data.morphingSettings();
+    }
+};
+}
 
 class cwTriangulateTask
 {
@@ -42,6 +63,105 @@ public:
                                 const QMatrix4x4 &toWorldCoords,
                                 const QMatrix4x4 &viewMatrix,
                                 const QVector3D &point);
+
+    template<typename T>
+    static QList<cwTriangulateStation> buildStationsWithInterpolatedShots(const T& data) {
+        const auto stationLookup = data.stationLookup();
+
+        if(stationLookup.isEmpty()) {
+            return QList<cwTriangulateStation>();
+        }
+
+        QList<cwTriangulateStation> stations;
+        stations.reserve(data.noteStations().size());
+
+        const QHash<QString, QVector3D> notePositions = [&]() {
+            QHash<QString, QVector3D> notePositions;
+            notePositions.reserve(data.noteStations().size());
+
+            for (const auto& station : data.noteStations()) {
+                const QString stationName = station.name();
+                const QString normalizedName = stationName.toLower();
+                if(stationLookup.hasPosition(normalizedName)) [[likely]] {
+                    notePositions.insert(normalizedName, QVector3D(station.positionOnNote()));
+                    stations.append(cwTriangulateStation(
+                        stationName,
+                        QVector3D(station.positionOnNote()),
+                        stationLookup.position(stationName)));
+                }
+            }
+
+            return notePositions;
+        }();
+
+        const auto morphingSettings = cwTriangulateTaskDetail::WarpingSettingsAccessor<T>::get(data);
+        const bool useShotInterpolation = morphingSettings.useShotInterpolationSpacing;
+        const double shotInterpolationSpacingMeters = morphingSettings.shotInterpolationSpacingMeters > 0.0
+                                                          ? morphingSettings.shotInterpolationSpacingMeters
+                                                          : cwTriangulateWarpingData().shotInterpolationSpacingMeters;
+        if(!useShotInterpolation || shotInterpolationSpacingMeters <= 0.0) {
+            //Skip adding interpolated points
+            return stations;
+        }
+
+        const auto network = data.surveyNetwork();
+
+
+        QSet<QString> processedShots;
+
+        const auto noteStations = data.noteStations();
+        for(const auto& noteStation : noteStations) {
+            const QString from = noteStation.name();
+
+            if(!stationLookup.hasPosition(from)) [[unlikely]] {
+                continue;
+            }
+
+            const QVector3D fromNote = QVector3D(noteStation.positionOnNote());
+            const QVector3D fromWorld = stationLookup.position(from);
+
+            for (const QString& toStation : network.neighbors(from)) {
+                if(!notePositions.contains(toStation)) {
+                    continue;
+                }
+
+                const QString to = toStation.toLower();
+                QString shotKey = from < to ? from + "|" + to : to + "|" + from;
+                if (processedShots.contains(shotKey)) {
+                    continue;
+                }
+                processedShots.insert(shotKey);
+
+                Q_ASSERT(stationLookup.hasPosition(to));
+
+                const QVector3D toNote = notePositions.value(to);
+                const QVector3D toWorld = stationLookup.position(to);
+
+                const double shotLength = static_cast<double>((toWorld - fromWorld).length());
+                if (shotLength <= 0.0) {
+                    continue;
+                }
+
+                const int segmentCount = static_cast<int>(std::ceil(shotLength / shotInterpolationSpacingMeters));
+                if (segmentCount <= 1) {
+                    continue;
+                }
+
+                const QVector3D noteStep = (toNote - fromNote) / static_cast<float>(segmentCount);
+                const QVector3D worldStep = (toWorld - fromWorld) / static_cast<float>(segmentCount);
+
+                for (int i = 1; i < segmentCount; ++i) {
+                    const float t = static_cast<float>(i);
+                    QVector3D notePos = fromNote + noteStep * t;
+                    QVector3D worldPos = fromWorld + worldStep * t;
+                    const QString dummyName = QString("%1_%2_%3").arg(from, to).arg(i);
+                    stations.append(cwTriangulateStation(dummyName, notePos, worldPos));
+                }
+            }
+        }
+
+        return stations;
+    }
 
 signals:
     

@@ -4,6 +4,9 @@
 #include "cwTriangulateStation.h"
 #include "cwTriangulateTask.h"
 #include "cwRenderTexturedItems.h"
+#include <QHash>
+#include <QSet>
+#include <cmath>
 
 using namespace Monad;
 
@@ -20,14 +23,7 @@ QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item> > > cwTriangulateLiDA
 
         auto gltf = cw::gltf::Loader::loadGltf(data.gltfFilename());
 
-        auto visibleStations = cw::transform(data.noteStations(), [&](const cwNoteLiDARStation& station) {
-            const QString stationName = station.name();
-            return cwTriangulateStation(
-                stationName,
-                station.positionOnNote(),
-                data.stationLookup().position(stationName)
-                );
-        });
+        auto visibleStations = cwTriangulateTask::buildStationsWithInterpolatedShots(data);
 
         auto morphPositions = [&](cwGeometry& geometry) {
             const auto positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);

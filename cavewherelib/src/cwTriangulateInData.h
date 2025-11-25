@@ -21,6 +21,7 @@
 #include "cwAbstractScrapViewMatrix.h"
 #include "cwStationPositionLookup.h"
 #include "cwSurveyNetwork.h"
+#include "cwTriangulateWarpingData.h"
 
 class cwTriangulatePrivateData;
 
@@ -39,7 +40,7 @@ public:
     void setOutline(QPolygonF outline);
 
     [[deprecated("Use note stations, network, and lookup instead")]]
-    QList<cwTriangulateStation> stations() const;    
+    QList<cwTriangulateStation> stations() const;
     [[deprecated("Use note stations, network, and lookup instead")]]
     void setStations(QList<cwTriangulateStation> stations);
 
@@ -66,6 +67,9 @@ public:
 
     QList<cwLead> leads() const;
     void setLeads(QList<cwLead> leads);
+
+    cwTriangulateWarpingData morphingSettings() const;
+    void setMorphingSettings(const cwTriangulateWarpingData& morphingSettings);
 
 private:
     QSharedDataPointer<cwTriangulatePrivateData> data;

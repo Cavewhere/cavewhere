@@ -26,6 +26,8 @@
 #include "cwPDFSettings.h"
 #include "cwConcurrent.h"
 #include "cwSaveLoad.h"
+#include "cwNote.h"
+#include "cwNoteLiDAR.h"
 
 //Quick Git
 #include <GitRepository.h>
@@ -927,4 +929,35 @@ QString cwProject::absolutePath(const QString &relativePath) const
 {
     return m_saveLoad->projectDir().absoluteFilePath(relativePath);
 
+}
+
+QString cwProject::absolutePath(const cwNote* note) const
+{
+    if(note == nullptr) {
+        return QString();
+    }
+
+    const auto image = note->image();
+    if(image.mode() == cwImage::Mode::Path && !image.path().isEmpty()) {
+        return cwSaveLoad::absolutePath(note, image.path());
+    }
+
+    return QString();
+}
+
+QString cwProject::absolutePath(const cwNoteLiDAR* noteLiDAR) const
+{
+    if(noteLiDAR == nullptr) {
+        return QString();
+    }
+
+    if(!noteLiDAR->filename().isEmpty()) {
+        return cwSaveLoad::absolutePath(noteLiDAR, noteLiDAR->filename());
+    }
+
+    if(!noteLiDAR->iconImagePath().isEmpty()) {
+        return cwSaveLoad::absolutePath(noteLiDAR, noteLiDAR->iconImagePath());
+    }
+
+    return QString();
 }

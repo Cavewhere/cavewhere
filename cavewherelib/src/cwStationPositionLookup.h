@@ -28,6 +28,7 @@ public:
     void setPosition(const QString& stationName, const QVector3D& stationPosition);
     QVector3D position(const QString& stationName) const;
     bool hasPosition(QString stationName) const;
+    bool isEmpty() const { return StationPositions.isEmpty(); }
 
     QMap<QString, QVector3D> positions() const;
 

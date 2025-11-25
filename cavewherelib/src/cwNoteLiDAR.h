@@ -63,7 +63,7 @@ public:
     QBindable<QString> bindableName() { return &m_name; }
 
     QString filename() const;
-    void setFilename(const QString& path);
+    void setFilename(const QString& filename);
 
     void setParentTrip(cwTrip* trip);
     Q_INVOKABLE cwTrip* parentTrip() const { return m_parentTrip; }

@@ -39,18 +39,13 @@ QVariant cwSurveyNoteModel::data(const QModelIndex& index, int role) const
     }
 
     switch (role) {
+    case IconPathRole:
+        //Icon path is just cached
     case PathRole: {
-        const cwImage image = note->image();
-        // present via image provider URL to keep QML bindings consistent
-        return cwImageProvider::imageUrl(image.path());
-    }
-    case IconPathRole: {
-        const cwImage image = note->image();
-        // TODO: replace with cached icon path when available
-        return cwImageProvider::imageUrl(image.path());
+        return cwImageProvider::imageUrl(cwSaveLoad::absolutePath(note, note->image().path()));
     }
     case ImageRole: {
-        return QVariant::fromValue(note->image());
+        return QVariant::fromValue(cwSaveLoad::absolutePathNoteImage(note));
     }
     default:
         return QVariant();

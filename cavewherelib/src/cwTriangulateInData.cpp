@@ -6,6 +6,7 @@
 **************************************************************************/
 
 #include "cwTriangulateInData.h"
+#include "cwTriangulateWarpingData.h"
 
 class cwTriangulatePrivateData : public QSharedData {
 public:
@@ -20,7 +21,8 @@ public:
         leads(other.leads),
         type(other.type),
         lookDirection(other.lookDirection),
-        viewMatrix(other.viewMatrix->clone())
+        viewMatrix(other.viewMatrix->clone()),
+        morphingSettings(other.morphingSettings)
     {
 
     }
@@ -46,6 +48,7 @@ public:
     cwScrap::ScrapType type;
     QVector3D lookDirection;
     std::unique_ptr<cwAbstractScrapViewMatrix::Data> viewMatrix;
+    cwTriangulateWarpingData morphingSettings;
 };
 
 cwTriangulateInData::cwTriangulateInData() :
@@ -217,6 +220,15 @@ void cwTriangulateInData::setLeads(QList<cwLead> leads)
     data->leads = leads;
 }
 
+cwTriangulateWarpingData cwTriangulateInData::morphingSettings() const
+{
+    return data->morphingSettings;
+}
+
+void cwTriangulateInData::setMorphingSettings(const cwTriangulateWarpingData &morphingSettings)
+{
+    data->morphingSettings = morphingSettings;
+}
 
 
 

@@ -35,7 +35,6 @@ SplitView {
 
                 TabButton { objectName: "viewTabButton"; text: qsTr("View") }
                 TabButton { objectName: "layersTabButton"; text: qsTr("Layers") }
-                TabButton { objectName: "exportTabButton"; text: qsTr("Export") }
             }
 
             StackLayout {
