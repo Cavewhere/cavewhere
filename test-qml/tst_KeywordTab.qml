@@ -2,6 +2,7 @@ import QtQuick
 import QtTest
 import cavewherelib
 import cw.TestLib
+import QmlTestRecorder
 
 MainWindowTest {
     id: rootId
@@ -20,6 +21,22 @@ MainWindowTest {
             verify(layersTab !== null);
 
             mouseClick(layersTab);
+
+            wait(100);
+
+            let addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->addButton0_0")
+            mouseClick(addButton0_0_obj1)
+
+            wait(100);
+
+            let removeButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->removeButton0_0")
+            mouseClick(removeButton0_0_obj1)
+
+            wait(100)
+
+            //Add it back again
+            addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->addButton0_0")
+            mouseClick(addButton0_0_obj1)
 
             wait(100000);
         }

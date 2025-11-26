@@ -59,7 +59,7 @@ public:
     Q_INVOKABLE void insertRow(int i);
     Q_INVOKABLE void addRow();
 
-    void removeRow(int i );
+    Q_INVOKABLE void removeRow(int i );
 
     QStringList possibleKeys() const;
 

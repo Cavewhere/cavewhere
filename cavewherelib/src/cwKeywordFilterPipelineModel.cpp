@@ -244,7 +244,7 @@ void cwKeywordFilterPipelineModel::setKeywordModel(cwKeywordItemModel* keywordMo
 
     void cwKeywordFilterPipelineModel::linkPipelineAt(int i)
     {
-        if(i < mRows.size()) {
+        if(i >= 0 && i < mRows.size()) {
             auto& row = mRows.at(i);
 
             switch(row.modelOperator) {

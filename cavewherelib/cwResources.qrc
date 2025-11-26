@@ -135,5 +135,6 @@
         <file>twbs-icons/icons/arrow-repeat.svg</file>
         <file>twbs-icons/icons/arrows-angle-expand.svg</file>
         <file>twbs-icons/icons/repeat.svg</file>
+        <file>twbs-icons/icons/dash.svg</file>
     </qresource>
 </RCC>
