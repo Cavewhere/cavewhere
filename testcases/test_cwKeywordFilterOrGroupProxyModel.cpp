@@ -1,96 +1,114 @@
 // Our includes
 #include "cwKeywordFilterPipelineModel.h"
 #include "cwKeywordFilterOrGroupProxyModel.h"
+#include "cwKeywordFilterGroupProxyModel.h"
+#include "SignalSpyChecker.h"
 
 // Catch includes
 #include <catch2/catch_test_macros.hpp>
 
-// Qt includes
-#include <QSignalSpy>
-
-TEST_CASE("cwKeywordFilterOrGroupProxyModel groups rows by OR boundaries", "[cwKeywordFilterOrGroupProxyModel]")
+TEST_CASE("cwKeywordFilterOrGroupProxyModel exposes groups via OR boundaries", "[cwKeywordFilterOrGroupProxyModel]")
 {
     cwKeywordFilterPipelineModel pipeline;
-    cwKeywordFilterOrGroupProxyModel proxy;
+    cwKeywordFilterOrGroupProxyModel orProxy;
+    cwKeywordFilterGroupProxyModel groupProxy;
 
-    proxy.setSourceModel(&pipeline);
-    QSignalSpy resetSpy(&proxy, &QAbstractItemModel::modelReset);
+    orProxy.setSourceModel(&pipeline);
+    groupProxy.setSourceModel(&pipeline);
 
-    auto groupCount = [&proxy]() { return proxy.rowCount(); };
-    auto childCount = [&proxy](int groupRow) {
-        const auto groupIndex = proxy.index(groupRow, 0);
-        REQUIRE(groupIndex.isValid());
-        return proxy.rowCount(groupIndex);
-    };
+    auto orSpyChecker = SignalSpyChecker::Constant::makeChecker(&orProxy);
+    auto groupSpyChecker = SignalSpyChecker::Constant::makeChecker(&groupProxy);
+
+    // auto orSpyChecker = SignalSpyChecker::Constant::makeChecker(&orProxy);
+    auto or_dataChangedSpy = orSpyChecker.findSpy(&QAbstractItemModel::dataChanged);
+    auto or_rowsInsertedSpy = orSpyChecker.findSpy(&QAbstractItemModel::rowsInserted);
+    auto or_rowsAboutToBeInsertedSpy = orSpyChecker.findSpy(&QAbstractItemModel::rowsAboutToBeInserted);
+    auto or_rowsRemovedSpy = orSpyChecker.findSpy(&QAbstractItemModel::rowsRemoved);
+    auto or_rowsAboutToBeRemovedSpy = orSpyChecker.findSpy(&QAbstractItemModel::rowsAboutToBeRemoved);
+
+    auto group_dataChangedSpy = groupSpyChecker.findSpy(&QAbstractItemModel::dataChanged);
+    auto group_rowsInsertedSpy = groupSpyChecker.findSpy(&QAbstractItemModel::rowsInserted);
+    auto group_rowsAboutToBeInsertedSpy = groupSpyChecker.findSpy(&QAbstractItemModel::rowsAboutToBeInserted);
+    auto group_rowsRemovedSpy = groupSpyChecker.findSpy(&QAbstractItemModel::rowsRemoved);
+    auto group_rowsAboutToBeRemovedSpy = groupSpyChecker.findSpy(&QAbstractItemModel::rowsAboutToBeRemoved);
+
 
     SECTION("Single AND row")
     {
-        CHECK(groupCount() == 1);
-        CHECK(childCount(0) == 1);
+        CHECK(orProxy.rowCount() == 1);
+        CHECK(groupProxy.rowCount() == 1);
     }
 
-    SECTION("Two AND rows stay in one group")
+    SECTION("Two AND rows stay in one group with only dataChanged")
     {
         pipeline.addRow();
-        CHECK(groupCount() == 1);
-        CHECK(childCount(0) == 2);
-        CHECK(resetSpy.count() == 0);
+
+        CHECK(orProxy.rowCount() == 1);
+
+        orSpyChecker.checkSpies();
+
+        groupSpyChecker[group_rowsAboutToBeInsertedSpy]++;
+        groupSpyChecker[group_rowsInsertedSpy]++;
+        groupSpyChecker.checkSpies();
     }
 
-    SECTION("OR starts a new group")
+    SECTION("OR starts a new group and inserts a proxy row")
     {
         pipeline.addRow();
-        pipeline.setData(pipeline.index(1), cwKeywordFilterPipelineModel::Or, cwKeywordFilterPipelineModel::OperatorRole);
-        CHECK(groupCount() == 2);
-        CHECK(childCount(0) == 1);
-        CHECK(childCount(1) == 1);
-        CHECK(resetSpy.count() == 0);
+
+        orSpyChecker.checkSpies();
+
+        groupSpyChecker[group_rowsAboutToBeInsertedSpy]++;
+        groupSpyChecker[group_rowsInsertedSpy]++;
+        groupSpyChecker.checkSpies();
+
+        CHECK(pipeline.rowCount() == 2);
+        CHECK(orProxy.rowCount() == 1);
+        CHECK(groupProxy.rowCount() == 2);
+
+        bool okay = pipeline.setData(pipeline.index(1), cwKeywordFilterPipelineModel::Or, cwKeywordFilterPipelineModel::OperatorRole);
+        CHECK(okay);
+
+        orSpyChecker[or_rowsInsertedSpy]++;
+        orSpyChecker[or_rowsAboutToBeInsertedSpy]++;
+
+        groupSpyChecker[group_rowsAboutToBeRemovedSpy]++;
+        groupSpyChecker[group_rowsRemovedSpy]++;
+
+        CHECK(group_rowsRemovedSpy->last().at(1).toInt() == 1);
+        CHECK(group_rowsRemovedSpy->last().at(2).toInt() == 1);
+
+        CHECK(orProxy.rowCount() == 2);
+        CHECK(groupProxy.rowCount() == 1);
     }
 
-    SECTION("Mixed AND/OR maintains grouping")
-    {
-        pipeline.addRow(); // row 1 (AND)
-        pipeline.addRow(); // row 2 (AND)
-
-        pipeline.setData(pipeline.index(1), cwKeywordFilterPipelineModel::Or, cwKeywordFilterPipelineModel::OperatorRole);
-        CHECK(groupCount() == 2);
-        CHECK(childCount(0) == 1);
-        CHECK(childCount(1) == 2);
-
-        pipeline.setData(pipeline.index(2), cwKeywordFilterPipelineModel::Or, cwKeywordFilterPipelineModel::OperatorRole);
-        CHECK(groupCount() == 3);
-        CHECK(childCount(0) == 1);
-        CHECK(childCount(1) == 1);
-        CHECK(childCount(2) == 1);
-        CHECK(resetSpy.count() == 0);
-    }
-
-    SECTION("Insert extends group without reset")
-    {
-        pipeline.addRow(); // add AND row; still one group
-        CHECK(groupCount() == 1);
-        CHECK(childCount(0) == 2);
-        CHECK(resetSpy.count() == 0);
-    }
-
-    SECTION("Operator change to OR does not reset")
+    SECTION("Group proxy filters rows by group index")
     {
         pipeline.addRow();
-        pipeline.setData(pipeline.index(1), cwKeywordFilterPipelineModel::Or, cwKeywordFilterPipelineModel::OperatorRole);
-        CHECK(groupCount() == 2);
-        CHECK(childCount(0) == 1);
-        CHECK(childCount(1) == 1);
-        CHECK(resetSpy.count() == 0);
-    }
-
-    SECTION("Remove rows updates groups without reset")
-    {
         pipeline.addRow();
-        pipeline.setData(pipeline.index(1), cwKeywordFilterPipelineModel::Or, cwKeywordFilterPipelineModel::OperatorRole);
-        CHECK(groupCount() == 2);
-        pipeline.removeRow(1);
-        CHECK(groupCount() == 1);
-        CHECK(childCount(0) == 1);
-        CHECK(resetSpy.count() == 0);
+
+        CHECK(orProxy.rowCount() == 1);
+        CHECK(groupProxy.rowCount() == 3);
+        REQUIRE(pipeline.rowCount() == 3);
+
+        bool okay = pipeline.setData(pipeline.index(1), cwKeywordFilterPipelineModel::Or, cwKeywordFilterPipelineModel::OperatorRole);
+        CHECK(okay);
+
+        CHECK(orProxy.rowCount() == 2);
+        REQUIRE(pipeline.rowCount() == 3);
+
+        qDebug() << "---- Set group 0! ---";
+
+        // groupProxy.setGroupIndex(0);
+        qDebug() << "Group rowCount:" << groupProxy.rowCount();
+        CHECK(groupProxy.rowCount() == 1);
+        CHECK(groupProxy.index(0, 0).data(cwKeywordFilterGroupProxyModel::SourceRowRole).toInt() == 0);
+
+        qDebug() << "---- Set group 1! ---";
+
+        groupProxy.setGroupIndex(1);
+        CHECK(groupProxy.rowCount() == 2);
+        CHECK(groupProxy.index(0, 0).data(cwKeywordFilterGroupProxyModel::SourceRowRole).toInt() == 1);
+        CHECK(groupProxy.index(1, 0).data(cwKeywordFilterGroupProxyModel::SourceRowRole).toInt() == 2);
     }
 }

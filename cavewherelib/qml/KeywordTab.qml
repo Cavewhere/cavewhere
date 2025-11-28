@@ -6,6 +6,7 @@ import cavewherelib 1.0
 
 Item {
     id: keywordTabId
+    objectName: "keyword"
 
     KeywordFilterPipelineModel {
         id: pipelineModelId
@@ -28,6 +29,7 @@ Item {
 
         ListView {
             id: groupListView
+            objectName: "groupListView"
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
@@ -40,9 +42,7 @@ Item {
 
             delegate:  Rectangle {
                 id: orDelegateId
-                required property int groupIndex
-                required property int firstSourceRow
-                required property int lastSourceRow
+                // required property int lastSourceRow
                 required property int index
 
                 width: ListView.view ? ListView.view.width : parent.width
@@ -55,11 +55,11 @@ Item {
 
                 ListView {
                     id: andListView
-                    property int groupLastSourceRow: lastSourceRow
-
+                    objectName: "andListView_" + orDelegateId.index
                     orientation: ListView.Horizontal
                     spacing: 12
                     clip: true
+                    highlightFollowsCurrentItem: true
 
                     anchors {
                         left: parent.left
@@ -72,103 +72,118 @@ Item {
                     Layout.fillWidth: true
 
                     QC.ScrollBar.horizontal: QC.ScrollBar {
+                        id: groupScrollBarId
+                        objectName: "groupScrollBar_" + orDelegateId.index
                         policy: QC.ScrollBar.AsNeeded
+
+                        onPositionChanged: {
+                            console.log("Position changed:" + position)
+                        }
                     }
 
-                    model: DelegateModel {
-                        id: groupDelegateModel
-                        model: orProxyModelId
-                        rootIndex: orProxyModelId.groupModelIndex(groupIndex)
-                        delegate: Item {
-                            id: delegateId
+                    model: KeywordFilterGroupProxyModel {
+                        id: groupProxyModel
+                        sourceModel: pipelineModelId
+                        groupIndex: orDelegateId.index
+                    }
 
-                            required property int sourceRow
-                            required property KeywordGroupByKeyModel filterModelObjectRole
-                            required property int index
+                    delegate: Item {
+                        id: delegateId
 
-                            width: 220
-                            height: andListView.height
+                        required property int sourceRow
+                        required property KeywordGroupByKeyModel filterModelObjectRole
+                        required property int index
 
-                            Rectangle {
-                                visible: delegateId.index % 2 === 0
-                                color: "#efefef"
-                                anchors.fill: columnLayoutId
-                            }
+                        width: 220
+                        height: andListView.height
 
-                            ColumnLayout {
-                                id: columnLayoutId
+                        Rectangle {
+                            visible: delegateId.index % 2 === 0
+                            color: "#efefef"
+                            anchors.fill: columnLayoutId
+                        }
 
-                                spacing: 4
+                        ColumnLayout {
+                            id: columnLayoutId
 
-                                anchors.fill: parent
+                            spacing: 4
 
-                                RowLayout {
+                            anchors.fill: parent
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 6
+
+                                QC.ComboBox {
+                                    id: keyCombo
                                     Layout.fillWidth: true
-                                    spacing: 6
-
-                                    QC.ComboBox {
-                                        id: keyCombo
-                                        Layout.fillWidth: true
-                                        model: pipelineModelId.possibleKeys
-                                        currentIndex: filterModelObjectRole.key && model.indexOf(filterModelObjectRole.key) >= 0
-                                                      ? model.indexOf(filterModelObjectRole.key)
-                                                      : 0
-                                        Component.onCompleted: {
-                                            if(!filterModelObjectRole.key && model.length > 0) {
-                                                filterModelObjectRole.key = model[0]
-                                            }
+                                    model: pipelineModelId.possibleKeys
+                                    currentIndex: filterModelObjectRole.key && model.indexOf(filterModelObjectRole.key) >= 0
+                                                  ? model.indexOf(filterModelObjectRole.key)
+                                                  : 0
+                                    Component.onCompleted: {
+                                        if(!filterModelObjectRole.key && model.length > 0) {
+                                            filterModelObjectRole.key = model[0]
                                         }
-                                        onActivated: filterModelObjectRole.key = currentText
                                     }
-
-                                    NoteToolIconButton {
-                                        id: removeButton
-                                        objectName: "removeButton" + orDelegateId.index + "_" + delegateId.index
-                                        visible: pipelineModelId.rowCount() > 1
-                                        iconSource: "qrc:/twbs-icons/icons/dash.svg"
-                                        onClicked: pipelineModelId.removeRow(sourceRow)
-                                    }
-
-                                    NoteToolIconButton {
-                                        id: addButton
-                                        objectName: "addButton" + orDelegateId.index + "_" + delegateId.index
-                                        icon.source: "qrc:/twbs-icons/icons/plus.svg"
-                                        onClicked: pipelineModelId.insertRow(andListView.groupLastSourceRow + 1)
-                                    }
+                                    onActivated: filterModelObjectRole.key = currentText
                                 }
 
-                                ListView {
-                                    Layout.fillWidth: true
-                                    Layout.fillHeight: true
-                                    // implicitHeight: contentItem.childrenRect.height
-                                    model: filterModelObjectRole
-                                    clip: true
-                                    spacing: 4
+                                NoteToolIconButton {
+                                    id: removeButton
+                                    objectName: "removeButton" + orDelegateId.index + "_" + delegateId.index
+                                    visible: pipelineModelId.rowCount() > 1
+                                    iconSource: "qrc:/twbs-icons/icons/dash.svg"
+                                    onClicked: pipelineModelId.removeRow(sourceRow)
+                                }
 
-                                    QC.ScrollBar.vertical: QC.ScrollBar {
-                                        policy: QC.ScrollBar.AsNeeded
+                                NoteToolIconButton {
+                                    id: addButton
+                                    objectName: "addButton" + orDelegateId.index + "_" + delegateId.index
+                                    icon.source: "qrc:/twbs-icons/icons/plus.svg"
+                                    onClicked: {
+                                        pipelineModelId.insertRow(sourceRow + 1)
+                                        andListView.currentIndex = delegateId.index + 1
+                                        // Qt.callLater(() => {
+                                        //                  groupScrollBarId.position = 1.0; // - groupScrollBarId.size
+                                        //                  console.log("Size:" + groupScrollBarId.size);
+                                        //                  console.log("Setting position" + groupScrollBarId.position + " " + (1.0 - groupScrollBarId.size))
+                                        //              })
+                                    }
+                                }
+                            }
+
+                            ListView {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                // implicitHeight: contentItem.childrenRect.height
+                                model: filterModelObjectRole
+                                clip: true
+                                spacing: 4
+
+                                QC.ScrollBar.vertical: QC.ScrollBar {
+                                    policy: QC.ScrollBar.AsNeeded
+                                }
+
+                                delegate: RowLayout {
+                                    required property bool acceptedRole
+                                    required property string valueRole
+                                    required property int objectCountRole
+                                    required property int index
+                                    spacing: 6
+
+                                    QC.CheckBox {
+                                        checked: acceptedRole
+                                        onToggled: {
+                                            var modelIndex = filterModelObjectRole.index(index, 0);
+                                            filterModelObjectRole.setData(modelIndex, checked, KeywordGroupByKeyModel.AcceptedRole);
+                                        }
                                     }
 
-                                    delegate: RowLayout {
-                                        required property bool acceptedRole
-                                        required property string valueRole
-                                        required property int objectCountRole
-                                        required property int index
-                                        spacing: 6
-
-                                        QC.CheckBox {
-                                            checked: acceptedRole
-                                            onToggled: {
-                                                var modelIndex = filterModelObjectRole.index(index, 0);
-                                                filterModelObjectRole.setData(modelIndex, checked, KeywordGroupByKeyModel.AcceptedRole);
-                                            }
-                                        }
-
-                                        Text {
-                                            text: valueRole + " (" + objectCountRole + ")"
-                                            elide: Text.ElideRight
-                                            Layout.fillWidth: true
-                                        }
+                                    Text {
+                                        text: valueRole + " (" + objectCountRole + ")"
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
                                     }
                                 }
                             }

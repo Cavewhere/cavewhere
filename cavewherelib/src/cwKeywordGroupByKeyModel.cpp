@@ -22,6 +22,7 @@ cwKeywordGroupByKeyModel::cwKeywordGroupByKeyModel(QObject *parent) :
 
 cwKeywordGroupByKeyModel::~cwKeywordGroupByKeyModel()
 {
+    qDebug() << "Deleting:" << this << "also deleting:" << mAcceptedModel;
 }
 
 int cwKeywordGroupByKeyModel::rowCount(const QModelIndex &parent) const

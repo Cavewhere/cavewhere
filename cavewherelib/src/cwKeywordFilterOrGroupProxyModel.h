@@ -2,14 +2,14 @@
 #define CWKEYWORDFILTERORGROUPPROXYMODEL_H
 
 // Qt includes
-#include <QAbstractProxyModel>
+#include <QSortFilterProxyModel>
 #include <QQmlEngine>
 
 // Our includes
 #include "CaveWhereLibExport.h"
 #include "cwKeywordFilterPipelineModel.h"
 
-class CAVEWHERE_LIB_EXPORT cwKeywordFilterOrGroupProxyModel : public QAbstractProxyModel
+class CAVEWHERE_LIB_EXPORT cwKeywordFilterOrGroupProxyModel : public QSortFilterProxyModel
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(KeywordFilterOrGroupProxyModel)
@@ -17,56 +17,20 @@ class CAVEWHERE_LIB_EXPORT cwKeywordFilterOrGroupProxyModel : public QAbstractPr
 public:
     explicit cwKeywordFilterOrGroupProxyModel(QObject* parent = nullptr);
 
-    enum ExtraRoles {
-        GroupIndexRole = Qt::UserRole + 1000,
-        IsGroupRole,
-        FirstSourceRowRole,
-        LastSourceRowRole,
-        SourceRowRole
-    };
-    Q_ENUM(ExtraRoles)
+    // Q_INVOKABLE QModelIndex groupModelIndex(int row) const;
 
     // QAbstractItemModel interface
-    QModelIndex index(int row, int column, const QModelIndex& parent = QModelIndex()) const override;
-    QModelIndex parent(const QModelIndex& child) const override;
-    int rowCount(const QModelIndex& parent = QModelIndex()) const override;
-    int columnCount(const QModelIndex& parent = QModelIndex()) const override;
-    QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
-    QHash<int, QByteArray> roleNames() const override;
-    // Qt::ItemFlags flags(const QModelIndex& index) const override;
+    // QVariant dat
+    //(const QModelIndex& index, int role = Qt::DisplayRole) const override;
+    // QHash<int, QByteArray> roleNames() const override;
 
-    // QAbstractProxyModel interface
-    void setSourceModel(QAbstractItemModel* sourceModel) override;
-    QModelIndex mapToSource(const QModelIndex& proxyIndex) const override;
-    QModelIndex mapFromSource(const QModelIndex& sourceIndex) const override;
-    Q_INVOKABLE QModelIndex groupModelIndex(int row) const;
+protected:
+    bool filterAcceptsRow(int sourceRow, const QModelIndex& sourceParent) const override;
+    // void setSourceModel(QAbstractItemModel* sourceModel) override;
 
-private:
-    struct GroupRange {
-        int start = -1;
-        int end = -1; // inclusive
-
-        int count() const { return end >= start ? end - start + 1 : 0; }
-        bool contains(int row) const { return row >= start && row <= end; }
-    };
-
-    enum Internal {
-        GroupInternalId = 0
-    };
-
-    QVector<GroupRange> mGroups;
-
-    bool isGroupIndex(const QModelIndex& index) const;
-    int sourceRowFromInternalId(const QModelIndex& index) const;
-    int groupForSourceRow(int sourceRow) const;
-    QModelIndex createGroupIndex(int row) const;
-    void rebuildGroups();
-    void resetAndRebuild();
-    bool operatorChanged(const QVector<int>& roles) const;
-    QVector<GroupRange> computeGroups() const;
-    QVector<GroupRange> adjustForInsert(const QVector<GroupRange>& groups, int start, int count) const;
-    QVector<GroupRange> adjustForRemove(const QVector<GroupRange>& groups, int start, int count) const;
-    void applyGroupDiff(const QVector<GroupRange>& oldGroups, const QVector<GroupRange>& newGroups);
+// private:
+//     int operatorAt(int row) const;
+//     void emitDerivedDataChanged();
 };
 
 #endif // CWKEYWORDFILTERORGROUPPROXYMODEL_H

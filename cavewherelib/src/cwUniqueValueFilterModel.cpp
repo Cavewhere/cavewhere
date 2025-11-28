@@ -48,8 +48,18 @@ int cwUniqueValueFilterModel::columnCount(const QModelIndex &parent) const
 QVariant cwUniqueValueFilterModel::data(const QModelIndex &index, int role) const
 {
     if(index.isValid() && index.row() < mUniqueIndex.size()) {
+
+        // if(mUniqueIndex.at(index.row()).index.data(role) == QVariant()) {
+            // qDebug() << "Concat role names:" << mUniqueIndex.at(index.row()).index.model()->roleNames();
+
+            // for(int i = 0; i < mUniqueIndex.at(index.row()).index.model()->rowCount(); i++) {
+            //     qDebug() << "Concat:" << i << mUniqueIndex.at(index.row()).index.model()->index(i, 0).data(role) << "value:" << mUniqueIndex.at(index.row()).value;
+            // }
+
+        // }
         return mUniqueIndex.at(index.row()).index.data(role);
     }
+    qDebug() << "Returning QVariant!" << index << role;
     return QVariant();
 }
 
@@ -199,6 +209,14 @@ void cwUniqueValueFilterModel::connectSourceModel()
     {
         Q_UNUSED(parent);
 
+        //This is a work around to the row inconsistancy in sourceModel()
+        if(sourceModel()->columnCount() <= 0) {
+            return;
+        }
+
+        // Q_ASSERT(sourceModel() == sender()); //if this fails, we haven't disconnected a old sourceModel()
+        qDebug() << "SourcModel:" << sourceModel() << sourceModel()->rowCount() << sourceModel()->columnCount() << sourceModel()->hasIndex(0, 0);
+
         qDebug() << "Insert:" << first << last;
         for(int i = first; i <= last; i++) {
             const auto index = this->sourceModel()->index(i, 0);
@@ -206,9 +224,31 @@ void cwUniqueValueFilterModel::connectSourceModel()
         }
     });
 
+    //This is to handle concatination model inconsistancy with column rows
+    connect(sourceModel(), &QAbstractItemModel::columnsInserted,
+            this, [this, insert](const QModelIndex& parent, int first, int last) {
+
+        if(sourceModel()->rowCount() <= 0) {
+            return;
+        }
+
+        if(mUniqueIndex.isEmpty()) {
+            qDebug() << "Running with column change";
+
+            //Only run on new models
+            for(int i = 0; i < sourceModel()->rowCount(); i++) {
+                const auto index = this->sourceModel()->index(i, 0);
+                insert(index);
+            }
+        }
+    });
+
     connect(sourceModel(), &QAbstractItemModel::rowsAboutToBeRemoved,
             this, [this, remove](const QModelIndex& parent, int first, int last)
     {
+        Q_ASSERT(sourceModel() == sender()); //if this fails, we haven't disconnected a old sourceModel()
+
+
         Q_UNUSED(parent);
         for(int i = first; i <= last; i++) {
             const auto sourceIndexToRemove = this->sourceModel()->index(i, 0);
@@ -276,6 +316,7 @@ void cwUniqueValueFilterModel::connectSourceModel()
 void cwUniqueValueFilterModel::disconnectSourceModel()
 {
     if(this->sourceModel()) {
+        qDebug() << "Disconnecting source model:" << this->sourceModel();
         disconnect(this->sourceModel(), nullptr, this, nullptr);
         isConnected = false;
     }
