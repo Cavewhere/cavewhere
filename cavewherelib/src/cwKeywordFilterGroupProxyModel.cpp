@@ -4,7 +4,6 @@
 cwKeywordFilterGroupProxyModel::cwKeywordFilterGroupProxyModel(QObject* parent)
     : QSortFilterProxyModel(parent)
 {
-    // setDynamicSortFilter(true);
 }
 
 int cwKeywordFilterGroupProxyModel::groupIndex() const
@@ -19,7 +18,7 @@ void cwKeywordFilterGroupProxyModel::setGroupIndex(int groupIndex)
     }
     m_groupIndex = groupIndex;
     emit groupIndexChanged();
-    invalidateFilter();
+    invalidateRowsFilter();
     // emitDerivedDataChanged();
 }
 
@@ -52,7 +51,6 @@ QHash<int, QByteArray> cwKeywordFilterGroupProxyModel::roleNames() const
 bool cwKeywordFilterGroupProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex& sourceParent) const
 {
     Q_UNUSED(sourceParent)
-    qDebug() << "SourceRow:" << sourceRow << groupIndexForRow(sourceRow) << "==" << m_groupIndex << (groupIndexForRow(sourceRow) == m_groupIndex);
     return groupIndexForRow(sourceRow) == m_groupIndex;
 }
 
@@ -75,15 +73,32 @@ void cwKeywordFilterGroupProxyModel::setSourceModel(QAbstractItemModel* sourceMo
     //     Q_UNUSED(last)
     //     // emitDerivedDataChanged();
     // });
-    // connect(sourceModel, &QAbstractItemModel::rowsRemoved, this, [this](const QModelIndex& parent, int first, int last) {
-    //     Q_UNUSED(parent)
-    //     Q_UNUSED(first)
-    //     Q_UNUSED(last)
-    //     // emitDerivedDataChanged();
-    // });
+
+    connect(sourceModel, &QAbstractItemModel::rowsAboutToBeRemoved, this, [this, sourceModel](const QModelIndex& parent, int first, int last) {
+        Q_UNUSED(parent)
+        Q_UNUSED(first)
+        Q_UNUSED(last)
+
+        for(int i = first; i <= last; i++) {
+            if(sourceModel->index(i, 0)
+                    .data(cwKeywordFilterPipelineModel::OperatorRole)
+                    .toInt()
+                == cwKeywordFilterPipelineModel::Operator::Or) {
+                shouldInvalidate = true;
+                return;
+            }
+        }
+    });
+
+    connect(sourceModel, &QAbstractItemModel::rowsRemoved, this, [this, sourceModel](const QModelIndex& parent, int first, int last) {
+        if(shouldInvalidate) {
+            invalidateRowsFilter();
+            shouldInvalidate = false;
+        }
+    });
+
     connect(sourceModel, &QAbstractItemModel::modelReset, this, [this]() {
         invalidateFilter();
-        // emitDerivedDataChanged();
     });
     connect(sourceModel, &QAbstractItemModel::dataChanged, this, [this](const QModelIndex& topLeft,
                                                                         const QModelIndex& bottomRight,
@@ -93,9 +108,8 @@ void cwKeywordFilterGroupProxyModel::setSourceModel(QAbstractItemModel* sourceMo
         Q_UNUSED(bottomRight)
         const bool opChanged = roles.isEmpty() || roles.contains(cwKeywordFilterPipelineModel::OperatorRole);
         if(opChanged) {
-            invalidateFilter();
+            invalidateRowsFilter();
         }
-        // emitDerivedDataChanged();
     });
 }
 
@@ -124,12 +138,3 @@ int cwKeywordFilterGroupProxyModel::groupIndexForRow(int sourceRow) const
     }
     return groupIndex;
 }
-
-// void cwKeywordFilterGroupProxyModel::emitDerivedDataChanged()
-// {
-//     if(rowCount() == 0) {
-//         return;
-//     }
-//     emit dataChanged(index(0, 0), index(rowCount() - 1, 0),
-//                      {GroupIndexRole, SourceRowRole});
-// }

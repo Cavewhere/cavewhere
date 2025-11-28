@@ -195,18 +195,38 @@ TEST_CASE("cwKeywordFilterOrGroupProxyModel exposes groups via OR boundaries", "
         CHECK(pipeline.rowCount() == 3);
         CHECK(orProxy.rowCount() == 2); // first row + row1(OR)
 
+        cwKeywordFilterGroupProxyModel groupProxy1;
+        groupProxy1.setSourceModel(&pipeline);
+        groupProxy1.setGroupIndex(1);
+        groupProxy1.setObjectName("groupProxy1");
+
+        cwKeywordFilterGroupProxyModel groupProxy2;
+        groupProxy2.setSourceModel(&pipeline);
+        groupProxy2.setGroupIndex(2);
+        groupProxy2.setObjectName("groupProxy2");
+
+        CHECK(groupProxy.rowCount() == 1);
+        CHECK(groupProxy1.rowCount() == 2);
+        CHECK(groupProxy2.rowCount() == 0);
+
         // Make row 2 an OR (second boundary)
         ok = pipeline.setData(pipeline.index(2), cwKeywordFilterPipelineModel::Or, cwKeywordFilterPipelineModel::OperatorRole);
         CHECK(ok);
         orSpyChecker[or_rowsAboutToBeInsertedSpy]++;
         orSpyChecker[or_rowsInsertedSpy]++;
 
+        CHECK(groupProxy.rowCount() == 1);
+        CHECK(groupProxy1.rowCount() == 1);
+        CHECK(groupProxy2.rowCount() == 1);
         CHECK(orProxy.rowCount() == 3);
 
         // Remove the first OR row (current source row 1)
         pipeline.removeRow(1);
         CHECK(pipeline.rowCount() == 2);
         CHECK(orProxy.rowCount() == 2);
+        CHECK(groupProxy.rowCount() == 1);
+        CHECK(groupProxy1.rowCount() == 1); //The group below it should fill in
+        CHECK(groupProxy2.rowCount() == 0);
 
         orSpyChecker[or_rowsAboutToBeRemovedSpy]++;
         orSpyChecker[or_rowsRemovedSpy]++;

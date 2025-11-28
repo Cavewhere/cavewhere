@@ -40,9 +40,9 @@ protected:
 private:
     int operatorAt(int row) const;
     int groupIndexForRow(int sourceRow) const;
-    // void emitDerivedDataChanged();
 
     int m_groupIndex = 0;
+    bool shouldInvalidate = false;
 };
 
 #endif // CWKEYWORDFILTERGROUPPROXYMODEL_H

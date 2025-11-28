@@ -215,6 +215,47 @@ MainWindowTest {
                     tryVerify(() => andListView0.count === 2);
         }
 
+        function test_removeMiddleOrBoundary() {
+            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
 
+            RootData.pageSelectionModel.gotoPageByName(null, "View");
+            let layersTab = findChild(rootId.mainWindow, "layersTabButton");
+            verify(layersTab !== null);
+            mouseClick(layersTab);
+            wait(150);
+
+                    let scrollbar = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->vScrollBar")
+                    let scrollbarAtEnd = (scrollbar) => {
+                        return Math.abs(scrollbar.position - (1.0 - scrollbar.size)) < 0.0001
+                    }
+
+            // Click "also" twice to create two OR boundaries
+            let alsoButton0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->alsoButton");
+            verify(alsoButton0);
+            mouseClick(alsoButton0);
+            mouseClick(alsoButton0);
+
+                    tryVerify( ()=> { return scrollbarAtEnd(scrollbar); });
+
+                    let groupListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView");
+                    groupListView.positionViewAtIndex(1, ListView.Beginning) //Jump to the first index
+
+
+            // Remove the middle OR row via its remove button
+            let removeMiddle = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_1->removeButton1_0");
+            verify(removeMiddle);
+            mouseClick(removeMiddle);
+
+            groupListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView");
+            verify(groupListView);
+            tryVerify(() => groupListView.count === 2);
+
+            let andListView0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0");
+            let andListView1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_1");
+            verify(andListView0);
+            verify(andListView1);
+            tryVerify(() => andListView0.count === 1);
+            tryVerify(() => andListView1.count === 1);
+        }
     }
 }
