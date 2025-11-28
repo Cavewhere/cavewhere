@@ -156,6 +156,65 @@ MainWindowTest {
                     mouseClick(removeButton0_2_obj1)
         }
 
+        function test_orBoundariesRemoveThenAdd() {
+            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+
+            // Ensure we are on the View page
+            RootData.pageSelectionModel.gotoPageByName(null, "View");
+
+            let layersTab = findChild(rootId.mainWindow, "layersTabButton");
+            verify(layersTab !== null);
+
+            mouseClick(layersTab);
+            wait(150);
+
+                    let scrollbar = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->vScrollBar")
+                    let scrollbarAtEnd = (scrollbar) => {
+                        return Math.abs(scrollbar.position - (1.0 - scrollbar.size)) < 0.0001
+                    }
+
+            // Click "also" twice to create two OR boundaries
+            let alsoButton0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->alsoButton");
+            verify(alsoButton0);
+            mouseClick(alsoButton0);
+            mouseClick(alsoButton0);
+
+            tryVerify( ()=> { return scrollbarAtEnd(scrollbar); });
+
+            // Remove last row
+            let removeButtonLast = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_2->removeButton2_0");
+            verify(removeButtonLast);
+            mouseClick(removeButtonLast);
+
+            tryVerify( ()=> { return scrollbarAtEnd(scrollbar); });
+            wait(300);
+
+            // Remove last row again
+            removeButtonLast = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_1->removeButton1_0");
+            verify(removeButtonLast);
+            mouseClick(removeButtonLast);
+
+            // tryVerify( ()=> { return scrollbarAtEnd(scrollbar); });
+
+            let groupListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView");
+            verify(groupListView);
+            tryVerify(() => groupListView.count === 1);
+
+            let andListView0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0");
+            verify(andListView0);
+            tryVerify(() => andListView0.count === 1);
+
+            wait(300)
+
+            // Press add button to append another row
+            let addButton0_0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->addButton0_0");
+            verify(addButton0_0);
+            mouseClick(addButton0_0);
+
+                    tryVerify(() => groupListView.count === 1);
+                    tryVerify(() => andListView0.count === 2);
+        }
+
 
     }
 }

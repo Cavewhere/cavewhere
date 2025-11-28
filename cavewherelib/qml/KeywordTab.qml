@@ -33,11 +33,13 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
-            spacing: 6
+            spacing: 3
+            highlightFollowsCurrentItem: true
             model: orProxyModelId
 
             QC.ScrollBar.vertical: QC.ScrollBar {
                 policy: QC.ScrollBar.AsNeeded
+                objectName: "vScrollBar"
             }
 
             delegate:  Rectangle {
@@ -144,11 +146,6 @@ Item {
                                     onClicked: {
                                         pipelineModelId.insertRow(sourceRow + 1)
                                         andListView.currentIndex = delegateId.index + 1
-                                        // Qt.callLater(() => {
-                                        //                  groupScrollBarId.position = 1.0; // - groupScrollBarId.size
-                                        //                  console.log("Size:" + groupScrollBarId.size);
-                                        //                  console.log("Setting position" + groupScrollBarId.position + " " + (1.0 - groupScrollBarId.size))
-                                        //              })
                                     }
                                 }
                             }
@@ -194,13 +191,15 @@ Item {
         }
 
         QC.Button {
+            objectName: "alsoButton"
             text: qsTr("Also Include")
             Layout.fillWidth: true
             onClicked: {
                 pipelineModelId.addRow();
-                var last = pipelineModelId.rowCount() - 1;
-                var idx = pipelineModelId.index(last, 0);
+                let last = pipelineModelId.rowCount() - 1;
+                let idx = pipelineModelId.index(last, 0);
                 pipelineModelId.setData(idx, KeywordFilterPipelineModel.Or, KeywordFilterPipelineModel.OperatorRole);
+                groupListView.currentIndex = groupListView.count - 1
             }
         }
     }

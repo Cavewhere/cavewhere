@@ -331,7 +331,9 @@ void cwKeywordFilterPipelineModel::linkPipelineAt(int i)
                          //Add to AcceptedModel
                          qDebug() << "start add pipeline";
                          row.filter->setSourceModel(mKeywordModel); //All the data
-                         mAcceptedModel->addSourceModel(previousRow.filter->acceptedModel());
+                         if(!mAcceptedModel->sourceModels().contains(previousRow.filter->acceptedModel())) {
+                             mAcceptedModel->addSourceModel(previousRow.filter->acceptedModel());
+                         }
                          qDebug() << "added pipeline:" << previousRow.filter->acceptedModel() << mAcceptedModel->sourceModels();
                      });
             break;
@@ -360,8 +362,9 @@ void cwKeywordFilterPipelineModel::linkLast(int i)
             qDebug() << "Index:" << index << index.isValid();
         }
 
-
-        mAcceptedModel->addSourceModel(mRows.at(i).filter->acceptedModel());
+        if(!mAcceptedModel->sourceModels().contains(mRows.at(i).filter->acceptedModel())) {
+            mAcceptedModel->addSourceModel(mRows.at(i).filter->acceptedModel());
+        }
 
     }
 }
