@@ -111,4 +111,64 @@ TEST_CASE("cwKeywordFilterOrGroupProxyModel exposes groups via OR boundaries", "
         CHECK(groupProxy.index(0, 0).data(cwKeywordFilterGroupProxyModel::SourceRowRole).toInt() == 1);
         CHECK(groupProxy.index(1, 0).data(cwKeywordFilterGroupProxyModel::SourceRowRole).toInt() == 2);
     }
+
+    SECTION("Add and remove a row keeps single group stable")
+    {
+        pipeline.addRow();
+        CHECK(pipeline.rowCount() == 2);
+        CHECK(orProxy.rowCount() == 1);
+        CHECK(groupProxy.rowCount() == 2);
+
+        groupSpyChecker[group_rowsAboutToBeInsertedSpy]++;
+        groupSpyChecker[group_rowsInsertedSpy]++;
+        groupSpyChecker.checkSpies();
+
+        // QObject::connect(&groupProxy, &QAbstractItemModel::rowsInserted, &groupProxy, [](const QModelIndex& parent, int begin, int end){
+        //     qDebug() << "I get here!";
+        // });
+
+        pipeline.removeRow(1);
+
+        CHECK(pipeline.rowCount() == 1);
+        CHECK(orProxy.rowCount() == 1);
+        CHECK(groupProxy.rowCount() == 1);
+
+        groupSpyChecker[group_rowsAboutToBeRemovedSpy]++;
+        groupSpyChecker[group_rowsRemovedSpy]++;
+        groupSpyChecker.checkSpies();
+    }
+
+    SECTION("Promote to OR then remove last row")
+    {
+        pipeline.addRow(); // row 1 (AND)
+        orSpyChecker.checkSpies();
+        groupSpyChecker[group_rowsAboutToBeInsertedSpy]++;
+        groupSpyChecker[group_rowsInsertedSpy]++;
+        groupSpyChecker.checkSpies();
+
+        // Promote the second row to OR, creating a new group
+        bool okay = pipeline.setData(pipeline.index(1), cwKeywordFilterPipelineModel::Or, cwKeywordFilterPipelineModel::OperatorRole);
+        CHECK(okay);
+
+        orSpyChecker[or_rowsInsertedSpy]++;
+        orSpyChecker[or_rowsAboutToBeInsertedSpy]++;
+        groupSpyChecker[group_rowsAboutToBeRemovedSpy]++;
+        groupSpyChecker[group_rowsRemovedSpy]++;
+
+        CHECK(orProxy.rowCount() == 2);
+        CHECK(groupProxy.rowCount() == 1); // default groupIndex 0
+
+        // Remove the OR row
+        pipeline.removeRow(1);
+
+        orSpyChecker[or_rowsAboutToBeRemovedSpy]++;
+        orSpyChecker[or_rowsRemovedSpy]++;
+
+        CHECK(pipeline.rowCount() == 1);
+        CHECK(orProxy.rowCount() == 1);
+        CHECK(groupProxy.rowCount() == 1);
+
+        orSpyChecker.checkSpies();
+        groupSpyChecker.checkSpies();
+    }
 }

@@ -294,7 +294,7 @@ void cwKeywordFilterPipelineModel::removeRow(int i)
     }
 
     // link(i-1); //Update the pointers between model rows
-    endInsertRows();
+    endRemoveRows();
 }
 
 void cwKeywordFilterPipelineModel::link(int i)
@@ -353,7 +353,6 @@ void cwKeywordFilterPipelineModel::linkLast(int i)
                      }
                  });
 
-        Q_ASSERT(!mAcceptedModel->sourceModels().contains(mRows.at(i).filter->acceptedModel()));
         qDebug() << "adding linkLast:" << mRows.at(i).filter->acceptedModel() << "existing models:" << mAcceptedModel->sourceModels();
         qDebug() << "mRows.at(i).filter" << mRows.at(i).filter->acceptedModel();
         for(int j = 0; j < mRows.at(i).filter->acceptedModel()->rowCount(); j++) {
