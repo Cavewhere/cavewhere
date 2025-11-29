@@ -75,7 +75,7 @@ Item {
 
                     QC.ScrollBar.horizontal: QC.ScrollBar {
                         id: groupScrollBarId
-                        objectName: "groupScrollBar_" + orDelegateId.index
+                        objectName: "groupScrollBar"
                         policy: QC.ScrollBar.AsNeeded
 
                         onPositionChanged: {
@@ -91,6 +91,8 @@ Item {
 
                     delegate: Item {
                         id: delegateId
+
+                        objectName: "delegate_" + delegateId.index
 
                         required property int sourceRow
                         required property KeywordGroupByKeyModel filterModelObjectRole
@@ -118,6 +120,7 @@ Item {
 
                                 QC.ComboBox {
                                     id: keyCombo
+                                    objectName: "keyCombo"
                                     Layout.fillWidth: true
                                     model: pipelineModelId.possibleKeys
                                     currentIndex: filterModelObjectRole.key && model.indexOf(filterModelObjectRole.key) >= 0
@@ -133,7 +136,7 @@ Item {
 
                                 NoteToolIconButton {
                                     id: removeButton
-                                    objectName: "removeButton" + orDelegateId.index + "_" + delegateId.index
+                                    objectName: "removeButton"
                                     visible: pipelineModelId.rowCount() > 1
                                     iconSource: "qrc:/twbs-icons/icons/dash.svg"
                                     onClicked: pipelineModelId.removeRow(sourceRow)
@@ -141,7 +144,7 @@ Item {
 
                                 NoteToolIconButton {
                                     id: addButton
-                                    objectName: "addButton" + orDelegateId.index + "_" + delegateId.index
+                                    objectName: "addButton"
                                     icon.source: "qrc:/twbs-icons/icons/plus.svg"
                                     onClicked: {
                                         pipelineModelId.insertRow(sourceRow + 1)
@@ -163,6 +166,9 @@ Item {
                                 }
 
                                 delegate: RowLayout {
+                                    id: rowId
+                                    objectName: "row" + rowId.index;
+
                                     required property bool acceptedRole
                                     required property string valueRole
                                     required property int objectCountRole
@@ -170,6 +176,7 @@ Item {
                                     spacing: 6
 
                                     QC.CheckBox {
+                                        objectName: "checkbox"
                                         checked: acceptedRole
                                         onToggled: {
                                             var modelIndex = filterModelObjectRole.index(index, 0);

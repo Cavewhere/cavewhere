@@ -417,7 +417,7 @@ void cwKeywordGroupByKeyModel::setSourceModel(QAbstractItemModel* source) {
                 }
             });
 
-            connect(mSourceModel, &QAbstractItemModel::rowsRemoved,
+            connect(mSourceModel, &QAbstractItemModel::rowsAboutToBeRemoved,
                     this, [this, toIndex, updateEntity](const QModelIndex& parent, int begin, int last)
             {
                 if(parent == QModelIndex()) {

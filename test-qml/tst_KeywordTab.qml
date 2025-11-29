@@ -257,5 +257,85 @@ MainWindowTest {
             tryVerify(() => andListView0.count === 1);
             tryVerify(() => andListView1.count === 1);
         }
+
+        function test_objectCount() {
+            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000 2024.2.cw");
+
+            RootData.pageSelectionModel.gotoPageByName(null, "View");
+            let layersTab = findChild(rootId.mainWindow, "layersTabButton");
+            verify(layersTab !== null);
+            mouseClick(layersTab);
+
+            wait(150)
+
+            // Set key combo to "orientation" on the first AND row
+            let keyCombo = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->keyCombo");
+            verify(keyCombo);
+            keyCombo.currentIndex = keyCombo.model.indexOf("Orientation");
+            verify(keyCombo.currentIndex > 0)
+
+            let delegate = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0");
+            verify(delegate);
+            delegate.filterModelObjectRole.key = keyCombo.currentText
+
+            // Add another AND row
+            let addButton0_0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton");
+            verify(addButton0_0);
+            mouseClick(addButton0_0);
+
+                    let scrollbar = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->groupScrollBar")
+                    verify(scrollbar);
+                    let scrollbarAtEnd = (scrollbar) => {
+                        return Math.abs(scrollbar.position - (1.0 - scrollbar.size)) < 0.0001
+                    }
+
+                    tryVerify(() => { return scrollbarAtEnd(scrollbar); } )
+
+            // Grab the first value row in the first list view
+            let andListView0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0");
+            verify(andListView0);
+            tryVerify(() => andListView0.count > 0);
+
+                    // let scrollbar = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->groupScrollBar_0")
+                    let scrollbarAtBeginning = (scrollbar) => {
+                        return scrollbar.position < 0.01
+                    }
+
+            andListView0.positionViewAtBeginning();
+
+                    tryVerify(() => { return scrollbarAtBeginning(scrollbar); } )
+
+
+            let firstCheckbox = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->row1->checkbox");
+            verify(firstCheckbox);
+
+            // Capture objectCountRole from the second list view (row0)
+            let row0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_1->row0");
+            verify(row0);
+
+            for(let i = 0; i < 5; i++) {
+                        let originalText = row0.objectCountRole;
+                        verify(originalText >= 1)
+
+                        // Toggle off then on in the first list view
+                        mouseClick(firstCheckbox);
+                        verify(firstCheckbox.checked === false);
+
+                        wait(10)
+
+                        mouseClick(firstCheckbox);
+                        verify(firstCheckbox.checked === true);
+
+
+                        wait(100)
+
+                        // The objectCountRole should be unchanged
+                        let row0SecondAfter = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_1->row0");
+                        verify(row0SecondAfter);
+                        verify(row0SecondAfter === row0);
+                        console.log("objectCountRole:" + row0SecondAfter.objectCountRole + " " + originalText)
+                        compare(row0SecondAfter.objectCountRole, originalText);
+            }
+        }
     }
 }
