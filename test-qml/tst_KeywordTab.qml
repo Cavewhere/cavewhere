@@ -7,7 +7,7 @@ import QmlTestRecorder
 MainWindowTest {
     id: rootId
 
-    CWTestCase {
+    TestCase {
         name: "KeywordTabLoadProject"
         when: windowShown
 
@@ -26,7 +26,7 @@ MainWindowTest {
 
             console.log("------ About to Add -------")
 
-            let addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->addButton0_0")
+            let addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton")
             mouseClick(addButton0_0_obj1)
 
             console.log("------ Added -------")
@@ -35,7 +35,7 @@ MainWindowTest {
 
             console.log("------ About to remove -------")
 
-            let removeButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->removeButton0_0")
+            let removeButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->removeButton")
             mouseClick(removeButton0_0_obj1)
 
             console.log("------ Removed -------")
@@ -45,7 +45,7 @@ MainWindowTest {
             console.log("------ About to add 2 -------")
 
             //Add it back again
-            addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->addButton0_0")
+            addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton")
             mouseClick(addButton0_0_obj1)
 
             console.log("------ Added 2 -------")
@@ -65,17 +65,17 @@ MainWindowTest {
 
             wait(150);
 
-                    let scrollbar = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->groupScrollBar_0")
+                    let scrollbar = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->groupScrollBar")
                     let scrollbarAtEnd = (scrollbar) => {
                         return Math.abs(scrollbar.position - (1.0 - scrollbar.size)) < 0.0001
                     }
 
-            let addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->addButton0_0")
+            let addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton")
             mouseClick(addButton0_0_obj1)
 
             tryVerify( ()=> { return scrollbarAtEnd(scrollbar); });
 
-            let removeButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->removeButton0_1")
+            let removeButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_1->removeButton")
             mouseClick(removeButton0_0_obj1)
 
                     let listViewRow0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0")
@@ -99,7 +99,7 @@ MainWindowTest {
 
             console.log("------ About to Add -------")
 
-            let addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->addButton0_0")
+            let addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton")
             mouseClick(addButton0_0_obj1)
 
             console.log("------ Added -------")
@@ -108,7 +108,7 @@ MainWindowTest {
 
             console.log("------ About to remove -------")
 
-            let removeButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->removeButton0_1")
+            let removeButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_1->removeButton")
             mouseClick(removeButton0_0_obj1)
 
             console.log("------ Removed -------")
@@ -118,7 +118,7 @@ MainWindowTest {
             console.log("------ About to add 2 -------")
 
             //Add it back again
-            addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->addButton0_0")
+            addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton")
             mouseClick(addButton0_0_obj1)
 
             console.log("------ Added 2 -------")
@@ -137,22 +137,22 @@ MainWindowTest {
 
                     wait(100);
 
-                    let scrollbar = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->groupScrollBar_0")
+                    let scrollbar = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->groupScrollBar")
                     let scrollbarAtEnd = (scrollbar) => {
                         return Math.abs(scrollbar.position - (1.0 - scrollbar.size)) < 0.0001
                     }
 
-                    let addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->addButton0_0")
+                    let addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton")
                     mouseClick(addButton0_0_obj1)
 
                     tryVerify( ()=> { return scrollbarAtEnd(scrollbar); });
 
-                    let addButton0_1_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->addButton0_1")
+                    let addButton0_1_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_1->addButton")
                     mouseClick(addButton0_1_obj1)
 
                     tryVerify( ()=> { return scrollbarAtEnd(scrollbar); });
 
-                    let removeButton0_2_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->removeButton0_2")
+                    let removeButton0_2_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_2->removeButton")
                     mouseClick(removeButton0_2_obj1)
         }
 
@@ -182,7 +182,7 @@ MainWindowTest {
             tryVerify( ()=> { return scrollbarAtEnd(scrollbar); });
 
             // Remove last row
-            let removeButtonLast = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_2->removeButton2_0");
+            let removeButtonLast = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_2->delegate_0->removeButton");
             verify(removeButtonLast);
             mouseClick(removeButtonLast);
 
@@ -190,7 +190,7 @@ MainWindowTest {
             wait(300);
 
             // Remove last row again
-            removeButtonLast = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_1->removeButton1_0");
+            removeButtonLast = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_1->delegate_0->removeButton");
             verify(removeButtonLast);
             mouseClick(removeButtonLast);
 
@@ -207,7 +207,7 @@ MainWindowTest {
             wait(300)
 
             // Press add button to append another row
-            let addButton0_0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->addButton0_0");
+            let addButton0_0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton");
             verify(addButton0_0);
             mouseClick(addButton0_0);
 
@@ -242,7 +242,7 @@ MainWindowTest {
 
 
             // Remove the middle OR row via its remove button
-            let removeMiddle = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_1->removeButton1_0");
+            let removeMiddle = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_1->delegate_0->removeButton");
             verify(removeMiddle);
             mouseClick(removeMiddle);
 
@@ -296,7 +296,7 @@ MainWindowTest {
             verify(andListView0);
             tryVerify(() => andListView0.count > 0);
 
-                    // let scrollbar = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->groupScrollBar_0")
+                    // let scrollbar = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->groupScrollBar")
                     let scrollbarAtBeginning = (scrollbar) => {
                         return scrollbar.position < 0.01
                     }
