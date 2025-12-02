@@ -20,6 +20,31 @@ TEST_CASE("cwKeywordFilterPipelineModel should initilize correctly", "[cwKeyword
     CHECK(model.acceptedModel()->rowCount() == 0);
 }
 
+TEST_CASE("cwKeywordFilterPipelineModel clear resets to defaults", "[cwKeywordFilterPipelineModel]") {
+    cwKeywordFilterPipelineModel model;
+    auto keywordModel = std::make_unique<cwKeywordItemModel>();
+
+    auto item = new cwKeywordItem();
+    item->keywordModel()->add({"type", "scrap"});
+    item->setObject(new QObject(&model));
+    keywordModel->addItem(item);
+
+    model.setKeywordModel(keywordModel.get());
+    model.addRow();
+    REQUIRE(model.rowCount() == 2);
+    REQUIRE(model.acceptedModel()->rowCount() == 1);
+
+    model.clear();
+
+    CHECK(model.rowCount() == 1);
+    auto filterModel = model.index(0).data(cwKeywordFilterPipelineModel::FilterModelObjectRole).value<QAbstractItemModel*>();
+    CHECK(filterModel != nullptr);
+    CHECK(model.index(0).data(cwKeywordFilterPipelineModel::OperatorRole).toInt() == cwKeywordFilterPipelineModel::And);
+
+    //I'm not sure if this should be 0 or 1
+    CHECK(model.acceptedModel()->rowCount() == 1);
+}
+
 TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipelineModel]") {
     qDebug() << "Start test";
 

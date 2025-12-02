@@ -32,6 +32,7 @@ public:
 
     Q_INVOKABLE void addItem(cwKeywordItem* item);
     Q_INVOKABLE void removeItem(cwKeywordItem* item);
+    Q_INVOKABLE void clear();
     cwKeywordItem* item(int row) const;
 
     QVariant data(const QModelIndex& index, int role) const;

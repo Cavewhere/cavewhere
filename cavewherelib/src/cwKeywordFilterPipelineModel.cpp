@@ -15,6 +15,8 @@ cwKeywordFilterPipelineModel::cwKeywordFilterPipelineModel(QObject *parent) :
     mUniqueAcceptedModel(new cwUniqueValueFilterModel(this)),
     mRejectedModel(new cwKeywordFilterModel(this))
 {
+    mRejectedModel->setCheckForInvalidRows(true); //This prevents an bad index assert, when we're a middle state in connections
+
     mUniqueAcceptedModel->setSourceModel(mAcceptedModel);
     mUniqueAcceptedModel->setUniqueRole(cwKeywordItemModel::ObjectRole);
     mUniqueAcceptedModel->setLessThan([](const QVariant& left, const QVariant& right) {
@@ -38,6 +40,7 @@ cwKeywordFilterPipelineModel::cwKeywordFilterPipelineModel(QObject *parent) :
     };
 
     auto validateUniqueModel = [this, findKeywordModelIndex](const char* context) {
+#ifdef QT_DEBUG
         for(int row = 0; row < mUniqueAcceptedModel->rowCount(); ++row) {
             const auto proxyIndex = mUniqueAcceptedModel->index(row, 0);
             Q_ASSERT(proxyIndex.isValid());
@@ -59,6 +62,7 @@ cwKeywordFilterPipelineModel::cwKeywordFilterPipelineModel(QObject *parent) :
             }
             Q_ASSERT(keywordIndex.isValid());
         }
+#endif
     };
 
     connect(mUniqueAcceptedModel, &cwKeywordItemModel::rowsInserted,
@@ -99,14 +103,6 @@ cwKeywordFilterPipelineModel::cwKeywordFilterPipelineModel(QObject *parent) :
                     mRejectedModel->insert(keywordModelIndex);
                 }
             });
-
-    connect(mUniqueAcceptedModel, &cwKeywordItemModel::rowsRemoved,
-            this, [this, validateUniqueModel](const QModelIndex& parent, int begin, int last)
-            {
-                qDebug() << "Rows removed:" << begin << last;
-                validateUniqueModel("rowsAboutToBeRemoved");
-            });
-
 }
 
 void cwKeywordFilterPipelineModel::setKeywordModel(cwKeywordItemModel* keywordModel) {
@@ -137,11 +133,9 @@ void cwKeywordFilterPipelineModel::setKeywordModel(cwKeywordItemModel* keywordMo
 
             auto removeFromRejected = [this, indexObj](int i) {
                 auto [index, obj] = indexObj(i);
-                qDebug() << "try to remove from rejected:" << index << index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
-                //                if(mUniqueAcceptedModel->contains(QVariant::fromValue(obj))) {
-                qDebug() << "removing from rejected from keywordModel:" << index << index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
+                // qDebug() << "try to remove from rejected:" << index << index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
+                // qDebug() << "removing from rejected from keywordModel:" << mRejectedModel << index << index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
                 mRejectedModel->remove(index);
-                //                }
             };
 
             connect(mKeywordModel, &cwKeywordItemModel::rowsInserted,
@@ -408,4 +402,24 @@ QAbstractItemModel *cwKeywordFilterPipelineModel::rejectedModel() const {
 
 QAbstractItemModel *cwKeywordFilterPipelineModel::acceptedModel() const {
     return mUniqueAcceptedModel;
+}
+
+void cwKeywordFilterPipelineModel::clear()
+{
+    beginResetModel();
+    mRows.clear();
+
+    const auto sourceModels = mAcceptedModel->sourceModels();
+    for(auto model : sourceModels) {
+        mAcceptedModel->removeSourceModel(model);
+    }
+    Q_ASSERT(mAcceptedModel->sourceModels().isEmpty());
+    Q_ASSERT(mAcceptedModel->rowCount() == 0);
+
+    // mAcceptedModel->clear();
+    // mUniqueAcceptedModel->clear();
+    mRejectedModel->clear();
+    addRow();
+    endResetModel();
+    updatePossibleKeys();
 }

@@ -28,6 +28,14 @@ public:
     //Filter by objects
     void insert(const QModelIndex& sourceIndex);
     void remove(const QModelIndex& sourceIndex);
+    void clear();
+
+    void setCheckForInvalidRows(bool shouldCheck) { mCheckForInvalidRows = shouldCheck; }
+
+    // //For debugging
+    // void dump() const {
+    //     qDebug() << "cwKeywordFilterModel::dump:" << this << mAcceptedSourceIndexes;
+    // }
 
 private:
     //Sorted list of indexes based on object, the list is added or remove via accept() / remove() functions
@@ -39,6 +47,14 @@ private:
     QVector<QPersistentModelIndex>::iterator findAcceptedObject(QObject* object);
     QVector<QPersistentModelIndex>::const_iterator findAcceptedObject(QObject* object) const;
 
+    /**
+     * This check might slow preformance down, but prevents invalid rows from being
+     * held in the filter.
+     */
+    bool mCheckForInvalidRows = false;
+
+    void removeInvalidRows();
+
     static QObject* toObject(const QModelIndex& sourceIndex)
     {
         return sourceIndex.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
@@ -46,6 +62,8 @@ private:
 
     template<typename R, typename C, typename F>
     R findElementRunAction(const QModelIndex& sourceIndex, C objectCompareFunc, F actionFunc) {
+        qDebug() << "findElementRunAction:" << this << sourceIndex << mAcceptedSourceIndexes;
+
         if(!sourceIndex.isValid()) {
             return R();
         }

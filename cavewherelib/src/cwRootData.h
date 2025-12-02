@@ -40,6 +40,7 @@
 #include "cwRepositoryModel.h"
 #include "cwGitHubIntegration.h"
 class cwKeywordItemModel;
+class cwKeywordFilterPipelineModel;
 class cwRemoteAccountModel;
 class cwRemoteAccountSelectionModel;
 
@@ -86,6 +87,7 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
     //Settings
     Q_PROPERTY(QUrl lastDirectory READ lastDirectory WRITE setLastDirectory NOTIFY lastDirectoryChanged)
     Q_PROPERTY(cwKeywordItemModel* keywordItemModel READ keywordItemModel CONSTANT)
+    Q_PROPERTY(cwKeywordFilterPipelineModel* keywordFilterPipelineModel READ keywordFilterPipelineModel CONSTANT)
     Q_PROPERTY(cwSettings* settings READ settings CONSTANT)
     Q_PROPERTY(QString supportImageFormats READ supportImageFormats CONSTANT)
 
@@ -119,6 +121,7 @@ public:
     cwPageSelectionModel* pageSelectionModel() const;
     cwRegionTreeModel* regionTreeModel() const;
     cwKeywordItemModel* keywordItemModel() const;
+    cwKeywordFilterPipelineModel* keywordFilterPipelineModel() const;
     cwSettings* settings() const;
     QQuickGit::Account *account() const { return m_account; }
     cwRepositoryModel* repositoryModel() const { return m_repositoryModel; }
@@ -195,6 +198,7 @@ private:
     cwScrapManager* ScrapManager; //!< For keeping all the scraps updated (carpeting)
     cwNoteLiDARManager* NoteLiDARManager; //!< For carpeting lidar scans
     cwKeywordItemModel* m_keywordItemModel;
+    cwKeywordFilterPipelineModel* m_keywordFilterPipelineModel = nullptr;
     cwProject* Project; //!< For saving and loading, image saving and loading
     cwSurveyImportManager* SurveyImportManager; //!< For importing survey data from survex, etc
     QQuickView* QuickView; //!< For exporting the 3d screen to a file
@@ -340,6 +344,11 @@ inline cwRegionTreeModel* cwRootData::regionTreeModel() const {
 inline cwKeywordItemModel* cwRootData::keywordItemModel() const
 {
     return m_keywordItemModel;
+}
+
+inline cwKeywordFilterPipelineModel* cwRootData::keywordFilterPipelineModel() const
+{
+    return m_keywordFilterPipelineModel;
 }
 
 /**

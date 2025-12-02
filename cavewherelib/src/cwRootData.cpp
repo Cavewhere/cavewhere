@@ -18,6 +18,7 @@
 #include "cwSurveyImportManager.h"
 #include "cwItemSelectionModel.h"
 #include "cwKeywordItemModel.h"
+#include "cwKeywordFilterPipelineModel.h"
 #include "cwQMLReload.h"
 #include "cwLicenseAgreement.h"
 #include "cwRegionSceneManager.h"
@@ -61,6 +62,8 @@ cwRootData::cwRootData(QObject *parent) :
     TaskManagerModel = new cwTaskManagerModel(this);
     FutureManagerModel = new cwFutureManagerModel(this);
     m_keywordItemModel = new cwKeywordItemModel(this);
+    m_keywordFilterPipelineModel = new cwKeywordFilterPipelineModel(this);
+    m_keywordFilterPipelineModel->setKeywordModel(m_keywordItemModel);
 
     //Create the project, this saves and load data
     Project = new cwProject(this);
@@ -138,6 +141,13 @@ cwRootData::cwRootData(QObject *parent) :
             this, updateAutomaticUpdate);
 
     connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, [&]() { Project->waitSaveToFinish(); });
+
+    connect(Project, &cwProject::filenameChanged, this, [this]() {
+        qDebug() << "Clearing pipeline models!";
+        m_keywordFilterPipelineModel->clear();
+        m_keywordItemModel->clear();
+
+    });
 }
 
 /**
@@ -241,6 +251,10 @@ void cwRootData::newProject()
 {
     PageSelectionModel->clearHistory();
     PageSelectionModel->gotoPageByName(nullptr, "View");
+    // m_keywordItemModel->clear();
+    // if (m_keywordFilterPipelineModel) {
+    //     m_keywordFilterPipelineModel->clear();
+    // }
     Project->newProject();
 }
 

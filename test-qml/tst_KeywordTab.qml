@@ -11,6 +11,28 @@ MainWindowTest {
         name: "KeywordTabLoadProject"
         when: windowShown
 
+        function cleanup() {
+            console.log("Cleanup")
+            RootData.newProject();
+
+            // After new project, keyword filter should be at defaults: 1 group, 1 row
+            let groupListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView");
+            verify(groupListView);
+            tryVerify(() => groupListView.count === 1);
+
+            let andListView0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0");
+            verify(andListView0);
+            tryVerify(() => andListView0.count === 1);
+
+                    let viewTab = findChild(rootId.mainWindow, "viewTabButton");
+                    verify(viewTab !== null);
+
+                    mouseClick(viewTab);
+
+                    wait(100)
+
+        }
+
         function test_addremovefirst() {
             TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
 
@@ -65,13 +87,15 @@ MainWindowTest {
 
             wait(150);
 
-                    let scrollbar = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->groupScrollBar")
-                    let scrollbarAtEnd = (scrollbar) => {
-                        return Math.abs(scrollbar.position - (1.0 - scrollbar.size)) < 0.0001
-                    }
 
             let addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton")
             mouseClick(addButton0_0_obj1)
+
+                    let scrollbar = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->groupScrollBar")
+                    verify(scrollbar)
+                    let scrollbarAtEnd = (scrollbar) => {
+                        return Math.abs(scrollbar.position - (1.0 - scrollbar.size)) < 0.0001
+                    }
 
             tryVerify( ()=> { return scrollbarAtEnd(scrollbar); });
 
@@ -336,6 +360,47 @@ MainWindowTest {
                         console.log("objectCountRole:" + row0SecondAfter.objectCountRole + " " + originalText)
                         compare(row0SecondAfter.objectCountRole, originalText);
             }
+        }
+
+        function test_hideRemoveSecondOr() {
+            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000 2024.2.cw");
+
+            RootData.pageSelectionModel.gotoPageByName(null, "View");
+            let layersTab = findChild(rootId.mainWindow, "layersTabButton");
+            verify(layersTab !== null);
+            mouseClick(layersTab);
+
+            wait(150)
+
+            let groupListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView");
+            verify(groupListView);
+
+            // Create two OR boundaries
+            let alsoButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->alsoButton");
+            verify(alsoButton);
+            mouseClick(alsoButton);
+            mouseClick(alsoButton);
+
+            tryVerify(() => groupListView.count === 3);
+
+            // Add another row in the second group (not the last)
+            let addButtonSecond = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_1->delegate_0->addButton");
+            verify(addButtonSecond);
+            mouseClick(addButtonSecond);
+
+            // Remove the first row in the second group
+            let removeButtonSecond = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_1->delegate_0->removeButton");
+            verify(removeButtonSecond);
+            mouseClick(removeButtonSecond);
+
+            tryVerify(() => groupListView.count === 2);
+
+            let andListView0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0");
+            let andListView1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_1");
+            verify(andListView0);
+            verify(andListView1);
+            tryVerify(() => andListView0.count >= 1);
+            tryVerify(() => andListView1.count >= 1);
         }
     }
 }

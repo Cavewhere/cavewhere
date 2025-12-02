@@ -101,6 +101,14 @@ void cwKeywordItemModel::removeItem(cwKeywordItem *item)
     disconnect(item, nullptr, this, nullptr);
 }
 
+void cwKeywordItemModel::clear()
+{
+    while(!Items.isEmpty()) {
+        auto item = Items.constFirst();
+        removeItem(item);
+    }
+}
+
 cwKeywordItem *cwKeywordItemModel::item(int row) const
 {
     return Items.at(row);

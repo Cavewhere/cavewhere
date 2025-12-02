@@ -8,19 +8,16 @@ Item {
     id: keywordTabId
     objectName: "keyword"
 
-    KeywordFilterPipelineModel {
-        id: pipelineModelId
-        keywordModel: RootData.keywordItemModel
-    }
+    readonly property KeywordFilterPipelineModel pipelineModel: RootData.keywordFilterPipelineModel
 
     KeywordFilterOrGroupProxyModel {
         id: orProxyModelId
-        sourceModel: pipelineModelId
+        sourceModel: pipelineModel
     }
 
     KeywordVisibility {
-        visibleModel: pipelineModelId.acceptedModel
-        hideModel: pipelineModelId.rejectedModel
+        visibleModel: pipelineModel.acceptedModel
+        hideModel: pipelineModel.rejectedModel
     }
 
     ColumnLayout {
@@ -85,7 +82,7 @@ Item {
 
                     model: KeywordFilterGroupProxyModel {
                         id: groupProxyModel
-                        sourceModel: pipelineModelId
+                        sourceModel: pipelineModel
                         groupIndex: orDelegateId.index
                     }
 
@@ -122,7 +119,7 @@ Item {
                                     id: keyCombo
                                     objectName: "keyCombo"
                                     Layout.fillWidth: true
-                                    model: pipelineModelId.possibleKeys
+                                    model: pipelineModel.possibleKeys
                                     currentIndex: filterModelObjectRole.key && model.indexOf(filterModelObjectRole.key) >= 0
                                                   ? model.indexOf(filterModelObjectRole.key)
                                                   : 0
@@ -137,9 +134,9 @@ Item {
                                 NoteToolIconButton {
                                     id: removeButton
                                     objectName: "removeButton"
-                                    visible: pipelineModelId.rowCount() > 1
+                                    visible: pipelineModel.rowCount() > 1
                                     iconSource: "qrc:/twbs-icons/icons/dash.svg"
-                                    onClicked: pipelineModelId.removeRow(sourceRow)
+                                    onClicked: pipelineModel.removeRow(sourceRow)
                                 }
 
                                 NoteToolIconButton {
@@ -147,7 +144,7 @@ Item {
                                     objectName: "addButton"
                                     icon.source: "qrc:/twbs-icons/icons/plus.svg"
                                     onClicked: {
-                                        pipelineModelId.insertRow(sourceRow + 1)
+                                        pipelineModel.insertRow(sourceRow + 1)
                                         andListView.currentIndex = delegateId.index + 1
                                     }
                                 }
@@ -202,10 +199,10 @@ Item {
             text: qsTr("Also Include")
             Layout.fillWidth: true
             onClicked: {
-                pipelineModelId.addRow();
-                let last = pipelineModelId.rowCount() - 1;
-                let idx = pipelineModelId.index(last, 0);
-                pipelineModelId.setData(idx, KeywordFilterPipelineModel.Or, KeywordFilterPipelineModel.OperatorRole);
+                pipelineModel.addRow();
+                let last = pipelineModel.rowCount() - 1;
+                let idx = pipelineModel.index(last, 0);
+                pipelineModel.setData(idx, KeywordFilterPipelineModel.Or, KeywordFilterPipelineModel.OperatorRole);
                 groupListView.currentIndex = groupListView.count - 1
             }
         }

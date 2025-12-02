@@ -55,6 +55,7 @@ public:
     QHash<int, QByteArray> roleNames() const;
 
     QStringList operators() const;
+    Q_INVOKABLE void clear();
 
     Q_INVOKABLE void insertRow(int i);
     Q_INVOKABLE void addRow();

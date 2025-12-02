@@ -9,7 +9,7 @@
 
 cwKeywordFilterModel::cwKeywordFilterModel(QObject *parent) : QAbstractProxyModel(parent)
 {
-
+    qDebug() << "Created:" << this << parent;
 }
 
 
@@ -75,6 +75,8 @@ void cwKeywordFilterModel::insert(const QModelIndex& sourceIndex)
 
 void cwKeywordFilterModel::remove(const QModelIndex& sourceIndex)
 {
+    removeInvalidRows();
+
     findElementRunAction<void>(sourceIndex,
                                std::equal_to<QObject*>(),
                                [this, sourceIndex](int row, auto iter)
@@ -85,13 +87,26 @@ void cwKeywordFilterModel::remove(const QModelIndex& sourceIndex)
     });
 }
 
+void cwKeywordFilterModel::clear()
+{
+    if(!mAcceptedSourceIndexes.isEmpty()) {
+        beginRemoveRows(QModelIndex(), 0, mAcceptedSourceIndexes.size() - 1);
+        mAcceptedSourceIndexes.clear();
+        endRemoveRows();
+    }
+    if(sourceModel()) {
+        setSourceModel(nullptr);
+    }
+}
+
 QVector<QPersistentModelIndex>::iterator cwKeywordFilterModel::findAcceptedObject(QObject *object)
 {
     return std::lower_bound(mAcceptedSourceIndexes.begin(),
                             mAcceptedSourceIndexes.end(),
                             object,
-                            [](const QPersistentModelIndex& modelIndex, QObject* obj)
+                            [this](const QPersistentModelIndex& modelIndex, QObject* obj)
     {
+                                // qDebug() << "Bounds:" << this << this->sourceModel() << mAcceptedSourceIndexes;
         Q_ASSERT(modelIndex.isValid());
         return cwKeywordFilterModel::toObject(modelIndex) < obj;
     });
@@ -109,17 +124,35 @@ QVector<QPersistentModelIndex>::const_iterator cwKeywordFilterModel::findAccepte
     });
 }
 
+void cwKeywordFilterModel::removeInvalidRows()
+{
+    if(mCheckForInvalidRows) {
+        auto isInvalid = [](const QPersistentModelIndex& index) {
+            return !index.isValid();
+        };
+
+        if(std::any_of(mAcceptedSourceIndexes.cbegin(), mAcceptedSourceIndexes.cend(), isInvalid)) {
+            beginResetModel();
+            auto newEnd = std::remove_if(mAcceptedSourceIndexes.begin(), mAcceptedSourceIndexes.end(), isInvalid);
+            mAcceptedSourceIndexes.erase(newEnd, mAcceptedSourceIndexes.end());
+            endResetModel();
+        }
+    }
+}
+
 void cwKeywordFilterModel::setSourceModel(QAbstractItemModel *sourceModel)
 {
     if(this->sourceModel() != sourceModel) {
-        qDebug() << "SourceModel changed:" << this->sourceModel() << sourceModel;
+        qDebug() << "SourceModel changed:" << this << "new:" << this->sourceModel() << "old:" << sourceModel;
         if(this->sourceModel()) {
             disconnect(mDataChanged);
             disconnect(mRowsAboutToBeRemoved);
+            // disconnect(mModelReseted);
         }
 
         if(!mAcceptedSourceIndexes.isEmpty()) {
             beginRemoveRows(QModelIndex(), 0, mAcceptedSourceIndexes.size() - 1);
+            qDebug() << "Clearing source indexes" << this;
             mAcceptedSourceIndexes.clear();
             endRemoveRows();
         }
@@ -153,6 +186,12 @@ void cwKeywordFilterModel::setSourceModel(QAbstractItemModel *sourceModel)
                     }
                 }
             });
+
+            // mModelReseted = connect(sourceModel, &QAbstractItemModel::modelAboutToBeReset,
+            //                         this, [this]() {
+            //     qDebug() << "Model reset!" << this;
+            // });
+
         }
 
         QAbstractProxyModel::setSourceModel(sourceModel);
