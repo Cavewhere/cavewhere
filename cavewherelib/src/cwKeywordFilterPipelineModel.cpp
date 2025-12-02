@@ -261,6 +261,8 @@ void cwKeywordFilterPipelineModel::removeRow(int i)
         return;
     }
 
+    const bool removedWasOr = mRows.at(i).modelOperator == Or;
+
     beginRemoveRows(QModelIndex(), i, i);
     const auto& row = mRows.at(i);
     // Q_ASSERT();
@@ -289,6 +291,15 @@ void cwKeywordFilterPipelineModel::removeRow(int i)
 
     // link(i-1); //Update the pointers between model rows
     endRemoveRows();
+
+    // Preserve the OR boundary when removing the first row of an OR group by
+    // promoting the following row to OR so the number of groups stays stable.
+    if(removedWasOr) {
+        auto nextIndex = index(i);
+        if(nextIndex.isValid()) {
+            setData(nextIndex, Or, OperatorRole);
+        }
+    }
 }
 
 void cwKeywordFilterPipelineModel::link(int i)

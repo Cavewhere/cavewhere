@@ -393,14 +393,29 @@ MainWindowTest {
             verify(removeButtonSecond);
             mouseClick(removeButtonSecond);
 
-            tryVerify(() => groupListView.count === 2);
+            tryVerify(() => groupListView.count === 3);
 
-            let andListView0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0");
-            let andListView1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_1");
-            verify(andListView0);
-            verify(andListView1);
-            tryVerify(() => andListView0.count >= 1);
-            tryVerify(() => andListView1.count >= 1);
+
+                    tryVerify(() => {
+                                          let andListView0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0");
+                                          if(andListView0) {
+                                                      return andListView0.count >= 1
+                                          }
+                              });
+                    tryVerify(() => {
+                                          let andListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_1");
+                                          if(andListView) {
+                                                      return andListView.count >= 1
+                                          }
+                              });
+                    tryVerify(() => {
+                                          let andListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_2");
+                                          if(andListView) {
+                                                      return andListView.count >= 1
+                                          }
+                              });
+
+            // wait(1000000)
         }
     }
 }

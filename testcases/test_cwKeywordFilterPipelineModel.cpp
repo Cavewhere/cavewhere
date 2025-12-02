@@ -5,6 +5,8 @@
 #include "cwKeywordItemModel.h"
 #include "cwKeywordGroupByKeyModel.h"
 #include "cwUniqueValueFilterModel.h"
+#include "cwKeywordFilterGroupProxyModel.h"
+#include "cwKeywordFilterOrGroupProxyModel.h"
 #include "SignalSpyChecker.h"
 
 //Catch includes
@@ -571,4 +573,69 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
             }
         }
     }
+}
+
+TEST_CASE("cwKeywordFilterPipelineModel removing first row of middle group keeps or groups", "[cwKeywordFilterPipelineModel]") {
+    // Mirrors test-qml/tst_KeywordTab.qml::test_hideRemoveSecondOr without UI clicks.
+    cwKeywordFilterPipelineModel pipeline;
+    auto keywordModel = std::make_unique<cwKeywordItemModel>();
+
+    auto item = new cwKeywordItem();
+    item->keywordModel()->add({"type", "scrap"});
+    auto object = std::make_unique<QObject>();
+    item->setObject(object.get());
+    keywordModel->addItem(item);
+
+    pipeline.setKeywordModel(keywordModel.get());
+
+    cwKeywordFilterOrGroupProxyModel orProxy;
+    orProxy.setSourceModel(&pipeline);
+
+    REQUIRE(pipeline.rowCount() == 1);
+    CHECK(orProxy.rowCount() == 1);
+
+    auto setOrOperator = [&pipeline](int row) {
+        auto idx = pipeline.index(row);
+        REQUIRE(idx.isValid());
+        REQUIRE(pipeline.setData(idx, cwKeywordFilterPipelineModel::Or, cwKeywordFilterPipelineModel::OperatorRole));
+        REQUIRE(pipeline.data(idx, cwKeywordFilterPipelineModel::OperatorRole).toInt() == cwKeywordFilterPipelineModel::Or);
+    };
+
+    // Create two OR boundaries (three groups)
+    pipeline.addRow();
+    setOrOperator(1);
+    pipeline.addRow();
+    setOrOperator(2);
+
+    REQUIRE(pipeline.rowCount() == 3);
+    CHECK(orProxy.rowCount() == 3);
+
+    // Add another row inside the second group (not the last)
+    pipeline.insertRow(2);
+    REQUIRE(pipeline.rowCount() == 4);
+    CHECK(orProxy.rowCount() == 3);
+
+    // Remove the first row in the second group
+    pipeline.removeRow(1);
+    REQUIRE(pipeline.rowCount() == 3);
+
+    // The OR-group list should remain at three groups
+    CHECK(orProxy.rowCount() == 3);
+
+    // Each group should still expose at least one row
+    cwKeywordFilterGroupProxyModel group0;
+    group0.setSourceModel(&pipeline);
+    group0.setGroupIndex(0);
+
+    cwKeywordFilterGroupProxyModel group1;
+    group1.setSourceModel(&pipeline);
+    group1.setGroupIndex(1);
+
+    cwKeywordFilterGroupProxyModel group2;
+    group2.setSourceModel(&pipeline);
+    group2.setGroupIndex(2);
+
+    CHECK(group0.rowCount() >= 1);
+    CHECK(group1.rowCount() >= 1);
+    CHECK(group2.rowCount() >= 1);
 }
