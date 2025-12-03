@@ -60,7 +60,7 @@ public:
     cwErrorModel* errorModel() const;
 
     int tripCount() const;
-    cwTrip* trip(int index) const;
+    Q_INVOKABLE cwTrip* trip(int index) const;
     bool hasTrips() const { return tripCount() > 0; }
     QList<cwTrip*> trips() const;
 

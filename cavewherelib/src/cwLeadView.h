@@ -62,7 +62,7 @@ private:
     cwSelectionManager* SelectionMananger;
 
     struct ScrapEntry {
-        int scrapLeadId;
+        int scrapLeadId = -1;
         QVector<QQuickItem*> items;
     };
 
