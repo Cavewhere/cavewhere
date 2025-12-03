@@ -8,7 +8,7 @@ MainWindowTest {
     id: rootId
 
     TestCase {
-        name: "KeywordTabLoadProject"
+        name: "KeywordTab"
         when: windowShown
 
         function cleanup() {
