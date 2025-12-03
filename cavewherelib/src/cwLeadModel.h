@@ -26,7 +26,7 @@ class cwCave;
  * to hook up all the scraps.  The cwScrap holds all the leads, and the cave is used to filter
  * the scrap's that are relevant to the cave.
  */
-class cwLeadModel : public QAbstractListModel
+class CAVEWHERE_LIB_EXPORT cwLeadModel : public QAbstractListModel
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(LeadModel)
