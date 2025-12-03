@@ -123,6 +123,8 @@ StandardPage {
 
                 Layout.fillHeight: true
                 model: LeadsSortFilterProxyModel {
+                    id: proxyModel
+
                     //We check if the leadPage is visible to improve preformance where leadModel changes
                     source: leadModel //leadPage.visible ? leadModel : null
 
@@ -135,7 +137,7 @@ StandardPage {
 
                 //This will populate the HorizontalHeader
                 columnModel.children: [
-                    TableStaticColumn { id: doneColumnId; columnWidth: 50; text: "Done" },
+                    TableStaticColumn { id: doneColumnId; columnWidth: 50; text: "Done" ; sortRole: LeadModel.LeadCompleted },
                     TableStaticColumn { id: gotoColumnId; columnWidth: 50; text: "Goto" },
                     TableStaticColumn { id: nearestColumnId; columnWidth: 75; text: "Nearest"; sortRole: LeadModel.LeadNearestStation },
                     TableStaticColumn { id: sizeColumnId; columnWidth: 75; text: "Size"; sortRole: LeadModel.LeadSizeAsString},
@@ -172,15 +174,16 @@ StandardPage {
                             implicitWidth: doneColumnId.columnWidth
                             implicitHeight: checkbox.implicitHeight
                             clip: true
-                            QC.CheckBox {
+
+                            QQ.Image {
                                 id: checkbox
+                                source: "qrc:/twbs-icons/icons/check-lg.svg"
+                                sourceSize: Qt.size(parent.implicitHeight, parent.implicitHeight)
                                 anchors.verticalCenter: parent.verticalCenter
                                 anchors.horizontalCenter: parent.horizontalCenter
-
-                                enabled: false
+                                visible: delegateId.leadCompleted
                             }
                         }
-
 
                         QQ.Item {
                             implicitWidth: gotoColumnId.columnWidth
