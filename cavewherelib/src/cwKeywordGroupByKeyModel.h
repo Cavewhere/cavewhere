@@ -2,13 +2,9 @@
 #define CWKEYWORDGROUPBYKEYMODEL_H
 
 //Our include
-#include "cwKeywordItemModel.h"
 #include "cwGlobals.h"
-#include "cwKeyword.h"
-#include "cwEntityAndKeywords.h"
 #include "cwKeywordFilterModel.h"
 class cwKeywordModel;
-class cwEntityKeywordsModel;
 class cwKeywordFilterModel;
 
 //Qt includes
