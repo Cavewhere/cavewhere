@@ -112,13 +112,13 @@ void cwLinkBarModel::updateNames()
         endInsertRows();
     }
 
-#ifdef CW_DEBUG
+#ifdef QT_DEBUG
     QStringList names2 = Address.split(cwPageSelectionModel::seperator());
     Q_ASSERT(Names.size() == names2.size());
     for(int i = 0; i < names2.size(); i++) {
         Q_ASSERT(Names.at(i) == names2.at(i));
     }
-#endif /* CW_DEBUG */
+#endif /* QT_DEBUG */
 }
 
 /**
