@@ -14,7 +14,10 @@
 #include <QObject>
 #include <QQmlEngine>
 
-class cwUnits : public QObject
+//Our includes
+#include "cwGlobals.h"
+
+class CAVEWHERE_LIB_EXPORT cwUnits : public QObject
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(Units)
