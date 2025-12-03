@@ -184,7 +184,7 @@ private:
         if(accepted != row.accepted) {
             row.accepted = accepted;
 
-            for(auto index : row.indexes) {
+            for(const auto& index : std::as_const(row.indexes)) {
                 setAcceptIndex(index, accepted);
             }
 

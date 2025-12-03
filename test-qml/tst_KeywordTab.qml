@@ -417,5 +417,67 @@ MainWindowTest {
 
             // wait(1000000)
         }
+
+        function test_togglePlanScrapVisibility() {
+            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000 2024.2.cw");
+
+            RootData.pageSelectionModel.gotoPageByName(null, "View");
+            let layersTab = findChild(rootId.mainWindow, "layersTabButton");
+            verify(layersTab !== null);
+            mouseClick(layersTab);
+            wait(150);
+
+            let delegate = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0");
+            verify(delegate);
+
+            let keyCombo = findChild(delegate, "keyCombo");
+            verify(keyCombo);
+            keyCombo.currentIndex = keyCombo.model.indexOf("Orientation");
+            delegate.filterModelObjectRole.key = keyCombo.currentText;
+            verify(delegate.filterModelObjectRole.key === "Orientation");
+
+            let filterModel = delegate.filterModelObjectRole;
+            verify(filterModel);
+            tryVerify(() => filterModel.rowCount() > 0);
+
+            let planRowIndex = -1;
+            for(let i = 0; i < filterModel.rowCount(); ++i) {
+                let modelIndex = filterModel.index(i, 0);
+                let value = filterModel.data(modelIndex, KeywordGroupByKeyModel.ValueRole);
+                if(value === "Plan") {
+                    planRowIndex = i;
+                    break;
+                }
+            }
+            verify(planRowIndex >= 0);
+
+            let planModelIndex = filterModel.index(planRowIndex, 0);
+            verify(planModelIndex.valid);
+
+            let planObjects = filterModel.data(planModelIndex, KeywordGroupByKeyModel.ObjectsRole);
+            verify(planObjects && planObjects.length > 0);
+
+            let planCheckbox = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->row" + planRowIndex + "->checkbox");
+            verify(planCheckbox);
+
+            let allPlanVisible = (expected) => {
+                for(let i = 0; i < planObjects.length; ++i) {
+                    let obj = planObjects[i];
+                        console.log("Obj.visible:" + obj + " " + obj.visible)
+                    if(!obj || obj.visible !== expected) {
+                        return false;
+                    }
+                }
+                return true;
+            };
+
+            tryVerify(() => allPlanVisible(true));
+
+            mouseClick(planCheckbox);
+            tryVerify(() => allPlanVisible(false));
+
+            mouseClick(planCheckbox);
+            tryVerify(() => allPlanVisible(true));
+        }
     }
 }

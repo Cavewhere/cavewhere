@@ -15,8 +15,6 @@ cwKeywordFilterPipelineModel::cwKeywordFilterPipelineModel(QObject *parent) :
     mUniqueAcceptedModel(new cwUniqueValueFilterModel(this)),
     mRejectedModel(new cwKeywordFilterModel(this))
 {
-    mRejectedModel->setCheckForInvalidRows(true); //This prevents an bad index assert, when we're a middle state in connections
-
     mUniqueAcceptedModel->setSourceModel(mAcceptedModel);
     mUniqueAcceptedModel->setUniqueRole(cwKeywordItemModel::ObjectRole);
     mUniqueAcceptedModel->setLessThan([](const QVariant& left, const QVariant& right) {
