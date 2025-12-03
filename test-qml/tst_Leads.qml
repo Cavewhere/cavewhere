@@ -103,16 +103,6 @@ MainWindowTest {
             let cave = RootData.region.cave(0);
             let trip = cave.trip(0);
 
-            // // Open data page
-            // let dataButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->mainSideBar->dataButton");
-            // mouseClick(dataButton);
-            // tryVerify(() => RootData.pageView.currentPageItem.objectName === "dataMainPage");
-
-            // // Open cave page
-            // let caveLink = ObjectFinder.findObjectByChain(mainWindow, "rootId->dataMainPage->caveDelegate0->caveLink");
-            // mouseClick(caveLink);
-            // tryVerify(() => RootData.pageView.currentPageItem.objectName === "cavePage");
-
             // Jump to trip page (first trip in cave)
             RootData.pageSelectionModel.currentPageAddress = "Data/Cave=" + cave.name + "/Trip=" + trip.name;
             tryVerify(() => RootData.pageView.currentPageItem.objectName === "tripPage");
@@ -140,13 +130,6 @@ MainWindowTest {
             verify(scrapView)
             // scrapView.selectScrapIndex = 0;
             tryVerify(() => scrapView.selectedScrapItem !== null);
-
-            // // Add a lead
-            // let addLeadButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->addLeads");
-            // mouseClick(addLeadButton);
-
-            // let imageItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId");
-            // mouseClick(imageItem, imageItem.width * 0.5, imageItem.height * 0.5);
 
             // Fill in lead details
             let widthText = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->leadEditor->widthText");
