@@ -62,8 +62,6 @@ private:
 
     template<typename R, typename C, typename F>
     R findElementRunAction(const QModelIndex& sourceIndex, C objectCompareFunc, F actionFunc) {
-        qDebug() << "findElementRunAction:" << this << sourceIndex << mAcceptedSourceIndexes;
-
         if(!sourceIndex.isValid()) {
             return R();
         }
