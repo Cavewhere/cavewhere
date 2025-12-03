@@ -6,6 +6,7 @@ import QtQml
 // import QtQuick.Controls as QC1
 import QtQuick.Controls as QC
 import QtQuick.Layouts
+import QtQuick.Dialogs as QD
 import cavewherelib
 
 StandardPage {
@@ -20,6 +21,27 @@ StandardPage {
         cave: leadPage.cave
     }
 
+    LeadCSVExporter {
+        id: leadExporter
+        model: tableView.model
+        leadModel: leadModel
+        futureManagerToken: RootData.futureManagerModel.token
+    }
+
+    QD.FileDialog {
+        id: exportLeadDialog
+
+        title: "Export leads to CSV"
+        nameFilters: ["CSV files (*.csv)", "All files (*)"]
+        fileMode: QD.FileDialog.SaveFile
+        currentFolder: RootData.lastDirectory
+
+        onAccepted: {
+            RootData.lastDirectory = selectedFile
+            leadExporter.exportToFile(selectedFile)
+        }
+    }
+
     HelpBox {
         objectName: "noLeadsHelpBox"
         anchors.centerIn: parent
@@ -32,6 +54,8 @@ StandardPage {
         anchors.margins: 3
 
         RowLayout {
+            implicitWidth: scrollViewId.implicitWidth
+
             QC.TextField {
                 id: searchBox
 
@@ -64,6 +88,14 @@ StandardPage {
                 id: distanceStationHelpArea
                 implicitWidth: 200
                 text: "Lead distance from a station, calculates the <b>line of sight</b> distance from the station to all the leads."
+            }
+
+            QQ.Item { implicitWidth: 50 }
+
+            QC.Button {
+                text: "Export CSV"
+                enabled: tableView.count > 0
+                onClicked: exportLeadDialog.open()
             }
         }
 
@@ -241,4 +273,3 @@ StandardPage {
         }
     }
 }
-
