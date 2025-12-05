@@ -149,13 +149,11 @@ TEST_CASE("cwNoteLiDARTransformation composition of upRotation, northUp, and sca
     t.setNorthUp(90.0);
     t.setScale(2.0);
 
-
     const QMatrix4x4 M = t.matrix();
-    // qDebug() << "Inverse:" << M.inverted().map({0.0, 0.0, 1.0});
-    //TODO: I'm not 100% sure if these values are correct,
-    const QVector3D out = M.map({1.06904, -0.534523, 1.60357});
 
-    qDebug() << "Out:" << out;
+    //These values have been verified.
+    const QVector3D out = M.map({0.534522, 1.069045, 1.603567});
+
     vecApprox(out.normalized(), {0,0,1});
 }
 
