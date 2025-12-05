@@ -245,7 +245,7 @@ QQ.Rectangle {
         radius: 7
         visible: true
 
-        color: Theme.sidebar
+        color: Theme.floatingWidgetColor
 
         ShadowRectangle {
             id: errorBoxId
