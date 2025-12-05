@@ -51,8 +51,6 @@ TEST_CASE("cwKeywordFilterPipelineModel clear resets to defaults", "[cwKeywordFi
 }
 
 TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipelineModel]") {
-    qDebug() << "Start test";
-
     cwKeywordFilterPipelineModel model;
 
     auto keywordEntityModel = std::make_unique<cwKeywordItemModel>();
@@ -147,7 +145,7 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
 
         auto findInModel = [](QObject* obj, QAbstractItemModel* model) {
             for(int i = 0; i < model->rowCount(); i++) {
-                qDebug() << "findInModel:" << (model->index(i, 0).data(cwKeywordItemModel::ObjectRole).value<QObject*>() == obj) << model->index(i, 0).data(cwKeywordItemModel::ObjectRole).value<QObject*>() << obj;
+                // qDebug() << "findInModel:" << (model->index(i, 0).data(cwKeywordItemModel::ObjectRole).value<QObject*>() == obj) << model->index(i, 0).data(cwKeywordItemModel::ObjectRole).value<QObject*>() << obj;
                 if(model->index(i, 0).data(cwKeywordItemModel::ObjectRole).value<QObject*>() == obj) {
                     return true;
                 }
@@ -156,13 +154,13 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
         };
 
         CHECK(model.acceptedModel()->rowCount() == acceptedObjects.size());
-        qDebug() << "Check accepted:";
+        // qDebug() << "Check accepted:";
         for(auto obj : acceptedObjects) {
             INFO("Obj:" << obj->objectName().toStdString());
             CHECK(findInModel(obj, model.acceptedModel()));
         }
 
-        qDebug() << "Check rejected:";
+        // qDebug() << "Check rejected:";
         CHECK(model.rejectedModel()->rowCount() == rejectedObjects.size());
         for(auto obj : rejectedObjects) {
             INFO("Obj:" << obj->objectName().toStdString());
@@ -481,12 +479,12 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
                                 qDebug() << "Rejected:" << index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
                             }
 
-                            dynamic_cast<cwUniqueValueFilterModel*>(model.acceptedModel())->printRows();
+                            // dynamic_cast<cwUniqueValueFilterModel*>(model.acceptedModel())->printRows();
 
                             qDebug() << "Or";
                             CHECK(model.setData(model.index(1), cwKeywordFilterPipelineModel::Or, cwKeywordFilterPipelineModel::OperatorRole));
 
-                            dynamic_cast<cwUniqueValueFilterModel*>(model.acceptedModel())->printRows();
+                            // dynamic_cast<cwUniqueValueFilterModel*>(model.acceptedModel())->printRows();
 
                             REQUIRE(model.rowCount() == 2);
                             CHECK(model.index(0).data(cwKeywordFilterPipelineModel::FilterModelObjectRole).value<QAbstractItemModel*>() != nullptr);

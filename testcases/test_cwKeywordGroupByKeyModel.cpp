@@ -7,15 +7,12 @@
 #include "cwKeywordItem.h"
 #include "cwKeywordModel.h"
 #include "cwKeywordItemModel.h"
-#include "cwAsyncFuture.h"
 
 //Qt includes
 #include <QFuture>
 #include <QSignalSpy>
 #include <QVector>
 
-//Async includes
-#include "asyncfuture.h"
 
 //Std includes
 #include <algorithm>

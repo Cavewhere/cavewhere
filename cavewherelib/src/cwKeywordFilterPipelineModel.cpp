@@ -71,10 +71,9 @@ cwKeywordFilterPipelineModel::cwKeywordFilterPipelineModel(QObject *parent) :
                     auto index = mUniqueAcceptedModel->index(i, 0);
                     auto obj = index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
                     Q_ASSERT(obj);
-                    //            mAccepted.insert(obj);
                     auto keywordIndex = findKeywordModelIndex(index);
                     mRejectedModel->remove(keywordIndex);
-                    qDebug() << "Remove from rejected:" << keywordIndex << keywordIndex.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
+                    // qDebug() << "Remove from rejected:" << keywordIndex << keywordIndex.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
                 }
                 validateUniqueModel("rowsInserted");
             });
@@ -83,19 +82,19 @@ cwKeywordFilterPipelineModel::cwKeywordFilterPipelineModel(QObject *parent) :
             this, [this, findKeywordModelIndex, validateUniqueModel](const QModelIndex& parent, int begin, int last)
             {
                 Q_UNUSED(parent);
-                qDebug() << "Rows about to be removed:" << begin << last;
+                // qDebug() << "Rows about to be removed:" << begin << last;
                 for(int i = begin; i <= last; i++) {
                     auto index = mUniqueAcceptedModel->index(i, 0);
                     Q_ASSERT(index.isValid());
 
-                    qDebug() << "Unique model:" << mUniqueAcceptedModel->rowCount() << i;
+                    // qDebug() << "Unique model:" << mUniqueAcceptedModel->rowCount() << i;
 
                     auto obj = index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
                     if(obj) {
                         //Get the original index
                         auto keywordModelIndex = findKeywordModelIndex(index);
 
-                        qDebug() << "adding to rejected:" << index << index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
+                        // qDebug() << "adding to rejected:" << index << index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
                         mRejectedModel->insert(keywordModelIndex);
                     }
                 }
@@ -121,9 +120,9 @@ void cwKeywordFilterPipelineModel::setKeywordModel(cwKeywordItemModel* keywordMo
 
             auto addToRejected = [this, indexObj](int i) {
                 auto [index, obj] = indexObj(i);
-                qDebug() << "try to add to rejected:" << index << index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
+                // qDebug() << "try to add to rejected:" << index << index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
                 if(!mUniqueAcceptedModel->contains(QVariant::fromValue(obj))) {
-                    qDebug() << "adding to rejected from keywordModel:" << index << index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
+                    // qDebug() << "adding to rejected from keywordModel:" << index << index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
                     mRejectedModel->insert(index);
                 }
             };
@@ -315,9 +314,9 @@ void cwKeywordFilterPipelineModel::link(int i)
 {
     linkFirst(i);
     linkLast(i);
-    qDebug() << "Pipeline: " << i;
+    // qDebug() << "Pipeline: " << i;
     linkPipelineAt(i);
-    qDebug() << "Pipeline: + 1";
+    // qDebug() << "Pipeline: + 1";
     linkPipelineAt(i + 1);
 }
 
@@ -365,16 +364,16 @@ void cwKeywordFilterPipelineModel::linkLast(int i)
                      Q_ASSERT(previousRow.filter->acceptedModel());
                      if(mAcceptedModel->sourceModels().contains(previousRow.filter->acceptedModel())) {
                          mAcceptedModel->removeSourceModel(previousRow.filter->acceptedModel());
-                         qDebug() << "removed linkLast:" << previousRow.filter->acceptedModel() << mAcceptedModel->sourceModels();
+                         // qDebug() << "removed linkLast:" << previousRow.filter->acceptedModel() << mAcceptedModel->sourceModels();
                      }
                  });
 
-        qDebug() << "adding linkLast:" << mRows.at(i).filter->acceptedModel() << "existing models:" << mAcceptedModel->sourceModels();
-        qDebug() << "mRows.at(i).filter" << mRows.at(i).filter->acceptedModel();
-        for(int j = 0; j < mRows.at(i).filter->acceptedModel()->rowCount(); j++) {
-            auto index = mRows.at(i).filter->acceptedModel()->index(j);;
-            qDebug() << "Index:" << index << index.isValid();
-        }
+        // qDebug() << "adding linkLast:" << mRows.at(i).filter->acceptedModel() << "existing models:" << mAcceptedModel->sourceModels();
+        // qDebug() << "mRows.at(i).filter" << mRows.at(i).filter->acceptedModel();
+        // for(int j = 0; j < mRows.at(i).filter->acceptedModel()->rowCount(); j++) {
+        //     auto index = mRows.at(i).filter->acceptedModel()->index(j);;
+        //     qDebug() << "Index:" << index << index.isValid();
+        // }
 
         if(!mAcceptedModel->sourceModels().contains(mRows.at(i).filter->acceptedModel())) {
             mAcceptedModel->addSourceModel(mRows.at(i).filter->acceptedModel());

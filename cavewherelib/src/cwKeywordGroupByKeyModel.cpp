@@ -1,13 +1,8 @@
 //Our includes
 #include "cwKeywordGroupByKeyModel.h"
 #include "cwKeyword.h"
-#include "cwAsyncFuture.h"
 #include "cwGlobals.h"
-#include "cwKeywordModel.h"
 #include "cwKeywordFilterModel.h"
-
-//Async includes
-#include "asyncfuture.h"
 
 //Qt includes
 #include <QtConcurrent>
@@ -22,7 +17,7 @@ cwKeywordGroupByKeyModel::cwKeywordGroupByKeyModel(QObject *parent) :
 
 cwKeywordGroupByKeyModel::~cwKeywordGroupByKeyModel()
 {
-    qDebug() << "Deleting:" << this << "also deleting:" << mAcceptedModel;
+    // qDebug() << "Deleting:" << this << "also deleting:" << mAcceptedModel;
 }
 
 int cwKeywordGroupByKeyModel::rowCount(const QModelIndex &parent) const
@@ -41,7 +36,7 @@ QVariant cwKeywordGroupByKeyModel::data(const QModelIndex &index, int role) cons
     case ObjectsRole: {
         QVector<QObject*> objects;
         objects.reserve(row.indexes.size());
-        for(auto index : row.indexes) {
+        for(const auto& index : std::as_const(row.indexes)) {
             objects.append(index.data(cwKeywordItemModel::ObjectRole).value<QObject*>());
         }
         return QVariant::fromValue(objects);
@@ -324,7 +319,7 @@ void cwKeywordGroupByKeyModel::Filter::filterEntity(const QModelIndex& sourceInd
     //Existing values for the entity
     QSet<QString> oldValues = entityValues(sourceIndex);
 
-    for(const auto& keyword : qAsConst(keywords)) {
+    for(const auto& keyword : std::as_const(keywords)) {
         //One of sourceIndex's keys matches the key were's filtering by
         if(keyword.key() == key) {
             if(!oldValues.contains(keyword.value())) {
@@ -336,7 +331,7 @@ void cwKeywordGroupByKeyModel::Filter::filterEntity(const QModelIndex& sourceInd
         }
     }
 
-    for(const auto& valueToRemove : oldValues) {
+    for(const auto& valueToRemove : std::as_const(oldValues)) {
         removeEntity(valueToRemove, sourceIndex);
     }
 }
@@ -352,7 +347,7 @@ void cwKeywordGroupByKeyModel::Filter::removeEntityFromAllRows(const QModelIndex
 QSet<QString> cwKeywordGroupByKeyModel::Filter::entityValues(const QModelIndex& sourceIndex) const
 {
     QSet<QString> valuesOfEntity;
-    for(const auto& row : qAsConst(model->mData.Rows)) {
+    for(const auto& row : std::as_const(model->mData.Rows)) {
         if(row.indexes.contains(sourceIndex)) {
             valuesOfEntity.insert(row.value);
         }

@@ -9,7 +9,7 @@
 
 cwKeywordFilterModel::cwKeywordFilterModel(QObject *parent) : QAbstractProxyModel(parent)
 {
-    qDebug() << "Created:" << this << parent;
+    // qDebug() << "Created:" << this << parent;
 }
 
 QModelIndex cwKeywordFilterModel::index(int row, int column, const QModelIndex &parent) const

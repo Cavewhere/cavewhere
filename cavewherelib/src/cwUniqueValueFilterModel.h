@@ -104,7 +104,7 @@ private:
     void disconnectSourceModel();
 
     inline Row toRow(const QModelIndex& sourceIndex) {
-        qDebug() << "toRow:" << this << uniqueValue(sourceIndex);
+        // qDebug() << "toRow:" << this << uniqueValue(sourceIndex);
         return {sourceIndex, uniqueValue(sourceIndex)};
     }
 

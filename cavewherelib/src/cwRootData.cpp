@@ -143,7 +143,7 @@ cwRootData::cwRootData(QObject *parent) :
     connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, [&]() { Project->waitSaveToFinish(); });
 
     connect(Project, &cwProject::filenameChanged, this, [this]() {
-        qDebug() << "Clearing pipeline models!";
+        // qDebug() << "Clearing pipeline models!";
         m_keywordFilterPipelineModel->clear();
         m_keywordItemModel->clear();
 

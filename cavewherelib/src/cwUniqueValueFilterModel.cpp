@@ -159,7 +159,7 @@ void cwUniqueValueFilterModel::connectSourceModel()
     auto insert = [this](const QModelIndex& sourceIndex) {
         Q_ASSERT(sourceIndex.isValid());
 
-        qDebug() << "cwUniqueValueFilterModel: insert" << sourceIndex;
+        // qDebug() << "cwUniqueValueFilterModel: insert" << sourceIndex;
 
         findRunAction<void>(sourceIndex,
                             [this, sourceIndex](auto iter) { return !contains(iter, sourceIndex); },
@@ -215,9 +215,9 @@ void cwUniqueValueFilterModel::connectSourceModel()
         }
 
         // Q_ASSERT(sourceModel() == sender()); //if this fails, we haven't disconnected a old sourceModel()
-        qDebug() << "SourcModel:" << sourceModel() << sourceModel()->rowCount() << sourceModel()->columnCount() << sourceModel()->hasIndex(0, 0);
+        // qDebug() << "SourcModel:" << sourceModel() << sourceModel()->rowCount() << sourceModel()->columnCount() << sourceModel()->hasIndex(0, 0);
+        // qDebug() << "Insert:" << first << last;
 
-        qDebug() << "Insert:" << first << last;
         for(int i = first; i <= last; i++) {
             const auto index = this->sourceModel()->index(i, 0);
             insert(index);
