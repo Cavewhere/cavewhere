@@ -286,7 +286,6 @@ if(APPLE)
         add_custom_command(TARGET CaveWhere POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy ${PLUGIN_DIR}/qmldir ${BUNDLE_QML_DIR}/qmldir
             COMMAND ${CMAKE_COMMAND} -E copy ${PLUGIN_DIR}/cavewherelib.qmltypes ${BUNDLE_QML_DIR}/cavewherelib.qmltypes
-            COMMAND ${CMAKE_COMMAND} -E copy ${PLUGIN_DIR}/qml/Theme.js ${BUNDLE_QML_DIR}/qml/Theme.js
             COMMAND ${CMAKE_COMMAND} -E copy ${PLUGIN_DIR}/qml/Utils.js ${BUNDLE_QML_DIR}/qml/Utils.js
             COMMAND ${CMAKE_COMMAND} -E copy ${PLUGIN_DIR}/qml/VectorMath.js ${BUNDLE_QML_DIR}/qml/VectorMath.js
             COMMENT "Copying qmldir and cavewherelib.qmltypes to Resources/qml."
