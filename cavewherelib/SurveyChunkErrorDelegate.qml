@@ -1,7 +1,7 @@
 import QtQuick as QQ
 import QtQuick.Layouts
 import cavewherelib
-
+import QtQuick.Controls as QC
 QQ.Rectangle {
     id: delegateId
 
@@ -13,13 +13,13 @@ QQ.Rectangle {
     // height: parent !== null ? parent.height : 0
     // border.color: "#7E0000"
     // border.width: 1
-    color: "#00000000"
+    color: Theme.transparent
     visible: chunk !== null ? chunk.errorModel.errors.count > 0 : false
 
 
 
     QQ.Rectangle {
-        color: "#F6A8AA"
+        color: Theme.danger
         parent: delegateId.parent
         width: delegateId.width
         height: delegateId.height
@@ -54,4 +54,3 @@ QQ.Rectangle {
         }
     }
 }
-

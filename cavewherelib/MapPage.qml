@@ -59,22 +59,29 @@ QQ.Item {
 
         anchors.fill: parent
 
-        QuickSceneView {
-            id: quickSceneView
+        QQ.Rectangle {
             QC.SplitView.preferredWidth: rowLayoutId.width * 0.5
-            // implicitWidth: 300
-            // Layout.fillHeight: true
-            // Layout.fillWidth: true
-            scene: screenCaptureManagerId.scene
-            clip: true
 
-            CaptureItemManiputalor {
-                id: captureItemManiputalorId
-                anchors.fill: parent;
-                view: quickSceneView
-                manager: screenCaptureManagerId
+            color: "#ffffff"
+
+            QuickSceneView {
+                id: quickSceneView
+                // implicitWidth: 300
+                // Layout.fillHeight: true
+                // Layout.fillWidth: true
+                anchors.fill: parent
+                scene: screenCaptureManagerId.scene
+                clip: true
+
+                CaptureItemManiputalor {
+                    id: captureItemManiputalorId
+                    anchors.fill: parent;
+                    view: quickSceneView
+                    manager: screenCaptureManagerId
+                }
             }
         }
+
 
         QC.ScrollView {
             padding: 5
@@ -93,7 +100,7 @@ QQ.Item {
                 QQ.Rectangle {
                     Layout.fillHeight: true
                     width: 1
-                    color: "#4C4C4C"
+                    color: Theme.divider
                 }
 
                 MapOptions {

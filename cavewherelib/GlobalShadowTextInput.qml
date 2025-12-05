@@ -7,6 +7,7 @@
 pragma Singleton
 
 import QtQuick as QQ
+import cavewherelib
 
 QQ.MouseArea {
     id: globalMouseArea
@@ -44,7 +45,7 @@ QQ.MouseArea {
         id: shadowEditor
         visible: false;
 
-        color: "white"
+        color: Theme.surface
 
         width:  globalMouseArea.minWidth > input.width + 6 ? globalMouseArea.minWidth : input.width  + 6
         height: globalMouseArea.minHeight > input.height + 6 ? globalMouseArea.minHeight : input.height + 6

@@ -1,22 +1,21 @@
-import QtQuick
+import QtQuick as QQ
+import cavewherelib
 
-Rectangle {
+QQ.Rectangle {
 
     required property bool isSelected;
     required property int rowIndex;
 
-    anchors.fill: parent
-
     color: {
         if(isSelected) {
             //Selected
-            return "#d6e6ff"
+            return Theme.highlight
         } else {
             //Alternating color background
             if(rowIndex % 2 == 1) {
-                return "#f2f2f2"
+                return Theme.surfaceMuted
             } else {
-                return "white"
+                return Theme.surface
             }
         }
     }

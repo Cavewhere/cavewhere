@@ -9,7 +9,7 @@
 import QtQuick.Layouts
 import QtQuick as QQ;
 import cavewherelib
-import QtQuick.Controls as Controls;
+import QtQuick.Controls as QC
 
 FloatingGroupBox {
     id: floatingGroup
@@ -29,7 +29,7 @@ FloatingGroupBox {
     ColumnLayout {
         id: layoutId
         RowLayout {
-            Controls.RoundButton {
+            RoundButton {
                 id: setResolution
                 objectName: "setResolution"
                 icon.source: "qrc:/icons/svg/measurement.svg"
@@ -51,8 +51,8 @@ FloatingGroupBox {
 
             ContextMenuButton {
 
-                menu:Controls.Menu {
-                    Controls.MenuItem {
+                menu:QC.Menu {
+                    QC.MenuItem {
                         text: {
                             var tripName = ""
                             if(floatingGroup.note !== null && floatingGroup.note.parentTrip() !== null) {
@@ -63,7 +63,7 @@ FloatingGroupBox {
                         onTriggered: floatingGroup.note.propagateResolutionNotesInTrip();
                     }
 
-                    Controls.MenuItem {
+                    QC.MenuItem {
                         text: "Reset to original"
                         onTriggered: floatingGroup.note.resetImageResolution()
                     }

@@ -8,7 +8,7 @@
 import cavewherelib
 import QtQuick.Dialogs
 
-IconButton {
+NeutralIconButton {
     id: buttonId
 
     signal filesSelected(list<url> images)

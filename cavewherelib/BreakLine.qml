@@ -7,6 +7,7 @@
 
 import QtQuick as QQ
 import QtQuick.Layouts
+import cavewherelib
 
 QQ.Item {
     Layout.fillWidth: true
@@ -20,7 +21,6 @@ QQ.Item {
         anchors.rightMargin: 10
         anchors.verticalCenter: parent.verticalCenter
         height: 1
-        color: "#4C4C4C"
+        color: Theme.divider
     }
 }
-

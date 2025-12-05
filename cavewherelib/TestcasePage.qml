@@ -30,7 +30,7 @@ StandardPage {
 
         z: 1
         triangleOffset: 0.8
-        color: "#FF9C14"
+        color: Theme.warning
         borderColor: "black"
         Text {
             text: "Click to run testcases"

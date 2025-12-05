@@ -1,7 +1,7 @@
 import QtQuick as QQ
 //import QtQuick.Dialogs
 //import QtQuick.Layouts
-import QtQuick.Controls as Controls
+import QtQuick.Controls as QC
 import cavewherelib
 
 QQ.Loader {
@@ -38,7 +38,7 @@ QQ.Loader {
 
         anchors.centerIn: parent
 
-        Controls.Dialog {
+        QC.Dialog {
             id: errorDialogId
 
             property int issueCount: itemId.model ? itemId.model.count : 0
@@ -47,7 +47,7 @@ QQ.Loader {
             modal: true
             width: 600
 
-            standardButtons: Controls.Dialog.Ok
+            standardButtons: QC.Dialog.Ok
             title: issueCount + " issue" + ((issueCount > 1) ? "s" : "") + " has occurred"
 
             onAccepted: {
@@ -62,7 +62,7 @@ QQ.Loader {
                 anchors.fill: parent
                 implicitHeight: 150
 
-                Controls.ScrollView {
+                QC.ScrollView {
                     clip: true
                     anchors.fill: parent
 

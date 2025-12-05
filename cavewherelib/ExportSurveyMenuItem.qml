@@ -6,9 +6,9 @@
 **************************************************************************/
 
 // import QtQuick as QQ // to target S60 5th Edition or Maemo 5
-import QtQuick.Controls
-
-MenuItem {
+import QtQuick.Controls as QC
+import cavewherelib
+QC.MenuItem {
 
     property string prefixText
     property string currentText

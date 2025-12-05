@@ -6,6 +6,8 @@
 **************************************************************************/
 
 import QtQuick as QQ
+import QtQuick.Controls as QC
+import cavewherelib
 
 QQ.Rectangle {
     property alias text: textArea.text
@@ -13,8 +15,10 @@ QQ.Rectangle {
     width: Math.floor(textArea.width) + 20
     height: 40
 
-    border.color: "lightgray"
+    border.color: Theme.borderSubtle
     border.width: 1;
+
+    color: Theme.surface
 
     Text {
         id: textArea

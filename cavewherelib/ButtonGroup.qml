@@ -7,6 +7,8 @@
 
 import QtQuick as QQ
 import QtQuick.Layouts
+import QtQuick.Controls as QC
+import cavewherelib
 
 QQ.Item {
     property alias text: groupText.text
@@ -22,7 +24,8 @@ QQ.Item {
         height: buttonArea.implicitHeight + 3 + textRect.height / 2.0
 
         border.width: 1
-        border.color: "black"
+        border.color: Theme.border
+        color: Theme.surface
 
         //color: "gray"
 
@@ -52,7 +55,7 @@ QQ.Item {
         height: groupText.height + 3
 
         radius: 3
-//        color: "white"
+        color: Theme.surface
         border.width: 1
 
         Text {

@@ -1,9 +1,9 @@
-import QtQuick
-import QtQuick.Controls
+import QtQuick as QQ
+import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
 
-Rectangle {
+QQ.Rectangle {
     id: delegate
 
     enum Sort {
@@ -27,10 +27,10 @@ Rectangle {
 
     implicitWidth: textId.implicitWidth + (cellPadding * 2)
     implicitHeight: textId.implicitHeight + (cellPadding * 2)
-    color: "#f6f6f6"
-    border.color: "#e4e4e4"
+    color: Theme.surfaceMuted
+    border.color: Theme.borderSubtle
 
-    Connections {
+    QQ.Connections {
         target: delegate._sortModel
         function onSortRoleChanged() {
             if(delegate._sortModel.sortRole != delegate.sortRole) {
@@ -39,7 +39,7 @@ Rectangle {
         }
     }
 
-    Item {
+    QQ.Item {
         width: delegate.width
         height: delegate.height
 
@@ -48,7 +48,7 @@ Rectangle {
 
             spacing: 1
 
-            Image {
+            QQ.Image {
                 id: sortImageId
                 visible: delegate.sortMode != TableStaticColumn.Sort.None
                 source: "qrc:/icons/moreArrowDown.png"
@@ -57,20 +57,20 @@ Rectangle {
                 smooth: true
             }
 
-            Item {
+            QQ.Item {
                 visible: !sortImageId.visible
                 implicitWidth: sortImageId.width
             }
 
-            Label {
+            Text {
                 id: textId
                 text: delegate.text
-                color: "#ff26282a"
+                color: Theme.text
             }
         }
     }
 
-    MouseArea {
+    QQ.MouseArea {
         anchors.fill: parent
         anchors.leftMargin: 5
         anchors.rightMargin: 5

@@ -6,6 +6,9 @@
 **************************************************************************/
 
 import QtQuick as QQ
+import QtQuick.Controls as QC
+import QtQuick.Effects
+import cavewherelib
 
 QQ.Rectangle {
     id: container
@@ -14,6 +17,7 @@ QQ.Rectangle {
     property alias sourceSize: iconNormal.sourceSize;
     property alias text: label.text
     property bool selected: false
+    property bool adjustColor: Theme.dark
 
     signal clicked();
 
@@ -22,7 +26,7 @@ QQ.Rectangle {
     height: iconNormal.sourceSize.height + label.height
     width:  Math.max(iconNormal.sourceSize.width, label.width) + 4
 
-    color: selected ? "#999999" : "#00000000"
+    color: selected ? Theme.highlight : Theme.transparent
 
 
     QQ.Image {
@@ -31,6 +35,15 @@ QQ.Rectangle {
         anchors.top: parent.top
         sourceSize: container.sourceSize
         visible: true;
+
+        layer {
+            enabled: container.adjustColor
+            effect: MultiEffect {
+                colorization: 1.0
+                colorizationColor: Theme.icon
+                brightness: 1.0
+            }
+        }
     }
 
     QQ.Image {
@@ -39,6 +52,15 @@ QQ.Rectangle {
         anchors.top: parent.top
         sourceSize: iconNormal.sourceSize
         visible: false;
+
+        layer {
+            enabled: container.adjustColor
+            effect: MultiEffect {
+                colorization: 1.0
+                colorizationColor: Theme.icon
+                brightness: 1.0
+            }
+        }
     }
 
     Text {

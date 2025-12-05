@@ -164,6 +164,7 @@ StandardPage {
                     TableRowBackground {
                         isSelected: false //tableView.currentIndex == rowDelegate.index
                         rowIndex: delegateId.index
+                        anchors.fill: parent
                     }
 
                     RowLayout {

@@ -6,7 +6,7 @@
 **************************************************************************/
 
 import QtQuick as QQ
-import QtQuick.Controls
+import QtQuick.Controls as QC
 import cavewherelib
 
 QQ.Rectangle {
@@ -15,9 +15,10 @@ QQ.Rectangle {
     property alias cave: usedStationsModel.cave
 
     border.width: 1
-    border.color: "#A7A7A7"
+    border.color: Theme.border
+    color: Theme.surfaceRaised
 
-    ScrollView {
+    QC.ScrollView {
         anchors.rightMargin: 2
         anchors.bottomMargin: 2
         anchors.leftMargin: 2

@@ -8,7 +8,7 @@
 import QtQuick as QQ
 import cavewherelib
 import QtQuick.Layouts
-
+import QtQuick.Controls as QC
 QQ.Item {
     id: cameraSettingsId
 

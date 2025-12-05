@@ -1,6 +1,6 @@
 import QtQuick as QQ
 
-QQ.Rectangle {
+QQ.Item {
     default property alias pageItemData: pageItemId.data
 
     anchors.fill: parent

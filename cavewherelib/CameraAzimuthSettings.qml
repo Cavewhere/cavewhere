@@ -1,8 +1,7 @@
 import QtQuick as QQ
 import QtQuick.Layouts
 import cavewherelib as Cavewhere
-import QtQuick.Controls
-
+import QtQuick.Controls as QC
 ColumnLayout {
     id: settingsId
     required property TurnTableInteraction turnTableInteraction
@@ -19,7 +18,7 @@ ColumnLayout {
             showItemOnClick: directionHelpAreaId
         }
 
-        Button {
+        QC.Button {
             id: northButton
             text: "North"
             onClicked: {
@@ -37,7 +36,7 @@ ColumnLayout {
             }
         }
 
-        Button {
+        QC.Button {
             id: westButton
             text: "West"
             width: northButton.width
@@ -73,7 +72,7 @@ ColumnLayout {
             }
         }
 
-        Button {
+        QC.Button {
             id: eastButton
             objectName: "eastButton"
             text: "East"
@@ -86,7 +85,7 @@ ColumnLayout {
         }
 
         QQ.Item { width:1; height:1 }
-        Button {
+        QC.Button {
             id: southButton
             text: "South"
             width: northButton.width
@@ -99,7 +98,7 @@ ColumnLayout {
         QQ.Item { width:1; height:1 }
     }
 
-    GroupBox {
+    QC.GroupBox {
         title: "Animate"
         enabled: !settingsId.turnTableInteraction.azimuthLocked
 
@@ -107,7 +106,7 @@ ColumnLayout {
 
         RowLayout {
 
-            Button {
+            QC.Button {
                 id: animateAzimuthButton
                 text: checked ? "Stop" : "Start"
                 checkable: true
@@ -124,11 +123,11 @@ ColumnLayout {
                 Layout.fillWidth: true
             }
 
-            Label {
+            Text {
                 text: "Duration"
             }
 
-            TextField {
+            QC.TextField {
                 id: durationTextField
                 implicitWidth: 50
                 text: fullRotationAnimation.duration / 1000
@@ -147,7 +146,7 @@ ColumnLayout {
                 }
             }
 
-            Label {
+            Text {
                 text: "s"
             }
         }

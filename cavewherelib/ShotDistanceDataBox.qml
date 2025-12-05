@@ -6,7 +6,7 @@
 **************************************************************************/
 
 import QtQuick as QQ
-import QtQuick.Controls as Controls
+import QtQuick.Controls as QC
 import cavewherelib
 
 DataBox {
@@ -24,7 +24,7 @@ DataBox {
         width: textId.width + 4
         height: textId.height - 2
 
-        color: "gray"
+        color: Theme.border
         Text {
             id: textId
 
@@ -34,7 +34,7 @@ DataBox {
             // font.family: "monospace"
             font.pixelSize: 14
             font.bold: true
-            color: "#EEEEEE"
+            color: Theme.surfaceMuted
             text: "Excluded"
         }
     }
@@ -56,11 +56,11 @@ DataBox {
 
             opacity: state === "" ? .75 : 1.0
 
-            menu: Controls.Menu {
+            menu: QC.Menu {
                 id: menuId
                 objectName: "excludeMenuId"
 
-                Controls.MenuItem {
+                QC.MenuItem {
                     objectName: "excludeDistanceMenuItem"
                     text: dataBoxId.distanceIncluded ? "Exclude Distance" : "Include Distance"
                     onTriggered: {

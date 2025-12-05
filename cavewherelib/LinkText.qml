@@ -1,16 +1,12 @@
 import QtQuick as QQ
 import cavewherelib
-
+import QtQuick.Controls as QC
 Text {
     id: linkTextId
 
     signal clicked();
 
-    Pallete {
-        id: pallete
-    }
-
-    color:  pallete.inputTextColor
+    color:  Theme.textLink
     font.underline: mouseAreaId.containsMouse
 
     QQ.MouseArea {

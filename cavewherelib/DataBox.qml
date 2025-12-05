@@ -7,8 +7,8 @@
 
 import QtQuick as QQ
 import cavewherelib
-import QtQuick.Controls as Controls;
-import QtQuick.Controls.Basic as BasicControls
+import QtQuick.Controls as QC
+import QtQuick.Controls as QC
 
 QQ.Item {
     id: dataBox
@@ -19,7 +19,7 @@ QQ.Item {
     required property SurveyChunkTrimmer surveyChunkTrimmer; //For interaction
     property alias aboutToDelete: removeBoxId.visible
     readonly property ErrorModel errorModel: dataValue.errorModel
-    required property Controls.ButtonGroup errorButtonGroup
+    required property QC.ButtonGroup errorButtonGroup
     property KeyNavigationContainer navigation: KeyNavigationContainer {}
 
     //The index informantion from cwSurveyEditorModel
@@ -176,9 +176,9 @@ QQ.Item {
         id: rightClickMenuLoader
         active: false
 
-        sourceComponent: Controls.Menu {
+        sourceComponent: QC.Menu {
 
-            Controls.MenuItem {
+            QC.MenuItem {
                 text: "Remove Chunk"
                 onTriggered: {
                     dataBox.dataValue.chunk.parentTrip.removeChunk(dataBox.dataValue.chunk)
@@ -231,11 +231,11 @@ QQ.Item {
         gradient: QQ.Gradient {
             QQ.GradientStop {
                 position: dataBox.dataValue.indexInChunk % 2 === 0 ? 1.0 : 0.0
-                color:  "#DDF2FF"
+                color:  Theme.surfaceRaised
             }
             QQ.GradientStop {
                 position: dataBox.dataValue.indexInChunk % 2 === 0 ? 0.4 : 0.6
-                color:  "white"
+                color:  Theme.surface
             }
         }
 
@@ -250,24 +250,24 @@ QQ.Item {
                                    && dataBox.dataValue.chunk.isShotRole(dataBox.dataValue.chunkDataRole)
         anchors.fill: parent
         visible: dataBox.dataValue.chunk ? dataBox.dataValue.chunk.isShotRole(dataBox.dataValue.chunkDataRole) : false
-        color: offsetColor ? "#DDF2FF" : "white"
+        color: offsetColor ? Theme.surfaceRaised : Theme.surface
     }
 
     QQ.Rectangle {
         id: border
         anchors.fill: parent
-        border.color:  "lightgray"
-        color: "#00000000"
+        border.color:  Theme.borderSubtle
+        color: Theme.transparent
         border.width: 1
     }
 
     QQ.Rectangle {
         id: interalHighlight
-        border.color: "black"
+        border.color: Theme.border
         anchors.fill: parent
         anchors.margins: 1
         border.width: 1
-        color: "#00000000"
+        color: Theme.transparent
         visible: dataBox.focus || editor.isEditting
     }
 
@@ -356,10 +356,10 @@ QQ.Item {
                 anchors.margins: 1
                 border.width: 1
                 border.color: dataBox.errorAppearance(dataBox.errorBorderColor)
-                color: "#00000000"
+                color: Theme.transparent
                 visible: errorBorderLoaderId.shouldBeVisible || errorIcon.checked
 
-                Controls.RoundButton {
+                RoundButton {
                     id: errorIcon
                     objectName: "errorIcon"
 
@@ -378,13 +378,13 @@ QQ.Item {
                     anchors.margins: 2
 
                     //Make the popup go away when another error button is pressed
-                    Controls.ButtonGroup.group: dataBox.errorButtonGroup
+                    QC.ButtonGroup.group: dataBox.errorButtonGroup
 
                     background: QQ.Rectangle {
                         implicitWidth: 12
                         implicitHeight: 12
-                        color: errorIcon.down || errorIcon.checked ? "#d6d6d6" : "#f6f6f6"
-                        border.color: "#26282a"
+                        color: errorIcon.down || errorIcon.checked ? Theme.surfaceRaised : Theme.surfaceMuted
+                        border.color: Theme.border
                         border.width: 1
                         radius: 0
                     }

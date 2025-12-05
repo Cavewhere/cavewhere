@@ -26,7 +26,7 @@ QQ.Item {
     RowLayout {
         id: row
 
-        QC.RoundButton {
+        RoundButton {
             id: setNorthButton
             objectName: "setNorthButton"
             radius: 2

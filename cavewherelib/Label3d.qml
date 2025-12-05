@@ -1,3 +1,5 @@
+import QtQuick.Controls as QC
+import cavewherelib
 /**************************************************************************
 **
 **    Copyright (C) 2013 by Philip Schuchardt
@@ -8,8 +10,8 @@
 // import QtQuick as QQ // to target S60 5th Edition or Maemo 5
 
 Text {
-    color: "white"
+    color: Theme.textInverse
     style: Text.Outline;
-    styleColor: "black"
+    styleColor: Theme.text
     font.pixelSize: 16
 }

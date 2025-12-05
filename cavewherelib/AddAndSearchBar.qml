@@ -1,6 +1,6 @@
 import QtQuick as QQ
 import QtQuick.Layouts
-import QtQuick.Controls as Controls
+import QtQuick.Controls as QC
 
 RowLayout {
     id: controlBarId
@@ -9,7 +9,7 @@ RowLayout {
 
     signal add();
 
-    Controls.Button {
+    QC.Button {
         id: addButtonId
         objectName: "addButton"
 
@@ -25,7 +25,7 @@ RowLayout {
     QQ.Item { Layout.fillWidth: true }
 
     //TODO: Add me back in, and implement!
-//    Controls.TextField {
+//    QC.TextField {
 //        id: searchBox
 
 //        placeholderText: "Filter..."

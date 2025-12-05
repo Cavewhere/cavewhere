@@ -1,4 +1,5 @@
 import QtQuick as QQ
+import cavewherelib
 
 QQ.Rectangle {
     id: selectedBackground
@@ -7,9 +8,9 @@ QQ.Rectangle {
 
     radius: 4
 
-    color: "#418CFF"
+    color: Theme.accent
     border.width: 1
-    border.color: "white"
+    border.color: Theme.textInverse
 
     opacity: .5
 }

@@ -10,6 +10,8 @@ QQ.TextInput {
 
     selectByMouse: activeFocus;
     activeFocusOnPress: false
+    selectionColor: Theme.highlight
+    color: Theme.text
 
     //FIXME: Revert back to orinial code
     //This is a work around to QTBUG-27300

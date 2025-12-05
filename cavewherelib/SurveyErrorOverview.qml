@@ -1,7 +1,7 @@
 import QtQuick as QQ
 import cavewherelib
 import QtQuick.Layouts
-
+import QtQuick.Controls as QC
 QQ.Item {
     id: overviewId
 
@@ -75,8 +75,8 @@ QQ.Item {
 
             QQ.PropertyChanges {
                 borderRectangle {
-                    border.color: "#930100"
-                    color: "#FAB8B9"
+                    border.color: Theme.danger
+                    color: Theme.danger
                 }
             }
         },
@@ -88,8 +88,8 @@ QQ.Item {
 
             QQ.PropertyChanges {
                 borderRectangle {
-                    border.color: "#E06841"
-                    color: "#FFFDBC"
+                    border.color: Theme.warning
+                    color: Theme.warning
                 }
             }
         },
@@ -131,4 +131,3 @@ QQ.Item {
         }
     ]
 }
-

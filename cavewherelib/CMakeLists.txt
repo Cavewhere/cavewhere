@@ -115,6 +115,7 @@ set(qml_singletons
     "GlobalShadowTextInput.qml"
     "RootPopupItem.qml"
     "YanoneKaffeesatz.qml"
+    "Theme.qml"
 )
 
 # Remove the singleton files from the regular QML file list

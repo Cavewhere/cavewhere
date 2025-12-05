@@ -8,7 +8,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick as QQ
 import cavewherelib
-
+import QtQuick.Controls as QC
 QQ.Item {
     id: itemId
 
@@ -68,12 +68,14 @@ QQ.Item {
         model: 2
         QQ.Rectangle {
             id: rect2Id
+            color: Theme.background
 
             required property int index
 
             y: -height
             x: -width / 2 + index * privateData.smallCellWidth * 2
             radius: 3
+
             Text {
                 text: rect2Id.index * privateData.meterPerCell / 2
                 anchors.centerIn: parent
@@ -102,6 +104,8 @@ QQ.Item {
             y: -height
             x: -width / 2 + (index + 1) * privateData.cellWidth
             radius: 3
+            color: Theme.background
+
             Text {
                 text: {
                     var text = (rect1Id.index + 1) * privateData.meterPerCell;
@@ -179,6 +183,6 @@ QQ.Item {
         height: privateData.cellHeight * 2.0 + 2
 
         border.width: 1
-        color: "#00000000"
+        color: Theme.transparent
     }
 }

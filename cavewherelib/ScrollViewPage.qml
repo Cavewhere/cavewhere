@@ -1,24 +1,26 @@
 import QtQuick as QQ
-import QtQuick.Controls
-
+import QtQuick.Controls as QC
+import cavewherelib
 QQ.Rectangle {
     default property alias scollData: itemId.data
 
     anchors.fill: parent
+    color: Theme.background
 
-    ScrollView {
+
+    QC.ScrollView {
         anchors.fill: parent
         clip: true
 
         // This need to be defined so we can access it in qml test
-        ScrollBar.vertical: ScrollBar {
+        QC.ScrollBar.vertical: QC.ScrollBar {
             objectName: "verticalScrollBar"
         }
 
         QQ.Item {
             id: itemId
             x: 10
-            y: x
+            y: 10
             implicitWidth: childrenRect.width
             implicitHeight: childrenRect.height
         }

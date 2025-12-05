@@ -6,10 +6,5 @@
 **************************************************************************/
 
 CoreClickTextInput {
-
-    Pallete {
-        id: pallete
-    }
-
-    color: readOnly ? pallete.normalTextColor : pallete.inputTextColor
+    color: readOnly ? Theme.text : Theme.textLink
 }

@@ -7,6 +7,8 @@
 
 import QtQuick as QQ
 import QtQuick.Layouts
+import QtQuick.Controls as QC
+import cavewherelib
 // import QtGraphicalEffects
 
 QQ.Rectangle {
@@ -31,11 +33,11 @@ QQ.Rectangle {
     radius: 4
 
     border.width: 1
-    border.color: "#7A7A7A"
+    border.color: Theme.border
 
     gradient: QQ.Gradient {
-        QQ.GradientStop {id: stop1; position:0.0; color:"#FAFAFA" }
-        QQ.GradientStop {id: stop2; position:1.0; color:"#D3D3D3" }
+        QQ.GradientStop {id: stop1; position:0.0; color: Theme.surfaceRaised }
+        QQ.GradientStop {id: stop2; position:1.0; color: Theme.surfaceMuted }
     }
 
     state: "enabledState"
@@ -54,7 +56,7 @@ QQ.Rectangle {
         Text {
             id: buttonText
             visible: button.hasText
-            color: "black"
+            color: Theme.text
         }
 
         QQ.Image {

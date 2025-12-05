@@ -8,7 +8,6 @@
 import QtQuick as QQ
 import QtQuick.Controls as QC
 import cavewherelib
-import "qrc:/cavewherelib/cavewherelib/Theme.js" as Theme
 
 PanZoomInteraction {
     id: interaction
@@ -109,6 +108,7 @@ PanZoomInteraction {
             Text {
                 id: lengthText
                 anchors.verticalCenter: parent.verticalCenter
+                color: Theme.text
             }
 
             UnitValueInput {

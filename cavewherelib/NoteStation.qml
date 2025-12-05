@@ -87,7 +87,8 @@ ScrapPointItem {
         id: stationName
 
         style: Text.Outline
-        styleColor: "#FFFFFF"
+        styleColor: Theme.text
+        color: Theme.textInverse
         font.bold: true
 
         //So we don't add new station when we click on the station

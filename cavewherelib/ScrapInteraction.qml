@@ -95,7 +95,7 @@ PanZoomInteraction {
         id: snapPoint
         parent: panZoom.target
         visible: false
-        color: "red"
+        color: Theme.accent
         opacity: 0.75
         radius: 5 / panZoom.zoom
         width: 10 / panZoom.zoom

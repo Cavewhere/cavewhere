@@ -6,10 +6,11 @@
 **************************************************************************/
 
 import QtQuick as QQ
+import cavewherelib
 
 QQ.Rectangle {
     id: rect
-    color: "red"
+    color: Theme.danger
     opacity: .5
 
     onVisibleChanged: {

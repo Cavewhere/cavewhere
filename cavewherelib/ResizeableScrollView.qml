@@ -1,13 +1,13 @@
 import QtQuick as QQ
-import QtQuick.Controls
-
+import QtQuick.Controls as QC
+import cavewherelib
 QQ.Item {
     id: rootItem
     default property alias scrollBarData: scrollViewId.contentData
     property size minimumSize: Qt.size(200, 100)
     property size resizeHandleSize: Qt.size(15, 15);
 
-    ScrollView {
+    QC.ScrollView {
         id: scrollViewId
         anchors.fill: parent
         clip: true

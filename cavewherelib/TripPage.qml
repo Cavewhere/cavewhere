@@ -86,13 +86,14 @@ StandardPage {
 
         width: expandButton.width + 6
         visible: false
+        color: Theme.background
 
         ColumnLayout {
             anchors.left: parent.left
             anchors.top: parent.top
             anchors.margins: 3
 
-            QC.RoundButton {
+            RoundButton {
                 id: expandButton
                 icon.source: "qrc:/twbs-icons/icons/chevron-right.svg"
                 implicitWidth: 20

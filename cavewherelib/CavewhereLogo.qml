@@ -1,5 +1,6 @@
 import QtQuick as QQ
-
+import QtQuick.Controls as QC
+import cavewherelib
 QQ.Row {
     spacing: 0
 

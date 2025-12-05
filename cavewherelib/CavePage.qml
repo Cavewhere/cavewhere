@@ -79,7 +79,7 @@ StandardPage {
             QQ.Rectangle {
                 id: lengthDepthContainerId
 
-                color: "lightgray"
+                color: Theme.borderSubtle
                 //            anchors.left: parent.left
                 //            anchors.top: usedStationWidgetId.top
                 //            anchors.margins: 5
@@ -205,6 +205,7 @@ StandardPage {
                             TableRowBackground {
                                 isSelected: tableViewId.currentIndex == rowDelegateId.index
                                 rowIndex: rowDelegateId.index
+                                anchors.fill: parent
                             }
 
                             QQ.MouseArea {

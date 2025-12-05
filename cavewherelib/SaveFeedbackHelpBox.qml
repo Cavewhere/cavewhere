@@ -9,7 +9,7 @@ HelpBox {
     visible: false;
     animateHide: true
 
-    color: "#a0faa0"
+    color: Theme.success
 
     Timer {
         id: hideTimerId

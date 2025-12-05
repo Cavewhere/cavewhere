@@ -1,8 +1,8 @@
 import QtQuick as QQ
-import QtQuick.Controls
+import QtQuick.Controls as QC
 import cavewherelib
 
-SplitView {
+QC.SplitView {
     objectName: "viewPage"
 
     property alias scene: rendererId.scene
@@ -11,7 +11,7 @@ SplitView {
     property alias renderer: rendererId
 
     QQ.Item {
-        SplitView.preferredWidth: parent.width - cameraOptionsId.implicitWidth
+        QC.SplitView.preferredWidth: parent.width - cameraOptionsId.implicitWidth
 
         GLTerrainRenderer {
             id: rendererId

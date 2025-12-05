@@ -7,12 +7,13 @@
 
 // import QtQuick as QQ // to target S60 5th Edition or Maemo 5
 import QtQuick as QQ
-import "qrc:/cavewherelib/cavewherelib/Theme.js" as Theme
+import QtQuick.Controls as QC
+import cavewherelib
 
 QQ.Item {
     id: groupBoxId
 
-    property QQ.color backgroundColor: "white"
+    property QQ.color backgroundColor: Theme.background
     property alias text: titleText.text
     property int contentHeight
     default property alias contentChildren: contentArea.children
@@ -22,9 +23,9 @@ QQ.Item {
     QQ.Rectangle {
         id: checkBoxGroup
         border.width: 1
-        border.color: "gray"
+        border.color: Theme.border
         radius: Theme.floatingWidgetRadius
-        color: "#00000000"
+        color: Theme.transparent
 
         anchors.top: titleText.verticalCenter
         anchors.left: parent.left
@@ -56,6 +57,7 @@ QQ.Item {
         anchors.leftMargin: 6
 
         font.bold: true
+        color: Theme.text
     }
 
 }

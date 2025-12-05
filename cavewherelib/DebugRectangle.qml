@@ -1,7 +1,8 @@
 import QtQuick
+import cavewherelib
 
 Rectangle {
-    color: "red"
+    color: Theme.danger
     anchors.fill: parent
     opacity: 0.5
 }

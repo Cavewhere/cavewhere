@@ -1,7 +1,7 @@
 import QtQuick as QQ
 import QtQuick.Layouts
 import cavewherelib
-
+import QtQuick.Controls as QC
 ColumnLayout {
     id: itemId
 

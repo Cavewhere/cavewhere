@@ -6,8 +6,8 @@
 **************************************************************************/
 
 import QtQuick as QQ
+import QtQuick.Controls as QC
 import cavewherelib
-import "qrc:/cavewherelib/cavewherelib/Theme.js" as Theme
 
 DataBox {
     id: stationBox
@@ -50,7 +50,7 @@ DataBox {
         color: Theme.floatingWidgetColor
         anchors.centerIn: parent
         visible: false
-        border.color: "#888888"
+        border.color: Theme.border
 
         QQ.MouseArea {
             anchors.fill: parent
@@ -68,17 +68,17 @@ DataBox {
 
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            color: "#444444"
+            color: Theme.textSubtle
             text: "Press Tab"
             font.pixelSize: 14
             font.bold: true
-            horizontalAlignment: Text.AlignHCenter
+            horizontalAlignment: Qt.AlignHCenter
         }
 
         Text {
             id: stationName
             anchors.horizontalCenter: parent.horizontalCenter
-            color: "#333333"
+            color: Theme.text
             //            font.pixelSize: 11
         }
     }

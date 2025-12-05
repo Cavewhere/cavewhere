@@ -29,7 +29,7 @@ QQ.Item {
         id: inputRow
         spacing: 5
 
-        QC.RoundButton {
+        RoundButton {
             id: setLength
             objectName: "setLengthButton"
             radius: 2
@@ -91,7 +91,7 @@ QQ.Item {
 
         Text {
             id: errorText
-            color: "red"
+            color: Theme.danger
             visible: false
             text: "Weird scaling units"
             font.italic: true

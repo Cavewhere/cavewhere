@@ -6,12 +6,12 @@
 **************************************************************************/
 
 import QtQuick as QQ
-import QtQuick.Controls
+import QtQuick.Controls as QC
 import QtQuick.Window
 import QtQuick.Dialogs
 import cavewherelib
 
-ApplicationWindow {
+QC.ApplicationWindow {
     id: applicationWindowId
     objectName: "applicationWindow"
 
@@ -123,4 +123,3 @@ ApplicationWindow {
         screenSizeSaverId.resize();
     }
 }
-

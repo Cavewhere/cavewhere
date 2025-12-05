@@ -1,7 +1,7 @@
 import QtQuick as QQ
 import QtQuick.Layouts
 import cavewherelib
-
+import QtQuick.Controls as QC
 QQ.Rectangle {
     id: pageMarginId
 
@@ -13,6 +13,7 @@ QQ.Rectangle {
     width: topId.width + 2 * radius
     height: topId.height + 2 * radius
     border.width: 1
+    color: Theme.background
 
     ColumnLayout {
         id: topId
