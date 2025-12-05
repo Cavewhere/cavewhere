@@ -182,6 +182,8 @@ QQ.Rectangle {
 
             height: columnLayoutId.height + 10
 
+            color: Theme.background
+
             ColumnLayout {
                 id: columnLayoutId
 

@@ -7,7 +7,8 @@ DoubleClickTextInput {
     required property PointItem pointItem
 
     style: Text.Outline
-    styleColor: "#FFFFFF"
+    styleColor: Theme.textInverse
+    color: Theme.text
     font.bold: true
 
     //So we don't add new station when we click on the station

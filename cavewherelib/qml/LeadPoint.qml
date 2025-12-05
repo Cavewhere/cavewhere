@@ -61,7 +61,6 @@ QQ.Item {
 
                     SizeEditor {
                         readOnly: true
-                        backgroundColor: "#C6C6C6"
                         widthText: lead.width
                         heightText: lead.height
                     }

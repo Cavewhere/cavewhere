@@ -46,9 +46,10 @@ Item {
 
                 width: ListView.view ? ListView.view.width : parent.width
                 height: Math.max(400, groupListView.height / groupListView.count)
+                color: Theme.background
 
                 border {
-                    color: "#ababab"
+                    color: Theme.border
                     width: 1
                 }
 
@@ -100,7 +101,7 @@ Item {
 
                         Rectangle {
                             visible: delegateId.index % 2 === 0
-                            color: "#efefef"
+                            color: Theme.surfaceMuted
                             anchors.fill: columnLayoutId
                         }
 

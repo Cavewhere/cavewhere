@@ -10,7 +10,6 @@ RowLayout {
     property alias unit: unitId.unit
     property alias unitModel: unitId.unitModel
     property alias readOnly: widthTextId.readOnly
-    property alias backgroundColor: rect1.color
     property QQ.Item nextTab: null
     property alias widthTextObject: widthTextId
     property alias heightTextObject: heightTextId;
@@ -37,7 +36,6 @@ RowLayout {
     }
 
     TitledRectangle {
-        color: editor.backgroundColor
         title: "Height"
 
         ClickTextInput {

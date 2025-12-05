@@ -83,7 +83,7 @@ StandardPage {
 
             model: RootData.repositoryModel
 
-            delegate: Rectangle {
+            delegate: TableRowBackground {
                 id: delegateId
 
                 required property string nameRole
@@ -92,7 +92,9 @@ StandardPage {
 
                 width: listViewId.width
                 implicitHeight: contentColumn.implicitHeight + 12
-                color: index % 2 === 0 ? "#ffffff" : "#eeeeee"
+                rowIndex: index
+                isSelected: false
+                // color: index % 2 === 0 ? "#ffffff" : "#eeeeee"
 
                 ColumnLayout {
                     id: contentColumn
@@ -122,7 +124,6 @@ StandardPage {
                         Layout.leftMargin: 16
                         text: delegateId.pathRole
                         elide: Text.ElideMiddle
-                        color: Qt.darkGray
 
                         QC.Menu {
                             id: contextMenu

@@ -18,6 +18,7 @@ Controls.RoundButton {
     icon {
         width: 20
         height: 20
+        color: Theme.icon
     }
 
     Controls.ToolTip {
