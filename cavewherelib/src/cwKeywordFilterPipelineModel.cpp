@@ -91,14 +91,13 @@ cwKeywordFilterPipelineModel::cwKeywordFilterPipelineModel(QObject *parent) :
                     qDebug() << "Unique model:" << mUniqueAcceptedModel->rowCount() << i;
 
                     auto obj = index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
-                    Q_ASSERT(obj);
-                    //     q       mAccepted.remove(obj);
+                    if(obj) {
+                        //Get the original index
+                        auto keywordModelIndex = findKeywordModelIndex(index);
 
-                    //Get the original index
-                    auto keywordModelIndex = findKeywordModelIndex(index);
-
-                    qDebug() << "adding to rejected:" << index << index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
-                    mRejectedModel->insert(keywordModelIndex);
+                        qDebug() << "adding to rejected:" << index << index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
+                        mRejectedModel->insert(keywordModelIndex);
+                    }
                 }
             });
 }
@@ -213,6 +212,18 @@ bool cwKeywordFilterPipelineModel::setData(const QModelIndex &index, const QVari
         auto newOperator = static_cast<Operator>(value.toInt());
         if(newOperator != row.modelOperator) {
             row.modelOperator = newOperator;
+
+            if(newOperator == Or) {
+                // New OR groups should start with everything unchecked.
+                row.filter->setAcceptedByDefault(false);
+                for(int i = 0; i < row.filter->rowCount(); i++) {
+                    const auto filterIndex = row.filter->index(i, 0);
+                    row.filter->setData(filterIndex, false, cwKeywordGroupByKeyModel::AcceptedRole);
+                }
+            } else {
+                row.filter->setAcceptedByDefault(true);
+            }
+
             linkPipelineAt(index.row());
             emit dataChanged(index, index, {OperatorRole});
             return true;

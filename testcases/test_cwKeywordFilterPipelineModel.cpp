@@ -12,6 +12,9 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
 
+//Std includes
+#include <vector>
+
 TEST_CASE("cwKeywordFilterPipelineModel should initilize correctly", "[cwKeywordFilterPipelineModel]") {
     cwKeywordFilterPipelineModel model;
     REQUIRE(model.rowCount() == 1);
@@ -119,6 +122,7 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
     auto rowsAboutToBeInsertedSpy = pipelineSpy.findSpy(&cwKeywordFilterPipelineModel::rowsAboutToBeInserted);
     auto rowsRemovedSpy = pipelineSpy.findSpy(&cwKeywordFilterPipelineModel::rowsAboutToBeRemoved);
     auto rowsAboutToBeRemovedSpy = pipelineSpy.findSpy(&cwKeywordFilterPipelineModel::rowsAboutToBeRemoved);
+    auto possibleKeysChanged = pipelineSpy.findSpy(&cwKeywordFilterPipelineModel::possibleKeysChanged);
 
     auto acceptedRowsInsertedSpy = acceptedSpy.findSpy(&cwKeywordFilterPipelineModel::rowsInserted);
     auto acceptedRowsAboutToBeInsertedSpy = acceptedSpy.findSpy(&cwKeywordFilterPipelineModel::rowsAboutToBeInserted);
@@ -130,6 +134,7 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
     auto accetpedColumnAboutToBeRemovedSpy = acceptedSpy.findSpy(&cwKeywordFilterPipelineModel::columnsAboutToBeRemoved);
 
     pipelineSpy[keywordModelSpy]++;
+    pipelineSpy[possibleKeysChanged]++;
     acceptedSpy[acceptedRowsInsertedSpy] = 4;
     acceptedSpy[acceptedRowsAboutToBeInsertedSpy] = 4;
 
@@ -247,6 +252,8 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
 
                 rejectedObjects.append(entity5.get());
 
+                pipelineSpy[possibleKeysChanged]++;
+
                 acceptedSpy.checkSpies();
                 pipelineSpy.checkSpies();
 
@@ -271,6 +278,7 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
 
                 acceptedSpy[acceptedRowsAboutToBeInsertedSpy] += 1;
                 acceptedSpy[acceptedRowsInsertedSpy] += 1;
+                pipelineSpy[possibleKeysChanged]++;
 
                 acceptedSpy.checkSpies();
                 pipelineSpy.checkSpies();
@@ -334,6 +342,7 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
 
                 acceptedSpy[acceptedRowsAboutToBeRemovedSpy] += 1;
                 acceptedSpy[acceptedRowsRemovedSpy] += 1;
+                pipelineSpy[possibleKeysChanged]++;
 
                 acceptedSpy.checkSpies();
                 pipelineSpy.checkSpies();
@@ -352,6 +361,8 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
                 rejectedObjects = {
                     entity1.get()
                 };
+
+                pipelineSpy[possibleKeysChanged]++;
 
                 acceptedSpy.checkSpies();
                 pipelineSpy.checkSpies();
@@ -484,13 +495,13 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
                             CHECK(model.index(1).data(cwKeywordFilterPipelineModel::OperatorRole).toInt() == cwKeywordFilterPipelineModel::Or);
 
                             acceptedObjects = {
-                                entity1.get(),
-                                entity2.get(),
                                 entity3.get(),
                                 entity4.get()
                             };
 
                             rejectedObjects = {
+                                entity1.get(),
+                                entity2.get(),
                             };
 
                             checkAcceptedRejected();
@@ -508,13 +519,13 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
 
                             auto tripGroupBy0 = groupBy1->index(0);
                             CHECK(tripGroupBy0.data(cwKeywordGroupByKeyModel::ValueRole).toString().toStdString() == "trip1");
-                            CHECK(tripGroupBy0.data(cwKeywordGroupByKeyModel::AcceptedRole).toBool() == true);
+                            CHECK(tripGroupBy0.data(cwKeywordGroupByKeyModel::AcceptedRole).toBool() == false);
                             auto tripGroupBy1 = groupBy1->index(1);
                             CHECK(tripGroupBy1.data(cwKeywordGroupByKeyModel::ValueRole).toString().toStdString() == "trip2");
-                            CHECK(tripGroupBy1.data(cwKeywordGroupByKeyModel::AcceptedRole).toBool() == true);
+                            CHECK(tripGroupBy1.data(cwKeywordGroupByKeyModel::AcceptedRole).toBool() == false);
                             auto tripGroupBy2 = groupBy1->index(2);
                             CHECK(tripGroupBy2.data(cwKeywordGroupByKeyModel::ValueRole).toString().toStdString() == "trip3");
-                            CHECK(tripGroupBy2.data(cwKeywordGroupByKeyModel::AcceptedRole).toBool() == true);
+                            CHECK(tripGroupBy2.data(cwKeywordGroupByKeyModel::AcceptedRole).toBool() == false);
 
 
                             for(int i = 0; i < model.acceptedModel()->rowCount(); i++) {
@@ -524,6 +535,26 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
                             for(int i = 0; i < model.rejectedModel()->rowCount(); i++) {
                                 auto index = model.rejectedModel()->index(i, 0);
                                 qDebug() << "Rejected:" << index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
+                            }
+
+                            SECTION("Enabled entry1 and entry 2") {
+                                // Accept trip1 and trip2 in the OR group to bring scrap rows back in.
+                                CHECK(groupBy1->setData(tripGroupBy0, true, cwKeywordGroupByKeyModel::AcceptedRole));
+                                CHECK(groupBy1->setData(tripGroupBy1, true, cwKeywordGroupByKeyModel::AcceptedRole));
+
+                                CHECK(tripGroupBy0.data(cwKeywordGroupByKeyModel::AcceptedRole).toBool() == true);
+                                CHECK(tripGroupBy1.data(cwKeywordGroupByKeyModel::AcceptedRole).toBool() == true);
+                                CHECK(tripGroupBy2.data(cwKeywordGroupByKeyModel::AcceptedRole).toBool() == false);
+
+                                acceptedObjects = {
+                                    entity1.get(),
+                                    entity2.get(),
+                                    entity3.get(),
+                                    entity4.get()
+                                };
+                                rejectedObjects.clear();
+
+                                checkAcceptedRejected();
                             }
 
                             SECTION("Set Or operator a second time") {
@@ -572,6 +603,56 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
                 }
             }
         }
+    }
+}
+
+TEST_CASE("cwKeywordFilterPipelineModel OR rows start unchecked", "[cwKeywordFilterPipelineModel]") {
+    cwKeywordFilterPipelineModel pipeline;
+    auto keywordModel = std::make_unique<cwKeywordItemModel>();
+
+    std::vector<std::unique_ptr<QObject>> objects;
+
+    auto addItem = [&](const QString& type, const QString& trip) {
+        auto item = new cwKeywordItem();
+        auto obj = std::make_unique<QObject>();
+        obj->setObjectName(type + "_" + trip);
+
+        item->keywordModel()->add({"type", type});
+        item->keywordModel()->add({"trip", trip});
+        item->setObject(obj.get());
+
+        keywordModel->addItem(item);
+        objects.push_back(std::move(obj));
+    };
+
+    addItem("scrap", "trip1");
+    addItem("line", "trip2");
+
+    pipeline.setKeywordModel(keywordModel.get());
+
+    auto firstGroup = pipeline.index(0).data(cwKeywordFilterPipelineModel::FilterModelObjectRole).value<cwKeywordGroupByKeyModel*>();
+    REQUIRE(firstGroup);
+    firstGroup->setKey("type");
+
+    pipeline.addRow();
+
+    auto secondGroup = pipeline.index(1).data(cwKeywordFilterPipelineModel::FilterModelObjectRole).value<cwKeywordGroupByKeyModel*>();
+    REQUIRE(secondGroup);
+    secondGroup->setKey("type");
+
+    // Switch the second row to OR and ensure everything becomes unchecked
+    auto orIndex = pipeline.index(1);
+    REQUIRE(orIndex.isValid());
+    REQUIRE(pipeline.setData(orIndex, cwKeywordFilterPipelineModel::Or, cwKeywordFilterPipelineModel::OperatorRole));
+
+    // Re-apply the key to rebuild rows with the new default (simulates user having a key selected)
+    secondGroup->setKey("type");
+
+    CHECK(secondGroup->acceptByDefault() == false);
+    //ignore other
+    for(int i = 0; i < secondGroup->rowCount() - 1; i++) {
+        INFO("i:" << i << secondGroup->index(i, 0).data(cwKeywordGroupByKeyModel::ValueRole).toString().toStdString());
+        CHECK(secondGroup->index(i, 0).data(cwKeywordGroupByKeyModel::AcceptedRole).toBool() == false);
     }
 }
 
