@@ -1,5 +1,6 @@
 import QtQuick.Controls as QC
 import QtQuick.Layouts
+import cavewherelib
 
 ColumnLayout {
     id: rootId

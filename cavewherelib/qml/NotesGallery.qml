@@ -60,6 +60,7 @@ QQ.Rectangle {
     signal backClicked();
 
     anchors.margins: 3
+    color: Theme.background
 
     LoadNotesWidget {
         id: loadNoteWidgetId
@@ -244,7 +245,7 @@ QQ.Rectangle {
         radius: 7
         visible: true
 
-        color: "#4A4F57"
+        color: Theme.sidebar
 
         ShadowRectangle {
             id: errorBoxId
@@ -258,7 +259,7 @@ QQ.Rectangle {
             anchors.topMargin: 5
             visible: errorText.text !== ""
 
-            color: "red";
+            color: Theme.danger;
 
             QQ.Column {
                 id: errorColumnId
@@ -308,7 +309,7 @@ QQ.Rectangle {
             orientation: QQ.ListView.Vertical
 
             highlight: QQ.Rectangle {
-                color: "#418CFF"
+                color: Theme.accent
                 radius:  3
                 width: galleryView.width
             }
@@ -368,11 +369,12 @@ QQ.Rectangle {
 
             spacing: 3
 
-            IconButton {
+            NeutralIconButton {
                 id: rotateIconButtonId
                 iconSource: "qrc:icons/svg/rotate.svg"
                 sourceSize: mainToolBar.iconSize
                 text: "Rotate"
+                adjustColor: false
 
                 onClicked: {
                     //Update the note's rotation
@@ -382,7 +384,7 @@ QQ.Rectangle {
                 }
             }
 
-            IconButton {
+            NeutralIconButton {
                 id: carpetButtonId
                 objectName: "carpetButtonId"
                 iconSource: "qrc:icons/svg/carpet.svg"
@@ -418,12 +420,12 @@ QQ.Rectangle {
         height: carpetRowId.height + 6
 
         radius: mainButtonArea.radius
-        color: "#EEEEEE"
+        color: Theme.surfaceMuted
         RowLayout {
             id: carpetRowId
             spacing: 3
 
-            IconButton {
+            NeutralIconButton {
                 objectName: "backButton"
                 iconSource: "qrc:icons/svg/back.svg"
                 sourceSize: mainToolBar.iconSize
@@ -436,7 +438,7 @@ QQ.Rectangle {
                 }
             }
 
-            IconButton {
+            NeutralIconButton {
                 id: selectObjectId
                 objectName: "selectButton"
                 iconSource: "qrc:icons/svg/select.svg"
@@ -452,7 +454,7 @@ QQ.Rectangle {
                 id: addButtonGroup
                 text: "Add"
 
-                IconButton {
+                NeutralIconButton {
                     id: addScrapId
                     objectName: "addScrapButton"
 
@@ -464,7 +466,7 @@ QQ.Rectangle {
                     onClicked: noteGallery.state = "ADD-SCRAP"
                 }
 
-                IconButton {
+                NeutralIconButton {
                     id: addStationId
                     objectName: "addScrapStation"
 
@@ -475,7 +477,7 @@ QQ.Rectangle {
                     onClicked: noteGallery.state = "ADD-STATION"
                 }
 
-                IconButton {
+                NeutralIconButton {
                     id: addLeadId
                     iconSource: "qrc:icons/svg/addLead.svg"
                     objectName: "addLeads"

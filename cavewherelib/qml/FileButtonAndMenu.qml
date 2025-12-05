@@ -7,26 +7,26 @@
 
 // import QtQuick as QQ // to target S60 5th Edition or Maemo 5
 import QtQuick as QQ
-import QtQuick.Controls
+import QtQuick.Controls as QC
 import QtQuick.Dialogs
 import cavewherelib
 
-MenuBar {
+QC.MenuBar {
     id: menuBarId
     // property var terrainRenderer; //For taking screenshots
 //    property var dataPage; //Should be a DataMainPage
     property QQ.Loader mainContentLoader;
     property FileDialog loadFileDialog;
     property FileDialog saveAsFileDialog;
-    property ApplicationWindow applicationWindow;
+    property QC.ApplicationWindow applicationWindow;
     property AskToSaveDialog askToSaveDialog;
 
     signal openAboutWindow;
 
-    Menu {
+    QC.Menu {
         title: "File"
 
-        Action {
+        QC.Action {
             id: newActionId
             text: "&New"
             shortcut: "Ctrl+N"
@@ -39,7 +39,7 @@ MenuBar {
             }
         }
 
-        Action {
+        QC.Action {
             id: openActionId
             text: "&Open"
             shortcut: "Ctrl+O"
@@ -55,9 +55,9 @@ MenuBar {
             }
         }
 
-        MenuSeparator {}
+        QC.MenuSeparator {}
 
-        Action {
+        QC.Action {
             id: saveActionId
             text: "&Save"
             shortcut: "Ctrl+S"
@@ -70,7 +70,7 @@ MenuBar {
             }
         }
 
-        MenuItem {
+        QC.MenuItem {
             id: saveAsMenuItem
             text: "Save As"
             onTriggered:{
@@ -78,22 +78,22 @@ MenuBar {
             }
         }
 
-        MenuSeparator {}
+        QC.MenuSeparator {}
 
-        MenuItem {
+        QC.MenuItem {
             text: "Settings"
             onTriggered: {
                 RootData.pageSelectionModel.gotoPageByName(null, "Settings");
             }
         }
 
-        MenuItem {
+        QC.MenuItem {
             text: "About"
             onTriggered: {
                 RootData.pageSelectionModel.gotoPageByName(null, "About");
             }
         }
-        Action {
+        QC.Action {
             id: quitActionId
             text: "Quit"
             shortcut: "Ctrl+Q"
@@ -103,15 +103,15 @@ MenuBar {
         }
     }
 
-    Menu {
+    QC.Menu {
         title: "Debug"
 
-        MenuItem {
+        QC.MenuItem {
             text: "Compute Scraps"
             onTriggered: RootData.scrapManager.updateAllScraps()
         }
 
-        // MenuItem {
+        // QC.MenuItem {
         //     text: "Reload"
         //     shortcut: "Ctrl+R"
         //     onTriggered: {
@@ -131,7 +131,7 @@ MenuBar {
         //     }
         // }
 
-        MenuItem {
+        QC.MenuItem {
             text: "Scraps Visible"
             checked: RootData.regionSceneManager.scraps.visible
             checkable: true
@@ -141,7 +141,7 @@ MenuBar {
             }
         }
 
-        MenuItem {
+        QC.MenuItem {
             text: "Leads Visible"
             checked: RootData.leadsVisible
             checkable: true
@@ -151,7 +151,7 @@ MenuBar {
         }
 
 
-        MenuItem {
+        QC.MenuItem {
             text: "Station Labels Visible"
             checked: RootData.stationsVisible
             checkable: true
@@ -160,14 +160,14 @@ MenuBar {
             }
         }
 
-        MenuItem {
+        QC.MenuItem {
             text: "Testcases"
             onTriggered: {
                 RootData.pageSelectionModel.gotoPageByName(null, "Testcases");
             }
         }
 
-        MenuItem {
+        QC.MenuItem {
             text: "Resize to 1080p"
             onTriggered: {
                 let titleBarHeight = RootData.titleBarHeight * applicationWindow.screen.devicePixelRatio

@@ -77,6 +77,10 @@ ScrapPointItem {
 
     StationDoubleClickTextInput {
         id: stationName
+
+        style: Text.Outline
+        styleColor: Theme.text
+        color: Theme.textInverse
         anchors.verticalCenter: stationImage.verticalCenter
         anchors.left: stationImage.right
         pointItem: noteStationId

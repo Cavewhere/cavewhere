@@ -1,8 +1,9 @@
 import QtQuick as QQ
-import QtQuick.Controls
+import QtQuick.Controls as QC
 import QtQuick.Layouts
+import cavewherelib
 
-GroupBox {
+QC.GroupBox {
     id: groupBoxId
     objectName: "paperMargin"
 

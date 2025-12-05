@@ -1,5 +1,6 @@
 import QtQuick 2.15
 import QtQuick.Shapes 1.15
+import cavewherelib
 
 //
 //   This will make a box around you qml elements like this.
@@ -14,8 +15,8 @@ Item {
     objectName: "quoteBox"
 
     default property alias defaultChildren: childrenContainer.children
-    property color color: "white"
-    property color borderColor: "#727272"
+    property color color: Theme.surface
+    property color borderColor: Theme.border
     property real borderWidth: 1.0
     property real margin: 3.0
     // property int triangleEdge: Qt.TopEdge

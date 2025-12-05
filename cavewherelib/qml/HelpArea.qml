@@ -7,6 +7,8 @@
 
 import QtQuick as QQ
 import QtQuick.Layouts
+import QtQuick.Controls as QC
+import cavewherelib
 
 QQ.Rectangle {
     id: helpArea
@@ -18,7 +20,7 @@ QQ.Rectangle {
     property bool animationToVisible: true
     property bool animationToInvisible: true
 
-    color: "#BBBBBB"
+    color: Theme.surfaceRaised
     implicitHeight: layout.implicitHeight
     radius: 5
     clip: true
@@ -70,6 +72,7 @@ QQ.Rectangle {
                 textFormat: Text.RichText
                 wrapMode: Text.WordWrap
                 font.pixelSize: 14
+                color: Theme.text
 
                 text: "No documentation"
             }

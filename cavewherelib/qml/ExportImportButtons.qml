@@ -7,7 +7,7 @@
 
 import QtQuick as QQ
 import cavewherelib
-import QtQuick.Controls as Controls;
+import QtQuick.Controls as QC
 import QtQuick.Dialogs
 import QtQuick.Layouts
 
@@ -127,7 +127,7 @@ QQ.Item {
 
         spacing: 3
 
-        Controls.Button {
+        QC.Button {
             id: exportButton
             text: "Export"
 
@@ -135,10 +135,10 @@ QQ.Item {
                 exportContextMenu.popup();
             }
 
-            Controls.Menu {
+            QC.Menu {
                 id: exportContextMenu
 
-                Controls.Menu {
+                QC.Menu {
                     title: "Survex"
 
                     ExportSurveyMenuItem {
@@ -159,7 +159,7 @@ QQ.Item {
                         }
                     }
 
-                    Controls.MenuItem {
+                    QC.MenuItem {
                         text: "Region (all caves)"
                         onTriggered: {
                             fileDialogItem.state = "EXPORT_REGION_SURVEX"
@@ -168,7 +168,7 @@ QQ.Item {
                     }
                 }
 
-                Controls.Menu {
+                QC.Menu {
                     title: "Compass"
 
                     ExportSurveyMenuItem {
@@ -181,7 +181,7 @@ QQ.Item {
                     }
                 }
 
-                Controls.Menu {
+                QC.Menu {
                     title: "Chipdata"
 
                     ExportSurveyMenuItem {
@@ -196,7 +196,7 @@ QQ.Item {
             }
         }
 
-        Controls.Button {
+        QC.Button {
             id: importButton
 
             objectName: "importButton"
@@ -208,15 +208,15 @@ QQ.Item {
                 importContextMenu.popup()
             }
 
-            Controls.Menu {
+            QC.Menu {
                 id: importContextMenu
 
-                Controls.MenuItem {
+                QC.MenuItem {
                     text: "Survex (.svx)"
                     onTriggered: RootData.surveyImportManager.importSurvex()
                 }
 
-                Controls.MenuItem {
+                QC.MenuItem {
                     text: "Compass (.dat)"
                     onTriggered: {
                         fileDialogItem.state = "IMPORT_COMPASS"
@@ -224,17 +224,17 @@ QQ.Item {
                     }
                 }
 
-                Controls.MenuItem {
+                QC.MenuItem {
                     text: "Walls (.wpj)"
                     onTriggered: RootData.surveyImportManager.importWalls()
                 }
 
-                Controls.MenuItem {
+                QC.MenuItem {
                     text: "Walls (.srv)"
                     onTriggered: RootData.surveyImportManager.importWallsSrv()
                 }
 
-                Controls.MenuItem {
+                QC.MenuItem {
                     text: "CSV (.csv)"
                     objectName: "csvMenuItem"
                     onTriggered: {

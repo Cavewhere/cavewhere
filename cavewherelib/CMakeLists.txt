@@ -4,7 +4,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/UpdateVersion.cmake)
 
 #### cavewherelib ######
 # All packages we need to find
-find_package(Protobuf REQUIRED)
+find_package(protobuf REQUIRED)
 find_package(Catch2 REQUIRED)
 find_package(Qt6
     COMPONENTS
@@ -135,6 +135,7 @@ set(qml_singletons
     "qml/GlobalShadowTextInput.qml"
     "qml/RootPopupItem.qml"
     "qml/YanoneKaffeesatz.qml"
+	"qml/Theme.qml"
 )
 
 # Remove the singleton files from the regular QML file list

@@ -6,6 +6,8 @@
 **************************************************************************/
 
 import QtQuick as QQ
+import QtQuick.Controls as QC
+import cavewherelib
 
 ShadowRectangle {
     id: helpBox
@@ -21,7 +23,7 @@ ShadowRectangle {
     anchors.bottomMargin: 20
     anchors.horizontalCenter: parent.horizontalCenter
 
-    color: "#85c1f4"
+    color: Theme.info
     radius: 5
 
     property bool _hiding: false

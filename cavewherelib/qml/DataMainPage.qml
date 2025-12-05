@@ -13,7 +13,7 @@ import cavewherelib
 import QtQml
 import QtQuick as QQ
 import QtQuick.Layouts
-
+import QtQuick.Controls as QC
 StandardPage {
     id: pageId
 
@@ -92,6 +92,7 @@ StandardPage {
                     TableRowBackground {
                         isSelected: tableViewId.currentIndex == delegateId.index
                         rowIndex: delegateId.index
+                        anchors.fill: parent
                     }
 
                     QQ.MouseArea {

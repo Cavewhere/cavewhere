@@ -1,4 +1,4 @@
-import QtQuick
+import QtQuick as QQ
 import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib

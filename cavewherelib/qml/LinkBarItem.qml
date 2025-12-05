@@ -1,6 +1,8 @@
 import QtQuick as QQ
 import QtQuick.Layouts
 import cavewherelib
+import QtQuick.Controls as QC
+import QtQuick.Effects
 
 QQ.Item {
     id: itemId
@@ -21,11 +23,12 @@ QQ.Item {
             implicitWidth: nameTextId.width + 6
             implicitHeight: nameTextId.height + 6
 
-            color: buttonId.containsMouse ? "#C5E4F7" : "#EEEEEE"
+            color: buttonId.containsMouse ? Theme.palette.highlight : Theme.tag
             radius: 3
 
             Text {
                 id: nameTextId
+                color: buttonId.containsMouse ? Theme.palette.highlightedText : Theme.palette.text
                 anchors.centerIn: parent
             }
 
@@ -43,6 +46,15 @@ QQ.Item {
             id: moreArrowId
             source: "qrc:/twbs-icons/icons/arrow-right-short.svg"
             sourceSize: Qt.size(backgroundRectId.implicitHeight, backgroundRectId.implicitHeight)
+
+            layer {
+                enabled: true
+                effect: MultiEffect {
+                    colorization: 1.0
+                    colorizationColor: Theme.icon
+                    brightness: 1.0
+                }
+            }
         }
     }
 }

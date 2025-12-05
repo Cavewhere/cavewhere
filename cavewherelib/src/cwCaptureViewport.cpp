@@ -19,6 +19,7 @@
 #include "cwGraphicsImageItem.h"
 #include "cwDebug.h"
 #include "cwGlobals.h"
+#include "cwScaleBarItem.h"
 
 //undef these because micrsoft is fucking retarded...
 #ifdef Q_OS_WIN
@@ -41,11 +42,18 @@ cwCaptureViewport::cwCaptureViewport(QObject *parent) :
     TileSize(1024, 1024),
     CaptureCamera(new cwCamera(this)),
     PreviewItem(nullptr),
-    Item(nullptr)
+    Item(nullptr),
+    m_scaleBar(new cwScaleBarItem())
 {
     connect(ScaleOrtho, &cwScale::scaleChanged, this, &cwCaptureViewport::updateTransformForItems);
     connect(this, &cwCaptureViewport::positionOnPaperChanged, this, &cwCaptureViewport::updateItemsPosition);
     connect(this, &cwCaptureViewport::rotationChanged, this, &cwCaptureViewport::updateTransformForItems);
+    connect(this, &cwCaptureViewport::boundingBoxChanged, this, &cwCaptureViewport::updateScaleBarGeometry);
+
+    m_scaleBar->setZValue(2000.0);
+    m_scaleBar->setVisible(false);
+
+    updateScaleBarScale();
 }
 
 cwCaptureViewport::~cwCaptureViewport()
@@ -439,6 +447,9 @@ void cwCaptureViewport::deleteSceneItems()
         delete Item;
         Item = nullptr;
     }
+
+    delete m_scaleBar;
+    m_scaleBar = nullptr;
 }
 
 /**
@@ -617,6 +628,9 @@ void cwCaptureViewport::updateTransformForItems()
         updateTransformForItem(fullResolutionItem(), hiResScale);
         fullResolutionItem()->setPos(previewItem()->pos());
     }
+
+    updateScaleBarScale();
+    updateScaleBarGeometry();
 }
 
 /**
@@ -637,6 +651,28 @@ void cwCaptureViewport::updateItemsPosition()
 
     updateBoundingBox();
 
+}
+
+void cwCaptureViewport::updateScaleBarScale()
+{
+    double ratio = 0.0;
+    if(CaptureCamera->projection().type() == cwProjection::Ortho) {
+        ratio = scaleOrtho()->scale();
+    }
+
+    if(!qFuzzyCompare(ratio + 1.0, m_scaleBar->scaleRatio() + 1.0)) {
+        m_scaleBar->setScaleRatio(ratio);
+    }
+}
+
+void cwCaptureViewport::updateScaleBarGeometry()
+{
+    QRectF borderRect = boundingBox();
+    if(!borderRect.isValid() || borderRect.isNull()) {
+        return;
+    }
+
+    m_scaleBar->setBorderRect(borderRect);
 }
 
 /**

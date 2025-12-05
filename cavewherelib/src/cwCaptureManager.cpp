@@ -19,6 +19,7 @@
 #include "cwDebug.h"
 #include "cwMappedQImage.h"
 #include "cwErrorListModel.h"
+#include "cwUnits.h"
 
 //Qt includes
 #include <QLabel>
@@ -35,6 +36,8 @@
 
 //Std includes
 #include <stdexcept>
+#include <memory>
+#include <functional>
 
 cwCaptureManager::cwCaptureManager(QObject *parent) :
     QAbstractListModel(parent),
@@ -314,6 +317,10 @@ void cwCaptureManager::removeCaptureViewport(cwCaptureViewport *capture)
     if(!Captures.contains(capture)) {
         qWarning() << "Can't remove. Capture manager doesn't contain" << capture << LOCATION;
         return;
+    }
+
+    if(capture->scaleBarItem() != nullptr && capture->scaleBarItem()->scene() == Scene) {
+        Scene->removeItem(capture->scaleBarItem());
     }
 
     int rowIndex = Layers.indexOf(capture);
@@ -696,6 +703,9 @@ void cwCaptureManager::addPreviewCaptureItemHelper(cwCaptureViewport *capture)
 {
     if(capture->previewItem() != nullptr) {
         Scene->addItem(capture->previewItem());
+        if(capture->scaleBarItem() != nullptr && capture->scaleBarItem()->scene() != Scene) {
+            Scene->addItem(capture->scaleBarItem());
+        }
         scaleCaptureToFitPage(capture);
     }
 }

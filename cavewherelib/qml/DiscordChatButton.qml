@@ -1,9 +1,9 @@
 import QtQuick as QQ
-import QtQuick.Controls as Controls
+import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
 
-Controls.RoundButton {
+RoundButton {
     id: chatButtonId
 
     icon.source: "qrc:/twbs-icons/icons/chat-right-text.svg"
@@ -28,9 +28,9 @@ Controls.RoundButton {
         }
     }
 
-    Controls.Popup {
+    QC.Popup {
         padding: 10
-        //popupType: Controls.Popup.Item
+        //popupType: QC.Popup.Item
 
         visible: chatButtonId.hovered
 

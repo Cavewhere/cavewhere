@@ -17,11 +17,11 @@ Item {
     property alias renderer: rendererId
     property alias scene: rendererId.scene
 
+    clip: true
+
     RegionViewer {
         id: rendererId
-
         anchors.fill: parent
-        clip: true
         camera.devicePixelRatio: Screen.devicePixelRatio
         sampleCount:4
     }

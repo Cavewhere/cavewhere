@@ -1,3 +1,5 @@
+import QtQuick.Controls as QC
+import cavewherelib
 /**************************************************************************
 **
 **    Copyright (C) 2013 by Philip Schuchardt

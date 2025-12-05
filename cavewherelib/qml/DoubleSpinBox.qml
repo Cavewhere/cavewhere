@@ -1,7 +1,7 @@
 import QtQuick
-import QtQuick.Controls
-
-SpinBox {
+import QtQuick.Controls as QC
+import cavewherelib
+QC.SpinBox {
     id: spinBox
     from: decimalToInt(realFrom)
     value: decimalToInt(realValue)

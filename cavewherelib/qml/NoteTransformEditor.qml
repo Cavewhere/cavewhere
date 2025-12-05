@@ -7,10 +7,9 @@
 
 import QtQuick as QQ
 import QtQml
-import QtQuick.Controls as Controls
+import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
-import "qrc:/qt/qml/cavewherelib/qml/Theme.js" as Theme
 
 QQ.Item {
     id: editor
@@ -78,7 +77,7 @@ QQ.Item {
                     helpArea: scrapTypeHelpId
                 }
 
-                Controls.ComboBox {
+                QC.ComboBox {
                     id: typeComboBox
                     objectName: "typeComboBox"
                     implicitWidth: 175
@@ -167,7 +166,7 @@ QQ.Item {
                             helpArea: azimuthHelpAreaId
                         }
 
-                        Controls.ComboBox {
+                        QC.ComboBox {
                             id: directionComboBoxId
                             objectName: "directionComboBox"
 

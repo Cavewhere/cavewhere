@@ -6,6 +6,8 @@
 **************************************************************************/
 
 import QtQuick as QQ
+import QtQuick.Controls as QC
+import cavewherelib
 
 Text {
     id: label
@@ -14,6 +16,7 @@ Text {
 
 //    font.bold: true
     font.underline: false
+    color: Theme.text
 
     QQ.MouseArea {
         id: textMouseArea
@@ -32,14 +35,13 @@ Text {
 
             QQ.PropertyChanges {
                 label {
-                    color: "blue"
+                    color: Theme.accent
                     font.underline: true
                 }
             }
         }
     ]
 }
-
 
 
 

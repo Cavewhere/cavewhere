@@ -1,7 +1,7 @@
 import QtQuick
-import QtQuick.Controls
-
-HorizontalHeaderView {
+import QtQuick.Controls as QC
+import cavewherelib
+QC.HorizontalHeaderView {
     id: horizontalHeader
     // Layout.fillWidth: true
 

@@ -1,10 +1,10 @@
-import QtQuick
+import QtQuick as QQ
 import cavewherelib
-
+import QtQuick.Controls as QC
 QuoteBox {
     property alias text: textId.text
 
-    color: "#ffa23f"
+    color: Theme.warning
     triangleOffset: 0.0
     Text {
         id: textId

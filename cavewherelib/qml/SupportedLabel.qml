@@ -1,6 +1,7 @@
 import QtQuick as QQ
 import QtQuick.Layouts
-
+import QtQuick.Controls as QC
+import cavewherelib
 RowLayout {
     id: rootId
     property bool supported: true

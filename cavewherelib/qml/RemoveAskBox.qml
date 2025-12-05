@@ -6,9 +6,8 @@
 **************************************************************************/
 
 import QtQuick as QQ
-import QtQuick.Controls as Controls
+import QtQuick.Controls as QC
 import cavewherelib
-import "qrc:/qt/qml/cavewherelib/qml/Theme.js" as Theme
 
 ShadowRectangle {
     id: removeChallenge
@@ -68,7 +67,7 @@ ShadowRectangle {
             visible: removeChallenge.removeName.length !== 0
         }
 
-        Controls.Button {
+        QC.Button {
             objectName: "removeButton"
             text: "Remove"
             onClicked: {
@@ -77,7 +76,7 @@ ShadowRectangle {
             }
         }
 
-        Controls.Button {
+        QC.Button {
             objectName: "cancelButton"
             text: "Cancel"
             onClicked: {

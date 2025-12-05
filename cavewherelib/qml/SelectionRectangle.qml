@@ -1,4 +1,5 @@
 import QtQuick as QQ
+import cavewherelib
 
 
 QQ.Rectangle {
@@ -7,9 +8,9 @@ QQ.Rectangle {
     property int mouseBuffer: 5
 
     opacity: 0.30
-    color: "#11B0FF"
+    color: Theme.accent
     border.width: 1
-    border.color: "#676767"
+    border.color: Theme.border
 
     QQ.MouseArea {
         id: leftSide

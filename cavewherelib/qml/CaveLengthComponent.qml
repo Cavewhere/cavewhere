@@ -7,7 +7,7 @@
 
 import QtQuick as QQ
 import cavewherelib
-
+import QtQuick.Controls as QC
 QQ.Row {
     id: caveLengthId
 

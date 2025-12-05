@@ -8,7 +8,8 @@ pragma ComponentBehavior: Bound
 
 import QtQml
 import QtQuick as QQ
-import QtQuick.Controls as Controls
+import QtQuick.Controls as QC
+import cavewherelib
 
 UnitBaseItem {
     id: unitInput
@@ -20,13 +21,9 @@ UnitBaseItem {
         menuId.selectedIndex = unitInput.unit
     }
 
-    Pallete {
-        id: pallete
-    }
-
     Text {
         id: textArea
-        color: unitInput.readOnly ? "black" : pallete.inputTextColor
+        color: unitInput.readOnly ? Theme.text : Theme.textLink
         text: unitInput.unitModel !== null && typeof(unitInput.unitModel) !== 'undefined' ? " " + unitInput.unitModel[menuId.selectedIndex] : "";
 
         QQ.MouseArea {
@@ -38,14 +35,14 @@ UnitBaseItem {
             }
         }
 
-        Controls.Menu {
+        QC.Menu {
             id: menuId
 
             property int selectedIndex: unitInput.unit
 
             QQ.Instantiator {
                 model: unitInput.unitModel
-                Controls.MenuItem {
+                QC.MenuItem {
                     required property string modelData
                     required property int index
 

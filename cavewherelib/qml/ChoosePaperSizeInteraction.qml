@@ -65,6 +65,6 @@ QQ.Item {
         property QQ.color marginColor: "#BBE8E8E8"
 
         border.width: 5
-        color: "#00000000"
+        color: Theme.transparent
     }
 }

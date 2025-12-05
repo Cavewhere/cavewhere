@@ -10,7 +10,6 @@ import QtQml
 import QtQuick.Controls as Controls
 import QtQuick.Layouts
 import cavewherelib
-import "qrc:/qt/qml/cavewherelib/qml/Theme.js" as Theme
 
 QQ.Item {
     id: editor

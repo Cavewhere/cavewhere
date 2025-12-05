@@ -9,7 +9,7 @@ import cavewherelib
 import QtQuick.Controls as QC
 import QtQuick
 
-QC.RoundButton {
+RoundButton {
     id: moreButton
 
     // required property QC.Menu menu

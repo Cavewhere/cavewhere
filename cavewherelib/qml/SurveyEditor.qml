@@ -7,8 +7,9 @@
 
 import QtQuick as QQ
 import cavewherelib
-import QtQuick.Controls as Controls
+import QtQuick.Controls as QC
 import QtQuick.Layouts
+import QtQuick.Effects
 import "Utils.js" as Utils
 
 QQ.Item {
@@ -42,7 +43,7 @@ QQ.Item {
         }
     }
 
-    Controls.ScrollView {
+    QC.ScrollView {
         id: scrollAreaId
 
         anchors.top: parent.top
@@ -50,7 +51,7 @@ QQ.Item {
         anchors.left: parent.left
         anchors.margins: 1;
 
-        Controls.ScrollBar.vertical.stepSize: 50;
+        QC.ScrollBar.vertical.stepSize: 50;
 
         width: 500; //flickableAreaId.contentWidth
         visible: true
@@ -60,7 +61,7 @@ QQ.Item {
             id: viewId
             objectName: "view"
 
-            Controls.ButtonGroup {
+            QC.ButtonGroup {
                 id: errorButtonGroupId
             }
 
@@ -127,7 +128,7 @@ QQ.Item {
                             text: "Trip"
                         }
 
-                        Controls.Button {
+                        QC.Button {
                             id: collapseButton
                             anchors.right: parent.right
                             anchors.top: parent.top
@@ -258,26 +259,11 @@ QQ.Item {
                     }
                 }
 
-                QQ.Image {
-                    id: spaceAddBar
-                    objectName: "spaceAddBar"
-                    source: "qrc:icons/spacebar.png"
-
+                QC.Button {
                     visible: currentTrip !== null && currentTrip.chunkCount > 0
                     Layout.alignment: Qt.AlignHCenter
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "Press <b>Space</b> to add another data block";
-                    }
-
-                    QQ.MouseArea {
-                        anchors.fill: parent
-
-                        onClicked: {
-                            clipArea.currentTrip.addNewChunk();
-                        }
-                    }
+                    text: "Press <b>Space</b> to add another data block"
+                    onClicked: clipArea.currentTrip.addNewChunk();
                 }
             }
         }

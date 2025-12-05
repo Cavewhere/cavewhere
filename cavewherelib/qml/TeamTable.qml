@@ -10,7 +10,7 @@ pragma ComponentBehavior: Bound
 // import QtQuick as QQ // to target S60 5th Edition or Maemo 5
 import QtQuick as QQ
 import cavewherelib
-
+import QtQuick.Controls as QC
 QQ.Item {
     id: teamTable
 
@@ -81,7 +81,7 @@ QQ.Item {
             anchors.top: parent.top
             anchors.bottom: teamList.top
             width: 1
-            border.color: "lightgray"
+            border.color: Theme.borderSubtle
             border.width: 1
             visible: teamList.visible
         }
@@ -117,7 +117,7 @@ QQ.Item {
                 width: teamList.width
                 height: Math.max(25, Math.max(personNameRow.height, jobsListView.height)) + 6
 
-                color: index % 2 === 0 ? "#DDF2FF" : "white"
+                color: index % 2 === 0 ? Theme.surfaceMuted : Theme.surface
 
                 property bool selected: teamList.currentIndex === index
 
@@ -135,7 +135,7 @@ QQ.Item {
                 QQ.Rectangle {
                     height: 1
                     border.width: 1
-                    border.color: "lightgray"
+                    border.color: Theme.borderSubtle
                     anchors.left: parent.left
                     anchors.right: parent.right
                 }
@@ -145,7 +145,7 @@ QQ.Item {
                     border.width: 1
                     anchors.fill: parent
                     anchors.margins: 1
-                    color: "#00000000"
+                    color: Theme.transparent
                     z:1
                     visible: rowDelegate.selected
                 }
@@ -192,7 +192,7 @@ QQ.Item {
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
                     width: 1
-                    border.color: "lightgray"
+                    border.color: Theme.borderSubtle
                     border.width: 1
                 }
 
@@ -218,9 +218,9 @@ QQ.Item {
                             required property string modelData
 
                             radius: 5
-                            color: selected ? "#F39935" : "#E4CC99"
+                            color: selected ? Theme.highlight : Theme.surfaceRaised
                             border.width: 1
-                            border.color: selected ? "#FFEDC7" : "#FFF3D6"
+                            border.color: selected ? Theme.surfaceRaised : Theme.borderSubtle
 
                             width: Math.max(jobText.width, 20) + 10
                             height: jobText.height + 6
@@ -270,10 +270,10 @@ QQ.Item {
 
                     QQ.Rectangle {
                         radius: 5
-                        color: "#B2D3AF"
+                        color: Theme.accent
 
                         border.width: 1
-                        border.color: "#E6FFE4"
+                        border.color: Theme.borderSubtle
 
                         width: addJobRow.width + 6
                         height: addJobRow.height + 6

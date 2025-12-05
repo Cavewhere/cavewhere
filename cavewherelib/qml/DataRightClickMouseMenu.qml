@@ -1,6 +1,6 @@
 import QtQuick as QQ
-import QtQuick.Controls
-
+import QtQuick.Controls as QC
+import cavewherelib
 QQ.MouseArea {
     id: rightClickMouseArea
     acceptedButtons: Qt.RightButton
@@ -16,9 +16,9 @@ QQ.MouseArea {
         mouse.accepted = false
     }
 
-    Menu {
+    QC.Menu {
         id: rightClickMenu
-        MenuItem {
+        QC.MenuItem {
             text: "Remove " + rightClickMouseArea.name
 
             onTriggered: {

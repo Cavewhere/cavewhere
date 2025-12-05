@@ -95,7 +95,7 @@ QQ.Item {
 
         Text {
             id: errorText
-            color: "red"
+            color: Theme.danger
             visible: false
             text: "Weird scaling units"
             font.italic: true

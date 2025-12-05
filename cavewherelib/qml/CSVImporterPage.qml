@@ -215,12 +215,12 @@ ScrollViewPage {
                                 font.family: csvTextAreaId.font.family
                                 font.pixelSize: csvTextAreaId.font.pixelSize
                                 text: index + 1
-                                color: "grey"
+                                color: Theme.border
                             }
 
                             QQ.Rectangle {
                                 anchors.fill: parent
-                                color: "#e8e8e8"
+                                color: Theme.surfaceMuted
                                 z: -1
                             }
                         }
@@ -259,9 +259,10 @@ ScrollViewPage {
                                 required property string displayRole
 
                                 border.width: 1
-                                border.color: "lightgrey"
+                                border.color: Theme.borderSubtle
                                 implicitWidth: textId.width + 6
                                 implicitHeight: textId.height + 6
+                                color: Theme.surfaceMuted
 
                                 Text {
                                     id: textId

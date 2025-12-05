@@ -6,8 +6,9 @@
 **************************************************************************/
 
 import QtQuick as QQ
+import QtQuick.Controls as QC
 // import QtGraphicalEffects
-import "qrc:/qt/qml/cavewherelib/qml/Theme.js" as Theme
+import cavewherelib
 
 QQ.Item {
     id: widgetId
@@ -44,24 +45,12 @@ QQ.Item {
             radius: Theme.floatingWidgetRadius
             color: Theme.floatingWidgetColor
 
-            QQ.Column {
-                id: columnId
+                QQ.Column {
+                    id: columnId
 
-                spacing: 10
+                    spacing: 10
 
-                anchors.centerIn: parent
-
-                Text {
-                    id: noteTextId
-                    text: "No notes found..."
-                    font.pixelSize: 18
-                    font.bold: true
-                    anchors.horizontalCenter: parent.horizontalCenter
-                }
-
-                QQ.Row {
-                    anchors.horizontalCenter: noteTextId.horizontalCenter
-                    spacing: 5
+                    anchors.centerIn: parent
 
                     Text {
                         text: "Add scanned notes\nAdd 3d Model"
@@ -118,4 +107,4 @@ QQ.Item {
     //     }
     // }
 
-}
+// }

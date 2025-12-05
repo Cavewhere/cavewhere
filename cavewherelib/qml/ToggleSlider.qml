@@ -6,7 +6,8 @@
 **************************************************************************/
 
 import QtQuick as QQ
-
+import QtQuick.Controls as QC
+import cavewherelib
 QQ.Item {
     id: toggleSliderId
 

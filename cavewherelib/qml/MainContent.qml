@@ -128,6 +128,12 @@ QQ.Item {
             anchors.fill: parent
         }
     }
+    QQ.Component {
+        id: colorsPageComponent
+        ColorsPage {
+            anchors.fill: parent
+        }
+    }
 
     QQ.Component {
         id: remoteRepositoryPageComponent
@@ -156,6 +162,7 @@ QQ.Item {
         RootData.pageSelectionModel.registerPage(null, "Testcases", testcasesPageComponent);
         RootData.pageSelectionModel.registerPage(null, "About", aboutPageComponent)
         RootData.pageSelectionModel.registerPage(null, "Settings", settingsPageComponent)
+        RootData.pageSelectionModel.registerPage(null, "Colors", colorsPageComponent)
         RootData.pageSelectionModel.registerPage(null, "Pipeline", pipelinePageComponent)
 
         mainSideBar.viewPage = viewPage;

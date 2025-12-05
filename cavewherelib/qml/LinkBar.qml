@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick as QQ
-import QtQuick.Controls as Controls
+import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
 
@@ -33,9 +33,10 @@ QQ.Item {
                 id: backForwardLayoutId
                 anchors.centerIn: parent
 
-                Controls.RoundButton {
+                RoundButton {
                     objectName: "back"
                     icon.source: "qrc:/twbs-icons/icons/chevron-left.svg"
+                    icon.color: Theme.text
                     enabled: RootData.pageSelectionModel.hasBackward
                     onClicked: {
                         RootData.pageSelectionModel.back();
@@ -44,7 +45,7 @@ QQ.Item {
                     implicitHeight: implicitWidth
                 }
 
-                Controls.RoundButton {
+                RoundButton {
                     icon.source: "qrc:/twbs-icons/icons/chevron-right.svg"
                     enabled: RootData.pageSelectionModel.hasForward
                     onClicked: {
@@ -62,7 +63,8 @@ QQ.Item {
             Layout.fillWidth: true
             implicitHeight: sizeItemId.height + 10
             border.width: 1
-            border.color: "#808080"
+            border.color: Theme.sidebar.divider
+            color: Theme.surfaceMuted
 
             LinkBarItem {
                 id: sizeItemId
@@ -91,9 +93,14 @@ QQ.Item {
                     nextArrowVisible: linkBarListView.count - 1 !== index
                     text: nameRole
                 }
+
+                QQ.Rectangle {
+                    anchors.fill: parent
+                    color: Theme.surface
+                }
             }
 
-            Controls.TextField {
+            QC.TextField {
                 id: textFieldId
                 anchors.left: parent.left
                 anchors.right: parent.right
@@ -106,8 +113,7 @@ QQ.Item {
                 onEditingFinished: RootData.pageSelectionModel.currentPageAddress = text
             }
 
-
-            Controls.Button {
+            QC.Button {
                 id: textEnableButtonId
                 anchors.right: parent.right
                 anchors.rightMargin: 5
@@ -142,7 +148,6 @@ QQ.Item {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         height: 1
-        color: "#141414"
+        color: Theme.divider
     }
 }
-

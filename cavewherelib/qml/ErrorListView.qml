@@ -1,6 +1,6 @@
 import QtQuick as QQ
 import QtQuick.Layouts
-import QtQuick.Controls
+import QtQuick.Controls as QC
 import cavewherelib
 
 QQ.ListView {
@@ -8,7 +8,7 @@ QQ.ListView {
 
     anchors.fill: parent
 
-    delegate: QQ.Rectangle {
+    delegate: TableRowBackground {
         id: delegateId
         required property int errorType
         required property int index
@@ -18,7 +18,8 @@ QQ.ListView {
         anchors.right: parent ? parent.right : undefined
         implicitHeight: rowLayoutId.height + 10
 
-        color: index % 2 ? "lightgray" : "white"
+        rowIndex: index
+        isSelected: false
 
         RowLayout {
             id: rowLayoutId
@@ -51,6 +52,8 @@ QQ.ListView {
                 readOnly: true
                 selectByMouse: true
                 wrapMode: QQ.TextEdit.WordWrap
+                color: Theme.text
+                selectionColor: Theme.highlight
             }
         }
     }

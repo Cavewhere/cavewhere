@@ -14,7 +14,7 @@ QQ.Rectangle {
     id: sidebarArea
     objectName: "mainSideBar"
     width: 80
-    color: "#ffffff"
+    color: Theme.sidebar.background
 
     //Pageshown is an enumerated type that is either, view, data, draft
     property alias pageShown: buttonBar.currentIndex;
@@ -98,12 +98,12 @@ QQ.Rectangle {
         gradient: QQ.Gradient {
             QQ.GradientStop {
                 position: 1
-                color: "#616469"
+                color: Theme.sidebar.gradientBottom
             }
 
             QQ.GradientStop {
                 position: 0
-                color: "#1b2331"
+                color: Theme.sidebar.gradientTop
             }
         }
         width: parent.height
@@ -213,7 +213,8 @@ QQ.Rectangle {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         implicitHeight: autoSwitchLayoutId.height
-        color: "white"
+
+        color: Theme.sidebar.panel
 
         ColumnLayout {
             id: autoSwitchLayoutId
@@ -244,6 +245,6 @@ QQ.Rectangle {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         width: 1
-        color: "#141414"
+        color: Theme.sidebar.divider
     }
 }

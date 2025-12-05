@@ -122,22 +122,23 @@ void cwLeadView::addScrap(cwScrap *scrap)
 
     auto updateIndexesToEnd = [scrap, itemAt, this](int begin) {
         auto& entry = m_leadItems[scrap];
-        for(int i = begin; i < scrap->numberOfLeads(); i++) {
+        for(int i = begin; i < entry.items.size(); i++) {
             auto item = itemAt(entry.items, i);
             item->setProperty("pointIndex", i);
         }
     };
 
     auto beginInsert = [this, scrap, updateIndexesToEnd, updatePosition](int begin, int end) {
+
         if(begin <= end) {
             auto& entry = m_leadItems[scrap];
-            entry.scrapLeadId = ++m_currentScrapId;
 
             for(int i = begin; i <= end; i++) {
                 //Create the item
                 auto item = createItem();
                 entry.items.insert(i, item);
 
+                item->setProperty("scrap", QVariant::fromValue(scrap));
                 item->setProperty("scrapId", entry.scrapLeadId);
             }
 
@@ -147,10 +148,10 @@ void cwLeadView::addScrap(cwScrap *scrap)
 
     auto insert = [this, scrap, updatePosition, itemAt](int begin, int end) {
         auto& entry = m_leadItems[scrap];
+
         for(int i = begin; i <= end; i++) {
             auto item = itemAt(entry.items, i);
             updatePosition(item, i);
-            item->setProperty("scrap", QVariant::fromValue(scrap));
         }
     };
 
@@ -186,7 +187,7 @@ void cwLeadView::addScrap(cwScrap *scrap)
     connect(scrap, &cwScrap::leadsReset, this, resetScrap);
 
     //Setup the leads
-    m_leadItems.insert(scrap, {});
+    m_leadItems.insert(scrap, {++m_currentScrapId, {}});
 
     auto lastIndex = scrap->numberOfLeads() - 1;
     beginInsert(0, lastIndex);

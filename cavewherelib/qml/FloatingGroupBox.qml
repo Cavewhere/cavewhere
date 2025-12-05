@@ -7,7 +7,8 @@
 
 // import QtQuick as QQ // to target S60 5th Edition or Maemo 5
 import QtQuick as QQ
-import "qrc:/qt/qml/cavewherelib/qml/Theme.js" as Theme
+import QtQuick.Controls as QC
+import cavewherelib
 
 QQ.Item {
     id: floatingGroupBoxId
@@ -27,6 +28,7 @@ QQ.Item {
         anchors.bottom: boxGroupId.top
         anchors.rightMargin: 5
         font.bold:  true
+        color: Theme.text
     }
 
     ShadowRectangle {
@@ -48,7 +50,7 @@ QQ.Item {
 
         border.width: floatingGroupBoxId.borderWidth
         radius: Theme.floatingWidgetRadius
-        color: "#00000000"
+        color: Theme.transparent
 
         width: container.width + floatingGroupBoxId.margin * 2;
         height: container.height + floatingGroupBoxId.margin * 2;

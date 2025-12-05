@@ -110,7 +110,7 @@ ColumnLayout {
                 }
 
                 highlight: QQ.Rectangle {
-                    color: "#8AC6FF"
+                    color: Theme.accentMuted
                     radius: 3
                 }
 

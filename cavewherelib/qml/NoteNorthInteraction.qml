@@ -7,7 +7,7 @@
 
 import QtQuick as QQ
 import cavewherelib
-
+import QtQuick.Controls as QC
 /**
   This interaction allows the user to select two points on the note scrap update the north
   rotation
@@ -126,7 +126,7 @@ PanZoomInteraction {
         visible: false
 
         style: Text.Outline
-        styleColor: "#EEEEEE"
+        styleColor: Theme.surfaceMuted
 
         // QQ.Connections {
         //     target: northArrow.transformUpdater

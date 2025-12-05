@@ -2,7 +2,7 @@ import QtQuick as QQ
 import QtQuick.Layouts
 import cavewherelib
 import "Utils.js" as Utils
-
+import QtQuick.Controls as QC
 RowLayout {
     id: itemId
 
@@ -42,6 +42,8 @@ RowLayout {
             implicitWidth: childrenRect.width + columnOnPaper.x * 2.0
             implicitHeight: childrenRect.height
 
+            color: Theme.surfaceRaised
+
             QQ.Column {
                 id: columnOnPaper
                 x: 3
@@ -74,6 +76,8 @@ RowLayout {
 
             implicitWidth: childrenRect.width + columnInCave.x * 2.0
             implicitHeight: childrenRect.height
+
+            color: Theme.surfaceRaised
 
             QQ.Column {
                 id: columnInCave
@@ -112,7 +116,7 @@ RowLayout {
 
     Text {
         id: errorText
-        color: "red"
+        color: Theme.danger
         Layout.alignment: Qt.AlignVCenter
         visible: false
         text: "Weird scaling units"

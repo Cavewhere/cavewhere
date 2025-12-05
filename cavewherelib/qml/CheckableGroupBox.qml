@@ -6,12 +6,12 @@
 **************************************************************************/
 
 import QtQuick as QQ
-import "qrc:/qt/qml/cavewherelib/qml/Theme.js" as Theme
+import cavewherelib
 
 QQ.Item {
     id: itemId
 
-    property QQ.color backgroundColor: "white"
+    property QQ.color backgroundColor: Theme.background
     property alias checked: checkbox.checked
     property alias text: checkbox.text
     property bool contentsVisible: true
@@ -26,9 +26,9 @@ QQ.Item {
     QQ.Rectangle {
         id: checkBoxGroup
         border.width: 1
-        border.color: "gray"
+        border.color: Theme.border
         radius: Theme.floatingWidgetRadius
-        color: "#00000000"
+        color: Theme.transparent
         visible: itemId.contentsVisible
 
         anchors.top: checkbox.verticalCenter

@@ -95,5 +95,87 @@ MainWindowTest {
             let noLeadsHelpbox = ObjectFinder.findObjectByChain(mainWindow, "rootId->leadPage->noLeadsHelpBox")
             tryVerify(()=>{ return noLeadsHelpbox.visible });
         }
+
+        function test_addLeadAndViewDetails() {
+            // Load dataset
+            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+
+            let cave = RootData.region.cave(0);
+            let trip = cave.trip(0);
+
+            // Jump to trip page (first trip in cave)
+            RootData.pageSelectionModel.currentPageAddress = "Data/Cave=" + cave.name + "/Trip=" + trip.name;
+            tryVerify(() => RootData.pageView.currentPageItem.objectName === "tripPage");
+
+            // Enter carpet/select mode
+            let carpetButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId");
+            mouseClick(carpetButton);
+
+            wait(300)
+
+            let imageId_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
+            mouseClick(imageId_obj1, 1854.2, 1091.57)
+
+                    let _obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->addLeads")
+                    mouseClick(_obj1)
+
+                    let imageId_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
+                    mouseClick(imageId_obj2, 1765, 1166.13)
+
+
+            wait(200)
+
+            let noteArea = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea")
+            let scrapView = findChild(noteArea, "scrapViewId");
+            verify(scrapView)
+            // scrapView.selectScrapIndex = 0;
+            tryVerify(() => scrapView.selectedScrapItem !== null);
+
+            // Fill in lead details
+            let widthText = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->leadEditor->widthText");
+            mouseClick(widthText, 2, 2);
+            keyClick(51, 0); // '3'
+
+            let heightText = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->leadEditor->heightText");
+            mouseClick(heightText, 2, 2);
+            keyClick(50, 0); // '2'
+
+            let description = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->leadEditor->description");
+            mouseClick(description, 2, 2);
+            keyClick("N");
+            keyClick("e");
+            keyClick("w");
+            keyClick(" ");
+            keyClick("l");
+            keyClick("e");
+            keyClick("a");
+            keyClick("d");
+
+            let scrap = scrapView.selectedScrapItem.scrap;
+            let newLeadIndex = scrap.numberOfLeads() - 1;
+
+            // Switch to 3D view
+            let viewButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->mainSideBar->viewButton");
+            mouseClick(viewButton);
+            tryVerify(() => RootData.pageView.currentPageItem.objectName === "viewPage");
+
+            wait(300)
+
+                    let leadObj = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint1_2")
+            tryVerify(() => leadObj !== null)
+                    mouseClick(leadObj)
+
+            wait(100);
+
+            let quoteBox = findChild(leadObj, "leadQuoteBox");
+                    verify(quoteBox)
+            let widthDisplay = findChild(quoteBox, "widthText");
+            let heightDisplay = findChild(quoteBox, "heightText");
+            let descriptionDisplay = findChild(quoteBox, "description");
+
+            compare(widthDisplay.text, "3");
+            compare(heightDisplay.text, "2");
+            compare(descriptionDisplay.text, "New lead");
+        }
     }
 }

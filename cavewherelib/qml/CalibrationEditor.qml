@@ -10,11 +10,11 @@ import QtQuick as QQ
 import QtQuick.Layouts
 import cavewherelib
 
-QQ.Rectangle {
+QQ.Item {
     id: calibrationEditor
     property TripCalibration calibration
 
-    radius: 8
+    // radius: 8
     implicitHeight: childrenRect.height
 
     ColumnLayout {

@@ -9,6 +9,8 @@ pragma ComponentBehavior: Bound
 import QtQuick as QQ
 import QtQuick.Layouts
 import QtQuick.Effects
+import QtQuick.Controls as QC
+import cavewherelib
 
 QQ.Rectangle {
     id: button
@@ -21,7 +23,7 @@ QQ.Rectangle {
     anchors.left: parent.left;
     anchors.right: parent.right
     height: columnLayoutId.height + 10
-    color: "#00000000"
+    color: Theme.transparent
     clip: true;
 
     //Called when troggle is true
@@ -46,7 +48,7 @@ QQ.Rectangle {
 
         Text {
             id: textLabel
-            color: "#ffffff"
+            color: Theme.sidebar.text
             text: "text"
             smooth: true
             style: Text.Sunken
@@ -67,19 +69,19 @@ QQ.Rectangle {
             QQ.GradientStop {
                 id: gradientstop1
                 position: 0
-                color: "#00d1d1d1"
+                color: Theme.sidebar.hoverStart
             }
 
             QQ.GradientStop {
                 id: gradientstop2
                 position: 0.47
-                color: "#96b5b5b5"
+                color: Theme.sidebar.hoverMid
             }
 
             QQ.GradientStop {
                 id: gradientstop3
                 position: 1
-                color: "#00000000"
+                color: Theme.transparent
             }
         }
         transformOrigin: QQ.Item.Top
@@ -109,9 +111,9 @@ QQ.Rectangle {
         width: parent.width + 4
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        color: "#00ffffff"
+        color: Theme.transparent
         anchors.horizontalCenter: parent.horizontalCenter
-        border.color: "#00000000"
+        border.color: Theme.transparent
         border.width: 0
         z: -1
         opacity: 1
@@ -121,26 +123,26 @@ QQ.Rectangle {
         QQ.State {
             name: "toggledState"
 
-            QQ.PropertyChanges {
-                gradientstop1 {
-                    position: 0
-                    color: "#ffffff"
-                }
+        QQ.PropertyChanges {
+            gradientstop1 {
+                position: 0
+                color: Theme.sidebar.toggledStart
             }
+        }
 
-            QQ.PropertyChanges {
-                gradientstop2 {
-                    position: 1
-                    color: "#000000"
-                }
+        QQ.PropertyChanges {
+            gradientstop2 {
+                position: 1
+                color: Theme.sidebar.toggledMid
             }
+        }
 
-            QQ.PropertyChanges {
-                gradientstop3 {
-                    position: 1
-                    color: "#c8c0c0c0"
-                }
+        QQ.PropertyChanges {
+            gradientstop3 {
+                position: 1
+                color: Theme.sidebar.toggledEnd
             }
+        }
 
             QQ.PropertyChanges {
                 hoverBackground {
@@ -149,19 +151,19 @@ QQ.Rectangle {
                 }
             }
 
-            QQ.PropertyChanges {
-                textLabel {
-                    color: "#000000"
-                    styleColor: "#aaaaaa"
-                    style: Text.Raised
-                }
+        QQ.PropertyChanges {
+            textLabel {
+                color: Theme.sidebar.textActive
+                styleColor: Theme.sidebar.textStroke
+                style: Text.Raised
             }
+        }
 
-            QQ.PropertyChanges {
-                borderRectangle {
-                    border.color: "#313131"
-                }
+        QQ.PropertyChanges {
+            borderRectangle {
+                border.color: Theme.sidebar.borderActive
             }
+        }
 
             QQ.PropertyChanges {
                 hoverHandler {
@@ -178,32 +180,32 @@ QQ.Rectangle {
                 }
             }
 
-            QQ.PropertyChanges {
-                gradientstop1 {
-                    position: 0
-                    color: "#00d1d1d1"
-                }
+        QQ.PropertyChanges {
+            gradientstop1 {
+                position: 0
+                color: Theme.sidebar.hoverStart
             }
+        }
 
-            QQ.PropertyChanges {
-                gradientstop2 {
-                    position: 0.47
-                    color: "#32b5b5b5"
-                }
+        QQ.PropertyChanges {
+            gradientstop2 {
+                position: 0.47
+                color: Theme.sidebar.hoverMidHover
             }
+        }
 
             QQ.PropertyChanges {
                 gradientstop3 {
                     position: 1
-                    color: "#00000000"
+                    color: Theme.transparent
                 }
             }
 
-            QQ.PropertyChanges {
-                borderRectangle {
-                    border.color: "#ffffff"
-                }
+        QQ.PropertyChanges {
+            borderRectangle {
+                border.color: Theme.sidebar.borderHover
             }
+        }
 
         }
     ]

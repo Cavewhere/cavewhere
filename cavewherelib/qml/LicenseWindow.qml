@@ -1,5 +1,5 @@
 import QtQuick.Window
-import QtQuick.Controls
+import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
 
@@ -8,7 +8,7 @@ Window {
     width: 500
     height: 600
     visible: !RootData.license.hasReadLicenseAgreement
-    color: "#E8E8E8"
+    color: Theme.surfaceMuted
     title: "License Agreement"
 
     modality: Qt.WindowModal
