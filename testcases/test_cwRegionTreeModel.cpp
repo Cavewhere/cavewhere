@@ -18,6 +18,7 @@
 TEST_CASE("cwRegionTreeModel all function should work correctly", "[cwRegionTreeModel]") {
 
     auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
     fileToProject(project.get(), "://datasets/test_cwRegionTreeModel/testAllFunction.cw");
 
     auto regionModel = std::make_unique<cwRegionTreeModel>();
@@ -56,6 +57,7 @@ TEST_CASE("cwRegionTreeModel all function should work correctly", "[cwRegionTree
 TEST_CASE("cwRegionTreeModel object function should work correctly", "[cwRegionTreeModel]") {
 
     auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
     fileToProject(project.get(), "://datasets/test_cwRegionTreeModel/testAllFunction.cw");
 
     auto regionModel = std::make_unique<cwRegionTreeModel>();
@@ -99,6 +101,7 @@ static T* objAt(const QAbstractItemModel* m, const QModelIndex& idx, int role)
 
 TEST_CASE("LiDAR rows are exposed under Trip and react to insert/remove", "[cwRegionTreeModel][LiDAR]") {
     auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
     fileToProject(project.get(), "://datasets/test_cwRegionTreeModel/testAllFunction.cw");
 
     auto regionModel = std::make_unique<cwRegionTreeModel>();
@@ -257,6 +260,7 @@ static QModelIndex idxTripNotesLidarContainer(const cwRegionTreeModel& m, const 
 
 TEST_CASE("cwRegionTreeModel::parent correctness across all levels", "[cwRegionTreeModel]") {
     auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
     fileToProject(project.get(), "://datasets/test_cwRegionTreeModel/testAllFunction.cw");
 
     auto model = std::make_unique<cwRegionTreeModel>();

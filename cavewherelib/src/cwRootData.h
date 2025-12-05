@@ -104,6 +104,7 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
 
 public:
     explicit cwRootData(QObject *parent = 0);
+    ~cwRootData();
     cwCavingRegion* region() const;
     cwLinePlotManager* linePlotManager() const;
     cwScrapManager* scrapManager() const;

@@ -16,9 +16,7 @@ void cwFutureManagerToken::addJob(const cwFuture &job)
 {
     auto model = Model;
 
-    if(model.isNull()) {
-        qWarning() << "Can't add job because model is null" << LOCATION;
-    }
+    Q_ASSERT(!model.isNull());
 
     QMetaObject::invokeMethod(model, [model, job]()
     {

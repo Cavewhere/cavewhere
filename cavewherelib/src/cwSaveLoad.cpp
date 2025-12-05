@@ -51,6 +51,7 @@
 
 //std includes
 #include <unordered_set>
+#include <algorithm>
 
 using namespace Monad;
 
@@ -115,7 +116,7 @@ struct cwSaveLoad::Data {
         Action action = Action::Rename;
 
         bool rename() const {
-            qDebug() << "Renaming: " << oldPath << "to" << newPath;
+            // qDebug() << "Renaming: " << oldPath << "to" << newPath;
             return QDir().rename(oldPath, newPath);
         }
 
@@ -391,13 +392,13 @@ struct cwSaveLoad::Data {
             std::ranges::sort(m_fileSystemJobs, FileSystemJob::lessThan);
 
             auto setOldPath = [this](FileSystemJob& job) {
-                qDebug() << "SetOldPath:" << m_fileLookup[job.object] << job.object;
+                // qDebug() << "SetOldPath:" << m_fileLookup[job.object] << job.object;
                 Q_ASSERT(m_fileLookup.contains(job.object));
                 // Q_ASSERT(QFileInfo::exists(m_fileLookup[job.object]));
                 auto oldPath = m_fileLookup[job.object];
 
                 if(job.kind == FileSystemJob::Kind::Directory) {
-                    qDebug() << "Dir:" << QFileInfo(oldPath).absoluteDir().canonicalPath() << QFileInfo(QFileInfo(oldPath).absoluteDir().canonicalPath());
+                    // qDebug() << "Dir:" << QFileInfo(oldPath).absoluteDir().canonicalPath() << QFileInfo(QFileInfo(oldPath).absoluteDir().canonicalPath());
                     Q_ASSERT(QFileInfo(QFileInfo(oldPath).absoluteDir().canonicalPath()).isDir());
                     oldPath = QFileInfo(oldPath).absoluteDir().canonicalPath();
                 } else {
@@ -413,7 +414,7 @@ struct cwSaveLoad::Data {
                 setOldPath(job);
 
                 bool success = job.execute();
-                qDebug() << "Success:" << job.newPath << success;
+                // qDebug() << "Success:" << job.newPath << success;
 
                 // qDebug() << "CouldRename:" << couldRename;
 
@@ -981,7 +982,7 @@ static auto makeImageFromRelativePath(const QDir& rootDirectory) {
         QImage qimage(absolutePath);
         cwImage image = cwAddImageTask::originalMetaData(qimage);
         image.setPath(relativePath);
-        qDebug() << "Returning image:" << image;
+        // qDebug() << "Returning image:" << image;
         return image;
     };
 }
@@ -1447,6 +1448,10 @@ QFuture<Monad::Result<cwCavingRegionData>> cwSaveLoad::loadAll(const QString &fi
 
             QDir regionDir = QFileInfo(filename).absoluteDir();
 
+            auto filePathLess = [](const QFileInfo& a, const QFileInfo& b) {
+                return a.absoluteFilePath() < b.absoluteFilePath();
+            };
+
             // Find all caves (*.cwcave)
             QFileInfoList caveFiles;
             QDirIterator it(regionDir.absolutePath(), QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
@@ -1459,6 +1464,8 @@ QFuture<Monad::Result<cwCavingRegionData>> cwSaveLoad::loadAll(const QString &fi
                     caveFiles.append(files);
                 }
             }
+
+            std::sort(caveFiles.begin(), caveFiles.end(), filePathLess);
 
             for (const QFileInfo &caveFileInfo : caveFiles) {
                 auto caveResult = loadCave(caveFileInfo.absoluteFilePath());
@@ -1474,55 +1481,67 @@ QFuture<Monad::Result<cwCavingRegionData>> cwSaveLoad::loadAll(const QString &fi
                 QDir caveDir = caveFileInfo.absoluteDir();
                 QDir tripsDir(caveDir.filePath("trips"));
                 if (tripsDir.exists()) {
+                    QFileInfoList tripFiles;
                     QDirIterator tripIt(tripsDir.absolutePath(), QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
                     while (tripIt.hasNext()) {
                         tripIt.next();
                         QDir tripDir(tripIt.filePath());
 
-                        QFileInfoList tripFiles = tripDir.entryInfoList(QStringList() << "*.cwtrip", QDir::Files);
-                        for (const QFileInfo &tripFileInfo : tripFiles) {
-                            auto tripResult = loadTrip(tripFileInfo.absoluteFilePath());
+                        QFileInfoList dirTripFiles = tripDir.entryInfoList(QStringList() << "*.cwtrip",
+                                                                           QDir::Files,
+                                                                           QDir::Name | QDir::IgnoreCase | QDir::LocaleAware);
+                        tripFiles.append(dirTripFiles);
+                    }
 
-                            if (tripResult.hasError()) {
-                                // FIXME: log or collect the error
-                                continue;
+                    std::sort(tripFiles.begin(), tripFiles.end(), filePathLess);
+
+                    for (const QFileInfo &tripFileInfo : tripFiles) {
+                        auto tripResult = loadTrip(tripFileInfo.absoluteFilePath());
+
+                        if (tripResult.hasError()) {
+                            // FIXME: log or collect the error
+                            continue;
+                        }
+
+                        cwTripData trip = tripResult.value();
+
+                        QDir tripDir = tripFileInfo.absoluteDir();
+
+                        auto loadObjectsFromNotesDir = [=](const QString& fileSuffix,
+                                                           auto&& loadFunc,
+                                                           auto& destinationList)
+                        {
+                            QDir notesDir = tripDir.filePath("notes");
+                            if (!notesDir.exists()) {
+                                return;
                             }
 
-                            cwTripData trip = tripResult.value();
-
-                            auto loadObjectsFromNotesDir = [=](const QString& fileSuffix,
-                                                               auto&& loadFunc,
-                                                               auto& destinationList)
-                            {
-                                QDir notesDir = tripDir.filePath("notes");
-                                if (!notesDir.exists()) {
-                                    return;
+                            QFileInfoList files = notesDir.entryInfoList(QStringList() << ("*" + fileSuffix),
+                                                                         QDir::Files,
+                                                                         QDir::Name | QDir::IgnoreCase | QDir::LocaleAware);
+                            std::sort(files.begin(), files.end(), filePathLess);
+                            for (const QFileInfo& fileInfo : files) {
+                                auto result = loadFunc(fileInfo.absoluteFilePath(), regionDir);
+                                if (result.hasError()) {
+                                    // FIXME: log or collect the error
+                                    continue;
                                 }
 
-                                QFileInfoList files = notesDir.entryInfoList(QStringList() << ("*" + fileSuffix), QDir::Files);
-                                for (const QFileInfo& fileInfo : files) {
-                                    auto result = loadFunc(fileInfo.absoluteFilePath(), regionDir);
-                                    if (result.hasError()) {
-                                        // FIXME: log or collect the error
-                                        continue;
-                                    }
+                                destinationList.append(result.value());
+                            }
+                        };
 
-                                    destinationList.append(result.value());
-                                }
-                            };
+                        //Load 2D notes
+                        loadObjectsFromNotesDir(QStringLiteral("cwnote"),
+                                                loadNote,
+                                                trip.noteModel.notes);
 
-                            //Load 2D notes
-                            loadObjectsFromNotesDir(QStringLiteral("cwnote"),
-                                                    loadNote,
-                                                    trip.noteModel.notes);
+                        //Load 3D lidar notes
+                        loadObjectsFromNotesDir(QStringLiteral("cwnote3d"),
+                                                loadNoteLiDAR,
+                                                trip.noteLiDARModel.notes);
 
-                            //Load 3D lidar notes
-                            loadObjectsFromNotesDir(QStringLiteral("cwnote3d"),
-                                                    loadNoteLiDAR,
-                                                    trip.noteLiDARModel.notes);
-
-                            cave.trips.append(trip);
-                        }
+                        cave.trips.append(trip);
                     }
                 }
 
@@ -2115,7 +2134,7 @@ void cwSaveLoad::connectTreeModel()
                     case cwRegionTreeModel::NoteType: {
                         auto note = d->m_regionTreeModel->note(index);
                         auto noteFilename = absolutePath(note);
-                        qDebug() << "Deleting:" << noteFilename << note << note->name();
+                        // qDebug() << "Deleting:" << noteFilename << note << note->name();
                         d->addFileSystemJob(Data::FileSystemJob
                                             {
                                                 note,

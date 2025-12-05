@@ -150,6 +150,12 @@ cwRootData::cwRootData(QObject *parent) :
     });
 }
 
+cwRootData::~cwRootData()
+{
+    taskManagerModel()->waitForTasks();
+    futureManagerModel()->waitForFinished();
+}
+
 /**
 Gets undoStack
 */

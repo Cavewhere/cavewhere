@@ -547,6 +547,7 @@ TEST_CASE("cwProject should detect the correct file type", "[cwProject]") {
     //Older sqlite project
     QString datasetFile = copyToTempFolder(":/datasets/test_cwProject/Phake Cave 3000.cw");
     auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
     CHECK(project->projectType(datasetFile) == cwProject::SqliteFileType);
 
     //A file based file
@@ -623,6 +624,7 @@ TEST_CASE("Updating scrap data from a loaded project should save", "[cwProject]"
     root->futureManagerModel()->waitForFinished();
 
     auto reloadedProject = std::make_unique<cwProject>();
+    addTokenManager(reloadedProject.get());
     reloadedProject->loadOrConvert(filename);
     reloadedProject->waitLoadToFinish();
 
@@ -658,6 +660,7 @@ TEST_CASE("Test save changes", "[cwProject]") {
     SECTION("Simple cave name change") {
         //Change the name of the cave
         auto project = std::make_unique<cwProject>();
+        addTokenManager(project.get());
         project->waitSaveToFinish();
 
         CHECK(project->isTemporaryProject());
@@ -691,6 +694,7 @@ TEST_CASE("Test save changes", "[cwProject]") {
     SECTION("Simple cave and trip") {
         //Change the name of the cave
         auto project = std::make_unique<cwProject>();
+        addTokenManager(project.get());
         project->waitSaveToFinish();
 
         INFO("Project name:" << project->filename().toStdString());
@@ -738,6 +742,7 @@ TEST_CASE("Test save changes", "[cwProject]") {
             CHECK(QFileInfo::exists(cwSaveLoad::absolutePath(trip)));
 
             auto loadingProject = std::make_unique<cwProject>();
+            addTokenManager(loadingProject.get());
             loadingProject->loadOrConvert(project->filename());
             loadingProject->waitLoadToFinish();
 
@@ -877,6 +882,7 @@ TEST_CASE("Renaming a trip moves its files and note assets", "[cwProject][cwTrip
     CHECK(lidarNote->filename().toStdString() == QFileInfo(lidarNote->filename()).fileName().toStdString());
 
     auto reloadedProject = std::make_unique<cwProject>();
+    addTokenManager(reloadedProject.get());
     reloadedProject->loadOrConvert(project->filename());
     reloadedProject->waitLoadToFinish();
 
@@ -920,6 +926,7 @@ TEST_CASE("Trip calibration persistence", "[cwProject]") {
 
     // Fresh project with one cave + one trip
     auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
     project->waitSaveToFinish();
 
     cwCave* cave = new cwCave();
@@ -948,6 +955,7 @@ TEST_CASE("Trip calibration persistence", "[cwProject]") {
 
             // Reload and verify
             auto loadingProject = std::make_unique<cwProject>();
+            addTokenManager(loadingProject.get());
             loadingProject->loadOrConvert(project->filename());
             loadingProject->waitLoadToFinish();
 
@@ -979,6 +987,7 @@ TEST_CASE("Trip calibration persistence", "[cwProject]") {
 
         // Reload and verify
         auto loadingProject = std::make_unique<cwProject>();
+        addTokenManager(loadingProject.get());
         loadingProject->loadOrConvert(project->filename());
         loadingProject->waitLoadToFinish();
 
@@ -1015,6 +1024,7 @@ TEST_CASE("Trip calibration persistence", "[cwProject]") {
         project->waitSaveToFinish();
 
         auto loadingProject = std::make_unique<cwProject>();
+        addTokenManager(loadingProject.get());
         loadingProject->loadOrConvert(project->filename());
         loadingProject->waitLoadToFinish();
 
@@ -1039,6 +1049,7 @@ TEST_CASE("Trip calibration persistence", "[cwProject]") {
         project->waitSaveToFinish();
 
         auto loadingProject = std::make_unique<cwProject>();
+        addTokenManager(loadingProject.get());
         loadingProject->loadOrConvert(project->filename());
         loadingProject->waitLoadToFinish();
 
@@ -1064,6 +1075,7 @@ TEST_CASE("Trip calibration persistence", "[cwProject]") {
         project->waitSaveToFinish();
 
         auto loadingProject = std::make_unique<cwProject>();
+        addTokenManager(loadingProject.get());
         loadingProject->loadOrConvert(project->filename());
         loadingProject->waitLoadToFinish();
 
@@ -1077,6 +1089,7 @@ TEST_CASE("Trip calibration persistence", "[cwProject]") {
 
 TEST_CASE("Trip team member role changes persist and trigger save", "[cwProject][cwTeam]") {
     auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
     project->waitSaveToFinish();
 
     cwCave* cave = new cwCave();
@@ -1117,6 +1130,7 @@ TEST_CASE("Trip team member role changes persist and trigger save", "[cwProject]
 
         // Reload and verify both roles
         auto reloaded = std::make_unique<cwProject>();
+        addTokenManager(reloaded.get());
         reloaded->loadOrConvert(project->filename());
         reloaded->waitLoadToFinish();
 
@@ -1158,6 +1172,7 @@ TEST_CASE("Trip team member role changes persist and trigger save", "[cwProject]
         project->waitSaveToFinish();
 
         auto reloaded = std::make_unique<cwProject>();
+        addTokenManager(reloaded.get());
         reloaded->loadOrConvert(project->filename());
         reloaded->waitLoadToFinish();
 
@@ -1193,6 +1208,7 @@ TEST_CASE("Trip team member role changes persist and trigger save", "[cwProject]
         project->waitSaveToFinish();
 
         auto reloaded = std::make_unique<cwProject>();
+        addTokenManager(reloaded.get());
         reloaded->loadOrConvert(project->filename());
         reloaded->waitLoadToFinish();
 
@@ -1209,6 +1225,7 @@ TEST_CASE("Trip team member role changes persist and trigger save", "[cwProject]
 TEST_CASE("Trip date persistence", "[cwProject][cwTrip]") {
     // Build project → cave → trip
     auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
     project->waitSaveToFinish();
 
     cwCave* cave = new cwCave();
@@ -1229,6 +1246,7 @@ TEST_CASE("Trip date persistence", "[cwProject][cwTrip]") {
         project->waitSaveToFinish();
 
         auto reloaded = std::make_unique<cwProject>();
+        addTokenManager(reloaded.get());
         reloaded->loadOrConvert(project->filename());
         reloaded->waitLoadToFinish();
 
@@ -1254,6 +1272,7 @@ TEST_CASE("Trip date persistence", "[cwProject][cwTrip]") {
         project->waitSaveToFinish();
 
         auto reloaded = std::make_unique<cwProject>();
+        addTokenManager(reloaded.get());
         reloaded->loadOrConvert(project->filename());
         reloaded->waitLoadToFinish();
 
@@ -1267,6 +1286,7 @@ TEST_CASE("Trip date persistence", "[cwProject][cwTrip]") {
 
 TEST_CASE("Survey chunk persistence", "[cwProject][cwTrip][cwSurveyChunk]") {
     auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
     project->waitSaveToFinish();
 
     cwCave* cave = new cwCave();
@@ -1379,6 +1399,7 @@ TEST_CASE("Survey chunk persistence", "[cwProject][cwTrip][cwSurveyChunk]") {
 
         // ---------- Reload & VERIFY EVERYTHING ----------
         auto reloaded = std::make_unique<cwProject>();
+        addTokenManager(reloaded.get());
         reloaded->loadOrConvert(project->filename());
         reloaded->waitLoadToFinish();
 
@@ -1511,6 +1532,7 @@ TEST_CASE("Survey chunk persistence", "[cwProject][cwTrip][cwSurveyChunk]") {
         project->waitSaveToFinish();
 
         auto reloaded = std::make_unique<cwProject>();
+        addTokenManager(reloaded.get());
         reloaded->loadOrConvert(project->filename());
         reloaded->waitLoadToFinish();
 
@@ -1598,6 +1620,7 @@ TEST_CASE("Survey chunk persistence", "[cwProject][cwTrip][cwSurveyChunk]") {
         project->waitSaveToFinish();
 
         auto reloaded = std::make_unique<cwProject>();
+        addTokenManager(reloaded.get());
         reloaded->loadOrConvert(project->filename());
         reloaded->waitLoadToFinish();
 
@@ -1651,6 +1674,7 @@ TEST_CASE("Survey chunk persistence", "[cwProject][cwTrip][cwSurveyChunk]") {
 TEST_CASE("Note and Scrap persistence", "[cwProject][cwTrip][cwSurveyNoteModel][cwNote][cwScrap]") {
     // Project → cave → trip
     auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
     project->waitSaveToFinish();
 
     cwCave* cave = new cwCave();
@@ -1744,6 +1768,7 @@ TEST_CASE("Note and Scrap persistence", "[cwProject][cwTrip][cwSurveyNoteModel][
 
         // --- Reload and verify everything persisted ---
         auto reloaded = std::make_unique<cwProject>();
+        addTokenManager(reloaded.get());
         reloaded->loadOrConvert(project->filename());
         reloaded->waitLoadToFinish();
 
@@ -1849,6 +1874,7 @@ TEST_CASE("Note and Scrap persistence", "[cwProject][cwTrip][cwSurveyNoteModel][
 
         // --- Reload and verify edits (last write wins) ---
         auto reloaded = std::make_unique<cwProject>();
+        addTokenManager(reloaded.get());
         reloaded->loadOrConvert(project->filename());
         reloaded->waitLoadToFinish();
 
@@ -1882,6 +1908,7 @@ TEST_CASE("Note and Scrap persistence", "[cwProject][cwTrip][cwSurveyNoteModel][
 
 
         auto reloaded2 = std::make_unique<cwProject>();
+        addTokenManager(reloaded2.get());
         reloaded2->loadOrConvert(project->filename());
         reloaded2->waitLoadToFinish();
 
@@ -1914,6 +1941,7 @@ static QByteArray fileSha256(const QString& absolutePath) {
 TEST_CASE("LiDAR GLB persistence: file copy + stations", "[cwProject]") {
     // ---- Project → cave → trip ----
     auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
     project->waitSaveToFinish();
 
     cwCave* cave = new cwCave();
@@ -1972,6 +2000,7 @@ TEST_CASE("LiDAR GLB persistence: file copy + stations", "[cwProject]") {
 
     // ---- Reload and verify ----
     auto reloaded = std::make_unique<cwProject>();
+    addTokenManager(reloaded.get());
     reloaded->loadOrConvert(project->filename());
     reloaded->waitLoadToFinish();
 
@@ -2038,6 +2067,7 @@ TEST_CASE("LiDAR GLB persistence: file copy + stations", "[cwProject]") {
         reloaded->waitSaveToFinish();
 
         auto reloaded2 = std::make_unique<cwProject>();
+        addTokenManager(reloaded2.get());
         reloaded2->loadOrConvert(project->filename());
         reloaded2->waitLoadToFinish();
 
@@ -2074,6 +2104,7 @@ TEST_CASE("LiDAR GLB persistence: file copy + stations", "[cwProject]") {
         reloaded->waitSaveToFinish();
 
         auto reloaded2 = std::make_unique<cwProject>();
+        addTokenManager(reloaded2.get());
         reloaded2->loadOrConvert(project->filename());
         reloaded2->waitLoadToFinish();
 
@@ -2116,6 +2147,7 @@ TEST_CASE("LiDAR GLB persistence: file copy + stations", "[cwProject]") {
         project->waitSaveToFinish();
 
         auto reloadedT = std::make_unique<cwProject>();
+        addTokenManager(reloadedT.get());
         reloadedT->loadOrConvert(project->filename());
         reloadedT->waitLoadToFinish();
 
@@ -2157,6 +2189,7 @@ TEST_CASE("LiDAR GLB persistence: file copy + stations", "[cwProject]") {
         project->waitSaveToFinish();
 
         auto reloadedT = std::make_unique<cwProject>();
+        addTokenManager(reloadedT.get());
         reloadedT->loadOrConvert(project->filename());
         reloadedT->waitLoadToFinish();
 
@@ -2198,6 +2231,7 @@ TEST_CASE("LiDAR GLB persistence: file copy + stations", "[cwProject]") {
         // First reload
         {
             auto r1 = std::make_unique<cwProject>();
+            addTokenManager(r1.get());
             r1->loadOrConvert(project->filename());
             r1->waitLoadToFinish();
 
@@ -2219,6 +2253,7 @@ TEST_CASE("LiDAR GLB persistence: file copy + stations", "[cwProject]") {
         // Second reload
         {
             auto r2 = std::make_unique<cwProject>();
+            addTokenManager(r2.get());
             r2->loadOrConvert(project->filename());
             r2->waitLoadToFinish();
 
@@ -2297,6 +2332,7 @@ TEST_CASE("cwProject should overwrite or touch loaded project", "[cwProject]") {
     auto initialLoad = scan(QFileInfo(convertedFilename).absolutePath());
 
     auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
     project->loadFile(convertedFilename);
     project->waitLoadToFinish();
 
@@ -2349,6 +2385,7 @@ TEST_CASE("cwProject should overwrite or touch loaded project", "[cwProject]") {
 TEST_CASE("Caves should be removed correctly simple", "[cwProject]") {
     auto filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
     auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
 
     project->loadOrConvert(filename);
     project->waitLoadToFinish();
@@ -2364,7 +2401,7 @@ TEST_CASE("Caves should be removed correctly simple", "[cwProject]") {
     CHECK(QFileInfo::exists(caveFileName));
     CHECK(QFileInfo::exists(caveDir.absolutePath()));
 
-    qDebug() << "Starting the remove!";
+    // qDebug() << "Starting the remove!";
 
     //Remove the cave
     project->cavingRegion()->removeCave(0);
@@ -2378,6 +2415,7 @@ TEST_CASE("Caves should be removed correctly simple", "[cwProject]") {
 TEST_CASE("Trips should be removed correctly simple", "[cwProject]") {
     auto filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
     auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
 
     project->loadOrConvert(filename);
     project->waitLoadToFinish();
@@ -2408,6 +2446,7 @@ TEST_CASE("Trips should be removed correctly simple", "[cwProject]") {
 TEST_CASE("Note should be removed correctly simple", "[cwProject]") {
     auto filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
     auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
 
     project->loadOrConvert(filename);
     project->waitLoadToFinish();

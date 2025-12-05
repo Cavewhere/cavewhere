@@ -454,6 +454,7 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
 {
     //Make a temporary project
     auto tempProject = std::make_shared<cwProject>();
+    tempProject->setFutureManagerToken(futureManagerToken());
 
     //Load the old project into the temp project
     auto oldLoadFuture = tempProject->loadHelper(oldProjectFilename);

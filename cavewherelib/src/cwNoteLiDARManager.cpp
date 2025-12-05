@@ -300,7 +300,7 @@ void cwNoteLiDARManager::updateIconFromCache(cwNoteLiDAR* note)
     }
 
     cwDiskCacher::Key key = iconCacheKey(note);
-    qDebug() << "Key:" << key.path << key.id;
+    // qDebug() << "Key:" << key.path << key.id;
 
     //Don't checksum, it's slow
     // key.checksum = sourceChecksum(m_project, note);

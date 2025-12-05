@@ -32,6 +32,7 @@
 //Qt includes
 #include <QtGlobal>
 #include "cwSignalSpy.h"
+#include <algorithm>
 
 class TestRow {
 public:
@@ -79,18 +80,56 @@ public:
     double RotationEpsilon;
     double ScaleEpsilon;
     double ProfileAzimuth;
+
+    QString CaveName = QStringLiteral("Cave 1");
+    QString TripName = QStringLiteral("Trip 1");
+    QString NoteName;
+    int ScrapIndex = 0;
 };
 
-cwScrap* scrap(const cwProject* project, int caveIndex, int tripIndex, int noteIndex, int scrapIndex) {
-    REQUIRE(project->cavingRegion()->caveCount() >= caveIndex + 1);
-    cwCave* cave = project->cavingRegion()->cave(caveIndex);
+cwScrap* findScrap(const cwProject* project,
+                   const QString& caveName,
+                   const QString& tripName,
+                   const QString& noteName,
+                   int scrapIndex) {
+    INFO("Project:" << project->filename());
 
-    REQUIRE(cave->tripCount() >= tripIndex + 1);
-    cwTrip* trip = cave->trip(tripIndex);
+    REQUIRE(project);
+    REQUIRE(project->cavingRegion());
+    auto caves = project->cavingRegion()->caves();
+    REQUIRE(!caves.isEmpty());
+
+    auto caveIt = caveName.isEmpty()
+            ? caves.begin()
+            : std::find_if(caves.begin(), caves.end(), [&caveName](const cwCave* cave) {
+                  return cave->name().compare(caveName, Qt::CaseInsensitive) == 0;
+              });
+    REQUIRE(caveIt != caves.end());
+    cwCave* cave = *caveIt;
+
+    auto trips = cave->trips();
+    REQUIRE(!trips.isEmpty());
+    auto tripIt = tripName.isEmpty()
+            ? trips.begin()
+            : std::find_if(trips.begin(), trips.end(), [&tripName](const cwTrip* trip) {
+                  return trip->name().compare(tripName, Qt::CaseInsensitive) == 0;
+              });
+    REQUIRE(tripIt != trips.end());
+    cwTrip* trip = *tripIt;
     cwSurveyNoteModel* noteModel = trip->notes();
 
-    REQUIRE(noteModel->rowCount() >= noteIndex + 1);
-    cwNote* note = noteModel->notes().at(noteIndex);
+    INFO("Trip:" << trip->name());
+
+    const auto notes = noteModel->notes();
+    REQUIRE(!notes.isEmpty());
+
+    auto noteIt = noteName.isEmpty()
+            ? notes.begin()
+            : std::find_if(notes.begin(), notes.end(), [&noteName](const cwNote* note) {
+                  return note->name().compare(noteName, Qt::CaseInsensitive) == 0;
+              });
+    REQUIRE(noteIt != notes.end());
+    cwNote* note = *noteIt;
 
     REQUIRE(note->scraps().size() >= scrapIndex + 1);
     cwScrap* scrap = note->scrap(scrapIndex);
@@ -99,7 +138,11 @@ cwScrap* scrap(const cwProject* project, int caveIndex, int tripIndex, int noteI
 }
 
 cwScrap* firstScrap(const cwProject* project) {
-    return scrap(project, 0, 0, 0, 0);
+    return findScrap(project, QString(), QString(), QString(), 0);
+}
+
+cwScrap* findScrap(const cwProject* project, const TestRow& row) {
+    return findScrap(project, row.CaveName, row.TripName, row.NoteName, row.ScrapIndex);
 }
 
 void checkScrapTransform(cwScrap* scrap, const TestRow& row) {
@@ -139,17 +182,17 @@ TEST_CASE("Auto Calculate Note Transform", "[cwScrap]") {
 
     foreach(TestRow row, rows) {
         auto project = fileToProject(row.Filename);
-        cwScrap* scrap = firstScrap(project.get());
+        cwScrap* currentScrap = findScrap(project.get(), row);
 
         auto plotManager = std::make_unique<cwLinePlotManager>();
         plotManager->setRegion(project->cavingRegion());
         plotManager->waitToFinish();
 
         //Force recalculation
-        CHECK(scrap->calculateNoteTransform() == false);
-        scrap->setCalculateNoteTransform(true);
+        CHECK(currentScrap->calculateNoteTransform() == false);
+        currentScrap->setCalculateNoteTransform(true);
 
-        checkScrapTransform(scrap, row);
+        checkScrapTransform(currentScrap, row);
     }
 }
 
@@ -167,7 +210,7 @@ TEST_CASE("Exact Auto Calculate Note Transform", "[cwScrap]") {
 
     foreach(TestRow row, rows) {
         auto project = fileToProject(row.Filename);
-        cwScrap* scrap = firstScrap(project.get());
+        cwScrap* currentScrap = findScrap(project.get(), row);
 
         auto plotManager = std::make_unique<cwLinePlotManager>();
         plotManager->setRegion(project->cavingRegion());
@@ -175,13 +218,13 @@ TEST_CASE("Exact Auto Calculate Note Transform", "[cwScrap]") {
 
         //Force recalculation
         INFO("Filename:" << row.Filename.toStdString());
-        CHECK(scrap->calculateNoteTransform() == false);
-        scrap->setCalculateNoteTransform(true);
+        CHECK(currentScrap->calculateNoteTransform() == false);
+        currentScrap->setCalculateNoteTransform(true);
 
-        while(scrap->stations().size() >= 6) {
-            checkScrapTransform(scrap, row);
-            INFO("Removing station:" << scrap->station(scrap->stations().size() - 1).name().toStdString());
-            scrap->removeStation(scrap->stations().size() - 1);
+        while(currentScrap->stations().size() >= 6) {
+            checkScrapTransform(currentScrap, row);
+            INFO("Removing station:" << currentScrap->station(currentScrap->stations().size() - 1).name().toStdString());
+            currentScrap->removeStation(currentScrap->stations().size() - 1);
         }
     }
 }
@@ -192,13 +235,21 @@ TEST_CASE("Check that auto calculate work outside of trip", "[cwScrap]") {
     rows.append(TestRow("://datasets/scrapAutoCalculate/exact/plan-seperate-trip-badSave.cw", 30.13, 1606.3, 0.05, 0.005));
 
     foreach(TestRow row, rows) {
+        row.TripName = QStringLiteral("Trip 2");
         auto root = std::make_unique<cwRootData>();
+        root->scrapManager()->warpingSettings()->setGridResolutionMeters(10.0);
+        root->scrapManager()->warpingSettings()->setUseShotInterpolationSpacing(false);
+        root->scrapManager()->warpingSettings()->setUseMaxClosestStations(false);
+        root->scrapManager()->warpingSettings()->setUseSmoothingRadius(false);
+
         fileToProject(root->project(), row.Filename);
         auto project = root->project();
-        cwScrap* currentScrap = scrap(project, 0, 1, 0, 0);
+        cwScrap* currentScrap = findScrap(project, row);
 
         auto plotManager = root->linePlotManager();
         plotManager->waitToFinish();
+
+        CHECK(!project->cavingRegion()->cave(0)->stationPositionLookup().isEmpty());
 
         root->taskManagerModel()->waitForTasks();
         root->futureManagerModel()->waitForFinished();
@@ -222,10 +273,16 @@ TEST_CASE("Auto calculate if survey station change position", "[cwScrap]") {
     rows.append(TestRow("://datasets/scrapAutoCalculate/exact/plan-seperate-trip.cw", 354.13, 16063.06, 0.05, 0.005));
 
     foreach(TestRow row, rows) {
+        row.TripName = QStringLiteral("Trip 2");
         auto root = std::make_unique<cwRootData>();
+        root->scrapManager()->warpingSettings()->setGridResolutionMeters(10.0);
+        root->scrapManager()->warpingSettings()->setUseShotInterpolationSpacing(false);
+        root->scrapManager()->warpingSettings()->setUseMaxClosestStations(false);
+        root->scrapManager()->warpingSettings()->setUseSmoothingRadius(false);
+
         fileToProject(root->project(), row.Filename);
         auto project = root->project();
-        cwScrap* currentScrap = scrap(project, 0, 1, 0, 0);
+        cwScrap* currentScrap = findScrap(project, row);
 
         REQUIRE(project->cavingRegion()->caves().size() > 0);
         REQUIRE(project->cavingRegion()->caves().first()->trips().size() > 0);
@@ -265,7 +322,13 @@ TEST_CASE("Auto calculate should work on projected profile azimuth", "[cwScrap]"
         auto root = std::make_unique<cwRootData>();
         fileToProject(root->project(), row.Filename);
         auto project = root->project();
-        cwScrap* currentScrap = firstScrap(project);
+        cwScrap* currentScrap = findScrap(project, row);
+
+        auto plotManager = root->linePlotManager();
+        plotManager->waitToFinish();
+
+        root->taskManagerModel()->waitForTasks();
+        root->futureManagerModel()->waitForFinished();
 
         //Force recalculation
         INFO("Filename:" << row.Filename.toStdString());
@@ -279,12 +342,21 @@ TEST_CASE("Auto calculate should work on projected profile azimuth", "[cwScrap]"
 TEST_CASE("Auto calculate if the scrap type has changed", "[cwScrap]") {
     QList<TestRow> rows;
     rows.append(TestRow("://datasets/scrapAutoCalculate/ProjectProfile-test-startRunning.cw", 359.85, 257.162, 0.05, 0.005, 134.4));
+    rows[0].CaveName = "My Cave";
+    rows[0].TripName = "Best Trip";
 
     foreach(TestRow row, rows) {
         auto root = std::make_unique<cwRootData>();
         fileToProject(root->project(), row.Filename);
         auto project = root->project();
-        cwScrap* currentScrap = firstScrap(project);
+        cwScrap* currentScrap = findScrap(project, row);
+
+        auto plotManager = root->linePlotManager();
+        plotManager->waitToFinish();
+
+        root->taskManagerModel()->waitForTasks();
+        root->futureManagerModel()->waitForFinished();
+
         currentScrap->setCalculateNoteTransform(true);
         REQUIRE(currentScrap->type() == cwScrap::RunningProfile);
 
@@ -370,7 +442,8 @@ TEST_CASE("Guess neighbor station name", "[cwScrap]") {
 }
 
 TEST_CASE("Distance lead unit should return the index supported units", "[cwScrap]") {
-    auto project = std::unique_ptr<cwProject>(new cwProject);
+    auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
     fileToProject(project.get(), "://datasets/test_cwScrap/leadLengthCheck.cw");
 
     auto trip = project->cavingRegion()->cave(0)->trip(0);
@@ -395,4 +468,3 @@ TEST_CASE("Distance lead unit should return the index supported units", "[cwScra
     trip->calibrations()->setDistanceUnit(cwUnits::Feet);
     checkUnit("ft");
 }
-

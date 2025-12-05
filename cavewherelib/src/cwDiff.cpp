@@ -162,7 +162,7 @@ void mergeRepeated(
         if (oursDel && theirsDel) {
             ++baseIdx; ++oursE; ++theirsE;
             ++oursIdx; ++theirsIdx; //I'm not sure if this is correct, might need to do more testing
-            qDebug() << "Both deleted!";
+            // qDebug() << "Both deleted!";
             continue;
         }
         if (oursDel && !theirsDel) {

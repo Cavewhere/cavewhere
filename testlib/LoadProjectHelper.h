@@ -29,6 +29,8 @@ QString CAVEWHERE_TESTLIB_EXPORT copyToTempFolder(QString filename);
 
 QString CAVEWHERE_TESTLIB_EXPORT prependTempFolder(QString filename);
 
+void CAVEWHERE_TESTLIB_EXPORT addTokenManager(cwProject* project);
+
 /**
  * @brief fileToProject
  * @param filename

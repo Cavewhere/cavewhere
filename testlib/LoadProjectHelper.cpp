@@ -6,9 +6,11 @@
 
 //Our includes
 #include "cwZip.h"
+#include "cwFutureManagerModel.h"
 
 std::shared_ptr<cwProject> fileToProject(QString filename) {
     auto project = std::make_shared<cwProject>();
+    addTokenManager(project.get());
     fileToProject(project.get(), filename);
     return project;
 }
@@ -105,3 +107,9 @@ void TestHelper::removeFile(const QUrl &filename) const
 }
 
 
+
+void addTokenManager(cwProject *project)
+{
+    cwFutureManagerModel* model = new cwFutureManagerModel(project);
+    project->setFutureManagerToken(model->token());
+}
