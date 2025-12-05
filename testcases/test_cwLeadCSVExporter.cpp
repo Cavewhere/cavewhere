@@ -24,7 +24,7 @@ TEST_CASE("cwLeadCSVExporter should export leads to CSV", "[cwLeadCSVExporter]")
     auto project = rootData->project();
 
     auto datasetFile = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
-    project->loadFile(datasetFile);
+    project->loadOrConvert(datasetFile);
     project->waitLoadToFinish();
     rootData->futureManagerModel()->waitForFinished();
 
