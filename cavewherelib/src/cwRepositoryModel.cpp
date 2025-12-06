@@ -214,7 +214,7 @@ cwResultDir cwRepositoryModel::repositoryDir(const QUrl &localDir, const QString
             return cwResultDir(QString(quotedFilename(info.absoluteFilePath(), name) + QStringLiteral("exists, use a different name")), PathError);
         } else {
             //Success
-            return QDir(QDir(info.absoluteFilePath()).absoluteFilePath(name));
+            return QDir(info.absoluteFilePath());
         }
     } else {
         //Is a url and not a local file
