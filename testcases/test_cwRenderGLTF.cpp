@@ -84,8 +84,6 @@ TEST_CASE("GLTF file should be loaded correctly", "[cwRenderGLTF]") {
     const QBox3D actual = render->boundingBox();
     REQUIRE(!actual.isNull());
 
-    qDebug() << "Actual:" << actual;
-
     CHECK_THAT(actual.minimum().x(), WithinAbs(expected.minimum().x(), 1e-4f));
     CHECK_THAT(actual.minimum().y(), WithinAbs(expected.minimum().y(), 1e-4f));
     CHECK_THAT(actual.minimum().z(), WithinAbs(expected.minimum().z(), 1e-4f));
