@@ -163,8 +163,8 @@ private:
     //The undo stack
     QUndoStack* UndoStack;
 
-    //Mark true if temp project
-    bool TempProject;
+    //Mark true if temp project when loaded via legacy SQLite/v6 paths
+    bool SQLiteTempProject;
 
     //Task manager, for visualizing running tasks
     QPointer<cwTaskManagerModel> TaskManager;
@@ -193,7 +193,7 @@ private:
     void privateSave();
 
     bool saveWillCauseDataLoss() const;
-    void setTemporaryProject(bool isTemp);
+    void setSqliteTemporaryProject(bool isTemp);
 
     // void addImageHelper(std::function<void (QList<cwImage>)> outputCallBackFunc,
     //                     std::function<void (cwAddImageTask*)> setImagesFunc);

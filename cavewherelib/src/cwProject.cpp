@@ -58,6 +58,44 @@ using namespace Monad;
 
 QAtomicInt cwProject::ConnectionCounter;
 
+namespace {
+// Emits state-change signals if the effective temp/save flags changed during the scope.
+class ScopedProjectStateNotifier {
+public:
+    explicit ScopedProjectStateNotifier(cwProject* project)
+        : m_project(project),
+          m_wasTemporary(project->isTemporaryProject()),
+          m_couldSaveDirectly(project->canSaveDirectly())
+    {
+    }
+
+    void dismiss() { m_project = nullptr; }
+
+    ~ScopedProjectStateNotifier()
+    {
+        if (!m_project) {
+            return;
+        }
+
+        const bool isTemporaryNow = m_project->isTemporaryProject();
+        const bool canSaveNow = m_project->canSaveDirectly();
+
+        if (isTemporaryNow != m_wasTemporary) {
+            emit m_project->isTemporaryProjectChanged();
+        }
+
+        if (canSaveNow != m_couldSaveDirectly) {
+            emit m_project->canSaveDirectlyChanged();
+        }
+    }
+
+private:
+    cwProject* m_project = nullptr;
+    bool m_wasTemporary = false;
+    bool m_couldSaveDirectly = false;
+};
+} // namespace
+
 /**
   By default, a project is open to a temporary directory
   */
@@ -65,6 +103,7 @@ cwProject::cwProject(QObject* parent) :
     QObject(parent),
     m_saveLoad(new cwSaveLoad(this)),
     FileVersion(cwRegionIOTask::protoVersion()),
+    SQLiteTempProject(false),
     Region(new cwCavingRegion(this)),
     UndoStack(new QUndoStack(this)),
     ErrorModel(new cwErrorListModel(this))
@@ -315,12 +354,9 @@ bool cwProject::deleteTemporaryProject()
     return true;
 }
 
-void cwProject::setTemporaryProject(bool isTemp)
+void cwProject::setSqliteTemporaryProject(bool isTemp)
 {
-    if(TempProject != isTemp) {
-        TempProject = isTemp;
-        emit isTemporaryProjectChanged();
-    }
+    SQLiteTempProject = isTemp;
 }
 
 // void cwProject::addImageHelper(std::function<void (QList<cwImage>)> outputCallBackFunc,
@@ -386,14 +422,16 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
         FutureToken.addJob({QFuture<void>(loadFuture), QStringLiteral("Loading")});
 
         auto updateRegion = [this, filename](const cwRegionLoadResult& result) {
+            ScopedProjectStateNotifier stateGuard(this);
+
             //Disable the m_saveLoad, since this should be a temporary project
             m_saveLoad->setCavingRegion(nullptr);
 
             setFilename(result.filename());
-            setTemporaryProject(result.isTempFile());
+            setSqliteTemporaryProject(result.isTempFile());
             Region->setData(result.cavingRegion());
             FileVersion = result.fileVersion();
-            emit canSaveDirectlyChanged();
+
             emit loaded();
         };
 
@@ -434,7 +472,20 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
     if(type == SqliteFileType) {
         return loadFromSQL(filename);
     } else if (type == GitFileType) {
-        return m_saveLoad->load(filename);
+        auto loadFuture = m_saveLoad->load(filename);
+
+        return AsyncFuture::observe(loadFuture)
+            .context(this, [this, loadFuture]() {
+                auto result = loadFuture.result();
+
+                if (!result.hasError()) {
+                    ScopedProjectStateNotifier stateGuard(this);
+                    setSqliteTemporaryProject(false);
+                    FileVersion = cwRegionIOTask::protoVersion();
+                }
+
+                return result;
+            }).future();
     }
 
     QFileInfo info(filename);
@@ -492,8 +543,12 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
                 auto result = loadTempProjectFuture.result();
                 errorModel()->append(tempProject->errorModel()->toList());
 
-                setTemporaryProject(isTemporary);
-                FileVersion = tempProject->FileVersion;
+                if (!result.hasError()) {
+                    ScopedProjectStateNotifier stateGuard(this);
+
+                    setSqliteTemporaryProject(isTemporary);
+                    FileVersion = tempProject->FileVersion;
+                }
 
 
                 // if(result.hasError()) {
@@ -915,7 +970,7 @@ cwFutureManagerToken cwProject::futureManagerToken() const {
 
 
 bool cwProject::isTemporaryProject() const {
-    return m_saveLoad->isTemporaryProject();
+    return m_saveLoad->isTemporaryProject() || SQLiteTempProject || saveWillCauseDataLoss();
 }
 
 QString cwProject::filename() const {
