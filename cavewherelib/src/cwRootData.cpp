@@ -16,7 +16,6 @@
 #include "cwTripCalibration.h"
 #include "cwSurveyExportManager.h"
 #include "cwSurveyImportManager.h"
-#include "cwItemSelectionModel.h"
 #include "cwKeywordItemModel.h"
 #include "cwKeywordFilterPipelineModel.h"
 #include "cwQMLReload.h"
