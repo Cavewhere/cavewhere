@@ -326,7 +326,7 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
             }
 
             SECTION("Remove accepted keywordItem") {
-                qDebug() << "Removing component3";
+                // qDebug() << "Removing component3";
                 keywordEntityModel->removeItem(component3);
 
                 acceptedObjects = {
@@ -370,7 +370,7 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
 
             SECTION("Add row") {
                 //Make sure we're and'ing the new row
-                qDebug() << "Add row";
+                // qDebug() << "Add row";
                 model.addRow();
 
                 REQUIRE(model.rowCount() == 2);

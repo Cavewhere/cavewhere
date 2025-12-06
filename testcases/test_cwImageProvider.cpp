@@ -14,7 +14,7 @@
 #include "cwImageProvider.h"
 #include "TestHelper.h"
 
-TEST_CASE("test_cwImageProvider_requestImage_cache_behavior", "[cwImageProvider]") {
+TEST_CASE("test cwImageProvider requestImage cache behavior", "[cwImageProvider]") {
     // 1) Copy the resource into a temp directory and derive paths
     const QString filename = copyToTempFolder("://datasets/test_cwNote/testpage.png");
     REQUIRE(!filename.isEmpty());

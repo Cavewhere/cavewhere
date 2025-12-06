@@ -43,8 +43,6 @@ public:
     //image data with full path
     cwImageData data(QString filename) const;
 
-    QString absoluteImagePath(const cwImage& image) const;
-
     static cwImageData createDxt1(QSize size, const QByteArray& uncompressData);
 
     static QString name() { return QLatin1String("sqlimagequery"); }

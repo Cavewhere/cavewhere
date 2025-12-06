@@ -3,12 +3,11 @@
 
 //Our includes
 #include "cwRootData.h"
-#include "cwTaskManagerModel.h"
 #include "TestHelper.h"
 #include "cwRegionTreeModel.h"
 #include "cwNote.h"
 #include "cwScrap.h"
-#include "cwImageDatabase.h"
+
 
 TEST_CASE("cwRootData should automatically update compression for notes", "[cwImageCompressionUpdater]") {
 
@@ -21,11 +20,8 @@ TEST_CASE("cwRootData should automatically update compression for notes", "[cwIm
 
         CHECK(notes.size() == 3);
 
-        cwImageProvider provider;
-        provider.setProjectPath(project->filename());
-
         for(cwNote* note : notes) {
-            CHECK(QFileInfo::exists(provider.absoluteImagePath(note->image())));
+            CHECK(QFileInfo::exists(project->absolutePath(note)));
         }
     };
 
