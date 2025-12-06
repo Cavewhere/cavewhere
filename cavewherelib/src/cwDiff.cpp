@@ -79,10 +79,10 @@ void mergeRepeated(
                           && theirsEdits[theirsE].positionOld == baseIdx);
         bool oursInserted = (oursE < oursEdits.size()
                         && oursEdits[oursE].operation == cwDiff::EditOperation::Insert
-                        && oursEdits[oursE].positionOld == baseIdx);
+                        && oursEdits[oursE].positionOld <= baseIdx);
         bool theirsInserted = (theirsE < theirsEdits.size()
                           && theirsEdits[theirsE].operation == cwDiff::EditOperation::Insert
-                          && theirsEdits[theirsE].positionOld == baseIdx);
+                          && theirsEdits[theirsE].positionOld <= baseIdx);
 
         // qDebug() << "BaseIdx:" << baseIdx << " oursE:" << oursE << " thiersE:" << theirsE;
         // qDebug() << "OursIdx:" << oursIdx << " thiersIdx:" << theirsIdx;
@@ -125,13 +125,32 @@ void mergeRepeated(
                     }
                 }
             } else {
-                // different data → append both
+                // different data:
+                //  - for messages, keep both inserts (two new IDs at same position)
+                //  - for scalars, resolve per strategy
                 if constexpr (std::is_pointer<Type>()) {
                     add(*oursSub);
                     add(*thiersSub);
                 } else {
-                    add(oursSub);
-                    add(thiersSub);
+                    auto chooseConflictValue = [&]() -> const Type& {
+                        switch (p.strategy) {
+                        case MergeStrategy::UseTheirsOnConflict:
+                            return thiersSub;
+                        case MergeStrategy::UseBaseOnConflict: {
+                            auto basePos = oursEdits[oursE].positionOld;
+                            if (basePos < baseSubs.size()) {
+                                return baseSubs[basePos];
+                            }
+                            return oursSub; // no base entry at this position, fall back to ours
+                        }
+                        case MergeStrategy::UseOursOnConflict:
+                        default:
+                            return oursSub;
+                        }
+                    };
+
+                    const auto& chosen = chooseConflictValue();
+                    add(chosen);
                 }
             }
             ++oursE; ++theirsE;
@@ -166,29 +185,14 @@ void mergeRepeated(
             continue;
         }
         if (oursDel && !theirsDel) {
-            // theirs kept?
-            if(!compare.equals(baseSubs.at(baseIdx), theirsSubs.at(theirsIdx))) {
-                if (p.strategy != MergeStrategy::UseTheirsOnConflict) {
-                    if constexpr(std::is_pointer<Type>()) {
-                        add(*theirsSubs.at(theirsIdx));
-                    } else {
-                        add(theirsSubs.at(theirsIdx));
-                    }
-                }
-            }
+            // Prefer deletions: drop the base element when only one side deletes.
+            // Inserts (replacements) will be handled separately when they appear.
             ++baseIdx; ++oursE; ++theirsIdx;
             continue;
         }
         if (!oursDel && theirsDel) {
-            if(!compare.equals(baseSubs.at(baseIdx), oursSubs.at(oursIdx))) {
-                if (p.strategy != MergeStrategy::UseOursOnConflict) {
-                    if constexpr(std::is_pointer<Type>()) {
-                        add(*oursSubs.at(oursIdx));
-                    } else {
-                        add(oursSubs.at(oursIdx));
-                    }
-                }
-            }
+            // Prefer deletions: drop the base element when only one side deletes.
+            // Inserts (replacements) will be handled separately when they appear.
             ++baseIdx; ++theirsE; ++oursIdx;
             continue;
         }
