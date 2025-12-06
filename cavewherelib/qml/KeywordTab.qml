@@ -1,8 +1,7 @@
-import QtQuick 2.0
-import QtQuick.Layouts 1.12
-import QtQuick.Controls 2.15 as QC
-import QtQml.Models 2.15
-import cavewherelib 1.0
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls as QC
+import cavewherelib
 
 Item {
     id: keywordTabId
@@ -151,41 +150,142 @@ Item {
                                 }
                             }
 
+                            SelectionProxyModel {
+                                id: keywordSelection
+                                sourceModel: filterModelObjectRole
+                                idRole: KeywordGroupByKeyModel.ValueRole
+                            }
+
                             ListView {
+                                id: keywordList
+                                objectName: "keywordList"
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
-                                // implicitHeight: contentItem.childrenRect.height
-                                model: filterModelObjectRole
+                                model: keywordSelection
                                 clip: true
-                                spacing: 4
+                                // spacing: 4
+                                property int anchorIndex: -1
 
                                 QC.ScrollBar.vertical: QC.ScrollBar {
                                     policy: QC.ScrollBar.AsNeeded
                                 }
 
-                                delegate: RowLayout {
+                                function applyCheckedToSelection(value, targetIndex) {
+                                    let selectionApplies = keywordSelection.selectionCount > 1 && keywordSelection.data(keywordSelection.index(targetIndex, 0), keywordSelection.selectionRole);
+                                    if (!selectionApplies) {
+                                        let idx = keywordSelection.index(targetIndex, 0);
+                                        keywordSelection.setData(idx, value, KeywordGroupByKeyModel.AcceptedRole);
+                                        return;
+                                    }
+
+                                    for (let i = 0; i < keywordList.count; i++) {
+                                        let candidate = keywordSelection.index(i, 0);
+                                        if (keywordSelection.data(candidate, keywordSelection.selectionRole)) {
+                                            keywordSelection.setData(candidate, value, KeywordGroupByKeyModel.AcceptedRole);
+                                        }
+                                    }
+                                }
+
+                                QC.Menu {
+                                    id: keywordContextMenu
+                                    QC.MenuItem {
+                                        text: qsTr("Select All")
+                                        onTriggered: keywordSelection.selectAll()
+                                    }
+                                }
+
+                                delegate:  TableRowBackground {
                                     id: rowId
                                     objectName: "row" + rowId.index;
 
                                     required property bool acceptedRole
                                     required property string valueRole
                                     required property int objectCountRole
+                                    required property bool selectedRole
                                     required property int index
-                                    spacing: 6
 
-                                    QC.CheckBox {
-                                        objectName: "checkbox"
-                                        checked: acceptedRole
-                                        onToggled: {
-                                            var modelIndex = filterModelObjectRole.index(index, 0);
-                                            filterModelObjectRole.setData(modelIndex, checked, KeywordGroupByKeyModel.AcceptedRole);
+                                    width: keywordList.width
+                                    height: rowLayoutId.height + 4
+
+                                    rowIndex: rowId.index
+                                    isSelected: rowId.selectedRole
+
+                                    // anchors.fill: parent
+                                    // color: selectedRole ? Theme.highlight : Theme.transparent
+                                    // radius: 4
+
+                                    TapHandler {
+                                        acceptedButtons: Qt.LeftButton
+                                        acceptedModifiers: Qt.NoModifier
+                                        gesturePolicy: TapHandler.ReleaseWithinBounds
+                                        onTapped: function() {
+                                            keywordSelection.clearSelection();
+                                            keywordSelection.setSelected(keywordSelection.index(index, 0), true);
+                                            keywordList.anchorIndex = index;
                                         }
                                     }
 
-                                    Text {
-                                        text: valueRole + " (" + objectCountRole + ")"
-                                        elide: Text.ElideRight
-                                        Layout.fillWidth: true
+                                    TapHandler {
+                                        acceptedButtons: Qt.LeftButton
+                                        acceptedModifiers: Qt.ShiftModifier
+                                        gesturePolicy: TapHandler.ReleaseWithinBounds
+                                        onTapped: function() {
+                                            if (keywordList.anchorIndex < 0) {
+                                                keywordList.anchorIndex = index;
+                                            }
+                                            keywordSelection.clearSelection();
+                                            let start = Math.min(keywordList.anchorIndex, index);
+                                            let end = Math.max(keywordList.anchorIndex, index);
+                                            for (let i = start; i <= end; i++) {
+                                                keywordSelection.setSelected(keywordSelection.index(i, 0), true);
+                                            }
+                                        }
+                                    }
+
+                                    TapHandler {
+                                        acceptedButtons: Qt.LeftButton
+                                        acceptedModifiers: Qt.ControlModifier
+                                        gesturePolicy: TapHandler.ReleaseWithinBounds
+                                        onTapped: function() {
+                                            let proxyIndex = keywordSelection.index(index, 0);
+                                            let current = keywordSelection.data(proxyIndex, keywordSelection.selectionRole);
+                                            keywordSelection.setSelected(proxyIndex, !current);
+                                            keywordList.anchorIndex = index;
+                                        }
+                                    }
+
+                                    TapHandler {
+                                        acceptedButtons: Qt.RightButton
+                                        acceptedModifiers: Qt.NoModifier
+                                        gesturePolicy: TapHandler.ReleaseWithinBounds
+                                        onTapped: function(point) {
+                                            keywordSelection.clearSelection();
+                                            keywordSelection.setSelected(keywordSelection.index(index, 0), true);
+                                            keywordList.anchorIndex = index;
+                                            keywordContextMenu.popup(point.scenePosition);
+                                        }
+                                    }
+
+                                    RowLayout {
+                                        id: rowLayoutId
+
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        spacing: 4
+
+
+                                        QC.CheckBox {
+                                            objectName: "checkbox"
+                                            checked: acceptedRole
+                                            onToggled: {
+                                                keywordList.applyCheckedToSelection(checked, index);
+                                            }
+                                        }
+
+                                        Text {
+                                            text: valueRole + " (" + objectCountRole + ")"
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
                                     }
                                 }
                             }

@@ -330,11 +330,11 @@ MainWindowTest {
                     tryVerify(() => { return scrollbarAtBeginning(scrollbar); } )
 
 
-            let firstCheckbox = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->row1->checkbox");
+            let firstCheckbox = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->keywordList->row1->checkbox");
             verify(firstCheckbox);
 
             // Capture objectCountRole from the second list view (row0)
-            let row0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_1->row0");
+            let row0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_1->keywordList->row0");
             verify(row0);
 
             for(let i = 0; i < 5; i++) {
@@ -354,7 +354,7 @@ MainWindowTest {
                         wait(100)
 
                         // The objectCountRole should be unchanged
-                        let row0SecondAfter = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_1->row0");
+                        let row0SecondAfter = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_1->keywordList->row0");
                         verify(row0SecondAfter);
                         verify(row0SecondAfter === row0);
                         console.log("objectCountRole:" + row0SecondAfter.objectCountRole + " " + originalText)
@@ -457,7 +457,7 @@ MainWindowTest {
             let planObjects = filterModel.data(planModelIndex, KeywordGroupByKeyModel.ObjectsRole);
             verify(planObjects && planObjects.length > 0);
 
-            let planCheckbox = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->row" + planRowIndex + "->checkbox");
+            let planCheckbox = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->keywordList->row" + planRowIndex + "->checkbox");
             verify(planCheckbox);
 
             let allPlanVisible = (expected) => {
@@ -478,6 +478,83 @@ MainWindowTest {
 
             mouseClick(planCheckbox);
             tryVerify(() => allPlanVisible(true));
+        }
+
+        function test_keywordSelectionMultiSelect() {
+            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000 2024.2.cw");
+
+            RootData.pageSelectionModel.gotoPageByName(null, "View");
+            let layersTab = findChild(rootId.mainWindow, "layersTabButton");
+            verify(layersTab !== null);
+            mouseClick(layersTab);
+            wait(150);
+
+            let andListView0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0");
+            verify(andListView0);
+            tryVerify(() => andListView0.count > 0);
+
+                    let delegate = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0");
+                    verify(delegate);
+
+            let keyCombo = findChild(delegate, "keyCombo");
+            verify(keyCombo);
+            keyCombo.currentIndex = keyCombo.model.indexOf("Orientation");
+            delegate.filterModelObjectRole.key = keyCombo.currentText;
+            verify(delegate.filterModelObjectRole.key === "Orientation");
+
+            let keywordListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->keywordList");
+            verify(keywordListView);
+            tryVerify(() => keywordListView.count >= 3);
+
+            let row0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->keywordList->row0");
+            let row1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->keywordList->row1");
+            let row2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->keywordList->row2");
+            verify(row0 && row1 && row2);
+
+            let checkbox0 = findChild(row0, "checkbox");
+            let checkbox1 = findChild(row1, "checkbox");
+            let checkbox2 = findChild(row2, "checkbox");
+            verify(checkbox0 && checkbox1 && checkbox2);
+
+            wait(100)
+
+                    // Select first row (no modifier)
+            mouseClick(row2);
+            verify(row2.isSelected)
+
+                    mouseClick(row1);
+                    verify(row1.isSelected)
+
+                    mouseClick(row0);
+                    verify(row0.isSelected)
+
+            // Shift-select third row (range selection)
+            mouseClick(row2, row2.width / 2, row2.height / 2, Qt.LeftButton, Qt.ShiftModifier);
+                    verify(row2.isSelected)
+                    verify(row1.isSelected)
+                    verify(row0.isSelected)
+
+            // Toggle second row with control
+            mouseClick(row1, row1.width / 2, row1.height / 2, Qt.LeftButton, Qt.ControlModifier);
+                    verify(row2.isSelected)
+                    verify(!row1.isSelected)
+                    verify(row0.isSelected)
+
+            // Apply checkbox toggle to selection (should affect selected rows)
+            mouseClick(checkbox2,  9.36719, 10.9531);
+
+            // All three should be unchecked after toggle
+            verify(checkbox0.checked === true);
+            verify(checkbox1.checked === true);
+            verify(checkbox2.checked === true);
+
+                    // Apply checkbox toggle to selection (should affect selected rows)
+                    mouseClick(checkbox2,  9.36719, 10.9531);
+
+                    // All three should be unchecked after toggle
+                    verify(checkbox0.checked === false);
+                    verify(checkbox1.checked === true);
+                    verify(checkbox2.checked === false);
         }
     }
 }
