@@ -245,7 +245,7 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
                 keywordModel5->add({"trip", "trip3"});
                 keywordModel5->add({"cave", "cave2"});
 
-                qDebug() << "Adding rejected" << component5;
+                // qDebug() << "Adding rejected" << component5;
                 keywordEntityModel->addItem(component5);
 
                 rejectedObjects.append(entity5.get());
@@ -285,9 +285,9 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
             }
 
             SECTION("Change keywordModel from accepted to rejected") {
-                qDebug() << "To scrap, reject";
+                // qDebug() << "To scrap, reject";
                 keywordModel4->replace({"type", "scrap"});
-                qDebug() << "Done";
+                // qDebug() << "Done";
 
                 acceptedObjects = {entity3.get()};
                 rejectedObjects = {entity1.get(),
@@ -470,18 +470,18 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
                             //keywordModel4->add({"trip", "trip3"}); //false
                             //keywordModel4->add({"cave", "cave2"});
 
-                            for(int i = 0; i < model.acceptedModel()->rowCount(); i++) {
-                                auto index = model.acceptedModel()->index(i, 0);
-                                qDebug() << "Accepted:" << index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
-                            }
-                            for(int i = 0; i < model.rejectedModel()->rowCount(); i++) {
-                                auto index = model.rejectedModel()->index(i, 0);
-                                qDebug() << "Rejected:" << index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
-                            }
+                            // for(int i = 0; i < model.acceptedModel()->rowCount(); i++) {
+                            //     auto index = model.acceptedModel()->index(i, 0);
+                            //     qDebug() << "Accepted:" << index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
+                            // }
+                            // for(int i = 0; i < model.rejectedModel()->rowCount(); i++) {
+                            //     auto index = model.rejectedModel()->index(i, 0);
+                            //     qDebug() << "Rejected:" << index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
+                            // }
 
                             // dynamic_cast<cwUniqueValueFilterModel*>(model.acceptedModel())->printRows();
 
-                            qDebug() << "Or";
+                            // qDebug() << "Or";
                             CHECK(model.setData(model.index(1), cwKeywordFilterPipelineModel::Or, cwKeywordFilterPipelineModel::OperatorRole));
 
                             // dynamic_cast<cwUniqueValueFilterModel*>(model.acceptedModel())->printRows();
@@ -526,14 +526,14 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
                             CHECK(tripGroupBy2.data(cwKeywordGroupByKeyModel::AcceptedRole).toBool() == false);
 
 
-                            for(int i = 0; i < model.acceptedModel()->rowCount(); i++) {
-                                auto index = model.acceptedModel()->index(i, 0);
-                                qDebug() << "Accepted:" << index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
-                            }
-                            for(int i = 0; i < model.rejectedModel()->rowCount(); i++) {
-                                auto index = model.rejectedModel()->index(i, 0);
-                                qDebug() << "Rejected:" << index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
-                            }
+                            // for(int i = 0; i < model.acceptedModel()->rowCount(); i++) {
+                            //     auto index = model.acceptedModel()->index(i, 0);
+                            //     qDebug() << "Accepted:" << index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
+                            // }
+                            // for(int i = 0; i < model.rejectedModel()->rowCount(); i++) {
+                            //     auto index = model.rejectedModel()->index(i, 0);
+                            //     qDebug() << "Rejected:" << index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
+                            // }
 
                             SECTION("Enabled entry1 and entry 2") {
                                 // Accept trip1 and trip2 in the OR group to bring scrap rows back in.

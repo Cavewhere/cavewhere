@@ -275,9 +275,9 @@ void cwKeywordFilterPipelineModel::removeRow(int i)
     const auto& row = mRows.at(i);
     // Q_ASSERT();
 
-    for(auto sourceModel : mAcceptedModel->sourceModels()) {
-        qDebug() << "SourceModel:" << sourceModel << row.filter->acceptedModel() << (sourceModel == row.filter->acceptedModel());
-    }
+    // for(auto sourceModel : mAcceptedModel->sourceModels()) {
+    //     qDebug() << "SourceModel:" << sourceModel << row.filter->acceptedModel() << (sourceModel == row.filter->acceptedModel());
+    // }
 
     if(mAcceptedModel->sourceModels().contains(row.filter->acceptedModel())) {
         mAcceptedModel->removeSourceModel(row.filter->acceptedModel());

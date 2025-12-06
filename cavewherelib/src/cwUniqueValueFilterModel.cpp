@@ -233,7 +233,7 @@ void cwUniqueValueFilterModel::connectSourceModel()
         }
 
         if(mUniqueIndex.isEmpty()) {
-            qDebug() << "Running with column change";
+            // qDebug() << "Running with column change";
 
             //Only run on new models
             for(int i = 0; i < sourceModel()->rowCount(); i++) {

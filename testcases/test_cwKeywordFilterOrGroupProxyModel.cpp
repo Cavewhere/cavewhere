@@ -97,14 +97,14 @@ TEST_CASE("cwKeywordFilterOrGroupProxyModel exposes groups via OR boundaries", "
         CHECK(orProxy.rowCount() == 2);
         REQUIRE(pipeline.rowCount() == 3);
 
-        qDebug() << "---- Set group 0! ---";
+        // qDebug() << "---- Set group 0! ---";
 
         // groupProxy.setGroupIndex(0);
-        qDebug() << "Group rowCount:" << groupProxy.rowCount();
+        // qDebug() << "Group rowCount:" << groupProxy.rowCount();
         CHECK(groupProxy.rowCount() == 1);
         CHECK(groupProxy.index(0, 0).data(cwKeywordFilterGroupProxyModel::SourceRowRole).toInt() == 0);
 
-        qDebug() << "---- Set group 1! ---";
+        // qDebug() << "---- Set group 1! ---";
 
         groupProxy.setGroupIndex(1);
         CHECK(groupProxy.rowCount() == 2);
