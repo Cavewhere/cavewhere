@@ -227,6 +227,14 @@ cwImageData cwImageProvider::data(QString filename) const
 
 
         // qDebug() << "Path:" <<  QFileInfo(resolvedPath).absolutePath() << (projectDir.canonicalPath());
+        if(!QFileInfo(resolvedPath)
+                 .absolutePath()
+                 .startsWith(projectDir.canonicalPath())
+            ) {
+            cwDebug::printStackTrace();
+            qDebug() << "Path:" <<  QFileInfo(resolvedPath).absolutePath() << (projectDir.canonicalPath());
+        }
+
         Q_ASSERT(
             QFileInfo(resolvedPath)
                 .absolutePath()
