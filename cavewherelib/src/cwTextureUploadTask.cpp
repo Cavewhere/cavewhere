@@ -39,10 +39,6 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
     auto loadValidMipmap = [projectFile, currentFormat](const cwTrackedImagePtr& image) {
         UploadResult results;
 
-        // if(!cwImageDatabase(projectFile).mipmapsValid(*image, currentFormat == DXT1Mipmaps)) {
-        //     return results;
-        // }
-
         cwImageProvider imageProvidor;
         imageProvidor.setProjectPath(projectFile);
 
@@ -61,6 +57,7 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
             auto imageData = imageProvidor.data(image->path());
 
             if(imageData.data().isEmpty()) {
+                qWarning() << "Image data is empty:" << image->path() << LOCATION;
                 return {};
             }
 
@@ -98,7 +95,7 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
 
     return cwConcurrent::run(std::bind(loadValidMipmap,
                                        cwTrackedImage::createShared(image,
-                                                                    projectFile,
+                                                                    image.path(),
                                                                     cwTrackedImage::NoOwnership)));
 
 }

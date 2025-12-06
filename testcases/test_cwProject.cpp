@@ -201,7 +201,14 @@ TEST_CASE("Images should load correctly", "[cwProject]") {
         //Load the image and check that it's in the correct order
         for(int i = 0; i < images.size(); i++) {
             cwTextureUploadTask uploadTask;
-            uploadTask.setImage(images.at(i));
+
+            auto path = project->absolutePath(images.at(i).path());
+            auto image = images.at(i);
+            image.setPath(path);
+
+            CHECK(QFile::exists(path));
+
+            uploadTask.setImage(image);
             uploadTask.setProjectFilename(project->filename());
             uploadTask.setType(cwTextureUploadTask::OpenGL_RGBA);
             auto future = uploadTask.mipmaps();

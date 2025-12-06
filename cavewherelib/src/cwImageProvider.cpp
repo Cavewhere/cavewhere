@@ -218,7 +218,23 @@ cwImageData cwImageProvider::data(QString filename) const
 {
     QFileInfo projectInfo(ProjectPath);
     auto projectDir = projectInfo.absoluteDir();
-    auto imagePath = projectDir.absoluteFilePath(filename);
+
+    auto imagePath = [this, projectDir](const QString& filename) {
+        QFileInfo fileInfo(filename);
+        QString resolvedPath = fileInfo.isAbsolute()
+                                   ? fileInfo.canonicalFilePath()
+                                   : QFileInfo(projectDir.absoluteFilePath(filename)).canonicalFilePath();
+
+
+        // qDebug() << "Path:" <<  QFileInfo(resolvedPath).absolutePath() << (projectDir.canonicalPath());
+        Q_ASSERT(
+            QFileInfo(resolvedPath)
+                .absolutePath()
+                .startsWith(projectDir.canonicalPath())
+            );
+
+        return resolvedPath;
+    }(filename);
 
     if(!QFileInfo::exists(imagePath)) {
         qDebug() << "cwImageProvider can't open:" << filename << LOCATION;
