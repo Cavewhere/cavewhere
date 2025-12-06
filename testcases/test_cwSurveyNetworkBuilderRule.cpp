@@ -11,7 +11,7 @@
 #include "LoadProjectHelper.h"
 #include "cwSurveyNetworkBuilderRule.h"
 #include "cwSurveyDataArtifact.h"
-#include "cwAsyncFuture.h"
+#include "asyncfuture.h"
 
 TEST_CASE("cwSurveyNetworkBuilderRule reports correct source/output names", "[SurveyNetworkBuilderRule]") {
     cwSurveyNetworkBuilderRule rule;
@@ -78,7 +78,7 @@ TEST_CASE("cwSurvexExportRule should build the network correctly and position st
     rule.setSurveyData(&surveyData);
 
     auto future = rule.surveyNetworkArtifact()->surveyNetwork();
-    CHECK(cwAsyncFuture::waitForFinished(future, 2000));
+    CHECK(AsyncFuture::waitForFinished(future, 2000));
 
     REQUIRE(future.result().hasError() == false);
     cwSurveyNetwork network = future.result().value();

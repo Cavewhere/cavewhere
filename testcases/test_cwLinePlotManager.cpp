@@ -188,7 +188,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
                 shot.setClino(cwClinoReading("0.0"));
                 cwStation station(QString("a3-%1").arg(i));
 
-                chunk->appendShot(chunk->stations().last(), station, shot);
+                const auto stations = chunk->stations();
+                chunk->appendShot(stations.last(), station, shot);
 
                 plotManager->waitToFinish();
 

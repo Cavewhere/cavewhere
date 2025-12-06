@@ -4,7 +4,7 @@
 //Our includes
 #include "cwFutureManagerToken.h"
 #include "cwFutureManagerModel.h"
-#include "cwAsyncFuture.h"
+#include "asyncfuture.h"
 
 //AsyncFuture
 #include "asyncfuture.h"
@@ -59,7 +59,7 @@ TEST_CASE("cwFutureManagerToken should be thread safe", "[cwFutureManagerToken]"
             QThread::msleep(50);
         });
 
-        cwAsyncFuture::waitForFinished(future);
+        AsyncFuture::waitForFinished(future);
 
         REQUIRE(model->rowCount() == 1);
         CHECK(model->index(0).data(cwFutureManagerModel::NameRole).toString().toStdString() == "Other Thread");

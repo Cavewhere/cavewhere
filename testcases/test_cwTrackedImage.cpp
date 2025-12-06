@@ -9,7 +9,7 @@
 #include "cwImage.h"
 #include "TestHelper.h"
 #include "cwImageProvider.h"
-#include "cwAsyncFuture.h"
+#include "asyncfuture.h"
 #include "cwImageDatabase.h"
 #include "cwSaveLoad.h"
 
@@ -104,7 +104,7 @@ TEST_CASE("cwTrackImage should work with QSharedPointer's custom delete function
 
     auto future = QtConcurrent::run(run);
 
-    cwAsyncFuture::waitForFinished(future);
+    AsyncFuture::waitForFinished(future);
 
     REQUIRE(!trackImagePtr.isNull());
 

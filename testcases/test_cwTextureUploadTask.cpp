@@ -11,7 +11,7 @@
 #include "cwSurveyNoteModel.h"
 #include "cwNote.h"
 #include "cwTextureUploadTask.h"
-#include "cwAsyncFuture.h"
+#include "asyncfuture.h"
 
 //Qt includes
 #include <QSqlDatabase>
@@ -52,7 +52,7 @@ TEST_CASE("cwTextureUploadTask should run correctly", "[cwTextureUploadTask]") {
     //     task.setType(cwTextureUploadTask::DXT1Mipmaps);
     //     auto resultsFuture = task.mipmaps();
 
-    //     cwAsyncFuture::waitForFinished(resultsFuture);
+    //     AsyncFuture::waitForFinished(resultsFuture);
     //     REQUIRE(resultsFuture.resultCount() == 1);
     //     REQUIRE(resultsFuture.isFinished());
     //     auto results = resultsFuture.result();
@@ -84,7 +84,7 @@ TEST_CASE("cwTextureUploadTask should run correctly", "[cwTextureUploadTask]") {
         task.setType(cwTextureUploadTask::OpenGL_RGBA);
         auto resultsFuture = task.mipmaps();
 
-        cwAsyncFuture::waitForFinished(resultsFuture);
+        AsyncFuture::waitForFinished(resultsFuture);
         auto results = resultsFuture.result();
 
         CHECK(results.type == cwTextureUploadTask::OpenGL_RGBA);

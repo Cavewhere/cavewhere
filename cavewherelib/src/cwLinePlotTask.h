@@ -9,7 +9,6 @@
 #define CWLINEPLOTTASK_H
 
 //Our includes
-#include "cwTask.h"
 class cwCavingRegion;
 class cwLinePlotGeometryTask;
 #include "cwStationPositionLookup.h"
@@ -32,11 +31,57 @@ class cwCave;
 #include <QVector>
 #include <QSet>
 #include <QHash>
+#include <QFuture>
+#include <QMap>
+#include <QList>
+#include <QPair>
+#include <QMultiHash>
 
-class cwLinePlotTask : public cwTask
+class cwLinePlotTask
 {
-    Q_OBJECT
 public:
+    struct LinePlotWorker;
+    /**
+     * TripDataPtrs, CaveDataPtrs, and RegionDataPtrs, store pointers to original
+     * data in this task.  This will allow the task to return the pointer of each object
+     * that the station's position has changed.  This is extremely useful for alerting
+     * when a specific scrap needs to be updated.
+     *
+     * It is unsafe to use the pointers in the this data structure.  But are used for
+     * book keeping only.
+     *
+     * This could possibly be replaced by id's in the future
+     */
+    class TripDataPtrs {
+    public:
+        TripDataPtrs() {}
+        TripDataPtrs(cwTrip* trip);
+
+        cwTrip* Trip;
+        QList<cwScrap*> Scraps;
+    };
+
+    class CaveDataPtrs {
+    public:
+        CaveDataPtrs() {}
+        CaveDataPtrs(cwCave* cave);
+
+        cwCave* Cave;
+        QList<TripDataPtrs> Trips;
+    };
+
+    class RegionDataPtrs {
+    public:
+        RegionDataPtrs() {}
+        RegionDataPtrs(const cwCavingRegion* region);
+
+        QList<CaveDataPtrs> Caves;
+    };
+
+    struct Input {
+        cwCavingRegionData regionData;
+        class RegionDataPtrs regionPointers;
+    };
 
     class LinePlotCaveData {
     public:
@@ -97,7 +142,7 @@ public:
         QVector<QVector3D> stationPositions() const;
         QVector<unsigned int> linePlotIndexData() const;
 
-    private:
+    public:
         QMap<cwCave*, LinePlotCaveData> Caves;
         QSet<cwTrip*> Trips;
         QSet<cwScrap*> Scraps;
@@ -105,72 +150,13 @@ public:
         QVector<unsigned int> LinePlotIndexData;
 
         friend class cwLinePlotTask;
+        friend struct LinePlotWorker;
     };
 
-    explicit cwLinePlotTask(QObject *parent = 0);
-    ~cwLinePlotTask();
+    static Input buildInput(const cwCavingRegion* region);
+    static QFuture<LinePlotResultData> run(Input input);
 
-    LinePlotResultData linePlotData() const;
 
-signals:
-
-protected:
-    virtual void runTask();
-
-public slots:
-    void setData(const cwCavingRegion *region);
-
-private slots:
-    void exportData();
-    void runCavern();
-    void convertToXML();
-    void readXML();
-    void generateCenterlineGeometry();
-    void linePlotTaskComplete();
-
-    //For setting up all the station positions
-    void updateStationPositionForCaves(const cwStationPositionLookup& stationPostions);
-
-    //Update the depth and length data
-    void updateDepthLength();
-
-private:
-    /**
-     * TripDataPtrs, CaveDataPtrs, and RegionDataPtrs, store pointers to original
-     * data in this task.  This will allow the task to return the pointer of each object
-     * that the station's position has changed.  This is extremely useful for alerting
-     * when a specific scrap needs to be updated.
-     *
-     * It is unsafe to use the pointers in the this data structure.  But are used for
-     * book keeping only.
-     *
-     * This could possibly be replaced by id's in the future
-     */
-    class TripDataPtrs {
-    public:
-        TripDataPtrs() {}
-        TripDataPtrs(cwTrip* trip);
-
-        cwTrip* Trip;
-        QList<cwScrap*> Scraps;
-    };
-
-    class CaveDataPtrs {
-    public:
-        CaveDataPtrs() {}
-        CaveDataPtrs(cwCave* cave);
-
-        cwCave* Cave;
-        QList<TripDataPtrs> Trips;
-    };
-
-    class RegionDataPtrs {
-    public:
-        RegionDataPtrs() {}
-        RegionDataPtrs(const cwCavingRegion* region);
-
-        QList<CaveDataPtrs> Caves;
-    };
 
     /**
      * @brief The StationCaveLookup class
@@ -190,47 +176,6 @@ private:
         QMultiHash<QString, int> MapStationToTrip; //Multi map of a station to multiple trips indexes
         QMultiHash<QString, QPair<int, int> > MapStationToScrap; //Multi map of a station to multiple scraps indexes (first index is cave, then scrap index)
     };
-
-    //The region data
-    cwCavingRegionData RegionData; //Local copy of the region, we can modify this
-    const cwCavingRegion* Region = nullptr; //Only valid in the thread
-    RegionDataPtrs RegionOriginalPointers; //Allows use to notify the which of the original data has changed
-    QVector<cwStationPositionLookup> CaveStationLookups; //Copies of all the cave station lookups that are going to be modified
-    QVector<StationTripScrapLookup> TripLookups; //Generated in indexStations()
-
-    //The temparary survex file
-    QTemporaryFile* SurvexFile;
-    cwSurvexExporterRegionTask* SurvexExporter;
-
-    //Sub tasks
-    cwCavernTask* CavernTask;
-    cwSurvexportTask* PlotSauceTask;
-    cwSurvexportCSVTask* PlotSauceParseTask;
-    cwLinePlotGeometryTask* CenterlineGeometryTask;
-    cwFindUnconnectedSurveyChunksTask* UnconnectedSurveyChunkTask;
-
-    //What's returned
-    LinePlotResultData Result;
-
-    //For performance testing
-    QElapsedTimer Time;
-
-    void checkForErrors();
-    void encodeCaveNames();
-    void initializeCaveStationLookups();
-    void setStationAsChanged(int caveIndex, QString stationName);
-    void indexStations();
-    LinePlotCaveData& createLinePlotCaveDataAt(int index);
-
-    QVector<cwStationPositionLookup> splitLookupByCave(const cwStationPositionLookup& stationPostions);
-    void updateInteralCaveStationLookups(QVector<cwStationPositionLookup> caveStations);
-    void updateExteralCaveStationLookups();
-
-    void updateCaveNetworks();
-
-    // Q_INVOKABLE void moveCaveRegionToThread(QThread* thread);
-
-    void addEmptyStationLookup(int caveIndex);
 
 };
 
@@ -329,38 +274,15 @@ inline void cwLinePlotTask::LinePlotResultData::setPlotIndexData(QVector<unsigne
     LinePlotIndexData = indexData;
 }
 
-/**
- * @brief cwLinePlotTask::linePlotData
- * @return The resulting line plot data from the task.
- *
- * This will include, the 3D geometry of the lineplot and the objects that need to be updated
- * based on the station data that has changed
- */
-inline cwLinePlotTask::LinePlotResultData cwLinePlotTask::linePlotData() const
-{
-    return Result;
-}
-
-/**
- * @brief cwLinePlotTask::StationTripScrapLookup::trips
- * @param stationName
- * @return All the trips that contain stationName
- */
 inline QList<int> cwLinePlotTask::StationTripScrapLookup::trips(QString stationName) const
 {
     return MapStationToTrip.values(stationName);
 }
 
-/**
- * @brief cwLinePlotTask::StationTripScrapLookup::scraps
- * @param stationName
- * @return All the scraps that contain stationName
- */
 inline QList<QPair<int, int> > cwLinePlotTask::StationTripScrapLookup::scraps(QString stationName) const
 {
     return MapStationToScrap.values(stationName);
 }
-
 
 inline void cwLinePlotTask::LinePlotCaveData::setDepth(double depth)
 {
@@ -368,113 +290,67 @@ inline void cwLinePlotTask::LinePlotCaveData::setDepth(double depth)
     DepthLengthChanged = true;
 }
 
-/**
- * @brief cwLinePlotTask::LinePlotCaveData::setLength
- * @param length
- */
 inline void cwLinePlotTask::LinePlotCaveData::setLength(double length)
 {
     Length = length;
     DepthLengthChanged = true;
 }
 
-/**
- * @brief cwLinePlotTask::LinePlotCaveData::setStationPositions
- * @param positionLookup
- */
 inline void cwLinePlotTask::LinePlotCaveData::setStationPositions(cwStationPositionLookup positionLookup)
 {
     Lookup = positionLookup;
     StationPostionsChanged = true;
 }
 
-/**
- * @brief cwLinePlotTask::LinePlotCaveData::setUnconnectedChunkError
- * @param results - Sets the results for chunks that aren't connect to the cave
- */
 inline void cwLinePlotTask::LinePlotCaveData::setUnconnectedChunkError(QList<cwFindUnconnectedSurveyChunksTask::Result> results)
 {
     UnconnectedChunksErrors = results;
 }
 
-/**
- * @brief cwLinePlotTask::LinePlotCaveData::setNetwork
- * @param network - Sets the survey network for the cave
- */
 inline void cwLinePlotTask::LinePlotCaveData::setNetwork(cwSurveyNetwork network)
 {
     Network = network;
     NetworkChanged = true;
 }
 
-/**
- * @brief cwLinePlotTask::LinePlotCaveData::depth
- * @return The depth of the cave
- */
 inline double cwLinePlotTask::LinePlotCaveData::depth() const
 {
     return Depth;
 }
 
-/**
- * @brief cwLinePlotTask::LinePlotCaveData::length
- * @return The length of the cave
- */
 inline double cwLinePlotTask::LinePlotCaveData::length() const
 {
     return Length;
 }
 
-/**
- * @brief cwLinePlotTask::LinePlotCaveData::stationPositions
- * @return All the station positions of the cave
- */
 inline cwStationPositionLookup cwLinePlotTask::LinePlotCaveData::stationPositions() const
 {
     return Lookup;
 }
 
-/**
- * @brief cwLinePlotTask::LinePlotCaveData::unconnectedChunkError
- * @return Returns the errors for unconnected chunk. Unconnected chunk are survey legs that aren't
- * connected to the cave.
- */
 inline QList<cwFindUnconnectedSurveyChunksTask::Result> cwLinePlotTask::LinePlotCaveData::unconnectedChunkError() const
 {
     return UnconnectedChunksErrors;
 }
 
-/**
- * @brief cwLinePlotTask::LinePlotCaveData::network
- * @return The survey network. This is how the stations are connected to one another
- */
 inline cwSurveyNetwork cwLinePlotTask::LinePlotCaveData::network() const
 {
     return Network;
 }
 
-/**
- * @brief cwLinePlotTask::LinePlotCaveData::hasDepthLengthChanged
- *
- * Return's true if the depth and the legth has     changed
- */
 inline bool cwLinePlotTask::LinePlotCaveData::hasDepthLengthChanged() const
 {
     return DepthLengthChanged;
 }
 
-/**
- * @brief cwLinePlotTask::LinePlotCaveData::hasStationPositionsChanged
- *
- * Return's true if the station positions have changed
- */
 inline bool cwLinePlotTask::LinePlotCaveData::hasStationPositionsChanged() const
 {
     return StationPostionsChanged;
 }
 
-
-
-
+inline bool cwLinePlotTask::LinePlotCaveData::hasNetworkChanged() const
+{
+    return NetworkChanged;
+}
 
 #endif // CWLINEPLOTTASK_H

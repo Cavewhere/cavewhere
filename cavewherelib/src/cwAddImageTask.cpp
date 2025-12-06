@@ -11,7 +11,7 @@
 #include "cwImageData.h"
 #include "cwImageProvider.h"
 #include "cwDebug.h"
-#include "cwAsyncFuture.h"
+#include "asyncfuture.h"
 #include "cwImageDatabase.h"
 #include "cwConcurrent.h"
 

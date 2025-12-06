@@ -1,6 +1,6 @@
 //Our includes
 #include "TaskWithBlockingAsync.h"
-#include "cwAsyncFuture.h"
+#include "asyncfuture.h"
 
 //Qt includes
 #include <QThread>
@@ -35,7 +35,7 @@ void TaskWithBlockingAsync::runTask()
         return sum;
     }).future();
 
-    cwAsyncFuture::waitForFinished(sumFuture);
+    AsyncFuture::waitForFinished(sumFuture);
 
     Result = sumFuture.result();
 

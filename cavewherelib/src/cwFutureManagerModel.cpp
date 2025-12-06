@@ -1,6 +1,6 @@
 //Our includes
 #include "cwFutureManagerModel.h"
-#include "cwAsyncFuture.h"
+#include "asyncfuture.h"
 
 //Qt includes
 #include <QFutureWatcher>
@@ -111,7 +111,7 @@ void cwFutureManagerModel::waitForFinished()
 {
     while(!Watchers.isEmpty()) {
         auto watcher = Watchers.first();
-        cwAsyncFuture::waitForFinished(watcher.job.future());
+        AsyncFuture::waitForFinished(watcher.job.future());
         Q_ASSERT(!watcher.job.future().isRunning());
         if(!Watchers.isEmpty()) {
             if(watcher.watcher == Watchers.first().watcher) {

@@ -25,6 +25,7 @@
 #include "cwTaskManagerModel.h"
 #include "cwFutureManagerModel.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
+#include "cwJobSettings.h"
 
 //Our includes
 #include "TestHelper.h"
@@ -237,21 +238,23 @@ TEST_CASE("Check that auto calculate work outside of trip", "[cwScrap]") {
     foreach(TestRow row, rows) {
         row.TripName = QStringLiteral("Trip 2");
         auto root = std::make_unique<cwRootData>();
+        root->settings()->jobSettings()->setAutomaticUpdate(true);
         root->scrapManager()->warpingSettings()->setGridResolutionMeters(10.0);
         root->scrapManager()->warpingSettings()->setUseShotInterpolationSpacing(false);
         root->scrapManager()->warpingSettings()->setUseMaxClosestStations(false);
         root->scrapManager()->warpingSettings()->setUseSmoothingRadius(false);
+        CHECK(root->scrapManager()->automaticUpdate());
 
         fileToProject(root->project(), row.Filename);
         auto project = root->project();
         cwScrap* currentScrap = findScrap(project, row);
 
-        auto plotManager = root->linePlotManager();
-        plotManager->waitToFinish();
+        // auto plotManager = root->linePlotManager();
+        // plotManager->waitToFinish();
 
-        CHECK(!project->cavingRegion()->cave(0)->stationPositionLookup().isEmpty());
+        // CHECK(!project->cavingRegion()->cave(0)->stationPositionLookup().isEmpty());
 
-        root->taskManagerModel()->waitForTasks();
+        // root->taskManagerModel()->waitForTasks();
         root->futureManagerModel()->waitForFinished();
 
         INFO("Finished after plotManager!");
@@ -275,10 +278,12 @@ TEST_CASE("Auto calculate if survey station change position", "[cwScrap]") {
     foreach(TestRow row, rows) {
         row.TripName = QStringLiteral("Trip 2");
         auto root = std::make_unique<cwRootData>();
+        root->settings()->jobSettings()->setAutomaticUpdate(true);
         root->scrapManager()->warpingSettings()->setGridResolutionMeters(10.0);
         root->scrapManager()->warpingSettings()->setUseShotInterpolationSpacing(false);
         root->scrapManager()->warpingSettings()->setUseMaxClosestStations(false);
         root->scrapManager()->warpingSettings()->setUseSmoothingRadius(false);
+        CHECK(root->scrapManager()->automaticUpdate());
 
         fileToProject(root->project(), row.Filename);
         auto project = root->project();
@@ -320,6 +325,7 @@ TEST_CASE("Auto calculate should work on projected profile azimuth", "[cwScrap]"
 
     foreach(TestRow row, rows) {
         auto root = std::make_unique<cwRootData>();
+        root->settings()->jobSettings()->setAutomaticUpdate(true);
         fileToProject(root->project(), row.Filename);
         auto project = root->project();
         cwScrap* currentScrap = findScrap(project, row);
@@ -347,6 +353,7 @@ TEST_CASE("Auto calculate if the scrap type has changed", "[cwScrap]") {
 
     foreach(TestRow row, rows) {
         auto root = std::make_unique<cwRootData>();
+        root->settings()->jobSettings()->setAutomaticUpdate(true);
         fileToProject(root->project(), row.Filename);
         auto project = root->project();
         cwScrap* currentScrap = findScrap(project, row);

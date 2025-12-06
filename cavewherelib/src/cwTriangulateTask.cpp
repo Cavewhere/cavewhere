@@ -10,7 +10,6 @@
 #include "cwCropImageTask.h"
 #include "cwDebug.h"
 #include "utils/cwTriangulate.h"
-#include "cwAsyncFuture.h"
 #include "cwRunningProfileScrapViewMatrix.h"
 #include "cwConcurrent.h"
 

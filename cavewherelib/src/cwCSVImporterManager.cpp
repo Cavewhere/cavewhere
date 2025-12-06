@@ -5,7 +5,7 @@
 #include "cwErrorModel.h"
 #include "cwErrorListModel.h"
 #include "cwCSVLineModel.h"
-#include "cwAsyncFuture.h"
+#include "asyncfuture.h"
 #include "cwConcurrent.h"
 
 //AsyncFuture
@@ -120,7 +120,7 @@ void cwCSVImporterManager::setDistanceUnit(cwUnits::LengthUnit distanceUnit) {
  */
 void cwCSVImporterManager::waitToFinish()
 {
-    cwAsyncFuture::waitForFinished(CSVFinishedFuture);
+    AsyncFuture::waitForFinished(CSVFinishedFuture);
 }
 
 /**

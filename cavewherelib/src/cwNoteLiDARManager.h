@@ -30,7 +30,7 @@ class cwNoteLiDAR;
 // Ours
 #include "cwGlobals.h"
 #include "cwFutureManagerToken.h"
-#include "cwAsyncFuture.h"
+#include "asyncfuture.h"
 #include "cwTriangulateLiDARInData.h"
 #include "cwRenderTexturedItems.h"
 #include "cwUniqueConnectionChecker.h"
@@ -128,7 +128,7 @@ private:
     cwProject* m_project = nullptr;
 
     cwFutureManagerToken m_futureManagerToken;
-    cwAsyncFuture::Restarter<void> m_restarter;
+    AsyncFuture::Restarter<void> m_restarter;
 
     QSet<cwNoteLiDAR*> m_dirtyNotes;
     QSet<cwNoteLiDAR*> m_deletedNotes;

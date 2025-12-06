@@ -25,7 +25,7 @@
 #include "cwKeywordItem.h"
 #include "cwRenderTexturedItemVisibility.h"
 #include "cwImageDatabase.h"
-#include "cwAsyncFuture.h"
+#include "asyncfuture.h"
 #include "cwAbstractScrapViewMatrix.h"
 #include "cwConcurrent.h"
 #include "cwTriangulateWarping.h"
@@ -1054,7 +1054,7 @@ void cwScrapManager::setAutomaticUpdate(bool automaticUpdate) {
 
 void cwScrapManager::waitForFinish()
 {
-    cwAsyncFuture::waitForFinished(TriangulateRestarter.future());
+    AsyncFuture::waitForFinished(TriangulateRestarter.future());
 }
 
 QList<cwScrap*> cwScrapManager::dirtyScraps() const

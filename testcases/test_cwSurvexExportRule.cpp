@@ -9,7 +9,7 @@
 #include "cwSurvexExporterRule.h"
 #include "cwSurveyDataArtifact.h"
 #include "cwTemporaryFileNameArtifact.h"
-#include "cwAsyncFuture.h"
+#include "asyncfuture.h"
 
 TEST_CASE("cwSurvexExportRule should export a caving region correctly", "[cwSurvexExportRule]") {
     // Load project and get the caving region
@@ -31,7 +31,7 @@ TEST_CASE("cwSurvexExportRule should export a caving region correctly", "[cwSurv
 
     // Wait for the asynchronous export to complete (2000ms timeout)
     auto future = exporter.survexFileArtifact()->filename();
-    CHECK(cwAsyncFuture::waitForFinished(future, 2000));
+    CHECK(AsyncFuture::waitForFinished(future, 2000));
 
     INFO("TempFileArtifact:" << tempFileArtifact.filename().toStdString());
 

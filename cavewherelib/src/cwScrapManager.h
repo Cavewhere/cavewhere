@@ -43,7 +43,7 @@ class cwRenderTexturedItemVisibility;
 #include "cwImageProvider.h"
 #include "cwFutureManagerToken.h"
 #include "cwGlobals.h"
-#include "cwAsyncFuture.h"
+#include "asyncfuture.h"
 #include "cwTriangulateWarping.h"
 #include <memory>
 
@@ -109,7 +109,7 @@ private:
 
     //The task that'll be run
     cwProject* Project;
-    cwAsyncFuture::Restarter<void> TriangulateRestarter;
+    AsyncFuture::Restarter<void> TriangulateRestarter;
 //    QFuture<void> TriangulateFuture;
     cwFutureManagerToken FutureManagerToken;
 

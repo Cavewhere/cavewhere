@@ -20,7 +20,7 @@
 #include "cwDebug.h"
 #include "cwSQLManager.h"
 #include "cwTaskManagerModel.h"
-#include "cwAsyncFuture.h"
+#include "asyncfuture.h"
 #include "cwErrorListModel.h"
 #include "cwPDFConverter.h"
 #include "cwPDFSettings.h"
@@ -699,7 +699,7 @@ QSqlDatabase cwProject::createDatabaseConnection(const QString &connectionName, 
  */
 void cwProject::waitLoadToFinish()
 {
-    cwAsyncFuture::waitForFinished(LoadFuture);
+    AsyncFuture::waitForFinished(LoadFuture);
     m_saveLoad->waitForFinished();
 }
 
@@ -712,7 +712,7 @@ void cwProject::waitLoadToFinish()
 void cwProject::waitSaveToFinish()
 {
     m_saveLoad->waitForFinished();
-    // cwAsyncFuture::waitForFinished(SaveFuture);
+    // AsyncFuture::waitForFinished(SaveFuture);
 }
 
 /**

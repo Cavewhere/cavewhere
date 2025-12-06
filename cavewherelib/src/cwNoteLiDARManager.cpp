@@ -30,7 +30,7 @@
 #include "cwNoteLiDAR.h"
 #include "cwLinePlotManager.h"
 #include "cwProject.h"
-#include "cwAsyncFuture.h"
+#include "asyncfuture.h"
 #include "cwUniqueConnectionChecker.h"
 #include "cwSaveLoad.h"
 #include "cwDiskCacher.h"
@@ -266,7 +266,7 @@ void cwNoteLiDARManager::updateLiDARForTrip(cwTrip* trip)
 
 void cwNoteLiDARManager::waitForFinish()
 {
-    cwAsyncFuture::waitForFinished(m_restarter.future());
+    AsyncFuture::waitForFinished(m_restarter.future());
 }
 
 void cwNoteLiDARManager::saveIcon(const QImage& icon, cwNoteLiDAR* note)

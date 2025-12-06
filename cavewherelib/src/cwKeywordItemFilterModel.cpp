@@ -1,7 +1,7 @@
 //Our includes
 #include "cwKeywordItemFilterModel.h"
 #include "cwKeyword.h"
-#include "cwAsyncFuture.h"
+#include "asyncfuture.h"
 #include "cwGlobals.h"
 #include "cwKeywordModel.h"
 
@@ -219,7 +219,7 @@ QString cwKeywordItemFilterModel::otherCategory()
 
 void cwKeywordItemFilterModel::waitForFinished()
 {
-    cwAsyncFuture::waitForFinished(LastRun);
+    AsyncFuture::waitForFinished(LastRun);
     Q_ASSERT(isRunning() == false);
 }
 

@@ -23,10 +23,12 @@
 #include "cwSurveyChunkSignaler.h"
 #include "cwErrorModel.h"
 #include "cwErrorListModel.h"
+#include "asyncfuture.h"
 
 
 cwLinePlotManager::cwLinePlotManager(QObject *parent) :
-    QObject(parent)
+    QObject(parent),
+    m_restarter(this)
 {
     Region = nullptr;
     m_linePlot = nullptr;
@@ -50,16 +52,16 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
     SurveySignaler->addConnectionToChunks(SIGNAL(calibrationsChanged()), this, SLOT(runSurvex()));
     SurveySignaler->addConnectionToChunkCalibrations(SIGNAL(calibrationsChanged()), this, SLOT(runSurvex()));
 
-    LinePlotTask = new cwLinePlotTask();
-    connect(LinePlotTask, SIGNAL(shouldRerun()), this, SLOT(rerunSurvex())); //So the task is rerun
-    connect(LinePlotTask, &cwLinePlotTask::finished, this, &cwLinePlotManager::updateLinePlotFromTask);
+    m_restarter.onFutureChanged([this]() {
+        if (m_futureManagerToken.isValid()) {
+            m_futureManagerToken.addJob({ QFuture<void>(m_restarter.future()), QStringLiteral("Line plot") });
+        }
+    });
 }
 
 cwLinePlotManager::~cwLinePlotManager() {
-    LinePlotTask->stop();
-    LinePlotTask->waitToFinish(cwTask::IgnoreRestart);
-
-    delete LinePlotTask;
+    m_restarter.future().cancel();
+    waitToFinish();
 }
 
 /**
@@ -87,7 +89,12 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
 
 void cwLinePlotManager::setRenderLinePlot(cwRenderLinePlot* linePlot) {
     m_linePlot = linePlot;
-    updateLinePlotFromTask();
+    updateLinePlot(cwLinePlotTask::LinePlotResultData());
+}
+
+void cwLinePlotManager::setFutureManagerToken(cwFutureManagerToken token)
+{
+    m_futureManagerToken = token;
 }
 
 /**
@@ -98,7 +105,7 @@ void cwLinePlotManager::setRenderLinePlot(cwRenderLinePlot* linePlot) {
  */
 void cwLinePlotManager::waitToFinish()
 {
-    LinePlotTask->waitToFinish();
+    AsyncFuture::waitForFinished(m_restarter.future());
 }
 
 /**
@@ -233,23 +240,24 @@ void cwLinePlotManager::runSurvex() {
     }
 
     if(Region != nullptr) {
-        if(LinePlotTask->isReady()) {
-            setCaveStationLookupAsStale(true);
-            LinePlotTask->setData(Region);
-            LinePlotTask->start();
-        } else {
-            //Restart the survex
-            LinePlotTask->restart();
-        }
+        setCaveStationLookupAsStale(true);
+        m_restarter.restart([this]() {
+            if (Region.isNull()) {
+                return QFuture<cwLinePlotTask::LinePlotResultData>();
+            }
+
+            auto input = cwLinePlotTask::buildInput(Region.data());
+            auto future = cwLinePlotTask::run(std::move(input));
+
+            AsyncFuture::observe(future)
+                .context(this, [this, future]() {
+                    updateLinePlot(future.result());
+                });
+
+            return future;
+        });
     }
 
-}
-
-void cwLinePlotManager::updateLinePlotFromTask()
-{
-    if(!LinePlotTask->isReady()) { return; }
-    cwLinePlotTask::LinePlotResultData resultData = LinePlotTask->linePlotData();
-    updateLinePlot(resultData);
 }
 
 /**
@@ -316,4 +324,3 @@ void cwLinePlotManager::setAutomaticUpdate(bool automaticUpdate) {
         runSurvex();
     }
 }
-

@@ -7,7 +7,7 @@
 #include "cwProject.h"
 #include "cwRootData.h"
 #include "TestHelper.h"
-#include "cwAsyncFuture.h"
+#include "asyncfuture.h"
 #include "cwTaskManagerModel.h"
 #include "cwCave.h"
 #include "cwTrip.h"

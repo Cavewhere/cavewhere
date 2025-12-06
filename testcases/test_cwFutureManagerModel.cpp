@@ -4,7 +4,7 @@
 //Our includes
 #include "cwFutureManagerModel.h"
 #include "SpyChecker.h"
-#include "cwAsyncFuture.h"
+#include "asyncfuture.h"
 
 //Qt includes
 #include <QtConcurrent>
@@ -119,7 +119,7 @@ TEST_CASE("cwFutureManagerModel should add and watch futures correctly", "[cwFut
             combine << row.future;
         }
 
-        REQUIRE(cwAsyncFuture::waitForFinished(combine.future(), numberOfTasks * sleepScale * 10));
+        REQUIRE(AsyncFuture::waitForFinished(combine.future(), numberOfTasks * sleepScale * 10));
 
         CHECK(model.rowCount() == 0);
         spyChecker[&rowsRemovedSpy] = numberOfTasks;
@@ -202,7 +202,7 @@ TEST_CASE("Update should update number of steps correctly", "[cwFutureManagerMod
 
     model.addJob({QFuture<void>(nextFuture2), "ChainedFutures"});
 
-    REQUIRE(cwAsyncFuture::waitForFinished(nextFuture2, size * sleepTime * 3));
+    REQUIRE(AsyncFuture::waitForFinished(nextFuture2, size * sleepTime * 3));
 }
 
 TEST_CASE("cwFutureManagerModel waitForFinished should work correctly", "[cwFutureManagerModel]") {
@@ -235,22 +235,22 @@ TEST_CASE("cwFutureManagerModel waitForFinished should work correctly", "[cwFutu
     CHECK(count == runs + 1);
 }
 
-TEST_CASE("cwFutureManagerModel waitForFinished should work correctly with cwAsyncFuture::Restarter", "[cwFutureManagerModel]") {
+TEST_CASE("cwFutureManagerModel waitForFinished should work correctly with AsyncFuture::Restarter", "[cwFutureManagerModel]") {
 
-    cwAsyncFuture::Restarter<int> restarter(QCoreApplication::instance());
+    AsyncFuture::Restarter<int> restarter(QCoreApplication::instance());
     cwFutureManagerModel model;
 
-    QAtomicInt count(0);
+    auto count = std::make_shared<QAtomicInt>(0);
 
     restarter.onFutureChanged([&model, &restarter]() {
         model.addJob({QFuture<void>(restarter.future()), "Job}"});
     });
 
     for(int i = 0; i < 20; i++) {
-        auto run = [&count, i]() {
-            auto concurrentRun = [&count, i]() {
+        auto run = [count, i]() {
+            auto concurrentRun = [count, i]() {
                 QThread::msleep(10);
-                count++;
+                *(count.get()) += 1;
                 return i;
             };
 
@@ -268,7 +268,7 @@ TEST_CASE("cwFutureManagerModel waitForFinished should work correctly with cwAsy
     CHECK(restarter.future().isFinished() == true);
     CHECK(restarter.future().result() == 19); //We restarted from 0 to 19
 
-    int finalCount = count;
+    int finalCount = *(count.get());
     CHECK(finalCount <= 2);
     CHECK(finalCount >= 1);
 }

@@ -333,7 +333,7 @@ void cwKeywordFilterPipelineModel::linkPipelineAt(int i)
                          row.filter->setSourceModel(previousRow.filter->acceptedModel());
                          if(mAcceptedModel->sourceModels().contains(previousRow.filter->acceptedModel())) {
                              mAcceptedModel->removeSourceModel(previousRow.filter->acceptedModel());
-                             qDebug() << "removed pipeline:" << row.filter->acceptedModel() << mAcceptedModel->sourceModels();
+                             // qDebug() << "removed pipeline:" << row.filter->acceptedModel() << mAcceptedModel->sourceModels();
                          }
                      });
             break;
@@ -342,12 +342,12 @@ void cwKeywordFilterPipelineModel::linkPipelineAt(int i)
                      [&row, this](const Row& previousRow)
                      {
                          //Add to AcceptedModel
-                         qDebug() << "start add pipeline";
+                         // qDebug() << "start add pipeline";
                          row.filter->setSourceModel(mKeywordModel); //All the data
                          if(!mAcceptedModel->sourceModels().contains(previousRow.filter->acceptedModel())) {
                              mAcceptedModel->addSourceModel(previousRow.filter->acceptedModel());
                          }
-                         qDebug() << "added pipeline:" << previousRow.filter->acceptedModel() << mAcceptedModel->sourceModels();
+                         // qDebug() << "added pipeline:" << previousRow.filter->acceptedModel() << mAcceptedModel->sourceModels();
                      });
             break;
         }

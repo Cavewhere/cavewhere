@@ -81,6 +81,7 @@ cwRootData::cwRootData(QObject *parent) :
     //Setup the loop closer
     LinePlotManager = new cwLinePlotManager(Project);
     LinePlotManager->setRegion(Region);
+    LinePlotManager->setFutureManagerToken(FutureManagerModel->token());
 
     //Setup the scrap manager
     ScrapManager = new cwScrapManager(Project);

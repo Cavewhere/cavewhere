@@ -3,7 +3,7 @@
 
 //Our includes
 #include "cwPDFConverter.h"
-#include "cwAsyncFuture.h"
+#include "asyncfuture.h"
 
 TEST_CASE("cwPDFConverter should initilize correctly", "[cwPDFConverter]") {
     cwPDFConverter converter;
@@ -28,7 +28,7 @@ TEST_CASE("cwPDFConverter should convert PDFs correctly", "[cwPDFConverter]") {
     if(converter.isSupported()) {
         CHECK(converter.error().toStdString() == "");
 
-        REQUIRE(cwAsyncFuture::waitForFinished(future, 5000));
+        REQUIRE(AsyncFuture::waitForFinished(future, 5000));
 
         REQUIRE(future.resultCount() == 2);
 
@@ -48,7 +48,7 @@ TEST_CASE("cwPDFConverter should convert PDFs correctly", "[cwPDFConverter]") {
 
             CHECK(converter.error().toStdString() == "");
 
-            REQUIRE(cwAsyncFuture::waitForFinished(future, 5000));
+            REQUIRE(AsyncFuture::waitForFinished(future, 5000));
 
             REQUIRE(future.resultCount() == 2);
 

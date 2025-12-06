@@ -175,11 +175,16 @@ TEST_CASE("cwCSVImportManager previewText should works correctly", "[cwCSVImport
     manager.waitToFinish();
 
     REQUIRE(manager.caves().size() == 1);
-    cwCave* cave = manager.caves().first();
+    const auto caves = manager.caves();
+    cwCave* cave = caves.first();
+
     REQUIRE(cave->trips().size() == 1);
-    cwTrip* trip = cave->trips().first();
+    const auto trips = cave->trips();
+    cwTrip* trip = trips.first();
+
     REQUIRE(trip->chunks().size() == 1);
-    cwSurveyChunk* chunk = trip->chunks().first();
+    const auto chunks = trip->chunks();
+    cwSurveyChunk* chunk = chunks.first();
 
     for(int i = 0; i < chunk->stationCount(); i++) {
         auto station = chunk->station(i);

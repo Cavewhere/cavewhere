@@ -21,11 +21,15 @@ class cwSurveyChunkSignaler;
 class cwErrorListModel;
 #include "cwLinePlotTask.h"
 #include "cwGlobals.h"
+#include "cwFutureManagerToken.h"
 
 //Qt includes
 #include <QObject>
 #include <QPointer>
 #include <QQmlEngine>
+
+//Async includes
+#include <asyncfuture.h>
 
 class CAVEWHERE_LIB_EXPORT cwLinePlotManager : public QObject
 {
@@ -40,6 +44,7 @@ public:
 
     void setRegion(cwCavingRegion* region);
     Q_INVOKABLE void setRenderLinePlot(cwRenderLinePlot* linePlot);
+    void setFutureManagerToken(cwFutureManagerToken token);
 
     bool automaticUpdate() const;
     void setAutomaticUpdate(bool automaticUpdate);
@@ -58,8 +63,8 @@ private:
     QPointer<cwCavingRegion> Region; //The main
     QList<QPointer<cwErrorListModel>> UnconnectedChunks; //Current unconnected chunks
 
-    cwLinePlotTask* LinePlotTask;
-
+    AsyncFuture::Restarter<cwLinePlotTask::LinePlotResultData> m_restarter;
+    cwFutureManagerToken m_futureManagerToken;
     cwRenderLinePlot* m_linePlot;
 
     cwSurveyChunkSignaler* SurveySignaler;
@@ -79,8 +84,6 @@ private:
 private slots:
     void rerunSurvex();
     void runSurvex();
-
-    void updateLinePlotFromTask();
 };
 
 //This needs to be here for moc to generate correctly and we can forward declare cwRenderLinePlot

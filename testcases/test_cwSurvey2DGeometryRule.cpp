@@ -18,13 +18,13 @@
 #include "cwSurvey2DGeometryArtifact.h"
 #include "Monad/Result.h"
 #include "cwSurveyNetwork.h"
-#include "cwAsyncFuture.h"
+#include "asyncfuture.h"
 
 //SVG export test
 #include "LoadProjectHelper.h"
 #include "cwSurveyNetworkBuilderRule.h"
 #include "cwSurveyDataArtifact.h"
-#include "cwAsyncFuture.h"
+#include "asyncfuture.h"
 
 
 TEST_CASE("cwSurvey2DGeometryRule: simple network yields non-empty 2D geometry", "[Survey2DGeometryRule]")
@@ -61,7 +61,7 @@ TEST_CASE("cwSurvey2DGeometryRule: simple network yields non-empty 2D geometry",
 
     // 8) Retrieve and verify the computed geometry
     auto geometryFuture = survey2DGeometryArtifact->geometryResult();
-    REQUIRE(cwAsyncFuture::waitForFinished(geometryFuture, 2000));
+    REQUIRE(AsyncFuture::waitForFinished(geometryFuture, 2000));
 
     auto geometryResult = geometryFuture.result();
     REQUIRE(!geometryResult.hasError());
@@ -132,7 +132,7 @@ TEST_CASE("SVG export test", "[Survey2DGeometryRule]") {
     rule.setViewMatrix(matrixArtifact);
 
     auto geometryFuture = rule.survey2DGeometry()->geometryResult();
-    REQUIRE(cwAsyncFuture::waitForFinished(geometryFuture, 2000));
+    REQUIRE(AsyncFuture::waitForFinished(geometryFuture, 2000));
 
     REQUIRE(!geometryFuture.result().hasError());
     const cwSurvey2DGeometry geometry = geometryFuture.result().value();
