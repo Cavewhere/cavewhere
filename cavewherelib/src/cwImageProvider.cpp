@@ -216,6 +216,10 @@ cwImageData cwImageProvider::data(int id, bool metaDataOnly) const {
 
 cwImageData cwImageProvider::data(QString filename) const
 {
+    if(filename.isEmpty()) {
+        return cwImageData();
+    }
+
     QFileInfo projectInfo(ProjectPath);
     auto projectDir = projectInfo.absoluteDir();
 
