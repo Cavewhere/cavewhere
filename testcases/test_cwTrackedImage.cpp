@@ -2,23 +2,18 @@
 #include <catch2/catch_test_macros.hpp>
 
 //Our includes
-#include "cwTrackedImage.h"
-#include "cwRootData.h"
-#include "cwProject.h"
 #include "cwFutureManagerModel.h"
 #include "cwImage.h"
-#include "TestHelper.h"
-#include "cwImageProvider.h"
-#include "asyncfuture.h"
-#include "cwImageDatabase.h"
+#include "cwProject.h"
+#include "cwRootData.h"
 #include "cwSaveLoad.h"
+#include "cwTrackedImage.h"
+#include "TestHelper.h"
 
 //Qt includes
-#include <QDebug>
-#include <QtConcurrent/QtConcurrentRun>
-
-//Async includes
-#include "asyncfuture.h"
+#include <QFile>
+#include <QImage>
+#include <QUrl>
 
 TEST_CASE("cwTrackedImage should delete images from database", "[cwTrackedImage]") {
 
@@ -36,108 +31,70 @@ TEST_CASE("cwTrackedImage should delete images from database", "[cwTrackedImage]
 
         auto newImage = newImages.first();
 
-        //FIXME!
-        REQUIRE(false);
+        auto fullPath = project->absolutePath(newImage.path());
 
-        // CHECK(newImage.isIconValid());
-        // CHECK(newImage.isOriginalValid());
+        CHECK(QFile::exists(fullPath));
+        CHECK(!QImage(fullPath).isNull());
 
-        trackedImage = cwTrackedImage(newImage, project->filename());
+        trackedImage = cwTrackedImage(newImage, fullPath);
         count++;
     });
 
     rootData->futureManagerModel()->waitForFinished();
 
+    CHECK(QFile::exists(trackedImage.path()));
+    CHECK(!QImage(trackedImage.path()).isNull());
+
     CHECK(count == 1);
-
-    //FIXME!
-    REQUIRE(false);
-
-    // CHECK(trackedImage.isIconValid());
-    // CHECK(trackedImage.isOriginalValid());
 
     trackedImage.deleteImagesFromDatabase();
 
-    auto checkThatImageWasDeleted = [project](int id) {
-        cwImageDatabase database(project->filename());
-        CHECK(!database.imageExists(id));
-    };
-
-    for(int id : trackedImage.ids()) {
-        checkThatImageWasDeleted(id);
-    }
+    CHECK(!QFile::exists(trackedImage.path()));
 }
 
 TEST_CASE("cwTrackImage should work with QSharedPointer's custom delete function", "[cwTrackedImage]") {
-
-    QSharedPointer<cwTrackedImage> trackedImage;
 
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
 
     cwTrackedImagePtr trackImagePtr;
 
-    auto run = [project, &trackImagePtr]() {
-        QEventLoop loop;
+    project->addImages({QUrl::fromLocalFile(copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG"))},
+                       cwSaveLoad::projectDir(project),
+                       [project, &trackImagePtr](QList<cwImage> newImages)
+    {
+        REQUIRE(newImages.size() == 1);
 
-        project->addImages({QUrl::fromLocalFile(copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG"))},
-                           cwSaveLoad::projectDir(project),
-                           [project, &loop, &trackImagePtr](QList<cwImage> newImages)
-        {
-            REQUIRE(newImages.size() == 1);
+        const auto newImage = newImages.first();
+        const auto fullPath = project->absolutePath(newImage.path());
 
-            auto newImage = newImages.first();
+        REQUIRE(QFile::exists(fullPath));
+        REQUIRE(!QImage(fullPath).isNull());
 
-            //FIXME!
-            loop.quit();
-            REQUIRE(false);
+        trackImagePtr = cwTrackedImage::createShared(newImage, fullPath);
+    });
 
-            CHECK(newImage.isIconValid());
-            CHECK(newImage.isOriginalValid());
-
-            trackImagePtr = cwTrackedImage::createShared(newImage, project->filename());
-            loop.quit();
-        });
-
-        loop.exec();
-    };
-
-    auto future = QtConcurrent::run(run);
-
-    AsyncFuture::waitForFinished(future);
+    rootData->futureManagerModel()->waitForFinished();
 
     REQUIRE(!trackImagePtr.isNull());
 
-    //FIXME!
-    REQUIRE(false);
+    const QString trackedPath = trackImagePtr->path();
 
-    auto checkThatImageExist = [project](int id) {
-        cwImageDatabase database(project->filename());
-        CHECK(database.imageExists(id));
-    };
-
-    auto checkThatImageWasDeleted = [project](int id) {
-        cwImageDatabase database(project->filename());
-        CHECK(!database.imageExists(id));
-    };
-
-    for(auto id : trackImagePtr->ids()) {
-        checkThatImageExist(id);
-    }
+    REQUIRE(QFile::exists(trackedPath));
+    REQUIRE(!QImage(trackedPath).isNull());
+    CHECK(trackImagePtr->mode() == cwImage::Mode::Path);
 
     SECTION("Check that delete works correctly with shared") {
         cwImage image = *trackImagePtr;
         trackImagePtr.clear();
-        for(auto id : image.ids()) {
-            checkThatImageWasDeleted(id);
-        }
+        CHECK(!QFile::exists(trackedPath));
     }
 
     SECTION("Check that take works correctly with shared") {
         cwImage image = trackImagePtr->take();
         trackImagePtr.clear();
-        for(auto id : image.ids()) {
-            checkThatImageExist(id);
-        }
+        CHECK(QFile::exists(trackedPath));
+        CHECK(image.mode() == cwImage::Mode::Path);
+        CHECK(image.path() == trackedPath);
     }
 }

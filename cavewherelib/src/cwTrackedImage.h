@@ -45,7 +45,6 @@ public:
 
 private:
     int Owner;
-    QString Filename;
 
 };
 
