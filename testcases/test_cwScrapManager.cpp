@@ -119,15 +119,13 @@ TEST_CASE("cwScrapManager auto update should work propertly", "[cwScrapManager]"
     auto scraps = note->scraps();
     auto scrap = scraps.first();
 
-    CHECK(rootData->futureManagerModel()->rowCount() == 0);
-    CHECK(addRowSpy.count() == 0);
+    rootData->futureManagerModel()->waitForFinished();
+    CHECK(scrapManager->dirtyScraps().contains(scrap));
 
     QEventLoop loop;
 
     QTimer::singleShot(1, qApp, [&](){
-        rootData->linePlotManager()->waitToFinish();
-        CHECK(rootData->futureManagerModel()->rowCount() == 0);
-        CHECK(addRowSpy.count() == 0);
+        rootData->futureManagerModel()->waitForFinished();
 
         auto pendingScraps = scrapManager->dirtyScraps();
         CHECK(pendingScraps.contains(scrap));
@@ -159,7 +157,7 @@ TEST_CASE("cwScrapManager shouldn't update scraps that are invalid", "[cwScrapMa
     REQUIRE(notes.size() == 1);
     auto note = notes.at(0);
     auto scrap = new cwScrap();
-    CHECK(rootData->futureManagerModel()->rowCount() == 0);
+
     rootData->futureManagerModel()->waitForFinished();
 
     note->addScrap(scrap);

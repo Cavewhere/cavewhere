@@ -458,9 +458,7 @@ void cwScrapManager::updateScrapGeometry(QList<cwScrap *> scraps) {
         DirtyScraps.insert(scrap);
     }
 
-    if(AutomaticUpdate) {
-        updateScrapGeometryHelper(scraps);
-    }
+    updateScrapGeometryHelper(scraps);
 }
 
 QList<cwScrapManager::TriangulatedScrapResult> cwScrapManager::triangulateScraps(const QList<cwScrap *> &scraps) const
@@ -518,6 +516,10 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
     //     oldData.setStale(true);
     //     scrap->setTriangulationData(oldData);
     // }
+
+    if(!automaticUpdate()) {
+        return;
+    }
 
 
     auto run = [this]() {
