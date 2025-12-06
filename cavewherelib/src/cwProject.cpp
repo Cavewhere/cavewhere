@@ -829,7 +829,8 @@ void cwProject::loadOrConvert(const QString &filename)
         QTemporaryDir dir;
         dir.setAutoRemove(false);
         auto tempDir = QDir(dir.filePath(QFileInfo(filename).baseName()));
-        bool temporaryProject = true;
+        const QFileInfo info(filename);
+        const bool temporaryProject = !info.isWritable();
         LoadFuture = convertFromProjectV6Helper(filename, tempDir, temporaryProject);
         // setTemporaryProject(true);
     } else {
@@ -872,6 +873,7 @@ void cwProject::convertFromProjectV6(QString oldProjectFilename,
 {
     //Make a temporary project
     auto tempProject = std::make_shared<cwProject>();
+    tempProject->setFutureManagerToken(futureManagerToken());
     auto loadTempProjectFuture = AsyncFuture::observe(tempProject.get(), &cwProject::loaded)
                                      .context(this, [this, tempProject, oldProjectFilename, newProjectDirectory]()->QFuture<ResultBase> {
 

@@ -2452,6 +2452,17 @@ void cwSaveLoad::connectScrap(cwScrap *scrap)
     connect(scrap, &cwScrap::calculateNoteTransformChanged, this, saveNote);
     connect(scrap, &cwScrap::viewMatrixChanged, this, saveNote);
     connect(scrap, &cwScrap::typeChanged, this, saveNote);
+
+    auto connectProjectedViewMatrixSignals = [this, saveNote, scrap]() {
+        if (auto projected = qobject_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix()))
+        {
+            connect(projected, &cwProjectedProfileScrapViewMatrix::azimuthChanged, this, saveNote);
+            connect(projected, &cwProjectedProfileScrapViewMatrix::directionChanged, this, saveNote);
+        }
+    };
+
+    connectProjectedViewMatrixSignals();
+    connect(scrap, &cwScrap::viewMatrixChanged, this, connectProjectedViewMatrixSignals);
 }
 
 void cwSaveLoad::connectNoteLiDAR(cwNoteLiDAR *lidarNote)

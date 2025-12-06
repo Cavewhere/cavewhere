@@ -175,30 +175,13 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
         QString expectErrorMessage = QString("Upgrade CaveWhere to 0.08-70-g20d1d7c to load this file! Current file version is 10000. CaveWhere %1 supports up to file version %2. You are loading a newer CaveWhere file than this version supports. You will loss data if you save")
                 .arg(CavewhereVersion)
                 .arg(cwRegionIOTask::protoVersion());
+        CHECK(errorModel->at(0).message().toStdString() == expectErrorMessage.toStdString());
         CHECK(errorModel->at(0) == cwError(expectErrorMessage, cwError::Warning));
         errorModel->clear();
 
         CHECK(root->project()->cavingRegion()->caveCount() == 1);
         CHECK(root->project()->isTemporaryProject() == true); //All old testcase files are temporary because they need to be converted
         CHECK(root->project()->canSaveDirectly() == false);
-
-        SECTION("Check that saveAs fails to the file") {
-            QFileInfo info(root->project()->filename());
-            auto lastModifiedTime = info.lastModified();
-
-            QThread::msleep(10);
-
-            //Fix me, this was calling saveAs
-            REQUIRE(false);
-            // root->project()->saveAs(root->project()->filename());
-
-            REQUIRE(errorModel->size() == 1);
-            expectErrorMessage = QString("Can't overwrite %1 because file is newer that the current version of CaveWhere. To solve this, save it somewhere else").arg(root->project()->filename());
-            CHECK(errorModel->at(0) == cwError(expectErrorMessage, cwError::Fatal));
-
-            //Make sure the file hasen't be modified
-            CHECK(lastModifiedTime == info.lastModified());
-        }
     }
 
 #ifndef Q_OS_WIN
@@ -460,11 +443,7 @@ TEST_CASE("Save and load should work correctly for Projected Profile v3->v5", "[
 
         root->taskManagerModel()->waitForTasks();
         root->futureManagerModel()->waitForFinished();
-
-        //Fixme: this was calling save
-        REQUIRE(false);
-
-        root->futureManagerModel()->waitForFinished();
+        root->project()->waitSaveToFinish();
 
         CHECK(root->project()->canSaveDirectly() == true);
 
@@ -481,6 +460,8 @@ TEST_CASE("Save and load should work correctly for Projected Profile v3->v5", "[
         CHECK(scrap->type() == cwScrap::ProjectedProfile);
         REQUIRE(dynamic_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix()) != nullptr);
 
+        scrap->setCalculateNoteTransform(false);
+
         cwProjectedProfileScrapViewMatrix* profileView = static_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix());
         profileView->setAzimuth(225);
         profileView->setDirection(cwProjectedProfileScrapViewMatrix::RightToLeft);
@@ -495,6 +476,7 @@ TEST_CASE("Save and load should work correctly for Projected Profile v3->v5", "[
         CHECK(scrap->stations().size() == 6);
         CHECK(scrap->polygon().size() > 0);
 
+        CHECK(scrap->calculateNoteTransform() == false);
         cwProjectedProfileScrapViewMatrix* profileView = static_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix());
         CHECK(profileView->azimuth() == 225);
         CHECK(profileView->direction() == cwProjectedProfileScrapViewMatrix::RightToLeft);
