@@ -187,7 +187,6 @@ qt_add_qml_module(cavewherelib
     QML_FILES
         ${cavewhere_RELATIVE_QML_FILES}
         ${qml_singletons}
-        SOURCES src/cwNoteLiDARManager.h src/cwNoteLiDARManager.cpp
 
 )
 
