@@ -238,7 +238,7 @@ TEST_CASE("LiDAR rows are exposed under Trip and react to insert/remove", "[cwRe
         // The container’s parent() must be the Trip index
         QModelIndex parentOfContainer = regionModel->parent(lidarContainerIdx);
         REQUIRE(parentOfContainer.isValid());
-        qDebug() << "ParentContainer:" << parentOfContainer << tripIdx;
+        // qDebug() << "ParentContainer:" << parentOfContainer << tripIdx;
         CHECK(parentOfContainer == tripIdx);
 
         // And its data(ObjectRole) is the model itself
