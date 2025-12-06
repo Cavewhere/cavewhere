@@ -79,7 +79,11 @@ TEST_CASE("cwTextureUploadTask should run correctly", "[cwTextureUploadTask]") {
 
     SECTION("RGBA extraction should work correctly") {
         cwTextureUploadTask task;
-        task.setImage(note->image());
+        auto path = project->absolutePath(note);
+        auto noteImage = note->image();
+        noteImage.setPath(path);
+
+        task.setImage(noteImage);
         task.setProjectFilename(project->filename());
         task.setType(cwTextureUploadTask::OpenGL_RGBA);
         auto resultsFuture = task.mipmaps();
