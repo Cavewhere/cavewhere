@@ -18,6 +18,7 @@
 #include "cwImage.h"
 #include "cwNoteTranformation.h"
 #include "cwNoteData.h"
+#include "cwKeywordModel.h"
 
 class cwScrap;
 class cwTrip;
@@ -33,6 +34,7 @@ class CAVEWHERE_LIB_EXPORT cwNote : public QObject
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged BINDABLE bindableName)
     Q_PROPERTY(double rotate READ rotate WRITE setRotate NOTIFY rotateChanged)
     Q_PROPERTY(cwImageResolution* imageResolution READ imageResolution NOTIFY imageResolutionChanged)
+    Q_PROPERTY(cwKeywordModel* keywordModel READ keywordModel CONSTANT)
 
     //These are old, potentially remove?
     // Q_PROPERTY(int original READ original NOTIFY originalChanged)
@@ -43,7 +45,7 @@ public:
     explicit cwNote(QObject *parent = 0);
 
     QString name() const { return m_name.value(); }
-    void setName(const QString& name) { m_name = name; }
+    void setName(const QString& name);
     QBindable<QString> bindableName() { return &m_name; }
 
     void setImage(cwImage image);
@@ -80,6 +82,7 @@ public:
 
     cwNoteData data() const;
     void setData(const cwNoteData& data);
+    cwKeywordModel* keywordModel() const { return KeywordModel; }
 
 signals:
     void nameChanged();
@@ -110,6 +113,7 @@ private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwNote, QString, m_name, QString(), &cwNote::nameChanged);
 
     cwTrip* ParentTrip;
+    cwKeywordModel* KeywordModel = nullptr;
 
     cwImage ImageIds;
     float DisplayRotation;  //!< Display rotation of the notes, don't confuse this with NoteTransform's rotation

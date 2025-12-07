@@ -23,6 +23,7 @@
 cwNote::cwNote(QObject *parent) :
     QObject(parent),
     ParentTrip(nullptr),
+    KeywordModel(new cwKeywordModel(this)),
     ImageResolution(new cwImageResolution(this))
 {
     DisplayRotation = 0.0;
@@ -104,6 +105,18 @@ void cwNote::setImage(cwImage image) {
     }
 }
 
+void cwNote::setName(const QString &name)
+{
+    if(m_name == name) {
+        return;
+    }
+
+    m_name = name;
+    if(KeywordModel) {
+        KeywordModel->replace({QStringLiteral("File Name"), name});
+    }
+}
+
 /**
   \brief Sets the rotation for the image
 
@@ -122,14 +135,22 @@ void cwNote::setRotate(double degrees) {
   */
 void cwNote::setParentTrip(cwTrip* trip) {
     if(ParentTrip != trip) {
+        if(KeywordModel && ParentTrip && ParentTrip->keywordModel()) {
+            KeywordModel->removeExtension(ParentTrip->keywordModel());
+        }
+
         ParentTrip = trip;
         // setParent(trip);
 
-    if(ParentTrip) {
-        for(auto scrap : Scraps) {
-            scrap->keywordModel()->addExtension(ParentTrip->keywordModel());
+        if(ParentTrip && KeywordModel) {
+            KeywordModel->addExtension(ParentTrip->keywordModel());
         }
-    }
+
+        if(ParentTrip) {
+            for(auto scrap : Scraps) {
+                scrap->keywordModel()->addExtension(KeywordModel);
+            }
+        }
     }
 }
 
@@ -240,8 +261,8 @@ cwScrap* cwNote::scrap(int scrapIndex) const {
 void cwNote::setupScrap(cwScrap *scrap) {
     scrap->setParent(this);
     scrap->setParentNote(this);
-    if(ParentTrip) {
-        scrap->keywordModel()->addExtension(ParentTrip->keywordModel());
+    if(KeywordModel) {
+        scrap->keywordModel()->addExtension(KeywordModel);
     }
 }
 
@@ -312,7 +333,7 @@ cwNoteData cwNote::data() const
 
 void cwNote::setData(const cwNoteData &data)
 {
-    m_name = data.name;
+    setName(data.name);
     setRotate(data.rotate);
     ImageResolution->setData(data.imageResolution);
 
