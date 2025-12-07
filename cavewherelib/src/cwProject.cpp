@@ -456,7 +456,7 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
                                  fatalErrors = QStringList(errorRange.begin(), errorRange.end()).join('\n');
                              }
 
-                             qDebug() << "Result error:" << result.errors().size();
+                             // qDebug() << "Result error:" << result.errors().size();
                              for(const cwError& error : result.errors()) {
                                  qDebug() << "Message:" << error.message();
                              }

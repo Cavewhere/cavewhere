@@ -216,10 +216,6 @@ cwImageData cwImageProvider::data(int id, bool metaDataOnly) const {
 
 cwImageData cwImageProvider::data(QString filename) const
 {
-    if(filename.isEmpty()) {
-        return cwImageData();
-    }
-
     QFileInfo projectInfo(ProjectPath);
     auto projectDir = projectInfo.absoluteDir();
 
@@ -236,7 +232,7 @@ cwImageData cwImageProvider::data(QString filename) const
                  .startsWith(projectDir.canonicalPath())
             ) {
             cwDebug::printStackTrace();
-            qDebug() << "Path:" <<  QFileInfo(resolvedPath).absolutePath() << (projectDir.canonicalPath());
+            qDebug() << "Path:" <<  filename << QFileInfo(resolvedPath).absolutePath() << (projectDir.canonicalPath());
         }
 
         Q_ASSERT(
