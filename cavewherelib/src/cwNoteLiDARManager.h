@@ -141,8 +141,8 @@ private:
     QSet<cwNoteLiDAR*> m_deletedNotes;
     QHash<cwNoteLiDAR*, QVector<uint32_t>> m_noteToRender;
     struct KeywordEntry {
-        cwKeywordItem* item = nullptr;
-        QObject* visibility = nullptr;
+        QPointer<cwKeywordItem> item;
+        QPointer<QObject> visibility;
     };
     QPointer<cwKeywordItemModel> m_keywordItemModel;
     QHash<cwNoteLiDAR*, KeywordEntry> m_keywordEntries;
