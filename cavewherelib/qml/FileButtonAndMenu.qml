@@ -21,6 +21,31 @@ QC.MenuBar {
     property QC.ApplicationWindow applicationWindow;
     property AskToSaveDialog askToSaveDialog;
 
+    // Resize the window to the provided aspect ratio and largest dimension without exceeding the screen.
+    function resizeTo(widthRatio, heightRatio, largestDimPixels)
+    {
+        const devicePixelRatio = applicationWindow.screen.devicePixelRatio || 1;
+        const titleBarHeightPx = (RootData.titleBarHeight || 0) * devicePixelRatio;
+        const baseScale = largestDimPixels / Math.max(widthRatio, heightRatio);
+
+        let targetWidthPx = widthRatio * baseScale;
+        let targetHeightPx = heightRatio * baseScale;
+
+        // Fit to screen while preserving the aspect ratio.
+        const fitScale = Math.min(
+                    1,
+                    applicationWindow.screen.width / targetWidthPx,
+                    (applicationWindow.screen.height - titleBarHeightPx) / targetHeightPx);
+
+        targetWidthPx *= fitScale;
+        targetHeightPx *= fitScale;
+
+        applicationWindow.width = Math.max(0, targetWidthPx / devicePixelRatio);
+        applicationWindow.height = Math.max(0, (targetHeightPx - titleBarHeightPx) / devicePixelRatio);
+
+        // console.log("Ratio:" + (applicationWindow.width / (applicationWindow.height + titleBarHeightPx)) + " " + (widthRatio / heightRatio))
+    }
+
     signal openAboutWindow;
 
     QC.Menu {
@@ -170,9 +195,14 @@ QC.MenuBar {
         QC.MenuItem {
             text: "Resize to 1080p"
             onTriggered: {
-                let titleBarHeight = RootData.titleBarHeight * applicationWindow.screen.devicePixelRatio
-                applicationWindow.width = 1920 / applicationWindow.screen.devicePixelRatio
-                applicationWindow.height = (1080 - titleBarHeight) / applicationWindow.screen.devicePixelRatio
+                resizeTo(16, 9, 1920)
+            }
+        }
+
+        QC.MenuItem {
+            text: "Resize to 1080p - Vertical"
+            onTriggered: {
+                resizeTo(9, 16, 1920)
             }
         }
 
