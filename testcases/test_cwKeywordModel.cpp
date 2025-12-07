@@ -3,6 +3,7 @@
 
 //Our includes
 #include "cwKeywordModel.h"
+#include "cwNote.h"
 #include "cwNoteLiDAR.h"
 #include "cwTrip.h"
 #include "TestHelper.h"
@@ -36,6 +37,19 @@ TEST_CASE("cwNoteLiDAR keywords include object type and trip metadata", "[cwKeyw
     const auto keywords = note.keywordModel()->keywords();
     CHECK(keywords.contains(cwKeyword(cwKeywordModel::TypeKey, QStringLiteral("LiDAR"))));
     CHECK(keywords.contains(cwKeyword(cwKeywordModel::TripNameKey, QStringLiteral("LiDAR Trip"))));
+}
+
+TEST_CASE("cwNote keywords include file name and trip metadata", "[cwKeywordModel][cwNote]") {
+    cwTrip trip;
+    trip.setName("Trip A");
+
+    cwNote note;
+    note.setName("note-image.png");
+    note.setParentTrip(&trip);
+
+    const auto keywords = note.keywordModel()->keywords();
+    CHECK(keywords.contains(cwKeyword(QStringLiteral("File Name"), QStringLiteral("note-image.png"))));
+    CHECK(keywords.contains(cwKeyword(cwKeywordModel::TripNameKey, QStringLiteral("Trip A"))));
 }
 
 TEST_CASE("cwKeywordModel should add and remove keywords correctly", "[cwKeywordModel]") {
@@ -463,4 +477,20 @@ TEST_CASE("cwKeywordModel should add and remove keywords correctly", "[cwKeyword
             }
         }
     }
+}
+
+TEST_CASE("cwKeywordModel extensions respect existing keywords", "[cwKeywordModel]") {
+    cwKeywordModel base;
+    base.add({"Base", "A"});
+
+    cwKeywordModel child;
+    child.add({"Child", "B"});
+
+    base.addExtension(&child);
+
+    REQUIRE(base.rowCount() == 2);
+    auto idx = base.index(1);
+    CHECK(idx.isValid());
+    CHECK(idx.data(cwKeywordModel::KeyRole).toString() == "Child");
+    CHECK(idx.data(cwKeywordModel::ValueRole).toString() == "B");
 }

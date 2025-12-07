@@ -133,6 +133,10 @@ QVariant cwKeywordModel::data(const QModelIndex &index, int role) const
         auto extension = modelAt(index);
         auto model = extension.first;
         auto modelRow = extension.second;
+        Q_ASSERT(model); //If this fails index generation is broken, and is a bug
+        if(model == nullptr) {
+            return QVariant();
+        }
         return model->data(model->index(modelRow), role);
     }
     return QVariant();
@@ -255,13 +259,17 @@ void cwKeywordModel::addExtension(cwKeywordModel *model)
         endRemoveRows();
     });
 
-    int firstIndex = rowCount();
-    int lastIndex = firstIndex + model->rowCount();
+    const int count = model->rowCount();
+    const int firstIndex = rowCount();
+    const int lastIndex = firstIndex + count - 1;
 
-    beginInsertRows(QModelIndex(), firstIndex, lastIndex);
-    CachedRowCount += model->rowCount();
     Extentions.append(model);
-    endInsertRows();
+
+    if(count > 0) {
+        beginInsertRows(QModelIndex(), firstIndex, lastIndex);
+        CachedRowCount += count;
+        endInsertRows();
+    }
 }
 
 void cwKeywordModel::removeExtension(cwKeywordModel *model)
