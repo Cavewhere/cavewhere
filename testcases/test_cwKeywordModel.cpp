@@ -48,7 +48,7 @@ TEST_CASE("cwNote keywords include file name and trip metadata", "[cwKeywordMode
     note.setParentTrip(&trip);
 
     const auto keywords = note.keywordModel()->keywords();
-    CHECK(keywords.contains(cwKeyword(QStringLiteral("File Name"), QStringLiteral("note-image.png"))));
+    CHECK(keywords.contains(cwKeyword(cwKeywordModel::FileNameKey, QStringLiteral("note-image.png"))));
     CHECK(keywords.contains(cwKeyword(cwKeywordModel::TripNameKey, QStringLiteral("Trip A"))));
 }
 

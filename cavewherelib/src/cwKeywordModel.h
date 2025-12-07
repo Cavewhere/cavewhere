@@ -46,6 +46,7 @@ public:
     static const QString YearKey;
     static const QString DateKey;
     static const QString CaverKey;
+    static const QString FileNameKey;
 
     Q_INVOKABLE cwKeyword createKeyword(const QString key, QString value) const;
 

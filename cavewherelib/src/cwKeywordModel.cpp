@@ -9,6 +9,7 @@ const QString cwKeywordModel::TripNameKey = QStringLiteral("Trip");
 const QString cwKeywordModel::YearKey = QStringLiteral("Year");
 const QString cwKeywordModel::DateKey = QStringLiteral("Date");
 const QString cwKeywordModel::CaverKey = QStringLiteral("Caver");
+const QString cwKeywordModel::FileNameKey = QStringLiteral("File Name");
 
 cwKeywordModel::cwKeywordModel(QObject *parent) :
     QAbstractListModel (parent)

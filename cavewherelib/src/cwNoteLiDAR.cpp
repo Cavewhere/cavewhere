@@ -16,6 +16,7 @@ cwNoteLiDAR::cwNoteLiDAR(QObject* parent)
 {
     if(m_keywordModel) {
         m_keywordModel->add({cwKeywordModel::TypeKey, QStringLiteral("LiDAR")});
+        m_keywordModel->add({cwKeywordModel::FileNameKey, filename()});
     }
 
     connect(m_noteTransformation, &cwNoteLiDARTransformation::matrixChanged, this, [this]() {
@@ -43,6 +44,9 @@ void cwNoteLiDAR::setFilename(const QString& path) {
         return;
     }
     m_filename = path;
+    if(m_keywordModel) {
+        m_keywordModel->replace({cwKeywordModel::FileNameKey, m_filename});
+    }
     emit filenameChanged();
 }
 

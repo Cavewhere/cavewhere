@@ -113,7 +113,7 @@ void cwNote::setName(const QString &name)
 
     m_name = name;
     if(KeywordModel) {
-        KeywordModel->replace({QStringLiteral("File Name"), name});
+        KeywordModel->replace({cwKeywordModel::FileNameKey, name});
     }
 }
 
