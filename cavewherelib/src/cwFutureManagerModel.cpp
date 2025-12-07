@@ -112,6 +112,7 @@ void cwFutureManagerModel::waitForFinished()
     while(!Watchers.isEmpty()) {
         auto watcher = Watchers.first();
         AsyncFuture::waitForFinished(watcher.job.future());
+        qDebug() << "Job:" << watcher.job.name() << watcher.job.future().isFinished() << watcher.job.future().isRunning() << watcher.job.future().isCanceled();
         Q_ASSERT(!watcher.job.future().isRunning());
         if(!Watchers.isEmpty()) {
             if(watcher.watcher == Watchers.first().watcher) {

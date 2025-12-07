@@ -153,8 +153,7 @@ cwRootData::cwRootData(QObject *parent) :
 
 cwRootData::~cwRootData()
 {
-    taskManagerModel()->waitForTasks();
-    futureManagerModel()->waitForFinished();
+    shutdown();
 }
 
 /**
@@ -339,6 +338,13 @@ bool cwRootData::isMobileBuild()
 cwNoteLiDARManager *cwRootData::noteLiDARManager() const
 {
     return NoteLiDARManager;
+}
+
+void cwRootData::shutdown()
+{
+    taskManagerModel()->waitForTasks();
+    futureManagerModel()->waitForFinished();
+    project()->waitSaveToFinish();
 }
 
 cwGitHubIntegration* cwRootData::gitHubIntegration() const

@@ -6,13 +6,14 @@
 **************************************************************************/
 
 import QtQuick as QQ
-import QtQuick.Controls
+import QtQuick.Controls as QC
 import QtQuick.Window
 import QtQuick.Dialogs
+import QtQuick.Layouts
 import cavewherelib
 import QQuickGit
 
-ApplicationWindow {
+QC.ApplicationWindow {
     id: applicationWindowId
     objectName: "applicationWindow"
 
@@ -57,6 +58,7 @@ ApplicationWindow {
     }
 
     QQ.Loader {
+        id: mainContentId
         active: RootData.account.isValid
         anchors.fill: parent
         sourceComponent: MainContent {
@@ -78,6 +80,52 @@ ApplicationWindow {
         anchors.fill: parent
     }
 
+    //This is only shown on shutdown when task still need to be completed
+    QQ.Loader {
+        id: shutdownLoader
+        active: false
+        anchors.fill: parent
+
+        sourceComponent: QQ.Item {
+            anchors.fill: parent
+
+            QQ.Rectangle {
+                anchors.fill: parent
+                color: Theme.background
+            }
+
+            ColumnLayout {
+                id: columnId
+                anchors.centerIn: parent
+
+                Text {
+                    text: "Finishing these jobs"
+                    font.pixelSize: 30
+                    Layout.alignment: Qt.AlignHCenter
+                }
+
+                QC.Button {
+                    text: "Quit Now"
+                    Layout.alignment: Qt.AlignHCenter
+                    onClicked: {
+                        Qt.quit();
+                    }
+                }
+            }
+
+            TaskListView {
+                width: Math.min(parent.width - 10, Math.max(parent.width * 0.2, 200))
+                anchors {
+                    top: columnId.bottom
+                    bottom: parent.bottom
+                    horizontalCenter: parent.horizontalCenter
+                    margins: 10
+                }
+                verticalLayoutDirection: QQ.ListView.TopToBottom
+            }
+        }
+    }
+
     SaveAsDialog {
         id: saveAsFileDialogId
     }
@@ -90,72 +138,6 @@ ApplicationWindow {
     LoadProjectDialog {
         id: loadDialogId
     }
-
-    // FileDialog {
-    //     id: loadFileDialogId
-    //     nameFilters: ["CaveWhere File (*.cw)"]
-    //     currentFolder: RootData.lastDirectory
-    //     onAccepted: {
-    //         RootData.lastDirectory = selectedFile
-    //         RootData.pageSelectionModel.clearHistory();
-    //         RootData.pageSelectionModel.gotoPageByName(null, "View")
-
-    //         let fileType = RootData.project.projectType(selectedFile);
-    //         console.log("Filetype:" + fileType)
-
-    //         switch(fileType) {
-    //         case Project.UnknownFileType:
-    //             //Some how add an error
-    //             console.log("Unknown file type")
-    //             break;
-    //         case Project.SqliteFileType:
-    //             console.log("Sqlite file:" + Project.SqliteFileType)
-    //             let path = RootData.urlToLocal(selectedFile);
-    //             convertedDialog.filename = RootData.fileName(path)
-    //             convertedDialog.repositoryName = RootData.fileBaseName(path);
-    //             convertedDialog.open();
-    //             break;
-
-
-    //         case Project.GitFileType:
-    //             break;
-
-    //         }
-
-    //         // RootData.project.loadFile(selectedFile)
-    //     }
-    // }
-
-    // SourceLocationDialog {
-    //     id: convertedDialog
-    //     property string filename;
-    //     description: filename + " is an old CaveWhere file.\nCaveWhere now uses version control and multiple files to save data.\n\nChoose a location to convert and save the data."
-    //     anchors.fill: parent
-
-    //     onAccepted: {
-
-    //     }
-    // }
-
-    //There's only one shadow input text editor for the cavewhere program
-    //This make the input creation much faster for any thing that needs an editor
-    //Only one editor can be open at a time
-    //THIS IS NOW A SINGLETON
-    // GlobalShadowTextInput {
-    //     id: globalShadowTextInput
-    // }
-
-    //All the dialogs in cavewhere are parented under this item. This prevents
-    //mouse clicks outside of the dialog
-    // GlobalDialogHandler {
-    //     id: globalDialogHandler
-    // }
-
-    //Use RootPopupItem instead. A signleton
-    // QQ.Item {
-    //     id: rootPopupItem
-    //     anchors.fill: parent
-    // }
 
     AskToSaveDialog {
         id: askToSaveDialogId
@@ -170,6 +152,10 @@ ApplicationWindow {
     onClosing: (close) => {
         askToSaveDialogId.taskName = "quiting"
         askToSaveDialogId.afterSaveFunc = function() {
+            mainContentId.enabled = false;
+            applicationWindowId.menuBar = null
+            shutdownLoader.active = true
+            RootData.shutdown();
             Qt.quit();
         }
 

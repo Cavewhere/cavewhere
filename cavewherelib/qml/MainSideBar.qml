@@ -151,62 +151,12 @@ QQ.Rectangle {
         }
     }
 
-    QQ.ListView {
+    TaskListView {
         id: taskListView
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: buttonBar.bottom
         anchors.bottom: autoSwitchId.top
-
-        TaskFutureCombineModel {
-            id: taskModelCombinerId
-            models: [RootData.taskManagerModel, RootData.futureManagerModel]
-        }
-
-        FutureFilterModel {
-            id: futureFilterId
-            sourceModel: taskModelCombinerId
-        }
-
-        model: taskModelCombinerId
-        verticalLayoutDirection: QQ.ListView.BottomToTop
-
-        delegate: QQ.Rectangle {
-            id: delegateId
-            required property string nameRole
-            required property int progressRole
-            required property int numberOfStepsRole
-
-            anchors.left: parent ? parent.left : undefined
-            anchors.right: parent ? parent.right : undefined
-
-            height: columnLayoutId.height + 10
-
-            color: Theme.background
-
-            ColumnLayout {
-                id: columnLayoutId
-
-                y: 5
-
-                anchors.margins: 5
-                anchors.left: parent.left
-                anchors.right: parent.right
-
-                Text {
-                    id: nameText
-                    text: delegateId.nameRole
-                    Layout.fillWidth: true
-                    elide: Text.ElideRight
-                }
-
-                QC.ProgressBar {
-                    Layout.maximumWidth: columnLayoutId.width
-                    value: !indeterminate ? delegateId.progressRole / delegateId.numberOfStepsRole : 0.0
-                    indeterminate: delegateId.numberOfStepsRole <= 0
-                }
-            }
-        }
     }
 
     QQ.Rectangle {

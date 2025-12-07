@@ -170,6 +170,8 @@ public:
 
     cwNoteLiDARManager *noteLiDARManager() const;
 
+    Q_INVOKABLE void shutdown();
+
 signals:
     void regionChanged();
     void linePlotManagerChanged();
