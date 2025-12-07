@@ -17,6 +17,7 @@
 #include "cwNoteLiDARStation.h"
 #include "cwNoteLiDARData.h"
 #include "cwNoteLiDARTransformation.h"
+#include "cwKeywordModel.h"
 class cwTrip;
 class cwCave;
 
@@ -34,6 +35,7 @@ class CAVEWHERE_LIB_EXPORT cwNoteLiDAR : public QAbstractListModel
     Q_PROPERTY(bool autoCalculateNorth READ autoCalculateNorth WRITE setAutoCalculateNorth NOTIFY autoCalculateNorthChanged BINDABLE bindableAutoCalculateNorth)
 
     Q_PROPERTY(QString iconImagePath READ iconImagePath WRITE setIconImagePath NOTIFY iconImagePathChanged BINDABLE bindableIconImagePath)
+    Q_PROPERTY(cwKeywordModel* keywordModel READ keywordModel CONSTANT)
 
 
     // Q_PROPERTY(QMatrix4x4 modelMatrix READ modelMatrix WRITE setModelMatrix NOTIFY modelMatrixChanged BINDABLE bindableModelMatrix)
@@ -67,6 +69,7 @@ public:
 
     void setParentTrip(cwTrip* trip);
     Q_INVOKABLE cwTrip* parentTrip() const { return m_parentTrip; }
+    cwKeywordModel* keywordModel() const { return m_keywordModel; }
 
     cwCave* parentCave() const;
 
@@ -108,6 +111,7 @@ private:
 
     cwTrip* m_parentTrip = nullptr;
     cwNoteLiDARTransformation *m_noteTransformation = nullptr;
+    cwKeywordModel* m_keywordModel = nullptr;
 
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwNoteLiDAR, QString, m_name, QString(), &cwNoteLiDAR::nameChanged);
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwNoteLiDAR, bool, m_autoCalculateNorth, true, &cwNoteLiDAR::autoCalculateNorthChanged);

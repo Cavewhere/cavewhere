@@ -3,6 +3,8 @@
 
 //Our includes
 #include "cwKeywordModel.h"
+#include "cwNoteLiDAR.h"
+#include "cwTrip.h"
 #include "TestHelper.h"
 #include "SignalSpyChecker.h"
 
@@ -18,6 +20,22 @@ TEST_CASE("cwKeywordModel should initilize correctly", "[cwKeywordModel]") {
     CHECK(roles[cwKeywordModel::KeyRole] == "keyRole");
     CHECK(roles[cwKeywordModel::ValueRole] == "valueRole");
     CHECK(roles[cwKeywordModel::KeywordRole] == "keywordRole");
+}
+
+TEST_CASE("cwKeywordModel exposes object type keywords", "[cwKeywordModel]") {
+    CHECK(cwKeywordModel::TypeKey == QStringLiteral("Type"));
+}
+
+TEST_CASE("cwNoteLiDAR keywords include object type and trip metadata", "[cwKeywordModel][cwNoteLiDAR]") {
+    cwTrip trip;
+    trip.setName("LiDAR Trip");
+
+    cwNoteLiDAR note;
+    note.setParentTrip(&trip);
+
+    const auto keywords = note.keywordModel()->keywords();
+    CHECK(keywords.contains(cwKeyword(cwKeywordModel::TypeKey, QStringLiteral("LiDAR"))));
+    CHECK(keywords.contains(cwKeyword(cwKeywordModel::TripNameKey, QStringLiteral("LiDAR Trip"))));
 }
 
 TEST_CASE("cwKeywordModel should add and remove keywords correctly", "[cwKeywordModel]") {

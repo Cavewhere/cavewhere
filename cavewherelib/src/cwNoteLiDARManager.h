@@ -34,6 +34,10 @@ class cwNoteLiDAR;
 #include "cwTriangulateLiDARInData.h"
 #include "cwRenderTexturedItems.h"
 #include "cwUniqueConnectionChecker.h"
+class cwKeywordItemModel;
+class cwKeywordItem;
+class cwRenderTexturedItemVisibility;
+class cwRenderTexturedItemsVisibilityGroup;
 
 
 /**
@@ -58,6 +62,7 @@ public:
     void setRegionTreeModel(cwRegionTreeModel* regionTreeModel);
     void setLinePlotManager(cwLinePlotManager* linePlotManager);
     void setFutureManagerToken(cwFutureManagerToken token);
+    void setKeywordItemModel(cwKeywordItemModel* keywordItemModel);
 
     void setRender(cwRenderTexturedItems* renderGltf);
     void setKeepRenderGeometry(bool keepGeometry);
@@ -116,6 +121,8 @@ private:
 
     void connectNote(cwNoteLiDAR* note);
     void updateIconFromCache(cwNoteLiDAR* note);
+    void addKeywordItemForNote(cwNoteLiDAR* note);
+    void removeKeywordItemForNote(cwNoteLiDAR* note);
 
     // Utilities
     static QList<cwNoteLiDAR*> collectAllNotes(cwRegionTreeModel* regionModel);
@@ -133,6 +140,12 @@ private:
     QSet<cwNoteLiDAR*> m_dirtyNotes;
     QSet<cwNoteLiDAR*> m_deletedNotes;
     QHash<cwNoteLiDAR*, QVector<uint32_t>> m_noteToRender;
+    struct KeywordEntry {
+        cwKeywordItem* item = nullptr;
+        QObject* visibility = nullptr;
+    };
+    QPointer<cwKeywordItemModel> m_keywordItemModel;
+    QHash<cwNoteLiDAR*, KeywordEntry> m_keywordEntries;
 
     QPointer<cwRenderTexturedItems> m_render;
 

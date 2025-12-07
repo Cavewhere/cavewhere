@@ -4,14 +4,20 @@
 #include "cwCave.h"
 #include "cwNoteLiDARTransformation.h"
 #include "cwNoteTransformCalculator.h"
+#include "cwKeywordModel.h"
 
 //Qt includes
 #include <QMetaType>
 
 cwNoteLiDAR::cwNoteLiDAR(QObject* parent)
     : QAbstractListModel(parent),
-    m_noteTransformation(new cwNoteLiDARTransformation(this))
+    m_noteTransformation(new cwNoteLiDARTransformation(this)),
+    m_keywordModel(new cwKeywordModel(this))
 {
+    if(m_keywordModel) {
+        m_keywordModel->add({cwKeywordModel::TypeKey, QStringLiteral("LiDAR")});
+    }
+
     connect(m_noteTransformation, &cwNoteLiDARTransformation::matrixChanged, this, [this]() {
         QList<int> roles = {ScenePositionRole};
         emit dataChanged(index(0), index(rowCount() - 1), roles);
@@ -107,8 +113,18 @@ void cwNoteLiDAR::setData(const cwNoteLiDARData &data)
   \brief Sets the parent trip for this note
   */
 void cwNoteLiDAR::setParentTrip(cwTrip* trip) {
-    if(m_parentTrip != trip) {
-        m_parentTrip = trip;
+    if(m_parentTrip == trip) {
+        return;
+    }
+
+    if(m_parentTrip && m_parentTrip->keywordModel() && m_keywordModel) {
+        m_keywordModel->removeExtension(m_parentTrip->keywordModel());
+    }
+
+    m_parentTrip = trip;
+
+    if(m_parentTrip && m_parentTrip->keywordModel() && m_keywordModel) {
+        m_keywordModel->addExtension(m_parentTrip->keywordModel());
     }
 }
 

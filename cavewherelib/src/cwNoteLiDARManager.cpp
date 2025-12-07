@@ -35,6 +35,9 @@
 #include "cwSaveLoad.h"
 #include "cwDiskCacher.h"
 #include "cwCacheImageProvider.h"
+#include "cwKeywordItemModel.h"
+#include "cwKeywordItem.h"
+#include "cwRenderTexturedItemsVisibilityGroup.h"
 #include "xxhash.h"
 
 // Async
@@ -113,6 +116,7 @@ QString cacheUrlForKey(const cwDiskCacher::Key& key)
     const QByteArray escaped = QUrl::toPercentEncoding(encoded);
     return QStringLiteral("image://%1/%2").arg(cwCacheImageProvider::name(), QString::fromLatin1(escaped));
 }
+
 }
 
 cwNoteLiDARManager::cwNoteLiDARManager(QObject* parent) :
@@ -198,9 +202,45 @@ void cwNoteLiDARManager::setFutureManagerToken(cwFutureManagerToken token)
     m_futureManagerToken = token;
 }
 
+void cwNoteLiDARManager::setKeywordItemModel(cwKeywordItemModel *keywordItemModel)
+{
+    if(m_keywordItemModel == keywordItemModel) {
+        return;
+    }
+
+    if(m_keywordItemModel) {
+        for(auto iter = m_keywordEntries.begin(); iter != m_keywordEntries.end(); ++iter) {
+            if(iter.value().item) {
+                m_keywordItemModel->removeItem(iter.value().item);
+                iter.value().item->deleteLater();
+            }
+            if(iter.value().visibility) {
+                iter.value().visibility->deleteLater();
+            }
+        }
+        m_keywordEntries.clear();
+    }
+
+    m_keywordItemModel = keywordItemModel;
+
+    if(!m_keywordItemModel) {
+        return;
+    }
+
+    for(auto note : m_noteToRender.keys()) {
+        addKeywordItemForNote(note);
+    }
+}
+
 void cwNoteLiDARManager::setRender(cwRenderTexturedItems *render)
 {
     m_render = render;
+
+    if(m_render && m_keywordItemModel) {
+        for(auto note : m_noteToRender.keys()) {
+            addKeywordItemForNote(note);
+        }
+    }
 }
 
 void cwNoteLiDARManager::setKeepRenderGeometry(bool keepGeometry)
@@ -415,6 +455,9 @@ void cwNoteLiDARManager::liDARRowsAboutToBeRemoved(const QModelIndex& parent, in
             m_deletedNotes.insert(note);
             m_dirtyNotes.remove(note);
 
+            removeKeywordItemForNote(note);
+            m_noteToRender.remove(note);
+
             disconnect(note->noteTransformation(), nullptr, this, nullptr);
             disconnect(note, nullptr, this, nullptr);
         }
@@ -435,6 +478,8 @@ void cwNoteLiDARManager::noteDestroyed(QObject* noteObj)
     if (auto* note = static_cast<cwNoteLiDAR*>(noteObj)) {
         m_deletedNotes.insert(note);
         m_dirtyNotes.remove(note);
+        removeKeywordItemForNote(note);
+        m_noteToRender.remove(note);
     }
 }
 
@@ -570,6 +615,8 @@ void cwNoteLiDARManager::runBatch()
                              } else {
                                  addItems(items);
                              }
+
+                             addKeywordItemForNote(note);
                          }
 
                          // Remove processed from dirty, clear deleted set entries
@@ -635,6 +682,8 @@ void cwNoteLiDARManager::disconnectTrip(cwTrip* trip)
             disconnect(note->noteTransformation(), nullptr, this, nullptr);
             disconnect(note, nullptr, this, nullptr);
             m_dirtyNotes.remove(note);
+            removeKeywordItemForNote(note);
+            m_noteToRender.remove(note);
         }
     }
 }
@@ -660,6 +709,7 @@ void cwNoteLiDARManager::connectNote(cwNoteLiDAR *note)
         handleNoteChange();
     });
 
+    addKeywordItemForNote(note);
     markDirty(note);
     updateIconFromCache(note);
 }
@@ -721,4 +771,53 @@ QVector<uint32_t> cwNoteLiDARManager::renderItemIds(cwNoteLiDAR* note) const
         return {};
     }
     return m_noteToRender.value(note);
+}
+
+void cwNoteLiDARManager::addKeywordItemForNote(cwNoteLiDAR *note)
+{
+    if(!note || !m_keywordItemModel || !m_render) {
+        return;
+    }
+
+    auto renderIdsIter = m_noteToRender.constFind(note);
+    if(renderIdsIter == m_noteToRender.constEnd() || renderIdsIter.value().isEmpty()) {
+        return;
+    }
+
+    removeKeywordItemForNote(note);
+
+    auto keywordItem = new cwKeywordItem();
+    keywordItem->keywordModel()->addExtension(note->keywordModel());
+
+    auto visibility = new cwRenderTexturedItemsVisibilityGroup(m_render, renderIdsIter.value(), keywordItem);
+    keywordItem->setObject(visibility);
+
+    m_keywordItemModel->addItem(keywordItem);
+
+    KeywordEntry entry;
+    entry.item = keywordItem;
+    entry.visibility = visibility;
+    m_keywordEntries.insert(note, entry);
+}
+
+void cwNoteLiDARManager::removeKeywordItemForNote(cwNoteLiDAR *note)
+{
+    auto iter = m_keywordEntries.find(note);
+    if(iter == m_keywordEntries.end()) {
+        return;
+    }
+
+    if(m_keywordItemModel && iter.value().item) {
+        m_keywordItemModel->removeItem(iter.value().item);
+    }
+
+    if(iter.value().item) {
+        iter.value().item->deleteLater();
+    }
+
+    if(iter.value().visibility) {
+        iter.value().visibility->deleteLater();
+    }
+
+    m_keywordEntries.erase(iter);
 }

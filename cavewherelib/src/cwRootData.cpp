@@ -97,6 +97,7 @@ cwRootData::cwRootData(QObject *parent) :
     NoteLiDARManager->setLinePlotManager(LinePlotManager);
     NoteLiDARManager->setRegionTreeModel(RegionTreeModel);
     NoteLiDARManager->setFutureManagerToken(FutureManagerModel->token());
+    NoteLiDARManager->setKeywordItemModel(m_keywordItemModel);
 
     //Setup the survey import manager
     SurveyImportManager = new cwSurveyImportManager(Project);
