@@ -38,7 +38,14 @@ void cwDiskCacher::setDir(const QDir& directory)
 // Private helpers
 QDir cwDiskCacher::relativeDir(const Key& key) const
 {
-    return QDir(m_dir.filePath(QStringLiteral(".cw_cache/") + key.path.path()));
+    QString relativePath = key.path.path();
+    if (key.path.isAbsolute()) {
+        // Keep cache directories relative to m_dir when keys use absolute paths
+        relativePath = m_dir.relativeFilePath(relativePath);
+    }
+
+    const QDir cacheRoot(m_dir.filePath(QStringLiteral(".cw_cache")));
+    return QDir(cacheRoot.filePath(relativePath));
 }
 
 QString cwDiskCacher::filePath(const Key& key) const

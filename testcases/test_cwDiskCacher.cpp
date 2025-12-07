@@ -4,6 +4,7 @@
 #include <QTemporaryDir>
 #include <QVector>
 #include <QtConcurrent>
+#include <QFileInfo>
 #include <numeric>
 
 #include "cwDiskCacher.h"
@@ -35,6 +36,26 @@ TEST_CASE("cwDiskCacher single-threaded insert and entry", "[cwDiskCacher]") {
         auto result = cacher.entry(key);
         CHECK(result != data);
         CHECK(result.isEmpty());
+    }
+
+    SECTION("Absolute key paths are stored relative to cache dir") {
+        cwDiskCacher::Key absKey{
+            QStringLiteral("absfile"),
+            QDir{tempDir.filePath(QStringLiteral("images/subdir"))},
+            QStringLiteral("absChecksum")};
+        QByteArray absData("Absolute Path Data");
+
+        cacher.insert(absKey, absData);
+
+        const QString cachePath = QFileInfo(cacher.filePath(absKey)).absoluteFilePath();
+        const QString expectedPath = QFileInfo(
+                                         QDir(tempDir.path())
+                                             .filePath(QStringLiteral(".cw_cache/images/subdir/absfile")))
+                                         .absoluteFilePath();
+
+        CHECK(cachePath == expectedPath);
+        CHECK(QFileInfo(cachePath).exists());
+        CHECK(cacher.entry(absKey) == absData);
     }
 }
 

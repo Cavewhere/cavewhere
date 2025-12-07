@@ -12,7 +12,7 @@ class cwDiskCacher {
 public:
     struct Key {
         QString id;
-        QDir path;      // relative directory
+        QDir path;      // relative or absolute (must be in dir()) directory
         QString checksum;
     };
 
