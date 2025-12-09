@@ -12,6 +12,8 @@
 class cwRenderTexturedItems : public cwRenderObject
 {
     Q_OBJECT
+    Q_PROPERTY(double gridAzimuth READ gridAzimuth WRITE setGridAzimuth NOTIFY gridAzimuthChanged FINAL)
+    Q_PROPERTY(double gridPitch READ gridPitch WRITE setGridPitch NOTIFY gridPitchChanged FINAL)
 
 public:
     using CullMode = cwRenderMaterialState::CullMode;
@@ -39,10 +41,20 @@ public:
     void setModelMatrix(uint32_t id, const QMatrix4x4& modelMatrix);
     void removeItem(uint32_t id);
 
+    double gridAzimuth() const { return m_gridAzimuth; }
+    void setGridAzimuth(double azimuth);
+
+    double gridPitch() const { return m_gridPitch; }
+    void setGridPitch(double pitch);
+
     //For testing
     Item item(uint32_t id) const;
     bool hasItem(uint32_t id) const;
 
+
+signals:
+    void gridAzimuthChanged();
+    void gridPitchChanged();
 
 protected:
     cwRHIObject *createRHIObject() override;
@@ -95,6 +107,11 @@ private:
     QHash<uint32_t, Item> m_frontState;
 
     void addCommand(const PendingCommand &&command);
+    QByteArray buildGridUniformBlock() const;
+    void updateGridUniforms();
+
+    double m_gridAzimuth = 0.0;
+    double m_gridPitch = -70.0;
 
     friend class cwRhiTexturedItems;
 };

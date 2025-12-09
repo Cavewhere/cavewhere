@@ -61,6 +61,55 @@ QQ.Item {
                 }
             }
 
+            QC.GroupBox {
+                title: "Grid"
+                Layout.fillWidth: true
+
+                ColumnLayout {
+                    spacing: 6
+
+                    RowLayout {
+                        QC.Label { text: "Azimuth"; Layout.preferredWidth: 70 }
+                        QC.Slider {
+                            id: gridAzimuthSlider
+                            // Layout.fillWidth: true
+                            from: -180.0
+                            to: 180.0
+                            stepSize: 1.0
+                            onValueChanged: RootData.regionSceneManager.items.gridAzimuth = value
+                        }
+                        QC.Label { text: gridAzimuthSlider.value.toFixed(1) }
+
+                        QQ.Binding {
+                            target: gridAzimuthSlider
+                            property: "value"
+                            value: RootData.regionSceneManager.items.gridAzimuth
+                            when: !gridAzimuthSlider.pressed
+                        }
+                    }
+
+                    RowLayout {
+                        QC.Label { text: "Pitch"; Layout.preferredWidth: 70 }
+                        QC.Slider {
+                            id: gridPitchSlider
+                            // Layout.fillWidth: true
+                            from: -90.0
+                            to: 90.0
+                            stepSize: 1.0
+                            onValueChanged: RootData.regionSceneManager.items.gridPitch = value
+                        }
+                        QC.Label { text: gridPitchSlider.value.toFixed(1) }
+
+                        QQ.Binding {
+                            target: gridPitchSlider
+                            property: "value"
+                            value: RootData.regionSceneManager.items.gridPitch
+                            when: !gridPitchSlider.pressed
+                        }
+                    }
+                }
+            }
+
             GridLayout {
                 id: gltfLayoutId
 

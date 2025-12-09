@@ -644,6 +644,9 @@ void cwScrapManager::scrapInsertedHelper(cwNote *parentNote, int begin, int end)
 
         cwRenderMaterialState state;
         state.cullMode = cwRenderMaterialState::CullMode::None;
+        state.perDrawUniformBinding = 2;
+        state.perDrawUniformStages = cwRenderMaterialState::ShaderStage::Vertex
+                                    | cwRenderMaterialState::ShaderStage::Fragment;
 
         //Add the scrap data that's already in it
         m_scrapToRenderId.insert(scrap,

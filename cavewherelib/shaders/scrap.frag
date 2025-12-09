@@ -42,13 +42,73 @@
 #version 440 core
 
 layout(location = 0) in vec2 vTexCoord;
+layout(location = 1) in vec3 vPosition;
 layout(location = 0) out vec4 fragColor;
 
 layout(binding = 1) uniform sampler2D Texture;
+layout(std140, binding = 2) uniform ScrapBlock {
+    mat4 modelMatrix;
+    vec2 gridAngles; // radians
+    vec2 padding;
+};
 
-void main() {
-    vec4 textureSample = texture(Texture, vTexCoord);
-    fragColor = textureSample;
-    // fragColor = vec4(vTexCoord, 0.0, 1.0);
+
+const float devicePixelRatio = 1.0f;
+const float contourSpacing1 = 0.1f;
+const float contourWidth1 = 1.0f;
+const float contourSpacing2 = 1.0f;
+const float contourWidth2 = 1.5f;
+const vec3 contourColor = vec3(0.15, 0.15, 0.15);
+
+vec3 rotatePosition(vec3 position, float azimuth, float pitch) {
+
+    float sinAz = sin(azimuth);
+    float cosAz = cos(azimuth);
+    mat3 rotZ = mat3(
+        cosAz, -sinAz, 0.0,
+        sinAz,  cosAz, 0.0,
+        0.0,    0.0,   1.0
+    );
+
+    float sinPitch = sin(pitch);
+    float cosPitch = cos(pitch);
+    mat3 rotX = mat3(
+        1.0,    0.0,      0.0,
+        0.0, cosPitch, -sinPitch,
+        0.0, sinPitch,  cosPitch
+    );
+
+    return rotX * (rotZ * position);
 }
 
+float contour(vec3 position, float spacing, float widthPx) {
+
+    float gsize = 1.0 / spacing;
+    const float offset = 0.5;
+
+    vec3 f  = abs(fract(position * gsize - offset) - offset);
+    vec3 df = fwidth(position * gsize);
+
+    float mi = max(0.0, widthPx - 1.0);
+    float ma = max(1.0, widthPx); // these should be uniforms
+    vec3 g = clamp((f - df * mi) / (df * (ma - mi)), max(0.0, 1.0 - widthPx), 1.0);
+    // float c = g.x * g.y;
+    float c = g.y;
+    // float c = g.y * g.z;
+
+    return c;
+}
+
+void main() {
+
+    vec3 rotatedPosition = rotatePosition(vPosition, gridAngles.x, gridAngles.y);
+
+    float c = contour(rotatedPosition, contourSpacing1, contourWidth1 * devicePixelRatio)
+            * contour(rotatedPosition, contourSpacing2, contourWidth2 * devicePixelRatio);
+    float lineMask = 1.0 - c;
+
+    vec4 textureSample = texture(Texture, vTexCoord);
+
+    fragColor = mix(textureSample, vec4(contourColor, textureSample.a), lineMask);
+    // fragColor = vec4(vTexCoord, 0.0, 1.0);
+}

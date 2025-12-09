@@ -9,7 +9,7 @@ layout(set = 0, binding = 0) uniform SceneUBO {
     mat4 viewProj;
 } sceneUbo;
 
-layout(set = 0, binding = 1) uniform ModelUBO {
+layout(set = 0, binding = 2) uniform ModelUBO {
     mat4 model;
 } modelUbo;
 

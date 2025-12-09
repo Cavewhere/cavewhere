@@ -2,6 +2,8 @@
 #include "cwGeometryItersecter.h"
 #include "cwRhiTexturedItems.h"
 
+#include <QtMath>
+
 cwRenderTexturedItems::cwRenderTexturedItems(QObject *parent) : cwRenderObject(parent) {}
 
 cwRHIObject* cwRenderTexturedItems::createRHIObject()
@@ -21,9 +23,11 @@ uint32_t cwRenderTexturedItems::addItem(const Item& item)
 {
     const uint32_t id = m_nextId++;
     Item commandItem = item;
+    commandItem.uniformBlock = buildGridUniformBlock();
     addCommand(PendingCommand(PendingCommand::Add, id, commandItem));
 
     Item storedItem = item;
+    storedItem.uniformBlock = commandItem.uniformBlock;
     if (!storedItem.storeGeometry) {
         storedItem.geometry = cwGeometry();
     }
@@ -136,6 +140,26 @@ void cwRenderTexturedItems::setUniformBlock(uint32_t id, const QByteArray& unifo
     entry->uniformBlock = uniformBlock;
 }
 
+void cwRenderTexturedItems::setGridAzimuth(double azimuth)
+{
+    if (qFuzzyCompare(m_gridAzimuth, azimuth)) {
+        return;
+    }
+    m_gridAzimuth = azimuth;
+    updateGridUniforms();
+    emit gridAzimuthChanged();
+}
+
+void cwRenderTexturedItems::setGridPitch(double pitch)
+{
+    if (qFuzzyCompare(m_gridPitch, pitch)) {
+        return;
+    }
+    m_gridPitch = pitch;
+    updateGridUniforms();
+    emit gridPitchChanged();
+}
+
 void cwRenderTexturedItems::setModelMatrix(uint32_t id, const QMatrix4x4& modelMatrix)
 {
     auto entry = m_frontState.find(id);
@@ -176,4 +200,26 @@ cwRenderTexturedItems::Item cwRenderTexturedItems::item(uint32_t id) const
 bool cwRenderTexturedItems::hasItem(uint32_t id) const
 {
     return m_frontState.contains(id);
+}
+
+QByteArray cwRenderTexturedItems::buildGridUniformBlock() const
+{
+    struct GridUniforms {
+        float azimuth;
+        float pitch;
+        float padding[2];
+    };
+
+    GridUniforms uniforms{};
+    uniforms.azimuth = static_cast<float>(qDegreesToRadians(m_gridAzimuth));
+    uniforms.pitch = static_cast<float>(qDegreesToRadians(m_gridPitch));
+    return QByteArray(reinterpret_cast<const char*>(&uniforms), sizeof(GridUniforms));
+}
+
+void cwRenderTexturedItems::updateGridUniforms()
+{
+    const QByteArray block = buildGridUniformBlock();
+    for (auto it = m_frontState.constBegin(); it != m_frontState.constEnd(); ++it) {
+        setUniformBlock(it.key(), block);
+    }
 }

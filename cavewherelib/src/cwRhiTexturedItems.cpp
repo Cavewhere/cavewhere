@@ -73,6 +73,8 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
 
     m_renderItems = renderItems;
     m_visible = renderItems->isVisible();
+    m_gridAzimuth = static_cast<float>(renderItems->gridAzimuth());
+    m_gridPitch = static_cast<float>(renderItems->gridPitch());
 
     const auto pendingChanges = renderItems->m_pendingChanges;
     for (const auto& command : pendingChanges) {

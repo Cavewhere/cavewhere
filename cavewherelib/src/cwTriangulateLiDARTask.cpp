@@ -54,8 +54,13 @@ QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item> > > cwTriangulateLiDA
                 morphPositions(geometry);
 
                 //Add the render item
-                renderItems.emplaceBack(std::move(geometry),
-                                        toImage(mesh.material.baseColorTextureIndex));
+                cwRenderTexturedItems::Item item;
+                item.geometry = std::move(geometry);
+                item.texture = toImage(mesh.material.baseColorTextureIndex);
+                item.material.perDrawUniformBinding = 2;
+                item.material.perDrawUniformStages = cwRenderMaterialState::ShaderStage::Vertex
+                                                     | cwRenderMaterialState::ShaderStage::Fragment;
+                renderItems.append(std::move(item));
             }
         }
 

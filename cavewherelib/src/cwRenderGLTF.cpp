@@ -103,7 +103,9 @@ QFuture<void> cwRenderGLTF::handleLoadFuture(QFuture<Monad::Result<Load> > loadF
         auto load = loadFuture.result().value();
 
         cwRenderMaterialState material;
-        material.perDrawUniformBinding = 1;
+        material.perDrawUniformBinding = 2;
+        material.perDrawUniformStages = cwRenderMaterialState::ShaderStage::Vertex
+                                        | cwRenderMaterialState::ShaderStage::Fragment;
         material.vertexShader = QStringLiteral(":/shaders/unlit.vert.qsb");
         material.fragmentShader = QStringLiteral(":/shaders/scrap.frag.qsb");
 

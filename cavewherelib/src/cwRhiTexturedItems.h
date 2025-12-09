@@ -19,6 +19,9 @@ public:
     void render(const RenderData& data) override;
     bool gather(const GatherContext& context, QVector<PipelineBatch>& batches) override;
 
+    float gridAzimuth() const { return m_gridAzimuth; }
+    float gridPitch() const { return m_gridPitch; }
+
 private:
     struct SharedItemData {
         QRhiTexture* loadingTexture = nullptr;
@@ -73,6 +76,8 @@ private:
     SharedItemData m_sharedData;
     QRhiVertexInputLayout m_inputLayout;
     cwRhiScene* m_scene = nullptr;
+    float m_gridAzimuth = 0.0f;
+    float m_gridPitch = 0.0f;
 
     static QRhiShaderResourceBinding::StageFlags toRhiStages(cwRenderMaterialState::ShaderStages stages);
     static QRhiGraphicsPipeline::CullMode toRhiCullMode(cwRenderMaterialState::CullMode mode);
