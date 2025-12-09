@@ -107,7 +107,7 @@ public:
     // cwScrap(const cwScrap& other);
     // const cwScrap& operator =(const cwScrap& other);
 
-    void setId(const QUuid& id) { m_id = id; }
+    void setId(const QUuid& id);
     QUuid id() const { return m_id; }
 
     void setParentNote(cwNote* trip);
@@ -120,6 +120,7 @@ public:
     ScrapType type() const;
     void setType(ScrapType type);
     QStringList types() const;
+    void updateIdKeyword();
 
     cwKeywordModel* keywordModel() const;
 

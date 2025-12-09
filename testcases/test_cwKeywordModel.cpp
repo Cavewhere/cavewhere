@@ -6,6 +6,7 @@
 #include "cwNote.h"
 #include "cwNoteLiDAR.h"
 #include "cwTrip.h"
+#include "cwScrap.h"
 #include "TestHelper.h"
 #include "SignalSpyChecker.h"
 
@@ -50,6 +51,20 @@ TEST_CASE("cwNote keywords include file name and trip metadata", "[cwKeywordMode
     const auto keywords = note.keywordModel()->keywords();
     CHECK(keywords.contains(cwKeyword(cwKeywordModel::FileNameKey, QStringLiteral("note-image.png"))));
     CHECK(keywords.contains(cwKeyword(cwKeywordModel::TripNameKey, QStringLiteral("Trip A"))));
+}
+
+TEST_CASE("cwScrap keywords include object id and type", "[cwKeywordModel][cwScrap]") {
+    cwScrap scrap;
+    const QString shortId = scrap.id().toString(QUuid::WithoutBraces).left(8);
+
+    auto keywords = scrap.keywordModel()->keywords();
+    CHECK(keywords.contains(cwKeyword(cwKeywordModel::ObjectIdKey, shortId)));
+    CHECK(keywords.contains(cwKeyword(cwKeywordModel::TypeKey, QStringLiteral("Plan"))));
+
+    QUuid newId = QUuid::createUuid();
+    scrap.setId(newId);
+    keywords = scrap.keywordModel()->keywords();
+    CHECK(keywords.contains(cwKeyword(cwKeywordModel::ObjectIdKey, newId.toString(QUuid::WithoutBraces).left(8))));
 }
 
 TEST_CASE("cwKeywordModel should add and remove keywords correctly", "[cwKeywordModel]") {

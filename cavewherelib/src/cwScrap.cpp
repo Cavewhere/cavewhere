@@ -43,6 +43,7 @@ cwScrap::cwScrap(QObject *parent) :
 {
     setCalculateNoteTransform(true);
     setViewMatrix(new cwPlanScrapViewMatrix(this));
+    updateIdKeyword();
     updateTypeKeyword();
 }
 
@@ -1278,6 +1279,16 @@ cwScrapData cwScrap::data() const
     };
 }
 
+void cwScrap::setId(const QUuid &id)
+{
+    if(m_id == id) {
+        return;
+    }
+
+    m_id = id;
+    updateIdKeyword();
+}
+
 /**
 * Sets the scrap type on how it's going to be projected
 */
@@ -1311,6 +1322,16 @@ void cwScrap::setType(ScrapType type) {
 
 QStringList cwScrap::types() const {
     return {"Plan", "Running Profile", "Project Profile"};
+}
+
+void cwScrap::updateIdKeyword()
+{
+    if(!KeywordModel) {
+        return;
+    }
+
+    const QString shortId = m_id.toString(QUuid::WithoutBraces).left(8);
+    KeywordModel->replace(cwKeyword(cwKeywordModel::ObjectIdKey, shortId));
 }
 
 cwScrap::ScrapType cwScrap::type() const {
