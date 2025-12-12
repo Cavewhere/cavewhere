@@ -285,11 +285,11 @@ QQuickRhiItemRenderer* cwCompassBackendItem::createRenderer()
 // {
 //     //Setup the shadow X direction shader
 //     cwGLShader* vertexXShader = new cwGLShader(QOpenGLShader::Vertex);
-//     vertexXShader->setSourceFile(":/shaders/compass/compassShadowX.vsh");
+//     vertexXShader->setSourceFile(":/shaders/compass/compassShadowX.vert");
 
 //     cwGLShader* fragmentShader = new cwGLShader(QOpenGLShader::Fragment);
 //     fragmentShader->addDefine("HORIZONTAL_BLUR_9");
-//     fragmentShader->setSourceFile(":/shaders/compass/compassShadow.fsh");
+//     fragmentShader->setSourceFile(":/shaders/compass/compassShadow.frag");
 
 //     XShadowProgram = new QOpenGLShaderProgram();
 //     XShadowProgram->addShader(vertexXShader);
@@ -308,11 +308,11 @@ QQuickRhiItemRenderer* cwCompassBackendItem::createRenderer()
 
 //     //Setup the shadow Y direction shader
 //     cwGLShader* vertexYShader = new cwGLShader(QOpenGLShader::Vertex);
-//     vertexYShader->setSourceFile(":/shaders/compass/compassShadowX.vsh");
+//     vertexYShader->setSourceFile(":/shaders/compass/compassShadowX.vert");
 
 //     cwGLShader* fragmentYShader = new cwGLShader(QOpenGLShader::Fragment);
 //     fragmentYShader->addDefine("VERTICAL_BLUR_9");
-//     fragmentYShader->setSourceFile(":/shaders/compass/compassShadow.fsh");
+//     fragmentYShader->setSourceFile(":/shaders/compass/compassShadow.frag");
 
 //     YShadowProgram = new QOpenGLShaderProgram();
 //     YShadowProgram->addShader(vertexYShader);
@@ -340,10 +340,10 @@ QQuickRhiItemRenderer* cwCompassBackendItem::createRenderer()
 // {
 //     //Setup the normal shader
 //     cwGLShader* vertexShader = new cwGLShader(QOpenGLShader::Vertex);
-//     vertexShader->setSourceFile(":/shaders/compass/compassShadowOutput.vsh");
+//     vertexShader->setSourceFile(":/shaders/compass/compassShadowOutput.vert");
 
 //     cwGLShader* fragmentShader = new cwGLShader(QOpenGLShader::Fragment);
-//     fragmentShader->setSourceFile(":/shaders/compass/compassShadowOutput.fsh");
+//     fragmentShader->setSourceFile(":/shaders/compass/compassShadowOutput.frag");
 
 //     ShadowOutputProgram = new QOpenGLShaderProgram();
 //     ShadowOutputProgram->addShader(vertexShader);
@@ -367,10 +367,10 @@ QQuickRhiItemRenderer* cwCompassBackendItem::createRenderer()
 // {
 //     //Setup the normal shader
 //     cwGLShader* vertexShader = new cwGLShader(QOpenGLShader::Vertex);
-//     vertexShader->setSourceFile(":/shaders/compass/compass.vsh");
+//     vertexShader->setSourceFile(":/shaders/compass/compass.vert");
 
 //     cwGLShader* fragmentShader = new cwGLShader(QOpenGLShader::Fragment);
-//     fragmentShader->setSourceFile(":/shaders/compass/compass.fsh");
+//     fragmentShader->setSourceFile(":/shaders/compass/compass.frag");
 
 //     Program = new QOpenGLShaderProgram();
 //     Program->addShader(vertexShader);
