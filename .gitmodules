@@ -36,4 +36,4 @@
 	url = https://github.com/vpicaver/SignalSpyChecker
 [submodule "qtkeychain"]
 	path = qtkeychain
-	url = git@github.com:frankosterfeld/qtkeychain.git
+	url = git@github.com:vpicaver/qtkeychain.git
