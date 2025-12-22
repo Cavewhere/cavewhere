@@ -16,7 +16,7 @@ class CaveWhereConan(ConanFile):
     requires = [
     ("catch2/[>=3.7.1]"),
     ("protobuf/[>=5.27.0]"),
-    ("libgit2/1.9.0"),
+    ("libgit2/1.9.1"),
     ("libssh2/[>=1.11]"),
     ("openssl/3.5.0"),
     ("xxhash/[>=0.8.3]"),
@@ -56,7 +56,7 @@ class CaveWhereConan(ConanFile):
 
         # Or add a new requirement!
         if not self.options.system_qt:
-            self.requires("qt/[>=6.7.3]")
+            self.requires("qt/6.8.3")
             self.requires("xkbcommon/[>=1.6.0]", override=True)
             self.requires("sqlite3/[>=3.45.0]") #, override=True) #override seems to use system's sqlite3 and causes issues
         else:
@@ -89,6 +89,7 @@ class CaveWhereConan(ConanFile):
             self.options["qt"].qttranslations = True
             self.options["qt"].qtimageformats = True
             self.options["qt"].with_libjpeg = "libjpeg"
+            self.options["qt"].with_dbus = True
 
         if not self.options.mobile:
             #Arrow fails on github linux build, disable

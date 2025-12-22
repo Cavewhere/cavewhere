@@ -190,6 +190,7 @@ add_subdirectory(test-qml)
 
 
 qt_add_executable(CaveWhere
+    MANUAL_FINALIZATION
     main.cpp
     Cavewhere.rc
     testcases/cwSignalSpy.h testcases/cwSignalSpy.cpp
@@ -213,6 +214,10 @@ target_link_libraries(CaveWhere
     cavewherelib
     MarkScope
 )
+
+# Ensure QML modules are imported without relying on QML2_IMPORT_PATH.
+qt_import_qml_plugins(CaveWhere)
+qt_finalize_executable(CaveWhere)
 
 if(WIN32)
     target_link_options(CaveWhere PRIVATE
@@ -413,4 +418,3 @@ if(WIN32 OR APPLE)
 #	set_target_properties(CaveWhere PROPERTIES SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
     include(installer/installer.cmake)
 endif()
-
