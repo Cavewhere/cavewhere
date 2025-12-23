@@ -16,7 +16,7 @@ class CaveWhereConan(ConanFile):
     requires = [
     ("catch2/[>=3.7.1]"),
     ("protobuf/[>=5.27.0]"),
-    ("libgit2/1.8.4"),
+    ("libgit2/1.9.1"),
     ("libssh2/[>=1.11]"),
     ("openssl/3.5.0"),
     ("xxhash/[>=0.8.3]"),
