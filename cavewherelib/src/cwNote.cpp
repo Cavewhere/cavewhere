@@ -20,6 +20,10 @@
 //Qt includes
 #include <QDebug>
 
+//Std includes
+#include <cmath>
+#include <limits>
+
 cwNote::cwNote(QObject *parent) :
     QObject(parent),
     ParentTrip(nullptr),
@@ -171,6 +175,9 @@ QMatrix4x4 cwNote::scaleMatrix() const {
   */
 QMatrix4x4 cwNote::metersOnPageMatrix() const {
     double dotsPerMeter = dotPerMeter();
+    if(!std::isfinite(dotsPerMeter) || dotsPerMeter <= 0.0) {
+        return QMatrix4x4();
+    }
     double metersPerDot = 1.0 / dotsPerMeter;
 
     QMatrix4x4 metersPerDotsMatrix;
@@ -284,6 +291,11 @@ void cwNote::updateScrapNoteTransform()
  */
 double cwNote::dotPerMeter() const {
     return imageResolution()->convertTo(cwUnits::DotsPerMeter).value;
+    // auto data = imageResolution()->convertTo(cwUnits::DotsPerMeter);
+    // if(!std::isfinite(data.value) || data.value <= 0.0) {
+    //     return std::numeric_limits<double>::quiet_NaN();
+    // }
+    // return data.value;
 }
 
 /**

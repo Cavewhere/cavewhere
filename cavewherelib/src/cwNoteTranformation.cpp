@@ -18,6 +18,8 @@
 
 //Std includes
 #include "cwMath.h"
+#include <cmath>
+#include <limits>
 
 cwNoteTranformation::cwNoteTranformation(QObject* parent) :
     cwAbstractNoteTransformation(parent)
@@ -61,8 +63,9 @@ double cwNoteTranformation::calculateScale(QPointF p1, QPointF p2,
                                            QSize imageSize,
                                            cwImageResolution* resolution)
 {
-    if(length == nullptr) { return 0.0; }
-    if(resolution == nullptr) { return 0.0; }
+    if(length == nullptr || resolution == nullptr) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
 
     QLineF line(p1, p2);
     double a = line.dx() * imageSize.width(); //a is in dots
@@ -70,15 +73,27 @@ double cwNoteTranformation::calculateScale(QPointF p1, QPointF p2,
 
     //Use Pythagorean
     double lengthInDots = sqrt(a * a + b * b);
+    if(!std::isfinite(lengthInDots) || lengthInDots <= 0.0) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
 
     //Dots per meter
     cwImageResolution::Data meterResolution = resolution->convertTo(cwUnits::DotsPerMeter);
     double dotsPerMeter = meterResolution.value;
+    if(!std::isfinite(dotsPerMeter) || dotsPerMeter <= 0.0) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
 
     //Compute the scale
     double lengthInMetersOnPage = lengthInDots / dotsPerMeter;
     double lengthInMetersInCave = length->convertTo(cwUnits::Meters).value;
+    if(!std::isfinite(lengthInMetersInCave) || lengthInMetersInCave <= 0.0) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
     double scale = lengthInMetersOnPage / lengthInMetersInCave;
+    if(!std::isfinite(scale) || scale <= 0.0) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
     return scale;
 }
 
@@ -87,8 +102,13 @@ double cwNoteTranformation::calculateScale(QPointF p1, QPointF p2,
 
 */
 QMatrix4x4 cwNoteTranformation::matrix() const {
+    double currentScale = scale();
+    if(!std::isfinite(currentScale) || currentScale <= 0.0) {
+        return QMatrix4x4();
+    }
+
     QMatrix4x4 matrix;
     matrix.rotate(northUp(), 0.0, 0.0, 1.0);
-    matrix.scale(1.0 / scale(), 1.0 / scale(), 1.0);
+    matrix.scale(1.0 / currentScale, 1.0 / currentScale, 1.0);
     return matrix;
 }

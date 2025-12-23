@@ -41,7 +41,7 @@ public:
     cwImageData data(int id, bool metaDataOnly = false) const;
 
     //image data with full path
-    cwImageData data(QString filename) const;
+    cwImageData data(const QString &filename) const;
 
     static cwImageData createDxt1(QSize size, const QByteArray& uncompressData);
 

@@ -21,6 +21,9 @@ FloatingGroupBox {
         }
         return null;
     }
+    readonly property bool resolutionValid: resolution !== null &&
+                                            Number.isFinite(resolution.value) &&
+                                            resolution.value > 0.0
 
     signal activateDPIInteraction
 
@@ -70,6 +73,13 @@ FloatingGroupBox {
                 }
 
             }
+        }
+
+        ErrorHelpArea {
+             id: resolutionErrorAreaId
+             Layout.fillWidth: true
+             visible: !floatingGroup.resolutionValid
+             text: "Invalid DPI. Value must be finite and greater than 0."
         }
 
         HelpArea {

@@ -42,7 +42,9 @@ QVariant cwSurveyNoteModel::data(const QModelIndex& index, int role) const
     case IconPathRole:
         //Icon path is just cached
     case PathRole: {
-        return cwImageProvider::imageUrl(cwSaveLoad::absolutePath(note, note->image().path()));
+        const QString imagePath = note->image().path();
+        Q_ASSERT(!QFileInfo(imagePath).isAbsolute()); //This should be a relative path
+        return cwImageProvider::imageUrl(cwSaveLoad::absolutePath(note, imagePath));
     }
     case ImageRole: {
         return QVariant::fromValue(cwSaveLoad::absolutePathNoteImage(note));
@@ -82,15 +84,15 @@ void cwSurveyNoteModel::addFromFiles(QList<QUrl> files)
         return;
     }
 
-    auto* proj = project();
-    if (proj == nullptr) {
+    auto* project = this->project();
+    if (project == nullptr) {
         qWarning() << "Project not found for cwSurveyNoteModel::addFromFiles";
         return;
     }
 
     const QDir destinationDirectory = cwSaveLoad::dir(this);
 
-    proj->addImages(
+    project->addImages(
         accepted,
         destinationDirectory,
         [this](QList<cwImage> newImages) {

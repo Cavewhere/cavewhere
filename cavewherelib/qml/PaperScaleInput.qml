@@ -14,13 +14,21 @@ import "Utils.js" as Utils
 QQ.Item {
     id: scaleInput
 
-//    property NoteTransform noteTransform
+    //    property NoteTransform noteTransform
     property Scale scaleObject;
     property HelpArea scaleHelp
     property bool autoScaling: false
     property bool usingInteraction: true
     property alias onPaperLabel: onPaperRect.title
     property alias inCaveLabel: inCaveRect.title
+    readonly property bool scaleValueValid: scaleObject !== null &&
+                                            Number.isFinite(scaleObject.scale) &&
+                                            scaleObject.scale > 0
+    readonly property bool scaleUnitMismatch: scaleObject !== null &&
+                                              (scaleObject.scaleDenominator.unit === Units.Unitless ||
+                                               scaleObject.scaleNumerator.unit === Units.Unitless) &&
+                                              !(scaleObject.scaleDenominator.unit === Units.Unitless &&
+                                                scaleObject.scaleNumerator.unit === Units.Unitless)
 
     signal scaleInteractionActivated()
 
@@ -110,29 +118,31 @@ QQ.Item {
             QQ.PropertyChanges {
                 onPaperLengthInput {
                     unitValue: scaleObject.scaleNumerator
-                    valueVisible: (!autoScaling || scaleObject.scaleNumerator.unit !== Units.Unitless) && !errorText.visible
+                    valueVisible: (!autoScaling || scaleObject.scaleNumerator.unit !== Units.Unitless)
                 }
             }
 
             QQ.PropertyChanges {
                 inCaveLengthInput {
                     unitValue: scaleObject.scaleDenominator
-                    valueVisible: (!autoScaling || scaleObject.scaleDenominator.unit !== Units.Unitless) && !errorText.visible
+                    valueVisible: (!autoScaling || scaleObject.scaleDenominator.unit !== Units.Unitless)
                 }
             }
 
             QQ.PropertyChanges {
                 scaleText {
-                    text: "1:" + Utils.fixed(1 / scaleObject.scale, 1)
+                    text: scaleInput.scaleValueValid
+                          ? "1:" + Utils.fixed(1 / scaleObject.scale, 1)
+                          : ""
                 }
             }
 
             QQ.PropertyChanges {
                 errorText {
-                    visible: (scaleObject.scaleDenominator.unit === Units.Unitless ||
-                              scaleObject.scaleNumerator.unit === Units.Unitless) &&
-                             !(scaleObject.scaleDenominator.unit === Units.Unitless &&
-                               scaleObject.scaleNumerator.unit === Units.Unitless)
+                    visible: scaleInput.scaleUnitMismatch || !scaleInput.scaleValueValid
+                    text: !scaleInput.scaleValueValid
+                          ? "Invalid scale (check DPI)"
+                          : "Weird scaling units"
                 }
             }
         }

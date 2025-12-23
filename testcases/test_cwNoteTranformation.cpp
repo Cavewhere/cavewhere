@@ -10,6 +10,11 @@
 
 //Qt includes
 #include "cwSignalSpy.h"
+#include "cwImageResolution.h"
+
+//Std includes
+#include <cmath>
+#include <limits>
 
 TEST_CASE("cwNoteTransformation should update correctly", "[cwNoteTransformation]") {
 
@@ -82,5 +87,58 @@ TEST_CASE("cwNoteTransformation should update correctly", "[cwNoteTransformation
         transform.setNorthUp(10.0);
         spyChecker[&northUpSpy]++;
         spyChecker.checkSpies();
+    }
+}
+
+TEST_CASE("cwNoteTransformation scale calculation handles invalid inputs", "[cwNoteTransformation]") {
+    cwNoteTranformation transform;
+    cwLength length;
+    cwImageResolution resolution;
+
+    length.setValue(1.0);
+    length.setUnit(cwUnits::Meters);
+
+    resolution.setValue(300.0);
+    resolution.setUnit(cwUnits::DotsPerInch);
+
+    const QSize imageSize(1000, 1000);
+
+    SECTION("Valid inputs produce a finite, positive scale") {
+        const double scale = transform.calculateScale(QPointF(0.0, 0.0),
+                                                      QPointF(1.0, 0.0),
+                                                      &length,
+                                                      imageSize,
+                                                      &resolution);
+        CHECK(std::isfinite(scale));
+        CHECK(scale > 0.0);
+    }
+
+    SECTION("Invalid resolution produces NaN scale") {
+        resolution.setValue(std::numeric_limits<double>::infinity());
+        const double scale = transform.calculateScale(QPointF(0.0, 0.0),
+                                                      QPointF(1.0, 0.0),
+                                                      &length,
+                                                      imageSize,
+                                                      &resolution);
+        CHECK(std::isnan(scale));
+    }
+
+    SECTION("Zero length produces NaN scale") {
+        length.setValue(0.0);
+        const double scale = transform.calculateScale(QPointF(0.0, 0.0),
+                                                      QPointF(1.0, 0.0),
+                                                      &length,
+                                                      imageSize,
+                                                      &resolution);
+        CHECK(std::isnan(scale));
+    }
+
+    SECTION("Degenerate points produce NaN scale") {
+        const double scale = transform.calculateScale(QPointF(0.0, 0.0),
+                                                      QPointF(0.0, 0.0),
+                                                      &length,
+                                                      imageSize,
+                                                      &resolution);
+        CHECK(std::isnan(scale));
     }
 }

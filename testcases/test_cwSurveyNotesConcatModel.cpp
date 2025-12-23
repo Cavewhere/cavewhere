@@ -8,12 +8,14 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QImage>
+#include <QSize>
 #include <QUrl>
 
 // SUT + deps
 #include "cwSurveyNotesConcatModel.h"
 #include "cwSurveyNoteModel.h"
 #include "cwSurveyNoteLiDARModel.h"
+#include "cwImageProvider.h"
 #include "cwTrip.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
@@ -140,4 +142,52 @@ TEST_CASE("cwSurveyNotesConcatModel integrates with real cwTrip models", "[cwSur
     const bool hasGlb = p0.endsWith(".glb", Qt::CaseInsensitive) || p1.endsWith(".glb", Qt::CaseInsensitive);
     CHECK(hasJpg);
     CHECK(hasGlb);
+}
+
+TEST_CASE("cwSurveyNotesConcatModel addFiles uses absolute paths with cwImageProvider", "[cwSurveyNotesConcatModel]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    cwCave* cave = new cwCave();
+    cave->setName("test");
+
+    cwTrip* trip = new cwTrip();
+    trip->setName("test trip");
+    cave->addTrip(trip);
+    project->cavingRegion()->addCave(cave);
+
+    cwSurveyNotesConcatModel concat;
+    concat.setTrip(trip);
+
+    const QString pngPath = copyToTempFolder("://datasets/test_cwNote/testpage.png");
+    REQUIRE(!pngPath.isEmpty());
+    const QList<QUrl> files = { QUrl::fromLocalFile(pngPath) };
+
+    concat.addFiles(files);
+    rootData->futureManagerModel()->waitForFinished();
+
+    REQUIRE(concat.rowCount() == 1);
+    const QModelIndex index = concat.index(0, 0);
+    REQUIRE(index.isValid());
+
+    const QString imageUrlString = concat.data(index, cwSurveyNoteModelBase::PathRole).toString();
+    REQUIRE(imageUrlString.startsWith(QStringLiteral("image://")));
+
+    const QUrl imageUrl(imageUrlString);
+    REQUIRE(imageUrl.isValid());
+    CHECK(imageUrl.scheme() == QStringLiteral("image"));
+    CHECK(imageUrl.host() == cwImageProvider::name());
+
+    const QString providerPath = imageUrl.path();
+    INFO("ProviderPath:" + imageUrl.path().toStdString());
+    REQUIRE(QFileInfo(providerPath).isAbsolute());
+    REQUIRE(QFileInfo(providerPath).exists());
+
+    cwImageProvider provider;
+    provider.setProjectPath(project->filename());
+
+    QSize size;
+    const QImage image = provider.requestImage(providerPath, &size, QSize(64, 64));
+    REQUIRE(!image.isNull());
+    REQUIRE(size.isValid());
 }

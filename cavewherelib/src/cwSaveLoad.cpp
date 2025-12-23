@@ -981,7 +981,7 @@ static auto makeImageFromRelativePath(const QDir& rootDirectory) {
         const QString absolutePath = rootDirectory.absoluteFilePath(relativePath);
         QImage qimage(absolutePath);
         cwImage image = cwAddImageTask::originalMetaData(qimage);
-        image.setPath(relativePath);
+        image.setPath(QFileInfo(relativePath).fileName());
         // qDebug() << "Returning image:" << image;
         return image;
     };

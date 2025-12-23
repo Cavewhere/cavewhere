@@ -117,10 +117,12 @@ TEST_CASE("Image data should save and load correctly", "[cwProject]") {
 
     REQUIRE(trip->notes()->notes().size() == 1);
 
-    cwImage image = trip->notes()->notes().first()->image();
+    cwNote* note = trip->notes()->notes().first();
+    cwImage image = note->image();
     cwImageProvider provider;
     provider.setProjectPath(project->filename());
-    QImage sqlImage = provider.image(image.path());
+    const QString noteImagePath = cwSaveLoad::absolutePath(note, image.path());
+    QImage sqlImage = provider.image(noteImagePath);
 
     CHECK(!sqlImage.isNull());
     CHECK(originalImage == sqlImage);
