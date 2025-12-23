@@ -406,8 +406,7 @@ if(UNIX AND NOT APPLE)
     add_custom_target(appimageInstaller
         COMMAND ${CMAKE_COMMAND} -P "${CMAKE_SOURCE_DIR}/installer/linux/CheckPatchelf.cmake"
         COMMAND ${CMAKE_COMMAND} -D QMAKE_EXECUTABLE="${QMAKE_EXECUTABLE}" -P "${CMAKE_SOURCE_DIR}/installer/linux/CheckQmake.cmake"
-        COMMAND ${CMAKE_COMMAND} -E env "PATH=${LINUXDEPLOY_ENV_PATH}" ${QMAKE_ENV} ${APPIMAGE_RUNTIME_ENV}
-            "QML_SOURCES_PATHS=${QML_SOURCES_PATHS}"
+        COMMAND ${CMAKE_COMMAND} -E env "PATH=${LINUXDEPLOY_ENV_PATH}" ${QMAKE_ENV}
             "${LINUXDEPLOY_EXECUTABLE}"
             --appdir "${APPIMAGE_APPDIR}"
             --executable "${APPIMAGE_BIN_DIR}/CaveWhere"
@@ -415,8 +414,14 @@ if(UNIX AND NOT APPLE)
             --executable "${APPIMAGE_BIN_DIR}/survexport"
             --desktop-file "${APPIMAGE_DESKTOP_FILE}"
             --icon-file "${APPIMAGE_ICON_TARGET}"
+        COMMAND ${CMAKE_COMMAND} -E env "PATH=${LINUXDEPLOY_ENV_PATH}" ${QMAKE_ENV}
+            "QML_SOURCES_PATHS=${QML_SOURCES_PATHS}"
+            "${LINUXDEPLOY_QT_PLUGIN_EXECUTABLE}"
+            --appdir "${APPIMAGE_APPDIR}"
             --exclude-library "libqsqlmimer.so"
-            --plugin qt
+        COMMAND ${CMAKE_COMMAND} -E env "PATH=${LINUXDEPLOY_ENV_PATH}" ${APPIMAGE_RUNTIME_ENV}
+            "${LINUXDEPLOY_EXECUTABLE}"
+            --appdir "${APPIMAGE_APPDIR}"
             --output appimage
         DEPENDS ${APPIMAGE_DEPENDENCIES}
         WORKING_DIRECTORY "${APPIMAGE_ROOT_DIR}"
