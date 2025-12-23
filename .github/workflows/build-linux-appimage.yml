@@ -48,6 +48,10 @@ jobs:
           arch: 'linux_gcc_64'
           modules: 'qtshadertools'
 
+      - name: Remove Mimer SQL driver (missing dependency in CI)
+        run: |
+          rm -f "${{ github.workspace }}/Qt/6.8.2/gcc_64/plugins/sqldrivers/libqsqlmimer.so"
+
       - name: Install Conan
         run: pipx install conan
 
