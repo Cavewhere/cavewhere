@@ -415,6 +415,7 @@ if(UNIX AND NOT APPLE)
             --executable "${APPIMAGE_BIN_DIR}/survexport"
             --desktop-file "${APPIMAGE_DESKTOP_FILE}"
             --icon-file "${APPIMAGE_ICON_TARGET}"
+            --exclude-library "libqsqlmimer.so"
             --plugin qt
             --output appimage
         DEPENDS ${APPIMAGE_DEPENDENCIES}
