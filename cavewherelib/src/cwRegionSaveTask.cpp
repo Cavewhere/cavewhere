@@ -274,6 +274,9 @@ void cwRegionSaveTask::saveImage(CavewhereProto::Image *protoImage, const cwImag
 
     protoImage->set_dotpermeter(image.originalDotsPerMeter());
     saveSize(protoImage->mutable_size(), image.originalSize());
+    if (image.page() >= 0) {
+        protoImage->set_page(image.page());
+    }
 }
 
 /**
@@ -691,4 +694,3 @@ void cwRegionSaveTask::saveProjectedScrapViewMatrix(CavewhereProto::ProjectedPro
 // {
 //     saveString(protoClinoReading->mutable_legacy_value(), reading.value());
 // }
-

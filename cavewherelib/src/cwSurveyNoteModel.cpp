@@ -4,7 +4,6 @@
 #include "cwNote.h"
 #include "cwImage.h"
 #include "cwImageProvider.h"
-#include "cwPDFConverter.h"
 #include "cwSaveLoad.h"
 #include "cwProject.h"
 #include "cwTrip.h"
@@ -13,8 +12,6 @@
 // Qt
 #include <QDir>
 #include <QFileInfo>
-#include <QImageReader>
-#include <QSet>
 #include <QDebug>
 
 cwSurveyNoteModel::cwSurveyNoteModel(QObject* parent)
@@ -44,7 +41,8 @@ QVariant cwSurveyNoteModel::data(const QModelIndex& index, int role) const
     case PathRole: {
         const QString imagePath = note->image().path();
         Q_ASSERT(!QFileInfo(imagePath).isAbsolute()); //This should be a relative path
-        return cwImageProvider::imageUrl(cwSaveLoad::absolutePath(note, imagePath));
+        const QString absolutePath = cwSaveLoad::absolutePath(note, imagePath);
+        return cwImageProvider::imageUrl(note->image(), absolutePath);
     }
     case ImageRole: {
         return QVariant::fromValue(cwSaveLoad::absolutePathNoteImage(note));
@@ -56,30 +54,8 @@ QVariant cwSurveyNoteModel::data(const QModelIndex& index, int role) const
 
 void cwSurveyNoteModel::addFromFiles(QList<QUrl> files)
 {
-    QSet<QString> supportedSuffixes;
-    for (const QByteArray& fmt : QImageReader::supportedImageFormats()) {
-        supportedSuffixes.insert(QString::fromLatin1(fmt).toLower());
-    }
-
-    auto isPdfPath = [](const QString& path) {
-        if (!cwPDFConverter::isSupported()) {
-            return false;
-        }
-        const QFileInfo fi(path);
-        return fi.suffix().compare(QStringLiteral("pdf"), Qt::CaseInsensitive) == 0;
-    };
-
-    QList<QUrl> accepted;
-    accepted.reserve(files.size());
-    for (const QUrl& u : files) {
-        const QFileInfo fi(u.toLocalFile());
-        const QString suffixLower = fi.suffix().toLower();
-        if (supportedSuffixes.contains(suffixLower) || isPdfPath(fi.absoluteFilePath())) {
-            accepted.append(u);
-        }
-    }
-
-    if (accepted.isEmpty()) {
+    const QList<QUrl> imageUrls = files;
+    if (imageUrls.isEmpty()) {
         qWarning() << "No supported image/PDF files provided to cwSurveyNoteModel::addFromFiles";
         return;
     }
@@ -93,7 +69,7 @@ void cwSurveyNoteModel::addFromFiles(QList<QUrl> files)
     const QDir destinationDirectory = cwSaveLoad::dir(this);
 
     project->addImages(
-        accepted,
+        imageUrls,
         destinationDirectory,
         [this](QList<cwImage> newImages) {
             addNotesWithNewImages(newImages);
@@ -164,7 +140,14 @@ void cwSurveyNoteModel::addNotesWithNewImages(QList<cwImage> images)
 
     for (const cwImage& image : images) {
         auto* note = new cwNote(this);
-        note->setName(QFileInfo(image.path()).fileName());
+        const QString baseName = QFileInfo(image.path()).fileName();
+        if (image.page() >= 0) {
+            note->setName(QStringLiteral("%1 (Page %2)")
+                              .arg(baseName)
+                              .arg(image.page() + 1));
+        } else {
+            note->setName(baseName);
+        }
         note->setImage(image);
         note->setParentTrip(parentTrip());
         newNotes.append(note);

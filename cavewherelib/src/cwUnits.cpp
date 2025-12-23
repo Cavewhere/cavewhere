@@ -13,50 +13,12 @@
 #include <QStringList>
 #include <QDebug>
 
-double cwUnits::LengthUnitsToMeters[cwUnits::Miles + 1] = {0.0254, //Inches
-                                                           0.3048, //Feet
-                                                           0.9144, //Yard
-                                                           1.0, //Meter
-                                                           0.001, //millimeter
-                                                           0.01, //cm
-                                                           1000.0, //km
-                                                           0.0, //Unitless
-                                                           1609.340 //Miles
-                                                          };
-
-
-double cwUnits::ResolutionUnitToDotPerMeters[cwUnits::DotsPerMeter + 1] = {
-      39.3700787, //Dots per inch
-      100.0, //Dots per centimeter
-      1.0, //Dots per meter
-};
-
 /**
   Converts value to the 'to' LengthUnit
 
   If the valueUnit and to unit are equal, this returns the value.
 
   */
-double cwUnits::convert(double value, cwUnits::LengthUnit from, cwUnits::LengthUnit to) {
-    if(from == LengthUnitless || to == LengthUnitless) {
-        return value;
-    }
-
-    if(to < 0 || to > Miles ) {
-        qDebug() << "Can't convert to unit" << LOCATION;
-        return value;
-    }
-
-    if(from < 0 || from > Miles) {
-        qDebug() << "Can't convert from unit" << LOCATION;
-        return value;
-    }
-
-    double fromFactor = LengthUnitsToMeters[from];
-    double toFactor = LengthUnitsToMeters[to];
-    return convert(value, fromFactor, toFactor);
-}
-
 /**
     Get's all the unit names for the cwUnit
   */
@@ -147,23 +109,6 @@ cwUnits::LengthUnit cwUnits::toLengthUnit(QString unitString) {
  * @param to - The units of the value that will be converted to
  * @return The value with the from units
  */
-double cwUnits::convert(double value, cwUnits::ImageResolutionUnit from, cwUnits::ImageResolutionUnit to)
-{
-    if(to < 0 || to > DotsPerMeter ) {
-        qDebug() << "Can't convert to unit" << LOCATION;
-        return value;
-    }
-
-    if(from < 0 || from > DotsPerMeter) {
-        qDebug() << "Can't convert from unit" << LOCATION;
-        return value;
-    }
-
-    double fromFactor = ResolutionUnitToDotPerMeters[from];
-    double toFactor = ResolutionUnitToDotPerMeters[to];
-    return convert(value, fromFactor, toFactor);
-}
-
 /**
  * @brief cwUnits::imageResolutionUnitNames
  * @return All the names of all the units
@@ -209,4 +154,3 @@ cwUnits::ImageResolutionUnit cwUnits::toImageResolutionUnit(QString unitString)
         return DotsPerInch;
     }
 }
-

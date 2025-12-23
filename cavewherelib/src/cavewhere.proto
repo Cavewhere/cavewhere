@@ -93,6 +93,7 @@ message Image {
     optional int32 dotPerMeter = 5;
     optional QtProto.QSizeF OBSOLETE_clipArea = 6; //Not need anymore
     optional string path = 7;
+    optional int32 page = 8;
 }
 
 message TripCalibration {

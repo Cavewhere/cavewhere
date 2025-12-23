@@ -151,7 +151,7 @@ public:
 
     //Helper functions for creating things
     Q_INVOKABLE cwImage emptyImage() const  { return cwImage(); }
-    Q_INVOKABLE QUrl cavewhereImageUrl(const QString& path) const;
+    Q_INVOKABLE QUrl cavewhereImageUrl(const cwImage& image, const QString& absolutePath) const;
     Q_INVOKABLE void newProject();
 
     int titleBarHeight() const;

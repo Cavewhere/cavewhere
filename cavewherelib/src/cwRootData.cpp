@@ -248,9 +248,9 @@ QString cwRootData::cwRootData::supportImageFormats() const {
     return cwProject::supportedImageFormats();
 }
 
-QUrl cwRootData::cavewhereImageUrl(const QString& path) const
+QUrl cwRootData::cavewhereImageUrl(const cwImage& image, const QString& absolutePath) const
 {
-    return cwImageProvider::imageUrl(path);
+    return cwImageProvider::imageUrl(image, absolutePath);
 }
 
 void cwRootData::newProject()

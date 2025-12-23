@@ -11,6 +11,7 @@
 #include "cwSQLManager.h"
 #include "cwAddImageTask.h"
 #include "cwDiskCacher.h"
+#include "cwPDFSettings.h"
 
 //Qt includes
 #include <QSqlDatabase>
@@ -25,6 +26,12 @@
 #include <QJsonDocument>
 #include <QBuffer>
 #include <QImageReader>
+#include <QUrlQuery>
+#include <cmath>
+
+#ifdef WITH_PDF_SUPPORT
+#include <QPdfDocument>
+#endif
 
 //Std includes
 #include <stdexcept>
@@ -33,6 +40,110 @@
 #include "xxhash.h" // Path to xxHash header
 
 QAtomicInt cwImageProvider::ConnectionCounter;
+
+namespace {
+
+struct ImageRequestDetails {
+    QString filePath;
+    int pageIndex = -1; // 0-based
+};
+
+int parsePositiveInt(const QString& value)
+{
+    bool ok = false;
+    int parsed = value.toInt(&ok);
+    return ok ? parsed : -1;
+}
+
+ImageRequestDetails parseImageRequest(const QString& id)
+{
+    ImageRequestDetails details;
+
+    QString pathPart = id;
+    QString fragmentPart;
+    const int fragmentIndex = pathPart.indexOf('#');
+    if (fragmentIndex >= 0) {
+        fragmentPart = pathPart.mid(fragmentIndex + 1);
+        pathPart = pathPart.left(fragmentIndex);
+    }
+
+    QString queryPart;
+    const int queryIndex = pathPart.indexOf('?');
+    if (queryIndex >= 0) {
+        queryPart = pathPart.mid(queryIndex + 1);
+        pathPart = pathPart.left(queryIndex);
+    }
+
+    details.filePath = pathPart;
+
+    if (!queryPart.isEmpty()) {
+        const QUrlQuery query(queryPart);
+        const QString pageValue = query.queryItemValue(QStringLiteral("page"));
+
+        const int page = parsePositiveInt(pageValue);
+        if (page >= 0) {
+            details.pageIndex = page > 0 ? page - 1 : 0;
+        }
+    }
+
+    if (!fragmentPart.isEmpty()) {
+        const QUrlQuery fragmentQuery(fragmentPart);
+        const QString fragmentPageValue = fragmentQuery.queryItemValue(QStringLiteral("page"));
+        if (!fragmentPageValue.isEmpty()) {
+            const int page = parsePositiveInt(fragmentPageValue);
+            if (page >= 0) {
+                details.pageIndex = page > 0 ? page - 1 : 0;
+            }
+        }
+    }
+
+    return details;
+}
+
+QString resolveFilePath(const QString& path, const QString& projectPath)
+{
+    QFileInfo info(path);
+    if (info.isAbsolute()) {
+        return info.canonicalFilePath().isEmpty() ? info.absoluteFilePath() : info.canonicalFilePath();
+    }
+
+    if (!projectPath.isEmpty()) {
+        const QDir projectDir = QFileInfo(projectPath).absoluteDir();
+        const QString candidate = projectDir.absoluteFilePath(path);
+        const QFileInfo candidateInfo(candidate);
+        return candidateInfo.canonicalFilePath().isEmpty() ? candidateInfo.absoluteFilePath() : candidateInfo.canonicalFilePath();
+    }
+
+    return info.absoluteFilePath();
+}
+
+QImage renderPdfPage(const QString& pdfPath, int pageIndex, int resolutionPpi)
+{
+#ifdef WITH_PDF_SUPPORT
+    QPdfDocument document;
+    if (document.load(pdfPath) != QPdfDocument::Error::None) {
+        return QImage();
+    }
+
+    if (pageIndex < 0 || pageIndex >= document.pageCount()) {
+        return QImage();
+    }
+
+    const QSizeF pagePoints = document.pagePointSize(pageIndex);
+    const double scale = resolutionPpi / 72.0;
+    const QSize targetSize(std::round(pagePoints.width() * scale),
+                           std::round(pagePoints.height() * scale));
+
+    return document.render(pageIndex, targetSize);
+#else
+    Q_UNUSED(pdfPath);
+    Q_UNUSED(pageIndex);
+    Q_UNUSED(resolutionPpi);
+    return QImage();
+#endif
+}
+
+} // namespace
 
 cwImageProvider::cwImageProvider() :
     QQuickImageProvider(QQuickImageProvider::Image)
@@ -50,29 +161,72 @@ QImage cwImageProvider::requestImage(const QString &path, QSize *size, const QSi
     // qDebug() << "Requesting path:" << path << ProjectPath;
 
     const int maxSize = std::max(requestedSize.width(), requestedSize.height());
+    const ImageRequestDetails details = parseImageRequest(path);
+    const QString basePath = details.filePath;
+    const QString resolvedPath = resolveFilePath(basePath, projectPath());
+    const QFileInfo info(resolvedPath);
 
-    if(maxSize > 0) {
+#ifdef WITH_PDF_SUPPORT
+    const bool isPdf = info.suffix().compare(QStringLiteral("pdf"), Qt::CaseInsensitive) == 0;
+
+    if(isPdf) {
+        const int pageIndex = details.pageIndex >= 0 ? details.pageIndex : 0;
+        const int resolutionPpi = cwPDFSettings::instance()->resolutionImport();
+        if(maxSize > 0) {
+            auto hash = fileHash(resolvedPath);
+            const QString prefix = QStringLiteral("scaled-%1_%2-page%3-ppi%4")
+                                       .arg(requestedSize.width())
+                                       .arg(requestedSize.height())
+                                       .arg(pageIndex + 1)
+                                       .arg(resolutionPpi);
+            auto key = imageCacheKey(resolvedPath, prefix, hash);
+
+            const QString projectFile = projectPath();
+            if (projectFile.isEmpty()) {
+                return {};
+            }
+            const QDir cacheDir = QFileInfo(projectFile).absoluteDir();
+            auto loadOriginal = [resolvedPath, pageIndex, resolutionPpi]() {
+                return renderPdfPage(resolvedPath, pageIndex, resolutionPpi);
+            };
+
+            return requestScaledImageFromCache(requestedSize, size, loadOriginal, key, cacheDir);
+        } else {
+            QImage image = renderPdfPage(resolvedPath, pageIndex, resolutionPpi);
+            if (image.isNull()) {
+                qDebug() << "cwImageProvider:: can't read pdf:" << resolvedPath << LOCATION;
+                return QImage();
+            }
+            if (size != nullptr) {
+                *size = image.size();
+            }
+            return image;
+        }
+    }
+#endif
+
+    if(maxSize > 0) {        
         //Generate a smaller image than the original, this could be an icon
-        auto hash = fileHash(relativeImagePath(path));
+        auto hash = fileHash(relativeImagePath(basePath));
         QString prefix = QStringLiteral("scaled-") + QString::number(requestedSize.width()) + QStringLiteral("_") + QString::number(requestedSize.height());
-        auto key = imageCacheKey(path, prefix, hash);
+        auto key = imageCacheKey(basePath, prefix, hash);
 
         const QString projectFile = projectPath();
         if (projectFile.isEmpty()) {
             return {};
         }
         const QDir cacheDir = QFileInfo(projectFile).absoluteDir();
-        auto loadOriginal = [this, path]() {
-            return this->image(path);
+        auto loadOriginal = [this, basePath]() {
+            return this->image(basePath);
         };
 
         return requestScaledImageFromCache(requestedSize, size, loadOriginal, key, cacheDir);
     } else {
-        QImage image = this->image(path);
+        QImage image = this->image(basePath);
 
         //Make sure the image is good
         if(image.isNull()) {
-            qDebug() << "cwImageProvider:: can't read image:" << path << LOCATION;
+            qDebug() << "cwImageProvider:: can't read image:" << basePath << LOCATION;
             return QImage();
         } else {
             //Just return the image
@@ -355,9 +509,19 @@ cwImageData cwImageProvider::createDxt1(QSize size, const QByteArray &uncompress
     return cwImageData(size, 0, cwImageProvider::dxt1GzExtension(), outputData);
 }
 
-QString cwImageProvider::imageUrl(QString relativePath)
+QString cwImageProvider::imagePath(const cwImage& image, const QString& absolutePath)
 {
-    return QStringLiteral("image://") + cwImageProvider::name() + QStringLiteral("/") + relativePath;
+    QString path = absolutePath;
+    const QFileInfo info(absolutePath);
+    if (info.suffix().compare(QStringLiteral("pdf"), Qt::CaseInsensitive) == 0 && image.page() >= 0) {
+        path += QStringLiteral("#page=%1").arg(image.page() + 1);
+    }
+    return path;
+}
+
+QString cwImageProvider::imageUrl(const cwImage& image, const QString& absolutePath)
+{
+    return QStringLiteral("image://") + cwImageProvider::name() + QStringLiteral("/") + imagePath(image, absolutePath);
 }
 
 quint64 cwImageProvider::imageHash(const QImage &image)

@@ -56,7 +56,8 @@ public:
     static QByteArray cropHeightKey() { return QByteArrayLiteral("height"); }
     static QByteArray cropIdKey() { return QByteArrayLiteral("id"); }
 
-    static QString imageUrl(QString relativePath);
+    static QString imagePath(const cwImage& image, const QString& absolutePath);
+    static QString imageUrl(const cwImage& image, const QString& absolutePath);
 
     static quint64 imageHash(const QImage& image);
     static quint64 fileHash(const QString& path);

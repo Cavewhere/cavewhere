@@ -27,6 +27,7 @@ class CAVEWHERE_LIB_EXPORT cwImage {
     Q_PROPERTY(QSize originalSize READ originalSize WRITE setOriginalSize)
     Q_PROPERTY(int originalDotsPerMeter READ originalDotsPerMeter WRITE setOriginalDotsPerMeter)
     Q_PROPERTY(QString path READ path WRITE setPath)
+    Q_PROPERTY(int page READ page WRITE setPage)
 
 public:
     enum class Mode {
@@ -115,6 +116,14 @@ public:
         return std::get<PathData>(m_data->modeData).path;
     }
 
+    void setPage(int page) {
+        m_data->page = page;
+    }
+
+    int page() const {
+        return m_data->page;
+    }
+
     bool isValid() const {
         //Id mode shouldn't be used, and should only be in old loading code
         return (mode() == Mode::Path && !path().isEmpty())
@@ -155,6 +164,7 @@ private:
     struct SharedData : public QSharedData {
         QSize originalSize;
         int originalDotsPerMeter = 0;
+        int page = -1;
         std::variant<std::monostate, IdData, PathData> modeData;
 
         SharedData() = default;

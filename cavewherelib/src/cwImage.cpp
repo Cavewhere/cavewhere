@@ -34,7 +34,7 @@ QDebug operator<<(QDebug debug, const cwImage &image)
     if(image.mode() == cwImage::Mode::Ids) {
         debug.nospace() << "original:" << image.original() << " icon:" << image.icon() << " mipmaps:" << image.mipmaps() << " size:" << image.originalSize() << " dotPerMeter:" << image.originalDotsPerMeter();;
     } else if(image.mode() == cwImage::Mode::Path) {
-        debug.nospace() << "path:" << image.path() << " size:" << image.originalSize() << " dotPerMeter:" << image.originalDotsPerMeter();
+        debug.nospace() << "path:" << image.path() << " size:" << image.originalSize() << " dotPerMeter:" << image.originalDotsPerMeter() << " page:" << image.page();
     } else {
         debug.nospace() << "cwImage isn't valid";
     }
@@ -47,7 +47,8 @@ bool cwImage::operator==(const cwImage &other) const {
     if (!m_data || !other.m_data) return false;
 
     if (m_data->originalSize != other.m_data->originalSize ||
-        m_data->originalDotsPerMeter != other.m_data->originalDotsPerMeter) {
+        m_data->originalDotsPerMeter != other.m_data->originalDotsPerMeter ||
+        m_data->page != other.m_data->page) {
         return false;
     }
 

@@ -9,6 +9,8 @@
 #include "cwRootData.h"
 #include "cwDiff.h"
 #include "cwJobSettings.h"
+#include "cwPDFSettings.h"
+#include "cwProject.h"
 #include "cwSurveyChunk.h"
 #include "cwSurveyNoteModel.h"
 #include "cwSurveyNoteLiDARModel.h"
@@ -19,7 +21,9 @@
 
 //Qt includes
 #include <QStandardPaths>
+#include <QDir>
 #include <QFileInfo>
+#include <QUrl>
 
 #include <set>
 
@@ -38,6 +42,33 @@ QDir testDir() {
     dir.mkdir("trip");
     dir.cd("trip");
     return dir;
+}
+
+TEST_CASE("cwSaveLoad saves pdf notes with unique filenames", "[cwSaveLoad]") {
+    if (!cwProject::supportedImageFormats().contains("pdf")) {
+        return;
+    }
+
+    cwPDFSettings::initialize();
+
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    cave->addTrip();
+    auto trip = cave->trip(0);
+
+    const QString pdfPath = copyToTempFolder("://datasets/test_cwPDFConverter/2page-test.pdf");
+    trip->notes()->addFromFiles({QUrl::fromLocalFile(pdfPath)});
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    const QDir notesDir = cwSaveLoad::dir(trip->notes());
+    REQUIRE(notesDir.exists());
+    const QStringList noteFiles = notesDir.entryList(QStringList() << "*.cwnote", QDir::Files);
+    REQUIRE(noteFiles.size() == 2);
 }
 
 

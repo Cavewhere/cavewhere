@@ -19,6 +19,8 @@
 #include "cwScrap.h"
 #include "cwPDFConverter.h"
 #include "cwPDFSettings.h"
+#include "cwUnits.h"
+#include "cwPDFSettings.h"
 #include "cwAddImageTask.h"
 #include "cwNoteLiDAR.h"
 #include "cwUniqueConnectionChecker.h"
@@ -38,6 +40,11 @@
 #include <QSaveFile>
 #include <QSet>
 #include <QImageReader>
+#include <cmath>
+
+#ifdef WITH_PDF_SUPPORT
+#include <QPdfDocument>
+#endif
 #include <QImage>
 #include <QUuid>
 #include <QtCore/qscopeguard.h>
@@ -1033,28 +1040,61 @@ void cwSaveLoad::addImages(QList<QUrl> noteImagePaths,
 
     // Optional: process PDFs into images, then emit. Kept separate to preserve ordering and avoid surprises.
     if (!pdfFilePaths.isEmpty() && cwPDFConverter::isSupported()) {
-        // Convert each PDF to one or more image files in the destination directory, then re-use the same pipe.
-        QList<QString> convertedImageSources;
+#ifdef WITH_PDF_SUPPORT
+        const QDir rootDirectory = projectDir();
+        const int resolutionPpi = cwPDFSettings::instance()->resolutionImport();
+        const double scale = resolutionPpi / 72.0;
+        const int dotsPerMeter = qRound(cwUnits::convert(resolutionPpi,
+                                                        cwUnits::DotsPerInch,
+                                                        cwUnits::DotsPerMeter));
 
-        //TODO: Add PDF support back in
-        // for (const QString& pdfPath : std::as_const(pdfFilePaths)) {
-        //     // Replace this with your real converter API.
-        //     // Expected: it writes image files into dir and returns absolute paths to those new images.
-        //     const QStringList newImages = cwPDFConverter::convertToImages(pdfPath, dir.absolutePath());
-        //     for (const QString& newImagePath : newImages) {
-        //         convertedImageSources.append(newImagePath);
-        //     }
-        // }
+        auto makeImagesFromPdf = [rootDirectory, resolutionPpi, scale, dotsPerMeter](const QString& relativePath) {
+            QList<cwImage> images;
+            const QString absolutePath = rootDirectory.absoluteFilePath(relativePath);
 
-        if (!convertedImageSources.isEmpty()) {
-            const QDir rootDirectory = projectDir();
-            copyFilesAndEmitResults<cwImage>(
-                convertedImageSources,
-                dir,
-                makeImageFromRelativePath(rootDirectory),
-                outputCallBackFunc
-                );
-        }
+            QPdfDocument document;
+            if (document.load(absolutePath) != QPdfDocument::Error::None) {
+                qWarning() << "Failed to load PDF:" << absolutePath;
+                return images;
+            }
+
+            const int pageCount = document.pageCount();
+            const QString fileName = QFileInfo(relativePath).fileName();
+
+            images.reserve(pageCount);
+            for (int pageIndex = 0; pageIndex < pageCount; ++pageIndex) {
+                const QSizeF pagePoints = document.pagePointSize(pageIndex);
+                const QSize pixelSize(std::round(pagePoints.width() * scale),
+                                      std::round(pagePoints.height() * scale));
+
+                cwImage image;
+                image.setPath(fileName);
+                image.setOriginalSize(pixelSize);
+                image.setOriginalDotsPerMeter(dotsPerMeter);
+                image.setPage(pageIndex);
+                images.append(image);
+            }
+
+            return images;
+        };
+
+        copyFilesAndEmitResults<QString>(
+            pdfFilePaths,
+            dir,
+            makeRelativePathEcho(),
+            [makeImagesFromPdf, outputCallBackFunc](QList<QString> relativePaths) {
+                QList<cwImage> allImages;
+                for (const QString& relativePath : relativePaths) {
+                    allImages.append(makeImagesFromPdf(relativePath));
+                }
+                if (!allImages.isEmpty()) {
+                    outputCallBackFunc(allImages);
+                }
+            }
+            );
+#else
+        qWarning() << "PDF support not enabled for cwSaveLoad::addImages";
+#endif
     }
 }
 
@@ -1631,6 +1671,9 @@ Monad::Result<cwNoteData> cwSaveLoad::loadNote(const QString &filename, const QD
         const QString rawImagePath = QString::fromStdString(protoNote.image().path());
         const QString imageFileName = QFileInfo(rawImagePath).fileName();
         noteData.image.setPath(imageFileName.isEmpty() ? rawImagePath : imageFileName);
+        if (protoNote.image().has_page()) {
+            noteData.image.setPage(protoNote.image().page());
+        }
 
         noteData.image.setOriginalSize(cwRegionLoadTask::loadSize(protoNote.image().size()));
         noteData.image.setOriginalDotsPerMeter(protoNote.image().dotpermeter());

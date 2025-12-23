@@ -506,13 +506,6 @@ TEST_CASE("Non-temporary project saveAs reports error when destination exists", 
 
 TEST_CASE("cwProject should add PDF correctly", "[cwProject]") {
     if(cwProject::supportedImageFormats().contains("pdf")) {
-        auto rootData = std::make_unique<cwRootData>();
-        auto project = rootData->project();
-
-        QList<QUrl> filenames {
-            QUrl::fromLocalFile(copyToTempFolder("://datasets/test_cwPDFConverter/2page-test.pdf"))
-        };
-
         struct Row {
             QList<QSize> pageSizes;
             int resolutionPPI;
@@ -536,18 +529,35 @@ TEST_CASE("cwProject should add PDF correctly", "[cwProject]") {
             }
         };
 
-        for(auto row : rows) {
+        for(const auto& row : rows) {
+            cwPDFSettings::initialize();
+            auto rootData = std::make_unique<cwRootData>();
+            auto project = rootData->project();
+
+            auto region = project->cavingRegion();
+            region->addCave();
+            auto cave = region->cave(0);
+            cave->addTrip();
+            auto trip = cave->trip(0);
+
+            const QString pdfPath = copyToTempFolder("://datasets/test_cwPDFConverter/2page-test.pdf");
+
             cwPDFSettings::instance()->setResolutionImport(row.resolutionPPI);
 
-            project->addImages(filenames, cwSaveLoad::projectDir(project), [row](QList<cwImage> images){
-                REQUIRE(images.size() == 2);
-                CHECK(images.at(0).isOriginalValid());
-                CHECK(images.at(0).isIconValid());
-                CHECK(row.pageSizes.contains(images.at(0).originalSize()));
-                CHECK(row.pageSizes.contains(images.at(1).originalSize()));
-            });
-
+            trip->notes()->addFromFiles({QUrl::fromLocalFile(pdfPath)});
             rootData->futureManagerModel()->waitForFinished();
+
+            const QList<cwNote*> notes = trip->notes()->notes();
+            REQUIRE(notes.size() == 2);
+
+            QList<int> pageIndexes;
+            for (const cwNote* note : notes) {
+                CHECK(row.pageSizes.contains(note->image().originalSize()));
+                pageIndexes.append(note->image().page());
+            }
+
+            CHECK(pageIndexes.contains(0));
+            CHECK(pageIndexes.contains(1));
         }
     }
 }

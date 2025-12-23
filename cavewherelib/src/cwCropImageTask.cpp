@@ -8,28 +8,19 @@
 
 //Our includes
 #include "cwCropImageTask.h"
-#include "cwImageData.h"
-#include "cwDebug.h"
 #include "cwConcurrent.h"
 #include "cwDiskCacher.h"
+#include "cwDebug.h"
 
+//Async future
+#include <asyncfuture.h>
 
 //Qt includes
-#include <QByteArray>
-#include <QBuffer>
-#include <QImageWriter>
-#include <QList>
 #include <QColorSpace>
-#include <QJsonDocument>
-
-//TODO: REMOVE for testing only
-#include <QFile>
+#include <cmath>
 
 //Std includes
 #include <algorithm>
-
-//Async Future
-#include <asyncfuture.h>
 
 cwCropImageTask::cwCropImageTask(QObject* parent) :
     cwProjectIOTask(parent) {
@@ -120,9 +111,13 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
     };
 
     auto cropImage = [filename, originalImage, cropRect, addCropToDatabase, hash]()->Image {
-            // cwImageProvider provider;
-            // provider.setProjectPath(filename);
-            QImage image = QImage(originalImage.path());
+            const QString originalPath = originalImage.path();
+            cwImageProvider provider;
+            provider.setProjectPath(filename);
+            const QString requestPath = cwImageProvider::imagePath(originalImage, originalPath);
+
+            QSize imageSize;
+            QImage image = provider.requestImage(requestPath, &imageSize, QSize());
             image.setColorSpace(QColorSpace());
             QRect cropArea = nearestDXT1Rect(mapNormalizedToIndex(cropRect,
                                                                   image.size()));
@@ -216,4 +211,3 @@ QRect cwCropImageTask::nearestDXT1Rect(QRect rect)
     return QRect(QPoint(nearestFloor(rect.left()), nearestFloor(rect.top())),
                  QSize(nearestCeiling(rect.width()), nearestCeiling(rect.height())));
 }
-
