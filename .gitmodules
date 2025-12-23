@@ -37,3 +37,15 @@
 [submodule "qtkeychain"]
 	path = qtkeychain
 	url = git@github.com:vpicaver/qtkeychain.git
+[submodule "installer/linux/linuxdeploy"]
+	path = installer/linux/linuxdeploy
+	url = https://github.com/linuxdeploy/linuxdeploy
+[submodule "installer/linux/linuxdeploy-plugin-appimage"]
+	path = installer/linux/linuxdeploy-plugin-appimage
+	url = https://github.com/linuxdeploy/linuxdeploy-plugin-appimage
+[submodule "installer/linux/linuxdeploy-plugin-qt"]
+	path = installer/linux/linuxdeploy-plugin-qt
+	url = https://github.com/linuxdeploy/linuxdeploy-plugin-qt
+[submodule "installer/linux/appimagetool"]
+	path = installer/linux/appimagetool
+	url = https://github.com/AppImage/appimagetool

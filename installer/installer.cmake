@@ -1,24 +1,29 @@
-# Determine the target OS
-find_package(Qt6 COMPONENTS Core)
-get_target_property(QtCore_location Qt6::Core LOCATION)
-get_filename_component(Qt_bin_dir ${QtCore_location} DIRECTORY)
-
-#set(conanbuildinfo ${CMAKE_BINARY_DIR}/conan-dependencies/conanbuildinfo.cmake)
-#include(${conanbuildinfo})
-
-# If Qt_bin_dir is empty
-if(NOT Qt_bin_dir)
-    set(Qt_bin_dir ${CONAN_BIN_DIRS_QT})
-endif()
-
-# if Qt_bin_dir doesn't exist
-if(NOT Qt_bin_dir)
-    message(FATAL_ERROR "Qt bin dir not found")
-endif()
-
 set(CAVEWHERE_NAME "Cavewhere")
+set(LINUXDEPLOY_EXECUTABLE "" CACHE FILEPATH "Path to linuxdeploy")
+set(LINUXDEPLOY_QT_PLUGIN_EXECUTABLE "" CACHE FILEPATH "Path to linuxdeploy-plugin-qt")
+set(LINUXDEPLOY_APPIMAGE_PLUGIN_EXECUTABLE "" CACHE FILEPATH "Path to linuxdeploy-plugin-appimage")
+set(QMAKE_EXECUTABLE "" CACHE FILEPATH "Path to qmake")
+set(APPIMAGETOOL_EXECUTABLE "" CACHE FILEPATH "Path to appimagetool")
+set(APPIMAGE_RUNTIME_FILE "" CACHE FILEPATH "Path to AppImage runtime (optional)")
 
 if(WIN32)
+    # Determine the target OS
+    find_package(Qt6 COMPONENTS Core)
+    get_target_property(QtCore_location Qt6::Core LOCATION)
+    get_filename_component(Qt_bin_dir ${QtCore_location} DIRECTORY)
+
+    #set(conanbuildinfo ${CMAKE_BINARY_DIR}/conan-dependencies/conanbuildinfo.cmake)
+    #include(${conanbuildinfo})
+
+    # If Qt_bin_dir is empty
+    if(NOT Qt_bin_dir)
+        set(Qt_bin_dir ${CONAN_BIN_DIRS_QT})
+    endif()
+
+    # if Qt_bin_dir doesn't exist
+    if(NOT Qt_bin_dir)
+        message(FATAL_ERROR "Qt bin dir not found")
+    endif()
     set(DEPLOY_DIR "${CMAKE_BINARY_DIR}/deploy")
 
     include(InstallRequiredSystemLibraries)
@@ -27,8 +32,14 @@ if(WIN32)
     set(CAVEWHER_BINARY_PATH "${DEPLOY_DIR}/CaveWhere${CMAKE_EXECUTABLE_SUFFIX}")
     get_target_property(CAVEWHERE_SOURCE_DIR CaveWhere SOURCE_DIR)
 
-    # Define the destination directory
+    # Define QML source directories for linuxdeploy-plugin-qt scanning.
     set(QML_DIR "${CMAKE_BINARY_DIR}/cavewherelib")
+    set(QML_SOURCE_DIRS
+        "${CMAKE_SOURCE_DIR}/cavewherelib/qml"
+        "${CMAKE_SOURCE_DIR}/QQuickGit/qml"
+        "${CMAKE_SOURCE_DIR}/sketch/qml"
+    )
+    string(JOIN ":" QML_SOURCES_PATHS ${QML_SOURCE_DIRS})
     set(DEPLOY_SURVEX_DIR "${DEPLOY_DIR}/survex")
     set(SURVEX_BIN_DIR "${BINARY_DIR}/survex")
 
@@ -187,4 +198,228 @@ if(WIN32)
     # Make sure your main target depends on this custom target
     add_dependencies(windowsInstaller deployCavewhere)
 
+endif()
+
+if(UNIX AND NOT APPLE)
+    set(APPIMAGE_ROOT_DIR "${CMAKE_BINARY_DIR}/appimage")
+    set(APPIMAGE_APPDIR "${APPIMAGE_ROOT_DIR}/AppDir")
+    set(APPIMAGE_USR_DIR "${APPIMAGE_APPDIR}/usr")
+    set(APPIMAGE_BIN_DIR "${APPIMAGE_USR_DIR}/bin")
+    set(APPIMAGE_LIB_DIR "${APPIMAGE_USR_DIR}/lib")
+    set(APPIMAGE_SHARE_DIR "${APPIMAGE_USR_DIR}/share")
+    set(APPIMAGE_APPLICATIONS_DIR "${APPIMAGE_SHARE_DIR}/applications")
+    set(APPIMAGE_QML_DIR "${APPIMAGE_USR_DIR}/qml")
+    set(APPIMAGE_ICONS_DIR "${APPIMAGE_SHARE_DIR}/icons/hicolor/512x512/apps")
+    set(APPIMAGE_DESKTOP_IN "${CMAKE_SOURCE_DIR}/installer/linux/CaveWhere.desktop.in")
+    set(APPIMAGE_APPRUN_IN "${CMAKE_SOURCE_DIR}/installer/linux/AppRun.in")
+    set(APPIMAGE_DESKTOP_FILE "${APPIMAGE_ROOT_DIR}/CaveWhere.desktop")
+    set(APPIMAGE_APPRUN_FILE "${APPIMAGE_ROOT_DIR}/AppRun")
+    set(APPIMAGE_ICON_SOURCE "${CMAKE_SOURCE_DIR}/cavewherelib/icons/cave512x512.png")
+    set(APPIMAGE_ICON_TARGET "${APPIMAGE_ICONS_DIR}/CaveWhere.png")
+    set(APPIMAGE_STAGE_STAMP "${APPIMAGE_ROOT_DIR}/appimage-stage.stamp")
+
+    set(QML_SOURCE_DIRS
+        "${CMAKE_SOURCE_DIR}/cavewherelib/qml"
+        "${CMAKE_SOURCE_DIR}/QQuickGit/qml"
+        "${CMAKE_SOURCE_DIR}/sketch/qml"
+    )
+    string(JOIN ":" QML_SOURCES_PATHS ${QML_SOURCE_DIRS})
+
+    if(EXISTS "${CMAKE_BINARY_DIR}/cavewherelib/current_git_hash.txt")
+        include("${CMAKE_SOURCE_DIR}/cavewherelib/GitHash.cmake")
+        get_hash("${CMAKE_BINARY_DIR}/cavewherelib/current_git_hash.txt" CAVEWHERE_VERSION)
+    else()
+        set(CAVEWHERE_VERSION "${PROJECT_VERSION}")
+    endif()
+
+    configure_file("${APPIMAGE_DESKTOP_IN}" "${APPIMAGE_DESKTOP_FILE}" @ONLY)
+    configure_file("${APPIMAGE_APPRUN_IN}" "${APPIMAGE_APPRUN_FILE}" @ONLY)
+
+    if(NOT EXISTS "${APPIMAGE_ICON_SOURCE}")
+        message(FATAL_ERROR "AppImage icon not found: ${APPIMAGE_ICON_SOURCE}")
+    endif()
+
+    if(TARGET linuxdeploy)
+        set(LINUXDEPLOY_EXECUTABLE "$<TARGET_FILE:linuxdeploy>")
+    elseif(NOT LINUXDEPLOY_EXECUTABLE)
+        find_program(LINUXDEPLOY_EXECUTABLE linuxdeploy)
+    endif()
+
+    if(TARGET linuxdeploy-plugin-qt)
+        set(LINUXDEPLOY_QT_PLUGIN_EXECUTABLE "$<TARGET_FILE:linuxdeploy-plugin-qt>")
+    elseif(NOT LINUXDEPLOY_QT_PLUGIN_EXECUTABLE)
+        find_program(LINUXDEPLOY_QT_PLUGIN_EXECUTABLE linuxdeploy-plugin-qt)
+    endif()
+
+    if(TARGET linuxdeploy-plugin-appimage)
+        set(LINUXDEPLOY_APPIMAGE_PLUGIN_EXECUTABLE "$<TARGET_FILE:linuxdeploy-plugin-appimage>")
+    elseif(NOT LINUXDEPLOY_APPIMAGE_PLUGIN_EXECUTABLE)
+        find_program(LINUXDEPLOY_APPIMAGE_PLUGIN_EXECUTABLE linuxdeploy-plugin-appimage)
+    endif()
+
+    if(NOT LINUXDEPLOY_EXECUTABLE)
+        message(FATAL_ERROR "linuxdeploy not found; set LINUXDEPLOY_EXECUTABLE or add it to PATH.")
+    endif()
+
+    if(NOT LINUXDEPLOY_QT_PLUGIN_EXECUTABLE)
+        message(FATAL_ERROR "linuxdeploy-plugin-qt not found; set LINUXDEPLOY_QT_PLUGIN_EXECUTABLE or add it to PATH.")
+    endif()
+
+    if(NOT LINUXDEPLOY_APPIMAGE_PLUGIN_EXECUTABLE)
+        message(FATAL_ERROR "linuxdeploy-plugin-appimage not found; set LINUXDEPLOY_APPIMAGE_PLUGIN_EXECUTABLE or add it to PATH.")
+    endif()
+
+    if(NOT QMAKE_EXECUTABLE AND TARGET Qt6::Core)
+        get_target_property(QtCore_location Qt6::Core IMPORTED_LOCATION_RELEASE)
+        if(NOT QtCore_location)
+            get_target_property(QtCore_location Qt6::Core IMPORTED_LOCATION)
+        endif()
+        if(QtCore_location)
+            get_filename_component(Qt_lib_dir "${QtCore_location}" DIRECTORY)
+            get_filename_component(Qt_prefix "${Qt_lib_dir}" DIRECTORY)
+            if(EXISTS "${Qt_prefix}/bin/qmake")
+                set(QMAKE_EXECUTABLE "${Qt_prefix}/bin/qmake")
+            elseif(EXISTS "${Qt_prefix}/bin/qmake6")
+                set(QMAKE_EXECUTABLE "${Qt_prefix}/bin/qmake6")
+            endif()
+        endif()
+    endif()
+
+    if(NOT QMAKE_EXECUTABLE)
+        if(DEFINED qt_Qt6_Core_BIN_DIRS_RELEASE)
+            set(Qt_bin_dir "${qt_Qt6_Core_BIN_DIRS_RELEASE}")
+        elseif(DEFINED qt_Qt6_Core_BIN_DIRS)
+            set(Qt_bin_dir "${qt_Qt6_Core_BIN_DIRS}")
+        else()
+            set(Qt_bin_dir "")
+        endif()
+
+        if(Qt_bin_dir AND EXISTS "${Qt_bin_dir}/qmake")
+            set(QMAKE_EXECUTABLE "${Qt_bin_dir}/qmake")
+        elseif(Qt_bin_dir AND EXISTS "${Qt_bin_dir}/qmake6")
+            set(QMAKE_EXECUTABLE "${Qt_bin_dir}/qmake6")
+        endif()
+    endif()
+
+    if(NOT QMAKE_EXECUTABLE)
+        find_program(QMAKE_EXECUTABLE NAMES qmake qmake6)
+    endif()
+
+    set(QMAKE_ENV "")
+    set(QT_LIBEXECS_DIR "")
+    if(QMAKE_EXECUTABLE)
+        set(QMAKE_ENV "QMAKE=${QMAKE_EXECUTABLE}")
+        execute_process(
+            COMMAND "${QMAKE_EXECUTABLE}" -query QT_INSTALL_LIBEXECS
+            OUTPUT_VARIABLE QT_LIBEXECS_DIR
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+        execute_process(
+            COMMAND "${QMAKE_EXECUTABLE}" -query QT_INSTALL_QML
+            OUTPUT_VARIABLE QT_INSTALL_QML_DIR
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+    endif()
+
+    set(LINUXDEPLOY_QT_PLUGIN_DIR "")
+    set(LINUXDEPLOY_APPIMAGE_PLUGIN_DIR "")
+    set(APPIMAGETOOL_DIR "")
+
+    if(TARGET linuxdeploy-plugin-qt)
+        set(LINUXDEPLOY_QT_PLUGIN_DIR "$<TARGET_FILE_DIR:linuxdeploy-plugin-qt>")
+    else()
+        get_filename_component(LINUXDEPLOY_QT_PLUGIN_DIR "${LINUXDEPLOY_QT_PLUGIN_EXECUTABLE}" DIRECTORY)
+    endif()
+
+    if(TARGET linuxdeploy-plugin-appimage)
+        set(LINUXDEPLOY_APPIMAGE_PLUGIN_DIR "$<TARGET_FILE_DIR:linuxdeploy-plugin-appimage>")
+    else()
+        get_filename_component(LINUXDEPLOY_APPIMAGE_PLUGIN_DIR "${LINUXDEPLOY_APPIMAGE_PLUGIN_EXECUTABLE}" DIRECTORY)
+    endif()
+
+    if(APPIMAGETOOL_EXECUTABLE)
+        get_filename_component(APPIMAGETOOL_DIR "${APPIMAGETOOL_EXECUTABLE}" DIRECTORY)
+    endif()
+
+    set(LINUXDEPLOY_ENV_PATH "${LINUXDEPLOY_QT_PLUGIN_DIR}:${LINUXDEPLOY_APPIMAGE_PLUGIN_DIR}:${APPIMAGETOOL_DIR}:${QT_LIBEXECS_DIR}:$ENV{PATH}")
+
+    # Define the destination directory
+    set(QML_DIR "${CMAKE_BINARY_DIR}/cavewherelib")
+
+    set(APPIMAGE_QML_COPY_COMMANDS "")
+    if(QT_INSTALL_QML_DIR)
+        list(APPEND APPIMAGE_QML_COPY_COMMANDS
+            COMMAND ${CMAKE_COMMAND} -E copy_directory "${QT_INSTALL_QML_DIR}" "${APPIMAGE_QML_DIR}"
+        )
+    endif()
+
+    add_custom_command(
+        OUTPUT ${APPIMAGE_STAGE_STAMP}
+        COMMAND ${CMAKE_COMMAND} -E remove_directory "${APPIMAGE_APPDIR}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${APPIMAGE_BIN_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${APPIMAGE_LIB_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${APPIMAGE_APPLICATIONS_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${APPIMAGE_QML_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${APPIMAGE_ICONS_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:CaveWhere>" "${APPIMAGE_BIN_DIR}/CaveWhere"
+        COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:cavern>" "${APPIMAGE_BIN_DIR}/cavern"
+        COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:survexport>" "${APPIMAGE_BIN_DIR}/survexport"
+        COMMAND ${CMAKE_COMMAND} -E copy ${SVX_MESSAGE_FILES} "${APPIMAGE_LIB_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E copy "${APPIMAGE_DESKTOP_FILE}" "${APPIMAGE_APPLICATIONS_DIR}/CaveWhere.desktop"
+        COMMAND ${CMAKE_COMMAND} -E copy "${APPIMAGE_APPRUN_FILE}" "${APPIMAGE_APPDIR}/AppRun"
+        COMMAND ${CMAKE_COMMAND} -E copy "${APPIMAGE_ICON_SOURCE}" "${APPIMAGE_ICON_TARGET}"
+        ${APPIMAGE_QML_COPY_COMMANDS}
+        COMMAND ${CMAKE_COMMAND} -E env /bin/sh -c "chmod +x \"${APPIMAGE_APPDIR}/AppRun\""
+        COMMAND ${CMAKE_COMMAND} -E touch "${APPIMAGE_STAGE_STAMP}"
+        DEPENDS
+            CaveWhere
+            cavern
+            survexport
+            ${SVX_MESSAGE_FILES}
+            messageFiles
+            "${APPIMAGE_DESKTOP_FILE}"
+            "${APPIMAGE_APPRUN_FILE}"
+        COMMENT "Staging AppDir for AppImage"
+        VERBATIM
+    )
+
+    set(APPIMAGE_DEPENDENCIES ${APPIMAGE_STAGE_STAMP})
+
+    if(TARGET linuxdeploy_ep)
+        list(APPEND APPIMAGE_DEPENDENCIES linuxdeploy_ep)
+    endif()
+    if(TARGET linuxdeploy_plugin_qt_ep)
+        list(APPEND APPIMAGE_DEPENDENCIES linuxdeploy_plugin_qt_ep)
+    endif()
+    if(TARGET linuxdeploy_plugin_appimage_ep)
+        list(APPEND APPIMAGE_DEPENDENCIES linuxdeploy_plugin_appimage_ep)
+    endif()
+    if(TARGET appimagetool_ep)
+        list(APPEND APPIMAGE_DEPENDENCIES appimagetool_ep)
+    endif()
+
+    set(APPIMAGE_RUNTIME_ENV "")
+    if(APPIMAGE_RUNTIME_FILE)
+        set(APPIMAGE_RUNTIME_ENV "LDAI_RUNTIME_FILE=${APPIMAGE_RUNTIME_FILE}")
+    endif()
+
+    add_custom_target(appimageInstaller
+        COMMAND ${CMAKE_COMMAND} -P "${CMAKE_SOURCE_DIR}/installer/linux/CheckPatchelf.cmake"
+        COMMAND ${CMAKE_COMMAND} -D QMAKE_EXECUTABLE="${QMAKE_EXECUTABLE}" -P "${CMAKE_SOURCE_DIR}/installer/linux/CheckQmake.cmake"
+        COMMAND ${CMAKE_COMMAND} -E env "PATH=${LINUXDEPLOY_ENV_PATH}" ${QMAKE_ENV} ${APPIMAGE_RUNTIME_ENV}
+            "QML_SOURCES_PATHS=${QML_SOURCES_PATHS}"
+            "${LINUXDEPLOY_EXECUTABLE}"
+            --appdir "${APPIMAGE_APPDIR}"
+            --executable "${APPIMAGE_BIN_DIR}/CaveWhere"
+            --executable "${APPIMAGE_BIN_DIR}/cavern"
+            --executable "${APPIMAGE_BIN_DIR}/survexport"
+            --desktop-file "${APPIMAGE_DESKTOP_FILE}"
+            --icon-file "${APPIMAGE_ICON_TARGET}"
+            --plugin qt
+            --output appimage
+        DEPENDS ${APPIMAGE_DEPENDENCIES}
+        WORKING_DIRECTORY "${APPIMAGE_ROOT_DIR}"
+        COMMENT "Building AppImage"
+        VERBATIM
+    )
 endif()

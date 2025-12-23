@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=CaveWhere
+Comment=Cave mapping and survey software
+Exec=CaveWhere
+Icon=CaveWhere
+Terminal=false
+Categories=Science;Graphics;
+X-AppImage-Version=@CAVEWHERE_VERSION@

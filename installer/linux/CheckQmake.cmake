@@ -1,0 +1,11 @@
+if(DEFINED QMAKE_EXECUTABLE AND QMAKE_EXECUTABLE)
+    set(QMAKE_PATH "${QMAKE_EXECUTABLE}")
+elseif(DEFINED ENV{QMAKE} AND NOT "$ENV{QMAKE}" STREQUAL "")
+    set(QMAKE_PATH "$ENV{QMAKE}")
+else()
+    find_program(QMAKE_PATH NAMES qmake qmake6)
+endif()
+
+if(NOT QMAKE_PATH)
+    message(FATAL_ERROR "qmake not found. Install it or configure with -DQMAKE_EXECUTABLE=/full/path/to/qmake.")
+endif()
