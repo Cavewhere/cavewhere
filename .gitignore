@@ -9,6 +9,7 @@ docs/*
 *.qmlc
 *.jsc
 .DS_Store
+CMakeUserPresets.json
 Cavewhere.app/Contents/Info.plist
 Cavewhere.app/Contents/MacOS/Cavewhere
 qt5-3-1-debug/*
