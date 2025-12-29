@@ -95,3 +95,4 @@ void cwNoteCamera::resize(const QSize& windowSize)
 
     setViewport(QRect(QPoint(0.0, 0.0), windowSize));
 }
+#include <QtGlobal>

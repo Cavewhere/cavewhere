@@ -128,14 +128,21 @@ cwTriangulatedData cwTriangulateTask::triangulateGeometry(const cwTriangulateInD
     //Create the texture coordinates
     QVector<QVector2D> texCoords = mapTexCoordinates(localNotePoints);
 
+    const QSize noteImageSize = scrap.noteImage().originalSize();
+    const QSizeF cropSizeInNoteUnits(noteImageSize.width() * bounds.width(),
+                                     noteImageSize.height() * bounds.height());
+
     //Morph the points for the scrap
-    QVector<QVector3D> points = morphPoints(scrapGeometry.points, scrap, toLocal, *croppedImage);
+    QVector<QVector3D> points = morphPoints(scrapGeometry.points,
+                                            scrap,
+                                            toLocal,
+                                            cropSizeInNoteUnits);
 
     //Morph the lead points for the scrap
     QVector<QVector3D> leadPoints = morphPoints(leadPositionToVector3D(scrap.leads()),
                                                 scrap,
                                                 toLocal,
-                                                *croppedImage);
+                                                cropSizeInNoteUnits);
 
 
     cwGeometry geometry {
@@ -171,13 +178,16 @@ cwTriangulateTask::PointGrid cwTriangulateTask::createPointGrid(QRectF bounds, c
 
     cwNoteTransformationData noteTransform = scrapData.noteTransform();
 
-    QSize scrapImageSize = scrapData.noteImage().originalSize();
-    double sizeOnPaperX = scrapImageSize.width() / scrapData.noteImageResolution(); //in meters
-    double sizeOnPaperY = scrapImageSize.height() / scrapData.noteImageResolution(); //in meters
+    const cwImage noteImage = scrapData.noteImage();
+    const QSize scrapImageSize = noteImage.originalSize();
+    const double sizeOnPaperX = scrapImageSize.width() / scrapData.noteImageResolution(); //in meters
+    const double sizeOnPaperY = scrapImageSize.height() / scrapData.noteImageResolution(); //in meters
 
     cwScale noteScale;
     noteScale.setData(noteTransform.scale);
     double scale = noteScale.scale(); //scale for the notes
+
+    // qDebug() << "SizeOnPaperX:" << scrapImageSize << scrapData.noteImageResolution() << sizeOnPaperX << sizeOnPaperY << "Scale:" << scale << 1.0/scale;
 
     QTransform toCave;
     toCave.scale(sizeOnPaperX / scale, sizeOnPaperY / scale);
@@ -688,7 +698,7 @@ QVector<QVector2D> cwTriangulateTask::mapTexCoordinates(const QVector<QVector3D>
 QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& notePoints,
                                                   const cwTriangulateInData& scrapData,
                                                   const QMatrix4x4& toLocal,
-                                                  const cwImage& croppedImage) {
+                                                  const QSizeF& cropSizeInNoteUnits) {
 
 
     /**
@@ -952,12 +962,11 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
         return smoothed;
     };
 
-    QSize imageSize = croppedImage.originalSize();
     double metersPerDot = 1.0 / (double)scrapData.noteImageResolution();
 
     //For right now try to map
     QMatrix4x4 toPixels;
-    toPixels.scale(imageSize.width(), imageSize.height(), 1.0);
+    toPixels.scale(cropSizeInNoteUnits.width(), cropSizeInNoteUnits.height(), 1.0);
 
     QMatrix4x4 toMetersOnPaper;
     toMetersOnPaper.scale(metersPerDot, metersPerDot, 1.0);

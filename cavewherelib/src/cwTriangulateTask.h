@@ -290,7 +290,7 @@ private:
     static QVector<QVector3D> morphPoints(const QVector<QVector3D> &notePoints,
                                           const cwTriangulateInData &scrapData,
                                           const QMatrix4x4& toLocal,
-                                          const cwImage& croppedImage);
+                                          const QSizeF& cropSizeInNoteUnits);
     static QList<cwTriangulateStation> stationsVisibleToPoint(const QVector3D& point,
                                                               const QList<cwTriangulateStation>& stations,
                                                               const QPolygonF& scrapOutline);

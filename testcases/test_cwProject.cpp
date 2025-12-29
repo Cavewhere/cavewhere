@@ -22,6 +22,7 @@ using namespace Catch;
 #include "cwNoteLiDAR.h"
 #include "cwError.h"
 #include "cwErrorListModel.h"
+#include "cwUnits.h"
 
 //Qt includes
 #include <QtCore/qdiriterator.h>
@@ -507,7 +508,7 @@ TEST_CASE("Non-temporary project saveAs reports error when destination exists", 
 TEST_CASE("cwProject should add PDF correctly", "[cwProject]") {
     if(cwProject::supportedImageFormats().contains("pdf")) {
         struct Row {
-            QList<QSize> pageSizes;
+            QList<QSize> pixelSizes;
             int resolutionPPI;
         };
 
@@ -550,10 +551,19 @@ TEST_CASE("cwProject should add PDF correctly", "[cwProject]") {
             const QList<cwNote*> notes = trip->notes()->notes();
             REQUIRE(notes.size() == 2);
 
+            QList<QSize> expectedPointSizes;
+            expectedPointSizes.reserve(row.pixelSizes.size());
+            for (const QSize& pixelSize : row.pixelSizes) {
+                expectedPointSizes.append(QSize(qRound(pixelSize.width() * 72.0 / row.resolutionPPI),
+                                                qRound(pixelSize.height() * 72.0 / row.resolutionPPI)));
+            }
+
             QList<int> pageIndexes;
             for (const cwNote* note : notes) {
-                CHECK(row.pageSizes.contains(note->image().originalSize()));
-                pageIndexes.append(note->image().page());
+                const cwImage image = note->image();
+                CHECK(expectedPointSizes.contains(image.originalSize()));
+                CHECK(image.unit() == cwImage::Unit::Points);
+                pageIndexes.append(image.page());
             }
 
             CHECK(pageIndexes.contains(0));

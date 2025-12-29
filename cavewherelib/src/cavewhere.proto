@@ -86,6 +86,12 @@ message Note {
 
 //This is a legacy message, do not use
 message Image {
+    enum Unit {
+        Pixels = 0;
+        Points = 1;
+        SvgUnits = 2;
+    }
+
     optional int32 legacy_originalId = 1;
     optional int32 legacy_iconId = 2;
     repeated int32 legacy_mipmapIds = 3;
@@ -94,6 +100,8 @@ message Image {
     optional QtProto.QSizeF OBSOLETE_clipArea = 6; //Not need anymore
     optional string path = 7;
     optional int32 page = 8;
+    reserved 9;
+    optional Unit imageUnit = 10;
 }
 
 message TripCalibration {

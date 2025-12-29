@@ -146,7 +146,7 @@ void cwScrapView::setZoom(double zoom)
 
 QTransform cwScrapView::toImage(cwNote *note)
 {
-    auto imageSize = note->image().originalSize();
+    auto imageSize = note->renderSize();
     QTransform transform;
     transform.scale(imageSize.width(), imageSize.height());
     transform.scale(1.0, -1.0);

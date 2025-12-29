@@ -13,6 +13,7 @@
 #include <QMatrix4x4>
 #include <QQmlEngine>
 #include <QPropertyBinding>
+#include <QSizeF>
 
 //Our includes
 #include "cwImage.h"
@@ -65,6 +66,8 @@ public:
 
     QMatrix4x4 scaleMatrix() const;
     QMatrix4x4 metersOnPageMatrix() const;
+    QSizeF physicalSize() const;
+    QSize renderSize() const;
 
     void addScrap(cwScrap* scrap);
     cwScrap* scrap(int scrap) const;

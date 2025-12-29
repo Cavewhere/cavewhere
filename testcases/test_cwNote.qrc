@@ -2,5 +2,6 @@
     <qresource prefix="/">
         <file>datasets/test_cwNote/basic.cw</file>
         <file>datasets/test_cwNote/testpage.png</file>
+        <file>datasets/test_cwNote/bb-pdf-dpi-test.zip</file>
     </qresource>
 </RCC>

@@ -14,6 +14,7 @@
 #include <QDebug>
 #include <QVector2D>
 #include <QVector>
+#include <cmath>
 
 bool cwImage::isMipmapsValid() const {
     if (!std::holds_alternative<IdData>(m_data->modeData)) {
@@ -34,7 +35,7 @@ QDebug operator<<(QDebug debug, const cwImage &image)
     if(image.mode() == cwImage::Mode::Ids) {
         debug.nospace() << "original:" << image.original() << " icon:" << image.icon() << " mipmaps:" << image.mipmaps() << " size:" << image.originalSize() << " dotPerMeter:" << image.originalDotsPerMeter();;
     } else if(image.mode() == cwImage::Mode::Path) {
-        debug.nospace() << "path:" << image.path() << " size:" << image.originalSize() << " dotPerMeter:" << image.originalDotsPerMeter() << " page:" << image.page();
+        debug.nospace() << "path:" << image.path() << " size:" << image.originalSize() << " dotPerMeter:" << image.originalDotsPerMeter() << " page:" << image.page() << " unit:" << static_cast<int>(image.unit());
     } else {
         debug.nospace() << "cwImage isn't valid";
     }
@@ -48,7 +49,8 @@ bool cwImage::operator==(const cwImage &other) const {
 
     if (m_data->originalSize != other.m_data->originalSize ||
         m_data->originalDotsPerMeter != other.m_data->originalDotsPerMeter ||
-        m_data->page != other.m_data->page) {
+        m_data->page != other.m_data->page ||
+        m_data->unit != other.m_data->unit) {
         return false;
     }
 

@@ -18,7 +18,6 @@
 #include "cwRegionTreeModel.h"
 #include "cwScrap.h"
 #include "cwPDFConverter.h"
-#include "cwPDFSettings.h"
 #include "cwUnits.h"
 #include "cwPDFSettings.h"
 #include "cwAddImageTask.h"
@@ -40,7 +39,6 @@
 #include <QSaveFile>
 #include <QSet>
 #include <QImageReader>
-#include <cmath>
 
 #ifdef WITH_PDF_SUPPORT
 #include <QPdfDocument>
@@ -1042,13 +1040,8 @@ void cwSaveLoad::addImages(QList<QUrl> noteImagePaths,
     if (!pdfFilePaths.isEmpty() && cwPDFConverter::isSupported()) {
 #ifdef WITH_PDF_SUPPORT
         const QDir rootDirectory = projectDir();
-        const int resolutionPpi = cwPDFSettings::instance()->resolutionImport();
-        const double scale = resolutionPpi / 72.0;
-        const int dotsPerMeter = qRound(cwUnits::convert(resolutionPpi,
-                                                        cwUnits::DotsPerInch,
-                                                        cwUnits::DotsPerMeter));
 
-        auto makeImagesFromPdf = [rootDirectory, resolutionPpi, scale, dotsPerMeter](const QString& relativePath) {
+        auto makeImagesFromPdf = [rootDirectory](const QString& relativePath) {
             QList<cwImage> images;
             const QString absolutePath = rootDirectory.absoluteFilePath(relativePath);
 
@@ -1062,15 +1055,21 @@ void cwSaveLoad::addImages(QList<QUrl> noteImagePaths,
             const QString fileName = QFileInfo(relativePath).fileName();
 
             images.reserve(pageCount);
+            constexpr double inchesToMeters = cwUnits::convert(1.0, cwUnits::Inches, cwUnits::Meters);
+            constexpr double pointsToInches = 1.0 / 72.0;
+            constexpr int pointsPerMeter = qRound(1.0 / (pointsToInches * inchesToMeters));
+
             for (int pageIndex = 0; pageIndex < pageCount; ++pageIndex) {
                 const QSizeF pagePoints = document.pagePointSize(pageIndex);
-                const QSize pixelSize(std::round(pagePoints.width() * scale),
-                                      std::round(pagePoints.height() * scale));
+                const QSize pointSize(qRound(pagePoints.width()),
+                                      qRound(pagePoints.height()));
+                // qDebug() << "Page:" << pageIndex << "PointSize:" << pointSize << pointsPerMeter;
 
                 cwImage image;
                 image.setPath(fileName);
-                image.setOriginalSize(pixelSize);
-                image.setOriginalDotsPerMeter(dotsPerMeter);
+                image.setOriginalSize(pointSize);
+                image.setOriginalDotsPerMeter(pointsPerMeter);
+                image.setUnit(cwImage::Unit::Points);
                 image.setPage(pageIndex);
                 images.append(image);
             }
@@ -1673,6 +1672,9 @@ Monad::Result<cwNoteData> cwSaveLoad::loadNote(const QString &filename, const QD
         noteData.image.setPath(imageFileName.isEmpty() ? rawImagePath : imageFileName);
         if (protoNote.image().has_page()) {
             noteData.image.setPage(protoNote.image().page());
+        }
+        if (protoNote.image().has_imageunit()) {
+            noteData.image.setUnit(static_cast<cwImage::Unit>(protoNote.image().imageunit()));
         }
 
         noteData.image.setOriginalSize(cwRegionLoadTask::loadSize(protoNote.image().size()));

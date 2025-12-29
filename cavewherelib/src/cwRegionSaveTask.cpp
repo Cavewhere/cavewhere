@@ -277,6 +277,10 @@ void cwRegionSaveTask::saveImage(CavewhereProto::Image *protoImage, const cwImag
     if (image.page() >= 0) {
         protoImage->set_page(image.page());
     }
+    if (image.unit() != cwImage::Unit::Pixels) {
+        protoImage->set_imageunit(
+            static_cast<CavewhereProto::Image_Unit>(static_cast<int>(image.unit())));
+    }
 }
 
 /**

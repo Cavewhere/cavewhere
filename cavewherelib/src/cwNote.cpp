@@ -13,12 +13,16 @@
 #include "cwImageResolution.h"
 #include "cwSurveyNoteModel.h"
 #include "cwKeywordModel.h"
+#include "cwPDFSettings.h"
+#include "cwUnits.h"
 
 //Std includes
 #include "cwMath.h"
 
 //Qt includes
 #include <QDebug>
+#include <QtGlobal>
+#include <QtGlobal>
 
 //Std includes
 #include <cmath>
@@ -186,6 +190,40 @@ QMatrix4x4 cwNote::metersOnPageMatrix() const {
     return metersPerDotsMatrix * scaleMatrix();
 }
 
+QSizeF cwNote::physicalSize() const
+{
+    const double unitsPerMeter = dotPerMeter();
+    if (!std::isfinite(unitsPerMeter) || unitsPerMeter <= 0.0) {
+        return {};
+    }
+    const QSize sizeUnits = ImageIds.originalSize();
+    return QSizeF(sizeUnits.width() / unitsPerMeter,
+                  sizeUnits.height() / unitsPerMeter);
+}
+
+QSize cwNote::renderSize() const
+{
+    if (ImageIds.unit() == cwImage::Unit::Pixels) {
+        return ImageIds.originalSize();
+    }
+
+    const QSizeF physical = physicalSize();
+    if (!physical.isValid()) {
+        return ImageIds.originalSize();
+    }
+
+    const int dotsPerMeter = qRound(cwUnits::convert(
+        cwPDFSettings::instance()->resolutionImport(),
+        cwUnits::DotsPerInch,
+        cwUnits::DotsPerMeter));
+    if (dotsPerMeter <= 0) {
+        return ImageIds.originalSize();
+    }
+
+    return QSize(qRound(physical.width() * dotsPerMeter),
+                 qRound(physical.height() * dotsPerMeter));
+}
+
 
 /**
   \Brief adds a scrap to the notes
@@ -291,11 +329,6 @@ void cwNote::updateScrapNoteTransform()
  */
 double cwNote::dotPerMeter() const {
     return imageResolution()->convertTo(cwUnits::DotsPerMeter).value;
-    // auto data = imageResolution()->convertTo(cwUnits::DotsPerMeter);
-    // if(!std::isfinite(data.value) || data.value <= 0.0) {
-    //     return std::numeric_limits<double>::quiet_NaN();
-    // }
-    // return data.value;
 }
 
 /**
