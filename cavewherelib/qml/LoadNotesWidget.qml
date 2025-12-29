@@ -7,6 +7,7 @@
 
 import QtQuick as QQ
 import QtQuick.Controls as QC
+import QtQuick.Layouts
 // import QtGraphicalEffects
 import cavewherelib
 
@@ -45,20 +46,33 @@ QQ.Item {
             radius: Theme.floatingWidgetRadius
             color: Theme.floatingWidgetColor
 
-                QQ.Column {
-                    id: columnId
+            ColumnLayout {
+                id: columnId
+                spacing: 10
 
-                    spacing: 10
+                anchors.centerIn: parent
 
-                    anchors.centerIn: parent
+                Text {
+                    id: noteTextId
+                    text: "No notes found..."
+                    font.pixelSize: 18
+                    font.bold: true
+                    anchors.horizontalCenter: parent.horizontalCenter
+                }
+
+                RowLayout {
+                    id: rowId
+                    spacing: 5
+
+                    // anchors.centerIn: parent
 
                     Text {
                         text: "Add scanned notes\nAdd 3d Model"
-                        anchors.verticalCenter: loadNoteButtonId.verticalCenter
+                        // anchors.verticalCenter: loadNoteButtonId.verticalCenter
                     }
 
                     QQ.Image {
-                        anchors.verticalCenter: loadNoteButtonId.verticalCenter
+                        // anchors.verticalCenter: loadNoteButtonId.verticalCenter
                         rotation: 180
                         source: "qrc:/icons/back.png"
                         sourceSize: Qt.size(30, 30)
@@ -74,37 +88,4 @@ QQ.Item {
             }
         }
     }
-
-    // FastBlur {
-    //     id: fastBlurId
-    //     source: shadowContainerId
-    //     width: shadowContainerId.width
-    //     height: shadowContainerId.height
-    //     transparentBorder: true
-
-    //     visible: radius != 0
-
-    //     anchors.centerIn: widgetId
-    // }
-
-    // QQ.ParallelAnimation {
-    //     id: visibleAnimation
-
-
-    //     QQ.PropertyAnimation {
-    //         target: fastBlurId
-    //         property: "radius"
-    //         from: 100
-    //         to: 0
-    //     }
-
-    //     QQ.PropertyAnimation {
-
-    //         target: fastBlurId
-    //         property: "opacity"
-    //         from: 0.0
-    //         to: 1.0
-    //     }
-    // }
-
-// }
+}
