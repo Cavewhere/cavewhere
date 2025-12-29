@@ -57,28 +57,28 @@ QQ.Item {
                     text: "No notes found..."
                     font.pixelSize: 18
                     font.bold: true
-                    anchors.horizontalCenter: parent.horizontalCenter
+                    Layout.alignment: Qt.AlignHCenter
                 }
 
                 RowLayout {
                     id: rowId
                     spacing: 5
-
-                    // anchors.centerIn: parent
+                    Layout.alignment: Qt.AlignHCenter
 
                     Text {
-                        text: "Add scanned notes\nAdd 3d Model"
-                        // anchors.verticalCenter: loadNoteButtonId.verticalCenter
+                        text: "Scanned notes\n 3d Model"
+                        Layout.alignment: Qt.AlignVCenter
                     }
 
                     QQ.Image {
-                        // anchors.verticalCenter: loadNoteButtonId.verticalCenter
+                        Layout.alignment: Qt.AlignVCenter
                         rotation: 180
                         source: "qrc:/icons/back.png"
                         sourceSize: Qt.size(30, 30)
                     }
 
                     LoadNotesIconButton {
+                        Layout.alignment: Qt.AlignVCenter
                         id: loadNoteButtonId
                         onFilesSelected: (images) => widgetId.filesSelected(images)
                         sourceSize: Qt.size(48, 48)
