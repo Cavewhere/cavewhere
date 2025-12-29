@@ -66,7 +66,7 @@ QQ.Item {
                     Layout.alignment: Qt.AlignHCenter
 
                     Text {
-                        text: "Scanned notes\n 3d Model"
+                        text: "Scanned notes\n3d Model"
                         Layout.alignment: Qt.AlignVCenter
                     }
 
