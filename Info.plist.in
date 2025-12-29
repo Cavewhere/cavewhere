@@ -28,7 +28,7 @@
   <string>APPL</string>
 
   <key>CFBundleIconFile</key>
-  <string>cavewhereIcon</string>
+  <string>cavewhereIcon.icns</string>
 
   <key>LSApplicationCategoryType</key>
   <string>public.app-category.utilities</string>

@@ -221,6 +221,11 @@ if(WIN32)
 endif()
 
 if(APPLE)
+    set(CMAKE_MACOSX_BUNDLE_ICON_FILE "cavewhereIcon.icns")
+    set_source_files_properties("${CMAKE_SOURCE_DIR}/cavewhereIcon.icns"
+        PROPERTIES
+        MACOSX_PACKAGE_LOCATION "Resources"
+    )
 
     set_target_properties(CaveWhere PROPERTIES
         MACOSX_BUNDLE TRUE
@@ -236,7 +241,7 @@ if(APPLE)
         XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "com.cavewhere.CaveWhere"
 
         MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/Info.plist.in"
-        RESOURCE "${CMAKE_CURRENT_SOURCE_DIR}/cavewhereIcon.icns"
+        RESOURCE "${CMAKE_SOURCE_DIR}/cavewhereIcon.icns"
     )
 
     # set(MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/Info.plist.in)
@@ -413,4 +418,3 @@ if(WIN32 OR APPLE)
 #	set_target_properties(CaveWhere PROPERTIES SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
     include(installer/installer.cmake)
 endif()
-
