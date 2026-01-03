@@ -12,6 +12,7 @@
 #include "cwAddImageTask.h"
 #include "cwDiskCacher.h"
 #include "cwPDFSettings.h"
+#include "cwUnits.h"
 
 //Qt includes
 #include <QSqlDatabase>

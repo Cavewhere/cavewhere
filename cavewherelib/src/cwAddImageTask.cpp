@@ -14,9 +14,11 @@
 #include "asyncfuture.h"
 #include "cwImageDatabase.h"
 #include "cwConcurrent.h"
+#include "cwSvgReader.h"
 
 //Std includes
 #include "cwMath.h"
+#include <cmath>
 
 //Qt includes
 #include <QString>
@@ -37,9 +39,6 @@
 //TODO: REMOVE for testing only
 #include <QFile>
 #include <QTime>
-
-//Async includes
-#include <asyncfuture.h>
 
 cwAddImageTask::cwAddImageTask(QObject* parent) : QObject(parent)
 {
@@ -298,7 +297,7 @@ QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
 
     //     QList<PrivateImageData> filterData;
     //     filterData.reserve(imageData.size());
-        
+
     //     //Remove all invalid images
     //     std::copy_if(imageData.begin(), imageData.end(), std::back_inserter(filterData),
     //                  [](const PrivateImageData& data)
@@ -514,12 +513,16 @@ QStringList cwAddImageTask::supportedImageFormats()
 
 QImage cwAddImageTask::imageWithAutoTransform(QByteArray &data, const QByteArray &format)
 {
-    QBuffer stream(&data);
+    if (cwSvgReader::isSvg(format)) {
+        return cwSvgReader::toImage(data, format);
+    } else {
+        QBuffer stream(&data);
 
-    //Load the image
-    QImageReader imageReader(&stream, format);
-    imageReader.setAutoTransform(true); //supports format rotation
-    return imageReader.read();
+        //Load the image
+        QImageReader imageReader(&stream, format);
+        imageReader.setAutoTransform(true); //supports format rotation
+        return imageReader.read();
+    }
 }
 
 /**
@@ -627,5 +630,3 @@ cwImage cwAddImageTask::originalMetaData(const QImage &image)
 
     return imageIdContainer;
 }
-
-

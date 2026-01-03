@@ -8,12 +8,12 @@ ColumnLayout {
     property PDFSettings pdfSettings: RootData.settings.pdfSettings
 
     QC.GroupBox {
-        title: "PDF Import Settings"
+        title: "PDF / SVG Import Settings"
 
         ColumnLayout {
             SupportedLabel {
                 supported: itemId.pdfSettings.isSupportImport
-                text: "Importing PDFs"
+                text: "PDFs"
             }
 
             RowLayout {
@@ -23,7 +23,7 @@ ColumnLayout {
                 }
 
                 Text {
-                    text: "PDF import resolution (in ppi)"
+                    text: "PDF / SVG rasterization resolution (in pixels per inch)"
                 }
 
                 QC.SpinBox {
@@ -41,7 +41,7 @@ ColumnLayout {
             HelpArea {
                 id: resolutionHelpId
                 Layout.fillWidth: true
-                text: "The import resolution for all future PDF imports in ppi. By default the import resolution is 300ppi. 300ppi is good balance to size vs quality. Using 72ppi (the lowest resolution), will import 1 to 1. PDF imports support upto 600 ppi, but will cause large file sizes and memory consumption. "
+                text: "The rasterization resolution for all PDF / SVG in pixels per inch. By default the import resolution is 300ppi. 300ppi is good balance to size vs quality. Using 72ppi (the lowest resolution for pdf) and 92ppi for svg, will import 1 to 1. PDF / SVG rasterization supported upto 600 ppi or 256mb, but will need a large amount of memory."
             }
         }
     }
