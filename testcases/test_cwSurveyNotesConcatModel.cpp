@@ -191,3 +191,42 @@ TEST_CASE("cwSurveyNotesConcatModel addFiles uses absolute paths with cwImagePro
     REQUIRE(!image.isNull());
     REQUIRE(size.isValid());
 }
+
+TEST_CASE("cwSurveyNotesConcatModel allows duplicate image files", "[cwSurveyNotesConcatModel]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    cwCave* cave = new cwCave();
+    cave->setName("test");
+
+    cwTrip* trip = new cwTrip();
+    trip->setName("test trip");
+    cave->addTrip(trip);
+    project->cavingRegion()->addCave(cave);
+
+    cwSurveyNotesConcatModel concat;
+    concat.setTrip(trip);
+
+    const QString pngPath = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    REQUIRE(!pngPath.isEmpty());
+
+    const QList<QUrl> files = {
+        QUrl::fromLocalFile(pngPath),
+        QUrl::fromLocalFile(pngPath)
+    };
+
+    concat.addFiles(files);
+    rootData->futureManagerModel()->waitForFinished();
+
+    REQUIRE(concat.rowCount() == 2);
+
+    const QModelIndex i0 = concat.index(0, 0);
+    const QModelIndex i1 = concat.index(1, 0);
+    REQUIRE(i0.isValid());
+    REQUIRE(i1.isValid());
+
+    const QString p0 = concat.data(i0, cwSurveyNoteModelBase::PathRole).toString();
+    const QString p1 = concat.data(i1, cwSurveyNoteModelBase::PathRole).toString();
+
+    REQUIRE(p0 != p1);
+}

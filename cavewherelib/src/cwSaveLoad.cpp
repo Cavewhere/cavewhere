@@ -887,6 +887,32 @@ struct CopyCommand {
     QString destinationFilePath;
 };
 
+static QString uniqueDestinationPath(const QDir& destinationDirectory,
+                                     const QString& sourceFilePath,
+                                     const QSet<QString>& reservedPaths,
+                                     const QHash<QString, QFuture<void>>& runningJobs)
+{
+    const QFileInfo sourceInfo(sourceFilePath);
+    const QString baseName = sourceInfo.completeBaseName();
+    const QString suffix = sourceInfo.suffix();
+
+    auto isTaken = [&reservedPaths, &runningJobs](const QString& path) {
+        return QFileInfo::exists(path) || reservedPaths.contains(path) || runningJobs.contains(path);
+    };
+
+    QString candidate = destinationDirectory.absoluteFilePath(sourceInfo.fileName());
+    int counter = 1;
+    while (isTaken(candidate)) {
+        const QString numberedName = suffix.isEmpty()
+            ? QStringLiteral("%1-%2").arg(baseName).arg(counter)
+            : QStringLiteral("%1-%2.%3").arg(baseName).arg(counter).arg(suffix);
+        candidate = destinationDirectory.absoluteFilePath(numberedName);
+        ++counter;
+    }
+
+    return candidate;
+}
+
 
 // ------------------------
 // Generic copy-and-emit pipe
@@ -897,11 +923,6 @@ void cwSaveLoad::copyFilesAndEmitResults(const QList<QString>& sourceFilePaths,
                                          MakeResultFunc makeResult,
                                          std::function<void (QList<ResultType>)> outputCallBackFunc)
 {
-    auto destinationFor = [destinationDirectory](const QString& filePath) {
-        const QString baseName = QFileInfo(filePath).fileName();
-        return destinationDirectory.absoluteFilePath(baseName);
-    };
-
     const QDir rootDirectory = projectDir();
     Q_ASSERT(rootDirectory.exists());
     // qDebug() << "RootDir:" << rootDirectory;
@@ -922,19 +943,22 @@ void cwSaveLoad::copyFilesAndEmitResults(const QList<QString>& sourceFilePaths,
                      });
     };
 
-    const auto commands = [this, sourceFilePaths, destinationFor]() {
-        QList<CopyCommand> items;
-        items.reserve(sourceFilePaths.size());
-        for (const QString& source : sourceFilePaths) {
-            const QString destination = destinationFor(source);
-            if (!d->m_runningJobs.contains(destination)) {
-                items.append(CopyCommand{source, destination});
-            } else {
-                qWarning() << "Can't add" << source << "because it's already queued" << LOCATION;
-            }
+    QList<CopyCommand> commands;
+    commands.reserve(sourceFilePaths.size());
+    QSet<QString> reservedPaths;
+    reservedPaths.reserve(sourceFilePaths.size());
+    for (const QString& source : sourceFilePaths) {
+        const QString destination = uniqueDestinationPath(destinationDirectory,
+                                                          source,
+                                                          reservedPaths,
+                                                          d->m_runningJobs);
+        if (!d->m_runningJobs.contains(destination)) {
+            commands.append(CopyCommand{source, destination});
+            reservedPaths.insert(destination);
+        } else {
+            qWarning() << "Can't add" << source << "because it's already queued" << LOCATION;
         }
-        return items;
-    }();
+    }
 
     auto future = AsyncFuture::observe(d->newFileFuture)
                       .context(this, [copyOne, commands]() {
