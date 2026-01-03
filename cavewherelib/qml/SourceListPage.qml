@@ -77,6 +77,10 @@ StandardPage {
             implicitWidth: Math.min(pageId.width, 500)
             Layout.fillHeight: true
             visible: count > 0
+            clip: true
+            QC.ScrollBar.vertical: QC.ScrollBar {
+                policy: QC.ScrollBar.AsNeeded
+            }
             // Layout.leftMargin: 10
             // Layout.rightMargin: 10
             // Layout.topMargin: 10

@@ -3,14 +3,5 @@
         <file>datasets/test_cwImageProvider/2019c154_-_party_fault-2p.svg</file>
         <file>datasets/test_cwImageProvider/testpage.png</file>
         <file>datasets/test_cwImageProvider/supportedImage.svg</file>
-        <file>datasets/test_cwImageProvider/rotationByMetadata-rotation90.jpg</file>
-        <file>datasets/test_cwImageProvider/supportedImage.bmp</file>
-        <file>datasets/test_cwImageProvider/supportedImage.gif</file>
-        <file>datasets/test_cwImageProvider/supportedImage.jpeg</file>
-        <file>datasets/test_cwImageProvider/supportedImage.jpg</file>
-        <file>datasets/test_cwImageProvider/supportedImage.png</file>
-        <file>datasets/test_cwImageProvider/supportedImage.tif</file>
-        <file>datasets/test_cwImageProvider/supportedImage.tiff</file>
-        <file>datasets/test_cwImageProvider/supportedImage.webp</file>
     </qresource>
 </RCC>
