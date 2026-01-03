@@ -97,6 +97,55 @@ double cwNoteTranformation::calculateScale(QPointF p1, QPointF p2,
     return scale;
 }
 
+double cwNoteTranformation::calculateScaleForRendered(QPointF p1, QPointF p2,
+                                                      cwLength* length,
+                                                      const cwImage& image,
+                                                      const QSize& renderedSize,
+                                                      cwImageResolution* resolution)
+{
+    if(length == nullptr || resolution == nullptr) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+
+    if(renderedSize.isEmpty()) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+
+    QLineF line(p1, p2);
+    const double dx = line.dx() * renderedSize.width();
+    const double dy = line.dy() * renderedSize.height();
+    const double lengthPixels = sqrt(dx * dx + dy * dy);
+    if(!std::isfinite(lengthPixels) || lengthPixels <= 0.0) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+
+    const double lengthInDots = resolution->nativePixelLength(image, renderedSize, lengthPixels);
+    if(!std::isfinite(lengthInDots) || lengthInDots <= 0.0) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+
+    //Dots per meter
+    cwImageResolution::Data meterResolution = resolution->convertTo(cwUnits::DotsPerMeter);
+    const double dotsPerMeter = meterResolution.value;
+    if(!std::isfinite(dotsPerMeter) || dotsPerMeter <= 0.0) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+
+    //Compute the scale
+    const double lengthInMetersOnPage = lengthInDots / dotsPerMeter;
+    const double lengthInMetersInCave = length->convertTo(cwUnits::Meters).value;
+    if(!std::isfinite(lengthInMetersInCave) || lengthInMetersInCave <= 0.0) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+
+    const double scale = lengthInMetersOnPage / lengthInMetersInCave;
+    if(!std::isfinite(scale) || scale <= 0.0) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+
+    return scale;
+}
+
 /**
   \brief Get's the matrix that converts
 

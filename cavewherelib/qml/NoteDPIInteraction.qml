@@ -10,7 +10,8 @@ import cavewherelib
 DrawLengthInteraction {
     id: noteDPIInteraction
 
-    property ImageResolution imageResolution
+    required property Note note
+    required property ImageResolution imageResolution
 
     doneTextLabel: "<b>Length on the paper</b>"
     defaultLengthUnit: Units.Inches
@@ -25,8 +26,14 @@ DrawLengthInteraction {
         var yImage = (p2.y - p1.y);
 
         var lengthPixels = Math.sqrt(xImage * xImage + yImage * yImage)
+        var nativePixels = lengthPixels
+        if(note !== null && imageItem !== null && imageResolution !== null) {
+            nativePixels = imageResolution.nativePixelLength(note.image,
+                                                            imageItem.sourceSize,
+                                                            lengthPixels)
+        }
 
-        imageResolution.setResolution(lengthObject, lengthPixels)
+        imageResolution.setResolution(lengthObject, nativePixels)
 
         noteDPIInteraction.done()
     }

@@ -10,10 +10,12 @@
 
 //Our includes
 #include "cwUnitValue.h"
+#include "cwImage.h"
 class cwLength;
 
 //Qt includes
 #include <QQmlEngine>
+#include <QSize>
 
 
 class cwImageResolution : public cwUnitValue
@@ -32,6 +34,9 @@ public:
     Q_INVOKABLE cwImageResolution::Data convertTo(cwUnits::ImageResolutionUnit to) const;
 
     Q_INVOKABLE void setResolution(cwLength* length, double numberOfPixels);
+    Q_INVOKABLE double nativePixelLength(const cwImage& image,
+                                         const QSize& renderedSize,
+                                         double renderedLength) const;
 
 protected:
     virtual void convertToUnit(int newUnit);

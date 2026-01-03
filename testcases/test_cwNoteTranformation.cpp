@@ -7,6 +7,7 @@
 #include "cwLength.h"
 #include "cwScale.h"
 #include "SpyChecker.h"
+#include "cwImage.h"
 
 //Qt includes
 #include "cwSignalSpy.h"
@@ -141,4 +142,32 @@ TEST_CASE("cwNoteTransformation scale calculation handles invalid inputs", "[cwN
                                                       &resolution);
         CHECK(std::isnan(scale));
     }
+}
+
+TEST_CASE("cwNoteTransformation scale calculation uses native units for rendered size", "[cwNoteTransformation]") {
+    cwNoteTranformation transform;
+    cwLength length;
+    cwImageResolution resolution;
+
+    length.setValue(1.0);
+    length.setUnit(cwUnits::Meters);
+
+    resolution.setValue(100.0);
+    resolution.setUnit(cwUnits::DotsPerInch);
+
+    cwImage image;
+    image.setOriginalSize(QSize(2000, 2000));
+
+    const QSize renderedSize(1000, 1000);
+    const double scaleRendered = transform.calculateScaleForRendered(QPointF(0.0, 0.0),
+                                                                     QPointF(1.0, 0.0),
+                                                                     &length,
+                                                                     image,
+                                                                     renderedSize,
+                                                                     &resolution);
+
+    const double dotsPerMeter = resolution.convertTo(cwUnits::DotsPerMeter).value;
+    const double expectedScale = 2000.0 / dotsPerMeter;
+
+    CHECK(scaleRendered == Catch::Approx(expectedScale).epsilon(1e-6));
 }

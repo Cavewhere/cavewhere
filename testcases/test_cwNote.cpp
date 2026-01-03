@@ -73,12 +73,9 @@ TEST_CASE("Note pdf sizes use note resolution and render settings", "[cwNote]") 
     CHECK(metersOnPage(0, 0) == Catch::Approx(physical.width()).epsilon(1e-6));
     CHECK(metersOnPage(1, 1) == Catch::Approx(physical.height()).epsilon(1e-6));
 
-    const int dotsPerMeter = qRound(cwUnits::convert(
-        cwPDFSettings::instance()->resolutionImport(),
-        cwUnits::DotsPerInch,
-        cwUnits::DotsPerMeter));
+    const double pixelsPerPoint = cwPDFSettings::instance()->resolutionImport() / 72.0;
     const QSize expectedRenderSize(
-        qRound(physical.width() * dotsPerMeter),
-        qRound(physical.height() * dotsPerMeter));
+        qRound(image.originalSize().width() * pixelsPerPoint),
+        qRound(image.originalSize().height() * pixelsPerPoint));
     CHECK(note->renderSize() == expectedRenderSize);
 }

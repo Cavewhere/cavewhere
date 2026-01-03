@@ -41,6 +41,36 @@ void cwImageResolution::setResolution(cwLength *length, double numberOfPixels)
     setValue(value);
 }
 
+double cwImageResolution::nativePixelLength(const cwImage& image,
+                                            const QSize& renderedSize,
+                                            double renderedLength) const
+{
+    const QSize nativeSize = image.originalSize();
+    if (renderedLength <= 0.0 || nativeSize.isEmpty() || renderedSize.isEmpty()) {
+        return renderedLength;
+    }
+
+    const double scaleX = renderedSize.width() > 0
+        ? static_cast<double>(nativeSize.width()) / renderedSize.width()
+        : 0.0;
+    const double scaleY = renderedSize.height() > 0
+        ? static_cast<double>(nativeSize.height()) / renderedSize.height()
+        : 0.0;
+
+    double scale = 0.0;
+    if (scaleX > 0.0 && scaleY > 0.0) {
+        scale = (scaleX + scaleY) * 0.5;
+    } else if (scaleX > 0.0) {
+        scale = scaleX;
+    } else if (scaleY > 0.0) {
+        scale = scaleY;
+    } else {
+        scale = 1.0;
+    }
+
+    return renderedLength * scale;
+}
+
 /**
  * @brief cwLength::convertToUnit
  * @param newUnit - The new unit this object is going to convert to

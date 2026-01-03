@@ -57,8 +57,8 @@ public:
     // cwTransformItemUpdater* transformUpdater() const;
     // void setTransformUpdater(cwTransformItemUpdater* transformUpdater);
 
-    void setTransformNode(QSGTransformNode* node);
-    QSGTransformNode* transformNode() const;
+    // void setTransformNode(QSGTransformNode* node);
+    // QSGTransformNode* transformNode() const;
 
     cwScrapStationView* stationView() const;
     cwScrapLeadView* leadView() const;

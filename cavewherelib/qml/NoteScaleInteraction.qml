@@ -18,14 +18,14 @@ DrawLengthInteraction {
     doneTextLabel: "<b>In cave length</b>"
 
     onDoneButtonPressed: {
-        let imageSize = note.image.originalSize
         let p1 = scrapView.toNoteCoordinates(firstMouseLocation);
         let p2 = scrapView.toNoteCoordinates(secondMouseLocation);
-        let scale = noteTransform.calculateScale(p1,
-                                                 p2,
-                                                 lengthObject,
-                                                 imageSize,
-                                                 note.imageResolution);
+        let scale = noteTransform.calculateScaleForRendered(p1,
+                                                            p2,
+                                                            lengthObject,
+                                                            note.image,
+                                                            note.renderSize(),
+                                                            note.imageResolution);
 
         noteTransform.scale = scale
         noteScaleInteraction.done()

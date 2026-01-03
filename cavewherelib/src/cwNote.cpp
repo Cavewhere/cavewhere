@@ -206,22 +206,19 @@ QSize cwNote::renderSize() const
     if (ImageIds.unit() == cwImage::Unit::Pixels) {
         return ImageIds.originalSize();
     }
-
-    const QSizeF physical = physicalSize();
-    if (!physical.isValid()) {
+    const QSizeF nativeSize = ImageIds.originalSize();
+    if (!nativeSize.isValid()) {
         return ImageIds.originalSize();
     }
 
-    const int dotsPerMeter = qRound(cwUnits::convert(
-        cwPDFSettings::instance()->resolutionImport(),
-        cwUnits::DotsPerInch,
-        cwUnits::DotsPerMeter));
-    if (dotsPerMeter <= 0) {
+    const int resolutionPpi = cwPDFSettings::instance()->resolutionImport();
+    if (resolutionPpi <= 0) {
         return ImageIds.originalSize();
     }
 
-    return QSize(qRound(physical.width() * dotsPerMeter),
-                 qRound(physical.height() * dotsPerMeter));
+    const double pixelsPerUnit = resolutionPpi / 72.0;
+    return QSize(qRound(nativeSize.width() * pixelsPerUnit),
+                 qRound(nativeSize.height() * pixelsPerUnit));
 }
 
 

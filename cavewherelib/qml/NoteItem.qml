@@ -112,6 +112,7 @@ ImageItem {
         anchors.fill: parent
         imageItem: noteArea
         zoom: noteArea.targetItem.scale
+        note: noteArea.note
         imageResolution: noteArea.note != null ? noteArea.note.imageResolution : null
         z:1
     }

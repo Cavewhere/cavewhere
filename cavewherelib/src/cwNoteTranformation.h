@@ -20,6 +20,7 @@
 //Our includes
 #include "cwGlobals.h"
 #include "cwAbstractNoteTransformation.h"
+#include "cwImage.h"
 class cwLength;
 class cwImageResolution;
 class cwScale;
@@ -44,6 +45,11 @@ public:
                                       cwLength* length,
                                       QSize imageSize,
                                       cwImageResolution* resolution);
+    Q_INVOKABLE double calculateScaleForRendered(QPointF noteP1, QPointF noteP2,
+                                                 cwLength* length,
+                                                 const cwImage& image,
+                                                 const QSize& renderedSize,
+                                                 cwImageResolution* resolution);
 
     QMatrix4x4 matrix() const override;
 };
