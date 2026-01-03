@@ -3,10 +3,10 @@ name: Build AppImage (WIP-linux)
 on:
   push:
     branches:
-      - WIP-linux
+      - dev
   pull_request:
     branches:
-      - WIP-linux
+      - dev
   workflow_dispatch:
 
 jobs:
