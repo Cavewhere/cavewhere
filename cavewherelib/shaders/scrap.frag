@@ -48,7 +48,8 @@ layout(binding = 1) uniform sampler2D Texture;
 
 void main() {
     vec4 textureSample = texture(Texture, vTexCoord);
-    fragColor = textureSample;
+    // Make fully transparent texels show as white instead of black.
+    vec3 rgb = mix(vec3(1.0), textureSample.rgb, textureSample.a);
+    fragColor = vec4(rgb, textureSample.a);
     // fragColor = vec4(vTexCoord, 0.0, 1.0);
 }
-
