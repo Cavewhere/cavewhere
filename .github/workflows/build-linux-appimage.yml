@@ -1,0 +1,95 @@
+name: Build AppImage (WIP-linux)
+
+on:
+  push:
+    branches:
+      - WIP-linux
+  pull_request:
+    branches:
+      - WIP-linux
+  workflow_dispatch:
+
+jobs:
+  appimage:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            pipx \
+            liblocale-po-perl \
+            git \
+            patchelf \
+            pkg-config \
+            libgpgme-dev \
+            libgcrypt20-dev \
+            libglib2.0-dev \
+            libcurl4-openssl-dev \
+            squashfs-tools \
+            desktop-file-utils
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          aqtversion: '==3.1.*'
+          version: '6.8.2'
+          host: 'linux'
+          target: 'desktop'
+          arch: 'linux_gcc_64'
+          modules: 'qtshadertools'
+
+      - name: Install Conan
+        run: pipx install conan
+
+      - name: Check Conan Version
+        run: conan --version
+
+      - name: Configure Conan Profile
+        run: conan profile detect --force
+
+      - name: Add CMake tool requirement
+        run: |
+          PROFILE_PATH="$(conan config home)/profiles/default"
+          echo >> "$PROFILE_PATH"
+          echo "[tool_requires]" >> "$PROFILE_PATH"
+          echo "!cmake/*: cmake/[>=3 <4]" >> "$PROFILE_PATH"
+
+      - name: Cache Conan Packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2
+          key: ${{ runner.os }}-conan-${{ hashFiles('conanfile.*') }}
+          restore-keys: |
+            ${{ runner.os }}-conan-
+
+      - name: Install Dependencies with Conan
+        run: |
+          conan install . --build=missing --output-folder=build \
+          -s compiler.cppstd=17 \
+          -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True
+
+      - name: Configure the Project with CMake
+        run: |
+          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_PDF=OFF \
+          -DCMAKE_PREFIX_PATH=${{ github.workspace }}/Qt/6.8.2/gcc_64/lib \
+          -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake -S . -B build
+
+      - name: Build AppImage
+        run: cmake --build build --target appimageInstaller
+
+      - name: Upload AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: CaveWhere-AppImage
+          path: build/appimage/*.AppImage

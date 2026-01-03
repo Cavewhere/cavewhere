@@ -130,6 +130,12 @@ void handleCommandline(QCoreApplication& a, cwRootData* rootData) {
 
 int main(int argc, char *argv[])
 {
+#ifdef Q_OS_LINUX
+    if (qEnvironmentVariableIsEmpty("QT_QPA_PLATFORMTHEME")) {
+        qputenv("QT_QPA_PLATFORMTHEME", "xdgdesktopportal");
+    }
+#endif
+
     //This needs to be first for QSettings
     QApplication::setOrganizationName("Vadose Solutions");
     QApplication::setOrganizationDomain("cavewhere.com");

@@ -5,7 +5,7 @@
 #include <QAbstractItemModel>
 #include <QObject>
 #include <QPointer>
-#include <QQMLEngine>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwGlobals.h"

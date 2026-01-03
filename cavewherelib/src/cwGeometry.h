@@ -163,42 +163,6 @@ public:
     template <typename T>
     struct AttributeTraits;
 
-    template <>
-    struct AttributeTraits<float> {
-        static constexpr AttributeFormat format = AttributeFormat::Float;
-        static constexpr int componentCount = 1;
-        static void pack(const float& v, float* out) {
-            *out = v;
-        }
-    };
-
-    template <>
-    struct AttributeTraits<QVector2D> {
-        static constexpr AttributeFormat format = AttributeFormat::Vec2;
-        static constexpr int componentCount = 2;
-        static void pack(const QVector2D& v, float* out) {
-            std::memcpy(out, reinterpret_cast<const float*>(&v), sizeof(float) * 2);
-        }
-    };
-
-    template <>
-    struct AttributeTraits<QVector3D> {
-        static constexpr AttributeFormat format = AttributeFormat::Vec3;
-        static constexpr int componentCount = 3;
-        static void pack(const QVector3D& v, float* out) {
-            std::memcpy(out, reinterpret_cast<const float*>(&v), sizeof(float) * 3);
-        }
-    };
-
-    template <>
-    struct AttributeTraits<QVector4D> {
-        static constexpr AttributeFormat format = AttributeFormat::Vec4;
-        static constexpr int componentCount = 4;
-        static void pack(const QVector4D& v, float* out) {
-            std::memcpy(out, reinterpret_cast<const float*>(&v), sizeof(float) * 4);
-        }
-    };
-
     // Bulk set: QVector<T> where T is one of the supported types above
     template <typename T>
     bool set(Semantic semantic, const QVector<T>& values) {
@@ -483,4 +447,40 @@ private:
     bool m_cullBackfaces = true;
 
     // private data ends here
+};
+
+template <>
+struct cwGeometry::AttributeTraits<float> {
+    static constexpr AttributeFormat format = AttributeFormat::Float;
+    static constexpr int componentCount = 1;
+    static void pack(const float& v, float* out) {
+        *out = v;
+    }
+};
+
+template <>
+struct cwGeometry::AttributeTraits<QVector2D> {
+    static constexpr AttributeFormat format = AttributeFormat::Vec2;
+    static constexpr int componentCount = 2;
+    static void pack(const QVector2D& v, float* out) {
+        std::memcpy(out, reinterpret_cast<const float*>(&v), sizeof(float) * 2);
+    }
+};
+
+template <>
+struct cwGeometry::AttributeTraits<QVector3D> {
+    static constexpr AttributeFormat format = AttributeFormat::Vec3;
+    static constexpr int componentCount = 3;
+    static void pack(const QVector3D& v, float* out) {
+        std::memcpy(out, reinterpret_cast<const float*>(&v), sizeof(float) * 3);
+    }
+};
+
+template <>
+struct cwGeometry::AttributeTraits<QVector4D> {
+    static constexpr AttributeFormat format = AttributeFormat::Vec4;
+    static constexpr int componentCount = 4;
+    static void pack(const QVector4D& v, float* out) {
+        std::memcpy(out, reinterpret_cast<const float*>(&v), sizeof(float) * 4);
+    }
 };
