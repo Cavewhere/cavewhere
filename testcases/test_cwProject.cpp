@@ -22,6 +22,7 @@ using namespace Catch;
 #include "cwNoteLiDAR.h"
 #include "cwError.h"
 #include "cwErrorListModel.h"
+#include "cwImageResolution.h"
 #include "cwUnits.h"
 
 //Qt includes
@@ -1733,6 +1734,8 @@ TEST_CASE("Note and Scrap persistence", "[cwProject][cwTrip][cwSurveyNoteModel][
         cwImage image;
         image.setPath(QStringLiteral("entrance.png"));
         note->setImage(image);
+        note->imageResolution()->setUnit(cwUnits::DotsPerCentimeter);
+        note->imageResolution()->setValue(12.34);
 
         // Attach the note to the trip via the model
         noteModel->addNotes(QList<cwNote*>{note});
@@ -1820,6 +1823,8 @@ TEST_CASE("Note and Scrap persistence", "[cwProject][cwTrip][cwSurveyNoteModel][
         CHECK(loadedNote->rotate() == 12.5);
         // If cwImage exposes path(), verify it:
         CHECK(loadedNote->image().path().toStdString() == std::string("entrance.png"));
+        CHECK(loadedNote->imageResolution()->unit() == cwUnits::DotsPerCentimeter);
+        CHECK(loadedNote->imageResolution()->value() == Catch::Approx(12.34).epsilon(1e-6));
 
         // Scrap-level checks
         REQUIRE(loadedNote->hasScraps());

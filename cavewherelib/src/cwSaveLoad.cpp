@@ -22,6 +22,7 @@
 #include "cwPDFSettings.h"
 #include "cwAddImageTask.h"
 #include "cwNoteLiDAR.h"
+#include "cwImageResolution.h"
 #include "cwUniqueConnectionChecker.h"
 #include "cwGlobals.h"
 
@@ -2397,13 +2398,8 @@ void cwSaveLoad::connectTrip(cwTrip* trip)
     }
 
     // Notes model changes → save
-    // if (QAbstractItemModel* const notesModel = trip->notes()) {
-    //     connect(notesModel, &QAbstractItemModel::dataChanged, this, saveTrip);
-    //     connect(notesModel, &QAbstractItemModel::rowsInserted, this, saveTrip);
-    //     connect(notesModel, &QAbstractItemModel::rowsRemoved, this, saveTrip);
-    //     connect(notesModel, &QAbstractItemModel::modelReset, this, saveTrip);
-    //     connect(notesModel, &QAbstractItemModel::layoutChanged, this, saveTrip);
-    // }
+    // Notes model is update through cwCavingRegionTree
+
 
     // Trip calibration changes → save
     if (cwTripCalibration* const cal = trip->calibrations()) {
@@ -2463,7 +2459,8 @@ void cwSaveLoad::connectNote(cwNote *note)
     };
     connect(note, &cwNote::imageChanged, this, saveNote);
     connect(note, &cwNote::rotateChanged, this, saveNote);
-    connect(note, &cwNote::imageResolutionChanged, this, saveNote);
+    connect(note->imageResolution(), &cwImageResolution::valueChanged, this, saveNote);
+    connect(note->imageResolution(), &cwImageResolution::unitChanged, this, saveNote);
 
     // connect(note, &cwNote::beginInsertingScraps, this, saveNote);
     connect(note, &cwNote::insertedScraps, this, saveNote);

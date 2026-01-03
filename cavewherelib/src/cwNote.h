@@ -34,7 +34,7 @@ class CAVEWHERE_LIB_EXPORT cwNote : public QObject
 
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged BINDABLE bindableName)
     Q_PROPERTY(double rotate READ rotate WRITE setRotate NOTIFY rotateChanged)
-    Q_PROPERTY(cwImageResolution* imageResolution READ imageResolution NOTIFY imageResolutionChanged)
+    Q_PROPERTY(cwImageResolution* imageResolution READ imageResolution CONSTANT)
     Q_PROPERTY(cwKeywordModel* keywordModel READ keywordModel CONSTANT)
 
     //These are old, potentially remove?
@@ -67,7 +67,7 @@ public:
     QMatrix4x4 scaleMatrix() const;
     QMatrix4x4 metersOnPageMatrix() const;
     QSizeF physicalSize() const;
-    QSize renderSize() const;
+    Q_INVOKABLE QSize renderSize() const;
 
     void addScrap(cwScrap* scrap);
     cwScrap* scrap(int scrap) const;
@@ -94,7 +94,7 @@ signals:
     // void iconChanged(int id);
     void imageChanged();
     void rotateChanged(float rotate);
-    void imageResolutionChanged();
+    // void imageResolutionChanged();
 
     //For scraps
     void insertedScraps(int begin, int end);

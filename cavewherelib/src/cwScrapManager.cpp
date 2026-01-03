@@ -416,7 +416,7 @@ void cwScrapManager::connectScrap(cwScrap* scrap) {
  */
 void cwScrapManager::disconnectNote(cwNote *note)
 {
-    disconnect(note, &cwNote::imageResolutionChanged, this, &cwScrapManager::updateScrapsWithNewNoteResolution);
+    // disconnect(note, &cwNote::imageResolutionChanged, this, &cwScrapManager::updateScrapsWithNewNoteResolution);
 }
 
 /**

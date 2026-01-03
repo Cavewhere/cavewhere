@@ -380,10 +380,12 @@ void cwNote::setData(const cwNoteData &data)
 {
     setName(data.name);
     setRotate(data.rotate);
-    ImageResolution->setData(data.imageResolution);
 
     //Old image data, for loading from old files
     setImage(data.image);
+
+    //ImageResolution should be set after setting the image because it changes the resolution values
+    ImageResolution->setData(data.imageResolution);
 
     //Delete extra scraps
     for(int i = Scraps.size() - 1; i >= data.scraps.size(); i--) {

@@ -41,8 +41,9 @@ void cwUnitValue::setUpdateValue(bool updateAutomatically)
 
 void cwUnitValue::setData(const Data &data)
 {
-    setValue(data.value);
+    setUpdateValue(false);
     setUnit(data.unit);
+    setValue(data.value);
     setUpdateValue(data.updateValueWhenUnitChanged);
 }
 
