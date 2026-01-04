@@ -27,7 +27,6 @@ ColumnLayout {
                 }
 
                 QC.SpinBox {
-                    enabled: itemId.pdfSettings.isSupportImport
                     from: 72
                     to: 600
                     value: itemId.pdfSettings.resolutionImport
