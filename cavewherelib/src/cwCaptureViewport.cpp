@@ -16,10 +16,15 @@
 #include "cwScene.h"
 #include "cwCamera.h"
 #include "cw3dRegionViewer.h"
+#include "cwCaptureCenterline.h"
 #include "cwGraphicsImageItem.h"
 #include "cwDebug.h"
 #include "cwGlobals.h"
 #include "cwScaleBarItem.h"
+#include "cwCavingRegion.h"
+#include "cwCave.h"
+#include "cwSurveyNetwork.h"
+#include "cwStationPositionLookup.h"
 
 //undef these because micrsoft is fucking retarded...
 #ifdef Q_OS_WIN
@@ -43,7 +48,8 @@ cwCaptureViewport::cwCaptureViewport(QObject *parent) :
     CaptureCamera(new cwCamera(this)),
     PreviewItem(nullptr),
     Item(nullptr),
-    m_scaleBar(new cwScaleBarItem())
+    m_scaleBar(new cwScaleBarItem()),
+    CenterlineItem(nullptr)
 {
     connect(ScaleOrtho, &cwScale::scaleChanged, this, &cwCaptureViewport::updateTransformForItems);
     connect(this, &cwCaptureViewport::positionOnPaperChanged, this, &cwCaptureViewport::updateItemsPosition);
@@ -131,19 +137,25 @@ void cwCaptureViewport::capture()
     if(previewCapture()) {
         if(PreviewItem != NULL) {
             delete PreviewItem;
+            PreviewItem = nullptr;
+            CenterlineItem = nullptr;
         }
         PreviewItem = new QGraphicsItemGroup();
         previewItemChanged();
 
         imageScale = 1.0;
+        CenterlineItem = createCenterlineItem(PreviewItem, imageScale);
     } else {
         if(Item != NULL) {
             delete Item;
+            Item = nullptr;
+            CenterlineItem = nullptr;
         }
         Item = new QGraphicsItemGroup();
         fullResolutionItemChanged();
 
         imageScale = ItemScale * resolution();
+        CenterlineItem = createCenterlineItem(Item, imageScale);
     }
 
     //Updates the scale for the items
@@ -441,15 +453,75 @@ void cwCaptureViewport::deleteSceneItems()
     if(PreviewItem != nullptr) {
         delete PreviewItem;
         PreviewItem = nullptr;
+        CenterlineItem = nullptr;
     }
 
     if(Item != nullptr) {
         delete Item;
         Item = nullptr;
+        CenterlineItem = nullptr;
     }
 
     delete m_scaleBar;
     m_scaleBar = nullptr;
+}
+
+cwSurveyNetwork cwCaptureViewport::buildCenterlineNetwork() const
+{
+    cwSurveyNetwork network;
+
+    if(m_sceneManager.isNull()) {
+        return network;
+    }
+
+    cwCavingRegion* region = m_sceneManager->cavingRegion();
+    if(region == nullptr) {
+        return network;
+    }
+
+    const QList<cwCave*> caves = region->caves();
+    for(cwCave* cave : caves) {
+        if(cave == nullptr) {
+            continue;
+        }
+
+        const cwSurveyNetwork caveNetwork = cave->network();
+        const cwStationPositionLookup stationLookup = cave->stationPositionLookup();
+        const QStringList stations = caveNetwork.stations();
+        for(const QString& station : stations) {
+            if(stationLookup.hasPosition(station)) {
+                network.setPosition(station, stationLookup.position(station));
+            }
+        }
+
+        for(const QString& station : stations) {
+            const QStringList neighbors = caveNetwork.neighbors(station);
+            for(const QString& neighbor : neighbors) {
+                network.addShot(station, neighbor);
+            }
+        }
+    }
+
+    qDebug() << "Build network station empty:" << network.isEmpty();
+
+    return network;
+}
+
+cwCaptureCenterline* cwCaptureViewport::createCenterlineItem(QGraphicsItemGroup* parent, double imageScale) const
+{
+    if(parent == nullptr) {
+        return nullptr;
+    }
+
+    auto* centerline = new cwCaptureCenterline();
+    centerline->setZValue(1500.0);
+    centerline->setCamera(CaptureCamera);
+    centerline->setViewport(viewport());
+    centerline->setImageScale(imageScale);
+    centerline->setNetwork(buildCenterlineNetwork());
+
+    parent->addToGroup(centerline);
+    return centerline;
 }
 
 /**

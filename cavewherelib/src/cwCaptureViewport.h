@@ -19,6 +19,8 @@
 
 //Our includes
 class cwCamera;
+class cwCaptureCenterline;
+class cwSurveyNetwork;
 #include "cwScaleBarItem.h"
 #include "cwScale.h"
 #include "cw3dRegionViewer.h"
@@ -136,6 +138,8 @@ private:
     void updateTransformForItem(QGraphicsItem* item, double scale) const;
     void updateBoundingBox();
     void deleteSceneItems();
+    cwSurveyNetwork buildCenterlineNetwork() const;
+    cwCaptureCenterline* createCenterlineItem(QGraphicsItemGroup* parent, double imageScale) const;
 
 
 private slots:
@@ -144,6 +148,9 @@ private slots:
     void updateItemsPosition();
     void updateScaleBarScale();
     void updateScaleBarGeometry();
+
+private:
+    cwCaptureCenterline* CenterlineItem;
 };
 
 /**
