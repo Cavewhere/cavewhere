@@ -92,5 +92,42 @@ MainWindowTest {
             verify(noteGallery.count === 0);
             tryVerify(() => {return !noteGallery.visible});
         }
+
+        function test_removeLidarNote() {
+            TestHelper.loadProjectFromZip(RootData.project, "://datasets/lidarProjects/jaws of the beast.zip");
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Jaws of the Beast/Trip=2019c154_-_party_fault"
+
+            tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
+
+            function toUrl(filePath) {
+                return Qt.url("file://" + filePath)
+            }
+
+            let phakeCavePath = toUrl(TestHelper.copyToTempDir("://datasets/test_cwTextureUploadTask/PhakeCave.PNG"));
+            let bonesPath = toUrl(TestHelper.copyToTempDir("://datasets/lidarProjects/9_15_2025 3.glb"));
+
+            let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery");
+            noteGallery.imagesAdded([phakeCavePath, bonesPath]);
+
+            let noteGalleryView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView");
+            tryVerify(() => { return noteGalleryView.count === 2});
+
+            waitForRendering(noteGalleryView)
+
+            let noteImage1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView->noteImage1")
+            mouseClick(noteImage1)
+
+            let removeImageButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView->noteImage1->removeImageButton")
+            mouseClick(removeImageButton)
+
+            let cancelChallenge = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView->noteImage1->removeChallange")
+            tryVerify(() => { return cancelChallenge.visible; });
+
+            let removeButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView->noteImage1->removeChallange->removeButton")
+            mouseClick(removeButton)
+
+            tryVerify(() => { return !cancelChallenge.visible; });
+            tryVerify(() => { return noteGalleryView.count === 1});
+        }
     }
 }

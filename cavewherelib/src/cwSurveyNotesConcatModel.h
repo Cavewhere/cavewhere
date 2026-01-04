@@ -48,6 +48,7 @@ public:
     void setTrip(cwTrip* trip);
 
     Q_INVOKABLE void addFiles(QList<QUrl> files);
+    Q_INVOKABLE void removeNote(int index);
 
 signals:
     void tripChanged(cwTrip* trip);

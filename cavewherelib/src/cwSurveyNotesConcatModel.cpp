@@ -3,6 +3,7 @@
 // CaveWhere
 #include "cwTrip.h"
 #include "cwSurveyNoteModel.h"
+#include "cwSurveyNoteModelBase.h"
 #include "cwSurveyNoteLiDARModel.h"
 #include "cwPDFConverter.h"
 
@@ -165,4 +166,33 @@ void cwSurveyNotesConcatModel::addFiles(QList<QUrl> files)
     if (!glbUrls.isEmpty() && m_trip->notesLiDAR() != nullptr) {
         m_trip->notesLiDAR()->addFromFiles(glbUrls);
     }
+}
+
+void cwSurveyNotesConcatModel::removeNote(int index)
+{
+    if (m_trip == nullptr) {
+        return;
+    }
+
+    if (index < 0 || index >= rowCount()) {
+        return;
+    }
+
+    const QModelIndex proxyIndex = this->index(index, 0);
+    if (!proxyIndex.isValid()) {
+        return;
+    }
+
+    const QModelIndex sourceIndex = mapToSource(proxyIndex);
+    if (!sourceIndex.isValid()) {
+        return;
+    }
+
+    auto* sourceModel = qobject_cast<cwSurveyNoteModelBase*>(
+        const_cast<QAbstractItemModel*>(sourceIndex.model()));
+    if (sourceModel == nullptr) {
+        return;
+    }
+
+    sourceModel->removeNote(sourceIndex.row());
 }
