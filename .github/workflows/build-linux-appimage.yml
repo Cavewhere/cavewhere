@@ -11,7 +11,19 @@ on:
 
 jobs:
   appimage:
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runs_on: ubuntu-24.04
+            qt_arch: linux_gcc_64
+            qt_dir: gcc_64
+          - arch: arm64
+            runs_on: ubuntu-24.04-arm64
+            qt_arch: linux_gcc_arm64
+            qt_dir: gcc_arm64
+    runs-on: ${{ matrix.runs_on }}
 
     steps:
       - name: Checkout code
@@ -46,7 +58,7 @@ jobs:
           version: '6.8.2'
           host: 'linux'
           target: 'desktop'
-          arch: 'linux_gcc_64'
+          arch: ${{ matrix.qt_arch }}
           modules: 'qtshadertools'
 
       - name: Install Conan
@@ -82,7 +94,7 @@ jobs:
       - name: Configure the Project with CMake
         run: |
           cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_PDF=OFF \
-          -DCMAKE_PREFIX_PATH=${{ github.workspace }}/Qt/6.8.2/gcc_64/lib \
+          -DCMAKE_PREFIX_PATH=${{ github.workspace }}/Qt/6.8.2/${{ matrix.qt_dir }}/lib \
           -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake -S . -B build
 
       - name: Build AppImage
@@ -91,5 +103,5 @@ jobs:
       - name: Upload AppImage
         uses: actions/upload-artifact@v4
         with:
-          name: CaveWhere-AppImage
+          name: CaveWhere-AppImage-${{ matrix.arch }}
           path: build/appimage/*.AppImage
