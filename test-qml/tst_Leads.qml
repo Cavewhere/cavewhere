@@ -104,7 +104,7 @@ MainWindowTest {
             let trip = cave.trip(0);
 
             // Jump to trip page (first trip in cave)
-            RootData.pageSelectionModel.currentPageAddress = "Data/Cave=" + cave.name + "/Trip=" + trip.name;
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + cave.name + "/Trip=" + trip.name;
             tryVerify(() => RootData.pageView.currentPageItem.objectName === "tripPage");
 
             // Enter carpet/select mode

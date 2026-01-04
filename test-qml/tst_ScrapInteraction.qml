@@ -21,7 +21,7 @@ MainWindowTest {
 
             wait(100);
 
-            RootData.pageSelectionModel.currentPageAddress = "Data/Cave=Cave 1/Trip=Trip 1"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
             //Select carpet
@@ -309,7 +309,7 @@ MainWindowTest {
 
             wait(100);
 
-            RootData.pageSelectionModel.currentPageAddress = "Data/Cave=Cave 1/Trip=Trip 1"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
             //Select carpet
