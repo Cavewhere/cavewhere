@@ -87,7 +87,7 @@ void cwLinkBarModel::updateNames()
         if(names.at(i) != Names.at(i)) {
             for(int j = i; j < names.size() && j < Names.size(); j++) {
                 //Update all the names
-                Names[i] = names.at(i);
+                Names[j] = names.at(j);
             }
 
             dataChanged(index(i), index(Names.size() - 1));
