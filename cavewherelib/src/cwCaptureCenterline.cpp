@@ -105,8 +105,6 @@ void cwCaptureCenterline::paint(QPainter* painter, const QStyleOptionGraphicsIte
     const qreal stationRadius = m_baseStationRadius;
     const QPointF labelOffset = m_baseLabelOffset;
 
-    qDebug() << "Lines:" << m_lines;
-
     painter->setPen(m_stationPen);
     painter->setBrush(m_stationBrush);
     for(const auto& station : std::as_const(m_stationData)) {
