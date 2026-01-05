@@ -1321,7 +1321,7 @@ void cwScrap::setType(ScrapType type) {
 }
 
 QStringList cwScrap::types() const {
-    return {"Plan", "Running Profile", "Project Profile"};
+    return {"Plan", "Running Profile", "Projected Profile"};
 }
 
 void cwScrap::updateIdKeyword()
