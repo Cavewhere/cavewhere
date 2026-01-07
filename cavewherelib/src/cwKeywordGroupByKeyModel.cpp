@@ -394,8 +394,12 @@ void cwKeywordGroupByKeyModel::setSourceModel(QAbstractItemModel* source) {
                     this, [updateEntity](const QModelIndex& topLeft, const QModelIndex& bottomRight, const QVector<int>& roles)
             {
                 if(roles.contains(cwKeywordItemModel::KeywordsRole)) {
-                    for(int i = topLeft.row(); i <= bottomRight.row(); i++) {
-                        updateEntity(i);
+                    if(topLeft.parent().isValid()) {
+                        updateEntity(topLeft.parent().row());
+                    } else {
+                        for(int i = topLeft.row(); i <= bottomRight.row(); i++) {
+                            updateEntity(i);
+                        }
                     }
                 }
             });
@@ -420,6 +424,16 @@ void cwKeywordGroupByKeyModel::setSourceModel(QAbstractItemModel* source) {
                         mFilter.removeEntityFromAllRows(toIndex(i));
                     }
                 } else {
+                    updateEntity(parent.row());
+                }
+            });
+
+            connect(mSourceModel, &QAbstractItemModel::rowsRemoved,
+                    this, [updateEntity](const QModelIndex& parent, int begin, int last)
+            {
+                Q_UNUSED(begin)
+                Q_UNUSED(last)
+                if(parent != QModelIndex()) {
                     updateEntity(parent.row());
                 }
             });

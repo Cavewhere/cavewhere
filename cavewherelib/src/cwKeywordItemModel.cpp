@@ -37,7 +37,7 @@ void cwKeywordItemModel::addItem(cwKeywordItem *item)
     });
 
     connect(item->keywordModel(), &cwKeywordModel::rowsInserted,
-            this, [this](const QModelIndex& parent, int first, int last)
+            this, [this, item](const QModelIndex& parent, int first, int last)
     {
         Q_UNUSED(parent)
         Q_UNUSED(first)
@@ -54,7 +54,7 @@ void cwKeywordItemModel::addItem(cwKeywordItem *item)
     });
 
     connect(item->keywordModel(), &cwKeywordModel::rowsRemoved,
-            this, [this](const QModelIndex& parent, int first, int last)
+            this, [item, this](const QModelIndex& parent, int first, int last)
     {
         Q_UNUSED(parent)
         Q_UNUSED(first)
@@ -78,6 +78,8 @@ void cwKeywordItemModel::addItem(cwKeywordItem *item)
         roles.removeAll(-1);
 
         if(roles.isEmpty()) { return; }
+
+        roles.append(KeywordsRole);
 
         auto newTopLeft = createIndex(topLeft.row(), 0, item);
         auto newBottomRight = createIndex(bottomRight.row(), 0, item);

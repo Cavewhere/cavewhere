@@ -161,8 +161,12 @@ void cwKeywordFilterPipelineModel::setKeywordModel(cwKeywordItemModel* keywordMo
                     this, [this, addToRejected](const QModelIndex& topLeft, const QModelIndex& bottomRight, const QVector<int>& roles)
                     {
                         if(roles.contains(cwKeywordItemModel::KeywordsRole)) {
-                            for(int i = topLeft.row(); i <= bottomRight.row(); i++) {
-                                addToRejected(i);
+                            if(topLeft.parent().isValid()) {
+                                addToRejected(topLeft.parent().row());
+                            } else {
+                                for(int i = topLeft.row(); i <= bottomRight.row(); i++) {
+                                    addToRejected(i);
+                                }
                             }
                             updatePossibleKeys();
                         }
