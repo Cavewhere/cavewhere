@@ -164,7 +164,7 @@ RegionViewer {
 
     states: [
         State {
-            name: "BASE"
+            name: ""
             PropertyChanges {
                 transformEditorId.visible: true
                 noteStationRepeaterId.visible: true
@@ -173,13 +173,13 @@ RegionViewer {
 
         State {
             name: "SELECT"
-            extend: "BASE"
+            extend: ""
             PropertyChanges { target: lidarAddStationInteraction; enabled: false; visible: false }
         },
 
         State {
             name: "ADD-STATION"
-            extend: "BASE"
+            extend: ""
             PropertyChanges { target: lidarAddStationInteraction; enabled: true; visible: true }
         },
 

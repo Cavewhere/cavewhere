@@ -129,12 +129,16 @@ MainWindowTest {
         }
 
         function test_northInteraction() {
+            wait(100)
 
+            //Turn off auto calculate
             let _obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->checkBox")
-            mouseClick(_obj1)
+            _obj1.checked = false;
+
 
             //Go through the tool
             let northToolButton_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->northToolButton")
+            verify(northToolButton_obj2.visible)
             mouseClick(northToolButton_obj2)
 
             let noteLiDARNorthInteraction_obj3 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARNorthInteraction")
@@ -176,6 +180,7 @@ MainWindowTest {
 
             tryVerify(() => { return azimuth.text === "62.0"; })
 
+
             let apply = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARNorthInteraction->apply")
             mouseClick(apply)
 
@@ -191,6 +196,8 @@ MainWindowTest {
             let transformEditor = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor")
             let noteTransform = transformEditor.noteTransform
             verify(noteTransform !== null)
+
+            wait(100)
 
             let setLengthButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->setLengthButton")
             mouseClick(setLengthButton)

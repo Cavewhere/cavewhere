@@ -434,6 +434,7 @@ QQ.Rectangle {
                 onClicked: {
                     noteGallery.state = "CARPET"
                     noteGallery.state = ""
+                    noteLidarArea.state = "SELECT"
                     noteGallery.backClicked()
                 }
             }

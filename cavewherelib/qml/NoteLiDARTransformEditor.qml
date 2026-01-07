@@ -253,7 +253,6 @@ QQ.Item {
 
             HelpArea {
                 id: customQuatHelp
-                visible: quatRow.visible
                 Layout.fillWidth: true
                 text: "These four numbers describe the tilt CaveWhere applies before north/scale—think of them as 'which way is up.' " +
                       "If they look intimidating, just stay in Custom mode and drag the arrow tool; the fields update automatically."
