@@ -17,7 +17,7 @@ std::shared_ptr<cwProject> fileToProject(QString filename) {
 
 QString fileToProject(cwProject *project, const QString &filename) {
     QString datasetFile = copyToTempFolder(filename);
-
+    project->newProject();
     project->loadOrConvert(datasetFile);
     project->waitLoadToFinish();
 

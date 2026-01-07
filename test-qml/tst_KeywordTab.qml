@@ -12,8 +12,9 @@ MainWindowTest {
         when: windowShown
 
         function cleanup() {
-            console.log("Cleanup")
             RootData.newProject();
+
+            wait(100);
 
             // After new project, keyword filter should be at defaults: 1 group, 1 row
             let groupListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView");
@@ -22,6 +23,7 @@ MainWindowTest {
 
             let andListView0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0");
             verify(andListView0);
+            console.log("Count:" + andListView0.count)
             tryVerify(() => andListView0.count === 1);
 
                     let viewTab = findChild(rootId.mainWindow, "viewTabButton");
