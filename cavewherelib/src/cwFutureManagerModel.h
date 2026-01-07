@@ -41,7 +41,7 @@ public:
     QVariant data(const QModelIndex &index, int role) const;
     QHash<int, QByteArray> roleNames() const;
 
-    void waitForFinished();
+    Q_INVOKABLE void waitForFinished();
 
     static QHash<int, QByteArray> defaultRoles();
 

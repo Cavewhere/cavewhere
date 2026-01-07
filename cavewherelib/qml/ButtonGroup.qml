@@ -14,8 +14,8 @@ QQ.Item {
     property alias text: groupText.text
     default property alias buttons: buttonArea.children
 
-    width: childrenRect.width
-    height: childrenRect.height
+    implicitWidth: childrenRect.width
+    implicitHeight: childrenRect.height
 
     QQ.Rectangle {
         id: buttonAreaRect
@@ -68,5 +68,4 @@ QQ.Item {
             font.bold: true
         }
     }
-
 }

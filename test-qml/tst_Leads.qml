@@ -17,20 +17,27 @@ MainWindowTest {
 
         function test_leads() {
             TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+            RootData.futureManagerModel.waitForFinished();
 
             //Click on the lead
-            let leadPoint0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_1")
+            let leadPoint0 = null;
+            tryVerify(() => {
+                leadPoint0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_1");
+                return leadPoint0 !== null;
+            });
             mouseClick(leadPoint0)
 
             verify(leadPoint0.scrap !== null )
             compare(leadPoint0.scrapId, 2)
             compare(leadPoint0.pointIndex, 1)
 
-            wait(100);
-
             //This doesn't work be leadPoint0 doesn't have a consistant name between runs,
-            let quoteBox = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_1->leadQuoteBox")
 
+            let quoteBox = null;
+                    tryVerify(() => {
+                                    quoteBox = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_1->leadQuoteBox")
+                                    return quoteBox !== null;
+                        })
 
             let description_obj1 = findChild(quoteBox, "description")
             tryVerify(() => {return description_obj1.text === "Walking"})
@@ -120,8 +127,7 @@ MainWindowTest {
                     mouseClick(_obj1)
 
                     let imageId_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
-                    mouseClick(imageId_obj2, 1765, 1166.13)
-
+                    mouseClick(imageId_obj2, 2429.22, 732.923)
 
             wait(200)
 
@@ -159,10 +165,10 @@ MainWindowTest {
             mouseClick(viewButton);
             tryVerify(() => RootData.pageView.currentPageItem.objectName === "viewPage");
 
-            wait(300)
-
+            wait(300)                    
                     let leadObj = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint1_2")
-            tryVerify(() => leadObj !== null)
+
+                    tryVerify(() => leadObj !== null)
                     mouseClick(leadObj)
 
             wait(100);
