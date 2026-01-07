@@ -14,7 +14,7 @@ MainWindowTest {
 
         function test_importCSVDataFromFile() {
 
-            RootData.pageSelectionModel.currentPageAddress = "Data"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data"
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "dataMainPage" });
 
             let importButton_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->dataMainPage->importButton")
