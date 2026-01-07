@@ -151,7 +151,7 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
 
                     return cwTrackedImage::createShared(image,
                                                         image.path(),
-                                                        cwTrackedImage::Original);
+                                                        cwTrackedImage::NoOwnership);
                 }
 
                 return cwTrackedImagePtr();

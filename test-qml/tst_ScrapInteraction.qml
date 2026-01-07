@@ -35,7 +35,15 @@ MainWindowTest {
 
             wait(200);
 
+            //Zoom in with wheel mouse
             let imageId = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
+            let imageCenterX = imageId.width / 2.0;
+            let imageCenterY = imageId.height / 2.0;
+            for(let i = 0; i < 8; i++) {
+                mouseWheel(imageId, imageCenterX, imageCenterY, 0, 120, Qt.NoButton, Qt.NoModifier, 5);
+            }
+
+
             mouseMove(imageId, 322, 392);
             mouseClick(imageId, 322, 392)
             wait(50);
@@ -236,7 +244,7 @@ MainWindowTest {
 
             let render = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer")
 
-            let leadPoint = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint1_0")
+            let leadPoint = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_0")
             verify(leadPoint.x >= 0);
             verify(leadPoint.y >= 0);
             verify(leadPoint.x <= render.width)
@@ -253,17 +261,17 @@ MainWindowTest {
             wait(200);
 
             //Make sure the popup box is showing the write data
-            let leadPointSizeWidth = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint1_0->leadQuoteBox->widthText")
-            let leadPointSizeHeight = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint1_0->leadQuoteBox->heightText")
+            let leadPointSizeWidth = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_0->leadQuoteBox->widthText")
+            let leadPointSizeHeight = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_0->leadQuoteBox->heightText")
 
             verify(leadPointSizeWidth.text === "5")
             verify(leadPointSizeHeight.text === "4")
 
-            let description2 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint1_0->leadQuoteBox->description")
+            let description2 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_0->leadQuoteBox->description")
             verify(description2.text === "Sauce")
 
             //Use the goto notes button to go to the notes
-            let notesButton = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint1_0->leadQuoteBox->gotoNotes")
+            let notesButton = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_0->leadQuoteBox->gotoNotes")
             mouseClick(notesButton)
 
             tryVerify(() => { return RootData.pageView.currentPageItem.objectName === "tripPage" });

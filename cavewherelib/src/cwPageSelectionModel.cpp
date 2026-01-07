@@ -329,7 +329,7 @@ void cwPageSelectionModel::clear()
  */
 QString cwPageSelectionModel::seperator()
 {
-    return QString("/");
+    return QStringLiteral("/");
 }
 
 /**

@@ -36,9 +36,12 @@ cwLinkGenerator::~cwLinkGenerator()
 QString cwLinkGenerator::caveLink(cwCave *cave)
 {
     if(cave == nullptr) { return QString(); }
-    return QString("Data%1Cave=%2")
-            .arg(cwPageSelectionModel::seperator())
-            .arg(cave->name());
+    return QStringLiteral("Source")
+           + cwPageSelectionModel::seperator()
+           + QStringLiteral("Data")
+           + cwPageSelectionModel::seperator()
+           + QStringLiteral("Cave=")
+           + cave->name();
 }
 
 /**
@@ -49,11 +52,10 @@ QString cwLinkGenerator::caveLink(cwCave *cave)
 QString cwLinkGenerator::tripLink(cwTrip *trip)
 {
     if(trip == nullptr) { return QString(); }
-    QString sep = cwPageSelectionModel::seperator();
-    return QString("%1%2Trip=%3")
-            .arg(caveLink(trip->parentCave()))
-            .arg(sep)
-            .arg(trip->name());
+    return caveLink(trip->parentCave())
+           + cwPageSelectionModel::seperator()
+           + QStringLiteral("Trip=")
+           + trip->name();
 
 }
 
@@ -130,5 +132,4 @@ void cwLinkGenerator::gotoNote(cwNote *note)
 
     page->setSelectionProperties(selection);
 }
-
 

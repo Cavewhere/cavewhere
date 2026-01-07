@@ -634,10 +634,10 @@ QQ.Rectangle {
                 }
             }
 
-            QQ.PropertyChanges {
-                target: renderViewId
-                visible: true
-            }
+            // QQ.PropertyChanges {
+            //     target: renderViewId
+            //     visible: true
+            // }
 
         },
 
