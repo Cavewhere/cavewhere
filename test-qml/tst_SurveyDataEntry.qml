@@ -12,7 +12,11 @@ MainWindowTest {
         name: "SurveyDataEntry"
         when: windowShown
 
-
+        function init() {
+            RootData.project.newProject()
+            RootData.pageSelectionModel.currentPageAddress = "View"
+            wait(100)
+        }
 
         function addSurvey() {
             TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwScrapManager/ProjectProfile-test-v3.cw");
