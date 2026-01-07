@@ -1,6 +1,6 @@
 #include "cwDebug.h"
 
-#if defined(QT_DEBUG) && defined(Q_OS_MAC)
+#if defined(QT_DEBUG) && defined(Q_OS_MAC) && !defined(Q_OS_IOS)
 #include <QCoreApplication>
 #include <QProcess>
 #include <QStringList>
@@ -15,7 +15,7 @@
 
 void cwDebug::printStackTrace(int maxFrames)
 {
-#if defined(QT_DEBUG) && defined(Q_OS_MAC)
+#if defined(QT_DEBUG) && defined(Q_OS_MAC) && !defined(Q_OS_IOS)
     auto demangle = [](const char* symbol) -> QString {
         if(symbol == nullptr) {
             return QStringLiteral("<unknown>");

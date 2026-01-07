@@ -30,7 +30,24 @@ set(BUILD_TRANSLATIONS OFF CACHE BOOL "Disable qtkeychain translations" FORCE)
 set(BUILD_TRANSLATIONS_AS_RESOURCES OFF CACHE BOOL "" FORCE)
 set(BUILD_TEST_APPLICATION OFF CACHE BOOL "" FORCE)
 
+set(cw_restore_build_shared_libs OFF)
+if(DEFINED BUILD_SHARED_LIBS)
+    set(cw_restore_build_shared_libs ON)
+    set(cw_prev_build_shared_libs ${BUILD_SHARED_LIBS})
+endif()
+if(IOS)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build dynamic library" FORCE)
+endif()
+
 add_subdirectory(${CMAKE_SOURCE_DIR}/qtkeychain ${CMAKE_BINARY_DIR}/qtkeychain_build)
+
+if(IOS)
+    if(cw_restore_build_shared_libs)
+        set(BUILD_SHARED_LIBS ${cw_prev_build_shared_libs} CACHE BOOL "Build dynamic library" FORCE)
+    else()
+        unset(BUILD_SHARED_LIBS CACHE)
+    endif()
+endif()
 
 qt_add_library(cavewherelib STATIC)
 
