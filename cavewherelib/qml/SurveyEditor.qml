@@ -260,6 +260,7 @@ QQ.Item {
                 }
 
                 QC.Button {
+                    objectName: "spaceAddBar"
                     visible: currentTrip !== null && currentTrip.chunkCount > 0
                     Layout.alignment: Qt.AlignHCenter
                     text: "Press <b>Space</b> to add another data block"
