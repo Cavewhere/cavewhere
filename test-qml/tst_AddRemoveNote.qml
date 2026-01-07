@@ -11,6 +11,10 @@ MainWindowTest {
         name: "AddRemoveNote"
         when: windowShown
 
+        function init() {
+                    RootData.pageSelectionModel.currentPageAddress = "View"
+        }
+
         function test_addNotes() {
                     // TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwScrapManager/ProjectProfile-test-v3.cw");
                     TestHelper.loadProjectFromZip(RootData.project, "://datasets/lidarProjects/jaws of the beast.zip");
@@ -97,7 +101,8 @@ MainWindowTest {
             TestHelper.loadProjectFromZip(RootData.project, "://datasets/lidarProjects/jaws of the beast.zip");
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Jaws of the Beast/Trip=2019c154_-_party_fault"
 
-            tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
+            tryVerify(() => { return RootData.pageView.currentPageItem !== null })
+                    tryVerify(() => {return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
             function toUrl(filePath) {
                 return Qt.url("file://" + filePath)

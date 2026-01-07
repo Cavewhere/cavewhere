@@ -272,8 +272,10 @@ cwCave::InsertRemoveTrip::InsertRemoveTrip(cwCave* cave,
 
 cwCave::InsertRemoveTrip::~InsertRemoveTrip() {
     if(OwnsTrips) {
-        for(auto trip : Trips) {
-            delete trip;
+        for(auto trip : std::as_const(Trips)) {
+            if(!trip.isNull()) {
+                delete trip;
+            }
         }
     }
 }
@@ -321,7 +323,10 @@ cwCave::InsertTripCommand::InsertTripCommand(cwCave* cave,
                                              int index) :
     cwCave::InsertRemoveTrip(cave, index, index + trips.size() -1)
 {
-    Trips = trips;
+    Trips.clear();
+    for(int i = 0; i < trips.size(); i++) {
+        Trips.append(trips.at(i));
+    }
 
     if(Trips.size() == 1) {
         setText(QString("Add %1").arg(Trips.first()->name()));

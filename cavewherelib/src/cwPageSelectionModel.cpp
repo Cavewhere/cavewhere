@@ -128,12 +128,13 @@ cwPage *cwPageSelectionModel::registerSubPage(cwPage *parentPage, QString pageNa
 void cwPageSelectionModel::unregisterPage(cwPage *page)
 {
     if(page != nullptr) {
-        Q_ASSERT(page != currentPage());
-
-        if(!PageHistory.contains(page)) {
-            //Delay removing the page, because it's in the history.
-            page->parentPage()->removeChild(page);
-            page->deleteLater();
+        // Q_ASSERT(page != currentPage());
+        if(page != currentPage()) {
+            if(!PageHistory.contains(page)) {
+                //Delay removing the page, because it's in the history.
+                page->parentPage()->removeChild(page);
+                page->deleteLater();
+            }
         }
     } else {
         qDebug() << "Unregistering a null page! This is a bug" << LOCATION;

@@ -131,6 +131,8 @@ void cwScrapStationView::updateShotLines() {
     cwNote* note = scrap()->parentNote();
     cwTrip* trip = note->parentTrip();
     cwCave* cave = trip->parentCave();
+    if(cave == nullptr) { return; }
+
     cwStationPositionLookup stationPositionLookup = cave->stationPositionLookup();
 
     //Clear all the lines

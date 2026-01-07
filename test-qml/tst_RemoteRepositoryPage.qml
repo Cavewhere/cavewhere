@@ -14,7 +14,7 @@ MainWindowTest {
         function test_openRemotePage() {
             RootData.pageSelectionModel.currentPageAddress = "Remote"
             // waitForRendering(mainWindow)
-            wait(1000000)
+            // wait(1000000)
         }
     }
 }

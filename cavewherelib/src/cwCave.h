@@ -145,7 +145,7 @@ private:
         void insertTrips();
         void removeTrips();
 
-        QList<cwTrip*> Trips;
+        QList<QPointer<cwTrip>> Trips;
     private:
         cwCave* CavePtr;
         int BeginIndex;

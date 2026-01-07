@@ -14,6 +14,6 @@ BasePointHandler {
     signal pointMoved(point noteCoord) // Emits in note coordinates
 
     onPositionChanged: (point) => {
-                           stationItem.pointMoved(stationItem.scrapItem.toNoteCoordinates(point))
+                           pointMoved(scrapItem.toNoteCoordinates(point))
                        }
 }
