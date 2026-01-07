@@ -24,6 +24,7 @@ using namespace Catch;
 #include "cwErrorListModel.h"
 #include "cwImageResolution.h"
 #include "cwUnits.h"
+#include "cwScrap.h"
 
 //Qt includes
 #include <QtCore/qdiriterator.h>
@@ -36,6 +37,25 @@ using namespace Catch;
 #include <QFileInfo>
 #include <QSet>
 #include <QTemporaryDir>
+
+namespace {
+cwScrap* firstScrap(cwProject* project) {
+    auto region = project->cavingRegion();
+    REQUIRE(region != nullptr);
+    REQUIRE(region->caveCount() > 0);
+    auto cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    REQUIRE(cave->tripCount() > 0);
+    auto trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
+    auto notes = trip->notes()->notes();
+    REQUIRE(!notes.isEmpty());
+    auto note = notes.first();
+    REQUIRE(note != nullptr);
+    REQUIRE(note->scraps().size() > 0);
+    return note->scrap(0);
+}
+} // namespace
 
 // TEST_CASE("cwProject isModified should work correctly", "[cwProject]") {
 //     cwProject project;
@@ -228,6 +248,41 @@ TEST_CASE("Images should load correctly", "[cwProject]") {
     rootData->futureManagerModel()->waitForFinished();
     CHECK(checked == 1);
     CHECK(filenames.size() > 0);
+}
+
+TEST_CASE("New project should clear loaded scraps before reload", "[cwProject]") {
+    auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
+
+    const QString dataset = copyToTempFolder("://datasets/test_cwScrapManager/ProjectProfile-test-v3.cw");
+    project->loadOrConvert(dataset);
+    project->waitLoadToFinish();
+
+    cwScrap* first = firstScrap(project.get());
+
+    project->newProject();
+    project->loadOrConvert(dataset);
+    project->waitLoadToFinish();
+
+    cwScrap* second = firstScrap(project.get());
+    CHECK(first != second);
+}
+
+TEST_CASE("Reloading the same project should replace scrap objects", "[cwProject]") {
+    auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
+
+    const QString dataset = copyToTempFolder("://datasets/test_cwScrapManager/ProjectProfile-test-v3.cw");
+    project->loadOrConvert(dataset);
+    project->waitLoadToFinish();
+
+    cwScrap* first = firstScrap(project.get());
+
+    project->loadOrConvert(dataset);
+    project->waitLoadToFinish();
+
+    cwScrap* second = firstScrap(project.get());
+    CHECK(first != second);
 }
 
 

@@ -38,6 +38,8 @@ class cwAbstractPointManager : public QQuickItem
 
 public:
     explicit cwAbstractPointManager(QQuickItem *parent = 0);
+
+    void updateItemParents();
     
     void clearSelection();
     int selectedItemIndex() const;

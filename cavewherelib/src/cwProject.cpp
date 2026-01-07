@@ -109,6 +109,7 @@ cwProject::cwProject(QObject* parent) :
     ErrorModel(new cwErrorListModel(this))
 {
     m_saveLoad->setCavingRegion(Region);
+    m_saveLoad->setUndoStack(UndoStack);
     connect(m_saveLoad, &cwSaveLoad::isTemporaryProjectChanged, this, [this]() {
         emit isTemporaryProjectChanged();
         emit canSaveDirectlyChanged();
@@ -628,8 +629,6 @@ void cwProject::newProject() {
     // //Create the caving the caving region that this project mantaines
     // Region->clearCaves();
 
-    //Clear undo stack
-    UndoStack->clear();
 }
 
 // /**
@@ -956,6 +955,7 @@ cwProject::FileType cwProject::projectType(QString filename) const
 void cwProject::setUndoStack(QUndoStack *undoStack) {
     if(UndoStack != undoStack) {
         UndoStack = undoStack;
+        m_saveLoad->setUndoStack(UndoStack);
         emit undoStackChanged();
     }
 }

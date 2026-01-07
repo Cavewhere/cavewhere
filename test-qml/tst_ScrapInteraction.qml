@@ -11,7 +11,15 @@ MainWindowTest {
         name: "NoteScrapInteraction"
         when: windowShown
 
+        function init() {
+            RootData.futureManagerModel.waitForFinished()
+            RootData.project.newProject()
+            RootData.pageSelectionModel.currentPageAddress = "View"
+            wait(1000)
+        }
+
         function addScrapOutline() {
+            // RootData.futureManagerModel.waitForFinished()
             TestHelper.loadProjectFromFile(RootData.project, "://datasets/tst_ScrapInteraction/projectedProfile.cw");
 
             //Zoom into the data, in the 3d view
@@ -43,6 +51,10 @@ MainWindowTest {
                 mouseWheel(imageId, imageCenterX, imageCenterY, 0, 120, Qt.NoButton, Qt.NoModifier, 5);
             }
 
+            let noteArea = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea");
+            let scrapView = findChild(noteArea, "scrapViewId")
+            compare(scrapView.count, 1);
+            verify(scrapView.selectedScrapItem === null)
 
             mouseMove(imageId, 322, 392);
             mouseClick(imageId, 322, 392)
@@ -60,10 +72,12 @@ MainWindowTest {
             mouseMove(imageId, 326, 716)
             mouseClick(imageId, 326, 716)
 
+
             //Scrap should have 4 points:
-            let noteArea = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea");
-            let scrapView = findChild(noteArea, "scrapViewId")
+            // let noteArea = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea");
+            // let scrapView = findChild(noteArea, "scrapViewId")
             let scrap = scrapView.selectedScrapItem.scrap as Scrap
+            console.log("Scrap:" + scrap)
             verify(scrap !== null)
             verify(scrap.isClosed() === false);
             verify(scrap.numberOfPoints() === 4);
@@ -136,8 +150,14 @@ MainWindowTest {
             mouseClick(imageId, 509, 630);
 
             //Double click on the stations text
-            tryVerify(() => { return ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->stationA3->coreTextInput") !== null; })
-            let a4Station = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->stationA3->coreTextInput")
+            tryVerify(() => { return ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->stationa3->coreTextInput") !== null; })
+            let a4Station = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->stationa3->coreTextInput")
+
+            //Make sure a4Station scale is correct
+            let stationTopLeft = a4Station.mapToItem(noteArea, 0, 0)
+            let stationTopRight = a4Station.mapToItem(noteArea, a4Station.width, 0)
+            let mappedWidth = stationTopRight.x - stationTopLeft.x
+            verify(Math.abs(mappedWidth - a4Station.width) < 0.5)
 
             // mouseDoubleClickSequence(a4Station)
             a4Station.openEditor() //Double clicking doesn't seem like it works through qml test
@@ -306,8 +326,6 @@ MainWindowTest {
           set
           */
         function test_projectedProfileDirection() {
-
-
             TestHelper.loadProjectFromFile(RootData.project, "://datasets/tst_ScrapInteraction/projectedProfile.cw");
 
             //Zoom into the data, in the 3d view

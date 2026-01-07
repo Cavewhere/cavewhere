@@ -29,11 +29,11 @@ class cwScrapView : public QQuickItem
     QML_NAMED_ELEMENT(ScrapView)
 
     Q_PROPERTY(cwNote* note READ note WRITE setNote NOTIFY noteChanged)
-    // Q_PROPERTY(cwTransformItemUpdater* transformUpdater READ transformUpdater WRITE setTransformUpdater NOTIFY transformUpdaterChanged)
     Q_PROPERTY(cwScrapItem* selectedScrapItem READ selectedScrapItem  NOTIFY selectScrapIndexChanged)
     Q_PROPERTY(int selectScrapIndex READ selectScrapIndex WRITE setSelectScrapIndex NOTIFY selectScrapIndexChanged)
     Q_PROPERTY(double zoom READ zoom WRITE setZoom NOTIFY zoomChanged);
     Q_PROPERTY(QQuickItem* targetItem READ targetItem WRITE setTargetItem NOTIFY targetItemChanged FINAL)
+    Q_PROPERTY(int count READ count NOTIFY countChanged)
 
 
 public:
@@ -41,9 +41,6 @@ public:
 
     cwNote* note() const;
     void setNote(cwNote* note);
-
-    // cwTransformItemUpdater* transformUpdater() const;
-    // void setTransformUpdater(cwTransformItemUpdater* updater);
 
     cwScrapItem* selectedScrapItem() const;
     void setSelectedScrapItem(cwScrapItem* selectedScrapItem);
@@ -68,12 +65,14 @@ public:
 
     QQuickItem *targetItem() const;
     void setTargetItem(QQuickItem *newTargetItem);
+    int count() const { return m_scrapItems.size(); }
 
 signals:
     void noteChanged();
     void transformUpdaterChanged();
     void selectScrapIndexChanged();
     void zoomChanged();
+    void countChanged();
 
     void targetItemChanged();
 

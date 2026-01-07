@@ -47,7 +47,13 @@ void cwScrapView::setNote(cwNote* note) {
         if(m_note != nullptr) {
             connect(m_note, &cwNote::insertedScraps, this, &cwScrapView::insertScrapItem);
             connect(m_note, &cwNote::removedScraps, this, &cwScrapView::updateRemovedScraps);
+            connect(m_note, &cwNote::scrapsReset, this, [this]() {
+                clearSelection();
+                updateAllScraps();
+            });
         }
+
+        clearSelection();
 
         //This is full reset, update all the scraps
         updateAllScraps();
@@ -199,6 +205,7 @@ void cwScrapView::selectScrapAt(QPointF imagePoint) {
   This will update all the scrap polygons
   */
 void cwScrapView::updateAllScraps() {
+    const int previousCount = m_scrapItems.size();
     int numberOfScraps;
     if(note() != nullptr) {
         numberOfScraps = note()->scraps().size();
@@ -240,6 +247,10 @@ void cwScrapView::updateAllScraps() {
         scrapItem->setSelectionManager(m_selectionManager);
         scrapItem->setTargetItem(targetItem());
         connect(scrapItem, SIGNAL(selectedChanged()), SLOT(updateSelection()), Qt::UniqueConnection);
+    }
+
+    if(previousCount != m_scrapItems.size()) {
+        emit countChanged();
     }
 }
 

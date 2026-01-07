@@ -229,10 +229,9 @@ static cwItem3DRepeater* findRepeater(QObject* root) {
 }
 
 static QVector<QQuickItem*> repeaterChildren(cwItem3DRepeater* rep) {
-    // Only direct QQuickItem children should be the delegates
     QVector<QQuickItem*> items;
-    const auto children = rep->childItems();
-    for(QQuickItem* it : children) {
+    const auto repItems = rep->items();
+    for(QQuickItem* it : repItems) {
         items.push_back(it);
     }
     return items;

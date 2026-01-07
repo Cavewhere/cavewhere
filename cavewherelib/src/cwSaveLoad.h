@@ -95,6 +95,8 @@ class GitRepository;
 #include <QDir>
 #include <QFuture>
 #include <QHash>
+#include <QPointer>
+#include <QUndoStack>
 #include <functional>
 
 class cwSaveLoad : public QObject
@@ -126,6 +128,7 @@ public:
 
     cwFutureManagerToken futureManagerToken() const;
     void setFutureManagerToken(const cwFutureManagerToken& futureManagerToken);
+    void setUndoStack(QUndoStack* undoStack);
 
     QFuture<Monad::ResultString> saveAllFromV6(const QDir& dir, const cwProject* region, const QString& projectFileName);
 
@@ -203,6 +206,7 @@ private:
     struct Data;
     friend struct Data;
     std::unique_ptr<Data> d;
+    QPointer<QUndoStack> m_undoStack;
 
 
     void setSaveEnabled(bool enabled);

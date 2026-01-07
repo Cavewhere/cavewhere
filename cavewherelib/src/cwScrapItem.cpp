@@ -218,6 +218,9 @@ void cwScrapItem::setTargetItem(QQuickItem *newTargetItem)
     StationView->setParentItem(m_targetItem);
     LeadView->setParentItem(m_targetItem);
     OutlinePointView->setParentItem(m_targetItem);
+    StationView->updateItemParents();
+    LeadView->updateItemParents();
+    OutlinePointView->updateItemParents();
 
     emit targetItemChanged();
 }

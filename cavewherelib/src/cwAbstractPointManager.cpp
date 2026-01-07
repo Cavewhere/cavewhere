@@ -24,9 +24,7 @@ cwAbstractPointManager::cwAbstractPointManager(QQuickItem *parent) :
     connect(this, &cwAbstractPointManager::parentChanged,
             this, [this]()
             {
-                for(auto item : std::as_const(m_items)) {
-                    item->setParentItem(parentItem());
-                }
+                updateItemParents();
             });
 }
 
@@ -122,7 +120,7 @@ QQuickItem* cwAbstractPointManager::createItem(int index)
         m_component->setInitialProperties(item, props);
     }
 
-    item->setParentItem(this);
+    item->setParentItem(parentItem() != nullptr ? parentItem() : this);
     item->setParent(this);
 
     m_component->completeCreate();
@@ -133,6 +131,14 @@ QQuickItem* cwAbstractPointManager::createItem(int index)
     }
 
     return item;
+}
+
+void cwAbstractPointManager::updateItemParents()
+{
+    QQuickItem* newParentItem = parentItem() != nullptr ? parentItem() : this;
+    for(auto item : std::as_const(m_items)) {
+        item->setParentItem(newParentItem);
+    }
 }
 
 void cwAbstractPointManager::refreshItemAt(int index)

@@ -674,6 +674,9 @@ void cwSaveLoad::newProject()
 
             if(region) [[likely]] {
                 region->clearCaves();
+                if(m_undoStack) {
+                    m_undoStack->clear();
+                }
 
                 //Rename the region
                 const auto tempName = randomName();
@@ -787,6 +790,13 @@ cwFutureManagerToken cwSaveLoad::futureManagerToken() const
 void cwSaveLoad::setFutureManagerToken(const cwFutureManagerToken &futureManagerToken)
 {
     d->futureToken = futureManagerToken;
+}
+
+void cwSaveLoad::setUndoStack(QUndoStack *undoStack)
+{
+    if(m_undoStack != undoStack) {
+        m_undoStack = undoStack;
+    }
 }
 
 QFuture<ResultBase> cwSaveLoad::saveCavingRegion(const QDir &dir, const cwCavingRegion *region)
