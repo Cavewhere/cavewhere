@@ -19,8 +19,11 @@ MainWindowTest {
             RootData.pageSelectionModel.currentPageAddress = "Source"
             waitForRendering(mainWindow);
 
-            let label_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->newCavingAreaButton->label")
-            mouseClick(label_obj1)
+            let addButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->addRepositoryButton")
+            mouseClick(addButton)
+            tryVerify(() => { return findChild(mainWindow, "addMenuNew") !== null })
+            let addMenuNew = findChild(mainWindow, "addMenuNew")
+            mouseClick(addMenuNew)
 
             let tempDir = TestHelper.tempDirectoryUrl();
             RootData.repositoryModel.defaultRepositoryDir = tempDir
@@ -58,8 +61,11 @@ MainWindowTest {
             RootData.pageSelectionModel.currentPageAddress = "Source"
             waitForRendering(mainWindow);
 
-            let label_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->newCavingAreaButton->label")
-            mouseClick(label_obj1)
+            let addButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->addRepositoryButton")
+            mouseClick(addButton)
+            tryVerify(() => { return findChild(mainWindow, "addMenuNew") !== null })
+            let addMenuNew = findChild(mainWindow, "addMenuNew")
+            mouseClick(addMenuNew)
 
             let tempDir = TestHelper.tempDirectoryUrl();
             RootData.repositoryModel.defaultRepositoryDir = tempDir
@@ -109,7 +115,10 @@ MainWindowTest {
             compare(firstDelegate.nameRole, "test")
 
             //Try to add the test directory again
-            mouseClick(label_obj1)
+            mouseClick(addButton)
+            tryVerify(() => { return findChild(mainWindow, "addMenuNew") !== null })
+            addMenuNew = findChild(mainWindow, "addMenuNew")
+            mouseClick(addMenuNew)
 
             cavingAreaNameTextEdit = ObjectFinder.findObjectByChain(mainWindow, "cavingAreaName")
             compare(cavingAreaNameTextEdit.textField.text, "")
@@ -166,8 +175,11 @@ MainWindowTest {
             RootData.pageSelectionModel.currentPageAddress = "Source"
             waitForRendering(mainWindow);
 
-            let label_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->newCavingAreaButton->label")
-            mouseClick(label_obj1)
+            let addButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->addRepositoryButton")
+            mouseClick(addButton)
+            tryVerify(() => { return findChild(mainWindow, "addMenuNew") !== null })
+            let addMenuNew = findChild(mainWindow, "addMenuNew")
+            mouseClick(addMenuNew)
 
             //We're going to assume we don't have permission here and trying to add repo at root will throw an error
             let dir = TestHelper.toLocalUrl("/");
