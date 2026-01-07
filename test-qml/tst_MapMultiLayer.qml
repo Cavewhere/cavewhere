@@ -27,6 +27,8 @@ MainWindowTest {
             let mapButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->mainSideBar->mapButton")
             mouseClick(mapButton)
 
+            wait(100)
+
             let addLayerButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->addLayerButton")
             mouseClick(addLayerButton)
 
