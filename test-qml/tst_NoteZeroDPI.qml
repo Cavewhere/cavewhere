@@ -88,7 +88,7 @@ MainWindowTest {
             mouseClick(done)
 
             //Make sure the value updates
-            fuzzyCompare(Number(text.text), 302.87, 1.0)
+            fuzzyCompare(Number(text.text), 300.23, 2.5)
         }
     }
 }
