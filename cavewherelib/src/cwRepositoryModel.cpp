@@ -83,6 +83,31 @@ Monad::ResultBase cwRepositoryModel::addRepository(const cwResultDir& dir)
     });
 }
 
+Monad::ResultBase cwRepositoryModel::addRepositoryDirectory(const QDir& dir)
+{
+    if (!dir.exists()) {
+        return Monad::ResultBase(QStringLiteral("Repository path %1 does not exist").arg(dir.absolutePath()), PathError);
+    }
+
+    if (!QQuickGit::GitRepository::isRepository(dir)) {
+        return Monad::ResultBase(QStringLiteral("Repository path %1 is not a git repository").arg(dir.absolutePath()), PathError);
+    }
+
+    for (const QDir& repo : m_repositories) {
+        if (repo.absolutePath() == dir.absolutePath()) {
+            return Monad::ResultBase();
+        }
+    }
+
+    const int newIndex = m_repositories.count();
+    beginInsertRows(QModelIndex(), newIndex, newIndex);
+    m_repositories.append(dir);
+    endInsertRows();
+    saveRepositories();
+
+    return Monad::ResultBase();
+}
+
 Monad::ResultString cwRepositoryModel::repositoryProjectFile(int index) const
 {
     if (index < 0 || index >= m_repositories.count()) {
@@ -236,8 +261,24 @@ void cwRepositoryModel::loadSettings()
     }
 
     //Load default directory
-    auto defaultPath = QUrl::fromLocalFile(QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation));
-    m_defaultRepositoryDir = settings.value(DefaultDirKey, defaultPath).toString();
+    QUrl defaultPath;
+    if (cwRootData::isMobileBuild()) {
+        const QString basePath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+        QDir baseDir(basePath);
+        baseDir.mkpath(QStringLiteral("."));
+        QDir repoDir(baseDir.filePath(QStringLiteral("Repositories")));
+        repoDir.mkpath(QStringLiteral("."));
+        defaultPath = QUrl::fromLocalFile(repoDir.absolutePath());
+    } else {
+        defaultPath = QUrl::fromLocalFile(QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation));
+    }
+
+    const QUrl storedPath = settings.value(DefaultDirKey, defaultPath).toUrl();
+    if (cwRootData::isMobileBuild()) {
+        m_defaultRepositoryDir = defaultPath;
+    } else {
+        m_defaultRepositoryDir = storedPath.isValid() ? storedPath : defaultPath;
+    }
 }
 
 void cwRepositoryModel::saveRepositories() const

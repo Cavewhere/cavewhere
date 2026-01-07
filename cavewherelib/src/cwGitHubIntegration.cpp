@@ -69,7 +69,7 @@ void cwGitHubIntegration::startDeviceLogin()
         emit secondsUntilNextPollChanged();
     }
     setAuthState(AuthState::RequestingCode);
-    m_deviceAuth.requestDeviceCode({QStringLiteral("repo"), QStringLiteral("read:user")});
+    m_deviceAuth.requestDeviceCode({QStringLiteral("repo"), QStringLiteral("read:user"), QStringLiteral("admin:public_key")});
 }
 
 void cwGitHubIntegration::cancelLogin()
@@ -159,8 +159,11 @@ void cwGitHubIntegration::uploadPublicKey(const QString& title)
     payload.insert(QStringLiteral("title"), title.isEmpty() ? defaultKeyTitle() : title);
     payload.insert(QStringLiteral("key"), keyValue);
 
+    qDebug() << "Uploading ssh key!" << payload;
+
     QNetworkReply* reply = m_network.post(request, QJsonDocument(payload).toJson());
     QObject::connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        qDebug() << "Reply finished:" << reply;
         handleUploadReply(reply);
     });
 }
@@ -414,6 +417,9 @@ void cwGitHubIntegration::handleUploadReply(QNetworkReply* reply)
     }
 
     const QByteArray data = reply->readAll();
+
+    qDebug() << "Reply: " << data;
+
     QJsonParseError parseError{};
     const QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
     if (parseError.error == QJsonParseError::NoError && doc.isObject()) {

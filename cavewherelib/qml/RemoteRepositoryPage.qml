@@ -10,6 +10,73 @@ StandardPage {
     property GitHubIntegration gitHub: RootData.gitHubIntegration
     property int selectedRepoIndex: -1
     signal repositoryPicked(string repositoryUrl)
+    property string cloneErrorMessage: ""
+    property string cloneStatusMessage: ""
+    property var pendingCloneDir: null
+
+    function repositoryNameFromUrl(urlText) {
+        let trimmed = urlText.trim()
+        if (trimmed.length === 0) {
+            return ""
+        }
+
+        while (trimmed.endsWith("/")) {
+            trimmed = trimmed.slice(0, trimmed.length - 1)
+        }
+
+        let splitIndex = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf(":"))
+        let name = splitIndex >= 0 ? trimmed.slice(splitIndex + 1) : trimmed
+        if (name.endsWith(".git")) {
+            name = name.slice(0, name.length - 4)
+        }
+        return name
+    }
+
+    function normalizeCloneUrl(urlText) {
+        let trimmed = urlText.trim()
+        if (trimmed.length === 0) {
+            return ""
+        }
+
+        if (trimmed.indexOf("://") === -1) {
+            let atIndex = trimmed.indexOf("@")
+            let colonIndex = trimmed.lastIndexOf(":")
+            if (atIndex !== -1 && colonIndex > atIndex) {
+                return "ssh://" + trimmed.slice(0, colonIndex) + "/" + trimmed.slice(colonIndex + 1)
+            }
+            return "https://" + trimmed
+        }
+
+        return trimmed
+    }
+
+    function startClone(urlText) {
+        cloneErrorMessage = ""
+        cloneStatusMessage = ""
+
+        let normalizedUrl = normalizeCloneUrl(urlText)
+        if (normalizedUrl.length === 0) {
+            cloneErrorMessage = "Repository URL is empty."
+            return
+        }
+
+        let repoName = repositoryNameFromUrl(normalizedUrl)
+        if (repoName.length === 0) {
+            cloneErrorMessage = "Repository name is missing."
+            return
+        }
+
+        let resultDir = RootData.repositoryModel.repositoryDir(RootData.repositoryModel.defaultRepositoryDir, repoName)
+        if (resultDir.hasError) {
+            cloneErrorMessage = resultDir.errorMessage
+            return
+        }
+
+        pendingCloneDir = resultDir.value
+        cloneRepository.directory = pendingCloneDir
+        cloneStatusMessage = "Starting clone..."
+        cloneWatcher.future = cloneRepository.clone(normalizedUrl)
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -53,13 +120,44 @@ StandardPage {
 
                 QC.Button {
                     id: cloneButton
-                    text: "Clone"
+                    text: cloneWatcher.state === GitFutureWatcher.Loading ? "Cloning..." : "Clone"
                     enabled: manualUrlField.textField.text.length > 0
+                             && cloneWatcher.state !== GitFutureWatcher.Loading
                     transformOrigin: Item.Center
                     onClicked: {
-                        console.log("TODO: clone", manualUrlField.textField.text)
+                        startClone(manualUrlField.textField.text)
                     }
                 }
+            }
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 6
+            visible: cloneWatcher.state === GitFutureWatcher.Loading
+                     || cloneErrorMessage.length > 0
+                     || cloneStatusMessage.length > 0
+
+            QC.ProgressBar {
+                Layout.fillWidth: true
+                visible: cloneWatcher.state === GitFutureWatcher.Loading
+                from: 0
+                to: 1
+                value: cloneWatcher.progress
+            }
+
+            Text {
+                Layout.fillWidth: true
+                visible: cloneStatusMessage.length > 0
+                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                color: "#444444"
+                text: cloneStatusMessage
+            }
+
+            ErrorHelpArea {
+                Layout.fillWidth: true
+                text: cloneErrorMessage
+                visible: cloneErrorMessage.length > 0
             }
         }
 
@@ -385,6 +483,45 @@ StandardPage {
             easing.type: Easing.InOutQuad
         }
         onStopped: cloneButton.scale = 1.0
+    }
+
+    GitRepository {
+        id: cloneRepository
+        account: RootData.account
+    }
+
+    GitFutureWatcher {
+        id: cloneWatcher
+        initialProgressText: "Cloning"
+
+        onProgressTextChanged: {
+            if (state === GitFutureWatcher.Loading) {
+                cloneStatusMessage = progressText
+            }
+        }
+
+        onStateChanged: {
+            if (state !== GitFutureWatcher.Ready) {
+                return
+            }
+
+            if (hasError) {
+                cloneErrorMessage = errorMessage
+                cloneStatusMessage = ""
+                pendingCloneDir = null
+                return
+            }
+
+            if (pendingCloneDir) {
+                let addResult = RootData.repositoryModel.addRepositoryDirectory(pendingCloneDir)
+                if (addResult.hasError) {
+                    cloneErrorMessage = addResult.errorMessage
+                } else {
+                    cloneStatusMessage = "Clone complete."
+                }
+                pendingCloneDir = null
+            }
+        }
     }
 
     onRepositoryPicked: {

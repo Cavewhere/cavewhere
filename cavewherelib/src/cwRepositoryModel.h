@@ -51,6 +51,7 @@ public:
 
     Q_INVOKABLE cwResultDir repositoryDir(const QUrl &localDir, const QString &name) const;
     Q_INVOKABLE Monad::ResultBase addRepository(const cwResultDir& dir);
+    Q_INVOKABLE Monad::ResultBase addRepositoryDirectory(const QDir& dir);
     Q_INVOKABLE Monad::ResultString repositoryProjectFile(int index) const;
     Q_INVOKABLE Monad::ResultBase openRepository(int index, cwProject* project) const;
     Q_INVOKABLE Monad::ResultBase addRepositoryFromProjectFile(const QUrl& projectFileUrl);
