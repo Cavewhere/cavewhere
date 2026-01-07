@@ -42,15 +42,15 @@ MainWindowTest {
                       && originalPosition.z !== turnTableInteraction.camera.position.z
                       })
 
-            //Reset the view
-            let resetViewButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->cameraOptions->resetViewButton")
+            //Reset the view                    
+            let resetViewButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->cameraOptions->resetViewButton")
             mouseClick(resetViewButton)
 
             //Make sure the text updates correctly
-            let azimuthText = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->cameraOptions->GroupBox->cameraAzimuthText")
+            let azimuthText = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->cameraOptions->GroupBox->cameraAzimuthText")
             tryVerify(() => { return azimuthText.text === "0.0" });
 
-            let pitchText = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->cameraOptions->GroupBox->pitchText")
+            let pitchText = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->cameraOptions->GroupBox->pitchText")
             tryVerify(() => { return pitchText.text === "90.0" });
 
             //Make sure the view is correct
@@ -63,8 +63,8 @@ MainWindowTest {
                       })
 
             //Change the projection to perspectiveProjection
-            let projectionSlider = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->cameraOptions->GroupBox->projectionSlider")
-            let slider = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->cameraOptions->GroupBox->projectionSlider->slider")
+            let projectionSlider = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->cameraOptions->GroupBox->projectionSlider")
+            let slider = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->cameraOptions->GroupBox->projectionSlider->slider")
             verify(projectionSlider.viewer.orthoProjection.enabled === true)
             verify(projectionSlider.viewer.perspectiveProjection.enabled === false)
             mouseClick(slider, slider.width-1, 0)
