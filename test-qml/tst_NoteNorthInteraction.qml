@@ -32,7 +32,7 @@ MainWindowTest {
             wait(200)
 
             let typeComboBox = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->noteTransformEditor->typeComboBox")
-            verify(typeComboBox.currentText === "Project Profile")
+            verify(typeComboBox.currentText === "Projected Profile")
 
             //Select North arrow up
             let setNorthButton_obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->noteTransformEditor->autoCalculate->setNorthButton")
