@@ -37,6 +37,8 @@ MainWindowTest {
 
             let lidarViewer = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId");
             tryVerify(() => { return lidarViewer.scene.gltf.status === RenderGLTF.Ready }, 10000);
+
+            RootData.futureManagerModel.waitForFinished();
         }
 
         function cleanup() {
@@ -126,6 +128,15 @@ MainWindowTest {
                           let pick = turnTableInteraction_obj3.pick(Qt.point(stationIconHandler.x, stationIconHandler.y))
                           return pick.hit && !vecClose(current3D, oldVec, 0.0001) && vecClose(current3D, pick.pointWorld, 0.0001)
                       })
+
+            let back = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->backButton")
+            mouseClick(back, 15.7781, 23.1722)
+
+            //Make sure that the transform is visible
+                    tryVerify(() => {
+                                          let transform = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor")
+                                          return transform.visible === true
+                              })
         }
 
         function test_northInteraction() {
