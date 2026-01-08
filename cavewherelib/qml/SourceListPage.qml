@@ -35,7 +35,7 @@ StandardPage {
 
                 QC.MenuItem {
                     objectName: "addMenuNew"
-                    text: "Create New Caving Area"
+                    text: "New Project"
                     onTriggered: {
                         whereDialogId.repositoryName = ""
                         whereDialogId.description = ""
@@ -45,7 +45,7 @@ StandardPage {
 
                 QC.MenuItem {
                     objectName: "addMenuOpen"
-                    text: "Open Existing Project"
+                    text: "Open"
                     onTriggered: {
                         const openDialog = function() {
                             RootData.pageSelectionModel.currentPageAddress = "Source";
@@ -62,7 +62,7 @@ StandardPage {
 
                 QC.MenuItem {
                     objectName: "addMenuRemote"
-                    text: "Connect to Remote Project"
+                    text: "Online Project"
                     onTriggered: {
                         RootData.pageSelectionModel.gotoPageByName(null, "Remote");
                     }
