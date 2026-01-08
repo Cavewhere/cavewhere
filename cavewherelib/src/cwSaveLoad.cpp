@@ -25,6 +25,7 @@
 #include "cwImageResolution.h"
 #include "cwUniqueConnectionChecker.h"
 #include "cwGlobals.h"
+#include "cwGitIgnore.h"
 
 //Async future
 #include <asyncfuture.h>
@@ -756,6 +757,7 @@ void cwSaveLoad::setFileName(const QString &filename)
 
         d->repository->setDirectory(QFileInfo(filename).absoluteDir());
         d->repository->initRepository();
+        cw::git::ensureGitIgnoreHasCacheEntry(d->repository->directory());
 
         emit fileNameChanged();
     }

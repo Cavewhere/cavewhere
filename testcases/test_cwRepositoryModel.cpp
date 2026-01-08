@@ -17,6 +17,17 @@
 #include "cwProject.h"
 #include "cwErrorListModel.h"
 
+namespace {
+QString readGitIgnore(const QDir& dir)
+{
+    QFile file(dir.filePath(QStringLiteral(".gitignore")));
+    if (!file.open(QIODevice::ReadOnly)) {
+        return QString();
+    }
+    return QString::fromUtf8(file.readAll());
+}
+} // namespace
+
 TEST_CASE("cwRepositoryModel initial state", "[cwRepositoryModel]") {
     // Ensure settings are clean
     QSettings settings;
@@ -75,6 +86,24 @@ TEST_CASE("cwRepositoryModel addRepository and persistence", "[cwRepositoryModel
     // QModelIndex idx2 = model2.index(0, 0);
     CHECK(model2.data(model2.index(0, 0), cwRepositoryModel::PathRole).toString() == repoDir.absolutePath());
     CHECK(model2.data(model2.index(1, 0), cwRepositoryModel::PathRole).toString() == nonExistentDir.absolutePath());
+}
+
+TEST_CASE("cwRepositoryModel addRepository writes .gitignore cache entry", "[cwRepositoryModel]") {
+    QSettings settings;
+    settings.clear();
+
+    cwRepositoryModel model;
+
+    QTemporaryDir tmpDir;
+    REQUIRE(tmpDir.isValid());
+    QDir repoDir(tmpDir.path());
+
+    auto result = model.addRepository(repoDir);
+    INFO("Error:" << result.errorMessage().toStdString());
+    REQUIRE_FALSE(result.hasError());
+
+    const QString contents = readGitIgnore(repoDir);
+    CHECK(contents.contains(".cw_cache/"));
 }
 
 TEST_CASE("cwRepositoryModel addRepository with url and persistence", "[cwRepositoryModel]") {

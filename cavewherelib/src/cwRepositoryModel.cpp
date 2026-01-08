@@ -3,6 +3,7 @@
 #include "cwRepositoryModel.h"
 #include "cwRootData.h"
 #include "cwProject.h"
+#include "cwGitIgnore.h"
 
 //Monad
 #include "Monad/Monad.h"
@@ -15,7 +16,6 @@
 #include <QDebug>
 
 using namespace Monad;
-
 
 cwRepositoryModel::cwRepositoryModel(QObject* parent)
     : QAbstractListModel(parent)
@@ -71,6 +71,7 @@ Monad::ResultBase cwRepositoryModel::addRepository(const cwResultDir& dir)
                    QQuickGit::GitRepository repo;
                    repo.setDirectory(dir.value());
                    repo.initRepository();
+                   cw::git::ensureGitIgnoreHasCacheEntry(dir.value());
 
                    m_repositories.append(dir.value());
                    endInsertRows();

@@ -55,6 +55,15 @@ cwScrap* firstScrap(cwProject* project) {
     REQUIRE(note->scraps().size() > 0);
     return note->scrap(0);
 }
+
+QString readGitIgnore(const QDir& dir)
+{
+    QFile file(dir.filePath(QStringLiteral(".gitignore")));
+    if (!file.open(QIODevice::ReadOnly)) {
+        return QString();
+    }
+    return QString::fromUtf8(file.readAll());
+}
 } // namespace
 
 // TEST_CASE("cwProject isModified should work correctly", "[cwProject]") {
@@ -174,6 +183,22 @@ TEST_CASE("Loading a project clears temporary flag", "[cwProject]") {
     project->waitLoadToFinish();
 
     CHECK(project->isTemporaryProject() == false);
+}
+
+TEST_CASE("Loading a project adds .gitignore cache entry", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    QString source = copyToTempFolder("://datasets/test_cwProject/v7.cw");
+    const QDir projectDir = QFileInfo(source).absoluteDir();
+    QFile::remove(projectDir.filePath(QStringLiteral(".gitignore")));
+
+    project->loadOrConvert(source);
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitLoadToFinish();
+
+    const QString contents = readGitIgnore(projectDir);
+    CHECK(contents.contains(".cw_cache/"));
 }
 
 TEST_CASE("Images should load correctly", "[cwProject]") {
