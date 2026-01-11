@@ -11,6 +11,7 @@
 //Cavewhere includes
 #include "cwProject.h"
 #include "cwCavingRegion.h"
+#include "cwCave.h"
 #include "cwCompassExporterCaveTask.h"
 #include "cwCompassImporter.h"
 #include "cwLinePlotManager.h"
@@ -24,6 +25,9 @@
 //Qt includes
 #include <QFile>
 #include <QFileInfo>
+#include <QDir>
+#include <QMap>
+#include <QTemporaryDir>
 #include "cwSignalSpy.h"
 
 TEST_CASE("Export/Import Compass", "[Compass]") {
@@ -187,6 +191,90 @@ TEST_CASE("Export invalid data - ISSUE #115", "[Compass]") {
         CHECK(loadShot.backClino() == importShot.backClino());
         CHECK(loadShot.backClino().state() == importShot.backClino().state());
     }
+}
+
+TEST_CASE("Export compass handles UP/DOWN clino values - ISSUE #121", "[Compass]") {
+    auto cave = std::make_unique<cwCave>();
+    cave->setName("CompassUpDown");
+
+    cwTrip* trip = new cwTrip();
+    trip->setName("UpDownTrip");
+    cave->addTrip(trip);
+
+    auto chunk = new cwSurveyChunk();
+    trip->addChunk(chunk);
+
+    const QStringList stations = {"s1", "s2", "s3", "s4", "s5"};
+    const QStringList clinos = {"Up", "Down", "90", "-90"};
+    const QStringList compasses = {"0", "90", "180", "270"};
+    for(int i = 0; i < clinos.size(); i++) {
+        chunk->appendNewShot();
+        chunk->setData(cwSurveyChunk::StationNameRole, i, stations.at(i));
+        chunk->setData(cwSurveyChunk::StationNameRole, i + 1, stations.at(i + 1));
+        chunk->setData(cwSurveyChunk::ShotDistanceRole, i, "10.0");
+        chunk->setData(cwSurveyChunk::ShotCompassRole, i, compasses.at(i));
+        chunk->setData(cwSurveyChunk::ShotClinoRole, i, clinos.at(i));
+    }
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString exportFile = QDir(tempDir.path()).filePath("updown.dat");
+
+    auto exportToCompass = std::make_unique<cwCompassExportCaveTask>();
+    exportToCompass->setData(cave->data());
+    exportToCompass->setOutputFile(exportFile);
+    exportToCompass->start();
+    exportToCompass->waitToFinish();
+
+    REQUIRE(QFileInfo::exists(exportFile) == true);
+
+    QFile exportedFile(exportFile);
+    REQUIRE(exportedFile.open(QFile::ReadOnly | QFile::Text));
+
+    QMap<QString, double> clinoByFrom;
+    while(!exportedFile.atEnd()) {
+        QString line = QString::fromUtf8(exportedFile.readLine());
+        line.remove(QChar(0x0C));
+
+        const QString trimmed = line.trimmed();
+        if(trimmed.isEmpty()
+                || trimmed.startsWith("Cave")
+                || trimmed.startsWith("SURVEY")
+                || trimmed.startsWith("DECLINATION")
+                || trimmed.startsWith("FROM TO")) {
+            continue;
+        }
+
+        const QStringList tokens = trimmed.simplified().split(' ');
+        if(tokens.size() < 5) {
+            continue;
+        }
+
+        const QString from = tokens.at(0);
+        const QString to = tokens.at(1);
+        if(from == to) {
+            continue;
+        }
+
+        bool ok = false;
+        const double clino = tokens.at(4).toDouble(&ok);
+        if(!ok) {
+            continue;
+        }
+
+        if(stations.contains(from)) {
+            clinoByFrom.insert(from, clino);
+        }
+    }
+
+    REQUIRE(clinoByFrom.contains("s1"));
+    REQUIRE(clinoByFrom.contains("s2"));
+    REQUIRE(clinoByFrom.contains("s3"));
+    REQUIRE(clinoByFrom.contains("s4"));
+    CHECK(clinoByFrom.value("s1") == 90.0);
+    CHECK(clinoByFrom.value("s2") == -90.0);
+    CHECK(clinoByFrom.value("s3") == 90.0);
+    CHECK(clinoByFrom.value("s4") == -90.0);
 }
 
 TEST_CASE("Test 15 char format is okay", "[Compass]") {
