@@ -419,6 +419,7 @@ if(UNIX AND NOT APPLE)
             "${LINUXDEPLOY_QT_PLUGIN_EXECUTABLE}"
             --appdir "${APPIMAGE_APPDIR}"
             --exclude-library "libqsqlmimer.so"
+            --exclude-library "libqsqloci.so*"
         COMMAND ${CMAKE_COMMAND} -E env "PATH=${LINUXDEPLOY_ENV_PATH}" ${APPIMAGE_RUNTIME_ENV}
             "${LINUXDEPLOY_EXECUTABLE}"
             --appdir "${APPIMAGE_APPDIR}"
