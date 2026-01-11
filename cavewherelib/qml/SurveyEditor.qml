@@ -142,20 +142,20 @@ QQ.Item {
 
                     RowLayout {
                         Layout.fillWidth: true
+                        spacing: 8
 
                         DoubleClickTextInput {
                             id: tripNameText
                             text: clipArea.currentTrip.name
                             font.bold: true
                             font.pixelSize: 20
+                            autoResize: true
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
 
                             onFinishedEditting: (newText) => {
                                                     clipArea.currentTrip.name = newText
                                                 }
-                        }
-
-                        QQ.Item {
-                            Layout.fillWidth: true
                         }
 
                         DoubleClickTextInput {
@@ -165,6 +165,7 @@ QQ.Item {
                             text: Qt.formatDate(clipArea.currentTrip.date, "yyyy-MM-dd")
 
                             font.bold: true
+                            Layout.alignment: Qt.AlignRight
 
                             onFinishedEditting: function(newText) {
                                 let dateTime = newText + " 00:00:00";
@@ -270,4 +271,3 @@ QQ.Item {
         }
     }
 }
-
