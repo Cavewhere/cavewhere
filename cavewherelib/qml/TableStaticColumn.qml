@@ -15,7 +15,7 @@ QQ.Rectangle {
     required property string text;
     required property int columnWidth;
 
-    property int sortRole: -1
+    required property int sortRole; //: -1
     property int sortMode: TableStaticColumn.Sort.None
 
     required property var model
@@ -100,6 +100,8 @@ QQ.Rectangle {
                 } else {
                     console.warn("TableStaticColumn model isn't a cwSortFilterProxyModel, sorting will not work")
                 }
+            } else {
+                console.warn("Delegate has no sortRole")
             }
         }
     }

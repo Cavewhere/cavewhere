@@ -139,18 +139,42 @@ StandardPage {
                 Layout.fillHeight: true
                 spacing: 0
 
+                TableStaticColumnModel {
+                    id: columnModelId
+                    columnWidth: QtObject {
+                        id: columnWidth
+                        property int name //: 200
+                        property int date //: 75
+                        property int stations //: 75
+                        property int length //: 50
+                    }
+
+                    columnModel: ListModel {
+                        ListElement { widthName: "name"; columnWidth: 200; text: "Name"; sortRole: CavePageModel.TripNameRole }
+                        ListElement { widthName: "date"; columnWidth: 75; text: "Date"; sortRole: CavePageModel.TripDateRole }
+                        ListElement { widthName: "stations"; columnWidth: 75; text: "Stations"; sortRole: CavePageModel.UsedStationsRole }
+                        ListElement { widthName: "length"; columnWidth: 50; text: "Length"; sortRole: CavePageModel.TripDistanceRole }
+                    }
+                }
+
 
                 HorizontalHeaderStaticView {
                     view: tableViewId
                     Layout.fillWidth: true
-                }
 
+                    delegate: TableStaticColumn {
+                        model: tableViewId.model
+                    }
+                }
 
                 QC.ScrollView {
                     id: scrollViewId
                     implicitWidth: tableViewId.implicitWidth +
                                    QC.ScrollBar.vertical.implicitWidth
                     Layout.fillHeight: true
+
+
+
 
                     TableStaticView {
                         id: tableViewId
@@ -161,12 +185,7 @@ StandardPage {
                         }
 
                         //This will populate the HorizontalHeader
-                        columnModel.children: [
-                            TableStaticColumn { id: nameColumnId; columnWidth: 200; text: "Name"; sortRole: CavePageModel.TripNameRole},
-                            TableStaticColumn { id: dateColumnId; columnWidth: 75; text: "Date"; sortRole: CavePageModel.TripDateRole },
-                            TableStaticColumn { id: stationsColumnId; columnWidth: 75; text: "Stations"; sortRole: CavePageModel.UsedStationsRole },
-                            TableStaticColumn { id: lengthColumnId; columnWidth: 50; text: "Length"; sortRole: CavePageModel.TripDistanceRole  }
-                        ]
+                        columnModel: columnModelId.columnModel
 
                         Layout.fillHeight: true
 
@@ -203,7 +222,7 @@ StandardPage {
                             }
 
                             TableRowBackground {
-                                isSelected: tableViewId.currentIndex == rowDelegateId.index
+                                isSelected: tableViewId.currentIndex === rowDelegateId.index
                                 rowIndex: rowDelegateId.index
                                 anchors.fill: parent
                             }
@@ -226,7 +245,7 @@ StandardPage {
                                 // anchors.fill: parent
 
                                 QQ.Item {
-                                    implicitWidth: nameColumnId.width
+                                    implicitWidth: columnWidth.name
                                     implicitHeight: rowLayout.height
                                     clip: true
 
@@ -251,7 +270,7 @@ StandardPage {
                                 }
 
                                 QQ.Item {
-                                    implicitWidth: dateColumnId.width
+                                    implicitWidth: columnWidth.date
                                     implicitHeight: dateId.implicitHeight
                                     clip: true
                                     Text {
@@ -263,7 +282,7 @@ StandardPage {
                                 }
 
                                 QQ.Item {
-                                    implicitWidth: stationsColumnId.width
+                                    implicitWidth: columnWidth.stations
                                     implicitHeight: usedStationsId.implicitHeight
                                     clip: true
 
@@ -276,7 +295,7 @@ StandardPage {
                                 }
 
                                 QQ.Item {
-                                    implicitWidth: lengthColumnId.width
+                                    implicitWidth: columnWidth.length
                                     implicitHeight: lengthId.implicitHeight
                                     clip: true
 

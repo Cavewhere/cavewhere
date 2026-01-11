@@ -12,7 +12,7 @@ QC.HorizontalHeaderView {
 
     columnWidthProvider: function (column) {
         let columnWidth = explicitColumnWidth(column);
-        if(columnWidth == -1) {
+        if(columnWidth === -1) {
             //column width hasn't been set.
             return view.columnModel.get(column).columnWidth;
         }
@@ -26,8 +26,8 @@ QC.HorizontalHeaderView {
         // Update each ListElement's columnWidth with the current header
         for(let i = 0; i < view.columnModel.count; i++) {
             let column = view.columnModel.get(i);
-            if(horizontalHeader.columnWidth(i) != -1
-                    && column.columnWidth != horizontalHeader.columnWidth(i))
+            if(horizontalHeader.columnWidth(i) !== -1
+                    && column.columnWidth !== horizontalHeader.columnWidth(i))
             {
                 column.columnWidth = horizontalHeader.columnWidth(i);
             }
