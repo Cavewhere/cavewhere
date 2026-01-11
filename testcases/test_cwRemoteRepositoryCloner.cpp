@@ -15,11 +15,15 @@
 #include <QDir>
 #include <QDebug>
 #include <QSignalSpy>
+#include <QSettings>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QUrl>
 
 TEST_CASE("cwRemoteRepositoryCloner clones a remote repository", "[cwRemoteRepositoryCloner]") {
+    QSettings settings;
+    settings.clear();
+
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
 
