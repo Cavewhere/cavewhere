@@ -28,12 +28,12 @@ MainWindowTest {
             let tempDir = TestHelper.tempDirectoryUrl();
             RootData.repositoryModel.defaultRepositoryDir = tempDir
 
-            let dirText = ObjectFinder.findObjectByChain(mainWindow, "repositoryParentDir")
+            let dirText = findChild(mainWindow, "repositoryParentDir")
             compare(dirText.text, RootData.urlToLocal(RootData.repositoryModel.defaultRepositoryDir))
             compare(dirText.text, RootData.urlToLocal(tempDir))
 
             //Write test
-            let nameTextEdit = ObjectFinder.findObjectByChain(mainWindow, "cavingAreaName->TextField")
+            let nameTextEdit = ObjectFinder.findObjectByChain(mainWindow, "Popup->cavingAreaName->TextField")
             mouseClick(nameTextEdit)
 
             //Write test
@@ -70,18 +70,18 @@ MainWindowTest {
             let tempDir = TestHelper.tempDirectoryUrl();
             RootData.repositoryModel.defaultRepositoryDir = tempDir
 
-            let dirText = ObjectFinder.findObjectByChain(mainWindow, "repositoryParentDir")
+            let dirText = ObjectFinder.findObjectByChain(mainWindow, "Popup->repositoryParentDir")
             compare(dirText.text, RootData.urlToLocal(RootData.repositoryModel.defaultRepositoryDir))
             compare(dirText.text, RootData.urlToLocal(tempDir))
 
             //Make sure the error isn't visible yet
-            let cavingAreaNameTextEdit = ObjectFinder.findObjectByChain(mainWindow, "cavingAreaName")
+            let cavingAreaNameTextEdit = ObjectFinder.findObjectByChain(mainWindow, "Popup->cavingAreaName")
             compare(cavingAreaNameTextEdit.textField.text, "")
             compare(cavingAreaNameTextEdit.hasError, false)
 
 
             //User clicks okay
-            let label_obj2 = ObjectFinder.findObjectByChain(mainWindow, "openRepoButton")
+            let label_obj2 = ObjectFinder.findObjectByChain(mainWindow, "Popup->openRepoButton")
             mouseClick(label_obj2)
 
             //Error should be shown
@@ -89,7 +89,7 @@ MainWindowTest {
             compare(cavingAreaNameTextEdit.errorMessage, "Caving area name is empty")
 
             //Write test
-            let nameTextEdit = ObjectFinder.findObjectByChain(mainWindow, "cavingAreaName->TextField")
+            let nameTextEdit = ObjectFinder.findObjectByChain(mainWindow, "Popup->cavingAreaName->TextField")
             mouseClick(nameTextEdit)
 
             //Write test
@@ -120,12 +120,12 @@ MainWindowTest {
             addMenuNew = findChild(mainWindow, "addMenuNew")
             mouseClick(addMenuNew)
 
-            cavingAreaNameTextEdit = ObjectFinder.findObjectByChain(mainWindow, "cavingAreaName")
+            cavingAreaNameTextEdit = ObjectFinder.findObjectByChain(mainWindow, "Popup->cavingAreaName")
             compare(cavingAreaNameTextEdit.textField.text, "")
             compare(cavingAreaNameTextEdit.hasError, false)
 
             //Write test
-            nameTextEdit = ObjectFinder.findObjectByChain(mainWindow, "cavingAreaName->TextField")
+            nameTextEdit = ObjectFinder.findObjectByChain(mainWindow, "Popup->cavingAreaName->TextField")
             mouseClick(nameTextEdit)
 
             //Write test
@@ -134,7 +134,7 @@ MainWindowTest {
             keyClick("s")
 
             //Write test
-            let errorArea = ObjectFinder.findObjectByChain(mainWindow, "newRepoErrorArea")
+            let errorArea = findChild(mainWindow, "newRepoErrorArea")
             waitForRendering(errorArea);
             compare(errorArea.visible, false)
             compare(errorArea.text, "")
@@ -153,7 +153,7 @@ MainWindowTest {
             verify(cavingAreaNameTextEdit.errorMessage.includes("exists, use a different name"))
 
             //User clicks okay
-            let openRepoButton = ObjectFinder.findObjectByChain(mainWindow, "openRepoButton")
+            let openRepoButton = ObjectFinder.findObjectByChain(mainWindow, "Popup->openRepoButton")
             mouseClick(openRepoButton)
 
             //Make sure there's an error about the directory exists
@@ -167,7 +167,7 @@ MainWindowTest {
             compare(errorArea.visible, false)
 
             //Cancel
-            let cancelRepoButton = ObjectFinder.findObjectByChain(mainWindow, "cancelRepoButton")
+            let cancelRepoButton = ObjectFinder.findObjectByChain(mainWindow, "Popup->cancelRepoButton")
             mouseClick(cancelRepoButton)
         }
 
@@ -185,12 +185,12 @@ MainWindowTest {
             let dir = TestHelper.toLocalUrl("/");
             RootData.repositoryModel.defaultRepositoryDir = TestHelper.toLocalUrl("/")
 
-            let dirText = ObjectFinder.findObjectByChain(mainWindow, "repositoryParentDir")
+            let dirText = ObjectFinder.findObjectByChain(mainWindow, "Popup->repositoryParentDir")
             compare(dirText.text, RootData.urlToLocal(RootData.repositoryModel.defaultRepositoryDir))
             compare(dirText.text, RootData.urlToLocal(dir))
 
             //Write test
-            let nameTextEdit = ObjectFinder.findObjectByChain(mainWindow, "cavingAreaName->TextField")
+            let nameTextEdit = ObjectFinder.findObjectByChain(mainWindow, "Popup->cavingAreaName->TextField")
             mouseClick(nameTextEdit)
 
             //Write test
@@ -199,15 +199,15 @@ MainWindowTest {
             keyClick("s")
             keyClick("t")
 
-            let cavingAreaNameTextEdit = ObjectFinder.findObjectByChain(mainWindow, "cavingAreaName")
-            let errorArea = ObjectFinder.findObjectByChain(mainWindow, "newRepoErrorArea")
+            let cavingAreaNameTextEdit = ObjectFinder.findObjectByChain(mainWindow, "Popup->cavingAreaName")
+            let errorArea = ObjectFinder.findObjectByChain(mainWindow, "Popup->newRepoErrorArea")
             waitForRendering(errorArea);
 
             compare(cavingAreaNameTextEdit.hasError, false)
             compare(errorArea.visible, false)
 
             //User clicks okay
-            let openRepoButton = ObjectFinder.findObjectByChain(mainWindow, "openRepoButton")
+            let openRepoButton = ObjectFinder.findObjectByChain(mainWindow, "Popup->openRepoButton")
             mouseClick(openRepoButton)
 
             compare(cavingAreaNameTextEdit.hasError, false)
@@ -215,7 +215,7 @@ MainWindowTest {
             verify(errorArea.text.includes("failed to make directory"));
 
             //Cancel
-            let cancelRepoButton = ObjectFinder.findObjectByChain(mainWindow, "cancelRepoButton")
+            let cancelRepoButton = ObjectFinder.findObjectByChain(mainWindow, "Popup->cancelRepoButton")
             mouseClick(cancelRepoButton)
 
             //Make sure the dialog goes away
@@ -248,7 +248,7 @@ MainWindowTest {
             // let folderDialog = ObjectFinder.findObjectByChain(mainWindow, "rootId->loadProjectDialog->whereDialogLoader->folderDialog")
             folderDialog.currentFolder = TestHelper.tempDirectoryUrl()
 
-            let openButton = ObjectFinder.findObjectByChain(mainWindow, "openRepoButton")
+            let openButton = ObjectFinder.findObjectByChain(mainWindow, "Popup->openRepoButton")
             mouseClick(openButton)
 
             //Make we have all the data
