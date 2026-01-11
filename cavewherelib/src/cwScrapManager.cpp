@@ -36,6 +36,7 @@
 #include "asyncfuture.h"
 
 //Std includes
+#include <algorithm>
 #include <ranges>
 
 cwScrapManager::cwScrapManager(QObject *parent) :
@@ -391,6 +392,11 @@ void cwScrapManager::connectScrap(cwScrap* scrap) {
     connect(scrap, &cwScrap::leadsInserted, this, &cwScrapManager::scrapLeadInserted);
     connect(scrap, &cwScrap::leadsRemoved, this, &cwScrapManager::scrapLeadRemoved);
     connect(scrap, &cwScrap::leadsDataChanged, this, &cwScrapManager::scrapLeadUpdated);
+    connect(scrap, &cwScrap::editingChanged, this, [this, scrap](bool editing) {
+        if(!editing) {
+            updateScrapGeometry({scrap});
+        }
+    });
 
     auto connectViewMatrix = [scrap, this]() {
         connect(scrap->viewMatrix(), &cwAbstractScrapViewMatrix::matrixChanged,
@@ -438,6 +444,7 @@ void cwScrapManager::disconnectScrap(cwScrap* scrap)
     disconnect(scrap, &cwScrap::leadsInserted, this, &cwScrapManager::scrapLeadInserted);
     disconnect(scrap, &cwScrap::leadsRemoved, this, &cwScrapManager::scrapLeadRemoved);
     disconnect(scrap, &cwScrap::leadsDataChanged, this, &cwScrapManager::scrapLeadUpdated);
+    disconnect(scrap, &cwScrap::editingChanged, this, nullptr);
     disconnect(scrap, &cwScrap::viewMatrixChanged, this, nullptr);
     disconnect(scrap->viewMatrix(), &cwAbstractScrapViewMatrix::matrixChanged, this, nullptr);
 }
@@ -521,13 +528,23 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
         return;
     }
 
+    const bool hasRunnableScrap = std::any_of(DirtyScraps.begin(), DirtyScraps.end(), [](const cwScrap* scrap) {
+        return scrap != nullptr && !scrap->editing() && scrap->parentCave() != nullptr;
+    });
+
+    if(!hasRunnableScrap) {
+        return;
+    }
+
 
     auto run = [this]() {
 
         //Running
         auto dirtyScrapsRange =
             cw::toList(DirtyScraps)
-            | std::views::filter([](const cwScrap* scrap) { return scrap->parentCave() != nullptr; });
+            | std::views::filter([](const cwScrap* scrap) {
+                return scrap != nullptr && !scrap->editing() && scrap->parentCave() != nullptr;
+            });
 
         QList<cwScrap*> dirtyScraps(dirtyScrapsRange.begin(), dirtyScrapsRange.end());
 

@@ -240,3 +240,44 @@ TEST_CASE("cwScrapManager should update on viewMatrix change", "[cwScrapManager]
         CHECK(scrapManager->dirtyScraps().contains(scrap) == false);
     }
 }
+
+TEST_CASE("cwScrapManager should defer updates while editing", "[cwScrapManager]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    fileToProject(project, "://datasets/test_cwScrapManager/scrapGuessNeigborPlan.cw");
+    rootData->futureManagerModel()->waitForFinished();
+
+    auto scrapManager = rootData->scrapManager();
+    REQUIRE(scrapManager);
+
+    auto cave = project->cavingRegion()->cave(0);
+    auto trip = cave->trip(0);
+    auto note = trip->notes()->notes().first();
+    auto scrap = note->scraps().first();
+    REQUIRE(scrap);
+
+    rootData->futureManagerModel()->waitForFinished();
+    CHECK(rootData->futureManagerModel()->rowCount() == 0);
+    CHECK(scrapManager->dirtyScraps().contains(scrap) == false);
+
+    cwSignalSpy rowsInsertedSpy(rootData->futureManagerModel(), &cwFutureManagerModel::rowsInserted);
+
+    scrap->beginEditing();
+    QPointF currentPos = scrap->stationData(cwScrap::StationPosition, 0).toPointF();
+    for(int i = 0; i < 20; ++i) {
+        auto offset = 0.01 * (i + 1);
+        scrap->setStationData(cwScrap::StationPosition, 0, currentPos + QPointF(offset, 0.0));
+    }
+
+    CHECK(rowsInsertedSpy.count() == 0);
+    CHECK(scrapManager->dirtyScraps().contains(scrap));
+
+    scrap->endEditing();
+    CHECK(rowsInsertedSpy.count() == 1);
+    rootData->futureManagerModel()->waitForFinished();
+    scrapManager->waitForFinish();
+
+
+    CHECK(scrapManager->dirtyScraps().contains(scrap) == false);
+}

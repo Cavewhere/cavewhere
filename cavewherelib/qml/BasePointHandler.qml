@@ -17,6 +17,7 @@ QQ.Item {
     signal positionChanged(point position)
     signal finishedMoving(point position)
     signal doubleClicked()
+    signal dragActiveChanged(bool active)
 
     function position() {
         return stationItem.mapToItem(stationItem.parentView,
@@ -44,11 +45,13 @@ QQ.Item {
             } else {
                 stationItem.finishedMoving(position())
             }
+
+            stationItem.dragActiveChanged(active)
         }
 
         onCentroidChanged: {
             if (active) {
-                positionChanged(position())
+                stationItem.positionChanged(position())
             }
         }
     }

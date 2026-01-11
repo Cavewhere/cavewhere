@@ -475,3 +475,35 @@ TEST_CASE("Distance lead unit should return the index supported units", "[cwScra
     trip->calibrations()->setDistanceUnit(cwUnits::Feet);
     checkUnit("ft");
 }
+
+TEST_CASE("cwScrap editing depth should toggle editing state", "[cwScrap]") {
+    cwScrap scrap;
+    cwSignalSpy editingSpy(&scrap, &cwScrap::editingChanged);
+
+    CHECK(scrap.editing() == false);
+    CHECK(editingSpy.count() == 0);
+
+    scrap.beginEditing();
+    CHECK(scrap.editing() == true);
+    REQUIRE(editingSpy.count() == 1);
+    CHECK(editingSpy.takeFirst().at(0).toBool() == true);
+
+    scrap.beginEditing();
+    CHECK(scrap.editing() == true);
+    CHECK(editingSpy.count() == 0);
+
+    scrap.endEditing();
+    CHECK(scrap.editing() == true);
+    CHECK(editingSpy.count() == 0);
+
+    scrap.endEditing();
+    CHECK(scrap.editing() == false);
+    REQUIRE(editingSpy.count() == 1);
+    CHECK(editingSpy.takeFirst().at(0).toBool() == false);
+
+    {
+        cwScrapEditingScope scope(&scrap);
+        CHECK(scrap.editing() == true);
+    }
+    CHECK(scrap.editing() == false);
+}

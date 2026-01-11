@@ -16,6 +16,7 @@
 #include <QQmlEngine>
 #include <QMatrix4x4>
 #include <QtCore/quuid.h>
+#include <QPointer>
 
 //Our includes
 #include "cwGlobals.h"
@@ -36,6 +37,7 @@ class cwProjectedProfileScrapViewMatrix;
 class cwNote;
 class cwCave;
 class cwKeywordModel;
+class cwScrapEditingScope;
 
 /**
   cwScrap holds a polygon of points that represents a scrap
@@ -50,6 +52,7 @@ class CAVEWHERE_LIB_EXPORT cwScrap : public QObject
 
     Q_PROPERTY(cwNoteTranformation* noteTransformation READ noteTransformation NOTIFY noteTransformationChanged)
     Q_PROPERTY(bool calculateNoteTransform READ calculateNoteTransform WRITE setCalculateNoteTransform NOTIFY calculateNoteTransformChanged)
+    Q_PROPERTY(bool editing READ editing NOTIFY editingChanged)
 
     Q_PROPERTY(ScrapType type READ type WRITE setType NOTIFY typeChanged)
     Q_PROPERTY(cwAbstractScrapViewMatrix* viewMatrix READ viewMatrix NOTIFY viewMatrixChanged)
@@ -57,6 +60,7 @@ class CAVEWHERE_LIB_EXPORT cwScrap : public QObject
     Q_PROPERTY(cwKeywordModel* keywordModel READ keywordModel CONSTANT)
 
 public:
+    friend class cwScrapEditingScope;
     enum ScrapType {
         Plan = cwScrapType::Plan,
         RunningProfile = cwScrapType::RunningProfile,
@@ -158,6 +162,10 @@ public:
     bool calculateNoteTransform() const;
     void setCalculateNoteTransform(bool calculateNoteTransform);
 
+    bool editing() const;
+    Q_INVOKABLE void beginEditing();
+    Q_INVOKABLE void endEditing();
+
     QString guessNeighborStationName(const cwNoteStation& previousStation, QPointF stationNotePosition);
 
     QMatrix4x4 mapWorldToNoteMatrix(const cwNoteStation &referenceStation) const;
@@ -210,6 +218,7 @@ signals:
     void typeChanged();
 
     void triangulationDataChanged();
+    void editingChanged(bool editing);
 
 private:
 
@@ -309,6 +318,18 @@ private:
 private slots:
 //    void updateStationsWithNewCave();
 
+private:
+    int m_editingDepth;
+};
+
+class CAVEWHERE_LIB_EXPORT cwScrapEditingScope
+{
+public:
+    explicit cwScrapEditingScope(cwScrap* scrap);
+    ~cwScrapEditingScope();
+
+private:
+    QPointer<cwScrap> m_scrap;
 };
 
 Q_DECLARE_METATYPE(cwScrap*)

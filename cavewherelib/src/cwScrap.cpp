@@ -39,12 +39,57 @@ cwScrap::cwScrap(QObject *parent) :
     ViewMatrix(nullptr),
     ParentNote(nullptr),
     TriangulationDataDirty(false),
-    KeywordModel(new cwKeywordModel(this))
+    KeywordModel(new cwKeywordModel(this)),
+    m_editingDepth(0)
 {
     setCalculateNoteTransform(true);
     setViewMatrix(new cwPlanScrapViewMatrix(this));
     updateIdKeyword();
     updateTypeKeyword();
+}
+
+bool cwScrap::editing() const
+{
+    return m_editingDepth > 0;
+}
+
+void cwScrap::beginEditing()
+{
+    if(m_editingDepth == 0) {
+        m_editingDepth = 1;
+        emit editingChanged(true);
+        return;
+    }
+
+    ++m_editingDepth;
+}
+
+void cwScrap::endEditing()
+{
+    if(m_editingDepth == 0) {
+        qWarning() << "cwScrap::endEditing called with depth 0" << LOCATION;
+        return;
+    }
+
+    --m_editingDepth;
+    if(m_editingDepth == 0) {
+        emit editingChanged(false);
+    }
+}
+
+cwScrapEditingScope::cwScrapEditingScope(cwScrap* scrap)
+    : m_scrap(scrap)
+{
+    if(m_scrap) {
+        m_scrap->beginEditing();
+    }
+}
+
+cwScrapEditingScope::~cwScrapEditingScope()
+{
+    if(m_scrap) {
+        m_scrap->endEditing();
+    }
 }
 
 // cwScrap::cwScrap(const cwScrap& other)
