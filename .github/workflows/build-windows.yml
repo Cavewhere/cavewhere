@@ -86,7 +86,7 @@ jobs:
 
       - name: Install Dependencies with Conan
         run: |
-          conan install . --build=missing --output-folder=build -s compiler.cppstd=17 -s compiler.version=194 -c tools.cmake.cmaketoolchain:generator=Ninja
+          conan install . --build=missing --output-folder=build -s:h compiler.cppstd=20 -s:b compiler.cppstd=20 -s compiler.version=194 -c tools.cmake.cmaketoolchain:generator=Ninja
 #-s compiler=msvc -s compiler.cppstd=17 -s compiler.version=193 -s compiler.update=6
 
       - name: Verify Toolchain File
