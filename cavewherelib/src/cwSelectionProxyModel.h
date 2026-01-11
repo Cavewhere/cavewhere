@@ -49,11 +49,16 @@ private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwSelectionProxyModel, int, m_idRole, -1, &cwSelectionProxyModel::idRoleChanged);
     int m_selectionRole = Qt::UserRole;
     QSet<QString> m_selectedIds;
+    QVector<QString> m_cachedIds;
     QVector<QMetaObject::Connection> m_sourceConnections;
 
     QString idForIndex(const QModelIndex& index) const;
     void clearSelectionInternal(bool emitDataChanged);
     void recomputeSelectionRole();
+    void rebuildIdCache();
+    void handleSourceDataChanged(const QModelIndex& topLeft,
+                                 const QModelIndex& bottomRight,
+                                 const QVector<int>& roles);
     void handleRowsAboutToBeRemoved(const QModelIndex& parent, int first, int last);
     void handleModelAboutToBeReset();
 };

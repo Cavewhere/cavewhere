@@ -5,6 +5,9 @@
 #include <QHash>
 #include <QVector>
 
+// Std includes
+#include <algorithm>
+
 cwSelectionProxyModel::cwSelectionProxyModel(QObject *parent) :
     QIdentityProxyModel(parent)
 {
@@ -24,6 +27,7 @@ void cwSelectionProxyModel::setIdRole(int idRole)
 
     m_idRole = idRole;
     clearSelectionInternal(true);
+    rebuildIdCache();
 }
 
 QBindable<int> cwSelectionProxyModel::bindableIdRole()
@@ -147,12 +151,28 @@ void cwSelectionProxyModel::setSourceModel(QAbstractItemModel *sourceModel)
     clearSelectionInternal(false);
     QIdentityProxyModel::setSourceModel(sourceModel);
     recomputeSelectionRole();
+    rebuildIdCache();
 
     if(sourceModel) {
         m_sourceConnections.append(connect(sourceModel, &QAbstractItemModel::rowsAboutToBeRemoved,
                                            this, &cwSelectionProxyModel::handleRowsAboutToBeRemoved));
         m_sourceConnections.append(connect(sourceModel, &QAbstractItemModel::modelAboutToBeReset,
                                            this, &cwSelectionProxyModel::handleModelAboutToBeReset));
+        m_sourceConnections.append(connect(sourceModel, &QAbstractItemModel::dataChanged,
+                                           this, &cwSelectionProxyModel::handleSourceDataChanged));
+        m_sourceConnections.append(connect(sourceModel, &QAbstractItemModel::rowsInserted,
+                                           this, [this](const QModelIndex& parent, int first, int last) {
+            if(parent.isValid() || m_idRole < 0) {
+                return;
+            }
+            if(m_cachedIds.size() != rowCount()) {
+                rebuildIdCache();
+                return;
+            }
+            for(int row = first; row <= last; ++row) {
+                m_cachedIds.insert(row, idForIndex(index(row, 0)));
+            }
+        }));
     }
 }
 
@@ -187,6 +207,83 @@ void cwSelectionProxyModel::recomputeSelectionRole()
     m_selectionRole = candidate;
 }
 
+void cwSelectionProxyModel::rebuildIdCache()
+{
+    m_cachedIds.clear();
+    if(m_idRole < 0) {
+        return;
+    }
+
+    m_cachedIds.reserve(rowCount());
+    for(int row = 0; row < rowCount(); ++row) {
+        m_cachedIds.append(idForIndex(index(row, 0)));
+    }
+}
+
+void cwSelectionProxyModel::handleSourceDataChanged(const QModelIndex& topLeft,
+                                                    const QModelIndex& bottomRight,
+                                                    const QVector<int>& roles)
+{
+    if(m_idRole < 0) {
+        return;
+    }
+
+    if(!roles.isEmpty() && !roles.contains(m_idRole)) {
+        return;
+    }
+
+    if(topLeft.parent().isValid() || bottomRight.parent().isValid()) {
+        rebuildIdCache();
+        return;
+    }
+
+    if(m_cachedIds.size() != rowCount()) {
+        rebuildIdCache();
+        return;
+    }
+
+    QHash<QString, int> idCounts;
+    for(const auto& id : std::as_const(m_cachedIds)) {
+        if(!id.isEmpty()) {
+            idCounts[id] += 1;
+        }
+    }
+
+    bool selectionChanged = false;
+    const int startRow = std::max(0, topLeft.row());
+    const int endRow = std::min(rowCount() - 1, bottomRight.row());
+    for(int row = startRow; row <= endRow; ++row) {
+        const QString oldId = m_cachedIds.at(row);
+        const QString newId = idForIndex(index(row, 0));
+        if(oldId == newId) {
+            continue;
+        }
+
+        if(!oldId.isEmpty()) {
+            auto countIter = idCounts.find(oldId);
+            if(countIter != idCounts.end()) {
+                countIter.value() -= 1;
+                if(countIter.value() <= 0 && m_selectedIds.remove(oldId) > 0) {
+                    selectionChanged = true;
+                }
+            }
+        }
+
+        if(!newId.isEmpty()) {
+            idCounts[newId] += 1;
+        }
+
+        m_cachedIds[row] = newId;
+    }
+
+    if(selectionChanged) {
+        if(rowCount() > 0) {
+            emit dataChanged(index(0, 0), index(rowCount() - 1, 0), {m_selectionRole});
+        }
+        emit this->selectionChanged();
+    }
+}
+
 void cwSelectionProxyModel::handleRowsAboutToBeRemoved(const QModelIndex &parent, int first, int last)
 {
     bool changed = false;
@@ -195,6 +292,15 @@ void cwSelectionProxyModel::handleRowsAboutToBeRemoved(const QModelIndex &parent
             auto modelIndex = index(row, 0, parent);
             auto id = idForIndex(modelIndex);
             changed = m_selectedIds.remove(id) > 0 || changed;
+        }
+    }
+
+    if(!parent.isValid() && !m_cachedIds.isEmpty()) {
+        const int removeCount = last - first + 1;
+        if(first >= 0 && removeCount > 0 && first + removeCount <= m_cachedIds.size()) {
+            m_cachedIds.remove(first, removeCount);
+        } else {
+            rebuildIdCache();
         }
     }
 
@@ -207,6 +313,7 @@ void cwSelectionProxyModel::handleModelAboutToBeReset()
 {
     const bool hadSelection = !m_selectedIds.isEmpty();
     m_selectedIds.clear();
+    m_cachedIds.clear();
     if(hadSelection) {
         emit selectionChanged();
     }
