@@ -917,6 +917,12 @@ void cwSurveyChunk::checkForErrorOnDataChanged(cwSurveyChunk::DataRole role, int
         checkForError(StationRightRole, index);
         checkForError(StationUpRole, index);
         checkForError(StationDownRole, index);
+        if(index - 1 >= 0) {
+            checkForError(StationNameRole, index - 1);
+        }
+        if(index + 1 < d.stations.size()) {
+            checkForError(StationNameRole, index + 1);
+        }
 
         //Previous shot
         const int previousIndex = index - 1;
@@ -1016,6 +1022,19 @@ void cwSurveyChunk::checkForError(cwSurveyChunk::DataRole role, int index)
                     //Station needs to have
                     cwError error;
                     error.setMessage("Missing station name");
+                    error.setType(cwError::Fatal);
+                    errors.append(error);
+                }
+            }
+        } else {
+            const int previousStationIndex = index - 1;
+            if(previousStationIndex >= 0) {
+                const QString previousStationName = d.stations.at(previousStationIndex).name();
+                if(!previousStationName.isEmpty()
+                    && previousStationName.compare(stationName, Qt::CaseInsensitive) == 0)
+                {
+                    cwError error;
+                    error.setMessage(QString("Duplicate station name \"%1\"").arg(stationName));
                     error.setType(cwError::Fatal);
                     errors.append(error);
                 }

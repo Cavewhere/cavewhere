@@ -232,6 +232,18 @@ TEST_CASE("Checks cwSurveyChunk errors", "[cwSurveyChunk]")
     CHECK(chunk->errorModel()->fatalCount() == 0);
     CHECK(chunk->errorModel()->warningCount() == 0); //All good
 
+    SECTION("Duplicate station name") {
+        chunk->setData(cwSurveyChunk::StationNameRole, 1, "a1");
+        REQUIRE(chunk->errorModel()->fatalCount() == 1);
+
+        cwErrorModel* errorModel = chunk->errorsAt(1, cwSurveyChunk::StationNameRole);
+
+        REQUIRE(errorModel != nullptr);
+        REQUIRE(errorModel->errors()->size() == 1);
+        CHECK(errorModel->errors()->first().message() == QString("Duplicate station name \"a1\""));
+        CHECK(errorModel->errors()->first().type() == cwError::Fatal);
+    }
+
     SECTION("Delete values out of the chunk") {
 
         SECTION("Remove empty station names") {
