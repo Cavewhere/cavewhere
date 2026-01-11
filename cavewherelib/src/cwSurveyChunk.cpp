@@ -39,6 +39,21 @@ double absAngleDifferenceDegrees(double first, double second)
     }
     return raw;
 }
+
+bool isVerticalClinoReading(const cwClinoReading& reading)
+{
+    if(reading.state() != cwClinoReading::State::Valid) {
+        return false;
+    }
+
+    bool ok = false;
+    const double value = reading.toDouble(&ok);
+    if(!ok) {
+        return false;
+    }
+
+    return qAbs(qAbs(value) - 90.0) < 0.001;
+}
 }
 
 cwSurveyChunk::cwSurveyChunk(QObject * parent) :
@@ -1527,7 +1542,17 @@ bool cwSurveyChunk::isClinoDownOrUp(cwSurveyChunk::DataRole role, int index) con
         return false;
     }
 
-    return isClinoDownOrUpHelper(ShotClinoRole, index) || isClinoDownOrUpHelper(ShotBackClinoRole, index);
+    if(isClinoDownOrUpHelper(ShotClinoRole, index) || isClinoDownOrUpHelper(ShotBackClinoRole, index)) {
+        return true;
+    }
+
+    const QVariant frontVariant = data(ShotClinoRole, index);
+    const QVariant backVariant = data(ShotBackClinoRole, index);
+    Q_ASSERT(frontVariant.canConvert<cwClinoReading>());
+    Q_ASSERT(backVariant.canConvert<cwClinoReading>());
+
+    return isVerticalClinoReading(frontVariant.value<cwClinoReading>())
+        || isVerticalClinoReading(backVariant.value<cwClinoReading>());
 }
 
 /**

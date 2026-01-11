@@ -10,6 +10,13 @@
 #include "cwSurveyDataArtifact.h"
 #include "cwTemporaryFileNameArtifact.h"
 #include "asyncfuture.h"
+#include "cwDistanceReading.h"
+#include "cwCompassReading.h"
+#include "cwClinoReading.h"
+
+//Qt includes
+#include <QBuffer>
+#include <QTextStream>
 
 TEST_CASE("cwSurvexExportRule should export a caving region correctly", "[cwSurvexExportRule]") {
     // Load project and get the caving region
@@ -58,4 +65,59 @@ TEST_CASE("cwSurvexExportRule should export a caving region correctly", "[cwSurv
         // Compare the entire contents
         REQUIRE(exportedContent == expectedContent);
     }
+}
+
+TEST_CASE("cwSurvexExportRule writes UP/DOWN for vertical shots without azimuth", "[cwSurvexExportRule]") {
+    cwSurveyDataArtifact::Trip trip;
+    trip.name = QStringLiteral("VerticalTrip");
+    trip.calibration.setBackSights(false);
+
+    cwSurveyDataArtifact::SurveyChunk chunk;
+    cwStation stationA;
+    cwStation stationB;
+    stationA.setName(QStringLiteral("a1"));
+    stationB.setName(QStringLiteral("a2"));
+    chunk.stations.append(stationA);
+    chunk.stations.append(stationB);
+
+    cwShot shotUp;
+    shotUp.setDistance(cwDistanceReading(QStringLiteral("10")));
+    shotUp.setCompass(cwCompassReading(QString()));
+    shotUp.setClino(cwClinoReading(QStringLiteral("90")));
+    chunk.shots.append(shotUp);
+
+    cwShot shotDown;
+    shotDown.setDistance(cwDistanceReading(QStringLiteral("10")));
+    shotDown.setCompass(cwCompassReading(QString()));
+    shotDown.setClino(cwClinoReading(QStringLiteral("-90")));
+    chunk.stations.append(stationA);
+    chunk.shots.append(shotDown);
+
+    trip.chunks.append(chunk);
+
+    QByteArray outputData;
+    QBuffer buffer(&outputData);
+    REQUIRE(buffer.open(QIODevice::WriteOnly));
+    QTextStream stream(&buffer);
+    auto result = cwSurvexExporterRule::writeTrip(stream, trip);
+    buffer.close();
+
+    REQUIRE(!result.hasError());
+
+    const QString output = QString::fromUtf8(outputData);
+    QStringList dataLines;
+    const QStringList lines = output.split('\n');
+    for(const QString& line : lines) {
+        const QString trimmed = line.trimmed();
+        if(trimmed.isEmpty() || trimmed.startsWith('*') || trimmed.startsWith(';')) {
+            continue;
+        }
+        if(trimmed.contains("a1") && trimmed.contains("a2")) {
+            dataLines.append(trimmed);
+        }
+    }
+
+    REQUIRE(dataLines.size() >= 2);
+    CHECK(dataLines.at(0).contains("UP"));
+    CHECK(dataLines.at(1).contains("DOWN"));
 }

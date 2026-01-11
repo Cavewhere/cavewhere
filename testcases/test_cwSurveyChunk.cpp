@@ -282,6 +282,17 @@ TEST_CASE("Checks cwSurveyChunk errors", "[cwSurveyChunk]")
             checkNoShotDataError(chunk.get(), shotIndex, cwSurveyChunk::ShotCompassRole, cwError::Warning);
         }
 
+        SECTION("Remove compass with vertical clino") {
+            shotIndex = 1;
+            chunk->setData(cwSurveyChunk::ShotClinoRole, shotIndex, "90");
+            chunk->setData(cwSurveyChunk::ShotBackClinoRole, shotIndex, "-90");
+            chunk->setData(cwSurveyChunk::ShotCompassRole, shotIndex, "");
+
+            CHECK(chunk->errorsAt(shotIndex, cwSurveyChunk::ShotCompassRole) == nullptr);
+            CHECK(chunk->errorModel()->warningCount() == 0);
+            CHECK(chunk->errorModel()->fatalCount() == 0);
+        }
+
         SECTION("Remove back compass") {
             shotIndex = 1;
             chunk->setData(cwSurveyChunk::ShotBackCompassRole, shotIndex, "");

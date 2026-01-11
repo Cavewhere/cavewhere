@@ -6,9 +6,14 @@
 #include "cwGlobals.h"
 #include "LoadProjectHelper.h"
 #include "cwCavernTask.h"
+#include "cwSurvexExporterTripTask.h"
+#include "cwSurveyChunk.h"
+#include "cwTrip.h"
 
 //Qt includes
+#include <QBuffer>
 #include <QFileInfo>
+#include <QTextStream>
 
 TEST_CASE("cwSurvexportTask should initilize correctly", "[cwSurvexportTask]") {
     cwSurvexportTask task;
@@ -72,4 +77,58 @@ TEST_CASE("cwSurvexportTask should produce a CSV file from a .3d file", "[cwSurv
 
     CHECK(generatedFile.atEnd() == true);
     CHECK(testFile.atEnd() == true);
+}
+
+TEST_CASE("cwSurvexExporterTripTask writes UP/DOWN for vertical shots without azimuth", "[cwSurvexExporterTripTask]") {
+    cwTrip trip;
+    trip.setName(QStringLiteral("TestTrip"));
+    trip.calibrations()->setBackSights(false);
+
+    auto chunk = new cwSurveyChunk();
+    trip.addChunk(chunk);
+
+    chunk->appendNewShot();
+    chunk->setData(cwSurveyChunk::StationNameRole, 0, "a1");
+    chunk->setData(cwSurveyChunk::StationNameRole, 1, "a2");
+    chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "10");
+    chunk->setData(cwSurveyChunk::ShotCompassRole, 0, "");
+    chunk->setData(cwSurveyChunk::ShotClinoRole, 0, "90");
+
+    cwSurvexExporterTripTask exporter;
+    QByteArray outputData;
+    QBuffer buffer(&outputData);
+    REQUIRE(buffer.open(QIODevice::WriteOnly));
+
+    QTextStream stream(&buffer);
+    exporter.writeTrip(stream, &trip);
+    buffer.close();
+
+    const QString output = QString::fromUtf8(outputData);
+    QString dataLine;
+    const QStringList lines = output.split('\n');
+    for(const QString& line : lines) {
+        const QString trimmed = line.trimmed();
+        if(trimmed.isEmpty() || trimmed.startsWith('*') || trimmed.startsWith(';')) {
+            continue;
+        }
+        if(trimmed.contains("a1", Qt::CaseInsensitive) && trimmed.contains("a2", Qt::CaseInsensitive)) {
+            dataLine = trimmed;
+            break;
+        }
+    }
+
+    if(dataLine.isEmpty()) {
+        for(const QString& line : lines) {
+            const QString trimmed = line.trimmed();
+            if(trimmed.isEmpty() || trimmed.startsWith('*') || trimmed.startsWith(';')) {
+                continue;
+            }
+            dataLine = trimmed;
+            break;
+        }
+    }
+
+    REQUIRE(!dataLine.isEmpty());
+    CHECK(dataLine.contains("UP"));
+    CHECK(!dataLine.contains(" 90"));
 }

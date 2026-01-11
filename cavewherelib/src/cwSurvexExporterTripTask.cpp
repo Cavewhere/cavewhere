@@ -13,6 +13,7 @@
 #include "cwTripCalibration.h"
 #include "cwTeamMember.h"
 #include "cwTeam.h"
+#include "cwSurvexExporterUtils.h"
 
 cwSurvexExporterTripTask::cwSurvexExporterTripTask(QObject *parent) :
     cwExporterTask(parent)
@@ -175,9 +176,6 @@ void cwSurvexExporterTripTask::writeShotData(QTextStream& stream, const cwTrip* 
 
     QList<cwSurveyChunk*> chunks = trip->chunks();
     for(int i = 0; i < chunks.size(); i++) {
-        //Make sure we can still be run
-        if(!parentIsRunning() && !isRunning()) { return; }
-
         cwSurveyChunk* chunk = chunks[i];
 
         //Write the chunk data
@@ -327,9 +325,6 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream,
     //Iterate over all the shots
     for(int i = 0; i < chunk->stationCount() - 1; i++) {
 
-        //Make sure we can still be run
-        if(!parentIsRunning() && !isRunning()) { return; }
-
         cwStation fromStation = chunk->station(i);
         cwStation toStation = chunk->station(i + 1);
         cwShot shot = chunk->shot(i);
@@ -341,6 +336,22 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream,
         QString backCompass = compassToString(shot.backCompass());
         QString clino = clinoToString(shot.clino());
         QString backClino = clinoToString(shot.backClino());
+        const bool compassMissing = compass == QStringLiteral("-");
+        const bool backCompassMissing = backCompass == QStringLiteral("-");
+
+        if(compassMissing) {
+            const QString verticalClino = cwSurvexExporterUtils::verticalClinoText(shot.clino());
+            if(!verticalClino.isEmpty()) {
+                clino = verticalClino;
+            }
+        }
+
+        if(backCompassMissing) {
+            const QString verticalBackClino = cwSurvexExporterUtils::verticalClinoText(shot.backClino());
+            if(!verticalBackClino.isEmpty()) {
+                backClino = verticalBackClino;
+            }
+        }
 
         //Make sure the model is good
         if(distance.isEmpty()) { continue; }
