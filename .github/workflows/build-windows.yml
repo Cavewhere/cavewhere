@@ -3,10 +3,10 @@ name: Build on Windows
 on:
   push:
     branches:
-      - master
+      - dev
   pull_request:
     branches:
-      - '*'
+      - dev
 
 jobs:
   build:
@@ -28,6 +28,10 @@ jobs:
       - name: Verify Ninja Installation
         run: |
           where ninja
+
+      - name: Install Inno Setup
+        run: |
+          choco install innosetup
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
@@ -98,3 +102,12 @@ jobs:
 
       - name: Build the Project
         run: cmake --build build --parallel
+
+      - name: Build Windows Installer
+        run: cmake --build build --target windowsInstaller --parallel
+
+      - name: Upload Windows Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: cavewhere-windows-installer
+          path: build/Cavewhere*.exe
