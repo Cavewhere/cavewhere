@@ -16,14 +16,22 @@
 #include "cwSurveyNoteLiDARModel.h"
 #include "cwNote.h"
 #include "cwNoteLiDAR.h"
+#include "cwImageUtils.h"
+#include "cwUnits.h"
 #include "cwTeam.h"
 #include "cwTeamMember.h"
+#include "cwSvgReader.h"
 
 //Qt includes
 #include <QStandardPaths>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QUrl>
+#ifdef CW_WITH_PDF_SUPPORT
+#include <QPdfDocument>
+#endif
+#include <QHash>
 
 #include <set>
 
@@ -33,6 +41,7 @@
 //Protobuf includes
 #include <google/protobuf/message.h>
 #include <google/protobuf/util/message_differencer.h>
+#include <google/protobuf/util/json_util.h>
 #include "cavewhere.pb.h"
 using namespace google::protobuf;
 
@@ -69,6 +78,222 @@ TEST_CASE("cwSaveLoad saves pdf notes with unique filenames", "[cwSaveLoad]") {
     REQUIRE(notesDir.exists());
     const QStringList noteFiles = notesDir.entryList(QStringList() << "*.cwnote", QDir::Files);
     REQUIRE(noteFiles.size() == 2);
+}
+
+TEST_CASE("cwSaveLoad reloads missing image metadata", "[cwSaveLoad]") {
+    cwPDFSettings::initialize();
+    auto settings = cwPDFSettings::instance();
+    const int originalResolution = settings->resolutionImport();
+    settings->setResolutionImport(144);
+
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    cave->addTrip();
+    auto trip = cave->trip(0);
+
+    const QString pngPath = copyToTempFolder("://datasets/test_cwNote/testpage.png");
+    const QString svgPath = copyToTempFolder("://datasets/test_cwImageProvider/supportedImage.svg");
+    const QString pdfPath = copyToTempFolder("://datasets/test_cwPDFConverter/2page-test.pdf");
+
+    QList<QUrl> noteFiles{
+        QUrl::fromLocalFile(pngPath),
+        QUrl::fromLocalFile(svgPath)
+    };
+
+    const bool pdfSupported = cwProject::supportedImageFormats().contains("pdf");
+    if (pdfSupported) {
+        noteFiles.append(QUrl::fromLocalFile(pdfPath));
+    }
+
+    trip->notes()->addFromFiles(noteFiles);
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    auto clearImageFields = [](const QString& noteFilename) {
+        QFile file(noteFilename);
+        REQUIRE(file.open(QIODevice::ReadOnly));
+        const QByteArray data = file.readAll();
+        file.close();
+
+        CavewhereProto::Note proto;
+        const auto status = google::protobuf::util::JsonStringToMessage(data.toStdString(), &proto);
+        REQUIRE(status.ok());
+        proto.mutable_image()->clear_size();
+        proto.mutable_image()->clear_dotpermeter();
+        proto.mutable_image()->clear_imageunit();
+
+        std::string output;
+        google::protobuf::util::JsonPrintOptions options;
+        options.add_whitespace = true;
+        const auto writeStatus = google::protobuf::util::MessageToJsonString(proto, &output, options);
+        REQUIRE(writeStatus.ok());
+        REQUIRE(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        REQUIRE(file.write(output.data(), static_cast<qint64>(output.size())) == static_cast<qint64>(output.size()));
+        file.close();
+    };
+
+    for (cwNote* note : trip->notes()->notes()) {
+        clearImageFields(cwSaveLoad::absolutePath(note));
+    }
+
+    auto reloaded = std::make_unique<cwProject>();
+    addTokenManager(reloaded.get());
+    reloaded->loadOrConvert(project->filename());
+    reloaded->waitLoadToFinish();
+
+    cwTrip* const loadedTrip = reloaded->cavingRegion()->cave(0)->trip(0);
+    REQUIRE(loadedTrip != nullptr);
+
+    auto expectedImageInfo = [settings](const cwNote* note, const QString& imagePath) {
+        cwImage::OriginalImageInfo info;
+        const QString suffix = QFileInfo(imagePath).suffix().toLower();
+        if (suffix == QStringLiteral("pdf")) {
+#ifdef CW_WITH_PDF_SUPPORT
+            QPdfDocument document;
+            if (document.load(imagePath) == QPdfDocument::Error::None) {
+                const int pageIndex = note->image().page() >= 0 ? note->image().page() : 0;
+                const QSizeF pagePoints = document.pagePointSize(pageIndex);
+                const QSize pointSize(qRound(pagePoints.width()),
+                                      qRound(pagePoints.height()));
+                constexpr double inchesToMeters = cwUnits::convert(1.0, cwUnits::Inches, cwUnits::Meters);
+                constexpr double pointsToInches = 1.0 / 72.0;
+                constexpr int pointsPerMeter = qRound(1.0 / (pointsToInches * inchesToMeters));
+                info.originalSize = pointSize;
+                info.originalDotsPerMeter = pointsPerMeter;
+                info.unit = cwImage::Unit::Points;
+            }
+#endif
+        } else {
+            QFile imageFile(imagePath);
+            if (imageFile.open(QIODevice::ReadOnly)) {
+                QByteArray imageData = imageFile.readAll();
+                const QByteArray format = QFileInfo(imagePath).suffix().toLatin1();
+                if (suffix == QStringLiteral("svg")) {
+                    info = cwSvgReader::imageInfo(imageData, format);
+                } else {
+                    QImage image = cwImageUtils::imageWithAutoTransform(imageData, format);
+                    info.originalSize = image.size();
+                    info.originalDotsPerMeter = image.dotsPerMeterX();
+                    info.unit = cwImage::Unit::Pixels;
+                }
+            }
+        }
+        return info;
+    };
+
+    for (cwNote* note : loadedTrip->notes()->notes()) {
+        const QString absolutePath = cwSaveLoad::absolutePath(note, note->image().path());
+        const QString suffix = QFileInfo(absolutePath).suffix().toLower();
+        const cwImage::OriginalImageInfo expected = expectedImageInfo(note, absolutePath);
+        if (suffix == QStringLiteral("pdf") && !expected.originalSize.isValid()) {
+            CHECK(note->image().unit() == cwImage::Unit::Points);
+            CHECK(note->image().originalSize().isValid());
+            CHECK(note->image().originalDotsPerMeter() > 0);
+            continue;
+        }
+        CHECK(note->image().unit() == expected.unit);
+        CHECK(note->image().originalSize() == expected.originalSize);
+        CHECK(note->image().originalDotsPerMeter() == expected.originalDotsPerMeter);
+    }
+
+    settings->setResolutionImport(originalResolution);
+}
+
+TEST_CASE("cwSaveLoad preserves cwImage units for png, svg, and pdf notes", "[cwSaveLoad]") {
+    cwPDFSettings::initialize();
+
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    cave->addTrip();
+    auto trip = cave->trip(0);
+
+    const QString pngPath = copyToTempFolder("://datasets/test_cwNote/testpage.png");
+    const QString svgPath = copyToTempFolder("://datasets/test_cwImageProvider/supportedImage.svg");
+    const QString pdfPath = copyToTempFolder("://datasets/test_cwPDFConverter/2page-test.pdf");
+
+    QList<QUrl> noteFiles{
+        QUrl::fromLocalFile(pngPath),
+        QUrl::fromLocalFile(svgPath)
+    };
+
+    const bool pdfSupported = cwProject::supportedImageFormats().contains("pdf");
+    if (pdfSupported) {
+        noteFiles.append(QUrl::fromLocalFile(pdfPath));
+    }
+
+    trip->notes()->addFromFiles(noteFiles);
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    const int expectedNoteCount = pdfSupported ? 4 : 2;
+    REQUIRE(trip->notes()->notes().size() == expectedNoteCount);
+
+    auto expectedUnitForPath = [](const QString& path) {
+        const QString suffix = QFileInfo(path).suffix().toLower();
+        if (suffix == QStringLiteral("pdf")) {
+            return cwImage::Unit::Points;
+        }
+        if (suffix == QStringLiteral("svg")) {
+            return cwImage::Unit::SvgUnits;
+        }
+        return cwImage::Unit::Pixels;
+    };
+
+    struct ExpectedImageData {
+        cwImage::Unit expectedUnit;
+        QSize originalSize;
+        int dotsPerMeter;
+        int page;
+    };
+
+    auto makeKey = [](const cwImage& image) {
+        return QStringLiteral("%1#%2").arg(image.path()).arg(image.page());
+    };
+
+    QHash<QString, ExpectedImageData> expectedImages;
+    for (const cwNote* note : trip->notes()->notes()) {
+        const cwImage image = note->image();
+        expectedImages.insert(makeKey(image),
+                              ExpectedImageData{
+                                  expectedUnitForPath(image.path()),
+                                  image.originalSize(),
+                                  image.originalDotsPerMeter(),
+                                  image.page()
+                              });
+    }
+
+    const QString projectFilename = project->filename();
+    REQUIRE(!projectFilename.isEmpty());
+
+    auto reloaded = std::make_unique<cwProject>();
+    addTokenManager(reloaded.get());
+    reloaded->loadOrConvert(projectFilename);
+    reloaded->waitLoadToFinish();
+
+    cwTrip* const loadedTrip = reloaded->cavingRegion()->cave(0)->trip(0);
+    REQUIRE(loadedTrip != nullptr);
+    const QList<cwNote*> loadedNotes = loadedTrip->notes()->notes();
+    REQUIRE(loadedNotes.size() == expectedImages.size());
+
+    for (const cwNote* note : loadedNotes) {
+        const cwImage image = note->image();
+        const QString key = makeKey(image);
+        INFO("Missing image key: " << key);
+        REQUIRE(expectedImages.contains(key));
+        const ExpectedImageData expected = expectedImages.value(key);
+        CHECK(image.unit() == expected.expectedUnit);
+        CHECK(image.originalSize() == expected.originalSize);
+        CHECK(image.originalDotsPerMeter() == expected.dotsPerMeter);
+        CHECK(image.page() == expected.page);
+    }
 }
 
 

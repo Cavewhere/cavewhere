@@ -28,7 +28,6 @@
 #include "cwRemoteAccountModel.h"
 #include "cwRemoteAccountSelectionModel.h"
 // #include "cwImageCompressionUpdater.h"
-#include "cwAddImageTask.h"
 #include "cwJobSettings.h"
 #include "cwSurveyNoteModel.h"
 

@@ -90,8 +90,9 @@ private:
 
     //For keeping the 2D object aligned
     double m_zoom = 1.0;
-    QPropertyNotifier m_matrixChanged;
-    QMatrix4x4 m_transformMatrix;
+
+    // QPropertyNotifier m_matrixChanged;
+    // QMatrix4x4 m_transformMatrix;
 
 
     //Visual elements

@@ -45,6 +45,12 @@ public:
     };
     Q_ENUM(Mode)
 
+    struct OriginalImageInfo {
+        QSize originalSize;
+        int originalDotsPerMeter = 0;
+        Unit unit = Unit::Pixels;
+    };
+
     cwImage() : m_data(new SharedData) {}
     virtual ~cwImage() = default;
 
@@ -92,6 +98,16 @@ public:
 
     int originalDotsPerMeter() const {
         return m_data->originalDotsPerMeter;
+    }
+
+    OriginalImageInfo originalImageInfo() const {
+        return {m_data->originalSize, m_data->originalDotsPerMeter, m_data->unit};
+    }
+
+    void setOriginalImageInfo(const OriginalImageInfo& info) {
+        m_data->originalSize = info.originalSize;
+        m_data->originalDotsPerMeter = info.originalDotsPerMeter;
+        m_data->unit = info.unit;
     }
 
     bool operator==(const cwImage& other) const;

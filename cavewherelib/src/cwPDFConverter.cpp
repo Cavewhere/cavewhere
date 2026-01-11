@@ -1,13 +1,14 @@
 //Our includes
 #include "cwPDFConverter.h"
 #include "cwDebug.h"
+#include "cwUnits.h"
 #include "cwConcurrent.h"
 
 //AsyncFuture
 #include "asyncfuture.h"
 
 //Qt includes
-#ifdef WITH_PDF_SUPPORT
+#ifdef CW_WITH_PDF_SUPPORT
 #include <QPdfDocument>
 #endif
 
@@ -42,7 +43,7 @@ void cwPDFConverter::setResolution(int resolution) {
  */
 QFuture<QImage> cwPDFConverter::convert()
 {
-#ifdef WITH_PDF_SUPPORT
+#ifdef CW_WITH_PDF_SUPPORT
     QPdfDocument document;
     auto error = document.load(source());
 
@@ -83,7 +84,7 @@ QFuture<QImage> cwPDFConverter::convert()
         doc.load(path);
         auto size = doc.pagePointSize(page);
 
-        auto scaledSize = size * 1/72.0 * resolution;
+        auto scaledSize = size * (1.0 / cwUnits::PointsPerInch) * resolution;
         QImage image = doc.render(page, QSize(std::round(scaledSize.width()),
                                               std::round(scaledSize.height())));
         return image;
@@ -108,7 +109,7 @@ void cwPDFConverter::setError(const QString &errorMessage)
 * Returns true if the converter will work, and falso if it doesn't
 */
 bool cwPDFConverter::isSupported()  {
-#ifdef WITH_PDF_SUPPORT
+#ifdef CW_WITH_PDF_SUPPORT
     return true;
 #else
     return false;

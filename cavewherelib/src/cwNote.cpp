@@ -204,10 +204,12 @@ QSizeF cwNote::physicalSize() const
 QSize cwNote::renderSize() const
 {
     if (ImageIds.unit() == cwImage::Unit::Pixels) {
+        qDebug() << "Units pixels:" << ImageIds.originalSize();
         return ImageIds.originalSize();
     }
     const QSizeF nativeSize = ImageIds.originalSize();
     if (!nativeSize.isValid()) {
+        qDebug() << "Native size:" << ImageIds.originalSize();
         return ImageIds.originalSize();
     }
 
@@ -216,7 +218,12 @@ QSize cwNote::renderSize() const
         return ImageIds.originalSize();
     }
 
-    const double pixelsPerUnit = resolutionPpi / 72.0;
+    qDebug() << "ResolutionImport!";
+
+    double pixelsPerUnit = resolutionPpi / cwUnits::PointsPerInch;
+    if (ImageIds.unit() == cwImage::Unit::SvgUnits) {
+        pixelsPerUnit = resolutionPpi / cwUnits::SvgCssDpi;
+    }
     return QSize(qRound(nativeSize.width() * pixelsPerUnit),
                  qRound(nativeSize.height() * pixelsPerUnit));
 }

@@ -311,3 +311,54 @@ TEST_CASE("cwSvgReader identifies SVG formats", "[cwSvgReader]") {
     CHECK(cwSvgReader::isSvg(QByteArrayLiteral("png")) == false);
     CHECK(cwSvgReader::isSvg(QByteArray()) == false);
 }
+
+TEST_CASE("cwSvgReader toImage uses resolutionImport", "[cwSvgReader]") {
+    const QString svgContents = QStringLiteral(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" "
+        "width=\"2in\" height=\"3in\" viewBox=\"0 0 200 300\">\n"
+        "<rect width=\"200\" height=\"300\" fill=\"#000\"/>\n"
+        "</svg>\n");
+
+    QByteArray data = svgContents.toUtf8();
+
+    cwPDFSettings::initialize();
+    auto settings = cwPDFSettings::instance();
+    const int originalResolution = settings->resolutionImport();
+    const int resolutionPpi = 144;
+    settings->setResolutionImport(resolutionPpi);
+
+    QImage image = cwSvgReader::toImage(data, QByteArrayLiteral("svg"));
+    REQUIRE(!image.isNull());
+    CHECK(image.size() == QSize(288, 432));
+
+    const int expectedDotsPerMeter = qRound(cwUnits::convert(
+        resolutionPpi,
+        cwUnits::DotsPerInch,
+        cwUnits::DotsPerMeter));
+    CHECK(image.dotsPerMeterX() == expectedDotsPerMeter);
+    CHECK(image.dotsPerMeterY() == expectedDotsPerMeter);
+
+    settings->setResolutionImport(originalResolution);
+}
+
+TEST_CASE("cwSvgReader imageInfo uses native SVG units", "[cwSvgReader]") {
+    const QString svgContents = QStringLiteral(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" "
+        "width=\"2in\" height=\"3in\" viewBox=\"0 0 200 300\">\n"
+        "<rect width=\"200\" height=\"300\" fill=\"#000\"/>\n"
+        "</svg>\n");
+
+    QByteArray data = svgContents.toUtf8();
+    const cwImage::OriginalImageInfo info = cwSvgReader::imageInfo(data, QByteArrayLiteral("svg"));
+
+    CHECK(info.unit == cwImage::Unit::SvgUnits);
+    CHECK(info.originalSize == QSize(192, 288));
+
+    const int expectedDotsPerMeter = qRound(cwUnits::convert(
+        96.0,
+        cwUnits::DotsPerInch,
+        cwUnits::DotsPerMeter));
+    CHECK(info.originalDotsPerMeter == expectedDotsPerMeter);
+}

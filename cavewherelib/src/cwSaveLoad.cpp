@@ -20,7 +20,8 @@
 #include "cwPDFConverter.h"
 #include "cwUnits.h"
 #include "cwPDFSettings.h"
-#include "cwAddImageTask.h"
+#include "cwImageUtils.h"
+#include "cwSvgReader.h"
 #include "cwNoteLiDAR.h"
 #include "cwImageResolution.h"
 #include "cwUniqueConnectionChecker.h"
@@ -41,8 +42,9 @@
 #include <QSaveFile>
 #include <QSet>
 #include <QImageReader>
+#include <QFile>
 
-#ifdef WITH_PDF_SUPPORT
+#ifdef CW_WITH_PDF_SUPPORT
 #include <QPdfDocument>
 #endif
 #include <QImage>
@@ -66,6 +68,142 @@ static QStringList fromProtoStringList(const google::protobuf::RepeatedPtrField<
 
 // template<typename NoteT>
 // static QString noteRelativePathHelper(const NoteT* note, const QString& storedPath);
+
+namespace {
+
+cwImage::OriginalImageInfo imageInfo(const QString& path) {
+    cwImage::OriginalImageInfo info;
+    const QFileInfo fileInfo(path);
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return info;
+    }
+
+    QByteArray imageData = file.readAll();
+    if (imageData.isEmpty()) {
+        return info;
+    }
+
+    const QByteArray format = fileInfo.suffix().toLatin1();
+    if (fileInfo.suffix().compare(QStringLiteral("svg"), Qt::CaseInsensitive) == 0) {
+        return cwSvgReader::imageInfo(imageData, format);
+    } else {
+        QImage image = cwImageUtils::imageWithAutoTransform(imageData, format);
+        if (image.isNull()) {
+            return info;
+        }
+
+        info.originalSize = image.size();
+        info.originalDotsPerMeter = image.dotsPerMeterX();
+        info.unit = cwImage::Unit::Pixels;
+    }
+
+    return info;
+}
+
+#ifdef CW_WITH_PDF_SUPPORT
+cwImage::OriginalImageInfo imageInfo(const QPdfDocument& document, int pageIndex) {
+    cwImage::OriginalImageInfo info;
+    if (pageIndex < 0 || pageIndex >= document.pageCount()) {
+        return info;
+    }
+
+    const QSizeF pagePoints = document.pagePointSize(pageIndex);
+    const QSize pointSize(qRound(pagePoints.width()),
+                          qRound(pagePoints.height()));
+    constexpr double inchesToMeters = cwUnits::convert(1.0, cwUnits::Inches, cwUnits::Meters);
+    constexpr double pointsToInches = 1.0 / cwUnits::PointsPerInch;
+    constexpr int pointsPerMeter = qRound(1.0 / (pointsToInches * inchesToMeters));
+
+    info.originalSize = pointSize;
+    info.originalDotsPerMeter = pointsPerMeter;
+    info.unit = cwImage::Unit::Points;
+
+    return info;
+}
+#endif
+
+cwImage loadImage(const CavewhereProto::Image& protoImage, const QString& noteFilename) {
+    cwImage image;
+
+    const QString rawImagePath = QString::fromStdString(protoImage.path());
+    const QString imageFileName = QFileInfo(rawImagePath).fileName();
+    image.setPath(imageFileName.isEmpty() ? rawImagePath : imageFileName);
+
+    if (protoImage.has_page()) {
+        image.setPage(protoImage.page());
+    }
+
+    const bool hasImageUnit = protoImage.has_imageunit();
+    if (hasImageUnit) {
+        image.setUnit(static_cast<cwImage::Unit>(protoImage.imageunit()));
+    }
+
+    const bool hasSize = protoImage.has_size();
+    if (hasSize) {
+        image.setOriginalSize(cwRegionLoadTask::loadSize(protoImage.size()));
+    }
+
+    const bool hasDots = protoImage.has_dotpermeter();
+    if (hasDots) {
+        image.setOriginalDotsPerMeter(protoImage.dotpermeter());
+    }
+
+    const QString suffix = QFileInfo(imageFileName).suffix().toLower();
+    const bool isPdf = suffix == QStringLiteral("pdf");
+    const bool isSvg = suffix == QStringLiteral("svg");
+
+    if (!hasImageUnit) {
+        if (isPdf) {
+            image.setUnit(cwImage::Unit::Points);
+        } else if (isSvg) {
+            image.setUnit(cwImage::Unit::SvgUnits);
+        } else {
+            image.setUnit(cwImage::Unit::Pixels);
+        }
+    }
+
+    const bool sizeMissing = !hasSize || !image.originalSize().isValid();
+    const bool dotsMissing = !hasDots || image.originalDotsPerMeter() <= 0;
+    const bool unitMismatch = (isPdf && image.unit() != cwImage::Unit::Points)
+        || (isSvg && image.unit() != cwImage::Unit::SvgUnits)
+        || (!isPdf && !isSvg && image.unit() != cwImage::Unit::Pixels);
+    const bool needsReload = sizeMissing
+                             || dotsMissing
+                             || (!hasImageUnit && image.unit() != cwImage::Unit::Pixels)
+                             || unitMismatch;
+
+    if (needsReload) {
+        qDebug() << "Image needs reload:" << noteFilename << sizeMissing << dotsMissing << !hasImageUnit << unitMismatch;
+
+        const QDir noteDir = QFileInfo(noteFilename).dir();
+        const QString imagePath = noteDir.absoluteFilePath(image.path());
+        const QFileInfo imageFileInfo(imagePath);
+        if (imageFileInfo.exists()) {
+            if (isPdf) {
+#ifdef CW_WITH_PDF_SUPPORT
+                QPdfDocument document;
+                if (document.load(imagePath) == QPdfDocument::Error::None) {
+                    const int pageIndex = image.page() >= 0 ? image.page() : 0;
+                    const cwImage::OriginalImageInfo info = imageInfo(document, pageIndex);
+                    if (info.originalSize.isValid()) {
+                        image.setOriginalImageInfo(info);
+                    }
+                }
+#endif
+            } else {
+                const cwImage::OriginalImageInfo info = imageInfo(imagePath);
+                if (info.originalSize.isValid()) {
+                    image.setOriginalImageInfo(info);
+                }
+            }
+        }
+    }
+
+    return image;
+}
+
+} // namespace
 
 
 template<typename ProtoType>
@@ -1021,9 +1159,10 @@ void cwSaveLoad::copyFilesAndEmitResults(const QList<QString>& sourceFilePaths,
 static auto makeImageFromRelativePath(const QDir& rootDirectory) {
     return [rootDirectory](const QString& relativePath) -> cwImage {
         const QString absolutePath = rootDirectory.absoluteFilePath(relativePath);
-        QImage qimage(absolutePath);
-        cwImage image = cwAddImageTask::originalMetaData(qimage);
-        image.setPath(QFileInfo(relativePath).fileName());
+        cwImage image;
+        image.setOriginalImageInfo(imageInfo(absolutePath));
+        const QFileInfo fileInfo(relativePath);
+        image.setPath(fileInfo.fileName());
         // qDebug() << "Returning image:" << image;
         return image;
     };
@@ -1058,15 +1197,9 @@ void cwSaveLoad::addImages(QList<QUrl> noteImagePaths,
 
     // Always process normal images first (original behavior).
     {
-        QList<QString> batch;
-        batch.reserve(imageFilePaths.size());
-        for (const QString& s : imageFilePaths) {
-            batch.append(s);
-        }
-
         const QDir rootDirectory = projectDir();
         copyFilesAndEmitResults<cwImage>(
-            batch,
+            imageFilePaths,
             dir,
             makeImageFromRelativePath(rootDirectory),
             outputCallBackFunc
@@ -1075,7 +1208,7 @@ void cwSaveLoad::addImages(QList<QUrl> noteImagePaths,
 
     // Optional: process PDFs into images, then emit. Kept separate to preserve ordering and avoid surprises.
     if (!pdfFilePaths.isEmpty() && cwPDFConverter::isSupported()) {
-#ifdef WITH_PDF_SUPPORT
+#ifdef CW_WITH_PDF_SUPPORT
         const QDir rootDirectory = projectDir();
 
         auto makeImagesFromPdf = [rootDirectory](const QString& relativePath) {
@@ -1092,21 +1225,11 @@ void cwSaveLoad::addImages(QList<QUrl> noteImagePaths,
             const QString fileName = QFileInfo(relativePath).fileName();
 
             images.reserve(pageCount);
-            constexpr double inchesToMeters = cwUnits::convert(1.0, cwUnits::Inches, cwUnits::Meters);
-            constexpr double pointsToInches = 1.0 / 72.0;
-            constexpr int pointsPerMeter = qRound(1.0 / (pointsToInches * inchesToMeters));
 
             for (int pageIndex = 0; pageIndex < pageCount; ++pageIndex) {
-                const QSizeF pagePoints = document.pagePointSize(pageIndex);
-                const QSize pointSize(qRound(pagePoints.width()),
-                                      qRound(pagePoints.height()));
-                // qDebug() << "Page:" << pageIndex << "PointSize:" << pointSize << pointsPerMeter;
-
                 cwImage image;
                 image.setPath(fileName);
-                image.setOriginalSize(pointSize);
-                image.setOriginalDotsPerMeter(pointsPerMeter);
-                image.setUnit(cwImage::Unit::Points);
+                image.setOriginalImageInfo(imageInfo(document, pageIndex));
                 image.setPage(pageIndex);
                 images.append(image);
             }
@@ -1703,19 +1826,8 @@ Monad::Result<cwNoteData> cwSaveLoad::loadNote(const QString &filename, const QD
         // Load image resolution
         noteData.imageResolution = fromProtoImageResolution(protoNote.imageresolution());
 
-        // Load the image: older saves may store a relative path; strip to filename for consistency.
-        const QString rawImagePath = QString::fromStdString(protoNote.image().path());
-        const QString imageFileName = QFileInfo(rawImagePath).fileName();
-        noteData.image.setPath(imageFileName.isEmpty() ? rawImagePath : imageFileName);
-        if (protoNote.image().has_page()) {
-            noteData.image.setPage(protoNote.image().page());
-        }
-        if (protoNote.image().has_imageunit()) {
-            noteData.image.setUnit(static_cast<cwImage::Unit>(protoNote.image().imageunit()));
-        }
-
-        noteData.image.setOriginalSize(cwRegionLoadTask::loadSize(protoNote.image().size()));
-        noteData.image.setOriginalDotsPerMeter(protoNote.image().dotpermeter());
+        // Load image metadata, reloading from disk if legacy fields are missing.
+        noteData.image = loadImage(protoNote.image(), filename);
 
         // Load scraps
         for (const auto& protoScrap : protoNote.scraps()) {

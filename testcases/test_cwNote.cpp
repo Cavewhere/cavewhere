@@ -73,9 +73,39 @@ TEST_CASE("Note pdf sizes use note resolution and render settings", "[cwNote]") 
     CHECK(metersOnPage(0, 0) == Catch::Approx(physical.width()).epsilon(1e-6));
     CHECK(metersOnPage(1, 1) == Catch::Approx(physical.height()).epsilon(1e-6));
 
-    const double pixelsPerPoint = cwPDFSettings::instance()->resolutionImport() / 72.0;
+    const double pixelsPerPoint = cwPDFSettings::instance()->resolutionImport() / cwUnits::PointsPerInch;
     const QSize expectedRenderSize(
         qRound(image.originalSize().width() * pixelsPerPoint),
         qRound(image.originalSize().height() * pixelsPerPoint));
+    CHECK(note->renderSize() == expectedRenderSize);
+}
+
+TEST_CASE("Note svg render size uses CSS dpi", "[cwNote]") {
+    cwPDFSettings::initialize();
+    cwPDFSettings::instance()->setResolutionImport(300);
+
+    auto root = std::make_unique<cwRootData>();
+    auto project = root->project();
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    cave->addTrip();
+    auto trip = cave->trip(0);
+
+    const QString svgPath = copyToTempFolder("://datasets/test_cwImageProvider/supportedImage.svg");
+    trip->notes()->addFromFiles({QUrl::fromLocalFile(svgPath)});
+    root->futureManagerModel()->waitForFinished();
+
+    auto notes = trip->notes()->notes();
+    REQUIRE(notes.size() == 1);
+    cwNote* note = notes.first();
+    REQUIRE(note != nullptr);
+
+    const cwImage image = note->image();
+    const double pixelsPerUnit = cwPDFSettings::instance()->resolutionImport() / cwUnits::SvgCssDpi;
+    const QSize expectedRenderSize(
+        qRound(image.originalSize().width() * pixelsPerUnit),
+        qRound(image.originalSize().height() * pixelsPerUnit));
     CHECK(note->renderSize() == expectedRenderSize);
 }

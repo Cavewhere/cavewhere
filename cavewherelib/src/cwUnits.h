@@ -47,6 +47,9 @@ public:
     Q_ENUM(LengthUnit)
     Q_ENUM(ImageResolutionUnit)
 
+    static constexpr double PointsPerInch = 72.0;
+    static constexpr double SvgCssDpi = 96.0;
+
     static constexpr double convert(double value,
                                     cwUnits::LengthUnit from,
                                     cwUnits::LengthUnit to);

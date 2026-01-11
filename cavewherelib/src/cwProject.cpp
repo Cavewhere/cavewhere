@@ -10,7 +10,7 @@
 #include "Monad/Monad.h"
 #include "cwCave.h"
 #include "cwTrip.h"
-#include "cwAddImageTask.h"
+#include "cwImageUtils.h"
 #include "cwCavingRegion.h"
 #include "cwTaskProgressDialog.h"
 #include "cwImageData.h"
@@ -850,7 +850,7 @@ void cwProject::loadOrConvert(const QString &filename)
  */
 QString cwProject::supportedImageFormats()
 {
-    QStringList formats = cwAddImageTask::supportedImageFormats();
+    QStringList formats = cwImageUtils::supportedImageFormats();
 
     if(cwPDFConverter::isSupported()) {
         formats.append("pdf");

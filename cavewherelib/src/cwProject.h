@@ -19,7 +19,6 @@
 #include "cwFutureManagerToken.h"
 class cwCave;
 class cwCavingRegion;
-class cwAddImageTask;
 class cwTrip;
 class cwScrapManager;
 class cwTaskManagerModel;

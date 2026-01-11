@@ -14,10 +14,10 @@
 #include <QRegularExpression>
 #include <QXmlStreamReader>
 #include <cmath>
+#include <optional>
 
 namespace {
 
-constexpr double kSvgCssDpi = 96.0;
 constexpr qint64 kMaxImageBytes = 256ll * 1024 * 1024;
 constexpr qint64 kBytesPerPixel = 4;
 
@@ -97,7 +97,7 @@ double svgLengthToInches(const SvgLength& length)
 {
     switch (length.unit) {
     case SvgUnit::Px:
-        return length.value / kSvgCssDpi;
+        return length.value / cwUnits::SvgCssDpi;
     case SvgUnit::In:
         return length.value;
     case SvgUnit::Cm:
@@ -105,11 +105,11 @@ double svgLengthToInches(const SvgLength& length)
     case SvgUnit::Mm:
         return length.value / 25.4;
     case SvgUnit::Pt:
-        return length.value / 72.0;
+        return length.value / cwUnits::PointsPerInch;
     case SvgUnit::Pc:
         return length.value / 6.0;
     }
-    return length.value / kSvgCssDpi;
+    return length.value / cwUnits::SvgCssDpi;
 }
 
 SvgSize parseSvgSize(const QByteArray& data)
@@ -187,6 +187,56 @@ QSize clampImageSize(const QSize& size)
     return QSize(width, height);
 }
 
+std::optional<QSize> svgPixelSize(const QByteArray& data, const QSize& baseSize, double dpi)
+{
+    if (dpi <= 0.0) {
+        return std::nullopt;
+    }
+
+    const SvgSize svgSize = parseSvgSize(data);
+    double widthPx = 0.0;
+    double heightPx = 0.0;
+    bool widthSet = false;
+    bool heightSet = false;
+
+    if (svgSize.hasWidth) {
+        widthPx = svgLengthToInches(svgSize.width) * dpi;
+        widthSet = widthPx > 0.0;
+    }
+    if (svgSize.hasHeight) {
+        heightPx = svgLengthToInches(svgSize.height) * dpi;
+        heightSet = heightPx > 0.0;
+    }
+
+    QSizeF aspectSource;
+    if (svgSize.hasViewBox && svgSize.viewBoxSize.isValid()) {
+        aspectSource = svgSize.viewBoxSize;
+    } else if (baseSize.isValid()) {
+        aspectSource = baseSize;
+    }
+
+    const double scale = dpi / cwUnits::SvgCssDpi;
+    if (widthSet && !heightSet && aspectSource.isValid()) {
+        heightPx = widthPx * (aspectSource.height() / aspectSource.width());
+        heightSet = heightPx > 0.0;
+    } else if (heightSet && !widthSet && aspectSource.isValid()) {
+        widthPx = heightPx * (aspectSource.width() / aspectSource.height());
+        widthSet = widthPx > 0.0;
+    } else if (!widthSet && !heightSet && aspectSource.isValid()) {
+        widthPx = aspectSource.width() * scale;
+        heightPx = aspectSource.height() * scale;
+        widthSet = widthPx > 0.0;
+        heightSet = heightPx > 0.0;
+    }
+
+    if (!widthSet || !heightSet) {
+        return std::nullopt;
+    }
+
+    return QSize(std::max(1, qRound(widthPx)),
+                 std::max(1, qRound(heightPx)));
+}
+
 } // namespace
 
 bool cwSvgReader::isSvg(const QByteArray& format)
@@ -203,48 +253,10 @@ QImage cwSvgReader::toImage(QByteArray& data, const QByteArray& format)
     const int resolutionPpi = cwPDFSettings::instance()->resolutionImport();
     const QSize baseSize = imageReader.size();
     if (resolutionPpi > 0) {
-        const SvgSize svgSize = parseSvgSize(data);
-        const double scale = resolutionPpi / kSvgCssDpi;
-        double widthPx = 0.0;
-        double heightPx = 0.0;
-        bool widthSet = false;
-        bool heightSet = false;
-
-        if (svgSize.hasWidth) {
-            widthPx = svgLengthToInches(svgSize.width) * resolutionPpi;
-            widthSet = widthPx > 0.0;
-        }
-        if (svgSize.hasHeight) {
-            heightPx = svgLengthToInches(svgSize.height) * resolutionPpi;
-            heightSet = heightPx > 0.0;
-        }
-
-        QSizeF aspectSource;
-        if (svgSize.hasViewBox && svgSize.viewBoxSize.isValid()) {
-            aspectSource = svgSize.viewBoxSize;
-        } else if (baseSize.isValid()) {
-            aspectSource = baseSize;
-        }
-
-        if (widthSet && !heightSet && aspectSource.isValid()) {
-            heightPx = widthPx * (aspectSource.height() / aspectSource.width());
-            heightSet = heightPx > 0.0;
-        } else if (heightSet && !widthSet && aspectSource.isValid()) {
-            widthPx = heightPx * (aspectSource.width() / aspectSource.height());
-            widthSet = widthPx > 0.0;
-        } else if (!widthSet && !heightSet && aspectSource.isValid()) {
-            widthPx = aspectSource.width() * scale;
-            heightPx = aspectSource.height() * scale;
-            widthSet = widthPx > 0.0;
-            heightSet = heightPx > 0.0;
-        }
-
-        if (widthSet && heightSet) {
-            QSize scaledSize(
-                std::max(1, qRound(widthPx)),
-                std::max(1, qRound(heightPx)));
-            const QSize clampedSize = clampImageSize(scaledSize);
-            if (clampedSize != scaledSize) {
+        const auto scaledSize = svgPixelSize(data, baseSize, resolutionPpi);
+        if (scaledSize.has_value()) {
+            const QSize clampedSize = clampImageSize(*scaledSize);
+            if (clampedSize != *scaledSize) {
                 qWarning() << "SVG render size clamped from" << scaledSize << "to" << clampedSize;
             }
             imageReader.setScaledSize(clampedSize);
@@ -262,4 +274,29 @@ QImage cwSvgReader::toImage(QByteArray& data, const QByteArray& format)
     }
 
     return image;
+}
+
+cwImage::OriginalImageInfo cwSvgReader::imageInfo(QByteArray& data, const QByteArray& format)
+{
+    cwImage::OriginalImageInfo info;
+    if (!isSvg(format)) {
+        return info;
+    }
+
+    QBuffer stream(&data);
+    QImageReader imageReader(&stream, format);
+    const QSize baseSize = imageReader.size();
+
+    const auto nativeSize = svgPixelSize(data, baseSize, cwUnits::SvgCssDpi);
+    if (nativeSize.has_value()) {
+        info.originalSize = *nativeSize;
+    }
+
+    const int dotsPerMeter = qRound(cwUnits::convert(
+        cwUnits::SvgCssDpi,
+        cwUnits::DotsPerInch,
+        cwUnits::DotsPerMeter));
+    info.originalDotsPerMeter = dotsPerMeter;
+    info.unit = cwImage::Unit::SvgUnits;
+    return info;
 }

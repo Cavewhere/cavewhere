@@ -16,7 +16,6 @@
 #include "cwGlobals.h"
 #include "cwTextureUploadTask.h"
 #include "cwTrackedImage.h"
-class cwAddImageTask;
 
 //Qt includes
 #include <QRectF>
@@ -56,4 +55,3 @@ private:
 };
 
 #endif // CWCROPIMAGETASK_H
-

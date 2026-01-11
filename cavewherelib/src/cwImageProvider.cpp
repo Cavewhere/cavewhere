@@ -9,7 +9,7 @@
 #include "cwImageProvider.h"
 #include "cwDebug.h"
 #include "cwSQLManager.h"
-#include "cwAddImageTask.h"
+#include "cwImageUtils.h"
 #include "cwDiskCacher.h"
 #include "cwPDFSettings.h"
 #include "cwUnits.h"
@@ -30,7 +30,7 @@
 #include <QUrlQuery>
 #include <cmath>
 
-#ifdef WITH_PDF_SUPPORT
+#ifdef CW_WITH_PDF_SUPPORT
 #include <QPdfDocument>
 #endif
 
@@ -120,7 +120,7 @@ QString resolveFilePath(const QString& path, const QString& projectPath)
 
 QImage renderPdfPage(const QString& pdfPath, int pageIndex, int resolutionPpi)
 {
-#ifdef WITH_PDF_SUPPORT
+#ifdef CW_WITH_PDF_SUPPORT
     QPdfDocument document;
     if (document.load(pdfPath) != QPdfDocument::Error::None) {
         return QImage();
@@ -131,7 +131,7 @@ QImage renderPdfPage(const QString& pdfPath, int pageIndex, int resolutionPpi)
     }
 
     const QSizeF pagePoints = document.pagePointSize(pageIndex);
-    const double scale = resolutionPpi / 72.0;
+    const double scale = resolutionPpi / cwUnits::PointsPerInch;
     const QSize targetSize(std::round(pagePoints.width() * scale),
                            std::round(pagePoints.height() * scale));
 
@@ -167,7 +167,7 @@ QImage cwImageProvider::requestImage(const QString &path, QSize *size, const QSi
     const QString resolvedPath = resolveFilePath(basePath, projectPath());
     const QFileInfo info(resolvedPath);
 
-#ifdef WITH_PDF_SUPPORT
+#ifdef CW_WITH_PDF_SUPPORT
     const bool isPdf = info.suffix().compare(QStringLiteral("pdf"), Qt::CaseInsensitive) == 0;
 
     if(isPdf) {
@@ -481,7 +481,7 @@ QImage cwImageProvider::image(const cwImageData &imageData) const
     }
 
     auto imageByteData = imageData.data();
-    return cwAddImageTask::imageWithAutoTransform(imageByteData, imageData.format());
+    return cwImageUtils::imageWithAutoTransform(imageByteData, imageData.format());
 }
 
 /**
@@ -602,7 +602,7 @@ QImage cwImageProvider::requestScaledImageFromCache(
     const QByteArray entry = cacher.entry(cacheKey);
     if (!entry.isEmpty()) {
         QByteArray dataCopy = entry;
-        QImage cachedImage = cwAddImageTask::imageWithAutoTransform(
+        QImage cachedImage = cwImageUtils::imageWithAutoTransform(
             dataCopy,
             cwImageProvider::imageCacheExtension().toUtf8());
         if (size != nullptr) {

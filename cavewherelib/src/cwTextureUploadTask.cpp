@@ -9,11 +9,11 @@
 #include "cwImageProvider.h"
 #include "cwTextureUploadTask.h"
 #include "cwDebug.h"
-#include "cwAddImageTask.h"
 #include "cwMath.h"
 #include "cwOpenGLUtils.h"
 #include "cwImageDatabase.h"
 #include "cwConcurrent.h"
+#include "cwTrackedImage.h"
 
 //Qt includes
 #include <QDebug>

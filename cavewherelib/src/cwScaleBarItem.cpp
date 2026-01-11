@@ -23,7 +23,7 @@ namespace {
     constexpr double kPaddingInches = 0.25;
     constexpr double kLabelSpacingInches = 0.05;
     constexpr double kBarHeightInches = 0.1;
-    constexpr double kPointsPerInch = 72.0;
+    constexpr double kPointsPerInch = cwUnits::PointsPerInch;
 }
 
 cwScaleBarItem::cwScaleBarItem(QGraphicsItem *parent) :
