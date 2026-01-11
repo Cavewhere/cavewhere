@@ -15,7 +15,7 @@ class CaveWhereConan(ConanFile):
     settings = "os", "compiler", "build_type", "arch"
     requires = [
     ("catch2/[>=3.7.1]"),
-    ("protobuf/[>=5.27.0]"),
+    ("protobuf/[=6.32.1]"),
     ("libgit2/1.9.1"),
     ("libssh2/[>=1.11]"),
     ("openssl/3.5.0"),
@@ -56,7 +56,7 @@ class CaveWhereConan(ConanFile):
 
         # Or add a new requirement!
         if not self.options.system_qt:
-            self.requires("qt/6.8.3")
+            self.requires("qt/6.10.1")
             self.requires("xkbcommon/[>=1.6.0]", override=True)
             self.requires("sqlite3/[>=3.45.0]") #, override=True) #override seems to use system's sqlite3 and causes issues
         else:

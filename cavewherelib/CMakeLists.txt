@@ -10,11 +10,10 @@ find_package(Qt6
     COMPONENTS
     Core
     Gui
-    # GuiPrivate
+    GuiPrivate
     Widgets
     Quick
     Sql
-    OpenGL
     Xml
     Concurrent
     Svg
@@ -67,7 +66,6 @@ target_link_libraries(cavewherelib
     Qt6::Widgets
     Qt6::Quick
     Qt6::Sql
-    Qt6::OpenGL
     Qt6::Xml
     Qt6::Concurrent
     Qt6::Svg

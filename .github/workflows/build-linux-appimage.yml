@@ -55,7 +55,7 @@ jobs:
         uses: jurplel/install-qt-action@v4
         with:
           aqtversion: '==3.1.*'
-          version: '6.8.2'
+          version: '6.10.1'
           host: 'linux'
           target: 'desktop'
           arch: ${{ matrix.qt_arch }}

@@ -156,7 +156,6 @@ find_package(Qt6
     Widgets
     Quick
     Sql
-    OpenGL
     Xml
     Concurrent
     Svg
