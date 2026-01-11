@@ -530,6 +530,14 @@ TEST_CASE("Checks cwSurveyChunk errors", "[cwSurveyChunk]")
             }
         }
 
+        SECTION("Corrected Backsight Wrap") {
+            trip->calibrations()->setCorrectedCompassBacksight(true);
+            chunk->setData(cwSurveyChunk::ShotCompassRole, 0, "1");
+            chunk->setData(cwSurveyChunk::ShotBackCompassRole, 0, "359");
+            CHECK(chunk->errorModel()->warningCount() == 0);
+            trip->calibrations()->setCorrectedCompassBacksight(false);
+        }
+
         SECTION("Small Corrected Compass") {
             chunk->setData(cwSurveyChunk::ShotCompassRole, 0, "0");
             chunk->setData(cwSurveyChunk::ShotBackCompassRole, 0, "183");

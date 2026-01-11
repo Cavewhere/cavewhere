@@ -18,6 +18,7 @@
 #include "cwDistanceValidator.h"
 #include "cwClinoValidator.h"
 #include "cwTripCalibration.h"
+#include "cwMath.h"
 
 //Qt includes
 #include <QHash>
@@ -28,6 +29,17 @@
 
 //Std includes
 #include <math.h>
+
+namespace {
+double absAngleDifferenceDegrees(double first, double second)
+{
+    double raw = fmod(fabs(first - second), 360.0);
+    if(raw > 180.0) {
+        raw = 360.0 - raw;
+    }
+    return raw;
+}
+}
 
 cwSurveyChunk::cwSurveyChunk(QObject * parent) :
     QObject(parent),
@@ -1349,8 +1361,8 @@ QList<cwError> cwSurveyChunk::checkWithTolerance(cwSurveyChunk::DataRole frontSi
 
         }
         //Flip the backsight so it's in frontsight space
-        frontSight = fmod(frontSight, 360.0);
-        backSight = fmod(backSight + 180.0, 360.0);
+        frontSight = cwWrapDegrees360(frontSight);
+        backSight = cwWrapDegrees360(backSight + 180.0);
         break;
     case ShotClinoRole:
         if(parentTrip() != nullptr) {
@@ -1378,7 +1390,12 @@ QList<cwError> cwSurveyChunk::checkWithTolerance(cwSurveyChunk::DataRole frontSi
         break;
     }
 
-    double differance = fabs(frontSight - backSight);
+    double differance = 0.0;
+    if(frontSightRole == ShotCompassRole) {
+        differance = absAngleDifferenceDegrees(frontSight, backSight);
+    } else {
+        differance = fabs(frontSight - backSight);
+    }
     if(differance > tolerance) {
         cwError error;
         error.setMessage(QString("Frontsight and backsight differs by %1%2").arg(differance).arg(units));
