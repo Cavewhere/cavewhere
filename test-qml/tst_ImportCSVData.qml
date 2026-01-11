@@ -20,7 +20,9 @@ MainWindowTest {
             let importButton_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->dataMainPage->importButton")
             mouseClick(importButton_obj1)
 
-            let csvMenuItem = ObjectFinder.findObjectByChain(mainWindow, "csvMenuItem")
+            // wait(100000)
+
+            let csvMenuItem = findChild(mainWindow, "csvMenuItem")
             mouseClick(csvMenuItem)
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "csvImporterPage" });
