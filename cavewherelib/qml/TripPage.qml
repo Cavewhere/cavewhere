@@ -113,8 +113,8 @@ StandardPage {
                     id: tripNameVerticalText
                     rotation: 270
                     text: area.currentTrip.name
-                    x: -5
-                    y: 20
+                    anchors.centerIn: parent
+                    transformOrigin: QQ.Item.Center
                 }
             }
         }
