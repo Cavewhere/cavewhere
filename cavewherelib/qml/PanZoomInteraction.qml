@@ -10,26 +10,26 @@ import cavewherelib
 
 Interaction {
     id: interactionId
-    required property QQ.Image target
+    required property ImageBackground target
     property alias dragAcceptedButtons: dragHandlerId.acceptedButtons
 
     //We need to make this false, so default state disables the interaction
     enabled: false
 
     function refit() {
-        target.x = target.parent.width * 0.5 - target.sourceSize.width * 0.5;
-        target.y = target.parent.height * 0.5 - target.sourceSize.height * 0.5;
+        target.x = target.parent.width * 0.5 - target.image.sourceSize.width * 0.5;
+        target.y = target.parent.height * 0.5 - target.image.sourceSize.height * 0.5;
 
         let imageAspect = target.width / target.height
         let scaleX = 0.0
         let scaleY = 0.0
         if(imageAspect >= 1.0) {
-            scaleX = target.parent.width / target.sourceSize.width;
-            scaleY = target.parent.height / target.sourceSize.height;
+            scaleX = target.parent.width / target.image.sourceSize.width;
+            scaleY = target.parent.height / target.image.sourceSize.height;
         } else {
             //Different aspect ratios, flip the scales
-            scaleX = target.parent.width / target.sourceSize.height;
-            scaleY = target.parent.height / target.sourceSize.width;
+            scaleX = target.parent.width / target.image.sourceSize.height;
+            scaleY = target.parent.height / target.image.sourceSize.width;
         }
 
         // Choose the smaller scale factor to ensure the image fits within the item
@@ -38,9 +38,9 @@ Interaction {
     }
 
     QQ.Connections {
-        target: interactionId.target
+        target: interactionId.target.image
         function onStatusChanged() {
-            if(interactionId.target.status == QQ.Image.Ready) {
+            if(interactionId.target.image.status === QQ.Image.Ready) {
                 interactionId.state = "AUTO_FIT"
                 interactionId.refit()
             }

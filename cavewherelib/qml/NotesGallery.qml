@@ -104,6 +104,14 @@ QQ.Rectangle {
         width: maxImageWidth
         height: maxImageWidth
 
+        QQ.Rectangle {
+            //Background for the image for transparent image and svgs
+            color: "#FFFFFF"
+            anchors.centerIn: imageItem
+            width: imageItem.paintedWidth
+            height: imageItem.paintedHeight
+        }
+
         QQ.Image {
             id: imageItem
             objectName: "noteImageItem"
@@ -122,7 +130,7 @@ QQ.Rectangle {
             visible: container.hasIconSource
 
             function updateHeight() {
-                if(paintedHeight == 0.0 || paintedWidth == 0.0) {
+                if(paintedHeight === 0.0 || paintedWidth === 0.0) {
                     container.height = container.maxImageWidth
                     return;
                 }

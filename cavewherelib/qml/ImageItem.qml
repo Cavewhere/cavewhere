@@ -4,12 +4,14 @@ import cavewherelib
 QQ.Item {
     id: itemId
 
-    property alias source: imageId.source
-    readonly property alias sourceSize: imageId.sourceSize
+    property alias image: background.image
+    // property alias source: background.image.source
+    // readonly property size sourceSize: background.image.sourceSize
 
-    property alias imageRotation: imageId.rotation
+    property alias imageRotation: background.rotation
     // property alias transformItem: imageId
-    property alias targetItem: imageId //imageCoordsId
+    property alias targetItem: background //imageCoordsId
+
 
     //Repart child items to the imageId
     // default property alias imageData: imageId.data
@@ -24,14 +26,8 @@ QQ.Item {
     //     console.log("normalized:" + normalizedToLocal)
     // }
 
-
-    QQ.Image {
-        id: imageId
-        objectName: "imageId"
-        smooth: false
-        mipmap: true
-        fillMode: QQ.Image.Pad //No rescaling
-        asynchronous: true
-        visible: status === QQ.Image.Ready
+    ImageBackground {
+        id: background
     }
+
 }

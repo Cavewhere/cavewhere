@@ -29,7 +29,7 @@ DrawLengthInteraction {
         var nativePixels = lengthPixels
         if(note !== null && imageItem !== null && imageResolution !== null) {
             nativePixels = imageResolution.nativePixelLength(note.image,
-                                                            imageItem.sourceSize,
+                                                            imageItem.image.sourceSize,
                                                             lengthPixels)
         }
 
