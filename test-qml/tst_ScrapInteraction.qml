@@ -187,11 +187,11 @@ MainWindowTest {
             tryVerify(() => { return noteGallery.state === "" }) ;
 
             let noteItem = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea")
+
             tryVerify(() => { return noteItem.scrapsVisible === false });
 
-            let scrapView = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId->scrapViewId")
+            let scrapView = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->scrapViewId")
             tryVerify(() => { return scrapView.visible === false });
-
         }
 
         function test_addLeadInteraction() {
