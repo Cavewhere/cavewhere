@@ -70,13 +70,22 @@ void TestHelper::loadProjectFromZip(cwProject *project, const QString &filename)
     QFileInfo info(datasetFileZip);
     auto result = cwZip::extractAll(datasetFileZip, info.canonicalPath());
 
-    // Find the first .cw file
+    // Find the first .cw file, skipping macOS metadata entries.
+    QString projectFilePath;
     QDirIterator it(info.canonicalPath(), {"*.cw"}, QDir::Files, QDirIterator::Subdirectories);
-    if (it.hasNext()) {
+    while (it.hasNext()) {
         QString filePath = it.next();
+        QFileInfo fileInfo(filePath);
+        if (filePath.contains(QStringLiteral("__MACOSX")) || fileInfo.fileName().startsWith("._")) {
+            continue;
+        }
 
-        // Optionally, load it
-        project->loadOrConvert(filePath);
+        projectFilePath = filePath;
+        break;
+    }
+
+    if (!projectFilePath.isEmpty()) {
+        project->loadOrConvert(projectFilePath);
         project->waitLoadToFinish();
     } else {
         qFatal() << "No .cw file found in:" << info.canonicalPath();
