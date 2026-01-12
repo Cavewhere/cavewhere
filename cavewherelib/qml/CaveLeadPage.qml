@@ -117,14 +117,48 @@ StandardPage {
                 property int description
             }
 
-            columnModel: ListModel {
-                ListElement { widthName: "done"; columnWidth: 50; text: "Done"; sortRole: LeadModel.LeadCompleted }
-                ListElement { widthName: "goTo"; columnWidth: 50; text: "Goto" }
-                ListElement { widthName: "nearest"; columnWidth: 75; text: "Nearest"; sortRole: LeadModel.LeadNearestStation }
-                ListElement { widthName: "size"; columnWidth: 75; text: "Size"; sortRole: LeadModel.LeadSizeAsString }
-                ListElement { widthName: "distance"; columnWidth: 75; text: "Distance"; sortRole: LeadModel.LeadDistanceToReferanceStation }
-                ListElement { widthName: "trip"; columnWidth: 120; text: "Trip"; sortRole: LeadModel.LeadTrip }
-                ListElement { widthName: "description"; columnWidth: 200; text: "Description"; sortRole: LeadModel.LeadDesciption }
+            columnModel: ObjectModel {
+                QtObject {
+                    property string widthName: "done"
+                    property int columnWidth: 50
+                    property string text: "Done"
+                    property int sortRole: LeadModel.LeadCompleted
+                }
+                QtObject {
+                    property string widthName: "goTo"
+                    property int columnWidth: 50
+                    property string text: "Goto"
+                }
+                QtObject {
+                    property string widthName: "nearest"
+                    property int columnWidth: 75
+                    property string text: "Nearest"
+                    property int sortRole: LeadModel.LeadNearestStation
+                }
+                QtObject {
+                    property string widthName: "size"
+                    property int columnWidth: 75
+                    property string text: "Size"
+                    property int sortRole: LeadModel.LeadSizeAsString
+                }
+                QtObject {
+                    property string widthName: "distance"
+                    property int columnWidth: 75
+                    property string text: "Distance"
+                    property int sortRole: LeadModel.LeadDistanceToReferanceStation
+                }
+                QtObject {
+                    property string widthName: "trip"
+                    property int columnWidth: 120
+                    property string text: "Trip"
+                    property int sortRole: LeadModel.LeadTrip
+                }
+                QtObject {
+                    property string widthName: "description"
+                    property int columnWidth: 200
+                    property string text: "Description"
+                    property int sortRole: LeadModel.LeadDesciption
+                }
             }
         }
 

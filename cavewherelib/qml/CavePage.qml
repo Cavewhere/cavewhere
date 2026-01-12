@@ -149,11 +149,31 @@ StandardPage {
                         property int length //: 50
                     }
 
-                    columnModel: ListModel {
-                        ListElement { widthName: "name"; columnWidth: 200; text: "Name"; sortRole: CavePageModel.TripNameRole }
-                        ListElement { widthName: "date"; columnWidth: 75; text: "Date"; sortRole: CavePageModel.TripDateRole }
-                        ListElement { widthName: "stations"; columnWidth: 75; text: "Stations"; sortRole: CavePageModel.UsedStationsRole }
-                        ListElement { widthName: "length"; columnWidth: 50; text: "Length"; sortRole: CavePageModel.TripDistanceRole }
+                    columnModel: ObjectModel {
+                        QtObject {
+                            property string widthName: "name"
+                            property int columnWidth: 200
+                            property string text: "Name"
+                            property int sortRole: CavePageModel.TripNameRole
+                        }
+                        QtObject {
+                            property string widthName: "date"
+                            property int columnWidth: 75
+                            property string text: "Date"
+                            property int sortRole: CavePageModel.TripDateRole
+                        }
+                        QtObject {
+                            property string widthName: "stations"
+                            property int columnWidth: 75
+                            property string text: "Stations"
+                            property int sortRole: CavePageModel.UsedStationsRole
+                        }
+                        QtObject {
+                            property string widthName: "length"
+                            property int columnWidth: 50
+                            property string text: "Length"
+                            property int sortRole: CavePageModel.TripDistanceRole
+                        }
                     }
                 }
 

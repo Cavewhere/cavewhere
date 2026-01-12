@@ -5,7 +5,7 @@ import QtQml
 Item {
     id: columnWidthModelId
     required property QtObject columnWidth
-    required property ListModel columnModel
+    required property ObjectModel columnModel
 
     function syncWidth(index) {
         if(index < 0 || index >= columnModel.count) {
