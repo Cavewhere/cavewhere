@@ -48,14 +48,27 @@ if(WIN32)
     set(ROOT_FILES_TO_COPY
         "${BINARY_DIR}/${CAVEWHERE_NAME}${CMAKE_EXECUTABLE_SUFFIX}"
         "${BINARY_DIR}/cavewhere-test${CMAKE_EXECUTABLE_SUFFIX}"
-        "${BINARY_DIR}/cavewherelib${CMAKE_SHARED_LIBRARY_SUFFIX}"
-        "${BINARY_DIR}/cavewhere-testlib${CMAKE_SHARED_LIBRARY_SUFFIX}"
-        "${BINARY_DIR}/dewalls${CMAKE_SHARED_LIBRARY_SUFFIX}"
-        "${BINARY_DIR}/QMath3d${CMAKE_SHARED_LIBRARY_SUFFIX}"
-        "${BINARY_DIR}/QmlTestRecorder${CMAKE_SHARED_LIBRARY_SUFFIX}"
 
         #"${CONAN_BIN_DIRS_ZLIB}/zlib1.dll"
     )
+
+    # Append shared library outputs only when they exist at build time.
+    set(_SHARED_LIB_TARGETS
+        cavewherelib
+        cavewhere-testlib
+        dewalls
+        QMath3d
+        QmlTestRecorder
+    )
+
+    foreach(_lib IN LISTS _SHARED_LIB_TARGETS)
+        if(TARGET ${_lib})
+            get_target_property(_lib_type ${_lib} TYPE)
+            if(_lib_type STREQUAL "SHARED")
+                list(APPEND ROOT_FILES_TO_COPY "$<TARGET_FILE:${_lib}>")
+            endif()
+        endif()
+    endforeach()
 
     set(PLUGIN_DIR $<TARGET_FILE_DIR:cavewherelibplugin>)
     SET(cavewherelib_FILES_TO_COPY
