@@ -3,11 +3,13 @@ import QtQuick
 import QmlTestRecorder
 import cavewherelib
 
-Item {
+Rectangle {
     id: rootId
     objectName: "rootId"
 
     property alias mainWindow: mainWindow
+
+    color: Theme.background
 
     width: 1200
     height: 700
