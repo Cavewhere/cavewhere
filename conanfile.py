@@ -48,11 +48,11 @@ class CaveWhereConan(ConanFile):
             self.requires("proj/[>=9.3.1]")
 
         #Fixes a build issue on macos
-        if self.settings.os == "Macos":
-            # Fixes a build issue on macOS
-            self.requires("abseil/[>=20250127.0]")
-        else:
-            self.requires("abseil/[>=20240116.2]")
+        # if self.settings.os == "Macos":
+        #     # Fixes a build issue on macOS
+        #     self.requires("abseil/[>=20250127.0]")
+        # else:
+        self.requires("abseil/[=20250814.0]", override=True)
 
         # Or add a new requirement!
         if not self.options.system_qt:
@@ -67,7 +67,8 @@ class CaveWhereConan(ConanFile):
 
     def configure(self):
         #This prevents protoc from needing zlib which adds a failing rpath protoc
-        self.options["protobuf"].with_zlib=False
+        #Disable for windows
+        self.options["protobuf"].with_zlib=True
 
         self.options["openssl"].shared = True
 
