@@ -37,7 +37,7 @@ jobs:
         uses: jurplel/install-qt-action@v4
         with:
           aqtversion: '==3.1.*'
-          version: '6.8.2'
+          version: '6.10.1'
           host: 'windows'
           target: 'desktop'
           arch: 'win64_msvc2022_64'
@@ -87,7 +87,6 @@ jobs:
       - name: Install Dependencies with Conan
         run: |
           conan install . --build=missing --output-folder=build -s:h compiler.cppstd=20 -s:b compiler.cppstd=20 -s compiler.version=194 -c tools.cmake.cmaketoolchain:generator=Ninja
-#-s compiler=msvc -s compiler.cppstd=17 -s compiler.version=193 -s compiler.update=6
 
       - name: Verify Toolchain File
         run: |
