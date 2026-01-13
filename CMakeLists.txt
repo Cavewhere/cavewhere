@@ -166,122 +166,124 @@ find_package(Qt6
 
 set(CMAKE_AUTOMOC ON)
 
-#### cavewhere-testlib ####
-qt_add_qml_module(cavewhere-testlib
-    URI cw.TestLib
-    VERSION 1.0
-    RESOURCE_PREFIX /qml
-    OUTPUT_DIRECTORY cw/TestLib
-    DEPENDENCIES
-        QtQuick
-        QtQuick.Controls
-    SOURCES
-        testlib/LoadProjectHelper.cpp
-        testlib/LoadProjectHelper.h
-    # STATIC
-    #QML_FILES
-)
+if(BUILD_TESTING)
+    #### cavewhere-testlib ####
+    qt_add_qml_module(cavewhere-testlib
+        URI cw.TestLib
+        VERSION 1.0
+        RESOURCE_PREFIX /qml
+        OUTPUT_DIRECTORY cw/TestLib
+        DEPENDENCIES
+            QtQuick
+            QtQuick.Controls
+        SOURCES
+            testlib/LoadProjectHelper.cpp
+            testlib/LoadProjectHelper.h
+        # STATIC
+        #QML_FILES
+    )
 
-# Generate the export header
-generate_export_header(cavewhere-testlib
-    BASE_NAME CAVEWHERE_TESTLIB
-    EXPORT_MACRO_NAME CAVEWHERE_TESTLIB_EXPORT
-    EXPORT_FILE_NAME CaveWhereTestLibExport.h
-)
+    # Generate the export header
+    generate_export_header(cavewhere-testlib
+        BASE_NAME CAVEWHERE_TESTLIB
+        EXPORT_MACRO_NAME CAVEWHERE_TESTLIB_EXPORT
+        EXPORT_FILE_NAME CaveWhereTestLibExport.h
+    )
 
-target_link_libraries(cavewhere-testlib
-    PRIVATE
-    Qt6::Test
-    Qt6::Core
-    Qt6::Gui
-    Qt6::Widgets
-    Qt6::Quick
-    Qt6::Qml
-    Catch2::Catch2
-    cavewherelib
-)
+    target_link_libraries(cavewhere-testlib
+        PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Widgets
+        Qt6::Quick
+        Qt6::Qml
+        Catch2::Catch2
+        cavewherelib
+    )
 
-file(GLOB cavewhere_testlib_qrc_FILES "testcases/*.qrc")
-qt_add_resources(cavewhere_testlib_QT_RESOURCES ${cavewhere_testlib_qrc_FILES})
-target_sources(cavewhere-testlib PRIVATE ${cavewhere_testlib_QT_RESOURCES})
+    file(GLOB cavewhere_testlib_qrc_FILES "testcases/*.qrc")
+    qt_add_resources(cavewhere_testlib_QT_RESOURCES ${cavewhere_testlib_qrc_FILES})
+    target_sources(cavewhere-testlib PRIVATE ${cavewhere_testlib_QT_RESOURCES})
 
-target_include_directories(cavewhere-testlib PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/testlib
-    ${CMAKE_CURRENT_BINARY_DIR}
-)
+    target_include_directories(cavewhere-testlib PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/testlib
+        ${CMAKE_CURRENT_BINARY_DIR}
+    )
 
-#### cavewhere-test ####
-qt_add_executable(cavewhere-test)
+    #### cavewhere-test ####
+    qt_add_executable(cavewhere-test)
 
-set_target_properties(cavewhere-test PROPERTIES
-    AUTOMOC ON
-    AUTORCC ON
-    AUTOUIC ON
-)
+    set_target_properties(cavewhere-test PROPERTIES
+        AUTOMOC ON
+        AUTORCC ON
+        AUTOUIC ON
+    )
 
-file(GLOB cavewhere_test_CPP_FILES "testcases/*.cpp")
-file(GLOB cavewhere_test_H_FILES "testcases/*.h")
-target_sources(cavewhere-test PRIVATE ${cavewhere_test_CPP_FILES} ${cavewhere_test_H_FILES})
+    file(GLOB cavewhere_test_CPP_FILES "testcases/*.cpp")
+    file(GLOB cavewhere_test_H_FILES "testcases/*.h")
+    target_sources(cavewhere-test PRIVATE ${cavewhere_test_CPP_FILES} ${cavewhere_test_H_FILES})
 
-target_link_libraries(cavewhere-test
-    PRIVATE
-    Qt6::Test
-    Catch2::Catch2
-    cavewhere-testlib
-    cavewherelib
-    protobuf::protobuf
-    SignalSpyChecker
+    target_link_libraries(cavewhere-test
+        PRIVATE
+        Qt6::Test
+        Catch2::Catch2
+        cavewhere-testlib
+        cavewherelib
+        protobuf::protobuf
+        SignalSpyChecker
 
-)
+    )
 
-#### Cavewhere qml tests ####
-# Add the executable
-qt_add_executable(cavewhere-qml-test)
+    #### Cavewhere qml tests ####
+    # Add the executable
+    qt_add_executable(cavewhere-qml-test)
 
-set_target_properties(cavewhere-qml-test PROPERTIES
-    AUTOMOC ON
-    AUTORCC ON
-    AUTOUIC ON
-)
+    set_target_properties(cavewhere-qml-test PROPERTIES
+        AUTOMOC ON
+        AUTORCC ON
+        AUTOUIC ON
+    )
 
 
-file(GLOB cavewhere_qml_test_CPP_FILES "test-qml/*.cpp")
-file(GLOB cavewhere_qml_test_H_FILES "test-qml/*.h")
-target_sources(cavewhere-qml-test PRIVATE ${cavewhere_qml_test_CPP_FILES} ${cavewhere_qml_test_CPP_FILES})
+    file(GLOB cavewhere_qml_test_CPP_FILES "test-qml/*.cpp")
+    file(GLOB cavewhere_qml_test_H_FILES "test-qml/*.h")
+    target_sources(cavewhere-qml-test PRIVATE ${cavewhere_qml_test_CPP_FILES} ${cavewhere_qml_test_CPP_FILES})
 
-file(GLOB cavewhere_qml_test_qrc_FILES "test-qml/*.qrc")
-qt_add_resources(cavewhere_qml_test_QT_RESOURCES ${cavewhere_qml_test_qrc_FILES})
-target_sources(cavewhere-qml-test PRIVATE ${cavewhere_qml_test_QT_RESOURCES})
+    file(GLOB cavewhere_qml_test_qrc_FILES "test-qml/*.qrc")
+    qt_add_resources(cavewhere_qml_test_QT_RESOURCES ${cavewhere_qml_test_qrc_FILES})
+    target_sources(cavewhere-qml-test PRIVATE ${cavewhere_qml_test_QT_RESOURCES})
 
-# Make the remaining QML files relative to the project directory
-file(GLOB cavewhere_qmltest_QML_FILES "test-qml/*.qml")
-set(cavewhere_qmltest_RELATIVE_QML_FILES "")
-foreach(file ${cavewhere_qmltest_QML_FILES})
-    file(RELATIVE_PATH relFile "${CMAKE_CURRENT_SOURCE_DIR}" "${file}")
-    message(STATUS "Adding QML file: ${relFile}")
-    list(APPEND cavewhere_qmltest_RELATIVE_QML_FILES "${relFile}")
-endforeach()
+    # Make the remaining QML files relative to the project directory
+    file(GLOB cavewhere_qmltest_QML_FILES "test-qml/*.qml")
+    set(cavewhere_qmltest_RELATIVE_QML_FILES "")
+    foreach(file ${cavewhere_qmltest_QML_FILES})
+        file(RELATIVE_PATH relFile "${CMAKE_CURRENT_SOURCE_DIR}" "${file}")
+        message(STATUS "Adding QML file: ${relFile}")
+        list(APPEND cavewhere_qmltest_RELATIVE_QML_FILES "${relFile}")
+    endforeach()
 
-qt_add_resources(cavewhere-qml-test "test-qmls"
-    PREFIX "/test-qmls"
-    FILES
-    ${cavewhere_qmltest_RELATIVE_QML_FILES})
+    qt_add_resources(cavewhere-qml-test "test-qmls"
+        PREFIX "/test-qmls"
+        FILES
+        ${cavewhere_qmltest_RELATIVE_QML_FILES})
 
-target_compile_definitions(cavewhere-qml-test PRIVATE QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test-qml")
+    target_compile_definitions(cavewhere-qml-test PRIVATE QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test-qml")
 
-target_link_libraries(cavewhere-qml-test
-    PRIVATE
-    Qt6::Test
-    Qt6::Quick
-    Qt6::Widgets
-    Qt6::Qml
-    Qt6::QuickTest
-    cavewhere-testlib
-    cavewherelib
-)
+    target_link_libraries(cavewhere-qml-test
+        PRIVATE
+        Qt6::Test
+        Qt6::Quick
+        Qt6::Widgets
+        Qt6::Qml
+        Qt6::QuickTest
+        cavewhere-testlib
+        cavewherelib
+    )
 
-# Add the cw.simple library
-add_subdirectory(test-qml)
+    # Add the cw.simple library
+    add_subdirectory(test-qml)
+endif()
 
 #### CaveWhere ####
 # if(APPLE)
@@ -424,10 +426,12 @@ if(APPLE)
         #     COMMENT "Copying QML module to application bundle."
         # )
 
-        add_custom_command(TARGET CaveWhere POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:cavewhere-test> $<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/MacOS
-            COMMENT "Copying cavewhere-test."
-        )
+        if(BUILD_TESTING)
+            add_custom_command(TARGET CaveWhere POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:cavewhere-test> $<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/MacOS
+                COMMENT "Copying cavewhere-test."
+            )
+        endif()
 
         # if(NOT MOBILE_BUILD)
             #Disable survex

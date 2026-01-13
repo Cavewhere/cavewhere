@@ -48,7 +48,6 @@ if(WIN32)
     # Define the list of files to copy
     set(ROOT_FILES_TO_COPY
         "${BINARY_DIR}/${CAVEWHERE_NAME}${CMAKE_EXECUTABLE_SUFFIX}"
-        "${BINARY_DIR}/cavewhere-test${CMAKE_EXECUTABLE_SUFFIX}"
         #"${CONAN_BIN_DIRS_ZLIB}/zlib1.dll"
     )
 
