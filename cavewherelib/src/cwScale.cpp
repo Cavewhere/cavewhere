@@ -48,6 +48,13 @@ void cwScale::setData(const Data &data)
     ScaleNumerator->setData(data.scaleNumerator);
 }
 
+double cwScale::scale(const Data &data)
+{
+    double numerator = cwUnits::convert(data.scaleNumerator.value, static_cast<cwUnits::LengthUnit>(data.scaleNumerator.unit), cwUnits::Meters);
+    double denominator = cwUnits::convert(data.scaleDenominator.value, static_cast<cwUnits::LengthUnit>(data.scaleDenominator.unit), cwUnits::Meters);
+    return numerator / denominator;
+}
+
 cwScale::Data cwScale::data() const
 {
     return {

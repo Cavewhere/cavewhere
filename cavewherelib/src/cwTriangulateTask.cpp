@@ -1245,9 +1245,7 @@ QVector<QVector3D> cwTriangulateTask::leadPositionToVector3D(const QList<cwLead>
 
 QMatrix4x4 cwTriangulateTask::toNoteMatrix(const cwNoteTransformationData &data)
 {
-    cwNoteTranformation transform;
-    transform.setData(data);
-    return transform.matrix();
+    return cwNoteTranformation::matrix(data);
 }
 
 /**

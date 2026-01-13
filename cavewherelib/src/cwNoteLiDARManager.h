@@ -85,6 +85,9 @@ public:
 
     QVector<uint32_t> renderItemIds(cwNoteLiDAR* note) const;
 
+    // Map helpers, exposed for testing, shouldn't be used directly
+    static cwTriangulateLiDARInData mapNoteToInData(const cwNoteLiDAR* note, const cwProject *project);
+
 signals:
     void automaticUpdateChanged();
     // Emitted after a successful triangulation batch completes
@@ -107,8 +110,6 @@ private slots:
     void noteDestroyed(QObject* noteObj);
 
 private:
-    // Map helpers
-    static cwTriangulateLiDARInData mapNoteToInData(const cwNoteLiDAR* note, const cwProject *project);
 
     // Batch scheduling
     void markDirty(cwNoteLiDAR* note);

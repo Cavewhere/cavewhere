@@ -169,8 +169,8 @@ TEST_CASE("Auto Calculate Note Transform", "[cwScrap]") {
     QList<TestRow> rows;
     rows.append(TestRow(":/datasets/scrapAutoCalculate/runningProfileRotate.cw", 87.8004635984, 176.349));
     rows.append(TestRow(":/datasets/scrapAutoCalculate/runningProfileRotateMirror.cw", 87.5044033263, 176.696));
-    rows.append(TestRow(":/datasets/scrapAutoCalculate/runningProfile.cw", -1.8869214928, 175.592));
-    rows.append(TestRow(":/datasets/scrapAutoCalculate/runningProfileMirror.cw", -2.2934958439, 176.721));
+    rows.append(TestRow(":/datasets/scrapAutoCalculate/runningProfile.cw", 358.11335805615993877, 175.592));
+    rows.append(TestRow(":/datasets/scrapAutoCalculate/runningProfileMirror.cw", 357.70680855674373788, 176.721));
     rows.append(TestRow("://datasets/scrapAutoCalculate/runningProfileUpsideDown.cw",  87.8188708214, 1729.652));
     rows.append(TestRow("://datasets/scrapAutoCalculate/ProjectProfile-test-v3.cw",
                 0.199, 255.962, 0.05, 0.05, 135.7));
@@ -200,8 +200,8 @@ TEST_CASE("Auto Calculate Note Transform", "[cwScrap]") {
 TEST_CASE("Exact Auto Calculate Note Transform", "[cwScrap]") {
 
     QList<TestRow> rows;
-    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-0rot-0mirror.cw", -0.142, 5795.0, 0.05, 0.005));
-    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-0rot-1mirror.cw", -0.26, 5795.0, 0.06, 0.005));
+    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-0rot-0mirror.cw", 359.857, 5795.0, 0.05, 0.005));
+    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-0rot-1mirror.cw", 359.728, 5795.0, 0.06, 0.005));
     rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-90rot-0mirror.cw", 90, 5795.0, 0.05, 0.005));
     rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-90rot-1mirror.cw", 90, 5795.0, 0.05, 0.005));
     rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-180rot-0mirror.cw", 180, 5795.0, 0.05, 0.005));
@@ -347,7 +347,7 @@ TEST_CASE("Auto calculate should work on projected profile azimuth", "[cwScrap]"
 
 TEST_CASE("Auto calculate if the scrap type has changed", "[cwScrap]") {
     QList<TestRow> rows;
-    rows.append(TestRow("://datasets/scrapAutoCalculate/ProjectProfile-test-startRunning.cw", 359.85, 257.162, 0.05, 0.005, 134.4));
+    rows.append(TestRow("://datasets/scrapAutoCalculate/ProjectProfile-test-startRunning.cw", 0.8519, 257.162, 0.05, 0.005, 134.4));
     rows[0].CaveName = "My Cave";
     rows[0].TripName = "Best Trip";
 
@@ -390,6 +390,50 @@ TEST_CASE("Auto calculate if the scrap type has changed", "[cwScrap]") {
         CHECK(projectedViewMatix2->direction() == cwProjectedProfileScrapViewMatrix::LookingAt);
         checkScrapTransform(currentScrap, row);
     }
+}
+
+TEST_CASE("Manual scrap rotation uses declination during triangulation", "[cwScrap]") {
+    auto project = fileToProject("://datasets/scrapAutoCalculate/runningProfile.cw");
+    cwScrap* scrap = firstScrap(project.get());
+    REQUIRE(scrap);
+    REQUIRE(scrap->parentNote());
+    REQUIRE(scrap->parentNote()->parentTrip());
+
+    cwTripCalibration* calibration = scrap->parentNote()->parentTrip()->calibrations();
+    REQUIRE(calibration);
+
+    cwNoteTranformation* noteTransform = scrap->noteTransformation();
+    REQUIRE(noteTransform);
+
+    scrap->setCalculateNoteTransform(false);
+
+    const double startingDeclination = 0.0;
+    const double endingDeclination = 12.5;
+    calibration->setDeclination(startingDeclination);
+    noteTransform->setNorthUp(30.0);
+
+    const double originalNorthUp = noteTransform->northUp();
+
+    scrap->setType(cwScrap::Plan);
+    const double originalEffectiveNorthUp = scrap->noteTransformAdjustedDeclination().north;
+    CHECK(originalEffectiveNorthUp == Catch::Approx(cwNoteTranformation::northAdjustedForDeclination(originalNorthUp, calibration->declination())).epsilon(1e-6));
+
+    calibration->setDeclination(endingDeclination);
+
+    const double updatedNorthUp = noteTransform->northUp();
+
+    scrap->setType(cwScrap::Plan);
+    const double updatedEffectiveNorthUp = scrap->noteTransformAdjustedDeclination().north;
+    const double expectedEffectiveNorthUp = cwNoteTranformation::northAdjustedForDeclination(originalNorthUp, endingDeclination);
+
+    CHECK(updatedNorthUp == Catch::Approx(originalNorthUp).epsilon(1e-6));
+    CHECK(updatedEffectiveNorthUp == Catch::Approx(expectedEffectiveNorthUp).epsilon(1e-6));
+
+    scrap->setType(cwScrap::RunningProfile);
+    CHECK(scrap->noteTransformAdjustedDeclination().north == Catch::Approx(originalNorthUp).epsilon(1e-6));
+
+    scrap->setType(cwScrap::ProjectedProfile);
+    CHECK(scrap->noteTransformAdjustedDeclination().north == Catch::Approx(originalNorthUp).epsilon(1e-6));
 }
 
 TEST_CASE("Guess neighbor station name", "[cwScrap]") {

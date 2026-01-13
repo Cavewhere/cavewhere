@@ -26,6 +26,16 @@ cwNoteTranformation::cwNoteTranformation(QObject* parent) :
 {
 }
 
+QMatrix4x4 cwNoteTranformation::matrix(const cwNoteTransformationData& data)
+{
+    return matrix(cwScale::scale(data.scale), data.north);
+}
+
+double cwNoteTranformation::northAdjustedForDeclination(double north, double declination)
+{
+    return cwWrapDegrees360(north - declination);
+}
+
 
 /**
   This calculates the north up based on two point in note transformation
@@ -151,13 +161,18 @@ double cwNoteTranformation::calculateScaleForRendered(QPointF p1, QPointF p2,
 
 */
 QMatrix4x4 cwNoteTranformation::matrix() const {
-    double currentScale = scale();
+    return matrix(scale(), northUp());
+}
+
+QMatrix4x4 cwNoteTranformation::matrix(double scale, double northUp)
+{
+    double currentScale = scale;
     if(!std::isfinite(currentScale) || currentScale <= 0.0) {
         return QMatrix4x4();
     }
 
     QMatrix4x4 matrix;
-    matrix.rotate(northUp(), 0.0, 0.0, 1.0);
+    matrix.rotate(northUp, 0.0, 0.0, 1.0);
     matrix.scale(1.0 / currentScale, 1.0 / currentScale, 1.0);
     return matrix;
 }

@@ -43,6 +43,8 @@ public:
     void setData(const Data& data);
     Data data() const;
 
+    static double scale(const Data& data);
+
 signals:
      void scaleChanged();
 

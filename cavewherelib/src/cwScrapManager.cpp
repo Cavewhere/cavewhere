@@ -613,7 +613,7 @@ cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) 
     data.setStationLookup(cave->stationPositionLookup());
     data.setSurveyNetwork(cave->network());
     data.setStations(mapNoteStationsToTriangulateStation(scrap->stations(), cave->stationPositionLookup()));
-    data.setNoteTransform(scrap->noteTransformation()->data());
+    data.setNoteTransform(scrap->noteTransformAdjustedDeclination());
     data.setViewMatrix(scrap->viewMatrix()->data()->clone());
 
     double dotsPerMeter = scrap->parentNote()->imageResolution()->convertTo(cwUnits::DotsPerMeter).value;

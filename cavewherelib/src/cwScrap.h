@@ -158,6 +158,7 @@ public:
     Q_INVOKABLE int numberOfLeads() const;
 
     cwNoteTranformation* noteTransformation() const;
+    cwNoteTransformationData noteTransformAdjustedDeclination() const;
 
     bool calculateNoteTransform() const;
     void setCalculateNoteTransform(bool calculateNoteTransform);
@@ -314,6 +315,8 @@ private:
     QStringList allNeighborStations(const QString& stationName) const;
 
     void setViewMatrix(cwAbstractScrapViewMatrix* viewMatrix);
+
+    cwNoteTransformationData noteTransformAdjustedDeclination(cwNoteTransformationData transformation) const;
 
 private slots:
 //    void updateStationsWithNewCave();

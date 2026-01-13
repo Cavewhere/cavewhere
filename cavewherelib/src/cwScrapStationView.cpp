@@ -16,6 +16,7 @@
 #include "cwRunningProfileScrapViewMatrix.h"
 #include "cwScrapView.h"
 #include "cwScrapItem.h"
+#include "cwNoteTranformation.h"
 
 //Qt includes
 #include <QQmlComponent>
@@ -146,7 +147,7 @@ void cwScrapStationView::updateShotLines() {
         QVector3D selectedStationPos = stationPositionLookup.position(noteStation.name());
 
         //Create the matrix to covert global position into note position
-        QMatrix4x4 noteTransformMatrix = scrap()->noteTransformation()->matrix(); //Matrix from page coordinates to cave coordinates
+        QMatrix4x4 noteTransformMatrix = cwNoteTranformation::matrix(scrap()->noteTransformAdjustedDeclination()); //Matrix from page coordinates to cave coordinates
         noteTransformMatrix = noteTransformMatrix.inverted(); //From cave coordinates to page coordinates
 
         QMatrix4x4 notePageAspect = note->scaleMatrix().inverted(); //The note's aspect ratio

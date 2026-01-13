@@ -264,7 +264,10 @@ void cwNoteLiDAR::updateNoteTransformion()
 
     auto shotStations = cwNoteTransformCalculator::noteShots(stations(), parentCave()->network());
     auto transform = cwNoteTransformCalculator::projectedAverageTransform(shotStations, profileTransform);
-    m_noteTransformation->setNorthUp(transform.north);
+
+    double north = cwNoteTranformation::northAdjustedForDeclination(transform.north,
+                                                                    -m_parentTrip->calibrations()->declination());
+    m_noteTransformation->setNorthUp(north);
 }
 
 

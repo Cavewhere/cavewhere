@@ -40,6 +40,9 @@ class CAVEWHERE_LIB_EXPORT cwNoteTranformation : public cwAbstractNoteTransforma
 public:
     cwNoteTranformation(QObject* parent = 0);
 
+    static QMatrix4x4 matrix(const cwNoteTransformationData& data);
+    static double northAdjustedForDeclination(double north, double declination);
+
     Q_INVOKABLE double calculateNorth(QPointF noteP1, QPointF noteP2) const;
     Q_INVOKABLE double calculateScale(QPointF noteP1, QPointF noteP2,
                                       cwLength* length,
@@ -52,6 +55,9 @@ public:
                                                  cwImageResolution* resolution);
 
     QMatrix4x4 matrix() const override;
+
+private:
+    static QMatrix4x4 matrix(double scale, double northUp);
 };
 
 

@@ -201,6 +201,12 @@ MainWindowTest {
                           return northFieldObject.text === "274.5"
                       })
 
+            let trip = RootData.region.cave(0).trip(0)
+            trip.calibration.declination = 12.5
+            tryVerify(() => {
+                          return northFieldObject.text === "274.5"
+                      })
+
         }
 
         function test_scaleInteraction() {

@@ -19,12 +19,46 @@
 #include "cwNoteLiDAR.h"
 #include "cwNoteLiDARManager.h"
 #include "cwNoteLiDARTransformation.h"
+#include "cwNoteTranformation.h"
 #include "cwRegionSceneManager.h"
 #include "cwRenderTexturedItems.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwTrip.h"
 #include "cwStationPositionLookup.h"
+
+TEST_CASE("cwNoteLiDARManager applies declination for manual north", "[cwNoteLiDARManager]")
+{
+    cwTrip trip;
+    cwNoteLiDAR note;
+    note.setParentTrip(&trip);
+
+    auto* transform = note.noteTransformation();
+    REQUIRE(transform != nullptr);
+    transform->setNorthUp(10.0);
+    trip.calibrations()->setDeclination(5.0);
+
+    auto compareMatrix = [](const QMatrix4x4& actual, const QMatrix4x4& expected) {
+        const float* actualData = actual.constData();
+        const float* expectedData = expected.constData();
+        for(int i = 0; i < 16; ++i) {
+            CHECK(actualData[i] == Catch::Approx(expectedData[i]).epsilon(1e-6));
+        }
+    };
+
+    note.setAutoCalculateNorth(true);
+    cwNoteLiDARTransformationData adjustedData = transform->data();
+    adjustedData.north = cwNoteTranformation::northAdjustedForDeclination(adjustedData.north, trip.calibrations()->declination());
+    cwNoteLiDARTransformation adjustedTransform;
+    adjustedTransform.setData(adjustedData);
+
+    const cwTriangulateLiDARInData autoData = cwNoteLiDARManager::mapNoteToInData(&note, nullptr);
+    compareMatrix(autoData.modelMatrix(), adjustedTransform.matrix());
+
+    note.setAutoCalculateNorth(false);
+    const cwTriangulateLiDARInData manualData = cwNoteLiDARManager::mapNoteToInData(&note, nullptr);
+    compareMatrix(manualData.modelMatrix(), adjustedTransform.matrix());
+}
 
 TEST_CASE("cwNoteLiDARManager triangulates LiDAR notes and keeps geometry accessible", "[cwNoteLiDARManager]")
 {
