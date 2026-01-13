@@ -109,4 +109,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cavewhere-windows-installer
-          path: build/Cavewhere*.exe
+          path: build/Cavewhere *.exe #Needs the space to grab the just the installer
