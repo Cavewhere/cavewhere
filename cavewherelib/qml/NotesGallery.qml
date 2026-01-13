@@ -348,7 +348,7 @@ QQ.Rectangle {
                 if(count <= 0) {
                     noteGallery.state = "NO_NOTES"
                 } else {
-                    noteGallery.state = "DEFAULT"
+                    noteGallery.state = ""
                 }
             }
 
