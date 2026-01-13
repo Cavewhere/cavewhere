@@ -336,21 +336,14 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream,
         QString backCompass = compassToString(shot.backCompass());
         QString clino = clinoToString(shot.clino());
         QString backClino = clinoToString(shot.backClino());
-        const bool compassMissing = compass == QStringLiteral("-");
-        const bool backCompassMissing = backCompass == QStringLiteral("-");
-
-        if(compassMissing) {
-            const QString verticalClino = cwSurvexExporterUtils::verticalClinoText(shot.clino());
-            if(!verticalClino.isEmpty()) {
-                clino = verticalClino;
-            }
+        const QString verticalClino = cwSurvexExporterUtils::verticalClinoText(shot.clino());
+        if(!verticalClino.isEmpty()) {
+            clino = verticalClino;
         }
 
-        if(backCompassMissing) {
-            const QString verticalBackClino = cwSurvexExporterUtils::verticalClinoText(shot.backClino());
-            if(!verticalBackClino.isEmpty()) {
-                backClino = verticalBackClino;
-            }
+        const QString verticalBackClino = cwSurvexExporterUtils::verticalClinoText(shot.backClino());
+        if(!verticalBackClino.isEmpty()) {
+            backClino = verticalBackClino;
         }
 
         //Make sure the model is good

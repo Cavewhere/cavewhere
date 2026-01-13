@@ -121,3 +121,62 @@ TEST_CASE("cwSurvexExportRule writes UP/DOWN for vertical shots without azimuth"
     CHECK(dataLines.at(0).contains("UP"));
     CHECK(dataLines.at(1).contains("DOWN"));
 }
+
+TEST_CASE("cwSurvexExportRule writes UP/DOWN for vertical shots with azimuth", "[cwSurvexExportRule]") {
+    cwSurveyDataArtifact::Trip trip;
+    trip.name = QStringLiteral("VerticalTripWithAzimuth");
+    trip.calibration.setBackSights(false);
+
+    cwSurveyDataArtifact::SurveyChunk chunk;
+    cwStation stationA;
+    cwStation stationB;
+    stationA.setName(QStringLiteral("a1"));
+    stationB.setName(QStringLiteral("a2"));
+    chunk.stations.append(stationA);
+    chunk.stations.append(stationB);
+
+    cwShot shotUp;
+    shotUp.setDistance(cwDistanceReading(QStringLiteral("10")));
+    shotUp.setCompass(cwCompassReading(QStringLiteral("123")));
+    shotUp.setClino(cwClinoReading(QStringLiteral("90")));
+    chunk.shots.append(shotUp);
+
+    cwShot shotDown;
+    shotDown.setDistance(cwDistanceReading(QStringLiteral("10")));
+    shotDown.setCompass(cwCompassReading(QStringLiteral("222")));
+    shotDown.setClino(cwClinoReading(QStringLiteral("-90")));
+    chunk.stations.append(stationA);
+    chunk.shots.append(shotDown);
+
+    trip.chunks.append(chunk);
+
+    QByteArray outputData;
+    QBuffer buffer(&outputData);
+    REQUIRE(buffer.open(QIODevice::WriteOnly));
+    QTextStream stream(&buffer);
+    auto result = cwSurvexExporterRule::writeTrip(stream, trip);
+    buffer.close();
+
+    REQUIRE(!result.hasError());
+
+    const QString output = QString::fromUtf8(outputData);
+    QStringList dataLines;
+    const QStringList lines = output.split('\n');
+    for(const QString& line : lines) {
+        const QString trimmed = line.trimmed();
+        if(trimmed.isEmpty() || trimmed.startsWith('*') || trimmed.startsWith(';')) {
+            continue;
+        }
+        if(trimmed.contains("a1") && trimmed.contains("a2")) {
+            dataLines.append(trimmed);
+        }
+    }
+
+    REQUIRE(dataLines.size() >= 2);
+    CHECK(dataLines.at(0).contains("123"));
+    CHECK(dataLines.at(0).contains("UP"));
+    CHECK(!dataLines.at(0).contains(" 90"));
+    CHECK(dataLines.at(1).contains("222"));
+    CHECK(dataLines.at(1).contains("DOWN"));
+    CHECK(!dataLines.at(1).contains(" -90"));
+}
