@@ -1,4 +1,4 @@
-set(CAVEWHERE_NAME "Cavewhere")
+set(CAVEWHERE_NAME "CaveWhere")
 set(LINUXDEPLOY_EXECUTABLE "" CACHE FILEPATH "Path to linuxdeploy")
 set(LINUXDEPLOY_QT_PLUGIN_EXECUTABLE "" CACHE FILEPATH "Path to linuxdeploy-plugin-qt")
 set(LINUXDEPLOY_APPIMAGE_PLUGIN_EXECUTABLE "" CACHE FILEPATH "Path to linuxdeploy-plugin-appimage")
@@ -43,14 +43,29 @@ if(WIN32)
     set(DEPLOY_SURVEX_DIR "${DEPLOY_DIR}/survex")
     set(SURVEX_BIN_DIR "${BINARY_DIR}/survex")
 
+    find_package(OpenSSL REQUIRED)
 
     # Define the list of files to copy
     set(ROOT_FILES_TO_COPY
         "${BINARY_DIR}/${CAVEWHERE_NAME}${CMAKE_EXECUTABLE_SUFFIX}"
         "${BINARY_DIR}/cavewhere-test${CMAKE_EXECUTABLE_SUFFIX}"
-
         #"${CONAN_BIN_DIRS_ZLIB}/zlib1.dll"
     )
+
+    set(_openssl_bin_dirs "")
+    if(DEFINED openssl_BIN_DIRS_RELEASE)
+        set(_openssl_bin_dirs ${openssl_BIN_DIRS_RELEASE})
+    elseif(DEFINED openssl_BIN_DIRS)
+        set(_openssl_bin_dirs ${openssl_BIN_DIRS})
+    endif()
+
+    foreach(_dir IN LISTS _openssl_bin_dirs)
+        file(GLOB _openssl_dlls
+            "${_dir}/libssl-*.dll"
+            "${_dir}/libcrypto-*.dll"
+        )
+        list(APPEND ROOT_FILES_TO_COPY ${_openssl_dlls})
+    endforeach()
 
     # Append shared library outputs only when they exist at build time.
     set(_SHARED_LIB_TARGETS
@@ -59,6 +74,7 @@ if(WIN32)
         dewalls
         QMath3d
         QmlTestRecorder
+        qt6keychain
     )
 
     foreach(_lib IN LISTS _SHARED_LIB_TARGETS)
@@ -74,11 +90,14 @@ if(WIN32)
     SET(cavewherelib_FILES_TO_COPY
         "${PLUGIN_DIR}/qmldir"
         "${PLUGIN_DIR}/cavewherelib.qmltypes"
-        "${PLUGIN_DIR}/Theme.js"
-        "${PLUGIN_DIR}/Utils.js"
-        "${PLUGIN_DIR}/VectorMath.js"
-        "${PLUGIN_DIR}/cavewherelibplugin${CMAKE_SHARED_LIBRARY_SUFFIX}"
     )
+
+    if(TARGET cavewherelibplugin)
+        get_target_property(_cavewherelibplugin_TYPE cavewherelibplugin TYPE)
+        if(_cavewherelibplugin_TYPE STREQUAL "SHARED")
+            list(APPEND cavewherelib_FILES_TO_COPY "${PLUGIN_DIR}/cavewherelibplugin${CMAKE_SHARED_LIBRARY_SUFFIX}")
+        endif()
+    endif()
 
 
     if(WITH_PDF)
@@ -104,6 +123,8 @@ if(WIN32)
         COMMAND ${CMAKE_COMMAND} -E copy ${ROOT_FILES_TO_COPY} ${DEPLOY_DIR}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${DEPLOY_DIR}/cavewherelib
         COMMAND ${CMAKE_COMMAND} -E copy ${cavewherelib_FILES_TO_COPY} ${DEPLOY_DIR}/cavewherelib
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${DEPLOY_DIR}/cavewherelib/qml
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${PLUGIN_DIR}/qml ${DEPLOY_DIR}/cavewherelib/qml
         COMMAND ${CMAKE_COMMAND} -E make_directory ${DEPLOY_SURVEX_DIR}
         COMMAND ${CMAKE_COMMAND} -E copy ${survex_files_to_copy} ${DEPLOY_SURVEX_DIR}
         COMMAND ${CMAKE_COMMAND} -E copy ${SVX_MESSAGE_FILES} ${DEPLOY_SURVEX_DIR}
@@ -120,9 +141,9 @@ if(WIN32)
         DEPENDS
         ${DEPOLY_COPY_TIMESTAMP}
         CaveWhere
-        cavewhere-test
+        #cavewhere-test #This makes the release much bigger
         survex
-        cavewhere-qml-test
+        #cavewhere-qml-test #This makes the release much bigger
     )
 
     set(DEPLOYMENT_APP "${Qt_bin_dir}/windeployqt.exe")
