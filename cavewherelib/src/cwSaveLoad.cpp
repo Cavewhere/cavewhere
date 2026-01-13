@@ -2227,8 +2227,8 @@ void cwSaveLoad::waitForFinished()
 {
     cwFutureManagerModel model;
     auto saveJobs = completeSaveJobs();
-    model.addJob(cwFuture(saveJobs, QStringLiteral()));
-    model.addJob(cwFuture(d->newFileFuture, QStringLiteral()));
+    model.addJob(cwFuture(saveJobs, QString()));
+    model.addJob(cwFuture(d->newFileFuture, QString()));
     model.waitForFinished();
 }
 
