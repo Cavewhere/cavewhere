@@ -140,8 +140,9 @@ if(WIN32)
         DEPENDS
         ${DEPOLY_COPY_TIMESTAMP}
         CaveWhere
+        cavern
+        survexport
         #cavewhere-test #This makes the release much bigger
-        survex
         #cavewhere-qml-test #This makes the release much bigger
     )
 

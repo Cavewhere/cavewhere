@@ -319,6 +319,13 @@ target_link_libraries(CaveWhere
     MarkScope
 )
 
+if(TARGET cavern)
+    add_dependencies(CaveWhere cavern)
+endif()
+if(TARGET survexport)
+    add_dependencies(CaveWhere survexport)
+endif()
+
 # Ensure QML modules are imported without relying on QML2_IMPORT_PATH.
 qt_import_qml_plugins(CaveWhere)
 qt_finalize_executable(CaveWhere)
