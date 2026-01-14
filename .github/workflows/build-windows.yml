@@ -102,8 +102,12 @@ jobs:
       - name: Build Windows Installer
         run: cmake --build build --target windowsInstaller --parallel
 
+      - name: Get Git tag
+        id: git_tag
+        run: echo "tag=$(git describe --tags --always)" >> "$GITHUB_OUTPUT"
+
       - name: Upload Windows Installer
         uses: actions/upload-artifact@v4
         with:
-          name: cavewhere-windows-installer
+          name: cavewhere-windows-installer-${{ steps.git_tag.outputs.tag }}
           path: build/Cavewhere *.exe #Needs the space to grab the just the installer
