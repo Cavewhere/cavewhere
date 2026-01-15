@@ -226,9 +226,13 @@ void cwLeadModel::addScrap(cwScrap *scrap)
     connect(scrap, &cwScrap::leadsInserted, this, &cwLeadModel::endInsertLeads);
     connect(scrap, &cwScrap::leadsRemoved, this, &cwLeadModel::beginRemoveLeads);
     connect(scrap, &cwScrap::leadsRemoved, this, &cwLeadModel::endRemoveLeads);
-    connect(scrap, &cwScrap::leadsDataChanged, this, &cwLeadModel::leadDataUpdated);
+    connect(scrap, &cwScrap::leadsDataChanged, this, [this, scrap](int begin, int end, const QList<int>& roles) {
+        leadDataUpdated(scrap, begin, end, roles);
+    });
     connect(scrap, &cwScrap::triangulationDataChanged, this, [this, scrap]() {
-        leadDataUpdated(0, scrap->leads().size(), {cwScrap::LeadPosition});
+        if(scrap->leads().isEmpty()) {
+            leadDataUpdated(scrap, 0, scrap->leads().size(), {cwScrap::LeadPosition});
+        }
     });
     connect(scrap, SIGNAL(destroyed(QObject*)), this, SLOT(scrapDeleted(QObject*)));
 }
@@ -354,17 +358,17 @@ void cwLeadModel::endRemoveLeads(int begin, int end)
  * @param end
  * @param roles
  */
-void cwLeadModel::leadDataUpdated(int begin, int end, QList<int> roles)
+void cwLeadModel::leadDataUpdated(cwScrap* scrap, int begin, int end, const QList<int>& roles)
 {
-    Q_ASSERT(qobject_cast<cwScrap*>(sender())  != nullptr);
-    cwScrap* scrap = static_cast<cwScrap*>(sender());
-    Q_ASSERT(ScrapToOffset.contains(scrap));
+    if (!ScrapToOffset.contains(scrap) || begin > end) {
+        return;
+    }
 
     int offset = ScrapToOffset.value(scrap);
     int offsetBegin = offset + begin;
     int offsetEnd = offset + end;
 
-    emit dataChanged(index(offsetBegin), index(offsetEnd), roles.toVector());
+    emit dataChanged(index(offsetBegin), index(offsetEnd), roles);
 }
 
 /**

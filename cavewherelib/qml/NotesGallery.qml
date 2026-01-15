@@ -110,6 +110,7 @@ QQ.Rectangle {
             anchors.centerIn: imageItem
             width: imageItem.paintedWidth
             height: imageItem.paintedHeight
+            rotation: imageItem.rotation
         }
 
         QQ.Image {

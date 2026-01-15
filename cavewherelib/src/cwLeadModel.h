@@ -108,7 +108,7 @@ private slots:
     void endInsertLeads(int begin, int end);
     void beginRemoveLeads(int begin, int end);
     void endRemoveLeads(int begin, int end);
-    void leadDataUpdated(int begin, int end, QList<int> roles);
+    void leadDataUpdated(cwScrap *scrap, int begin, int end, const QList<int>& roles);
     void scrapDeleted(QObject* scrapObj);
     void insertScraps(QModelIndex parent, int begin, int end);
     void removeScraps(QModelIndex parent, int begin, int end);

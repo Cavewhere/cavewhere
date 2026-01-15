@@ -2,7 +2,6 @@ import QtQuick as QQ
 import QtQuick.Layouts
 import cavewherelib
 import QtQuick.Controls as QC
-import QtQuick.Effects
 
 QQ.Item {
     id: itemId
@@ -42,19 +41,11 @@ QQ.Item {
             }
         }
 
-        QQ.Image {
+        Icon {
             id: moreArrowId
             source: "qrc:/twbs-icons/icons/arrow-right-short.svg"
             sourceSize: Qt.size(backgroundRectId.implicitHeight, backgroundRectId.implicitHeight)
-
-            layer {
-                enabled: true
-                effect: MultiEffect {
-                    colorization: 1.0
-                    colorizationColor: Theme.icon
-                    brightness: 1.0
-                }
-            }
+            colorizationColor: Theme.icon
         }
     }
 }

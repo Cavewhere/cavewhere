@@ -229,13 +229,14 @@ StandardPage {
                             implicitHeight: checkbox.implicitHeight
                             clip: true
 
-                            QQ.Image {
+                            Icon {
                                 id: checkbox
                                 source: "qrc:/twbs-icons/icons/check-lg.svg"
                                 sourceSize: Qt.size(parent.implicitHeight, parent.implicitHeight)
                                 anchors.verticalCenter: parent.verticalCenter
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 visible: delegateId.leadCompleted
+                                colorizationColor: Theme.text
                             }
                         }
 
