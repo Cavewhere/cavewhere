@@ -16,10 +16,12 @@
 //Qt includes
 #include <QQmlContext>
 #include <QQmlEngine>
+#include <QRectF>
+#include <QSizeF>
 cwLabel3dView::cwLabel3dView(QQuickItem *parent) :
     QQuickItem(parent),
-    Component(nullptr),
-    Camera(nullptr)
+    m_component(nullptr),
+    m_camera(nullptr)
 {
     connect(this, &cwLabel3dView::visibleChanged, this, [this]() {
         if(isVisible()) {
@@ -49,16 +51,16 @@ cwLabel3dView::~cwLabel3dView()
 }
 
 void cwLabel3dView::addGroup(cwLabel3dGroup *group) {
-    if(!LabelGroups.contains(group)) {
-        LabelGroups.insert(group);
+    if(!m_labelGroups.contains(group)) {
+        m_labelGroups.insert(group);
         group->setParentView(this);
         updateGroup(group);
     }
 }
 
 void cwLabel3dView::removeGroup(cwLabel3dGroup *group) {
-    if(LabelGroups.contains(group)) {
-        LabelGroups.remove(group);
+    if(m_labelGroups.contains(group)) {
+        m_labelGroups.remove(group);
         group->setParentView(nullptr);
     }
 }
@@ -71,59 +73,121 @@ void cwLabel3dView::removeGroup(cwLabel3dGroup *group) {
   * update the text and font properties.
   */
 void cwLabel3dView::updateGroup(cwLabel3dGroup* group) {
-    if(Component == nullptr) {
+    if(m_component == nullptr) {
         //Create the component that will generate all the labels
         QQmlEngine* engine = QQmlEngine::contextForObject(this)->engine();
-        Component = new QQmlComponent(engine,  "qrc:/qt/qml/cavewherelib/qml/Label3d.qml", this);
+        m_component = new QQmlComponent(engine,  "qrc:/qt/qml/cavewherelib/qml/Label3d.qml", this);
 
-        if(Component == nullptr) {
+        if(m_component == nullptr) {
             qDebug() << "Component is nullptr" << LOCATION;
         }
 
-        if(!Component->errors().isEmpty()) {
-            qDebug() << Component->errorString();
+        if(!m_component->errors().isEmpty()) {
+            qDebug() << m_component->errorString();
         }
     }
 
-    Q_ASSERT(LabelGroups.contains(group));
+    Q_ASSERT(m_labelGroups.contains(group));
 
-    //Remove extra
-    int numberExtra = group->LabelItems.size() - group->Labels.size();
-    for(int i = 0; i < numberExtra; i++) {
-        group->LabelItems.last()->deleteLater();
-        group->LabelItems.removeLast();
-    }
+    const int labelSize = group->Labels.size();
+    const int itemSize = group->LabelItems.size();
 
-    //Add extra
-    numberExtra = group->Labels.size() - group->LabelItems.size();
-    for(int i = 0; i < numberExtra; i++) {
-        QQuickItem* newItem = qobject_cast<QQuickItem*>(Component->create());
-        newItem->setParent(group);
-        newItem->setParentItem(this);
-        group->LabelItems.append(newItem);
-    }
-
-    //Update all the info for the label
-    Q_ASSERT(group->Labels.size() == group->LabelItems.size());
-    for(int i = 0; i < group->Labels.size(); i++) {
-        const cwLabel3dItem& label = group->Labels.at(i);
-        QQuickItem* item = group->LabelItems.at(i);
-
-        item->setProperty("text", label.text());
+    if(labelSize < itemSize) {
+        for(int i = labelSize; i < itemSize; i++) {
+            releaseLabelItem(group, i);
+        }
+        group->LabelItems.resize(labelSize);
+    } else if(labelSize > itemSize) {
+        group->LabelItems.resize(labelSize);
     }
 
     //Update all the positions
     updateGroupPositions(group);
 }
 
+QQuickItem* cwLabel3dView::labelItem(cwLabel3dGroup* group, int labelIndex)
+{
+    if(group == nullptr) {
+        return nullptr;
+    }
+    if(labelIndex < 0 || labelIndex >= group->LabelItems.size()) {
+        return nullptr;
+    }
+    return group->LabelItems.at(labelIndex);
+}
+
+QQuickItem* cwLabel3dView::acquireLabelItem(cwLabel3dGroup* group, int labelIndex)
+{
+    if(group == nullptr) {
+        return nullptr;
+    }
+    if(labelIndex < 0 || labelIndex >= group->LabelItems.size()) {
+        return nullptr;
+    }
+
+    if(labelItem(group, labelIndex) != nullptr) {
+        return group->LabelItems.at(labelIndex);
+    }
+
+    if(m_component == nullptr) {
+        QQmlEngine* engine = QQmlEngine::contextForObject(this)->engine();
+        m_component = new QQmlComponent(engine, "qrc:/qt/qml/cavewherelib/qml/Label3d.qml", this);
+
+        if(m_component == nullptr) {
+            qDebug() << "Component is nullptr" << LOCATION;
+        }
+
+        if(!m_component->errors().isEmpty()) {
+            qDebug() << m_component->errorString();
+        }
+    }
+
+    QQuickItem* item = nullptr;
+    if(!group->ItemPool.isEmpty()) {
+        item = group->ItemPool.takeLast();
+    } else {
+        item = qobject_cast<QQuickItem*>(m_component->create());
+    }
+
+    if(item == nullptr) {
+        qDebug() << "Problem creating new label item" << LOCATION;
+        return nullptr;
+    }
+
+    item->setParent(group);
+    item->setParentItem(this);
+    item->setVisible(false);
+    group->LabelItems[labelIndex] = item;
+    return item;
+}
+
+void cwLabel3dView::releaseLabelItem(cwLabel3dGroup* group, int labelIndex)
+{
+    if(group == nullptr) {
+        return;
+    }
+    if(labelIndex < 0 || labelIndex >= group->LabelItems.size()) {
+        return;
+    }
+
+    QQuickItem* item = group->LabelItems.at(labelIndex);
+    if(item == nullptr) {
+        return;
+    }
+
+    item->setVisible(false);
+    group->ItemPool.append(item);
+    group->LabelItems[labelIndex] = nullptr;
+}
+
 /**
 Sets camera
 */
 void cwLabel3dView::setCamera(cwCamera* camera) {
-    if(Camera != camera) {
-        Camera = camera;
-        connect(Camera, &cwCamera::viewMatrixChanged, this, &cwLabel3dView::updatePositions);
-        connect(Camera, &cwCamera::projectionChanged, this, &cwLabel3dView::updatePositions);
+    if(m_camera != camera) {
+        m_camera = camera;
+        connect(m_camera, &cwCamera::viewMatrixChanged, this, &cwLabel3dView::updatePositions);
+        connect(m_camera, &cwCamera::projectionChanged, this, &cwLabel3dView::updatePositions);
         updatePositions();
         emit cameraChanged();
     }
@@ -143,48 +207,76 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
 
     QList<cwLabel3dItem>& labels = group->Labels;
 
-    const QMatrix4x4 matrix = Camera->qtViewportMatrix() * Camera->viewProjectionMatrix();
+    const QMatrix4x4 matrix = m_camera->qtViewportMatrix() * m_camera->viewProjectionMatrix();
+    const QRectF viewportRect(m_camera->viewport());
+    const QSizeF averageSize = m_averageLabelSize;
+    const QRectF expandedViewport = viewportRect.adjusted(-averageSize.width(),
+                                                          -averageSize.height(),
+                                                          averageSize.width(),
+                                                          averageSize.height());
     const int labelCount = labels.size();
-    constexpr int visibilityThreshold = 3;
+    constexpr int visibilityThreshold = 2;
+
+    auto isCoarselyVisible = [&](const QVector3D& position) {
+        if(position.z() < -1.0f || position.z() > 1.0f) {
+            return false;
+        }
+        return expandedViewport.contains(QPointF(position.x(), position.y()));
+    };
 
     auto processIndex = [&](int i) {
-        QQuickItem* item = group->LabelItems.at(i);
+        QQuickItem* item = labelItem(group, i);
         cwLabel3dItem& label = labels[i];
         QVector3D qtViewportCoordinate = matrix.map(label.position());
 
-        //Clip the stations to the rendering area
-        if(Camera->isQtViewportCoordinateClipped(qtViewportCoordinate)) {
+        if(!isCoarselyVisible(qtViewportCoordinate)) {
             label.setHiddenStreak(label.hiddenStreak() + 1);
             label.setVisibleStreak(0);
-            if(item->isVisible() && label.hiddenStreak() >= visibilityThreshold) {
+            if(item != nullptr && item->isVisible() && label.hiddenStreak() >= visibilityThreshold) {
                 item->setVisible(false);
+            }
+            if(item != nullptr && !item->isVisible()) {
+                releaseLabelItem(group, i);
             }
             return;
         }
 
         //See if stationName overlaps with other stations
-        QPoint topLeftPoint = qtViewportCoordinate.toPoint();
-        QSize stationNameTextSize(item->width() * 1.1, item->height() * 1.1);
-        QRect stationRect(topLeftPoint, stationNameTextSize);
+        QPointF topLeftPoint(qtViewportCoordinate.x(), qtViewportCoordinate.y());
+        QSizeF stationNameTextSize(averageSize.width() * 1.1, averageSize.height() * 1.1);
+        QRectF stationRect(topLeftPoint, stationNameTextSize);
         stationRect.moveTop(stationRect.top() - stationNameTextSize.height() / 1.1);
-        bool couldAddText = LabelKdTree.addRect(stationRect);
+        bool couldAddText = m_labelKdTree.addRect(stationRect.toAlignedRect());
 
         if(couldAddText) {
             label.setVisibleStreak(label.visibleStreak() + 1);
             label.setHiddenStreak(0);
-            if(!item->isVisible() && label.visibleStreak() >= visibilityThreshold) {
-                item->setVisible(true);
+            if(label.visibleStreak() >= visibilityThreshold) {
+                const bool hadItem = item != nullptr;
+                if(!hadItem) {
+                    item = acquireLabelItem(group, i);
+                }
+                if(item != nullptr) {
+                    if(!hadItem) {
+                        item->setProperty("text", label.text());
+                    }
+                    if(!item->isVisible()) {
+                        item->setVisible(true);
+                    }
+                    item->setPosition(qtViewportCoordinate.toPointF());
+                }
+            } else if(item != nullptr && !item->isVisible()) {
+                releaseLabelItem(group, i);
             }
         } else {
             label.setHiddenStreak(label.hiddenStreak() + 1);
             label.setVisibleStreak(0);
-            if(item->isVisible() && label.hiddenStreak() >= visibilityThreshold) {
+            if(item != nullptr && item->isVisible() && label.hiddenStreak() >= visibilityThreshold) {
                 item->setVisible(false);
             }
-        }
-
-        if(item->isVisible()) {
-            item->setPosition(qtViewportCoordinate.toPointF());
+            if(item != nullptr && !item->isVisible()) {
+                releaseLabelItem(group, i);
+            }
         }
     };
 
@@ -199,8 +291,29 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
         if(!labels.at(i).wasVisible()) {
             processIndex(i);
         }
+    }
 
-        labels[i].setWasVisible(group->LabelItems.at(i)->isVisible() ? 1 : 0);
+    double widthSum = 0.0;
+    double heightSum = 0.0;
+    int sizeCount = 0;
+    for(int i = 0; i < labelCount; i++) {
+        QQuickItem* item = group->LabelItems.at(i);
+        const bool isVisible = item != nullptr && item->isVisible();
+        labels[i].setWasVisible(isVisible ? 1 : 0);
+        if(isVisible) {
+            const double width = item->width();
+            const double height = item->height();
+            if(width > 0.0 && height > 0.0) {
+                widthSum += width;
+                heightSum += height;
+                sizeCount++;
+            }
+        }
+    }
+
+    if(sizeCount > 0) {
+        m_averageLabelSize.setWidth(widthSum / sizeCount);
+        m_averageLabelSize.setHeight(heightSum / sizeCount);
     }
 }
 
@@ -211,16 +324,16 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
  */
 void cwLabel3dView::updatePositions()
 {
-    if(Camera == nullptr) { return; }
+    if(m_camera == nullptr) { return; }
 
     if(isVisible()) {
-        QSetIterator<cwLabel3dGroup*> iter(LabelGroups);
+        QSetIterator<cwLabel3dGroup*> iter(m_labelGroups);
         while(iter.hasNext()) {
             cwLabel3dGroup* group = iter.next();
             updateGroupPositions(group);
         }
 
-        LabelKdTree.clear();
+        m_labelKdTree.clear();
     }
 }
 
@@ -228,5 +341,5 @@ void cwLabel3dView::updatePositions()
 Gets camera
 */
 cwCamera *cwLabel3dView::camera() const {
-    return Camera;
+    return m_camera;
 }

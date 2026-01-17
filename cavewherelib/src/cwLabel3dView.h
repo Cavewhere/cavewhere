@@ -12,6 +12,7 @@
 #include <QQuickItem>
 #include <QQmlComponent>
 #include <QMatrix4x4>
+#include <QSizeF>
 #include <QQmlEngine>
 
 //Our includes
@@ -46,15 +47,19 @@ signals:
 public slots:
     
 private:
-    QSet<cwLabel3dGroup*> LabelGroups;
+    QSet<cwLabel3dGroup*> m_labelGroups;
 
     //For rendering labels
-    QQmlComponent* Component;
-    QPointer<cwCamera> Camera; //!<
-    cwCollisionRectKdTree LabelKdTree;
+    QQmlComponent* m_component;
+    QPointer<cwCamera> m_camera; //!<
+    cwCollisionRectKdTree m_labelKdTree;
+    QSizeF m_averageLabelSize = QSizeF(80.0, 14.0);
 
     void updateGroup(cwLabel3dGroup* group);
     void updateGroupPositions(cwLabel3dGroup* group);
+    QQuickItem* labelItem(cwLabel3dGroup* group, int labelIndex);
+    QQuickItem* acquireLabelItem(cwLabel3dGroup* group, int labelIndex);
+    void releaseLabelItem(cwLabel3dGroup* group, int labelIndex);
 private slots:
     void updatePositions();
 

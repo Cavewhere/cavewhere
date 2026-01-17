@@ -11,6 +11,7 @@
 //Qt includes
 #include <QObject>
 #include <QPointer>
+#include <QVector>
 class QQuickItem;
 
 //Our includes
@@ -40,7 +41,8 @@ public slots:
 private:
     QPointer<cwLabel3dView> ParentView;
     QList<cwLabel3dItem> Labels;
-    QList<QQuickItem*> LabelItems;
+    QVector<QQuickItem*> LabelItems;
+    QVector<QQuickItem*> ItemPool;
     
 };
 
