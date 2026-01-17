@@ -91,7 +91,9 @@ void cwTransformUpdater::removePointItem(QQuickItem *object) {
   This should be called when the camera has changed in anyway
   */
 void cwTransformUpdater::update() {
-    if(enabled()) {
+    if(enabled()
+        && Camera != nullptr)
+    {
         //Update transformation object
         updateTransformMatrix();
 
@@ -110,9 +112,12 @@ void cwTransformUpdater::update() {
   useful for billboarded points.
   */
 void cwTransformUpdater::updatePoint(QQuickItem *object) {
+    Q_ASSERT(Camera != nullptr);
+    Q_ASSERT(object != nullptr);
+
     QVector3D position = object->property("position3D").value<QVector3D>();
     QVector3D position2D = TransformMatrix.map(position);
-    auto visiblity = position2D.z() >= 0.0 && position2D.z() <= 1.0;
+    auto visiblity = !Camera->isQtViewportCoordinateClipped(position2D);
     object->setVisible(visiblity);
     object->setPosition(QPointF(position2D.x(), position2D.y()));
 }
@@ -122,15 +127,8 @@ void cwTransformUpdater::updatePoint(QQuickItem *object) {
   the objects to qt cooridantes
   */
 void cwTransformUpdater::updateTransformMatrix() {
-    if(Camera == nullptr) { return; }
-    float width = Camera->viewport().width();
-    float height = Camera->viewport().height();
-
-    QMatrix4x4 qtViewportMatrix;
-    qtViewportMatrix.scale(width / 2.0, -height / 2.0, 1.0);
-    qtViewportMatrix.translate(1.0, -1.0, 0.0);
-
-    TransformMatrix = qtViewportMatrix * Camera->viewProjectionMatrix() * ModelMatrix;
+    Q_ASSERT(Camera != nullptr);
+    TransformMatrix = Camera->qtViewportMatrix() * Camera->viewProjectionMatrix() * ModelMatrix;
 
     emit matrixChanged();
 }

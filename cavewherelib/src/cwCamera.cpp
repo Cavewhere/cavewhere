@@ -136,11 +136,52 @@ QVector3D cwCamera::mapNormalizeScreenToGLViewport(const QVector3D& point) const
      return QVector3D(x, y, z);
  }
 
- /**
-  * @brief cwCamera::project
-  * @param point - Projects the point into screen coordinates
-  * @param viewMatrix
-  * @param modelMatrix
+/**
+ * @brief cwCamera::isNormalizedDeviceCoordinateClipped
+ * @param normalizedDeviceCoordinates - Point in normalized device coordinates.
+ * @return True if the point lies outside the OpenGL clip volume.
+ */
+bool cwCamera::isNormalizedDeviceCoordinateClipped(const QVector3D& normalizedDeviceCoordinates)
+{
+    return normalizedDeviceCoordinates.x() < -1.0f
+            || normalizedDeviceCoordinates.x() > 1.0f
+            || normalizedDeviceCoordinates.y() < -1.0f
+            || normalizedDeviceCoordinates.y() > 1.0f
+            || normalizedDeviceCoordinates.z() < -1.0f
+            || normalizedDeviceCoordinates.z() > 1.0f;
+}
+
+bool cwCamera::isQtViewportCoordinateClipped(const QVector3D& qtViewportCoordinates) const
+{
+    return isQtViewportCoordinateClipped(qtViewportCoordinates, viewport());
+}
+
+bool cwCamera::isQtViewportCoordinateClipped(const QVector3D& qtViewportCoordinates, const QRect& viewport)
+{
+    const QRectF viewportRect(viewport);
+    const QPointF position(qtViewportCoordinates.x(), qtViewportCoordinates.y());
+
+    return !viewportRect.contains(position)
+            || qtViewportCoordinates.z() < -1.0f
+            || qtViewportCoordinates.z() > 1.0f;
+}
+
+QMatrix4x4 cwCamera::qtViewportMatrix() const
+{
+    QMatrix4x4 matrix;
+    const float width = viewport().width();
+    const float height = viewport().height();
+
+    matrix.scale(width / 2.0f, -height / 2.0f, 1.0f);
+    matrix.translate(1.0f, -1.0f, 0.0f);
+    return matrix;
+}
+
+/**
+ * @brief cwCamera::project
+ * @param point - Projects the point into screen coordinates
+ * @param viewMatrix
+ * @param modelMatrix
   * @return Returns the point in screen coordiante
   */
  QPointF cwCamera::project(QVector3D point, QMatrix4x4 viewMatrix, QMatrix4x4 modelMatrix) const

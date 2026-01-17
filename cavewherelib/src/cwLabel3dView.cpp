@@ -16,8 +16,6 @@
 //Qt includes
 #include <QQmlContext>
 #include <QQmlEngine>
-#include <QtConcurrent>
-
 cwLabel3dView::cwLabel3dView(QQuickItem *parent) :
     QQuickItem(parent),
     Component(nullptr),
@@ -143,44 +141,66 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
 
     Q_ASSERT(group->Labels.size() == group->LabelItems.size());
 
-    //Copy all the labels
-    QList<cwLabel3dItem> labels = group->Labels;
+    QList<cwLabel3dItem>& labels = group->Labels;
 
-    //Transforms all the label's points
-    QtConcurrent::blockingMap(labels,
-                              TransformPoint(Camera->viewProjectionMatrix(),
-                                             Camera->viewport()));
+    const QMatrix4x4 matrix = Camera->qtViewportMatrix() * Camera->viewProjectionMatrix();
+    const int labelCount = labels.size();
+    constexpr int visibilityThreshold = 3;
 
-    //Go through all the station points and render the text
-    for(int i = 0; i < labels.size(); i++) {
-        const cwLabel3dItem& label = labels.at(i);
+    auto processIndex = [&](int i) {
         QQuickItem* item = group->LabelItems.at(i);
-
-        QVector3D projectedStationPosition = label.position();
-
-
+        cwLabel3dItem& label = labels[i];
+        QVector3D qtViewportCoordinate = matrix.map(label.position());
 
         //Clip the stations to the rendering area
-        if(projectedStationPosition.z() > 1.0 ||
-                projectedStationPosition.z() < 0.0 ||
-                !Camera->viewport().contains(projectedStationPosition.x(), projectedStationPosition.y())) {
-            item->setVisible(false);
-            continue;
+        if(Camera->isQtViewportCoordinateClipped(qtViewportCoordinate)) {
+            label.setHiddenStreak(label.hiddenStreak() + 1);
+            label.setVisibleStreak(0);
+            if(item->isVisible() && label.hiddenStreak() >= visibilityThreshold) {
+                item->setVisible(false);
+            }
+            return;
         }
 
         //See if stationName overlaps with other stations
-        QPoint topLeftPoint = projectedStationPosition.toPoint();
+        QPoint topLeftPoint = qtViewportCoordinate.toPoint();
         QSize stationNameTextSize(item->width() * 1.1, item->height() * 1.1);
         QRect stationRect(topLeftPoint, stationNameTextSize);
         stationRect.moveTop(stationRect.top() - stationNameTextSize.height() / 1.1);
         bool couldAddText = LabelKdTree.addRect(stationRect);
 
         if(couldAddText) {
-            item->setVisible(true);
-            item->setPosition(projectedStationPosition.toPointF());
+            label.setVisibleStreak(label.visibleStreak() + 1);
+            label.setHiddenStreak(0);
+            if(!item->isVisible() && label.visibleStreak() >= visibilityThreshold) {
+                item->setVisible(true);
+            }
         } else {
-            item->setVisible(false);
+            label.setHiddenStreak(label.hiddenStreak() + 1);
+            label.setVisibleStreak(0);
+            if(item->isVisible() && label.hiddenStreak() >= visibilityThreshold) {
+                item->setVisible(false);
+            }
         }
+
+        if(item->isVisible()) {
+            item->setPosition(qtViewportCoordinate.toPointF());
+        }
+    };
+
+    //Go through all the station points and render the text (visible items first)
+    for(int i = 0; i < labelCount; i++) {
+        if(labels.at(i).wasVisible()) {
+            processIndex(i);
+        }
+    }
+
+    for(int i = 0; i < labelCount; i++) {
+        if(!labels.at(i).wasVisible()) {
+            processIndex(i);
+        }
+
+        labels[i].setWasVisible(group->LabelItems.at(i)->isVisible() ? 1 : 0);
     }
 }
 
@@ -202,20 +222,6 @@ void cwLabel3dView::updatePositions()
 
         LabelKdTree.clear();
     }
-}
-
-/**
-  \brief This is a helper for QtCurrentent function
-
-  This is the kernel for multi threaded algroithm to transform the points into
-  screen coordinates.  This is a helper function to renderStationLabels
-  */
-void cwLabel3dView::TransformPoint::operator()(cwLabel3dItem& label) {
-    QVector3D normalizeSceenCoordinate =  ModelViewProjection.map(label.position());
-    QVector3D viewportCoord = cwCamera::mapNormalizeScreenToGLViewport(normalizeSceenCoordinate, Viewport);
-    float y = Viewport.y() + (Viewport.height() - viewportCoord.y());
-    viewportCoord.setY(y);
-    label.setPosition(viewportCoord);
 }
 
 /**

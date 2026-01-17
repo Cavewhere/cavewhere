@@ -68,6 +68,13 @@ public:
 
     static QVector3D mapNormalizeScreenToGLViewport(const QVector3D& point, const QRect& viewport);
     Q_INVOKABLE QVector3D mapNormalizeScreenToGLViewport(const QVector3D& point) const;
+    // Returns true when a point in normalized device coordinates lies outside the clip volume.
+    static bool isNormalizedDeviceCoordinateClipped(const QVector3D& normalizedDeviceCoordinates);
+    // Returns true when a point in Qt viewport coordinates lies outside the clip volume.
+    // The x/y values are Qt viewport pixels and z is normalized device coordinate depth.
+    bool isQtViewportCoordinateClipped(const QVector3D& qtViewportCoordinates) const;
+    static bool isQtViewportCoordinateClipped(const QVector3D& qtViewportCoordinates, const QRect& viewport);
+    QMatrix4x4 qtViewportMatrix() const;
     QPoint mapToGLViewport(QPoint qtViewportPoint) const;
     QPointF mapToQtViewport(QPointF glViewportPoint) const;
 

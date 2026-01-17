@@ -46,30 +46,6 @@ signals:
 public slots:
     
 private:
-    /**
-      \brief This is used to render text labels correctly
-
-      This will transform the points in a multi thread manor.
-      */
-    class TransformPoint {
-    public:
-        typedef QVector3D result_type;
-
-        TransformPoint(QMatrix4x4 modelViewProjection, QRect viewport) {
-            ModelViewProjection = modelViewProjection;
-            Viewport = viewport;
-        }
-
-        /**
-          \brief Transforms the point
-          */
-        void operator()(cwLabel3dItem& label);
-
-    private:
-        QMatrix4x4 ModelViewProjection;
-        QRect Viewport;
-    };
-
     QSet<cwLabel3dGroup*> LabelGroups;
 
     //For rendering labels
