@@ -16,6 +16,7 @@
 //Qt includes
 #include <QQmlContext>
 #include <QQmlEngine>
+#include <algorithm>
 #include <QRectF>
 #include <QSizeF>
 cwLabel3dView::cwLabel3dView(QQuickItem *parent) :
@@ -175,9 +176,6 @@ void cwLabel3dView::releaseLabelItem(cwLabel3dGroup* group, int labelIndex)
         return;
     }
 
-    qDebug() << "Releasing label:" << item << item->property("text");
-    item->setProperty("text", item->property("text").toString() + "-release");
-
     item->setVisible(false);
     group->ItemPool.append(item);
     group->LabelItems[labelIndex] = nullptr;
@@ -213,12 +211,9 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
     const QMatrix4x4 matrix = m_camera->qtViewportMatrix() * m_camera->viewProjectionMatrix();
     const QRectF viewportRect(m_camera->viewport());
     const QSizeF averageSize = m_averageLabelSize;
-    const QRectF expandedViewport = viewportRect.adjusted(-averageSize.width(),
-                                                          -averageSize.height(),
-                                                          averageSize.width(),
-                                                          averageSize.height());
+
     const int labelCount = labels.size();
-    constexpr int visibilityThreshold = 10;
+    constexpr int visibilityThreshold = 5;
 
     auto processIndex = [&](int i) {
         QQuickItem* item = labelItem(group, i);
@@ -227,12 +222,8 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
 
         auto increaseVisiblity = [&]() {
             label.setVisibleStreak(std::min(label.visibleStreak() + 1, visibilityThreshold));
-            label.setHiddenStreak(0);
-        };
-
-        auto decreaseVisiblity = [&]() {
-            label.setVisibleStreak(0); //std::max(label.visibleStreak() + 1, visibilityThreshold));
-            label.setHiddenStreak(std::min(label.hiddenStreak() + 1, visibilityThreshold));
+            label.setPriority(label.priority() + 1);
+            // label.setVisibleStreak(label.visibleStreak() + 1);
         };
 
         auto accept = [&]() {
@@ -244,22 +235,17 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
                     item->setProperty("text", label.text());
                     item->setVisible(true);
                 }
-            } if (item) {
+            }
+
+            if (item) {
                 item->setPosition(qtViewportCoordinate.toPointF());
             }
         };
 
         auto reject = [&]() {
-            decreaseVisiblity();
-
+            label.setVisibleStreak(0);
             if(item && item->isVisible()) {
-                // item->setVisible(false);
                 releaseLabelItem(group, i);
-                // if(label.hiddenStreak() >= visibilityThreshold) {
-                // }
-                // else {
-                //     item->setPosition(qtViewportCoordinate.toPointF());
-                // }
             }
         };
 
@@ -280,20 +266,32 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
             reject();
         }
 
-        // //Debuggging
+        //Debugging
         // if(item) {
-        //     item->setProperty("text", QString("%1 a:%2 r:%3")
-        //                           .arg(label.text())
-        //                           .arg(label.visibleStreak())
-        //                           .arg(label.hiddenStreak()));
+        //     item->setProperty("text", QString("%1 a:%2 p:%3")
+        //                                   .arg(label.text())
+        //                                   .arg(label.visibleStreak())
+        //                                   .arg(label.priority()));
         // }
     };
 
-    //Go through all the station points and render the text (visible items first)
+    QVector<int> visibleIndices;
+    visibleIndices.reserve(labelCount);
     for(int i = 0; i < labelCount; i++) {
         if(labels.at(i).wasVisible()) {
-            processIndex(i);
+            visibleIndices.append(i);
         }
+    }
+
+    std::stable_sort(visibleIndices.begin(), visibleIndices.end(),
+                     [&](int lhs, int rhs) {
+                         return (labels.at(lhs).priority())
+                                 > (labels.at(rhs).priority());
+                     });
+
+    //Go through all the station points and render the text (visible items first)
+    for(int i = 0; i < visibleIndices.size(); i++) {
+        processIndex(visibleIndices.at(i));
     }
 
     for(int i = 0; i < labelCount; i++) {
