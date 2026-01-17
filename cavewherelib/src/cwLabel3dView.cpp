@@ -175,6 +175,9 @@ void cwLabel3dView::releaseLabelItem(cwLabel3dGroup* group, int labelIndex)
         return;
     }
 
+    qDebug() << "Releasing label:" << item << item->property("text");
+    item->setProperty("text", item->property("text").toString() + "-release");
+
     item->setVisible(false);
     group->ItemPool.append(item);
     group->LabelItems[labelIndex] = nullptr;
@@ -215,31 +218,54 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
                                                           averageSize.width(),
                                                           averageSize.height());
     const int labelCount = labels.size();
-    constexpr int visibilityThreshold = 2;
-
-    auto isCoarselyVisible = [&](const QVector3D& position) {
-        if(position.z() < -1.0f || position.z() > 1.0f) {
-            return false;
-        }
-        return expandedViewport.contains(QPointF(position.x(), position.y()));
-    };
+    constexpr int visibilityThreshold = 10;
 
     auto processIndex = [&](int i) {
         QQuickItem* item = labelItem(group, i);
         cwLabel3dItem& label = labels[i];
         QVector3D qtViewportCoordinate = matrix.map(label.position());
 
-        if(!isCoarselyVisible(qtViewportCoordinate)) {
-            label.setHiddenStreak(label.hiddenStreak() + 1);
-            label.setVisibleStreak(0);
-            if(item != nullptr && item->isVisible() && label.hiddenStreak() >= visibilityThreshold) {
-                item->setVisible(false);
+        auto increaseVisiblity = [&]() {
+            label.setVisibleStreak(std::min(label.visibleStreak() + 1, visibilityThreshold));
+            label.setHiddenStreak(0);
+        };
+
+        auto decreaseVisiblity = [&]() {
+            label.setVisibleStreak(0); //std::max(label.visibleStreak() + 1, visibilityThreshold));
+            label.setHiddenStreak(std::min(label.hiddenStreak() + 1, visibilityThreshold));
+        };
+
+        auto accept = [&]() {
+            increaseVisiblity();
+
+            if(label.visibleStreak() >= visibilityThreshold) {
+                if(item == nullptr) {
+                    item = acquireLabelItem(group, i);
+                    item->setProperty("text", label.text());
+                    item->setVisible(true);
+                }
+            } if (item) {
+                item->setPosition(qtViewportCoordinate.toPointF());
             }
-            if(item != nullptr && !item->isVisible()) {
+        };
+
+        auto reject = [&]() {
+            decreaseVisiblity();
+
+            if(item && item->isVisible()) {
+                // item->setVisible(false);
                 releaseLabelItem(group, i);
+                // if(label.hiddenStreak() >= visibilityThreshold) {
+                // }
+                // else {
+                //     item->setPosition(qtViewportCoordinate.toPointF());
+                // }
             }
-            return;
-        }
+        };
+
+        if(m_camera->isQtViewportCoordinateClipped(qtViewportCoordinate)) {
+            reject();
+        };
 
         //See if stationName overlaps with other stations
         QPointF topLeftPoint(qtViewportCoordinate.x(), qtViewportCoordinate.y());
@@ -249,35 +275,18 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
         bool couldAddText = m_labelKdTree.addRect(stationRect.toAlignedRect());
 
         if(couldAddText) {
-            label.setVisibleStreak(label.visibleStreak() + 1);
-            label.setHiddenStreak(0);
-            if(label.visibleStreak() >= visibilityThreshold) {
-                const bool hadItem = item != nullptr;
-                if(!hadItem) {
-                    item = acquireLabelItem(group, i);
-                }
-                if(item != nullptr) {
-                    if(!hadItem) {
-                        item->setProperty("text", label.text());
-                    }
-                    if(!item->isVisible()) {
-                        item->setVisible(true);
-                    }
-                    item->setPosition(qtViewportCoordinate.toPointF());
-                }
-            } else if(item != nullptr && !item->isVisible()) {
-                releaseLabelItem(group, i);
-            }
+            accept();
         } else {
-            label.setHiddenStreak(label.hiddenStreak() + 1);
-            label.setVisibleStreak(0);
-            if(item != nullptr && item->isVisible() && label.hiddenStreak() >= visibilityThreshold) {
-                item->setVisible(false);
-            }
-            if(item != nullptr && !item->isVisible()) {
-                releaseLabelItem(group, i);
-            }
+            reject();
         }
+
+        // //Debuggging
+        // if(item) {
+        //     item->setProperty("text", QString("%1 a:%2 r:%3")
+        //                           .arg(label.text())
+        //                           .arg(label.visibleStreak())
+        //                           .arg(label.hiddenStreak()));
+        // }
     };
 
     //Go through all the station points and render the text (visible items first)
