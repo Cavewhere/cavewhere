@@ -141,40 +141,32 @@ StandardPage {
 
                 TableStaticColumnModel {
                     id: columnModelId
-                    columnWidth: QtObject {
-                        id: columnWidth
-                        property int name //: 200
-                        property int date //: 75
-                        property int stations //: 75
-                        property int length //: 50
-                    }
-
-                    columnModel: ObjectModel {
-                        QtObject {
-                            property string widthName: "name"
-                            property int columnWidth: 200
-                            property string text: "Name"
-                            property int sortRole: CavePageModel.TripNameRole
+                    columns: [
+                        TableStaticColumn {
+                            id: nameColumn
+                            columnWidth: 200
+                            text: "Name"
+                            sortRole: CavePageModel.TripNameRole
+                        },
+                        TableStaticColumn {
+                            id: dateColumn
+                            columnWidth: 75
+                            text: "Date"
+                            sortRole: CavePageModel.TripDateRole
+                        },
+                        TableStaticColumn {
+                            id: stationsColumn
+                            columnWidth: 75
+                            text: "Stations"
+                            sortRole: CavePageModel.UsedStationsRole
+                        },
+                        TableStaticColumn {
+                            id: lengthColumn
+                            columnWidth: 50
+                            text: "Length"
+                            sortRole: CavePageModel.TripDistanceRole
                         }
-                        QtObject {
-                            property string widthName: "date"
-                            property int columnWidth: 75
-                            property string text: "Date"
-                            property int sortRole: CavePageModel.TripDateRole
-                        }
-                        QtObject {
-                            property string widthName: "stations"
-                            property int columnWidth: 75
-                            property string text: "Stations"
-                            property int sortRole: CavePageModel.UsedStationsRole
-                        }
-                        QtObject {
-                            property string widthName: "length"
-                            property int columnWidth: 50
-                            property string text: "Length"
-                            property int sortRole: CavePageModel.TripDistanceRole
-                        }
-                    }
+                    ]
                 }
 
 
@@ -182,7 +174,7 @@ StandardPage {
                     view: tableViewId
                     Layout.fillWidth: true
 
-                    delegate: TableStaticColumn {
+                    delegate: TableStaticHeaderColumn {
                         model: tableViewId.model
                     }
                 }
@@ -205,7 +197,7 @@ StandardPage {
                         }
 
                         //This will populate the HorizontalHeader
-                        columnModel: columnModelId.columnModel
+                        columnModel: columnModelId
 
                         Layout.fillHeight: true
 
@@ -265,7 +257,7 @@ StandardPage {
                                 // anchors.fill: parent
 
                                 QQ.Item {
-                                    implicitWidth: columnWidth.name
+                                    implicitWidth: nameColumn.columnWidth
                                     implicitHeight: rowLayout.height
                                     clip: true
 
@@ -290,7 +282,7 @@ StandardPage {
                                 }
 
                                 QQ.Item {
-                                    implicitWidth: columnWidth.date
+                                    implicitWidth: dateColumn.columnWidth
                                     implicitHeight: dateId.implicitHeight
                                     clip: true
                                     Text {
@@ -302,7 +294,7 @@ StandardPage {
                                 }
 
                                 QQ.Item {
-                                    implicitWidth: columnWidth.stations
+                                    implicitWidth: stationsColumn.columnWidth
                                     implicitHeight: usedStationsId.implicitHeight
                                     clip: true
 
@@ -315,7 +307,7 @@ StandardPage {
                                 }
 
                                 QQ.Item {
-                                    implicitWidth: columnWidth.length
+                                    implicitWidth: lengthColumn.columnWidth
                                     implicitHeight: lengthId.implicitHeight
                                     clip: true
 

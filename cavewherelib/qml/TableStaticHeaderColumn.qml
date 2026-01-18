@@ -16,7 +16,7 @@ QQ.Rectangle {
     required property int columnWidth;
 
     required property int sortRole; //: -1
-    property int sortMode: TableStaticColumn.Sort.None
+    property int sortMode: TableStaticHeaderColumn.Sort.None
 
     required property var model
 
@@ -34,7 +34,7 @@ QQ.Rectangle {
         target: delegate._sortModel
         function onSortRoleChanged() {
             if(delegate._sortModel.sortRole != delegate.sortRole) {
-                delegate.sortMode = TableStaticColumn.Sort.None
+                delegate.sortMode = TableStaticHeaderColumn.Sort.None
             }
         }
     }
@@ -50,9 +50,9 @@ QQ.Rectangle {
 
             QQ.Image {
                 id: sortImageId
-                visible: delegate.sortMode != TableStaticColumn.Sort.None
+                visible: delegate.sortMode != TableStaticHeaderColumn.Sort.None
                 source: "qrc:/icons/moreArrowDown.png"
-                rotation: delegate.sortMode == TableStaticColumn.Sort.Descending ? 0 : 180
+                rotation: delegate.sortMode == TableStaticHeaderColumn.Sort.Descending ? 0 : 180
                 sourceSize: Qt.size(8, 8)
                 smooth: true
             }
@@ -76,13 +76,13 @@ QQ.Rectangle {
         anchors.rightMargin: 5
         onClicked: {
             if(delegate.sortRole >= 0) {
-                if(delegate.sortMode == TableStaticColumn.Sort.None) {
-                    delegate.sortMode = TableStaticColumn.Sort.Ascending
-                } else if(delegate.sortMode == TableStaticColumn.Sort.Ascending) {
-                    delegate.sortMode = TableStaticColumn.Sort.Descending
+                if(delegate.sortMode == TableStaticHeaderColumn.Sort.None) {
+                    delegate.sortMode = TableStaticHeaderColumn.Sort.Ascending
+                } else if(delegate.sortMode == TableStaticHeaderColumn.Sort.Ascending) {
+                    delegate.sortMode = TableStaticHeaderColumn.Sort.Descending
                 } else {
                     //Descending
-                    delegate.sortMode = TableStaticColumn.Sort.Ascending
+                    delegate.sortMode = TableStaticHeaderColumn.Sort.Ascending
                 }
 
                 //Assume that this is a sort proxy mode
@@ -90,15 +90,15 @@ QQ.Rectangle {
                 if(delegate._sortModel) {
                     delegate._sortModel.sortRole = delegate.sortRole
                     switch(delegate.sortMode) {
-                    case TableStaticColumn.Sort.Ascending:
+                    case TableStaticHeaderColumn.Sort.Ascending:
                             delegate._sortModel.sort(Qt.AscendingOrder)
                         break
-                    case TableStaticColumn.Sort.Descending:
+                    case TableStaticHeaderColumn.Sort.Descending:
                             delegate._sortModel.sort(Qt.DescendingOrder)
                         break
                     }
                 } else {
-                    console.warn("TableStaticColumn model isn't a cwSortFilterProxyModel, sorting will not work")
+                    console.warn("TableStaticHeaderColumn model isn't a cwSortFilterProxyModel, sorting will not work")
                 }
             } else {
                 console.warn("Delegate has no sortRole")

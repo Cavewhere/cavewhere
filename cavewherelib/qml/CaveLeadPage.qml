@@ -106,66 +106,55 @@ StandardPage {
 
         TableStaticColumnModel {
             id: columnModelId
-            columnWidth: QtObject {
-                id: columnWidth
-                property int done
-                property int goTo
-                property int nearest
-                property int size
-                property int distance
-                property int trip
-                property int description
-            }
-
-            columnModel: ObjectModel {
-                QtObject {
-                    property string widthName: "done"
-                    property int columnWidth: 50
-                    property string text: "Done"
-                    property int sortRole: LeadModel.LeadCompleted
+            columns: [
+                TableStaticColumn {
+                    id: doneColumn
+                    columnWidth: 50
+                    text: "Done"
+                    sortRole: LeadModel.LeadCompleted
+                },
+                TableStaticColumn {
+                    id: goToColumn
+                    columnWidth: 50
+                    text: "Goto"
+                },
+                TableStaticColumn {
+                    id: nearestColumn
+                    columnWidth: 75
+                    text: "Nearest"
+                    sortRole: LeadModel.LeadNearestStation
+                },
+                TableStaticColumn {
+                    id: sizeColumn
+                    columnWidth: 75
+                    text: "Size"
+                    sortRole: LeadModel.LeadSizeAsString
+                },
+                TableStaticColumn {
+                    id: distanceColumn
+                    columnWidth: 75
+                    text: "Distance"
+                    sortRole: LeadModel.LeadDistanceToReferanceStation
+                },
+                TableStaticColumn {
+                    id: tripColumn
+                    columnWidth: 120
+                    text: "Trip"
+                    sortRole: LeadModel.LeadTrip
+                },
+                TableStaticColumn {
+                    id: descriptionColumn
+                    columnWidth: 200
+                    text: "Description"
+                    sortRole: LeadModel.LeadDesciption
                 }
-                QtObject {
-                    property string widthName: "goTo"
-                    property int columnWidth: 50
-                    property string text: "Goto"
-                }
-                QtObject {
-                    property string widthName: "nearest"
-                    property int columnWidth: 75
-                    property string text: "Nearest"
-                    property int sortRole: LeadModel.LeadNearestStation
-                }
-                QtObject {
-                    property string widthName: "size"
-                    property int columnWidth: 75
-                    property string text: "Size"
-                    property int sortRole: LeadModel.LeadSizeAsString
-                }
-                QtObject {
-                    property string widthName: "distance"
-                    property int columnWidth: 75
-                    property string text: "Distance"
-                    property int sortRole: LeadModel.LeadDistanceToReferanceStation
-                }
-                QtObject {
-                    property string widthName: "trip"
-                    property int columnWidth: 120
-                    property string text: "Trip"
-                    property int sortRole: LeadModel.LeadTrip
-                }
-                QtObject {
-                    property string widthName: "description"
-                    property int columnWidth: 200
-                    property string text: "Description"
-                    property int sortRole: LeadModel.LeadDesciption
-                }
-            }
+            ]
         }
 
         HorizontalHeaderStaticView {
             view: tableView
             Layout.fillWidth: true
-            delegate: TableStaticColumn {
+            delegate: TableStaticHeaderColumn {
                 model: tableView.model
             }
         }
@@ -197,7 +186,7 @@ StandardPage {
                 }
 
                 //This will populate the HorizontalHeader
-                columnModel: columnModelId.columnModel
+                columnModel: columnModelId
 
                 component RowDelegate : QQ.Item {
                     id: delegateId
@@ -225,7 +214,7 @@ StandardPage {
                         spacing: 0
 
                         QQ.Item {
-                            implicitWidth: columnWidth.done
+                            implicitWidth: doneColumn.columnWidth
                             implicitHeight: checkbox.implicitHeight
                             clip: true
 
@@ -241,7 +230,7 @@ StandardPage {
                         }
 
                         QQ.Item {
-                            implicitWidth: columnWidth.goTo
+                            implicitWidth: goToColumn.columnWidth
                             implicitHeight: gotoId.implicitHeight
                             clip: true
                             LinkText {
@@ -270,7 +259,7 @@ StandardPage {
 
                         QQ.Item {
                             clip: true
-                            implicitWidth: columnWidth.nearest
+                            implicitWidth: nearestColumn.columnWidth
                             implicitHeight: nearestText.implicitHeight
                             Text {
                                 id: nearestText
@@ -280,7 +269,7 @@ StandardPage {
 
                         QQ.Item {
                             clip: true
-                            implicitWidth: columnWidth.size
+                            implicitWidth: sizeColumn.columnWidth
                             implicitHeight: leadSize.implicitHeight
                             Text {
                                 id: leadSize
@@ -290,7 +279,7 @@ StandardPage {
 
                         QQ.Item {
                             clip: true
-                            implicitWidth: columnWidth.distance
+                            implicitWidth: distanceColumn.columnWidth
                             implicitHeight: distanceId.implicitHeight
                             Text {
                                 id: distanceId
@@ -300,7 +289,7 @@ StandardPage {
 
                         QQ.Item {
                             clip: true
-                            implicitWidth: columnWidth.trip
+                            implicitWidth: tripColumn.columnWidth
                             implicitHeight: tripId.implicitHeight
                             LinkText {
                                 id: tripId
@@ -315,7 +304,7 @@ StandardPage {
 
                         QQ.Item {
                             clip: true
-                            implicitWidth: columnWidth.description
+                            implicitWidth: descriptionColumn.columnWidth
                             implicitHeight: descriptionId.implicitHeight
                             Text {
                                 id: descriptionId

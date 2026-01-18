@@ -8,13 +8,14 @@ QC.HorizontalHeaderView {
     required property TableStaticView view
 
     model: view.columnModel
-    textRole: "name"
+    textRole: "text"
 
     columnWidthProvider: function (column) {
         let columnWidth = explicitColumnWidth(column);
         if(columnWidth === -1) {
             //column width hasn't been set.
-            return view.columnModel.get(column).columnWidth;
+            let index = view.columnModel.index(column, 0);
+            return view.columnModel.data(index, TableStaticColumnModel.ColumnWidthRole);
         }
 
         return Math.min(300, Math.max(50, columnWidth));
@@ -25,11 +26,13 @@ QC.HorizontalHeaderView {
     onLayoutChanged: {
         // Update each ListElement's columnWidth with the current header
         for(let i = 0; i < view.columnModel.count; i++) {
-            let column = view.columnModel.get(i);
-            if(horizontalHeader.columnWidth(i) !== -1
-                    && column.columnWidth !== horizontalHeader.columnWidth(i))
-            {
-                column.columnWidth = horizontalHeader.columnWidth(i);
+            let columnWidth = horizontalHeader.columnWidth(i);
+            if(columnWidth !== -1) {
+                let index = view.columnModel.index(i, 0);
+                let currentWidth = view.columnModel.data(index, TableStaticColumnModel.ColumnWidthRole);
+                if(currentWidth !== columnWidth) {
+                    view.columnModel.setData(index, columnWidth, TableStaticColumnModel.ColumnWidthRole);
+                }
             }
         }
     }
