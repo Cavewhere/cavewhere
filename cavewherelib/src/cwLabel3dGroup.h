@@ -39,12 +39,12 @@ signals:
 public slots:
 
 private:
-    QPointer<cwLabel3dView> ParentView;
-    QList<cwLabel3dItem> Labels;
-    QVector<QQuickItem*> LabelItems;
+    QPointer<cwLabel3dView> m_parentView;
+    QList<cwLabel3dItem> m_labels;
+    QVector<QQuickItem*> m_labelItems;
 
     //For caching and memory efficientcy
-    QVector<QQuickItem*> ItemPool;
+    QVector<QQuickItem*> m_itemPool;
 
     struct VisibleEntry {
         int index;

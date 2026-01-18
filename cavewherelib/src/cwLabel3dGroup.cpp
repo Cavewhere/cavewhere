@@ -11,7 +11,7 @@
 
 cwLabel3dGroup::cwLabel3dGroup(cwLabel3dView *parent) :
     QObject(parent),
-    ParentView(nullptr)
+    m_parentView(nullptr)
 {
     setParentView(parent);
 }
@@ -26,25 +26,25 @@ cwLabel3dGroup::~cwLabel3dGroup()
  * @param parent - The parent view that owns this object
  */
 void cwLabel3dGroup::setParentView(cwLabel3dView *parent) {
-    if(ParentView != parent) {
-        if(ParentView != nullptr) {
-            ParentView->removeGroup(this);
+    if(m_parentView != parent) {
+        if(m_parentView != nullptr) {
+            m_parentView->removeGroup(this);
         }
 
-        ParentView = parent;
+        m_parentView = parent;
 
-        if(ParentView != nullptr) {
-            ParentView->addGroup(this);
+        if(m_parentView != nullptr) {
+            m_parentView->addGroup(this);
         }
 
-        setParent(ParentView);
+        setParent(m_parentView);
     }
 }
 
 void cwLabel3dGroup::setLabels(QList<cwLabel3dItem> labels) {
-    Labels = labels;
+    m_labels = labels;
 
-    if(ParentView != nullptr) {
-        ParentView->updateGroup(this);
+    if(m_parentView != nullptr) {
+        m_parentView->updateGroup(this);
     }
 }

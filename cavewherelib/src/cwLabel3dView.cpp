@@ -90,16 +90,16 @@ void cwLabel3dView::updateGroup(cwLabel3dGroup* group) {
 
     Q_ASSERT(m_labelGroups.contains(group));
 
-    const int labelSize = group->Labels.size();
-    const int itemSize = group->LabelItems.size();
+    const int labelSize = group->m_labels.size();
+    const int itemSize = group->m_labelItems.size();
 
     if(labelSize < itemSize) {
         for(int i = labelSize; i < itemSize; i++) {
             releaseLabelItem(group, i);
         }
-        group->LabelItems.resize(labelSize);
+        group->m_labelItems.resize(labelSize);
     } else if(labelSize > itemSize) {
-        group->LabelItems.resize(labelSize);
+        group->m_labelItems.resize(labelSize);
     }
 
     //Update all the positions
@@ -111,10 +111,10 @@ QQuickItem* cwLabel3dView::labelItem(cwLabel3dGroup* group, int labelIndex)
     if(group == nullptr) {
         return nullptr;
     }
-    if(labelIndex < 0 || labelIndex >= group->LabelItems.size()) {
+    if(labelIndex < 0 || labelIndex >= group->m_labelItems.size()) {
         return nullptr;
     }
-    return group->LabelItems.at(labelIndex);
+    return group->m_labelItems.at(labelIndex);
 }
 
 QQuickItem* cwLabel3dView::acquireLabelItem(cwLabel3dGroup* group, int labelIndex)
@@ -122,12 +122,12 @@ QQuickItem* cwLabel3dView::acquireLabelItem(cwLabel3dGroup* group, int labelInde
     if(group == nullptr) {
         return nullptr;
     }
-    if(labelIndex < 0 || labelIndex >= group->LabelItems.size()) {
+    if(labelIndex < 0 || labelIndex >= group->m_labelItems.size()) {
         return nullptr;
     }
 
     if(labelItem(group, labelIndex) != nullptr) {
-        return group->LabelItems.at(labelIndex);
+        return group->m_labelItems.at(labelIndex);
     }
 
     if(m_component == nullptr) {
@@ -144,8 +144,8 @@ QQuickItem* cwLabel3dView::acquireLabelItem(cwLabel3dGroup* group, int labelInde
     }
 
     QQuickItem* item = nullptr;
-    if(!group->ItemPool.isEmpty()) {
-        item = group->ItemPool.takeLast();
+    if(!group->m_itemPool.isEmpty()) {
+        item = group->m_itemPool.takeLast();
     } else {
         item = qobject_cast<QQuickItem*>(m_component->create());
     }
@@ -158,7 +158,7 @@ QQuickItem* cwLabel3dView::acquireLabelItem(cwLabel3dGroup* group, int labelInde
     item->setParent(group);
     item->setParentItem(this);
     item->setVisible(false);
-    group->LabelItems[labelIndex] = item;
+    group->m_labelItems[labelIndex] = item;
     return item;
 }
 
@@ -167,19 +167,19 @@ void cwLabel3dView::releaseLabelItem(cwLabel3dGroup* group, int labelIndex)
     if(group == nullptr) {
         return;
     }
-    if(labelIndex < 0 || labelIndex >= group->LabelItems.size()) {
+    if(labelIndex < 0 || labelIndex >= group->m_labelItems.size()) {
         return;
     }
 
-    QQuickItem* item = group->LabelItems.at(labelIndex);
+    QQuickItem* item = group->m_labelItems.at(labelIndex);
     if(item == nullptr) {
         return;
     }
 
     item->setVisible(false);
     item->setOpacity(0.0);
-    group->ItemPool.append(item);
-    group->LabelItems[labelIndex] = nullptr;
+    group->m_itemPool.append(item);
+    group->m_labelItems[labelIndex] = nullptr;
 }
 
 /**
@@ -205,9 +205,9 @@ void cwLabel3dView::setCamera(cwCamera* camera) {
 void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
 {
 
-    Q_ASSERT(group->Labels.size() == group->LabelItems.size());
+    Q_ASSERT(group->m_labels.size() == group->m_labelItems.size());
 
-    QList<cwLabel3dItem>& labels = group->Labels;
+    QList<cwLabel3dItem>& labels = group->m_labels;
 
     const QMatrix4x4 matrix = m_camera->qtViewportMatrix() * m_camera->viewProjectionMatrix();
     const QRectF viewportRect(m_camera->viewport());
@@ -278,7 +278,7 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
 
     auto sortVisibleEntries = [&]() {
         const QPointF viewportCenter = viewportRect.center();
-        // QVector<VisibleEntry> visibleEntries
+
         group->m_visibleEntries.reserve(labelCount);
         group->m_visibleEntries.clear();
         for(int i = 0; i < labelCount; i++) {
@@ -327,7 +327,7 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
     double heightSum = 0.0;
     int sizeCount = 0;
     for(int i = 0; i < labelCount; i++) {
-        QQuickItem* item = group->LabelItems.at(i);
+        QQuickItem* item = group->m_labelItems.at(i);
         const bool isVisible = item != nullptr && item->isVisible();
         labels[i].setWasVisible(isVisible ? 1 : 0);
         if(isVisible) {
