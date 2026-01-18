@@ -43,6 +43,9 @@ MainWindowTest {
             mouseClick(mapButton)
 
 
+            //Make sure we're on the map page
+            tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "mapPage" });
+
             //Make sure all the margins are displayed correctly
             let topMargin = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->mapOptions->paperMargin->PaperMarginGroupBox->topMarginSpinBox->spinBox")
             let bottomMargin = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->mapOptions->paperMargin->PaperMarginGroupBox->bottomMarginSpinBox->spinBox")
@@ -61,9 +64,9 @@ MainWindowTest {
             verify(allMargin.realValue === 1.0)
             verify(allMargin.displayText === "1.00")
 
-
             //Click on the add layer button
             let addLayerButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->addLayerButton")
+            waitForRendering(addLayerButton)
             mouseClick(addLayerButton)
 
             //Make sure we're on the view page
