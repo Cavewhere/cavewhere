@@ -256,9 +256,20 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
 
         //See if stationName overlaps with other stations
         QPointF topLeftPoint(qtViewportCoordinate.x(), qtViewportCoordinate.y());
-        QSizeF stationNameTextSize(averageSize.width() * 1.1, averageSize.height() * 1.1);
+        QSizeF stationNameTextSize = averageSize;
+        if(item) {
+            const double width = item->width();
+            const double height = item->height();
+            if(width > 0.0 && height > 0.0) {
+                stationNameTextSize.setWidth(width);
+                stationNameTextSize.setHeight(height);
+            }
+        }
+
+        constexpr double margin = 1.1;
+        stationNameTextSize = stationNameTextSize * margin;
         QRectF stationRect(topLeftPoint, stationNameTextSize);
-        stationRect.moveTop(stationRect.top() - stationNameTextSize.height() / 1.1);
+        stationRect.moveTop(stationRect.top() - stationNameTextSize.height() / margin);
         bool couldAddText = m_labelKdTree.addRect(stationRect.toAlignedRect());
 
         if(couldAddText) {
