@@ -45,7 +45,9 @@ void cwRenderGLTF::setGLTFFilePath(const QString &filePath)
             auto modelMatrix = m_modelMatrix.value();
 
             auto future = cwConcurrent::run([filePath, renderObject, modelMatrix]()->Monad::Result<Load> {
-                auto data = cw::gltf::Loader::loadGltf(filePath);
+                cw::gltf::LoadOptions options;
+                options.requestedLayout = cwRenderTexturedItems::geometryLayout();
+                auto data = cw::gltf::Loader::loadGltf(filePath, options);
 
                 Load load;
                 load.items = cwTriangulateLiDARTask::reserveRenderItems(data.meshes);

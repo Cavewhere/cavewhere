@@ -21,7 +21,10 @@ QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item> > > cwTriangulateLiDA
             return Monad::Result<QVector<cwRenderTexturedItems::Item> >("Station Lookup not set");
         }
 
-        auto gltf = cw::gltf::Loader::loadGltf(data.gltfFilename());
+        cw::gltf::LoadOptions options = {
+            cwRenderTexturedItems::geometryLayout()
+};
+        auto gltf = cw::gltf::Loader::loadGltf(data.gltfFilename(), options);
 
         auto visibleStations = cwTriangulateTask::buildStationsWithInterpolatedShots(data);
 

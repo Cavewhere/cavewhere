@@ -1,8 +1,94 @@
 #include "cwRenderTexturedItems.h"
 #include "cwGeometryItersecter.h"
 #include "cwRhiTexturedItems.h"
+#include "Monad/Result.h"
+
+#include <QtGlobal>
+
+namespace {
+Monad::Result<cwGeometry> geometryMatchesLayout(const cwGeometry& geometry,
+                                                const QVector<cwGeometry::AttributeDesc>& layout)
+{
+    if (geometry.isEmpty()) {
+        return Monad::Result<cwGeometry>(geometry);
+    }
+
+    if (layout.isEmpty()) {
+        return Monad::Result<cwGeometry>(QStringLiteral("Expected layout is empty"));
+    }
+
+    const auto& attributes = geometry.attributes();
+    if (attributes.size() != layout.size()) {
+        return Monad::Result<cwGeometry>(QStringLiteral("Attribute count mismatch (expected %1, got %2)")
+                                             .arg(layout.size())
+                                             .arg(attributes.size()));
+    }
+
+    int expectedOffset = 0;
+    for (int i = 0; i < layout.size(); ++i) {
+        const auto& expected = layout[i];
+        const auto& actual = attributes[i];
+        if (actual.semantic != expected.semantic || actual.format != expected.format) {
+            return Monad::Result<cwGeometry>(QStringLiteral("Attribute %1 mismatch").arg(i));
+        }
+        if (actual.byteOffset != expectedOffset) {
+            return Monad::Result<cwGeometry>(QStringLiteral("Attribute %1 offset mismatch").arg(i));
+        }
+        expectedOffset += actual.byteSize();
+    }
+
+    if (geometry.vertexStride() != expectedOffset) {
+        return Monad::Result<cwGeometry>(QStringLiteral("Vertex stride mismatch (expected %1, got %2)")
+                                             .arg(expectedOffset)
+                                             .arg(geometry.vertexStride()));
+    }
+
+    if (geometry.vertexStride() <= 0) {
+        return Monad::Result<cwGeometry>(QStringLiteral("Invalid vertex stride"));
+    }
+
+    if (geometry.vertexData().size() % geometry.vertexStride() != 0) {
+        return Monad::Result<cwGeometry>(QStringLiteral("Vertex buffer size is not a multiple of stride"));
+    }
+
+    const int vertexCount = geometry.vertexCount();
+    for (uint32_t index : geometry.indices()) {
+        if (index >= static_cast<uint32_t>(vertexCount)) {
+            return Monad::Result<cwGeometry>(QStringLiteral("Index out of range (index %1, vertexCount %2)")
+                                                 .arg(index)
+                                                 .arg(vertexCount));
+        }
+    }
+
+    return Monad::Result<cwGeometry>(geometry);
+
+
+}
+
+cwGeometry handleGeometryError(const Monad::Result<cwGeometry>& geometryResult) {
+    if (geometryResult.hasError()) {
+        qWarning().noquote() << "cwRenderTexturedItems: rejecting geometry with incompatible layout:"
+                             << geometryResult.errorMessage();
+    }
+    return geometryResult.value();
+}
+
+Monad::Result<cwGeometry> geometryForRender(const cwGeometry& geometry)
+{
+    const auto layout = cwRenderTexturedItems::geometryLayout();
+    return geometryMatchesLayout(geometry, layout);
+}
+}
 
 cwRenderTexturedItems::cwRenderTexturedItems(QObject *parent) : cwRenderObject(parent) {}
+
+QVector<cwGeometry::AttributeDesc> cwRenderTexturedItems::geometryLayout()
+{
+    return {
+        { cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3 },
+        { cwGeometry::Semantic::TexCoord0, cwGeometry::AttributeFormat::Vec2 }
+    };
+}
 
 cwRHIObject* cwRenderTexturedItems::createRHIObject()
 {
@@ -21,6 +107,8 @@ uint32_t cwRenderTexturedItems::addItem(const Item& item)
 {
     const uint32_t id = m_nextId++;
     Item commandItem = item;
+    commandItem.geometry = handleGeometryError(geometryForRender(commandItem.geometry));
+
     addCommand(PendingCommand(PendingCommand::Add, id, commandItem));
 
     Item storedItem = item;
@@ -32,8 +120,10 @@ uint32_t cwRenderTexturedItems::addItem(const Item& item)
     }
     m_frontState.insert(id, storedItem);
 
-    if (auto* intersector = geometryItersecter()) {
-        intersector->addObject(cwGeometryItersecter::Object({this, id}, item.geometry, item.modelMatrix));
+    if (!commandItem.geometry.isEmpty()) {
+        if (auto* intersector = geometryItersecter()) {
+            intersector->addObject(cwGeometryItersecter::Object({this, id}, commandItem.geometry, item.modelMatrix));
+        }
     }
 
     return id;
@@ -47,18 +137,22 @@ void cwRenderTexturedItems::updateGeometry(uint32_t id, const cwGeometry& geomet
     }
 
     Item payload;
-    payload.geometry = geometry; // texture left empty; RHI side should only consume what's needed
+    payload.geometry = handleGeometryError(geometryForRender(geometry));
     addCommand(PendingCommand(PendingCommand::UpdateGeometry, id, payload));
 
     const QMatrix4x4 modelMatrix = entry->modelMatrix;
     if (entry->storeGeometry) {
-        entry->geometry = geometry;
+        entry->geometry = payload.geometry;
     } else {
         entry->geometry = cwGeometry();
     }
 
     if (auto* intersector = geometryItersecter()) {
-        intersector->addObject(cwGeometryItersecter::Object({this, id}, geometry, modelMatrix));
+        if (!payload.geometry.isEmpty()) {
+            intersector->addObject(cwGeometryItersecter::Object({this, id}, payload.geometry, modelMatrix));
+        } else {
+            intersector->removeObject({this, id});
+        }
     }
 }
 

@@ -61,7 +61,8 @@ static QRhiCommandBuffer::IndexFormat toRhiIndexFormat(int gltfComponentType)
 
 // Build a cwGeometry from a glTF primitive
 static cwGeometry buildGeometryFromPrimitive(const tinygltf::Model& model,
-                                             const tinygltf::Primitive& prim)
+                                             const tinygltf::Primitive& prim,
+                                             const QVector<cwGeometry::AttributeDesc>& requestedLayout)
 {
     // POSITION (required)
     const auto posIt = prim.attributes.find("POSITION");
@@ -97,28 +98,6 @@ static cwGeometry buildGeometryFromPrimitive(const tinygltf::Model& model,
 
     const int vertexCount = posAcc.count;
 
-    // Build geometry with a declarative layout
-    QVector<cwGeometry::AttributeDesc> geometryDescription {
-        { cwGeometry::Semantic::Position,  cwGeometry::AttributeFormat::Vec3 }
-    };
-
-    if(hasNormal) {
-        geometryDescription.append({cwGeometry::Semantic::Normal, cwGeometry::AttributeFormat::Vec3});
-    }
-
-    if(hasTangent) {
-        geometryDescription.append({cwGeometry::Semantic::Tangent, cwGeometry::AttributeFormat::Vec4});
-    }
-
-    if(hasTex0) {
-        geometryDescription.append({cwGeometry::Semantic::TexCoord0, cwGeometry::AttributeFormat::Vec2});
-    }
-
-    cwGeometry geometry(geometryDescription);
-
-    // Pre-size
-    geometry.resizeVertices(vertexCount);
-
     // Helper to read a vector attribute into a QVector<T> with normalization support
     auto readVec = [](const AttributeView& src, int count, int comps, bool normalized) -> QVector<float> {
         QVector<float> out;
@@ -150,36 +129,142 @@ static cwGeometry buildGeometryFromPrimitive(const tinygltf::Model& model,
         return out;
     };
 
-    // Positions (vec3). glTF requires float here, but we still use the generic path.
-    {
-        QVector<float> flat = readVec(posView, vertexCount, 3, posView.normalized);
-        auto attribute = geometry.attribute(cwGeometry::Semantic::Position);
-        for (int i = 0; i < vertexCount; i++) {
-            geometry.set(attribute, i, QVector3D(flat[i*3+0], flat[i*3+1], flat[i*3+2]));
-        }
-    }
+    auto fillAttribute = [&](cwGeometry& geometry,
+                             cwGeometry::Semantic semantic,
+                             cwGeometry::AttributeFormat format,
+                             const AttributeView* view) {
+        const int comps = cwGeometry::VertexAttribute{semantic, format, 0}.componentCount();
+        const bool hasView = view && view->data && view->componentCount == comps;
 
-    if (hasNormal) {
-        QVector<float> flat = readVec(norView, vertexCount, 3, norView.normalized);
-        auto attribute = geometry.attribute(cwGeometry::Semantic::Normal);
-        for (int i = 0; i < vertexCount; i++) {
-            geometry.set(attribute, i, QVector3D(flat[i * 3 + 0], flat[i * 3 + 1], flat[i * 3 + 2]));
+        switch (format) {
+        case cwGeometry::AttributeFormat::Float: {
+            const QVector<float> flat = hasView ? readVec(*view, vertexCount, comps, view->normalized)
+                                                 : QVector<float>(vertexCount * comps, 0.0f);
+            auto attribute = geometry.attribute(semantic);
+            for (int i = 0; i < vertexCount; i++) {
+                geometry.set(attribute, i, flat[i]);
+            }
+        } break;
+        case cwGeometry::AttributeFormat::Vec2: {
+            const QVector<float> flat = hasView ? readVec(*view, vertexCount, comps, view->normalized)
+                                                 : QVector<float>(vertexCount * comps, 0.0f);
+            auto attribute = geometry.attribute(semantic);
+            for (int i = 0; i < vertexCount; i++) {
+                geometry.set(attribute, i, QVector2D(flat[i * 2 + 0], flat[i * 2 + 1]));
+            }
+        } break;
+        case cwGeometry::AttributeFormat::Vec3: {
+            const QVector<float> flat = hasView ? readVec(*view, vertexCount, comps, view->normalized)
+                                                 : QVector<float>(vertexCount * comps, 0.0f);
+            auto attribute = geometry.attribute(semantic);
+            for (int i = 0; i < vertexCount; i++) {
+                geometry.set(attribute, i, QVector3D(flat[i * 3 + 0], flat[i * 3 + 1], flat[i * 3 + 2]));
+            }
+        } break;
+        case cwGeometry::AttributeFormat::Vec4: {
+            const QVector<float> flat = hasView ? readVec(*view, vertexCount, comps, view->normalized)
+                                                 : QVector<float>(vertexCount * comps, 0.0f);
+            auto attribute = geometry.attribute(semantic);
+            for (int i = 0; i < vertexCount; i++) {
+                geometry.set(attribute, i, QVector4D(flat[i * 4 + 0], flat[i * 4 + 1], flat[i * 4 + 2], flat[i * 4 + 3]));
+            }
+        } break;
         }
-    }
+    };
 
-    if (hasTangent) {
-        QVector<float> flat = readVec(tanView, vertexCount, 4, tanView.normalized);
-        auto attribute = geometry.attribute(cwGeometry::Semantic::Tangent);
-        for (int i = 0; i < vertexCount; i++) {
-            geometry.set(attribute, i, QVector4D(flat[i * 4 + 0], flat[i * 4 + 1], flat[i * 4 + 2], flat[i * 4 + 3]));
+    cwGeometry geometry;
+    if (requestedLayout.isEmpty()) {
+        // Build geometry with a declarative layout from available attributes
+        QVector<cwGeometry::AttributeDesc> geometryDescription {
+            { cwGeometry::Semantic::Position,  cwGeometry::AttributeFormat::Vec3 }
+        };
+
+        if (hasNormal) {
+            geometryDescription.append({cwGeometry::Semantic::Normal, cwGeometry::AttributeFormat::Vec3});
         }
-    }
 
-    if (hasTex0) {
-        QVector<float> flat = readVec(uv0View, vertexCount, 2, uv0View.normalized);
-        auto attribute = geometry.attribute(cwGeometry::Semantic::TexCoord0);
-        for (int i = 0; i < vertexCount; i++) {
-            geometry.set(attribute, i, QVector2D(flat[i * 2 + 0], flat[i * 2 + 1]));
+        if (hasTangent) {
+            geometryDescription.append({cwGeometry::Semantic::Tangent, cwGeometry::AttributeFormat::Vec4});
+        }
+
+        if (hasTex0) {
+            geometryDescription.append({cwGeometry::Semantic::TexCoord0, cwGeometry::AttributeFormat::Vec2});
+        }
+
+        geometry = cwGeometry(geometryDescription);
+        geometry.resizeVertices(vertexCount);
+
+        // Positions (vec3). glTF requires float here, but we still use the generic path.
+        {
+            QVector<float> flat = readVec(posView, vertexCount, 3, posView.normalized);
+            auto attribute = geometry.attribute(cwGeometry::Semantic::Position);
+            for (int i = 0; i < vertexCount; i++) {
+                geometry.set(attribute, i, QVector3D(flat[i*3+0], flat[i*3+1], flat[i*3+2]));
+            }
+        }
+
+        if (hasNormal) {
+            QVector<float> flat = readVec(norView, vertexCount, 3, norView.normalized);
+            auto attribute = geometry.attribute(cwGeometry::Semantic::Normal);
+            for (int i = 0; i < vertexCount; i++) {
+                geometry.set(attribute, i, QVector3D(flat[i * 3 + 0], flat[i * 3 + 1], flat[i * 3 + 2]));
+            }
+        }
+
+        if (hasTangent) {
+            QVector<float> flat = readVec(tanView, vertexCount, 4, tanView.normalized);
+            auto attribute = geometry.attribute(cwGeometry::Semantic::Tangent);
+            for (int i = 0; i < vertexCount; i++) {
+                geometry.set(attribute, i, QVector4D(flat[i * 4 + 0], flat[i * 4 + 1], flat[i * 4 + 2], flat[i * 4 + 3]));
+            }
+        }
+
+        if (hasTex0) {
+            QVector<float> flat = readVec(uv0View, vertexCount, 2, uv0View.normalized);
+            auto attribute = geometry.attribute(cwGeometry::Semantic::TexCoord0);
+            for (int i = 0; i < vertexCount; i++) {
+                geometry.set(attribute, i, QVector2D(flat[i * 2 + 0], flat[i * 2 + 1]));
+            }
+        }
+    } else {
+        geometry = cwGeometry(requestedLayout);
+        geometry.resizeVertices(vertexCount);
+
+        for (const auto& attr : requestedLayout) {
+            const AttributeView* view = nullptr;
+            AttributeView viewStorage{};
+
+            switch (attr.semantic) {
+            case cwGeometry::Semantic::Position:
+                view = &posView;
+                break;
+            case cwGeometry::Semantic::Normal:
+                if (hasNormal) {
+                    viewStorage = norView;
+                    view = &viewStorage;
+                }
+                break;
+            case cwGeometry::Semantic::Tangent:
+                if (hasTangent) {
+                    viewStorage = tanView;
+                    view = &viewStorage;
+                }
+                break;
+            case cwGeometry::Semantic::TexCoord0:
+                if (hasTex0) {
+                    viewStorage = uv0View;
+                    view = &viewStorage;
+                }
+                break;
+            case cwGeometry::Semantic::TexCoord1:
+            case cwGeometry::Semantic::Color0:
+            case cwGeometry::Semantic::Bitangent:
+            case cwGeometry::Semantic::Custom:
+                view = nullptr;
+                break;
+            }
+
+            fillAttribute(geometry, attr.semantic, attr.format, view);
         }
     }
 
@@ -327,7 +412,8 @@ static QMatrix4x4 localMatrix(const tinygltf::Node& node)
 static void gatherMeshesRecursive(const tinygltf::Model& model,
                                   int nodeIndex,
                                   const QMatrix4x4& parent,
-                                  QVector<MeshCPU>& outMeshes)
+                                  QVector<MeshCPU>& outMeshes,
+                                  const QVector<cwGeometry::AttributeDesc>& requestedLayout)
 {
     const auto& node = model.nodes[nodeIndex];
     QMatrix4x4 world = parent * localMatrix(node);
@@ -340,7 +426,7 @@ static void gatherMeshesRecursive(const tinygltf::Model& model,
         m.modelMatrix = world;
 
         for (const auto& prim : gltfMesh.primitives) {
-            m.geometries.push_back(buildGeometryFromPrimitive(model, prim));
+            m.geometries.push_back(buildGeometryFromPrimitive(model, prim, requestedLayout));
             // Simple “dominant” material; switch to per-primitive if needed
             m.material = loadMaterialCPU(model, prim.material);
         }
@@ -349,11 +435,16 @@ static void gatherMeshesRecursive(const tinygltf::Model& model,
     }
 
     for (int child : node.children) {
-        gatherMeshesRecursive(model, child, world, outMeshes);
+        gatherMeshesRecursive(model, child, world, outMeshes, requestedLayout);
     }
 }
 
 SceneCPU Loader::loadGltf(const QString &filePath)
+{
+    return loadGltf(filePath, LoadOptions{});
+}
+
+SceneCPU Loader::loadGltf(const QString &filePath, const LoadOptions& options)
 {
     tinygltf::TinyGLTF loader;
     tinygltf::Model model;
@@ -381,7 +472,7 @@ SceneCPU Loader::loadGltf(const QString &filePath)
     }
 
     for (int n : std::as_const(roots)) {
-        gatherMeshesRecursive(model, n, QMatrix4x4(), scene.meshes);
+        gatherMeshesRecursive(model, n, QMatrix4x4(), scene.meshes, options.requestedLayout);
     }
 
     // CPU: collect textures actually referenced by materials (here we provision array sized to textures count)

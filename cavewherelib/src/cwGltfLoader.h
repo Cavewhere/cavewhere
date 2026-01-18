@@ -68,11 +68,15 @@ struct SceneCPU {
     void dump() const; // declaration
 };
 
+struct LoadOptions {
+    QVector<cwGeometry::AttributeDesc> requestedLayout;
+};
 
 class Loader
 {
 public:
     static SceneCPU loadGltf(const QString& filePath);
+    static SceneCPU loadGltf(const QString& filePath, const LoadOptions& options);
 
 private:
     // No instances

@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/">
+        <file>datasets/test_cwGltfLoader/test.glb</file>
+    </qresource>
+</RCC>

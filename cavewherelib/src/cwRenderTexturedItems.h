@@ -18,6 +18,8 @@ public:
 
     cwRenderTexturedItems(QObject* parent = nullptr);
 
+    static QVector<cwGeometry::AttributeDesc> geometryLayout();
+
     struct Item {
         cwGeometry geometry;
         QImage texture;
