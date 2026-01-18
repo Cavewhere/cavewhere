@@ -65,7 +65,10 @@ void cwTransformUpdater::addPointItem(QQuickItem *object) {
     PointItems.insert(object);
     connect(object, &QQuickItem::destroyed, this, &cwTransformUpdater::pointItemDeleted);
     connect(object, SIGNAL(position3DChanged()), this, SLOT(handlePointItemDataChanged()));
-    updatePoint(object);
+
+    if(Camera) {
+        updatePoint(object);
+    }
 }
 
 /**
@@ -154,6 +157,10 @@ void cwTransformUpdater::pointItemDeleted(QObject* object) {
   This will update the position of a object, when it has changed.
   */
 void cwTransformUpdater::handlePointItemDataChanged() {
+    if (Camera == nullptr) {
+        return;
+    }
+
     QQuickItem* item = qobject_cast<QQuickItem*>(sender());
     if(PointItems.contains(item)) {
         updatePoint(item);
