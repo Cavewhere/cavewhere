@@ -204,6 +204,9 @@ void cwLabel3dView::setCamera(cwCamera* camera) {
  */
 void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
 {
+    if(m_camera == nullptr) {
+        return;
+    }
 
     Q_ASSERT(group->m_labels.size() == group->m_labelItems.size());
 
@@ -252,7 +255,8 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
 
         if(m_camera->isQtViewportCoordinateClipped(qtViewportCoordinate)) {
             reject();
-        };
+            return;
+        }
 
         //See if stationName overlaps with other stations
         QPointF topLeftPoint(qtViewportCoordinate.x(), qtViewportCoordinate.y());
@@ -288,18 +292,14 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
     };
 
     auto sortVisibleEntries = [&]() {
-        const QPointF viewportCenter = viewportRect.center();
-
         group->m_visibleEntries.reserve(labelCount);
         group->m_visibleEntries.clear();
         for(int i = 0; i < labelCount; i++) {
             if(labels.at(i).wasVisible()) {
                 QVector3D qtViewportCoordinate = matrix.map(labels.at(i).position());
-                const QPointF position(qtViewportCoordinate.x(), qtViewportCoordinate.y());
                 group->m_visibleEntries.emplaceBack(i,
                                                     labels.at(i).visibleStreak(),
-                                                    position,
-                                                    qtViewportCoordinate.z());
+                                                    qtViewportCoordinate);
             }
         }
 
@@ -308,8 +308,8 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
                       if(lhs.priority != rhs.priority) {
                           return lhs.priority > rhs.priority;
                       }
-                      if(lhs.distanceToCenterSquared != rhs.distanceToCenterSquared) {
-                          return lhs.distanceToCenterSquared < rhs.distanceToCenterSquared;
+                      if(lhs.position.z() != rhs.position.z()) {
+                          return lhs.position.z() < rhs.position.z();
                       }
                       if(lhs.position.y() != rhs.position.y()) {
                           return lhs.position.y() < rhs.position.y();

@@ -49,8 +49,7 @@ private:
     struct VisibleEntry {
         int index;
         int priority;
-        QPointF position;
-        double distanceToCenterSquared;
+        QVector3D position;
     };
     QVector<VisibleEntry> m_visibleEntries;
     
