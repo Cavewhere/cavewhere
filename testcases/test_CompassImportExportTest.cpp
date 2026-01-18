@@ -7,6 +7,7 @@
 
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 //Cavewhere includes
 #include "cwProject.h"
@@ -298,4 +299,64 @@ TEST_CASE("Test 15 char format is okay", "[Compass]") {
 
     QList<cwCaveData> caves = importFromCompass->caves();
     REQUIRE(caves.size() == 1);
+}
+
+TEST_CASE("Compass importer enables backsights and reads data - ISSUE #249", "[Compass]") {
+    QString datasetFile = copyToTempFolder(":/datasets/compass/A.dat");
+
+    auto importFromCompass = std::make_unique<cwCompassImporter>();
+    cwSignalSpy messageSpy(importFromCompass.get(), &cwCompassImporter::statusMessage);
+
+    importFromCompass->setCompassDataFiles(QStringList() << datasetFile);
+    importFromCompass->start();
+    importFromCompass->waitToFinish();
+
+    if(!messageSpy.isEmpty()) {
+        for(int i = 0; i < messageSpy.size(); i++) {
+            QList<QVariant> messageArgs = messageSpy.at(i);
+            foreach(QVariant arg, messageArgs) {
+                INFO("Spy Arg:" << arg.toString().toStdString());
+            }
+        }
+    }
+
+    CHECK(messageSpy.isEmpty());
+
+    QList<cwCaveData> caves = importFromCompass->caves();
+    REQUIRE(caves.size() == 1);
+
+    auto importedCave = std::make_unique<cwCave>();
+    importedCave->setData(caves.first());
+
+    REQUIRE(importedCave->trips().size() == 1);
+    cwTrip* trip = importedCave->trips().first();
+    CHECK(trip->calibrations()->hasBackSights());
+
+    const auto chunks = trip->chunks();
+    REQUIRE(chunks.size() > 0);
+    cwSurveyChunk* firstChunk = chunks.first();
+    REQUIRE(firstChunk->shotCount() > 0);
+
+    const cwShot firstShot = firstChunk->shot(0);
+    CHECK(firstShot.backCompass().value().toDouble() == Catch::Approx(157.60));
+    CHECK(firstShot.backClino().value().toDouble() == Catch::Approx(13.40));
+
+    auto findShot = [&chunks](const QString& fromName, const QString& toName, cwShot& foundShot) -> bool {
+        for(cwSurveyChunk* chunk : chunks) {
+            for(int i = 0; i < chunk->shotCount(); i++) {
+                const cwStation fromStation = chunk->station(i);
+                const cwStation toStation = chunk->station(i + 1);
+                if(fromStation.name() == fromName && toStation.name() == toName) {
+                    foundShot = chunk->shot(i);
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+
+    cwShot a3ToA1Shot;
+    REQUIRE(findShot("A3", "A1", a3ToA1Shot));
+    CHECK(a3ToA1Shot.backCompass().value().toDouble() == Catch::Approx(178.20));
+    CHECK(a3ToA1Shot.backClino().value().toDouble() == Catch::Approx(-10.80));
 }

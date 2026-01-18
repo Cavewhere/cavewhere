@@ -431,12 +431,16 @@ void cwCompassImporter::parseSurveyFormatAndCalibration(QFile *file)
                                    .arg(LineCount));
             }
 
-            if(fileFormatString.size() >= 12) {
-                if(fileFormatString.at(11) == 'B') {
-                    CurrentTrip->calibrations()->setBackSights(true);
-                } else {
-                    CurrentTrip->calibrations()->setBackSights(false);
+            if(fileFormatString.size() >= 11) {
+                bool hasBackSights = false;
+                if(fileFormatString.contains('B') || fileFormatString.contains('b')) {
+                    hasBackSights = true;
                 }
+                // 15-char Compass formats use lowercase a/d to indicate backsight azimuth/inclination.
+                if(fileFormatString.contains('a') || fileFormatString.contains('d')) {
+                    hasBackSights = true;
+                }
+                CurrentTrip->calibrations()->setBackSights(hasBackSights);
             }
 
         } else if(fileFormatString.size() == 1) {
@@ -508,7 +512,11 @@ void cwCompassImporter::parseSurveyData(QFile *file)
             QString rightString = dataStrings.at(6);
             QString upString = dataStrings.at(7);
             QString downString = dataStrings.at(8);
-            QString flags = dataStrings.size() >= 10 ? dataStrings.at(9) : QString();
+            int flagsIndex = 9;
+            if(CurrentTrip->calibrations()->hasBackSights()) {
+                flagsIndex = 11;
+            }
+            QString flags = dataStrings.size() > flagsIndex ? dataStrings.at(flagsIndex) : QString();
 
             cwStation fromStation = StationRenamer.createStation(fromStationName);
             cwStation toStation = StationRenamer.createStation(toStationName);
