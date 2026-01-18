@@ -177,6 +177,7 @@ void cwLabel3dView::releaseLabelItem(cwLabel3dGroup* group, int labelIndex)
     }
 
     item->setVisible(false);
+    item->setOpacity(0.0);
     group->ItemPool.append(item);
     group->LabelItems[labelIndex] = nullptr;
 }
@@ -213,7 +214,7 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
     const QSizeF averageSize = m_averageLabelSize;
 
     const int labelCount = labels.size();
-    constexpr int visibilityThreshold = 5;
+    constexpr int visibilityThreshold = 4;
 
     auto processIndex = [&](int i) {
         QQuickItem* item = labelItem(group, i);
@@ -222,7 +223,7 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
 
         auto increaseVisiblity = [&]() {
             label.setVisibleStreak(std::min(label.visibleStreak() + 1, visibilityThreshold));
-            label.setPriority(label.priority() + 1);
+            // label.setPriority(label.priority() + 1);
             // label.setVisibleStreak(label.visibleStreak() + 1);
         };
 
@@ -275,23 +276,45 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
         // }
     };
 
-    QVector<int> visibleIndices;
-    visibleIndices.reserve(labelCount);
-    for(int i = 0; i < labelCount; i++) {
-        if(labels.at(i).wasVisible()) {
-            visibleIndices.append(i);
+    auto sortVisibleEntries = [&]() {
+        const QPointF viewportCenter = viewportRect.center();
+        // QVector<VisibleEntry> visibleEntries
+        group->m_visibleEntries.reserve(labelCount);
+        group->m_visibleEntries.clear();
+        for(int i = 0; i < labelCount; i++) {
+            if(labels.at(i).wasVisible()) {
+                QVector3D qtViewportCoordinate = matrix.map(labels.at(i).position());
+                const QPointF position(qtViewportCoordinate.x(), qtViewportCoordinate.y());
+                group->m_visibleEntries.emplaceBack(i,
+                                                    labels.at(i).visibleStreak(),
+                                                    position,
+                                                    qtViewportCoordinate.z());
+            }
         }
-    }
 
-    std::stable_sort(visibleIndices.begin(), visibleIndices.end(),
-                     [&](int lhs, int rhs) {
-                         return (labels.at(lhs).priority())
-                                 > (labels.at(rhs).priority());
-                     });
+        std::sort(group->m_visibleEntries.begin(), group->m_visibleEntries.end(),
+                  [&](const auto& lhs, const auto& rhs) {
+                      if(lhs.priority != rhs.priority) {
+                          return lhs.priority > rhs.priority;
+                      }
+                      if(lhs.distanceToCenterSquared != rhs.distanceToCenterSquared) {
+                          return lhs.distanceToCenterSquared < rhs.distanceToCenterSquared;
+                      }
+                      if(lhs.position.y() != rhs.position.y()) {
+                          return lhs.position.y() < rhs.position.y();
+                      }
+                      if(lhs.position.x() != rhs.position.x()) {
+                          return lhs.position.x() < rhs.position.x();
+                      }
+                      return lhs.index < rhs.index;
+                  });
+    };
+
+    sortVisibleEntries();
 
     //Go through all the station points and render the text (visible items first)
-    for(int i = 0; i < visibleIndices.size(); i++) {
-        processIndex(visibleIndices.at(i));
+    for(int i = 0; i < group->m_visibleEntries.size(); i++) {
+        processIndex(group->m_visibleEntries.at(i).index);
     }
 
     for(int i = 0; i < labelCount; i++) {

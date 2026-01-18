@@ -26,9 +26,6 @@ public:
     void setPosition(QVector3D worldCoords);
     QVector3D position() const;
 
-    void setPriority(int priority);
-    int priority() const;
-
     void setWasVisible(int wasVisible);
     int wasVisible() const;
 
@@ -39,7 +36,6 @@ private:
     QFont Font;
     QString Text;
     QVector3D Position;
-    int Priority = 0;
     int WasVisible = 0;
     int VisibleStreak = std::numeric_limits<int>::max();
 
@@ -63,16 +59,6 @@ inline void cwLabel3dItem::setPosition(QVector3D worldCoords)
 inline QVector3D cwLabel3dItem::position() const
 {
     return Position;
-}
-
-inline void cwLabel3dItem::setPriority(int priority)
-{
-    Priority = priority;
-}
-
-inline int cwLabel3dItem::priority() const
-{
-    return Priority;
 }
 
 inline void cwLabel3dItem::setWasVisible(int wasVisible)

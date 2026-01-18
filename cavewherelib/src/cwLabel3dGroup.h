@@ -42,7 +42,17 @@ private:
     QPointer<cwLabel3dView> ParentView;
     QList<cwLabel3dItem> Labels;
     QVector<QQuickItem*> LabelItems;
+
+    //For caching and memory efficientcy
     QVector<QQuickItem*> ItemPool;
+
+    struct VisibleEntry {
+        int index;
+        int priority;
+        QPointF position;
+        double distanceToCenterSquared;
+    };
+    QVector<VisibleEntry> m_visibleEntries;
     
 };
 
