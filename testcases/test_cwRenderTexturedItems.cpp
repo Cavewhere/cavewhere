@@ -2,6 +2,7 @@
 
 #include <QColor>
 #include <QImage>
+#include <QVector2D>
 #include <QVector3D>
 #include <QVector>
 
@@ -13,13 +14,16 @@ namespace {
 cwGeometry makeGeometry(int vertexCount, float offset)
 {
     cwGeometry geometry({
-        { cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3 }
+        { cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3 },
+        { cwGeometry::Semantic::TexCoord0, cwGeometry::AttributeFormat::Vec2 }
     });
 
     geometry.resizeVertices(vertexCount);
     const auto* positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
+    const auto* texCoordAttribute = geometry.attribute(cwGeometry::Semantic::TexCoord0);
     for (int i = 0; i < vertexCount; ++i) {
         geometry.set(positionAttribute, i, QVector3D(offset + float(i), offset, float(i)));
+        geometry.set(texCoordAttribute, i, QVector2D(float(i), offset));
     }
 
     QVector<uint32_t> indices;
