@@ -509,9 +509,9 @@ void cwCompassImporter::parseSurveyData(QFile *file)
             QString bearingString = dataStrings.at(3);
             QString inclinationString = dataStrings.at(4);
             QString leftString = dataStrings.at(5);
-            QString rightString = dataStrings.at(6);
-            QString upString = dataStrings.at(7);
-            QString downString = dataStrings.at(8);
+            QString upString = dataStrings.at(6);
+            QString downString = dataStrings.at(7);
+            QString rightString = dataStrings.at(8);
             int flagsIndex = 9;
             if(CurrentTrip->calibrations()->hasBackSights()) {
                 flagsIndex = 11;
@@ -531,6 +531,7 @@ void cwCompassImporter::parseSurveyData(QFile *file)
             double down;
 
             QString missingEntry = "-999.00";
+            QString lrudMissingEntry = "-9.90";
 
             cwUnits::LengthUnit distanceUnits = CurrentTrip->calibrations()->distanceUnit();
 
@@ -559,22 +560,26 @@ void cwCompassImporter::parseSurveyData(QFile *file)
                 return QString::number(value, 'g', 2);
             };
 
-            if(leftString != missingEntry) {
+            auto isLrudMissing = [&missingEntry, &lrudMissingEntry](const QString& value) {
+                return value == missingEntry || value == lrudMissingEntry;
+            };
+
+            if(!isLrudMissing(leftString)) {
                 if(!convertNumber(leftString, "left", &left)) { CurrentFileGood = false; return; }
                 fromStation.setLeft(toString(cwUnits::convert(left, cwUnits::Feet, distanceUnits)));
             }
 
-            if(rightString != missingEntry) {
+            if(!isLrudMissing(rightString)) {
                 if(!convertNumber(rightString, "right", &right)) { CurrentFileGood = false; return; }
                 fromStation.setRight(toString(cwUnits::convert(right, cwUnits::Feet, distanceUnits)));
             }
 
-            if(upString != missingEntry) {
+            if(!isLrudMissing(upString)) {
                 if(!convertNumber(upString, "up", &up)) { CurrentFileGood = false; return; }
                 fromStation.setUp(toString(cwUnits::convert(up, cwUnits::Feet, distanceUnits)));
             }
 
-            if(downString != missingEntry) {
+            if(!isLrudMissing(downString)) {
                 if(!convertNumber(downString, "down", &down)) { CurrentFileGood = false; return; }
                 fromStation.setDown(toString(cwUnits::convert(down, cwUnits::Feet, distanceUnits)));
             }

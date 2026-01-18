@@ -19,6 +19,7 @@
 #include "cwTrip.h"
 #include "cwSurveyChunk.h"
 #include "cwStation.h"
+#include "cwDistanceReading.h"
 
 //Our includes
 #include "TestHelper.h"
@@ -359,4 +360,63 @@ TEST_CASE("Compass importer enables backsights and reads data - ISSUE #249", "[C
     REQUIRE(findShot("A3", "A1", a3ToA1Shot));
     CHECK(a3ToA1Shot.backCompass().value().toDouble() == Catch::Approx(178.20));
     CHECK(a3ToA1Shot.backClino().value().toDouble() == Catch::Approx(-10.80));
+}
+
+TEST_CASE("Compass importer ignores -9.90 LRUD values - ISSUE #248", "[Compass]") {
+    QString datasetFile = copyToTempFolder(":/datasets/compass/A.dat");
+
+    auto importFromCompass = std::make_unique<cwCompassImporter>();
+    cwSignalSpy messageSpy(importFromCompass.get(), &cwCompassImporter::statusMessage);
+
+    importFromCompass->setCompassDataFiles(QStringList() << datasetFile);
+    importFromCompass->start();
+    importFromCompass->waitToFinish();
+
+    if(!messageSpy.isEmpty()) {
+        for(int i = 0; i < messageSpy.size(); i++) {
+            QList<QVariant> messageArgs = messageSpy.at(i);
+            foreach(QVariant arg, messageArgs) {
+                INFO("Spy Arg:" << arg.toString().toStdString());
+            }
+        }
+    }
+
+    CHECK(messageSpy.isEmpty());
+
+    QList<cwCaveData> caves = importFromCompass->caves();
+    REQUIRE(caves.size() == 1);
+
+    auto importedCave = std::make_unique<cwCave>();
+    importedCave->setData(caves.first());
+
+    REQUIRE(importedCave->trips().size() == 1);
+    const auto chunks = importedCave->trips().first()->chunks();
+    REQUIRE(chunks.size() > 0);
+
+    cwStation a4FromStation;
+    bool foundA4ToA5 = false;
+    for(cwSurveyChunk* chunk : chunks) {
+        for(int i = 0; i < chunk->shotCount(); i++) {
+            const cwStation fromStation = chunk->station(i);
+            const cwStation toStation = chunk->station(i + 1);
+            if(fromStation.name() == "A4" && toStation.name() == "A5") {
+                a4FromStation = fromStation;
+                foundA4ToA5 = true;
+                break;
+            }
+        }
+        if(foundA4ToA5) {
+            break;
+        }
+    }
+
+    REQUIRE(foundA4ToA5);
+    CHECK(a4FromStation.left().state() == cwDistanceReading::State::Empty);
+    CHECK(a4FromStation.up().state() == cwDistanceReading::State::Empty);
+    CHECK(a4FromStation.down().state() == cwDistanceReading::State::Valid);
+    CHECK(a4FromStation.right().state() == cwDistanceReading::State::Valid);
+    CHECK(a4FromStation.left().value().isEmpty());
+    CHECK(a4FromStation.up().value().isEmpty());
+    CHECK(a4FromStation.down().value().toDouble() == Catch::Approx(5.00));
+    CHECK(a4FromStation.right().value().toDouble() == Catch::Approx(6.40));
 }
