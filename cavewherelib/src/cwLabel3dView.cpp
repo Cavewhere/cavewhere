@@ -217,28 +217,19 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
     const QSizeF averageSize = m_averageLabelSize;
 
     const int labelCount = labels.size();
-    constexpr int visibilityThreshold = 4;
+    constexpr double visibleMarginFactor = 1.05;
+    constexpr double invisibleMarginFactor = 2.0;
 
     auto processIndex = [&](int i) {
         QQuickItem* item = labelItem(group, i);
         cwLabel3dItem& label = labels[i];
         QVector3D qtViewportCoordinate = matrix.map(label.position());
 
-        auto increaseVisiblity = [&]() {
-            label.setVisibleStreak(std::min(label.visibleStreak() + 1, visibilityThreshold));
-            // label.setPriority(label.priority() + 1);
-            // label.setVisibleStreak(label.visibleStreak() + 1);
-        };
-
         auto accept = [&]() {
-            increaseVisiblity();
-
-            if(label.visibleStreak() >= visibilityThreshold) {
-                if(item == nullptr) {
-                    item = acquireLabelItem(group, i);
-                    item->setProperty("text", label.text());
-                    item->setVisible(true);
-                }
+            if(item == nullptr) {
+                item = acquireLabelItem(group, i);
+                item->setProperty("text", label.text());
+                item->setVisible(true);
             }
 
             if (item) {
@@ -247,7 +238,6 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
         };
 
         auto reject = [&]() {
-            label.setVisibleStreak(0);
             if(item && item->isVisible()) {
                 releaseLabelItem(group, i);
             }
@@ -270,10 +260,13 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
             }
         }
 
-        constexpr double margin = 1.1;
-        stationNameTextSize = stationNameTextSize * margin;
-        QRectF stationRect(topLeftPoint, stationNameTextSize);
-        stationRect.moveTop(stationRect.top() - stationNameTextSize.height() / margin);
+        const double marginFactor = (item != nullptr && item->isVisible())
+                ? visibleMarginFactor
+                : invisibleMarginFactor;
+        stationNameTextSize = stationNameTextSize * marginFactor;
+        QRectF stationRect(QPointF(topLeftPoint.x() - stationNameTextSize.width() * 0.5,
+                                   topLeftPoint.y() - stationNameTextSize.height() * 0.5),
+                           stationNameTextSize);
         bool couldAddText = m_labelKdTree.addRect(stationRect.toAlignedRect());
 
         if(couldAddText) {
@@ -297,17 +290,12 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
         for(int i = 0; i < labelCount; i++) {
             if(labels.at(i).wasVisible()) {
                 QVector3D qtViewportCoordinate = matrix.map(labels.at(i).position());
-                group->m_visibleEntries.emplaceBack(i,
-                                                    labels.at(i).visibleStreak(),
-                                                    qtViewportCoordinate);
+                group->m_visibleEntries.emplaceBack(i, qtViewportCoordinate);
             }
         }
 
         std::sort(group->m_visibleEntries.begin(), group->m_visibleEntries.end(),
                   [&](const auto& lhs, const auto& rhs) {
-                      if(lhs.priority != rhs.priority) {
-                          return lhs.priority > rhs.priority;
-                      }
                       if(lhs.position.z() != rhs.position.z()) {
                           return lhs.position.z() < rhs.position.z();
                       }

@@ -29,15 +29,11 @@ public:
     void setWasVisible(int wasVisible);
     int wasVisible() const;
 
-    void setVisibleStreak(int visibleStreak);
-    int visibleStreak() const;
-
 private:
     QFont Font;
     QString Text;
     QVector3D Position;
     int WasVisible = 0;
-    int VisibleStreak = std::numeric_limits<int>::max();
 
 };
 
@@ -69,16 +65,6 @@ inline void cwLabel3dItem::setWasVisible(int wasVisible)
 inline int cwLabel3dItem::wasVisible() const
 {
     return WasVisible;
-}
-
-inline void cwLabel3dItem::setVisibleStreak(int visibleStreak)
-{
-    VisibleStreak = visibleStreak;
-}
-
-inline int cwLabel3dItem::visibleStreak() const
-{
-    return VisibleStreak;
 }
 
 
