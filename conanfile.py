@@ -70,10 +70,15 @@ class CaveWhereConan(ConanFile):
         #Disable for windows
         self.options["protobuf"].with_zlib=True
         is_mobile = self.options.mobile or self.settings.os in ["iOS", "Android"]
-        # Desktop uses shared protobuf to avoid duplicate static runtimes in plugin-heavy builds.
-        self.options["protobuf"].shared = not is_mobile
-        # Protobuf shared requires abseil shared on desktop (especially on Windows).
-        self.options["abseil"].shared = not is_mobile
+        is_windows = self.settings.os == "Windows"
+        # Windows desktop: shared protobuf requires shared abseil.
+        if not is_mobile and is_windows:
+            self.options["protobuf"].shared = True
+            self.options["abseil"].shared = True
+        else:
+            # macOS/Linux desktop + mobile: keep protobuf/abseil static.
+            self.options["protobuf"].shared = True
+            self.options["abseil"].shared = False
 
         self.options["openssl"].shared = True
 
