@@ -34,6 +34,14 @@ add_subdirectory(QQuickGit)
 
 set(SURVEX_CONAN OFF CACHE BOOL "Use survex Conan to manage dependencies" FORCE)
 option(MOBILE_BUILD "Builds as mobile: for ios or android" OFF)
+if(ANDROID OR IOS)
+    set(MOBILE_BUILD ON CACHE BOOL "Builds as mobile: for ios or android" FORCE)
+endif()
+
+if(MOBILE_BUILD)
+    # Mobile builds are fully static (including protobuf); tests are disabled to avoid duplicate protobuf runtimes via plugins.
+    set(BUILD_TESTING OFF CACHE BOOL "Disable tests for mobile builds" FORCE)
+endif()
 
 add_subdirectory(MarkScope)
 add_subdirectory(QuickQanava)
@@ -230,7 +238,7 @@ if(BUILD_TESTING)
         Catch2::Catch2
         cavewhere-testlib
         cavewherelib
-        protobuf::protobuf
+        protobuf::libprotobuf
         SignalSpyChecker
 
     )

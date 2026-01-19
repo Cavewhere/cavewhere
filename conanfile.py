@@ -69,6 +69,9 @@ class CaveWhereConan(ConanFile):
         #This prevents protoc from needing zlib which adds a failing rpath protoc
         #Disable for windows
         self.options["protobuf"].with_zlib=True
+        is_mobile = self.options.mobile or self.settings.os in ["iOS", "Android"]
+        # Desktop uses shared protobuf to avoid duplicate static runtimes in plugin-heavy builds.
+        self.options["protobuf"].shared = not is_mobile
 
         self.options["openssl"].shared = True
 

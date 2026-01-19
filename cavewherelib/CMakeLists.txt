@@ -45,7 +45,11 @@ else()
     unset(BUILD_SHARED_LIBS CACHE)
 endif()
 
-qt_add_library(cavewherelib STATIC)
+if(MOBILE_BUILD)
+    qt_add_library(cavewherelib STATIC)
+else()
+    qt_add_library(cavewherelib SHARED)
+endif()
 
 #RESOURCE_PREFIX defaults to /qt/qml/ which is the default import path of the QML engine
 # qmake_policy(SET QTP0001 NEW)
@@ -78,7 +82,7 @@ target_link_libraries(cavewherelib
     qt6keychain
     PRIVATE
     TinyGLTF::TinyGLTF
-    protobuf::protobuf
+    protobuf::libprotobuf
     xxHash::xxhash
     MINIZIP::minizip
     # surveximg
