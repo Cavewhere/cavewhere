@@ -4,6 +4,7 @@
 
 //Our includes
 #include "cwShot.h"
+#include "cwCave.h"
 #include "cwTrip.h"
 #include "cwSaveLoad.h"
 #include "cwRootData.h"
@@ -21,6 +22,8 @@
 #include "cwTeam.h"
 #include "cwTeamMember.h"
 #include "cwSvgReader.h"
+#include "cwRegionIOTask.h"
+#include "cavewhereVersion.h"
 
 //Qt includes
 #include <QStandardPaths>
@@ -32,6 +35,7 @@
 #include <QPdfDocument>
 #endif
 #include <QHash>
+#include <QTemporaryDir>
 
 #include <set>
 
@@ -51,6 +55,19 @@ QDir testDir() {
     dir.mkdir("trip");
     dir.cd("trip");
     return dir;
+}
+
+template<typename ProtoT>
+static ProtoT loadProtoFromJsonFile(const QString& filename) {
+    QFile file(filename);
+    REQUIRE(file.open(QIODevice::ReadOnly));
+    const QByteArray data = file.readAll();
+    file.close();
+
+    ProtoT proto;
+    const auto status = google::protobuf::util::JsonStringToMessage(data.toStdString(), &proto);
+    REQUIRE(status.ok());
+    return proto;
 }
 
 TEST_CASE("cwSaveLoad saves pdf notes with unique filenames", "[cwSaveLoad]") {
@@ -78,6 +95,56 @@ TEST_CASE("cwSaveLoad saves pdf notes with unique filenames", "[cwSaveLoad]") {
     REQUIRE(notesDir.exists());
     const QStringList noteFiles = notesDir.entryList(QStringList() << "*.cwnote", QDir::Files);
     REQUIRE(noteFiles.size() == 2);
+}
+
+TEST_CASE("cwSaveLoad writes file version metadata for saved files", "[cwSaveLoad]") {
+    auto root = std::make_unique<cwRootData>();
+    auto project = root->project();
+    auto region = project->cavingRegion();
+
+    region->addCave();
+    auto cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->addTrip();
+
+    auto trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
+    const QString noteImagePath = copyToTempFolder("://datasets/test_cwNote/testpage.png");
+    trip->notes()->addFromFiles({QUrl::fromLocalFile(noteImagePath)});
+
+    const QString glbPath = copyToTempFolder("://datasets/test_cwSurveyNotesConcatModel/bones.glb");
+    trip->notesLiDAR()->addFromFiles({QUrl::fromLocalFile(glbPath)});
+
+    root->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    auto note = trip->notes()->notes().value(0);
+    REQUIRE(note != nullptr);
+
+    auto noteLidar = qobject_cast<cwNoteLiDAR*>(trip->notesLiDAR()->notes().value(0));
+    REQUIRE(noteLidar != nullptr);
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("version-test.cw"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+
+    auto checkFileVersion = [](const auto& proto) {
+        REQUIRE(proto.has_fileversion());
+        CHECK(proto.fileversion().version() == cwRegionIOTask::protoVersion());
+        CHECK(proto.fileversion().cavewhereversion() == CavewhereVersion.toStdString());
+    };
+
+    const QString caveFile = cwSaveLoad::absolutePath(cave);
+    const QString tripFile = cwSaveLoad::absolutePath(trip);
+    const QString noteFile = cwSaveLoad::absolutePath(note);
+    const QString noteLidarFile = cwSaveLoad::absolutePath(noteLidar);
+
+    checkFileVersion(loadProtoFromJsonFile<CavewhereProto::Cave>(caveFile));
+    checkFileVersion(loadProtoFromJsonFile<CavewhereProto::Trip>(tripFile));
+    checkFileVersion(loadProtoFromJsonFile<CavewhereProto::Note>(noteFile));
+    checkFileVersion(loadProtoFromJsonFile<CavewhereProto::NoteLiDAR>(noteLidarFile));
 }
 
 TEST_CASE("cwSaveLoad reloads missing image metadata", "[cwSaveLoad]") {

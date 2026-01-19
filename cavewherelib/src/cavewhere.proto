@@ -18,6 +18,7 @@ message CavingRegion {
 }
 
 message Cave {
+    optional FileVersion fileVersion = 9;
     optional string name = 8;
     repeated Trip trips = 2;
 
@@ -35,6 +36,7 @@ message Cave {
 }
 
 message Trip {
+    optional FileVersion fileVersion = 8;
     optional string name = 7;
     optional QtProto.QDate date = 2;
     optional TripCalibration tripCalibration = 4;
@@ -76,6 +78,7 @@ message SurveyNoteModel {
 }
 
 message Note {
+    optional FileVersion fileVersion = 6;
     optional Image image = 1;
     optional double rotation = 2;
     repeated Scrap scraps = 3;
@@ -376,6 +379,7 @@ message NoteLiDARTransformation {
 }
 
 message NoteLiDAR {
+    optional FileVersion fileVersion = 6;
     optional string name = 1;
     optional string fileName = 2;
     repeated NoteLiDARStation noteStations = 3;

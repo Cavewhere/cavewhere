@@ -988,6 +988,9 @@ QFuture<ResultBase> cwSaveLoad::save(const QDir &dir, const cwCave *cave)
 std::unique_ptr<CavewhereProto::Cave> cwSaveLoad::toProtoCave(const cwCave *cave)
 {
     auto protoCave = std::make_unique<CavewhereProto::Cave>();
+    auto fileVersion = protoCave->mutable_fileversion();
+    fileVersion->set_version(cwRegionIOTask::protoVersion());
+    cwRegionSaveTask::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
     *(protoCave->mutable_name()) = cave->name().toStdString();
     return protoCave;
 }
@@ -1005,6 +1008,9 @@ std::unique_ptr<CavewhereProto::Trip> cwSaveLoad::toProtoTrip(const cwTrip *trip
 {
     //Copy trip data into proto, on the main thread
     auto protoTrip = std::make_unique<CavewhereProto::Trip>();
+    auto fileVersion = protoTrip->mutable_fileversion();
+    fileVersion->set_version(cwRegionIOTask::protoVersion());
+    cwRegionSaveTask::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
 
     *(protoTrip->mutable_name()) = trip->name().toStdString();
 
@@ -1452,6 +1458,9 @@ std::unique_ptr<CavewhereProto::Note> cwSaveLoad::toProtoNote(const cwNote *note
 {
     //Copy trip data into proto, on the main thread
     auto protoNote = std::make_unique<CavewhereProto::Note>();
+    auto fileVersion = protoNote->mutable_fileversion();
+    fileVersion->set_version(cwRegionIOTask::protoVersion());
+    cwRegionSaveTask::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
 
     cwRegionSaveTask::saveImage(protoNote->mutable_image(), note->image());
 
@@ -1486,6 +1495,9 @@ std::unique_ptr<CavewhereProto::NoteLiDAR> cwSaveLoad::toProtoNoteLiDAR(const cw
 {
     //Copy trip data into proto, on the main thread
     auto protoNote = std::make_unique<CavewhereProto::NoteLiDAR>();
+    auto fileVersion = protoNote->mutable_fileversion();
+    fileVersion->set_version(cwRegionIOTask::protoVersion());
+    cwRegionSaveTask::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
 
     // cwRegionSaveTask::saveImage(protoNote->mutable_image(), note->image());
 
