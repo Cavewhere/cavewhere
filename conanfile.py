@@ -72,6 +72,8 @@ class CaveWhereConan(ConanFile):
         is_mobile = self.options.mobile or self.settings.os in ["iOS", "Android"]
         # Desktop uses shared protobuf to avoid duplicate static runtimes in plugin-heavy builds.
         self.options["protobuf"].shared = not is_mobile
+        # Protobuf shared requires abseil shared on desktop (especially on Windows).
+        self.options["abseil"].shared = not is_mobile
 
         self.options["openssl"].shared = True
 
