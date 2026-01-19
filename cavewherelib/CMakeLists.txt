@@ -83,10 +83,13 @@ target_link_libraries(cavewherelib
     PRIVATE
     TinyGLTF::TinyGLTF
     protobuf::libprotobuf
+    abseil::abseil
     xxHash::xxhash
     MINIZIP::minizip
     # surveximg
 )
+
+cw_link_absl_static(cavewherelib)
 
 # Conditionally find the package and include directories
 find_package(Qt6 COMPONENTS Pdf QUIET)

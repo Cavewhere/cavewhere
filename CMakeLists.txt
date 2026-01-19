@@ -4,6 +4,7 @@ project(CaveWhere VERSION 1.0.0 LANGUAGES CXX)
 
 find_package(Qt6 REQUIRED COMPONENTS Core)
 qt_standard_project_setup()
+find_package(absl REQUIRED)
 
 #Add address sanitizer for clang build only
 if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
@@ -17,6 +18,40 @@ set(QT_QML_GENERATE_QMLLS_INI ON CACHE BOOL "Generate QMLLS INI file")
 
 # Include the GenerateExportHeader module
 include(GenerateExportHeader)
+
+# Work around Conan Abseil CMakeDeps missing libs by explicitly linking libabsl_*.a.
+function(cw_link_absl_static target)
+    if(UNIX AND NOT APPLE)
+        set(_absl_lib_dirs "")
+        if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+            set(_absl_lib_dirs ${abseil_LIB_DIRS_DEBUG})
+        elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+            set(_absl_lib_dirs ${abseil_LIB_DIRS_RELEASE})
+        elseif(CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+            set(_absl_lib_dirs ${abseil_LIB_DIRS_RELWITHDEBINFO})
+        elseif(CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
+            set(_absl_lib_dirs ${abseil_LIB_DIRS_MINSIZEREL})
+        endif()
+
+        if(_absl_lib_dirs)
+            list(GET _absl_lib_dirs 0 _absl_lib_dir)
+            file(GLOB _absl_static_libs "${_absl_lib_dir}/libabsl_*.a")
+            if(_absl_static_libs)
+                target_link_libraries(
+                    ${target}
+                    PRIVATE
+                    "-Wl,--start-group"
+                    ${_absl_static_libs}
+                    "-Wl,--end-group"
+                )
+            else()
+                message(WARNING "Abseil static libs not found in ${_absl_lib_dir}")
+            endif()
+        else()
+            message(WARNING "Abseil lib directories not found; skipping absl static linking for ${target}")
+        endif()
+    endif()
+endfunction()
 
 # All subdirectoriesb
 add_subdirectory(QMath3d)
@@ -242,6 +277,7 @@ if(BUILD_TESTING)
         SignalSpyChecker
 
     )
+    cw_link_absl_static(cavewhere-test)
 
     #### Cavewhere qml tests ####
     # Add the executable
