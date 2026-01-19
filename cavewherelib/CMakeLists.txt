@@ -60,6 +60,10 @@ set_target_properties(cavewherelib PROPERTIES
     AUTOUIC ON
 )
 
+if(MSVC)
+    target_compile_options(cavewherelib PRIVATE /FI${CMAKE_CURRENT_BINARY_DIR}/CaveWhereLibExport.h)
+endif()
+
 target_link_libraries(cavewherelib
     PUBLIC
     Qt6::Core
@@ -256,7 +260,7 @@ endif()
 # Protobuf files
 file(GLOB protobuf_FILES "src/*.proto")
 set(Protobuf_IMPORT_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/src)
-protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${protobuf_FILES})
+protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS EXPORT_MACRO CAVEWHERE_LIB_EXPORT ${protobuf_FILES})
 target_sources(cavewherelib PRIVATE ${protobuf_FILES} ${protobuf_FILES})
 
 # Add the generated files to your target
