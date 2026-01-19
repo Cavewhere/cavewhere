@@ -12,6 +12,7 @@
 #include "cwGeometry.h"
 #include "cwTrackedImage.h"
 #include "cwTextureUploadTask.h"
+#include "CaveWhereLibExport.h"
 
 //Qt includes
 #include <QSharedData>
@@ -19,7 +20,7 @@
 #include <QVector3D>
 #include <QVector2D>
 
-class cwTriangulatedData
+class CAVEWHERE_LIB_EXPORT cwTriangulatedData
 {
 public:
     cwTriangulatedData();

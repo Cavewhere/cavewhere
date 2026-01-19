@@ -3,10 +3,11 @@
 #include <QAbstractListModel>
 #include <QQmlEngine>
 #include <QPointer>
+#include "CaveWhereLibExport.h"
 
 class cwRemoteAccountModel;
 
-class cwRemoteAccountSelectionModel : public QAbstractListModel
+class CAVEWHERE_LIB_EXPORT cwRemoteAccountSelectionModel : public QAbstractListModel
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(RemoteAccountSelectionModel)

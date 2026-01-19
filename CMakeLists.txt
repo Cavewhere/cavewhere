@@ -19,38 +19,62 @@ set(QT_QML_GENERATE_QMLLS_INI ON CACHE BOOL "Generate QMLLS INI file")
 # Include the GenerateExportHeader module
 include(GenerateExportHeader)
 
-# Work around Conan Abseil CMakeDeps missing libs by explicitly linking libabsl_*.a.
+# Work around Conan Abseil CMakeDeps missing libs by explicitly linking absl libs.
 function(cw_link_absl_static target)
-    if(UNIX AND NOT APPLE)
-        set(_absl_lib_dirs "")
-        if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-            set(_absl_lib_dirs ${abseil_LIB_DIRS_DEBUG})
-        elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-            set(_absl_lib_dirs ${abseil_LIB_DIRS_RELEASE})
-        elseif(CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-            set(_absl_lib_dirs ${abseil_LIB_DIRS_RELWITHDEBINFO})
-        elseif(CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
-            set(_absl_lib_dirs ${abseil_LIB_DIRS_MINSIZEREL})
-        endif()
+    if(NOT (WIN32 OR (UNIX AND NOT APPLE)))
+        return()
+    endif()
+
+    if(WIN32)
+        set(_absl_glob_patterns "abseil_dll.lib" "absl_*.lib" "libabsl_*.lib")
+    else()
+        set(_absl_glob_patterns "libabsl_*.a")
+    endif()
+
+    set(_absl_configs "")
+    if(CMAKE_CONFIGURATION_TYPES)
+        set(_absl_configs ${CMAKE_CONFIGURATION_TYPES})
+    elseif(CMAKE_BUILD_TYPE)
+        set(_absl_configs ${CMAKE_BUILD_TYPE})
+    endif()
+
+    if(NOT _absl_configs)
+        message(WARNING "No build configuration detected; skipping absl static linking for ${target}")
+        return()
+    endif()
+
+    foreach(_absl_config IN LISTS _absl_configs)
+        string(TOUPPER "${_absl_config}" _absl_config_upper)
+        set(_absl_lib_dirs "${abseil_LIB_DIRS_${_absl_config_upper}}")
 
         if(_absl_lib_dirs)
             list(GET _absl_lib_dirs 0 _absl_lib_dir)
-            file(GLOB _absl_static_libs "${_absl_lib_dir}/libabsl_*.a")
+            set(_absl_static_libs "")
+            foreach(_absl_pattern IN LISTS _absl_glob_patterns)
+                file(GLOB _absl_pattern_libs "${_absl_lib_dir}/${_absl_pattern}")
+                list(APPEND _absl_static_libs ${_absl_pattern_libs})
+            endforeach()
+            list(REMOVE_DUPLICATES _absl_static_libs)
+
             if(_absl_static_libs)
-                target_link_libraries(
-                    ${target}
-                    PRIVATE
-                    "-Wl,--start-group"
-                    ${_absl_static_libs}
-                    "-Wl,--end-group"
-                )
+                if(UNIX AND NOT APPLE)
+                    target_link_libraries(
+                        ${target}
+                        PRIVATE
+                        "$<$<CONFIG:${_absl_config}>:-Wl,--start-group>"
+                        "$<$<CONFIG:${_absl_config}>:${_absl_static_libs}>"
+                        "$<$<CONFIG:${_absl_config}>:-Wl,--end-group>"
+                    )
+                else()
+                    target_link_libraries(${target} PRIVATE "$<$<CONFIG:${_absl_config}>:${_absl_static_libs}>")
+                endif()
             else()
-                message(WARNING "Abseil static libs not found in ${_absl_lib_dir}")
+                message(WARNING "Abseil static libs not found in ${_absl_lib_dir} for ${_absl_config}")
             endif()
         else()
-            message(WARNING "Abseil lib directories not found; skipping absl static linking for ${target}")
+            message(WARNING "Abseil lib directories not found for ${_absl_config}; skipping absl static linking for ${target}")
         endif()
-    endif()
+    endforeach()
 endfunction()
 
 # All subdirectoriesb

@@ -12,6 +12,7 @@ class Message;
 #include <vector>
 #include <algorithm>
 #include <cstddef>
+#include "CaveWhereLibExport.h"
 
 namespace cwDiff {
 
@@ -248,7 +249,7 @@ T merge(const T& baseValue,
 // -----------------------------------------------------------------------------
 // 3) The main recursive merge routine
 // -----------------------------------------------------------------------------
-std::unique_ptr<google::protobuf::Message> mergeMessageByReflection(
+CAVEWHERE_LIB_EXPORT std::unique_ptr<google::protobuf::Message> mergeMessageByReflection(
     const google::protobuf::Message& base,
     const google::protobuf::Message& ours,
     const google::protobuf::Message& theirs,

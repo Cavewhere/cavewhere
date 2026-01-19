@@ -15,6 +15,7 @@
 #include "cwDistanceReading.h"
 #include "cwClinoReading.h"
 #include "cwCompassReading.h"
+#include "CaveWhereLibExport.h"
 class cwTrip;
 class cwSurveyChunk;
 class cwTripCalibration;
@@ -24,7 +25,7 @@ class cwTeam;
 class QTextStream;
 
 
-class cwSurvexExporterTripTask : public cwExporterTask
+class CAVEWHERE_LIB_EXPORT cwSurvexExporterTripTask : public cwExporterTask
 {
     Q_OBJECT
 

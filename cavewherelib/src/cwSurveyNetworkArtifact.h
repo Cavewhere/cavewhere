@@ -9,8 +9,9 @@
 #include "cwArtifact.h"
 #include "Monad/Monad.h"
 #include "cwSurveyNetwork.h"
+#include "CaveWhereLibExport.h"
 
-class cwSurveyNetworkArtifact : public cwArtifact
+class CAVEWHERE_LIB_EXPORT cwSurveyNetworkArtifact : public cwArtifact
 {
     Q_OBJECT
     Q_PROPERTY(QFuture<Monad::Result<cwSurveyNetwork>> surveyNetwork READ surveyNetwork WRITE setSurveyNetwork NOTIFY surveyNetworkChanged)

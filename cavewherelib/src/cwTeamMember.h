@@ -12,8 +12,9 @@
 #include <QString>
 #include <QStringList>
 #include <QUuid>
+#include "CaveWhereLibExport.h"
 
-class cwTeamMember {
+class CAVEWHERE_LIB_EXPORT cwTeamMember {
 public:
     explicit cwTeamMember();
     cwTeamMember(QString name, QStringList jobs);

@@ -13,12 +13,13 @@
 #include "cwTracked.h"
 #include "cwGeometryItersecter.h"
 #include "cwRenderTexturedItems.h"
+#include "CaveWhereLibExport.h"
 
 //Qt include
 #include <QQmlEngine>
 #include <QtCore/qproperty.h>
 
-class cwRenderGLTF : public cwRenderTexturedItems
+class CAVEWHERE_LIB_EXPORT cwRenderGLTF : public cwRenderTexturedItems
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(RenderGLTF)

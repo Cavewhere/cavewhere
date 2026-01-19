@@ -15,10 +15,11 @@
 
 //Our
 #include "cwResultDir.h"
+#include "CaveWhereLibExport.h"
 
 class cwProject;
 
-class cwRepositoryModel : public QAbstractListModel
+class CAVEWHERE_LIB_EXPORT cwRepositoryModel : public QAbstractListModel
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(RepositoryModel);

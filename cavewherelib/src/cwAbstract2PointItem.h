@@ -11,8 +11,9 @@
 //Qt includes
 #include <QQuickItem>
 #include <QPen>
+#include "CaveWhereLibExport.h"
 
-class cwAbstract2PointItem : public QQuickItem
+class CAVEWHERE_LIB_EXPORT cwAbstract2PointItem : public QQuickItem
 {
     Q_OBJECT
 

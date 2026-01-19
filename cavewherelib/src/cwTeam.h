@@ -15,9 +15,10 @@
 //Our includes
 #include "cwTeamMember.h"
 #include "cwTeamData.h"
+#include "CaveWhereLibExport.h"
 class cwKeywordModel;
 
-class cwTeam : public QAbstractListModel
+class CAVEWHERE_LIB_EXPORT cwTeam : public QAbstractListModel
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(Team)

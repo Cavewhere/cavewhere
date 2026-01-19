@@ -6,8 +6,9 @@
 #include "cwAbstractRule.h"
 #include "cwSurveyNetworkArtifact.h"
 #include "cwSurveyDataArtifact.h"  // Assuming this class exists
+#include "CaveWhereLibExport.h"
 
-class cwSurveyNetworkBuilderRule : public cwAbstractRule
+class CAVEWHERE_LIB_EXPORT cwSurveyNetworkBuilderRule : public cwAbstractRule
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(SurveyNetworkBuilderRule)

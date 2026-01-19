@@ -4,12 +4,13 @@
 #include "cwRenderMaterialState.h"
 #include "cwRenderObject.h"
 #include "cwGeometry.h"
+#include "CaveWhereLibExport.h"
 #include <QHash>
 #include <QByteArray>
 #include <QtGui/qimage.h>
 #include <QMatrix4x4>
 
-class cwRenderTexturedItems : public cwRenderObject
+class CAVEWHERE_LIB_EXPORT cwRenderTexturedItems : public cwRenderObject
 {
     Q_OBJECT
 

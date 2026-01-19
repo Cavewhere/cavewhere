@@ -2,6 +2,7 @@
 #define CWSURVEYDATAARTIFACT_H
 
 #include "cwArtifact.h"
+#include "CaveWhereLibExport.h"
 
 //Qt includes
 #include <QObject>
@@ -27,7 +28,7 @@ class cwSurveyChunk;
  * It exposes a cwCavingRegion* as a Q_PROPERTY and sets up a cwSurveyChunkSignaler
  * to connect various survey-related signals directly to the dataChanged() signal.
  */
-class cwSurveyDataArtifact : public cwArtifact
+class CAVEWHERE_LIB_EXPORT cwSurveyDataArtifact : public cwArtifact
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(SurveyDataArtifact)

@@ -18,6 +18,7 @@
 
 //Our includes
 #include "cwSceneUpdate.h"
+#include "CaveWhereLibExport.h"
 class cwRenderObject;
 class cwCamera;
 class cwShaderDebugger;
@@ -29,7 +30,7 @@ class cwRhiItemRenderer;
 /**
  * @brief The cwScene class
  */
-class cwScene : public QObject
+class CAVEWHERE_LIB_EXPORT cwScene : public QObject
 {
     friend class cwRhiScene;
 

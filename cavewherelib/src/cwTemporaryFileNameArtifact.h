@@ -3,12 +3,13 @@
 
 //Our includes
 #include "cwFileNameArtifact.h"
+#include "CaveWhereLibExport.h"
 
 //Qt includes
 #include <QTemporaryFile>
 #include <QQmlEngine>
 
-class cwTemporaryFileNameArtifact : public cwFileNameArtifact
+class CAVEWHERE_LIB_EXPORT cwTemporaryFileNameArtifact : public cwFileNameArtifact
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(TemporaryFileNameArtifact)

@@ -11,6 +11,7 @@
 #include "cwFutureFileNameArtifact.h"
 #include "cwSurveyDataArtifact.h"
 #include "cwFileNameArtifact.h"
+#include "CaveWhereLibExport.h"
 // #include "cwReadingStates.h"
 // #include "cwUnits.h"
 // #include "cwTripCalibration.h"
@@ -24,7 +25,7 @@
 // class cwTeam;
 // class cwSurveyChunk;
 
-class cwSurvexExporterRule : public cwAbstractRule {
+class CAVEWHERE_LIB_EXPORT cwSurvexExporterRule : public cwAbstractRule {
     Q_OBJECT
     QML_NAMED_ELEMENT(SurvexExporterRule)
 

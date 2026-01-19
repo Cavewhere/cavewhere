@@ -3,12 +3,13 @@
 #define CWMATRIX4X4ARTIFACT_H
 
 #include "cwArtifact.h"
+#include "CaveWhereLibExport.h"
 #include <QObject>
 #include <QObjectBindableProperty>
 #include <QQmlEngine>
 #include <QMatrix4x4>
 
-class cwMatrix4x4Artifact : public cwArtifact {
+class CAVEWHERE_LIB_EXPORT cwMatrix4x4Artifact : public cwArtifact {
     Q_OBJECT
     QML_NAMED_ELEMENT(Matrix4x4Artifact)
     Q_PROPERTY(QMatrix4x4 matrix4x4 READ matrix4x4 WRITE setMatrix4x4 NOTIFY matrix4x4Changed BINDABLE bindableMatrix4x4)
