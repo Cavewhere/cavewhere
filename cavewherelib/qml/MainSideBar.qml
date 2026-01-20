@@ -145,9 +145,10 @@ QQ.Rectangle {
         }
 
         QQ.Rectangle {
-           color: Theme.divider
-           width: parent.width
-           height: 1
+            visible: fileMenuButtonLoaderId.active
+            color: Theme.divider
+            width: parent.width
+            height: 1
         }
 
         SideBarButton {

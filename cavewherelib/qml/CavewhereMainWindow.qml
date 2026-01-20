@@ -32,8 +32,7 @@ QC.ApplicationWindow {
 
     menuBar: menuBarLoaderId.item
 
-    FileMenu {
-        id: fileMenuId
+    component MainWindowFileMenu : FileMenu {
         applicationWindow: applicationWindowId
         saveAsFileDialog: saveAsFileDialogId
         loadFileDialog: loadDialogId.loadFileDialog
@@ -44,10 +43,14 @@ QC.ApplicationWindow {
         id: menuBarLoaderId
         active: RootData.desktopBuild && RootData.account.isValid && isMacOS
         sourceComponent: QC.MenuBar {
-            QC.MenuBarItem {
-                menu: fileMenuId
-            }
+            MainWindowFileMenu {}
         }
+    }
+
+    QQ.Loader {
+        id: windowsLinuxFileMenuLoader
+        active: RootData.desktopBuild && menuBarLoaderId.active
+        sourceComponent: MainWindowFileMenu {}
     }
 
     ScreenSizeSaver {
@@ -66,7 +69,7 @@ QC.ApplicationWindow {
         anchors.fill: parent
         sourceComponent: MainContent {
             anchors.fill: parent
-            fileMenu: fileMenuId
+            fileMenu: windowsLinuxFileMenuLoader.item
         }
     }
 

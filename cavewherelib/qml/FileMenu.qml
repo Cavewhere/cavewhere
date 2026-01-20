@@ -9,10 +9,10 @@ QC.Menu {
     id: fileMenuId
 
     property QQ.Loader mainContentLoader
-    property FileDialog loadFileDialog
-    property FileDialog saveAsFileDialog
-    property QC.ApplicationWindow applicationWindow
-    property AskToSaveDialog askToSaveDialog
+    required property FileDialog loadFileDialog
+    required property FileDialog saveAsFileDialog
+    required property QC.ApplicationWindow applicationWindow
+    required property AskToSaveDialog askToSaveDialog
 
     title: "File"
 
