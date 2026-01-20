@@ -17,9 +17,10 @@
 //Our includes
 #include "cwRayTriangleHit.h"
 #include "cwGeometry.h"
+#include "CaveWhereLibExport.h"
 class cwRenderObject;
 
-class cwGeometryItersecter
+class CAVEWHERE_LIB_EXPORT cwGeometryItersecter
 {
 public:
     struct Key {

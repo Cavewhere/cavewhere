@@ -6,11 +6,12 @@
 #include "cwSurveyNetworkArtifact.h"
 #include "cwMatrix4x4Artifact.h"
 #include "cwSurvey2DGeometryArtifact.h"
+#include "CaveWhereLibExport.h"
 
 //Qt includes
 #include <QQmlEngine>
 
-class cwSurvey2DGeometryRule : public cwAbstractRule {
+class CAVEWHERE_LIB_EXPORT cwSurvey2DGeometryRule : public cwAbstractRule {
     Q_OBJECT
     QML_NAMED_ELEMENT(Survey2DGeometryRule)
 

@@ -14,6 +14,7 @@
 
 // Our includes
 #include "cwGeometry.h"
+#include "CaveWhereLibExport.h"
 
 // tinygltf (forward declare to avoid heavy includes in headers)
 namespace tinygltf {
@@ -72,7 +73,7 @@ struct LoadOptions {
     QVector<cwGeometry::AttributeDesc> requestedLayout;
 };
 
-class Loader
+class CAVEWHERE_LIB_EXPORT Loader
 {
 public:
     static SceneCPU loadGltf(const QString& filePath);

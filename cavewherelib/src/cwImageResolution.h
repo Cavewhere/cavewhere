@@ -11,6 +11,7 @@
 //Our includes
 #include "cwUnitValue.h"
 #include "cwImage.h"
+#include "CaveWhereLibExport.h"
 class cwLength;
 
 //Qt includes
@@ -18,7 +19,7 @@ class cwLength;
 #include <QSize>
 
 
-class cwImageResolution : public cwUnitValue
+class CAVEWHERE_LIB_EXPORT cwImageResolution : public cwUnitValue
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(ImageResolution)

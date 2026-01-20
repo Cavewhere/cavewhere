@@ -5,8 +5,9 @@
 #include <QMutex>
 
 #include "cwDiskCacher.h"
+#include "cwGlobals.h"
 
-class cwCacheImageProvider : public QQuickImageProvider
+class CAVEWHERE_LIB_EXPORT cwCacheImageProvider : public QQuickImageProvider
 {
 public:
     cwCacheImageProvider();

@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QList>
 #include <QObjectBindableProperty>
+#include "CaveWhereLibExport.h"
 
 //Our includes
 // #include "cwArtifact.h"
@@ -15,7 +16,7 @@
  * Rules process input artifacts and produce output artifacts.
  * When input artifacts change, the rule processes them automatically.
  */
-class cwAbstractRule : public QObject
+class CAVEWHERE_LIB_EXPORT cwAbstractRule : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)

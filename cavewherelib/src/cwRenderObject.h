@@ -24,8 +24,9 @@ class cwRHIObject;
 class cwRhiItemRenderer;
 class cwGeometryItersector;
 #include "cwScene.h"
+#include "CaveWhereLibExport.h"
 
-class cwRenderObject : public QObject {
+class CAVEWHERE_LIB_EXPORT cwRenderObject : public QObject {
     Q_OBJECT
 
     Q_PROPERTY(bool visible READ isVisible WRITE setVisible NOTIFY visibleChanged FINAL)

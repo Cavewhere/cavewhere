@@ -9,11 +9,12 @@
 #define CWSVGREADER_H
 
 #include "cwImage.h"
+#include "CaveWhereLibExport.h"
 
 #include <QByteArray>
 #include <QImage>
 
-class cwSvgReader
+class CAVEWHERE_LIB_EXPORT cwSvgReader
 {
 public:
     static bool isSvg(const QByteArray& format);

@@ -6,6 +6,7 @@
 
 // Ours
 #include "cwTriangulateWarping.h"
+#include "CaveWhereLibExport.h"
 
 /**
  * @brief Persists cwTriangulateWarping settings to QSettings.
@@ -13,7 +14,7 @@
  * Listens for changes on the provided cwTriangulateWarping instance and saves
  * values so they survive app restarts.
  */
-class cwTriangulateWarpingSettings : public QObject
+class CAVEWHERE_LIB_EXPORT cwTriangulateWarpingSettings : public QObject
 {
     Q_OBJECT
 public:

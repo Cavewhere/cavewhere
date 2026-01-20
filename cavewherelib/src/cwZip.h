@@ -6,6 +6,8 @@
 //Monad
 #include <Monad/Result.h>
 
+//Our includes
+#include "cwGlobals.h"
 
 /**
  * @brief The cwZip class
@@ -13,7 +15,7 @@
  * Provides static methods to extract or create ZIP archives using minizip-ng.
  * Only depends on Qt types in the public interface.
  */
-class cwZip
+class CAVEWHERE_LIB_EXPORT cwZip
 {
 public:
     struct ZipResult {

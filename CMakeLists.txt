@@ -4,6 +4,7 @@ project(CaveWhere VERSION 1.0.0 LANGUAGES CXX)
 
 find_package(Qt6 REQUIRED COMPONENTS Core)
 qt_standard_project_setup()
+find_package(absl REQUIRED)
 
 #Add address sanitizer for clang build only
 if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
@@ -17,6 +18,64 @@ set(QT_QML_GENERATE_QMLLS_INI ON CACHE BOOL "Generate QMLLS INI file")
 
 # Include the GenerateExportHeader module
 include(GenerateExportHeader)
+
+# Work around Conan Abseil CMakeDeps missing libs by explicitly linking absl libs.
+function(cw_link_absl_static target)
+    if(NOT (WIN32 OR (UNIX AND NOT APPLE)))
+        return()
+    endif()
+
+    if(WIN32)
+        set(_absl_glob_patterns "abseil_dll.lib" "absl_*.lib" "libabsl_*.lib")
+    else()
+        set(_absl_glob_patterns "libabsl_*.a")
+    endif()
+
+    set(_absl_configs "")
+    if(CMAKE_CONFIGURATION_TYPES)
+        set(_absl_configs ${CMAKE_CONFIGURATION_TYPES})
+    elseif(CMAKE_BUILD_TYPE)
+        set(_absl_configs ${CMAKE_BUILD_TYPE})
+    endif()
+
+    if(NOT _absl_configs)
+        message(WARNING "No build configuration detected; skipping absl static linking for ${target}")
+        return()
+    endif()
+
+    foreach(_absl_config IN LISTS _absl_configs)
+        string(TOUPPER "${_absl_config}" _absl_config_upper)
+        set(_absl_lib_dirs "${abseil_LIB_DIRS_${_absl_config_upper}}")
+
+        if(_absl_lib_dirs)
+            list(GET _absl_lib_dirs 0 _absl_lib_dir)
+            set(_absl_static_libs "")
+            foreach(_absl_pattern IN LISTS _absl_glob_patterns)
+                file(GLOB _absl_pattern_libs "${_absl_lib_dir}/${_absl_pattern}")
+                list(APPEND _absl_static_libs ${_absl_pattern_libs})
+            endforeach()
+            list(REMOVE_DUPLICATES _absl_static_libs)
+
+            if(_absl_static_libs)
+                if(UNIX AND NOT APPLE)
+                    target_link_libraries(
+                        ${target}
+                        PRIVATE
+                        "$<$<CONFIG:${_absl_config}>:-Wl,--start-group>"
+                        "$<$<CONFIG:${_absl_config}>:${_absl_static_libs}>"
+                        "$<$<CONFIG:${_absl_config}>:-Wl,--end-group>"
+                    )
+                else()
+                    target_link_libraries(${target} PRIVATE "$<$<CONFIG:${_absl_config}>:${_absl_static_libs}>")
+                endif()
+            else()
+                message(WARNING "Abseil static libs not found in ${_absl_lib_dir} for ${_absl_config}")
+            endif()
+        else()
+            message(WARNING "Abseil lib directories not found for ${_absl_config}; skipping absl static linking for ${target}")
+        endif()
+    endforeach()
+endfunction()
 
 # All subdirectoriesb
 add_subdirectory(QMath3d)
@@ -242,6 +301,7 @@ if(BUILD_TESTING)
         SignalSpyChecker
 
     )
+    cw_link_absl_static(cavewhere-test)
 
     #### Cavewhere qml tests ####
     # Add the executable
@@ -324,6 +384,7 @@ target_link_libraries(CaveWhere
     Qt6::Sql
     Qt6::Test
     cavewherelib
+    QuickQanavaplugin
     MarkScope
 )
 
@@ -339,6 +400,64 @@ qt_import_qml_plugins(CaveWhere)
 qt_finalize_executable(CaveWhere)
 
 if(WIN32)
+    set(_conan_runtime_dlls "")
+    set(_protobuf_bin_dirs "")
+    if(DEFINED protobuf_BIN_DIRS_RELEASE)
+        list(APPEND _protobuf_bin_dirs ${protobuf_BIN_DIRS_RELEASE})
+    endif()
+    if(DEFINED protobuf_BIN_DIRS_DEBUG)
+        list(APPEND _protobuf_bin_dirs ${protobuf_BIN_DIRS_DEBUG})
+    endif()
+    if(DEFINED protobuf_BIN_DIRS)
+        list(APPEND _protobuf_bin_dirs ${protobuf_BIN_DIRS})
+    endif()
+    foreach(_dir IN LISTS _protobuf_bin_dirs)
+        file(GLOB _protobuf_dlls
+            "${_dir}/libprotobuf*.dll"
+            "${_dir}/protobuf*.dll"
+            "${_dir}/libutf8_validity.dll"
+        )
+        list(APPEND _conan_runtime_dlls ${_protobuf_dlls})
+    endforeach()
+
+    set(_abseil_bin_dirs "")
+    if(DEFINED abseil_BIN_DIRS_RELEASE)
+        list(APPEND _abseil_bin_dirs ${abseil_BIN_DIRS_RELEASE})
+    endif()
+    if(DEFINED abseil_BIN_DIRS_DEBUG)
+        list(APPEND _abseil_bin_dirs ${abseil_BIN_DIRS_DEBUG})
+    endif()
+    if(DEFINED abseil_BIN_DIRS)
+        list(APPEND _abseil_bin_dirs ${abseil_BIN_DIRS})
+    endif()
+    foreach(_dir IN LISTS _abseil_bin_dirs)
+        file(GLOB _abseil_dlls
+            "${_dir}/abseil_dll.dll"
+            "${_dir}/absl_*.dll"
+            "${_dir}/libutf8_validity.dll"
+        )
+        list(APPEND _conan_runtime_dlls ${_abseil_dlls})
+    endforeach()
+    list(REMOVE_DUPLICATES _conan_runtime_dlls)
+
+    if(_conan_runtime_dlls)
+        add_custom_command(TARGET CaveWhere POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${_conan_runtime_dlls}
+                $<TARGET_FILE_DIR:CaveWhere>
+            COMMAND_EXPAND_LISTS
+            COMMENT "Copying Conan runtime DLLs next to CaveWhere.exe."
+        )
+    endif()
+
+    # add_custom_command(TARGET CaveWhere POST_BUILD
+    #     COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    #         $<TARGET_RUNTIME_DLLS:CaveWhere>
+    #         $<TARGET_FILE_DIR:CaveWhere>
+    #     COMMAND_EXPAND_LISTS
+    #     COMMENT "Copying CaveWhere runtime DLLs next to the executable."
+    # )
+
     target_link_options(CaveWhere PRIVATE
         $<$<AND:$<CONFIG:Release>,$<STREQUAL:${CMAKE_SYSTEM_NAME},Windows>>:/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup>
     )

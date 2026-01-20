@@ -17,6 +17,7 @@
 #include "cwNoteLiDARStation.h"
 #include "cwStationPositionLookup.h"
 #include "cwSurveyNetwork.h"
+#include "CaveWhereLibExport.h"
 
 /**
  * @brief The cwTriangulateLiDARInData class
@@ -27,7 +28,7 @@
  */
 class cwTriangulateLiDARPrivateData;
 
-class cwTriangulateLiDARInData
+class CAVEWHERE_LIB_EXPORT cwTriangulateLiDARInData
 {
 public:
     cwTriangulateLiDARInData();

@@ -8,10 +8,11 @@
 //Our includes
 #include "cwArtifact.h"
 #include "cwSurvey2DGeometry.h"
+#include "CaveWhereLibExport.h"
 
 #include "Monad/Result.h"
 
-class cwSurvey2DGeometryArtifact : public cwArtifact {
+class CAVEWHERE_LIB_EXPORT cwSurvey2DGeometryArtifact : public cwArtifact {
     Q_OBJECT
     Q_PROPERTY(QFuture<Monad::Result<cwSurvey2DGeometry>> geometryResult READ geometryResult WRITE setGeometryResult NOTIFY geometryResultChanged)
 

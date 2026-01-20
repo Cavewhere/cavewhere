@@ -43,7 +43,9 @@
 #include <type_traits>
 #include <span>
 
-class cwGeometry
+#include "CaveWhereLibExport.h"
+
+class CAVEWHERE_LIB_EXPORT cwGeometry
 {
 public:
     enum class Type {

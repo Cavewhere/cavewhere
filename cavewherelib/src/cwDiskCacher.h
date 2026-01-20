@@ -8,7 +8,9 @@
 #include <QHash>
 #include <memory>
 
-class cwDiskCacher {
+#include "CaveWhereLibExport.h"
+
+class CAVEWHERE_LIB_EXPORT cwDiskCacher {
 public:
     struct Key {
         QString id;

@@ -6,11 +6,12 @@
 #include <QString>
 
 #include "cwRepositoryModel.h"
+#include "CaveWhereLibExport.h"
 #include "Account.h"
 #include "GitFutureWatcher.h"
 #include "GitRepository.h"
 
-class cwRemoteRepositoryCloner : public QObject
+class CAVEWHERE_LIB_EXPORT cwRemoteRepositoryCloner : public QObject
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(RemoteRepositoryCloner)

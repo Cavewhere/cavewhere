@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QString>
 #include <QObjectBindableProperty>
+#include "CaveWhereLibExport.h"
 
 /**
  * @brief The cwArtifact class represents data that flows between rules in the pipeline
@@ -12,7 +13,7 @@
  * This is a lightweight class that serves as an identifier for data in the pipeline.
  * It emits a dataChanged signal when its underlying data (managed externally) changes.
  */
-class cwArtifact : public QObject
+class CAVEWHERE_LIB_EXPORT cwArtifact : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged BINDABLE bindableName)

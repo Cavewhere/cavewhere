@@ -12,6 +12,7 @@
 #include <QQuickItem>
 #include <QGraphicsPolygonItem>
 #include <QQmlEngine>
+#include "CaveWhereLibExport.h"
 
 //Our includes
 class cwNote;
@@ -23,7 +24,7 @@ class cwSelectionManager;
 /**
   This class visualizes scraps in NoteItem
   */
-class cwScrapView : public QQuickItem
+class CAVEWHERE_LIB_EXPORT cwScrapView : public QQuickItem
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(ScrapView)

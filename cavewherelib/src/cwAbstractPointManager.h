@@ -17,6 +17,7 @@
 //Our includes
 // #include "cwTransformItemUpdater.h"
 #include "cwSelectionManager.h"
+#include "CaveWhereLibExport.h"
 
 /**
  * @brief The cwAbsrtactPointManager class
@@ -25,7 +26,7 @@
  * a transformUpdate.  This class also support simple selection.
  *
  */
-class cwAbstractPointManager : public QQuickItem
+class CAVEWHERE_LIB_EXPORT cwAbstractPointManager : public QQuickItem
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(AbstractPointManager)

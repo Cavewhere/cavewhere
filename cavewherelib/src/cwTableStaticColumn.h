@@ -11,8 +11,9 @@
 //Qt includes
 #include <QObject>
 #include <QQmlEngine>
+#include "CaveWhereLibExport.h"
 
-class cwTableStaticColumn : public QObject
+class CAVEWHERE_LIB_EXPORT cwTableStaticColumn : public QObject
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(TableStaticColumn)

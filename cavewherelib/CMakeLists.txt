@@ -60,6 +60,10 @@ set_target_properties(cavewherelib PROPERTIES
     AUTOUIC ON
 )
 
+if(MSVC)
+    target_compile_options(cavewherelib PRIVATE /FI${CMAKE_CURRENT_BINARY_DIR}/CaveWhereLibExport.h)
+endif()
+
 target_link_libraries(cavewherelib
     PUBLIC
     Qt6::Core
@@ -77,16 +81,18 @@ target_link_libraries(cavewherelib
     MarkScope
     monad
     QuickQanava
-    QuickQanavaplugin
     qquickgit
     qt6keychain
     PRIVATE
     TinyGLTF::TinyGLTF
     protobuf::libprotobuf
+    abseil::abseil
     xxHash::xxhash
     MINIZIP::minizip
     # surveximg
 )
+
+cw_link_absl_static(cavewherelib)
 
 # Conditionally find the package and include directories
 find_package(Qt6 COMPONENTS Pdf QUIET)
@@ -253,7 +259,11 @@ endif()
 # Protobuf files
 file(GLOB protobuf_FILES "src/*.proto")
 set(Protobuf_IMPORT_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/src)
-protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${protobuf_FILES})
+if(WIN32)
+    protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS EXPORT_MACRO CAVEWHERE_LIB_EXPORT ${protobuf_FILES})
+else()
+    protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${protobuf_FILES})
+endif()
 target_sources(cavewherelib PRIVATE ${protobuf_FILES} ${protobuf_FILES})
 
 # Add the generated files to your target

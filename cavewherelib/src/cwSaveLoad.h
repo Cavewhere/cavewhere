@@ -35,6 +35,7 @@ class cwNoteLiDARData;
 #include "cwCavingRegionData.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
 #include "cwFutureManagerToken.h"
+#include "CaveWhereLibExport.h"
 
 //Google protobuffer
 namespace CavewhereProto {
@@ -99,7 +100,7 @@ class GitRepository;
 #include <QUndoStack>
 #include <functional>
 
-class cwSaveLoad : public QObject
+class CAVEWHERE_LIB_EXPORT cwSaveLoad : public QObject
 {
     Q_OBJECT
 
