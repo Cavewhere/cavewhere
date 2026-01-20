@@ -22,6 +22,8 @@ QQ.Rectangle {
     property Page viewPage;
     property Page dataPage;
     property Page mapPage;
+    property QC.Menu fileMenu
+    readonly property bool isMacOS: Qt.platform.os === "osx"
 
     readonly property string _viewPage: viewPage.fullname()
     readonly property string _dataPage: dataPage.fullname()
@@ -122,6 +124,31 @@ QQ.Rectangle {
         anchors.right: parent.right
 
         property int currentIndex: 0
+
+        QQ.Loader {
+            id: fileMenuButtonLoaderId
+            active: RootData.desktopBuild && !sidebarArea.isMacOS
+            width: parent.width
+            sourceComponent: SideBarButton {
+                id: fileMenuButtonId
+                text: "File"
+                image: "qrc:/twbs-icons/icons/chevron-double-down.svg"
+                imageSize: Qt.size(12, 12)
+                troggled: false
+                layout: Qt.Horizontal
+                onButtonIsTroggled: {
+                    if (sidebarArea.fileMenu) {
+                        sidebarArea.fileMenu.popup(fileMenuButtonId, 0, fileMenuButtonId.height)
+                    }
+                }
+            }
+        }
+
+        QQ.Rectangle {
+           color: Theme.divider
+           width: parent.width
+           height: 1
+        }
 
         SideBarButton {
             id: viewButton

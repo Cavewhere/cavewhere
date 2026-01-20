@@ -1,11 +1,13 @@
 pragma ComponentBehavior: Bound
 import QtQuick as QQ
+import QtQuick.Controls as QC
 import cavewherelib
 
 QQ.Item {
     id: mainContentId
 
     property GLTerrainRenderer renderer;
+    property QC.Menu fileMenu
 
     anchors.fill: parent
 
@@ -26,6 +28,7 @@ QQ.Item {
         anchors.left: parent.left
         anchors.leftMargin: 0
         anchors.top: linkBar.bottom
+        fileMenu: mainContentId.fileMenu
 
         // //For animating which page is shown
         // property real pageShownReal: pageShown;

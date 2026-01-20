@@ -20,6 +20,8 @@ QC.ApplicationWindow {
     visible: false
     width: 1024
     height: 576
+    readonly property bool isMacOS: Qt.platform.os === "osx"
+    readonly property bool showMenuBar: RootData.desktopBuild && RootData.account.isValid && isMacOS
     // flags: Qt.FramelessWindowHint
 
     title: {
@@ -28,21 +30,22 @@ QC.ApplicationWindow {
         return baseName + "   " + filename
     }
 
-    menuBar: fileMenuLoaderId.item
+    menuBar: menuBarLoaderId.item
+
+    FileMenu {
+        id: fileMenuId
+        applicationWindow: applicationWindowId
+        saveAsFileDialog: saveAsFileDialogId
+        loadFileDialog: loadDialogId.loadFileDialog
+        askToSaveDialog: askToSaveDialogId
+    }
 
     QQ.Loader {
-        id: fileMenuLoaderId
-        active: RootData.desktopBuild && RootData.account.isValid
-        sourceComponent: FileButtonAndMenu {
-            id: fileMenuButton
-
-            saveAsFileDialog: saveAsFileDialogId
-            loadFileDialog: loadDialogId.loadFileDialog
-            applicationWindow: applicationWindowId
-            askToSaveDialog: askToSaveDialogId
-
-            onOpenAboutWindow:  {
-                loadAboutWindowId.setSource("AboutWindow.qml")
+        id: menuBarLoaderId
+        active: RootData.desktopBuild && RootData.account.isValid && isMacOS
+        sourceComponent: QC.MenuBar {
+            QC.MenuBarItem {
+                menu: fileMenuId
             }
         }
     }
@@ -63,6 +66,7 @@ QC.ApplicationWindow {
         anchors.fill: parent
         sourceComponent: MainContent {
             anchors.fill: parent
+            fileMenu: fileMenuId
         }
     }
 
@@ -167,4 +171,3 @@ QC.ApplicationWindow {
         screenSizeSaverId.resize();
     }
 }
-

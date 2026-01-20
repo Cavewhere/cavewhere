@@ -19,6 +19,8 @@ QQ.Rectangle {
     property alias image: icon.source;
     property bool troggled: false;
     property int buttonIndex;
+    property int layout: Qt.Vertical
+    property alias imageSize: icon.sourceSize
 
     anchors.left: parent.left;
     anchors.right: parent.right
@@ -29,14 +31,22 @@ QQ.Rectangle {
     //Called when troggle is true
     signal buttonIsTroggled()
 
-    ColumnLayout {
+    GridLayout {
         id: columnLayoutId
         anchors.centerIn: parent
+
+        columns: layout == Qt.Vertical ? 1 : 2
+        // rows: columnLayout ? 2 : 1
 
         QQ.Image {
             id: icon
             smooth: true
-            sourceSize: Qt.size(32, 32)
+
+            // height: Qt.Vertical ? 32 : 10
+            // width: Qt.V
+
+            sourceSize: layout == Qt.Vertical ? Qt.size(32, 32) : Qt.size(textLabel.height, textLabel.height)
+
             // visible: false
 
             layer.enabled: true
