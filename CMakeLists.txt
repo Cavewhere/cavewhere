@@ -384,6 +384,7 @@ target_link_libraries(CaveWhere
     Qt6::Sql
     Qt6::Test
     cavewherelib
+    QuickQanavaplugin
     MarkScope
 )
 
@@ -399,6 +400,64 @@ qt_import_qml_plugins(CaveWhere)
 qt_finalize_executable(CaveWhere)
 
 if(WIN32)
+    set(_conan_runtime_dlls "")
+    set(_protobuf_bin_dirs "")
+    if(DEFINED protobuf_BIN_DIRS_RELEASE)
+        list(APPEND _protobuf_bin_dirs ${protobuf_BIN_DIRS_RELEASE})
+    endif()
+    if(DEFINED protobuf_BIN_DIRS_DEBUG)
+        list(APPEND _protobuf_bin_dirs ${protobuf_BIN_DIRS_DEBUG})
+    endif()
+    if(DEFINED protobuf_BIN_DIRS)
+        list(APPEND _protobuf_bin_dirs ${protobuf_BIN_DIRS})
+    endif()
+    foreach(_dir IN LISTS _protobuf_bin_dirs)
+        file(GLOB _protobuf_dlls
+            "${_dir}/libprotobuf*.dll"
+            "${_dir}/protobuf*.dll"
+            "${_dir}/libutf8_validity.dll"
+        )
+        list(APPEND _conan_runtime_dlls ${_protobuf_dlls})
+    endforeach()
+
+    set(_abseil_bin_dirs "")
+    if(DEFINED abseil_BIN_DIRS_RELEASE)
+        list(APPEND _abseil_bin_dirs ${abseil_BIN_DIRS_RELEASE})
+    endif()
+    if(DEFINED abseil_BIN_DIRS_DEBUG)
+        list(APPEND _abseil_bin_dirs ${abseil_BIN_DIRS_DEBUG})
+    endif()
+    if(DEFINED abseil_BIN_DIRS)
+        list(APPEND _abseil_bin_dirs ${abseil_BIN_DIRS})
+    endif()
+    foreach(_dir IN LISTS _abseil_bin_dirs)
+        file(GLOB _abseil_dlls
+            "${_dir}/abseil_dll.dll"
+            "${_dir}/absl_*.dll"
+            "${_dir}/libutf8_validity.dll"
+        )
+        list(APPEND _conan_runtime_dlls ${_abseil_dlls})
+    endforeach()
+    list(REMOVE_DUPLICATES _conan_runtime_dlls)
+
+    if(_conan_runtime_dlls)
+        add_custom_command(TARGET CaveWhere POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${_conan_runtime_dlls}
+                $<TARGET_FILE_DIR:CaveWhere>
+            COMMAND_EXPAND_LISTS
+            COMMENT "Copying Conan runtime DLLs next to CaveWhere.exe."
+        )
+    endif()
+
+    # add_custom_command(TARGET CaveWhere POST_BUILD
+    #     COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    #         $<TARGET_RUNTIME_DLLS:CaveWhere>
+    #         $<TARGET_FILE_DIR:CaveWhere>
+    #     COMMAND_EXPAND_LISTS
+    #     COMMENT "Copying CaveWhere runtime DLLs next to the executable."
+    # )
+
     target_link_options(CaveWhere PRIVATE
         $<$<AND:$<CONFIG:Release>,$<STREQUAL:${CMAKE_SYSTEM_NAME},Windows>>:/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup>
     )

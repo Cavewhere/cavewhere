@@ -50,6 +50,7 @@ if(WIN32)
         "${BINARY_DIR}/${CAVEWHERE_NAME}${CMAKE_EXECUTABLE_SUFFIX}"
         #"${CONAN_BIN_DIRS_ZLIB}/zlib1.dll"
     )
+    list(APPEND ROOT_FILES_TO_COPY "$<TARGET_RUNTIME_DLLS:CaveWhere>")
 
     set(_openssl_bin_dirs "")
     if(DEFINED openssl_BIN_DIRS_RELEASE)
@@ -66,10 +67,41 @@ if(WIN32)
         list(APPEND ROOT_FILES_TO_COPY ${_openssl_dlls})
     endforeach()
 
+    set(_protobuf_bin_dirs "")
+    if(DEFINED protobuf_BIN_DIRS_RELEASE)
+        set(_protobuf_bin_dirs ${protobuf_BIN_DIRS_RELEASE})
+    elseif(DEFINED protobuf_BIN_DIRS)
+        set(_protobuf_bin_dirs ${protobuf_BIN_DIRS})
+    endif()
+
+    foreach(_dir IN LISTS _protobuf_bin_dirs)
+        file(GLOB _protobuf_dlls
+            "${_dir}/libprotobuf*.dll"
+            "${_dir}/protobuf*.dll"
+            "${_dir}/libutf8_validity.dll"
+        )
+        list(APPEND ROOT_FILES_TO_COPY ${_protobuf_dlls})
+    endforeach()
+
+    set(_abseil_bin_dirs "")
+    if(DEFINED abseil_BIN_DIRS_RELEASE)
+        set(_abseil_bin_dirs ${abseil_BIN_DIRS_RELEASE})
+    elseif(DEFINED abseil_BIN_DIRS)
+        set(_abseil_bin_dirs ${abseil_BIN_DIRS})
+    endif()
+
+    foreach(_dir IN LISTS _abseil_bin_dirs)
+        file(GLOB _abseil_dlls
+            "${_dir}/abseil_dll.dll"
+            "${_dir}/absl_*.dll"
+            "${_dir}/libutf8_validity.dll"
+        )
+        list(APPEND ROOT_FILES_TO_COPY ${_abseil_dlls})
+    endforeach()
+
     # Append shared library outputs only when they exist at build time.
     set(_SHARED_LIB_TARGETS
         cavewherelib
-        cavewhere-testlib
         dewalls
         QMath3d
         QmlTestRecorder
@@ -79,7 +111,7 @@ if(WIN32)
     foreach(_lib IN LISTS _SHARED_LIB_TARGETS)
         if(TARGET ${_lib})
             get_target_property(_lib_type ${_lib} TYPE)
-            if(_lib_type STREQUAL "SHARED")
+            if(_lib_type STREQUAL "SHARED_LIBRARY" OR _lib_type STREQUAL "MODULE_LIBRARY")
                 list(APPEND ROOT_FILES_TO_COPY "$<TARGET_FILE:${_lib}>")
             endif()
         endif()
@@ -132,6 +164,7 @@ if(WIN32)
         #Also copy to the survex director
         COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS} ${DEPLOY_SURVEX_DIR}
         COMMENT "Copying files to deploy directory"
+        COMMAND_EXPAND_LISTS
         VERBATIM
     )
 

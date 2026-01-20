@@ -81,7 +81,6 @@ target_link_libraries(cavewherelib
     MarkScope
     monad
     QuickQanava
-    QuickQanavaplugin
     qquickgit
     qt6keychain
     PRIVATE
