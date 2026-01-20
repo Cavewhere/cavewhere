@@ -22,7 +22,7 @@ QQ.Rectangle {
     property Page viewPage;
     property Page dataPage;
     property Page mapPage;
-    property QC.Menu fileMenu
+    required property QC.Menu fileMenu
     readonly property bool isMacOS: Qt.platform.os === "osx"
 
     readonly property string _viewPage: viewPage.fullname()
@@ -138,7 +138,21 @@ QQ.Rectangle {
                 layout: Qt.Horizontal
                 onButtonIsTroggled: {
                     if (sidebarArea.fileMenu) {
-                        sidebarArea.fileMenu.popup(fileMenuButtonId, 0, fileMenuButtonId.height)
+                        if(sidebarArea.fileMenu.visible) {
+                            sidebarArea.fileMenu.close()
+                        } else {
+                            sidebarArea.fileMenu.popup(fileMenuButtonId, 0, fileMenuButtonId.height)
+                        }
+                    }
+                }
+
+                QQ.Connections {
+                    target: sidebarArea
+                    function onFileMenuChanged() {
+                        if(sidebarArea.fileMenu) {
+                            sidebarArea.fileMenu.parent = fileMenuButtonId
+                            sidebarArea.fileMenu.closePolicy = QC.Popup.CloseOnReleaseOutsideParent
+                        }
                     }
                 }
             }

@@ -30,7 +30,7 @@ QC.ApplicationWindow {
         return baseName + "   " + filename
     }
 
-    menuBar: menuBarLoaderId.item
+    menuBar: macosMenuBarLoaderId.item
 
     component MainWindowFileMenu : FileMenu {
         applicationWindow: applicationWindowId
@@ -40,7 +40,7 @@ QC.ApplicationWindow {
     }
 
     QQ.Loader {
-        id: menuBarLoaderId
+        id: macosMenuBarLoaderId
         active: RootData.desktopBuild && RootData.account.isValid && isMacOS
         sourceComponent: QC.MenuBar {
             MainWindowFileMenu {}
@@ -49,7 +49,7 @@ QC.ApplicationWindow {
 
     QQ.Loader {
         id: windowsLinuxFileMenuLoader
-        active: RootData.desktopBuild && menuBarLoaderId.active
+        active: RootData.desktopBuild && !macosMenuBarLoaderId.active
         sourceComponent: MainWindowFileMenu {}
     }
 
