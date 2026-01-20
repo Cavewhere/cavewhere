@@ -138,5 +138,6 @@
         <file>twbs-icons/icons/dash.svg</file>
         <file>twbs-icons/icons/file-earmark.svg</file>
         <file>twbs-icons/icons/chevron-double-down.svg</file>
+        <file>twbs-icons/icons/chevron-double-right.svg</file>
     </qresource>
 </RCC>

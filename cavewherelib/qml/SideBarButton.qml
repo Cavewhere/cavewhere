@@ -21,6 +21,7 @@ QQ.Rectangle {
     property int buttonIndex;
     property int layout: Qt.Vertical
     property alias imageSize: icon.sourceSize
+    property alias layoutDirection: columnLayoutId.layoutDirection
 
     anchors.left: parent.left;
     anchors.right: parent.right

@@ -132,16 +132,17 @@ QQ.Rectangle {
             sourceComponent: SideBarButton {
                 id: fileMenuButtonId
                 text: "File"
-                image: "qrc:/twbs-icons/icons/chevron-double-down.svg"
+                image: "qrc:/twbs-icons/icons/chevron-double-right.svg"
                 imageSize: Qt.size(12, 12)
                 troggled: false
                 layout: Qt.Horizontal
+                layoutDirection: Qt.RightToLeft
                 onButtonIsTroggled: {
                     if (sidebarArea.fileMenu) {
                         if(sidebarArea.fileMenu.visible) {
                             sidebarArea.fileMenu.close()
                         } else {
-                            sidebarArea.fileMenu.popup(fileMenuButtonId, 0, fileMenuButtonId.height)
+                            sidebarArea.fileMenu.popup(fileMenuButtonId, fileMenuButtonId.width, 0)
                         }
                     }
                 }
