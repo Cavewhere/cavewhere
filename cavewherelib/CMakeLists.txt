@@ -259,7 +259,11 @@ endif()
 # Protobuf files
 file(GLOB protobuf_FILES "src/*.proto")
 set(Protobuf_IMPORT_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/src)
-protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS EXPORT_MACRO CAVEWHERE_LIB_EXPORT ${protobuf_FILES})
+if(WIN32)
+    protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS EXPORT_MACRO CAVEWHERE_LIB_EXPORT ${protobuf_FILES})
+else()
+    protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${protobuf_FILES})
+endif()
 target_sources(cavewherelib PRIVATE ${protobuf_FILES} ${protobuf_FILES})
 
 # Add the generated files to your target
