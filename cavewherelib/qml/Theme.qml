@@ -32,7 +32,7 @@ QtObject {
     readonly property color warning: dark ? "#6b643e" : "#FF9C14"
     readonly property color danger: dark ? "#6f312e" : "#FF6736"
     readonly property color info: dark ? "#1f3f61" : "#85c1f4"
-    readonly property color highlight: palette.highlight
+    readonly property color highlight: dark ? "#314f78" : "#a5cdff"
     readonly property color icon: palette.buttonText
     readonly property color tag: dark ? "#656565" : border
 
