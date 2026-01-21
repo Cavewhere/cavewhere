@@ -299,8 +299,11 @@ if(BUILD_TESTING)
         cavewherelib
         protobuf::libprotobuf
         SignalSpyChecker
-
+        QuickQanavaplugin
     )
+
+    qt_import_qml_plugins(cavewhere-test)
+
     cw_link_absl_static(cavewhere-test)
 
     #### Cavewhere qml tests ####
@@ -347,7 +350,11 @@ if(BUILD_TESTING)
         Qt6::QuickTest
         cavewhere-testlib
         cavewherelib
+        QuickQanavaplugin
     )
+
+    # Ensure QML modules are imported without relying on QML2_IMPORT_PATH.
+    qt_import_qml_plugins(cavewhere-qml-test)
 
     # Add the cw.simple library
     add_subdirectory(test-qml)
