@@ -1043,10 +1043,20 @@ void cwSurveyChunk::checkForError(cwSurveyChunk::DataRole role, int index)
             if(!isStationAndShotsEmpty()) {
 
                 const int previousShotIndex = index - 1;
-                if((previousShotIndex < 0 || //Previous shot data doesn't exist
-                     !(isShotDataEmpty(previousShotIndex)))) //Existing shot data needs to be not empty
-                {
-                    //Station needs to have
+                const int nextShotIndex = index;
+                bool previousShotHasData = false;
+                bool nextShotHasData = false;
+
+                if(previousShotIndex >= 0) {
+                    previousShotHasData = !isShotDataEmpty(previousShotIndex);
+                }
+
+                if(nextShotIndex < d.shots.size()) {
+                    nextShotHasData = !isShotDataEmpty(nextShotIndex);
+                }
+
+                if(previousShotHasData || nextShotHasData) {
+                    //Station needs to have a name when either adjacent shot has data
                     cwError error;
                     error.setMessage("Missing station name");
                     error.setType(cwError::Fatal);

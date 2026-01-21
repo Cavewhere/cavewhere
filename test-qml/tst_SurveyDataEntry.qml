@@ -456,6 +456,147 @@ MainWindowTest {
             verify(distanceError.checked === false);
         }
 
+        function test_missingStationNameAfterClearingShotData() {
+            addSurvey();
+
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view");
+            let frontSight = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->frontSightCalibrationEditor->checkBox")
+            let backSight = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->backSightCalibrationEditor->checkBox")
+
+            verify(view !== null)
+            verify(frontSight !== null)
+            verify(backSight !== null)
+
+            if(!frontSight.checked) {
+                mouseClick(frontSight)
+            }
+            if(!backSight.checked) {
+                mouseClick(backSight)
+            }
+
+            function dataBoxAt(row, column) {
+                view.positionViewAtIndex(row, ListView.Contain)
+                waitForRendering(rootId)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
+                verify(cell !== null)
+                mouseClick(cell)
+                return cell
+            }
+
+            function keyClickText(text) {
+                for(let i = 0; i < text.length; i++) {
+                    let ch = text[i]
+                    if(ch >= "0" && ch <= "9") {
+                        keyClick(ch.charCodeAt(0), 0)
+                    } else if(ch === ".") {
+                        keyClick(46, 0)
+                    } else if(ch === "-") {
+                        keyClick(45, 0)
+                    } else {
+                        keyClick(ch)
+                    }
+                }
+            }
+
+            function setCell(row, column, text) {
+                dataBoxAt(row, column)
+                keyClickText(text)
+                keyClick(16777220, 0) //Return
+                waitForRendering(rootId)
+            }
+
+            function clearCell(row, column) {
+                dataBoxAt(row, column)
+                keyClick(16777220, 0) //Return
+                keyClick(16777223, 0) //Delete
+                keyClick(16777220, 0) //Return
+                waitForRendering(rootId)
+
+                // wait(1000000)
+            }
+
+            // Stations: 0 -> 1 -> 2 -> 3
+            setCell(1, SurveyChunk.StationNameRole, "A1")
+            setCell(3, SurveyChunk.StationNameRole, "1")
+            setCell(5, SurveyChunk.StationNameRole, "2")
+            setCell(7, SurveyChunk.StationNameRole, "3")
+
+            // LRUD for each station
+            setCell(1, SurveyChunk.StationLeftRole, "1")
+            setCell(1, SurveyChunk.StationRightRole, "2")
+            setCell(1, SurveyChunk.StationUpRole, "3")
+            setCell(1, SurveyChunk.StationDownRole, "4")
+
+            setCell(3, SurveyChunk.StationLeftRole, "1.1")
+            setCell(3, SurveyChunk.StationRightRole, "2.1")
+            setCell(3, SurveyChunk.StationUpRole, "3.1")
+            setCell(3, SurveyChunk.StationDownRole, "4.1")
+
+            setCell(5, SurveyChunk.StationLeftRole, "1.2")
+            setCell(5, SurveyChunk.StationRightRole, "2.2")
+            setCell(5, SurveyChunk.StationUpRole, "3.2")
+            setCell(5, SurveyChunk.StationDownRole, "4.2")
+
+            setCell(7, SurveyChunk.StationLeftRole, "1.3")
+            setCell(7, SurveyChunk.StationRightRole, "2.3")
+            setCell(7, SurveyChunk.StationUpRole, "3.3")
+            setCell(7, SurveyChunk.StationDownRole, "4.3")
+
+            // Shot 0
+            setCell(2, SurveyChunk.ShotDistanceRole, "10")
+            setCell(2, SurveyChunk.ShotCompassRole, "10")
+            setCell(2, SurveyChunk.ShotBackCompassRole, "190")
+            setCell(2, SurveyChunk.ShotClinoRole, "5")
+            setCell(2, SurveyChunk.ShotBackClinoRole, "-5")
+
+            // Shot 1
+            setCell(4, SurveyChunk.ShotDistanceRole, "11")
+            setCell(4, SurveyChunk.ShotCompassRole, "20")
+            setCell(4, SurveyChunk.ShotBackCompassRole, "200")
+            setCell(4, SurveyChunk.ShotClinoRole, "6")
+            setCell(4, SurveyChunk.ShotBackClinoRole, "-6")
+
+            // Shot 2
+            setCell(6, SurveyChunk.ShotDistanceRole, "12")
+            setCell(6, SurveyChunk.ShotCompassRole, "30")
+            setCell(6, SurveyChunk.ShotBackCompassRole, "210")
+            setCell(6, SurveyChunk.ShotClinoRole, "7")
+            setCell(6, SurveyChunk.ShotBackClinoRole, "-7")
+
+            let trip = RootData.pageView.currentPageItem.currentTrip as Trip
+            verify(trip !== null)
+            verify(trip.errorModel !== null)
+            let chunk = trip.chunk(0)
+            verify(chunk !== null)
+            verify(chunk.errorModel !== null)
+
+            tryVerify(() => { return chunk.errorModel.fatalCount === 0 && chunk.errorModel.warningCount === 0 })
+            tryVerify(() => { return trip.errorModel.fatalCount === 0 && trip.errorModel.warningCount === 0 })
+
+            // wait(100000)
+
+            // Clear first shot front readings and remove station 1 name.
+            clearCell(2, SurveyChunk.ShotDistanceRole)
+            clearCell(2, SurveyChunk.ShotCompassRole)
+            clearCell(2, SurveyChunk.ShotClinoRole)
+            clearCell(2, SurveyChunk.ShotBackCompassRole)
+            clearCell(2, SurveyChunk.ShotBackClinoRole)
+            clearCell(3, SurveyChunk.StationNameRole)
+
+            let station1Cell = dataBoxAt(3, SurveyChunk.StationNameRole)
+            verify(station1Cell.errorModel !== null)
+            tryVerify(() => { return station1Cell.errorModel.fatalCount === 1 })
+            verify(station1Cell.errorModel.warningCount === 0)
+            tryVerify(() => { return chunk.errorModel.fatalCount === 1 && chunk.errorModel.warningCount === 0 })
+            tryVerify(() => { return trip.errorModel.fatalCount === 1 && trip.errorModel.warningCount === 0 })
+
+            let errors = station1Cell.errorModel.errors
+            verify(errors.count === 1)
+            let errorIndex = errors.index(0, 0)
+            verify(errors.data(errorIndex, ErrorListModel.MessageRole) === "Missing station name")
+            verify(errors.data(errorIndex, ErrorListModel.ErrorTypeRole) === CwError.Fatal)
+        }
+
         function test_dateChangeShouldWork() {
             addSurvey();
 

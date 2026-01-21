@@ -291,6 +291,11 @@ QQ.Item {
                                dataBox.editorFocus.setIndex(dataBox.navigation.arrowDown())
                                event.accepted = true
                                break;
+                               case Qt.Key_Enter:
+                               case Qt.Key_Return:
+                               dataBox.state = 'MiddleTyping'
+                               editor.openEditor()
+                               break;
                                case Qt.Key_Backspace:
                                // deletePressedHandler();
                                return;

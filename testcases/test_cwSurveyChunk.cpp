@@ -618,6 +618,58 @@ TEST_CASE("Checks cwSurveyChunk errors", "[cwSurveyChunk]")
     }
 }
 
+TEST_CASE("cwSurveyChunk reports missing station name when shot data is cleared", "[cwSurveyChunk][errors]") {
+    cwTrip trip;
+    auto chunk = new cwSurveyChunk();
+    trip.addChunk(chunk);
+
+    auto makeStation = [](const QString& name, double offset) {
+        cwStation station(name);
+        station.setLeft(cwDistanceReading(1.0 + offset));
+        station.setRight(cwDistanceReading(1.5 + offset));
+        station.setUp(cwDistanceReading(2.0 + offset));
+        station.setDown(cwDistanceReading(2.5 + offset));
+        return station;
+    };
+
+    cwStation station0 = makeStation("0", 0.0);
+    cwStation station1 = makeStation("1", 1.0);
+    cwStation station2 = makeStation("2", 2.0);
+    cwStation station3 = makeStation("3", 3.0);
+
+    cwShot shot0("10", "10", "190", "5", "-5");
+    cwShot shot1("11", "20", "200", "6", "-6");
+    cwShot shot2("12", "30", "210", "7", "-7");
+
+    // Stations: 0 -> 1 -> 2 -> 3
+    chunk->appendShot(station0, station1, shot0);
+    chunk->appendShot(station1, station2, shot1);
+    chunk->appendShot(station2, station3, shot2);
+
+    CHECK(chunk->errorModel()->fatalCount() == 0);
+    CHECK(chunk->errorModel()->warningCount() == 0);
+
+    // First shot: clear distance/compass/clino and remove station 1 name.
+    chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "");
+    chunk->setData(cwSurveyChunk::ShotCompassRole, 0, "");
+    chunk->setData(cwSurveyChunk::ShotClinoRole, 0, "");
+    chunk->setData(cwSurveyChunk::StationNameRole, 1, "");
+
+    REQUIRE(chunk->errorModel()->fatalCount() == 1);
+    CHECK(chunk->errorModel()->warningCount() == 0);
+
+    REQUIRE(trip.errorModel()->fatalCount() == 1);
+    CHECK(trip.errorModel()->warningCount() == 0);
+
+    cwErrorModel* errorModel = chunk->errorsAt(1, cwSurveyChunk::StationNameRole);
+    REQUIRE(errorModel != nullptr);
+    REQUIRE(errorModel->errors()->size() == 1);
+    CHECK(errorModel->errors()->first().message() == QString("Missing station name"));
+    CHECK(errorModel->errors()->first().type() == cwError::Fatal);
+
+
+}
+
 /**
  * @brief TEST_CASE
  *
