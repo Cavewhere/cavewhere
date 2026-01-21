@@ -33,6 +33,10 @@ QQ.Item {
         trip: clipArea.currentTrip
     }
 
+    RemovePreview {
+        id: removePreviewId
+    }
+
 
     SurveyEditorModel {
         id: editorModel
@@ -230,6 +234,7 @@ QQ.Item {
                 surveyChunkTrimmer: surveyChunkTrimmerId
                 // view: viewId
                 model: editorModel
+                removePreview: removePreviewId
                 stationValidator: stationValidatorId
                 distanceValidator: distanceValidatorId
                 compassValidator: compassValidatorId

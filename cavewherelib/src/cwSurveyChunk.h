@@ -161,11 +161,11 @@ public slots:
     void insertStation(int stationIndex, Direction direction);
     void insertShot(int shotIndex, Direction direction);
 
-    void removeStation(int stationIndex, Direction shot);
-    bool canRemoveStation(int stationIndex, Direction shot);
+    Q_INVOKABLE void removeStation(int stationIndex, Direction shot);
+    Q_INVOKABLE bool canRemoveStation(int stationIndex, Direction shot);
 
-    void removeShot(int shotIndex, Direction station);
-    bool canRemoveShot(int shotIndex, Direction station);
+    Q_INVOKABLE void removeShot(int shotIndex, Direction station);
+    Q_INVOKABLE bool canRemoveShot(int shotIndex, Direction station);
 
     void setData(DataRole role, int index, QVariant data);
 

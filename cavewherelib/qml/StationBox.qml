@@ -14,6 +14,14 @@ DataBox {
 
     property var window: QQ.Window.window
 
+    StationMenu {
+        id: removeMenuId
+        dataValue: stationBox.dataValue
+        removePreview: stationBox.removePreview
+    }
+
+    rightClickMenu: removeMenuId.item
+
     function commitAutoStation() {
         var stationName = dataValue.rowIndex.chunk.guessLastStationName();
         dataValue.rowIndex.chunk.setData(dataValue.chunkDataRole, dataValue.rowIndex.indexInChunk, stationName);
