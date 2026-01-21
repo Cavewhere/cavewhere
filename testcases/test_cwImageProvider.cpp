@@ -29,7 +29,7 @@ TEST_CASE("test cwImageProvider requestImage cache behavior", "[cwImageProvider]
     REQUIRE(fileInfo.isFile());
 
     //ProjectFile doesn't exist, but that's not need for this testcase to work
-    const QString projectFile = fileInfo.absolutePath() + QStringLiteral("/test.cw");
+    const QString projectFile = fileInfo.absolutePath() + QStringLiteral("/test.cwproj");
     const QString imageRelativeName = fileInfo.fileName(); // "testpage.png"
 
     // 2) Set up provider with project path
@@ -115,7 +115,7 @@ TEST_CASE("cwImageProvider renders SVG using resolutionImport", "[cwImageProvide
     REQUIRE(fileInfo.exists());
     REQUIRE(fileInfo.isFile());
 
-    const QString projectFile = fileInfo.absolutePath() + QStringLiteral("/test.cw");
+    const QString projectFile = fileInfo.absolutePath() + QStringLiteral("/test.cwproj");
     const QString imageRelativeName = fileInfo.fileName();
 
     cwImageProvider provider;
@@ -160,7 +160,7 @@ TEST_CASE("cwImageProvider respects SVG unit sizes with CSS dpi", "[cwImageProvi
     REQUIRE(fileInfo.exists());
     REQUIRE(fileInfo.isFile());
 
-    const QString projectFile = fileInfo.absolutePath() + QStringLiteral("/test.cw");
+    const QString projectFile = fileInfo.absolutePath() + QStringLiteral("/test.cwproj");
     const QString imageRelativeName = fileInfo.fileName();
 
     cwImageProvider provider;
@@ -195,7 +195,7 @@ TEST_CASE("cwImageProvider clamps SVG render size to 256MB threshold", "[cwImage
     REQUIRE(fileInfo.exists());
     REQUIRE(fileInfo.isFile());
 
-    const QString projectFile = fileInfo.absolutePath() + QStringLiteral("/test.cw");
+    const QString projectFile = fileInfo.absolutePath() + QStringLiteral("/test.cwproj");
     const QString imageRelativeName = fileInfo.fileName();
 
     cwImageProvider provider;
@@ -277,7 +277,7 @@ TEST_CASE("cwImageProvider scales SVG units correctly", "[cwImageProvider]") {
         REQUIRE(svgFile.write(svgContents.toUtf8()) > 0);
         svgFile.close();
 
-        const QString projectFile = QDir(tempDirPath).filePath(QStringLiteral("test.cw"));
+        const QString projectFile = QDir(tempDirPath).filePath(QStringLiteral("test.cwproj"));
         const QString imageRelativeName = QFileInfo(tempPath).fileName();
 
         cwImageProvider provider;

@@ -172,7 +172,7 @@ TEST_CASE("cwRepositoryModel repositoryProjectFile locates project file", "[cwRe
     QTemporaryDir tmpDir;
     REQUIRE(tmpDir.isValid());
 
-    QFile projectFile(tmpDir.filePath("Sample.cw"));
+    QFile projectFile(tmpDir.filePath("Sample.cwproj"));
     REQUIRE(projectFile.open(QIODevice::WriteOnly));
     REQUIRE(projectFile.write("{}") != -1);
     projectFile.close();
@@ -205,8 +205,8 @@ TEST_CASE("cwRepositoryModel repositoryProjectFile reports missing or duplicate 
     }
 
     SECTION("duplicate project files") {
-        QFile first(repoDir.filePath("one.cw"));
-        QFile second(repoDir.filePath("two.cw"));
+        QFile first(repoDir.filePath("one.cwproj"));
+        QFile second(repoDir.filePath("two.cwproj"));
         REQUIRE(first.open(QIODevice::WriteOnly));
         REQUIRE(second.open(QIODevice::WriteOnly));
         first.close();
@@ -226,7 +226,7 @@ TEST_CASE("cwRepositoryModel addRepositoryFromProjectFile adds repositories once
     QTemporaryDir tmpDir;
     REQUIRE(tmpDir.isValid());
 
-    QFile projectFile(tmpDir.filePath("Repo.cw"));
+    QFile projectFile(tmpDir.filePath("Repo.cwproj"));
     REQUIRE(projectFile.open(QIODevice::WriteOnly));
     projectFile.close();
 
@@ -242,7 +242,7 @@ TEST_CASE("cwRepositoryModel addRepositoryFromProjectFile adds repositories once
     CHECK(addAgainResult.hasError() == false);
     CHECK(model.rowCount() == 1);
 
-    const auto remoteResult = model.addRepositoryFromProjectFile(QUrl(QStringLiteral("https://example.com/remote.cw")));
+    const auto remoteResult = model.addRepositoryFromProjectFile(QUrl(QStringLiteral("https://example.com/remote.cwproj")));
     CHECK(remoteResult.hasError());
 }
 

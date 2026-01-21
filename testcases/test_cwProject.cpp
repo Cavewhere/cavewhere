@@ -400,7 +400,7 @@ TEST_CASE("Temporary project saveAs should move the project directory", "[cwProj
     QTemporaryDir destinationParent;
     REQUIRE(destinationParent.isValid());
 
-    const QString targetProjectFile = destinationParent.filePath(QStringLiteral("SavedProject.cw"));
+    const QString targetProjectFile = destinationParent.filePath(QStringLiteral("SavedProject.cwproj"));
 
     REQUIRE(project->saveAs(targetProjectFile));
 
@@ -419,7 +419,7 @@ TEST_CASE("Temporary project saveAs should move the project directory", "[cwProj
     CHECK(QFileInfo::exists(newRootDir.absoluteFilePath(QStringLiteral("marker.txt"))));
     CHECK_FALSE(QFileInfo::exists(markerFilePath));
 
-    CHECK(newFileInfo.fileName() == QStringLiteral("SavedProject.cw"));
+    CHECK(newFileInfo.fileName() == QStringLiteral("SavedProject.cwproj"));
 }
 
 TEST_CASE("Temporary project saveAs reports error when destination exists", "[cwProject]") {
@@ -436,7 +436,7 @@ TEST_CASE("Temporary project saveAs reports error when destination exists", "[cw
     const QString existingRoot = destinationParent.filePath(baseName);
     REQUIRE(QDir().mkpath(existingRoot));
 
-    const QString targetProjectFile = destinationParent.filePath(baseName + QStringLiteral(".cw"));
+    const QString targetProjectFile = destinationParent.filePath(baseName + QStringLiteral(".cwproj"));
 
     CHECK_FALSE(project->saveAs(targetProjectFile));
 
@@ -457,7 +457,7 @@ TEST_CASE("Non-temporary project saveAs reports error when destination exists", 
     QTemporaryDir moveDestinationParent;
     REQUIRE(moveDestinationParent.isValid());
 
-    const QString initialTarget = moveDestinationParent.filePath(QStringLiteral("PersistentProject.cw"));
+    const QString initialTarget = moveDestinationParent.filePath(QStringLiteral("PersistentProject.cwproj"));
     REQUIRE(project->saveAs(initialTarget));
     rootData->futureManagerModel()->waitForFinished();
     project->errorModel()->clear();
@@ -472,7 +472,7 @@ TEST_CASE("Non-temporary project saveAs reports error when destination exists", 
     const QString existingRoot = copyDestinationParent.filePath(baseName);
     REQUIRE(QDir().mkpath(existingRoot));
 
-    const QString targetProjectFile = copyDestinationParent.filePath(baseName + QStringLiteral(".cw"));
+    const QString targetProjectFile = copyDestinationParent.filePath(baseName + QStringLiteral(".cwproj"));
 
     CHECK_FALSE(project->saveAs(targetProjectFile));
 
@@ -964,7 +964,7 @@ TEST_CASE("Renaming a trip moves its files and note assets", "[cwProject][cwTrip
     CHECK_FALSE(tripDirs.contains(originalTripName));
 
     QDir renamedTripDir(renamedTripDirPath);
-    const QStringList renamedCwFiles = renamedTripDir.entryList(QStringList() << "*.cwtrip" << "*.cw",
+    const QStringList renamedCwFiles = renamedTripDir.entryList(QStringList() << "*.cwtrip" << "*.cwproj",
                                                                 QDir::Files | QDir::NoDotAndDotDot);
     INFO("Files:" << renamedCwFiles.join(",").toStdString());
 

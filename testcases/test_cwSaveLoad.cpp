@@ -126,7 +126,7 @@ TEST_CASE("cwSaveLoad writes file version metadata for saved files", "[cwSaveLoa
 
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
-    const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("version-test.cw"));
+    const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("version-test.cwproj"));
     REQUIRE(project->saveAs(projectPath));
     project->waitSaveToFinish();
 

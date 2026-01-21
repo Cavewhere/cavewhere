@@ -122,14 +122,25 @@ Monad::ResultString cwRepositoryModel::repositoryProjectFile(int index) const
 
     const QFileInfoList entries = dir.entryInfoList(QDir::Files | QDir::NoDotAndDotDot);
     QString projectFilePath;
+    QString legacyProjectFilePath;
 
     for (const QFileInfo& entry : entries) {
-        if (entry.suffix().compare(QStringLiteral("cw"), Qt::CaseInsensitive) == 0) {
+        const QString suffix = entry.suffix();
+        if (suffix.compare(QStringLiteral("cwproj"), Qt::CaseInsensitive) == 0) {
             if (!projectFilePath.isEmpty()) {
                 return Monad::ResultString(QStringLiteral("Multiple CaveWhere project files found in %1").arg(dir.absolutePath()), PathError);
             }
             projectFilePath = entry.absoluteFilePath();
+        } else if (suffix.compare(QStringLiteral("cw"), Qt::CaseInsensitive) == 0) {
+            if (!legacyProjectFilePath.isEmpty()) {
+                return Monad::ResultString(QStringLiteral("Multiple CaveWhere project files found in %1").arg(dir.absolutePath()), PathError);
+            }
+            legacyProjectFilePath = entry.absoluteFilePath();
         }
+    }
+
+    if (projectFilePath.isEmpty()) {
+        projectFilePath = legacyProjectFilePath;
     }
 
     if (projectFilePath.isEmpty()) {
@@ -169,7 +180,9 @@ Monad::ResultBase cwRepositoryModel::addRepositoryFromProjectFile(const QUrl& pr
         return Monad::ResultBase(QStringLiteral("Project file %1 does not exist").arg(fileInfo.absoluteFilePath()), PathError);
     }
 
-    if (fileInfo.suffix().compare(QStringLiteral("cw"), Qt::CaseInsensitive) != 0) {
+    const QString suffix = fileInfo.suffix();
+    if (suffix.compare(QStringLiteral("cwproj"), Qt::CaseInsensitive) != 0
+        && suffix.compare(QStringLiteral("cw"), Qt::CaseInsensitive) != 0) {
         return Monad::ResultBase(QStringLiteral("Project file %1 is not a CaveWhere project").arg(fileInfo.fileName()), PathError);
     }
 

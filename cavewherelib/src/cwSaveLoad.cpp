@@ -629,7 +629,11 @@ Result<ProjectDestination> projectDestination(const QString& destinationUrl)
         return Result<ProjectDestination>(QStringLiteral("Save location can't be empty."));
     }
 
-    localPath = cwGlobals::addExtension(localPath, QStringLiteral("cw"));
+    localPath = cwGlobals::addExtension(localPath, QStringLiteral("cwproj"));
+    if (QFileInfo(localPath).suffix().compare(QStringLiteral("cw"), Qt::CaseInsensitive) == 0) {
+        localPath = QFileInfo(localPath).path() + QDir::separator()
+            + QFileInfo(localPath).completeBaseName() + QStringLiteral(".cwproj");
+    }
     QFileInfo destinationInfo(localPath);
     if (!destinationInfo.isAbsolute()) {
         destinationInfo = QFileInfo(QDir::current(), localPath);
@@ -663,7 +667,7 @@ Result<ProjectDestination> projectDestination(const QString& destinationUrl)
     }
 
     const QDir rootDir(rootDirPath);
-    const QString projectFilePath = rootDir.absoluteFilePath(sanitizedBaseName + QStringLiteral(".cw"));
+    const QString projectFilePath = rootDir.absoluteFilePath(sanitizedBaseName + QStringLiteral(".cwproj"));
 
     return Result<ProjectDestination>({sanitizedBaseName, rootDirPath, projectFilePath});
 }
@@ -958,7 +962,7 @@ std::unique_ptr<CavewhereProto::CavingRegion> cwSaveLoad::toProtoCavingRegion(co
 
 QString cwSaveLoad::regionFileName(const QDir &dir, const cwCavingRegion *region)
 {
-    return dir.absoluteFilePath(sanitizeFileName(QStringLiteral("%1.cw").arg(region->name())));
+    return dir.absoluteFilePath(sanitizeFileName(QStringLiteral("%1.cwproj").arg(region->name())));
 }
 
 void cwSaveLoad::save(const cwCave *cave)
@@ -2853,7 +2857,7 @@ QDir cwSaveLoad::projectDir() const
 
 QString cwSaveLoad::regionFileName(const cwCavingRegion *region)
 {
-    return sanitizeFileName(region->name() + QStringLiteral(".cw"));
+    return sanitizeFileName(region->name() + QStringLiteral(".cwproj"));
 }
 
 QString cwSaveLoad::fileName(const cwCave *cave)

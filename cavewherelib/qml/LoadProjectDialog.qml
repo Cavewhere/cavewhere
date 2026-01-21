@@ -12,7 +12,7 @@ Item {
 
         property string oldFilePath;
 
-        nameFilters: ["CaveWhere File (*.cw)"]
+        nameFilters: ["CaveWhere Project (*.cwproj *.cw)"]
         currentFolder: RootData.lastDirectory
         onAccepted: {
             RootData.lastDirectory = selectedFile

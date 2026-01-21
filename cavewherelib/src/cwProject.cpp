@@ -38,6 +38,7 @@
 #include <QDateTime>
 #include <QSqlQuery>
 #include <QDebug>
+#include <QFileInfo>
 #include <QSqlError>
 #include <QUndoStack>
 #include <QFileDialog>
@@ -324,7 +325,11 @@ bool cwProject::saveAs(QString newFilename)
         return false;
     }
 
-    newFilename = cwGlobals::addExtension(newFilename, QStringLiteral("cw"));
+    newFilename = cwGlobals::addExtension(newFilename, QStringLiteral("cwproj"));
+    if (QFileInfo(newFilename).suffix().compare(QStringLiteral("cw"), Qt::CaseInsensitive) == 0) {
+        newFilename = QFileInfo(newFilename).path() + QDir::separator()
+            + QFileInfo(newFilename).completeBaseName() + QStringLiteral(".cwproj");
+    }
 
     Monad::ResultBase result = isTemporaryProject()
         ? m_saveLoad->moveProjectTo(newFilename)

@@ -4,7 +4,7 @@ import cavewherelib
 
 FileDialog {
     id: saveAsFileDialogId
-    nameFilters: ["CaveWhere Project (*.cw)"]
+    nameFilters: ["CaveWhere Project (*.cwproj)"]
     title: "Save CaveWhere Project As"
     fileMode: FileDialog.SaveFile
     currentFolder: RootData.lastDirectory
