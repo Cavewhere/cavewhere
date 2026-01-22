@@ -100,7 +100,7 @@ QQ.Loader {
 
                 QC.MenuItem {
                     objectName: "shotMenuInsertAbove"
-                    text: "Shot above"
+                    text: "Above"
                     enabled: dataValue.chunk !== null
                     onTriggered: {
                         dataValue.chunk.insertShot(dataValue.indexInChunk, SurveyChunk.Above)
@@ -109,7 +109,7 @@ QQ.Loader {
 
                 QC.MenuItem {
                     objectName: "shotMenuInsertBelow"
-                    text: "Shot below"
+                    text: "Below"
                     enabled: dataValue.chunk !== null
                     onTriggered: {
                         dataValue.chunk.insertShot(dataValue.indexInChunk, SurveyChunk.Below)
