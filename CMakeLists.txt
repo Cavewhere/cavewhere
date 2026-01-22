@@ -341,6 +341,9 @@ if(BUILD_TESTING)
 
     target_compile_definitions(cavewhere-qml-test PRIVATE QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test-qml")
 
+    # Add the cw.simple module before linking/importing plugins.
+    add_subdirectory(test-qml)
+
     target_link_libraries(cavewhere-qml-test
         PRIVATE
         Qt6::Test
@@ -348,6 +351,7 @@ if(BUILD_TESTING)
         Qt6::Widgets
         Qt6::Qml
         Qt6::QuickTest
+        cavewhere_simplemodule
         cavewhere-testlib
         cavewherelib
         QuickQanavaplugin
@@ -355,9 +359,6 @@ if(BUILD_TESTING)
 
     # Ensure QML modules are imported without relying on QML2_IMPORT_PATH.
     qt_import_qml_plugins(cavewhere-qml-test)
-
-    # Add the cw.simple library
-    add_subdirectory(test-qml)
 endif()
 
 #### CaveWhere ####
