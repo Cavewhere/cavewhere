@@ -486,8 +486,12 @@ if(UNIX AND NOT APPLE)
             "QML_SOURCES_PATHS=${QML_SOURCES_PATHS}"
             "${LINUXDEPLOY_QT_PLUGIN_EXECUTABLE}"
             --appdir "${APPIMAGE_APPDIR}"
+            # Only bundle SQLite; drop other Qt SQL drivers (odbc, mysql, psql, oci, mimer).
             --exclude-library "libqsqlmimer.so"
             --exclude-library "libqsqloci.so*"
+            --exclude-library "libqsqlodbc.so*"
+            --exclude-library "libqsqlmysql.so*"
+            --exclude-library "libqsqlpsql.so*"
         COMMAND ${CMAKE_COMMAND} -E env "PATH=${LINUXDEPLOY_ENV_PATH}" ${APPIMAGE_RUNTIME_ENV}
             "${LINUXDEPLOY_EXECUTABLE}"
             --appdir "${APPIMAGE_APPDIR}"
