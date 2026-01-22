@@ -6,6 +6,8 @@ find_package(Qt6 REQUIRED COMPONENTS Core)
 qt_standard_project_setup()
 find_package(absl REQUIRED)
 
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 #Add address sanitizer for clang build only
 if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     add_compile_options($<$<CONFIG:Debug>:-fsanitize=address>)
