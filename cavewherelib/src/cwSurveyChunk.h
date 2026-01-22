@@ -158,16 +158,16 @@ public slots:
 
     cwSurveyChunk* splitAtStation(int stationIndex);
 
-    void insertStation(int stationIndex, Direction direction);
-    void insertShot(int shotIndex, Direction direction);
+    void insertStation(int stationIndex, cwSurveyChunk::Direction direction);
+    void insertShot(int shotIndex, cwSurveyChunk::Direction direction);
 
-    Q_INVOKABLE void removeStation(int stationIndex, Direction shot);
-    Q_INVOKABLE bool canRemoveStation(int stationIndex, Direction shot);
+    void removeStation(int stationIndex, cwSurveyChunk::Direction shot);
+    bool canRemoveStation(int stationIndex, cwSurveyChunk::Direction shot);
 
-    Q_INVOKABLE void removeShot(int shotIndex, Direction station);
-    Q_INVOKABLE bool canRemoveShot(int shotIndex, Direction station);
+    void removeShot(int shotIndex, cwSurveyChunk::Direction station);
+    bool canRemoveShot(int shotIndex, cwSurveyChunk::Direction station);
 
-    void setData(DataRole role, int index, QVariant data);
+    void setData(cwSurveyChunk::DataRole role, int index, QVariant data);
 
 
 private:

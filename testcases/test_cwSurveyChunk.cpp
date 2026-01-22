@@ -670,6 +670,66 @@ TEST_CASE("cwSurveyChunk reports missing station name when shot data is cleared"
 
 }
 
+TEST_CASE("cwSurveyChunk insertStation keeps shot data aligned", "[cwSurveyChunk]") {
+    cwSurveyChunk chunk;
+
+    chunk.appendNewShot();
+
+    chunk.setData(cwSurveyChunk::StationNameRole, 0, "A0");
+    chunk.setData(cwSurveyChunk::StationNameRole, 1, "A1");
+    chunk.setData(cwSurveyChunk::ShotDistanceRole, 0, 10);
+
+    chunk.appendNewShot();
+    chunk.setData(cwSurveyChunk::StationNameRole, 2, "A2");
+    chunk.setData(cwSurveyChunk::ShotDistanceRole, 1, 20);
+
+    REQUIRE(chunk.stationCount() == 3);
+    REQUIRE(chunk.shotCount() == 2);
+
+    chunk.insertStation(0, cwSurveyChunk::Above);
+    chunk.setData(cwSurveyChunk::StationNameRole, 0, "B0");
+
+    REQUIRE(chunk.stationCount() == 4);
+    REQUIRE(chunk.shotCount() == 3);
+    {
+        bool ok = false;
+        const auto distance = chunk.data(cwSurveyChunk::ShotDistanceRole, 1).value<cwDistanceReading>();
+        CHECK(distance.toDouble(&ok) == 10);
+        CHECK(ok);
+    }
+    {
+        bool ok = false;
+        const auto distance = chunk.data(cwSurveyChunk::ShotDistanceRole, 2).value<cwDistanceReading>();
+        CHECK(distance.toDouble(&ok) == 20);
+        CHECK(ok);
+    }
+
+    chunk.insertStation(1, cwSurveyChunk::Above);
+    chunk.setData(cwSurveyChunk::StationNameRole, 1, "C0");
+
+    REQUIRE(chunk.stationCount() == 5);
+    REQUIRE(chunk.shotCount() == 4);
+
+    CHECK(chunk.data(cwSurveyChunk::StationNameRole, 0).toString() == "B0");
+    CHECK(chunk.data(cwSurveyChunk::StationNameRole, 1).toString() == "C0");
+    CHECK(chunk.data(cwSurveyChunk::StationNameRole, 2).toString() == "A0");
+    CHECK(chunk.data(cwSurveyChunk::StationNameRole, 3).toString() == "A1");
+    CHECK(chunk.data(cwSurveyChunk::StationNameRole, 4).toString() == "A2");
+
+    {
+        bool ok = false;
+        const auto distance = chunk.data(cwSurveyChunk::ShotDistanceRole, 2).value<cwDistanceReading>();
+        CHECK(distance.toDouble(&ok) == 10);
+        CHECK(ok);
+    }
+    {
+        bool ok = false;
+        const auto distance = chunk.data(cwSurveyChunk::ShotDistanceRole, 3).value<cwDistanceReading>();
+        CHECK(distance.toDouble(&ok) == 20);
+        CHECK(ok);
+    }
+}
+
 /**
  * @brief TEST_CASE
  *

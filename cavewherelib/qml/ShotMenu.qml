@@ -10,15 +10,17 @@ import cavewherelib
 
 QQ.Loader {
     id: shotMenuLoader
+    objectName: "shotMenuLoader"
 
     required property cwSurveyEditorBoxData dataValue
     required property RemovePreview removePreview
 
-    active: true
+    active: false
 
     sourceComponent: QQ.Component {
         QC.Menu {
             id: menuId
+            objectName: "shotMenuRoot"
 
             function stationLabel(index) {
                 if(dataValue.chunk === null) {
@@ -49,10 +51,12 @@ QQ.Loader {
             }
 
             QC.Menu {
+                objectName: "shotMenuRemoveMenu"
                 title: "Remove shot"
                 enabled: dataValue.chunk !== null
 
                 QC.MenuItem {
+                    objectName: "shotMenuRemoveAbove"
                     text: "and " + stationLabel(dataValue.indexInChunk)
                     enabled: dataValue.chunk !== null
                              && dataValue.chunk.canRemoveShot(dataValue.indexInChunk, SurveyChunk.Above)
@@ -69,6 +73,7 @@ QQ.Loader {
                     }
                 }
                 QC.MenuItem {
+                    objectName: "shotMenuRemoveBelow"
                     text: "and " + stationLabel(dataValue.indexInChunk + 1)
                     enabled: dataValue.chunk !== null
                              && dataValue.chunk.canRemoveShot(dataValue.indexInChunk, SurveyChunk.Below)
@@ -86,9 +91,36 @@ QQ.Loader {
                 }
             }
 
+            // QC.MenuSeparator { }
+
+            QC.Menu {
+                objectName: "shotMenuInsertMenu"
+                title: "Insert"
+                enabled: dataValue.chunk !== null
+
+                QC.MenuItem {
+                    objectName: "shotMenuInsertAbove"
+                    text: "Shot above"
+                    enabled: dataValue.chunk !== null
+                    onTriggered: {
+                        dataValue.chunk.insertShot(dataValue.indexInChunk, SurveyChunk.Above)
+                    }
+                }
+
+                QC.MenuItem {
+                    objectName: "shotMenuInsertBelow"
+                    text: "Shot below"
+                    enabled: dataValue.chunk !== null
+                    onTriggered: {
+                        dataValue.chunk.insertShot(dataValue.indexInChunk, SurveyChunk.Below)
+                    }
+                }
+            }
+
             QC.MenuSeparator { }
 
             RemoveChunkMenuItem {
+                objectName: "shotMenuRemoveChunk"
                 chunk: dataValue.chunk
             }
         }

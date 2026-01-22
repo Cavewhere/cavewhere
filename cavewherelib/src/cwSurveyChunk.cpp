@@ -436,6 +436,9 @@ cwSurveyChunk* cwSurveyChunk::splitAtStation(int stationIndex) {
 
   */
 void cwSurveyChunk::insertStation(int stationIndex, Direction direction) {
+    qDebug() << "InsertStation:" << this << stationIndex << direction << d.stations.empty() << (stationIndex < 0) << (stationIndex >= d.stations.size());
+
+
     if(d.stations.empty()) { appendNewShot(); return; }
     if(stationIndex < 0 || stationIndex >= d.stations.size()) { return; }
 

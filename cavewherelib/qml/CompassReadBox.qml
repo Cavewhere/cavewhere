@@ -17,5 +17,5 @@ ReadingBox {
         removePreview: compassReadBox.removePreview
     }
 
-    rightClickMenu: removeMenuId.item
+    rightClickMenuLoader: removeMenuId
 }

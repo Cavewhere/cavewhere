@@ -107,6 +107,189 @@ TEST_CASE("cwSurveyEditorModel new chunk should work correctly", "[cwSurveyEdito
     CHECK(i3.data(cwSurveyEditorModel::ShotCalibrationRole).isNull());
 }
 
+TEST_CASE("cwSurveyEditorModel box data stays correct after appendNewShot", "[cwSurveyEditorModel]") {
+    cwTrip trip;
+    trip.addNewChunk();
+    cwSurveyChunk* chunk = trip.chunk(0);
+
+    cwSurveyEditorModel model;
+    model.setTrip(&trip);
+
+    auto setStationData = [&](int index, const QString& name, const QString& left, const QString& right, const QString& up, const QString& down) {
+        chunk->setData(cwSurveyChunk::StationNameRole, index, name);
+        chunk->setData(cwSurveyChunk::StationLeftRole, index, left);
+        chunk->setData(cwSurveyChunk::StationRightRole, index, right);
+        chunk->setData(cwSurveyChunk::StationUpRole, index, up);
+        chunk->setData(cwSurveyChunk::StationDownRole, index, down);
+    };
+
+    auto setShotData = [&](int index, const QString& distance, const QString& compass, const QString& backCompass, const QString& clino, const QString& backClino) {
+        chunk->setData(cwSurveyChunk::ShotDistanceRole, index, distance);
+        chunk->setData(cwSurveyChunk::ShotCompassRole, index, compass);
+        chunk->setData(cwSurveyChunk::ShotBackCompassRole, index, backCompass);
+        chunk->setData(cwSurveyChunk::ShotClinoRole, index, clino);
+        chunk->setData(cwSurveyChunk::ShotBackClinoRole, index, backClino);
+    };
+
+    setStationData(0, "A0", "1.0", "2.0", "3.0", "4.0");
+    setStationData(1, "A1", "1.1", "2.1", "3.1", "4.1");
+    setShotData(0, "10.0", "100.0", "200.0", "30.0", "40.0");
+
+    chunk->appendNewShot();
+    setStationData(2, "A2", "1.2", "2.2", "3.2", "4.2");
+    setShotData(1, "20.0", "110.0", "210.0", "31.0", "41.0");
+
+    int previousRowCount = model.rowCount();
+    chunk->appendNewShot();
+
+    REQUIRE(model.rowCount() == previousRowCount + 2);
+
+    auto findStationRow = [&](const QString& name) {
+        for(int row = 0; row < model.rowCount(); ++row) {
+            auto index = model.index(row);
+            auto stationData = index.data(cwSurveyEditorModel::StationNameRole);
+            if(stationData.isNull()) {
+                continue;
+            }
+            const auto boxData = stationData.value<cwSurveyEditorBoxData>();
+            if(boxData.reading().value() == name) {
+                return index;
+            }
+        }
+        return QModelIndex();
+    };
+
+    auto a0Row = findStationRow("A0");
+    auto a1Row = findStationRow("A1");
+    auto a2Row = findStationRow("A2");
+
+    REQUIRE(a0Row.isValid());
+    REQUIRE(a1Row.isValid());
+    REQUIRE(a2Row.isValid());
+
+    CHECK(a0Row.data(cwSurveyEditorModel::StationNameRole).value<cwSurveyEditorBoxData>().rowIndex().indexInChunk() == 0);
+    CHECK(a1Row.data(cwSurveyEditorModel::StationNameRole).value<cwSurveyEditorBoxData>().rowIndex().indexInChunk() == 1);
+    CHECK(a2Row.data(cwSurveyEditorModel::StationNameRole).value<cwSurveyEditorBoxData>().rowIndex().indexInChunk() == 2);
+
+    auto newShotRow = model.index(model.rowCount() - 2);
+    auto newStationRow = model.index(model.rowCount() - 1);
+
+    auto newShotRowIndex = newShotRow.data(cwSurveyEditorModel::RowIndexRole).value<cwSurveyEditorRowIndex>();
+    auto newStationRowIndex = newStationRow.data(cwSurveyEditorModel::RowIndexRole).value<cwSurveyEditorRowIndex>();
+
+    CHECK(newShotRowIndex.rowType() == cwSurveyEditorRowIndex::ShotRow);
+    CHECK(newShotRowIndex.indexInChunk() == 2);
+    CHECK(newShotRow.data(cwSurveyEditorModel::ShotDistanceRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
+
+    CHECK(newStationRowIndex.rowType() == cwSurveyEditorRowIndex::StationRow);
+    CHECK(newStationRowIndex.indexInChunk() == 3);
+    CHECK(newStationRow.data(cwSurveyEditorModel::StationNameRole).value<cwSurveyEditorBoxData>().reading().value().isEmpty());
+}
+
+TEST_CASE("cwSurveyEditorModel updates box indices after insertStation", "[cwSurveyEditorModel]") {
+    cwTrip trip;
+    trip.addNewChunk();
+    cwSurveyChunk* chunk = trip.chunk(0);
+
+    cwSurveyEditorModel model;
+    model.setTrip(&trip);
+
+    auto setStationData = [&](int index, const QString& name, const QString& left, const QString& right, const QString& up, const QString& down) {
+        chunk->setData(cwSurveyChunk::StationNameRole, index, name);
+        chunk->setData(cwSurveyChunk::StationLeftRole, index, left);
+        chunk->setData(cwSurveyChunk::StationRightRole, index, right);
+        chunk->setData(cwSurveyChunk::StationUpRole, index, up);
+        chunk->setData(cwSurveyChunk::StationDownRole, index, down);
+    };
+
+    auto setShotData = [&](int index, const QString& distance, const QString& compass, const QString& backCompass, const QString& clino, const QString& backClino) {
+        chunk->setData(cwSurveyChunk::ShotDistanceRole, index, distance);
+        chunk->setData(cwSurveyChunk::ShotCompassRole, index, compass);
+        chunk->setData(cwSurveyChunk::ShotBackCompassRole, index, backCompass);
+        chunk->setData(cwSurveyChunk::ShotClinoRole, index, clino);
+        chunk->setData(cwSurveyChunk::ShotBackClinoRole, index, backClino);
+    };
+
+    setStationData(0, "A0", "1.0", "2.0", "3.0", "4.0");
+    setStationData(1, "A1", "1.1", "2.1", "3.1", "4.1");
+    setShotData(0, "10.0", "100.0", "200.0", "30.0", "40.0");
+
+    chunk->appendNewShot();
+    setStationData(2, "A2", "1.2", "2.2", "3.2", "4.2");
+    setShotData(1, "20.0", "110.0", "210.0", "31.0", "41.0");
+
+    QSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+    dataChangedSpy.clear();
+
+    int previousRowCount = model.rowCount();
+    chunk->insertStation(1, cwSurveyChunk::Above);
+
+    REQUIRE(model.rowCount() == previousRowCount + 2);
+
+    auto findStationRow = [&](const QString& name) {
+        for(int row = 0; row < model.rowCount(); ++row) {
+            auto index = model.index(row);
+            auto stationData = index.data(cwSurveyEditorModel::StationNameRole);
+            if(stationData.isNull()) {
+                continue;
+            }
+            const auto boxData = stationData.value<cwSurveyEditorBoxData>();
+            if(boxData.reading().value() == name) {
+                return index;
+            }
+        }
+        return QModelIndex();
+    };
+
+    auto findShotRow = [&](const QString& distance) {
+        for(int row = 0; row < model.rowCount(); ++row) {
+            auto index = model.index(row);
+            auto shotData = index.data(cwSurveyEditorModel::ShotDistanceRole);
+            if(shotData.isNull()) {
+                continue;
+            }
+            const auto boxData = shotData.value<cwSurveyEditorBoxData>();
+            if(boxData.reading().value() == distance) {
+                return index;
+            }
+        }
+        return QModelIndex();
+    };
+
+    auto a1Row = findStationRow("A1");
+    auto a2Row = findStationRow("A2");
+    auto shot10Row = findShotRow("10.0");
+    auto shot20Row = findShotRow("20.0");
+
+    REQUIRE(a1Row.isValid());
+    REQUIRE(a2Row.isValid());
+    REQUIRE(shot10Row.isValid());
+    REQUIRE(shot20Row.isValid());
+
+    CHECK(a1Row.data(cwSurveyEditorModel::StationNameRole).value<cwSurveyEditorBoxData>().rowIndex().indexInChunk() == 2);
+    CHECK(a2Row.data(cwSurveyEditorModel::StationNameRole).value<cwSurveyEditorBoxData>().rowIndex().indexInChunk() == 3);
+    CHECK(shot10Row.data(cwSurveyEditorModel::ShotDistanceRole).value<cwSurveyEditorBoxData>().rowIndex().indexInChunk() == 0);
+    CHECK(shot20Row.data(cwSurveyEditorModel::ShotDistanceRole).value<cwSurveyEditorBoxData>().rowIndex().indexInChunk() == 2);
+
+    auto dataChangedCovers = [&](int row, cwSurveyEditorModel::Role role) {
+        for(const auto& call : dataChangedSpy) {
+            const auto topLeft = call.at(0).toModelIndex();
+            const auto bottomRight = call.at(1).toModelIndex();
+            const auto roles = call.at(2).value<QVector<int>>();
+            if(row >= topLeft.row() && row <= bottomRight.row()
+                && (roles.contains(role) || roles.isEmpty()))
+            {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    CHECK(dataChangedCovers(a1Row.row(), cwSurveyEditorModel::StationNameRole));
+    CHECK(dataChangedCovers(a2Row.row(), cwSurveyEditorModel::StationNameRole));
+    CHECK(dataChangedCovers(shot20Row.row(), cwSurveyEditorModel::ShotDistanceRole));
+}
+
 TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurveyEditorModel]") {
     cwTrip trip;
     cwSurveyEditorModel model;
@@ -820,7 +1003,7 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
                 int prevShotCount = newChunk->shotCount();
 
                 newChunk->removeStation(0, cwSurveyChunk::Below);
-                spyChecker[&dataChangedSpy]++; //Error Model change
+                spyChecker[&dataChangedSpy] += 2; //Error model change + shifted indices
                 spyChecker[&rowsRemovedSpy]++;
                 spyChecker.requireSpies();
 
@@ -850,7 +1033,7 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
                     int prevShotCount = newChunk->shotCount();
 
                     newChunk->removeStation(1, cwSurveyChunk::Above);
-                    spyChecker[&dataChangedSpy]++; //Error Model change
+                    spyChecker[&dataChangedSpy] += 2; //Error model change + shifted indices
                     spyChecker[&rowsRemovedSpy]++;
                     spyChecker.requireSpies();
 
@@ -876,7 +1059,7 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
                     int prevShotCount = newChunk->shotCount();
 
                     newChunk->removeStation(1, cwSurveyChunk::Below);
-                    // spyChecker[&dataChangedSpy]++; //Error Model change
+                    spyChecker[&dataChangedSpy]++; //Shifted indices
                     spyChecker[&rowsRemovedSpy]++;
                     spyChecker.requireSpies();
 

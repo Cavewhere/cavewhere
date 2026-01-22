@@ -20,7 +20,7 @@ DataBox {
         removePreview: dataBoxId.removePreview
     }
 
-    rightClickMenu: removeMenuId.item
+    rightClickMenuLoader: removeMenuId
 
     QQ.Rectangle {
         visible: !dataBoxId.distanceIncluded

@@ -17,5 +17,5 @@ ReadingBox {
         removePreview: clinoReadBox.removePreview
     }
 
-    rightClickMenu: removeMenuId.item
+    rightClickMenuLoader: removeMenuId
 }

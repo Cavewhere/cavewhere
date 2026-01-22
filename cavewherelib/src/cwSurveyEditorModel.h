@@ -84,9 +84,17 @@ public:
     Q_INVOKABLE cwSurveyEditorBoxIndex offsetBoxIndex(const cwSurveyEditorBoxIndex& boxIndex, int offsetIndex) const;
 
 private:
+    struct RemoveToken {
+        cwSurveyChunk* chunk = nullptr;
+        int firstIndex = -1;
+    };
+
     QPointer<cwTrip> m_trip; //!<
 
     const int m_titleRowOffset = 1;
+
+    //For bookkeeping on row removal
+    RemoveToken m_removeToken;
 
     cwSurveyEditorRowIndex toRowIndex(const QModelIndex& index) const;
     cwSurveyEditorRowIndex toRowIndex(int index) const;

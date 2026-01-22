@@ -11,5 +11,5 @@ DataBox {
         removePreview: stationDistanceBox.removePreview
     }
 
-    rightClickMenu: removeMenuId.item
+    rightClickMenuLoader: removeMenuId
 }

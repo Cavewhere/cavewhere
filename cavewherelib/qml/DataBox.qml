@@ -21,7 +21,7 @@ QQ.Item {
     readonly property ErrorModel errorModel: dataValue.errorModel
     required property QC.ButtonGroup errorButtonGroup
     property RemovePreview removePreview: null
-    property QC.Menu rightClickMenu: null
+    property QQ.Loader rightClickMenuLoader: null
     readonly property bool removePreviewActive: {
         if(removePreview === null || removePreview.chunk === null) {
             return false
@@ -185,9 +185,8 @@ QQ.Item {
     }
 
     onRightClick: {
-        if(rightClickMenu !== null) {
-            rightClickMenu.popup()
-        }
+        rightClickMenuLoader.active = true;
+        rightClickMenuLoader.item.popup();
     }
 
     RemoveDataRectangle {

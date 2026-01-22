@@ -12,7 +12,7 @@ import cavewherelib
 DataBox {
     id: stationBox
 
-    property var window: QQ.Window.window
+    // property var window: QQ.Window.window
 
     StationMenu {
         id: removeMenuId
@@ -20,7 +20,7 @@ DataBox {
         removePreview: stationBox.removePreview
     }
 
-    rightClickMenu: removeMenuId.item
+    rightClickMenuLoader: removeMenuId
 
     function commitAutoStation() {
         var stationName = dataValue.rowIndex.chunk.guessLastStationName();
