@@ -35,7 +35,14 @@ if(DEFINED BUILD_SHARED_LIBS)
     set(cw_prev_build_shared_libs ${BUILD_SHARED_LIBS})
 endif()
 
+set(cw_restore_pic OFF)
+if(DEFINED CMAKE_POSITION_INDEPENDENT_CODE)
+    set(cw_restore_pic ON)
+    set(cw_prev_pic ${CMAKE_POSITION_INDEPENDENT_CODE})
+endif()
+
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build qtkeychain as static library" FORCE)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON CACHE BOOL "Build qtkeychain with -fPIC" FORCE)
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/qtkeychain ${CMAKE_BINARY_DIR}/qtkeychain_build)
 
@@ -43,6 +50,16 @@ if(cw_restore_build_shared_libs)
     set(BUILD_SHARED_LIBS ${cw_prev_build_shared_libs} CACHE BOOL "Build dynamic library" FORCE)
 else()
     unset(BUILD_SHARED_LIBS CACHE)
+endif()
+
+if(cw_restore_pic)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ${cw_prev_pic} CACHE BOOL "Restore PIC setting" FORCE)
+else()
+    unset(CMAKE_POSITION_INDEPENDENT_CODE CACHE)
+endif()
+
+if(TARGET qt6keychain)
+    set_target_properties(qt6keychain PROPERTIES POSITION_INDEPENDENT_CODE ON)
 endif()
 
 if(MOBILE_BUILD)
