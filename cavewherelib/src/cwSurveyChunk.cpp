@@ -436,9 +436,6 @@ cwSurveyChunk* cwSurveyChunk::splitAtStation(int stationIndex) {
 
   */
 void cwSurveyChunk::insertStation(int stationIndex, Direction direction) {
-    qDebug() << "InsertStation:" << this << stationIndex << direction << d.stations.empty() << (stationIndex < 0) << (stationIndex >= d.stations.size());
-
-
     if(d.stations.empty()) { appendNewShot(); return; }
     if(stationIndex < 0 || stationIndex >= d.stations.size()) { return; }
 
@@ -446,6 +443,12 @@ void cwSurveyChunk::insertStation(int stationIndex, Direction direction) {
 
     if(direction == Below) {
         stationIndex++;
+    }
+
+    if(shotIndex < 0) {
+        shotIndex = 0;
+    } else if(shotIndex > d.shots.size()) {
+        shotIndex = d.shots.size();
     }
 
     cwStation station;
@@ -467,12 +470,22 @@ void cwSurveyChunk::insertStation(int stationIndex, Direction direction) {
   */
 void cwSurveyChunk::insertShot(int shotIndex, Direction direction) {
     if(d.stations.empty()) { appendNewShot(); return; }
-    if(shotIndex < 0 || shotIndex >= d.stations.size()) { return; }
+    if(shotIndex < 0) { return; }
+
+    if(shotIndex > d.shots.size()) {
+        shotIndex = d.shots.size();
+    }
 
     int stationIndex = shotIndex + 1;
+    if(stationIndex > d.stations.size()) {
+        stationIndex = d.stations.size();
+    }
 
     if(direction == Below) {
         shotIndex++;
+        if(shotIndex > d.shots.size()) {
+            shotIndex = d.shots.size();
+        }
     }
 
     cwStation station;

@@ -111,7 +111,13 @@ void cwSurveyChunkTrimmer::trim(cwSurveyChunk *chunk, cwSurveyChunkTrimmer::Trim
   */
 
 void cwSurveyChunkTrimmer::addLastEmptyStation() {
-    trim(PreserveLastEmptyOne);
+    if(Chunk == nullptr) {
+        return;
+    }
+
+    if(Chunk->isStationAndShotsEmpty()) {
+        return;
+    }
 
     //If last station isn't empty, add new one
     if(!isStationShotEmpty(Chunk, Chunk->stationCount() - 1)) {
