@@ -89,9 +89,9 @@ QQ.Loader {
                         dataValue.chunk.removeStation(dataValue.indexInChunk, SurveyChunk.Below)
                     }
                 }
-            }
 
-            // QC.MenuSeparator { }
+
+            }
 
             QC.Menu {
                 objectName: "stationMenuInsertMenu"
@@ -124,6 +124,7 @@ QQ.Loader {
             RemoveChunkMenuItem {
                 objectName: "stationMenuRemoveChunk"
                 chunk: dataValue.chunk
+                removePreview: stationMenuLoader.removePreview
             }
         }
     }

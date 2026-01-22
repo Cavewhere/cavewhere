@@ -29,6 +29,16 @@ QQ.Item {
         if(dataValue.chunk !== removePreview.chunk) {
             return false
         }
+        if(removePreview.previewChunkRemoval) {
+            switch(dataValue.rowIndex.rowType) {
+            case SurveyEditorRowIndex.StationRow:
+                return dataValue.chunk.isStationRole(dataValue.chunkDataRole)
+            case SurveyEditorRowIndex.ShotRow:
+                return dataValue.chunk.isShotRole(dataValue.chunkDataRole)
+            default:
+                return false
+            }
+        }
         switch(dataValue.rowIndex.rowType) {
         case SurveyEditorRowIndex.StationRow:
             return dataValue.chunk.isStationRole(dataValue.chunkDataRole) && removePreview.stationIndex === dataValue.indexInChunk

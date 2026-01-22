@@ -13,11 +13,22 @@ QQ.QtObject {
     property SurveyChunk chunk: null
     property int stationIndex: -1
     property int shotIndex: -1
+    property bool previewChunkRemoval: false
 
     function clear() {
         chunk = null
         stationIndex = -1
         shotIndex = -1
+        previewChunkRemoval = false
+    }
+
+    function previewChunk(previewChunk) {
+        clear()
+        if(previewChunk === null) {
+            return
+        }
+        chunk = previewChunk
+        previewChunkRemoval = true
     }
 
     function previewStation(previewChunk, previewStationIndex, direction) {

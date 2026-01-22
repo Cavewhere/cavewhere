@@ -122,6 +122,7 @@ QQ.Loader {
             RemoveChunkMenuItem {
                 objectName: "shotMenuRemoveChunk"
                 chunk: dataValue.chunk
+                removePreview: shotMenuLoader.removePreview
             }
         }
     }
