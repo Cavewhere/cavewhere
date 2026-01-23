@@ -114,7 +114,7 @@ public:
     void newProject();
 
     QString fileName() const;
-    void setFileName(const QString& filename);
+    void setFileName(const QString& filename, bool initRepository = true);
     QFuture<Monad::ResultBase> load(const QString& filename);
 
     // void setRootDir(const QDir& rootDir);

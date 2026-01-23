@@ -885,7 +885,7 @@ QFuture<ResultBase> cwSaveLoad::load(const QString &filename)
     return future;
 }
 
-void cwSaveLoad::setFileName(const QString &filename)
+void cwSaveLoad::setFileName(const QString &filename, bool initRepository)
 {
     //This should load the filename
 
@@ -893,9 +893,11 @@ void cwSaveLoad::setFileName(const QString &filename)
     if(d->projectFileName != filename) {
         d->projectFileName = filename;
 
-        d->repository->setDirectory(QFileInfo(filename).absoluteDir());
-        d->repository->initRepository();
-        cw::git::ensureGitIgnoreHasCacheEntry(d->repository->directory());
+        if(initRepository) {
+            d->repository->setDirectory(QFileInfo(filename).absoluteDir());
+            d->repository->initRepository();
+            cw::git::ensureGitIgnoreHasCacheEntry(d->repository->directory());
+        }
 
         emit fileNameChanged();
     }

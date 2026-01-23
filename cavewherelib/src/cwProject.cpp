@@ -37,6 +37,7 @@
 #include <QTime>
 #include <QDateTime>
 #include <QSqlQuery>
+#include <QSqlError>
 #include <QDebug>
 #include <QSqlError>
 #include <QUndoStack>
@@ -428,8 +429,8 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
             //Disable the m_saveLoad, since this should be a temporary project
             m_saveLoad->setCavingRegion(nullptr);
 
-            setFilename(result.filename());
             setSqliteTemporaryProject(result.isTempFile());
+            setFilename(result.filename(), false);
             Region->setData(result.cavingRegion());
             FileVersion = result.fileVersion();
 
@@ -667,9 +668,9 @@ void cwProject::loadFile(QString filename) {
 
   \param newFilename - The new filename that this project will be moved to.
   */
-void cwProject::setFilename(QString newFilename) {
+void cwProject::setFilename(QString newFilename, bool initRepository) {
     if(newFilename != filename()) {
-        m_saveLoad->setFileName(newFilename);
+        m_saveLoad->setFileName(newFilename, initRepository);
         emit filenameChanged(newFilename);
     }
 }
@@ -914,21 +915,32 @@ cwProject::FileType cwProject::projectType(QString filename) const
 
     //Check if we can connect to the sqlite database, v6 and lower
     auto result = Monad::mtry([filename]() {
-        auto database = createDatabaseConnection("test_database", filename);
+        int nextConnectonName = ConnectionCounter.fetchAndAddAcquire(1);
+        const QString connectionName = QString("%1-%2").arg(QStringLiteral("test_database")).arg(nextConnectonName);
+        Monad::ResultBase finalResult;
 
-        QSqlQuery query(database);
-        query.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='ObjectData'");
+        {
+            QSqlDatabase database = QSqlDatabase::addDatabase("QSQLITE", connectionName);
+            database.setDatabaseName(filename);
+            database.setConnectOptions(QStringLiteral("QSQLITE_OPEN_READONLY"));
+            if(!database.open()) {
+                finalResult = Monad::ResultBase(QStringLiteral("Failed to open database read-only: %1").arg(database.lastError().text()));
+            } else {
+                QSqlQuery query(database);
+                query.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='ObjectData'");
 
-        if (!query.exec()) {
-            return Monad::ResultBase(QStringLiteral("Failed to query database: %1").arg(query.lastError().text()));
+                if (!query.exec()) {
+                    finalResult = Monad::ResultBase(QStringLiteral("Failed to query database: %1").arg(query.lastError().text()));
+                } else if(!query.next()) {
+                    finalResult = Monad::ResultBase(QStringLiteral("Sqlite database dosen't have ObjectData"));
+                }
+
+                database.close();
+            }
         }
 
-        if(!query.next()) {
-            return Monad::ResultBase(QStringLiteral("Sqlite database dosen't have ObjectData"));
-        }
-
-        //No error
-        return Monad::ResultBase();
+        QSqlDatabase::removeDatabase(connectionName);
+        return finalResult;
     });
 
     if(result.hasError()) {
