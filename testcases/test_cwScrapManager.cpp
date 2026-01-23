@@ -37,8 +37,6 @@ static void requireAutomaticUpdatesEnabled()
 {
     cwJobSettings::initialize();
     auto* settings = cwJobSettings::instance();
-    REQUIRE(settings != nullptr);
-    settings->setAutomaticUpdate(true);
     REQUIRE(settings->automaticUpdate());
 }
 

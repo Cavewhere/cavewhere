@@ -13,7 +13,6 @@
 #include "cwTrip.h"
 #include "cwSurveyNoteModel.h"
 #include "cwGeometry.h"
-#include "cwJobSettings.h"
 #include "asyncfuture.h"
 
 //Std includes

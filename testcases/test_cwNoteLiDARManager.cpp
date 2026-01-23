@@ -65,8 +65,6 @@ TEST_CASE("cwNoteLiDARManager triangulates LiDAR notes and keeps geometry access
 {
     cwJobSettings::initialize();
     auto* jobSettings = cwJobSettings::instance();
-    REQUIRE(jobSettings != nullptr);
-    jobSettings->setAutomaticUpdate(true);
     REQUIRE(jobSettings->automaticUpdate());
 
     auto root = std::make_unique<cwRootData>();

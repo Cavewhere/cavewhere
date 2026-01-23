@@ -6,6 +6,7 @@
 **************************************************************************/
 
 #include <catch2/reporters/catch_reporter_event_listener.hpp>
+#include <catch2/reporters/catch_reporter_registrars.hpp>
 
 // Qt includes
 #include <QThread>
@@ -31,4 +32,4 @@ public:
     }
 };
 
-CATCH_REGISTER_LISTENER(JobSettingsResetListener)
+CATCH_REGISTER_LISTENER(JobSettingsResetListener);
