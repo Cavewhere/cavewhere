@@ -21,6 +21,38 @@ set(QT_QML_GENERATE_QMLLS_INI ON CACHE BOOL "Generate QMLLS INI file")
 # Include the GenerateExportHeader module
 include(GenerateExportHeader)
 
+# On Windows, prefer the Conan *build* tools (e.g., Release protoc) over the host Debug package.
+# Qt Creator's auto-setup generates conanbuildenv-<config>-x86_64.bat with the build-tool PATH.
+if(WIN32)
+    function(cw_prepend_conan_buildenv_path)
+        if(DEFINED CMAKE_BUILD_TYPE AND NOT CMAKE_BUILD_TYPE STREQUAL "")
+            string(TOLOWER "${CMAKE_BUILD_TYPE}" _cw_build_type_lower)
+        else()
+            set(_cw_build_type_lower "debug")
+        endif()
+
+        set(_cw_conan_buildenv
+            "${CMAKE_BINARY_DIR}/conan-dependencies/build/conan/conanbuildenv-${_cw_build_type_lower}-x86_64.bat")
+        if(NOT EXISTS "${_cw_conan_buildenv}")
+            return()
+        endif()
+
+        file(STRINGS "${_cw_conan_buildenv}" _cw_path_lines REGEX "^set \"PATH=.*\"$")
+        if(NOT _cw_path_lines)
+            return()
+        endif()
+
+        list(GET _cw_path_lines 0 _cw_path_line)
+        string(REGEX REPLACE "^set \"PATH=([^;]+);%PATH%\".*" "\\1" _cw_conan_bin "${_cw_path_line}")
+        if(_cw_conan_bin AND EXISTS "${_cw_conan_bin}")
+            set(ENV{PATH} "${_cw_conan_bin};$ENV{PATH}")
+            list(PREPEND CMAKE_PROGRAM_PATH "${_cw_conan_bin}")
+            message(STATUS "CaveWhere: Prepending Conan build-tools bin to PATH: ${_cw_conan_bin}")
+        endif()
+    endfunction()
+    cw_prepend_conan_buildenv_path()
+endif()
+
 # Work around Conan Abseil CMakeDeps missing libs by explicitly linking absl libs.
 function(cw_link_absl_static target)
     if(NOT (WIN32 OR (UNIX AND NOT APPLE)))
