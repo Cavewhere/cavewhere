@@ -26,6 +26,7 @@
 #include <QTimer>
 #include <QDebug>
 #include <QSettings>
+#include <QGuiApplication>
 
 //QuickQanave includes
 #include <QuickQanava>
@@ -66,10 +67,15 @@ TEST_CASE("Test that the cavewhere main window remember size and position", "[Ca
         settings.clear();
     }
 
+    const QString platformName = QGuiApplication::platformName();
+    const bool canSetWindowPosition = platformName != QStringLiteral("wayland")
+        && platformName != QStringLiteral("offscreen")
+        && platformName != QStringLiteral("minimal");
+
     auto firstAppEngine = MainHelper::createApplicationEnigne();
 
     QEventLoop loop;
-    QTimer::singleShot(2000, qApp, [firstAppEngine, &loop]() {
+    QTimer::singleShot(2000, qApp, [=, &loop]() {
         REQUIRE(!firstAppEngine->rootObjects().isEmpty());
         auto mainWindow = MainHelper::findMainWidow(firstAppEngine);
         REQUIRE(mainWindow->objectName().toStdString() == "applicationWindow");
@@ -79,30 +85,40 @@ TEST_CASE("Test that the cavewhere main window remember size and position", "[Ca
 
         CHECK(mainWindow->property("width").toInt() == 1024);
         CHECK(mainWindow->property("height").toInt() == 576);
-        CHECK(mainWindow->property("x").toInt() == 75);
+        if (canSetWindowPosition) {
+            CHECK(mainWindow->property("x").toInt() == 75);
+        } else {
+            INFO("Skipping position checks on platform: " << platformName.toStdString());
+        }
 
         //This seems to move around on macos
-        CHECK((mainWindow->property("y").toInt() >= 55
-              || mainWindow->property("y").toInt() <= 65));
+        if (canSetWindowPosition) {
+            CHECK((mainWindow->property("y").toInt() >= 55
+                  || mainWindow->property("y").toInt() <= 65));
+        }
 
         mainWindow->setProperty("width", 250);
         mainWindow->setProperty("height", 200);
         mainWindow->setProperty("x", 323);
         mainWindow->setProperty("y", 386);
 
-        QTimer::singleShot(1000, qApp, [&loop, firstAppEngine]() {
+        QTimer::singleShot(1000, qApp, [=, &loop]() {
 
             delete firstAppEngine;
 
             auto secondEngine = MainHelper::createApplicationEnigne();
 
-            QTimer::singleShot(2000, qApp, [&loop, secondEngine]() {
+            QTimer::singleShot(2000, qApp, [=, &loop]() {
                 auto mainWindow2 = MainHelper::findMainWidow(secondEngine);
 
                 CHECK(mainWindow2->property("width").toInt() == 250);
                 CHECK(mainWindow2->property("height").toInt() == 200);
-                CHECK(mainWindow2->property("x").toInt() == 323);
-                CHECK(mainWindow2->property("y").toInt() == 386);
+                if (canSetWindowPosition) {
+                    CHECK(mainWindow2->property("x").toInt() == 323);
+                    CHECK(mainWindow2->property("y").toInt() == 386);
+                } else {
+                    INFO("Skipping position checks on platform: " << platformName.toStdString());
+                }
 
                 delete secondEngine;
 

@@ -171,7 +171,23 @@ TEST_CASE("cwSelectionProxyModel tracks selection using valueRole ids", "[cwSele
         CHECK(selection.data(originalScrapIndex, selection.selectionRole()).toBool() == true);
 
         // Change the id role data for the scrap item so its group value changes
-        auto scrapComponent = keywordEntityModel->item(0);
+        auto findItemWithKeyword = [keywordEntityModel = keywordEntityModel.get()](const QString& key,
+                                                                                   const QString& value) -> cwKeywordItem*
+        {
+            for(int i = 0; i < keywordEntityModel->rowCount(); ++i) {
+                auto item = keywordEntityModel->item(i);
+                const auto keywords = item->keywordModel()->keywords();
+                for(const auto& keyword : keywords) {
+                    if(keyword.key() == key && keyword.value() == value) {
+                        return item;
+                    }
+                }
+            }
+            return nullptr;
+        };
+
+        auto scrapComponent = findItemWithKeyword("type", "scrap");
+        REQUIRE(scrapComponent != nullptr);
         scrapComponent->keywordModel()->replace({"type", "scrapUpdated"});
 
         // Re-group to reflect updated values
