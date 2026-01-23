@@ -14,6 +14,14 @@ DataBox {
 
     property bool distanceIncluded: true //This show's if the distance is include (true) or excluded
 
+    ShotMenu {
+        id: removeMenuId
+        dataValue: dataBoxId.dataValue
+        removePreview: dataBoxId.removePreview
+    }
+
+    rightClickMenuLoader: removeMenuId
+
     QQ.Rectangle {
         visible: !dataBoxId.distanceIncluded
 

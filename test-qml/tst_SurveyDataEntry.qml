@@ -597,6 +597,409 @@ MainWindowTest {
             verify(errors.data(errorIndex, ErrorListModel.ErrorTypeRole) === CwError.Fatal)
         }
 
+        function test_insertRemoveStationsAndShots() {
+            addSurvey();
+
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view");
+            verify(view !== null)
+
+            function dataBoxAt(row, column) {
+                view.positionViewAtIndex(row, ListView.Contain)
+                waitForRendering(rootId)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
+                verify(cell !== null)
+                mouseClick(cell)
+                return cell
+            }
+
+            function keyClickText(text) {
+                for(let i = 0; i < text.length; i++) {
+                    let ch = text[i]
+                    if(ch >= "0" && ch <= "9") {
+                        keyClick(ch.charCodeAt(0), 0)
+                    } else if(ch === ".") {
+                        keyClick(46, 0)
+                    } else if(ch === "-") {
+                        keyClick(45, 0)
+                    } else {
+                        keyClick(ch)
+                    }
+                }
+            }
+
+            function setCell(row, column, text) {
+                dataBoxAt(row, column)
+                keyClickText(text)
+                keyClick(16777220, 0) //Return
+                waitForRendering(rootId)
+            }
+
+            function openContextMenu(row, column) {
+                let cell = dataBoxAt(row, column)
+                mouseClick(cell, cell.width / 2, cell.height / 2, Qt.RightButton)
+                waitForRendering(rootId)
+            }
+
+            function triggerMenuItemFromLoader(row, column, loaderObjectName, itemObjectName) {
+                let loaderPath = "rootId->tripPage->view->dataBox." + row + "." + column + "->" + loaderObjectName
+                let loader = ObjectFinder.findObjectByChain(mainWindow, loaderPath)
+                verify(loader !== null)
+                verify(loader.item !== null)
+
+                let item = findChild(loader.item, itemObjectName)
+                verify(item !== null)
+                item.triggered()
+                waitForRendering(rootId)
+            }
+
+            let trip = RootData.pageView.currentPageItem.currentTrip as Trip
+            verify(trip !== null)
+            let chunk = trip.chunk(0)
+            verify(chunk !== null)
+
+            // Base data: A0 -> A1 -> A2, two shots
+            setCell(1, SurveyChunk.StationNameRole, "A0")
+            setCell(3, SurveyChunk.StationNameRole, "A1")
+            setCell(5, SurveyChunk.StationNameRole, "A2")
+            setCell(2, SurveyChunk.ShotDistanceRole, "10")
+            setCell(4, SurveyChunk.ShotDistanceRole, "20")
+
+
+            verify(chunk.stationCount === 4)
+            verify(chunk.shotCount === 3)
+            verify(chunk.data(SurveyChunk.StationNameRole, 0) === "A0")
+            verify(chunk.data(SurveyChunk.StationNameRole, 1) === "A1")
+            verify(chunk.data(SurveyChunk.StationNameRole, 2) === "A2")
+
+            // Insert station above A1
+            openContextMenu(3, SurveyChunk.StationNameRole)
+            wait(100);
+            triggerMenuItemFromLoader(3, SurveyChunk.StationNameRole, "stationMenuLoader", "stationMenuInsertAbove")
+
+            verify(chunk.stationCount === 5)
+            verify(chunk.shotCount === 4)
+
+            verify(chunk.data(SurveyChunk.StationNameRole, 0) === "A0")
+            verify(chunk.data(SurveyChunk.StationNameRole, 1) === "")
+            verify(chunk.data(SurveyChunk.StationNameRole, 2) === "A1")
+            verify(chunk.data(SurveyChunk.StationNameRole, 3) === "A2")
+            verify(chunk.data(SurveyChunk.StationNameRole, 4) === "")
+
+            // Edit inserted station/shot
+            setCell(3, SurveyChunk.StationNameRole, "B0")
+            setCell(4, SurveyChunk.ShotDistanceRole, "15")
+
+            // Remove inserted station and shot below
+            openContextMenu(3, SurveyChunk.StationNameRole)
+            triggerMenuItemFromLoader(3, SurveyChunk.StationNameRole, "stationMenuLoader", "stationMenuRemoveBelow")
+
+            verify(chunk.stationCount === 4)
+            verify(chunk.shotCount === 3)
+            verify(chunk.data(SurveyChunk.StationNameRole, 0) === "A0")
+            verify(chunk.data(SurveyChunk.StationNameRole, 1) === "A1")
+            verify(chunk.data(SurveyChunk.StationNameRole, 2) === "A2")
+            verify(chunk.data(SurveyChunk.StationNameRole, 3) === "")
+
+            // Insert station below A1
+            openContextMenu(3, SurveyChunk.StationNameRole)
+            triggerMenuItemFromLoader(3, SurveyChunk.StationNameRole, "stationMenuLoader", "stationMenuInsertBelow")
+
+            verify(chunk.stationCount === 5)
+            verify(chunk.shotCount === 4)
+            verify(chunk.data(SurveyChunk.StationNameRole, 0) === "A0")
+            verify(chunk.data(SurveyChunk.StationNameRole, 1) === "A1")
+            verify(chunk.data(SurveyChunk.StationNameRole, 2) === "")
+            verify(chunk.data(SurveyChunk.StationNameRole, 3) === "A2")
+                    verify(chunk.data(SurveyChunk.StationNameRole, 4) === "")
+
+            setCell(5, SurveyChunk.StationNameRole, "B1")
+            setCell(6, SurveyChunk.ShotDistanceRole, "25")
+
+            openContextMenu(5, SurveyChunk.StationNameRole)
+            triggerMenuItemFromLoader(5, SurveyChunk.StationNameRole, "stationMenuLoader", "stationMenuRemoveAbove")
+
+            verify(chunk.stationCount === 4)
+            verify(chunk.shotCount === 3)
+            verify(chunk.data(SurveyChunk.StationNameRole, 0) === "A0")
+            verify(chunk.data(SurveyChunk.StationNameRole, 1) === "A1")
+            verify(chunk.data(SurveyChunk.StationNameRole, 2) === "A2")
+                    verify(chunk.data(SurveyChunk.StationNameRole, 3) === "")
+
+            // Insert shot below shot 0
+            openContextMenu(2, SurveyChunk.ShotDistanceRole)
+            triggerMenuItemFromLoader(2, SurveyChunk.ShotDistanceRole, "shotMenuLoader", "shotMenuInsertBelow")
+
+            verify(chunk.stationCount === 5)
+            verify(chunk.shotCount === 4)
+            verify(chunk.data(SurveyChunk.StationNameRole, 1) === "")
+            setCell(3, SurveyChunk.StationNameRole, "C0")
+            setCell(4, SurveyChunk.ShotDistanceRole, "12")
+
+            openContextMenu(4, SurveyChunk.ShotDistanceRole)
+            triggerMenuItemFromLoader(4, SurveyChunk.ShotDistanceRole, "shotMenuLoader", "shotMenuRemoveAbove")
+
+            verify(chunk.stationCount === 4)
+            verify(chunk.shotCount === 3)
+            verify(chunk.data(SurveyChunk.StationNameRole, 0) === "A0")
+            verify(chunk.data(SurveyChunk.StationNameRole, 1) === "A1")
+            verify(chunk.data(SurveyChunk.StationNameRole, 2) === "A2")
+                    verify(chunk.data(SurveyChunk.StationNameRole, 3) === "")
+
+            // Insert shot above shot 1
+            openContextMenu(4, SurveyChunk.ShotDistanceRole)
+            triggerMenuItemFromLoader(4, SurveyChunk.ShotDistanceRole, "shotMenuLoader", "shotMenuInsertAbove")
+
+            verify(chunk.stationCount === 5)
+            verify(chunk.shotCount === 4)
+            verify(chunk.data(SurveyChunk.StationNameRole, 2) === "")
+            setCell(5, SurveyChunk.StationNameRole, "C1")
+            setCell(4, SurveyChunk.ShotDistanceRole, "18")
+
+            openContextMenu(4, SurveyChunk.ShotDistanceRole)
+            triggerMenuItemFromLoader(4, SurveyChunk.ShotDistanceRole, "shotMenuLoader", "shotMenuRemoveBelow")
+
+            verify(chunk.stationCount === 4)
+            verify(chunk.shotCount === 3)
+            verify(chunk.data(SurveyChunk.StationNameRole, 0) === "A0")
+            verify(chunk.data(SurveyChunk.StationNameRole, 1) === "A1")
+            verify(chunk.data(SurveyChunk.StationNameRole, 2) === "A2")
+            verify(chunk.data(SurveyChunk.StationNameRole, 3) === "")
+        }
+
+        function test_insertAboveRowOneTwice() {
+            addSurvey();
+
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view");
+            verify(view !== null)
+
+            function dataBoxAt(row, column) {
+                view.positionViewAtIndex(row, ListView.Contain)
+                waitForRendering(rootId)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
+                verify(cell !== null)
+                mouseClick(cell)
+                return cell
+            }
+
+            function keyClickText(text) {
+                for(let i = 0; i < text.length; i++) {
+                    let ch = text[i]
+                    if(ch >= "0" && ch <= "9") {
+                        keyClick(ch.charCodeAt(0), 0)
+                    } else {
+                        keyClick(ch)
+                    }
+                }
+            }
+
+            function setCell(row, column, text) {
+                dataBoxAt(row, column)
+                keyClickText(text)
+                keyClick(16777220, 0) //Return
+                waitForRendering(rootId)
+            }
+
+            function openContextMenu(row, column) {
+                let cell = dataBoxAt(row, column)
+                mouseClick(cell, cell.width / 2, cell.height / 2, Qt.RightButton)
+                waitForRendering(rootId)
+            }
+
+            function triggerMenuItemFromLoader(row, column, loaderObjectName, itemObjectName) {
+                let loaderPath = "rootId->tripPage->view->dataBox." + row + "." + column + "->" + loaderObjectName
+                let loader = ObjectFinder.findObjectByChain(mainWindow, loaderPath)
+                verify(loader !== null)
+                verify(loader.item !== null)
+
+                let item = findChild(loader.item, itemObjectName)
+                verify(item !== null)
+                item.triggered()
+                waitForRendering(rootId)
+            }
+
+            let trip = RootData.pageView.currentPageItem.currentTrip as Trip
+            verify(trip !== null)
+            let chunk = trip.chunk(0)
+            verify(chunk !== null)
+
+            // Base data: A0 -> A1 -> A2
+            setCell(1, SurveyChunk.StationNameRole, "A0")
+            setCell(3, SurveyChunk.StationNameRole, "A1")
+            setCell(5, SurveyChunk.StationNameRole, "A2")
+            setCell(2, SurveyChunk.ShotDistanceRole, "10")
+            setCell(4, SurveyChunk.ShotDistanceRole, "20")
+
+            // Insert above row 1
+            openContextMenu(1, SurveyChunk.StationNameRole)
+            triggerMenuItemFromLoader(1, SurveyChunk.StationNameRole, "stationMenuLoader", "stationMenuInsertAbove")
+
+            // Edit inserted station name
+            setCell(1, SurveyChunk.StationNameRole, "B0")
+
+            // Insert above row 2 again using same loader
+            openContextMenu(3, SurveyChunk.StationNameRole)
+            triggerMenuItemFromLoader(3, SurveyChunk.StationNameRole, "stationMenuLoader", "stationMenuInsertAbove")
+
+            // Edit the newest inserted station name
+            setCell(3, SurveyChunk.StationNameRole, "C0")
+
+            // Verify station order
+            verify(chunk.data(SurveyChunk.StationNameRole, 0) === "B0")
+            verify(chunk.data(SurveyChunk.StationNameRole, 1) === "C0")
+            verify(chunk.data(SurveyChunk.StationNameRole, 2) === "A0")
+            verify(chunk.data(SurveyChunk.StationNameRole, 3) === "A1")
+            verify(chunk.data(SurveyChunk.StationNameRole, 4) === "A2")
+
+            // Only one cell highlighted (focused)
+            let otherCell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.1." + SurveyChunk.StationNameRole)
+            let focusedCell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.3." + SurveyChunk.StationNameRole)
+            verify(focusedCell !== null)
+            verify(otherCell !== null)
+            verify(focusedCell.focus === true)
+            verify(otherCell.focus === false)
+            verify(mainWindow.Window.window.activeFocusItem === focusedCell)
+        }
+
+        function test_insertBelowOnEmptyChunk() {
+            addSurvey();
+
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view");
+            verify(view !== null)
+
+            function dataBoxAt(row, column) {
+                view.positionViewAtIndex(row, ListView.Contain)
+                waitForRendering(rootId)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
+                verify(cell !== null)
+                mouseClick(cell)
+                return cell
+            }
+
+            function openContextMenu(row, column) {
+                let cell = dataBoxAt(row, column)
+                mouseClick(cell, cell.width / 2, cell.height / 2, Qt.RightButton)
+                waitForRendering(rootId)
+            }
+
+            function triggerMenuItemFromLoader(row, column, loaderObjectName, itemObjectName) {
+                let loaderPath = "rootId->tripPage->view->dataBox." + row + "." + column + "->" + loaderObjectName
+                let loader = ObjectFinder.findObjectByChain(mainWindow, loaderPath)
+                verify(loader !== null)
+                verify(loader.item !== null)
+
+                let item = findChild(loader.item, itemObjectName)
+                verify(item !== null)
+                item.triggered()
+                waitForRendering(rootId)
+            }
+
+            let trip = RootData.pageView.currentPageItem.currentTrip as Trip
+            verify(trip !== null)
+            let chunk = trip.chunk(0)
+            verify(chunk !== null)
+
+            // Default survey editor should start with a single empty chunk.
+            verify(chunk.stationCount >= 1)
+
+            // Right click on the first station cell and insert below (currently aborts).
+            openContextMenu(3, SurveyChunk.StationNameRole)
+            triggerMenuItemFromLoader(3, SurveyChunk.StationNameRole, "stationMenuLoader", "stationMenuInsertBelow")
+
+            // If the abort is fixed, we should have another empty station row.
+            verify(chunk.stationCount === 3)
+
+                    verify(chunk.data(SurveyChunk.StationNameRole, 0) === "")
+                    verify(chunk.data(SurveyChunk.StationNameRole, 1) === "")
+                    verify(chunk.data(SurveyChunk.StationNameRole, 2) === "")
+        }
+
+        function test_insertBelowLastStationWithOneShot() {
+            addSurvey();
+
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view");
+            verify(view !== null)
+
+            function dataBoxAt(row, column) {
+                view.positionViewAtIndex(row, ListView.Contain)
+                waitForRendering(rootId)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
+                verify(cell !== null)
+                mouseClick(cell)
+                return cell
+            }
+
+            function keyClickText(text) {
+                for(let i = 0; i < text.length; i++) {
+                    let ch = text[i]
+                    if(ch >= "0" && ch <= "9") {
+                        keyClick(ch.charCodeAt(0), 0)
+                    } else if(ch === ".") {
+                        keyClick(46, 0)
+                    } else if(ch === "-") {
+                        keyClick(45, 0)
+                    } else {
+                        keyClick(ch)
+                    }
+                }
+            }
+
+            function setCell(row, column, text) {
+                dataBoxAt(row, column)
+                keyClickText(text)
+                keyClick(16777220, 0) //Return
+                waitForRendering(rootId)
+            }
+
+            function openContextMenu(row, column) {
+                let cell = dataBoxAt(row, column)
+                mouseClick(cell, cell.width / 2, cell.height / 2, Qt.RightButton)
+                waitForRendering(rootId)
+            }
+
+            function triggerMenuItemFromLoader(row, column, loaderObjectName, itemObjectName) {
+                let loaderPath = "rootId->tripPage->view->dataBox." + row + "." + column + "->" + loaderObjectName
+                let loader = ObjectFinder.findObjectByChain(mainWindow, loaderPath)
+                verify(loader !== null)
+                verify(loader.item !== null)
+
+                let item = findChild(loader.item, itemObjectName)
+                verify(item !== null)
+                item.triggered()
+                waitForRendering(rootId)
+            }
+
+            let trip = RootData.pageView.currentPageItem.currentTrip as Trip
+            verify(trip !== null)
+            let chunk = trip.chunk(0)
+            verify(chunk !== null)
+
+            // Base data: A0 -> A1, one shot
+            setCell(1, SurveyChunk.StationNameRole, "A0")
+            setCell(3, SurveyChunk.StationNameRole, "A1")
+            setCell(2, SurveyChunk.ShotDistanceRole, "10")
+
+            verify(chunk.stationCount === 3)
+            verify(chunk.shotCount === 2)
+
+                    // wait(100000)
+
+            // Insert below the last station
+            openContextMenu(3, SurveyChunk.StationNameRole)
+            triggerMenuItemFromLoader(3, SurveyChunk.StationNameRole, "stationMenuLoader", "stationMenuInsertBelow")
+
+            // wait(100000)
+
+            wait(100)
+
+            // Bug repro: model counts don't change, but the view shows an extra station row.
+            compare(chunk.stationCount, 4)
+            compare(chunk.shotCount, 3)
+
+            // wait(10000)
+
+            compare(view.count, chunk.stationCount + chunk.shotCount + 1)
+        }
+
         function test_dateChangeShouldWork() {
             addSurvey();
 

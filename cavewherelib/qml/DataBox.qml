@@ -20,6 +20,34 @@ QQ.Item {
     property alias aboutToDelete: removeBoxId.visible
     readonly property ErrorModel errorModel: dataValue.errorModel
     required property QC.ButtonGroup errorButtonGroup
+    property RemovePreview removePreview: null
+    property QQ.Loader rightClickMenuLoader: null
+    readonly property bool removePreviewActive: {
+        if(removePreview === null || removePreview.chunk === null) {
+            return false
+        }
+        if(dataValue.chunk !== removePreview.chunk) {
+            return false
+        }
+        if(removePreview.previewChunkRemoval) {
+            switch(dataValue.rowIndex.rowType) {
+            case SurveyEditorRowIndex.StationRow:
+                return dataValue.chunk.isStationRole(dataValue.chunkDataRole)
+            case SurveyEditorRowIndex.ShotRow:
+                return dataValue.chunk.isShotRole(dataValue.chunkDataRole)
+            default:
+                return false
+            }
+        }
+        switch(dataValue.rowIndex.rowType) {
+        case SurveyEditorRowIndex.StationRow:
+            return dataValue.chunk.isStationRole(dataValue.chunkDataRole) && removePreview.stationIndex === dataValue.indexInChunk
+        case SurveyEditorRowIndex.ShotRow:
+            return dataValue.chunk.isShotRole(dataValue.chunkDataRole) && removePreview.shotIndex === dataValue.indexInChunk
+        default:
+            return false
+        }
+    }
     property KeyNavigationContainer navigation: KeyNavigationContainer {}
 
     //The index informantion from cwSurveyEditorModel
@@ -167,36 +195,8 @@ QQ.Item {
     }
 
     onRightClick: {
-        //Show menu
-        rightClickMenuLoader.active = true
+        rightClickMenuLoader.active = true;
         rightClickMenuLoader.item.popup();
-    }
-
-    QQ.Loader {
-        id: rightClickMenuLoader
-        active: false
-
-        sourceComponent: QC.Menu {
-
-            QC.MenuItem {
-                text: "Remove Chunk"
-                onTriggered: {
-                    dataBox.dataValue.chunk.parentTrip.removeChunk(dataBox.dataValue.chunk)
-                }
-
-                //            onContainsMouseChanged: {
-                //                var lastStationIndex = index.chunk.stationCount() - 1;
-                //                var lastShotIndex = index.chunk.shotCount() - 1;
-
-                //                if(containsMouse) {
-                //                    surveyChunkView.showRemoveBoxsOnStations(0, lastStationIndex);
-                //                    surveyChunkView.showRemoveBoxsOnShots(0, lastShotIndex);
-                //                } else {
-                //                    surveyChunkView.hideRemoveBoxs();
-                //                }
-                //            }
-            }
-        }
     }
 
     RemoveDataRectangle {
@@ -205,6 +205,18 @@ QQ.Item {
         anchors.fill: parent
         anchors.rightMargin: -1
         z: 1
+    }
+
+    QQ.Rectangle {
+        id: removePreviewLine
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+        height: 2
+        color: Theme.text
+        // opacity: 0.9
+        visible: removePreviewActive
+        z: 2
     }
 
     QQ.MouseArea {
@@ -267,7 +279,7 @@ QQ.Item {
         anchors.fill: parent
         anchors.margins: 1
         border.width: 1
-        color: Theme.transparent
+        color: Theme.highlight
         visible: dataBox.focus || editor.isEditting
     }
 

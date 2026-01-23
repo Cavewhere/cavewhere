@@ -1,9 +1,16 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <QSettings>
+
 #include "cwRemoteAccountModel.h"
 
 TEST_CASE("cwRemoteAccountModel add/remove/persist", "[cwRemoteAccountModel]")
 {
+    {
+        QSettings settings;
+        settings.remove(QStringLiteral("RemoteAccounts"));
+    }
+
     {
         cwRemoteAccountModel model;
         REQUIRE(model.rowCount() == 0);

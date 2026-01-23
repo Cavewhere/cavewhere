@@ -6,7 +6,6 @@
 #include "cwSurveyEditorBoxData.h"
 #include "cwDebug.h"
 
-
 cwSurveyEditorModel::cwSurveyEditorModel()
 {
 
@@ -31,8 +30,20 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
         m_trip = trip;
 
         if(m_trip) {
+            auto emitDataChangedForChunk = [this](cwSurveyChunk* chunk, int firstRow) {
+                if(!chunk) {
+                    return;
+                }
+
+                int baseRow = toModelRow({chunk, -1, cwSurveyEditorRowIndex::TitleRow});
+                int lastRow = baseRow + chunk->stationCount() + chunk->shotCount() + m_titleRowOffset - 1;
+                if(firstRow <= lastRow) {
+                    emit dataChanged(index(firstRow), index(lastRow));
+                }
+            };
+
             // Lambda to connect signals for a cwSurveyChunk.
-            auto connectChunk = [this](cwSurveyChunk* chunk) {
+            auto connectChunk = [this, emitDataChangedForChunk](cwSurveyChunk* chunk) {
                 // Data changes in the chunk.
 
                 auto chunkDataChange = [this, chunk](cwSurveyChunk::DataRole role, int chunkIndex) {
@@ -47,13 +58,14 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
 
                 // Stations added.
                 connect(chunk, &cwSurveyChunk::added, this,
-                        [this, chunk](int stationBegin, int stationEnd, int shotBegin, int shotEnd) {
+                        [this, chunk, emitDataChangedForChunk](int stationBegin, int stationEnd, int shotBegin, int shotEnd) {
                             int first = std::min(toModelRow({chunk, stationBegin, cwSurveyEditorRowIndex::StationRow} ),
                                                  toModelRow({chunk, shotBegin, cwSurveyEditorRowIndex::ShotRow}));
                             int last = std::max(toModelRow({chunk, stationEnd, cwSurveyEditorRowIndex::StationRow}),
                                                 toModelRow({chunk, shotEnd, cwSurveyEditorRowIndex::ShotRow}));
                             beginInsertRows(QModelIndex(), first, last);
                             endInsertRows();
+                            emitDataChangedForChunk(chunk, last + 1);
                         });
                 // Stations removed.
                 connect(chunk, &cwSurveyChunk::aboutToRemove, this,
@@ -62,12 +74,17 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
                                                  toModelRow({chunk, shotBegin, cwSurveyEditorRowIndex::ShotRow}));
                             int last = std::max(toModelRow({chunk, stationEnd, cwSurveyEditorRowIndex::StationRow}),
                                                 toModelRow({chunk, shotEnd, cwSurveyEditorRowIndex::ShotRow}));
+                            Q_ASSERT(m_removeToken.chunk == nullptr); //Multiple aboutToRemoves called, if this is the case we shuold switch to QHash
+                            m_removeToken = {chunk, first};
                             beginRemoveRows(QModelIndex(), first, last);
                 });
 
                 connect(chunk, &cwSurveyChunk::removed, this,
-                        [this, chunk](int stationBegin, int stationEnd, int shotBegin, int shotEnd) {
+                        [this, chunk, emitDataChangedForChunk](int stationBegin, int stationEnd, int shotBegin, int shotEnd) {
                             endRemoveRows();
+                            Q_ASSERT(m_removeToken.chunk != nullptr);
+                            emitDataChangedForChunk(m_removeToken.chunk, m_removeToken.firstIndex);
+                            m_removeToken = {};
                         });
             };
 

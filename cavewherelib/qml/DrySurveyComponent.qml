@@ -23,6 +23,7 @@ Item {
     required property int index;
     required property QC.ButtonGroup errorButtonGroup
     required property SurveyChunkTrimmer surveyChunkTrimmer;
+    required property var removePreview
 
     //Data that comes from the model
     required property cwSurveyEditorBoxData stationName;
@@ -140,6 +141,7 @@ Item {
                 listViewIndex: itemId.index
                 errorButtonGroup: itemId.errorButtonGroup
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
+                removePreview: itemId.removePreview
                 view: itemId.ListView.view
                 dataValidator: stationValidator
                 editorFocus: itemId.editorFocus
@@ -203,6 +205,7 @@ Item {
                 errorButtonGroup: itemId.errorButtonGroup
 
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
+                removePreview: itemId.removePreview
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
                 editorFocus: itemId.editorFocus
@@ -256,6 +259,7 @@ Item {
                 listViewIndex: itemId.index
                 errorButtonGroup: itemId.errorButtonGroup
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
+                removePreview: itemId.removePreview
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
                 editorFocus: itemId.editorFocus
@@ -311,6 +315,7 @@ Item {
                 listViewIndex: itemId.index
                 errorButtonGroup: itemId.errorButtonGroup
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
+                removePreview: itemId.removePreview
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
                 editorFocus: itemId.editorFocus
@@ -366,6 +371,7 @@ Item {
                 listViewIndex: itemId.index
                 errorButtonGroup: itemId.errorButtonGroup
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
+                removePreview: itemId.removePreview
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
                 editorFocus: itemId.editorFocus
@@ -443,6 +449,7 @@ Item {
                 listViewIndex: itemId.index
                 errorButtonGroup: itemId.errorButtonGroup
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
+                removePreview: itemId.removePreview
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
                 editorFocus: itemId.editorFocus
@@ -513,6 +520,7 @@ Item {
                 listViewIndex: itemId.index
                 errorButtonGroup: itemId.errorButtonGroup
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
+                removePreview: itemId.removePreview
                 view: itemId.ListView.view
                 readingText: "fs"
                 dataValidator: compassValidator
@@ -593,6 +601,7 @@ Item {
                 listViewIndex: itemId.index
                 errorButtonGroup: itemId.errorButtonGroup
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
+                removePreview: itemId.removePreview
                 view: itemId.ListView.view
                 readingText: "bs"
                 dataValidator: compassValidator
@@ -674,6 +683,7 @@ Item {
                 listViewIndex: itemId.index
                 errorButtonGroup: itemId.errorButtonGroup
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
+                removePreview: itemId.removePreview
                 view: itemId.ListView.view
                 readingText: "fs"
                 dataValidator: clinoValidator
@@ -747,6 +757,7 @@ Item {
                 listViewIndex: itemId.index
                 errorButtonGroup: itemId.errorButtonGroup
                 surveyChunkTrimmer: itemId.surveyChunkTrimmer
+                removePreview: itemId.removePreview
                 view: itemId.ListView.view
                 readingText: "bs"
                 dataValidator: clinoValidator

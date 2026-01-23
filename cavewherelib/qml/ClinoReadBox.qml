@@ -8,5 +8,14 @@
 import cavewherelib
 
 ReadingBox {
+    id: clinoReadBox
     dataValidator: ClinoValidator { }
+
+    ShotMenu {
+        id: removeMenuId
+        dataValue: clinoReadBox.dataValue
+        removePreview: clinoReadBox.removePreview
+    }
+
+    rightClickMenuLoader: removeMenuId
 }

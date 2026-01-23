@@ -6,12 +6,14 @@
 #include "TestHelper.h"
 #include "cwRootData.h"
 #include "cwPDFSettings.h"
+#include "cwPDFConverter.h"
 #include "cwScrapManager.h"
 #include "cwNote.h"
 #include "cwCave.h"
 #include "cwTrip.h"
 #include "cwSurveyNoteModel.h"
 #include "cwGeometry.h"
+#include "asyncfuture.h"
 
 //Std includes
 #include <algorithm>
@@ -39,6 +41,9 @@ static QSizeF geometryBoundsSize(const cwGeometry& geometry)
 
 TEST_CASE("cwTriangulateTask uses note units for crop scaling", "[cwTriangulateTask]") {
     cwPDFSettings::initialize();
+    if (!cwPDFConverter::isSupported()) {
+        SKIP("PDF support not enabled for cwTriangulateTask test");
+    }
 
     auto triangulateBounds = [](int resolutionPpi) {
         cwPDFSettings::instance()->setResolutionImport(resolutionPpi);
@@ -62,6 +67,7 @@ TEST_CASE("cwTriangulateTask uses note units for crop scaling", "[cwTriangulateT
 
         auto results = root->scrapManager()->triangulateScraps({scrap});
         root->futureManagerModel()->waitForFinished();
+        REQUIRE(AsyncFuture::waitForFinished(results.first().data));
         REQUIRE(results.size() == 1);
         REQUIRE(results.first().data.resultCount() == 1);
         const cwTriangulatedData data = results.first().data.result();

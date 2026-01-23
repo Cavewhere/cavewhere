@@ -15,6 +15,7 @@
 #include "cwNote.h"
 #include "cwSurveyNoteModel.h"
 #include "cwLinePlotManager.h"
+#include "cwJobSettings.h"
 // #include "cwScrapsEntity.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
 #include "cwRunningProfileScrapViewMatrix.h"
@@ -32,7 +33,15 @@
 //Async includes
 #include "asyncfuture.h"
 
+static void requireAutomaticUpdatesEnabled()
+{
+    cwJobSettings::initialize();
+    auto* settings = cwJobSettings::instance();
+    REQUIRE(settings->automaticUpdate());
+}
+
 TEST_CASE("cwScrapManager should make the file size grow when re-calculaing scraps", "[cwScrapManager]") {
+    requireAutomaticUpdatesEnabled();
     QFile file;
     qint64 firstSize;
 
@@ -92,6 +101,7 @@ TEST_CASE("cwScrapManager should make the file size grow when re-calculaing scra
 }
 
 TEST_CASE("cwScrapManager auto update should work propertly", "[cwScrapManager]") {
+    requireAutomaticUpdatesEnabled();
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
     fileToProject(project, "://datasets/test_cwScrapManager/scrapGuessNeigborPlan.cw");
@@ -145,6 +155,7 @@ TEST_CASE("cwScrapManager auto update should work propertly", "[cwScrapManager]"
 
 
 TEST_CASE("cwScrapManager shouldn't update scraps that are invalid", "[cwScrapManager]") {
+    requireAutomaticUpdatesEnabled();
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
 
@@ -187,6 +198,7 @@ TEST_CASE("cwScrapManager shouldn't update scraps that are invalid", "[cwScrapMa
 }
 
 TEST_CASE("cwScrapManager should update on viewMatrix change", "[cwScrapManager]") {
+    requireAutomaticUpdatesEnabled();
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
 
@@ -242,6 +254,7 @@ TEST_CASE("cwScrapManager should update on viewMatrix change", "[cwScrapManager]
 }
 
 TEST_CASE("cwScrapManager should defer updates while editing", "[cwScrapManager]") {
+    requireAutomaticUpdatesEnabled();
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
 

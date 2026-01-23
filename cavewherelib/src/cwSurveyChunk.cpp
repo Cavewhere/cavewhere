@@ -445,6 +445,12 @@ void cwSurveyChunk::insertStation(int stationIndex, Direction direction) {
         stationIndex++;
     }
 
+    if(shotIndex < 0) {
+        shotIndex = 0;
+    } else if(shotIndex > d.shots.size()) {
+        shotIndex = d.shots.size();
+    }
+
     cwStation station;
 
     d.stations.insert(stationIndex, station);
@@ -464,12 +470,22 @@ void cwSurveyChunk::insertStation(int stationIndex, Direction direction) {
   */
 void cwSurveyChunk::insertShot(int shotIndex, Direction direction) {
     if(d.stations.empty()) { appendNewShot(); return; }
-    if(shotIndex < 0 || shotIndex >= d.stations.size()) { return; }
+    if(shotIndex < 0) { return; }
+
+    if(shotIndex > d.shots.size()) {
+        shotIndex = d.shots.size();
+    }
 
     int stationIndex = shotIndex + 1;
+    if(stationIndex > d.stations.size()) {
+        stationIndex = d.stations.size();
+    }
 
     if(direction == Below) {
         shotIndex++;
+        if(shotIndex > d.shots.size()) {
+            shotIndex = d.shots.size();
+        }
     }
 
     cwStation station;

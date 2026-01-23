@@ -292,15 +292,31 @@ if(UNIX AND NOT APPLE)
     )
     string(JOIN ":" QML_SOURCES_PATHS ${QML_SOURCE_DIRS})
 
-    if(EXISTS "${BINARY_DIR}/cavewherelib/current_git_hash.txt")
-        include("${CMAKE_SOURCE_DIR}/cavewherelib/GitHash.cmake")
-        get_hash("${BINARY_DIR}/cavewherelib/current_git_hash.txt" CAVEWHERE_VERSION)
-    else()
-        set(CAVEWHERE_VERSION "${PROJECT_VERSION}")
+    set(APPIMAGE_VERSION_FILE "${CMAKE_BINARY_DIR}/cavewherelib/current_git_hash.txt")
+
+    set(APPIMAGE_METADATA_DEPENDS
+        "${APPIMAGE_DESKTOP_IN}"
+        "${APPIMAGE_APPRUN_IN}"
+        "${APPIMAGE_VERSION_FILE}"
+    )
+    if(TARGET update_version)
+        list(APPEND APPIMAGE_METADATA_DEPENDS update_version)
     endif()
 
-    configure_file("${APPIMAGE_DESKTOP_IN}" "${APPIMAGE_DESKTOP_FILE}" @ONLY)
-    configure_file("${APPIMAGE_APPRUN_IN}" "${APPIMAGE_APPRUN_FILE}" @ONLY)
+    add_custom_command(
+        OUTPUT "${APPIMAGE_DESKTOP_FILE}" "${APPIMAGE_APPRUN_FILE}"
+        COMMAND ${CMAKE_COMMAND}
+            -DAPPIMAGE_DESKTOP_IN="${APPIMAGE_DESKTOP_IN}"
+            -DAPPIMAGE_DESKTOP_FILE="${APPIMAGE_DESKTOP_FILE}"
+            -DAPPIMAGE_APPRUN_IN="${APPIMAGE_APPRUN_IN}"
+            -DAPPIMAGE_APPRUN_FILE="${APPIMAGE_APPRUN_FILE}"
+            -DVERSION_FILE="${APPIMAGE_VERSION_FILE}"
+            -DSOURCE_DIR="${CMAKE_SOURCE_DIR}"
+            -P "${CMAKE_SOURCE_DIR}/installer/linux/GenerateAppImageMetadata.cmake"
+        DEPENDS ${APPIMAGE_METADATA_DEPENDS}
+        COMMENT "Generating AppImage metadata"
+        VERBATIM
+    )
 
     if(NOT EXISTS "${APPIMAGE_ICON_SOURCE}")
         message(FATAL_ERROR "AppImage icon not found: ${APPIMAGE_ICON_SOURCE}")
@@ -465,12 +481,6 @@ if(UNIX AND NOT APPLE)
         list(APPEND APPIMAGE_DEPENDENCIES appimagetool_ep)
     endif()
 
-    set(APPIMAGE_OUTPUT_NAME "CaveWhere-${CAVEWHERE_VERSION}-${CMAKE_SYSTEM_PROCESSOR}.AppImage")
-    set(APPIMAGE_RUNTIME_ENV "LDAI_OUTPUT=${APPIMAGE_OUTPUT_NAME}")
-    if(APPIMAGE_RUNTIME_FILE)
-        list(APPEND APPIMAGE_RUNTIME_ENV "LDAI_RUNTIME_FILE=${APPIMAGE_RUNTIME_FILE}")
-    endif()
-
     add_custom_target(appimageInstaller
         COMMAND ${CMAKE_COMMAND} -P "${CMAKE_SOURCE_DIR}/installer/linux/CheckPatchelf.cmake"
         COMMAND ${CMAKE_COMMAND} -D QMAKE_EXECUTABLE="${QMAKE_EXECUTABLE}" -P "${CMAKE_SOURCE_DIR}/installer/linux/CheckQmake.cmake"
@@ -486,15 +496,27 @@ if(UNIX AND NOT APPLE)
             "QML_SOURCES_PATHS=${QML_SOURCES_PATHS}"
             "${LINUXDEPLOY_QT_PLUGIN_EXECUTABLE}"
             --appdir "${APPIMAGE_APPDIR}"
+            # Only bundle SQLite; drop other Qt SQL drivers (odbc, mysql, psql, oci, mimer).
             --exclude-library "libqsqlmimer.so"
             --exclude-library "libqsqloci.so*"
-        COMMAND ${CMAKE_COMMAND} -E env "PATH=${LINUXDEPLOY_ENV_PATH}" ${APPIMAGE_RUNTIME_ENV}
-            "${LINUXDEPLOY_EXECUTABLE}"
-            --appdir "${APPIMAGE_APPDIR}"
-            --output appimage
+            --exclude-library "libqsqlodbc.so*"
+            --exclude-library "libqsqlmysql.so*"
+            --exclude-library "libqsqlpsql.so*"
+        COMMAND ${CMAKE_COMMAND}
+            -DAPPIMAGE_APPDIR="${APPIMAGE_APPDIR}"
+            -DLINUXDEPLOY_EXECUTABLE="${LINUXDEPLOY_EXECUTABLE}"
+            -DLINUXDEPLOY_ENV_PATH="${LINUXDEPLOY_ENV_PATH}"
+            -DVERSION_FILE="${APPIMAGE_VERSION_FILE}"
+            -DSOURCE_DIR="${CMAKE_SOURCE_DIR}"
+            -DAPPIMAGE_RUNTIME_FILE="${APPIMAGE_RUNTIME_FILE}"
+            -DAPPIMAGE_SYSTEM_PROCESSOR="${CMAKE_SYSTEM_PROCESSOR}"
+            -P "${CMAKE_SOURCE_DIR}/installer/linux/RunAppImageTool.cmake"
         DEPENDS ${APPIMAGE_DEPENDENCIES}
         WORKING_DIRECTORY "${APPIMAGE_ROOT_DIR}"
         COMMENT "Building AppImage"
         VERBATIM
     )
+    if(TARGET update_version)
+        add_dependencies(appimageInstaller update_version)
+    endif()
 endif()
