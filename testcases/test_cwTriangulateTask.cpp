@@ -12,6 +12,7 @@
 #include "cwTrip.h"
 #include "cwSurveyNoteModel.h"
 #include "cwGeometry.h"
+#include "cwJobSettings.h"
 
 //Std includes
 #include <algorithm>
@@ -42,6 +43,12 @@ TEST_CASE("cwTriangulateTask uses note units for crop scaling", "[cwTriangulateT
 
     auto triangulateBounds = [](int resolutionPpi) {
         cwPDFSettings::instance()->setResolutionImport(resolutionPpi);
+
+        cwJobSettings::initialize();
+        auto* jobSettings = cwJobSettings::instance();
+        REQUIRE(jobSettings != nullptr);
+        jobSettings->setAutomaticUpdate(true);
+        REQUIRE(jobSettings->automaticUpdate());
 
         auto root = std::make_unique<cwRootData>();
         TestHelper helper;

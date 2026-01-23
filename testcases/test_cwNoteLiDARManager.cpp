@@ -26,6 +26,7 @@
 #include "cwCave.h"
 #include "cwTrip.h"
 #include "cwStationPositionLookup.h"
+#include "cwJobSettings.h"
 
 TEST_CASE("cwNoteLiDARManager applies declination for manual north", "[cwNoteLiDARManager]")
 {
@@ -62,6 +63,12 @@ TEST_CASE("cwNoteLiDARManager applies declination for manual north", "[cwNoteLiD
 
 TEST_CASE("cwNoteLiDARManager triangulates LiDAR notes and keeps geometry accessible", "[cwNoteLiDARManager]")
 {
+    cwJobSettings::initialize();
+    auto* jobSettings = cwJobSettings::instance();
+    REQUIRE(jobSettings != nullptr);
+    jobSettings->setAutomaticUpdate(true);
+    REQUIRE(jobSettings->automaticUpdate());
+
     auto root = std::make_unique<cwRootData>();
     REQUIRE(root != nullptr);
 
