@@ -14,6 +14,7 @@
 #include "cwSurveyNoteModel.h"
 #include "cwGeometry.h"
 #include "cwJobSettings.h"
+#include "asyncfuture.h"
 
 //Std includes
 #include <algorithm>
@@ -48,12 +49,6 @@ TEST_CASE("cwTriangulateTask uses note units for crop scaling", "[cwTriangulateT
     auto triangulateBounds = [](int resolutionPpi) {
         cwPDFSettings::instance()->setResolutionImport(resolutionPpi);
 
-        cwJobSettings::initialize();
-        auto* jobSettings = cwJobSettings::instance();
-        REQUIRE(jobSettings != nullptr);
-        jobSettings->setAutomaticUpdate(true);
-        REQUIRE(jobSettings->automaticUpdate());
-
         auto root = std::make_unique<cwRootData>();
         TestHelper helper;
         helper.loadProjectFromZip(root->project(), "://datasets/test_cwNote/bb-pdf-dpi-test.zip");
@@ -73,6 +68,7 @@ TEST_CASE("cwTriangulateTask uses note units for crop scaling", "[cwTriangulateT
 
         auto results = root->scrapManager()->triangulateScraps({scrap});
         root->futureManagerModel()->waitForFinished();
+        REQUIRE(AsyncFuture::waitForFinished(results.first().data));
         REQUIRE(results.size() == 1);
         REQUIRE(results.first().data.resultCount() == 1);
         const cwTriangulatedData data = results.first().data.result();
