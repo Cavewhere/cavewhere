@@ -279,7 +279,7 @@ QQ.Item {
         anchors.fill: parent
         anchors.margins: 1
         border.width: 1
-        color: Theme.transparent
+        color: Theme.highlight
         visible: dataBox.focus || editor.isEditting
     }
 
