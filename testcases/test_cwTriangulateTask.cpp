@@ -6,6 +6,7 @@
 #include "TestHelper.h"
 #include "cwRootData.h"
 #include "cwPDFSettings.h"
+#include "cwPDFConverter.h"
 #include "cwScrapManager.h"
 #include "cwNote.h"
 #include "cwCave.h"
@@ -40,6 +41,9 @@ static QSizeF geometryBoundsSize(const cwGeometry& geometry)
 
 TEST_CASE("cwTriangulateTask uses note units for crop scaling", "[cwTriangulateTask]") {
     cwPDFSettings::initialize();
+    if (!cwPDFConverter::isSupported()) {
+        SKIP("PDF support not enabled for cwTriangulateTask test");
+    }
 
     auto triangulateBounds = [](int resolutionPpi) {
         cwPDFSettings::instance()->setResolutionImport(resolutionPpi);
