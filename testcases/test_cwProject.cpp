@@ -171,6 +171,118 @@ TEST_CASE("New temporary project detection works", "[cwProject]") {
     CHECK(project->isNewProject() == false);
 }
 
+TEST_CASE("NewProject should not clear objects added after call", "[cwProject][newProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto region = project->cavingRegion();
+
+    // Create a backlog of saves so newProject stays in-flight.
+    const int preCaveCount = 400;
+    for (int i = 0; i < preCaveCount; ++i) {
+        region->addCave();
+        auto cave = region->cave(i);
+        cave->setName(QStringLiteral("PreCave-%1").arg(i));
+        cave->addTrip();
+        cave->trip(0)->setName(QStringLiteral("PreTrip-%1").arg(i));
+    }
+
+    project->newProject();
+
+    region->addCave();
+    auto postCave = region->cave(region->caveCount() - 1);
+    postCave->setName(QStringLiteral("PostNewProjectCave"));
+    postCave->addTrip();
+    auto postTrip = postCave->trip(0);
+    postTrip->setName(QStringLiteral("PostNewProjectTrip"));
+
+    QPointer<cwCave> postCavePtr = postCave;
+    QPointer<cwTrip> postTripPtr = postTrip;
+
+    project->waitSaveToFinish();
+
+    REQUIRE(postCavePtr != nullptr);
+    REQUIRE(postTripPtr != nullptr);
+    CHECK(region->indexOf(postCavePtr) != -1);
+    CHECK(postCavePtr->tripCount() == 1);
+}
+
+TEST_CASE("Saves queued during newProject should target the new project directory", "[cwProject][newProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto region = project->cavingRegion();
+
+    const int preCaveCount = 400;
+    for (int i = 0; i < preCaveCount; ++i) {
+        region->addCave();
+        auto cave = region->cave(i);
+        cave->setName(QStringLiteral("PreSaveCave-%1").arg(i));
+        cave->addTrip();
+        cave->trip(0)->setName(QStringLiteral("PreSaveTrip-%1").arg(i));
+    }
+
+    const QString oldProjectFile = project->filename();
+    const QDir oldProjectDir = QFileInfo(oldProjectFile).absoluteDir();
+
+    project->newProject();
+
+    region->addCave();
+    auto postCave = region->cave(region->caveCount() - 1);
+    postCave->setName(QStringLiteral("PostSaveCave"));
+    postCave->addTrip();
+    postCave->trip(0)->setName(QStringLiteral("PostSaveTrip"));
+
+    QPointer<cwCave> postCavePtr = postCave;
+
+    project->waitSaveToFinish();
+
+    REQUIRE(postCavePtr != nullptr);
+    const QString newProjectFile = project->filename();
+    const QDir newProjectDir = QFileInfo(newProjectFile).absoluteDir();
+
+    const QString newCavePath = cwSaveLoad::absolutePath(postCavePtr);
+    const QString oldCavePath = oldProjectDir.absoluteFilePath(cwSaveLoad::fileName(postCavePtr));
+
+    CHECK(QFileInfo::exists(newCavePath));
+    CHECK(!QFileInfo::exists(oldCavePath));
+    CHECK(oldProjectDir.absolutePath() != newProjectDir.absolutePath());
+}
+
+TEST_CASE("newProject waits for pending edits before reset", "[cwProject][newProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto region = project->cavingRegion();
+
+    region->addCave();
+    auto cave = region->cave(0);
+    cave->addTrip();
+    auto trip = cave->trip(0);
+
+    cave->setName(QStringLiteral("InitialCave"));
+    trip->setName(QStringLiteral("InitialTrip"));
+    project->waitSaveToFinish();
+
+    const QString oldProjectFile = project->filename();
+    REQUIRE(QFileInfo::exists(oldProjectFile));
+
+    cave->setName(QStringLiteral("EditedCave"));
+    trip->setName(QStringLiteral("EditedTrip"));
+
+    project->newProject();
+    project->waitSaveToFinish();
+
+    auto reloaded = std::make_unique<cwProject>();
+    addTokenManager(reloaded.get());
+    reloaded->loadOrConvert(oldProjectFile);
+    reloaded->waitLoadToFinish();
+
+    REQUIRE(reloaded->cavingRegion()->caveCount() == 1);
+    auto reloadedCave = reloaded->cavingRegion()->cave(0);
+    REQUIRE(reloadedCave != nullptr);
+    CHECK(reloadedCave->name() == QStringLiteral("EditedCave"));
+    REQUIRE(reloadedCave->tripCount() == 1);
+    CHECK(reloadedCave->trip(0)->name() == QStringLiteral("EditedTrip"));
+}
+
 TEST_CASE("Loading a project clears temporary flag", "[cwProject]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
