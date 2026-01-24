@@ -341,6 +341,12 @@ bool cwProject::saveAs(QString newFilename)
         return false;
     }
 
+    const QString baseName = QFileInfo(newFilename).completeBaseName();
+    if (!baseName.isEmpty()) {
+        cavingRegion()->setName(baseName);
+        m_saveLoad->setDataRoot(baseName);
+    }
+
     emit fileSaved();
     return true;
 }
@@ -918,6 +924,10 @@ cwProject::FileType cwProject::projectType(QString filename) const
         return UnknownFileType;
     }
 
+    if (info.suffix().compare(QStringLiteral("cwproj"), Qt::CaseInsensitive) == 0) {
+        return GitFileType;
+    }
+
     //Check if we can connect to the sqlite database, v6 and lower
     auto result = Monad::mtry([filename]() {
         int nextConnectonName = ConnectionCounter.fetchAndAddAcquire(1);
@@ -949,17 +959,11 @@ cwProject::FileType cwProject::projectType(QString filename) const
     });
 
     if(result.hasError()) {
-        //Check to see
-        auto regionResult = cwSaveLoad::loadCavingRegion(filename);
-        if(regionResult.hasError()) {
-            return UnknownFileType;
-        } else {
-            return GitFileType;
-        }
-    } else {
-        //V6 or lower
-        return SqliteFileType;
+        return UnknownFileType;
     }
+
+    //V6 or lower
+    return SqliteFileType;
 }
 
 
@@ -994,6 +998,16 @@ bool cwProject::isTemporaryProject() const {
 
 QString cwProject::filename() const {
     return m_saveLoad->fileName();
+}
+
+QString cwProject::dataRoot() const
+{
+    return m_saveLoad->dataRoot();
+}
+
+void cwProject::setDataRoot(const QString &dataRoot)
+{
+    m_saveLoad->setDataRoot(dataRoot);
 }
 
 /**

@@ -67,6 +67,8 @@ class ClinoReading;
 class StationShot;
 class NoteLiDAR;
 class NoteLiDARTransformation;
+class Project;
+class ProjectMetadata;
 };
 
 namespace QtProto {
@@ -108,6 +110,24 @@ class CAVEWHERE_LIB_EXPORT cwSaveLoad : public QObject
     Q_PROPERTY(bool isTemporaryProject READ isTemporaryProject NOTIFY isTemporaryProjectChanged)
 
 public:
+    enum class GitMode {
+        ManagedNew,
+        ExistingRepo,
+        NoGit
+    };
+    Q_ENUM(GitMode);
+
+    struct ProjectMetadataData {
+        QString dataRoot;
+        GitMode gitMode = GitMode::ManagedNew;
+        bool syncEnabled = true;
+    };
+
+    struct ProjectLoadData {
+        cwCavingRegionData region;
+        ProjectMetadataData metadata;
+    };
+
     cwSaveLoad(QObject* parent = nullptr);
     ~cwSaveLoad();
 
@@ -133,9 +153,10 @@ public:
 
     QFuture<Monad::ResultString> saveAllFromV6(const QDir& dir, const cwProject* region, const QString& projectFileName);
 
-    static QFuture<Monad::Result<cwCavingRegionData>> loadAll(const QString& filename);
+    static QFuture<Monad::Result<ProjectLoadData>> loadAll(const QString& filename);
 
     static Monad::Result<cwCavingRegionData> loadCavingRegion(const QString& filename);
+    static Monad::Result<ProjectLoadData> loadProject(const QString& filename);
 
     static QString sanitizeFileName(QString input);
 
@@ -199,6 +220,15 @@ public:
 
     bool isTemporaryProject() const;
 
+    QString dataRoot() const;
+    void setDataRoot(const QString& dataRoot);
+
+    GitMode gitMode() const;
+    void setGitMode(GitMode mode);
+
+    bool syncEnabled() const;
+    void setSyncEnabled(bool enabled);
+
 signals:
     void fileNameChanged();
     void isTemporaryProjectChanged();
@@ -208,6 +238,10 @@ private:
     friend struct Data;
     std::unique_ptr<Data> d;
     QPointer<QUndoStack> m_undoStack;
+
+    QFuture<Monad::ResultBase> saveProject(const QDir& dir, const cwCavingRegion* region);
+    std::unique_ptr<CavewhereProto::Project> toProtoProject(const cwCavingRegion* region);
+    QDir projectRootDir() const;
 
 
     void setSaveEnabled(bool enabled);

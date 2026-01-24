@@ -71,6 +71,44 @@ static QStringList fromProtoStringList(const google::protobuf::RepeatedPtrField<
 
 namespace {
 
+QDir projectRootDirForFile(const QString& projectFileName)
+{
+    QFileInfo info(projectFileName);
+    return info.absoluteDir();
+}
+
+QString defaultDataRoot(const QString& projectName)
+{
+    return cwSaveLoad::sanitizeFileName(projectName);
+}
+
+CavewhereProto::ProjectMetadata::GitMode toProtoGitMode(cwSaveLoad::GitMode mode)
+{
+    switch (mode) {
+    case cwSaveLoad::GitMode::ManagedNew:
+        return CavewhereProto::ProjectMetadata::GitMode::ProjectMetadata_GitMode_ManagedNew;
+    case cwSaveLoad::GitMode::ExistingRepo:
+        return CavewhereProto::ProjectMetadata::GitMode::ProjectMetadata_GitMode_ExistingRepo;
+    case cwSaveLoad::GitMode::NoGit:
+        return CavewhereProto::ProjectMetadata::GitMode::ProjectMetadata_GitMode_NoGit;
+    }
+
+    return CavewhereProto::ProjectMetadata::GitMode::ProjectMetadata_GitMode_ManagedNew;
+}
+
+cwSaveLoad::GitMode fromProtoGitMode(CavewhereProto::ProjectMetadata::GitMode mode)
+{
+    switch (mode) {
+    case CavewhereProto::ProjectMetadata::GitMode::ProjectMetadata_GitMode_ExistingRepo:
+        return cwSaveLoad::GitMode::ExistingRepo;
+    case CavewhereProto::ProjectMetadata::GitMode::ProjectMetadata_GitMode_NoGit:
+        return cwSaveLoad::GitMode::NoGit;
+    case CavewhereProto::ProjectMetadata::GitMode::ProjectMetadata_GitMode_ManagedNew:
+    default:
+        return cwSaveLoad::GitMode::ManagedNew;
+    }
+}
+
 cwImage::OriginalImageInfo imageInfo(const QString& path) {
     cwImage::OriginalImageInfo info;
     const QFileInfo fileInfo(path);
@@ -370,6 +408,7 @@ struct cwSaveLoad::Data {
     QQuickGit::GitRepository* repository;
 
     QString projectFileName;
+    cwSaveLoad::ProjectMetadataData projectMetadata;
 
     //Where the objects are currently being saved
     //This the absolute directory to the m_rootDir
@@ -726,7 +765,7 @@ ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, Proj
         return ResultBase(QStringLiteral("Project does not have an associated file."));
     }
 
-    const QString currentRootPath = projectDir().absolutePath();
+    const QString currentRootPath = projectRootDir().absolutePath();
     const QString targetRootPath = destination.rootDirPath;
     const QString normalizedCurrentRoot = QDir(currentRootPath).absolutePath();
     const QString normalizedTargetRoot = QDir(targetRootPath).absolutePath();
@@ -779,6 +818,35 @@ ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, Proj
         sourceFilePath = desiredPath;
     }
 
+    const QString newDataRootName = destination.sanitizedBaseName;
+    const auto region = d->m_regionTreeModel->cavingRegion();
+    QString oldDataRootName = d->projectMetadata.dataRoot;
+    if (oldDataRootName.isEmpty()) {
+        oldDataRootName = defaultDataRoot(region ? region->name() : QString());
+    }
+
+    if (!oldDataRootName.isEmpty() && oldDataRootName != newDataRootName) {
+        const QString oldDataRootPath = targetRootDir.absoluteFilePath(oldDataRootName);
+        const QString newDataRootPath = targetRootDir.absoluteFilePath(newDataRootName);
+        if (QFileInfo::exists(oldDataRootPath)) {
+            if (QFileInfo::exists(newDataRootPath)) {
+                return ResultBase(QStringLiteral("Destination data root '%1' already exists.").arg(newDataRootPath));
+            }
+            if (!QDir().rename(oldDataRootPath, newDataRootPath)) {
+                return ResultBase(QStringLiteral("Couldn't rename data root to '%1'.").arg(newDataRootPath));
+            }
+        } else {
+            QDir(targetRootDir).mkpath(newDataRootName);
+        }
+    }
+
+    d->projectMetadata.dataRoot = newDataRootName;
+    if (region != nullptr) {
+        region->setName(newDataRootName);
+    }
+
+    saveProject(targetRootDir, region);
+
     setFileName(desiredFilePath);
     setTemporary(false);
     d->resetFileLookup();
@@ -829,7 +897,11 @@ void cwSaveLoad::newProject()
                 auto tempDir = createTemporaryDirectory(tempName);
 
                 //Save the project file
-                saveCavingRegion(tempDir, region);
+                d->projectMetadata.dataRoot = defaultDataRoot(region->name());
+                d->projectMetadata.gitMode = GitMode::ManagedNew;
+                d->projectMetadata.syncEnabled = true;
+                tempDir.mkpath(d->projectMetadata.dataRoot);
+                saveProject(tempDir, region);
 
                 //Connect all for watching for saves
                 connectTreeModel();
@@ -857,13 +929,13 @@ QFuture<ResultBase> cwSaveLoad::load(const QString &filename)
 
     QFuture<ResultBase> future = oldJobs.then(this, [this, filename]() {
         //Find all the cave file
-        auto regionDataFuture = cwSaveLoad::loadAll(filename);
+        auto projectDataFuture = cwSaveLoad::loadAll(filename);
 
-        d->futureToken.addJob({QFuture<void>(regionDataFuture), QStringLiteral("Loading")});
+        d->futureToken.addJob({QFuture<void>(projectDataFuture), QStringLiteral("Loading")});
 
-        return AsyncFuture::observe(regionDataFuture)
-            .context(this, [this, regionDataFuture, filename]() {
-                return mbind(regionDataFuture, [this, regionDataFuture, filename](const ResultBase&) {
+        return AsyncFuture::observe(projectDataFuture)
+            .context(this, [this, projectDataFuture, filename]() {
+                return mbind(projectDataFuture, [this, projectDataFuture, filename](const ResultBase&) {
                     // setTemporaryProject(false);
                     //The filename needs to be set first because, image providers should
                     //have the filename before the region model is set
@@ -871,7 +943,9 @@ QFuture<ResultBase> cwSaveLoad::load(const QString &filename)
                     setTemporary(false);
 
                     setSaveEnabled(false);
-                    d->m_regionTreeModel->cavingRegion()->setData(regionDataFuture.result().value());
+                    const auto& loadData = projectDataFuture.result().value();
+                    d->projectMetadata = loadData.metadata;
+                    d->m_regionTreeModel->cavingRegion()->setData(loadData.region);
 
                     // d->projectFileName = filename;
 
@@ -943,6 +1017,39 @@ void cwSaveLoad::setUndoStack(QUndoStack *undoStack)
     if(m_undoStack != undoStack) {
         m_undoStack = undoStack;
     }
+}
+
+QFuture<ResultBase> cwSaveLoad::saveProject(const QDir &dir, const cwCavingRegion *region)
+{
+    return saveProtoMessage(dir,
+                            regionFileName(region),
+                            toProtoProject(region),
+                            region);
+}
+
+std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavingRegion *region)
+{
+    auto protoProject = std::make_unique<CavewhereProto::Project>();
+    auto fileVersion = protoProject->mutable_fileversion();
+    fileVersion->set_version(cwRegionIOTask::protoVersion());
+    cwRegionSaveTask::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
+
+    if (region != nullptr) {
+        cwRegionSaveTask::saveString(protoProject->mutable_name(), region->name());
+    }
+
+    auto metadata = d->projectMetadata;
+    if (metadata.dataRoot.isEmpty()) {
+        metadata.dataRoot = defaultDataRoot(region ? region->name() : QString());
+    }
+    d->projectMetadata = metadata;
+
+    auto protoMetadata = protoProject->mutable_metadata();
+    cwRegionSaveTask::saveString(protoMetadata->mutable_dataroot(), metadata.dataRoot);
+    protoMetadata->set_gitmode(toProtoGitMode(metadata.gitMode));
+    protoMetadata->set_syncenabled(metadata.syncEnabled);
+
+    return protoProject;
 }
 
 QFuture<ResultBase> cwSaveLoad::saveCavingRegion(const QDir &dir, const cwCavingRegion *region)
@@ -1548,7 +1655,14 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
         return dir;
     };
 
-    auto saveNoteImage = [projectFileName, dir](cwNoteData noteData, int imageIndex, QDir noteDir) {
+    const QString projectName = QFileInfo(project->filename()).baseName();
+    d->projectMetadata.dataRoot = defaultDataRoot(projectName);
+    d->projectMetadata.gitMode = GitMode::ManagedNew;
+    d->projectMetadata.syncEnabled = true;
+
+    const QDir dataRootDir = makeDir(QDir(dir.absoluteFilePath(d->projectMetadata.dataRoot)));
+
+    auto saveNoteImage = [projectFileName, dataRootDir](cwNoteData noteData, int imageIndex, QDir noteDir) {
         cwImageProvider provider;
         provider.setProjectPath(projectFileName);
 
@@ -1574,7 +1688,7 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
         // qDebug() << "Saving image:" << filename << file.errorString();
 
         cwImage noteImage = noteCopy.image();
-        QString relativeFilename = dir.relativeFilePath(filename);
+        QString relativeFilename = dataRootDir.relativeFilePath(filename);
         noteImage.setPath(relativeFilename);
         noteCopy.setImage(noteImage);
 
@@ -1582,7 +1696,7 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
     };
 
 
-    auto saveNotes = [makeDir, this, dir, saveNoteImage](const QDir& tripDir, const cwSurveyNoteModel* notes) {
+    auto saveNotes = [makeDir, this, saveNoteImage](const QDir& tripDir, const cwSurveyNoteModel* notes) {
         const QDir noteDir = makeDir(noteDirHelper(tripDir));
 
         QList<QFuture<ResultBase>> noteFutures;
@@ -1632,9 +1746,9 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
 
     //Save the region's data
     cwCavingRegion region;
-    region.setName(QFileInfo(project->filename()).baseName());
+    region.setName(projectName);
     makeDir(dir);
-    auto regionFuture = saveCavingRegion(dir, &region);
+    auto regionFuture = saveProject(dir, &region);
     QString newProjectFilename = regionFileName(dir, &region);
 
     QList<QFuture<ResultBase>> saveFutures;
@@ -1642,7 +1756,7 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
 
     //Go through all the caves
     for(const auto cave : project->cavingRegion()->caves()) {
-        const QDir caveDir = makeDir(caveDirHelper(dir, cave));
+        const QDir caveDir = makeDir(caveDirHelper(dataRootDir, cave));
         saveFutures.append(save(caveDir, cave));
         saveFutures.append(saveTrips(caveDir, cave));
     }
@@ -1654,16 +1768,16 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
 
 }
 
-QFuture<Monad::Result<cwCavingRegionData>> cwSaveLoad::loadAll(const QString &filename)
+QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QString &filename)
 {
     return cwConcurrent::run([filename]() {
-        // Load the root region file
-        auto regionResult = loadCavingRegion(filename);
+        auto projectResult = loadProject(filename);
 
-        return regionResult.then([filename](Result<cwCavingRegionData> result) {
-            cwCavingRegionData region = result.value();
+        return projectResult.then([filename](Result<ProjectLoadData> result) {
+            ProjectLoadData loadData = result.value();
 
-            QDir regionDir = QFileInfo(filename).absoluteDir();
+            QDir projectRootDir = projectRootDirForFile(filename);
+            QDir regionDir = QDir(projectRootDir.absoluteFilePath(loadData.metadata.dataRoot));
 
             auto filePathLess = [](const QFileInfo& a, const QFileInfo& b) {
                 return a.absoluteFilePath() < b.absoluteFilePath();
@@ -1762,10 +1876,10 @@ QFuture<Monad::Result<cwCavingRegionData>> cwSaveLoad::loadAll(const QString &fi
                     }
                 }
 
-                region.caves.append(cave);
+                loadData.region.caves.append(cave);
             }
 
-            return Result(region);
+            return Result(loadData);
         });
     });
 }
@@ -1781,6 +1895,55 @@ Monad::Result<cwCavingRegionData> cwSaveLoad::loadCavingRegion(const QString &fi
                                 regionData.name = QString::fromStdString(regionProto.name());
                             }
                             return Result(regionData);
+                        });
+}
+
+Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString &filename)
+{
+    auto projectResult = loadMessage<CavewhereProto::Project>(filename);
+    return Monad::mbind(projectResult, [](const Result<CavewhereProto::Project>& result)
+                        {
+                            auto projectProto = result.value();
+
+                            if (!projectProto.has_fileversion() || !projectProto.fileversion().has_version()) {
+                                return Result<ProjectLoadData>(QStringLiteral("Project file missing version information."));
+                            }
+
+                            const int fileVersion = projectProto.fileversion().version();
+                            if (fileVersion < 8) {
+                                return Result<ProjectLoadData>(QStringLiteral("Legacy CaveWhere v7 project files are not supported."));
+                            }
+
+                            if (fileVersion > cwRegionIOTask::protoVersion()) {
+                                return Result<ProjectLoadData>(
+                                    QStringLiteral("Project file version %1 is newer than supported version %2.")
+                                        .arg(fileVersion)
+                                        .arg(cwRegionIOTask::protoVersion()));
+                            }
+
+                            ProjectLoadData loadData;
+                            if (projectProto.has_name()) {
+                                loadData.region.name = QString::fromStdString(projectProto.name());
+                            }
+
+                            if (projectProto.has_metadata()) {
+                                const auto& metadataProto = projectProto.metadata();
+                                if (metadataProto.has_dataroot()) {
+                                    loadData.metadata.dataRoot = QString::fromStdString(metadataProto.dataroot());
+                                }
+                                if (metadataProto.has_gitmode()) {
+                                    loadData.metadata.gitMode = fromProtoGitMode(metadataProto.gitmode());
+                                }
+                                if (metadataProto.has_syncenabled()) {
+                                    loadData.metadata.syncEnabled = metadataProto.syncenabled();
+                                }
+                            }
+
+                            if (loadData.metadata.dataRoot.isEmpty()) {
+                                loadData.metadata.dataRoot = defaultDataRoot(loadData.region.name);
+                            }
+
+                            return Result(loadData);
                         });
 }
 
@@ -2846,15 +3009,30 @@ QStringList fromProtoStringList(const google::protobuf::RepeatedPtrField<std::st
     return stringList;
 }
 
+QDir cwSaveLoad::projectRootDir() const
+{
+    return projectRootDirForFile(d->projectFileName);
+}
+
 QDir cwSaveLoad::projectDir(const cwProject *project)
 {
     QFileInfo info(project->filename());
-    return info.absoluteDir();
+    QDir rootDir = info.absoluteDir();
+    QString dataRootName = project->dataRoot();
+    if (dataRootName.isEmpty()) {
+        dataRootName = defaultDataRoot(project->cavingRegion() ? project->cavingRegion()->name() : QString());
+    }
+    return QDir(rootDir.absoluteFilePath(dataRootName));
 }
 
 QDir cwSaveLoad::projectDir() const
 {
-    return projectDir(d->m_regionTreeModel->cavingRegion()->parentProject());
+    auto region = d->m_regionTreeModel->cavingRegion();
+    QString dataRootName = d->projectMetadata.dataRoot;
+    if (dataRootName.isEmpty()) {
+        dataRootName = defaultDataRoot(region ? region->name() : QString());
+    }
+    return QDir(projectRootDir().absoluteFilePath(dataRootName));
 }
 
 QString cwSaveLoad::regionFileName(const cwCavingRegion *region)
@@ -3136,4 +3314,67 @@ QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
 bool cwSaveLoad::isTemporaryProject() const
 {
     return d->isTemporary;
+}
+
+QString cwSaveLoad::dataRoot() const
+{
+    return d->projectMetadata.dataRoot;
+}
+
+void cwSaveLoad::setDataRoot(const QString &dataRoot)
+{
+    QString normalized = dataRoot.trimmed();
+    if (normalized.isEmpty()) {
+        auto region = d->m_regionTreeModel->cavingRegion();
+        normalized = defaultDataRoot(region ? region->name() : QString());
+    }
+
+    if (d->projectMetadata.dataRoot == normalized) {
+        return;
+    }
+
+    d->projectMetadata.dataRoot = normalized;
+    if (!d->projectFileName.isEmpty()) {
+        projectRootDir().mkpath(normalized);
+    }
+
+    if (d->saveEnabled && !d->projectFileName.isEmpty()) {
+        saveProject(projectRootDir(), d->m_regionTreeModel->cavingRegion());
+    }
+}
+
+cwSaveLoad::GitMode cwSaveLoad::gitMode() const
+{
+    return d->projectMetadata.gitMode;
+}
+
+void cwSaveLoad::setGitMode(GitMode mode)
+{
+    if (d->projectMetadata.gitMode == mode) {
+        return;
+    }
+
+    d->projectMetadata.gitMode = mode;
+
+    if (d->saveEnabled && !d->projectFileName.isEmpty()) {
+        saveProject(projectRootDir(), d->m_regionTreeModel->cavingRegion());
+    }
+}
+
+bool cwSaveLoad::syncEnabled() const
+{
+    return d->projectMetadata.syncEnabled;
+}
+
+void cwSaveLoad::setSyncEnabled(bool enabled)
+{
+    if (d->projectMetadata.syncEnabled == enabled) {
+        return;
+    }
+
+    d->projectMetadata.syncEnabled = enabled;
+
+    if (d->saveEnabled && !d->projectFileName.isEmpty()) {
+        saveProject(projectRootDir(), d->m_regionTreeModel->cavingRegion());
+    }
 }

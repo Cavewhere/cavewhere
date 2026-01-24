@@ -8,6 +8,24 @@ message FileVersion {
     optional string cavewhereVersion = 2;
 }
 
+message ProjectMetadata {
+    enum GitMode {
+        ManagedNew = 0;
+        ExistingRepo = 1;
+        NoGit = 2;
+    }
+
+    optional string dataRoot = 1;
+    optional GitMode gitMode = 2;
+    optional bool syncEnabled = 3;
+}
+
+message Project {
+    optional FileVersion fileVersion = 1;
+    optional string name = 2;
+    optional ProjectMetadata metadata = 3;
+}
+
 //This is a legacy message, do not use
 message CavingRegion {
     repeated Cave caves = 1;

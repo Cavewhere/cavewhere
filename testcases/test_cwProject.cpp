@@ -177,7 +177,7 @@ TEST_CASE("Loading a project clears temporary flag", "[cwProject]") {
 
     REQUIRE(project->isTemporaryProject());
 
-    QString source = copyToTempFolder("://datasets/test_cwProject/v7.cw");
+    QString source = copyToTempFolder("://datasets/test_cwProject/v8.cwproj");
     project->loadOrConvert(source);
     rootData->futureManagerModel()->waitForFinished();
     project->waitLoadToFinish();
@@ -185,11 +185,51 @@ TEST_CASE("Loading a project clears temporary flag", "[cwProject]") {
     CHECK(project->isTemporaryProject() == false);
 }
 
+TEST_CASE("Loading a project preserves metadata dataRoot", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    QTemporaryDir projectDir;
+    REQUIRE(projectDir.isValid());
+
+    const QString projectName = QStringLiteral("Project Name");
+    const QString metadataDataRoot = QStringLiteral("custom-root");
+    const QString projectFile = projectDir.filePath(QStringLiteral("metadata-root.cwproj"));
+
+    REQUIRE(QDir().mkpath(projectDir.filePath(metadataDataRoot)));
+
+    QFile file(projectFile);
+    REQUIRE(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    const QByteArray contents = QStringLiteral(
+        "{\n"
+        " \"fileVersion\": {\n"
+        "  \"version\": 8,\n"
+        "  \"cavewhereVersion\": \"2025.2-223-gd949c05f\"\n"
+        " },\n"
+        " \"name\": \"%1\",\n"
+        " \"metadata\": {\n"
+        "  \"dataRoot\": \"%2\",\n"
+        "  \"gitMode\": \"ManagedNew\",\n"
+        "  \"syncEnabled\": true\n"
+        " }\n"
+        "}\n")
+            .arg(projectName, metadataDataRoot)
+            .toUtf8();
+    REQUIRE(file.write(contents) == contents.size());
+    file.close();
+
+    project->loadOrConvert(projectFile);
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitLoadToFinish();
+
+    CHECK(project->dataRoot().toStdString() == metadataDataRoot.toStdString());
+}
+
 TEST_CASE("Loading a project adds .gitignore cache entry", "[cwProject]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
 
-    QString source = copyToTempFolder("://datasets/test_cwProject/v7.cw");
+    QString source = copyToTempFolder("://datasets/test_cwProject/v8.cwproj");
     const QDir projectDir = QFileInfo(source).absoluteDir();
     QFile::remove(projectDir.filePath(QStringLiteral(".gitignore")));
 
@@ -385,7 +425,7 @@ TEST_CASE("Temporary project saveAs should move the project directory", "[cwProj
 
     REQUIRE(project->isTemporaryProject());
 
-    const QDir originalRoot = cwSaveLoad::projectDir(project);
+    const QDir originalRoot = QFileInfo(project->filename()).absoluteDir();
     REQUIRE(originalRoot.exists());
 
     const QString markerFilePath = originalRoot.absoluteFilePath(QStringLiteral("marker.txt"));
@@ -446,6 +486,40 @@ TEST_CASE("Temporary project saveAs reports error when destination exists", "[cw
     CHECK(error.message() == QStringLiteral("Destination folder '%1' already exists.").arg(existingRoot));
     CHECK(project->isTemporaryProject());
     CHECK(project->isNewProject());
+}
+
+TEST_CASE("SaveAs updates dataRoot directory to match project name", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    REQUIRE(project->isTemporaryProject());
+
+    auto cave = new cwCave();
+    cave->setName(QStringLiteral("Test Cave"));
+    project->cavingRegion()->addCave(cave);
+
+    auto trip = new cwTrip();
+    trip->setName(QStringLiteral("Trip 1"));
+    cave->addTrip(trip);
+
+    project->waitSaveToFinish();
+
+    QTemporaryDir destinationParent;
+    REQUIRE(destinationParent.isValid());
+
+    const QString targetProjectFile = destinationParent.filePath(QStringLiteral("SlugProject.cwproj"));
+    REQUIRE(project->saveAs(targetProjectFile));
+    rootData->futureManagerModel()->waitForFinished();
+
+    CHECK(project->canSaveDirectly());
+    CHECK_FALSE(project->isTemporaryProject());
+
+    const QString projectName = QFileInfo(project->filename()).completeBaseName();
+    const QDir dataRootDir = cwSaveLoad::projectDir(project);
+    CHECK(dataRootDir.dirName().toStdString() == projectName.toStdString());
+
+    CHECK(QFileInfo::exists(cwSaveLoad::absolutePath(cave)));
+    CHECK(QFileInfo::exists(cwSaveLoad::absolutePath(trip)));
 }
 
 TEST_CASE("Non-temporary project saveAs reports error when destination exists", "[cwProject]") {
@@ -661,7 +735,7 @@ TEST_CASE("cwProject should detect the correct file type", "[cwProject]") {
     CHECK(project->projectType(datasetFile) == cwProject::SqliteFileType);
 
     //A file based file
-    datasetFile = copyToTempFolder(":/datasets/test_cwProject/v7.cw");
+    datasetFile = copyToTempFolder(":/datasets/test_cwProject/v8.cwproj");
     CHECK(project->projectType(datasetFile) == cwProject::GitFileType);
 
     //Empty file

@@ -1,0 +1,12 @@
+{
+ "fileVersion": {
+  "version": 8,
+  "cavewhereVersion": "2025.2-223-gd949c05f"
+ },
+ "name": "v7-test",
+ "metadata": {
+  "dataRoot": "v7-test",
+  "gitMode": "ManagedNew",
+  "syncEnabled": true
+ }
+}
