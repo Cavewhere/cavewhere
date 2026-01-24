@@ -14,6 +14,7 @@
 
 //Our includes
 #include "cwSurveyChunk.h"
+#include "CaveWhereLibExport.h"
 
 /**
   This class expands the survey chunk to allow editting.  When
@@ -25,7 +26,7 @@
   Once the survey chunk is unset, the survey chunk will be trimmed.  All empty
   station and shot are removed.
   */
-class cwSurveyChunkTrimmer : public QObject
+class CAVEWHERE_LIB_EXPORT cwSurveyChunkTrimmer : public QObject
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(SurveyChunkTrimmer)
