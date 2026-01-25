@@ -110,21 +110,37 @@ cwProject::cwProject(QObject* parent) :
     UndoStack(new QUndoStack(this)),
     ErrorModel(new cwErrorListModel(this))
 {
-    m_saveLoad->setCavingRegion(Region);
-    m_saveLoad->setUndoStack(UndoStack);
-    connect(m_saveLoad, &cwSaveLoad::isTemporaryProjectChanged, this, [this]() {
-        emit isTemporaryProjectChanged();
-        emit canSaveDirectlyChanged();
-    });
-    connect(m_saveLoad, &cwSaveLoad::fileNameChanged, this, [this]() {
-        emit filenameChanged(m_saveLoad->fileName());
-    });
+    bindSaveLoad(m_saveLoad);
 
-    newProject();
+    m_saveLoad->newProject();
 }
 
 cwProject::~cwProject()
 {
+}
+
+void cwProject::bindSaveLoad(cwSaveLoad* saveLoad)
+{
+    Q_ASSERT(saveLoad);
+
+    saveLoad->setCavingRegion(Region);
+    saveLoad->setUndoStack(UndoStack);
+    saveLoad->setFutureManagerToken(FutureToken);
+
+    connect(saveLoad, &cwSaveLoad::isTemporaryProjectChanged, this, [this, saveLoad]() {
+        if (m_saveLoad != saveLoad) {
+            return;
+        }
+        emit isTemporaryProjectChanged();
+        emit canSaveDirectlyChanged();
+    });
+
+    connect(saveLoad, &cwSaveLoad::fileNameChanged, this, [this, saveLoad]() {
+        if (m_saveLoad != saveLoad) {
+            return;
+        }
+        emit filenameChanged(saveLoad->fileName());
+    });
 }
 
 /**
@@ -633,6 +649,17 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
   \brief Creates a new project
   */
 void cwProject::newProject() {
+    auto oldSaveLoad = m_saveLoad;
+
+    auto newSaveLoad = new cwSaveLoad(this);
+    m_saveLoad = newSaveLoad;
+    bindSaveLoad(m_saveLoad);
+
+    if (oldSaveLoad) {
+        auto retireFuture = oldSaveLoad->retire();
+        RetiringSaveFutures.append(retireFuture);
+    }
+
     m_saveLoad->newProject();
 
     // //Creates a temp directory for the project
@@ -779,6 +806,13 @@ void cwProject::waitSaveToFinish()
 {
     m_saveLoad->waitForFinished();
     // AsyncFuture::waitForFinished(SaveFuture);
+
+    for (const auto& future : std::as_const(RetiringSaveFutures)) {
+        if (future.isRunning() || !future.isFinished()) {
+            AsyncFuture::waitForFinished(future);
+        }
+    }
+    RetiringSaveFutures.clear();
 }
 
 /**

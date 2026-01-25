@@ -229,6 +229,8 @@ public:
     bool syncEnabled() const;
     void setSyncEnabled(bool enabled);
 
+    QFuture<void> retire();
+
 signals:
     void fileNameChanged();
     void isTemporaryProjectChanged();

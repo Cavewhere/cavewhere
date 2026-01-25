@@ -417,9 +417,6 @@ struct cwSaveLoad::Data {
     //For watching when object data has changed
     cwRegionTreeModel* m_regionTreeModel;
 
-    //New file future
-    QFuture<void> newFileFuture;
-
     //Saving jobs
     QList<FileSystemJob> m_fileSystemJobs;
     std::unordered_map<QString, WaitingJob> m_waitingJobs;
@@ -427,6 +424,7 @@ struct cwSaveLoad::Data {
 
     bool isTemporary = true;
     bool saveEnabled = true;
+    bool newProjectCalled = false;
 
     cwFutureManagerToken futureToken;
 
@@ -435,6 +433,9 @@ struct cwSaveLoad::Data {
 
     //This is for bug checking, should be removed
     bool clearingWait = false;
+
+    bool retiring = false;
+    QFuture<void> retireFuture;
 
     static QList<cwSurveyChunkData> fromProtoSurveyChunks(const google::protobuf::RepeatedPtrField<CavewhereProto::SurveyChunk> & protoList);
 
@@ -870,47 +871,46 @@ cwSaveLoad::cwSaveLoad(QObject *parent) :
 
 void cwSaveLoad::newProject()
 {
-    //Make sure we haven't requested a newProject already and we
-    //aren't already waiting
-    if(!d->newFileFuture.isRunning()) {
-        //Disconnect all connections
-        disconnectTreeModel();
+    Q_ASSERT(!d->newProjectCalled);
+    d->newProjectCalled = true;
 
-        //Wait for jobs to complete
-        auto future = completeSaveJobs();
+    Q_ASSERT(d->m_runningJobs.isEmpty());
+    Q_ASSERT(d->m_waitingJobs.empty());
+    Q_ASSERT(d->m_fileSystemJobs.isEmpty());
 
-        d->newFileFuture = future.then(this, [this]() {
-            //Clear the current data
-            auto region = d->m_regionTreeModel->cavingRegion();
+    //Disconnect all connections
+    disconnectTreeModel();
 
-            if(region) [[likely]] {
-                region->clearCaves();
-                if(m_undoStack) {
-                    m_undoStack->clear();
-                }
+    //Clear the current data
+    auto region = d->m_regionTreeModel->cavingRegion();
 
-                //Rename the region
-                const auto tempName = randomName();
-                region->setName(tempName);
+    if(region) [[likely]] {
+        region->clearCaves();
+        if(m_undoStack) {
+            m_undoStack->clear();
+        }
 
-                //Create the temp directory
-                auto tempDir = createTemporaryDirectory(tempName);
+        //Rename the region
+        const auto tempName = randomName();
+        region->setName(tempName);
 
-                //Save the project file
-                d->projectMetadata.dataRoot = defaultDataRoot(region->name());
-                d->projectMetadata.gitMode = GitMode::ManagedNew;
-                d->projectMetadata.syncEnabled = true;
-                tempDir.mkpath(d->projectMetadata.dataRoot);
-                saveProject(tempDir, region);
+        //Create the temp directory
+        auto tempDir = createTemporaryDirectory(tempName);
 
-                //Connect all for watching for saves
-                connectTreeModel();
+        //Save the project file
+        d->projectMetadata.dataRoot = defaultDataRoot(region->name());
+        d->projectMetadata.gitMode = GitMode::ManagedNew;
+        d->projectMetadata.syncEnabled = true;
+        tempDir.mkpath(d->projectMetadata.dataRoot);
+        saveProject(tempDir, region);
 
-                setTemporary(true);
-                setFileName(tempDir.absoluteFilePath(regionFileName(region)));
-            }
-        });
+        //Connect all for watching for saves
+        connectTreeModel();
+
+        setTemporary(true);
+        setFileName(tempDir.absoluteFilePath(regionFileName(region)));
     }
+
 }
 
 QString cwSaveLoad::fileName() const
@@ -1230,12 +1230,9 @@ void cwSaveLoad::copyFilesAndEmitResults(const QList<QString>& sourceFilePaths,
         }
     }
 
-    auto future = AsyncFuture::observe(d->newFileFuture)
-                      .context(this, [copyOne, commands]() {
-                          return cwConcurrent::mapped(commands, [copyOne](const CopyCommand& command) {
-                              return copyOne(command.sourceFilePath, command.destinationFilePath);
-                          });
-                      }).future();
+    auto future = cwConcurrent::mapped(commands, [copyOne](const CopyCommand& command) {
+        return copyOne(command.sourceFilePath, command.destinationFilePath);
+    });
 
 
     for (const CopyCommand& command : commands) {
@@ -1427,135 +1424,6 @@ void cwSaveLoad::addFiles(QList<QUrl> files,
         fileCallBackFunc
         );
 }
-
-
-// void cwSaveLoad::addImages(QList<QUrl> noteImagePaths,
-//                            const QDir &dir,
-//                            std::function<void (QList<cwImage>)> outputCallBackFunc)
-// {
-//     auto isPDF = [](const QString& path) {
-//         if(cwPDFConverter::isSupported()) {
-//             QFileInfo info(path);
-//             return info.suffix().compare("pdf", Qt::CaseInsensitive) == 0;
-//         }
-//         return false;
-//     };
-
-//     //Sort by images and pdf, pdf's last, but them in the same image order
-//     QVector<QString> images;
-//     QVector<QString> pdfs;
-//     images.reserve(noteImagePaths.size());
-//     pdfs.reserve(noteImagePaths.size());
-//     for(const QUrl& url : noteImagePaths) {
-//         QString path = url.toLocalFile();
-//         if(isPDF(path)) {
-//             pdfs.append(path);
-//         } else {
-//             //Normal image
-//             images.append(path);
-//         }
-//     }
-
-//     auto addImagesByPath = [this, dir, outputCallBackFunc](const QList<QString>& images) {
-//         auto destFileName = [dir](const QString& fileName) {
-//             return dir.absoluteFilePath(QFileInfo(fileName).fileName());
-//         };
-
-//         auto rootDir = projectDir();
-//         Q_ASSERT(rootDir.exists());
-//         qDebug() << "RootDir:" << rootDir;
-
-//         auto copyFileToNote = [rootDir](const QString& fileName, const QString& newFileName) {
-//             return mbind(Data::ensurePathForFile(newFileName), [rootDir, fileName, newFileName](const ResultBase& result) {
-//                 bool success = QFile::copy(fileName, newFileName);
-//                 if(success) {
-//                     QImage qimage(fileName);
-//                     cwImage image = cwAddImageTask::originalMetaData(qimage);
-//                     // cwImage image;
-//                     image.setPath(rootDir.relativeFilePath(newFileName));
-
-//                     return Monad::Result<cwImage>(image);
-//                 } else {
-//                     qWarning() << "Can't copy!";
-//                     return Monad::Result<cwImage>(QStringLiteral("Can't copy ") + fileName + QStringLiteral(" ") + newFileName);
-//                 }
-//             });
-//         };
-
-//         struct CopyCommand {
-//             QString oldName;
-//             QString newName;
-//         };
-
-//         auto commands = [destFileName, images, this]() {
-//             QList<CopyCommand> commands;
-//             commands.reserve(images.size());
-//             for(const auto imagePath : images) {
-//                 const auto newName = destFileName(imagePath);
-//                 if(!d->m_runningJobs.contains(newName)) {
-//                     commands.append({imagePath, newName});
-//                 } else {
-//                     qWarning() << "Can't add" << imagePath << " because it's already queued" << LOCATION;
-//                 }
-//             }
-//             return commands;
-//         }();
-
-//         auto future = AsyncFuture::observe(d->newFileFuture)
-//                           .context(this, [copyFileToNote, commands]() {
-//                               return cwConcurrent::mapped(commands, [copyFileToNote](const CopyCommand& command) {
-//                                   return copyFileToNote(command.oldName, command.newName);
-//                               });
-
-//                           }).future();
-
-
-//         qDebug() << "Adding images:" << images;
-
-//         for(const auto command : commands) {
-//             d->m_runningJobs.insert(command.newName, QFuture<void>(future));
-//         }
-
-//         auto callBackFuture
-//             = AsyncFuture::observe(future)
-//                   .context(this, [future, commands, this, outputCallBackFunc]() {
-//                       qDebug() << "Done!";
-
-//                       for(const auto command : commands) {
-//                           d->m_runningJobs.remove(command.newName);
-//                       }
-
-//                       const auto results = future.results();
-
-//                       QList<cwImage> images;
-//                       images.reserve(results.size());
-//                       std::transform(results.begin(), results.end(),
-//                                      std::back_inserter(images),
-//                                      [](const Monad::Result<cwImage>& image)
-//                                      {
-//                                          if(!image.hasError()) {
-//                                              qDebug() << "Returning image:" << image.value();
-//                                              return image.value();
-//                                          } else {
-//                                              qWarning() << "Error:" << image.errorMessage() << LOCATION;
-//                                              return cwImage();
-//                                          }
-//                                      });
-
-//                       outputCallBackFunc(images);
-//                   }).future();
-
-//         d->futureToken.addJob(cwFuture(QFuture<void>(callBackFuture), QStringLiteral("Adding images")));
-//     };
-
-//     addImagesByPath(images);
-// }
-
-// void cwSaveLoad::addFiles(QList<QUrl> files, const QDir &dir, std::function<void (QList<QString>)> fileCallBackFunc)
-// {
-
-// }
-
 
 
 QFuture<ResultBase> cwSaveLoad::save(const QDir &dir, const cwNote *note)
@@ -2409,7 +2277,6 @@ void cwSaveLoad::waitForFinished()
     cwFutureManagerModel model;
     auto saveJobs = completeSaveJobs();
     model.addJob(cwFuture(saveJobs, QString()));
-    model.addJob(cwFuture(d->newFileFuture, QString()));
     model.waitForFinished();
 }
 
@@ -3377,4 +3244,29 @@ void cwSaveLoad::setSyncEnabled(bool enabled)
     if (d->saveEnabled && !d->projectFileName.isEmpty()) {
         saveProject(projectRootDir(), d->m_regionTreeModel->cavingRegion());
     }
+}
+
+QFuture<void> cwSaveLoad::retire()
+{
+    if (d->retiring) {
+        return d->retireFuture;
+    }
+
+    d->retiring = true;
+    setSaveEnabled(false);
+    disconnectTreeModel();
+    d->m_regionTreeModel->setCavingRegion(nullptr);
+
+    auto retireFuture = completeSaveJobs();
+
+    d->retireFuture = retireFuture;
+    d->futureToken.addJob(cwFuture(QFuture<void>(d->retireFuture),
+                                   QStringLiteral("Finishing saves")));
+
+    AsyncFuture::observe(d->retireFuture)
+        .context(this, [this]() {
+            deleteLater();
+        }).future();
+
+    return d->retireFuture;
 }

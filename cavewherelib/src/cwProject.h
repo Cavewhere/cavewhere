@@ -37,6 +37,7 @@ class GitRepository;
 //Qt includes
 #include <QSqlDatabase>
 #include <QDir>
+#include <QList>
 #include <QMap>
 #include <QHash>
 #include <QPointer>
@@ -194,6 +195,8 @@ private:
 
     void privateSave();
 
+    void bindSaveLoad(cwSaveLoad* saveLoad);
+
     bool saveWillCauseDataLoss() const;
     void setSqliteTemporaryProject(bool isTemp);
 
@@ -204,6 +207,8 @@ private:
     QFuture<Monad::ResultBase> convertFromProjectV6Helper(QString oldProjectFilename,
                                                           const QDir &newProjectDirectory,
                                                           bool isTemporary = false);
+
+    QList<QFuture<void>> RetiringSaveFutures;
 };
 
 /**
