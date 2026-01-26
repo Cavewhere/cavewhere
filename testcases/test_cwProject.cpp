@@ -275,6 +275,69 @@ TEST_CASE("Rapid renaming", "[cwProject]") {
 
 }
 
+TEST_CASE("Queued copy and rename should preserve note assets", "[cwProject][cwSaveLoad]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto region = project->cavingRegion();
+
+    region->addCave();
+    auto cave = region->cave(0);
+    cave->setName(QStringLiteral("CopyRenameCave"));
+    cave->addTrip();
+    auto trip = cave->trip(0);
+    trip->setName(QStringLiteral("CopyRenameTrip"));
+
+    auto notes = trip->notes();
+    REQUIRE(notes != nullptr);
+
+    const QString sourceImage = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    REQUIRE(QFileInfo::exists(sourceImage));
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const int imageCount = 20;
+    QList<QUrl> urls;
+    urls.reserve(imageCount);
+    for (int i = 0; i < imageCount; ++i) {
+        const QString filePath = tempDir.filePath(QStringLiteral("copy-%1.png").arg(i));
+        REQUIRE(QFile::copy(sourceImage, filePath));
+        urls.append(QUrl::fromLocalFile(filePath));
+    }
+
+    const QString originalTripFile = cwSaveLoad::absolutePath(trip);
+    QFileInfo originalTripInfo(originalTripFile);
+    const QString originalTripDirPath = originalTripInfo.absoluteDir().absolutePath();
+    const QString originalNotesDirPath = QDir(originalTripDirPath).filePath(QStringLiteral("notes"));
+
+    notes->addFromFiles(urls);
+    trip->setName(QStringLiteral("CopyRenameTripAfter"));
+
+    project->waitSaveToFinish();
+    rootData->futureManagerModel()->waitForFinished();
+
+    const QString renamedTripFile = cwSaveLoad::absolutePath(trip);
+    QFileInfo renamedTripInfo(renamedTripFile);
+    const QString renamedTripDirPath = renamedTripInfo.absoluteDir().absolutePath();
+    const QString renamedNotesDirPath = QDir(renamedTripDirPath).filePath(QStringLiteral("notes"));
+
+    CHECK_FALSE(QFileInfo::exists(originalTripFile));
+    CHECK_FALSE(QDir(originalTripDirPath).exists());
+    CHECK(QFileInfo::exists(renamedTripFile));
+    CHECK(QDir(renamedNotesDirPath).exists());
+    CHECK_FALSE(QDir(originalNotesDirPath).exists());
+
+    REQUIRE(notes->rowCount() == imageCount);
+    for (cwNote* note : notes->notes()) {
+        REQUIRE(note != nullptr);
+        const QString imagePath = note->image().path();
+        const QString fileName = QFileInfo(imagePath).fileName();
+        REQUIRE_FALSE(fileName.isEmpty());
+        const QString expectedPath = cwSaveLoad::dir(note).absoluteFilePath(fileName);
+        CHECK(QFileInfo::exists(expectedPath));
+    }
+}
+
 TEST_CASE("Saves queued during newProject should target the new project directory", "[cwProject][newProject]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
