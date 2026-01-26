@@ -292,12 +292,13 @@ struct cwSaveLoad::Data {
 
     struct Job {
         enum class Kind { File, Directory, };
-        enum class Action { Move, Remove, EnsureDir, WriteFile, CopyFile };
+        enum class Action { Move, Remove, EnsureDir, WriteFile, CopyFile, Custom };
 
         const void* objectId = nullptr;
         Kind kind = Kind::File;
         Action action = Action::Move;
         std::shared_ptr<const google::protobuf::Message> message;
+        std::function<Monad::ResultBase()> customAction;
         std::function<void(const Monad::ResultBase&)> onDone;
 
         QString oldPath;
@@ -327,13 +328,15 @@ struct cwSaveLoad::Data {
                 return "WriteFile";
             case Action::CopyFile:
                 return "CopyFile";
+            case Action::Custom:
+                return "Custom";
             }
             return "Unknown";
         }
 
         QString toString() const {
             const QString objectHex = QString::number(reinterpret_cast<quintptr>(objectId), 16);
-            return QStringLiteral("Job{action=%1 kind=%2 objectId=0x%3 oldPath='%4' newPath='%5' sourcePath='%6' dataRoot='%7' hasMessage=%8}")
+            return QStringLiteral("Job{action=%1 kind=%2 objectId=0x%3 oldPath='%4' newPath='%5' sourcePath='%6' dataRoot='%7' hasMessage=%8 hasCustom=%9}")
                 .arg(QString::fromLatin1(actionName(action)),
                      QString::fromLatin1(kindName(kind)),
                      objectHex,
@@ -341,7 +344,8 @@ struct cwSaveLoad::Data {
                      path,
                      sourcePath,
                      dataRoot)
-                .arg(message != nullptr);
+                .arg(message != nullptr)
+                .arg(customAction != nullptr);
         }
 
         Monad::ResultBase execute() const {
@@ -488,6 +492,11 @@ struct cwSaveLoad::Data {
                     return Monad::ResultBase();
                 });
             }
+            case Action::Custom:
+                if (!customAction) {
+                    return Monad::ResultBase(QStringLiteral("Missing custom action for job"));
+                }
+                return customAction();
             }
             return Monad::ResultBase();
         }
@@ -671,18 +680,14 @@ struct cwSaveLoad::Data {
                     }
                 }
             }
-        } /*else {
-            if (!job.path.isEmpty()) {
-                m_objectStates[job.objectId].currentPath = job.path;
-            }
-        }*/
+        }
 
-        qDebug() << "Pushing job:" << this << m_pendingJobs.size() << job.toString();
+        // qDebug() << "Pushing job:" << this << m_pendingJobs.size() << job.toString();
 
         m_pendingJobs.append(job);
 
         if(m_pendingJobsDeferred.future().isFinished()) {
-            qDebug() << "Exec file system jobs:" << this << m_pendingJobs.size();
+            // qDebug() << "Exec file system jobs:" << this << m_pendingJobs.size();
             execFileSystemJobs(context);
         }
     }
@@ -774,9 +779,9 @@ struct cwSaveLoad::Data {
 
         Q_ASSERT(m_pendingJobsDeferred.future().isRunning());
 
-        qDebug() << "Starting job:" << this << job.toString();
+        // qDebug() << "Starting job:" << this << job.toString();
         auto future = cwConcurrent::run([job]() {
-            qDebug() << "\tExecuting job:" << job.toString();
+            // qDebug() << "\tExecuting job:" << job.toString();
             return job.execute();
         });
 
@@ -789,7 +794,7 @@ struct cwSaveLoad::Data {
                 job.onDone(data);
             }
             if (m_pendingJobs.isEmpty()) {
-                qDebug() << "Pending jobs complete!" << this;
+                // qDebug() << "Pending jobs complete!" << this;
                 m_pendingJobsDeferred.complete();
             } else {
                 //Start another job
@@ -839,9 +844,9 @@ struct cwSaveLoad::Data {
 
 // cwSaveLoad::~cwSaveLoad() = default;
 cwSaveLoad::~cwSaveLoad() {
+    // qDebug() << "SaveLoad destroyed:" << this << d->m_pendingJobs.size();
     Q_ASSERT(d->m_pendingJobs.isEmpty());
-    // Q_ASSERT(d->m_pendingJobsDeferred.future().isFinished());
-    qDebug() << "SaveLoad destroyed:" << this << d->m_pendingJobs.size();
+    Q_ASSERT(d->m_pendingJobsDeferred.future().isFinished());
 }
 
 namespace {
@@ -1768,25 +1773,38 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
 
             auto noteData = note->data();
             QPointer<cwNote> notePtr(note);
+            auto updatedNoteData = std::make_shared<cwNoteData>();
 
-            auto saveImageFuture = cwConcurrent::run([saveNoteImage, noteData, imageIndex, noteDir]() {
-                QThread::msleep(1000);
-                return saveNoteImage(noteData, imageIndex, noteDir);
-            });
+            AsyncFuture::Deferred<ResultBase> noteDeferred;
 
-            auto noteFuture =
-                AsyncFuture::observe(saveImageFuture)
-                    .context(this, [this, noteDir, noteData, saveImageFuture, notePtr]() {
-                        // cwNote noteCopy;
-                        // noteCopy.setData(saveImageFuture.result());
-                        Q_ASSERT(notePtr);
-                        qDebug() << "Save notes!" << notePtr << this;
-                        notePtr->setData(saveImageFuture.result());
-                        return save(noteDir, notePtr);
-                    }).future();
+            Data::Job saveImageJob;
+            saveImageJob.objectId = note;
+            saveImageJob.kind = Data::Job::Kind::File;
+            saveImageJob.action = Data::Job::Action::Custom;
+            saveImageJob.customAction = [saveNoteImage, noteData, imageIndex, noteDir, updatedNoteData]() {
+                *updatedNoteData = saveNoteImage(noteData, imageIndex, noteDir);
+                return ResultBase();
+            };
+            saveImageJob.onDone = [this, noteDir, notePtr, updatedNoteData, noteDeferred](const ResultBase& result) mutable {
+                if (result.hasError()) {
+                    noteDeferred.complete(result);
+                    return;
+                }
+                if (!notePtr) {
+                    noteDeferred.complete(ResultBase(QStringLiteral("Note was deleted before image save completed")));
+                    return;
+                }
 
+                notePtr->setData(*updatedNoteData);
+                auto saveFuture = save(noteDir, notePtr);
+                AsyncFuture::observe(saveFuture)
+                    .context(this, [noteDeferred, saveFuture]() mutable {
+                        noteDeferred.complete(saveFuture.result());
+                    });
+            };
 
-            noteFutures.append(noteFuture);
+            d->addExplicitFileSystemJob(saveImageJob, this);
+            noteFutures.append(noteDeferred.future());
 
             ++imageIndex;
         }
@@ -1799,8 +1817,6 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
         tripFutures.reserve(cave->tripCount());
 
         QList<QFuture<ResultBase>> noteFutures;
-
-        qDebug() << "Trips:" << cave->trips().size();
 
         for(const auto trip : cave->trips()) {
             const QDir tripDir = makeDir(tripDirHelper(caveDir, trip));
@@ -1844,7 +1860,7 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
     AsyncFuture::Combinator combine;
     combine << saveFutures;
 
-    qDebug() << "Watching:" << d.get();
+    //TODO: use the m_pendingJobDefered
     return AsyncFuture::observe(combine.future())
         .context(this, [newProjectFilename]() {
             return ResultString(newProjectFilename);

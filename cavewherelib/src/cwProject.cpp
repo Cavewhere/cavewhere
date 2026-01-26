@@ -117,6 +117,8 @@ cwProject::cwProject(QObject* parent) :
 
 cwProject::~cwProject()
 {
+    //This prevents testcases from aborting when cwSaveLoad is deleted
+    waitSaveToFinish();
 }
 
 void cwProject::bindSaveLoad(cwSaveLoad* saveLoad)
@@ -556,7 +558,7 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
                     auto loadFuture
                         = AsyncFuture::observe(filenameFuture)
                               .context(this, [saveLoad, filenameFuture, this]() {
-                                  qDebug() << "Finished save on:" << filenameFuture.result().value();
+                                  // qDebug() << "Finished save on:" << filenameFuture.result().value();
                                   return Monad::mbind(filenameFuture, [this](const Monad::ResultString& filename) {
                                       return loadHelper(filename.value());
                                   });
@@ -586,7 +588,7 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
                 //     errorModel()->append(cwError(loadTempProjectFuture.result().errorMessage(), cwError::Fatal));
                 // }
 
-                qDebug() << "--Finished loading!";
+                // qDebug() << "--Finished loading!";
 
                 return loadTempProjectFuture;
             }).future();
