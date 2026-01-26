@@ -1393,15 +1393,25 @@ void cwSaveLoad::copyFilesAndEmitResults(const QList<QString>& sourceFilePaths,
         return;
     }
 
-    auto results = std::make_shared<QVector<Monad::Result<QString>>>(commands.size());
-    auto remaining = std::make_shared<std::atomic<int>>(commands.size());
-    auto deferred = std::make_shared<AsyncFuture::Deferred<void>>();
+    struct CopyBatchState {
+        QVector<Monad::Result<QString>> results;
+        std::atomic<int> remaining{0};
+        AsyncFuture::Deferred<void> deferred;
 
-    auto finalizeResults = [results, makeResult, outputCallBackFunc, deferred]() {
+        explicit CopyBatchState(int count)
+            : results(count),
+              remaining(count)
+        {
+        }
+    };
+
+    auto state = std::make_shared<CopyBatchState>(commands.size());
+
+    auto finalizeResults = [state, makeResult, outputCallBackFunc]() {
         QList<ResultType> finalResults;
-        finalResults.reserve(results->size());
+        finalResults.reserve(state->results.size());
 
-        std::transform(results->begin(), results->end(),
+        std::transform(state->results.begin(), state->results.end(),
                        std::back_inserter(finalResults),
                        [makeResult](const Monad::Result<QString>& relativePathResult) {
                            if (!relativePathResult.hasError()) {
@@ -1413,7 +1423,7 @@ void cwSaveLoad::copyFilesAndEmitResults(const QList<QString>& sourceFilePaths,
                        });
 
         outputCallBackFunc(finalResults);
-        deferred->complete();
+        state->deferred.complete();
     };
 
     for (const CopyCommand& command : commands) {
@@ -1422,14 +1432,14 @@ void cwSaveLoad::copyFilesAndEmitResults(const QList<QString>& sourceFilePaths,
         job.kind = Data::Job::Kind::File;
         job.sourcePath = command.sourceFilePath;
         job.path = command.destinationFilePath;
-        job.onDone = [results, remaining, command, rootDirectory, finalizeResults](const Monad::ResultBase& result) {
+        job.onDone = [state, command, rootDirectory, finalizeResults](const Monad::ResultBase& result) {
             if (!result.hasError()) {
-                (*results)[command.index] = Monad::ResultString(rootDirectory.relativeFilePath(command.destinationFilePath));
+                state->results[command.index] = Monad::ResultString(rootDirectory.relativeFilePath(command.destinationFilePath));
             } else {
-                (*results)[command.index] = Monad::ResultString(result.errorMessage(), result.errorCode());
+                state->results[command.index] = Monad::ResultString(result.errorMessage(), result.errorCode());
             }
 
-            if (remaining->fetch_sub(1) == 1) {
+            if (state->remaining.fetch_sub(1) == 1) {
                 finalizeResults();
             }
         };
@@ -1437,7 +1447,7 @@ void cwSaveLoad::copyFilesAndEmitResults(const QList<QString>& sourceFilePaths,
         d->addExplicitFileSystemJob(job, this);
     }
 
-    d->futureToken.addJob(cwFuture(QFuture<void>(deferred->future()),
+    d->futureToken.addJob(cwFuture(QFuture<void>(state->deferred.future()),
                                    QStringLiteral("Adding files")));
 }
 
