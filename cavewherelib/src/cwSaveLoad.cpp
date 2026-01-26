@@ -357,17 +357,20 @@ struct cwSaveLoad::Data {
                 if (target.isEmpty()) {
                     return false;
                 }
-                return target == root || target.startsWith(root + QDir::separator());
+                return target == root || target.startsWith(root + QStringLiteral("/"));
             };
 
             auto isProjectFile = [&](const QString& targetPath) {
                 const QString root = QDir::cleanPath(QDir(dataRoot).absolutePath());
-                const QString target = QDir::cleanPath(QFileInfo(targetPath).absoluteFilePath());
-                const QString parentOfRoot = QDir(root).absolutePath() + QDir::separator() + QStringLiteral("..");
+                const QString target = QDir::cleanPath(QFileInfo(targetPath).absolutePath());
+                const QString parentOfRoot = QDir(root).absolutePath() + QStringLiteral("/") + QStringLiteral("..");
                 const QString normalizedParent = QDir::cleanPath(QDir(parentOfRoot).absolutePath());
                 const bool isProjectFileWrite = (action == Action::WriteFile && kind == Kind::File);
                 const bool isInProjectRoot = (target == normalizedParent)
-                    || target.startsWith(normalizedParent + QDir::separator());
+                    || target.startsWith(normalizedParent + QStringLiteral("/"));
+
+                // qDebug() << "Root:" << root << target << parentOfRoot << normalizedParent << isProjectFileWrite << isInProjectRoot;
+
                 return isProjectFileWrite && isInProjectRoot;
             };
 
