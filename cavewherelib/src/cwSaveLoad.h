@@ -247,6 +247,26 @@ private:
     std::unique_ptr<CavewhereProto::Project> toProtoProject(const cwCavingRegion* region);
     QDir projectRootDir() const;
 
+    QString fileNamePrivate(const cwCave* cave) const;
+    QString absolutePathPrivate(const cwCave* cave) const;
+    QDir dirPrivate(const cwCave* cave) const;
+
+    QString fileNamePrivate(const cwTrip* trip) const;
+    QString absolutePathPrivate(const cwTrip* trip) const;
+    QDir dirPrivate(const cwTrip* trip) const;
+
+    QDir dirPrivate(cwSurveyNoteModel* notes) const;
+    QDir dirPrivate(cwSurveyNoteLiDARModel* notes) const;
+
+    QString fileNamePrivate(const cwNote* note) const;
+    QString absolutePathPrivate(const cwNote* note) const;
+    QString absolutePathPrivate(const cwNote* note, const QString& imageFilename) const;
+    QDir dirPrivate(const cwNote* note) const;
+
+    QString fileNamePrivate(const cwNoteLiDAR* note) const;
+    QString absolutePathPrivate(const cwNoteLiDAR* note) const;
+    QString absolutePathPrivate(const cwNoteLiDAR* note, const QString& lidarFilename) const;
+    QDir dirPrivate(const cwNoteLiDAR* note) const;
 
     void setSaveEnabled(bool enabled);
 
@@ -289,26 +309,6 @@ private:
 
     static QUuid toUuid(const std::string& uuidStr);
 
-    // static QStringList fromProtoStringList(const google::protobuf::RepeatedPtrField<std::string> &protoStringList);
-
-    // //Returns the relative path to the project
-    // static QString projectFileName(const cwProject* project);
-    // static QString projectAbsolutePath(const cwProject* project);
-    // static QDir projectDir(const cwProject* project);
-
-    // static QString regionFileName(const cwCavingRegion* region);
-
-    // static QString caveFileName(const cwCave* cave);
-    // static QString caveAbsolutePath(const cwCave* cave);
-    // static QDir caveDir(const cwCave* cave);
-
-    // static QString tripFileName(const cwTrip* trip);
-    // static QString tripAbsolutePath(const cwTrip* trip);
-    // static QDir tripDir(const cwTrip* trip);
-
-    // static QString noteFileName(const cwNote* note);
-    // static QString noteAbsolutePath(const cwNote* note);
-    // static QDir noteDir(const cwNote* note);
 
 
     QFuture<Monad::ResultBase> saveCavingRegion(const QDir& dir, const cwCavingRegion* region);

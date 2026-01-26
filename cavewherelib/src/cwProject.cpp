@@ -556,6 +556,7 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
                     auto loadFuture
                         = AsyncFuture::observe(filenameFuture)
                               .context(this, [saveLoad, filenameFuture, this]() {
+                                  qDebug() << "Finished save on:" << filenameFuture.result().value();
                                   return Monad::mbind(filenameFuture, [this](const Monad::ResultString& filename) {
                                       return loadHelper(filename.value());
                                   });
@@ -584,6 +585,8 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
                 //     qDebug() << "Adding error:" << loadTempProjectFuture.result().errorMessage();
                 //     errorModel()->append(cwError(loadTempProjectFuture.result().errorMessage(), cwError::Fatal));
                 // }
+
+                qDebug() << "--Finished loading!";
 
                 return loadTempProjectFuture;
             }).future();
@@ -925,7 +928,6 @@ void cwProject::convertFromProjectV6(QString oldProjectFilename,
                                          //Use a shared pointer here, too keep saveLoad alive until, the project is fully saved
                                          auto saveLoad = std::make_shared<cwSaveLoad>();
                                          auto filenameFuture = saveLoad->saveAllFromV6(newProjectDirectory, tempProject.get(), oldProjectFilename);
-                                         qDebug() << "I get here!";
 
                                          auto loadFuture = AsyncFuture::observe(filenameFuture)
                                                                .context(this, [saveLoad, filenameFuture, this]() {
