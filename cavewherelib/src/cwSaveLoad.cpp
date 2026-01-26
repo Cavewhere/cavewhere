@@ -409,6 +409,7 @@ struct cwSaveLoad::Data {
                 if (!QDir().rename(oldPath, path)) {
                     return Monad::ResultBase(QStringLiteral("Failed to move %1 -> %2").arg(oldPath, path));
                 }
+                Q_ASSERT(QFileInfo::exists(path));
                 return Monad::ResultBase();
             case Action::Remove:
                 {
@@ -645,7 +646,7 @@ struct cwSaveLoad::Data {
             Q_ASSERT(oldDir != newDir);
 
             // if (!oldDir.isEmpty() && !newDir.isEmpty() && oldDir != newDir) {
-                const QString prefix = oldDir + QDir::separator();
+                const QString prefix = oldDir + QStringLiteral("/");
                 for (auto it = m_objectStates.begin(); it != m_objectStates.end(); ++it) {
                     const QString currentPath = it.value().currentPath;
                     if (currentPath == oldDir) {
@@ -658,7 +659,7 @@ struct cwSaveLoad::Data {
         } else if (job.kind == Job::Kind::Directory && job.action == Job::Action::Remove) {
             const QString oldDir = job.oldPath;
             if (!oldDir.isEmpty()) {
-                const QString prefix = oldDir + QDir::separator();
+                const QString prefix = oldDir + QStringLiteral("/");
                 for (auto it = m_objectStates.begin(); it != m_objectStates.end();) {
                     const QString currentPath = it.value().currentPath;
                     if (currentPath == oldDir || currentPath.startsWith(prefix)) {
@@ -774,7 +775,6 @@ struct cwSaveLoad::Data {
         auto future = cwConcurrent::run([job]() {
             // qDebug() << "\tExecuting job:" << job.toString();
             return job.execute();
-            // qDebug() << "\tDone executing:" << job.toString();
         });
 
         AsyncFuture::observe(future).context(context, [this, context, job, future]() {
