@@ -28,9 +28,6 @@
 #include "cwGlobals.h"
 #include "cwMetaTypeSystem.h"
 
-//QQuickGit
-#include "GitRepository.h"
-
 //QuickQanave includes
 #include <QuickQanava>
 
@@ -159,10 +156,11 @@ int main(int argc, char *argv[])
     format.setSamples(4); // Adjust the sample count as needed
     QSurfaceFormat::setDefaultFormat(format);
 
-    //initilize git
-    QQuickGit::GitRepository::initGitEngine();
-
     QQmlApplicationEngine* applicationEngine = new QQmlApplicationEngine();
+
+    //initilize cavewher lib, gitlib2 and QQuickQanava
+    cwRootData::initCavewherelib();
+    cwRootData::initCavewherelibQml(applicationEngine);
 
     // Add the macOS Resources directory to the QML import search path
     QString resourcePath = QCoreApplication::applicationDirPath() + "/../Resources/qml";
@@ -171,7 +169,7 @@ int main(int argc, char *argv[])
 
     //Initilize QuickQanava
     // Q_IMPORT_QML_PLUGIN(QuickQanava)
-    QuickQanava::initialize(applicationEngine);
+    // QuickQanava::initialize(applicationEngine);
 
     QQmlContext* context = applicationEngine->rootContext();
 

@@ -18,12 +18,10 @@
 #include <QSettings>
 
 //Our includes
+#include "cwRootData.h"
 #include "cwSettings.h"
 #include "cwTask.h"
 #include "cwMetaTypeSystem.h"
-
-//QQuickGit
-#include "GitRepository.h"
 
 int main( int argc, char* argv[] )
 {
@@ -36,8 +34,9 @@ int main( int argc, char* argv[] )
 
   cwMetaTypeSystem::registerTypes();
 
-  //initilize git
-  QQuickGit::GitRepository::initGitEngine();
+  //initilize gitlib2
+  cwRootData::initCavewherelib();
+  // QQuickGit::GitRepository::initGitEngine();
 
   {
       QSettings settings;

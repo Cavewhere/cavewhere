@@ -172,6 +172,9 @@ public:
 
     Q_INVOKABLE void shutdown();
 
+    static void initCavewherelib();
+    static void initCavewherelibQml(QQmlEngine* engine);
+
 signals:
     void regionChanged();
     void linePlotManagerChanged();

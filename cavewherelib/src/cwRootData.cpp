@@ -45,6 +45,12 @@
 //Generated files from qbs
 #include "cavewhereVersion.h"
 
+//QQuickGit
+#include "GitRepository.h"
+
+//QuickQanave includes
+#include <QuickQanava>
+
 cwRootData::cwRootData(QObject *parent) :
     QObject(parent),
     m_account(new QQuickGit::Account(this)),
@@ -344,6 +350,17 @@ void cwRootData::shutdown()
     taskManagerModel()->waitForTasks();
     futureManagerModel()->waitForFinished();
     project()->waitSaveToFinish();
+}
+
+void cwRootData::initCavewherelibQml(QQmlEngine *engine)
+{
+    QuickQanava::initialize(engine);
+}
+
+//For windows static linkage
+void cwRootData::initCavewherelib()
+{
+    QQuickGit::GitRepository::initGitEngine();
 }
 
 cwGitHubIntegration* cwRootData::gitHubIntegration() const
