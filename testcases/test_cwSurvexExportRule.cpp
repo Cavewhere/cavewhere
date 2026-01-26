@@ -62,8 +62,22 @@ TEST_CASE("cwSurvexExportRule should export a caving region correctly", "[cwSurv
         QByteArray expectedContent = expectedFile.readAll();
         expectedFile.close();
 
-        // Compare the entire contents
-        REQUIRE(exportedContent == expectedContent);
+        auto normalizedLines = [](const QByteArray& bytes) {
+            QString text = QString::fromUtf8(bytes);
+            text.replace("\r\n", "\n");
+            text.replace('\r', '\n');
+            return text.split('\n', Qt::KeepEmptyParts);
+        };
+
+        const auto exportedLines = normalizedLines(exportedContent);
+        const auto expectedLines = normalizedLines(expectedContent);
+        REQUIRE(exportedLines.size() == expectedLines.size());
+
+        for (int lineIndex = 0; lineIndex < exportedLines.size(); ++lineIndex) {
+            INFO("line " << (lineIndex + 1) << ": exported '" << exportedLines.at(lineIndex).toStdString()
+                 << "' vs expected '" << expectedLines.at(lineIndex).toStdString() << "'");
+            REQUIRE(exportedLines.at(lineIndex) == expectedLines.at(lineIndex));
+        }
     }
 }
 

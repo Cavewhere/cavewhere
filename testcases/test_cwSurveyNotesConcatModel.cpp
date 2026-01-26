@@ -180,7 +180,7 @@ TEST_CASE("cwSurveyNotesConcatModel addFiles uses absolute paths with cwImagePro
 
     QString providerPath = imageUrl.path(QUrl::FullyDecoded);
     if (providerPath.size() >= 3 && providerPath[0] == QLatin1Char('/') && providerPath[2] == QLatin1Char(':')) {
-    //     //Strip the leading "/" on windows                                                                                                                                                                                                                                                             }
+        //Strip the leading "/" on windows                                                                                                                                                                                                                                                             }
         providerPath.remove(0, 1);
     }
 
