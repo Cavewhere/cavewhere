@@ -178,8 +178,14 @@ TEST_CASE("cwSurveyNotesConcatModel addFiles uses absolute paths with cwImagePro
     CHECK(imageUrl.scheme() == QStringLiteral("image"));
     CHECK(imageUrl.host() == cwImageProvider::name());
 
-    const QString providerPath = imageUrl.path();
-    INFO("ProviderPath:" + imageUrl.path().toStdString());
+    QString providerPath = imageUrl.path(QUrl::FullyDecoded);
+    if (providerPath.size() >= 3 && providerPath[0] == QLatin1Char('/') && providerPath[2] == QLatin1Char(':')) {
+    //     //Strip the leading "/" on windows                                                                                                                                                                                                                                                             }
+        providerPath.remove(0, 1);
+    }
+
+    INFO("Url:" << imageUrl.toString().toStdString());
+    INFO("ProviderPath:\"" << imageUrl.path().toStdString() << "\"");
     REQUIRE(QFileInfo(providerPath).isAbsolute());
     REQUIRE(QFileInfo(providerPath).exists());
 
