@@ -62,6 +62,7 @@
 //std includes
 #include <unordered_set>
 #include <algorithm>
+#include <atomic>
 
 using namespace Monad;
 
@@ -291,15 +292,17 @@ struct cwSaveLoad::Data {
 
     struct Job {
         enum class Kind { File, Directory, };
-        enum class Action { Move, Remove, EnsureDir, WriteFile };
+        enum class Action { Move, Remove, EnsureDir, WriteFile, CopyFile };
 
         const void* objectId = nullptr;
         Kind kind = Kind::File;
         Action action = Action::Move;
         std::shared_ptr<const google::protobuf::Message> message;
+        std::function<void(const Monad::ResultBase&)> onDone;
 
         QString oldPath;
         QString path;
+        QString sourcePath;
         QString dataRoot;
 
         static const char* kindName(Kind kind) {
@@ -322,18 +325,21 @@ struct cwSaveLoad::Data {
                 return "EnsureDir";
             case Action::WriteFile:
                 return "WriteFile";
+            case Action::CopyFile:
+                return "CopyFile";
             }
             return "Unknown";
         }
 
         QString toString() const {
             const QString objectHex = QString::number(reinterpret_cast<quintptr>(objectId), 16);
-            return QStringLiteral("Job{action=%1 kind=%2 objectId=0x%3 oldPath='%4' newPath='%5' dataRoot='%6' hasMessage=%7}")
+            return QStringLiteral("Job{action=%1 kind=%2 objectId=0x%3 oldPath='%4' newPath='%5' sourcePath='%6' dataRoot='%7' hasMessage=%8}")
                 .arg(QString::fromLatin1(actionName(action)),
                      QString::fromLatin1(kindName(kind)),
                      objectHex,
                      oldPath,
                      path,
+                     sourcePath,
                      dataRoot)
                 .arg(message != nullptr);
         }
@@ -456,6 +462,23 @@ struct cwSaveLoad::Data {
 
                     file.write(json_output.c_str(), json_output.size());
                     file.commit();
+                    return Monad::ResultBase();
+                });
+            }
+            case Action::CopyFile: {
+                if (sourcePath.isEmpty()) {
+                    return Monad::ResultBase(QStringLiteral("Missing source path for CopyFile job: %1").arg(path));
+                }
+                {
+                    auto rootCheck = ensureInsideRoot(path);
+                    if (rootCheck.hasError()) {
+                        return rootCheck;
+                    }
+                }
+                return mbind(ensurePathForFile(path), [&](ResultBase /*result*/) {
+                    if (!QFile::copy(sourcePath, path)) {
+                        return Monad::ResultBase(QStringLiteral("Failed to copy %1 -> %2").arg(sourcePath, path));
+                    }
                     return Monad::ResultBase();
                 });
             }
@@ -657,6 +680,20 @@ struct cwSaveLoad::Data {
         }
     }
 
+    void addExplicitFileSystemJob(Job job, cwSaveLoad* context) {
+        const QString dataRootName = context->dataRoot();
+        const QString dataRootPath = dataRootName.isEmpty()
+            ? context->projectRootDir().absolutePath()
+            : context->projectRootDir().absoluteFilePath(dataRootName);
+        job.dataRoot = QDir(dataRootPath).absolutePath();
+
+        m_pendingJobs.append(job);
+
+        if(m_pendingJobsDeferred.future().isFinished()) {
+            execFileSystemJobs(context);
+        }
+    }
+
     QString absolutePathFor(const cwSaveLoad* context, const QObject* object) const {
         // qDebug() << "Object:" << object;
 
@@ -733,14 +770,18 @@ struct cwSaveLoad::Data {
         // qDebug() << "Starting job:" << job.toString();
         auto future = cwConcurrent::run([job]() {
             // qDebug() << "\tExecuting job:" << job.toString();
-            auto data = job.execute();
-            if(data.hasError()) {
-                qWarning() << "Save job error:" << data.errorMessage() << job.toString();
-            }
+            return job.execute();
             // qDebug() << "\tDone executing:" << job.toString();
         });
 
-        AsyncFuture::observe(future).context(context, [this, context, job]() {
+        AsyncFuture::observe(future).context(context, [this, context, job, future]() {
+            const auto data = future.result();
+            if(data.hasError()) {
+                qWarning() << "Save job error:" << data.errorMessage() << job.toString();
+            }
+            if (job.onDone) {
+                job.onDone(data);
+            }
             if (m_pendingJobs.isEmpty()) {
                 // qDebug() << "Pending jobs complete!" << this;
                 m_pendingJobsDeferred.complete();
@@ -1289,6 +1330,7 @@ inline bool isPDF(const QString& path) {
 }
 
 struct CopyCommand {
+    int index = 0;
     QString sourceFilePath;
     QString destinationFilePath;
 };
@@ -1332,61 +1374,70 @@ void cwSaveLoad::copyFilesAndEmitResults(const QList<QString>& sourceFilePaths,
     Q_ASSERT(rootDirectory.exists());
     // qDebug() << "RootDir:" << rootDirectory;
 
-    auto copyOne = [rootDirectory](const QString& sourceFilePath, const QString& destinationFilePath) {
-        return mbind(Data::ensurePathForFile(destinationFilePath),
-                     [rootDirectory, sourceFilePath, destinationFilePath](const ResultBase&) {
-                         const bool success = QFile::copy(sourceFilePath, destinationFilePath);
-                         if (success) {
-                             return Monad::ResultString(rootDirectory.relativeFilePath(destinationFilePath));
-                         } else {
-                             qWarning() << "Can't copy!" << sourceFilePath << "->" << destinationFilePath;
-                             return Monad::ResultString(QStringLiteral("Can't copy ")
-                                                            + sourceFilePath + QStringLiteral(" ")
-                                                            + destinationFilePath,
-                                                        Monad::ResultBase::Unknown);
-                         }
-                     });
-    };
-
     QList<CopyCommand> commands;
     commands.reserve(sourceFilePaths.size());
     QSet<QString> reservedPaths;
     reservedPaths.reserve(sourceFilePaths.size());
+    int index = 0;
     for (const QString& source : sourceFilePaths) {
         const QString destination = uniqueDestinationPath(destinationDirectory,
                                                           source,
                                                           reservedPaths);
-        commands.append(CopyCommand{source, destination});
+        commands.append(CopyCommand{index, source, destination});
         reservedPaths.insert(destination);
+        ++index;
     }
 
-    auto future = cwConcurrent::mapped(commands, [copyOne](const CopyCommand& command) {
-        return copyOne(command.sourceFilePath, command.destinationFilePath);
-    });
+    if (commands.isEmpty()) {
+        outputCallBackFunc({});
+        return;
+    }
 
+    auto results = std::make_shared<QVector<Monad::Result<QString>>>(commands.size());
+    auto remaining = std::make_shared<std::atomic<int>>(commands.size());
+    auto deferred = std::make_shared<AsyncFuture::Deferred<void>>();
 
-    auto callBackFuture = AsyncFuture::observe(future)
-                              .context(this, [this, future, commands, rootDirectory, makeResult, outputCallBackFunc]() {
-                                  const auto results = future.results(); // QList<Monad::Result<QString>> of relative paths
+    auto finalizeResults = [results, makeResult, outputCallBackFunc, deferred]() {
+        QList<ResultType> finalResults;
+        finalResults.reserve(results->size());
 
-                                  QList<ResultType> finalResults;
-                                  finalResults.reserve(results.size());
+        std::transform(results->begin(), results->end(),
+                       std::back_inserter(finalResults),
+                       [makeResult](const Monad::Result<QString>& relativePathResult) {
+                           if (!relativePathResult.hasError()) {
+                               return makeResult(relativePathResult.value()); // ResultType
+                           } else {
+                               qWarning() << "Error:" << relativePathResult.errorMessage() << LOCATION;
+                               return ResultType{};
+                           }
+                       });
 
-                                  std::transform(results.begin(), results.end(),
-                                                 std::back_inserter(finalResults),
-                                                 [makeResult](const Monad::Result<QString>& relativePathResult) {
-                                                     if (!relativePathResult.hasError()) {
-                                                         return makeResult(relativePathResult.value()); // ResultType
-                                                     } else {
-                                                         qWarning() << "Error:" << relativePathResult.errorMessage() << LOCATION;
-                                                         return ResultType{};
-                                                     }
-                                                 });
+        outputCallBackFunc(finalResults);
+        deferred->complete();
+    };
 
-                                  outputCallBackFunc(finalResults);
-                              }).future();
+    for (const CopyCommand& command : commands) {
+        Data::Job job;
+        job.action = Data::Job::Action::CopyFile;
+        job.kind = Data::Job::Kind::File;
+        job.sourcePath = command.sourceFilePath;
+        job.path = command.destinationFilePath;
+        job.onDone = [results, remaining, command, rootDirectory, finalizeResults](const Monad::ResultBase& result) {
+            if (!result.hasError()) {
+                (*results)[command.index] = Monad::ResultString(rootDirectory.relativeFilePath(command.destinationFilePath));
+            } else {
+                (*results)[command.index] = Monad::ResultString(result.errorMessage(), result.errorCode());
+            }
 
-    d->futureToken.addJob(cwFuture(QFuture<void>(callBackFuture),
+            if (remaining->fetch_sub(1) == 1) {
+                finalizeResults();
+            }
+        };
+
+        d->addExplicitFileSystemJob(job, this);
+    }
+
+    d->futureToken.addJob(cwFuture(QFuture<void>(deferred->future()),
                                    QStringLiteral("Adding files")));
 }
 
