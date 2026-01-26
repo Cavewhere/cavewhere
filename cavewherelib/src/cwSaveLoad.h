@@ -190,7 +190,9 @@ public:
     static QDir projectDir(const cwProject* project);
     QDir projectDir() const;
 
-    static QString regionFileName(const cwCavingRegion* region);
+    static QString fileName(const cwCavingRegion* region);
+    static QString absolutePath(const cwCavingRegion* region);
+    static QDir dir(const cwCavingRegion* region);
 
     static QString fileName(const cwCave* cave);
     static QString absolutePath(const cwCave* cave);

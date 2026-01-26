@@ -30,6 +30,7 @@
 
 //Async future
 #include <asyncfuture.h>
+#include <memory>
 
 //Google protobuffer
 #include <google/protobuf/util/json_util.h>
@@ -204,8 +205,8 @@ cwImage loadImage(const CavewhereProto::Image& protoImage, const QString& noteFi
     const bool sizeMissing = !hasSize || !image.originalSize().isValid();
     const bool dotsMissing = !hasDots || image.originalDotsPerMeter() <= 0;
     const bool unitMismatch = (isPdf && image.unit() != cwImage::Unit::Points)
-        || (isSvg && image.unit() != cwImage::Unit::SvgUnits)
-        || (!isPdf && !isSvg && image.unit() != cwImage::Unit::Pixels);
+                              || (isSvg && image.unit() != cwImage::Unit::SvgUnits)
+                              || (!isPdf && !isSvg && image.unit() != cwImage::Unit::Pixels);
     const bool needsReload = sizeMissing
                              || dotsMissing
                              || (!hasImageUnit && image.unit() != cwImage::Unit::Pixels)
@@ -288,50 +289,181 @@ static Result<ProtoType> loadMessage(const QString& filename) {
 
 struct cwSaveLoad::Data {
 
-    struct FileSystemJob {
-        enum class Kind { File, Directory };
-        enum class Action { Rename, Remove };
+    struct Job {
+        enum class Kind { File, Directory, };
+        enum class Action { Move, Remove, EnsureDir, WriteFile };
 
-        const QObject* object;
-        QString oldPath;
-        QString newPath;
+        const void* objectId = nullptr;
         Kind kind = Kind::File;
-        Action action = Action::Rename;
+        Action action = Action::Move;
+        std::shared_ptr<const google::protobuf::Message> message;
 
-        bool rename() const {
-            // qDebug() << "Renaming: " << oldPath << "to" << newPath;
-            return QDir().rename(oldPath, newPath);
-        }
+        QString oldPath;
+        QString path;
+        QString dataRoot;
 
-        bool remove() const {
-            switch(kind) {
+        static const char* kindName(Kind kind) {
+            switch (kind) {
             case Kind::File:
-                Q_ASSERT(QFileInfo::exists(oldPath));
-                Q_ASSERT(QFileInfo(oldPath).isFile());
-                return QFile::remove(oldPath);
+                return "File";
             case Kind::Directory:
-                Q_ASSERT(QFileInfo::exists(oldPath));
-                Q_ASSERT(QFileInfo(oldPath).isDir());
-                QDir dir(oldPath);
-                // qDebug() << "Removing dir:" << dir;
-                // return true;
-                return dir.removeRecursively();
+                return "Directory";
             }
+            return "Unknown";
         }
 
-        bool execute() const {
-            switch(action) {
-            case Action::Rename:
-                return rename();
-                break;
+        static const char* actionName(Action action) {
+            switch (action) {
+            case Action::Move:
+                return "Move";
             case Action::Remove:
-                return remove();
-                break;
+                return "Remove";
+            case Action::EnsureDir:
+                return "EnsureDir";
+            case Action::WriteFile:
+                return "WriteFile";
             }
-            return false;
+            return "Unknown";
         }
 
-        static bool lessThan(const FileSystemJob& a, const FileSystemJob& b) {
+        QString toString() const {
+            const QString objectHex = QString::number(reinterpret_cast<quintptr>(objectId), 16);
+            return QStringLiteral("Job{action=%1 kind=%2 objectId=0x%3 oldPath='%4' newPath='%5' dataRoot='%6' hasMessage=%7}")
+                .arg(QString::fromLatin1(actionName(action)),
+                     QString::fromLatin1(kindName(kind)),
+                     objectHex,
+                     oldPath,
+                     path,
+                     dataRoot)
+                .arg(message != nullptr);
+        }
+
+        Monad::ResultBase execute() const {
+            auto isInsideRoot = [](const QString& rootPath, const QString& targetPath) {
+                if (rootPath.isEmpty() || targetPath.isEmpty()) {
+                    return false;
+                }
+                const QString root = QDir::cleanPath(QDir(rootPath).absolutePath());
+                if (root.isEmpty()) {
+                    return false;
+                }
+                const QString target = QDir::cleanPath(QFileInfo(targetPath).absoluteFilePath());
+                if (target.isEmpty()) {
+                    return false;
+                }
+                return target == root || target.startsWith(root + QDir::separator());
+            };
+
+            auto isProjectFile = [&](const QString& targetPath) {
+                const QString root = QDir::cleanPath(QDir(dataRoot).absolutePath());
+                const QString target = QDir::cleanPath(QFileInfo(targetPath).absoluteFilePath());
+                const QString parentOfRoot = QDir(root).absolutePath() + QDir::separator() + QStringLiteral("..");
+                const QString normalizedParent = QDir::cleanPath(QDir(parentOfRoot).absolutePath());
+                const bool isProjectFileWrite = (action == Action::WriteFile && kind == Kind::File);
+                const bool isInProjectRoot = (target == normalizedParent)
+                    || target.startsWith(normalizedParent + QDir::separator());
+                return isProjectFileWrite && isInProjectRoot;
+            };
+
+            auto ensureInsideRoot = [&](const QString& targetPath) -> Monad::ResultBase {
+                if (!isInsideRoot(dataRoot, targetPath) && !isProjectFile(targetPath)) [[unlikely]] {
+                    return Monad::ResultBase(QStringLiteral("Path outside dataRoot: %1").arg(targetPath));
+                }
+                return Monad::ResultBase();
+            };
+
+            switch(action) {
+            case Action::EnsureDir: {
+                auto rootCheck = ensureInsideRoot(path);
+                if (rootCheck.hasError()) {
+                    return rootCheck;
+                }
+                QDir dir;
+                if (!dir.mkpath(path)) {
+                    return Monad::ResultBase(QStringLiteral("Failed to create directory: %1").arg(path));
+                }
+                return Monad::ResultBase();
+            }
+            case Action::Move:
+                {
+                    auto oldCheck = ensureInsideRoot(oldPath);
+                    if (oldCheck.hasError()) {
+                        return oldCheck;
+                    }
+                    auto newCheck = ensureInsideRoot(path);
+                    if (newCheck.hasError()) {
+                        return newCheck;
+                    }
+                }
+                Q_ASSERT(QFileInfo::exists(oldPath));
+                // Q_ASSERT(QFileInfo::exists(path));
+                if (!QDir().rename(oldPath, path)) {
+                    return Monad::ResultBase(QStringLiteral("Failed to move %1 -> %2").arg(oldPath, path));
+                }
+                return Monad::ResultBase();
+            case Action::Remove:
+                {
+                    auto rootCheck = ensureInsideRoot(oldPath);
+                    if (rootCheck.hasError()) {
+                        return rootCheck;
+                    }
+                }
+                switch(kind) {
+                case Kind::File:
+                    if (!QFileInfo::exists(oldPath)) {
+                        return Monad::ResultBase();
+                    }
+                    Q_ASSERT(QFileInfo(oldPath).isFile());
+                    if (!QFile::remove(oldPath)) {
+                        return Monad::ResultBase(QStringLiteral("Failed to remove file: %1").arg(oldPath));
+                    }
+                    return Monad::ResultBase();
+                case Kind::Directory:
+                    if (!QFileInfo::exists(oldPath)) {
+                        return Monad::ResultBase();
+                    }
+                    Q_ASSERT(QFileInfo(oldPath).isDir());
+                    if (!QDir(oldPath).removeRecursively()) {
+                        return Monad::ResultBase(QStringLiteral("Failed to remove directory: %1").arg(oldPath));
+                    }
+                    return Monad::ResultBase();
+                }
+            case Action::WriteFile: {
+                if (!message) {
+                    return Monad::ResultBase(QStringLiteral("Missing message for WriteFile job: %1").arg(path));
+                }
+                {
+                    auto rootCheck = ensureInsideRoot(path);
+                    if (rootCheck.hasError()) {
+                        return rootCheck;
+                    }
+                }
+                return mbind(ensurePathForFile(path), [&](ResultBase /*result*/) {
+                    QSaveFile file(path);
+                    if (!file.open(QFile::WriteOnly)) {
+                        qWarning() << "Failed to write to " << path << file.errorString();
+                        return Monad::ResultBase(QStringLiteral("Failed to open file for writing: %1").arg(path));
+                    }
+
+                    std::string json_output;
+                    google::protobuf::util::JsonPrintOptions options;
+                    options.add_whitespace = true;
+
+                    auto status = google::protobuf::util::MessageToJsonString(*message, &json_output, options);
+                    if (!status.ok()) {
+                        return Monad::ResultBase(QStringLiteral("Failed to convert proto message to JSON: %1").arg(status.ToString().c_str()));
+                    }
+
+                    file.write(json_output.c_str(), json_output.size());
+                    file.commit();
+                    return Monad::ResultBase();
+                });
+            }
+            }
+            return Monad::ResultBase();
+        }
+
+        static bool lessThan(const Job& a, const Job& b) {
             auto pathDepth = [](const QString& path) -> int {
                 const QString cleaned = QDir::cleanPath(path);
 
@@ -344,13 +476,13 @@ struct cwSaveLoad::Data {
                 return slashCount;
             };
 
-            auto kindRank = [](FileSystemJob::Kind kind) -> int {
+            auto kindRank = [](Job::Kind kind) -> int {
                 // Files first (0), directories second (1).
-                return (kind == FileSystemJob::Kind::File) ? 0 : 1;
+                return (kind == Job::Kind::File) ? 0 : 1;
             };
 
-            auto actionRank = [](FileSystemJob::Action action) -> int {
-                return action == FileSystemJob::Action::Remove ? 0 : 1;
+            auto actionRank = [](Job::Action action) -> int {
+                return action == Job::Action::Remove ? 0 : 1;
             };
 
             {
@@ -369,58 +501,41 @@ struct cwSaveLoad::Data {
                 }
             }
 
-            {
-                const int aDepth = pathDepth(a.oldPath);
-                const int bDepth = pathDepth(b.oldPath);
-                if (aDepth != bDepth) {
-                    // Deeper first.
-                    return aDepth > bDepth;
-                }
+            const QString aPath = a.action == Action::EnsureDir ? a.path : a.oldPath;
+            const QString bPath = b.action == Action::EnsureDir ? b.path : b.oldPath;
+            const int aDepth = pathDepth(aPath);
+            const int bDepth = pathDepth(bPath);
+            if (aDepth != bDepth) {
+                // Deeper first.
+                return aDepth > bDepth;
             }
 
             // Stable lexical tie-breaker.
-            return a.oldPath < b.oldPath;
+            return aPath < bPath;
         }
     };
 
-    //More messages,
-    struct WaitingJob {
-        AsyncFuture::Deferred<Monad::ResultBase> jobDeferred;
-        std::unique_ptr<const google::protobuf::Message> message;
 
-        WaitingJob() = default;
-        WaitingJob(AsyncFuture::Deferred<Monad::ResultBase> job,
-                   std::unique_ptr<const google::protobuf::Message>&& msg) :
-            jobDeferred(job),
-            message(std::move(msg))
-        {
-
-        }
-
-        WaitingJob(WaitingJob&&) noexcept = default;
-        WaitingJob& operator=(WaitingJob&&) noexcept = default;
-
-        // Prevent copying
-        WaitingJob(const WaitingJob&) = delete;
-        WaitingJob& operator=(const WaitingJob&) = delete;
-    };
 
     QQuickGit::GitRepository* repository;
 
     QString projectFileName;
     cwSaveLoad::ProjectMetadataData projectMetadata;
 
+    struct ObjectState {
+        QString currentPath;
+    };
+
     //Where the objects are currently being saved
     //This the absolute directory to the m_rootDir
-    QHash<const void*, QString> m_fileLookup;
+    QHash<const void*, ObjectState> m_objectStates;
 
     //For watching when object data has changed
     cwRegionTreeModel* m_regionTreeModel;
 
     //Saving jobs
-    QList<FileSystemJob> m_fileSystemJobs;
-    std::unordered_map<QString, WaitingJob> m_waitingJobs;
-    QHash<QString, QFuture<void>> m_runningJobs;
+    QList<Job> m_pendingJobs;
+    AsyncFuture::Deferred<void> m_pendingJobsCompleteDeferred;
 
     bool isTemporary = true;
     bool saveEnabled = true;
@@ -430,9 +545,6 @@ struct cwSaveLoad::Data {
 
     //Helps watch if we already has objects connected, this is for debugging only
     cwUniqueConnectionChecker connectionChecker;
-
-    //This is for bug checking, should be removed
-    bool clearingWait = false;
 
     bool retiring = false;
     QFuture<void> retireFuture;
@@ -453,62 +565,130 @@ struct cwSaveLoad::Data {
         return ResultBase();
     }
 
-    void addFileSystemJob(const FileSystemJob& job) {
-        // Q_ASSERT((job.kind == FileSystemJob::Kind::Directory) == QFileInfo(job.oldPath).isDir());
-        m_fileSystemJobs.append(job);
-
-
-        // const auto beginIt = m_fileSystemJobs.begin();
-        // const auto endIt   = m_fileSystemJobs.end();
-
-        // const auto it = std::lower_bound(beginIt, endIt, job, lessThan);
-
-        // // If an element with the same oldPath already exists at this position, replace it.
-        // // This should update with removes too
-        // if (it != endIt && it->oldPath == job.oldPath) {
-        //     *it = job;
-        //     return;
-        // }
-
-        // //If we're removing directories
-        // if(job.action == FileSystemJob::Action::Remove
-        //     && job.kind == FileSystemJob::Kind::Directory)
-        // {
-        //     //Search for rename jobs that are a subdirectory
-
-        //     auto isParentOf = [](const QDir& parent, const QDir& child) {
-        //         QString parentPath = parent.canonicalPath();
-        //         QString childPath  = child.canonicalPath();
-
-        //         if (parentPath.isEmpty() || childPath.isEmpty()) {
-        //             // canonicalPath() can fail if the directory doesn’t exist
-        //             return false;
-        //         }
-
-        //         return childPath.startsWith(parentPath + QDir::separator());
-        //     };
-
-        //     QDir jobDir = QFileInfo(job.oldPath).absoluteDir();
-        //     auto removeJobs = std::ranges::remove_if(m_fileSystemJobs,
-        //                                              [jobDir, isParentOf](const auto& currentJob) {
-        //                                                  auto currentDir = QFileInfo(currentJob.newPath).absoluteDir();
-        //                                                  return isParentOf(jobDir, currentDir);
-        //                                              });
-        //     m_fileSystemJobs.erase(removeJobs.begin(), removeJobs.end());
-
-        // }
-
-
-        // Otherwise insert at the correct sorted position.
-        // m_fileSystemJobs.insert(static_cast<int>(it - beginIt), job);
+    Data() {
+        m_pendingJobsCompleteDeferred.complete();
     }
 
-    void resetFileLookup() {
-        m_fileLookup.clear();
+    void addFileSystemJob(Job job, cwSaveLoad* context) {
+        Q_ASSERT(job.path.isEmpty());
+        Q_ASSERT(job.oldPath.isEmpty());
+
+        const QString dataRootName = context->dataRoot();
+        const QString dataRootPath = dataRootName.isEmpty()
+            ? context->projectRootDir().absolutePath()
+            : context->projectRootDir().absoluteFilePath(dataRootName);
+        job.dataRoot = QDir(dataRootPath).absolutePath();
+
+        // if(job.kind == Job::Kind::Directory) {
+        //     qDebug() << "Directory move!";
+        // }
+
+        auto toDirOrFilePath = [](const Job& job, const QString& path) {
+            return job.kind == Job::Kind::Directory ? QFileInfo(path).absoluteDir().absolutePath() : path;
+        };
+
+        auto oldPath = [this, toDirOrFilePath](const Job& job) {
+            return toDirOrFilePath(job, m_objectStates[job.objectId].currentPath);
+        };
+
+        auto path = [this, toDirOrFilePath](const Job& job) {
+            return toDirOrFilePath(job, absolutePathFor(static_cast<const QObject*>(job.objectId)));
+        };
+
+        job.path = path(job);
+        job.oldPath = oldPath(job);
+
+        if (job.action == Job::Action::WriteFile && job.kind == Job::Kind::File) {
+            auto& state = m_objectStates[job.objectId];
+            if (state.currentPath.isEmpty()) {
+                state.currentPath = job.path;
+            } else {
+                // qDebug() << "Paths:" << state.currentPath << job.path;
+                Q_ASSERT(state.currentPath == job.path);
+            }
+        } else if (job.kind == Job::Kind::File && job.action == Job::Action::Move) {
+            auto& state = m_objectStates[job.objectId];
+            Q_ASSERT(state.currentPath != job.path);
+            state.currentPath = job.path;
+        } else if (job.kind == Job::Kind::Directory && job.action == Job::Action::Move) {
+            const QString oldDir = job.oldPath;
+            const QString newDir = job.path;
+
+            Q_ASSERT(!oldDir.isEmpty());
+            Q_ASSERT(!newDir.isEmpty());
+            Q_ASSERT(oldDir != newDir);
+
+            // if (!oldDir.isEmpty() && !newDir.isEmpty() && oldDir != newDir) {
+                const QString prefix = oldDir + QDir::separator();
+                for (auto it = m_objectStates.begin(); it != m_objectStates.end(); ++it) {
+                    const QString currentPath = it.value().currentPath;
+                    if (currentPath == oldDir) {
+                        it.value().currentPath = newDir;
+                    } else if (currentPath.startsWith(prefix)) {
+                        it.value().currentPath = newDir + QStringLiteral("/") + currentPath.mid(prefix.size());
+                    }
+                }
+            // }
+        } else if (job.kind == Job::Kind::Directory && job.action == Job::Action::Remove) {
+            const QString oldDir = job.oldPath;
+            if (!oldDir.isEmpty()) {
+                const QString prefix = oldDir + QDir::separator();
+                for (auto it = m_objectStates.begin(); it != m_objectStates.end();) {
+                    const QString currentPath = it.value().currentPath;
+                    if (currentPath == oldDir || currentPath.startsWith(prefix)) {
+                        it = m_objectStates.erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
+            }
+        } /*else {
+            if (!job.path.isEmpty()) {
+                m_objectStates[job.objectId].currentPath = job.path;
+            }
+        }*/
+
+        // qDebug() << "Pushing job:" << m_pendingJobs.size() << job.toString();
+
+        m_pendingJobs.append(job);
+
+        if(m_pendingJobsCompleteDeferred.future().isFinished()) {
+            execFileSystemJobs(context);
+        }
+    }
+
+    QString absolutePathFor(const QObject* object) const {
+        // qDebug() << "Object:" << object;
+
+        if (auto note = qobject_cast<const cwNote*>(object)) {
+            return cwSaveLoad::absolutePath(note);
+        }
+        if (auto lidar = qobject_cast<const cwNoteLiDAR*>(object)) {
+            return cwSaveLoad::absolutePath(lidar);
+        }
+        if (auto trip = qobject_cast<const cwTrip*>(object)) {
+            return cwSaveLoad::absolutePath(trip);
+        }
+        if (auto cave = qobject_cast<const cwCave*>(object)) {
+            return cwSaveLoad::absolutePath(cave);
+        }
+        if(auto region = qobject_cast<const cwCavingRegion*>(object)) {
+            return region->parentProject()->filename();
+        }
+        return QString();
+    }
+
+    ObjectState& stateFor(const void* object) {
+        return m_objectStates[object];
+    }
+
+    void resetObjectStates() {
+        m_objectStates.clear();
 
         auto addObjects = [this](auto objects) {
             for(const auto object : objects) {
-                m_fileLookup[object] = absolutePath(object);
+                auto& state = stateFor(object);
+                state.currentPath = absolutePathFor(object);
             }
         };
 
@@ -536,79 +716,150 @@ struct cwSaveLoad::Data {
         return saveProtoMessage(context, dir.absoluteFilePath(filename), std::move(message), objectId);
     }
 
-    void excuteFileSystemActions() {
-        if(!m_fileSystemJobs.isEmpty() && m_runningJobs.isEmpty()) {
-
-            // 1) Deduplicate by 'object', keeping the *last* occurrence
-            {
-                struct JobIdentity {
-                    const QObject* object = nullptr;
-                    FileSystemJob::Kind kind = FileSystemJob::Kind::File;
-
-                    bool operator==(const JobIdentity&) const = default;
-                };
-
-                struct JobIdentityHash {
-                    std::size_t operator()(const JobIdentity& id) const noexcept {
-                        return qHash(qMakePair(reinterpret_cast<quintptr>(id.object),
-                                               static_cast<int>(id.kind)));
-                    }
-                };
-
-                std::unordered_set<JobIdentity, JobIdentityHash> seenObjects;
-                QList<FileSystemJob> deduplicated;
-                deduplicated.reserve(m_fileSystemJobs.size());
-
-                for (const auto& job : std::views::reverse(m_fileSystemJobs)) {
-                    JobIdentity id{job.object, job.kind};
-                    if (seenObjects.insert(id).second) {
-                        deduplicated.push_back(job); // collected in reverse order
-                    } else {
-                        qDebug() << "Rejecting:" << job.object << (int)job.kind;
-                    }
-                }
-
-                // Restore original order of the kept "last" entries
-                std::ranges::reverse(deduplicated);
-                m_fileSystemJobs.swap(deduplicated);
-            }
-
-            // 2) Sort the jobs for safe execution ordering
-            std::ranges::sort(m_fileSystemJobs, FileSystemJob::lessThan);
-
-            auto setOldPath = [this](FileSystemJob& job) {
-                // qDebug() << "SetOldPath:" << m_fileLookup[job.object] << job.object;
-                Q_ASSERT(m_fileLookup.contains(job.object));
-                // Q_ASSERT(QFileInfo::exists(m_fileLookup[job.object]));
-                auto oldPath = m_fileLookup[job.object];
-
-                if(job.kind == FileSystemJob::Kind::Directory) {
-                    // qDebug() << "Dir:" << QFileInfo(oldPath).absoluteDir().canonicalPath() << QFileInfo(QFileInfo(oldPath).absoluteDir().canonicalPath());
-                    Q_ASSERT(QFileInfo(QFileInfo(oldPath).absoluteDir().canonicalPath()).isDir());
-                    oldPath = QFileInfo(oldPath).absoluteDir().canonicalPath();
-                } else {
-                    //Check that it's a file
-                    Q_ASSERT(QFileInfo(oldPath).isFile());
-                }
-
-                job.oldPath = oldPath;
-            };
-
-            for(auto& job : m_fileSystemJobs) {
-                //Resolve the oldPath
-                setOldPath(job);
-
-                bool success = job.execute();
-                // qDebug() << "Success:" << job.newPath << success;
-
-                // qDebug() << "CouldRename:" << couldRename;
-
-                //Remove waiting job, because the should re-queue for save with the new name
-                m_waitingJobs.erase(job.oldPath);
-            }
-
-            m_fileSystemJobs.clear();
+    void execFileSystemJobs(cwSaveLoad* context) {
+        if (m_pendingJobs.isEmpty()) {
+            return;
         }
+
+        // // 1) Deduplicate by 'object', keeping the *last* occurrence
+        // {
+        //     struct JobIdentity {
+        //         const QObject* object = nullptr;
+        //         Job::Kind kind = Job::Kind::File;
+
+        //         bool operator==(const JobIdentity&) const = default;
+        //     };
+
+        //     struct JobIdentityHash {
+        //         std::size_t operator()(const JobIdentity& id) const noexcept {
+        //             return qHash(qMakePair(reinterpret_cast<quintptr>(id.object),
+        //                                    static_cast<int>(id.kind)));
+        //         }
+        //     };
+
+        //     std::unordered_set<JobIdentity, JobIdentityHash> seenObjects;
+        //     QList<Job> deduplicated;
+        //     deduplicated.reserve(m_pendingJobs.size());
+
+        //     for (const auto& job : std::views::reverse(m_pendingJobs)) {
+        //         JobIdentity id{job.object, job.kind};
+        //         if (seenObjects.insert(id).second) {
+        //             deduplicated.push_back(job); // collected in reverse order
+        //         } else {
+        //             qDebug() << "Rejecting:" << job.object << (int)job.kind;
+        //         }
+        //     }
+
+        //     // Restore original order of the kept "last" entries
+        //     std::ranges::reverse(deduplicated);
+        //     m_pendingJobs.swap(deduplicated);
+        // }
+
+        // 2) Sort the jobs for safe execution ordering
+        // std::ranges::sort(m_pendingJobs, Job::lessThan);
+
+
+        // auto setOldPath = [this](Job& job) -> bool {
+        //     if (job.action == Job::Action::EnsureDir || job.action == Job::Action::WriteFile) {
+        //         return true;
+        //     }
+
+        //     auto& state = stateFor(job.objectId);
+        //     if (state.currentPath.isEmpty()) {
+        //         state.currentPath = absolutePathFor(static_cast<const QObject*>(job.objectId));
+        //     }
+
+        //     auto oldPath = state.currentPath;
+        //     if (oldPath.isEmpty()) {
+        //         qWarning() << "Skipping file system job with empty old path for" << job.objectId;
+        //         return false;
+        //     }
+
+        //     if(job.kind == Job::Kind::Directory) {
+        //         const QString path = QFileInfo(oldPath).absoluteDir().absolutePath();
+        //         const QDir dirPath(path);
+        //         if (!dirPath.exists()) {
+        //             return false;
+        //         }
+        //         oldPath = dirPath.canonicalPath();
+        //     } else {
+        //         if (job.action == Job::Action::Move && !QFileInfo::exists(oldPath)) {
+        //             return false;
+        //         }
+        //     }
+
+        //     job.oldPath = oldPath;
+        //     return true;
+        // };
+
+        Job job = m_pendingJobs.takeFirst();
+
+
+
+        // job.oldPath = oldPath(job);
+        // job.path = path(job);
+
+
+        // if (job.action == Job::Action::WriteFile) {
+        //     const QObject* object = static_cast<const QObject*>(job.objectId);
+        //     if (object != nullptr) {
+        //         const QString derivedPath = absolutePathFor(object);
+        //         if (!derivedPath.isEmpty()) {
+        //             job.path = derivedPath;
+        //         }
+        //     }
+        // }
+
+        // if (!setOldPath(job)) {
+        //     //Error, skipping the job
+        //     qDebug() << "Skipping:" << job.toString();
+        //     execFileSystemJobs(context);
+        //     return;
+        // }
+
+        // if (job.action == Job::Action::Move && job.oldPath == job.newPath) {
+        //     startFileSystemJobs(context);
+        //     return;
+        // }
+
+        if(m_pendingJobsCompleteDeferred.future().isFinished()) {
+            m_pendingJobsCompleteDeferred = {};
+        }
+
+        Q_ASSERT(m_pendingJobsCompleteDeferred.future().isRunning());
+
+        // qDebug() << "Starting job:" << job.toString();
+        auto future = cwConcurrent::run([job]() {
+            // qDebug() << "\tExecuting job:" << job.toString();
+            // return job.execute();
+            auto data = job.execute();
+            if(data.hasError()) {
+                qDebug() << "Has error:" << data.errorMessage() << job.toString();
+            }
+            // qDebug() << "\tDone executing:" << job.toString();
+        });
+
+        AsyncFuture::observe(future).context(context, [this, context, job]() {
+            // auto& state = stateFor(job.objectId);
+            // if (job.action == Job::Action::Move) {
+            //     state.currentPath = absolutePathFor(static_cast<const QObject*>(job.objectId));
+            // } else if (job.action == Job::Action::WriteFile) {
+            //     state.currentPath = job.path;
+            // } else if (job.action == Job::Action::Remove) {
+            //     if (state.currentPath == job.oldPath
+            //         || state.currentPath.startsWith(job.oldPath + QDir::separator()))
+            //     {
+            //         state.currentPath.clear();
+            //     }
+            // }
+
+            if (m_pendingJobs.isEmpty()) {
+                m_pendingJobsCompleteDeferred.complete();
+            } else {
+                //Start another job
+                execFileSystemJobs(context);
+            }
+        });
     }
 
     template<typename T>
@@ -638,16 +889,14 @@ struct cwSaveLoad::Data {
 
     template<typename T>
     void renameDirectoryAndFile(cwSaveLoad* context, const T* object) {
-        //We need to handle changing the directory and changing the name of the file
-        // auto currentFileName = m_fileLookup.value(object);
-        // QString folderName = QFileInfo(currentFileName).absolutePath();
+        // Capture paths now to avoid partial state during rename.
+        auto& state = stateFor(object);
+        const QString oldFilePath = state.currentPath;
+        const QString newDirPath = dir(object).absolutePath();
 
-        auto fileRename = Data::FileSystemJob {object, QString(), QString(), Data::FileSystemJob::Kind::File, Data::FileSystemJob::Action::Remove};
-        auto folderRename = Data::FileSystemJob {object, QString(), dir(object).absolutePath(), Data::FileSystemJob::Kind::Directory};
-
-        addFileSystemJob(fileRename);
-        addFileSystemJob(folderRename);
-
+        // qDebug() << "Rename" << oldFilePath << newDirPath;
+        addFileSystemJob(Data::Job {object, Data::Job::Kind::Directory, Data::Job::Action::Move}, context);
+        addFileSystemJob(Data::Job {object, Data::Job::Kind::File, Data::Job::Action::Move}, context);
         context->save(object);
     }
 };
@@ -672,7 +921,7 @@ Result<ProjectDestination> projectDestination(const QString& destinationUrl)
     localPath = cwGlobals::addExtension(localPath, QStringLiteral("cwproj"));
     if (QFileInfo(localPath).suffix().compare(QStringLiteral("cw"), Qt::CaseInsensitive) == 0) {
         localPath = QFileInfo(localPath).path() + QDir::separator()
-            + QFileInfo(localPath).completeBaseName() + QStringLiteral(".cwproj");
+        + QFileInfo(localPath).completeBaseName() + QStringLiteral(".cwproj");
     }
     QFileInfo destinationInfo(localPath);
     if (!destinationInfo.isAbsolute()) {
@@ -850,7 +1099,7 @@ ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, Proj
 
     setFileName(desiredFilePath);
     setTemporary(false);
-    d->resetFileLookup();
+    d->resetObjectStates();
 
     setSaveEnabled(true);
     enableGuard.dismiss();
@@ -874,9 +1123,7 @@ void cwSaveLoad::newProject()
     Q_ASSERT(!d->newProjectCalled);
     d->newProjectCalled = true;
 
-    Q_ASSERT(d->m_runningJobs.isEmpty());
-    Q_ASSERT(d->m_waitingJobs.empty());
-    Q_ASSERT(d->m_fileSystemJobs.isEmpty());
+    Q_ASSERT(d->m_pendingJobs.isEmpty());
 
     //Disconnect all connections
     disconnectTreeModel();
@@ -902,13 +1149,15 @@ void cwSaveLoad::newProject()
         d->projectMetadata.gitMode = GitMode::ManagedNew;
         d->projectMetadata.syncEnabled = true;
         tempDir.mkpath(d->projectMetadata.dataRoot);
+
+        setTemporary(true);
+        setFileName(tempDir.absoluteFilePath(fileName(region)));
+
         saveProject(tempDir, region);
 
         //Connect all for watching for saves
         connectTreeModel();
 
-        setTemporary(true);
-        setFileName(tempDir.absoluteFilePath(regionFileName(region)));
     }
 
 }
@@ -928,37 +1177,37 @@ QFuture<ResultBase> cwSaveLoad::load(const QString &filename)
     auto oldJobs = completeSaveJobs();
 
     QFuture<ResultBase> future = oldJobs.then(this, [this, filename]() {
-        //Find all the cave file
-        auto projectDataFuture = cwSaveLoad::loadAll(filename);
+                                            //Find all the cave file
+                                            auto projectDataFuture = cwSaveLoad::loadAll(filename);
 
-        d->futureToken.addJob({QFuture<void>(projectDataFuture), QStringLiteral("Loading")});
+                                            d->futureToken.addJob({QFuture<void>(projectDataFuture), QStringLiteral("Loading")});
 
-        return AsyncFuture::observe(projectDataFuture)
-            .context(this, [this, projectDataFuture, filename]() {
-                return mbind(projectDataFuture, [this, projectDataFuture, filename](const ResultBase&) {
-                    // setTemporaryProject(false);
-                    //The filename needs to be set first because, image providers should
-                    //have the filename before the region model is set
-                    setFileName(filename);
-                    setTemporary(false);
+                                            return AsyncFuture::observe(projectDataFuture)
+                                                .context(this, [this, projectDataFuture, filename]() {
+                                                    return mbind(projectDataFuture, [this, projectDataFuture, filename](const ResultBase&) {
+                                                        // setTemporaryProject(false);
+                                                        //The filename needs to be set first because, image providers should
+                                                        //have the filename before the region model is set
+                                                        setFileName(filename);
+                                                        setTemporary(false);
 
-                    setSaveEnabled(false);
-                    const auto& loadData = projectDataFuture.result().value();
-                    d->projectMetadata = loadData.metadata;
-                    d->m_regionTreeModel->cavingRegion()->setData(loadData.region);
+                                                        setSaveEnabled(false);
+                                                        const auto& loadData = projectDataFuture.result().value();
+                                                        d->projectMetadata = loadData.metadata;
+                                                        d->m_regionTreeModel->cavingRegion()->setData(loadData.region);
 
-                    // d->projectFileName = filename;
+                                                        // d->projectFileName = filename;
 
-                    d->resetFileLookup();
+                                                        d->resetObjectStates();
 
-                    setSaveEnabled(true);
+                                                        setSaveEnabled(true);
 
-                    connectTreeModel();
+                                                        connectTreeModel();
 
-                    return ResultBase();
-                });
-            }).future();
-    }).unwrap();
+                                                        return ResultBase();
+                                                    });
+                                                }).future();
+                                        }).unwrap();
 
     return future;
 }
@@ -966,8 +1215,6 @@ QFuture<ResultBase> cwSaveLoad::load(const QString &filename)
 void cwSaveLoad::setFileName(const QString &filename, bool initRepository)
 {
     //This should load the filename
-
-
     if(d->projectFileName != filename) {
         d->projectFileName = filename;
 
@@ -1022,7 +1269,7 @@ void cwSaveLoad::setUndoStack(QUndoStack *undoStack)
 QFuture<ResultBase> cwSaveLoad::saveProject(const QDir &dir, const cwCavingRegion *region)
 {
     return saveProtoMessage(dir,
-                            regionFileName(region),
+                            fileName(region),
                             toProtoProject(region),
                             region);
 }
@@ -1055,7 +1302,7 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
 QFuture<ResultBase> cwSaveLoad::saveCavingRegion(const QDir &dir, const cwCavingRegion *region)
 {
     return saveProtoMessage(dir,
-                            regionFileName(region),
+                            fileName(region),
                             toProtoCavingRegion(region),
                             region);
 }
@@ -1159,23 +1406,22 @@ struct CopyCommand {
 
 static QString uniqueDestinationPath(const QDir& destinationDirectory,
                                      const QString& sourceFilePath,
-                                     const QSet<QString>& reservedPaths,
-                                     const QHash<QString, QFuture<void>>& runningJobs)
+                                     const QSet<QString>& reservedPaths)
 {
     const QFileInfo sourceInfo(sourceFilePath);
     const QString baseName = sourceInfo.completeBaseName();
     const QString suffix = sourceInfo.suffix();
 
-    auto isTaken = [&reservedPaths, &runningJobs](const QString& path) {
-        return QFileInfo::exists(path) || reservedPaths.contains(path) || runningJobs.contains(path);
+    auto isTaken = [&reservedPaths](const QString& path) {
+        return QFileInfo::exists(path) || reservedPaths.contains(path);
     };
 
     QString candidate = destinationDirectory.absoluteFilePath(sourceInfo.fileName());
     int counter = 1;
     while (isTaken(candidate)) {
         const QString numberedName = suffix.isEmpty()
-            ? QStringLiteral("%1-%2").arg(baseName).arg(counter)
-            : QStringLiteral("%1-%2.%3").arg(baseName).arg(counter).arg(suffix);
+        ? QStringLiteral("%1-%2").arg(baseName).arg(counter)
+        : QStringLiteral("%1-%2.%3").arg(baseName).arg(counter).arg(suffix);
         candidate = destinationDirectory.absoluteFilePath(numberedName);
         ++counter;
     }
@@ -1220,14 +1466,9 @@ void cwSaveLoad::copyFilesAndEmitResults(const QList<QString>& sourceFilePaths,
     for (const QString& source : sourceFilePaths) {
         const QString destination = uniqueDestinationPath(destinationDirectory,
                                                           source,
-                                                          reservedPaths,
-                                                          d->m_runningJobs);
-        if (!d->m_runningJobs.contains(destination)) {
-            commands.append(CopyCommand{source, destination});
-            reservedPaths.insert(destination);
-        } else {
-            qWarning() << "Can't add" << source << "because it's already queued" << LOCATION;
-        }
+                                                          reservedPaths);
+        commands.append(CopyCommand{source, destination});
+        reservedPaths.insert(destination);
     }
 
     auto future = cwConcurrent::mapped(commands, [copyOne](const CopyCommand& command) {
@@ -1235,17 +1476,8 @@ void cwSaveLoad::copyFilesAndEmitResults(const QList<QString>& sourceFilePaths,
     });
 
 
-    for (const CopyCommand& command : commands) {
-        // qDebug() << "Adding files:" << sourceFilePaths << command.destinationFilePath;
-        d->m_runningJobs.insert(command.destinationFilePath, QFuture<void>(future));
-    }
-
     auto callBackFuture = AsyncFuture::observe(future)
                               .context(this, [this, future, commands, rootDirectory, makeResult, outputCallBackFunc]() {
-                                  for (const CopyCommand& command : commands) {
-                                      d->m_runningJobs.remove(command.destinationFilePath);
-                                  }
-
                                   const auto results = future.results(); // QList<Monad::Result<QString>> of relative paths
 
                                   QList<ResultType> finalResults;
@@ -2344,16 +2576,13 @@ void cwSaveLoad::connectTreeModel()
             this, [this](const QModelIndex &parent, int first, int last) {
 
                 auto removeDirectory = [this](const QObject* object) {
-                    d->addFileSystemJob(Data::FileSystemJob
+                    d->addFileSystemJob(Data::Job
                                         {
                                             object,
-                                            // dir.canonicalPath(),
-                                            QString(),
-                                            QString(),
-                                            Data::FileSystemJob::Kind::Directory,
-                                            Data::FileSystemJob::Action::Remove
-                                        });
-                    d->excuteFileSystemActions();
+                                            Data::Job::Kind::Directory,
+                                            Data::Job::Action::Remove
+                                        },
+                                        this);
                 };
 
                 for(int i = first; i <= last; i++) {
@@ -2377,15 +2606,13 @@ void cwSaveLoad::connectTreeModel()
                         auto note = d->m_regionTreeModel->note(index);
                         auto noteFilename = absolutePath(note);
                         // qDebug() << "Deleting:" << noteFilename << note << note->name();
-                        d->addFileSystemJob(Data::FileSystemJob
+                        d->addFileSystemJob(Data::Job
                                             {
                                                 note,
-                                                QString(),
-                                                QString(),
-                                                Data::FileSystemJob::Kind::File,
-                                                Data::FileSystemJob::Action::Remove
-                                            });
-                        d->excuteFileSystemActions();
+                                                Data::Job::Kind::File,
+                                                Data::Job::Action::Remove
+                                            },
+                                            this);
                         break;
                     }
                     default:
@@ -2612,8 +2839,9 @@ void cwSaveLoad::connectNote(cwNote *note)
     auto renameAndSaveNote = [this, note]() {
         //Only rename if saved before
         // auto currentFileName = d->m_fileLookup.value(note);
-        auto fileRename = Data::FileSystemJob {note, QString(), absolutePath(note), Data::FileSystemJob::Kind::File};
-        d->addFileSystemJob(fileRename);
+        auto fileMove = Data::Job {note, Data::Job::Kind::File, Data::Job::Action::Move};
+        d->addFileSystemJob(fileMove, this);
+        // d->startFileSystemJobs(this);
 
         save(note);
     };
@@ -2724,28 +2952,28 @@ void cwSaveLoad::connectNoteLiDAR(cwNoteLiDAR *lidarNote)
             this, [saveNote](const QModelIndex &topLeft,
                        const QModelIndex &bottomRight,
                        const QList<int> &roles) {
-        if(roles.contains(cwNoteLiDAR::NameRole)
-            || roles.contains(cwNoteLiDAR::PositionOnNoteRole)) {
-            Q_UNUSED(topLeft);
-            Q_UNUSED(bottomRight);
-            Q_UNUSED(roles);
-            saveNote();
-        }
-    });
+                if(roles.contains(cwNoteLiDAR::NameRole)
+                    || roles.contains(cwNoteLiDAR::PositionOnNoteRole)) {
+                    Q_UNUSED(topLeft);
+                    Q_UNUSED(bottomRight);
+                    Q_UNUSED(roles);
+                    saveNote();
+                }
+            });
     connect(lidarNote, &cwNoteLiDAR::rowsInserted,
             this, [saveNote](const QModelIndex &parent, int first, int last) {
                 Q_UNUSED(parent);
                 Q_UNUSED(first);
                 Q_UNUSED(last);
                 saveNote();
-    });
+            });
     connect(lidarNote, &cwNoteLiDAR::rowsRemoved,
             this, [saveNote](const QModelIndex &parent, int first, int last) {
                 Q_UNUSED(parent);
                 Q_UNUSED(first);
                 Q_UNUSED(last);
                 saveNote();
-    });
+            });
     connect(lidarNote, &cwNoteLiDAR::autoCalculateNorthChanged, this, saveNote);
 
     if(!d->connectionChecker.add(lidarNote->noteTransformation())) {
@@ -2801,28 +3029,7 @@ QDir cwSaveLoad::createTemporaryDirectory(const QString &subDirName)
 
 QFuture<void> cwSaveLoad::completeSaveJobs()
 {
-    bool hasRunningJobs = !d->m_runningJobs.isEmpty();
-    bool hasWaitingJobs = !d->m_waitingJobs.empty();
-
-    if(hasRunningJobs || hasWaitingJobs) {
-        auto combine = AsyncFuture::combine();
-
-        if(hasRunningJobs) {
-            for(auto keyValue : d->m_runningJobs.asKeyValueRange()) {
-                combine << keyValue.second;
-            }
-        }
-
-        if(hasWaitingJobs) {
-            for(const auto& keyValue : d->m_waitingJobs) {
-                combine << keyValue.second.jobDeferred.future();
-            }
-        }
-
-        return combine.future();
-    } else {
-        return QtFuture::makeReadyVoidFuture();
-    }
+    return d->m_pendingJobsCompleteDeferred.future();
 }
 
 QString cwSaveLoad::sanitizeFileName(QString input) {
@@ -2902,9 +3109,22 @@ QDir cwSaveLoad::projectDir() const
     return QDir(projectRootDir().absoluteFilePath(dataRootName));
 }
 
-QString cwSaveLoad::regionFileName(const cwCavingRegion *region)
+QString cwSaveLoad::fileName(const cwCavingRegion *region)
 {
     return sanitizeFileName(region->name() + QStringLiteral(".cwproj"));
+}
+
+QString cwSaveLoad::absolutePath(const cwCavingRegion *region)
+{
+    return dir(region).absoluteFilePath(fileName(region));
+}
+
+QDir cwSaveLoad::dir(const cwCavingRegion *region)
+{
+    if(region->parentProject()) {
+        return projectDir(region->parentProject());
+    }
+    return QDir();
 }
 
 QString cwSaveLoad::fileName(const cwCave *cave)
@@ -3081,100 +3301,19 @@ QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
     std::unique_ptr<const google::protobuf::Message> message,
     const void* objectId)
 {
+    auto deferred = std::make_shared<AsyncFuture::Deferred<ResultBase>>();
 
-    // qDebug () << "Try Saving to " << filename << objectId;
+    Job job(
+        objectId,
+        Job::Kind::File,
+        Job::Action::WriteFile,
+        std::shared_ptr<const google::protobuf::Message>(std::move(message))
+        );
 
-    //Rename or remove file and directories
-    excuteFileSystemActions();
+    addFileSystemJob(job, context);
+    // startFileSystemJobs(context);
 
-    //Make sure we're not saving to the same file at the same time
-    if (m_runningJobs.contains(filename) || !m_fileSystemJobs.isEmpty()) {
-
-        Q_ASSERT(!clearingWait);
-        // qDebug() << "\twaiting runningJob:" << m_runningJobs.contains(filename) << "rename:" << !m_fileSystemJobs.isEmpty();
-
-        auto deferred = AsyncFuture::Deferred<ResultBase>();
-
-        m_waitingJobs[filename] = WaitingJob {
-            deferred,
-            std::move(message),
-        };
-
-        //Add defered here
-        return deferred.future();
-    } else {
-
-        auto future = cwConcurrent::run([filename, message = std::move(message)]() {
-
-            //enable this to simulate slow saves, good for debugging thread code
-            // QThread::currentThread()->msleep(100);
-
-            return mbind(ensurePathForFile(filename), [&](ResultBase /*result*/) {
-                QSaveFile file(filename);
-                if (!file.open(QFile::WriteOnly)) {
-                    qWarning() << "Failed to write to " << filename << file.errorString();
-                    return Monad::ResultBase(QStringLiteral("Failed to open file for writing: %1").arg(filename));
-                }
-
-                std::string json_output;
-                google::protobuf::util::JsonPrintOptions options;
-                options.add_whitespace = true; // Makes it pretty
-                // options.always_print_primitive_fields = true; // Optional: print even if fields are default
-
-                auto status = google::protobuf::util::MessageToJsonString(*message, &json_output, options);
-                if (!status.ok()) {
-                    return Monad::ResultBase(QStringLiteral("Failed to convert proto message to JSON: %1").arg(status.ToString().c_str()));
-                }
-
-                file.write(json_output.c_str(), json_output.size());
-                file.commit();
-
-                // qDebug() << "Saving:" << filename << "error code:" << file.error();
-
-                return Monad::ResultBase();
-            });
-        });
-
-        AsyncFuture::observe(future).context(
-            context, [filename, this, context, objectId]() {
-                // qDebug() << "job finished:" << filename << objectId;
-                m_runningJobs.remove(filename);
-                m_fileLookup[objectId] = filename;
-
-                auto runWaitingJobs = [this, context, objectId]() {
-                    Q_ASSERT(m_fileSystemJobs.isEmpty());
-                    Q_ASSERT(m_runningJobs.isEmpty());
-
-                    //clearingWait is a temp variable for debugging, TODO: remove
-                    clearingWait = true;
-
-                    // Run waiting save jobs
-                    for (auto it = m_waitingJobs.begin(); it != m_waitingJobs.end(); ++it) {
-                        WaitingJob& job = it->second;
-
-                        //Recursive call
-                        auto future = saveProtoMessage(context, it->first, std::move(job.message), objectId);
-                        AsyncFuture::observe(future).context(context, [deferred = job.jobDeferred, future]() mutable {
-                            deferred.complete(future.result());
-                        });
-                    }
-                    m_waitingJobs.clear();
-
-                    clearingWait = false;
-                };
-
-                if(m_runningJobs.isEmpty()) {
-                    if(!m_fileSystemJobs.isEmpty()) {
-                        excuteFileSystemActions();
-                    }
-                    runWaitingJobs();
-                }
-            });
-
-        m_runningJobs.insert(filename, QFuture<void>(future));
-
-        return future;
-    }
+    return deferred->future();
 }
 
 

@@ -214,7 +214,7 @@ TEST_CASE("Rapid renaming", "[cwProject]") {
     auto region = project->cavingRegion();
 
     // Create a backlog of saves so newProject stays in-flight.
-    const int preCaveCount = 10;
+    const int preCaveCount = 500;
     for (int i = 0; i < preCaveCount; ++i) {
         region->addCave();
         auto cave = region->cave(i);
@@ -232,12 +232,12 @@ TEST_CASE("Rapid renaming", "[cwProject]") {
     project->waitSaveToFinish();
 
     //Check the file structure and make sure files exist where the should be
-    const QDir projectDir = QFileInfo(project->filename()).absoluteDir();
-    const auto cavePathFor = [&projectDir](const QString& caveName) {
-        return projectDir.filePath(QStringLiteral("%1/%1.cwcave").arg(caveName));
+    const QDir projectDataRoot = QFileInfo(project->absolutePath(project->dataRoot())).absoluteDir();
+    const auto cavePathFor = [&projectDataRoot](const QString& caveName) {
+        return projectDataRoot.filePath(QStringLiteral("%1/%1.cwcave").arg(caveName));
     };
-    const auto tripPathFor = [&projectDir](const QString& caveName, const QString& tripName) {
-        return projectDir.filePath(QStringLiteral("%1/trips/%2/%2.cwtrip").arg(caveName, tripName));
+    const auto tripPathFor = [&projectDataRoot](const QString& caveName, const QString& tripName) {
+        return projectDataRoot.filePath(QStringLiteral("%1/trips/%2/%2.cwtrip").arg(caveName, tripName));
     };
 
     REQUIRE(region->caveCount() == preCaveCount);
@@ -260,6 +260,9 @@ TEST_CASE("Rapid renaming", "[cwProject]") {
         const QString expectedTripPath = tripPathFor(expectedCaveName, expectedTripName);
         const QString oldCavePath = cavePathFor(oldCaveName);
         const QString oldTripPath = tripPathFor(oldCaveName, oldTripName);
+
+        INFO("Cave path:" << expectedCavePath.toStdString());
+        INFO("Trip path:" << expectedTripPath.toStdString());
 
         CHECK(QFileInfo::exists(expectedCavePath));
         CHECK(QFileInfo::exists(expectedTripPath));
