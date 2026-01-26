@@ -480,6 +480,8 @@ struct cwSaveLoad::Data {
                     }
                 }
                 return mbind(ensurePathForFile(path), [&](ResultBase /*result*/) {
+                    // QThread::msleep(10000);
+                    // qDebug() << "Coping sourcePath:" << sourcePath << path;
                     if (!QFile::copy(sourcePath, path)) {
                         return Monad::ResultBase(QStringLiteral("Failed to copy %1 -> %2").arg(sourcePath, path));
                     }
@@ -675,11 +677,12 @@ struct cwSaveLoad::Data {
             }
         }*/
 
-        // qDebug() << "Pushing job:" << m_pendingJobs.size() << job.toString();
+        qDebug() << "Pushing job:" << this << m_pendingJobs.size() << job.toString();
 
         m_pendingJobs.append(job);
 
         if(m_pendingJobsDeferred.future().isFinished()) {
+            qDebug() << "Exec file system jobs:" << this << m_pendingJobs.size();
             execFileSystemJobs(context);
         }
     }
@@ -771,9 +774,9 @@ struct cwSaveLoad::Data {
 
         Q_ASSERT(m_pendingJobsDeferred.future().isRunning());
 
-        // qDebug() << "Starting job:" << job.toString();
+        qDebug() << "Starting job:" << this << job.toString();
         auto future = cwConcurrent::run([job]() {
-            // qDebug() << "\tExecuting job:" << job.toString();
+            qDebug() << "\tExecuting job:" << job.toString();
             return job.execute();
         });
 
@@ -786,7 +789,7 @@ struct cwSaveLoad::Data {
                 job.onDone(data);
             }
             if (m_pendingJobs.isEmpty()) {
-                // qDebug() << "Pending jobs complete!" << this;
+                qDebug() << "Pending jobs complete!" << this;
                 m_pendingJobsDeferred.complete();
             } else {
                 //Start another job
@@ -834,7 +837,12 @@ struct cwSaveLoad::Data {
     }
 };
 
-cwSaveLoad::~cwSaveLoad() = default;
+// cwSaveLoad::~cwSaveLoad() = default;
+cwSaveLoad::~cwSaveLoad() {
+    Q_ASSERT(d->m_pendingJobs.isEmpty());
+    // Q_ASSERT(d->m_pendingJobsDeferred.future().isFinished());
+    qDebug() << "SaveLoad destroyed:" << this << d->m_pendingJobs.size();
+}
 
 namespace {
 
@@ -1734,11 +1742,11 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
 
 
         QSaveFile file(filename);
-        file.open(QSaveFile::WriteOnly);
+        bool success = file.open(QSaveFile::WriteOnly);
         file.write(imageData.data());
         file.commit();
 
-        // qDebug() << "Saving image:" << filename << file.errorString();
+        qDebug() << "Saving image:" << success << filename << file.errorString();
 
         cwImage noteImage = noteCopy.image();
         QString relativeFilename = dataRootDir.relativeFilePath(filename);
@@ -1759,19 +1767,22 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
         for(cwNote* note : notes->notes()) {
 
             auto noteData = note->data();
+            QPointer<cwNote> notePtr(note);
 
             auto saveImageFuture = cwConcurrent::run([saveNoteImage, noteData, imageIndex, noteDir]() {
+                QThread::msleep(1000);
                 return saveNoteImage(noteData, imageIndex, noteDir);
             });
 
             auto noteFuture =
                 AsyncFuture::observe(saveImageFuture)
-                    .context(this, [this, noteDir, noteData, saveImageFuture, note]() {
+                    .context(this, [this, noteDir, noteData, saveImageFuture, notePtr]() {
                         // cwNote noteCopy;
                         // noteCopy.setData(saveImageFuture.result());
-                        qDebug() << "Save notes!" << note << this;
-                        note->setData(saveImageFuture.result());
-                        return save(noteDir, note);
+                        Q_ASSERT(notePtr);
+                        qDebug() << "Save notes!" << notePtr << this;
+                        notePtr->setData(saveImageFuture.result());
+                        return save(noteDir, notePtr);
                     }).future();
 
 

@@ -929,8 +929,13 @@ void cwProject::convertFromProjectV6(QString oldProjectFilename,
                                          auto saveLoad = std::make_shared<cwSaveLoad>();
                                          auto filenameFuture = saveLoad->saveAllFromV6(newProjectDirectory, tempProject.get(), oldProjectFilename);
 
+                                         AsyncFuture::observe(filenameFuture).context(this, [tempProject]() {
+                                             //Even though tempProject isn't used here, we need it to stay alive, until
+                                             //filenameFuture is finished
+                                         });
+
                                          auto loadFuture = AsyncFuture::observe(filenameFuture)
-                                                               .context(this, [saveLoad, filenameFuture, this]() {
+                                                               .context(this, [this, saveLoad, filenameFuture]() {
                                                                    if(!filenameFuture.result().hasError()) {
                                                                        //Load the project into this cwProject
                                                                        qDebug() << "Loading project:" << filenameFuture.result().value();
