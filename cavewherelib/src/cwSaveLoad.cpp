@@ -63,6 +63,7 @@
 #include <unordered_set>
 #include <algorithm>
 #include <atomic>
+#include <variant>
 
 using namespace Monad;
 
@@ -294,17 +295,64 @@ struct cwSaveLoad::Data {
         enum class Kind { File, Directory, };
         enum class Action { Move, Remove, EnsureDir, WriteFile, CopyFile, Custom };
 
+        struct EmptyPayload { };
+        struct WriteFilePayload { std::shared_ptr<const google::protobuf::Message> message; };
+        struct CopyFilePayload { QString sourcePath; };
+        struct CustomPayload { std::function<Monad::ResultBase()> action; };
+        using Payload = std::variant<EmptyPayload, WriteFilePayload, CopyFilePayload, CustomPayload>;
+
         const void* objectId = nullptr;
         Kind kind = Kind::File;
         Action action = Action::Move;
-        std::shared_ptr<const google::protobuf::Message> message;
-        std::function<Monad::ResultBase()> customAction;
         std::function<void(const Monad::ResultBase&)> onDone;
+        Payload payload = EmptyPayload{};
 
         QString oldPath;
         QString path;
-        QString sourcePath;
         QString dataRoot;
+
+        Job() = default;
+        Job(const void* objectId, Kind kind, Action action)
+            : objectId(objectId),
+              kind(kind),
+              action(action),
+              payload(EmptyPayload{})
+        {
+        }
+
+        Job(const void* objectId,
+            Kind kind,
+            Action action,
+            std::shared_ptr<const google::protobuf::Message> message)
+            : objectId(objectId),
+              kind(kind),
+              action(action),
+              payload(WriteFilePayload{std::move(message)})
+        {
+        }
+
+        Job(const void* objectId, Kind kind, Action action, QString sourcePath)
+            : objectId(objectId),
+              kind(kind),
+              action(action),
+              payload(CopyFilePayload{std::move(sourcePath)})
+        {
+        }
+
+        Job(const void* objectId,
+            Kind kind,
+            Action action,
+            std::function<Monad::ResultBase()> customAction)
+            : objectId(objectId),
+              kind(kind),
+              action(action),
+              payload(CustomPayload{std::move(customAction)})
+        {
+        }
+
+        // ~Job() {
+        //     qDebug() << "sizeOf:" << sizeof(Job);
+        // }
 
         static const char* kindName(Kind kind) {
             switch (kind) {
@@ -336,6 +384,10 @@ struct cwSaveLoad::Data {
 
         QString toString() const {
             const QString objectHex = QString::number(reinterpret_cast<quintptr>(objectId), 16);
+            const auto* writePayload = std::get_if<WriteFilePayload>(&payload);
+            const auto* copyPayload = std::get_if<CopyFilePayload>(&payload);
+            const auto* customPayload = std::get_if<CustomPayload>(&payload);
+            const QString sourcePath = copyPayload ? copyPayload->sourcePath : QString();
             return QStringLiteral("Job{action=%1 kind=%2 objectId=0x%3 oldPath='%4' newPath='%5' sourcePath='%6' dataRoot='%7' hasMessage=%8 hasCustom=%9}")
                 .arg(QString::fromLatin1(actionName(action)),
                      QString::fromLatin1(kindName(kind)),
@@ -344,8 +396,8 @@ struct cwSaveLoad::Data {
                      path,
                      sourcePath,
                      dataRoot)
-                .arg(message != nullptr)
-                .arg(customAction != nullptr);
+                .arg(writePayload && writePayload->message != nullptr)
+                .arg(customPayload && customPayload->action != nullptr);
         }
 
         Monad::ResultBase execute() const {
@@ -443,7 +495,8 @@ struct cwSaveLoad::Data {
                     return Monad::ResultBase();
                 }
             case Action::WriteFile: {
-                if (!message) {
+                auto* writePayload = std::get_if<WriteFilePayload>(&payload);
+                if (!writePayload || !writePayload->message) {
                     return Monad::ResultBase(QStringLiteral("Missing message for WriteFile job: %1").arg(path));
                 }
                 {
@@ -463,7 +516,7 @@ struct cwSaveLoad::Data {
                     google::protobuf::util::JsonPrintOptions options;
                     options.add_whitespace = true;
 
-                    auto status = google::protobuf::util::MessageToJsonString(*message, &json_output, options);
+                    auto status = google::protobuf::util::MessageToJsonString(*writePayload->message, &json_output, options);
                     if (!status.ok()) {
                         return Monad::ResultBase(QStringLiteral("Failed to convert proto message to JSON: %1").arg(status.ToString().c_str()));
                     }
@@ -474,7 +527,8 @@ struct cwSaveLoad::Data {
                 });
             }
             case Action::CopyFile: {
-                if (sourcePath.isEmpty()) {
+                auto* copyPayload = std::get_if<CopyFilePayload>(&payload);
+                if (!copyPayload || copyPayload->sourcePath.isEmpty()) {
                     return Monad::ResultBase(QStringLiteral("Missing source path for CopyFile job: %1").arg(path));
                 }
                 {
@@ -485,18 +539,21 @@ struct cwSaveLoad::Data {
                 }
                 return mbind(ensurePathForFile(path), [&](ResultBase /*result*/) {
                     // QThread::msleep(10000);
-                    // qDebug() << "Coping sourcePath:" << sourcePath << path;
-                    if (!QFile::copy(sourcePath, path)) {
-                        return Monad::ResultBase(QStringLiteral("Failed to copy %1 -> %2").arg(sourcePath, path));
+                    // qDebug() << "Coping sourcePath:" << copyPayload->sourcePath << path;
+                    if (!QFile::copy(copyPayload->sourcePath, path)) {
+                        return Monad::ResultBase(QStringLiteral("Failed to copy %1 -> %2").arg(copyPayload->sourcePath, path));
                     }
                     return Monad::ResultBase();
                 });
             }
             case Action::Custom:
-                if (!customAction) {
-                    return Monad::ResultBase(QStringLiteral("Missing custom action for job"));
+                if (auto* customPayload = std::get_if<CustomPayload>(&payload)) {
+                    if (!customPayload->action) {
+                        return Monad::ResultBase(QStringLiteral("Missing custom action for job"));
+                    }
+                    return customPayload->action();
                 }
-                return customAction();
+                return Monad::ResultBase(QStringLiteral("Missing custom action for job"));
             }
             return Monad::ResultBase();
         }
@@ -1446,7 +1503,7 @@ void cwSaveLoad::copyFilesAndEmitResults(const QList<QString>& sourceFilePaths,
         Data::Job job;
         job.action = Data::Job::Action::CopyFile;
         job.kind = Data::Job::Kind::File;
-        job.sourcePath = command.sourceFilePath;
+        job.payload = Data::Job::CopyFilePayload{command.sourceFilePath};
         job.path = command.destinationFilePath;
         job.onDone = [state, command, rootDirectory, finalizeResults](const Monad::ResultBase& result) {
             if (!result.hasError()) {
@@ -1744,7 +1801,7 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
             saveImageJob.objectId = note;
             saveImageJob.kind = Data::Job::Kind::File;
             saveImageJob.action = Data::Job::Action::Custom;
-            saveImageJob.customAction = [projectFileName, dataRootDir, noteData, imageIndex, noteDir, updatedNoteData]() {
+            saveImageJob.payload = Data::Job::CustomPayload{[projectFileName, dataRootDir, noteData, imageIndex, noteDir, updatedNoteData]() {
                 cwImageProvider provider;
                 provider.setProjectPath(projectFileName);
 
@@ -1774,7 +1831,7 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
 
                 *updatedNoteData = noteCopy.data();
                 return ResultBase();
-            };
+            }};
 
             saveImageJob.onDone = [this, noteDir, notePtr, updatedNoteData](const ResultBase& result) mutable {
                 notePtr->setData(*updatedNoteData);
