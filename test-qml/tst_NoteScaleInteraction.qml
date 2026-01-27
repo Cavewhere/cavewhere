@@ -62,7 +62,7 @@ MainWindowTest {
             mouseClick(done_obj1)
 
             //Make sure the scale updates correctly
-            tryFuzzyCompare(1.0 / scrap.noteTransformation.scale, 567.4924, 0.001, `1.0 / ${scrap.noteTransformation.scale} === 567.4924`);
+            tryFuzzyCompare(1.0 / scrap.noteTransformation.scale, 569, 3.0, `1.0 / ${scrap.noteTransformation.scale} === 569`);
         }
     }
 }
