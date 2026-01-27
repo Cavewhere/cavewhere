@@ -15,6 +15,7 @@
 #include <QQuickWindow>
 #include <QCommandLineParser>
 #include <QFileInfo>
+#include <QtQml/qqml.h>
 
 //Our includes
 //#include "cwMainWindow.h"
@@ -158,9 +159,8 @@ int main(int argc, char *argv[])
 
     QQmlApplicationEngine* applicationEngine = new QQmlApplicationEngine();
 
-    //initilize cavewher lib, gitlib2 and QQuickQanava
+    //initilize cavewher lib, gitlib2
     cwRootData::initCavewherelib();
-    cwRootData::initCavewherelibQml(applicationEngine);
 
     // Add the macOS Resources directory to the QML import search path
     QString resourcePath = QCoreApplication::applicationDirPath() + "/../Resources/qml";
@@ -168,8 +168,7 @@ int main(int argc, char *argv[])
     applicationEngine->addImportPath(":/"); //This enable QuickQanava to load in qml correctly
 
     //Initilize QuickQanava
-    // Q_IMPORT_QML_PLUGIN(QuickQanava)
-    // QuickQanava::initialize(applicationEngine);
+    QuickQanava::initialize(applicationEngine);
 
     QQmlContext* context = applicationEngine->rootContext();
 

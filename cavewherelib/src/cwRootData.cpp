@@ -352,11 +352,6 @@ void cwRootData::shutdown()
     project()->waitSaveToFinish();
 }
 
-void cwRootData::initCavewherelibQml(QQmlEngine *engine)
-{
-    QuickQanava::initialize(engine);
-}
-
 //For windows static linkage
 void cwRootData::initCavewherelib()
 {
