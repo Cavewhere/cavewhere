@@ -553,8 +553,6 @@ struct cwSaveLoad::Data {
         }
     };
 
-
-
     QQuickGit::GitRepository* repository;
 
     QString projectFileName;
@@ -682,9 +680,9 @@ struct cwSaveLoad::Data {
             }
         }
 
-        // qDebug() << "Pushing job:" << this << m_pendingJobs.size() << job.toString();
-
         m_pendingJobs.append(job);
+
+        // qDebug() << "Pushing job:" << this << m_pendingJobs.size() << job.toString();
 
         if(m_pendingJobsDeferred.future().isFinished()) {
             // qDebug() << "Exec file system jobs:" << this << m_pendingJobs.size();
@@ -700,6 +698,8 @@ struct cwSaveLoad::Data {
         job.dataRoot = QDir(dataRootPath).absolutePath();
 
         m_pendingJobs.append(job);
+
+        // qDebug() << "Pushing explicit job:" << this << m_pendingJobs.size() << job.toString();
 
         if(m_pendingJobsDeferred.future().isFinished()) {
             execFileSystemJobs(context);
@@ -1728,45 +1728,8 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
 
     const QDir dataRootDir = makeDir(QDir(dir.absoluteFilePath(d->projectMetadata.dataRoot)));
 
-    auto saveNoteImage = [projectFileName, dataRootDir](cwNoteData noteData, int imageIndex, QDir noteDir) {
-        cwImageProvider provider;
-        provider.setProjectPath(projectFileName);
-
-        cwNote noteCopy;
-        noteCopy.setData(noteData);
-
-        if(noteCopy.name().isEmpty()) {
-            noteCopy.setName(QString::number(imageIndex));
-        }
-        auto imageData = provider.data(noteCopy.image().original());
-
-        auto filename = noteDir.absoluteFilePath(QStringLiteral("%1.%2")
-                                                     .arg(imageIndex)
-                                                     .arg(imageData.format().toLower()));
-
-
-
-        QSaveFile file(filename);
-        bool success = file.open(QSaveFile::WriteOnly);
-        file.write(imageData.data());
-        file.commit();
-
-        qDebug() << "Saving image:" << success << filename << file.errorString();
-
-        cwImage noteImage = noteCopy.image();
-        QString relativeFilename = dataRootDir.relativeFilePath(filename);
-        noteImage.setPath(relativeFilename);
-        noteCopy.setImage(noteImage);
-
-        return noteCopy.data();
-    };
-
-
-    auto saveNotes = [makeDir, this, saveNoteImage](const QDir& tripDir, const cwSurveyNoteModel* notes) {
+    auto saveNotes = [makeDir, this, projectFileName, dataRootDir](const QDir& tripDir, const cwSurveyNoteModel* notes) {
         const QDir noteDir = makeDir(noteDirHelper(tripDir));
-
-        QList<QFuture<ResultBase>> noteFutures;
-        noteFutures.reserve(notes->notes().size() * 2);
 
         int imageIndex = 1;
         for(cwNote* note : notes->notes()) {
@@ -1775,56 +1738,61 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
             QPointer<cwNote> notePtr(note);
             auto updatedNoteData = std::make_shared<cwNoteData>();
 
-            AsyncFuture::Deferred<ResultBase> noteDeferred;
+            // AsyncFuture::Deferred<ResultBase> noteDeferred;
 
             Data::Job saveImageJob;
             saveImageJob.objectId = note;
             saveImageJob.kind = Data::Job::Kind::File;
             saveImageJob.action = Data::Job::Action::Custom;
-            saveImageJob.customAction = [saveNoteImage, noteData, imageIndex, noteDir, updatedNoteData]() {
-                *updatedNoteData = saveNoteImage(noteData, imageIndex, noteDir);
+            saveImageJob.customAction = [projectFileName, dataRootDir, noteData, imageIndex, noteDir, updatedNoteData]() {
+                cwImageProvider provider;
+                provider.setProjectPath(projectFileName);
+
+                cwNote noteCopy;
+                noteCopy.setData(noteData);
+
+                if(noteCopy.name().isEmpty()) {
+                    noteCopy.setName(QString::number(imageIndex));
+                }
+                auto imageData = provider.data(noteCopy.image().original());
+
+                auto filename = noteDir.absoluteFilePath(QStringLiteral("%1.%2")
+                                                             .arg(imageIndex)
+                                                             .arg(imageData.format().toLower()));
+
+                QSaveFile file(filename);
+                bool success = file.open(QSaveFile::WriteOnly);
+                file.write(imageData.data());
+                file.commit();
+
+                // qDebug() << "Saving image:" << success << filename << file.errorString();
+
+                cwImage noteImage = noteCopy.image();
+                QString relativeFilename = dataRootDir.relativeFilePath(filename);
+                noteImage.setPath(relativeFilename);
+                noteCopy.setImage(noteImage);
+
+                *updatedNoteData = noteCopy.data();
                 return ResultBase();
             };
-            saveImageJob.onDone = [this, noteDir, notePtr, updatedNoteData, noteDeferred](const ResultBase& result) mutable {
-                if (result.hasError()) {
-                    noteDeferred.complete(result);
-                    return;
-                }
-                if (!notePtr) {
-                    noteDeferred.complete(ResultBase(QStringLiteral("Note was deleted before image save completed")));
-                    return;
-                }
 
+            saveImageJob.onDone = [this, noteDir, notePtr, updatedNoteData](const ResultBase& result) mutable {
                 notePtr->setData(*updatedNoteData);
                 auto saveFuture = save(noteDir, notePtr);
-                AsyncFuture::observe(saveFuture)
-                    .context(this, [noteDeferred, saveFuture]() mutable {
-                        noteDeferred.complete(saveFuture.result());
-                    });
             };
 
             d->addExplicitFileSystemJob(saveImageJob, this);
-            noteFutures.append(noteDeferred.future());
 
             ++imageIndex;
         }
-
-        return noteFutures;
     };
 
     auto saveTrips = [this, projectFileName, makeDir, saveNotes](const QDir& caveDir, const cwCave* cave) {
-        QList<QFuture<ResultBase>> tripFutures;
-        tripFutures.reserve(cave->tripCount());
-
-        QList<QFuture<ResultBase>> noteFutures;
-
         for(const auto trip : cave->trips()) {
             const QDir tripDir = makeDir(tripDirHelper(caveDir, trip));
-            tripFutures.append(save(tripDir, trip));
-            noteFutures.append(saveNotes(tripDir, trip->notes()));
+            save(tripDir, trip);
+            saveNotes(tripDir, trip->notes());
         }
-
-        return tripFutures + noteFutures;
     };
 
 
@@ -1836,44 +1804,22 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
     QString newProjectFilename = regionFileName(dir, &region);
     setFileName(newProjectFilename);
 
-    auto regionFuture = saveProject(dir, &region);
+    saveProject(dir, &region);
 
-    QList<QFuture<ResultBase>> saveFutures;
-    // saveFutures.append(regionFuture);
 
     //Go through all the caves
     for(const auto cave : project->cavingRegion()->caves()) {
         const QDir caveDir = makeDir(caveDirHelper(dataRootDir, cave));
         save(caveDir, cave);
-        saveFutures.append(saveTrips(caveDir, cave));
+        saveTrips(caveDir, cave);
     }
 
-    auto allPendingJobsFuture =  AsyncFuture::observe(d->m_pendingJobsDeferred.future())
-                                 .context(this, [newProjectFilename]() {
-                                     return ResultBase();
-                                 })
-        .future();
-
-
-    saveFutures.append(allPendingJobsFuture);
-
-    AsyncFuture::Combinator combine;
-    combine << saveFutures;
-
-    //TODO: use the m_pendingJobDefered
-    return AsyncFuture::observe(combine.future())
-        .context(this, [newProjectFilename]() {
+    return AsyncFuture::observe(d->m_pendingJobsDeferred.future())
+        .context(this, [this, newProjectFilename]() {
+            // qDebug() << "Finished" << this;
             return ResultString(newProjectFilename);
         })
         .future();
-
-
-
-    // auto combine = AsyncFuture::combine() << saveFutures;
-    // return combine.context(this, [newProjectFilename]() {
-    //                   return ResultString(newProjectFilename);
-    //               }).future();
-
 }
 
 QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QString &filename)
