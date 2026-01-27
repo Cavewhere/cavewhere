@@ -160,16 +160,12 @@ public:
 
     static QString sanitizeFileName(QString input);
 
-    QFuture<Monad::ResultBase> saveProtoMessage(
-        const QDir& dir,
-        const QString& filename,
+    void saveProtoMessage(
         std::unique_ptr<const google::protobuf::Message> message,
         const void* pointerId);
 
     static std::unique_ptr<CavewhereProto::Cave> toProtoCave(const cwCave* cave);
     static std::unique_ptr<CavewhereProto::Trip> toProtoTrip(const cwTrip* trip);
-
-    QFuture<Monad::ResultBase> save(const QDir& dir, const cwTrip* trip);
 
     void addImages(QList<QUrl> noteImagePaths,
                    const QDir& dir,
@@ -243,7 +239,7 @@ private:
     std::unique_ptr<Data> d;
     QPointer<QUndoStack> m_undoStack;
 
-    QFuture<Monad::ResultBase> saveProject(const QDir& dir, const cwCavingRegion* region);
+    void saveProject(const QDir& dir, const cwCavingRegion* region);
     std::unique_ptr<CavewhereProto::Project> toProtoProject(const cwCavingRegion* region);
     QDir projectRootDir() const;
 
@@ -311,12 +307,11 @@ private:
 
 
 
-    QFuture<Monad::ResultBase> saveCavingRegion(const QDir& dir, const cwCavingRegion* region);
+    void saveCavingRegion(const cwCavingRegion* region);
     static std::unique_ptr<CavewhereProto::CavingRegion> toProtoCavingRegion(const cwCavingRegion* region);
     static QString regionFileName(const QDir& dir, const cwCavingRegion* region);
 
     void save(const cwCave* cave);
-    QFuture<Monad::ResultBase> save(const QDir& dir, const cwCave* cave);
     // static std::unique_ptr<CavewhereProto::Cave> toProtoCave(const cwCave* cave);
 
     void save(const cwTrip* trip);
@@ -324,11 +319,9 @@ private:
     // static std::unique_ptr<CavewhereProto::Trip> toProtoTrip(const cwTrip* trip);
 
     void save(const cwNote* note);
-    QFuture<Monad::ResultBase> save(const QDir& dir, const cwNote* note);
     static std::unique_ptr<CavewhereProto::Note> toProtoNote(const cwNote* note);
 
     void save(const cwNoteLiDAR* note);
-    QFuture<Monad::ResultBase> save(const QDir& dir, const cwNoteLiDAR* note);
     static std::unique_ptr<CavewhereProto::NoteLiDAR> toProtoNoteLiDAR(const cwNoteLiDAR* note);
 
     static Monad::Result<cwCaveData> loadCave(const QString& filename);

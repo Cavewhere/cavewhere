@@ -795,39 +795,6 @@ TEST_CASE("Test the sanitized for directory name", "[cwSaveLoad]") {
     }
 }
 
-TEST_CASE("cwSaveLoad should save and load cwTrip - empty", "[cwSaveLoad]") {
-    auto dir = testDir();
-
-    cwTrip emptyTrip;
-
-    cwSaveLoad save;
-    save.save(dir, &emptyTrip);
-
-    save.waitForFinished();
-}
-
-TEST_CASE("cwSaveLoad should save and load cwTrip - complex", "[cwSaveLoad]") {
-    auto root = std::make_unique<cwRootData>();
-    auto filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
-
-    root->project()->loadOrConvert(filename);
-    root->project()->waitLoadToFinish();
-
-    REQUIRE(root->project()->cavingRegion()->caveCount() >= 1);
-    auto cave = root->project()->cavingRegion()->cave(0);
-
-    REQUIRE(cave->tripCount() >= 1);
-    auto trip = cave->trip(0);
-    REQUIRE(trip != nullptr);
-
-    cwSaveLoad save;
-    auto dir = testDir();
-
-    save.save(dir, trip);
-    save.waitForFinished();
-
-}
-
 TEST_CASE("cwSaveLoad should save and load old projects correctly", "[cwSaveLoad]") {
     auto root = std::make_unique<cwRootData>();
     auto filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");

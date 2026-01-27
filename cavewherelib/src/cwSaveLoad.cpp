@@ -64,6 +64,7 @@
 #include <algorithm>
 #include <atomic>
 #include <variant>
+#include <type_traits>
 
 using namespace Monad;
 
@@ -804,23 +805,11 @@ struct cwSaveLoad::Data {
     }
 
 
-    QFuture<Monad::ResultBase> saveProtoMessage(
+    void saveProtoMessage(
         cwSaveLoad* context,
-        const QString& filename,
         std::unique_ptr<const google::protobuf::Message> message,
         const void* objectId
         );
-
-    QFuture<Monad::ResultBase> saveProtoMessage(
-        cwSaveLoad* context,
-        const QDir& dir,
-        const QString& filename,
-        std::unique_ptr<const google::protobuf::Message> message,
-        const void* objectId)
-    {
-        Q_ASSERT(message);
-        return saveProtoMessage(context, dir.absoluteFilePath(filename), std::move(message), objectId);
-    }
 
     void execFileSystemJobs(cwSaveLoad* context) {
         if (m_pendingJobs.isEmpty()) {
@@ -864,7 +853,17 @@ struct cwSaveLoad::Data {
     void saveObject(cwSaveLoad* context, const T* object) {
         if(saveEnabled) {
             // qDebug() << "Saving object:" << object << object->name() << dir(object);
-            auto saveFuture = context->save(dir(object), object);
+            if constexpr (std::is_same_v<T, cwCave>) {
+                saveProtoMessage(context, cwSaveLoad::toProtoCave(object), object);
+            } else if constexpr (std::is_same_v<T, cwTrip>) {
+                saveProtoMessage(context, cwSaveLoad::toProtoTrip(object), object);
+            } else if constexpr (std::is_same_v<T, cwNote>) {
+                saveProtoMessage(context, cwSaveLoad::toProtoNote(object), object);
+            } else if constexpr (std::is_same_v<T, cwNoteLiDAR>) {
+                saveProtoMessage(context, cwSaveLoad::toProtoNoteLiDAR(object), object);
+            } else {
+                static_assert(std::is_same_v<T, void>, "Unsupported saveObject type");
+            }
 
             // saveFuture.then(context, [context, object](const ResultBase& base) {
             //     if(!base.hasError()) {
@@ -1269,12 +1268,10 @@ void cwSaveLoad::setUndoStack(QUndoStack *undoStack)
     }
 }
 
-QFuture<ResultBase> cwSaveLoad::saveProject(const QDir &dir, const cwCavingRegion *region)
+void cwSaveLoad::saveProject(const QDir &dir, const cwCavingRegion *region)
 {
-    return saveProtoMessage(dir,
-                            fileName(region),
-                            toProtoProject(region),
-                            region);
+    Q_UNUSED(dir);
+    saveProtoMessage(toProtoProject(region), region);
 }
 
 std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavingRegion *region)
@@ -1302,12 +1299,9 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
     return protoProject;
 }
 
-QFuture<ResultBase> cwSaveLoad::saveCavingRegion(const QDir &dir, const cwCavingRegion *region)
+void cwSaveLoad::saveCavingRegion(const cwCavingRegion *region)
 {
-    return saveProtoMessage(dir,
-                            fileName(region),
-                            toProtoCavingRegion(region),
-                            region);
+    saveProtoMessage(toProtoCavingRegion(region), region);
 }
 
 std::unique_ptr<CavewhereProto::CavingRegion> cwSaveLoad::toProtoCavingRegion(const cwCavingRegion *region)
@@ -1339,15 +1333,6 @@ void cwSaveLoad::save(const cwNote* note)
     d->saveObject(this, note);
 }
 
-QFuture<ResultBase> cwSaveLoad::save(const QDir &dir, const cwCave *cave)
-{
-    return saveProtoMessage(
-        dir,
-        fileName(cave),
-        toProtoCave(cave),
-        cave);
-}
-
 std::unique_ptr<CavewhereProto::Cave> cwSaveLoad::toProtoCave(const cwCave *cave)
 {
     auto protoCave = std::make_unique<CavewhereProto::Cave>();
@@ -1356,15 +1341,6 @@ std::unique_ptr<CavewhereProto::Cave> cwSaveLoad::toProtoCave(const cwCave *cave
     cwRegionSaveTask::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
     *(protoCave->mutable_name()) = cave->name().toStdString();
     return protoCave;
-}
-
-QFuture<ResultBase> cwSaveLoad::save(const QDir &dir, const cwTrip *trip)
-{
-    return saveProtoMessage(
-        dir,
-        fileName(trip),
-        toProtoTrip(trip),
-        trip);
 }
 
 std::unique_ptr<CavewhereProto::Trip> cwSaveLoad::toProtoTrip(const cwTrip *trip)
@@ -1681,15 +1657,6 @@ void cwSaveLoad::addFiles(QList<QUrl> files,
 }
 
 
-QFuture<ResultBase> cwSaveLoad::save(const QDir &dir, const cwNote *note)
-{
-    return saveProtoMessage(
-        dir,
-        fileName(note),
-        toProtoNote(note),
-        note);
-}
-
 std::unique_ptr<CavewhereProto::Note> cwSaveLoad::toProtoNote(const cwNote *note)
 {
     //Copy trip data into proto, on the main thread
@@ -1716,15 +1683,6 @@ std::unique_ptr<CavewhereProto::Note> cwSaveLoad::toProtoNote(const cwNote *note
 void cwSaveLoad::save(const cwNoteLiDAR *note)
 {
     d->saveObject(this, note);
-}
-
-QFuture<ResultBase> cwSaveLoad::save(const QDir &dir, const cwNoteLiDAR *note)
-{
-    return saveProtoMessage(
-        dir,
-        fileName(note),
-        toProtoNoteLiDAR(note),
-        note);
 }
 
 std::unique_ptr<CavewhereProto::NoteLiDAR> cwSaveLoad::toProtoNoteLiDAR(const cwNoteLiDAR *note)
@@ -1833,9 +1791,9 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
                 return ResultBase();
             }};
 
-            saveImageJob.onDone = [this, noteDir, notePtr, updatedNoteData](const ResultBase& result) mutable {
+            saveImageJob.onDone = [this, notePtr, updatedNoteData](const ResultBase& result) mutable {
                 notePtr->setData(*updatedNoteData);
-                auto saveFuture = save(noteDir, notePtr);
+                save(notePtr);
             };
 
             d->addExplicitFileSystemJob(saveImageJob, this);
@@ -1847,7 +1805,7 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
     auto saveTrips = [this, projectFileName, makeDir, saveNotes](const QDir& caveDir, const cwCave* cave) {
         for(const auto trip : cave->trips()) {
             const QDir tripDir = makeDir(tripDirHelper(caveDir, trip));
-            save(tripDir, trip);
+            save(trip);
             saveNotes(tripDir, trip->notes());
         }
     };
@@ -1867,7 +1825,7 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
     //Go through all the caves
     for(const auto cave : project->cavingRegion()->caves()) {
         const QDir caveDir = makeDir(caveDirHelper(dataRootDir, cave));
-        save(caveDir, cave);
+        save(cave);
         saveTrips(caveDir, cave);
     }
 
@@ -3390,16 +3348,13 @@ QDir cwSaveLoad::dirPrivate(const cwNoteLiDAR* note) const
     return QDir();
 }
 
-QFuture<ResultBase> cwSaveLoad::saveProtoMessage(const QDir &dir,
-                                                 const QString &filename,
-                                                 std::unique_ptr<const google::protobuf::Message> message,
-                                                 const void* objectId)
+void cwSaveLoad::saveProtoMessage(std::unique_ptr<const google::protobuf::Message> message,
+                                  const void* objectId)
 {
     Q_ASSERT(message);
-    return d->saveProtoMessage(this,
-                               dir.absoluteFilePath(sanitizeFileName(filename)),
-                               std::move(message),
-                               objectId);
+    d->saveProtoMessage(this,
+                        std::move(message),
+                        objectId);
 
 }
 
@@ -3419,9 +3374,8 @@ QDir cwSaveLoad::noteDirHelper(const QDir &tripDir)
     return QDir(tripDir.absoluteFilePath("notes"));
 }
 
-QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
+void cwSaveLoad::Data::saveProtoMessage(
     cwSaveLoad* context,
-    const QString &filename,
     std::unique_ptr<const google::protobuf::Message> message,
     const void* objectId)
 {
@@ -3435,9 +3389,6 @@ QFuture<ResultBase> cwSaveLoad::Data::saveProtoMessage(
         );
 
     addFileSystemJob(job, context);
-
-    //TODO: remove return?!
-    return QtFuture::makeReadyValueFuture(ResultBase()); // deferred->future();
 }
 
 
