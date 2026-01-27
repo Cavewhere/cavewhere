@@ -607,7 +607,9 @@ cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) 
     cwCave* cave = scrap->parentNote()->parentTrip()->parentCave();
 
     cwImage noteImage = scrap->parentNote()->image();
-    data.setNoteImage(cwSaveLoad::absolutePathNoteImage(scrap->parentNote()));
+    if (Project) {
+        data.setNoteImage(Project->absolutePathNoteImage(scrap->parentNote()));
+    }
     data.setOutline(scrap->points());
     data.setNoteStation(scrap->stations());
     data.setStationLookup(cave->stationPositionLookup());

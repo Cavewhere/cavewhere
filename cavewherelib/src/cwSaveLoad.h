@@ -180,36 +180,14 @@ public:
                   std::function<void (QList<QString>)> fileCallBackFunc);
 
 
-    //Returns the relative path to the project
-    static QDir projectDir(const cwProject* project);
     QDir projectDir() const;
 
-    static QString fileName(const cwCavingRegion* region);
-    static QString absolutePath(const cwCavingRegion* region);
-    static QDir dir(const cwCavingRegion* region);
+    QDir dir(cwSurveyNoteModel* notes) const;
+    QDir dir(cwSurveyNoteLiDARModel* notes) const;
 
-    static QString fileName(const cwCave* cave);
-    static QString absolutePath(const cwCave* cave);
-    static QDir dir(const cwCave* cave);
-
-    static QString fileName(const cwTrip* trip);
-    static QString absolutePath(const cwTrip* trip);
-    static QDir dir(const cwTrip* trip);
-
-    static QDir dir(cwSurveyNoteModel* notes);
-    static QDir dir(cwSurveyNoteLiDARModel* notes);
-
-    static QString fileName(const cwNote* note);
-    static QString absolutePath(const cwNote* note);
-    static QString absolutePath(const cwNote* note, const QString& imageFilename);
-    static QDir dir(const cwNote* note);
-
-    static QString fileName(const cwNoteLiDAR* note);
-    static QString absolutePath(const cwNoteLiDAR* note);
-    static QString absolutePath(const cwNoteLiDAR* note, const QString& lidarFilename);
-    static QDir dir(const cwNoteLiDAR* note);
-
-    static cwImage absolutePathNoteImage(const cwNote* note);
+    QString absolutePath(const cwNote* note, const QString& imageFilename) const;
+    QString absolutePath(const cwNoteLiDAR* note, const QString& lidarFilename) const;
+    cwImage absolutePathNoteImage(const cwNote* note) const;
 
     //For testing
     void waitForFinished();

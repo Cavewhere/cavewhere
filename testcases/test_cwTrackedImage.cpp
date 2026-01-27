@@ -24,7 +24,7 @@ TEST_CASE("cwTrackedImage should delete images from database", "[cwTrackedImage]
 
     int count = 0;
     project->addImages({QUrl::fromLocalFile(copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG"))},
-                       cwSaveLoad::projectDir(project),
+                       ProjectFilenameTestHelper::projectDir(project),
                        [project, &trackedImage, &count](QList<cwImage> newImages)
     {
         REQUIRE(newImages.size() == 1);
@@ -60,7 +60,7 @@ TEST_CASE("cwTrackImage should work with QSharedPointer's custom delete function
     cwTrackedImagePtr trackImagePtr;
 
     project->addImages({QUrl::fromLocalFile(copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG"))},
-                       cwSaveLoad::projectDir(project),
+                       ProjectFilenameTestHelper::projectDir(project),
                        [project, &trackImagePtr](QList<cwImage> newImages)
     {
         REQUIRE(newImages.size() == 1);

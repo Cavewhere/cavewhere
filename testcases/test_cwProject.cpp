@@ -152,7 +152,7 @@ TEST_CASE("Image data should save and load correctly", "[cwProject]") {
     cwImage image = note->image();
     cwImageProvider provider;
     provider.setProjectPath(project->filename());
-    const QString noteImagePath = cwSaveLoad::absolutePath(note, image.path());
+    const QString noteImagePath = ProjectFilenameTestHelper::absolutePath(note, image.path());
     QImage sqlImage = provider.image(noteImagePath);
 
     CHECK(!sqlImage.isNull());
@@ -305,7 +305,7 @@ TEST_CASE("Queued copy and rename should preserve note assets", "[cwProject][cwS
         urls.append(QUrl::fromLocalFile(filePath));
     }
 
-    const QString originalTripFile = cwSaveLoad::absolutePath(trip);
+    const QString originalTripFile = ProjectFilenameTestHelper::absolutePath(trip);
     QFileInfo originalTripInfo(originalTripFile);
     const QString originalTripDirPath = originalTripInfo.absoluteDir().absolutePath();
     const QString originalNotesDirPath = QDir(originalTripDirPath).filePath(QStringLiteral("notes"));
@@ -316,7 +316,7 @@ TEST_CASE("Queued copy and rename should preserve note assets", "[cwProject][cwS
     project->waitSaveToFinish();
     rootData->futureManagerModel()->waitForFinished();
 
-    const QString renamedTripFile = cwSaveLoad::absolutePath(trip);
+    const QString renamedTripFile = ProjectFilenameTestHelper::absolutePath(trip);
     QFileInfo renamedTripInfo(renamedTripFile);
     const QString renamedTripDirPath = renamedTripInfo.absoluteDir().absolutePath();
     const QString renamedNotesDirPath = QDir(renamedTripDirPath).filePath(QStringLiteral("notes"));
@@ -333,7 +333,7 @@ TEST_CASE("Queued copy and rename should preserve note assets", "[cwProject][cwS
         const QString imagePath = note->image().path();
         const QString fileName = QFileInfo(imagePath).fileName();
         REQUIRE_FALSE(fileName.isEmpty());
-        const QString expectedPath = cwSaveLoad::dir(note).absoluteFilePath(fileName);
+        const QString expectedPath = ProjectFilenameTestHelper::dir(note).absoluteFilePath(fileName);
         CHECK(QFileInfo::exists(expectedPath));
     }
 }
@@ -371,8 +371,8 @@ TEST_CASE("Saves queued during newProject should target the new project director
     const QString newProjectFile = project->filename();
     const QDir newProjectDir = QFileInfo(newProjectFile).absoluteDir();
 
-    const QString newCavePath = cwSaveLoad::absolutePath(postCavePtr);
-    const QString oldCavePath = oldProjectDir.absoluteFilePath(cwSaveLoad::fileName(postCavePtr));
+    const QString newCavePath = ProjectFilenameTestHelper::absolutePath(postCavePtr);
+    const QString oldCavePath = oldProjectDir.absoluteFilePath(ProjectFilenameTestHelper::fileName(postCavePtr));
 
     CHECK(QFileInfo::exists(newCavePath));
     CHECK(!QFileInfo::exists(oldCavePath));
@@ -525,10 +525,10 @@ TEST_CASE("Images should load correctly", "[cwProject]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
 
-    CHECK(cwSaveLoad::projectDir(project).isAbsolute());
+    CHECK(ProjectFilenameTestHelper::projectDir(project).isAbsolute());
 
     int checked = 0;
-    project->addImages(filenames, cwSaveLoad::projectDir(project), [&checked, testImages, project, size](QList<cwImage> images){
+    project->addImages(filenames, ProjectFilenameTestHelper::projectDir(project), [&checked, testImages, project, size](QList<cwImage> images){
         REQUIRE(images.size() == testImages.size());
 
         //Load the image and check that it's in the correct order
@@ -616,7 +616,7 @@ TEST_CASE("Files should be added to the project correctly", "[cwProject]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
 
-    const QDir projectRootDirectory = cwSaveLoad::projectDir(project);
+    const QDir projectRootDirectory = ProjectFilenameTestHelper::projectDir(project);
     CHECK(projectRootDirectory.isAbsolute());
 
     // Act: call addFiles
@@ -759,11 +759,11 @@ TEST_CASE("SaveAs updates dataRoot directory to match project name", "[cwProject
     CHECK_FALSE(project->isTemporaryProject());
 
     const QString projectName = QFileInfo(project->filename()).completeBaseName();
-    const QDir dataRootDir = cwSaveLoad::projectDir(project);
+    const QDir dataRootDir = ProjectFilenameTestHelper::projectDir(project);
     CHECK(dataRootDir.dirName().toStdString() == projectName.toStdString());
 
-    CHECK(QFileInfo::exists(cwSaveLoad::absolutePath(cave)));
-    CHECK(QFileInfo::exists(cwSaveLoad::absolutePath(trip)));
+    CHECK(QFileInfo::exists(ProjectFilenameTestHelper::absolutePath(cave)));
+    CHECK(QFileInfo::exists(ProjectFilenameTestHelper::absolutePath(trip)));
 }
 
 TEST_CASE("Non-temporary project saveAs reports error when destination exists", "[cwProject]") {
@@ -812,7 +812,7 @@ TEST_CASE("Non-temporary project saveAs reports error when destination exists", 
 //     };
 
 //     QList<cwImage> loadedImages;
-//     project->addImages(filenames, cwSaveLoad::projectDir(project), [&loadedImages](QList<cwImage> images){
+//     project->addImages(filenames, ProjectFilenameTestHelper::projectDir(project), [&loadedImages](QList<cwImage> images){
 //         loadedImages += images;
 //     });
 
@@ -1102,21 +1102,21 @@ TEST_CASE("Test save changes", "[cwProject]") {
 
         //Check no-name cave
         CHECK(QFileInfo::exists(project->filename()));
-        // CHECK(project->filename() == cwSaveLoad::projectAbsolutePath(project.get()));
+        // CHECK(project->filename() == ProjectFilenameTestHelper::projectAbsolutePath(project.get()));
 
-        auto testFilename = cwSaveLoad::absolutePath(cave);
+        auto testFilename = ProjectFilenameTestHelper::absolutePath(cave);
         QFileInfo info(testFilename);
         auto oldDir = info.absoluteDir();
         oldDir.cdUp();
 
-        CHECK(QFileInfo::exists(cwSaveLoad::absolutePath(cave)));
+        CHECK(QFileInfo::exists(ProjectFilenameTestHelper::absolutePath(cave)));
 
         //Test renaming the cave
         cave->setName("test2");
         project->waitSaveToFinish();
 
-        CHECK(QFileInfo::exists(cwSaveLoad::absolutePath(cave)));
-        CHECK(cwSaveLoad::absolutePath(cave).toStdString() == oldDir.filePath("test2/test2.cwcave").toStdString());
+        CHECK(QFileInfo::exists(ProjectFilenameTestHelper::absolutePath(cave)));
+        CHECK(ProjectFilenameTestHelper::absolutePath(cave).toStdString() == oldDir.filePath("test2/test2.cwcave").toStdString());
     }
 
     SECTION("Simple cave and trip") {
@@ -1143,11 +1143,11 @@ TEST_CASE("Test save changes", "[cwProject]") {
 
         project->waitSaveToFinish();
 
-        CHECK(QFileInfo::exists(cwSaveLoad::absolutePath(cave)));
-        CHECK(QFileInfo::exists(cwSaveLoad::absolutePath(trip)));
+        CHECK(QFileInfo::exists(ProjectFilenameTestHelper::absolutePath(cave)));
+        CHECK(QFileInfo::exists(ProjectFilenameTestHelper::absolutePath(trip)));
 
         SECTION("Rename the cave") {
-            auto testFilename = cwSaveLoad::absolutePath(cave);
+            auto testFilename = ProjectFilenameTestHelper::absolutePath(cave);
             QFileInfo info(testFilename);
             auto oldDir = info.absoluteDir();
             oldDir.cdUp();
@@ -1157,17 +1157,17 @@ TEST_CASE("Test save changes", "[cwProject]") {
 
             project->waitSaveToFinish();
 
-            CHECK(QFileInfo::exists(cwSaveLoad::absolutePath(cave)));
-            CHECK(QFileInfo::exists(cwSaveLoad::absolutePath(trip)));
-            CHECK(cwSaveLoad::absolutePath(cave).toStdString() == oldDir.filePath("test2/test2.cwcave").toStdString());
-            CHECK(cwSaveLoad::absolutePath(trip).toStdString() == oldDir.filePath("test2/trips/test trip/test trip.cwtrip").toStdString());
+            CHECK(QFileInfo::exists(ProjectFilenameTestHelper::absolutePath(cave)));
+            CHECK(QFileInfo::exists(ProjectFilenameTestHelper::absolutePath(trip)));
+            CHECK(ProjectFilenameTestHelper::absolutePath(cave).toStdString() == oldDir.filePath("test2/test2.cwcave").toStdString());
+            CHECK(ProjectFilenameTestHelper::absolutePath(trip).toStdString() == oldDir.filePath("test2/trips/test trip/test trip.cwtrip").toStdString());
         }
 
         SECTION("Make sure trip calibration changes are saved") {
             trip->calibrations()->setDeclination(12.0);
             project->waitSaveToFinish();
 
-            CHECK(QFileInfo::exists(cwSaveLoad::absolutePath(trip)));
+            CHECK(QFileInfo::exists(ProjectFilenameTestHelper::absolutePath(trip)));
 
             auto loadingProject = std::make_unique<cwProject>();
             addTokenManager(loadingProject.get());
@@ -1219,7 +1219,7 @@ TEST_CASE("Renaming a trip moves its files and note assets", "[cwProject][cwTrip
     const QString originalTripName = trip->name();
     REQUIRE(originalTripName.toStdString() == QStringLiteral("2019c154_-_party_fault").toStdString());
 
-    const QString originalTripFile = cwSaveLoad::absolutePath(trip);
+    const QString originalTripFile = ProjectFilenameTestHelper::absolutePath(trip);
     QFileInfo originalTripInfo(originalTripFile);
     const QString originalTripDirPath = originalTripInfo.absoluteDir().absolutePath();
 
@@ -1258,14 +1258,14 @@ TEST_CASE("Renaming a trip moves its files and note assets", "[cwProject][cwTrip
     REQUIRE(lidarNote != nullptr);
     const QString lidarFileName = QFileInfo(glbSource).fileName();
 
-    const QString originalLidarPath = cwSaveLoad::dir(lidarNote).absoluteFilePath(lidarFileName);
+    const QString originalLidarPath = ProjectFilenameTestHelper::dir(lidarNote).absoluteFilePath(lidarFileName);
     REQUIRE(QFileInfo::exists(originalLidarPath));
 
     trip->setName(QStringLiteral("Trip 2"));
     project->waitSaveToFinish();
     root->futureManagerModel()->waitForFinished();
 
-    const QString renamedTripFile = cwSaveLoad::absolutePath(trip);
+    const QString renamedTripFile = ProjectFilenameTestHelper::absolutePath(trip);
     QFileInfo renamedTripInfo(renamedTripFile);
     const QString renamedTripDirPath = renamedTripInfo.absoluteDir().absolutePath();
     const QString renamedNotesDirPath = QDir(renamedTripDirPath).filePath(QStringLiteral("notes"));
@@ -1304,7 +1304,7 @@ TEST_CASE("Renaming a trip moves its files and note assets", "[cwProject][cwTrip
     CHECK(toSet(originalNoteFiles) == toSet(renamedNoteFiles));
     CHECK_FALSE(QDir(originalNotesDirPath).exists());
 
-    const QString renamedLidarPath = cwSaveLoad::dir(lidarNote).absoluteFilePath(lidarFileName);
+    const QString renamedLidarPath = ProjectFilenameTestHelper::dir(lidarNote).absoluteFilePath(lidarFileName);
     CHECK_FALSE(QFileInfo::exists(originalLidarPath));
     CHECK(QFileInfo::exists(renamedLidarPath));
     CHECK(lidarNote->filename().toStdString() == QFileInfo(lidarNote->filename()).fileName().toStdString());
@@ -1334,8 +1334,8 @@ TEST_CASE("Renaming a trip moves its files and note assets", "[cwProject][cwTrip
         const QString fileName = QFileInfo(imagePath).fileName();
         CHECK(expectedNoteImages.contains(fileName));
         const QDir projectDir = QFileInfo(reloadedProject->filename()).absoluteDir();
-        const QString expectedPath = cwSaveLoad::dir(note).absoluteFilePath(fileName);
-        CHECK(cwSaveLoad::absolutePathNoteImage(note).path().toStdString() == expectedPath.toStdString());
+        const QString expectedPath = ProjectFilenameTestHelper::dir(note).absoluteFilePath(fileName);
+        CHECK(ProjectFilenameTestHelper::absolutePathNoteImage(note).path().toStdString() == expectedPath.toStdString());
     }
 
     cwSurveyNoteLiDARModel* const reloadedLidarModel = reloadedTrip->notesLiDAR();
@@ -1343,10 +1343,10 @@ TEST_CASE("Renaming a trip moves its files and note assets", "[cwProject][cwTrip
     REQUIRE(reloadedLidarModel->rowCount() == 1);
     cwNoteLiDAR* const reloadedLidarNote = dynamic_cast<cwNoteLiDAR*>(reloadedLidarModel->notes().at(0));
     REQUIRE(reloadedLidarNote != nullptr);
-    const QString reloadedLidarAbsolute1 = cwSaveLoad::absolutePath(reloadedLidarNote, reloadedLidarNote->filename());
+    const QString reloadedLidarAbsolute1 = ProjectFilenameTestHelper::absolutePath(reloadedLidarNote, reloadedLidarNote->filename());
     CHECK(!reloadedLidarAbsolute1.isEmpty());
     CHECK(QFileInfo::exists(reloadedLidarAbsolute1));
-    const QString reloadedLidarAbsolute = cwSaveLoad::dir(reloadedLidarNote).absoluteFilePath(QFileInfo(reloadedLidarAbsolute1).fileName());
+    const QString reloadedLidarAbsolute = ProjectFilenameTestHelper::dir(reloadedLidarNote).absoluteFilePath(QFileInfo(reloadedLidarAbsolute1).fileName());
     CHECK(QFileInfo::exists(reloadedLidarAbsolute));
 }
 
@@ -1367,7 +1367,7 @@ TEST_CASE("Trip calibration persistence", "[cwProject]") {
     project->cavingRegion()->addCave(cave);
     project->waitSaveToFinish();
 
-    REQUIRE(QFileInfo::exists(cwSaveLoad::absolutePath(trip)));
+    REQUIRE(QFileInfo::exists(ProjectFilenameTestHelper::absolutePath(trip)));
 
     SECTION("Booleans persist") {
         for(int i = 0; i < 100; i++) {
@@ -1530,7 +1530,7 @@ TEST_CASE("Trip team member role changes persist and trigger save", "[cwProject]
     project->cavingRegion()->addCave(cave);
     project->waitSaveToFinish();
 
-    REQUIRE(QFileInfo::exists(cwSaveLoad::absolutePath(trip)));
+    REQUIRE(QFileInfo::exists(ProjectFilenameTestHelper::absolutePath(trip)));
 
     // Use the concrete model so we can call add/remove helpers
     cwTeam* const team = static_cast<cwTeam*>(trip->team());
@@ -1666,7 +1666,7 @@ TEST_CASE("Trip date persistence", "[cwProject][cwTrip]") {
     project->cavingRegion()->addCave(cave);
     project->waitSaveToFinish();
 
-    REQUIRE(QFileInfo::exists(cwSaveLoad::absolutePath(trip)));
+    REQUIRE(QFileInfo::exists(ProjectFilenameTestHelper::absolutePath(trip)));
 
     SECTION("Initial date persists after reload") {
         const QDateTime dateUtc(QDate(2024, 5, 1), QTime());
@@ -1727,7 +1727,7 @@ TEST_CASE("Survey chunk persistence", "[cwProject][cwTrip][cwSurveyChunk]") {
     project->cavingRegion()->addCave(cave);
     project->waitSaveToFinish();
 
-    REQUIRE(QFileInfo::exists(cwSaveLoad::absolutePath(trip)));
+    REQUIRE(QFileInfo::exists(ProjectFilenameTestHelper::absolutePath(trip)));
 
     SECTION("Add two chunks with data → save → reload → verify ALL fields") {
         // ---------- Chunk 0 ----------
@@ -2115,7 +2115,7 @@ TEST_CASE("Note and Scrap persistence", "[cwProject][cwTrip][cwSurveyNoteModel][
     project->cavingRegion()->addCave(cave);
     project->waitSaveToFinish();
 
-    REQUIRE(QFileInfo::exists(cwSaveLoad::absolutePath(trip)));
+    REQUIRE(QFileInfo::exists(ProjectFilenameTestHelper::absolutePath(trip)));
 
     // Use the trip's note model
     cwSurveyNoteModel* const noteModel = trip->notes();
@@ -2386,7 +2386,7 @@ TEST_CASE("LiDAR GLB persistence: file copy + stations", "[cwProject]") {
     project->cavingRegion()->addCave(cave);
     project->waitSaveToFinish();
 
-    REQUIRE(QFileInfo::exists(cwSaveLoad::absolutePath(trip)));
+    REQUIRE(QFileInfo::exists(ProjectFilenameTestHelper::absolutePath(trip)));
 
     // ---- LiDAR model ----
     cwSurveyNoteLiDARModel* const lidarModel = trip->notesLiDAR();
@@ -2467,7 +2467,7 @@ TEST_CASE("LiDAR GLB persistence: file copy + stations", "[cwProject]") {
     // ---- File copy checks: exists in the project and matches bytes ----
     // Assume cwNoteLiDAR::filename() returns a path relative to the trip directory.
     {
-        const QString glb = cwSaveLoad::absolutePath(loadedNote, loadedNote->filename());          // e.g. "lidar/bones.glb"
+        const QString glb = ProjectFilenameTestHelper::absolutePath(loadedNote, loadedNote->filename());          // e.g. "lidar/bones.glb"
         REQUIRE(!glb.isEmpty());
 
         REQUIRE(QFileInfo::exists(glb));
@@ -2799,7 +2799,7 @@ TEST_CASE("cwProject should overwrite or touch loaded project", "[cwProject]") {
 
         project->waitSaveToFinish();
 \
-        auto tripPath = cwSaveLoad::absolutePath(trip);
+        auto tripPath = ProjectFilenameTestHelper::absolutePath(trip);
         auto modifiedLoad = scan(QFileInfo(convertedFilename).absolutePath());
 
         //Trip's data change should show up as different
@@ -2826,7 +2826,7 @@ TEST_CASE("Caves should be removed correctly simple", "[cwProject]") {
     REQUIRE(project->cavingRegion()->caveCount() > 0);
     auto cave = project->cavingRegion()->cave(0);
 
-    auto caveFileName = cwSaveLoad::absolutePath(cave);
+    auto caveFileName = ProjectFilenameTestHelper::absolutePath(cave);
     auto caveDir = QFileInfo(caveFileName).absoluteDir();
 
 
@@ -2859,7 +2859,7 @@ TEST_CASE("Trips should be removed correctly simple", "[cwProject]") {
     REQUIRE(cave->tripCount() > 0);
     auto trip = cave->trip(0);
 
-    auto tripFileName = cwSaveLoad::absolutePath(trip);
+    auto tripFileName = ProjectFilenameTestHelper::absolutePath(trip);
     auto tripDir = QFileInfo(tripFileName).absoluteDir();
 
 
@@ -2893,7 +2893,7 @@ TEST_CASE("Note should be removed correctly simple", "[cwProject]") {
     REQUIRE(trip->notes()->rowCount() > 0);
     auto note = trip->notes()->notes().at(0);
 
-    auto noteFileName = cwSaveLoad::absolutePath(note);
+    auto noteFileName = ProjectFilenameTestHelper::absolutePath(note);
     auto noteDir = QFileInfo(noteFileName).absoluteDir();
 
     CHECK(QFileInfo::exists(noteFileName));

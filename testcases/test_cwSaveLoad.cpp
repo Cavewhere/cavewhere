@@ -24,6 +24,7 @@
 #include "cwSvgReader.h"
 #include "cwRegionIOTask.h"
 #include "cavewhereVersion.h"
+#include "ProjectFilenameTestHelper.h"
 
 //Qt includes
 #include <QStandardPaths>
@@ -91,7 +92,7 @@ TEST_CASE("cwSaveLoad saves pdf notes with unique filenames", "[cwSaveLoad]") {
     rootData->futureManagerModel()->waitForFinished();
     project->waitSaveToFinish();
 
-    const QDir notesDir = cwSaveLoad::dir(trip->notes());
+    const QDir notesDir = ProjectFilenameTestHelper::dir(trip->notes());
     REQUIRE(notesDir.exists());
     const QStringList noteFiles = notesDir.entryList(QStringList() << "*.cwnote", QDir::Files);
     REQUIRE(noteFiles.size() == 2);
@@ -136,10 +137,10 @@ TEST_CASE("cwSaveLoad writes file version metadata for saved files", "[cwSaveLoa
         CHECK(proto.fileversion().cavewhereversion() == CavewhereVersion.toStdString());
     };
 
-    const QString caveFile = cwSaveLoad::absolutePath(cave);
-    const QString tripFile = cwSaveLoad::absolutePath(trip);
-    const QString noteFile = cwSaveLoad::absolutePath(note);
-    const QString noteLidarFile = cwSaveLoad::absolutePath(noteLidar);
+    const QString caveFile = ProjectFilenameTestHelper::absolutePath(cave);
+    const QString tripFile = ProjectFilenameTestHelper::absolutePath(trip);
+    const QString noteFile = ProjectFilenameTestHelper::absolutePath(note);
+    const QString noteLidarFile = ProjectFilenameTestHelper::absolutePath(noteLidar);
 
     checkFileVersion(loadProtoFromJsonFile<CavewhereProto::Cave>(caveFile));
     checkFileVersion(loadProtoFromJsonFile<CavewhereProto::Trip>(tripFile));
@@ -204,7 +205,7 @@ TEST_CASE("cwSaveLoad reloads missing image metadata", "[cwSaveLoad]") {
     };
 
     for (cwNote* note : trip->notes()->notes()) {
-        clearImageFields(cwSaveLoad::absolutePath(note));
+        clearImageFields(ProjectFilenameTestHelper::absolutePath(note));
     }
 
     auto reloaded = std::make_unique<cwProject>();
@@ -253,7 +254,7 @@ TEST_CASE("cwSaveLoad reloads missing image metadata", "[cwSaveLoad]") {
     };
 
     for (cwNote* note : loadedTrip->notes()->notes()) {
-        const QString absolutePath = cwSaveLoad::absolutePath(note, note->image().path());
+        const QString absolutePath = ProjectFilenameTestHelper::absolutePath(note, note->image().path());
         const QString suffix = QFileInfo(absolutePath).suffix().toLower();
         const cwImage::OriginalImageInfo expected = expectedImageInfo(note, absolutePath);
         if (suffix == QStringLiteral("pdf") && !expected.originalSize.isValid()) {

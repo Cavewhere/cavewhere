@@ -33,7 +33,6 @@
 #include "cwProject.h"
 #include "asyncfuture.h"
 #include "cwUniqueConnectionChecker.h"
-#include "cwSaveLoad.h"
 #include "cwDiskCacher.h"
 #include "cwCacheImageProvider.h"
 #include "cwKeywordItemModel.h"
@@ -48,11 +47,11 @@ using NotePtrList = QList<cwNoteLiDAR*>;
 
 namespace {
 
-cwDiskCacher::Key iconCacheKey(const cwNoteLiDAR* note)
+cwDiskCacher::Key iconCacheKey(const cwProject* project, const cwNoteLiDAR* note)
 {
     cwDiskCacher::Key key;
 
-    QString path = note ? cwSaveLoad::absolutePath(note, note->filename()) : QString();
+    QString path = (project && note) ? project->absolutePath(note, note->filename()) : QString();
     if (!path.isEmpty()) {
         QFileInfo fi(path);
         key.path = QDir(fi.path());
@@ -79,13 +78,11 @@ QString sourceChecksum(const cwProject* project, const cwNoteLiDAR* note)
         return {};
     }
 
-    const QString path = cwSaveLoad::absolutePath(note, note->filename());
-    if (path.isEmpty()) {
+    const QString absolutePath = project->absolutePath(note, note->filename());
+    if (absolutePath.isEmpty()) {
         return {};
     }
 
-    const QDir projectDir = cwSaveLoad::projectDir(project);
-    const QString absolutePath = projectDir.absoluteFilePath(path);
     QFile file(absolutePath);
     if (!file.open(QIODevice::ReadOnly)) {
         return {};
@@ -316,8 +313,8 @@ void cwNoteLiDARManager::saveIcon(const QImage& icon, cwNoteLiDAR* note)
         return;
     }
 
-    cwDiskCacher cacher(cwSaveLoad::projectDir(m_project));
-    auto key = iconCacheKey(note);
+    cwDiskCacher cacher(m_project ? m_project->projectDir() : QDir());
+    auto key = iconCacheKey(m_project, note);
     // key.checksum = sourceChecksum(m_project, note);
     // if (key.checksum.isEmpty()) {
     //     return;
@@ -340,7 +337,7 @@ void cwNoteLiDARManager::updateIconFromCache(cwNoteLiDAR* note)
         return;
     }
 
-    cwDiskCacher::Key key = iconCacheKey(note);
+    cwDiskCacher::Key key = iconCacheKey(m_project, note);
     // qDebug() << "Key:" << key.path << key.id;
 
     //Don't checksum, it's slow
@@ -350,7 +347,7 @@ void cwNoteLiDARManager::updateIconFromCache(cwNoteLiDAR* note)
     //     return;
     // }
 
-    cwDiskCacher cacher(cwSaveLoad::projectDir(m_project));
+    cwDiskCacher cacher(m_project ? m_project->projectDir() : QDir());
     if (cacher.hasEntry(key)) {
         note->setIconImagePath(cacheUrlForKey(key));
     } else {
@@ -519,7 +516,7 @@ cwTriangulateLiDARInData cwNoteLiDARManager::mapNoteToInData(const cwNoteLiDAR* 
     }
 
     // GLTF path (if the note exposes one via filename())
-    const QString path = cwSaveLoad::absolutePath(note, note->filename());
+    const QString path = (project && note) ? project->absolutePath(note, note->filename()) : QString();
     in.setGltfFilename(path);
 
     return in;

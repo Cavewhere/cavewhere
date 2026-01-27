@@ -1053,6 +1053,11 @@ void cwProject::setDataRoot(const QString &dataRoot)
     m_saveLoad->setDataRoot(dataRoot);
 }
 
+QDir cwProject::projectDir() const
+{
+    return m_saveLoad->projectDir();
+}
+
 /**
  * Returns the absolute path of the file that has a relative path
  * to the project
@@ -1063,6 +1068,31 @@ QString cwProject::absolutePath(const QString &relativePath) const
 
 }
 
+QString cwProject::absolutePath(const cwNote* note, const QString& imageFilename) const
+{
+    return m_saveLoad->absolutePath(note, imageFilename);
+}
+
+QString cwProject::absolutePath(const cwNoteLiDAR* noteLiDAR, const QString& lidarFilename) const
+{
+    return m_saveLoad->absolutePath(noteLiDAR, lidarFilename);
+}
+
+cwImage cwProject::absolutePathNoteImage(const cwNote* note) const
+{
+    return m_saveLoad->absolutePathNoteImage(note);
+}
+
+QDir cwProject::notesDir(cwSurveyNoteModel* notes) const
+{
+    return m_saveLoad->dir(notes);
+}
+
+QDir cwProject::notesDir(cwSurveyNoteLiDARModel* notes) const
+{
+    return m_saveLoad->dir(notes);
+}
+
 QString cwProject::absolutePath(const cwNote* note) const
 {
     if(note == nullptr) {
@@ -1071,7 +1101,7 @@ QString cwProject::absolutePath(const cwNote* note) const
 
     const auto image = note->image();
     if(image.mode() == cwImage::Mode::Path && !image.path().isEmpty()) {
-        return cwSaveLoad::absolutePath(note, image.path());
+        return m_saveLoad->absolutePath(note, image.path());
     }
 
     return QString();
@@ -1084,11 +1114,11 @@ QString cwProject::absolutePath(const cwNoteLiDAR* noteLiDAR) const
     }
 
     if(!noteLiDAR->filename().isEmpty()) {
-        return cwSaveLoad::absolutePath(noteLiDAR, noteLiDAR->filename());
+        return m_saveLoad->absolutePath(noteLiDAR, noteLiDAR->filename());
     }
 
     if(!noteLiDAR->iconImagePath().isEmpty()) {
-        return cwSaveLoad::absolutePath(noteLiDAR, noteLiDAR->iconImagePath());
+        return m_saveLoad->absolutePath(noteLiDAR, noteLiDAR->iconImagePath());
     }
 
     return QString();

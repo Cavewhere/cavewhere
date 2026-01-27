@@ -4,7 +4,6 @@
 #include "cwNote.h"
 #include "cwImage.h"
 #include "cwImageProvider.h"
-#include "cwSaveLoad.h"
 #include "cwProject.h"
 #include "cwTrip.h"
 #include "cwCave.h"
@@ -35,17 +34,22 @@ QVariant cwSurveyNoteModel::data(const QModelIndex& index, int role) const
         return QVariant();
     }
 
+    auto* project = this->project();
+    if (project == nullptr) {
+        return QVariant();
+    }
+
     switch (role) {
     case IconPathRole:
         //Icon path is just cached
     case PathRole: {
         const QString imagePath = note->image().path();
         Q_ASSERT(!QFileInfo(imagePath).isAbsolute()); //This should be a relative path
-        const QString absolutePath = cwSaveLoad::absolutePath(note, imagePath);
+        const QString absolutePath = project->absolutePath(note, imagePath);
         return cwImageProvider::imageUrl(note->image(), absolutePath);
     }
     case ImageRole: {
-        return QVariant::fromValue(cwSaveLoad::absolutePathNoteImage(note));
+        return QVariant::fromValue(project->absolutePathNoteImage(note));
     }
     default:
         return QVariant();
@@ -66,7 +70,7 @@ void cwSurveyNoteModel::addFromFiles(QList<QUrl> files)
         return;
     }
 
-    const QDir destinationDirectory = cwSaveLoad::dir(this);
+    const QDir destinationDirectory = project->notesDir(this);
 
     project->addImages(
         imageUrls,

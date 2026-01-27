@@ -2,7 +2,6 @@
 
 // CaveWhere
 #include "cwProject.h"
-#include "cwSaveLoad.h"
 #include "cwNoteLiDAR.h"
 #include "cwTrip.h"
 
@@ -40,7 +39,7 @@ void cwSurveyNoteLiDARModel::addFromFiles(QList<QUrl> files)
         return;
     }
 
-    const QDir destinationDirectory = cwSaveLoad::dir(this);
+    const QDir destinationDirectory = proj->notesDir(this);
 
     proj->addFiles(
         glbUrls,
@@ -85,7 +84,11 @@ QVariant cwSurveyNoteLiDARModel::data(const QModelIndex& index, int role) const
     switch (role) {
     case PathRole: {
         // For LiDAR, expose the stored project-relative filename (.glb)
-        return cwSaveLoad::absolutePath(note, note->filename());
+        auto* proj = project();
+        if (proj == nullptr) {
+            return QVariant();
+        }
+        return proj->absolutePath(note, note->filename());
     }
     case IconPathRole: {
         return note->iconImagePath();

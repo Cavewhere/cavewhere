@@ -29,6 +29,8 @@ class cwFutureManagerModel;
 class cwSaveLoad;
 class cwNote;
 class cwNoteLiDAR;
+class cwSurveyNoteModel;
+class cwSurveyNoteLiDARModel;
 
 namespace QQuickGit {
 class GitRepository;
@@ -111,9 +113,15 @@ public:
     Q_INVOKABLE QString dataRoot() const;
     Q_INVOKABLE void setDataRoot(const QString& dataRoot);
 
+    QDir projectDir() const;
     Q_INVOKABLE QString absolutePath(const QString& relativePath) const;
     Q_INVOKABLE QString absolutePath(const cwNote* note) const;
     Q_INVOKABLE QString absolutePath(const cwNoteLiDAR* noteLiDAR) const;
+    QString absolutePath(const cwNote* note, const QString& imageFilename) const;
+    QString absolutePath(const cwNoteLiDAR* noteLiDAR, const QString& lidarFilename) const;
+    cwImage absolutePathNoteImage(const cwNote* note) const;
+    QDir notesDir(cwSurveyNoteModel* notes) const;
+    QDir notesDir(cwSurveyNoteLiDARModel* notes) const;
 
 
     Q_INVOKABLE void waitLoadToFinish();

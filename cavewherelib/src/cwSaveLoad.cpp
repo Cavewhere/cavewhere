@@ -867,7 +867,21 @@ struct cwSaveLoad::Data {
         // Capture paths now to avoid partial state during rename.
         auto& state = stateFor(object);
         const QString oldFilePath = state.currentPath;
-        const QString newDirPath = dir(object).absolutePath();
+        QString newDirPath;
+        if constexpr (std::is_same_v<T, cwCave>) {
+            newDirPath = context->dirPrivate(object).absolutePath();
+        } else if constexpr (std::is_same_v<T, cwTrip>) {
+            newDirPath = context->dirPrivate(object).absolutePath();
+        } else if constexpr (std::is_same_v<T, cwNote>) {
+            newDirPath = context->dirPrivate(object).absolutePath();
+        } else if constexpr (std::is_same_v<T, cwNoteLiDAR>) {
+            newDirPath = context->dirPrivate(object).absolutePath();
+        } else {
+            static_assert(std::is_same_v<T, void>, "Unsupported renameDirectoryAndFile type");
+        }
+
+        Q_UNUSED(oldFilePath);
+        Q_UNUSED(newDirPath);
 
         // qDebug() << "Rename" << oldFilePath << newDirPath;
         addFileSystemJob(Data::Job {object, Data::Job::Kind::Directory, Data::Job::Action::Move}, context);
@@ -1131,7 +1145,7 @@ void cwSaveLoad::newProject()
         tempDir.mkpath(d->projectMetadata.dataRoot);
 
         setTemporary(true);
-        setFileName(tempDir.absoluteFilePath(fileName(region)));
+        setFileName(regionFileName(tempDir, region));
 
         saveProject(tempDir, region);
 
@@ -2531,7 +2545,7 @@ void cwSaveLoad::connectTreeModel()
                     }
                     case cwRegionTreeModel::NoteType: {
                         auto note = d->m_regionTreeModel->note(index);
-                        auto noteFilename = absolutePath(note);
+                        auto noteFilename = absolutePathPrivate(note);
                         // qDebug() << "Deleting:" << noteFilename << note << note->name();
                         d->addFileSystemJob(Data::Job
                                             {
@@ -2957,17 +2971,6 @@ QDir cwSaveLoad::projectRootDir() const
     return projectRootDirForFile(d->projectFileName);
 }
 
-QDir cwSaveLoad::projectDir(const cwProject *project)
-{
-    QFileInfo info(project->filename());
-    QDir rootDir = info.absoluteDir();
-    QString dataRootName = project->dataRoot();
-    if (dataRootName.isEmpty()) {
-        dataRootName = defaultDataRoot(project->cavingRegion() ? project->cavingRegion()->name() : QString());
-    }
-    return QDir(rootDir.absoluteFilePath(dataRootName));
-}
-
 QDir cwSaveLoad::projectDir() const
 {
     auto region = d->m_regionTreeModel->cavingRegion();
@@ -2978,88 +2981,27 @@ QDir cwSaveLoad::projectDir() const
     return QDir(projectRootDir().absoluteFilePath(dataRootName));
 }
 
-QString cwSaveLoad::fileName(const cwCavingRegion *region)
+QDir cwSaveLoad::dir(cwSurveyNoteModel* notes) const
 {
-    return sanitizeFileName(region->name() + QStringLiteral(".cwproj"));
+    return dirPrivate(notes);
 }
 
-QString cwSaveLoad::absolutePath(const cwCavingRegion *region)
+QDir cwSaveLoad::dir(cwSurveyNoteLiDARModel* notes) const
 {
-    return dir(region).absoluteFilePath(fileName(region));
+    return dirPrivate(notes);
 }
 
-QDir cwSaveLoad::dir(const cwCavingRegion *region)
+QString cwSaveLoad::absolutePath(const cwNote* note, const QString& imageFilename) const
 {
-    if(region->parentProject()) {
-        return projectDir(region->parentProject());
-    }
-    return QDir();
+    return absolutePathPrivate(note, imageFilename);
 }
 
-QString cwSaveLoad::fileName(const cwCave *cave)
+QString cwSaveLoad::absolutePath(const cwNoteLiDAR* note, const QString& lidarFilename) const
 {
-    return sanitizeFileName(cave->name() + QStringLiteral(".cwcave"));
+    return absolutePathPrivate(note, lidarFilename);
 }
 
-QString cwSaveLoad::absolutePath(const cwCave *cave)
-{
-    return dir(cave).absoluteFilePath(fileName(cave));
-}
-
-QDir cwSaveLoad::dir(const cwCave *cave)
-{
-    if(cave->parentRegion() && cave->parentRegion()->parentProject()) {
-        QDir projDir = projectDir(cave->parentRegion()->parentProject());
-        return caveDirHelper(projDir, cave);
-    } else {
-        return QDir();
-    }
-
-}
-
-QString cwSaveLoad::fileName(const cwTrip *trip)
-{
-    return sanitizeFileName(trip->name() + QStringLiteral(".cwtrip"));
-}
-
-QString cwSaveLoad::absolutePath(const cwTrip *trip)
-{
-    return dir(trip).absoluteFilePath(fileName(trip));
-}
-
-QDir cwSaveLoad::dir(const cwTrip *trip)
-{
-    if(trip->parentCave()) {
-        return tripDirHelper(dir(trip->parentCave()), trip);
-    } else {
-        return QDir();
-    }
-}
-
-QDir cwSaveLoad::dir(cwSurveyNoteModel *notes)
-{
-    if(notes->parentTrip()) {
-        return noteDirHelper(dir(notes->parentTrip()));
-    } else {
-        return QDir();
-    }
-}
-
-QDir cwSaveLoad::dir(cwSurveyNoteLiDARModel *notes)
-{
-    if(notes->parentTrip()) {
-        return noteDirHelper(dir(notes->parentTrip()));
-    } else {
-        return QDir();
-    }
-}
-
-QString cwSaveLoad::fileName(const cwNote *note)
-{
-    return sanitizeFileName(note->name() + QStringLiteral(".cwnote"));
-}
-
-cwImage cwSaveLoad::absolutePathNoteImage(const cwNote* note)
+cwImage cwSaveLoad::absolutePathNoteImage(const cwNote* note) const
 {
     if (!note) {
         return cwImage();
@@ -3073,66 +3015,6 @@ cwImage cwSaveLoad::absolutePathNoteImage(const cwNote* note)
     cwImage image = note->image();
     image.setPath(path);
     return image;
-}
-
-QString cwSaveLoad::absolutePath(const cwNote *note)
-{
-    return dir(note).absoluteFilePath(fileName(note));
-}
-
-QString cwSaveLoad::absolutePath(const cwNote *note, const QString& imageFilename)
-{
-    if(note == nullptr) {
-        return QString();
-    }
-
-    if(!imageFilename.isEmpty()) {
-        return dir(note).absoluteFilePath(imageFilename);
-    }
-
-    return QString();
-}
-
-
-QDir cwSaveLoad::dir(const cwNote *note)
-{
-    if(note->parentTrip()) {
-        return noteDirHelper(dir(note->parentTrip()));
-    } else {
-        return QDir();
-    }
-}
-
-QString cwSaveLoad::fileName(const cwNoteLiDAR *note)
-{
-    return sanitizeFileName(note->name() + QStringLiteral(".cwnote3d"));
-}
-
-QString cwSaveLoad::absolutePath(const cwNoteLiDAR *note)
-{
-    return dir(note).absoluteFilePath(fileName(note));
-}
-
-QString cwSaveLoad::absolutePath(const cwNoteLiDAR *note, const QString& lidarFilename)
-{
-    if(note == nullptr) {
-        return QString();
-    }
-
-    if(lidarFilename.isEmpty()) {
-        return QString();
-    }
-
-    return dir(note).absoluteFilePath(lidarFilename);
-}
-
-QDir cwSaveLoad::dir(const cwNoteLiDAR *note)
-{
-    if(note->parentTrip()) {
-        return noteDirHelper(dir(note->parentTrip()));
-    } else {
-        return QDir();
-    }
 }
 
 QString cwSaveLoad::fileNamePrivate(const cwCave* cave) const

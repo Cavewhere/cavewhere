@@ -35,6 +35,7 @@
 #include "cwImageData.h"
 #include "CaveWhereTestLibExport.h"
 #include "LoadProjectHelper.h"
+#include "ProjectFilenameTestHelper.h"
 
 //Std includes
 #include <iostream>
@@ -176,4 +177,3 @@ void checkStationLookup(cwStationPositionLookup lookup1, cwStationPositionLookup
 
 
 #endif // STREAMOPERATOR
-
