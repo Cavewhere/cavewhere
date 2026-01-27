@@ -84,7 +84,64 @@ cwScrapManager::~cwScrapManager()
   \brief Sets the project for the scrap manager
   */
 void cwScrapManager::setProject(cwProject *project) {
+    if (Project == project) {
+        return;
+    }
+
+    if (m_pathReadyConnection) {
+        disconnect(m_pathReadyConnection);
+    }
+
     Project = project;
+
+    if (Project != nullptr) {
+        m_pathReadyConnection = connect(Project, &cwProject::objectPathReady, this, [this](QObject* object) {
+            if (object == nullptr) {
+                return;
+            }
+
+            if (auto* note = qobject_cast<cwNote*>(object)) {
+                if (!note->scraps().isEmpty()) {
+                    updateScrapGeometry(note->scraps());
+                }
+                return;
+            }
+
+            if (auto* trip = qobject_cast<cwTrip*>(object)) {
+                QList<cwScrap*> scraps;
+                if (auto* notesModel = trip->notes()) {
+                    for (QObject* obj : notesModel->notes()) {
+                        if (auto* note = qobject_cast<cwNote*>(obj)) {
+                            scraps.append(note->scraps());
+                        }
+                    }
+                }
+                if (!scraps.isEmpty()) {
+                    updateScrapGeometry(scraps);
+                }
+                return;
+            }
+
+            if (auto* cave = qobject_cast<cwCave*>(object)) {
+                QList<cwScrap*> scraps;
+                for (cwTrip* trip : cave->trips()) {
+                    if (trip == nullptr) {
+                        continue;
+                    }
+                    if (auto* notesModel = trip->notes()) {
+                        for (QObject* obj : notesModel->notes()) {
+                            if (auto* note = qobject_cast<cwNote*>(obj)) {
+                                scraps.append(note->scraps());
+                            }
+                        }
+                    }
+                }
+                if (!scraps.isEmpty()) {
+                    updateScrapGeometry(scraps);
+                }
+            }
+        });
+    }
 }
 
 /**

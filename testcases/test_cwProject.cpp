@@ -25,6 +25,7 @@ using namespace Catch;
 #include "cwImageResolution.h"
 #include "cwUnits.h"
 #include "cwScrap.h"
+#include "cwSignalSpy.h"
 
 //Qt includes
 #include <QtCore/qdiriterator.h>
@@ -273,6 +274,79 @@ TEST_CASE("Rapid renaming", "[cwProject]") {
         CHECK_FALSE(QFileInfo::exists(oldTripPath));
     }
 
+}
+
+TEST_CASE("objectPathReady emits for renamed objects", "[cwProject][cwSaveLoad]") {
+    qRegisterMetaType<QObject*>("QObject*");
+
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto region = project->cavingRegion();
+
+    region->addCave();
+    auto cave = region->cave(0);
+    cave->setName(QStringLiteral("PathReadyCave"));
+    cave->addTrip();
+    auto trip = cave->trip(0);
+    trip->setName(QStringLiteral("PathReadyTrip"));
+
+    auto notes = trip->notes();
+    REQUIRE(notes != nullptr);
+
+    const QString sourceImage = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    REQUIRE(QFileInfo::exists(sourceImage));
+    notes->addFromFiles({QUrl::fromLocalFile(sourceImage)});
+
+    const QString glbSource = copyToTempFolder("://datasets/test_cwSurveyNotesConcatModel/bones.glb");
+    REQUIRE(QFileInfo::exists(glbSource));
+    trip->notesLiDAR()->addFromFiles({QUrl::fromLocalFile(glbSource)});
+
+    project->waitSaveToFinish();
+    rootData->futureManagerModel()->waitForFinished();
+
+    REQUIRE(notes->notes().size() == 1);
+    auto note = notes->notes().first();
+    note->setName(QStringLiteral("PathReadyNote"));
+
+    project->waitSaveToFinish();
+    rootData->futureManagerModel()->waitForFinished();
+
+    cwSignalSpy spy(project, &cwProject::objectPathReady);
+
+    auto countFor = [&spy](QObject* object) {
+        int count = 0;
+        for (int i = 0; i < spy.count(); ++i) {
+            const auto args = spy.at(i);
+            if (!args.isEmpty() && args.at(0).value<QObject*>() == object) {
+                ++count;
+            }
+        }
+        return count;
+    };
+
+    spy.clear();
+    note->setName(QStringLiteral("PathReadyNoteRenamed"));
+    project->waitSaveToFinish();
+    rootData->futureManagerModel()->waitForFinished();
+    CHECK(countFor(note) >= 1);
+    CHECK(countFor(trip) == 0);
+    CHECK(countFor(cave) == 0);
+
+    spy.clear();
+    trip->setName(QStringLiteral("PathReadyTripRenamed"));
+    project->waitSaveToFinish();
+    rootData->futureManagerModel()->waitForFinished();
+    CHECK(countFor(trip) >= 1);
+    CHECK(countFor(note) == 0);
+    CHECK(countFor(cave) == 0);
+
+    spy.clear();
+    cave->setName(QStringLiteral("PathReadyCaveRenamed"));
+    project->waitSaveToFinish();
+    rootData->futureManagerModel()->waitForFinished();
+    CHECK(countFor(cave) >= 1);
+    CHECK(countFor(trip) == 0);
+    CHECK(countFor(note) == 0);
 }
 
 TEST_CASE("Queued copy and rename should preserve note assets", "[cwProject][cwSaveLoad]") {

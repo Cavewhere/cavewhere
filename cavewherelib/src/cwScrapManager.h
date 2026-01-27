@@ -15,6 +15,7 @@
 #include <QSet>
 #include <QWeakPointer>
 #include <QPointer>
+#include <QMetaObject>
 #include <QQmlEngine>
 #include <QFuture>
 
@@ -120,6 +121,7 @@ private:
 
     cwTriangulateWarping* m_warpingSettings = nullptr;
     std::unique_ptr<class cwTriangulateWarpingSettings> m_warpingSettingsStore;
+    QMetaObject::Connection m_pathReadyConnection;
 
     void connectNote(cwNote* note);
     void connectScrap(cwScrap* scrap);

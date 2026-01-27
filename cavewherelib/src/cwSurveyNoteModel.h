@@ -6,6 +6,10 @@
 // Fwd
 class cwImage;
 class cwNote;
+class cwProject;
+
+#include <QPointer>
+#include <QMetaObject>
 
 /**
  * @brief Model for image/PDF survey notes (cwNote).
@@ -34,4 +38,7 @@ private:
     QList<cwNote*> validateNoteImages(QList<cwNote*> notes) const;
     void addNotesWithNewImages(QList<cwImage> images);
     static QString imagePathString();
+
+    QPointer<cwProject> m_project;
+    QMetaObject::Connection m_pathReadyConnection;
 };

@@ -310,9 +310,9 @@ struct cwSaveLoad::Data {
         Job() = default;
         Job(const void* objectId, Kind kind, Action action)
             : objectId(objectId),
-              kind(kind),
-              action(action),
-              payload(EmptyPayload{})
+            kind(kind),
+            action(action),
+            payload(EmptyPayload{})
         {
         }
 
@@ -321,17 +321,17 @@ struct cwSaveLoad::Data {
             Action action,
             std::shared_ptr<const google::protobuf::Message> message)
             : objectId(objectId),
-              kind(kind),
-              action(action),
-              payload(WriteFilePayload{std::move(message)})
+            kind(kind),
+            action(action),
+            payload(WriteFilePayload{std::move(message)})
         {
         }
 
         Job(const void* objectId, Kind kind, Action action, QString sourcePath)
             : objectId(objectId),
-              kind(kind),
-              action(action),
-              payload(CopyFilePayload{std::move(sourcePath)})
+            kind(kind),
+            action(action),
+            payload(CopyFilePayload{std::move(sourcePath)})
         {
         }
 
@@ -340,9 +340,9 @@ struct cwSaveLoad::Data {
             Action action,
             std::function<Monad::ResultBase()> customAction)
             : objectId(objectId),
-              kind(kind),
-              action(action),
-              payload(CustomPayload{std::move(customAction)})
+            kind(kind),
+            action(action),
+            payload(CustomPayload{std::move(customAction)})
         {
         }
 
@@ -419,7 +419,7 @@ struct cwSaveLoad::Data {
                 const QString normalizedParent = QDir::cleanPath(QDir(parentOfRoot).absolutePath());
                 const bool isProjectFileWrite = (action == Action::WriteFile && kind == Kind::File);
                 const bool isInProjectRoot = (target == normalizedParent)
-                    || target.startsWith(normalizedParent + QStringLiteral("/"));
+                                             || target.startsWith(normalizedParent + QStringLiteral("/"));
 
                 // qDebug() << "Root:" << root << target << parentOfRoot << normalizedParent << isProjectFileWrite << isInProjectRoot;
 
@@ -446,16 +446,16 @@ struct cwSaveLoad::Data {
                 return Monad::ResultBase();
             }
             case Action::Move:
-                {
-                    auto oldCheck = ensureInsideRoot(oldPath);
-                    if (oldCheck.hasError()) {
-                        return oldCheck;
-                    }
-                    auto newCheck = ensureInsideRoot(path);
-                    if (newCheck.hasError()) {
-                        return newCheck;
-                    }
+            {
+                auto oldCheck = ensureInsideRoot(oldPath);
+                if (oldCheck.hasError()) {
+                    return oldCheck;
                 }
+                auto newCheck = ensureInsideRoot(path);
+                if (newCheck.hasError()) {
+                    return newCheck;
+                }
+            }
                 Q_ASSERT(QFileInfo::exists(oldPath));
                 // Q_ASSERT(QFileInfo::exists(path));
                 if (!QDir().rename(oldPath, path)) {
@@ -464,12 +464,12 @@ struct cwSaveLoad::Data {
                 Q_ASSERT(QFileInfo::exists(path));
                 return Monad::ResultBase();
             case Action::Remove:
-                {
-                    auto rootCheck = ensureInsideRoot(oldPath);
-                    if (rootCheck.hasError()) {
-                        return rootCheck;
-                    }
+            {
+                auto rootCheck = ensureInsideRoot(oldPath);
+                if (rootCheck.hasError()) {
+                    return rootCheck;
                 }
+            }
                 switch(kind) {
                 case Kind::File:
                     if (!QFileInfo::exists(oldPath)) {
@@ -664,8 +664,8 @@ struct cwSaveLoad::Data {
 
         const QString dataRootName = context->dataRoot();
         const QString dataRootPath = dataRootName.isEmpty()
-            ? context->projectRootDir().absolutePath()
-            : context->projectRootDir().absoluteFilePath(dataRootName);
+                                         ? context->projectRootDir().absolutePath()
+                                         : context->projectRootDir().absoluteFilePath(dataRootName);
         job.dataRoot = QDir(dataRootPath).absolutePath();
 
         // if(job.kind == Job::Kind::Directory) {
@@ -687,6 +687,17 @@ struct cwSaveLoad::Data {
         job.path = path(job);
         job.oldPath = oldPath(job);
 
+
+        auto emitObjectPathHelper = [](const Monad::ResultBase& result, auto doneFunc, auto emitFunc) {
+            if (doneFunc) {
+                doneFunc(result);
+            }
+
+            if (!result.hasError()) {
+                emitFunc();
+            }
+        };
+
         if (job.action == Job::Action::WriteFile && job.kind == Job::Kind::File) {
             auto& state = m_objectStates[job.objectId];
             if (state.currentPath.isEmpty()) {
@@ -699,6 +710,22 @@ struct cwSaveLoad::Data {
             auto& state = m_objectStates[job.objectId];
             Q_ASSERT(state.currentPath != job.path);
             state.currentPath = job.path;
+
+            const auto originalOnDone = job.onDone;
+            job.onDone =
+                [this,
+                 emitObjectPathHelper,
+                 context,
+                 objectId = job.objectId,
+                 originalOnDone]
+                (const Monad::ResultBase& result)
+            {
+                emitObjectPathHelper(result, originalOnDone, [objectId, context]() {
+                    if (auto* object = static_cast<QObject*>(const_cast<void*>(objectId))) {
+                        emit context->objectPathReady(object);
+                    }
+                });
+            };
         } else if (job.kind == Job::Kind::Directory && job.action == Job::Action::Move) {
             const QString oldDir = job.oldPath;
             const QString newDir = job.path;
@@ -707,17 +734,32 @@ struct cwSaveLoad::Data {
             Q_ASSERT(!newDir.isEmpty());
             Q_ASSERT(oldDir != newDir);
 
-            // if (!oldDir.isEmpty() && !newDir.isEmpty() && oldDir != newDir) {
-                const QString prefix = oldDir + QStringLiteral("/");
-                for (auto it = m_objectStates.begin(); it != m_objectStates.end(); ++it) {
-                    const QString currentPath = it.value().currentPath;
-                    if (currentPath == oldDir) {
-                        it.value().currentPath = newDir;
-                    } else if (currentPath.startsWith(prefix)) {
-                        it.value().currentPath = newDir + QStringLiteral("/") + currentPath.mid(prefix.size());
-                    }
+            const QString prefix = oldDir + QStringLiteral("/");
+            for (auto it = m_objectStates.begin(); it != m_objectStates.end(); ++it) {
+                const QString currentPath = it.value().currentPath;
+                if (currentPath == oldDir) {
+                    it.value().currentPath = newDir;
+                } else if (currentPath.startsWith(prefix)) {
+                    it.value().currentPath = newDir + QStringLiteral("/") + currentPath.mid(prefix.size());
                 }
-            // }
+            }
+
+            const auto originalOnDone = job.onDone;
+            job.onDone =
+                [this,
+                 emitObjectPathHelper,
+                 context,
+                 objectId = job.objectId,
+                 originalOnDone]
+                (const Monad::ResultBase& result)
+            {
+                emitObjectPathHelper(result, originalOnDone, [objectId, context]() {
+                    // Emit only for the directory object; listeners cascade so we avoid N per-file signals.
+                    if (auto* object = static_cast<QObject*>(const_cast<void*>(objectId))) {
+                        emit context->objectPathReady(object);
+                    }
+                });
+            };
         } else if (job.kind == Job::Kind::Directory && job.action == Job::Action::Remove) {
             const QString oldDir = job.oldPath;
             if (!oldDir.isEmpty()) {
@@ -744,10 +786,14 @@ struct cwSaveLoad::Data {
     }
 
     void addExplicitFileSystemJob(Job job, cwSaveLoad* context) {
+        // Explicit jobs are already path-resolved and don't track object state; move jobs here
+        // can race with path updates and break path-ready notifications. Use addFileSystemJob for moves.
+        Q_ASSERT(job.action != Job::Action::Move);
+
         const QString dataRootName = context->dataRoot();
         const QString dataRootPath = dataRootName.isEmpty()
-            ? context->projectRootDir().absolutePath()
-            : context->projectRootDir().absoluteFilePath(dataRootName);
+                                         ? context->projectRootDir().absolutePath()
+                                         : context->projectRootDir().absoluteFilePath(dataRootName);
         job.dataRoot = QDir(dataRootPath).absolutePath();
 
         m_pendingJobs.append(job);
@@ -1441,7 +1487,7 @@ void cwSaveLoad::copyFilesAndEmitResults(const QList<QString>& sourceFilePaths,
 
         explicit CopyBatchState(int count)
             : results(count),
-              remaining(count)
+            remaining(count)
         {
         }
     };

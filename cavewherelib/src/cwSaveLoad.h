@@ -208,6 +208,7 @@ public:
 signals:
     void fileNameChanged();
     void isTemporaryProjectChanged();
+    void objectPathReady(QObject* object);
 
 private:
     struct Data;

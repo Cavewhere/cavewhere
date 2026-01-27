@@ -134,7 +134,39 @@ cwNoteLiDARManager::~cwNoteLiDARManager()
 
 void cwNoteLiDARManager::setProject(cwProject* project)
 {
+    if (m_project == project) {
+        return;
+    }
+
+    if (m_pathReadyConnection) {
+        disconnect(m_pathReadyConnection);
+    }
+
     m_project = project;
+
+    if (m_project != nullptr) {
+        m_pathReadyConnection = connect(m_project, &cwProject::objectPathReady, this, [this](QObject* object) {
+            if (object == nullptr) {
+                return;
+            }
+
+            if (auto* note = qobject_cast<cwNoteLiDAR*>(object)) {
+                updateIconFromCache(note);
+                markDirty(note);
+                runIfNeeded();
+                return;
+            }
+
+            if (auto* trip = qobject_cast<cwTrip*>(object)) {
+                updateLiDARForTrip(trip);
+                return;
+            }
+
+            if (auto* cave = qobject_cast<cwCave*>(object)) {
+                updateLiDARForCave(cave);
+            }
+        });
+    }
 }
 
 void cwNoteLiDARManager::setRegionTreeModel(cwRegionTreeModel* regionTreeModel)

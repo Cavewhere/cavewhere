@@ -17,6 +17,7 @@
 #include <QModelIndex>
 #include <QQmlEngine>
 #include <QImage>
+#include <QMetaObject>
 
 // Fwd decls
 class cwProject;
@@ -152,6 +153,7 @@ private:
 
     bool m_automaticUpdate = true;
     bool m_keepRenderGeometry = false;
+    QMetaObject::Connection m_pathReadyConnection;
 
     //For checking duplicate connections
     cwUniqueConnectionChecker m_connectionChecker;

@@ -143,6 +143,7 @@ void cwProject::bindSaveLoad(cwSaveLoad* saveLoad)
         }
         emit filenameChanged(saveLoad->fileName());
     });
+    connect(saveLoad, &cwSaveLoad::objectPathReady, this, &cwProject::objectPathReady);
 }
 
 /**

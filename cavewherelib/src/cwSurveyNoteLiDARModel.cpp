@@ -3,6 +3,7 @@
 // CaveWhere
 #include "cwProject.h"
 #include "cwNoteLiDAR.h"
+#include "cwCave.h"
 #include "cwTrip.h"
 
 // Qt
@@ -124,6 +125,70 @@ void cwSurveyNoteLiDARModel::onParentTripChanged()
     for (QObject* obj : notes) {
         if (auto* note = qobject_cast<cwNoteLiDAR*>(obj)) {
             note->setParentTrip(parentTrip());
+        }
+    }
+
+    auto* proj = project();
+    if (m_project != proj) {
+        if (m_pathReadyConnection) {
+            disconnect(m_pathReadyConnection);
+        }
+        m_project = proj;
+        if (m_project != nullptr) {
+            m_pathReadyConnection = connect(m_project, &cwProject::objectPathReady, this, [this](QObject* object) {
+                if (object == nullptr) {
+                    return;
+                }
+
+                auto* trip = parentTrip();
+                if (trip == nullptr) {
+                    return;
+                }
+
+                auto emitForNote = [this](cwNoteLiDAR* note) {
+                    const QList<QObject*> objNotes = this->notes();
+                    const int row = objNotes.indexOf(note);
+                    if (row < 0) {
+                        return;
+                    }
+                    const QModelIndex modelIndex = index(row, 0);
+                    if (modelIndex.isValid()) {
+                        emit dataChanged(modelIndex, modelIndex, {PathRole, IconPathRole, ImageRole});
+                    }
+                };
+
+                if (auto* note = qobject_cast<cwNoteLiDAR*>(object)) {
+                    if (note->parentTrip() == trip) {
+                        emitForNote(note);
+                    }
+                    return;
+                }
+
+                if (auto* tripObject = qobject_cast<cwTrip*>(object)) {
+                    if (tripObject != trip) {
+                        return;
+                    }
+                    const QList<QObject*> objNotes = this->notes();
+                    for (QObject* obj : objNotes) {
+                        if (auto* note = qobject_cast<cwNoteLiDAR*>(obj)) {
+                            emitForNote(note);
+                        }
+                    }
+                    return;
+                }
+
+                if (auto* caveObject = qobject_cast<cwCave*>(object)) {
+                    if (trip->parentCave() != caveObject) {
+                        return;
+                    }
+                    const QList<QObject*> objNotes = this->notes();
+                    for (QObject* obj : objNotes) {
+                        if (auto* note = qobject_cast<cwNoteLiDAR*>(obj)) {
+                            emitForNote(note);
+                        }
+                    }
+                }
+            });
         }
     }
 }

@@ -115,6 +115,66 @@ void cwSurveyNoteModel::onParentTripChanged()
             note->setParentTrip(parentTrip());
         }
     }
+
+    auto* project = this->project();
+    if (m_project != project) {
+        if (m_pathReadyConnection) {
+            disconnect(m_pathReadyConnection);
+        }
+        m_project = project;
+        if (m_project != nullptr) {
+            m_pathReadyConnection = connect(m_project, &cwProject::objectPathReady, this, [this](QObject* object) {
+                if (object == nullptr) {
+                    return;
+                }
+
+                auto* trip = parentTrip();
+                if (trip == nullptr) {
+                    return;
+                }
+
+                auto emitForNote = [this](cwNote* note) {
+                    const QList<cwNote*> objNotes = this->notes();
+                    const int row = objNotes.indexOf(note);
+                    if (row < 0) {
+                        return;
+                    }
+                    const QModelIndex modelIndex = index(row, 0);
+                    if (modelIndex.isValid()) {
+                        emit dataChanged(modelIndex, modelIndex, {PathRole, IconPathRole, ImageRole});
+                    }
+                };
+
+                if (auto* note = qobject_cast<cwNote*>(object)) {
+                    if (note->parentTrip() == trip) {
+                        emitForNote(note);
+                    }
+                    return;
+                }
+
+                if (auto* tripObject = qobject_cast<cwTrip*>(object)) {
+                    if (tripObject != trip) {
+                        return;
+                    }
+                    const QList<cwNote*> objNotes = this->notes();
+                    for (auto note : objNotes) {
+                        emitForNote(note);
+                    }
+                    return;
+                }
+
+                if (auto* caveObject = qobject_cast<cwCave*>(object)) {
+                    if (trip->parentCave() != caveObject) {
+                        return;
+                    }
+                    const QList<cwNote*> objNotes = this->notes();
+                    for (auto note : objNotes) {
+                        emitForNote(note);
+                    }
+                }
+            });
+        }
+    }
 }
 
 

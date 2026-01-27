@@ -155,6 +155,7 @@ signals:
     void isTemporaryProjectChanged();
     void fileSaved();
     void loaded();
+    void objectPathReady(QObject* object);
 
 public slots:
     void loadFile(QString filename);

@@ -4,7 +4,11 @@
 #include "cwSurveyNoteLiDARModelData.h"
 #include "cwNoteLiDAR.h"
 
+#include <QMetaObject>
+#include <QPointer>
+
 class cwNoteLiDAR;
+class cwProject;
 
 /**
  * @brief Model for LiDAR notes (cwNoteLiDAR) driven by .glb files.
@@ -49,4 +53,7 @@ private:
                     });
         }
     }
+
+    QPointer<cwProject> m_project;
+    QMetaObject::Connection m_pathReadyConnection;
 };
