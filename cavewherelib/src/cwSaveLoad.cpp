@@ -19,7 +19,6 @@
 #include "cwScrap.h"
 #include "cwPDFConverter.h"
 #include "cwUnits.h"
-#include "cwPDFSettings.h"
 #include "cwImageUtils.h"
 #include "cwSvgReader.h"
 #include "cwNoteLiDAR.h"
@@ -60,7 +59,6 @@
 #include "Monad/Monad.h"
 
 //std includes
-#include <unordered_set>
 #include <algorithm>
 #include <atomic>
 #include <variant>
@@ -69,9 +67,6 @@
 using namespace Monad;
 
 static QStringList fromProtoStringList(const google::protobuf::RepeatedPtrField<std::string> &protoStringList);
-
-// template<typename NoteT>
-// static QString noteRelativePathHelper(const NoteT* note, const QString& storedPath);
 
 namespace {
 
@@ -864,24 +859,7 @@ struct cwSaveLoad::Data {
             } else {
                 static_assert(std::is_same_v<T, void>, "Unsupported saveObject type");
             }
-
-            // saveFuture.then(context, [context, object](const ResultBase& base) {
-            //     if(!base.hasError()) {
-            //         auto filename = context->absolutePath(object);
-            //         Q_ASSERT(QFileInfo::exists(filename));
-            //         qDebug() << "Updating lookup:" << object << filename;
-            //         context->d->m_fileLookup[object] = filename;
-            //     }
-            // });
         }
-
-        // QPointer<const T> ptr = object;
-
-        // AsyncFuture::observe(saveFuture)
-        //     .context(context, [context, saveFuture, ptr](){
-        //         if(!saveFuture.result().hasError()) {
-        //         }
-        //     });
     }
 
     template<typename T>
@@ -1693,16 +1671,6 @@ std::unique_ptr<CavewhereProto::NoteLiDAR> cwSaveLoad::toProtoNoteLiDAR(const cw
     fileVersion->set_version(cwRegionIOTask::protoVersion());
     cwRegionSaveTask::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
 
-    // cwRegionSaveTask::saveImage(protoNote->mutable_image(), note->image());
-
-    // protoNote->set_rotation(note->rotate());
-    // cwRegionSaveTask::saveImageResolution(protoNote->mutable_imageresolution(), note->imageResolution());
-
-    // foreach(cwScrap* scrap, note->scraps()) {
-    //     CavewhereProto::Scrap* protoScrap = protoNote->add_scraps();
-    //     cwRegionSaveTask::saveScrap(protoScrap, scrap);
-    // }
-
     *(protoNote->mutable_name()) = note->name().toStdString();
     *(protoNote->mutable_filename()) = note->filename().toStdString();
 
@@ -2202,17 +2170,7 @@ cwSurveyChunkData cwSaveLoad::fromProtoSurveyChunk(const CavewhereProto::SurveyC
         }
     }
 
-    // const int calibrationCount = protoChunk.calibrations_size();
-    // for (int i = 0; i < calibrationCount; ++i) {
-    //     const auto& protoCalibration = protoChunk.calibrations(i);
-    //     int shotIndex = protoCalibration.shotindex();
-    //     auto calibration = fromProtoTripCalibration(protoCalibration.calibration());
-    //     chunkData.calibrations.insert(shotIndex, calibration);
-    // }
-
     return chunkData;
-
-
 }
 
 cwStation cwSaveLoad::fromProtoStation(const CavewhereProto::StationShot &protoStation)
@@ -2594,26 +2552,7 @@ void cwSaveLoad::connectTreeModel()
                 }
             });
 
-
-    // connect(d->m_regionTreeModel, &cwRegionTreeModel::modelAboutToBeReset,
-    //         this, [this]() {
-    //     disconnectObjects();
-    // });
-
-    // auto reset = [this]() {
-    //     //Connect all the subobjects
-    //     connectObjects();
-
-    //     //Save the current caving region,
-    // };
-
-    // connect(d->m_regionTreeModel, &cwRegionTreeModel::modelReset,
-    //         this, reset);
-
-
     connectObjects();
-
-    // reset();
 }
 
 void cwSaveLoad::disconnectObjects()
@@ -2702,20 +2641,9 @@ void cwSaveLoad::connectTrip(cwTrip* trip)
         connect(chunk, &cwSurveyChunk::aboutToRemove, this, saveTrip);
         connect(chunk, &cwSurveyChunk::removed, this, saveTrip);
 
-        // connect(chunk, &cwSurveyChunk::stationsAdded, this, saveTrip);
-        // connect(chunk, &cwSurveyChunk::shotsAdded, this, saveTrip);
-        // connect(chunk, &cwSurveyChunk::stationsRemoved, this, saveTrip);
-        // connect(chunk, &cwSurveyChunk::shotsRemoved, this, saveTrip);
-
         connect(chunk, &cwSurveyChunk::calibrationsChanged, this, saveTrip);
-        // connect(chunk, &cwSurveyChunk::connectedChanged, this, saveTrip);
-        // connect(chunk, &cwSurveyChunk::connectedStateChanged, this, saveTrip);
-        // connect(chunk, &cwSurveyChunk::shotCountChanged, this, saveTrip);
-        // connect(chunk, &cwSurveyChunk::stationCountChanged, this, saveTrip);
 
         connect(chunk, &cwSurveyChunk::dataChanged, this, saveTrip);
-        // connect(chunk, &cwSurveyChunk::errorsChanged, this, saveTrip);
-        // parentTripChanged intentionally not handled (no re-parenting)
     };
 
     if(!d->connectionChecker.add(trip)) {
@@ -2830,11 +2758,8 @@ void cwSaveLoad::connectNote(cwNote *note)
     connect(note->imageResolution(), &cwImageResolution::valueChanged, this, saveNote);
     connect(note->imageResolution(), &cwImageResolution::unitChanged, this, saveNote);
 
-    // connect(note, &cwNote::beginInsertingScraps, this, saveNote);
     connect(note, &cwNote::insertedScraps, this, saveNote);
-    // connect(note, &cwNote::beginRemovingScraps, this, saveNote);
     connect(note, &cwNote::removedScraps, this, saveNote);
-    // connect(note, &cwNote::scrapAdded, this, saveNote);
     connect(note, &cwNote::scrapsReset, this, saveNote);
 
     //Connect scraps
@@ -2956,19 +2881,6 @@ void cwSaveLoad::connectNoteLiDAR(cwNoteLiDAR *lidarNote)
 }
 
 
-// void cwSaveLoad::setFileNameHelper(const QString &fileName)
-// {
-//     if(d->projectFileName != fileName) {
-//         d->projectFileName = fileName;
-
-//         d->repository->setDirectory(QFileInfo(fileName).absoluteDir());
-//         d->repository->initRepository();
-
-//         emit fileNameChanged();
-//     }
-// }
-
-
 void cwSaveLoad::setTemporary(bool isTemp)
 {
     if(d->isTemporary != isTemp) {
@@ -3023,17 +2935,6 @@ QUuid cwSaveLoad::toUuid(const std::string &uuidStr)
 {
     return QUuid::fromString(QString::fromStdString(uuidStr));
 }
-
-// QString cwSaveLoad::projectFileName(const cwProject *project)
-// {
-//     Q_ASSERT(false);
-//     return QString();
-// }
-
-// QString cwSaveLoad::projectAbsolutePath(const cwProject *project)
-// {
-//     return QString(); //regionFileName();
-// }
 
 
 QStringList fromProtoStringList(const google::protobuf::RepeatedPtrField<std::string>& protoStringList)

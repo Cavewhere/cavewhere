@@ -181,8 +181,6 @@ public:
 
 
     //Returns the relative path to the project
-    // static QString projectFileName(const cwProject* project);
-    // static QString projectAbsolutePath(const cwProject* project);
     static QDir projectDir(const cwProject* project);
     QDir projectDir() const;
 
@@ -277,20 +275,11 @@ private:
 
     //Save
     void connectCave(cwCave* cave);
-    // void disconnectCave( cwCave* cave);
-
     void connectTrip(cwTrip* trip);
-    // void disconnectTrip(cwTrip* trip);
-
     void connectNote(cwNote* note);
-    // void disconnectNote(cwNote* note);
-
     void connectScrap(cwScrap* scrap);
-    // void disconnectScrap(cwScrap* scrap);
-
     void connectNoteLiDAR(cwNoteLiDAR * lidarNote);
 
-    // void setFileNameHelper(const QString& fileName);
     void setTemporary(bool isTemp);
 
     // QString
@@ -312,11 +301,8 @@ private:
     static QString regionFileName(const QDir& dir, const cwCavingRegion* region);
 
     void save(const cwCave* cave);
-    // static std::unique_ptr<CavewhereProto::Cave> toProtoCave(const cwCave* cave);
 
     void save(const cwTrip* trip);
-    // QFuture<Monad::ResultBase> saveTrip(const QDir& dir, const cwTrip* trip);
-    // static std::unique_ptr<CavewhereProto::Trip> toProtoTrip(const cwTrip* trip);
 
     void save(const cwNote* note);
     static std::unique_ptr<CavewhereProto::Note> toProtoNote(const cwNote* note);
@@ -332,7 +318,6 @@ private:
     static cwTripCalibrationData fromProtoTripCalibration(const CavewhereProto::TripCalibration& proto);
     static cwTeamData fromProtoTeam(const CavewhereProto::Team& proto);
     static cwTeamMember fromProtoTeamMember(const CavewhereProto::TeamMember& proto);
-    // static QList<cwSurveyChunkData> fromProtoSurveyChunks(const google::protobuf::RepeatedPtrField<CavewhereProto::SurveyChunk> & protoList);
     static cwSurveyChunkData fromProtoSurveyChunk(const CavewhereProto::SurveyChunk& protoChunk);
     static cwStation fromProtoStation(const CavewhereProto::StationShot& protoStation);
     static cwShot fromProtoShot(const CavewhereProto::StationShot& protoShot);
