@@ -8,6 +8,7 @@
 //Our includes
 #include "cwCavernTask.h"
 #include "cwDebug.h"
+#include "cwFileUtils.h"
 
 //Qt includes
 #include <QReadLocker>
@@ -75,8 +76,6 @@ QString cwCavernTask::output3dFileName() const {
      QString outputFile = inputFile + survex3dExtension();
 
      QStringList cavernAppNames;
-     cavernAppNames.append("survex/cavern");
-     cavernAppNames.append("survex/cavern.exe");
      cavernAppNames.append("cavern");
      cavernAppNames.append("cavern.exe");
 
@@ -118,6 +117,12 @@ QString cwCavernTask::output3dFileName() const {
          }
 
          stop();
+     } else {
+         if (!cwGlobals::isInApplicationDir(outputFile)) {
+             //This is a work around to this issue:
+             //https://trac.survex.com/ticket/147#ticket
+             cwFileUtils::waitForFileReady(outputFile);
+         }
      }
 
 #endif

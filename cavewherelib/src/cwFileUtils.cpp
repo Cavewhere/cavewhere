@@ -41,7 +41,7 @@ bool waitForExistence(const QString& filePath, int timeoutMs) {
 
     QObject::connect(&watcher, &QFileSystemWatcher::directoryChanged,
                      &loop, [&](const QString&) {
-                         if (QFileInfo(filePath).exists()) {
+                         if (QFileInfo::exists(filePath)) {
                              found = true;
                              loop.quit();
                          }
@@ -54,7 +54,7 @@ bool waitForExistence(const QString& filePath, int timeoutMs) {
 
     loop.exec();
 
-    return found || QFileInfo(filePath).exists();
+    return found || QFileInfo::exists(filePath);
 }
 
 bool waitForSizeStability(const QString& filePath, int stabilityMs, int timeoutMs) {

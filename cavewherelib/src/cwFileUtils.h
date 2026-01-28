@@ -1,6 +1,6 @@
 /**************************************************************************
 **
-**    Copyright (C) 2007-2026 Cavewhere contributors
+**    Copyright (C) 2007-2026 Philip Schuchardt
 **    www.cavewhere.com
 **
 **************************************************************************/
@@ -13,6 +13,9 @@
 
 namespace cwFileUtils {
 
+// Waits for a file to exist and stop changing size before returning.
+// Returns true once the file exists and its size is stable for stabilityMs,
+// or false if either the existence or stability timeouts are reached.
 bool waitForFileReady(const QString& filePath,
                       int existenceTimeoutMs = 10000,
                       int stabilityMs = 200,

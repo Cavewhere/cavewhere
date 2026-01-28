@@ -143,6 +143,31 @@ QList<QDir> cwGlobals::survexPath()
 #endif
 }
 
+static bool isPathInsideDir(const QString& candidate, const QDir& baseDir) {
+    if (candidate.isEmpty() || !baseDir.exists()) {
+        return false;
+    }
+
+    const QString basePath = QDir::cleanPath(baseDir.absolutePath()) + QLatin1Char('/');
+    const QString candidatePath = QDir::cleanPath(QFileInfo(candidate).absoluteFilePath());
+
+#ifdef Q_OS_WIN
+    const Qt::CaseSensitivity sensitivity = Qt::CaseInsensitive;
+#else
+    const Qt::CaseSensitivity sensitivity = Qt::CaseSensitive;
+#endif
+
+    return candidatePath.compare(basePath.left(basePath.size() - 1), sensitivity) == 0
+        || candidatePath.startsWith(basePath, sensitivity);
+}
+
+bool cwGlobals::isInApplicationDir(const QString& path)
+{
+    const QDir appDir(QCoreApplication::applicationDirPath());
+    const QDir resourcesDir(QCoreApplication::applicationDirPath() + QStringLiteral("/../Resources"));
+    return isPathInsideDir(path, appDir) || isPathInsideDir(path, resourcesDir);
+}
+
 /**
  * Init's cavewhere lib resources when built as a static library
  */
@@ -168,4 +193,3 @@ void cwGlobals::loadFonts()
         }
     }
 }
-

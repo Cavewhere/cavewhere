@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwSurvexportTask.h"
+#include "cwFileUtils.h"
 
 //Qt includes
 #include <QReadLocker>
@@ -103,28 +104,10 @@ void cwSurvexportTask::runTask() {
 
     SurvexportProcess->deleteLater();
 
-    //On windows survexport is slow to write files to disk, if the file
-    //doesn't exist, we wait until it shows up.
-    if(!QFileInfo::exists(outputFile)) {
-        auto dirPath = QFileInfo(outputFile).absolutePath();
-        QFileSystemWatcher watcher;
-        watcher.addPath(dirPath);
-
-        QEventLoop loop;
-        QObject::connect(&watcher, &QFileSystemWatcher::directoryChanged,
-                         &loop, [&](const QString& /*changedDir*/){
-                             if (QFileInfo::exists(outputFile)) {
-                                 loop.quit();
-                             }
-                         });
-
-        // also quit after 500 ms no matter what
-        QTimer::singleShot(500, &loop, &QEventLoop::quit);
-
-        // if the file already exists, skip waiting
-        if (!QFileInfo::exists(outputFile)) {
-            loop.exec();
-        }
+    if (!cwGlobals::isInApplicationDir(survexportPath)) {
+        //This is a work around to this issue:
+        //https://trac.survex.com/ticket/147#ticket
+        cwFileUtils::waitForFileReady(outputFile);
     }
 
     m_outputFilename = outputFile;

@@ -9,6 +9,8 @@
 #include <QDir>
 #include <QDebug>
 #include <QFileInfo>
+#include <QCoreApplication>
+#include <QTemporaryDir>
 
 TEST_CASE("cwGlobals should extract the system paths correctly", "[cwGlobals]") {
     QList<QDir> paths = cwGlobals::systemPaths();
@@ -55,4 +57,21 @@ TEST_CASE("cwGlobals::findExecutable prefers the first survex path that contains
     const QString found = cwGlobals::findExecutable(executables, paths);
 
     CHECK(found.toStdString() == expected.toStdString());
+}
+
+TEST_CASE("cwGlobals::isInApplicationDir detects app and resources directories", "[cwGlobals]") {
+    const QDir appDir(QCoreApplication::applicationDirPath());
+    const QString appPath = appDir.filePath(QStringLiteral("cwGlobals_test_marker"));
+    CHECK(cwGlobals::isInApplicationDir(appPath));
+
+    const QDir resourcesDir(QCoreApplication::applicationDirPath() + QStringLiteral("/../Resources"));
+    if (resourcesDir.exists()) {
+        const QString resourcesPath = resourcesDir.filePath(QStringLiteral("cwGlobals_resources_marker"));
+        CHECK(cwGlobals::isInApplicationDir(resourcesPath));
+    }
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString outsidePath = QDir(tempDir.path()).filePath(QStringLiteral("outside.txt"));
+    CHECK_FALSE(cwGlobals::isInApplicationDir(outsidePath));
 }
