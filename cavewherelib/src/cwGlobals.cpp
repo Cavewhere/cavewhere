@@ -74,20 +74,17 @@ QString cwGlobals::findExecutable(QStringList executables)
  */
 QString cwGlobals::findExecutable(const QStringList &executables, const QList<QDir> &dirs)
 {
-    QString execPath;
-
     for(const QString& appName : executables) {
         for(const auto& directory : dirs) {
             QString currentPath = directory.absoluteFilePath(appName);
             QFileInfo fileInfo(currentPath);
             if(fileInfo.exists() && fileInfo.isExecutable()) {
-                execPath = currentPath;
-                break;
+                return currentPath;
             }
         }
     }
 
-    return execPath;
+    return QString();
 }
 
 /**
@@ -127,10 +124,16 @@ QList<QDir> cwGlobals::systemPaths()
  */
 QList<QDir> cwGlobals::survexPath()
 {
+    QDir cavewhereSurvex = QCoreApplication::applicationDirPath() + "/survex";
+
 #ifdef Q_OS_WIN
-    return {QDir(QCoreApplication::applicationDirPath()), QDir(QStringLiteral("c:/Program Files (x86)/Survex")), QDir(QStringLiteral("c:/Program Files (x86)/Survex"))};
+    return {cavewhereSurvex,
+            QDir(QCoreApplication::applicationDirPath()),
+            QDir(QStringLiteral("C:/Program Files (x86)/Survex")),
+            QDir(QStringLiteral("C:/Program Files/Survex"))};
 #elif defined(Q_OS_UNIX)
     QList<QDir> dirs;
+    dirs.append(cavewhereSurvex);
     dirs.append(QDir(QCoreApplication::applicationDirPath()));
     dirs.append(QDir(QCoreApplication::applicationDirPath() + QStringLiteral("/../Resources")));
     dirs.append(systemPaths());
