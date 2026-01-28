@@ -246,28 +246,16 @@ void cwCavingRegion::setData(const cwCavingRegionData &data)
 {
     setName(data.name);
 
-    //Update existing caves
-    for(int i = 0; i < m_caves.size() && i < data.caves.size(); ++i) {
-        m_caves.at(i)->setData(data.caves.at(i));
-    }
+    clearCaves();
 
-    if(m_caves.size() > data.caves.size()) {
-        //Remove caves
-        int firstIndex = data.caves.size();
-        int lastIndex = m_caves.size() - 1;
-        removeCaves(firstIndex, lastIndex);
-    } else if(m_caves.size() < data.caves.size()) {
-        //add new caves
-
-        QList<cwCave*> newCaves;
-        newCaves.reserve(data.caves.size() - m_caves.size());
-        for(int i = m_caves.size(); i < data.caves.size(); ++i) {
-            auto newCave = new cwCave(this);
-            newCave->setData(data.caves.at(i));
-            newCaves.append(newCave);
-        }
-        addCaves(newCaves);
+    QList<cwCave*> newCaves;
+    newCaves.reserve(data.caves.size());
+    for(const auto& caveData : data.caves) {
+        auto newCave = new cwCave(this);
+        newCave->setData(caveData);
+        newCaves.append(newCave);
     }
+    addCaves(newCaves);
 }
 
 cwCavingRegionData cwCavingRegion::data() const
@@ -421,4 +409,3 @@ void cwCavingRegion::RemoveCaveCommand::redo() {
 void cwCavingRegion::RemoveCaveCommand::undo() {
     insertCaves();
 }
-

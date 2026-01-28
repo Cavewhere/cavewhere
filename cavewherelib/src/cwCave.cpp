@@ -173,6 +173,15 @@ void cwCave::removeTrip(int i) {
     pushUndo(new RemoveTripCommand(this, i, i));
 }
 
+/**
+  \brief Removes all the trips from the cave
+  */
+void cwCave::clearTrips() {
+    if(!Trips.isEmpty()) {
+        pushUndo(new RemoveTripCommand(this, 0, Trips.size() - 1));
+    }
+}
+
 cwCavingRegion *cwCave::parentRegion() const
 {
     return dynamic_cast<cwCavingRegion*>(parent());
@@ -408,10 +417,7 @@ void cwCave::setData(const cwCaveData &data)
 {
     setName(data.name);
 
-    //Remove all trips
-    for(int i = Trips.size(); i >= 0; --i) {
-        removeTrip(i);
-    }
+    clearTrips();
 
     //Insert all trips
     for(const auto& tripData : data.trips) {

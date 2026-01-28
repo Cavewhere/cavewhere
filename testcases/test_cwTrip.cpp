@@ -3,6 +3,7 @@
 
 //Our includes
 #include "cwTrip.h"
+#include "cwCave.h"
 
 //Qt inculdes
 #include "cwSignalSpy.h"
@@ -27,3 +28,6 @@ TEST_CASE("cwTrip should strip the datestamp away from date", "[cwTrip]") {
 
     CHECK(spy.count() == 1);
 }
+
+
+
