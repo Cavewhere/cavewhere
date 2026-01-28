@@ -204,7 +204,8 @@ private:
 
     void privateSave();
 
-    void bindSaveLoad(cwSaveLoad* saveLoad);
+    void connectSaveLoad(cwSaveLoad* saveLoad);
+    void disconnectSaveLoad(cwSaveLoad *saveLoad);
 
     bool saveWillCauseDataLoss() const;
     void setSqliteTemporaryProject(bool isTemp);

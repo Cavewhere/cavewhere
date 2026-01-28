@@ -110,8 +110,7 @@ cwProject::cwProject(QObject* parent) :
     UndoStack(new QUndoStack(this)),
     ErrorModel(new cwErrorListModel(this))
 {
-    bindSaveLoad(m_saveLoad);
-
+    connectSaveLoad(m_saveLoad);
     m_saveLoad->newProject();
 }
 
@@ -121,12 +120,12 @@ cwProject::~cwProject()
     waitSaveToFinish();
 }
 
-void cwProject::bindSaveLoad(cwSaveLoad* saveLoad)
+void cwProject::connectSaveLoad(cwSaveLoad* saveLoad)
 {
     Q_ASSERT(saveLoad);
 
     saveLoad->setCavingRegion(Region);
-    saveLoad->setUndoStack(UndoStack);
+    // saveLoad->setUndoStack(UndoStack);
     saveLoad->setFutureManagerToken(FutureToken);
 
     connect(saveLoad, &cwSaveLoad::isTemporaryProjectChanged, this, [this, saveLoad]() {
@@ -145,6 +144,15 @@ void cwProject::bindSaveLoad(cwSaveLoad* saveLoad)
     });
     connect(saveLoad, &cwSaveLoad::objectPathReady, this, &cwProject::objectPathReady);
 }
+
+void cwProject::disconnectSaveLoad(cwSaveLoad *saveLoad)
+{
+    Q_ASSERT(saveLoad);
+    disconnect(saveLoad, nullptr, this, nullptr);
+    saveLoad->setCavingRegion(nullptr);
+}
+
+
 
 /**
   Creates a new tempDirectoryPath for the temp project
@@ -655,25 +663,23 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
   \brief Creates a new project
   */
 void cwProject::newProject() {
-    auto oldSaveLoad = m_saveLoad;
-
-    auto newSaveLoad = new cwSaveLoad(this);
-    m_saveLoad = newSaveLoad;
-    bindSaveLoad(m_saveLoad);
-
-    if (oldSaveLoad) {
-        auto retireFuture = oldSaveLoad->retire();
+    //Stop the save and load on the old project
+    if (m_saveLoad) {
+        auto retireFuture = m_saveLoad->retire();
         RetiringSaveFutures.append(retireFuture);
+        disconnectSaveLoad(m_saveLoad);
     }
 
+    //Clear all the caves
+    Region->clearCaves();
+    if(UndoStack) {
+        UndoStack->clear();
+    }
+
+    //Create a new save and load
+    m_saveLoad = new cwSaveLoad(this);
+    connectSaveLoad(m_saveLoad);
     m_saveLoad->newProject();
-
-    // //Creates a temp directory for the project
-    // createTempProjectFile();
-
-    // //Create the caving the caving region that this project mantaines
-    // Region->clearCaves();
-
 }
 
 // /**

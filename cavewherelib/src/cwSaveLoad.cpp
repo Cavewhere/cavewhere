@@ -1172,11 +1172,6 @@ void cwSaveLoad::newProject()
     auto region = d->m_regionTreeModel->cavingRegion();
 
     if(region) [[likely]] {
-        region->clearCaves();
-        if(m_undoStack) {
-            m_undoStack->clear();
-        }
-
         //Rename the region
         const auto tempName = randomName();
         region->setName(tempName);

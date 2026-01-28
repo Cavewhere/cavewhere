@@ -204,8 +204,11 @@ TEST_CASE("NewProject should not clear objects added after call", "[cwProject][n
 
     REQUIRE(postCavePtr != nullptr);
     REQUIRE(postTripPtr != nullptr);
+    CHECK(region->caveCount() == 1);
     CHECK(region->indexOf(postCavePtr) != -1);
     CHECK(postCavePtr->tripCount() == 1);
+    CHECK(postCavePtr->name() == QStringLiteral("PostNewProjectCave"));
+    CHECK(postTripPtr->name() == QStringLiteral("PostNewProjectTrip"));
 }
 
 TEST_CASE("Rapid renaming", "[cwProject]") {
