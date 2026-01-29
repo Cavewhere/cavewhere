@@ -25,6 +25,7 @@ class cwCropImageTask;
 #include <QVector3D>
 #include <QSet>
 #include <QPoint>
+#include <QDir>
 #include <cmath>
 #include <type_traits>
 #include <utility>
@@ -47,13 +48,13 @@ struct WarpingSettingsAccessor<T, std::void_t<decltype(std::declval<const T&>().
 
 class cwTriangulateTask
 {
-//    Q_OBJECT
+   // Q_OBJECT
 public:
     explicit cwTriangulateTask() = default;
     
     //Input so the triangle task
     void setScrapData(QList<cwTriangulateInData> scraps);
-    void setProjectFilename(QString filename);
+    void setDataRootDir(const QDir& dataRootDir);
     void setFormatType(cwTextureUploadTask::Format format);
 
     //Outputs of the task
@@ -168,6 +169,7 @@ signals:
 public slots:
 
 private:
+    QDir DataRootDir;
 
     /**
       The quad structure
@@ -253,7 +255,6 @@ private:
 
     //Inputs
     QList<cwTriangulateInData> Scraps;
-    QString ProjectFilename;
     cwTextureUploadTask::Format Format;
 
     //Outputs
@@ -261,7 +262,7 @@ private:
 
 
     static QFuture<cwTrackedImagePtr> cropScrap(const cwTriangulateInData& scrap,
-                                                const QString& projectFilename,
+                                                const QDir& dataRootDir,
                                                 cwTextureUploadTask::Format format);
 
     static cwTriangulatedData triangulateGeometry(const cwTriangulateInData& scrap,

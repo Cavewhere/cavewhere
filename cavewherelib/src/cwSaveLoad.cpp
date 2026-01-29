@@ -1131,6 +1131,7 @@ ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, Proj
     }
 
     d->projectMetadata.dataRoot = newDataRootName;
+    emit dataRootChanged();
     if (region != nullptr) {
         region->setName(newDataRootName);
     }
@@ -1193,6 +1194,7 @@ void cwSaveLoad::newProject()
         //Connect all for watching for saves
         connectTreeModel();
 
+        emit dataRootChanged();
     }
 
 }
@@ -1229,6 +1231,7 @@ QFuture<ResultBase> cwSaveLoad::load(const QString &filename)
                                                         setSaveEnabled(false);
                                                         const auto& loadData = projectDataFuture.result().value();
                                                         d->projectMetadata = loadData.metadata;
+                                                        emit dataRootChanged();
                                                         d->m_regionTreeModel->cavingRegion()->setData(loadData.region);
 
                                                         // d->projectFileName = filename;
@@ -1452,7 +1455,7 @@ void cwSaveLoad::copyFilesAndEmitResults(const QList<QString>& sourceFilePaths,
                                          MakeResultFunc makeResult,
                                          std::function<void (QList<ResultType>)> outputCallBackFunc)
 {
-    const QDir rootDirectory = projectDir();
+    const QDir rootDirectory = dataRootDir();
     Q_ASSERT(rootDirectory.exists());
     // qDebug() << "RootDir:" << rootDirectory;
 
@@ -1577,7 +1580,7 @@ void cwSaveLoad::addImages(QList<QUrl> noteImagePaths,
 
     // Always process normal images first (original behavior).
     {
-        const QDir rootDirectory = projectDir();
+        const QDir rootDirectory = dataRootDir();
         copyFilesAndEmitResults<cwImage>(
             imageFilePaths,
             dir,
@@ -1589,7 +1592,7 @@ void cwSaveLoad::addImages(QList<QUrl> noteImagePaths,
     // Optional: process PDFs into images, then emit. Kept separate to preserve ordering and avoid surprises.
     if (!pdfFilePaths.isEmpty() && cwPDFConverter::isSupported()) {
 #ifdef CW_WITH_PDF_SUPPORT
-        const QDir rootDirectory = projectDir();
+        const QDir rootDirectory = dataRootDir();
 
         auto makeImagesFromPdf = [rootDirectory](const QString& relativePath) {
             QList<cwImage> images;
@@ -1655,7 +1658,7 @@ ResultBase cwSaveLoad::deleteTemporaryProject()
 
     waitForFinished();
 
-    QDir dir = projectDir();
+    QDir dir = dataRootDir();
     if (dir.exists()) {
         qDebug() << "Wanting to delete:" << dir;
         // if (!dir.removeRecursively()) {
@@ -1680,7 +1683,7 @@ void cwSaveLoad::addFiles(QList<QUrl> files,
     }
 
     // For generic files, we only copy and return the relative destination paths.
-    const QDir rootDirectory = projectDir();
+    const QDir rootDirectory = dataRootDir();
     copyFilesAndEmitResults<QString>(
         sourceFilePaths,
         dir,
@@ -1763,6 +1766,7 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
     d->projectMetadata.dataRoot = defaultDataRoot(projectName);
     d->projectMetadata.gitMode = GitMode::ManagedNew;
     d->projectMetadata.syncEnabled = true;
+    emit dataRootChanged();
 
     const QDir dataRootDir = makeDir(QDir(dir.absoluteFilePath(d->projectMetadata.dataRoot)));
 
@@ -3012,7 +3016,7 @@ QDir cwSaveLoad::projectRootDir() const
     return projectRootDirForFile(d->projectFileName);
 }
 
-QDir cwSaveLoad::projectDir() const
+QDir cwSaveLoad::dataRootDir() const
 {
     auto region = d->m_regionTreeModel->cavingRegion();
     QString dataRootName = d->projectMetadata.dataRoot;
@@ -3071,7 +3075,7 @@ QString cwSaveLoad::absolutePathPrivate(const cwCave* cave) const
 QDir cwSaveLoad::dirPrivate(const cwCave* cave) const
 {
     if (cave->parentRegion()) {
-        return caveDirHelper(projectDir(), cave);
+        return caveDirHelper(dataRootDir(), cave);
     }
     return QDir();
 }
@@ -3239,6 +3243,7 @@ void cwSaveLoad::setDataRoot(const QString &dataRoot)
     }
 
     d->projectMetadata.dataRoot = normalized;
+    emit dataRootChanged();
     if (!d->projectFileName.isEmpty()) {
         projectRootDir().mkpath(normalized);
     }

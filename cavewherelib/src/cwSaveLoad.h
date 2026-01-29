@@ -180,7 +180,7 @@ public:
                   std::function<void (QList<QString>)> fileCallBackFunc);
 
 
-    QDir projectDir() const;
+    QDir dataRootDir() const;
 
     QDir dir(cwSurveyNoteModel* notes) const;
     QDir dir(cwSurveyNoteLiDARModel* notes) const;
@@ -207,6 +207,7 @@ public:
 
 signals:
     void fileNameChanged();
+    void dataRootChanged();
     void isTemporaryProjectChanged();
     void objectPathReady(QObject* object);
 

@@ -542,7 +542,7 @@ QList<cwScrapManager::TriangulatedScrapResult> cwScrapManager::triangulateScraps
     }
 
     cwTriangulateTask task;
-    task.setProjectFilename(Project->filename());
+    task.setDataRootDir(Project->dataRootDir());
     task.setScrapData(scrapData);
     task.setFormatType(cwTextureUploadTask::format());
     auto triangulatedFutures = task.triangulate();

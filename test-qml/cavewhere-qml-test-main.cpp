@@ -8,8 +8,7 @@
 #include <QApplication>
 
 //Our inculdes
-#include "cwImageProvider.h"
-#include "cwCacheImageProvider.h"
+#include "cwQmlImageProviderBinder.h"
 #include "cwRootData.h"
 #include "cwGlobals.h"
 #include "cwMetaTypeSystem.h"
@@ -40,13 +39,6 @@ public slots:
         QSettings settings;
         settings.clear();
 
-        //This allow to extra image data from the project's image database
-        cwImageProvider* imageProvider = new cwImageProvider();
-        engine->addImageProvider(cwImageProvider::name(), imageProvider);
-
-        cwCacheImageProvider* cacheImageProvider = new cwCacheImageProvider();
-        engine->addImageProvider(cwCacheImageProvider::name(), cacheImageProvider);
-
         //Init libgit2
         QQuickGit::GitRepository::initGitEngine();
 
@@ -54,15 +46,7 @@ public slots:
         cwRootData* rootData = engine->rootContext()->engine()->singletonInstance<cwRootData*>(id);
 
         if(rootData) {
-            //Hookup the image provider now that the rootdata is create
-            const QString filename = rootData->project()->filename();
-            imageProvider->setProjectPath(filename);
-            QObject::connect(rootData->project(), SIGNAL(filenameChanged(QString)), imageProvider, SLOT(setProjectPath(QString)));
-
-            cacheImageProvider->setProjectDirectory(QFileInfo(filename).absoluteDir());
-            QObject::connect(rootData->project(), &cwProject::filenameChanged, cacheImageProvider, [cacheImageProvider](const QString& newFilename) {
-                cacheImageProvider->setProjectDirectory(QFileInfo(newFilename).absoluteDir());
-            });
+            new cwQmlImageProviderBinder(engine, rootData, engine);
         } else {
             qFatal("RootData didn't load correctly, check qml import path / build setup");
         }

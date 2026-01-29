@@ -23,7 +23,7 @@
 #include <algorithm>
 
 cwCropImageTask::cwCropImageTask(QObject* parent) :
-    cwProjectIOTask(parent) {
+    QObject(parent) {
 
 }
 
@@ -47,12 +47,17 @@ void cwCropImageTask::setFormatType(cwTextureUploadTask::Format format)
     Format = format;
 }
 
+void cwCropImageTask::setDataRootDir(const QDir& dataRootDir)
+{
+    DataRootDir = dataRootDir;
+}
+
 QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
 {
-    auto filename = databaseFilename();
     auto originalImage = Original;
     auto cropRect = CropRect;
     auto format = Format;
+    auto dataRootDir = DataRootDir;
 
     struct Image {
         cwDiskCacher::Key key;
@@ -66,7 +71,7 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
 
 
 
-    auto addCropToDatabase = [filename](
+    auto addCropToDatabase = [dataRootDir](
                                  QImage image,
                                  QString pathToImage,
                                  const QRectF& crop,
@@ -101,7 +106,7 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
         // cacher.insert(key, imageData);
         // return key;
 
-        return cwImageProvider::addToImageCache(filename,
+        return cwImageProvider::addToImageCache(dataRootDir.path(),
                                                 image,
                                                 cwImageProvider::imageCacheKey(
                                                     pathToImage,
@@ -110,10 +115,10 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
                                                 );
     };
 
-    auto cropImage = [filename, originalImage, cropRect, addCropToDatabase, hash]()->Image {
+    auto cropImage = [dataRootDir, originalImage, cropRect, addCropToDatabase, hash]()->Image {
             const QString originalPath = originalImage.path();
             cwImageProvider provider;
-            provider.setProjectPath(filename);
+            provider.setDataRootDir(dataRootDir);
             const QString requestPath = cwImageProvider::imagePath(originalImage, originalPath);
 
             QSize imageSize;
@@ -138,12 +143,12 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
 
     auto finishedFuture =
         AsyncFuture::observe(cropFuture)
-            .subscribe([cropFuture, filename]() {
-                auto dir = QFileInfo(filename).dir();
-                auto cropRGBImage = cropFuture.result();
+            .subscribe([cropFuture, dataRootDir]() {
+            auto dir = dataRootDir;
+            auto cropRGBImage = cropFuture.result();
 
-                if(!cropRGBImage.key.id.isEmpty()) {
-                    cwDiskCacher cacher(dir);
+            if(!cropRGBImage.key.id.isEmpty()) {
+                cwDiskCacher cacher(dir);
                     auto filePath = cacher.filePath(cropRGBImage.key);
                     cwImage image;
                     image.setOriginalSize(cropRGBImage.croppedImage.size());

@@ -27,9 +27,9 @@ void cwTriangulateTask::setScrapData(QList<cwTriangulateInData> scraps) {
     Scraps = scraps;
 }
 
-void cwTriangulateTask::setProjectFilename(QString filename)
+void cwTriangulateTask::setDataRootDir(const QDir& dataRootDir)
 {
-    ProjectFilename = filename;
+    DataRootDir = dataRootDir;
 }
 
 void cwTriangulateTask::setFormatType(cwTextureUploadTask::Format format)
@@ -41,57 +41,59 @@ QList<QFuture<cwTriangulatedData>> cwTriangulateTask::triangulate() const
 {
     Q_ASSERT(!Scraps.isEmpty());
 
-    QString projectFilename = ProjectFilename;
     cwTextureUploadTask::Format format = Format;
 
     auto triangulateScrap
-        = [projectFilename, format](const cwTriangulateInData& scrap)->QFuture<cwTriangulatedData>
+        = [this, format](const cwTriangulateInData& scrap)->QFuture<cwTriangulatedData>
     {
 
-        auto cropFuture = cropScrap(scrap, projectFilename, format);
+        auto cropFuture = cropScrap(scrap, DataRootDir, format);
+        auto dataRootDir = DataRootDir;
 
         return AsyncFuture::observe(cropFuture)
-            .subscribe([cropFuture, scrap, projectFilename]()
-                       {
+            //DONT use "this" in .subscribe lambda capture, this object will be destroyed before the lambda is called
+            //USING this will cause UB!
+            .subscribe([dataRootDir, cropFuture, scrap]()
+                     {
 
-                           cwTextureUploadTask uploadTask;
-                           auto croppedImagePtr = cropFuture.result();
+                         cwTextureUploadTask uploadTask;
+                         auto croppedImagePtr = cropFuture.result();
 
-                           if(croppedImagePtr) {
-                               cwImage croppedImage = *(cropFuture.result());
-                               uploadTask.setImage(croppedImage);
-                               uploadTask.setProjectFilename(projectFilename);
-                               uploadTask.setType(cwTextureUploadTask::OpenGL_RGBA);
-                               auto uploadFuture = uploadTask.mipmaps();
+                         if(croppedImagePtr) {
+                             cwImage croppedImage = *(cropFuture.result());
+                             uploadTask.setImage(croppedImage);
+                             uploadTask.setDataRootDir(dataRootDir);
+                             uploadTask.setType(cwTextureUploadTask::OpenGL_RGBA);
+                             auto uploadFuture = uploadTask.mipmaps();
 
-                               return AsyncFuture::observe(uploadFuture)
-                                   .subscribe(
-                                       [scrap, cropFuture, uploadFuture]() {
+                             return AsyncFuture::observe(uploadFuture)
+                                 .subscribe(
+                                     [scrap, cropFuture, uploadFuture]() {
 
-                                           return cwConcurrent::run([scrap, cropFuture, uploadFuture]()
-                                                                    {
-                                                                        return triangulateGeometry(scrap,
-                                                                                                   cropFuture.result(),
-                                                                                                   uploadFuture.result());
-                                                                    });
-                                       }).future();
-                           }
+                                         return cwConcurrent::run([scrap, cropFuture, uploadFuture]()
+                                                                  {
+                                                                      return triangulateGeometry(scrap,
+                                                                                                 cropFuture.result(),
+                                                                                                 uploadFuture.result());
+                                                                  });
+                                     }).future();
+                         }
 
-                           qDebug() << "Problem cropping image, does it not exist";
-                           return QtFuture::makeReadyValueFuture(cwTriangulatedData());
+                         qDebug() << "Problem cropping image, does it not exist";
+                         return QtFuture::makeReadyValueFuture(cwTriangulatedData());
 
-                       }).future();
+                     }).future();
     };
 
     return cw::transform(Scraps, triangulateScrap);
 }
 
 QFuture<cwTrackedImagePtr> cwTriangulateTask::cropScrap(const cwTriangulateInData &scrap,
-                                                        const QString &projectFilename,
+                                                        const QDir& dataRootDir,
                                                         cwTextureUploadTask::Format format)
 {
     cwCropImageTask cropTask;
-    cropTask.setDatabaseFilename(projectFilename);
+    cropTask.setDataRootDir(dataRootDir);
     cropTask.setFormatType(format);
     cropTask.setOriginal(scrap.noteImage());
 
@@ -196,8 +198,8 @@ cwTriangulateTask::PointGrid cwTriangulateTask::createPointGrid(QRectF bounds, c
 
     const auto morphingSettings = scrapData.morphingSettings();
     const double gridResolutionMeters = morphingSettings.gridResolutionMeters > 0.0
-            ? morphingSettings.gridResolutionMeters
-            : cwTriangulateWarpingData().gridResolutionMeters;
+                                            ? morphingSettings.gridResolutionMeters
+                                            : cwTriangulateWarpingData().gridResolutionMeters;
 
     double numberOfPointsX = inCave.width() / gridResolutionMeters;
     double numberOfPointsY = inCave.height() / gridResolutionMeters;
@@ -316,9 +318,9 @@ cwTriangulateTask::QuadDatabase cwTriangulateTask::createQuads(const cwTriangula
     This returns the points that make up the polygon (these are in original note cooridates, before cropping)
  */
 cwTriangulateTask::ScrapGeomtery cwTriangulateTask::createTriangles(const cwTriangulateTask::PointGrid &grid,
-                                                      const QSet<int> pointsContainedInOutline,
-                                                      const cwTriangulateTask::QuadDatabase &database,
-                                                      const cwTriangulateInData &inScrapData) {
+                                                                    const QSet<int> pointsContainedInOutline,
+                                                                    const cwTriangulateTask::QuadDatabase &database,
+                                                                    const cwTriangulateInData &inScrapData) {
 
     //Resize the outputScrapData to have all points contained in the scrap outline
     QVector<QVector3D> points;
@@ -383,7 +385,7 @@ cwTriangulateTask::ScrapGeomtery cwTriangulateTask::createTriangles(const cwTria
     The grid is used to get the quad
   */
 QVector<uint32_t> cwTriangulateTask::createTrianglesFull(const cwTriangulateTask::QuadDatabase &database,
-                                                     const QHash<int, int> &mapGridToOutput) {
+                                                         const QHash<int, int> &mapGridToOutput) {
 
     QVector<uint32_t> triangles;
 
@@ -837,8 +839,8 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
         const auto morphingSettings = scrapData.morphingSettings();
         const bool useMaxClosestStations = morphingSettings.useMaxClosestStations;
         const int maxClosestStations = morphingSettings.maxClosestStations > 0
-                ? morphingSettings.maxClosestStations
-                : cwTriangulateWarpingData().maxClosestStations;
+                                           ? morphingSettings.maxClosestStations
+                                           : cwTriangulateWarpingData().maxClosestStations;
         // constexpr double kStationSearchRadius = .1;
 
         // double currentRadius = kStationSearchRadius;
@@ -996,8 +998,8 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
     double smoothingRadiusMeters = 0.0;
     if(morphingSettings.useSmoothingRadius) {
         smoothingRadiusMeters = morphingSettings.smoothingRadiusMeters > 0.0
-                ? morphingSettings.smoothingRadiusMeters
-                : cwTriangulateWarpingData().smoothingRadiusMeters;
+                                    ? morphingSettings.smoothingRadiusMeters
+                                    : cwTriangulateWarpingData().smoothingRadiusMeters;
     }
     points = smoothZ(points, scrapData.viewMatrix()->matrix(), smoothingRadiusMeters);
 

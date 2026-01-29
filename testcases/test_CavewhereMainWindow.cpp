@@ -206,7 +206,7 @@ TEST_CASE("Load project with no images for scraps", "[CavewhereMainWindow]") {
         auto note = trip->notes()->notes().at(0);
 
         cwImageProvider imageProvider;
-        imageProvider.setProjectPath(project->filename());
+        imageProvider.setDataRootDir(project->dataRootDir());
 
         CHECK(note->scraps().size() == 2);
 

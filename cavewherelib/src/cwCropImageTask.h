@@ -12,7 +12,6 @@
 #include "cwTask.h"
 #include "cwImage.h"
 #include "cwImageProvider.h"
-#include "cwProjectIOTask.h"
 #include "cwGlobals.h"
 #include "cwTextureUploadTask.h"
 #include "cwTrackedImage.h"
@@ -20,11 +19,12 @@
 //Qt includes
 #include <QRectF>
 #include <QString>
+#include <QDir>
 
 /**
   \brief This will crop a cwImage using normalize coordinates of the original
   */
-class CAVEWHERE_LIB_EXPORT cwCropImageTask : public cwProjectIOTask
+class CAVEWHERE_LIB_EXPORT cwCropImageTask : public QObject
 {
     Q_OBJECT
 
@@ -35,6 +35,7 @@ public:
     void setOriginal(cwImage image);
     void setRectF(QRectF cropTo);
     void setFormatType(cwTextureUploadTask::Format format);
+    void setDataRootDir(const QDir& dataRootDir);
 
     QFuture<cwTrackedImagePtr> crop();
 
@@ -46,6 +47,7 @@ private:
     cwImage Original;
     QRectF CropRect;
     cwTextureUploadTask::Format Format = cwTextureUploadTask::Unknown;
+    QDir DataRootDir;
 
     //Output
     cwImage CroppedImage;

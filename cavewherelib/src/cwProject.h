@@ -111,9 +111,9 @@ public:
     QString filename() const;
 
     Q_INVOKABLE QString dataRoot() const;
-    Q_INVOKABLE void setDataRoot(const QString& dataRoot);
+    // Q_INVOKABLE void setDataRoot(const QString& dataRoot);
 
-    QDir projectDir() const;
+    QDir dataRootDir() const;
     Q_INVOKABLE QString absolutePath(const QString& relativePath) const;
     Q_INVOKABLE QString absolutePath(const cwNote* note) const;
     Q_INVOKABLE QString absolutePath(const cwNoteLiDAR* noteLiDAR) const;
@@ -151,6 +151,7 @@ signals:
 
     // -----Old save and load
     void filenameChanged(QString newFilename);
+    void dataRootChanged();
     void canSaveDirectlyChanged();
     void isTemporaryProjectChanged();
     void fileSaved();

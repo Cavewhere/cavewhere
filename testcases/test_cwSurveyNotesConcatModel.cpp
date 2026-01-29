@@ -190,7 +190,7 @@ TEST_CASE("cwSurveyNotesConcatModel addFiles uses absolute paths with cwImagePro
     REQUIRE(QFileInfo(providerPath).exists());
 
     cwImageProvider provider;
-    provider.setProjectPath(project->filename());
+    provider.setDataRootDir(project->dataRootDir());
 
     QSize size;
     const QImage image = provider.requestImage(providerPath, &size, QSize(64, 64));

@@ -345,7 +345,7 @@ void cwNoteLiDARManager::saveIcon(const QImage& icon, cwNoteLiDAR* note)
         return;
     }
 
-    cwDiskCacher cacher(m_project ? m_project->projectDir() : QDir());
+    cwDiskCacher cacher(m_project ? m_project->dataRootDir() : QDir());
     auto key = iconCacheKey(m_project, note);
     // key.checksum = sourceChecksum(m_project, note);
     // if (key.checksum.isEmpty()) {
@@ -379,7 +379,7 @@ void cwNoteLiDARManager::updateIconFromCache(cwNoteLiDAR* note)
     //     return;
     // }
 
-    cwDiskCacher cacher(m_project ? m_project->projectDir() : QDir());
+    cwDiskCacher cacher(m_project ? m_project->dataRootDir() : QDir());
     if (cacher.hasEntry(key)) {
         note->setIconImagePath(cacheUrlForKey(key));
     } else {

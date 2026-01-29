@@ -13,6 +13,7 @@
 #include <QQuickImageProvider>
 #include <QMutex>
 #include <QDebug>
+#include <QDir>
 #include <QVector2D>
 #include <QStringLiteral>
 #include <functional>
@@ -64,7 +65,7 @@ public:
     static quint64 toHash(const QByteArray& data);
 
     static cwDiskCacher::Key addToImageCache(
-        const QString& projectPath,
+        const QString& dataRootPath,
         const QImage& image,
         const cwDiskCacher::Key& key);
     static cwDiskCacher::Key addToImageCache(
@@ -85,17 +86,21 @@ public:
 
 public slots:
     void setProjectPath(QString projectPath);
+    void setDataRootDir(const QDir& dataRootDir);
 
 
 private:
     static QString requestImageSQL() { return QLatin1String("SELECT type,width,height,dotsPerMeter,imageData from Images where id=?"); }
     static QString requestMetadataSQL() { return QLatin1String("SELECT type,width,height,dotsPerMeter from Images where id=?"); }
+
     QString ProjectPath;
-    mutable QMutex ProjectPathMutex;
+    QDir DataRootDir;    
+    mutable QMutex ProjectMutex;
 
     static QAtomicInt ConnectionCounter;
 
     QString projectPath() const;
+    QDir dataRootDir() const;
     QString relativeImagePath(const QString& absolutePath) const;
 };
 

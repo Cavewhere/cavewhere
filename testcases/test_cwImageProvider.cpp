@@ -34,7 +34,8 @@ TEST_CASE("test cwImageProvider requestImage cache behavior", "[cwImageProvider]
 
     // 2) Set up provider with project path
     cwImageProvider provider;
-    provider.setProjectPath(projectFile);
+    // provider.setProjectPath(projectFile);
+    provider.setDataRootDir(fileInfo.absoluteDir());
 
     // 3) Request original image with no requested size (QSize())
     {
@@ -79,7 +80,8 @@ TEST_CASE("test cwImageProvider requestImage cache behavior", "[cwImageProvider]
     // 6) Verify cache file exists and is non-empty
     {
         const QFileInfo cacheInfo(expectedCachePath);
-        // INFO("Cache location:" << expectedCachePath.toStdString());
+        qDebug() << "Cache location:" << expectedCachePath;
+        INFO("Expected Cache location:" << expectedCachePath.toStdString());
         REQUIRE(cacheInfo.exists());
         REQUIRE(cacheInfo.isFile());
         REQUIRE(cacheInfo.size() > 0);
@@ -119,7 +121,7 @@ TEST_CASE("cwImageProvider renders SVG using resolutionImport", "[cwImageProvide
     const QString imageRelativeName = fileInfo.fileName();
 
     cwImageProvider provider;
-    provider.setProjectPath(projectFile);
+    provider.setDataRootDir(fileInfo.absoluteDir());
 
     cwPDFSettings::initialize();
     auto settings = cwPDFSettings::instance();
@@ -164,7 +166,7 @@ TEST_CASE("cwImageProvider respects SVG unit sizes with CSS dpi", "[cwImageProvi
     const QString imageRelativeName = fileInfo.fileName();
 
     cwImageProvider provider;
-    provider.setProjectPath(projectFile);
+    provider.setDataRootDir(fileInfo.absoluteDir());
 
     cwPDFSettings::initialize();
     auto settings = cwPDFSettings::instance();
@@ -199,7 +201,7 @@ TEST_CASE("cwImageProvider clamps SVG render size to 256MB threshold", "[cwImage
     const QString imageRelativeName = fileInfo.fileName();
 
     cwImageProvider provider;
-    provider.setProjectPath(projectFile);
+    provider.setDataRootDir(fileInfo.absoluteDir());
 
     cwPDFSettings::initialize();
     auto settings = cwPDFSettings::instance();
@@ -281,7 +283,7 @@ TEST_CASE("cwImageProvider scales SVG units correctly", "[cwImageProvider]") {
         const QString imageRelativeName = QFileInfo(tempPath).fileName();
 
         cwImageProvider provider;
-        provider.setProjectPath(projectFile);
+        provider.setDataRootDir(tempDirPath); //fileInfo.absoluteDir());
 
         const QSize expectedSize(
             std::max(1, qRound(unitCase.widthInches * resolutionPpi)),

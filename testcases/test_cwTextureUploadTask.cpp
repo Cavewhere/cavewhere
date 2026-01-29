@@ -84,7 +84,7 @@ TEST_CASE("cwTextureUploadTask should run correctly", "[cwTextureUploadTask]") {
         noteImage.setPath(path);
 
         task.setImage(noteImage);
-        task.setProjectFilename(project->filename());
+        task.setDataRootDir(project->dataRootDir());
         task.setType(cwTextureUploadTask::OpenGL_RGBA);
         auto resultsFuture = task.mipmaps();
 

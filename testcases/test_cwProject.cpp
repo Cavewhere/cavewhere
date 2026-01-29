@@ -152,7 +152,7 @@ TEST_CASE("Image data should save and load correctly", "[cwProject]") {
     cwNote* note = trip->notes()->notes().first();
     cwImage image = note->image();
     cwImageProvider provider;
-    provider.setProjectPath(project->filename());
+    provider.setDataRootDir(project->dataRootDir());
     const QString noteImagePath = ProjectFilenameTestHelper::absolutePath(note, image.path());
     QImage sqlImage = provider.image(noteImagePath);
 
@@ -619,7 +619,7 @@ TEST_CASE("Images should load correctly", "[cwProject]") {
             CHECK(QFile::exists(path));
 
             uploadTask.setImage(image);
-            uploadTask.setProjectFilename(project->filename());
+            uploadTask.setDataRootDir(project->dataRootDir());
             uploadTask.setType(cwTextureUploadTask::OpenGL_RGBA);
             auto future = uploadTask.mipmaps();
             auto imageData = future.result();

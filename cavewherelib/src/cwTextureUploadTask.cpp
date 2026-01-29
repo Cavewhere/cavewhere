@@ -27,31 +27,21 @@
 
 cwTextureUploadTask::cwTextureUploadTask()
 {
+
 }
 
 QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
 {
-    auto projectFile = ProjectFilename;
     auto image = Image;
     auto currentFormat = type;
+    QDir dataRootDir = DataRootDir;
 
     //loads valid mipmap
-    auto loadValidMipmap = [projectFile, currentFormat](const cwTrackedImagePtr& image) {
+    auto loadValidMipmap = [currentFormat, dataRootDir](const cwTrackedImagePtr& image) {
         UploadResult results;
 
         cwImageProvider imageProvidor;
-        imageProvidor.setProjectPath(projectFile);
-
-        auto loadDXT1Mipmap = [&imageProvidor, image]() {
-            QList< QPair< QByteArray, QSize > > mipmaps;
-            //Load all the mipmaps
-            foreach(int imageId, image->mipmaps()) {
-                auto imageData = imageProvidor.data(imageId);
-                imageProvidor.data(imageId, true);
-                mipmaps.append(QPair< QByteArray, QSize >(imageData.data(), imageData.size()));
-            }
-            return mipmaps;
-        };
+        imageProvidor.setDataRootDir(dataRootDir);
 
         auto loadRGB = [&imageProvidor, image]()->QImage {
             auto imageData = imageProvidor.data(image->path());
@@ -64,16 +54,7 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
             QImage qimage = cwOpenGLUtils::toGLTexture(imageProvidor.image(imageData));
 
             //We might want convert the image here to prevent Rhi from having to covert it
-
             return qimage;
-            // if(!image.isNull()) {
-            //     image = cwOpenGLUtils::toGLTexture(image);
-            //     QByteArray data(reinterpret_cast<char*>(image.bits()),
-            //                     static_cast<int>(image.sizeInBytes()));
-            //     return {{data, imageData.size()}};
-            // }
-            // qDebug() << "Couldn't load from imageData";
-            // return {};
         };
 
         switch(currentFormat) {
@@ -81,10 +62,6 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
             results.scaleTexCoords = QVector2D(1.0, 1.0); //No extra padding
             results.image = loadRGB();
             break;
-        // case DXT1Mipmaps:
-        //     results.scaleTexCoords = imageProvidor.scaleTexCoords(*image);
-        //     results.mipmaps = loadDXT1Mipmap();
-        //     break;
         default:
             Q_ASSERT(false);
         }
@@ -119,8 +96,10 @@ bool cwTextureUploadTask::isDivisibleBy4(QSize size)
  */
 cwTextureUploadTask::Format cwTextureUploadTask::format()
 {
-    // if(cwOpenGLSettings::instance()->useDXT1Compression()) {
-    //     return cwTextureUploadTask::DXT1Mipmaps;
-    // }
     return cwTextureUploadTask::OpenGL_RGBA;
+}
+
+void cwTextureUploadTask::setDataRootDir(const QDir& dataRootDir)
+{
+    DataRootDir = dataRootDir;
 }

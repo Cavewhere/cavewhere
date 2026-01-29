@@ -17,6 +17,7 @@
 #include <QOpenGLBuffer>
 #include <QVector2D>
 #include <QFuture>
+#include <QDir>
 class QOpenGLContext;
 class QSurface;
 
@@ -43,7 +44,7 @@ public:
 
     //Inputs
     void setImage(cwImage image);
-    void setProjectFilename(QString filename);
+    void setDataRootDir(const QDir &dataRootDir);
     void setType(Format type);
 
     QFuture<cwTextureUploadTask::UploadResult> mipmaps() const;
@@ -54,7 +55,7 @@ public:
 private:
     Format type = Unknown;
     cwImage Image;
-    QString ProjectFilename;
+    QDir DataRootDir;
 
 
     void loadMipmapsFromDisk();
@@ -71,14 +72,7 @@ inline void cwTextureUploadTask::setImage(cwImage image) {
     Image = image;
 }
 
-/**
- * @brief cwTextureUploadTask::setProjectFilename
- * @param filename
- */
-inline void cwTextureUploadTask::setProjectFilename(QString filename)
-{
-    ProjectFilename = filename;
-}
+
 
 
 inline void cwTextureUploadTask::setType(cwTextureUploadTask::Format type)

@@ -142,6 +142,12 @@ void cwProject::connectSaveLoad(cwSaveLoad* saveLoad)
         }
         emit filenameChanged(saveLoad->fileName());
     });
+    connect(saveLoad, &cwSaveLoad::dataRootChanged, this, [this, saveLoad]() {
+        if (m_saveLoad != saveLoad) {
+            return;
+        }
+        emit dataRootChanged();
+    });
     connect(saveLoad, &cwSaveLoad::objectPathReady, this, &cwProject::objectPathReady);
 }
 
@@ -1055,14 +1061,14 @@ QString cwProject::dataRoot() const
     return m_saveLoad->dataRoot();
 }
 
-void cwProject::setDataRoot(const QString &dataRoot)
-{
-    m_saveLoad->setDataRoot(dataRoot);
-}
+// void cwProject::setDataRoot(const QString &dataRoot)
+// {
+//     m_saveLoad->setDataRoot(dataRoot);
+// }
 
-QDir cwProject::projectDir() const
+QDir cwProject::dataRootDir() const
 {
-    return m_saveLoad->projectDir();
+    return m_saveLoad->dataRootDir();
 }
 
 /**
@@ -1071,7 +1077,7 @@ QDir cwProject::projectDir() const
  */
 QString cwProject::absolutePath(const QString &relativePath) const
 {
-    return m_saveLoad->projectDir().absoluteFilePath(relativePath);
+    return m_saveLoad->dataRootDir().absoluteFilePath(relativePath);
 
 }
 

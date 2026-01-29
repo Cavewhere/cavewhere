@@ -22,8 +22,7 @@
 #include "cwImage.h"
 #include "cwRootData.h"
 #include "cwProject.h"
-#include "cwImageProvider.h"
-#include "cwCacheImageProvider.h"
+#include "cwQmlImageProviderBinder.h"
 #include "cwOpenFileEventHandler.h"
 #include "cwApplication.h"
 #include "cwGlobals.h"
@@ -172,13 +171,6 @@ int main(int argc, char *argv[])
 
     QQmlContext* context = applicationEngine->rootContext();
 
-    //This allow to extra image data from the project's image database
-    cwImageProvider* imageProvider = new cwImageProvider();
-    context->engine()->addImageProvider(cwImageProvider::name(), imageProvider);
-
-    cwCacheImageProvider* cacheImageProvider = new cwCacheImageProvider();
-    context->engine()->addImageProvider(cwCacheImageProvider::name(), cacheImageProvider);
-
     applicationEngine->loadFromModule(QStringLiteral("cavewherelib"),
                                        QStringLiteral("CavewhereMainWindow"));
     auto id = qmlTypeId("cavewherelib", 1, 0, "RootData");
@@ -196,14 +188,8 @@ int main(int argc, char *argv[])
     openFileHandler->setProject(rootData->project());
     a.installEventFilter(openFileHandler);
 
-    //Hookup the image provider now that the rootdata is create
-    imageProvider->setProjectPath(rootData->project()->filename());
-    QObject::connect(rootData->project(), SIGNAL(filenameChanged(QString)), imageProvider, SLOT(setProjectPath(QString)));
-
-    cacheImageProvider->setProjectDirectory(QFileInfo(rootData->project()->filename()).absoluteDir());
-    QObject::connect(rootData->project(), &cwProject::filenameChanged, cacheImageProvider, [cacheImageProvider](const QString& filename) {
-        cacheImageProvider->setProjectDirectory(QFileInfo(filename).absoluteDir());
-    });
+    //Creates image providers for the qml engine
+    new cwQmlImageProviderBinder(context->engine(), rootData, applicationEngine);
 
     auto quit = [&a, rootData, applicationEngine]() {
         delete applicationEngine;

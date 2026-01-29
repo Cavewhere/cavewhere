@@ -101,21 +101,18 @@ ImageRequestDetails parseImageRequest(const QString& id)
     return details;
 }
 
-QString resolveFilePath(const QString& path, const QString& projectPath)
+QString resolveFilePath(const QString& path, const QDir& dataRootDir)
 {
     QFileInfo info(path);
     if (info.isAbsolute()) {
-        return info.canonicalFilePath().isEmpty() ? info.absoluteFilePath() : info.canonicalFilePath();
+        return info.absoluteFilePath();
     }
 
-    if (!projectPath.isEmpty()) {
-        const QDir projectDir = QFileInfo(projectPath).absoluteDir();
-        const QString candidate = projectDir.absoluteFilePath(path);
-        const QFileInfo candidateInfo(candidate);
-        return candidateInfo.canonicalFilePath().isEmpty() ? candidateInfo.absoluteFilePath() : candidateInfo.canonicalFilePath();
+    if (dataRootDir.exists()) {
+        return dataRootDir.absoluteFilePath(path);
     }
 
-    return info.absoluteFilePath();
+    return QString();
 }
 
 QImage renderPdfPage(const QString& pdfPath, int pageIndex, int resolutionPpi)
@@ -161,10 +158,21 @@ QImage cwImageProvider::requestImage(const QString &path, QSize *size, const QSi
 
     // qDebug() << "Requesting path:" << path << ProjectPath;
 
+    if (!dataRootDir().exists()) {
+        qDebug() << "cwImageProvider: dataRootDir is empty when requesting" << path << LOCATION;
+        return {};
+    }
+
     const int maxSize = std::max(requestedSize.width(), requestedSize.height());
     const ImageRequestDetails details = parseImageRequest(path);
     const QString basePath = details.filePath;
-    const QString resolvedPath = resolveFilePath(basePath, projectPath());
+    const QDir rootDir = dataRootDir();
+    const QString resolvedPath = resolveFilePath(basePath, rootDir);
+    if (resolvedPath.isEmpty()) {
+        qDebug() << "cwImageProvider: dataRootDir is empty when resolving" << basePath << LOCATION;
+        return {};
+    }
+
     const QFileInfo info(resolvedPath);
 
 #ifdef CW_WITH_PDF_SUPPORT
@@ -182,11 +190,10 @@ QImage cwImageProvider::requestImage(const QString &path, QSize *size, const QSi
                                        .arg(resolutionPpi);
             auto key = imageCacheKey(resolvedPath, prefix, hash);
 
-            const QString projectFile = projectPath();
-            if (projectFile.isEmpty()) {
+            const QDir cacheDir = dataRootDir();
+            if (!cacheDir.exists()) {
                 return {};
             }
-            const QDir cacheDir = QFileInfo(projectFile).absoluteDir();
             auto loadOriginal = [resolvedPath, pageIndex, resolutionPpi]() {
                 return renderPdfPage(resolvedPath, pageIndex, resolutionPpi);
             };
@@ -208,15 +215,14 @@ QImage cwImageProvider::requestImage(const QString &path, QSize *size, const QSi
 
     if(maxSize > 0) {        
         //Generate a smaller image than the original, this could be an icon
-        auto hash = fileHash(relativeImagePath(basePath));
+        auto hash = fileHash(resolvedPath);
         QString prefix = QStringLiteral("scaled-") + QString::number(requestedSize.width()) + QStringLiteral("_") + QString::number(requestedSize.height());
-        auto key = imageCacheKey(basePath, prefix, hash);
+        auto key = imageCacheKey(resolvedPath, prefix, hash);
 
-        const QString projectFile = projectPath();
-        if (projectFile.isEmpty()) {
+        const QDir cacheDir = dataRootDir();
+        if (!cacheDir.exists()) {
             return {};
         }
-        const QDir cacheDir = QFileInfo(projectFile).absoluteDir();
         auto loadOriginal = [this, basePath]() {
             return this->image(basePath);
         };
@@ -256,26 +262,39 @@ QImage cwImageProvider::image(const QString &path) const
  *Sets the project path so we can connect and extract data from it
  */
 void cwImageProvider::setProjectPath(QString projectPath) {
-    QMutexLocker locker(&ProjectPathMutex);
+    QMutexLocker locker(&ProjectMutex);
+    Q_ASSERT(DataRootDir == QDir()); //If this fails, you're trying to use old and new projects
     ProjectPath = projectPath;
+}
+
+void cwImageProvider::setDataRootDir(const QDir& dataRootDir)
+{
+    QMutexLocker locker(&ProjectMutex);
+    Q_ASSERT(ProjectPath.isEmpty()); //If this fails, you're trying to use old and new projects
+    DataRootDir = dataRootDir;
 }
 
 /**
   Returns the project path where the images will be extracted from
   */
 QString cwImageProvider::projectPath() const {
-    QMutexLocker locker(&ProjectPathMutex);
+    QMutexLocker locker(&ProjectMutex);
     return ProjectPath;
+}
+
+QDir cwImageProvider::dataRootDir() const
+{
+    QMutexLocker locker(&ProjectMutex);
+    return DataRootDir;
 }
 
 QString cwImageProvider::relativeImagePath(const QString &absolutePath) const
 {
-    QMutexLocker locker(&ProjectPathMutex);
-
-    QFileInfo info(ProjectPath);
-    QDir dir = info.absoluteDir();
-
-    return dir.relativeFilePath(absolutePath);
+    QMutexLocker locker(&ProjectMutex);
+    if (!DataRootDir.exists()) {
+        return QString();
+    }
+    return DataRootDir.relativeFilePath(absolutePath);
 }
 
 /**
@@ -371,14 +390,17 @@ cwImageData cwImageProvider::data(int id, bool metaDataOnly) const {
 
 cwImageData cwImageProvider::data(const QString& filename) const
 {
-    QFileInfo projectInfo(ProjectPath);
-    auto projectDir = projectInfo.absoluteDir();
+    QDir projectDir = dataRootDir();
+    if (!projectDir.exists()) {
+        qDebug() << "cwImageProvider: dataRootDir is empty when reading" << filename << LOCATION;
+        return cwImageData();
+    }
 
     auto imagePath = [this, projectDir](const QString& filename) {
         QFileInfo fileInfo(filename);
         QString resolvedPath = fileInfo.isAbsolute()
-                                   ? fileInfo.canonicalFilePath()
-                                   : QFileInfo(projectDir.absoluteFilePath(filename)).canonicalFilePath();
+                                   ? fileInfo.absoluteFilePath()
+                                   : projectDir.absoluteFilePath(filename);
 
 
         // qDebug() << "Path:" <<  QFileInfo(resolvedPath).absolutePath() << (projectDir.canonicalPath());
@@ -561,12 +583,11 @@ cwDiskCacher::Key cwImageProvider::addToImageCache(
 }
 
 cwDiskCacher::Key cwImageProvider::addToImageCache(
-    const QString& projectFilename,
+    const QString& dataRootPath,
     const QImage& image,
     const cwDiskCacher::Key& key)
 {
-    QFileInfo info(projectFilename);
-    return addToImageCache(info.dir(), image, key);
+    return addToImageCache(QDir(dataRootPath), image, key);
 }
 
 cwDiskCacher::Key cwImageProvider::imageCacheKey(const QString &pathToImage, const QString &keyPrefix, quint64 parentImageHash)
