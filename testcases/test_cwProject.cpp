@@ -843,6 +843,60 @@ TEST_CASE("SaveAs updates dataRoot directory to match project name", "[cwProject
     CHECK(QFileInfo::exists(ProjectFilenameTestHelper::absolutePath(trip)));
 }
 
+TEST_CASE("SaveAs persists dataRoot updates for reload", "[cwProject][saveAs]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    REQUIRE(project->isTemporaryProject());
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    cave->setName(QStringLiteral("ReloadCave"));
+    cave->addTrip();
+    auto trip = cave->trip(0);
+    trip->setName(QStringLiteral("ReloadTrip"));
+
+    project->waitSaveToFinish();
+
+    QTemporaryDir destinationParent;
+    destinationParent.setAutoRemove(false);
+    REQUIRE(destinationParent.isValid());
+    REQUIRE(QFileInfo::exists(destinationParent.path()));
+
+    const QString targetProjectFile = destinationParent.filePath(QStringLiteral("ReloadProject.cwproj"));
+    REQUIRE(project->saveAs(targetProjectFile));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    const QString savedProjectFile = project->filename();
+    REQUIRE(QFileInfo::exists(savedProjectFile));
+    CHECK(savedProjectFile.toStdString() == targetProjectFile.toStdString());
+
+    const QString projectName = QFileInfo(targetProjectFile).completeBaseName();
+    const QDir savedDataRootDir = ProjectFilenameTestHelper::projectDir(project);
+    CHECK(savedDataRootDir.dirName().toStdString() == projectName.toStdString());
+    CHECK(project->dataRoot().toStdString() == projectName.toStdString());
+    CHECK(project->dataRootDir().dirName().toStdString() == projectName.toStdString());
+
+    auto reloaded = std::make_unique<cwProject>();
+    addTokenManager(reloaded.get());
+    reloaded->loadOrConvert(targetProjectFile);
+    reloaded->waitLoadToFinish();
+
+    REQUIRE(reloaded->cavingRegion()->caveCount() == 1);
+    auto reloadedCave = reloaded->cavingRegion()->cave(0);
+    REQUIRE(reloadedCave != nullptr);
+    CHECK(reloadedCave->name() == QStringLiteral("ReloadCave"));
+    REQUIRE(reloadedCave->tripCount() == 1);
+    CHECK(reloadedCave->trip(0)->name() == QStringLiteral("ReloadTrip"));
+
+    const QDir dataRootDir = ProjectFilenameTestHelper::projectDir(reloaded.get());
+    CHECK(dataRootDir.dirName().toStdString() == projectName.toStdString());
+    CHECK(reloaded->dataRoot().toStdString() == projectName.toStdString());
+    CHECK(reloaded->dataRootDir().dirName().toStdString() == projectName.toStdString());
+}
+
 TEST_CASE("Non-temporary project saveAs reports error when destination exists", "[cwProject]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
