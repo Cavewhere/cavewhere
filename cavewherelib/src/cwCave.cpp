@@ -283,7 +283,7 @@ cwCave::InsertRemoveTrip::~InsertRemoveTrip() {
     if(OwnsTrips) {
         for(auto trip : std::as_const(Trips)) {
             if(!trip.isNull()) {
-                delete trip;
+                trip->deleteLater();
             }
         }
     }
@@ -298,7 +298,6 @@ void cwCave::InsertRemoveTrip::insertTrips() {
         cave->Trips.insert(index, Trips[i]);
         Trips[i]->setParentCave(cave);
         Trips[i]->errorModel()->setParentModel(cave->errorModel());
-//        cave->errorModel()->addParent(Trips[i]);
     }
 
     OwnsTrips = false;
@@ -316,7 +315,10 @@ void cwCave::InsertRemoveTrip::removeTrips() {
     for(int i = Trips.size() - 1; i >= 0; i--) {
         int index = BeginIndex + i;
         cave->Trips.removeAt(index);
-        Trips[i]->setParentCave(nullptr);
+
+        //Do NOT uncomment, qml engine may garbage collect objects that aren't parented, and can cause double free problem
+        // Trips[i]->setParentCave(nullptr);
+
         Trips[i]->errorModel()->setParentModel(nullptr);
     }
 

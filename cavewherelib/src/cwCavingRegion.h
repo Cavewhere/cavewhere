@@ -110,7 +110,7 @@ private:
         void insertCaves();
         void removeCaves();
 
-        QList< cwCave* > Caves;
+        QList< QPointer<cwCave> > Caves;
     private:
         cwCavingRegion* Region;
         int BeginIndex;

@@ -301,8 +301,10 @@ cwCavingRegion::InsertRemoveCave::InsertRemoveCave(cwCavingRegion* region,
   */
 cwCavingRegion::InsertRemoveCave::~InsertRemoveCave() {
     if(OwnsCaves) {
-        foreach(cwCave* cave, Caves) {
-            delete cave;
+        foreach(auto cave, Caves) {
+            if(cave) {
+                cave->deleteLater();
+            }
         }
     }
 }
@@ -342,7 +344,9 @@ void cwCavingRegion::InsertRemoveCave::removeCaves() {
     for(int i = Caves.size() - 1; i >= 0; i--) {
         int index = BeginIndex + i;
         regionPtr->m_caves.removeAt(index);
-        Caves[i]->setParent(nullptr);
+
+        //Do NOT uncomment, qml engine may garbage collect objects that aren't parented, and can cause double free problem
+        // Caves[i]->setParent(nullptr);
     }
 
     OwnsCaves = true;
@@ -358,7 +362,10 @@ cwCavingRegion::InsertCaveCommand::InsertCaveCommand(cwCavingRegion* parentRegio
                                                      int index) :
     cwCavingRegion::InsertRemoveCave(parentRegion, index, index + caves.size() -1)
 {
-    Caves = caves;
+    Caves.reserve(caves.size());
+    for(auto cave : caves) {
+        Caves.append(cave);
+    }
 
     if(caves.size() == 1) {
         setText(QString("Add %1").arg(caves.first()->name()));
