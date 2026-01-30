@@ -67,8 +67,8 @@ TEST_CASE("cwCavingRegion setData should reset caves", "[cwCavingRegion]") {
     if(region.undoStack() != nullptr) {
         REQUIRE(!oldCave1Ptr.isNull());
         REQUIRE(!oldCave2Ptr.isNull());
-        CHECK(oldCave1Ptr->parent() == nullptr);
-        CHECK(oldCave2Ptr->parent() == nullptr);
+        CHECK(oldCave1Ptr->parent() == &region);
+        CHECK(oldCave2Ptr->parent() == &region);
     } else {
         //No undostack, caves should have been deleted
         CHECK(oldCave1Ptr.isNull());

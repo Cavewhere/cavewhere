@@ -45,8 +45,8 @@ TEST_CASE("cwCave setData should reset trips", "[cwCave]") {
     if(cave.undoStack() != nullptr) {
         REQUIRE(!oldTrip1Ptr.isNull());
         REQUIRE(!oldTrip2Ptr.isNull());
-        CHECK(oldTrip1Ptr->parent() == nullptr);
-        CHECK(oldTrip2Ptr->parent() == nullptr);
+        CHECK(oldTrip1Ptr->parent() == &cave);
+        CHECK(oldTrip2Ptr->parent() == &cave);
     } else {
         CHECK(oldTrip1Ptr.isNull());
         CHECK(oldTrip2Ptr.isNull());
@@ -81,8 +81,8 @@ TEST_CASE("cwCave clearTrips should remove all trips", "[cwCave]") {
     if(cave.undoStack() != nullptr) {
         REQUIRE(!trip1Ptr.isNull());
         REQUIRE(!trip2Ptr.isNull());
-        CHECK(trip1Ptr->parent() == nullptr);
-        CHECK(trip2Ptr->parent() == nullptr);
+        CHECK(trip1Ptr->parent() == &cave);
+        CHECK(trip2Ptr->parent() == &cave);
     } else {
         CHECK(trip1Ptr.isNull());
         CHECK(trip2Ptr.isNull());
