@@ -127,7 +127,7 @@ TEST_CASE("cwCropImageTask writes cache under dataRoot", "[cwCropImageTask][cach
 
     const QString cachedPath = QFileInfo(cropped->path()).absoluteFilePath();
     CHECK(cachedPath.contains(QStringLiteral("/.cw_cache/")));
-    CHECK(cachedPath.startsWith(fixture.dataRootDir.absolutePath() + QDir::separator()));
+    CHECK(cachedPath.startsWith(fixture.dataRootDir.absolutePath() + QStringLiteral("/")));
 }
 
 TEST_CASE("cwCacheImageProvider reads cached data from dataRoot", "[cwCacheImageProvider][cache][dataRoot]") {
