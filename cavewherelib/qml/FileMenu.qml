@@ -60,7 +60,6 @@ QC.Menu {
         shortcut: "Ctrl+O"
         onTriggered: {
             const openDialog = function() {
-                RootData.pageSelectionModel.currentPageAddress = "Source";
                 loadFileDialog.open();
             }
 
