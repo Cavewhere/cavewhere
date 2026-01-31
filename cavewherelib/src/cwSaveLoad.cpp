@@ -1062,7 +1062,12 @@ Result<ProjectDestination> projectDestination(const QString& destinationUrl)
 
     QDir destinationDirectory = destinationInfo.absoluteDir();
 
-    const QString rootDirPath = destinationDirectory.absolutePath();
+    QString rootDirPath;
+    if (destinationDirectory.dirName() == sanitizedBaseName) {
+        rootDirPath = destinationDirectory.absolutePath();
+    } else {
+        rootDirPath = destinationDirectory.absoluteFilePath(sanitizedBaseName);
+    }
 
     QFileInfo rootInfo(rootDirPath);
     QDir parentDir = rootInfo.dir();
@@ -1116,78 +1121,6 @@ ResultBase copyDirectoryRecursively(const QDir& sourceDir, const QDir& destinati
     return ResultBase();
 }
 
-ResultBase copyDirectoryContentsRecursively(const QDir& sourceDir, const QDir& destinationDir)
-{
-    if (!sourceDir.exists()) {
-        return ResultBase(QStringLiteral("Source directory '%1' does not exist.").arg(sourceDir.absolutePath()));
-    }
-
-    if (!destinationDir.exists()) {
-        if (!QDir().mkpath(destinationDir.absolutePath())) {
-            return ResultBase(QStringLiteral("Cannot create directory '%1'.").arg(destinationDir.absolutePath()));
-        }
-    }
-
-    const QFileInfoList entries = sourceDir.entryInfoList(QDir::NoDotAndDotDot
-                                                          | QDir::AllEntries
-                                                          | QDir::Hidden
-                                                          | QDir::System);
-    for (const QFileInfo& entry : entries) {
-        const QString targetPath = destinationDir.absoluteFilePath(entry.fileName());
-        if (QFileInfo::exists(targetPath)) {
-            return ResultBase(QStringLiteral("Destination '%1' already exists.").arg(targetPath));
-        }
-        if (entry.isDir()) {
-            auto result = copyDirectoryRecursively(QDir(entry.absoluteFilePath()), QDir(targetPath));
-            if (result.hasError()) {
-                return result;
-            }
-        } else {
-            if (!QFile::copy(entry.absoluteFilePath(), targetPath)) {
-                return ResultBase(QStringLiteral("Can't copy '%1' to '%2'.").arg(entry.absoluteFilePath(), targetPath));
-            }
-        }
-    }
-
-    return ResultBase();
-}
-
-ResultBase moveDirectoryContents(const QDir& sourceDir, const QDir& destinationDir)
-{
-    if (!sourceDir.exists()) {
-        return ResultBase(QStringLiteral("Source directory '%1' does not exist.").arg(sourceDir.absolutePath()));
-    }
-
-    if (!destinationDir.exists()) {
-        if (!QDir().mkpath(destinationDir.absolutePath())) {
-            return ResultBase(QStringLiteral("Cannot create directory '%1'.").arg(destinationDir.absolutePath()));
-        }
-    }
-
-    const QFileInfoList entries = sourceDir.entryInfoList(QDir::NoDotAndDotDot
-                                                          | QDir::AllEntries
-                                                          | QDir::Hidden
-                                                          | QDir::System);
-    for (const QFileInfo& entry : entries) {
-        const QString targetPath = destinationDir.absoluteFilePath(entry.fileName());
-        if (QFileInfo::exists(targetPath)) {
-            return ResultBase(QStringLiteral("Destination '%1' already exists.").arg(targetPath));
-        }
-        if (entry.isDir()) {
-            if (!QDir().rename(entry.absoluteFilePath(), targetPath)) {
-                return ResultBase(QStringLiteral("Couldn't move '%1' to '%2'.").arg(entry.absoluteFilePath(), targetPath));
-            }
-        } else {
-            if (!QFile::rename(entry.absoluteFilePath(), targetPath)) {
-                return ResultBase(QStringLiteral("Couldn't move '%1' to '%2'.").arg(entry.absoluteFilePath(), targetPath));
-            }
-        }
-    }
-
-    QDir().rmdir(sourceDir.absolutePath());
-    return ResultBase();
-}
-
 }
 
 ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, ProjectTransferMode mode)
@@ -1210,17 +1143,8 @@ ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, Proj
     const QString normalizedTargetRoot = QDir(targetRootPath).absolutePath();
     const bool sameRoot = normalizedCurrentRoot == normalizedTargetRoot;
 
-    const QString newDataRootName = destination.sanitizedBaseName;
-    const QString newDataRootPath = QDir(targetRootPath).absoluteFilePath(newDataRootName);
-    const QString desiredFilePath = destination.projectFilePath;
-
-    if (!sameRoot) {
-        if (QFileInfo::exists(desiredFilePath)) {
-            return ResultBase(QStringLiteral("Destination '%1' already exists.").arg(desiredFilePath));
-        }
-        if (QFileInfo::exists(newDataRootPath)) {
-            return ResultBase(QStringLiteral("Destination folder '%1' already exists.").arg(newDataRootPath));
-        }
+    if (!sameRoot && QFileInfo::exists(targetRootPath)) {
+        return ResultBase(QStringLiteral("Destination folder '%1' already exists.").arg(targetRootPath));
     }
 
     setSaveEnabled(false);
@@ -1230,12 +1154,11 @@ ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, Proj
 
     if (!sameRoot) {
         if (mode == ProjectTransferMode::Move) {
-            auto moveResult = moveDirectoryContents(QDir(currentRootPath), QDir(targetRootPath));
-            if (moveResult.hasError()) {
-                return moveResult;
+            if (!QDir().rename(currentRootPath, targetRootPath)) {
+                return ResultBase(QStringLiteral("Couldn't move project to '%1'.").arg(targetRootPath));
             }
         } else if (mode == ProjectTransferMode::Copy) {
-            auto copyResult = copyDirectoryContentsRecursively(QDir(currentRootPath), QDir(targetRootPath));
+            auto copyResult = copyDirectoryRecursively(QDir(currentRootPath), QDir(targetRootPath));
             if (copyResult.hasError()) {
                 return copyResult;
             }
@@ -1245,6 +1168,7 @@ ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, Proj
     }
 
     QDir targetRootDir(sameRoot ? normalizedCurrentRoot : normalizedTargetRoot);
+    const QString desiredFilePath = destination.projectFilePath;
     const QString sourceFileName = QFileInfo(currentProjectFile).fileName();
     QString sourceFilePath = targetRootDir.absoluteFilePath(sourceFileName);
 
@@ -1266,6 +1190,7 @@ ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, Proj
         sourceFilePath = desiredPath;
     }
 
+    const QString newDataRootName = destination.sanitizedBaseName;
     const auto region = d->m_regionTreeModel->cavingRegion();
     QString oldDataRootName = d->projectMetadata.dataRoot;
     if (oldDataRootName.isEmpty()) {

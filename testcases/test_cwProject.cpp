@@ -871,9 +871,11 @@ TEST_CASE("SaveAs persists dataRoot updates for reload", "[cwProject][saveAs]") 
 
     const QString savedProjectFile = project->filename();
     REQUIRE(QFileInfo::exists(savedProjectFile));
-    CHECK(savedProjectFile.toStdString() == targetProjectFile.toStdString());
+    const QString expectedProjectFile = QDir(destinationParent.path())
+                                            .filePath(QStringLiteral("ReloadProject/ReloadProject.cwproj"));
+    CHECK(savedProjectFile.toStdString() == expectedProjectFile.toStdString());
 
-    const QString projectName = QFileInfo(targetProjectFile).completeBaseName();
+    const QString projectName = QFileInfo(savedProjectFile).completeBaseName();
     const QDir savedDataRootDir = ProjectFilenameTestHelper::projectDir(project);
     CHECK(savedDataRootDir.dirName().toStdString() == projectName.toStdString());
     CHECK(project->dataRoot().toStdString() == projectName.toStdString());
@@ -881,7 +883,7 @@ TEST_CASE("SaveAs persists dataRoot updates for reload", "[cwProject][saveAs]") 
 
     auto reloaded = std::make_unique<cwProject>();
     addTokenManager(reloaded.get());
-    reloaded->loadOrConvert(targetProjectFile);
+    reloaded->loadOrConvert(savedProjectFile);
     reloaded->waitLoadToFinish();
 
     REQUIRE(reloaded->cavingRegion()->caveCount() == 1);
