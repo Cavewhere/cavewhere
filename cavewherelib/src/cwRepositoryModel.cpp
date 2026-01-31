@@ -3,6 +3,7 @@
 #include "cwRepositoryModel.h"
 #include "cwRootData.h"
 #include "cwProject.h"
+#include "cwSaveLoad.h"
 
 //Monad
 #include "Monad/Monad.h"
@@ -74,7 +75,10 @@ Monad::ResultBase cwRepositoryModel::addRepository(const cwResultDir& dir)
                    QQuickGit::GitRepository repo;
                    repo.setDirectory(dir.value());
                    repo.initRepository();
-                   cw::git::ensureGitExcludeHasCacheEntry(dir.value());
+
+                   qWarning() << "TODO: Repositories should be init'ed through cwSaveLoad" << LOCATION;
+                   cwSaveLoad::ensureGitExcludeHasCacheEntry(dir.value());
+
 
                    m_repositories.append(dir.value());
                    endInsertRows();
@@ -239,7 +243,7 @@ cwResultDir cwRepositoryModel::repositoryDir(const QUrl &localDir, const QString
 
     auto quotedFilename = [](const QString& fullName, const QString& name) {
         auto quote = [](const QString& str){
-           return  QStringLiteral("\"") + str + QStringLiteral("\" ");
+            return  QStringLiteral("\"") + str + QStringLiteral("\" ");
         };
 
         if(!cwRootData::isMobileBuild()) {
@@ -260,7 +264,7 @@ cwResultDir cwRepositoryModel::repositoryDir(const QUrl &localDir, const QString
         }
     } else {
         //Is a url and not a local file
-         return cwResultDir(quotedFilename(localDir.toString(), name) + QStringLiteral("is not a non-local directory"), PathError);
+        return cwResultDir(quotedFilename(localDir.toString(), name) + QStringLiteral("is not a non-local directory"), PathError);
     }
 }
 

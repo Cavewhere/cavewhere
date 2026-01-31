@@ -277,9 +277,7 @@ cwImage loadImage(const CavewhereProto::Image& protoImage, const QString& noteFi
 
 } // namespace
 
-namespace cw::git {
-
-void ensureGitExcludeHasCacheEntry(const QDir& repoDir)
+void cwSaveLoad::ensureGitExcludeHasCacheEntry(const QDir& repoDir)
 {
     const QDir gitDir = gitDirForRepository(repoDir);
     if (!gitDir.exists()) {
@@ -321,9 +319,6 @@ void ensureGitExcludeHasCacheEntry(const QDir& repoDir)
     }
     writeFile.write(".cw_cache/\n");
 }
-
-} // namespace cw::git
-
 
 template<typename ProtoType>
 static Result<ProtoType> loadMessage(const QString& filename) {
@@ -1339,7 +1334,7 @@ void cwSaveLoad::setFileName(const QString &filename, bool initRepository)
         if(initRepository) {
             d->repository->setDirectory(QFileInfo(filename).absoluteDir());
             d->repository->initRepository();
-            cw::git::ensureGitExcludeHasCacheEntry(d->repository->directory());
+            ensureGitExcludeHasCacheEntry(d->repository->directory());
         }
 
         emit fileNameChanged();

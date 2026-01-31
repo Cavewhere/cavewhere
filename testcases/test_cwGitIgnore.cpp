@@ -6,9 +6,8 @@
 #include <QFile>
 #include <QTemporaryDir>
 
-namespace cw::git {
-void ensureGitExcludeHasCacheEntry(const QDir& repoDir);
-}
+//Our includes
+#include "cwSaveLoad.h"
 
 static QString readGitExclude(const QDir& dir)
 {
@@ -25,7 +24,7 @@ TEST_CASE("ensureGitExcludeHasCacheEntry writes .cw_cache entry", "[cwGitIgnore]
     QDir repoDir(tmpDir.path());
     REQUIRE(QDir().mkpath(repoDir.filePath(QStringLiteral(".git/info"))));
 
-    cw::git::ensureGitExcludeHasCacheEntry(repoDir);
+    cwSaveLoad::ensureGitExcludeHasCacheEntry(repoDir);
     const QString contents = readGitExclude(repoDir);
     CHECK(contents.contains(".cw_cache/"));
 }
@@ -36,8 +35,8 @@ TEST_CASE("ensureGitExcludeHasCacheEntry is idempotent", "[cwGitIgnore]") {
     QDir repoDir(tmpDir.path());
     REQUIRE(QDir().mkpath(repoDir.filePath(QStringLiteral(".git/info"))));
 
-    cw::git::ensureGitExcludeHasCacheEntry(repoDir);
-    cw::git::ensureGitExcludeHasCacheEntry(repoDir);
+    cwSaveLoad::ensureGitExcludeHasCacheEntry(repoDir);
+    cwSaveLoad::ensureGitExcludeHasCacheEntry(repoDir);
 
     const QString contents = readGitExclude(repoDir);
     const QStringList lines = contents.split('\n');
@@ -61,7 +60,7 @@ TEST_CASE("ensureGitExcludeHasCacheEntry respects existing .cw_cache entry", "[c
     file.write(".cw_cache\n");
     file.close();
 
-    cw::git::ensureGitExcludeHasCacheEntry(repoDir);
+    cwSaveLoad::ensureGitExcludeHasCacheEntry(repoDir);
 
     const QString contents = readGitExclude(repoDir);
     CHECK(contents.contains(".cw_cache"));

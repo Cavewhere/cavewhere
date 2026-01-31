@@ -205,6 +205,8 @@ public:
 
     QFuture<void> retire();
 
+    static void ensureGitExcludeHasCacheEntry(const QDir& repoDir);
+
 signals:
     void fileNameChanged();
     void dataRootChanged();
