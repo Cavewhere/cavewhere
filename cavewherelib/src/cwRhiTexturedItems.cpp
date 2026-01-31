@@ -7,6 +7,7 @@
 #include <QFont>
 #include <QImage>
 #include <QPainter>
+#include <QDebug>
 #include <QtGlobal>
 #include <algorithm>
 #include <cstring>
@@ -250,6 +251,17 @@ bool cwRhiTexturedItems::gather(const GatherContext& context, QVector<PipelineBa
         return false;
     }
 
+    auto* renderer = context.renderData ? context.renderData->renderer : nullptr;
+    auto* renderTarget = renderer ? renderer->renderTarget() : nullptr;
+    auto* currentPass = renderTarget ? renderTarget->renderPassDescriptor() : nullptr;
+    auto* depthBuffer = renderer ? renderer->depthStencilBuffer() : nullptr;
+
+    if (!depthBuffer) {
+        qDebug() << "cwRhiTexturedItems::gather depthStencilBuffer missing"
+                 << "renderTarget" << renderTarget
+                 << "renderer" << renderer;
+    }
+
     const auto desiredPass = context.renderPass;
     bool appended = false;
 
@@ -265,6 +277,18 @@ bool cwRhiTexturedItems::gather(const GatherContext& context, QVector<PipelineBa
             !item->srb ||
             !item->vertexBuffer ||
             !item->indexBuffer) {
+
+
+            const bool pipelineValid = item->pipelineRecord && item->pipelineRecord->pipeline;
+            const bool passMatches = pipelineValid && (item->pipelineRecord->key.renderPass == currentPass);
+            qDebug() << "cwRhiTexturedItems::gather skip item"
+                     << "item" << item
+                     << "pipelineValid" << pipelineValid
+                     << "passMatches" << passMatches
+                     << "hasSRB" << (item->srb != nullptr)
+                     << "hasVertexBuffer" << (item->vertexBuffer != nullptr)
+                     << "hasIndexBuffer" << (item->indexBuffer != nullptr)
+                     << "depthStencilBuffer" << (depthBuffer != nullptr);
             continue;
         }
 
