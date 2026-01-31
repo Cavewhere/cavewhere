@@ -57,9 +57,9 @@ cwScrap* firstScrap(cwProject* project) {
     return note->scrap(0);
 }
 
-QString readGitIgnore(const QDir& dir)
+QString readGitExclude(const QDir& dir)
 {
-    QFile file(dir.filePath(QStringLiteral(".gitignore")));
+    QFile file(dir.filePath(QStringLiteral(".git/info/exclude")));
     if (!file.open(QIODevice::ReadOnly)) {
         return QString();
     }
@@ -546,19 +546,19 @@ TEST_CASE("Loading a project preserves metadata dataRoot", "[cwProject]") {
     CHECK(project->dataRoot().toStdString() == metadataDataRoot.toStdString());
 }
 
-TEST_CASE("Loading a project adds .gitignore cache entry", "[cwProject]") {
+TEST_CASE("Loading a project adds .git/info/exclude cache entry", "[cwProject]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
 
     QString source = copyToTempFolder("://datasets/test_cwProject/v8.cwproj");
     const QDir projectDir = QFileInfo(source).absoluteDir();
-    QFile::remove(projectDir.filePath(QStringLiteral(".gitignore")));
+    QFile::remove(projectDir.filePath(QStringLiteral(".git/info/exclude")));
 
     project->loadOrConvert(source);
     rootData->futureManagerModel()->waitForFinished();
     project->waitLoadToFinish();
 
-    const QString contents = readGitIgnore(projectDir);
+    const QString contents = readGitExclude(projectDir);
     CHECK(contents.contains(".cw_cache/"));
 }
 
