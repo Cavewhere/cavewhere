@@ -229,6 +229,8 @@ void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
     const QSize outputSize = renderer->renderTarget()->pixelSize();
     cb->setViewport(QRhiViewport(0, 0, outputSize.width(), outputSize.height()));
 
+    qDebug() << "Render!";
+
     QRhiGraphicsPipeline* boundPipeline = nullptr;
     for (cwRHIObject::RenderPass pass : passOrder) {
         const int passIndex = static_cast<int>(pass);
@@ -248,6 +250,7 @@ void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
         for (const auto& batch : std::as_const(batches)) {
             if (batch.state.pipeline && batch.state.pipeline != boundPipeline) {
                 boundPipeline = batch.state.pipeline;
+                qDebug() << "\tbatch depth:" << batch.name << boundPipeline->hasDepthTest() << boundPipeline->hasDepthWrite() << boundPipeline->depthOp();
                 cb->setGraphicsPipeline(boundPipeline);
             } else if (!batch.state.pipeline) {
                 boundPipeline = nullptr;

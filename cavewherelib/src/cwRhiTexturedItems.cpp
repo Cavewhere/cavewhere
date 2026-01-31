@@ -271,26 +271,26 @@ bool cwRhiTexturedItems::gather(const GatherContext& context, QVector<PipelineBa
             continue;
         }
 
-        if (item->numberOfIndices <= 0 ||
-            !item->pipelineRecord ||
-            !item->pipelineRecord->pipeline ||
-            !item->srb ||
-            !item->vertexBuffer ||
-            !item->indexBuffer) {
+        // if (item->numberOfIndices <= 0 ||
+        //     !item->pipelineRecord ||
+        //     !item->pipelineRecord->pipeline ||
+        //     !item->srb ||
+        //     !item->vertexBuffer ||
+        //     !item->indexBuffer) {
 
 
-            const bool pipelineValid = item->pipelineRecord && item->pipelineRecord->pipeline;
-            const bool passMatches = pipelineValid && (item->pipelineRecord->key.renderPass == currentPass);
-            qDebug() << "cwRhiTexturedItems::gather skip item"
-                     << "item" << item
-                     << "pipelineValid" << pipelineValid
-                     << "passMatches" << passMatches
-                     << "hasSRB" << (item->srb != nullptr)
-                     << "hasVertexBuffer" << (item->vertexBuffer != nullptr)
-                     << "hasIndexBuffer" << (item->indexBuffer != nullptr)
-                     << "depthStencilBuffer" << (depthBuffer != nullptr);
-            continue;
-        }
+        //     const bool pipelineValid = item->pipelineRecord && item->pipelineRecord->pipeline;
+        //     const bool passMatches = pipelineValid && (item->pipelineRecord->key.renderPass == currentPass);
+        //     qDebug() << "cwRhiTexturedItems::gather skip item"
+        //              << "item" << item
+        //              << "pipelineValid" << pipelineValid
+        //              << "passMatches" << passMatches
+        //              << "hasSRB" << (item->srb != nullptr)
+        //              << "hasVertexBuffer" << (item->vertexBuffer != nullptr)
+        //              << "hasIndexBuffer" << (item->indexBuffer != nullptr)
+        //              << "depthStencilBuffer" << (depthBuffer != nullptr);
+        //     continue;
+        // }
 
         if (toRenderPass(item->material.renderPass) != desiredPass) {
             continue;
@@ -313,6 +313,7 @@ bool cwRhiTexturedItems::gather(const GatherContext& context, QVector<PipelineBa
         drawable.vertexBindings.append(QRhiCommandBuffer::VertexInput(item->vertexBuffer, 0));
 
         batch.drawables.append(drawable);
+        batch.name = QStringLiteral("cwRhiTextureItems:%1").arg(m_items.size());
         appended = true;
     }
 
@@ -621,6 +622,8 @@ cwRhiScene::PipelineRecord *cwRhiTexturedItems::acquirePipeline(const cwRhiPipel
         record->pipeline->setTopology(static_cast<QRhiGraphicsPipeline::Topology>(key.topology));
         record->pipeline->setDepthTest(material.depthTest);
         record->pipeline->setDepthWrite(material.depthWrite);
+        qDebug() << "Depth operation:" << record->pipeline->depthOp();
+        // record->pipeline->setDepthOp(QRhiGraphicsPipeline::Less);
         record->pipeline->setSampleCount(key.sampleCount);
 
         if (material.requiresBlending()) {

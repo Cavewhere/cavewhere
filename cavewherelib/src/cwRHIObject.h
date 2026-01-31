@@ -81,6 +81,7 @@ public:
     struct PipelineBatch {
         PipelineState state;
         QVector<Drawable> drawables;
+        QString name;
     };
 
     static quint64 makeSortKey(quint32 objectOrder, QRhiGraphicsPipeline* pipeline)
