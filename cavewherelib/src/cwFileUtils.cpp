@@ -16,8 +16,6 @@
 #include <QThread>
 #include <QTimer>
 
-namespace cwFileUtils {
-
 namespace {
 
 bool waitForExistence(const QString& filePath, int timeoutMs) {
@@ -93,10 +91,11 @@ bool waitForSizeStability(const QString& filePath, int stabilityMs, int timeoutM
 
 }
 
-bool waitForFileReady(const QString& filePath,
-                      int existenceTimeoutMs,
-                      int stabilityMs,
-                      int stabilityTimeoutMs) {
+
+bool cwFileUtils::waitForFileReady(const QString& filePath,
+                                   int existenceTimeoutMs,
+                                   int stabilityMs,
+                                   int stabilityTimeoutMs) {
     if (!waitForExistence(filePath, existenceTimeoutMs)) {
         return false;
     }
@@ -104,4 +103,4 @@ bool waitForFileReady(const QString& filePath,
     return waitForSizeStability(filePath, stabilityMs, stabilityTimeoutMs);
 }
 
-}
+

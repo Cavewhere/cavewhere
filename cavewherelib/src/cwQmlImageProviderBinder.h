@@ -8,16 +8,19 @@
 #ifndef CWQMLIMAGEPROVIDERBINDER_H
 #define CWQMLIMAGEPROVIDERBINDER_H
 
+// Qt includes
 #include <QObject>
 #include <QPointer>
 #include <QQmlEngine>
 
+// Our include
+#include "CaveWhereLibExport.h"
 class cwCacheImageProvider;
 class cwImageProvider;
 class cwProject;
 class cwRootData;
 
-class cwQmlImageProviderBinder : public QObject
+class CAVEWHERE_LIB_EXPORT cwQmlImageProviderBinder : public QObject
 {
     Q_OBJECT
 

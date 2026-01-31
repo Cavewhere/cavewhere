@@ -11,16 +11,22 @@
 // Qt includes
 #include <QString>
 
-namespace cwFileUtils {
+// Our includes
+#include "CaveWhereLibExport.h"
 
-// Waits for a file to exist and stop changing size before returning.
-// Returns true once the file exists and its size is stable for stabilityMs,
-// or false if either the existence or stability timeouts are reached.
-bool waitForFileReady(const QString& filePath,
-                      int existenceTimeoutMs = 10000,
-                      int stabilityMs = 200,
-                      int stabilityTimeoutMs = 10000);
+class CAVEWHERE_LIB_EXPORT cwFileUtils {
+public:
 
-}
+    cwFileUtils() = delete;
+
+    // Waits for a file to exist and stop changing size before returning.
+    // Returns true once the file exists and its size is stable for stabilityMs,
+    // or false if either the existence or stability timeouts are reached.
+    static bool waitForFileReady(const QString& filePath,
+                          int existenceTimeoutMs = 10000,
+                          int stabilityMs = 200,
+                          int stabilityTimeoutMs = 10000);
+
+};
 
 #endif // CAVEWHERE_CWFILEUTILS_H
