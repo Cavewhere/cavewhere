@@ -25,7 +25,6 @@
 #include "cwImageResolution.h"
 #include "cwUniqueConnectionChecker.h"
 #include "cwGlobals.h"
-#include "cwGitIgnore.h"
 
 //Async future
 #include <asyncfuture.h>
@@ -74,6 +73,42 @@ QDir projectRootDirForFile(const QString& projectFileName)
 {
     QFileInfo info(projectFileName);
     return info.absoluteDir();
+}
+
+QDir gitDirForRepository(const QDir& repoDir)
+{
+    const QString dotGitPath = repoDir.filePath(QStringLiteral(".git"));
+    const QFileInfo gitInfo(dotGitPath);
+    if (gitInfo.isDir()) {
+        return QDir(gitInfo.absoluteFilePath());
+    }
+
+    if (!gitInfo.isFile()) {
+        return QDir();
+    }
+
+    QFile gitFile(gitInfo.absoluteFilePath());
+    if (!gitFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return QDir();
+    }
+
+    const QByteArray line = gitFile.readLine();
+    const QByteArray gitDirPrefix = "gitdir:";
+    if (!line.startsWith(gitDirPrefix)) {
+        return QDir();
+    }
+
+    QString gitDirPath = QString::fromUtf8(line.mid(gitDirPrefix.size())).trimmed();
+    if (gitDirPath.isEmpty()) {
+        return QDir();
+    }
+
+    QDir gitDir(gitDirPath);
+    if (gitDir.isRelative()) {
+        gitDir = QDir(repoDir.filePath(gitDirPath));
+    }
+
+    return gitDir.exists() ? gitDir : QDir();
 }
 
 QString defaultDataRoot(const QString& projectName)
@@ -241,6 +276,53 @@ cwImage loadImage(const CavewhereProto::Image& protoImage, const QString& noteFi
 }
 
 } // namespace
+
+namespace cw::git {
+
+void ensureGitExcludeHasCacheEntry(const QDir& repoDir)
+{
+    const QDir gitDir = gitDirForRepository(repoDir);
+    if (!gitDir.exists()) {
+        return;
+    }
+
+    const QDir infoDir(gitDir.filePath(QStringLiteral("info")));
+    if (!infoDir.exists()) {
+        if (!QDir().mkpath(infoDir.absolutePath())) {
+            return;
+        }
+    }
+
+    const QString excludePath = infoDir.filePath(QStringLiteral("exclude"));
+    QByteArray existingContents;
+    if (QFile::exists(excludePath)) {
+        QFile readFile(excludePath);
+        if (readFile.open(QIODevice::ReadOnly)) {
+            existingContents = readFile.readAll();
+        }
+    }
+
+    const QString entry = QStringLiteral(".cw_cache/");
+    const QStringList lines = QString::fromUtf8(existingContents).split('\n');
+    for (const QString& line : lines) {
+        const QString trimmed = line.trimmed();
+        if (trimmed == entry || trimmed == QStringLiteral(".cw_cache")) {
+            return;
+        }
+    }
+
+    QFile writeFile(excludePath);
+    if (!writeFile.open(QIODevice::WriteOnly | QIODevice::Append)) {
+        return;
+    }
+
+    if (!existingContents.isEmpty() && !existingContents.endsWith('\n')) {
+        writeFile.write("\n");
+    }
+    writeFile.write(".cw_cache/\n");
+}
+
+} // namespace cw::git
 
 
 template<typename ProtoType>
@@ -1332,7 +1414,7 @@ void cwSaveLoad::setFileName(const QString &filename, bool initRepository)
         if(initRepository) {
             d->repository->setDirectory(QFileInfo(filename).absoluteDir());
             d->repository->initRepository();
-            cw::git::ensureGitIgnoreHasCacheEntry(d->repository->directory());
+            cw::git::ensureGitExcludeHasCacheEntry(d->repository->directory());
         }
 
         emit fileNameChanged();

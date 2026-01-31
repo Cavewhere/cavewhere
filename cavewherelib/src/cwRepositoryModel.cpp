@@ -3,7 +3,6 @@
 #include "cwRepositoryModel.h"
 #include "cwRootData.h"
 #include "cwProject.h"
-#include "cwGitIgnore.h"
 
 //Monad
 #include "Monad/Monad.h"
@@ -14,6 +13,10 @@
 #include <QFileInfo>
 #include <QUrl>
 #include <QDebug>
+
+namespace cw::git {
+void ensureGitExcludeHasCacheEntry(const QDir& repoDir);
+}
 
 using namespace Monad;
 
@@ -71,7 +74,7 @@ Monad::ResultBase cwRepositoryModel::addRepository(const cwResultDir& dir)
                    QQuickGit::GitRepository repo;
                    repo.setDirectory(dir.value());
                    repo.initRepository();
-                   cw::git::ensureGitIgnoreHasCacheEntry(dir.value());
+                   cw::git::ensureGitExcludeHasCacheEntry(dir.value());
 
                    m_repositories.append(dir.value());
                    endInsertRows();

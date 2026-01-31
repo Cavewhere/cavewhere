@@ -6,37 +6,40 @@
 #include <QFile>
 #include <QTemporaryDir>
 
-//Our includes
-#include "cwGitIgnore.h"
+namespace cw::git {
+void ensureGitExcludeHasCacheEntry(const QDir& repoDir);
+}
 
-static QString readGitIgnore(const QDir& dir)
+static QString readGitExclude(const QDir& dir)
 {
-    QFile file(dir.filePath(QStringLiteral(".gitignore")));
+    QFile file(dir.filePath(QStringLiteral(".git/info/exclude")));
     if (!file.open(QIODevice::ReadOnly)) {
         return QString();
     }
     return QString::fromUtf8(file.readAll());
 }
 
-TEST_CASE("ensureGitIgnoreHasCacheEntry writes .cw_cache entry", "[cwGitIgnore]") {
+TEST_CASE("ensureGitExcludeHasCacheEntry writes .cw_cache entry", "[cwGitIgnore]") {
     QTemporaryDir tmpDir;
     REQUIRE(tmpDir.isValid());
     QDir repoDir(tmpDir.path());
+    REQUIRE(QDir().mkpath(repoDir.filePath(QStringLiteral(".git/info"))));
 
-    cw::git::ensureGitIgnoreHasCacheEntry(repoDir);
-    const QString contents = readGitIgnore(repoDir);
+    cw::git::ensureGitExcludeHasCacheEntry(repoDir);
+    const QString contents = readGitExclude(repoDir);
     CHECK(contents.contains(".cw_cache/"));
 }
 
-TEST_CASE("ensureGitIgnoreHasCacheEntry is idempotent", "[cwGitIgnore]") {
+TEST_CASE("ensureGitExcludeHasCacheEntry is idempotent", "[cwGitIgnore]") {
     QTemporaryDir tmpDir;
     REQUIRE(tmpDir.isValid());
     QDir repoDir(tmpDir.path());
+    REQUIRE(QDir().mkpath(repoDir.filePath(QStringLiteral(".git/info"))));
 
-    cw::git::ensureGitIgnoreHasCacheEntry(repoDir);
-    cw::git::ensureGitIgnoreHasCacheEntry(repoDir);
+    cw::git::ensureGitExcludeHasCacheEntry(repoDir);
+    cw::git::ensureGitExcludeHasCacheEntry(repoDir);
 
-    const QString contents = readGitIgnore(repoDir);
+    const QString contents = readGitExclude(repoDir);
     const QStringList lines = contents.split('\n');
     int count = 0;
     for (const QString& line : lines) {
@@ -47,19 +50,20 @@ TEST_CASE("ensureGitIgnoreHasCacheEntry is idempotent", "[cwGitIgnore]") {
     CHECK(count == 1);
 }
 
-TEST_CASE("ensureGitIgnoreHasCacheEntry respects existing .cw_cache entry", "[cwGitIgnore]") {
+TEST_CASE("ensureGitExcludeHasCacheEntry respects existing .cw_cache entry", "[cwGitIgnore]") {
     QTemporaryDir tmpDir;
     REQUIRE(tmpDir.isValid());
     QDir repoDir(tmpDir.path());
 
-    QFile file(repoDir.filePath(QStringLiteral(".gitignore")));
+    REQUIRE(QDir().mkpath(repoDir.filePath(QStringLiteral(".git/info"))));
+    QFile file(repoDir.filePath(QStringLiteral(".git/info/exclude")));
     REQUIRE(file.open(QIODevice::WriteOnly));
     file.write(".cw_cache\n");
     file.close();
 
-    cw::git::ensureGitIgnoreHasCacheEntry(repoDir);
+    cw::git::ensureGitExcludeHasCacheEntry(repoDir);
 
-    const QString contents = readGitIgnore(repoDir);
+    const QString contents = readGitExclude(repoDir);
     CHECK(contents.contains(".cw_cache"));
     const QStringList lines = contents.split('\n');
     int count = 0;
