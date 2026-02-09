@@ -1413,6 +1413,96 @@ TEST_CASE("cwProject sync creates and pushes merge commit for diverged non-confl
     CHECK(localLocalSideFile.readAll() == QByteArray("local side change\n"));
 }
 
+TEST_CASE("cwProject sync surfaces remote access failure and preserves local commit", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Sync Tester"));
+    rootData->account()->setEmail(QStringLiteral("sync.tester@example.com"));
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Offline Sync Cave"));
+
+    QTemporaryDir projectDir;
+    REQUIRE(projectDir.isValid());
+    const QString projectPath = QDir(projectDir.path()).filePath(QStringLiteral("sync-offline.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+
+    auto* repository = project->findChild<QQuickGit::GitRepository*>();
+    REQUIRE(repository != nullptr);
+
+    QTemporaryDir missingRemoteRoot;
+    REQUIRE(missingRemoteRoot.isValid());
+    const QString missingRemotePath = QDir(missingRemoteRoot.path()).filePath(QStringLiteral("missing-remote.git"));
+    const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
+                                                         QUrl::fromLocalFile(missingRemotePath));
+    REQUIRE(addRemoteError.isEmpty());
+
+    const QString localRepoPath = QFileInfo(project->filename()).absoluteDir().absolutePath();
+    git_repository* localRepo = nullptr;
+    REQUIRE(git_repository_open(&localRepo, localRepoPath.toLocal8Bit().constData()) == GIT_OK);
+    auto localRepoGuard = qScopeGuard([&localRepo]() {
+        if (localRepo) {
+            git_repository_free(localRepo);
+        }
+    });
+
+    auto tryHeadOid = [](git_repository* repoInstance) -> std::optional<git_oid> {
+        git_reference* head = nullptr;
+        const int error = git_repository_head(&head, repoInstance);
+        if (error == GIT_EUNBORNBRANCH || error == GIT_ENOTFOUND) {
+            return std::nullopt;
+        }
+        REQUIRE(error == GIT_OK);
+        auto headGuard = qScopeGuard([&head]() {
+            if (head) {
+                git_reference_free(head);
+            }
+        });
+        const git_oid* target = git_reference_target(head);
+        REQUIRE(target != nullptr);
+        return *target;
+    };
+
+    cave->setName(QStringLiteral("Offline Sync Cave Local Change"));
+    project->waitSaveToFinish();
+    REQUIRE(project->isModified());
+
+    const std::optional<git_oid> beforeSyncHead = tryHeadOid(localRepo);
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    REQUIRE(project->errorModel()->count() > 0);
+    const auto syncError = project->errorModel()->last();
+    CHECK(syncError.type() == cwError::Warning);
+    CHECK_FALSE(syncError.message().isEmpty());
+    CHECK(syncError.message() != QStringLiteral("No git remote is configured for this project."));
+
+    const std::optional<git_oid> afterSyncHead = tryHeadOid(localRepo);
+    REQUIRE(afterSyncHead.has_value());
+    if (beforeSyncHead.has_value()) {
+        CHECK(git_oid_cmp(&(*beforeSyncHead), &(*afterSyncHead)) != 0);
+    }
+
+    git_commit* commit = nullptr;
+    REQUIRE(git_commit_lookup(&commit, localRepo, &(*afterSyncHead)) == GIT_OK);
+    auto commitGuard = qScopeGuard([&commit]() {
+        if (commit) {
+            git_commit_free(commit);
+        }
+    });
+    const QString commitMessage = QString::fromUtf8(git_commit_message(commit));
+    CHECK(commitMessage.startsWith(QStringLiteral("Sync from CaveWhere")));
+    CHECK(project->isModified() == false);
+}
+
 TEST_CASE("cwProject sync conflict keeps ours and push succeeds", "[cwProject]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
