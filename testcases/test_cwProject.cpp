@@ -722,6 +722,65 @@ TEST_CASE("Saving commits local git changes when account is configured", "[cwPro
     CHECK(project->isModified() == false);
 }
 
+TEST_CASE("commit-on-save is idempotent when no changes exist", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Commit Tester"));
+    rootData->account()->setEmail(QStringLiteral("commit.tester@example.com"));
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Cave A"));
+    cave->addTrip();
+    cave->trip(0)->setName(QStringLiteral("Trip A"));
+
+    QTemporaryDir saveDir;
+    REQUIRE(saveDir.isValid());
+    const QString savePath = QDir(saveDir.path()).filePath(QStringLiteral("commit-idempotent-save.cwproj"));
+    REQUIRE(project->saveAs(savePath));
+    project->waitSaveToFinish();
+
+    const QDir repoDir = QFileInfo(project->filename()).absoluteDir();
+    git_repository* repo = nullptr;
+    REQUIRE(git_repository_open(&repo, repoDir.absolutePath().toLocal8Bit().constData()) == GIT_OK);
+    auto repoGuard = qScopeGuard([&repo]() {
+        if (repo) {
+            git_repository_free(repo);
+        }
+    });
+
+    auto headOid = [](git_repository* repository) -> git_oid {
+        git_reference* head = nullptr;
+        REQUIRE(git_repository_head(&head, repository) == GIT_OK);
+        auto headGuard = qScopeGuard([&head]() {
+            if (head) {
+                git_reference_free(head);
+            }
+        });
+        const git_oid* target = git_reference_target(head);
+        REQUIRE(target != nullptr);
+        return *target;
+    };
+
+    cave->setName(QStringLiteral("Cave B"));
+    project->waitSaveToFinish();
+    REQUIRE(project->isModified());
+
+    REQUIRE(project->save());
+    project->waitSaveToFinish();
+    const git_oid firstSaveHead = headOid(repo);
+    CHECK(project->isModified() == false);
+
+    REQUIRE(project->save());
+    project->waitSaveToFinish();
+    const git_oid secondSaveHead = headOid(repo);
+    CHECK(git_oid_cmp(&firstSaveHead, &secondSaveHead) == 0);
+    CHECK(project->isModified() == false);
+}
+
 TEST_CASE("Project repository includes LFS attributes for glb assets", "[cwProject]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
