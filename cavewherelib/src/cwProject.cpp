@@ -125,6 +125,9 @@ void cwProject::connectSaveLoad(cwSaveLoad* saveLoad)
     Q_ASSERT(saveLoad);
 
     saveLoad->setCavingRegion(Region);
+    if (auto* repo = saveLoad->repository()) {
+        repo->setAccount(m_gitAccount);
+    }
     // saveLoad->setUndoStack(UndoStack);
     saveLoad->setFutureManagerToken(FutureToken);
 
@@ -342,7 +345,30 @@ bool cwProject::save()
     }
 
     m_saveLoad->waitForFinished();
+    const auto commitResult = m_saveLoad->commitProjectChanges();
+    if (commitResult.hasError()) {
+        ErrorModel->append(cwError(commitResult.errorMessage(), cwError::Warning));
+        qWarning() << "Save commit skipped:" << commitResult.errorMessage();
+    }
     emit fileSaved();
+    return true;
+}
+
+bool cwProject::sync()
+{
+    if (!m_saveLoad) {
+        return false;
+    }
+
+    auto syncFuture = m_saveLoad->sync();
+    AsyncFuture::observe(syncFuture)
+        .context(this, [this, syncFuture]() {
+            const auto result = syncFuture.result();
+            if (result.hasError()) {
+                ErrorModel->append(cwError(result.errorMessage(), cwError::Warning));
+            }
+        }).future();
+
     return true;
 }
 
@@ -906,6 +932,18 @@ void cwProject::loadOrConvert(const QString &filename)
                                  errorModel()->append(cwError(result.errorMessage(), cwError::Fatal));
                              }
                          }).future();
+    }
+}
+
+void cwProject::setGitAccount(QQuickGit::Account* account)
+{
+    if (m_gitAccount == account) {
+        return;
+    }
+
+    m_gitAccount = account;
+    if (m_saveLoad && m_saveLoad->repository()) {
+        m_saveLoad->repository()->setAccount(account);
     }
 }
 

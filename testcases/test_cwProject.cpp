@@ -26,6 +26,7 @@ using namespace Catch;
 #include "cwUnits.h"
 #include "cwScrap.h"
 #include "cwSignalSpy.h"
+#include "GitRepository.h"
 
 //Qt includes
 #include <QtCore/qdiriterator.h>
@@ -38,6 +39,12 @@ using namespace Catch;
 #include <QFileInfo>
 #include <QSet>
 #include <QTemporaryDir>
+#include <QtCore/qscopeguard.h>
+
+//libgit2
+#include "git2.h"
+
+#include <optional>
 
 namespace {
 cwScrap* firstScrap(cwProject* project) {
@@ -560,6 +567,290 @@ TEST_CASE("Loading a project adds .git/info/exclude cache entry", "[cwProject]")
 
     const QString contents = readGitExclude(projectDir);
     CHECK(contents.contains(".cw_cache/"));
+}
+
+TEST_CASE("Saving commits local git changes when account is configured", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Commit Tester"));
+    rootData->account()->setEmail(QStringLiteral("commit.tester@example.com"));
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Cave A"));
+    cave->addTrip();
+    cave->trip(0)->setName(QStringLiteral("Trip A"));
+
+    QTemporaryDir saveDir;
+    REQUIRE(saveDir.isValid());
+    const QString savePath = QDir(saveDir.path()).filePath(QStringLiteral("commit-on-save.cwproj"));
+    REQUIRE(project->saveAs(savePath));
+    project->waitSaveToFinish();
+
+    const QDir repoDir = QFileInfo(project->filename()).absoluteDir();
+    git_repository* repo = nullptr;
+    REQUIRE(git_repository_open(&repo, repoDir.absolutePath().toLocal8Bit().constData()) == GIT_OK);
+    auto repoGuard = qScopeGuard([&repo]() {
+        if (repo) {
+            git_repository_free(repo);
+        }
+    });
+
+    auto tryHeadOid = [](git_repository* repository) -> std::optional<git_oid> {
+        git_reference* head = nullptr;
+        const int error = git_repository_head(&head, repository);
+        if (error == GIT_EUNBORNBRANCH || error == GIT_ENOTFOUND) {
+            return std::nullopt;
+        }
+        REQUIRE(error == GIT_OK);
+        auto headGuard = qScopeGuard([&head]() {
+            if (head) {
+                git_reference_free(head);
+            }
+        });
+        const git_oid* target = git_reference_target(head);
+        REQUIRE(target != nullptr);
+        return *target;
+    };
+
+    cave->setName(QStringLiteral("Cave B"));
+    project->waitSaveToFinish();
+    REQUIRE(project->isModified());
+
+    const std::optional<git_oid> beforeSaveCommit = tryHeadOid(repo);
+
+    REQUIRE(project->save());
+    project->waitSaveToFinish();
+
+    const std::optional<git_oid> afterSaveCommit = tryHeadOid(repo);
+    REQUIRE(afterSaveCommit.has_value());
+    if (beforeSaveCommit.has_value()) {
+        CHECK(git_oid_cmp(&(*beforeSaveCommit), &(*afterSaveCommit)) != 0);
+    }
+
+    git_commit* commit = nullptr;
+    REQUIRE(git_commit_lookup(&commit, repo, &(*afterSaveCommit)) == GIT_OK);
+    auto commitGuard = qScopeGuard([&commit]() {
+        if (commit) {
+            git_commit_free(commit);
+        }
+    });
+
+    const git_signature* committer = git_commit_committer(commit);
+    REQUIRE(committer != nullptr);
+    CHECK(QString::fromUtf8(committer->name) == QStringLiteral("Commit Tester"));
+    CHECK(QString::fromUtf8(committer->email) == QStringLiteral("commit.tester@example.com"));
+
+    const QString commitMessage = QString::fromUtf8(git_commit_message(commit));
+    CHECK(commitMessage.startsWith(QStringLiteral("Save from CaveWhere")));
+    CHECK(project->isModified() == false);
+}
+
+TEST_CASE("Project repository includes LFS attributes for glb assets", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    const QString attributesPath = QFileInfo(project->filename()).absoluteDir().filePath(QStringLiteral(".gitattributes"));
+    QFile attributesFile(attributesPath);
+    REQUIRE(attributesFile.open(QIODevice::ReadOnly));
+    const QString contents = QString::fromUtf8(attributesFile.readAll());
+    CHECK(contents.contains(QStringLiteral("*.glb filter=lfs diff=lfs merge=lfs -text")));
+}
+
+TEST_CASE("cwProject sync pushes local changes to remote repository", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Sync Tester"));
+    rootData->account()->setEmail(QStringLiteral("sync.tester@example.com"));
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Sync Cave"));
+
+    QTemporaryDir projectDir;
+    REQUIRE(projectDir.isValid());
+    const QString projectPath = QDir(projectDir.path()).filePath(QStringLiteral("sync-project.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+
+    auto* repository = project->findChild<QQuickGit::GitRepository*>();
+    REQUIRE(repository != nullptr);
+
+    QTemporaryDir remoteRoot;
+    REQUIRE(remoteRoot.isValid());
+    const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
+
+    git_repository* remoteRepo = nullptr;
+    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
+    if (remoteRepo) {
+        git_repository_free(remoteRepo);
+        remoteRepo = nullptr;
+    }
+
+    const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
+                                                         QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(addRemoteError.isEmpty());
+
+    cave->setName(QStringLiteral("Sync Cave Updated"));
+    project->waitSaveToFinish();
+    REQUIRE(project->isModified());
+
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    git_repository* localRepo = nullptr;
+    REQUIRE(git_repository_open(&localRepo, QFileInfo(project->filename()).absoluteDir().absolutePath().toLocal8Bit().constData()) == GIT_OK);
+    auto localRepoGuard = qScopeGuard([&localRepo]() {
+        if (localRepo) {
+            git_repository_free(localRepo);
+        }
+    });
+
+    git_reference* localHead = nullptr;
+    REQUIRE(git_repository_head(&localHead, localRepo) == GIT_OK);
+    auto localHeadGuard = qScopeGuard([&localHead]() {
+        if (localHead) {
+            git_reference_free(localHead);
+        }
+    });
+    const git_oid* localHeadOid = git_reference_target(localHead);
+    REQUIRE(localHeadOid != nullptr);
+
+    git_commit* localCommit = nullptr;
+    REQUIRE(git_commit_lookup(&localCommit, localRepo, localHeadOid) == GIT_OK);
+    auto localCommitGuard = qScopeGuard([&localCommit]() {
+        if (localCommit) {
+            git_commit_free(localCommit);
+        }
+    });
+    const QString localCommitMessage = QString::fromUtf8(git_commit_message(localCommit));
+    CHECK(localCommitMessage.startsWith(QStringLiteral("Sync from CaveWhere")));
+
+    REQUIRE(git_repository_open(&remoteRepo, remoteRepoPath.toLocal8Bit().constData()) == GIT_OK);
+    auto remoteRepoGuard = qScopeGuard([&remoteRepo]() {
+        if (remoteRepo) {
+            git_repository_free(remoteRepo);
+        }
+    });
+
+    const QString remoteRefName = QStringLiteral("refs/heads/") + repository->headBranchName();
+    git_reference* remoteBranch = nullptr;
+    REQUIRE(git_reference_lookup(&remoteBranch, remoteRepo, remoteRefName.toLocal8Bit().constData()) == GIT_OK);
+    auto remoteBranchGuard = qScopeGuard([&remoteBranch]() {
+        if (remoteBranch) {
+            git_reference_free(remoteBranch);
+        }
+    });
+
+    const git_oid* remoteHeadOid = git_reference_target(remoteBranch);
+    REQUIRE(remoteHeadOid != nullptr);
+    CHECK(git_oid_cmp(localHeadOid, remoteHeadOid) == 0);
+    CHECK(project->isModified() == false);
+}
+
+TEST_CASE("cwProject sync reports warning when no remote is configured", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    project->errorModel()->clear();
+    rootData->account()->setName(QStringLiteral("Sync Tester"));
+    rootData->account()->setEmail(QStringLiteral("sync.tester@example.com"));
+
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+
+    REQUIRE(project->errorModel()->count() > 0);
+    const auto error = project->errorModel()->last();
+    CHECK(error.type() == cwError::Warning);
+    CHECK(error.message() == QStringLiteral("No git remote is configured for this project."));
+}
+
+TEST_CASE("cwProject save skips commit and sync fails when account is invalid", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Valid Tester"));
+    rootData->account()->setEmail(QStringLiteral("valid.tester@example.com"));
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("InvalidAccount Cave"));
+
+    QTemporaryDir projectDir;
+    REQUIRE(projectDir.isValid());
+    const QString projectPath = QDir(projectDir.path()).filePath(QStringLiteral("invalid-account.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+
+    cave->setName(QStringLiteral("Baseline Commit Cave"));
+    project->waitSaveToFinish();
+    REQUIRE(project->save());
+    project->waitSaveToFinish();
+    CHECK(project->isModified() == false);
+
+    git_repository* repo = nullptr;
+    REQUIRE(git_repository_open(&repo,
+                                QFileInfo(project->filename()).absoluteDir().absolutePath().toLocal8Bit().constData()) == GIT_OK);
+    auto repoGuard = qScopeGuard([&repo]() {
+        if (repo) {
+            git_repository_free(repo);
+        }
+    });
+
+    auto headOid = [](git_repository* repository) {
+        git_reference* head = nullptr;
+        REQUIRE(git_repository_head(&head, repository) == GIT_OK);
+        auto headGuard = qScopeGuard([&head]() {
+            if (head) {
+                git_reference_free(head);
+            }
+        });
+
+        const git_oid* target = git_reference_target(head);
+        REQUIRE(target != nullptr);
+        return *target;
+    };
+
+    const git_oid beforeSave = headOid(repo);
+
+    rootData->account()->setName(QString());
+    rootData->account()->setEmail(QString());
+    project->errorModel()->clear();
+
+    cave->setName(QStringLiteral("InvalidAccount Cave Updated"));
+    project->waitSaveToFinish();
+    REQUIRE(project->isModified());
+
+    REQUIRE(project->save());
+    project->waitSaveToFinish();
+
+    REQUIRE(project->errorModel()->count() > 0);
+    auto saveError = project->errorModel()->last();
+    CHECK(saveError.type() == cwError::Warning);
+    CHECK(saveError.message() == QStringLiteral("Git account is not configured. Please set your name and email in CaveWhere."));
+
+    const git_oid afterSave = headOid(repo);
+    CHECK(git_oid_cmp(&beforeSave, &afterSave) == 0);
+    CHECK(project->isModified());
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    REQUIRE(project->errorModel()->count() > 0);
+    auto syncError = project->errorModel()->last();
+    CHECK(syncError.type() == cwError::Warning);
+    CHECK(syncError.message() == QStringLiteral("Git account is not configured. Please set your name and email in CaveWhere."));
 }
 
 TEST_CASE("Images should load correctly", "[cwProject]") {

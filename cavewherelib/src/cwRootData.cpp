@@ -71,6 +71,7 @@ cwRootData::cwRootData(QObject *parent) :
 
     //Create the project, this saves and load data
     Project = new cwProject(this);
+    Project->setGitAccount(m_account);
     // Project->setTaskManager(TaskManagerModel);
     Project->setFutureManagerToken(FutureManagerModel);
     m_repositoryModel->setProject(Project);

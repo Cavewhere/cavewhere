@@ -89,6 +89,7 @@ class Message;
 
 namespace QQuickGit {
 class GitRepository;
+class Account;
 }
 
 //Monad includes
@@ -202,6 +203,10 @@ public:
 
     bool syncEnabled() const;
     void setSyncEnabled(bool enabled);
+
+    QFuture<Monad::ResultBase> sync();
+    Monad::ResultBase commitProjectChanges(const QString& subject = QString(),
+                                           const QString& description = QString());
 
     QFuture<void> retire();
 

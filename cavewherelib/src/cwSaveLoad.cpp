@@ -42,6 +42,7 @@
 #include <QSet>
 #include <QImageReader>
 #include <QFile>
+#include <QDateTime>
 
 #ifdef CW_WITH_PDF_SUPPORT
 #include <QPdfDocument>
@@ -53,6 +54,9 @@
 
 //QQuickGit
 #include "GitRepository.h"
+#include "Account.h"
+#include "LfsStore.h"
+#include "LfsPolicy.h"
 
 //Monad
 #include "Monad/Monad.h"
@@ -273,6 +277,50 @@ cwImage loadImage(const CavewhereProto::Image& protoImage, const QString& noteFi
     }
 
     return image;
+}
+
+QQuickGit::LfsPolicy cavewhereLfsPolicy()
+{
+    QQuickGit::LfsPolicy policy;
+    const auto alwaysEligible = [](const QString&, const QByteArray*) {
+        return true;
+    };
+
+    QSet<QString> trackedExtensions;
+    const QList<QByteArray> supportedFormats = QImageReader::supportedImageFormats();
+    for (const QByteArray& format : supportedFormats) {
+        const QString extension = QString::fromLatin1(format).trimmed().toLower();
+        if (!extension.isEmpty()) {
+            trackedExtensions.insert(extension);
+        }
+    }
+
+    trackedExtensions.insert(QStringLiteral("svg"));
+    trackedExtensions.insert(QStringLiteral("pdf"));
+    trackedExtensions.insert(QStringLiteral("glb"));
+
+    for (const QString& extension : trackedExtensions) {
+        policy.setRule(extension, alwaysEligible);
+    }
+
+    return policy;
+}
+
+bool hasRemoteConfigured(const QQuickGit::GitRepository* repository)
+{
+    return repository != nullptr && !repository->remotes().isEmpty();
+}
+
+QString defaultCommitSubject(const QString& action)
+{
+    const QString normalizedAction = action.trimmed().isEmpty() ? QStringLiteral("Save") : action.trimmed();
+    return QStringLiteral("%1 from CaveWhere").arg(normalizedAction);
+}
+
+QString defaultCommitDescription()
+{
+    return QStringLiteral("Automatic commit at %1")
+        .arg(QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
 }
 
 } // namespace
@@ -1229,6 +1277,7 @@ cwSaveLoad::cwSaveLoad(QObject *parent) :
 {
     d->m_regionTreeModel = new cwRegionTreeModel(this);
     d->repository = new QQuickGit::GitRepository(this);
+    d->repository->setLfsPolicy(cavewhereLfsPolicy());
 
     //Connect all for watching for saves
     connectTreeModel();
@@ -3362,6 +3411,88 @@ void cwSaveLoad::setSyncEnabled(bool enabled)
     if (d->saveEnabled && !d->projectFileName.isEmpty()) {
         saveProject(projectRootDir(), d->m_regionTreeModel->cavingRegion());
     }
+}
+
+Monad::ResultBase cwSaveLoad::commitProjectChanges(const QString& subject,
+                                                   const QString& description)
+{
+    if (gitMode() == GitMode::NoGit || d->projectFileName.isEmpty()) {
+        return ResultBase();
+    }
+
+    auto* repo = d->repository;
+    if (repo == nullptr) {
+        return ResultBase(QStringLiteral("Git repository is unavailable."));
+    }
+
+    repo->checkStatus();
+    if (repo->modifiedFileCount() <= 0) {
+        return ResultBase();
+    }
+
+    auto* account = repo->account();
+    if (account == nullptr || !account->isValid()) {
+        return ResultBase(QStringLiteral("Git account is not configured. Please set your name and email in CaveWhere."));
+    }
+
+    const QString commitSubject = subject.trimmed().isEmpty()
+                                      ? defaultCommitSubject(QStringLiteral("Save"))
+                                      : subject.trimmed();
+    const QString commitDescription = description.trimmed().isEmpty()
+                                          ? defaultCommitDescription()
+                                          : description.trimmed();
+
+    try {
+        repo->commitAll(commitSubject, commitDescription);
+        repo->checkStatus();
+    } catch (const std::exception& error) {
+        return ResultBase(QString::fromUtf8(error.what()));
+    }
+
+    return ResultBase();
+}
+
+QFuture<Monad::ResultBase> cwSaveLoad::sync()
+{
+    if (gitMode() == GitMode::NoGit) {
+        return AsyncFuture::completed(ResultBase(QStringLiteral("Sync is disabled for this project.")));
+    }
+
+    if (!syncEnabled()) {
+        return AsyncFuture::completed(ResultBase(QStringLiteral("Project sync is disabled in metadata.")));
+    }
+
+    if (d->projectFileName.isEmpty()) {
+        return AsyncFuture::completed(ResultBase(QStringLiteral("Project has no filename.")));
+    }
+
+    auto* repo = d->repository;
+    if (repo == nullptr) {
+        return AsyncFuture::completed(ResultBase(QStringLiteral("Git repository is unavailable.")));
+    }
+
+    auto syncFuture = AsyncFuture::observe(completeSaveJobs())
+                          .context(this, [this, repo]() -> QFuture<ResultBase> {
+                              auto commitResult = commitProjectChanges(defaultCommitSubject(QStringLiteral("Sync")),
+                                                                       defaultCommitDescription());
+                              if (commitResult.hasError()) {
+                                  return AsyncFuture::completed(commitResult);
+                              }
+
+                              if (!hasRemoteConfigured(repo)) {
+                                  return AsyncFuture::completed(
+                                      ResultBase(QStringLiteral("No git remote is configured for this project.")));
+                              }
+
+                              return repo->pullPush();
+                          })
+                          .future();
+
+    if (d->futureToken.isValid()) {
+        d->futureToken.addJob(cwFuture(QFuture<void>(syncFuture), QStringLiteral("Syncing project")));
+    }
+
+    return syncFuture;
 }
 
 QFuture<void> cwSaveLoad::retire()

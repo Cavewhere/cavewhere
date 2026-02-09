@@ -34,6 +34,7 @@ class cwSurveyNoteLiDARModel;
 
 namespace QQuickGit {
 class GitRepository;
+class Account;
 };
 
 //Qt includes
@@ -103,6 +104,7 @@ public:
     // Q_INVOKABLE void saveAs(QString newFilename);
     Q_INVOKABLE void newProject();
     Q_INVOKABLE bool save();
+    Q_INVOKABLE bool sync();
     Q_INVOKABLE bool saveAs(QString newFilename);
     Q_INVOKABLE bool deleteTemporaryProject();
     Q_INVOKABLE bool isNewProject() const;
@@ -144,6 +146,7 @@ public:
                   std::function<void (QList<QString> paths)> outputCallBackFunc);
 
     void loadOrConvert(const QString& filename);
+    void setGitAccount(QQuickGit::Account* account);
 
 signals:
     void undoStackChanged();
@@ -169,6 +172,7 @@ private:
     //save and load
     QFuture<void> LoadFuture;
     QFuture<void> SaveFuture;
+    QPointer<QQuickGit::Account> m_gitAccount;
 
     //The region that this project looks after
     cwCavingRegion* Region;
