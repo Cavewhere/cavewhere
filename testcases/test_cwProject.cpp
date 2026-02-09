@@ -27,6 +27,7 @@ using namespace Catch;
 #include "cwScrap.h"
 #include "cwSignalSpy.h"
 #include "GitRepository.h"
+#include "asyncfuture.h"
 
 //Qt includes
 #include <QtCore/qdiriterator.h>
@@ -753,6 +754,154 @@ TEST_CASE("cwProject sync pushes local changes to remote repository", "[cwProjec
     REQUIRE(remoteHeadOid != nullptr);
     CHECK(git_oid_cmp(localHeadOid, remoteHeadOid) == 0);
     CHECK(project->isModified() == false);
+}
+
+TEST_CASE("cwProject sync conflict keeps ours and push succeeds", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Sync Tester"));
+    rootData->account()->setEmail(QStringLiteral("sync.tester@example.com"));
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Conflict Cave"));
+
+    QTemporaryDir projectDir;
+    REQUIRE(projectDir.isValid());
+    const QString projectPath = QDir(projectDir.path()).filePath(QStringLiteral("sync-conflict-project.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+
+    auto* repository = project->findChild<QQuickGit::GitRepository*>();
+    REQUIRE(repository != nullptr);
+
+    QTemporaryDir remoteRoot;
+    REQUIRE(remoteRoot.isValid());
+    const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
+
+    git_repository* remoteRepo = nullptr;
+    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
+    if (remoteRepo) {
+        git_repository_free(remoteRepo);
+        remoteRepo = nullptr;
+    }
+
+    const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
+                                                         QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(addRemoteError.isEmpty());
+
+    const QString conflictFileName = QStringLiteral("sync-conflict.txt");
+    const QString localRepoPath = QFileInfo(project->filename()).absoluteDir().absolutePath();
+    const QString localConflictFilePath = QDir(localRepoPath).filePath(conflictFileName);
+
+    QFile localFile(localConflictFilePath);
+    REQUIRE(localFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    REQUIRE(localFile.write("base\n") == 5);
+    localFile.close();
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+
+    QTemporaryDir cloneDir;
+    REQUIRE(cloneDir.isValid());
+    const QString clonePath = QDir(cloneDir.path()).filePath(QStringLiteral("clone-2"));
+
+    QQuickGit::GitRepository cloneRepository;
+    cloneRepository.setDirectory(QDir(clonePath));
+    cloneRepository.setAccount(rootData->account());
+
+    auto cloneFuture = cloneRepository.clone(QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(AsyncFuture::waitForFinished(cloneFuture, 10000));
+    INFO("Clone error:" << cloneFuture.result().errorMessage().toStdString());
+    REQUIRE(!cloneFuture.result().hasError());
+
+    QFile cloneFile(QDir(clonePath).filePath(conflictFileName));
+    REQUIRE(cloneFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    REQUIRE(cloneFile.write("theirs\n") == 7);
+    cloneFile.close();
+
+    REQUIRE_NOTHROW(cloneRepository.commitAll(QStringLiteral("Theirs"),
+                                              QStringLiteral("remote side edit")));
+    auto clonePushFuture = cloneRepository.push();
+    REQUIRE(AsyncFuture::waitForFinished(clonePushFuture, 10000));
+    INFO("Remote clone push error:" << clonePushFuture.result().errorMessage().toStdString());
+    REQUIRE(!clonePushFuture.result().hasError());
+
+    QFile oursFile(localConflictFilePath);
+    REQUIRE(oursFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    REQUIRE(oursFile.write("ours\n") == 5);
+    oursFile.close();
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    REQUIRE(project->errorModel()->count() == 0);
+    QFile localRead(localConflictFilePath);
+    REQUIRE(localRead.open(QIODevice::ReadOnly));
+    CHECK(localRead.readAll() == QByteArray("ours\n"));
+
+    REQUIRE(git_repository_open(&remoteRepo, remoteRepoPath.toLocal8Bit().constData()) == GIT_OK);
+    auto remoteRepoGuard = qScopeGuard([&remoteRepo]() {
+        if (remoteRepo) {
+            git_repository_free(remoteRepo);
+        }
+    });
+
+    const QString remoteRefName = QStringLiteral("refs/heads/") + repository->headBranchName();
+    git_reference* remoteBranch = nullptr;
+    REQUIRE(git_reference_lookup(&remoteBranch, remoteRepo, remoteRefName.toLocal8Bit().constData()) == GIT_OK);
+    auto remoteBranchGuard = qScopeGuard([&remoteBranch]() {
+        if (remoteBranch) {
+            git_reference_free(remoteBranch);
+        }
+    });
+
+    const git_oid* remoteHeadOid = git_reference_target(remoteBranch);
+    REQUIRE(remoteHeadOid != nullptr);
+
+    git_commit* remoteHeadCommit = nullptr;
+    REQUIRE(git_commit_lookup(&remoteHeadCommit, remoteRepo, remoteHeadOid) == GIT_OK);
+    auto remoteHeadCommitGuard = qScopeGuard([&remoteHeadCommit]() {
+        if (remoteHeadCommit) {
+            git_commit_free(remoteHeadCommit);
+        }
+    });
+
+    git_tree* remoteTree = nullptr;
+    REQUIRE(git_commit_tree(&remoteTree, remoteHeadCommit) == GIT_OK);
+    auto remoteTreeGuard = qScopeGuard([&remoteTree]() {
+        if (remoteTree) {
+            git_tree_free(remoteTree);
+        }
+    });
+
+    git_tree_entry* conflictEntry = nullptr;
+    REQUIRE(git_tree_entry_bypath(&conflictEntry, remoteTree, conflictFileName.toLocal8Bit().constData()) == GIT_OK);
+    auto conflictEntryGuard = qScopeGuard([&conflictEntry]() {
+        if (conflictEntry) {
+            git_tree_entry_free(conflictEntry);
+        }
+    });
+
+    git_blob* conflictBlob = nullptr;
+    REQUIRE(git_blob_lookup(&conflictBlob, remoteRepo, git_tree_entry_id(conflictEntry)) == GIT_OK);
+    auto conflictBlobGuard = qScopeGuard([&conflictBlob]() {
+        if (conflictBlob) {
+            git_blob_free(conflictBlob);
+        }
+    });
+
+    QByteArray remoteConflictContents(static_cast<const char*>(git_blob_rawcontent(conflictBlob)),
+                                      static_cast<int>(git_blob_rawsize(conflictBlob)));
+    CHECK(remoteConflictContents == QByteArray("ours\n"));
 }
 
 TEST_CASE("cwProject sync reports warning when no remote is configured", "[cwProject]") {
