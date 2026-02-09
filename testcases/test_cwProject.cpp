@@ -1260,6 +1260,159 @@ TEST_CASE("cwProject sync pulls remote-only changes into a clean local repo", "[
     CHECK(pulledFile.readAll() == QByteArray("remote commit content\n"));
 }
 
+TEST_CASE("cwProject sync creates and pushes merge commit for diverged non-conflicting changes", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Sync Tester"));
+    rootData->account()->setEmail(QStringLiteral("sync.tester@example.com"));
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Merge Cave"));
+
+    QTemporaryDir projectDir;
+    REQUIRE(projectDir.isValid());
+    const QString projectPath = QDir(projectDir.path()).filePath(QStringLiteral("sync-merge.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+
+    auto* repository = project->findChild<QQuickGit::GitRepository*>();
+    REQUIRE(repository != nullptr);
+
+    QTemporaryDir remoteRoot;
+    REQUIRE(remoteRoot.isValid());
+    const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
+
+    git_repository* remoteRepo = nullptr;
+    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
+    if (remoteRepo) {
+        git_repository_free(remoteRepo);
+        remoteRepo = nullptr;
+    }
+
+    const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
+                                                         QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(addRemoteError.isEmpty());
+
+    cave->setName(QStringLiteral("Merge Cave Baseline"));
+    project->waitSaveToFinish();
+    REQUIRE(project->isModified());
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+
+    const QString localRepoPath = QFileInfo(project->filename()).absoluteDir().absolutePath();
+    git_repository* localRepo = nullptr;
+    REQUIRE(git_repository_open(&localRepo, localRepoPath.toLocal8Bit().constData()) == GIT_OK);
+    auto localRepoGuard = qScopeGuard([&localRepo]() {
+        if (localRepo) {
+            git_repository_free(localRepo);
+        }
+    });
+
+    auto headOid = [](git_repository* repoInstance) -> git_oid {
+        git_reference* head = nullptr;
+        REQUIRE(git_repository_head(&head, repoInstance) == GIT_OK);
+        auto headGuard = qScopeGuard([&head]() {
+            if (head) {
+                git_reference_free(head);
+            }
+        });
+        const git_oid* target = git_reference_target(head);
+        REQUIRE(target != nullptr);
+        return *target;
+    };
+
+    const git_oid baselineHead = headOid(localRepo);
+
+    QTemporaryDir cloneDir;
+    REQUIRE(cloneDir.isValid());
+    const QString clonePath = QDir(cloneDir.path()).filePath(QStringLiteral("clone-2"));
+
+    QQuickGit::GitRepository cloneRepository;
+    cloneRepository.setDirectory(QDir(clonePath));
+    cloneRepository.setAccount(rootData->account());
+
+    auto cloneFuture = cloneRepository.clone(QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(AsyncFuture::waitForFinished(cloneFuture, 10000));
+    INFO("Clone error:" << cloneFuture.result().errorMessage().toStdString());
+    REQUIRE(!cloneFuture.result().hasError());
+
+    const QString remoteOnlyFileName = QStringLiteral("remote-side-only.txt");
+    QFile remoteOnlyFile(QDir(clonePath).filePath(remoteOnlyFileName));
+    REQUIRE(remoteOnlyFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    REQUIRE(remoteOnlyFile.write("remote side change\n") == 19);
+    remoteOnlyFile.close();
+
+    REQUIRE_NOTHROW(cloneRepository.commitAll(QStringLiteral("Remote side"),
+                                              QStringLiteral("non-conflicting remote change")));
+    auto clonePushFuture = cloneRepository.push();
+    REQUIRE(AsyncFuture::waitForFinished(clonePushFuture, 10000));
+    INFO("Remote clone push error:" << clonePushFuture.result().errorMessage().toStdString());
+    REQUIRE(!clonePushFuture.result().hasError());
+
+    const QString localOnlyFileName = QStringLiteral("local-side-only.txt");
+    QFile localOnlyFile(QDir(localRepoPath).filePath(localOnlyFileName));
+    REQUIRE(localOnlyFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    REQUIRE(localOnlyFile.write("local side change\n") == 18);
+    localOnlyFile.close();
+    project->waitSaveToFinish();
+    REQUIRE(project->isModified());
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+
+    const git_oid mergedHead = headOid(localRepo);
+    CHECK(git_oid_cmp(&baselineHead, &mergedHead) != 0);
+
+    git_commit* mergedCommit = nullptr;
+    REQUIRE(git_commit_lookup(&mergedCommit, localRepo, &mergedHead) == GIT_OK);
+    auto mergedCommitGuard = qScopeGuard([&mergedCommit]() {
+        if (mergedCommit) {
+            git_commit_free(mergedCommit);
+        }
+    });
+    CHECK(git_commit_parentcount(mergedCommit) == 2);
+    CHECK(QString::fromUtf8(git_commit_message(mergedCommit))
+              == QStringLiteral("Merged branch origin/%1").arg(repository->headBranchName()));
+
+    REQUIRE(git_repository_open(&remoteRepo, remoteRepoPath.toLocal8Bit().constData()) == GIT_OK);
+    auto remoteRepoGuard = qScopeGuard([&remoteRepo]() {
+        if (remoteRepo) {
+            git_repository_free(remoteRepo);
+        }
+    });
+
+    const QString remoteRefName = QStringLiteral("refs/heads/") + repository->headBranchName();
+    git_reference* remoteBranch = nullptr;
+    REQUIRE(git_reference_lookup(&remoteBranch, remoteRepo, remoteRefName.toLocal8Bit().constData()) == GIT_OK);
+    auto remoteBranchGuard = qScopeGuard([&remoteBranch]() {
+        if (remoteBranch) {
+            git_reference_free(remoteBranch);
+        }
+    });
+    const git_oid* remoteHeadOid = git_reference_target(remoteBranch);
+    REQUIRE(remoteHeadOid != nullptr);
+    CHECK(git_oid_cmp(remoteHeadOid, &mergedHead) == 0);
+
+    QFile localRemoteSideFile(QDir(localRepoPath).filePath(remoteOnlyFileName));
+    REQUIRE(localRemoteSideFile.open(QIODevice::ReadOnly));
+    CHECK(localRemoteSideFile.readAll() == QByteArray("remote side change\n"));
+
+    QFile localLocalSideFile(QDir(localRepoPath).filePath(localOnlyFileName));
+    REQUIRE(localLocalSideFile.open(QIODevice::ReadOnly));
+    CHECK(localLocalSideFile.readAll() == QByteArray("local side change\n"));
+}
+
 TEST_CASE("cwProject sync conflict keeps ours and push succeeds", "[cwProject]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
