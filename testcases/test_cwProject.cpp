@@ -756,6 +756,94 @@ TEST_CASE("cwProject sync pushes local changes to remote repository", "[cwProjec
     CHECK(project->isModified() == false);
 }
 
+TEST_CASE("cwProject sync from unborn head creates first commit and pushes branch", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Sync Tester"));
+    rootData->account()->setEmail(QStringLiteral("sync.tester@example.com"));
+
+    auto* repository = project->findChild<QQuickGit::GitRepository*>();
+    REQUIRE(repository != nullptr);
+
+    QTemporaryDir remoteRoot;
+    REQUIRE(remoteRoot.isValid());
+    const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
+
+    git_repository* remoteRepo = nullptr;
+    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
+    if (remoteRepo) {
+        git_repository_free(remoteRepo);
+        remoteRepo = nullptr;
+    }
+
+    const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
+                                                         QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(addRemoteError.isEmpty());
+
+    const QString localRepoPath = QFileInfo(project->filename()).absoluteDir().absolutePath();
+    const QString localFilePath = QDir(localRepoPath).filePath(QStringLiteral("unborn-sync.txt"));
+
+    QFile localFile(localFilePath);
+    REQUIRE(localFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    REQUIRE(localFile.write("first sync\n") == 11);
+    localFile.close();
+
+    git_repository* localRepo = nullptr;
+    REQUIRE(git_repository_open(&localRepo, localRepoPath.toLocal8Bit().constData()) == GIT_OK);
+    auto localRepoGuard = qScopeGuard([&localRepo]() {
+        if (localRepo) {
+            git_repository_free(localRepo);
+        }
+    });
+
+    git_reference* preSyncHead = nullptr;
+    const int preSyncHeadError = git_repository_head(&preSyncHead, localRepo);
+    if (preSyncHead) {
+        git_reference_free(preSyncHead);
+        preSyncHead = nullptr;
+    }
+    CHECK((preSyncHeadError == GIT_EUNBORNBRANCH || preSyncHeadError == GIT_ENOTFOUND));
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    CHECK(project->errorModel()->count() == 0);
+
+    git_reference* localHead = nullptr;
+    REQUIRE(git_repository_head(&localHead, localRepo) == GIT_OK);
+    auto localHeadGuard = qScopeGuard([&localHead]() {
+        if (localHead) {
+            git_reference_free(localHead);
+        }
+    });
+
+    const git_oid* localHeadOid = git_reference_target(localHead);
+    REQUIRE(localHeadOid != nullptr);
+
+    REQUIRE(git_repository_open(&remoteRepo, remoteRepoPath.toLocal8Bit().constData()) == GIT_OK);
+    auto remoteRepoGuard = qScopeGuard([&remoteRepo]() {
+        if (remoteRepo) {
+            git_repository_free(remoteRepo);
+        }
+    });
+
+    const QString remoteRefName = QStringLiteral("refs/heads/") + repository->headBranchName();
+    git_reference* remoteBranch = nullptr;
+    REQUIRE(git_reference_lookup(&remoteBranch, remoteRepo, remoteRefName.toLocal8Bit().constData()) == GIT_OK);
+    auto remoteBranchGuard = qScopeGuard([&remoteBranch]() {
+        if (remoteBranch) {
+            git_reference_free(remoteBranch);
+        }
+    });
+
+    const git_oid* remoteHeadOid = git_reference_target(remoteBranch);
+    REQUIRE(remoteHeadOid != nullptr);
+    CHECK(git_oid_cmp(localHeadOid, remoteHeadOid) == 0);
+}
+
 TEST_CASE("cwProject sync conflict keeps ours and push succeeds", "[cwProject]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
