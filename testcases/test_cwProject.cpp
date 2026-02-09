@@ -28,6 +28,7 @@ using namespace Catch;
 #include "cwSignalSpy.h"
 #include "GitRepository.h"
 #include "asyncfuture.h"
+#include "LfsStore.h"
 
 //Qt includes
 #include <QtCore/qdiriterator.h>
@@ -72,6 +73,77 @@ QString readGitExclude(const QDir& dir)
         return QString();
     }
     return QString::fromUtf8(file.readAll());
+}
+
+QByteArray readBlobFromHead(git_repository* repo, const QString& path)
+{
+    git_reference* head = nullptr;
+    if (git_repository_head(&head, repo) != GIT_OK) {
+        return QByteArray();
+    }
+    auto headGuard = qScopeGuard([&head]() {
+        if (head) {
+            git_reference_free(head);
+        }
+    });
+
+    const git_oid* headId = git_reference_target(head);
+    if (!headId) {
+        return QByteArray();
+    }
+
+    git_commit* commit = nullptr;
+    if (git_commit_lookup(&commit, repo, headId) != GIT_OK) {
+        return QByteArray();
+    }
+    auto commitGuard = qScopeGuard([&commit]() {
+        if (commit) {
+            git_commit_free(commit);
+        }
+    });
+
+    git_tree* tree = nullptr;
+    if (git_commit_tree(&tree, commit) != GIT_OK) {
+        return QByteArray();
+    }
+    auto treeGuard = qScopeGuard([&tree]() {
+        if (tree) {
+            git_tree_free(tree);
+        }
+    });
+
+    git_tree_entry* entry = nullptr;
+    if (git_tree_entry_bypath(&entry, tree, path.toLocal8Bit().constData()) != GIT_OK) {
+        return QByteArray();
+    }
+    auto entryGuard = qScopeGuard([&entry]() {
+        if (entry) {
+            git_tree_entry_free(entry);
+        }
+    });
+
+    git_blob* blob = nullptr;
+    if (git_blob_lookup(&blob, repo, git_tree_entry_id(entry)) != GIT_OK) {
+        return QByteArray();
+    }
+    auto blobGuard = qScopeGuard([&blob]() {
+        if (blob) {
+            git_blob_free(blob);
+        }
+    });
+
+    const auto* content = static_cast<const char*>(git_blob_rawcontent(blob));
+    const size_t size = git_blob_rawsize(blob);
+    return QByteArray(content, static_cast<int>(size));
+}
+
+QString gitDirPathFromRepository(git_repository* repo)
+{
+    if (!repo) {
+        return QString();
+    }
+    const char* gitPath = git_repository_path(repo);
+    return gitPath ? QString::fromUtf8(gitPath) : QString();
 }
 } // namespace
 
@@ -842,6 +914,147 @@ TEST_CASE("cwProject sync from unborn head creates first commit and pushes branc
     const git_oid* remoteHeadOid = git_reference_target(remoteBranch);
     REQUIRE(remoteHeadOid != nullptr);
     CHECK(git_oid_cmp(localHeadOid, remoteHeadOid) == 0);
+}
+
+TEST_CASE("cwProject sync tracks png pdf and glb via LFS", "[cwProject][lfs]") {
+    if (!cwProject::supportedImageFormats().contains(QStringLiteral("pdf"))) {
+        SUCCEED("PDF support not available in this build");
+        return;
+    }
+
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("LFS Sync Tester"));
+    rootData->account()->setEmail(QStringLiteral("lfs.sync.tester@example.com"));
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("LFS Cave"));
+    cave->addTrip();
+    auto trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
+    trip->setName(QStringLiteral("LFS Trip"));
+
+    const QString pngSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    const QString pdfSource = copyToTempFolder("://datasets/test_cwPDFConverter/2page-test.pdf");
+    const QString glbSource = copyToTempFolder("://datasets/test_cwSurveyNotesConcatModel/bones.glb");
+    REQUIRE(QFileInfo::exists(pngSource));
+    REQUIRE(QFileInfo::exists(pdfSource));
+    REQUIRE(QFileInfo::exists(glbSource));
+
+    QFile pngSourceFile(pngSource);
+    REQUIRE(pngSourceFile.open(QIODevice::ReadOnly));
+    const QByteArray pngSourceBytes = pngSourceFile.readAll();
+    REQUIRE_FALSE(pngSourceBytes.isEmpty());
+
+    QFile pdfSourceFile(pdfSource);
+    REQUIRE(pdfSourceFile.open(QIODevice::ReadOnly));
+    const QByteArray pdfSourceBytes = pdfSourceFile.readAll();
+    REQUIRE_FALSE(pdfSourceBytes.isEmpty());
+
+    QFile glbSourceFile(glbSource);
+    REQUIRE(glbSourceFile.open(QIODevice::ReadOnly));
+    const QByteArray glbSourceBytes = glbSourceFile.readAll();
+    REQUIRE_FALSE(glbSourceBytes.isEmpty());
+
+    trip->notes()->addFromFiles({QUrl::fromLocalFile(pngSource)});
+    trip->notes()->addFromFiles({QUrl::fromLocalFile(pdfSource)});
+    trip->notesLiDAR()->addFromFiles({QUrl::fromLocalFile(glbSource)});
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    const QList<cwNote*> notes = trip->notes()->notes();
+    REQUIRE(notes.size() >= 3);
+
+    cwNote* pngNote = nullptr;
+    cwNote* pdfNote = nullptr;
+    for (cwNote* note : notes) {
+        REQUIRE(note != nullptr);
+        const QString suffix = QFileInfo(note->image().path()).suffix().toLower();
+        if (suffix == QStringLiteral("png") && pngNote == nullptr) {
+            pngNote = note;
+        }
+        if (suffix == QStringLiteral("pdf") && pdfNote == nullptr) {
+            pdfNote = note;
+        }
+    }
+    REQUIRE(pngNote != nullptr);
+    REQUIRE(pdfNote != nullptr);
+
+    REQUIRE(trip->notesLiDAR()->rowCount() == 1);
+    auto* glbNote = dynamic_cast<cwNoteLiDAR*>(trip->notesLiDAR()->notes().first());
+    REQUIRE(glbNote != nullptr);
+
+    const QString pngPath = ProjectFilenameTestHelper::absolutePath(pngNote, pngNote->image().path());
+    const QString pdfPath = ProjectFilenameTestHelper::absolutePath(pdfNote, pdfNote->image().path());
+    const QString glbPath = ProjectFilenameTestHelper::absolutePath(glbNote, glbNote->filename());
+    REQUIRE(QFileInfo::exists(pngPath));
+    REQUIRE(QFileInfo::exists(pdfPath));
+    REQUIRE(QFileInfo::exists(glbPath));
+
+    QFile pngProjectFile(pngPath);
+    REQUIRE(pngProjectFile.open(QIODevice::ReadOnly));
+    CHECK(pngProjectFile.readAll() == pngSourceBytes);
+
+    QFile pdfProjectFile(pdfPath);
+    REQUIRE(pdfProjectFile.open(QIODevice::ReadOnly));
+    CHECK(pdfProjectFile.readAll() == pdfSourceBytes);
+
+    QFile glbProjectFile(glbPath);
+    REQUIRE(glbProjectFile.open(QIODevice::ReadOnly));
+    CHECK(glbProjectFile.readAll() == glbSourceBytes);
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    REQUIRE(project->errorModel()->count() > 0);
+    const auto syncError = project->errorModel()->last();
+    CHECK(syncError.type() == cwError::Warning);
+    CHECK(syncError.message() == QStringLiteral("No git remote is configured for this project."));
+
+    const QString localRepoPath = QFileInfo(project->filename()).absoluteDir().absolutePath();
+    const QString attributesPath = QDir(localRepoPath).filePath(QStringLiteral(".gitattributes"));
+    QFile attributesFile(attributesPath);
+    REQUIRE(attributesFile.open(QIODevice::ReadOnly));
+    const QString attributes = QString::fromUtf8(attributesFile.readAll());
+    CHECK(attributes.contains(QStringLiteral("*.png filter=lfs diff=lfs merge=lfs -text")));
+    CHECK(attributes.contains(QStringLiteral("*.pdf filter=lfs diff=lfs merge=lfs -text")));
+    CHECK(attributes.contains(QStringLiteral("*.glb filter=lfs diff=lfs merge=lfs -text")));
+
+    git_repository* repo = nullptr;
+    REQUIRE(git_repository_open(&repo, localRepoPath.toLocal8Bit().constData()) == GIT_OK);
+    auto repoGuard = qScopeGuard([&repo]() {
+        if (repo) {
+            git_repository_free(repo);
+        }
+    });
+
+    const QString gitDirPath = gitDirPathFromRepository(repo);
+    REQUIRE_FALSE(gitDirPath.isEmpty());
+
+    const auto verifyLfsPointer = [&](const QString& absolutePath) {
+        const QString relativePath = QDir(localRepoPath).relativeFilePath(absolutePath);
+        const QByteArray blobData = readBlobFromHead(repo, relativePath);
+        REQUIRE_FALSE(blobData.isEmpty());
+
+        QQuickGit::LfsPointer pointer;
+        REQUIRE(QQuickGit::LfsPointer::parse(blobData, &pointer));
+        CHECK(pointer.isValid());
+        CHECK(pointer.size == QFileInfo(absolutePath).size());
+
+        const QString objectPath = QQuickGit::LfsStore::objectPath(gitDirPath, pointer.oid);
+        REQUIRE_FALSE(objectPath.isEmpty());
+        CHECK(QFileInfo::exists(objectPath));
+    };
+
+    verifyLfsPointer(pngPath);
+    verifyLfsPointer(pdfPath);
+    verifyLfsPointer(glbPath);
 }
 
 TEST_CASE("cwProject sync conflict keeps ours and push succeeds", "[cwProject]") {
