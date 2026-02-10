@@ -331,6 +331,7 @@ if(BUILD_TESTING)
         Catch2::Catch2
         cavewhere-testlib
         cavewherelib
+        qquickgit-lfs-test-server
         protobuf::libprotobuf
         SignalSpyChecker
         QuickQanavaplugin

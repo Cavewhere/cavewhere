@@ -32,6 +32,7 @@ using namespace Catch;
 #include "GitFutureWatcher.h"
 #include "asyncfuture.h"
 #include "LfsStore.h"
+#include "LfsServer.h"
 
 //Qt includes
 #include <QtCore/qdiriterator.h>
@@ -41,6 +42,7 @@ using namespace Catch;
 #include <QSqlResult>
 #include <QSqlRecord>
 #include <QDir>
+#include <QDebug>
 #include <QFileInfo>
 #include <QSet>
 #include <QTemporaryDir>
@@ -197,6 +199,35 @@ QString gitDirPathFromRepository(git_repository* repo)
     }
     const char* gitPath = git_repository_path(repo);
     return gitPath ? QString::fromUtf8(gitPath) : QString();
+}
+
+bool setGitConfigString(const QString& workTreePath,
+                        const char* key,
+                        const QString& value)
+{
+    git_repository* repo = nullptr;
+    if (git_repository_open(&repo, workTreePath.toLocal8Bit().constData()) != GIT_OK || !repo) {
+        return false;
+    }
+    auto repoGuard = qScopeGuard([&repo]() {
+        if (repo) {
+            git_repository_free(repo);
+        }
+    });
+
+    git_config* config = nullptr;
+    if (git_repository_config(&config, repo) != GIT_OK || !config) {
+        return false;
+    }
+    auto configGuard = qScopeGuard([&config]() {
+        if (config) {
+            git_config_free(config);
+        }
+    });
+
+    return git_config_set_string(config,
+                                 key,
+                                 value.toUtf8().constData()) == GIT_OK;
 }
 } // namespace
 
@@ -1232,7 +1263,11 @@ TEST_CASE("cwProject sync fails without remotes after saving survey and notes", 
 
     const QString pngSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
     REQUIRE(QFileInfo::exists(pngSource));
-    trip->notes()->addFromFiles({QUrl::fromLocalFile(pngSource)});
+    QTemporaryDir lowerCaseImageRoot;
+    REQUIRE(lowerCaseImageRoot.isValid());
+    const QString lowerCasePngPath = QDir(lowerCaseImageRoot.path()).filePath(QStringLiteral("tracked-note.png"));
+    REQUIRE(QFile::copy(pngSource, lowerCasePngPath));
+    trip->notes()->addFromFiles({QUrl::fromLocalFile(lowerCasePngPath)});
     rootData->futureManagerModel()->waitForFinished();
     project->waitSaveToFinish();
     REQUIRE(trip->notes()->rowCount() == 1);
@@ -1597,6 +1632,144 @@ TEST_CASE("cwProject sync tracks png pdf and glb via LFS", "[cwProject][lfs]") {
     verifyLfsPointer(pngPath);
     verifyLfsPointer(pdfPath);
     verifyLfsPointer(glbPath);
+}
+
+TEST_CASE("cwProject sync uploads LFS objects through test LFS server", "[cwProject][lfs][sync]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("LFS E2E Tester"));
+    rootData->account()->setEmail(QStringLiteral("lfs.e2e.tester@example.com"));
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto* cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("LFS Sync Cave"));
+    cave->addTrip();
+    auto* trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
+    trip->setName(QStringLiteral("LFS Sync Trip"));
+
+    const QString pngSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    REQUIRE(QFileInfo::exists(pngSource));
+    QTemporaryDir lowerCaseImageRoot;
+    REQUIRE(lowerCaseImageRoot.isValid());
+    const QString lowerCasePngPath = QDir(lowerCaseImageRoot.path()).filePath(QStringLiteral("lfs-sync-upload.png"));
+    REQUIRE(QFile::copy(pngSource, lowerCasePngPath));
+    trip->notes()->addFromFiles({QUrl::fromLocalFile(lowerCasePngPath)});
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    REQUIRE(trip->notes()->rowCount() == 1);
+
+    QTemporaryDir saveRoot;
+    REQUIRE(saveRoot.isValid());
+    const QString projectPath = QDir(saveRoot.path()).filePath(QStringLiteral("lfs-e2e-sync.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+    REQUIRE(project->save());
+    project->waitSaveToFinish();
+
+    const QString localRepoPath = QFileInfo(project->filename()).absoluteDir().absolutePath();
+
+    QTemporaryDir remoteRoot;
+    REQUIRE(remoteRoot.isValid());
+    const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote-lfs.git"));
+
+    git_repository* remoteRepo = nullptr;
+    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
+    if (remoteRepo) {
+        git_repository_free(remoteRepo);
+        remoteRepo = nullptr;
+    }
+
+    auto* repository = project->repository();
+    REQUIRE(repository != nullptr);
+    const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
+                                                         QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(addRemoteError.isEmpty());
+
+    auto* note = trip->notes()->notes().first();
+    REQUIRE(note != nullptr);
+    const QString noteImagePath = ProjectFilenameTestHelper::absolutePath(note, note->image().path());
+    REQUIRE(QFileInfo::exists(noteImagePath));
+    qDebug() << "[cwProject LFS sync test] note image path:" << noteImagePath;
+    git_repository* localRepo = nullptr;
+    REQUIRE(git_repository_open(&localRepo, localRepoPath.toLocal8Bit().constData()) == GIT_OK);
+    auto localRepoGuard = qScopeGuard([&localRepo]() {
+        if (localRepo) {
+            git_repository_free(localRepo);
+        }
+    });
+
+    QFile noteImageFile(noteImagePath);
+    REQUIRE(noteImageFile.open(QIODevice::ReadOnly));
+    const QByteArray noteImageBytes = noteImageFile.readAll();
+    REQUIRE_FALSE(noteImageBytes.isEmpty());
+    const QString expectedOid = QString::fromLatin1(
+        QCryptographicHash::hash(noteImageBytes, QCryptographicHash::Sha256).toHex());
+    const qint64 expectedSize = noteImageBytes.size();
+    qDebug() << "[cwProject LFS sync test] expected upload oid/size:" << expectedOid << expectedSize;
+
+    const QString relativeImagePath = QDir(localRepoPath).relativeFilePath(noteImagePath);
+    const QByteArray localHeadBlob = readBlobFromHead(localRepo, relativeImagePath);
+    QQuickGit::LfsPointer committedPointer;
+    const bool committedAsPointer = QQuickGit::LfsPointer::parse(localHeadBlob, &committedPointer);
+    qDebug() << "[cwProject LFS sync test] head blob bytes:" << localHeadBlob.size()
+             << "relativePath=" << relativeImagePath
+             << "isPointer=" << committedAsPointer
+             << "pointerOid=" << committedPointer.oid
+             << "pointerSize=" << committedPointer.size;
+
+    LfsServer lfsServer;
+    if (!lfsServer.start()) {
+        SKIP("LFS test server could not bind a local TCP port in this environment.");
+        return;
+    }
+    lfsServer.setExpectedUploadObject(expectedOid, expectedSize);
+
+    REQUIRE(setGitConfigString(localRepoPath,
+                               "lfs.url",
+                               lfsServer.endpoint()));
+    qDebug() << "[cwProject LFS sync test] configured lfs.url =" << lfsServer.endpoint();
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+
+    CHECK(lfsServer.uploadBatchRequestCount() > 0);
+    CHECK(lfsServer.uploadRequestCount() > 0);
+
+    git_reference* localHeadRef = nullptr;
+    REQUIRE(git_repository_head(&localHeadRef, localRepo) == GIT_OK);
+    auto localHeadRefGuard = qScopeGuard([&localHeadRef]() {
+        if (localHeadRef) {
+            git_reference_free(localHeadRef);
+        }
+    });
+    const git_oid* localHeadOid = git_reference_target(localHeadRef);
+    REQUIRE(localHeadOid != nullptr);
+
+    REQUIRE(git_repository_open(&remoteRepo, remoteRepoPath.toLocal8Bit().constData()) == GIT_OK);
+    auto remoteRepoGuard = qScopeGuard([&remoteRepo]() {
+        if (remoteRepo) {
+            git_repository_free(remoteRepo);
+        }
+    });
+
+    const QString remoteRefName = QStringLiteral("refs/heads/") + repository->headBranchName();
+    git_reference* remoteHeadRef = nullptr;
+    REQUIRE(git_reference_lookup(&remoteHeadRef, remoteRepo, remoteRefName.toLocal8Bit().constData()) == GIT_OK);
+    auto remoteHeadRefGuard = qScopeGuard([&remoteHeadRef]() {
+        if (remoteHeadRef) {
+            git_reference_free(remoteHeadRef);
+        }
+    });
+    const git_oid* remoteHeadOid = git_reference_target(remoteHeadRef);
+    REQUIRE(remoteHeadOid != nullptr);
+    CHECK(git_oid_cmp(localHeadOid, remoteHeadOid) == 0);
 }
 
 TEST_CASE("cwProject sync pulls remote-only changes into a clean local repo", "[cwProject]") {
