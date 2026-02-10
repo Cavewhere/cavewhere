@@ -1772,6 +1772,247 @@ TEST_CASE("cwProject sync uploads LFS objects through test LFS server", "[cwProj
     CHECK(git_oid_cmp(localHeadOid, remoteHeadOid) == 0);
 }
 
+TEST_CASE("cwProject sync hydrates pulled LFS objects from test LFS server", "[cwProject][lfs][sync][hydration]") {
+    QSettings settings;
+    settings.clear();
+
+    auto authorRoot = std::make_unique<cwRootData>();
+    auto* authorProject = authorRoot->project();
+    authorRoot->account()->setName(QStringLiteral("LFS Hydration Author"));
+    authorRoot->account()->setEmail(QStringLiteral("lfs.hydration.author@example.com"));
+
+    auto* region = authorProject->cavingRegion();
+    region->addCave();
+    auto* cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Hydration Cave"));
+    cave->addTrip();
+    auto* trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
+    trip->setName(QStringLiteral("Hydration Trip"));
+
+    const QString seedPngSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    REQUIRE(QFileInfo::exists(seedPngSource));
+    QTemporaryDir authorLowerCaseRoot;
+    REQUIRE(authorLowerCaseRoot.isValid());
+    const QString seedPngPath = QDir(authorLowerCaseRoot.path()).filePath(QStringLiteral("hydration-seed.png"));
+    REQUIRE(QFile::copy(seedPngSource, seedPngPath));
+    trip->notes()->addFromFiles({QUrl::fromLocalFile(seedPngPath)});
+    authorRoot->futureManagerModel()->waitForFinished();
+    authorProject->waitSaveToFinish();
+    REQUIRE(trip->notes()->rowCount() == 1);
+
+    QTemporaryDir authorSaveRoot;
+    REQUIRE(authorSaveRoot.isValid());
+    const QString authorProjectPath = QDir(authorSaveRoot.path()).filePath(QStringLiteral("lfs-hydration-author.cwproj"));
+    REQUIRE(authorProject->saveAs(authorProjectPath));
+    authorProject->waitSaveToFinish();
+    REQUIRE(authorProject->save());
+    authorProject->waitSaveToFinish();
+
+    const QString authorRepoPath = QFileInfo(authorProject->filename()).absoluteDir().absolutePath();
+    auto* authorRepository = authorProject->repository();
+    REQUIRE(authorRepository != nullptr);
+
+    QTemporaryDir remoteRoot;
+    REQUIRE(remoteRoot.isValid());
+    const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("hydration-remote.git"));
+    git_repository* remoteRepo = nullptr;
+    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
+    if (remoteRepo) {
+        git_repository_free(remoteRepo);
+        remoteRepo = nullptr;
+    }
+
+    const QString addRemoteError = authorRepository->addRemote(QStringLiteral("origin"),
+                                                               QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(addRemoteError.isEmpty());
+
+    auto* seedNote = trip->notes()->notes().first();
+    REQUIRE(seedNote != nullptr);
+    const QString seedNotePath = ProjectFilenameTestHelper::absolutePath(seedNote, seedNote->image().path());
+    REQUIRE(QFileInfo::exists(seedNotePath));
+    QFile seedNoteFile(seedNotePath);
+    REQUIRE(seedNoteFile.open(QIODevice::ReadOnly));
+    const QByteArray seedBytes = seedNoteFile.readAll();
+    REQUIRE_FALSE(seedBytes.isEmpty());
+    const QString seedOid = QString::fromLatin1(QCryptographicHash::hash(seedBytes, QCryptographicHash::Sha256).toHex());
+
+    LfsServer lfsServer;
+    if (!lfsServer.start()) {
+        SKIP("LFS test server could not bind a local TCP port in this environment.");
+        return;
+    }
+    lfsServer.setExpectedUploadObject(seedOid, seedBytes.size());
+    lfsServer.setDownloadObject(seedOid, seedBytes);
+    REQUIRE(setGitConfigString(authorRepoPath, "lfs.url", lfsServer.endpoint()));
+
+    authorProject->errorModel()->clear();
+    REQUIRE(authorProject->sync());
+    authorRoot->futureManagerModel()->waitForFinished();
+    authorProject->waitSaveToFinish();
+    CHECK(authorProject->errorModel()->count() == 0);
+    CHECK(lfsServer.uploadBatchRequestCount() > 0);
+    CHECK(lfsServer.uploadRequestCount() > 0);
+
+    auto consumerRoot = std::make_unique<cwRootData>();
+    auto* consumerProject = consumerRoot->project();
+    consumerRoot->account()->setName(QStringLiteral("LFS Hydration Consumer"));
+    consumerRoot->account()->setEmail(QStringLiteral("lfs.hydration.consumer@example.com"));
+
+    QTemporaryDir cloneRoot;
+    REQUIRE(cloneRoot.isValid());
+    auto* repositoryModel = consumerRoot->repositoryModel();
+    REQUIRE(repositoryModel != nullptr);
+    repositoryModel->setDefaultRepositoryDir(QUrl::fromLocalFile(cloneRoot.path()));
+    const int repositoryCountBeforeClone = repositoryModel->rowCount();
+
+    QQuickGit::GitFutureWatcher cloneWatcher;
+    cwRemoteRepositoryCloner cloner;
+    cloner.setRepositoryModel(repositoryModel);
+    cloner.setCloneWatcher(&cloneWatcher);
+    cloner.setAccount(consumerRoot->account());
+
+    const QString cloneUrl = QUrl::fromLocalFile(remoteRepoPath).toString();
+    cloner.clone(cloneUrl);
+
+    QEventLoop cloneLoop;
+    QTimer cloneTimeout;
+    cloneTimeout.setSingleShot(true);
+    QObject::connect(&cloneTimeout, &QTimer::timeout, &cloneLoop, &QEventLoop::quit);
+    QObject::connect(&cloneWatcher, &QQuickGit::GitFutureWatcher::stateChanged, &cloneLoop, [&cloneWatcher, &cloneLoop]() {
+        if (cloneWatcher.state() == QQuickGit::GitFutureWatcher::Ready) {
+            cloneLoop.quit();
+        }
+    });
+    cloneTimeout.start(20000);
+    cloneLoop.exec();
+
+    REQUIRE(cloneWatcher.state() == QQuickGit::GitFutureWatcher::Ready);
+    REQUIRE_FALSE(cloneWatcher.hasError());
+    REQUIRE(repositoryModel->rowCount() == repositoryCountBeforeClone + 1);
+
+    const QString clonedRepoName = cloner.repositoryNameFromUrl(cloneUrl);
+    const QString clonedRepoPath = QDir(cloneRoot.path()).filePath(clonedRepoName);
+    REQUIRE(QDir(clonedRepoPath).exists());
+    REQUIRE(setGitConfigString(clonedRepoPath, "lfs.url", lfsServer.endpoint()));
+
+    int clonedIndex = -1;
+    for (int i = 0; i < repositoryModel->rowCount(); ++i) {
+        const QString path = repositoryModel->data(repositoryModel->index(i, 0), cwRepositoryModel::PathRole).toString();
+        if (QDir(path).absolutePath() == QDir(clonedRepoPath).absolutePath()) {
+            clonedIndex = i;
+            break;
+        }
+    }
+    REQUIRE(clonedIndex >= 0);
+
+    const auto openResult = repositoryModel->openRepository(clonedIndex, consumerProject);
+    INFO(openResult.errorMessage().toStdString());
+    REQUIRE_FALSE(openResult.hasError());
+    consumerRoot->futureManagerModel()->waitForFinished();
+    consumerProject->waitLoadToFinish();
+    consumerProject->waitSaveToFinish();
+
+    const QString updatePngSource = copyToTempFolder("://datasets/test_cwNote/testpage.png");
+    REQUIRE(QFileInfo::exists(updatePngSource));
+    const QString updatePngPath = QDir(authorLowerCaseRoot.path()).filePath(QStringLiteral("hydration-update.png"));
+    REQUIRE(QFile::copy(updatePngSource, updatePngPath));
+    trip->notes()->addFromFiles({QUrl::fromLocalFile(updatePngPath)});
+    authorRoot->futureManagerModel()->waitForFinished();
+    authorProject->waitSaveToFinish();
+    REQUIRE(trip->notes()->rowCount() == 2);
+
+    cwNote* updateNote = nullptr;
+    for (cwNote* note : trip->notes()->notes()) {
+        if (note != nullptr && note->image().path().endsWith(QStringLiteral("hydration-update.png"), Qt::CaseInsensitive)) {
+            updateNote = note;
+            break;
+        }
+    }
+    REQUIRE(updateNote != nullptr);
+    const QString updateNotePath = ProjectFilenameTestHelper::absolutePath(updateNote, updateNote->image().path());
+    REQUIRE(QFileInfo::exists(updateNotePath));
+    const QString updateRelativePath = QDir(authorRepoPath).relativeFilePath(updateNotePath);
+    QFile updateNoteFile(updateNotePath);
+    REQUIRE(updateNoteFile.open(QIODevice::ReadOnly));
+    const QByteArray updateBytes = updateNoteFile.readAll();
+    REQUIRE_FALSE(updateBytes.isEmpty());
+    const QString updateOid = QString::fromLatin1(QCryptographicHash::hash(updateBytes, QCryptographicHash::Sha256).toHex());
+    lfsServer.setExpectedUploadObject(updateOid, updateBytes.size());
+    lfsServer.setDownloadObject(updateOid, updateBytes);
+
+    authorProject->errorModel()->clear();
+    REQUIRE(authorProject->sync());
+    authorRoot->futureManagerModel()->waitForFinished();
+    authorProject->waitSaveToFinish();
+    CHECK(authorProject->errorModel()->count() == 0);
+
+    consumerProject->errorModel()->clear();
+    REQUIRE(consumerProject->sync());
+    consumerRoot->futureManagerModel()->waitForFinished();
+    consumerProject->waitSaveToFinish();
+    qDebug() << "[cwProject LFS hydration test] consumer sync error count:"
+             << consumerProject->errorModel()->count();
+    for (int i = 0; i < consumerProject->errorModel()->count(); ++i) {
+        const cwError err = consumerProject->errorModel()->at(i);
+        qDebug() << "[cwProject LFS hydration test] consumer sync error"
+                 << i
+                 << "type=" << err.type()
+                 << "message=" << err.message();
+    }
+    CHECK(consumerProject->errorModel()->count() == 0);
+
+    qDebug() << "[cwProject LFS hydration test] pulled cave count:"
+             << consumerProject->cavingRegion()->caveCount();
+    REQUIRE(consumerProject->cavingRegion()->caveCount() > 0);
+    auto* pulledCave = consumerProject->cavingRegion()->cave(0);
+    REQUIRE(pulledCave != nullptr);
+    qDebug() << "[cwProject LFS hydration test] pulled cave name:"
+             << pulledCave->name()
+             << "trip count=" << pulledCave->tripCount();
+    REQUIRE(pulledCave->tripCount() > 0);
+    auto* pulledTrip = pulledCave->trip(0);
+    REQUIRE(pulledTrip != nullptr);
+    qDebug() << "[cwProject LFS hydration test] pulled trip name:"
+             << pulledTrip->name()
+             << "note count=" << pulledTrip->notes()->rowCount();
+    for (cwNote* note : pulledTrip->notes()->notes()) {
+        if (!note) {
+            qDebug() << "[cwProject LFS hydration test] pulled note is null";
+            continue;
+        }
+        qDebug() << "[cwProject LFS hydration test] pulled note path:"
+                 << note->image().path();
+    }
+
+    cwNote* pulledUpdateNote = nullptr;
+    for (cwNote* note : pulledTrip->notes()->notes()) {
+        if (note != nullptr && note->image().path().endsWith(QStringLiteral("hydration-update.png"), Qt::CaseInsensitive)) {
+            pulledUpdateNote = note;
+            break;
+        }
+    }
+    CHECK(pulledUpdateNote != nullptr); // Exposes current model-refresh gap after merge/sync.
+
+    const QString pulledUpdatePath = QDir(clonedRepoPath).filePath(updateRelativePath);
+    qDebug() << "[cwProject LFS hydration test] pulled update path from git working tree:"
+             << pulledUpdatePath
+             << "exists=" << QFileInfo::exists(pulledUpdatePath);
+    REQUIRE(QFileInfo::exists(pulledUpdatePath));
+    QFile pulledUpdateFile(pulledUpdatePath);
+    REQUIRE(pulledUpdateFile.open(QIODevice::ReadOnly));
+    const QByteArray pulledBytes = pulledUpdateFile.readAll();
+    REQUIRE_FALSE(pulledBytes.isEmpty());
+
+    QQuickGit::LfsPointer parsedPointer;
+    CHECK_FALSE(QQuickGit::LfsPointer::parse(pulledBytes, &parsedPointer));
+    CHECK(pulledBytes == updateBytes);
+
+    CHECK(lfsServer.downloadBatchRequestCount() > 0);
+    CHECK(lfsServer.downloadObjectRequestCount() > 0);
+}
+
 TEST_CASE("cwProject sync pulls remote-only changes into a clean local repo", "[cwProject]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
