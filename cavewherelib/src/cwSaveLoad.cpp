@@ -1379,9 +1379,9 @@ void cwSaveLoad::setFileName(const QString &filename, bool initRepository)
     //This should load the filename
     if(d->projectFileName != filename) {
         d->projectFileName = filename;
+        d->repository->setDirectory(QFileInfo(filename).absoluteDir());
 
         if(initRepository) {
-            d->repository->setDirectory(QFileInfo(filename).absoluteDir());
             d->repository->initRepository();
             ensureGitExcludeHasCacheEntry(d->repository->directory());
         }

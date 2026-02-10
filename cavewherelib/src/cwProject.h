@@ -136,6 +136,7 @@ public:
 
     bool canSaveDirectly() const;
     bool isTemporaryProject() const;
+    QQuickGit::GitRepository* repository() const;
 
     void addImages(QList<QUrl> noteImagePath,
                    const QDir &dir,

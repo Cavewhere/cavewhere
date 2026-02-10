@@ -372,6 +372,11 @@ bool cwProject::sync()
     return true;
 }
 
+QQuickGit::GitRepository* cwProject::repository() const
+{
+    return m_saveLoad->repository();
+}
+
 bool cwProject::saveWillCauseDataLoss() const
 {
     return FileVersion > cwRegionIOTask::protoVersion();
