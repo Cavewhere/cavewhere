@@ -14,6 +14,7 @@
 #include "cwImage.h"
 // #include "cwImageData.h"
 #include "cwGlobals.h"
+#include "cwSaveLoad.h"
 // #include "cwRegionLoadResult.h"
 // #include "cwError.h"
 #include "cwFutureManagerToken.h"
@@ -47,6 +48,7 @@ class Account;
 #include <QFuture>
 #include <QQmlEngine>
 #include <functional>
+#include <optional>
 class QUndoStack;
 
 //Monad
@@ -105,6 +107,7 @@ public:
     Q_INVOKABLE void newProject();
     Q_INVOKABLE bool save();
     Q_INVOKABLE bool sync();
+    std::optional<cwSaveLoad::SyncReport> lastSyncReport() const;
     Q_INVOKABLE bool saveAs(QString newFilename);
     Q_INVOKABLE bool deleteTemporaryProject();
     Q_INVOKABLE bool isNewProject() const;

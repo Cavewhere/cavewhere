@@ -54,6 +54,7 @@ using namespace Catch;
 //libgit2
 #include "git2.h"
 
+#include <algorithm>
 #include <optional>
 #include <google/protobuf/util/json_util.h>
 #include "cavewhere.pb.h"
@@ -2496,6 +2497,25 @@ TEST_CASE("cwProject sync pulls remote-only changes into a clean local repo", "[
     rootData->futureManagerModel()->waitForFinished();
     project->waitSaveToFinish();
     CHECK(project->errorModel()->count() == 0);
+
+    const auto syncReport = project->lastSyncReport();
+    REQUIRE(syncReport.has_value());
+    const bool isExpectedPullState =
+        syncReport->pullState == cwSaveLoad::SyncReport::PullState::FastForward
+        || syncReport->pullState == cwSaveLoad::SyncReport::PullState::MergeCommitCreated;
+    CHECK(isExpectedPullState);
+    CHECK(syncReport->beforeHead != syncReport->afterHead);
+    CHECK(syncReport->hasCommitDiffPaths);
+    CHECK(std::any_of(syncReport->commitDiffPaths.begin(),
+                      syncReport->commitDiffPaths.end(),
+                      [&pulledFileName](const QString& path) {
+                          return path.endsWith(pulledFileName, Qt::CaseInsensitive);
+                      }));
+    CHECK(std::any_of(syncReport->changedPaths.begin(),
+                      syncReport->changedPaths.end(),
+                      [&pulledFileName](const QString& path) {
+                          return path.endsWith(pulledFileName, Qt::CaseInsensitive);
+                      }));
 
     const git_oid afterPullHead = headOid(localRepo);
     CHECK(git_oid_cmp(&beforePullHead, &afterPullHead) != 0);

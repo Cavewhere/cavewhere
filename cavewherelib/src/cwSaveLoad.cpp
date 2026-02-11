@@ -44,6 +44,7 @@
 #include <QFile>
 #include <QDateTime>
 #include <QQueue>
+#include <QDirIterator>
 
 #ifdef CW_WITH_PDF_SUPPORT
 #include <QPdfDocument>
@@ -281,13 +282,8 @@ cwImage loadImage(const CavewhereProto::Image& protoImage, const QString& noteFi
     return image;
 }
 
-QQuickGit::LfsPolicy cavewhereLfsPolicy()
+QSet<QString> cavewhereTrackedExtensions()
 {
-    QQuickGit::LfsPolicy policy;
-    const auto alwaysEligible = [](const QString&, const QByteArray*) {
-        return true;
-    };
-
     QSet<QString> trackedExtensions;
     const QList<QByteArray> supportedFormats = QImageReader::supportedImageFormats();
     for (const QByteArray& format : supportedFormats) {
@@ -300,8 +296,17 @@ QQuickGit::LfsPolicy cavewhereLfsPolicy()
     trackedExtensions.insert(QStringLiteral("svg"));
     trackedExtensions.insert(QStringLiteral("pdf"));
     trackedExtensions.insert(QStringLiteral("glb"));
+    return trackedExtensions;
+}
 
-    for (const QString& extension : trackedExtensions) {
+QQuickGit::LfsPolicy cavewhereLfsPolicy()
+{
+    QQuickGit::LfsPolicy policy;
+    const auto alwaysEligible = [](const QString&, const QByteArray*) {
+        return true;
+    };
+
+    for (const QString& extension : cavewhereTrackedExtensions()) {
         policy.setRule(extension, alwaysEligible);
     }
 
@@ -311,6 +316,156 @@ QQuickGit::LfsPolicy cavewhereLfsPolicy()
 bool hasRemoteConfigured(const QQuickGit::GitRepository* repository)
 {
     return repository != nullptr && !repository->remotes().isEmpty();
+}
+
+QStringList uniqueSortedPaths(const QStringList& paths)
+{
+    QSet<QString> seen;
+    QStringList result;
+    result.reserve(paths.size());
+    for (const QString& path : paths) {
+        const QString normalized = QDir::fromNativeSeparators(path);
+        if (normalized.isEmpty() || seen.contains(normalized)) {
+            continue;
+        }
+        seen.insert(normalized);
+        result.append(normalized);
+    }
+    std::sort(result.begin(), result.end());
+    return result;
+}
+
+struct LfsCandidateState {
+    bool isPointer = false;
+    QString pointerOid;
+    qint64 size = -1;
+    qint64 lastModifiedUtcMsecs = 0;
+};
+
+using LfsSnapshot = QHash<QString, LfsCandidateState>;
+
+LfsSnapshot captureLfsSnapshot(const QString& repoPath)
+{
+    LfsSnapshot snapshot;
+    const QDir repoDir(repoPath);
+    const QSet<QString> trackedExtensions = cavewhereTrackedExtensions();
+
+    QDirIterator it(repoPath,
+                    QDir::Files | QDir::NoSymLinks,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        it.next();
+        const QFileInfo info = it.fileInfo();
+        const QString relativePath = QDir::fromNativeSeparators(repoDir.relativeFilePath(info.absoluteFilePath()));
+        if (relativePath.isEmpty()
+            || relativePath == QStringLiteral(".git")
+            || relativePath.startsWith(QStringLiteral(".git/"))) {
+            continue;
+        }
+
+        const QString extension = info.suffix().trimmed().toLower();
+        if (!trackedExtensions.contains(extension)) {
+            continue;
+        }
+
+        LfsCandidateState state;
+        state.size = info.size();
+        state.lastModifiedUtcMsecs = info.lastModified().toUTC().toMSecsSinceEpoch();
+        if (state.size >= 0 && state.size <= 8192) {
+            QFile file(info.absoluteFilePath());
+            if (file.open(QIODevice::ReadOnly)) {
+                const QByteArray data = file.readAll();
+                QQuickGit::LfsPointer pointer;
+                if (QQuickGit::LfsPointer::parse(data, &pointer)) {
+                    state.isPointer = true;
+                    state.pointerOid = pointer.oid;
+                }
+            }
+        }
+
+        snapshot.insert(relativePath, state);
+    }
+
+    return snapshot;
+}
+
+QStringList hydrationDeltaPaths(const LfsSnapshot& beforeSnapshot,
+                                const LfsSnapshot& afterSnapshot)
+{
+    QSet<QString> allPaths = QSet<QString>(beforeSnapshot.keyBegin(), beforeSnapshot.keyEnd());
+    allPaths.unite(QSet<QString>(afterSnapshot.keyBegin(), afterSnapshot.keyEnd()));
+
+    QStringList changedPaths;
+    changedPaths.reserve(allPaths.size());
+    for (const QString& path : allPaths) {
+        const bool hadBefore = beforeSnapshot.contains(path);
+        const bool hasAfter = afterSnapshot.contains(path);
+        if (hadBefore != hasAfter) {
+            changedPaths.append(path);
+            continue;
+        }
+
+        const LfsCandidateState& before = beforeSnapshot[path];
+        const LfsCandidateState& after = afterSnapshot[path];
+        if (before.isPointer != after.isPointer
+            || before.pointerOid != after.pointerOid
+            || before.size != after.size
+            || before.lastModifiedUtcMsecs != after.lastModifiedUtcMsecs) {
+            changedPaths.append(path);
+        }
+    }
+
+    return uniqueSortedPaths(changedPaths);
+}
+
+cwSaveLoad::SyncReport::PullState toPullState(QQuickGit::GitRepository::MergeResult::State mergeState)
+{
+    switch (mergeState) {
+    case QQuickGit::GitRepository::MergeResult::AlreadyUpToDate:
+        return cwSaveLoad::SyncReport::PullState::AlreadyUpToDate;
+    case QQuickGit::GitRepository::MergeResult::FastForward:
+        return cwSaveLoad::SyncReport::PullState::FastForward;
+    case QQuickGit::GitRepository::MergeResult::MergeCommitCreated:
+        return cwSaveLoad::SyncReport::PullState::MergeCommitCreated;
+    case QQuickGit::GitRepository::MergeResult::MergeConflicts:
+        return cwSaveLoad::SyncReport::PullState::MergeConflicts;
+    case QQuickGit::GitRepository::MergeResult::UnknownState:
+    default:
+        return cwSaveLoad::SyncReport::PullState::Unknown;
+    }
+}
+
+cwSaveLoad::SyncReport buildSyncReport(const QString& repoPath,
+                                       const QString& beforeHead,
+                                       const QString& afterHead,
+                                       cwSaveLoad::SyncReport::PullState pullState,
+                                       const LfsSnapshot& beforeSnapshot)
+{
+    cwSaveLoad::SyncReport report;
+    report.beforeHead = beforeHead;
+    report.afterHead = afterHead;
+    report.pullState = pullState;
+
+    const auto commitPathsResult =
+        QQuickGit::GitRepository::diffPathsBetweenCommits(repoPath, beforeHead, afterHead);
+    if (commitPathsResult.hasError()) {
+        report.diagnostics.append(commitPathsResult.errorMessage());
+    } else {
+        report.commitDiffPaths = commitPathsResult.value();
+    }
+
+    const LfsSnapshot afterSnapshot = captureLfsSnapshot(repoPath);
+    report.hydrationDeltaPaths = hydrationDeltaPaths(beforeSnapshot, afterSnapshot);
+    report.backendPaths = uniqueSortedPaths(report.backendPaths);
+
+    QStringList changedPaths = report.backendPaths;
+    changedPaths.append(report.commitDiffPaths);
+    changedPaths.append(report.hydrationDeltaPaths);
+    report.changedPaths = uniqueSortedPaths(changedPaths);
+    report.hasBackendPaths = !report.backendPaths.isEmpty();
+    report.hasCommitDiffPaths = !report.commitDiffPaths.isEmpty();
+    report.hasHydrationDeltaPaths = !report.hydrationDeltaPaths.isEmpty();
+    return report;
 }
 
 QString defaultCommitSubject(const QString& action)
@@ -843,6 +998,7 @@ struct cwSaveLoad::Data {
     quint64 operationGeneration = 0;
     quint64 modelMutationEpoch = 0;
     bool pendingIdentityRepairSave = false;
+    std::optional<cwSaveLoad::SyncReport> lastSyncReport;
 
     static QList<cwSurveyChunkData> fromProtoSurveyChunks(const google::protobuf::RepeatedPtrField<CavewhereProto::SurveyChunk> & protoList);
 
@@ -3955,6 +4111,8 @@ Monad::ResultBase cwSaveLoad::commitProjectChanges(const QString& subject,
 
 QFuture<Monad::ResultBase> cwSaveLoad::sync()
 {
+    d->lastSyncReport.reset();
+
     auto saveFlushFuture = d->enqueueOperation(this, Data::Operation::Type::SaveFlush, [this]() {
         return saveFlushImpl();
     });
@@ -3974,6 +4132,11 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
     }
 
     return queuedFuture;
+}
+
+std::optional<cwSaveLoad::SyncReport> cwSaveLoad::lastSyncReport() const
+{
+    return d->lastSyncReport;
 }
 
 QFuture<Monad::ResultBase> cwSaveLoad::syncImpl()
@@ -3997,7 +4160,9 @@ QFuture<Monad::ResultBase> cwSaveLoad::syncImpl()
         return AsyncFuture::completed(ResultBase(QStringLiteral("Git repository is unavailable.")));
     }
 
-    auto syncFuture = saveFlushImpl().then(this, [this, repo, syncGeneration](ResultBase saveFlushResult) -> QFuture<ResultBase> {
+    const QString repoPath = repo->directory().absolutePath();
+
+    auto syncFuture = saveFlushImpl().then(this, [this, repo, repoPath, syncGeneration](ResultBase saveFlushResult) -> QFuture<ResultBase> {
         if (saveFlushResult.hasError()) {
             return AsyncFuture::completed(saveFlushResult);
         }
@@ -4017,15 +4182,70 @@ QFuture<Monad::ResultBase> cwSaveLoad::syncImpl()
                 ResultBase(QStringLiteral("No git remote is configured for this project.")));
         }
 
-        auto pullPushFuture = repo->pullPush();
-        return AsyncFuture::observe(pullPushFuture)
-            .context(this, [this, pullPushFuture, syncGeneration]() {
+        const auto beforeHeadResult = QQuickGit::GitRepository::headCommitOid(repoPath);
+        if (beforeHeadResult.hasError()) {
+            return AsyncFuture::completed(ResultBase(beforeHeadResult.errorMessage()));
+        }
+        const QString beforeHead = beforeHeadResult.value();
+
+        auto beforeSnapshotFuture = QtConcurrent::run([repoPath]() {
+            return captureLfsSnapshot(repoPath);
+        });
+
+        auto pullFuture = repo->pull();
+        auto pullStageFuture = AsyncFuture::observe(pullFuture)
+            .context(this, [this, repo, repoPath, beforeHead, beforeSnapshotFuture, pullFuture, syncGeneration]() -> QFuture<ResultBase> {
                 if (d->operationGeneration != syncGeneration || d->retiring) {
-                    return ResultBase(QStringLiteral("Operation canceled."));
+                    return AsyncFuture::completed(ResultBase(QStringLiteral("Operation canceled.")));
                 }
-                return pullPushFuture.result();
+
+                const auto pullResult = pullFuture.result();
+                if (pullResult.hasError()) {
+                    return AsyncFuture::completed(ResultBase(pullResult.errorMessage()));
+                }
+
+                const auto pullState = toPullState(pullResult.value().state());
+                if (pullState == SyncReport::PullState::MergeConflicts) {
+                    return AsyncFuture::completed(ResultBase(QStringLiteral("Merge Conflicts need to be resolved")));
+                }
+
+                const auto afterHeadResult = QQuickGit::GitRepository::headCommitOid(repoPath);
+                if (afterHeadResult.hasError()) {
+                    return AsyncFuture::completed(ResultBase(afterHeadResult.errorMessage()));
+                }
+                const QString afterHead = afterHeadResult.value();
+
+                auto reportFuture = QtConcurrent::run([repoPath, beforeHead, afterHead, pullState, beforeSnapshotFuture]() {
+                    return buildSyncReport(repoPath,
+                                           beforeHead,
+                                           afterHead,
+                                           pullState,
+                                           beforeSnapshotFuture.result());
+                });
+
+                auto reportStageFuture = AsyncFuture::observe(reportFuture)
+                    .context(this, [this, repo, reportFuture, syncGeneration]() -> QFuture<ResultBase> {
+                        if (d->operationGeneration != syncGeneration || d->retiring) {
+                            return AsyncFuture::completed(ResultBase(QStringLiteral("Operation canceled.")));
+                        }
+
+                        d->lastSyncReport = reportFuture.result();
+
+                        auto pushFuture = repo->push();
+                        return AsyncFuture::observe(pushFuture)
+                            .context(this, [this, pushFuture, syncGeneration]() {
+                                if (d->operationGeneration != syncGeneration || d->retiring) {
+                                    return ResultBase(QStringLiteral("Operation canceled."));
+                                }
+                                return pushFuture.result();
+                            })
+                            .future();
+                    })
+                    .future();
+                return reportStageFuture;
             })
             .future();
+        return pullStageFuture;
     }).unwrap();
 
     return syncFuture;

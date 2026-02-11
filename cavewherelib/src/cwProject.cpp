@@ -372,6 +372,14 @@ bool cwProject::sync()
     return true;
 }
 
+std::optional<cwSaveLoad::SyncReport> cwProject::lastSyncReport() const
+{
+    if (!m_saveLoad) {
+        return std::nullopt;
+    }
+    return m_saveLoad->lastSyncReport();
+}
+
 QQuickGit::GitRepository* cwProject::repository() const
 {
     return m_saveLoad->repository();

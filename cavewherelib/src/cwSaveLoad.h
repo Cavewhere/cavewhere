@@ -102,6 +102,7 @@ class Account;
 #include <QPointer>
 #include <QUndoStack>
 #include <functional>
+#include <optional>
 
 class CAVEWHERE_LIB_EXPORT cwSaveLoad : public QObject
 {
@@ -134,6 +135,28 @@ public:
         cwCavingRegionData region;
         ProjectMetadataData metadata;
         IdentityRepairData identityRepair;
+    };
+
+    struct SyncReport {
+        enum class PullState {
+            Unknown,
+            AlreadyUpToDate,
+            FastForward,
+            MergeCommitCreated,
+            MergeConflicts
+        };
+
+        QString beforeHead;
+        QString afterHead;
+        PullState pullState = PullState::Unknown;
+        QStringList backendPaths;
+        QStringList commitDiffPaths;
+        QStringList hydrationDeltaPaths;
+        QStringList changedPaths;
+        QStringList diagnostics;
+        bool hasBackendPaths = false;
+        bool hasCommitDiffPaths = false;
+        bool hasHydrationDeltaPaths = false;
     };
 
     cwSaveLoad(QObject* parent = nullptr);
@@ -218,6 +241,7 @@ public:
     void setSyncEnabled(bool enabled);
 
     QFuture<Monad::ResultBase> sync();
+    std::optional<SyncReport> lastSyncReport() const;
     Monad::ResultBase commitProjectChanges(const QString& subject = QString(),
                                            const QString& description = QString());
 
