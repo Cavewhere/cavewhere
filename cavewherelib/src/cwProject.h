@@ -141,9 +141,15 @@ public:
     void addImages(QList<QUrl> noteImagePath,
                    const QDir &dir,
                    std::function<void (QList<cwImage> images)> outputCallBackFunc);
+    void addImages(QList<QUrl> noteImagePath,
+                   std::function<QDir()> destinationDirResolver,
+                   std::function<void (QList<cwImage> images)> outputCallBackFunc);
 
     void addFiles(QList<QUrl> filePath,
                   const QDir& dir,
+                  std::function<void (QList<QString> paths)> outputCallBackFunc);
+    void addFiles(QList<QUrl> filePath,
+                  std::function<QDir()> destinationDirResolver,
                   std::function<void (QList<QString> paths)> outputCallBackFunc);
 
     void loadOrConvert(const QString& filename);

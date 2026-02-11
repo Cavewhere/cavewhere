@@ -12,6 +12,7 @@
 #include <QUrl>
 #include <QDebug>
 #include <QImageReader>
+#include <QPointer>
 
 cwSurveyNoteLiDARModel::cwSurveyNoteLiDARModel(QObject* parent)
     : cwSurveyNoteModelBase(parent)
@@ -40,11 +41,18 @@ void cwSurveyNoteLiDARModel::addFromFiles(QList<QUrl> files)
         return;
     }
 
-    const QDir destinationDirectory = proj->notesDir(this);
+    const QDir fallbackDestinationDirectory = proj->notesDir(this);
+    QPointer<cwProject> projectPtr(proj);
+    QPointer<cwSurveyNoteLiDARModel> modelPtr(this);
 
     proj->addFiles(
         glbUrls,
-        destinationDirectory,
+        [projectPtr, modelPtr, fallbackDestinationDirectory]() {
+            if (projectPtr == nullptr || modelPtr == nullptr) {
+                return fallbackDestinationDirectory;
+            }
+            return projectPtr->notesDir(modelPtr);
+        },
         [this](QList<QString> relativePaths) {
             if (relativePaths.isEmpty()) {
                 return;

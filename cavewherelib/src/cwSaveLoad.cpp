@@ -52,6 +52,7 @@
 #include <QUuid>
 #include <QtCore/qscopeguard.h>
 #include <QFileInfo>
+#include <QThread>
 
 //QQuickGit
 #include "GitRepository.h"
@@ -633,8 +634,14 @@ struct cwSaveLoad::Data {
                     return newCheck;
                 }
             }
-                Q_ASSERT(QFileInfo::exists(oldPath));
-                // Q_ASSERT(QFileInfo::exists(path));
+                if (!QFileInfo::exists(oldPath)) {
+                    return Monad::ResultBase();
+                }
+
+                if (oldPath == path) {
+                    return Monad::ResultBase();
+                }
+
                 if (!QDir().rename(oldPath, path)) {
                     return Monad::ResultBase(QStringLiteral("Failed to move %1 -> %2").arg(oldPath, path));
                 }
@@ -802,6 +809,7 @@ struct cwSaveLoad::Data {
     //Saving jobs
     QList<Job> m_pendingJobs;
     AsyncFuture::Deferred<void> m_pendingJobsDeferred;
+    QStringList m_pendingSaveJobErrors;
 
     bool isTemporary = true;
     bool saveEnabled = true;
@@ -833,6 +841,7 @@ struct cwSaveLoad::Data {
     QQueue<std::shared_ptr<Operation>> operationQueue;
     std::shared_ptr<Operation> activeOperation;
     quint64 operationGeneration = 0;
+    quint64 modelMutationEpoch = 0;
 
     static QList<cwSurveyChunkData> fromProtoSurveyChunks(const google::protobuf::RepeatedPtrField<CavewhereProto::SurveyChunk> & protoList);
 
@@ -852,6 +861,74 @@ struct cwSaveLoad::Data {
 
     Data() {
         m_pendingJobsDeferred.complete();
+    }
+
+    bool hasQueuedOperationType(Operation::Type type) const
+    {
+        if (activeOperation
+            && activeOperation->generation == operationGeneration
+            && activeOperation->type == type) {
+            return true;
+        }
+
+        for (const auto& op : operationQueue) {
+            if (op
+                && op->generation == operationGeneration
+                && op->type == type) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    void maybeStartPendingFileJobs(cwSaveLoad* context)
+    {
+        if (activeOperation == nullptr) {
+            return;
+        }
+
+        if (m_pendingJobs.isEmpty()) {
+            return;
+        }
+
+        if (m_pendingJobsDeferred.future().isFinished()) {
+            execFileSystemJobs(context);
+        }
+    }
+
+    void ensureSaveFlushScheduled(cwSaveLoad* context)
+    {
+        if (retiring) {
+            return;
+        }
+
+        if (hasQueuedOperationType(Operation::Type::SaveFlush)) {
+            return;
+        }
+
+        auto saveFlushFuture = enqueueOperation(context, Operation::Type::SaveFlush, [context]() {
+            return context->saveFlushImpl();
+        });
+
+        AsyncFuture::observe(saveFlushFuture)
+            .context(context, [saveFlushFuture]() {
+                const auto result = saveFlushFuture.result();
+                if (result.hasError()) {
+                    qWarning() << "Save flush failed:" << result.errorMessage();
+                }
+            }).future();
+    }
+
+    QString takePendingSaveJobErrors()
+    {
+        if (m_pendingSaveJobErrors.isEmpty()) {
+            return QString();
+        }
+
+        const QString joined = m_pendingSaveJobErrors.join(QLatin1Char('\n'));
+        m_pendingSaveJobErrors.clear();
+        return joined;
     }
 
     QFuture<ResultBase> enqueueOperation(cwSaveLoad* context,
@@ -888,6 +965,8 @@ struct cwSaveLoad::Data {
             return;
         }
 
+        maybeStartPendingFileJobs(context);
+
         QFuture<ResultBase> opFuture;
         if (op->run) {
             opFuture = op->run();
@@ -909,6 +988,14 @@ struct cwSaveLoad::Data {
                 if (activeOperation == op) {
                     activeOperation.reset();
                 }
+
+                if (op->type == Operation::Type::SaveFlush && result.hasError()) {
+                    const QString reason = result.errorMessage().isEmpty()
+                                               ? QStringLiteral("Save flush failed.")
+                                               : result.errorMessage();
+                    cancelPendingOperations(reason);
+                }
+
                 runNextOperation(context);
             }).future();
     }
@@ -935,7 +1022,7 @@ struct cwSaveLoad::Data {
         const QString dataRootPath = dataRootName.isEmpty()
                                          ? context->projectRootDir().absolutePath()
                                          : context->projectRootDir().absoluteFilePath(dataRootName);
-        job.dataRoot = QDir(dataRootPath).absolutePath();
+        job.dataRoot = normalizeQueuedPath(QDir(dataRootPath).absolutePath());
 
         // if(job.kind == Job::Kind::Directory) {
         //     qDebug() << "Directory move!";
@@ -955,6 +1042,12 @@ struct cwSaveLoad::Data {
 
         job.path = path(job);
         job.oldPath = oldPath(job);
+        if (!job.path.isEmpty()) {
+            job.path = normalizeQueuedPath(job.path);
+        }
+        if (!job.oldPath.isEmpty()) {
+            job.oldPath = normalizeQueuedPath(job.oldPath);
+        }
 
 
         auto emitObjectPathHelper = [](const Monad::ResultBase& result, auto doneFunc, auto emitFunc) {
@@ -1048,9 +1141,10 @@ struct cwSaveLoad::Data {
 
         // qDebug() << "Pushing job:" << this << m_pendingJobs.size() << job.toString();
 
-        if(m_pendingJobsDeferred.future().isFinished()) {
-            // qDebug() << "Exec file system jobs:" << this << m_pendingJobs.size();
-            execFileSystemJobs(context);
+        if (activeOperation != nullptr) {
+            maybeStartPendingFileJobs(context);
+        } else {
+            ensureSaveFlushScheduled(context);
         }
     }
 
@@ -1063,14 +1157,22 @@ struct cwSaveLoad::Data {
         const QString dataRootPath = dataRootName.isEmpty()
                                          ? context->projectRootDir().absolutePath()
                                          : context->projectRootDir().absoluteFilePath(dataRootName);
-        job.dataRoot = QDir(dataRootPath).absolutePath();
+        job.dataRoot = normalizeQueuedPath(QDir(dataRootPath).absolutePath());
+        if (!job.path.isEmpty()) {
+            job.path = normalizeQueuedPath(job.path);
+        }
+        if (!job.oldPath.isEmpty()) {
+            job.oldPath = normalizeQueuedPath(job.oldPath);
+        }
 
         m_pendingJobs.append(job);
 
         // qDebug() << "Pushing explicit job:" << this << m_pendingJobs.size() << job.toString();
 
-        if(m_pendingJobsDeferred.future().isFinished()) {
-            execFileSystemJobs(context);
+        if (activeOperation != nullptr) {
+            maybeStartPendingFileJobs(context);
+        } else {
+            ensureSaveFlushScheduled(context);
         }
     }
 
@@ -1105,13 +1207,56 @@ struct cwSaveLoad::Data {
         auto addObjects = [this, context](auto objects) {
             for(const auto object : objects) {
                 auto& state = stateFor(object);
-                state.currentPath = absolutePathFor(context, object);
+                state.currentPath = normalizeQueuedPath(absolutePathFor(context, object));
             }
         };
 
         addObjects(m_regionTreeModel->all<cwCave*>(QModelIndex(), &cwRegionTreeModel::cave));
         addObjects(m_regionTreeModel->all<cwTrip*>(QModelIndex(), &cwRegionTreeModel::trip));
         addObjects(m_regionTreeModel->all<cwNote*>(QModelIndex(), &cwRegionTreeModel::note));
+    }
+
+    // Normalize paths for queued jobs in a way that is stable across aliases/symlinks.
+    // We cannot canonicalize the full path directly because many queued destinations
+    // do not exist yet, and QFileInfo::canonicalFilePath() then returns an empty string.
+    // Instead, canonicalize the deepest existing ancestor and append unresolved segments.
+    static QString normalizeQueuedPath(const QString& inputPath)
+    {
+        if (inputPath.isEmpty()) {
+            return inputPath;
+        }
+
+        QString unresolved = QDir::cleanPath(QFileInfo(inputPath).absoluteFilePath());
+        QStringList unresolvedSegments;
+        QFileInfo unresolvedInfo(unresolved);
+
+        while (!unresolvedInfo.exists()) {
+            const QString segment = unresolvedInfo.fileName();
+            const QString parentPath = unresolvedInfo.path();
+            if (segment.isEmpty() || parentPath == unresolved) {
+                break;
+            }
+
+            unresolvedSegments.prepend(segment);
+            unresolved = parentPath;
+            unresolvedInfo.setFile(unresolved);
+        }
+
+        QString normalizedBase = QDir::cleanPath(QFileInfo(unresolved).absoluteFilePath());
+        if (unresolvedInfo.exists()) {
+            const QString canonicalBase = unresolvedInfo.canonicalFilePath();
+            if (!canonicalBase.isEmpty()) {
+                normalizedBase = QDir::cleanPath(canonicalBase);
+            }
+        }
+
+        QString normalized = normalizedBase;
+        for (const QString& segment : unresolvedSegments) {
+            normalized = QDir(normalized).filePath(segment);
+            normalized = QDir::cleanPath(normalized);
+        }
+
+        return normalized;
     }
 
 
@@ -1145,6 +1290,9 @@ struct cwSaveLoad::Data {
             const auto data = future.result();
             if(data.hasError()) {
                 qWarning() << "Save job error:" << data.errorMessage() << job.toString();
+                m_pendingSaveJobErrors.append(
+                    QStringLiteral("%1 (%2)")
+                        .arg(data.errorMessage(), job.toString()));
             }
             if (job.onDone) {
                 job.onDone(data);
@@ -1474,7 +1622,16 @@ QString cwSaveLoad::fileName() const
 
 QFuture<ResultBase> cwSaveLoad::load(const QString &filename)
 {
-    return d->enqueueOperation(this, Data::Operation::Type::LoadProject, [this, filename]() {
+    auto saveFlushFuture = d->enqueueOperation(this, Data::Operation::Type::SaveFlush, [this]() {
+        return saveFlushImpl();
+    });
+
+    return d->enqueueOperation(this, Data::Operation::Type::LoadProject, [this, filename, saveFlushFuture]() {
+        const auto saveFlushResult = saveFlushFuture.result();
+        if (saveFlushResult.hasError()) {
+            return AsyncFuture::completed(saveFlushResult);
+        }
+
         return loadImpl(filename);
     });
 }
@@ -1482,22 +1639,40 @@ QFuture<ResultBase> cwSaveLoad::load(const QString &filename)
 QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
 {
     // qDebug() << "---- Loading: " << filename;
+    const quint64 loadGeneration = d->operationGeneration;
+    const auto canceledResult = []() {
+        return ResultBase(QStringLiteral("Operation canceled."));
+    };
 
     //Disconnect all connections
     disconnectTreeModel();
     auto shouldPersistIdentityRepair = std::make_shared<bool>(false);
 
-    auto oldJobs = completeSaveJobs();
+    auto oldJobs = saveFlushImpl();
 
-    QFuture<ResultBase> future = oldJobs.then(this, [this, filename, shouldPersistIdentityRepair]() {
+    QFuture<ResultBase> future = oldJobs.then(this, [this, filename, shouldPersistIdentityRepair, loadGeneration, canceledResult](ResultBase flushResult) {
+                                            if (flushResult.hasError()) {
+                                                return AsyncFuture::completed(flushResult);
+                                            }
+
+                                            if (d->operationGeneration != loadGeneration || d->retiring) {
+                                                return AsyncFuture::completed(canceledResult());
+                                            }
+
                                             //Find all the cave file
                                             auto projectDataFuture = cwSaveLoad::loadAll(filename);
 
                                             d->futureToken.addJob({QFuture<void>(projectDataFuture), QStringLiteral("Loading")});
 
                                             return AsyncFuture::observe(projectDataFuture)
-                                                .context(this, [this, projectDataFuture, filename, shouldPersistIdentityRepair]() {
-                                                    return mbind(projectDataFuture, [this, projectDataFuture, filename, shouldPersistIdentityRepair](const ResultBase&) {
+                                                .context(this, [this, projectDataFuture, filename, shouldPersistIdentityRepair, loadGeneration, canceledResult]() {
+                                                    return mbind(projectDataFuture, [this, projectDataFuture, filename, shouldPersistIdentityRepair, loadGeneration, canceledResult](const ResultBase&) {
+                                                        if (d->operationGeneration != loadGeneration
+                                                            || d->retiring
+                                                            || d->m_regionTreeModel->cavingRegion() == nullptr) {
+                                                            return canceledResult();
+                                                        }
+
                                                         // setTemporaryProject(false);
                                                         //The filename needs to be set first because, image providers should
                                                         //have the filename before the region model is set
@@ -1518,13 +1693,18 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                                                         setSaveEnabled(true);
 
                                                         connectTreeModel();
+                                                        ++d->modelMutationEpoch;
 
                                                         return ResultBase();
                                                     });
                                                 }).future();
                                         }).unwrap();
 
-    future = future.then(this, [this, shouldPersistIdentityRepair](ResultBase loadResult) -> QFuture<ResultBase> {
+    future = future.then(this, [this, shouldPersistIdentityRepair, loadGeneration, canceledResult](ResultBase loadResult) -> QFuture<ResultBase> {
+        if (d->operationGeneration != loadGeneration || d->retiring) {
+            return AsyncFuture::completed(canceledResult());
+        }
+
         if (loadResult.hasError() || !*shouldPersistIdentityRepair) {
             return AsyncFuture::completed(loadResult);
         }
@@ -1533,6 +1713,19 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
     }).unwrap();
 
     return future;
+}
+
+QFuture<ResultBase> cwSaveLoad::saveFlushImpl()
+{
+    return AsyncFuture::observe(completeSaveJobs())
+        .context(this, [this]() {
+            const QString pendingErrors = d->takePendingSaveJobErrors();
+            if (!pendingErrors.isEmpty()) {
+                return ResultBase(QStringLiteral("Save flush failed:\n%1").arg(pendingErrors));
+            }
+            return ResultBase();
+        })
+        .future();
 }
 
 QFuture<ResultBase> cwSaveLoad::persistIdentityRepairSave()
@@ -1560,11 +1753,7 @@ QFuture<ResultBase> cwSaveLoad::persistIdentityRepairSave()
         }
     }
 
-    return AsyncFuture::observe(completeSaveJobs())
-        .context(this, []() {
-            return ResultBase();
-        })
-        .future();
+    return saveFlushImpl();
 }
 
 void cwSaveLoad::setFileName(const QString &filename, bool initRepository)
@@ -1773,10 +1962,10 @@ static QString uniqueDestinationPath(const QDir& destinationDirectory,
 // Generic copy-and-emit pipe
 // ------------------------
 template<typename ResultType, typename MakeResultFunc>
-void cwSaveLoad::copyFilesAndEmitResults(const QList<QString>& sourceFilePaths,
-                                         const QDir& destinationDirectory,
-                                         MakeResultFunc makeResult,
-                                         std::function<void (QList<ResultType>)> outputCallBackFunc)
+QFuture<ResultBase> cwSaveLoad::copyFilesAndEmitResults(const QList<QString>& sourceFilePaths,
+                                                        const QDir& destinationDirectory,
+                                                        MakeResultFunc makeResult,
+                                                        std::function<void (QList<ResultType>)> outputCallBackFunc)
 {
     const QDir rootDirectory = dataRootDir();
     Q_ASSERT(rootDirectory.exists());
@@ -1798,13 +1987,13 @@ void cwSaveLoad::copyFilesAndEmitResults(const QList<QString>& sourceFilePaths,
 
     if (commands.isEmpty()) {
         outputCallBackFunc({});
-        return;
+        return AsyncFuture::completed(ResultBase());
     }
 
     struct CopyBatchState {
         QVector<Monad::Result<QString>> results;
         std::atomic<int> remaining{0};
-        AsyncFuture::Deferred<void> deferred;
+        AsyncFuture::Deferred<ResultBase> deferred;
 
         explicit CopyBatchState(int count)
             : results(count),
@@ -1818,20 +2007,27 @@ void cwSaveLoad::copyFilesAndEmitResults(const QList<QString>& sourceFilePaths,
     auto finalizeResults = [state, makeResult, outputCallBackFunc]() {
         QList<ResultType> finalResults;
         finalResults.reserve(state->results.size());
+        QStringList errorMessages;
 
         std::transform(state->results.begin(), state->results.end(),
                        std::back_inserter(finalResults),
-                       [makeResult](const Monad::Result<QString>& relativePathResult) {
+                       [makeResult, &errorMessages](const Monad::Result<QString>& relativePathResult) {
                            if (!relativePathResult.hasError()) {
-                               return makeResult(relativePathResult.value()); // ResultType
+                                return makeResult(relativePathResult.value()); // ResultType
                            } else {
-                               qWarning() << "Error:" << relativePathResult.errorMessage() << LOCATION;
-                               return ResultType{};
+                                qWarning() << "Error:" << relativePathResult.errorMessage() << LOCATION;
+                                errorMessages.append(relativePathResult.errorMessage());
+                                return ResultType{};
                            }
                        });
 
         outputCallBackFunc(finalResults);
-        state->deferred.complete();
+        if (!errorMessages.isEmpty()) {
+            state->deferred.complete(ResultBase(QStringLiteral("Import copy failed:\n%1")
+                                                    .arg(errorMessages.join(QLatin1Char('\n')))));
+        } else {
+            state->deferred.complete(ResultBase());
+        }
     };
 
     for (const CopyCommand& command : commands) {
@@ -1854,9 +2050,7 @@ void cwSaveLoad::copyFilesAndEmitResults(const QList<QString>& sourceFilePaths,
 
         d->addExplicitFileSystemJob(job, this);
     }
-
-    d->futureToken.addJob(cwFuture(QFuture<void>(state->deferred.future()),
-                                   QStringLiteral("Adding files")));
+    return state->deferred.future();
 }
 
 // ------------------------
@@ -1887,36 +2081,66 @@ void cwSaveLoad::addImages(QList<QUrl> noteImagePaths,
                            const QDir& dir,
                            std::function<void (QList<cwImage>)> outputCallBackFunc)
 {
-    QVector<QString> imageFilePaths;
-    QVector<QString> pdfFilePaths;
-    imageFilePaths.reserve(noteImagePaths.size());
-    pdfFilePaths.reserve(noteImagePaths.size());
+    addImages(noteImagePaths, [dir]() { return dir; }, outputCallBackFunc);
+}
 
-    for (const QUrl& url : noteImagePaths) {
-        const QString path = url.toLocalFile();
-        if (isPDF(path)) {
-            pdfFilePaths.append(path);
-        } else {
-            imageFilePaths.append(path);
+void cwSaveLoad::addImages(QList<QUrl> noteImagePaths,
+                           std::function<QDir()> destinationDirResolver,
+                           std::function<void (QList<cwImage>)> outputCallBackFunc)
+{
+    auto queuedFuture = d->enqueueOperation(this, Data::Operation::Type::ImportFiles, [this, noteImagePaths, destinationDirResolver, outputCallBackFunc]() {
+        const quint64 importGeneration = d->operationGeneration;
+        auto guardedCallback = [this, importGeneration, outputCallBackFunc](QList<cwImage> images) {
+            if (d->operationGeneration != importGeneration || d->retiring) {
+                return;
+            }
+            outputCallBackFunc(images);
+        };
+
+        if (!destinationDirResolver) {
+            return AsyncFuture::completed(ResultBase(QStringLiteral("Import destination resolver is missing.")));
         }
-    }
+        Q_ASSERT(QThread::currentThread() == this->thread());
+        const QDir destinationDir = destinationDirResolver();
+        if (destinationDir.absolutePath().isEmpty()) {
+            return AsyncFuture::completed(ResultBase(QStringLiteral("Import destination directory is invalid.")));
+        }
 
-    // Always process normal images first (original behavior).
-    {
+        QVector<QString> imageFilePaths;
+        QVector<QString> pdfFilePaths;
+        imageFilePaths.reserve(noteImagePaths.size());
+        pdfFilePaths.reserve(noteImagePaths.size());
+
+        for (const QUrl& url : noteImagePaths) {
+            const QString path = url.toLocalFile();
+            if (isPDF(path)) {
+                pdfFilePaths.append(path);
+            } else {
+                imageFilePaths.append(path);
+            }
+        }
+
         const QDir rootDirectory = dataRootDir();
-        copyFilesAndEmitResults<cwImage>(
+        auto imageFuture = copyFilesAndEmitResults<cwImage>(
             imageFilePaths,
-            dir,
+            destinationDir,
             makeImageFromRelativePath(rootDirectory),
-            outputCallBackFunc
-            );
-    }
+            guardedCallback);
 
-    // Optional: process PDFs into images, then emit. Kept separate to preserve ordering and avoid surprises.
-    if (!pdfFilePaths.isEmpty() && cwPDFConverter::isSupported()) {
+        auto finishImport = [this](QFuture<ResultBase> copyFuture) {
+            return copyFuture.then(this, [this](ResultBase copyResult) -> QFuture<ResultBase> {
+                if (copyResult.hasError()) {
+                    return AsyncFuture::completed(copyResult);
+                }
+                return saveFlushImpl();
+            }).unwrap();
+        };
+
+        if (pdfFilePaths.isEmpty() || !cwPDFConverter::isSupported()) {
+            return finishImport(imageFuture);
+        }
+
 #ifdef CW_WITH_PDF_SUPPORT
-        const QDir rootDirectory = dataRootDir();
-
         auto makeImagesFromPdf = [rootDirectory](const QString& relativePath) {
             QList<cwImage> images;
             const QString absolutePath = rootDirectory.absoluteFilePath(relativePath);
@@ -1943,23 +2167,35 @@ void cwSaveLoad::addImages(QList<QUrl> noteImagePaths,
             return images;
         };
 
-        copyFilesAndEmitResults<QString>(
-            pdfFilePaths,
-            dir,
-            makeRelativePathEcho(),
-            [makeImagesFromPdf, outputCallBackFunc](QList<QString> relativePaths) {
-                QList<cwImage> allImages;
-                for (const QString& relativePath : relativePaths) {
-                    allImages.append(makeImagesFromPdf(relativePath));
-                }
-                if (!allImages.isEmpty()) {
-                    outputCallBackFunc(allImages);
-                }
+        auto combinedCopyFuture = imageFuture.then(this, [this, pdfFilePaths, destinationDir, makeImagesFromPdf, guardedCallback](ResultBase imageResult) -> QFuture<ResultBase> {
+            if (imageResult.hasError()) {
+                return AsyncFuture::completed(imageResult);
             }
-            );
+
+            return copyFilesAndEmitResults<QString>(
+                pdfFilePaths,
+                destinationDir,
+                makeRelativePathEcho(),
+                [makeImagesFromPdf, guardedCallback](QList<QString> relativePaths) {
+                    QList<cwImage> allImages;
+                    for (const QString& relativePath : relativePaths) {
+                        allImages.append(makeImagesFromPdf(relativePath));
+                    }
+                    if (!allImages.isEmpty()) {
+                        guardedCallback(allImages);
+                    }
+                });
+        }).unwrap();
+
+        return finishImport(combinedCopyFuture);
 #else
         qWarning() << "PDF support not enabled for cwSaveLoad::addImages";
+        return finishImport(imageFuture);
 #endif
+    });
+
+    if (d->futureToken.isValid()) {
+        d->futureToken.addJob(cwFuture(QFuture<void>(queuedFuture), QStringLiteral("Adding images")));
     }
 }
 
@@ -1999,20 +2235,54 @@ void cwSaveLoad::addFiles(QList<QUrl> files,
                           const QDir& dir,
                           std::function<void (QList<QString>)> fileCallBackFunc)
 {
-    QList<QString> sourceFilePaths;
-    sourceFilePaths.reserve(files.size());
-    for (const QUrl& url : files) {
-        sourceFilePaths.append(url.toLocalFile());
-    }
+    addFiles(files, [dir]() { return dir; }, fileCallBackFunc);
+}
 
-    // For generic files, we only copy and return the relative destination paths.
-    const QDir rootDirectory = dataRootDir();
-    copyFilesAndEmitResults<QString>(
-        sourceFilePaths,
-        dir,
-        makeRelativePathEcho(),
-        fileCallBackFunc
-        );
+void cwSaveLoad::addFiles(QList<QUrl> files,
+                          std::function<QDir()> destinationDirResolver,
+                          std::function<void (QList<QString>)> fileCallBackFunc)
+{
+    auto queuedFuture = d->enqueueOperation(this, Data::Operation::Type::ImportFiles, [this, files, destinationDirResolver, fileCallBackFunc]() {
+        const quint64 importGeneration = d->operationGeneration;
+        auto guardedCallback = [this, importGeneration, fileCallBackFunc](QList<QString> paths) {
+            if (d->operationGeneration != importGeneration || d->retiring) {
+                return;
+            }
+            fileCallBackFunc(paths);
+        };
+
+        if (!destinationDirResolver) {
+            return AsyncFuture::completed(ResultBase(QStringLiteral("Import destination resolver is missing.")));
+        }
+        Q_ASSERT(QThread::currentThread() == this->thread());
+        const QDir destinationDir = destinationDirResolver();
+        if (destinationDir.absolutePath().isEmpty()) {
+            return AsyncFuture::completed(ResultBase(QStringLiteral("Import destination directory is invalid.")));
+        }
+
+        QList<QString> sourceFilePaths;
+        sourceFilePaths.reserve(files.size());
+        for (const QUrl& url : files) {
+            sourceFilePaths.append(url.toLocalFile());
+        }
+
+        auto copyFuture = copyFilesAndEmitResults<QString>(
+            sourceFilePaths,
+            destinationDir,
+            makeRelativePathEcho(),
+            guardedCallback);
+
+        return copyFuture.then(this, [this](ResultBase copyResult) -> QFuture<ResultBase> {
+            if (copyResult.hasError()) {
+                return AsyncFuture::completed(copyResult);
+            }
+            return saveFlushImpl();
+        }).unwrap();
+    });
+
+    if (d->futureToken.isValid()) {
+        d->futureToken.addJob(cwFuture(QFuture<void>(queuedFuture), QStringLiteral("Adding files")));
+    }
 }
 
 
@@ -3672,7 +3942,16 @@ Monad::ResultBase cwSaveLoad::commitProjectChanges(const QString& subject,
 
 QFuture<Monad::ResultBase> cwSaveLoad::sync()
 {
-    auto queuedFuture = d->enqueueOperation(this, Data::Operation::Type::SyncProject, [this]() {
+    auto saveFlushFuture = d->enqueueOperation(this, Data::Operation::Type::SaveFlush, [this]() {
+        return saveFlushImpl();
+    });
+
+    auto queuedFuture = d->enqueueOperation(this, Data::Operation::Type::SyncProject, [this, saveFlushFuture]() {
+        const auto saveFlushResult = saveFlushFuture.result();
+        if (saveFlushResult.hasError()) {
+            return AsyncFuture::completed(saveFlushResult);
+        }
+
         return syncImpl();
     });
 
@@ -3685,6 +3964,8 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
 
 QFuture<Monad::ResultBase> cwSaveLoad::syncImpl()
 {
+    const quint64 syncGeneration = d->operationGeneration;
+
     if (gitMode() == GitMode::NoGit) {
         return AsyncFuture::completed(ResultBase(QStringLiteral("Sync is disabled for this project.")));
     }
@@ -3702,22 +3983,36 @@ QFuture<Monad::ResultBase> cwSaveLoad::syncImpl()
         return AsyncFuture::completed(ResultBase(QStringLiteral("Git repository is unavailable.")));
     }
 
-    auto syncFuture = AsyncFuture::observe(completeSaveJobs())
-                          .context(this, [this, repo]() -> QFuture<ResultBase> {
-                              auto commitResult = commitProjectChanges(defaultCommitSubject(QStringLiteral("Sync")),
-                                                                       defaultCommitDescription());
-                              if (commitResult.hasError()) {
-                                  return AsyncFuture::completed(commitResult);
-                              }
+    auto syncFuture = saveFlushImpl().then(this, [this, repo, syncGeneration](ResultBase saveFlushResult) -> QFuture<ResultBase> {
+        if (saveFlushResult.hasError()) {
+            return AsyncFuture::completed(saveFlushResult);
+        }
 
-                              if (!hasRemoteConfigured(repo)) {
-                                  return AsyncFuture::completed(
-                                      ResultBase(QStringLiteral("No git remote is configured for this project.")));
-                              }
+        if (d->operationGeneration != syncGeneration || d->retiring) {
+            return AsyncFuture::completed(ResultBase(QStringLiteral("Operation canceled.")));
+        }
 
-                              return repo->pullPush();
-                          })
-                          .future();
+        auto commitResult = commitProjectChanges(defaultCommitSubject(QStringLiteral("Sync")),
+                                                 defaultCommitDescription());
+        if (commitResult.hasError()) {
+            return AsyncFuture::completed(commitResult);
+        }
+
+        if (!hasRemoteConfigured(repo)) {
+            return AsyncFuture::completed(
+                ResultBase(QStringLiteral("No git remote is configured for this project.")));
+        }
+
+        auto pullPushFuture = repo->pullPush();
+        return AsyncFuture::observe(pullPushFuture)
+            .context(this, [this, pullPushFuture, syncGeneration]() {
+                if (d->operationGeneration != syncGeneration || d->retiring) {
+                    return ResultBase(QStringLiteral("Operation canceled."));
+                }
+                return pullPushFuture.result();
+            })
+            .future();
+    }).unwrap();
 
     return syncFuture;
 }

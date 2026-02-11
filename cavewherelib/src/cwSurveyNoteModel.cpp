@@ -12,6 +12,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QDebug>
+#include <QPointer>
 
 cwSurveyNoteModel::cwSurveyNoteModel(QObject* parent)
     : cwSurveyNoteModelBase(parent)
@@ -70,11 +71,18 @@ void cwSurveyNoteModel::addFromFiles(QList<QUrl> files)
         return;
     }
 
-    const QDir destinationDirectory = project->notesDir(this);
+    const QDir fallbackDestinationDirectory = project->notesDir(this);
+    QPointer<cwProject> projectPtr(project);
+    QPointer<cwSurveyNoteModel> modelPtr(this);
 
     project->addImages(
         imageUrls,
-        destinationDirectory,
+        [projectPtr, modelPtr, fallbackDestinationDirectory]() {
+            if (projectPtr == nullptr || modelPtr == nullptr) {
+                return fallbackDestinationDirectory;
+            }
+            return projectPtr->notesDir(modelPtr);
+        },
         [this](QList<cwImage> newImages) {
             addNotesWithNewImages(newImages);
         }

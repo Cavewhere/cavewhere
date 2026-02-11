@@ -178,6 +178,9 @@ public:
     void addImages(QList<QUrl> noteImagePaths,
                    const QDir& dir,
                    std::function<void (QList<cwImage>)> outputCallBackFunc);
+    void addImages(QList<QUrl> noteImagePaths,
+                   std::function<QDir()> destinationDirResolver,
+                   std::function<void (QList<cwImage>)> outputCallBackFunc);
 
     Monad::ResultBase moveProjectTo(const QString& destinationFileUrl);
     Monad::ResultBase copyProjectTo(const QString& destinationFileUrl);
@@ -185,6 +188,9 @@ public:
 
     void addFiles(QList<QUrl> files,
                   const QDir& dir,
+                  std::function<void (QList<QString>)> fileCallBackFunc);
+    void addFiles(QList<QUrl> files,
+                  std::function<QDir()> destinationDirResolver,
                   std::function<void (QList<QString>)> fileCallBackFunc);
 
 
@@ -289,6 +295,7 @@ private:
     static QUuid toUuid(const std::string& uuidStr);
 
     QFuture<Monad::ResultBase> loadImpl(const QString& filename);
+    QFuture<Monad::ResultBase> saveFlushImpl();
     QFuture<Monad::ResultBase> syncImpl();
     QFuture<Monad::ResultBase> persistIdentityRepairSave();
 
@@ -336,10 +343,11 @@ private:
 
 
     template<typename ResultType, typename MakeResultFunc>
-    void copyFilesAndEmitResults(const QList<QString>& sourceFilePaths,
-                                 const QDir& destinationDirectory,
-                                 MakeResultFunc makeResult,
-                                 std::function<void (QList<ResultType>)> outputCallBackFunc);
+    QFuture<Monad::ResultBase> copyFilesAndEmitResults(
+        const QList<QString>& sourceFilePaths,
+        const QDir& destinationDirectory,
+        MakeResultFunc makeResult,
+        std::function<void (QList<ResultType>)> outputCallBackFunc);
     
 
 };

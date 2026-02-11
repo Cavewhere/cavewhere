@@ -687,6 +687,40 @@ TEST_CASE("newProject waits for pending edits before reset", "[cwProject][newPro
     CHECK(reloadedCave->trip(0)->name() == QStringLiteral("EditedTrip"));
 }
 
+TEST_CASE("addFiles callback is quarantined when newProject retires in-flight import", "[cwProject][newProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    QTemporaryDir sourceDir;
+    REQUIRE(sourceDir.isValid());
+    const QString largeFilePath = sourceDir.filePath(QStringLiteral("large-import.bin"));
+    {
+        QFile largeFile(largeFilePath);
+        REQUIRE(largeFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        const QByteArray chunk(1024 * 1024, '\0');
+        for (int i = 0; i < 128; ++i) {
+            REQUIRE(largeFile.write(chunk) == chunk.size());
+        }
+        largeFile.close();
+    }
+    REQUIRE(QFileInfo::exists(largeFilePath));
+    REQUIRE(QFileInfo(largeFilePath).size() == 128ll * 1024ll * 1024ll);
+
+    int callbackCount = 0;
+    project->addFiles({QUrl::fromLocalFile(largeFilePath)},
+                      ProjectFilenameTestHelper::projectDir(project),
+                      [&callbackCount](const QList<QString>&) {
+                          ++callbackCount;
+                      });
+
+    project->newProject();
+
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    CHECK(callbackCount == 0);
+}
+
 TEST_CASE("Loading a project clears temporary flag", "[cwProject]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
@@ -1498,6 +1532,60 @@ TEST_CASE("cwProject sync fails without remotes after saving survey and notes", 
     const auto syncError = project->errorModel()->last();
     CHECK(syncError.type() == cwError::Warning);
     CHECK(syncError.message() == QStringLiteral("No git remote is configured for this project."));
+}
+
+TEST_CASE("cwProject sync surfaces save flush failures before git sync", "[cwProject][sync]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Save Flush Tester"));
+    rootData->account()->setEmail(QStringLiteral("save.flush.tester@example.com"));
+
+    auto* region = project->cavingRegion();
+    region->addCave();
+    auto* cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Save Flush Cave"));
+    cave->addTrip();
+    auto* trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
+    trip->setName(QStringLiteral("Save Flush Trip"));
+
+    project->waitSaveToFinish();
+
+    QTemporaryDir saveRoot;
+    REQUIRE(saveRoot.isValid());
+    const QString projectPath = QDir(saveRoot.path()).filePath(QStringLiteral("save-flush-failure.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+
+    const QString tripFilePath = ProjectFilenameTestHelper::absolutePath(trip);
+    REQUIRE(QFileInfo::exists(tripFilePath));
+    const QDir tripDir = QFileInfo(tripFilePath).absoluteDir();
+
+    const QFileDevice::Permissions originalTripDirPermissions = QFile::permissions(tripDir.absolutePath());
+    auto permissionsGuard = qScopeGuard([tripDir, originalTripDirPermissions]() {
+        QFile::setPermissions(tripDir.absolutePath(), originalTripDirPermissions);
+    });
+
+    const QFileDevice::Permissions readOnlyDirPermissions =
+        QFileDevice::ReadOwner | QFileDevice::ExeOwner
+        | QFileDevice::ReadGroup | QFileDevice::ExeGroup
+        | QFileDevice::ReadOther | QFileDevice::ExeOther;
+
+    REQUIRE(QFile::setPermissions(tripDir.absolutePath(), readOnlyDirPermissions));
+
+    trip->setDate(QDateTime::currentDateTimeUtc().addSecs(60));
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    REQUIRE(project->errorModel()->count() > 0);
+    const auto syncError = project->errorModel()->last();
+    CHECK(syncError.type() == cwError::Warning);
+    CHECK(syncError.message().contains(QStringLiteral("Save flush failed")));
 }
 
 TEST_CASE("cwProject sync succeeds after adding remote through project repository", "[cwProject]") {

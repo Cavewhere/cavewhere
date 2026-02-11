@@ -903,12 +903,26 @@ void cwProject::addImages(QList<QUrl> noteImagePaths,
                           const QDir& dir,
                           std::function<void (QList<cwImage>)> outputCallBackFunc)
 {
-    m_saveLoad->addImages(noteImagePaths, dir, outputCallBackFunc);
+    addImages(noteImagePaths, [dir]() { return dir; }, outputCallBackFunc);
+}
+
+void cwProject::addImages(QList<QUrl> noteImagePaths,
+                          std::function<QDir()> destinationDirResolver,
+                          std::function<void (QList<cwImage>)> outputCallBackFunc)
+{
+    m_saveLoad->addImages(noteImagePaths, std::move(destinationDirResolver), std::move(outputCallBackFunc));
 }
 
 void cwProject::addFiles(QList<QUrl> filePath, const QDir &dir, std::function<void (QList<QString>)> outputCallBackFunc)
 {
-    m_saveLoad->addFiles(filePath, dir, outputCallBackFunc);
+    addFiles(filePath, [dir]() { return dir; }, outputCallBackFunc);
+}
+
+void cwProject::addFiles(QList<QUrl> filePath,
+                         std::function<QDir()> destinationDirResolver,
+                         std::function<void (QList<QString>)> outputCallBackFunc)
+{
+    m_saveLoad->addFiles(filePath, std::move(destinationDirResolver), std::move(outputCallBackFunc));
 }
 
 void cwProject::loadOrConvert(const QString &filename)
