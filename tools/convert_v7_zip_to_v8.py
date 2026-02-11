@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import shutil
 import sys
 import tempfile
 import zipfile
@@ -29,9 +30,42 @@ def is_metadata_path(path: str) -> bool:
     return name.startswith("._")
 
 
+def remove_path(path: Path) -> None:
+    if path.is_dir():
+        shutil.rmtree(path, ignore_errors=True)
+    else:
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def remove_cache_entries(project_dir: Path) -> None:
+    for cache_path in project_dir.rglob(".cw_cache"):
+        remove_path(cache_path)
+
+
+def relocate_git_dir(project_dir: Path) -> None:
+    target = project_dir / ".git"
+    if target.exists():
+        return
+    candidates = [p for p in project_dir.rglob(".git") if p.is_dir()]
+    if not candidates:
+        return
+    candidates.sort(key=lambda p: len(p.parts))
+    source = candidates[0]
+    if source != target:
+        try:
+            source.rename(target)
+        except OSError:
+            pass
+
+
 def move_project_contents(project_dir: Path, project_name: str, project_file: Path) -> None:
     data_root_dir = project_dir / project_name
     data_root_dir.mkdir(exist_ok=True)
+
+    remove_cache_entries(project_dir)
 
     for entry in project_dir.iterdir():
         if entry == data_root_dir or entry == project_file:
@@ -39,6 +73,11 @@ def move_project_contents(project_dir: Path, project_name: str, project_file: Pa
         if entry.name.startswith("._"):
             continue
         if entry.name == "__MACOSX":
+            continue
+        if entry.name == ".cw_cache":
+            remove_path(entry)
+            continue
+        if entry.name == ".git":
             continue
         if entry.suffix.lower() == ".cwproj":
             continue
@@ -59,6 +98,9 @@ def move_project_contents(project_dir: Path, project_name: str, project_file: Pa
         if target.exists():
             continue
         entry.rename(target)
+
+    relocate_git_dir(project_dir)
+    remove_cache_entries(project_dir)
 
     # Flatten a single wrapper directory inside dataRoot if it only contains caves.
     entries = [e for e in data_root_dir.iterdir() if not e.name.startswith("._") and e.name != "__MACOSX"]
