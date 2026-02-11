@@ -3154,6 +3154,138 @@ TEST_CASE("cwProject sync conflict keeps ours and push succeeds", "[cwProject]")
     CHECK(remoteConflictContents == QByteArray("ours\n"));
 }
 
+TEST_CASE("cwProject sync blocks pulled newer project version", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Sync Tester"));
+    rootData->account()->setEmail(QStringLiteral("sync.tester@example.com"));
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Incompatible Version Cave"));
+
+    QTemporaryDir projectDir;
+    REQUIRE(projectDir.isValid());
+    const QString projectPath = QDir(projectDir.path()).filePath(QStringLiteral("sync-incompatible-version.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+
+    auto* repository = project->repository();
+    REQUIRE(repository != nullptr);
+
+    QTemporaryDir remoteRoot;
+    REQUIRE(remoteRoot.isValid());
+    const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
+
+    git_repository* remoteRepo = nullptr;
+    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
+    if (remoteRepo) {
+        git_repository_free(remoteRepo);
+        remoteRepo = nullptr;
+    }
+
+    const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
+                                                         QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(addRemoteError.isEmpty());
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+
+    QTemporaryDir cloneDir;
+    REQUIRE(cloneDir.isValid());
+    const QString clonePath = QDir(cloneDir.path()).filePath(QStringLiteral("clone-2"));
+
+    QQuickGit::GitRepository cloneRepository;
+    cloneRepository.setDirectory(QDir(clonePath));
+    cloneRepository.setAccount(rootData->account());
+
+    auto cloneFuture = cloneRepository.clone(QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(AsyncFuture::waitForFinished(cloneFuture, 10000));
+    INFO("Clone error:" << cloneFuture.result().errorMessage().toStdString());
+    REQUIRE(!cloneFuture.result().hasError());
+
+    const QString clonedProjectPath = QDir(clonePath).filePath(QFileInfo(projectPath).fileName());
+    QFile clonedProjectFile(clonedProjectPath);
+    REQUIRE(clonedProjectFile.open(QIODevice::ReadOnly));
+    const QByteArray clonedProjectJson = clonedProjectFile.readAll();
+    clonedProjectFile.close();
+
+    CavewhereProto::Project clonedProjectProto;
+    auto loadStatus = google::protobuf::util::JsonStringToMessage(clonedProjectJson.toStdString(), &clonedProjectProto);
+    REQUIRE(loadStatus.ok());
+    REQUIRE(clonedProjectProto.has_fileversion());
+    clonedProjectProto.mutable_fileversion()->set_version(9999);
+
+    std::string incompatibleProjectJson;
+    auto saveStatus = google::protobuf::util::MessageToJsonString(clonedProjectProto, &incompatibleProjectJson);
+    REQUIRE(saveStatus.ok());
+
+    REQUIRE(clonedProjectFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    REQUIRE(clonedProjectFile.write(QByteArray::fromStdString(incompatibleProjectJson)) > 0);
+    clonedProjectFile.close();
+
+    REQUIRE_NOTHROW(cloneRepository.commitAll(QStringLiteral("Bump project version"),
+                                              QStringLiteral("set unsupported project version")));
+    auto clonePushFuture = cloneRepository.push();
+    REQUIRE(AsyncFuture::waitForFinished(clonePushFuture, 10000));
+    INFO("Remote clone push error:" << clonePushFuture.result().errorMessage().toStdString());
+    REQUIRE(!clonePushFuture.result().hasError());
+
+    auto remoteHeadOid = [repository](const QString& remoteRepoPath) -> git_oid {
+        git_repository* remoteRepoLocal = nullptr;
+        REQUIRE(git_repository_open(&remoteRepoLocal, remoteRepoPath.toLocal8Bit().constData()) == GIT_OK);
+        auto remoteRepoGuard = qScopeGuard([&remoteRepoLocal]() {
+            if (remoteRepoLocal) {
+                git_repository_free(remoteRepoLocal);
+            }
+        });
+
+        const QString remoteRefName = QStringLiteral("refs/heads/") + repository->headBranchName();
+        git_reference* remoteBranch = nullptr;
+        REQUIRE(git_reference_lookup(&remoteBranch, remoteRepoLocal, remoteRefName.toLocal8Bit().constData()) == GIT_OK);
+        auto remoteBranchGuard = qScopeGuard([&remoteBranch]() {
+            if (remoteBranch) {
+                git_reference_free(remoteBranch);
+            }
+        });
+
+        const git_oid* remoteHead = git_reference_target(remoteBranch);
+        REQUIRE(remoteHead != nullptr);
+        return *remoteHead;
+    };
+
+    const git_oid expectedRemoteHead = remoteHeadOid(remoteRepoPath);
+
+    const QString localRepoPath = QFileInfo(project->filename()).absoluteDir().absolutePath();
+    QFile localFile(QDir(localRepoPath).filePath(QStringLiteral("local-before-incompatible-sync.txt")));
+    REQUIRE(localFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    REQUIRE(localFile.write("local change before incompatible sync\n") > 0);
+    localFile.close();
+    project->waitSaveToFinish();
+    REQUIRE(project->isModified());
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    REQUIRE(project->errorModel()->count() > 0);
+    const auto syncError = project->errorModel()->last();
+    CHECK(syncError.type() == cwError::Warning);
+    CHECK(syncError.message().contains(QStringLiteral("Project file version")));
+    CHECK(syncError.message().contains(QStringLiteral("newer than supported version")));
+    CHECK_FALSE(project->lastSyncReport().has_value());
+
+    const git_oid finalRemoteHead = remoteHeadOid(remoteRepoPath);
+    CHECK(git_oid_cmp(&expectedRemoteHead, &finalRemoteHead) == 0);
+}
+
 TEST_CASE("cwProject sync reports warning when no remote is configured", "[cwProject]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();

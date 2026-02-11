@@ -159,6 +159,11 @@ public:
         bool hasHydrationDeltaPaths = false;
     };
 
+    enum class SyncErrorCode : int {
+        RetryEpochChanged = Monad::ResultBase::CustomError + 1,
+        IncompatibleProjectVersion = Monad::ResultBase::CustomError + 2
+    };
+
     cwSaveLoad(QObject* parent = nullptr);
     ~cwSaveLoad();
 

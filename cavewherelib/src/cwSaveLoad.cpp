@@ -468,7 +468,6 @@ cwSaveLoad::SyncReport buildSyncReport(const QString& repoPath,
     return report;
 }
 
-constexpr int SyncRetryEpochChangedErrorCode = 62001;
 constexpr int SyncMaxRetriesPerSession = 3;
 
 ResultBase syncRetryLimitResult(const QString& reason)
@@ -2809,7 +2808,8 @@ Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString
                                 return Result<ProjectLoadData>(
                                     QStringLiteral("Project file version %1 is newer than supported version %2.")
                                         .arg(fileVersion)
-                                        .arg(cwRegionIOTask::protoVersion()));
+                                        .arg(cwRegionIOTask::protoVersion()),
+                                    static_cast<int>(SyncErrorCode::IncompatibleProjectVersion));
                             }
 
                             ProjectLoadData loadData;
@@ -4191,7 +4191,7 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
             if (d->modelMutationEpoch != planEpoch) {
                 return Monad::Result<ReconcileExternalResult>(
                     QStringLiteral("Sync plan is stale because the model changed before apply."),
-                    SyncRetryEpochChangedErrorCode);
+                    static_cast<int>(SyncErrorCode::RetryEpochChanged));
             }
 
             auto* region = d->m_regionTreeModel->cavingRegion();
@@ -4315,6 +4315,12 @@ QFuture<Monad::ResultBase> cwSaveLoad::syncImpl()
                             return AsyncFuture::completed(ResultBase(QStringLiteral("Merge Conflicts need to be resolved")));
                         }
 
+                        const auto pulledProjectResult = cwSaveLoad::loadProject(d->projectFileName);
+                        if (pulledProjectResult.hasError()) {
+                            return AsyncFuture::completed(ResultBase(pulledProjectResult.errorMessage(),
+                                                                     pulledProjectResult.errorCode()));
+                        }
+
                         const auto afterHeadResult = QQuickGit::GitRepository::headCommitOid(repoPath);
                         if (afterHeadResult.hasError()) {
                             return AsyncFuture::completed(ResultBase(afterHeadResult.errorMessage()));
@@ -4367,7 +4373,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::syncImpl()
 
                                         const auto reconcileResult = reconcileFuture.result();
                                         if (reconcileResult.hasError()) {
-                                            if (reconcileResult.errorCode() == SyncRetryEpochChangedErrorCode) {
+                                            if (reconcileResult.errorCodeTo<SyncErrorCode>() == SyncErrorCode::RetryEpochChanged) {
                                                 return retryOrFail(QStringLiteral("model changed before reconcile apply"));
                                             }
                                             return AsyncFuture::completed(ResultBase(reconcileResult.errorMessage(),
