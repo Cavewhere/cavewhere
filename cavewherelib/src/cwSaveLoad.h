@@ -256,6 +256,15 @@ signals:
     void objectPathReady(QObject* object);
 
 private:
+    struct ReconcileExternalResult {
+        enum class Outcome {
+            NoOp,
+            Mutated
+        };
+
+        Outcome outcome = Outcome::NoOp;
+    };
+
     struct Data;
     friend struct Data;
     std::unique_ptr<Data> d;
@@ -321,6 +330,8 @@ private:
     QFuture<Monad::ResultBase> loadImpl(const QString& filename);
     QFuture<Monad::ResultBase> saveFlushImpl();
     QFuture<Monad::ResultBase> syncImpl();
+    QFuture<Monad::Result<ReconcileExternalResult>> reconcileExternalImpl(const SyncReport& report,
+                                                                           quint64 syncGeneration);
     QFuture<Monad::ResultBase> persistIdentityRepairSave();
 
 

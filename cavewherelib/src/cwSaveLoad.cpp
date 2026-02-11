@@ -983,6 +983,7 @@ struct cwSaveLoad::Data {
             SaveFlush,
             LoadProject,
             SyncProject,
+            ReconcileExternal,
             RepairSave,
             ImportFiles
         };
@@ -4139,6 +4140,65 @@ std::optional<cwSaveLoad::SyncReport> cwSaveLoad::lastSyncReport() const
     return d->lastSyncReport;
 }
 
+QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcileExternalImpl(const SyncReport& report,
+                                                                                                quint64 syncGeneration)
+{
+    const bool needsApply = !report.changedPaths.isEmpty() || report.beforeHead != report.afterHead;
+    if (!needsApply) {
+        ReconcileExternalResult result;
+        result.outcome = ReconcileExternalResult::Outcome::NoOp;
+        return AsyncFuture::completed(Monad::Result<ReconcileExternalResult>(result));
+    }
+
+    auto loadFuture = cwSaveLoad::loadAll(d->projectFileName);
+    return AsyncFuture::observe(loadFuture)
+        .context(this, [this, loadFuture, syncGeneration]() -> Monad::Result<ReconcileExternalResult> {
+            const auto loadResult = loadFuture.result();
+            if (loadResult.hasError()) {
+                return Monad::Result<ReconcileExternalResult>(loadResult.errorMessage(), loadResult.errorCode());
+            }
+
+            if (d->operationGeneration != syncGeneration || d->retiring) {
+                return Monad::Result<ReconcileExternalResult>(QStringLiteral("Operation canceled."));
+            }
+
+            auto* region = d->m_regionTreeModel->cavingRegion();
+            if (region == nullptr) {
+                return Monad::Result<ReconcileExternalResult>(QStringLiteral("No caving region is available for reconcile."));
+            }
+
+            const bool previousSaveEnabled = d->saveEnabled;
+            disconnectTreeModel();
+            setSaveEnabled(false);
+            auto reconnectGuard = qScopeGuard([this, previousSaveEnabled]() {
+                setSaveEnabled(previousSaveEnabled);
+                connectTreeModel();
+            });
+
+            const auto& loadData = loadResult.value();
+            const auto previousMetadata = d->projectMetadata;
+            d->projectMetadata = loadData.metadata;
+            d->pendingIdentityRepairSave = loadData.identityRepair.required;
+
+            region->setData(loadData.region);
+            d->resetObjectStates(this);
+            ++d->modelMutationEpoch;
+
+            if (previousMetadata.dataRoot != d->projectMetadata.dataRoot
+                || previousMetadata.gitMode != d->projectMetadata.gitMode
+                || previousMetadata.syncEnabled != d->projectMetadata.syncEnabled) {
+                emit dataRootChanged();
+            }
+
+            ReconcileExternalResult reconcileResult;
+            reconcileResult.outcome = d->pendingIdentityRepairSave
+                                          ? ReconcileExternalResult::Outcome::Mutated
+                                          : ReconcileExternalResult::Outcome::NoOp;
+            return Monad::Result<ReconcileExternalResult>(reconcileResult);
+        })
+        .future();
+}
+
 QFuture<Monad::ResultBase> cwSaveLoad::syncImpl()
 {
     const quint64 syncGeneration = d->operationGeneration;
@@ -4230,14 +4290,64 @@ QFuture<Monad::ResultBase> cwSaveLoad::syncImpl()
                         }
 
                         d->lastSyncReport = reportFuture.result();
+                        if (!d->lastSyncReport.has_value()) {
+                            return AsyncFuture::completed(ResultBase(QStringLiteral("Sync report is unavailable.")));
+                        }
 
-                        auto pushFuture = repo->push();
-                        return AsyncFuture::observe(pushFuture)
-                            .context(this, [this, pushFuture, syncGeneration]() {
+                        const auto pushAfterReconcile = [this, repo, syncGeneration]() -> QFuture<ResultBase> {
+                            auto pushFuture = repo->push();
+                            return AsyncFuture::observe(pushFuture)
+                                .context(this, [this, pushFuture, syncGeneration]() {
+                                    if (d->operationGeneration != syncGeneration || d->retiring) {
+                                        return ResultBase(QStringLiteral("Operation canceled."));
+                                    }
+                                    return pushFuture.result();
+                                })
+                                .future();
+                        };
+
+                        auto reconcileFuture = reconcileExternalImpl(*d->lastSyncReport, syncGeneration);
+                        return AsyncFuture::observe(reconcileFuture)
+                            .context(this, [this, reconcileFuture, pushAfterReconcile, syncGeneration]() -> QFuture<ResultBase> {
                                 if (d->operationGeneration != syncGeneration || d->retiring) {
-                                    return ResultBase(QStringLiteral("Operation canceled."));
+                                    return AsyncFuture::completed(ResultBase(QStringLiteral("Operation canceled.")));
                                 }
-                                return pushFuture.result();
+
+                                const auto reconcileResult = reconcileFuture.result();
+                                if (reconcileResult.hasError()) {
+                                    return AsyncFuture::completed(ResultBase(reconcileResult.errorMessage(),
+                                                                             reconcileResult.errorCode()));
+                                }
+
+                                const auto outcome = reconcileResult.value().outcome;
+                                if (outcome != ReconcileExternalResult::Outcome::Mutated) {
+                                    return pushAfterReconcile();
+                                }
+
+                                auto repairFuture = persistIdentityRepairSave();
+                                return AsyncFuture::observe(repairFuture)
+                                    .context(this, [this, repairFuture, pushAfterReconcile, syncGeneration]() -> QFuture<ResultBase> {
+                                        if (d->operationGeneration != syncGeneration || d->retiring) {
+                                            return AsyncFuture::completed(ResultBase(QStringLiteral("Operation canceled.")));
+                                        }
+
+                                        const auto repairResult = repairFuture.result();
+                                        if (repairResult.hasError()) {
+                                            return AsyncFuture::completed(repairResult);
+                                        }
+
+                                        d->pendingIdentityRepairSave = false;
+                                        ++d->modelMutationEpoch;
+
+                                        auto commitResult = commitProjectChanges(defaultCommitSubject(QStringLiteral("Sync Reconcile")),
+                                                                                 defaultCommitDescription());
+                                        if (commitResult.hasError()) {
+                                            return AsyncFuture::completed(commitResult);
+                                        }
+
+                                        return pushAfterReconcile();
+                                    })
+                                    .future();
                             })
                             .future();
                     })

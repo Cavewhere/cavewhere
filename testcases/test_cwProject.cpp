@@ -2538,6 +2538,101 @@ TEST_CASE("cwProject sync pulls remote-only changes into a clean local repo", "[
     CHECK(pulledFile.readAll() == QByteArray("remote commit content\n"));
 }
 
+TEST_CASE("cwProject sync reconciles pulled cave updates into memory", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Sync Tester"));
+    rootData->account()->setEmail(QStringLiteral("sync.tester@example.com"));
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Reconcile Baseline Cave"));
+
+    QTemporaryDir projectDir;
+    REQUIRE(projectDir.isValid());
+    const QString projectPath = QDir(projectDir.path()).filePath(QStringLiteral("sync-reconcile.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+
+    auto* repository = project->repository();
+    REQUIRE(repository != nullptr);
+
+    QTemporaryDir remoteRoot;
+    REQUIRE(remoteRoot.isValid());
+    const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
+
+    git_repository* remoteRepo = nullptr;
+    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
+    if (remoteRepo) {
+        git_repository_free(remoteRepo);
+        remoteRepo = nullptr;
+    }
+
+    const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
+                                                         QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(addRemoteError.isEmpty());
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+
+    QTemporaryDir cloneDir;
+    REQUIRE(cloneDir.isValid());
+    const QString clonePath = QDir(cloneDir.path()).filePath(QStringLiteral("clone-2"));
+
+    QQuickGit::GitRepository cloneRepository;
+    cloneRepository.setDirectory(QDir(clonePath));
+    cloneRepository.setAccount(rootData->account());
+
+    auto cloneFuture = cloneRepository.clone(QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(AsyncFuture::waitForFinished(cloneFuture, 10000));
+    INFO("Clone error:" << cloneFuture.result().errorMessage().toStdString());
+    REQUIRE(!cloneFuture.result().hasError());
+
+    auto remoteRootData = std::make_unique<cwRootData>();
+    remoteRootData->account()->setName(QStringLiteral("Remote Sync Tester"));
+    remoteRootData->account()->setEmail(QStringLiteral("remote.sync.tester@example.com"));
+
+    auto remoteProject = remoteRootData->project();
+    const QString clonedProjectPath = QDir(clonePath).filePath(QFileInfo(projectPath).fileName());
+    REQUIRE(QFileInfo::exists(clonedProjectPath));
+    remoteProject->loadFile(clonedProjectPath);
+    remoteProject->waitLoadToFinish();
+    remoteProject->waitSaveToFinish();
+
+    auto* remoteRepository = remoteProject->repository();
+    REQUIRE(remoteRepository != nullptr);
+    remoteRepository->setAccount(remoteRootData->account());
+
+    auto* remoteCave = remoteProject->cavingRegion()->cave(0);
+    REQUIRE(remoteCave != nullptr);
+    const QString remoteCaveName = QStringLiteral("Reconcile Updated Cave");
+    remoteCave->setName(remoteCaveName);
+    remoteProject->waitSaveToFinish();
+    REQUIRE(remoteProject->isModified());
+
+    remoteProject->errorModel()->clear();
+    REQUIRE(remoteProject->sync());
+    remoteRootData->futureManagerModel()->waitForFinished();
+    remoteProject->waitSaveToFinish();
+    CHECK(remoteProject->errorModel()->count() == 0);
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+
+    auto* localCave = project->cavingRegion()->cave(0);
+    REQUIRE(localCave != nullptr);
+    CHECK(localCave->name() == remoteCaveName);
+}
+
 TEST_CASE("cwProject sync creates and pushes merge commit for diverged non-conflicting changes", "[cwProject]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
