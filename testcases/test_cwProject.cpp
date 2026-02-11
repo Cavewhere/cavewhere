@@ -965,6 +965,74 @@ TEST_CASE("Loading a project repairs duplicate cave ids", "[cwProject][repair]")
     CHECK(repairedFirst.id() != repairedSecond.id());
 }
 
+TEST_CASE("Loading a project surfaces repair save failures", "[cwProject][repair]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto* region = project->cavingRegion();
+
+    region->addCave();
+    auto* cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Repair Failure Cave"));
+    cave->addTrip();
+    auto* trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
+    trip->setName(QStringLiteral("Repair Failure Trip"));
+
+    QTemporaryDir saveDir;
+    REQUIRE(saveDir.isValid());
+    const QString savePath = QDir(saveDir.path()).filePath(QStringLiteral("repair-save-failure.cwproj"));
+    REQUIRE(project->saveAs(savePath));
+    project->waitSaveToFinish();
+    const QString savedProjectFile = project->filename();
+    REQUIRE(QFileInfo::exists(savedProjectFile));
+
+    const QString caveFile = ProjectFilenameTestHelper::absolutePath(cave);
+    REQUIRE(QFileInfo::exists(caveFile));
+
+    {
+        auto caveProto = loadProtoFromJsonFile<CavewhereProto::Cave>(caveFile);
+        caveProto.clear_id();
+        writeProtoToJsonFile(caveFile, caveProto);
+    }
+
+    const auto clearedCave = loadProtoFromJsonFile<CavewhereProto::Cave>(caveFile);
+    REQUIRE_FALSE(clearedCave.has_id());
+
+    const QDir caveDir = QFileInfo(caveFile).absoluteDir();
+    const QFileDevice::Permissions originalCaveDirPermissions = QFile::permissions(caveDir.absolutePath());
+    auto permissionsGuard = qScopeGuard([caveDir, originalCaveDirPermissions]() {
+        QFile::setPermissions(caveDir.absolutePath(), originalCaveDirPermissions);
+    });
+
+    const QFileDevice::Permissions readOnlyDirPermissions =
+        QFileDevice::ReadOwner | QFileDevice::ExeOwner
+        | QFileDevice::ReadGroup | QFileDevice::ExeGroup
+        | QFileDevice::ReadOther | QFileDevice::ExeOther;
+    REQUIRE(QFile::setPermissions(caveDir.absolutePath(), readOnlyDirPermissions));
+
+    rootData.reset();
+
+    auto reloaded = std::make_unique<cwProject>();
+    addTokenManager(reloaded.get());
+    reloaded->errorModel()->clear();
+    reloaded->loadOrConvert(savedProjectFile);
+    reloaded->waitLoadToFinish();
+
+    REQUIRE(reloaded->errorModel()->count() > 0);
+    const auto loadError = reloaded->errorModel()->last();
+    CHECK(loadError.type() == cwError::Fatal);
+    CHECK(loadError.message().contains(QStringLiteral("Save flush failed")));
+
+    REQUIRE(reloaded->cavingRegion()->caveCount() == 1);
+    auto* loadedCave = reloaded->cavingRegion()->cave(0);
+    REQUIRE(loadedCave != nullptr);
+    CHECK_FALSE(loadedCave->id().isNull());
+
+    const auto onDiskCave = loadProtoFromJsonFile<CavewhereProto::Cave>(caveFile);
+    CHECK_FALSE(onDiskCave.has_id());
+}
+
 TEST_CASE("Saving commits local git changes when account is configured", "[cwProject]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();

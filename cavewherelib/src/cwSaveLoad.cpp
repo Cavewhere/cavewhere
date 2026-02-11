@@ -842,6 +842,7 @@ struct cwSaveLoad::Data {
     std::shared_ptr<Operation> activeOperation;
     quint64 operationGeneration = 0;
     quint64 modelMutationEpoch = 0;
+    bool pendingIdentityRepairSave = false;
 
     static QList<cwSurveyChunkData> fromProtoSurveyChunks(const google::protobuf::RepeatedPtrField<CavewhereProto::SurveyChunk> & protoList);
 
@@ -1626,13 +1627,38 @@ QFuture<ResultBase> cwSaveLoad::load(const QString &filename)
         return saveFlushImpl();
     });
 
-    return d->enqueueOperation(this, Data::Operation::Type::LoadProject, [this, filename, saveFlushFuture]() {
+    auto loadFuture = d->enqueueOperation(this, Data::Operation::Type::LoadProject, [this, filename, saveFlushFuture]() {
         const auto saveFlushResult = saveFlushFuture.result();
         if (saveFlushResult.hasError()) {
+            d->pendingIdentityRepairSave = false;
             return AsyncFuture::completed(saveFlushResult);
         }
 
+        d->pendingIdentityRepairSave = false;
         return loadImpl(filename);
+    });
+
+    return d->enqueueOperation(this, Data::Operation::Type::RepairSave, [this, loadFuture]() {
+        const auto loadResult = loadFuture.result();
+        if (loadResult.hasError()) {
+            d->pendingIdentityRepairSave = false;
+            return AsyncFuture::completed(loadResult);
+        }
+
+        if (!d->pendingIdentityRepairSave) {
+            return AsyncFuture::completed(loadResult);
+        }
+
+        auto repairFuture = persistIdentityRepairSave();
+        return AsyncFuture::observe(repairFuture)
+            .context(this, [this, repairFuture]() {
+                const auto result = repairFuture.result();
+                if (!result.hasError()) {
+                    d->pendingIdentityRepairSave = false;
+                    ++d->modelMutationEpoch;
+                }
+                return result;
+            }).future();
     });
 }
 
@@ -1646,11 +1672,11 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
 
     //Disconnect all connections
     disconnectTreeModel();
-    auto shouldPersistIdentityRepair = std::make_shared<bool>(false);
+    d->pendingIdentityRepairSave = false;
 
     auto oldJobs = saveFlushImpl();
 
-    QFuture<ResultBase> future = oldJobs.then(this, [this, filename, shouldPersistIdentityRepair, loadGeneration, canceledResult](ResultBase flushResult) {
+    QFuture<ResultBase> future = oldJobs.then(this, [this, filename, loadGeneration, canceledResult](ResultBase flushResult) {
                                             if (flushResult.hasError()) {
                                                 return AsyncFuture::completed(flushResult);
                                             }
@@ -1665,8 +1691,8 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                                             d->futureToken.addJob({QFuture<void>(projectDataFuture), QStringLiteral("Loading")});
 
                                             return AsyncFuture::observe(projectDataFuture)
-                                                .context(this, [this, projectDataFuture, filename, shouldPersistIdentityRepair, loadGeneration, canceledResult]() {
-                                                    return mbind(projectDataFuture, [this, projectDataFuture, filename, shouldPersistIdentityRepair, loadGeneration, canceledResult](const ResultBase&) {
+                                                .context(this, [this, projectDataFuture, filename, loadGeneration, canceledResult]() {
+                                                    return mbind(projectDataFuture, [this, projectDataFuture, filename, loadGeneration, canceledResult](const ResultBase&) {
                                                         if (d->operationGeneration != loadGeneration
                                                             || d->retiring
                                                             || d->m_regionTreeModel->cavingRegion() == nullptr) {
@@ -1682,7 +1708,7 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                                                         setSaveEnabled(false);
                                                         const auto& loadData = projectDataFuture.result().value();
                                                         d->projectMetadata = loadData.metadata;
-                                                        *shouldPersistIdentityRepair = loadData.identityRepair.required;
+                                                        d->pendingIdentityRepairSave = loadData.identityRepair.required;
                                                         emit dataRootChanged();
                                                         d->m_regionTreeModel->cavingRegion()->setData(loadData.region);
 
@@ -1699,19 +1725,6 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                                                     });
                                                 }).future();
                                         }).unwrap();
-
-    future = future.then(this, [this, shouldPersistIdentityRepair, loadGeneration, canceledResult](ResultBase loadResult) -> QFuture<ResultBase> {
-        if (d->operationGeneration != loadGeneration || d->retiring) {
-            return AsyncFuture::completed(canceledResult());
-        }
-
-        if (loadResult.hasError() || !*shouldPersistIdentityRepair) {
-            return AsyncFuture::completed(loadResult);
-        }
-
-        return persistIdentityRepairSave();
-    }).unwrap();
-
     return future;
 }
 
@@ -3947,6 +3960,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
     });
 
     auto queuedFuture = d->enqueueOperation(this, Data::Operation::Type::SyncProject, [this, saveFlushFuture]() {
+        Q_ASSERT(saveFlushFuture.isFinished());
         const auto saveFlushResult = saveFlushFuture.result();
         if (saveFlushResult.hasError()) {
             return AsyncFuture::completed(saveFlushResult);
