@@ -3,6 +3,7 @@
 
 #include <QString>
 #include <QDateTime>
+#include <QUuid>
 
 //Our includes
 #include "cwTeamData.h"
@@ -19,7 +20,7 @@ struct cwTripData {
     QList<cwSurveyChunkData> chunks;
     cwSurveyNoteModelData noteModel;
     cwSurveyNoteLiDARModelData noteLiDARModel;
-
+    QUuid id;
 };
 
 

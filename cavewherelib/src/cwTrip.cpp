@@ -19,6 +19,7 @@
 
 //Qt includes
 #include <QMap>
+#include <QUuid>
 
 cwTrip::cwTrip(QObject *parent) :
     QObject(parent),
@@ -32,6 +33,7 @@ cwTrip::cwTrip(QObject *parent) :
     NotesLidar = new cwSurveyNoteLiDARModel(this);
     ErrorModel = new cwErrorModel(this);
     KeywordModel = new cwKeywordModel(this);
+    Id = QUuid::createUuid();
 
     Notes->setParentTrip(this);
     NotesLidar->setParentTrip(this);
@@ -112,6 +114,15 @@ cwTrip::~cwTrip()
 void cwTrip::setName(QString name) {
     if(name != Name && !name.isEmpty()) {
         pushUndo(new NameCommand(this, name));
+    }
+}
+
+void cwTrip::setId(const QUuid& id)
+{
+    if (!id.isNull()) {
+        Id = id;
+    } else if (Id.isNull()) {
+        Id = QUuid::createUuid();
     }
 }
 
@@ -375,13 +386,15 @@ cwTripData cwTrip::data() const
         Calibration->data(),
         cwData::toDataList<cwSurveyChunkData>(Chunks),
         Notes->data(),
-        NotesLidar->data()
+        NotesLidar->data(),
+        Id
     };
 }
 
 void cwTrip::setData(const cwTripData &data)
 {
     setName(data.name);
+    setId(data.id);
     setDate(data.date);
     Team->setData(data.team);
     Calibration->setData(data.calibrations);

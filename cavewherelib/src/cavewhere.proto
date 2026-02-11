@@ -38,6 +38,7 @@ message CavingRegion {
 message Cave {
     optional FileVersion fileVersion = 9;
     optional string name = 8;
+    optional string id = 10;
     repeated Trip trips = 2;
 
     //This probably should be in a settings file (global / local) somewhere
@@ -56,6 +57,7 @@ message Cave {
 message Trip {
     optional FileVersion fileVersion = 8;
     optional string name = 7;
+    optional string id = 9;
     optional QtProto.QDate date = 2;
     optional TripCalibration tripCalibration = 4;
     repeated SurveyChunk chunks = 5;
@@ -102,6 +104,7 @@ message Note {
     repeated Scrap scraps = 3;
     optional ImageResolution imageResolution = 4;
     optional string name = 5;
+    optional string id = 7;
 
 }
 
@@ -403,6 +406,7 @@ message NoteLiDAR {
     repeated NoteLiDARStation noteStations = 3;
     optional NoteLiDARTransformation noteTransformation = 4;
     optional bool autoCalculateNorth = 5;
+    optional string id = 7;
 }
 
 ///////////////////////////////////////////////////

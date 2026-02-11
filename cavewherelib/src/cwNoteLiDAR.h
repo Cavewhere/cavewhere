@@ -11,6 +11,7 @@
 #include <QProperty>
 #include <QMatrix4x4>
 #include <QQuaternion>
+#include <QUuid>
 
 // Our includes
 #include "cwGlobals.h"
@@ -62,6 +63,8 @@ public:
     // Property accessors
     QString name() const { return m_name.value(); }
     void setName(const QString& name) { m_name = name; }
+    QUuid id() const;
+    void setId(const QUuid& id);
     QBindable<QString> bindableName() { return &m_name; }
 
     QString filename() const;
@@ -112,6 +115,7 @@ private:
     cwTrip* m_parentTrip = nullptr;
     cwNoteLiDARTransformation *m_noteTransformation = nullptr;
     cwKeywordModel* m_keywordModel = nullptr;
+    QUuid m_id;
 
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwNoteLiDAR, QString, m_name, QString(), &cwNoteLiDAR::nameChanged);
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwNoteLiDAR, bool, m_autoCalculateNorth, true, &cwNoteLiDAR::autoCalculateNorthChanged);
@@ -123,6 +127,11 @@ private:
     void updateNoteTransformion();
 
 };
+
+inline QUuid cwNoteLiDAR::id() const
+{
+    return m_id;
+}
 
 
 #endif // CWNOTELIDAR_H

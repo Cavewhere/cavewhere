@@ -7,6 +7,7 @@
 
 //Qt includes
 #include <QString>
+#include <QUuid>
 
 struct cwNoteLiDARData {
     QString name;
@@ -14,6 +15,7 @@ struct cwNoteLiDARData {
     QList<cwNoteLiDARStation> stations;
     cwNoteLiDARTransformationData transfrom;
     bool autoCalculateNorth = true;
+    QUuid id;
 };
 
 #endif // CWNOTELIDARDATA_H

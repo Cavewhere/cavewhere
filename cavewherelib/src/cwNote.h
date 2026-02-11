@@ -14,6 +14,7 @@
 #include <QQmlEngine>
 #include <QPropertyBinding>
 #include <QSizeF>
+#include <QUuid>
 
 //Our includes
 #include "cwImage.h"
@@ -47,6 +48,8 @@ public:
 
     QString name() const { return m_name.value(); }
     void setName(const QString& name);
+    QUuid id() const;
+    void setId(const QUuid& id);
     QBindable<QString> bindableName() { return &m_name; }
 
     void setImage(cwImage image);
@@ -124,6 +127,7 @@ private:
     QList<cwScrap*> Scraps;
 
     cwImageResolution* ImageResolution; //!< nullptr if the note should use image's resolution
+    QUuid m_id;
 
     void copy(const cwNote& object);
     void setupScrap(cwScrap* scrap);
@@ -144,6 +148,11 @@ inline cwTrip* cwNote::parentTrip() const {
   */
 inline cwImage cwNote::image() const {
     return ImageIds;
+}
+
+inline QUuid cwNote::id() const
+{
+    return m_id;
 }
 
 // inline int cwNote::original() const {

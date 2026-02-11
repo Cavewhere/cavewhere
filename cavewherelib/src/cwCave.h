@@ -30,6 +30,7 @@ class cwCavingRegion;
 #include <QVariant>
 #include <QAbstractListModel>
 #include <QQmlEngine>
+#include <QUuid>
 
 
 class CAVEWHERE_LIB_EXPORT cwCave : public QAbstractListModel, public cwUndoer
@@ -55,6 +56,8 @@ public:
 
     QString name() const;
     void setName(QString name);
+    QUuid id() const;
+    void setId(const QUuid& id);
 
     cwLength* length() const;
     cwLength* depth() const;
@@ -117,6 +120,7 @@ private:
 
     cwStationPositionLookup StationPositionModel;
     bool StationPositionModelStale;
+    QUuid Id;
 
     cwSurveyNetwork Network;
 
@@ -186,6 +190,11 @@ private:
   */
 inline QString cwCave::name() const {
     return Name;
+}
+
+inline QUuid cwCave::id() const
+{
+    return Id;
 }
 
 /**

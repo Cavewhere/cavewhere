@@ -137,15 +137,30 @@ TEST_CASE("cwSaveLoad writes file version metadata for saved files", "[cwSaveLoa
         CHECK(proto.fileversion().cavewhereversion() == CavewhereVersion.toStdString());
     };
 
+    auto checkHasId = [](const auto& proto) {
+        REQUIRE(proto.has_id());
+        CHECK(!proto.id().empty());
+    };
+
     const QString caveFile = ProjectFilenameTestHelper::absolutePath(cave);
     const QString tripFile = ProjectFilenameTestHelper::absolutePath(trip);
     const QString noteFile = ProjectFilenameTestHelper::absolutePath(note);
     const QString noteLidarFile = ProjectFilenameTestHelper::absolutePath(noteLidar);
 
-    checkFileVersion(loadProtoFromJsonFile<CavewhereProto::Cave>(caveFile));
-    checkFileVersion(loadProtoFromJsonFile<CavewhereProto::Trip>(tripFile));
-    checkFileVersion(loadProtoFromJsonFile<CavewhereProto::Note>(noteFile));
-    checkFileVersion(loadProtoFromJsonFile<CavewhereProto::NoteLiDAR>(noteLidarFile));
+    const auto caveProto = loadProtoFromJsonFile<CavewhereProto::Cave>(caveFile);
+    const auto tripProto = loadProtoFromJsonFile<CavewhereProto::Trip>(tripFile);
+    const auto noteProto = loadProtoFromJsonFile<CavewhereProto::Note>(noteFile);
+    const auto noteLidarProto = loadProtoFromJsonFile<CavewhereProto::NoteLiDAR>(noteLidarFile);
+
+    checkFileVersion(caveProto);
+    checkFileVersion(tripProto);
+    checkFileVersion(noteProto);
+    checkFileVersion(noteLidarProto);
+
+    checkHasId(caveProto);
+    checkHasId(tripProto);
+    checkHasId(noteProto);
+    checkHasId(noteLidarProto);
 }
 
 TEST_CASE("cwSaveLoad reloads missing image metadata", "[cwSaveLoad]") {

@@ -37,6 +37,7 @@ class cwKeywordModel;
 #include <QDate>
 #include <QUndoCommand>
 #include <QQmlEngine>
+#include <QUuid>
 
 
 class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
@@ -67,6 +68,8 @@ public:
 
     QString name() const;
     void setName(QString name);
+    QUuid id() const;
+    void setId(const QUuid& id);
 
     QDateTime date() const;
     void setDate(QDateTime date);
@@ -137,6 +140,7 @@ protected:
     cwSurveyNoteLiDARModel* NotesLidar;
     cwErrorModel* ErrorModel; //!<
     cwKeywordModel* KeywordModel;
+    QUuid Id;
 
     //Units
 
@@ -185,6 +189,11 @@ inline int cwTrip::chunkCount() const {
   */
 inline QString cwTrip::name() const {
     return Name;
+}
+
+inline QUuid cwTrip::id() const
+{
+    return Id;
 }
 
 /**

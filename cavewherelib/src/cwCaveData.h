@@ -3,6 +3,7 @@
 
 //Qt includes
 #include <QString>
+#include <QUuid>
 
 //Our includes
 #include "cwTripData.h"
@@ -12,6 +13,7 @@ struct cwCaveData {
     QString name;
     QList<cwTripData> trips;
     cwStationPositionLookup stationPositionModel;
+    QUuid id;
 };
 
 #endif // CWCAVEDATA_H

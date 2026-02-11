@@ -5,6 +5,7 @@
 #include "cwUnitValue.h"
 #include "cwScrapData.h"
 #include "cwImageResolution.h"
+#include <QUuid>
 
 struct cwNoteData {
     QString name;
@@ -12,6 +13,7 @@ struct cwNoteData {
     cwImageResolution::Data imageResolution;
     QList<cwScrapData> scraps;
     cwImage image;
+    QUuid id;
 };
 
 #endif // CWNOTEDATA_H

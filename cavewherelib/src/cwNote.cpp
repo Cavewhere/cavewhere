@@ -27,6 +27,7 @@
 //Std includes
 #include <cmath>
 #include <limits>
+#include <QUuid>
 
 cwNote::cwNote(QObject *parent) :
     QObject(parent),
@@ -35,6 +36,7 @@ cwNote::cwNote(QObject *parent) :
     ImageResolution(new cwImageResolution(this))
 {
     DisplayRotation = 0.0;
+    m_id = QUuid::createUuid();
     ImageResolution->setUpdateValue(true); //Update the value when the units have changed
 
     connect(ImageResolution, &cwImageResolution::unitChanged, this, &cwNote::updateScrapNoteTransform);
@@ -122,6 +124,15 @@ void cwNote::setName(const QString &name)
     m_name = name;
     if(KeywordModel) {
         KeywordModel->replace({cwKeywordModel::FileNameKey, name});
+    }
+}
+
+void cwNote::setId(const QUuid& id)
+{
+    if (!id.isNull()) {
+        m_id = id;
+    } else if (m_id.isNull()) {
+        m_id = QUuid::createUuid();
     }
 }
 
@@ -373,13 +384,15 @@ cwNoteData cwNote::data() const
         DisplayRotation,
         ImageResolution->data(),
         std::move(scrapData),
-        ImageIds
+        ImageIds,
+        m_id
     };
 }
 
 void cwNote::setData(const cwNoteData &data)
 {
     setName(data.name);
+    setId(data.id);
     setRotate(data.rotate);
 
     //Old image data, for loading from old files

@@ -16,13 +16,15 @@
 
 //Qt includes
 #include <QThread>
+#include <QUuid>
 
 cwCave::cwCave(QObject* parent) :
     QAbstractListModel(parent),
     Length(new cwLength(this)),
     Depth(new cwLength(this)),
     ErrorModel(new cwErrorModel(this)),
-    StationPositionModelStale(false)
+    StationPositionModelStale(false),
+    Id(QUuid::createUuid())
 {
     Length->setUnit(cwUnits::Meters);
     Depth->setUnit(cwUnits::Meters);
@@ -109,6 +111,15 @@ cwCave::~cwCave() {
 void cwCave::setName(QString name) {
     if(Name != name && !name.isEmpty()) {
         pushUndo(new NameCommand(this, name));
+    }
+}
+
+void cwCave::setId(const QUuid& id)
+{
+    if (!id.isNull()) {
+        Id = id;
+    } else if (Id.isNull()) {
+        Id = QUuid::createUuid();
     }
 }
 
@@ -411,13 +422,15 @@ cwCaveData cwCave::data() const
     return {
         Name,
         cwData::toDataList<cwTripData>(Trips),
-        StationPositionModel
+        StationPositionModel,
+        Id
     };
 }
 
 void cwCave::setData(const cwCaveData &data)
 {
     setName(data.name);
+    setId(data.id);
 
     clearTrips();
 

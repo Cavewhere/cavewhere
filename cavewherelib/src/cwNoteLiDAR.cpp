@@ -8,12 +8,14 @@
 
 //Qt includes
 #include <QMetaType>
+#include <QUuid>
 
 cwNoteLiDAR::cwNoteLiDAR(QObject* parent)
     : QAbstractListModel(parent),
     m_noteTransformation(new cwNoteLiDARTransformation(this)),
     m_keywordModel(new cwKeywordModel(this))
 {
+    m_id = QUuid::createUuid();
     if(m_keywordModel) {
         m_keywordModel->add({cwKeywordModel::TypeKey, QStringLiteral("LiDAR")});
         m_keywordModel->add({cwKeywordModel::FileNameKey, filename()});
@@ -48,6 +50,15 @@ void cwNoteLiDAR::setFilename(const QString& path) {
         m_keywordModel->replace({cwKeywordModel::FileNameKey, m_filename});
     }
     emit filenameChanged();
+}
+
+void cwNoteLiDAR::setId(const QUuid& id)
+{
+    if (!id.isNull()) {
+        m_id = id;
+    } else if (m_id.isNull()) {
+        m_id = QUuid::createUuid();
+    }
 }
 
 void cwNoteLiDAR::addStation(const cwNoteLiDARStation& station) {
@@ -100,13 +111,15 @@ cwNoteLiDARData cwNoteLiDAR::data() const
         m_filename,
         m_stations,
         m_noteTransformation->data(),
-        m_autoCalculateNorth
+        m_autoCalculateNorth,
+        m_id
     };
 }
 
 void cwNoteLiDAR::setData(const cwNoteLiDARData &data)
 {
     setName(data.name);
+    setId(data.id);
     setFilename(data.filename);
     setStations(data.stations);
     setAutoCalculateNorth(data.autoCalculateNorth); //This should be set before m_noteTransformation because auto calucaltion
