@@ -331,7 +331,8 @@ private:
     QFuture<Monad::ResultBase> saveFlushImpl();
     QFuture<Monad::ResultBase> syncImpl();
     QFuture<Monad::Result<ReconcileExternalResult>> reconcileExternalImpl(const SyncReport& report,
-                                                                           quint64 syncGeneration);
+                                                                           quint64 syncGeneration,
+                                                                           quint64 planEpoch);
     QFuture<Monad::ResultBase> persistIdentityRepairSave();
 
 
