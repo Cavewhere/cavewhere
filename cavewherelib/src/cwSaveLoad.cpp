@@ -43,6 +43,7 @@
 #include <QImageReader>
 #include <QFile>
 #include <QDateTime>
+#include <QQueue>
 
 #ifdef CW_WITH_PDF_SUPPORT
 #include <QPdfDocument>
@@ -321,6 +322,57 @@ QString defaultCommitDescription()
 {
     return QStringLiteral("Automatic commit at %1")
         .arg(QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
+}
+
+QString uuidToProtoString(const QUuid& uuid)
+{
+    return uuid.toString(QUuid::WithoutBraces);
+}
+
+QUuid repairedTopLevelId(const QUuid& candidateId,
+                         QSet<QUuid>& seenIds,
+                         cwSaveLoad::IdentityRepairData& repair)
+{
+    if (!candidateId.isNull() && !seenIds.contains(candidateId)) {
+        seenIds.insert(candidateId);
+        return candidateId;
+    }
+
+    repair.required = true;
+    if (candidateId.isNull()) {
+        ++repair.generatedIds;
+    } else {
+        ++repair.duplicateIds;
+    }
+
+    QUuid repairedId;
+    do {
+        repairedId = QUuid::createUuid();
+    } while (repairedId.isNull() || seenIds.contains(repairedId));
+
+    seenIds.insert(repairedId);
+    return repairedId;
+}
+
+void repairTopLevelIds(cwSaveLoad::ProjectLoadData& loadData)
+{
+    QSet<QUuid> seenCaveIds;
+    QSet<QUuid> seenTripIds;
+    QSet<QUuid> seenNoteIds;
+    QSet<QUuid> seenNoteLiDARIds;
+
+    for (cwCaveData& cave : loadData.region.caves) {
+        cave.id = repairedTopLevelId(cave.id, seenCaveIds, loadData.identityRepair);
+        for (cwTripData& trip : cave.trips) {
+            trip.id = repairedTopLevelId(trip.id, seenTripIds, loadData.identityRepair);
+            for (cwNoteData& note : trip.noteModel.notes) {
+                note.id = repairedTopLevelId(note.id, seenNoteIds, loadData.identityRepair);
+            }
+            for (cwNoteLiDARData& note : trip.noteLiDARModel.notes) {
+                note.id = repairedTopLevelId(note.id, seenNoteLiDARIds, loadData.identityRepair);
+            }
+        }
+    }
 }
 
 } // namespace
@@ -763,6 +815,25 @@ struct cwSaveLoad::Data {
     bool retiring = false;
     QFuture<void> retireFuture;
 
+    struct Operation {
+        enum class Type {
+            SaveFlush,
+            LoadProject,
+            SyncProject,
+            RepairSave,
+            ImportFiles
+        };
+
+        Type type = Type::SaveFlush;
+        quint64 generation = 0;
+        std::function<QFuture<ResultBase>()> run;
+        AsyncFuture::Deferred<ResultBase> deferred;
+    };
+
+    QQueue<std::shared_ptr<Operation>> operationQueue;
+    std::shared_ptr<Operation> activeOperation;
+    quint64 operationGeneration = 0;
+
     static QList<cwSurveyChunkData> fromProtoSurveyChunks(const google::protobuf::RepeatedPtrField<CavewhereProto::SurveyChunk> & protoList);
 
     static ResultBase ensurePathForFile(const QString& filePath) {
@@ -781,6 +852,79 @@ struct cwSaveLoad::Data {
 
     Data() {
         m_pendingJobsDeferred.complete();
+    }
+
+    QFuture<ResultBase> enqueueOperation(cwSaveLoad* context,
+                                         Operation::Type type,
+                                         std::function<QFuture<ResultBase>()> run)
+    {
+        auto op = std::make_shared<Operation>();
+        op->type = type;
+        op->generation = operationGeneration;
+        op->run = std::move(run);
+
+        operationQueue.enqueue(op);
+        runNextOperation(context);
+        return op->deferred.future();
+    }
+
+    void runNextOperation(cwSaveLoad* context)
+    {
+        if (activeOperation != nullptr) {
+            return;
+        }
+
+        if (operationQueue.isEmpty()) {
+            return;
+        }
+
+        activeOperation = operationQueue.dequeue();
+        auto op = activeOperation;
+
+        if (op->generation != operationGeneration) {
+            op->deferred.complete(ResultBase(QStringLiteral("Operation canceled.")));
+            activeOperation.reset();
+            runNextOperation(context);
+            return;
+        }
+
+        QFuture<ResultBase> opFuture;
+        if (op->run) {
+            opFuture = op->run();
+        } else {
+            opFuture = AsyncFuture::completed(ResultBase(QStringLiteral("Invalid operation request.")));
+        }
+
+        AsyncFuture::observe(opFuture)
+            .context(context, [this, context, opFuture, op]() {
+                ResultBase result = opFuture.result();
+                if (op->generation != operationGeneration && !result.hasError()) {
+                    result = ResultBase(QStringLiteral("Operation canceled."));
+                }
+
+                if (!op->deferred.future().isFinished()) {
+                    op->deferred.complete(result);
+                }
+
+                if (activeOperation == op) {
+                    activeOperation.reset();
+                }
+                runNextOperation(context);
+            }).future();
+    }
+
+    void cancelPendingOperations(const QString& reason)
+    {
+        ++operationGeneration;
+
+        if (activeOperation && !activeOperation->deferred.future().isFinished()) {
+            activeOperation->deferred.complete(ResultBase(reason));
+        }
+
+        while (!operationQueue.isEmpty()) {
+            auto op = operationQueue.dequeue();
+            op->deferred.complete(ResultBase(reason));
+        }
     }
 
     void addFileSystemJob(Job job, cwSaveLoad* context) {
@@ -1330,22 +1474,30 @@ QString cwSaveLoad::fileName() const
 
 QFuture<ResultBase> cwSaveLoad::load(const QString &filename)
 {
+    return d->enqueueOperation(this, Data::Operation::Type::LoadProject, [this, filename]() {
+        return loadImpl(filename);
+    });
+}
+
+QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
+{
     // qDebug() << "---- Loading: " << filename;
 
     //Disconnect all connections
     disconnectTreeModel();
+    auto shouldPersistIdentityRepair = std::make_shared<bool>(false);
 
     auto oldJobs = completeSaveJobs();
 
-    QFuture<ResultBase> future = oldJobs.then(this, [this, filename]() {
+    QFuture<ResultBase> future = oldJobs.then(this, [this, filename, shouldPersistIdentityRepair]() {
                                             //Find all the cave file
                                             auto projectDataFuture = cwSaveLoad::loadAll(filename);
 
                                             d->futureToken.addJob({QFuture<void>(projectDataFuture), QStringLiteral("Loading")});
 
                                             return AsyncFuture::observe(projectDataFuture)
-                                                .context(this, [this, projectDataFuture, filename]() {
-                                                    return mbind(projectDataFuture, [this, projectDataFuture, filename](const ResultBase&) {
+                                                .context(this, [this, projectDataFuture, filename, shouldPersistIdentityRepair]() {
+                                                    return mbind(projectDataFuture, [this, projectDataFuture, filename, shouldPersistIdentityRepair](const ResultBase&) {
                                                         // setTemporaryProject(false);
                                                         //The filename needs to be set first because, image providers should
                                                         //have the filename before the region model is set
@@ -1355,6 +1507,7 @@ QFuture<ResultBase> cwSaveLoad::load(const QString &filename)
                                                         setSaveEnabled(false);
                                                         const auto& loadData = projectDataFuture.result().value();
                                                         d->projectMetadata = loadData.metadata;
+                                                        *shouldPersistIdentityRepair = loadData.identityRepair.required;
                                                         emit dataRootChanged();
                                                         d->m_regionTreeModel->cavingRegion()->setData(loadData.region);
 
@@ -1371,7 +1524,47 @@ QFuture<ResultBase> cwSaveLoad::load(const QString &filename)
                                                 }).future();
                                         }).unwrap();
 
+    future = future.then(this, [this, shouldPersistIdentityRepair](ResultBase loadResult) -> QFuture<ResultBase> {
+        if (loadResult.hasError() || !*shouldPersistIdentityRepair) {
+            return AsyncFuture::completed(loadResult);
+        }
+
+        return persistIdentityRepairSave();
+    }).unwrap();
+
     return future;
+}
+
+QFuture<ResultBase> cwSaveLoad::persistIdentityRepairSave()
+{
+    auto* region = d->m_regionTreeModel->cavingRegion();
+    if (region == nullptr) {
+        return AsyncFuture::completed(ResultBase(QStringLiteral("No caving region is available for repair save.")));
+    }
+
+    saveProject(projectRootDir(), region);
+    for (cwCave* cave : region->caves()) {
+        save(cave);
+        for (cwTrip* trip : cave->trips()) {
+            save(trip);
+
+            for (cwNote* note : trip->notes()->notes()) {
+                save(note);
+            }
+
+            for (QObject* noteObject : trip->notesLiDAR()->notes()) {
+                if (auto* lidarNote = qobject_cast<cwNoteLiDAR*>(noteObject)) {
+                    save(lidarNote);
+                }
+            }
+        }
+    }
+
+    return AsyncFuture::observe(completeSaveJobs())
+        .context(this, []() {
+            return ResultBase();
+        })
+        .future();
 }
 
 void cwSaveLoad::setFileName(const QString &filename, bool initRepository)
@@ -1500,6 +1693,9 @@ std::unique_ptr<CavewhereProto::Cave> cwSaveLoad::toProtoCave(const cwCave *cave
     fileVersion->set_version(cwRegionIOTask::protoVersion());
     cwRegionSaveTask::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
     *(protoCave->mutable_name()) = cave->name().toStdString();
+    if (!cave->id().isNull()) {
+        *(protoCave->mutable_id()) = uuidToProtoString(cave->id()).toStdString();
+    }
     return protoCave;
 }
 
@@ -1512,6 +1708,9 @@ std::unique_ptr<CavewhereProto::Trip> cwSaveLoad::toProtoTrip(const cwTrip *trip
     cwRegionSaveTask::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
 
     *(protoTrip->mutable_name()) = trip->name().toStdString();
+    if (!trip->id().isNull()) {
+        *(protoTrip->mutable_id()) = uuidToProtoString(trip->id()).toStdString();
+    }
 
     // cwRegionSaveTask::saveString(protoTrip->mutable_name(), trip->name());
     cwRegionSaveTask::saveDate(protoTrip->mutable_date(), trip->date().date());
@@ -1836,6 +2035,9 @@ std::unique_ptr<CavewhereProto::Note> cwSaveLoad::toProtoNote(const cwNote *note
     }
 
     *(protoNote->mutable_name()) = note->name().toStdString();
+    if (!note->id().isNull()) {
+        *(protoNote->mutable_id()) = uuidToProtoString(note->id()).toStdString();
+    }
 
     return protoNote;
 }
@@ -1855,6 +2057,9 @@ std::unique_ptr<CavewhereProto::NoteLiDAR> cwSaveLoad::toProtoNoteLiDAR(const cw
 
     *(protoNote->mutable_name()) = note->name().toStdString();
     *(protoNote->mutable_filename()) = note->filename().toStdString();
+    if (!note->id().isNull()) {
+        *(protoNote->mutable_id()) = uuidToProtoString(note->id()).toStdString();
+    }
 
     protoNote->set_autocalculatenorth(note->autoCalculateNorth());
 
@@ -2058,9 +2263,9 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
 
                         QDir tripDir = tripFileInfo.absoluteDir();
 
-                        auto loadObjectsFromNotesDir = [=](const QString& fileSuffix,
-                                                           auto&& loadFunc,
-                                                           auto& destinationList)
+                        auto loadObjectsFromNotesDir = [tripDir, regionDir, &filePathLess](const QString& fileSuffix,
+                                                                                             auto&& loadFunc,
+                                                                                             auto& destinationList)
                         {
                             QDir notesDir = tripDir.filePath("notes");
                             if (!notesDir.exists()) {
@@ -2099,6 +2304,7 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
                 loadData.region.caves.append(cave);
             }
 
+            repairTopLevelIds(loadData);
             return Result(loadData);
         });
     });
@@ -2177,6 +2383,9 @@ Monad::Result<cwCaveData> cwSaveLoad::loadCave(const QString &filename)
                             if(caveProto.has_name()) {
                                 caveData.name = QString::fromStdString(caveProto.name());
                             }
+                            if (caveProto.has_id()) {
+                                caveData.id = toUuid(caveProto.id());
+                            }
                             return Result(caveData);
                         });
 }
@@ -2191,6 +2400,9 @@ Monad::Result<cwTripData> cwSaveLoad::loadTrip(const QString &filename)
 
                             if(tripProto.has_name()) {
                                 tripData.name = QString::fromStdString(tripProto.name());
+                            }
+                            if (tripProto.has_id()) {
+                                tripData.id = toUuid(tripProto.id());
                             }
 
                             if(tripProto.has_date()) {
@@ -2237,6 +2449,9 @@ Monad::Result<cwNoteData> cwSaveLoad::loadNote(const QString &filename, const QD
         }
 
         noteData.name = QString::fromStdString(protoNote.name());
+        if (protoNote.has_id()) {
+            noteData.id = toUuid(protoNote.id());
+        }
 
         return noteData;
     });
@@ -2254,6 +2469,9 @@ Monad::Result<cwNoteLiDARData> cwSaveLoad::loadNoteLiDAR(const QString& filename
         // Older saves may contain project-relative paths; normalize to just the filename to stay resilient to renames.
         noteData.filename = QFileInfo(rawFilename).fileName().isEmpty() ? rawFilename : QFileInfo(rawFilename).fileName();
         noteData.name = QString::fromStdString(protoNote.name());
+        if (protoNote.has_id()) {
+            noteData.id = toUuid(protoNote.id());
+        }
 
         noteData.stations.reserve(protoNote.notestations_size());
         for(const auto& protoNoteStation : protoNote.notestations()) {
@@ -3454,6 +3672,19 @@ Monad::ResultBase cwSaveLoad::commitProjectChanges(const QString& subject,
 
 QFuture<Monad::ResultBase> cwSaveLoad::sync()
 {
+    auto queuedFuture = d->enqueueOperation(this, Data::Operation::Type::SyncProject, [this]() {
+        return syncImpl();
+    });
+
+    if (d->futureToken.isValid()) {
+        d->futureToken.addJob(cwFuture(QFuture<void>(queuedFuture), QStringLiteral("Syncing project")));
+    }
+
+    return queuedFuture;
+}
+
+QFuture<Monad::ResultBase> cwSaveLoad::syncImpl()
+{
     if (gitMode() == GitMode::NoGit) {
         return AsyncFuture::completed(ResultBase(QStringLiteral("Sync is disabled for this project.")));
     }
@@ -3488,10 +3719,6 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
                           })
                           .future();
 
-    if (d->futureToken.isValid()) {
-        d->futureToken.addJob(cwFuture(QFuture<void>(syncFuture), QStringLiteral("Syncing project")));
-    }
-
     return syncFuture;
 }
 
@@ -3502,6 +3729,7 @@ QFuture<void> cwSaveLoad::retire()
     }
 
     d->retiring = true;
+    d->cancelPendingOperations(QStringLiteral("Project is retiring."));
     setSaveEnabled(false);
     disconnectTreeModel();
     d->m_regionTreeModel->setCavingRegion(nullptr);

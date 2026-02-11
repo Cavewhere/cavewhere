@@ -124,9 +124,16 @@ public:
         bool syncEnabled = true;
     };
 
+    struct IdentityRepairData {
+        bool required = false;
+        int generatedIds = 0;
+        int duplicateIds = 0;
+    };
+
     struct ProjectLoadData {
         cwCavingRegionData region;
         ProjectMetadataData metadata;
+        IdentityRepairData identityRepair;
     };
 
     cwSaveLoad(QObject* parent = nullptr);
@@ -280,6 +287,10 @@ private:
     static QDir noteDirHelper(const QDir& tripDir);
 
     static QUuid toUuid(const std::string& uuidStr);
+
+    QFuture<Monad::ResultBase> loadImpl(const QString& filename);
+    QFuture<Monad::ResultBase> syncImpl();
+    QFuture<Monad::ResultBase> persistIdentityRepairSave();
 
 
 

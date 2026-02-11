@@ -55,6 +55,8 @@ using namespace Catch;
 #include "git2.h"
 
 #include <optional>
+#include <google/protobuf/util/json_util.h>
+#include "cavewhere.pb.h"
 
 namespace {
 cwScrap* firstScrap(cwProject* project) {
@@ -228,6 +230,35 @@ bool setGitConfigString(const QString& workTreePath,
     return git_config_set_string(config,
                                  key,
                                  value.toUtf8().constData()) == GIT_OK;
+}
+
+template<typename ProtoT>
+ProtoT loadProtoFromJsonFile(const QString& filename)
+{
+    QFile file(filename);
+    REQUIRE(file.open(QIODevice::ReadOnly));
+    const QByteArray data = file.readAll();
+    file.close();
+
+    ProtoT proto;
+    const auto parseStatus = google::protobuf::util::JsonStringToMessage(data.toStdString(), &proto);
+    REQUIRE(parseStatus.ok());
+    return proto;
+}
+
+template<typename ProtoT>
+void writeProtoToJsonFile(const QString& filename, const ProtoT& proto)
+{
+    std::string json;
+    google::protobuf::util::JsonPrintOptions options;
+    options.add_whitespace = true;
+    const auto toJsonStatus = google::protobuf::util::MessageToJsonString(proto, &json, options);
+    REQUIRE(toJsonStatus.ok());
+
+    QFile file(filename);
+    REQUIRE(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    REQUIRE(file.write(json.data(), static_cast<qint64>(json.size())) == static_cast<qint64>(json.size()));
+    file.close();
 }
 } // namespace
 
@@ -724,6 +755,180 @@ TEST_CASE("Loading a project adds .git/info/exclude cache entry", "[cwProject]")
 
     const QString contents = readGitExclude(projectDir);
     CHECK(contents.contains(".cw_cache/"));
+}
+
+TEST_CASE("Loading a project repairs and persists missing top-level ids", "[cwProject][repair]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto* region = project->cavingRegion();
+
+    region->addCave();
+    auto* cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Repair Cave"));
+    cave->addTrip();
+    auto* trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
+    trip->setName(QStringLiteral("Repair Trip"));
+
+    const QString imagePath = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    REQUIRE(QFileInfo::exists(imagePath));
+    trip->notes()->addFromFiles({QUrl::fromLocalFile(imagePath)});
+
+    const QString glbPath = copyToTempFolder("://datasets/test_cwSurveyNotesConcatModel/bones.glb");
+    REQUIRE(QFileInfo::exists(glbPath));
+    trip->notesLiDAR()->addFromFiles({QUrl::fromLocalFile(glbPath)});
+
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    REQUIRE(trip->notes()->rowCount() == 1);
+    REQUIRE(trip->notesLiDAR()->rowCount() == 1);
+    auto* note = trip->notes()->notes().at(0);
+    auto* lidarNote = qobject_cast<cwNoteLiDAR*>(trip->notesLiDAR()->notes().at(0));
+    REQUIRE(note != nullptr);
+    REQUIRE(lidarNote != nullptr);
+
+    QTemporaryDir saveDir;
+    REQUIRE(saveDir.isValid());
+    const QString savePath = QDir(saveDir.path()).filePath(QStringLiteral("repair-missing-ids.cwproj"));
+    REQUIRE(project->saveAs(savePath));
+    project->waitSaveToFinish();
+    const QString savedProjectFile = project->filename();
+    REQUIRE(QFileInfo::exists(savedProjectFile));
+
+    const QString caveFile = ProjectFilenameTestHelper::absolutePath(cave);
+    const QString tripFile = ProjectFilenameTestHelper::absolutePath(trip);
+    const QString noteFile = ProjectFilenameTestHelper::absolutePath(note);
+    const QString lidarFile = ProjectFilenameTestHelper::absolutePath(lidarNote);
+
+    {
+        auto caveProto = loadProtoFromJsonFile<CavewhereProto::Cave>(caveFile);
+        auto tripProto = loadProtoFromJsonFile<CavewhereProto::Trip>(tripFile);
+        auto noteProto = loadProtoFromJsonFile<CavewhereProto::Note>(noteFile);
+        auto lidarProto = loadProtoFromJsonFile<CavewhereProto::NoteLiDAR>(lidarFile);
+
+        caveProto.clear_id();
+        tripProto.clear_id();
+        noteProto.clear_id();
+        lidarProto.clear_id();
+
+        writeProtoToJsonFile(caveFile, caveProto);
+        writeProtoToJsonFile(tripFile, tripProto);
+        writeProtoToJsonFile(noteFile, noteProto);
+        writeProtoToJsonFile(lidarFile, lidarProto);
+    }
+
+    {
+        const auto clearedCave = loadProtoFromJsonFile<CavewhereProto::Cave>(caveFile);
+        const auto clearedTrip = loadProtoFromJsonFile<CavewhereProto::Trip>(tripFile);
+        const auto clearedNote = loadProtoFromJsonFile<CavewhereProto::Note>(noteFile);
+        const auto clearedLidar = loadProtoFromJsonFile<CavewhereProto::NoteLiDAR>(lidarFile);
+        REQUIRE_FALSE(clearedCave.has_id());
+        REQUIRE_FALSE(clearedTrip.has_id());
+        REQUIRE_FALSE(clearedNote.has_id());
+        REQUIRE_FALSE(clearedLidar.has_id());
+    }
+
+    rootData.reset();
+
+    auto reloaded = std::make_unique<cwProject>();
+    addTokenManager(reloaded.get());
+    reloaded->loadOrConvert(savedProjectFile);
+    reloaded->waitLoadToFinish();
+    reloaded->waitSaveToFinish();
+
+    const auto repairedCaveProto = loadProtoFromJsonFile<CavewhereProto::Cave>(caveFile);
+    const auto repairedTripProto = loadProtoFromJsonFile<CavewhereProto::Trip>(tripFile);
+    const auto repairedNoteProto = loadProtoFromJsonFile<CavewhereProto::Note>(noteFile);
+    const auto repairedLidarProto = loadProtoFromJsonFile<CavewhereProto::NoteLiDAR>(lidarFile);
+
+    REQUIRE(repairedCaveProto.has_id());
+    REQUIRE(repairedTripProto.has_id());
+    REQUIRE(repairedNoteProto.has_id());
+    REQUIRE(repairedLidarProto.has_id());
+    CHECK_FALSE(repairedCaveProto.id().empty());
+    CHECK_FALSE(repairedTripProto.id().empty());
+    CHECK_FALSE(repairedNoteProto.id().empty());
+    CHECK_FALSE(repairedLidarProto.id().empty());
+
+    REQUIRE(reloaded->cavingRegion()->caveCount() == 1);
+    auto* loadedCave = reloaded->cavingRegion()->cave(0);
+    REQUIRE(loadedCave != nullptr);
+    CHECK_FALSE(loadedCave->id().isNull());
+    REQUIRE(loadedCave->tripCount() == 1);
+    auto* loadedTrip = loadedCave->trip(0);
+    REQUIRE(loadedTrip != nullptr);
+    CHECK_FALSE(loadedTrip->id().isNull());
+    REQUIRE(loadedTrip->notes()->rowCount() == 1);
+    REQUIRE(loadedTrip->notesLiDAR()->rowCount() == 1);
+    CHECK_FALSE(loadedTrip->notes()->notes().at(0)->id().isNull());
+    auto* loadedLiDARNote = qobject_cast<cwNoteLiDAR*>(loadedTrip->notesLiDAR()->notes().at(0));
+    REQUIRE(loadedLiDARNote != nullptr);
+    CHECK_FALSE(loadedLiDARNote->id().isNull());
+}
+
+TEST_CASE("Loading a project repairs duplicate cave ids", "[cwProject][repair]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto* region = project->cavingRegion();
+
+    region->addCave();
+    region->addCave();
+    auto* caveA = region->cave(0);
+    auto* caveB = region->cave(1);
+    REQUIRE(caveA != nullptr);
+    REQUIRE(caveB != nullptr);
+    caveA->setName(QStringLiteral("AA-Cave"));
+    caveB->setName(QStringLiteral("BB-Cave"));
+
+    QTemporaryDir saveDir;
+    REQUIRE(saveDir.isValid());
+    const QString savePath = QDir(saveDir.path()).filePath(QStringLiteral("repair-duplicate-cave-ids.cwproj"));
+    REQUIRE(project->saveAs(savePath));
+    project->waitSaveToFinish();
+    const QString savedProjectFile = project->filename();
+    REQUIRE(QFileInfo::exists(savedProjectFile));
+
+    QStringList caveFiles{
+        ProjectFilenameTestHelper::absolutePath(caveA),
+        ProjectFilenameTestHelper::absolutePath(caveB)
+    };
+    caveFiles.sort();
+    REQUIRE(caveFiles.size() == 2);
+
+    const std::string duplicateId = "11111111-2222-3333-4444-555555555555";
+    for (const QString& caveFile : caveFiles) {
+        auto caveProto = loadProtoFromJsonFile<CavewhereProto::Cave>(caveFile);
+        caveProto.set_id(duplicateId);
+        writeProtoToJsonFile(caveFile, caveProto);
+    }
+
+    {
+        const auto duplicateFirst = loadProtoFromJsonFile<CavewhereProto::Cave>(caveFiles.at(0));
+        const auto duplicateSecond = loadProtoFromJsonFile<CavewhereProto::Cave>(caveFiles.at(1));
+        REQUIRE(duplicateFirst.has_id());
+        REQUIRE(duplicateSecond.has_id());
+        REQUIRE(duplicateFirst.id() == duplicateId);
+        REQUIRE(duplicateSecond.id() == duplicateId);
+    }
+
+    rootData.reset();
+
+    auto reloaded = std::make_unique<cwProject>();
+    addTokenManager(reloaded.get());
+    reloaded->loadOrConvert(savedProjectFile);
+    reloaded->waitLoadToFinish();
+    reloaded->waitSaveToFinish();
+
+    const auto repairedFirst = loadProtoFromJsonFile<CavewhereProto::Cave>(caveFiles.at(0));
+    const auto repairedSecond = loadProtoFromJsonFile<CavewhereProto::Cave>(caveFiles.at(1));
+
+    REQUIRE(repairedFirst.has_id());
+    REQUIRE(repairedSecond.has_id());
+    CHECK(repairedFirst.id() == duplicateId);
+    CHECK(repairedSecond.id() != duplicateId);
+    CHECK(repairedFirst.id() != repairedSecond.id());
 }
 
 TEST_CASE("Saving commits local git changes when account is configured", "[cwProject]") {
