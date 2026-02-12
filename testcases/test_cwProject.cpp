@@ -5694,6 +5694,9 @@ TEST_CASE("cwProject should overwrite or touch loaded project", "[cwProject]") {
             if (fileInformation.isDir()) {
                 result.directoriesVisited += 1;
             } else if (fileInformation.isFile()) {
+                if (fileInformation.fileName() == QStringLiteral(".gitattributes")) {
+                    continue;
+                }
                 // Only store directory
                 result.modificationTimes.insert(absolutePath, lastModifiedUtc);
                 result.filesVisited += 1;
@@ -5750,10 +5753,17 @@ TEST_CASE("cwProject should overwrite or touch loaded project", "[cwProject]") {
         REQUIRE(cave->tripCount() > 0);
         auto trip = cave->trip(0);
 
-        trip->setDate(QDateTime::currentDateTime());
+        const QDateTime originalDate = trip->date();
+        QDate updatedDate = originalDate.isValid() ? originalDate.date().addDays(1) : QDate::currentDate().addDays(1);
+        if (!updatedDate.isValid()) {
+            updatedDate = originalDate.date().addDays(-1);
+        }
+        REQUIRE(updatedDate.isValid());
+        trip->setDate(QDateTime(updatedDate, QTime()));
+        REQUIRE(trip->date().date() == updatedDate);
 
         project->waitSaveToFinish();
-\
+
         auto tripPath = ProjectFilenameTestHelper::absolutePath(trip);
         auto modifiedLoad = scan(QFileInfo(convertedFilename).absolutePath());
 
