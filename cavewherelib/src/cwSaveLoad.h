@@ -264,7 +264,7 @@ private:
     struct ReconcileExternalResult {
         enum class Outcome {
             NoOp,
-            Mutated
+            MutatedRequiresPrePushPersistence
         };
 
         Outcome outcome = Outcome::NoOp;

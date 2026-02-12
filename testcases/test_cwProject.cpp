@@ -2788,6 +2788,169 @@ TEST_CASE("cwProject sync reconciles pulled model changes before pushing local c
     });
 }
 
+TEST_CASE("cwProject sync persists pulled id repairs before push", "[cwProject][repair]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Sync Tester"));
+    rootData->account()->setEmail(QStringLiteral("sync.tester@example.com"));
+
+    auto* region = project->cavingRegion();
+    region->addCave();
+    auto* cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Repair Sync Cave"));
+
+    QTemporaryDir projectDir;
+    REQUIRE(projectDir.isValid());
+    const QString projectPath = QDir(projectDir.path()).filePath(QStringLiteral("sync-repair-id.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+
+    auto* repository = project->repository();
+    REQUIRE(repository != nullptr);
+
+    QTemporaryDir remoteRoot;
+    REQUIRE(remoteRoot.isValid());
+    const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
+
+    git_repository* remoteRepo = nullptr;
+    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
+    if (remoteRepo) {
+        git_repository_free(remoteRepo);
+        remoteRepo = nullptr;
+    }
+
+    const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
+                                                         QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(addRemoteError.isEmpty());
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+
+    QTemporaryDir cloneDir;
+    REQUIRE(cloneDir.isValid());
+    const QString clonePath = QDir(cloneDir.path()).filePath(QStringLiteral("clone-2"));
+
+    QQuickGit::GitRepository cloneRepository;
+    cloneRepository.setDirectory(QDir(clonePath));
+    cloneRepository.setAccount(rootData->account());
+
+    auto cloneFuture = cloneRepository.clone(QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(AsyncFuture::waitForFinished(cloneFuture, 10000));
+    INFO("Clone error:" << cloneFuture.result().errorMessage().toStdString());
+    REQUIRE(!cloneFuture.result().hasError());
+
+    QDirIterator caveFileIterator(clonePath,
+                                  QStringList{QStringLiteral("*.cwcave")},
+                                  QDir::Files,
+                                  QDirIterator::Subdirectories);
+    REQUIRE(caveFileIterator.hasNext());
+    const QString clonedCaveFile = caveFileIterator.next();
+
+    auto clonedCaveProto = loadProtoFromJsonFile<CavewhereProto::Cave>(clonedCaveFile);
+    REQUIRE(clonedCaveProto.has_id());
+    clonedCaveProto.clear_id();
+    writeProtoToJsonFile(clonedCaveFile, clonedCaveProto);
+
+    REQUIRE_NOTHROW(cloneRepository.commitAll(QStringLiteral("Remove cave id"),
+                                              QStringLiteral("simulate remote missing identity")));
+    auto clonePushFuture = cloneRepository.push();
+    REQUIRE(AsyncFuture::waitForFinished(clonePushFuture, 10000));
+    INFO("Remote clone push error:" << clonePushFuture.result().errorMessage().toStdString());
+    REQUIRE(!clonePushFuture.result().hasError());
+
+    auto remoteHeadOid = [repository](const QString& remoteRepoPath) -> git_oid {
+        git_repository* remoteRepoLocal = nullptr;
+        REQUIRE(git_repository_open(&remoteRepoLocal, remoteRepoPath.toLocal8Bit().constData()) == GIT_OK);
+        auto remoteRepoGuard = qScopeGuard([&remoteRepoLocal]() {
+            if (remoteRepoLocal) {
+                git_repository_free(remoteRepoLocal);
+            }
+        });
+
+        const QString remoteRefName = QStringLiteral("refs/heads/") + repository->headBranchName();
+        git_reference* remoteBranch = nullptr;
+        REQUIRE(git_reference_lookup(&remoteBranch, remoteRepoLocal, remoteRefName.toLocal8Bit().constData()) == GIT_OK);
+        auto remoteBranchGuard = qScopeGuard([&remoteBranch]() {
+            if (remoteBranch) {
+                git_reference_free(remoteBranch);
+            }
+        });
+
+        const git_oid* remoteHead = git_reference_target(remoteBranch);
+        REQUIRE(remoteHead != nullptr);
+        return *remoteHead;
+    };
+
+    const git_oid remoteHeadBeforeRepair = remoteHeadOid(remoteRepoPath);
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+
+    const git_oid remoteHeadAfterRepair = remoteHeadOid(remoteRepoPath);
+    CHECK(git_oid_cmp(&remoteHeadBeforeRepair, &remoteHeadAfterRepair) != 0);
+
+    const QString localRepoPath = QFileInfo(project->filename()).absoluteDir().absolutePath();
+    git_repository* localRepo = nullptr;
+    REQUIRE(git_repository_open(&localRepo, localRepoPath.toLocal8Bit().constData()) == GIT_OK);
+    auto localRepoGuard = qScopeGuard([&localRepo]() {
+        if (localRepo) {
+            git_repository_free(localRepo);
+        }
+    });
+
+    git_reference* localHeadRef = nullptr;
+    REQUIRE(git_repository_head(&localHeadRef, localRepo) == GIT_OK);
+    auto localHeadRefGuard = qScopeGuard([&localHeadRef]() {
+        if (localHeadRef) {
+            git_reference_free(localHeadRef);
+        }
+    });
+
+    const git_oid* localHeadOid = git_reference_target(localHeadRef);
+    REQUIRE(localHeadOid != nullptr);
+    git_commit* localHeadCommit = nullptr;
+    REQUIRE(git_commit_lookup(&localHeadCommit, localRepo, localHeadOid) == GIT_OK);
+    auto localHeadCommitGuard = qScopeGuard([&localHeadCommit]() {
+        if (localHeadCommit) {
+            git_commit_free(localHeadCommit);
+        }
+    });
+    const QString localHeadMessage = QString::fromUtf8(git_commit_message(localHeadCommit));
+    CHECK(localHeadMessage.startsWith(QStringLiteral("Sync Reconcile from CaveWhere")));
+
+    QTemporaryDir verifyCloneDir;
+    REQUIRE(verifyCloneDir.isValid());
+    const QString verifyClonePath = QDir(verifyCloneDir.path()).filePath(QStringLiteral("clone-verify"));
+
+    QQuickGit::GitRepository verifyRepository;
+    verifyRepository.setDirectory(QDir(verifyClonePath));
+    verifyRepository.setAccount(rootData->account());
+
+    auto verifyCloneFuture = verifyRepository.clone(QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(AsyncFuture::waitForFinished(verifyCloneFuture, 10000));
+    INFO("Verify clone error:" << verifyCloneFuture.result().errorMessage().toStdString());
+    REQUIRE(!verifyCloneFuture.result().hasError());
+
+    QDirIterator verifyCaveFileIterator(verifyClonePath,
+                                        QStringList{QStringLiteral("*.cwcave")},
+                                        QDir::Files,
+                                        QDirIterator::Subdirectories);
+    REQUIRE(verifyCaveFileIterator.hasNext());
+    const QString repairedCaveFile = verifyCaveFileIterator.next();
+
+    const auto repairedCaveProto = loadProtoFromJsonFile<CavewhereProto::Cave>(repairedCaveFile);
+    REQUIRE(repairedCaveProto.has_id());
+    CHECK_FALSE(repairedCaveProto.id().empty());
+}
+
 TEST_CASE("cwProject sync creates and pushes merge commit for diverged non-conflicting changes", "[cwProject]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();

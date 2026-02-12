@@ -4341,7 +4341,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
                         .future();
                 };
 
-                if (attemptState->reconcileOutcome->outcome != ReconcileExternalResult::Outcome::Mutated) {
+                if (attemptState->reconcileOutcome->outcome == ReconcileExternalResult::Outcome::NoOp) {
                     return pushWithoutRetry();
                 }
 
@@ -4475,7 +4475,7 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
 
             ReconcileExternalResult reconcileResult;
             reconcileResult.outcome = d->pendingIdentityRepairSave
-                                          ? ReconcileExternalResult::Outcome::Mutated
+                                          ? ReconcileExternalResult::Outcome::MutatedRequiresPrePushPersistence
                                           : ReconcileExternalResult::Outcome::NoOp;
             return Monad::Result<ReconcileExternalResult>(reconcileResult);
         })
