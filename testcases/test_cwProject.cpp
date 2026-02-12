@@ -2918,6 +2918,14 @@ TEST_CASE("cwProject sync structurally reconciles note scraps by id without repl
     REQUIRE(reorderedScrapAfterSync != nullptr);
     REQUIRE(reorderedScrapAfterSync->points().size() > 1);
     CHECK(reorderedScrapAfterSync->points().at(1) == QPointF(0.39, 0.14));
+
+    const auto syncReport = project->lastSyncReport();
+    REQUIRE(syncReport.has_value());
+    CHECK(std::any_of(syncReport->diagnostics.cbegin(),
+                      syncReport->diagnostics.cend(),
+                      [](const QString& diagnostic) {
+                          return diagnostic.contains(QStringLiteral("reconcile handler cwNoteSyncMergeHandler applied"));
+                      }));
 }
 
 TEST_CASE("cwProject sync incrementally reconciles pulled scrap station updates", "[cwProject][sync]") {
@@ -3177,6 +3185,14 @@ TEST_CASE("cwProject sync falls back to full reconcile for ambiguous scrap struc
     CHECK(syncedCave != localCavePtr.data());
     CHECK(syncedTrip != localTripPtr.data());
     CHECK(syncedNote != localNotePtr.data());
+
+    const auto syncReport = project->lastSyncReport();
+    REQUIRE(syncReport.has_value());
+    CHECK(std::any_of(syncReport->diagnostics.cbegin(),
+                      syncReport->diagnostics.cend(),
+                      [](const QString& diagnostic) {
+                          return diagnostic.contains(QStringLiteral("reconcile fallback to full reload"));
+                      }));
 }
 
 TEST_CASE("cwProject sync handles local edit churn during reconcile apply window", "[cwProject][sync]") {

@@ -146,8 +146,8 @@ target_include_directories(cavewherelib
 )
 
 # Collect source files cavewhereLib
-file(GLOB cavewherelib_CPP_FILES "src/*.cpp" "src/utils/*.cpp" "src/rendering/*.cpp")
-file(GLOB cavewherelib_H_FILES "src/*.h" "src/utils/*.h" "src/rendering/*.h")
+file(GLOB cavewherelib_CPP_FILES CONFIGURE_DEPENDS "src/*.cpp" "src/utils/*.cpp" "src/rendering/*.cpp")
+file(GLOB cavewherelib_H_FILES CONFIGURE_DEPENDS "src/*.h" "src/utils/*.h" "src/rendering/*.h")
 
 # file(GLOB cavewhere_QML_FILES "qml/*.qml" "qml/*.js")
 # target_sources(CaveWhere PRIVATE ${cavewhere_QML_FILES})
