@@ -409,9 +409,10 @@ Implementation checklist:
 - [x] Detect note reorder (same stable note IDs, different order) as reorder-only, not `FullModelReplace`.
 - [x] Apply deterministic note reorder while preserving existing note QObject identity where mapping is unambiguous.
 - [x] Keep fallback to full reload for duplicate/null note IDs or unresolved mapping.
-- [ ] 4B.2 Scrap merge extraction
-- [ ] Add `cwScrapSyncMergeHandler` (or equivalent merge component) and move nested scrap merge logic out of note handler.
-- [ ] Keep note handler responsible for note-level routing/dispatch only.
+- [x] 4B.2 Scrap merge extraction
+- [x] Add `cwScrapSyncMergeHandler` (or equivalent merge component) and move nested scrap merge logic out of note handler.
+- [x] Keep note handler responsible for note-level routing/dispatch only.
+- [x] Add focused unit tests for scrap merge planning/apply in `testcases/test_cwScrapMergePlanBuilder.cpp`.
 - [ ] 4B.3 Stable identity for stations/leads
 - [ ] Add stable IDs for `NoteStation` and `Lead` in proto schema, runtime data structs, and serialization.
 - [ ] Add load-time backfill/repair for missing/duplicate station/lead IDs with deterministic repair policy.
@@ -445,6 +446,11 @@ Test checklist (add to `testcases/test_cwProject.cpp`):
 - [ ] `TEST_CASE("cwProject sync emits diagnostic when geometry conflict resolves to ours", "[cwProject][sync]")`
 - [ ] `TEST_CASE("cwProject sync falls back to full reconcile when station id mapping is ambiguous", "[cwProject][sync]")`
 - [ ] `TEST_CASE("cwProject sync falls back to full reconcile when lead id mapping is ambiguous", "[cwProject][sync]")`
+
+Focused unit tests (`testcases/test_cwScrapMergePlanBuilder.cpp`):
+- [x] `TEST_CASE("cwScrap merge plan builder accepts note reorder with stable identities", "[cwScrapMerge][sync]")`
+- [x] `TEST_CASE("cwScrap merge plan builder rejects ambiguous note identities", "[cwScrapMerge][sync]")`
+- [x] `TEST_CASE("cwScrap merge applier applies deterministic payload by planned scrap order", "[cwScrapMerge][sync]")`
 
 Exit criteria:
 - concurrent note+scrap edits merge deterministically or explicitly fallback with no silent data loss.
