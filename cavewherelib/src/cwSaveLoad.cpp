@@ -1054,6 +1054,44 @@ struct cwSaveLoad::Data {
     std::shared_ptr<Operation> activeOperation;
     quint64 operationGeneration = 0;
     quint64 modelMutationEpoch = 0;
+    quint64 localMutationEpoch = 0;
+    bool suppressLocalMutationTracking = false;
+
+    struct RemoteApplyGuardState {
+        bool active = false;
+        bool mutationObserved = false;
+        quint64 baselineLocalMutationEpoch = 0;
+
+        void begin(quint64 currentEpoch)
+        {
+            active = true;
+            mutationObserved = false;
+            baselineLocalMutationEpoch = currentEpoch;
+        }
+
+        void end()
+        {
+            *this = {};
+        }
+
+        void noteMutation()
+        {
+            if (active) {
+                mutationObserved = true;
+            }
+        }
+
+        bool hasLocalMutation(quint64 currentEpoch) const
+        {
+            if (!active) {
+                return false;
+            }
+
+            return mutationObserved || currentEpoch != baselineLocalMutationEpoch;
+        }
+    };
+
+    RemoteApplyGuardState remoteApplyGuard;
     bool pendingIdentityRepairSave = false;
     std::optional<cwSaveLoad::SyncReport> lastSyncReport;
 
@@ -1524,6 +1562,11 @@ struct cwSaveLoad::Data {
     template<typename T>
     void saveObject(cwSaveLoad* context, const T* object) {
         if(saveEnabled) {
+            if (!suppressLocalMutationTracking) {
+                ++localMutationEpoch;
+                remoteApplyGuard.noteMutation();
+            }
+
             // qDebug() << "Saving object:" << object << object->name() << dir(object);
             if constexpr (std::is_same_v<T, cwCave>) {
                 saveProtoMessage(context, cwSaveLoad::toProtoCave(object), object);
@@ -1960,6 +2003,12 @@ QFuture<ResultBase> cwSaveLoad::persistIdentityRepairSave()
     if (region == nullptr) {
         return AsyncFuture::completed(ResultBase(QStringLiteral("No caving region is available for repair save.")));
     }
+
+    const bool previousSuppressTracking = d->suppressLocalMutationTracking;
+    d->suppressLocalMutationTracking = true;
+    auto suppressTrackingGuard = qScopeGuard([this, previousSuppressTracking]() {
+        d->suppressLocalMutationTracking = previousSuppressTracking;
+    });
 
     saveProject(projectRootDir(), region);
     for (cwCave* cave : region->caves()) {
@@ -4193,6 +4242,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
 
     struct SyncAttemptState {
         quint64 planEpoch = 0;
+        quint64 localMutationPlanEpoch = 0;
         std::optional<SyncReport> report;
         std::optional<ReconcileExternalResult> reconcileOutcome;
     };
@@ -4280,6 +4330,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
                         }
                         const QString afterHead = afterHeadResult.value();
                         attemptState->planEpoch = d->modelMutationEpoch;
+                        attemptState->localMutationPlanEpoch = d->localMutationEpoch;
 
                         auto reportFuture = QtConcurrent::run([repoPath, beforeHead, afterHead, pullState, beforeSnapshotFuture]() {
                             return buildSyncReport(repoPath,
@@ -4325,6 +4376,13 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
                     return AsyncFuture::completed(ResultBase(QStringLiteral("Sync report is unavailable.")));
                 }
 
+                if (d->localMutationEpoch != attemptState->localMutationPlanEpoch) {
+                    return AsyncFuture::completed(ResultBase(
+                        QStringLiteral("Sync plan is stale because the model changed before apply."),
+                        static_cast<int>(SyncErrorCode::RetryEpochChanged)));
+                }
+
+                d->remoteApplyGuard.begin(d->localMutationEpoch);
                 auto reconcileImplFuture =
                     reconcileExternalImpl(*attemptState->report,
                                           syncGeneration,
@@ -4361,7 +4419,21 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
                     return AsyncFuture::completed(ResultBase(QStringLiteral("Reconcile outcome is unavailable.")));
                 }
 
-                const auto pushWithoutRetry = [this, repo, syncGeneration]() -> QFuture<ResultBase> {
+                const auto staleFromRemoteApplyGuard = [this]() -> std::optional<ResultBase> {
+                    if (!d->remoteApplyGuard.hasLocalMutation(d->localMutationEpoch)) {
+                        return std::nullopt;
+                    }
+
+                    return ResultBase(
+                        QStringLiteral("Sync plan is stale because the model changed during remote apply."),
+                        static_cast<int>(SyncErrorCode::RetryEpochChanged));
+                };
+
+                const auto pushWithoutRetry = [this, repo, syncGeneration, staleFromRemoteApplyGuard]() -> QFuture<ResultBase> {
+                    if (const auto staleResult = staleFromRemoteApplyGuard()) {
+                        return AsyncFuture::completed(*staleResult);
+                    }
+
                     auto pushFuture = repo->push();
                     return AsyncFuture::observe(pushFuture)
                         .context(this, [this, pushFuture, syncGeneration]() -> ResultBase {
@@ -4377,9 +4449,13 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
                     return pushWithoutRetry();
                 }
 
+                if (const auto staleResult = staleFromRemoteApplyGuard()) {
+                    return AsyncFuture::completed(*staleResult);
+                }
+
                 auto repairFuture = persistIdentityRepairSave();
                 return AsyncFuture::observe(repairFuture)
-                    .context(this, [this, repairFuture, pushWithoutRetry, syncGeneration]() -> QFuture<ResultBase> {
+                    .context(this, [this, repairFuture, pushWithoutRetry, staleFromRemoteApplyGuard, syncGeneration]() -> QFuture<ResultBase> {
                         if (d->operationGeneration != syncGeneration || d->retiring) {
                             return AsyncFuture::completed(ResultBase(QStringLiteral("Operation canceled.")));
                         }
@@ -4387,6 +4463,10 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
                         const auto repairResult = repairFuture.result();
                         if (repairResult.hasError()) {
                             return AsyncFuture::completed(repairResult);
+                        }
+
+                        if (const auto staleResult = staleFromRemoteApplyGuard()) {
+                            return AsyncFuture::completed(*staleResult);
                         }
 
                         d->pendingIdentityRepairSave = false;
@@ -4406,6 +4486,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
         AsyncFuture::observe(finalizeFuture)
             .context(this, [this, finalizeFuture, retryCount, scheduleAttempt, syncDeferred]() {
                 const auto attemptResult = finalizeFuture.result();
+                d->remoteApplyGuard.end();
                 if (!attemptResult.hasError()) {
                     syncDeferred->complete(attemptResult);
                     return;
