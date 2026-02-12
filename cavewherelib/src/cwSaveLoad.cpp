@@ -483,15 +483,7 @@ bool isPushRejectedByRemoteAdvance(const ResultBase& pushResult)
         return false;
     }
 
-    const QString message = pushResult.errorMessage().toLower();
-    return message.contains(QStringLiteral("non-fast-forward"))
-           || message.contains(QStringLiteral("failed to push some refs"))
-           || message.contains(QStringLiteral("updates were rejected"))
-           || message.contains(QStringLiteral("fetch first"))
-           || message.contains(QStringLiteral("tip of your current branch is behind"))
-           || message.contains(QStringLiteral("cannot lock ref"))
-           || message.contains(QStringLiteral("contains commits that are not present locally"))
-           || message.contains(QStringLiteral("cannot push because a reference that you are trying to update on the remote"));
+    return QQuickGit::GitRepository::isPushRejectedByRemoteAdvanceError(pushResult.errorCode());
 }
 
 QString defaultCommitSubject(const QString& action)
