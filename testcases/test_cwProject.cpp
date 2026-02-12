@@ -49,6 +49,9 @@ using namespace Catch;
 #include <QEventLoop>
 #include <QTimer>
 #include <QSignalSpy>
+#include <QElapsedTimer>
+#include <QCoreApplication>
+#include <QThread>
 #include <QtCore/qscopeguard.h>
 
 //libgit2
@@ -3322,6 +3325,175 @@ TEST_CASE("cwProject sync is reentrant and converges to deterministic head", "[c
     QFile finalFile(reentrantFilePath);
     REQUIRE(finalFile.open(QIODevice::ReadOnly));
     CHECK(finalFile.readAll() == QByteArray("sync called twice\n"));
+}
+
+TEST_CASE("cwProject sync stress under remote churn retries safely and converges", "[cwProject][sync][stress]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Sync Stress Tester"));
+    rootData->account()->setEmail(QStringLiteral("sync.stress.tester@example.com"));
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Retry Stress Cave"));
+
+    QTemporaryDir projectDir;
+    REQUIRE(projectDir.isValid());
+    const QString projectPath = QDir(projectDir.path()).filePath(QStringLiteral("sync-retry-stress.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+
+    auto* repository = project->repository();
+    REQUIRE(repository != nullptr);
+
+    QTemporaryDir remoteRoot;
+    REQUIRE(remoteRoot.isValid());
+    const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
+
+    git_repository* remoteRepo = nullptr;
+    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
+    if (remoteRepo) {
+        git_repository_free(remoteRepo);
+        remoteRepo = nullptr;
+    }
+
+    const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
+                                                         QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(addRemoteError.isEmpty());
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    REQUIRE(project->errorModel()->count() == 0);
+
+    QTemporaryDir cloneDir;
+    REQUIRE(cloneDir.isValid());
+    const QString clonePath = QDir(cloneDir.path()).filePath(QStringLiteral("clone-2"));
+
+    QQuickGit::GitRepository churnRepository;
+    churnRepository.setDirectory(QDir(clonePath));
+    churnRepository.setAccount(rootData->account());
+
+    auto cloneFuture = churnRepository.clone(QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(AsyncFuture::waitForFinished(cloneFuture, 10000));
+    INFO("Clone error:" << cloneFuture.result().errorMessage().toStdString());
+    REQUIRE(!cloneFuture.result().hasError());
+
+    const QString localRepoPath = QFileInfo(project->filename()).absoluteDir().absolutePath();
+    const QString localChurnFilePath = QDir(localRepoPath).filePath(QStringLiteral("local-retry-stress.txt"));
+    const QString remoteChurnFilePath = QDir(clonePath).filePath(QStringLiteral("remote-retry-stress.txt"));
+
+    auto appendLine = [](const QString& path, const QByteArray& line) {
+        QFile file(path);
+        REQUIRE(file.open(QIODevice::WriteOnly | QIODevice::Append));
+        REQUIRE(file.write(line) == line.size());
+        file.close();
+    };
+
+    auto pushRemoteChurn = [&churnRepository, &remoteChurnFilePath, &appendLine](int i) {
+        appendLine(remoteChurnFilePath, QStringLiteral("remote-%1\n").arg(i).toUtf8());
+
+        REQUIRE_NOTHROW(churnRepository.commitAll(QStringLiteral("Remote churn %1").arg(i),
+                                                  QStringLiteral("retry stress remote update")));
+
+        auto pushFuture = churnRepository.push();
+        REQUIRE(AsyncFuture::waitForFinished(pushFuture, 10000));
+        if (!pushFuture.result().hasError()) {
+            return;
+        }
+
+        auto pullFuture = churnRepository.pull();
+        REQUIRE(AsyncFuture::waitForFinished(pullFuture, 10000));
+        INFO("Churn pull error:" << pullFuture.result().errorMessage().toStdString());
+        REQUIRE(!pullFuture.result().hasError());
+
+        auto retryPushFuture = churnRepository.push();
+        REQUIRE(AsyncFuture::waitForFinished(retryPushFuture, 10000));
+        INFO("Churn push retry error:" << retryPushFuture.result().errorMessage().toStdString());
+        REQUIRE(!retryPushFuture.result().hasError());
+    };
+
+    appendLine(localChurnFilePath, QByteArray("local-seed\n"));
+    project->waitSaveToFinish();
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+
+    QElapsedTimer churnTimer;
+    churnTimer.start();
+    constexpr int ChurnBudgetMs = 8000;
+    int remotePushCount = 0;
+    while (rootData->futureManagerModel()->rowCount() > 0 && churnTimer.elapsed() < ChurnBudgetMs) {
+        ++remotePushCount;
+        pushRemoteChurn(remotePushCount);
+
+        appendLine(localChurnFilePath, QStringLiteral("local-%1\n").arg(remotePushCount).toUtf8());
+        cave->setName(QStringLiteral("Retry Stress Cave %1").arg(remotePushCount));
+
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+        QThread::msleep(5);
+    }
+
+    const bool syncTimedOutDuringChurn = rootData->futureManagerModel()->rowCount() > 0;
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    WARN("sync timed out during churn window: " << (syncTimedOutDuringChurn ? "yes" : "no"));
+    CHECK(remotePushCount > 0);
+
+    bool sawRetryCapWarning = false;
+    bool sawRawPushRejectWarning = false;
+    QStringList warningMessages;
+    for (int i = 0; i < project->errorModel()->count(); ++i) {
+        const auto warning = project->errorModel()->at(i);
+        const QString message = warning.message();
+        warningMessages.append(message);
+        if (message.contains(QStringLiteral("did not complete after"), Qt::CaseInsensitive)) {
+            sawRetryCapWarning = true;
+        }
+        if (message.contains(QStringLiteral("contains commits that are not present locally"), Qt::CaseInsensitive)
+            || message.contains(QStringLiteral("cannot push because a reference that you are trying to update on the remote"), Qt::CaseInsensitive)) {
+            sawRawPushRejectWarning = true;
+        }
+    }
+    WARN("retry cap warning observed during churn: " << (sawRetryCapWarning ? "yes" : "no"));
+    WARN("warnings during churn sync: " << warningMessages.join(QStringLiteral(" | ")).toStdString());
+    CHECK_FALSE(sawRawPushRejectWarning);
+
+    project->errorModel()->clear();
+    appendLine(localChurnFilePath, QByteArray("local-final\n"));
+    project->waitSaveToFinish();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+
+    QDirIterator payloadIterator(localRepoPath,
+                                 QStringList{
+                                     QStringLiteral("*.cwproj"),
+                                     QStringLiteral("*.cwcave"),
+                                     QStringLiteral("*.cwtrip"),
+                                     QStringLiteral("*.cwnote"),
+                                     QStringLiteral("*.cwnote3d")
+                                 },
+                                 QDir::Files,
+                                 QDirIterator::Subdirectories);
+    while (payloadIterator.hasNext()) {
+        const QString payloadPath = payloadIterator.next();
+        QFile payload(payloadPath);
+        REQUIRE(payload.open(QIODevice::ReadOnly));
+        const QByteArray data = payload.readAll();
+        CHECK(!data.contains("<<<<<<<"));
+        CHECK(!data.contains("======="));
+        CHECK(!data.contains(">>>>>>>"));
+    }
+
+    auto loadAllFuture = cwSaveLoad::loadAll(project->filename());
+    REQUIRE(AsyncFuture::waitForFinished(loadAllFuture, 10000));
+    CHECK_FALSE(loadAllFuture.result().hasError());
 }
 
 TEST_CASE("cwProject sync conflict keeps ours and push succeeds", "[cwProject]") {

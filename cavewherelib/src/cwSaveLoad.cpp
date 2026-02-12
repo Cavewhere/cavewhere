@@ -489,7 +489,9 @@ bool isPushRejectedByRemoteAdvance(const ResultBase& pushResult)
            || message.contains(QStringLiteral("updates were rejected"))
            || message.contains(QStringLiteral("fetch first"))
            || message.contains(QStringLiteral("tip of your current branch is behind"))
-           || message.contains(QStringLiteral("cannot lock ref"));
+           || message.contains(QStringLiteral("cannot lock ref"))
+           || message.contains(QStringLiteral("contains commits that are not present locally"))
+           || message.contains(QStringLiteral("cannot push because a reference that you are trying to update on the remote"));
 }
 
 QString defaultCommitSubject(const QString& action)
