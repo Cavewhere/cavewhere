@@ -4139,25 +4139,276 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
 {
     d->lastSyncReport.reset();
 
-    auto saveFlushFuture = d->enqueueOperation(this, Data::Operation::Type::SaveFlush, [this]() {
-        return saveFlushImpl();
-    });
-
-    auto queuedFuture = d->enqueueOperation(this, Data::Operation::Type::SyncProject, [this, saveFlushFuture]() {
-        Q_ASSERT(saveFlushFuture.isFinished());
-        const auto saveFlushResult = saveFlushFuture.result();
-        if (saveFlushResult.hasError()) {
-            return AsyncFuture::completed(saveFlushResult);
-        }
-
-        return syncImpl();
-    });
-
-    if (d->futureToken.isValid()) {
-        d->futureToken.addJob(cwFuture(QFuture<void>(queuedFuture), QStringLiteral("Syncing project")));
+    if (gitMode() == GitMode::NoGit) {
+        return AsyncFuture::completed(ResultBase(QStringLiteral("Sync is disabled for this project.")));
     }
 
-    return queuedFuture;
+    if (!syncEnabled()) {
+        return AsyncFuture::completed(ResultBase(QStringLiteral("Project sync is disabled in metadata.")));
+    }
+
+    if (d->projectFileName.isEmpty()) {
+        return AsyncFuture::completed(ResultBase(QStringLiteral("Project has no filename.")));
+    }
+
+    auto* repo = d->repository;
+    if (repo == nullptr) {
+        return AsyncFuture::completed(ResultBase(QStringLiteral("Git repository is unavailable.")));
+    }
+
+    const QString repoPath = repo->directory().absolutePath();
+    const quint64 syncGeneration = d->operationGeneration;
+
+    struct SyncAttemptState {
+        quint64 planEpoch = 0;
+        std::optional<SyncReport> report;
+        std::optional<ReconcileExternalResult> reconcileOutcome;
+    };
+
+    auto syncDeferred = std::make_shared<AsyncFuture::Deferred<ResultBase>>();
+    auto scheduleAttempt = std::make_shared<std::function<void(int)>>();
+
+    *scheduleAttempt = [this, repo, repoPath, syncGeneration, syncDeferred, scheduleAttempt](int retryCount) {
+        if (syncDeferred->future().isFinished()) {
+            return;
+        }
+
+        if (d->operationGeneration != syncGeneration || d->retiring) {
+            syncDeferred->complete(ResultBase(QStringLiteral("Operation canceled.")));
+            return;
+        }
+
+        auto attemptState = std::make_shared<SyncAttemptState>();
+
+        auto saveFlushFuture = d->enqueueOperation(this, Data::Operation::Type::SaveFlush, [this]() {
+            return saveFlushImpl();
+        });
+
+        auto syncPrepareFuture = d->enqueueOperation(
+            this,
+            Data::Operation::Type::SyncProject,
+            [this, repo, repoPath, syncGeneration, saveFlushFuture, attemptState]() -> QFuture<ResultBase> {
+                Q_ASSERT(saveFlushFuture.isFinished());
+                const auto saveFlushResult = saveFlushFuture.result();
+                if (saveFlushResult.hasError()) {
+                    return AsyncFuture::completed(saveFlushResult);
+                }
+
+                if (d->operationGeneration != syncGeneration || d->retiring) {
+                    return AsyncFuture::completed(ResultBase(QStringLiteral("Operation canceled.")));
+                }
+
+                auto commitResult = commitProjectChanges(defaultCommitSubject(QStringLiteral("Sync")),
+                                                         defaultCommitDescription());
+                if (commitResult.hasError()) {
+                    return AsyncFuture::completed(commitResult);
+                }
+
+                if (!hasRemoteConfigured(repo)) {
+                    return AsyncFuture::completed(
+                        ResultBase(QStringLiteral("No git remote is configured for this project.")));
+                }
+
+                const auto beforeHeadResult = QQuickGit::GitRepository::headCommitOid(repoPath);
+                if (beforeHeadResult.hasError()) {
+                    return AsyncFuture::completed(ResultBase(beforeHeadResult.errorMessage()));
+                }
+                const QString beforeHead = beforeHeadResult.value();
+
+                auto beforeSnapshotFuture = QtConcurrent::run([repoPath]() {
+                    return captureLfsSnapshot(repoPath);
+                });
+
+                auto pullFuture = repo->pull();
+                return AsyncFuture::observe(pullFuture)
+                    .context(this, [this, repoPath, beforeHead, beforeSnapshotFuture, pullFuture, syncGeneration, attemptState]() -> QFuture<ResultBase> {
+                        if (d->operationGeneration != syncGeneration || d->retiring) {
+                            return AsyncFuture::completed(ResultBase(QStringLiteral("Operation canceled.")));
+                        }
+
+                        const auto pullResult = pullFuture.result();
+                        if (pullResult.hasError()) {
+                            return AsyncFuture::completed(ResultBase(pullResult.errorMessage()));
+                        }
+
+                        const auto pullState = toPullState(pullResult.value().state());
+                        if (pullState == SyncReport::PullState::MergeConflicts) {
+                            return AsyncFuture::completed(ResultBase(QStringLiteral("Merge Conflicts need to be resolved")));
+                        }
+
+                        const auto pulledProjectResult = cwSaveLoad::loadProject(d->projectFileName);
+                        if (pulledProjectResult.hasError()) {
+                            return AsyncFuture::completed(ResultBase(pulledProjectResult.errorMessage(),
+                                                                     pulledProjectResult.errorCode()));
+                        }
+
+                        const auto afterHeadResult = QQuickGit::GitRepository::headCommitOid(repoPath);
+                        if (afterHeadResult.hasError()) {
+                            return AsyncFuture::completed(ResultBase(afterHeadResult.errorMessage()));
+                        }
+                        const QString afterHead = afterHeadResult.value();
+                        attemptState->planEpoch = d->modelMutationEpoch;
+
+                        auto reportFuture = QtConcurrent::run([repoPath, beforeHead, afterHead, pullState, beforeSnapshotFuture]() {
+                            return buildSyncReport(repoPath,
+                                                   beforeHead,
+                                                   afterHead,
+                                                   pullState,
+                                                   beforeSnapshotFuture.result());
+                        });
+
+                        return AsyncFuture::observe(reportFuture)
+                            .context(this, [this, reportFuture, attemptState, syncGeneration]() -> ResultBase {
+                                if (d->operationGeneration != syncGeneration || d->retiring) {
+                                    return ResultBase(QStringLiteral("Operation canceled."));
+                                }
+
+                                attemptState->report = reportFuture.result();
+                                d->lastSyncReport = attemptState->report;
+                                if (!attemptState->report.has_value()) {
+                                    return ResultBase(QStringLiteral("Sync report is unavailable."));
+                                }
+                                return ResultBase();
+                            })
+                            .future();
+                    })
+                    .future();
+            });
+
+        auto reconcileFuture = d->enqueueOperation(
+            this,
+            Data::Operation::Type::ReconcileExternal,
+            [this, syncPrepareFuture, syncGeneration, attemptState]() -> QFuture<ResultBase> {
+                Q_ASSERT(syncPrepareFuture.isFinished());
+                const auto syncPrepareResult = syncPrepareFuture.result();
+                if (syncPrepareResult.hasError()) {
+                    return AsyncFuture::completed(syncPrepareResult);
+                }
+
+                if (d->operationGeneration != syncGeneration || d->retiring) {
+                    return AsyncFuture::completed(ResultBase(QStringLiteral("Operation canceled.")));
+                }
+
+                if (!attemptState->report.has_value()) {
+                    return AsyncFuture::completed(ResultBase(QStringLiteral("Sync report is unavailable.")));
+                }
+
+                auto reconcileImplFuture =
+                    reconcileExternalImpl(*attemptState->report,
+                                          syncGeneration,
+                                          attemptState->planEpoch);
+                return AsyncFuture::observe(reconcileImplFuture)
+                    .context(this, [reconcileImplFuture, attemptState]() -> ResultBase {
+                        const auto reconcileResult = reconcileImplFuture.result();
+                        if (reconcileResult.hasError()) {
+                            return ResultBase(reconcileResult.errorMessage(),
+                                              reconcileResult.errorCode());
+                        }
+
+                        attemptState->reconcileOutcome = reconcileResult.value();
+                        return ResultBase();
+                    })
+                    .future();
+            });
+
+        auto finalizeFuture = d->enqueueOperation(
+            this,
+            Data::Operation::Type::SyncProject,
+            [this, repo, reconcileFuture, syncGeneration, attemptState]() -> QFuture<ResultBase> {
+                Q_ASSERT(reconcileFuture.isFinished());
+                const auto reconcileResult = reconcileFuture.result();
+                if (reconcileResult.hasError()) {
+                    return AsyncFuture::completed(reconcileResult);
+                }
+
+                if (d->operationGeneration != syncGeneration || d->retiring) {
+                    return AsyncFuture::completed(ResultBase(QStringLiteral("Operation canceled.")));
+                }
+
+                if (!attemptState->reconcileOutcome.has_value()) {
+                    return AsyncFuture::completed(ResultBase(QStringLiteral("Reconcile outcome is unavailable.")));
+                }
+
+                const auto pushWithoutRetry = [this, repo, syncGeneration]() -> QFuture<ResultBase> {
+                    auto pushFuture = repo->push();
+                    return AsyncFuture::observe(pushFuture)
+                        .context(this, [this, pushFuture, syncGeneration]() -> ResultBase {
+                            if (d->operationGeneration != syncGeneration || d->retiring) {
+                                return ResultBase(QStringLiteral("Operation canceled."));
+                            }
+                            return pushFuture.result();
+                        })
+                        .future();
+                };
+
+                if (attemptState->reconcileOutcome->outcome != ReconcileExternalResult::Outcome::Mutated) {
+                    return pushWithoutRetry();
+                }
+
+                auto repairFuture = persistIdentityRepairSave();
+                return AsyncFuture::observe(repairFuture)
+                    .context(this, [this, repairFuture, pushWithoutRetry, syncGeneration]() -> QFuture<ResultBase> {
+                        if (d->operationGeneration != syncGeneration || d->retiring) {
+                            return AsyncFuture::completed(ResultBase(QStringLiteral("Operation canceled.")));
+                        }
+
+                        const auto repairResult = repairFuture.result();
+                        if (repairResult.hasError()) {
+                            return AsyncFuture::completed(repairResult);
+                        }
+
+                        d->pendingIdentityRepairSave = false;
+                        ++d->modelMutationEpoch;
+
+                        auto commitResult = commitProjectChanges(defaultCommitSubject(QStringLiteral("Sync Reconcile")),
+                                                                 defaultCommitDescription());
+                        if (commitResult.hasError()) {
+                            return AsyncFuture::completed(commitResult);
+                        }
+
+                        return pushWithoutRetry();
+                    })
+                    .future();
+            });
+
+        AsyncFuture::observe(finalizeFuture)
+            .context(this, [this, finalizeFuture, retryCount, scheduleAttempt, syncDeferred]() {
+                const auto attemptResult = finalizeFuture.result();
+                if (!attemptResult.hasError()) {
+                    syncDeferred->complete(attemptResult);
+                    return;
+                }
+
+                QString retryReason;
+                if (attemptResult.errorCodeTo<SyncErrorCode>() == SyncErrorCode::RetryEpochChanged) {
+                    retryReason = QStringLiteral("model changed before reconcile apply");
+                } else if (isPushRejectedByRemoteAdvance(attemptResult)) {
+                    retryReason = QStringLiteral("remote advanced during push");
+                }
+
+                if (retryReason.isEmpty()) {
+                    syncDeferred->complete(attemptResult);
+                    return;
+                }
+
+                if (retryCount >= SyncMaxRetriesPerSession) {
+                    syncDeferred->complete(syncRetryLimitResult(retryReason));
+                    return;
+                }
+
+                (*scheduleAttempt)(retryCount + 1);
+            })
+            .future();
+    };
+
+    (*scheduleAttempt)(0);
+
+    if (d->futureToken.isValid()) {
+        d->futureToken.addJob(cwFuture(QFuture<void>(syncDeferred->future()),
+                                       QStringLiteral("Syncing project")));
+    }
+
+    return syncDeferred->future();
 }
 
 std::optional<cwSaveLoad::SyncReport> cwSaveLoad::lastSyncReport() const
@@ -4229,197 +4480,6 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
             return Monad::Result<ReconcileExternalResult>(reconcileResult);
         })
         .future();
-}
-
-QFuture<Monad::ResultBase> cwSaveLoad::syncImpl()
-{
-    const quint64 syncGeneration = d->operationGeneration;
-
-    if (gitMode() == GitMode::NoGit) {
-        return AsyncFuture::completed(ResultBase(QStringLiteral("Sync is disabled for this project.")));
-    }
-
-    if (!syncEnabled()) {
-        return AsyncFuture::completed(ResultBase(QStringLiteral("Project sync is disabled in metadata.")));
-    }
-
-    if (d->projectFileName.isEmpty()) {
-        return AsyncFuture::completed(ResultBase(QStringLiteral("Project has no filename.")));
-    }
-
-    auto* repo = d->repository;
-    if (repo == nullptr) {
-        return AsyncFuture::completed(ResultBase(QStringLiteral("Git repository is unavailable.")));
-    }
-
-    const QString repoPath = repo->directory().absolutePath();
-
-    auto syncAttempt = std::make_shared<std::function<QFuture<ResultBase>(int)>>();
-    *syncAttempt = [this, repo, repoPath, syncGeneration, syncAttempt](int retryCount) -> QFuture<ResultBase> {
-        if (d->operationGeneration != syncGeneration || d->retiring) {
-            return AsyncFuture::completed(ResultBase(QStringLiteral("Operation canceled.")));
-        }
-
-        const auto retryOrFail = [syncAttempt, retryCount](const QString& reason) -> QFuture<ResultBase> {
-            if (retryCount >= SyncMaxRetriesPerSession) {
-                return AsyncFuture::completed(syncRetryLimitResult(reason));
-            }
-            return (*syncAttempt)(retryCount + 1);
-        };
-
-        return saveFlushImpl()
-            .then(this, [this, repo, repoPath, syncGeneration, retryOrFail](ResultBase saveFlushResult) -> QFuture<ResultBase> {
-                if (saveFlushResult.hasError()) {
-                    return AsyncFuture::completed(saveFlushResult);
-                }
-
-                if (d->operationGeneration != syncGeneration || d->retiring) {
-                    return AsyncFuture::completed(ResultBase(QStringLiteral("Operation canceled.")));
-                }
-
-                auto commitResult = commitProjectChanges(defaultCommitSubject(QStringLiteral("Sync")),
-                                                         defaultCommitDescription());
-                if (commitResult.hasError()) {
-                    return AsyncFuture::completed(commitResult);
-                }
-
-                if (!hasRemoteConfigured(repo)) {
-                    return AsyncFuture::completed(
-                        ResultBase(QStringLiteral("No git remote is configured for this project.")));
-                }
-
-                const auto beforeHeadResult = QQuickGit::GitRepository::headCommitOid(repoPath);
-                if (beforeHeadResult.hasError()) {
-                    return AsyncFuture::completed(ResultBase(beforeHeadResult.errorMessage()));
-                }
-                const QString beforeHead = beforeHeadResult.value();
-
-                auto beforeSnapshotFuture = QtConcurrent::run([repoPath]() {
-                    return captureLfsSnapshot(repoPath);
-                });
-
-                auto pullFuture = repo->pull();
-                return AsyncFuture::observe(pullFuture)
-                    .context(this, [this, repo, repoPath, beforeHead, beforeSnapshotFuture, pullFuture, syncGeneration, retryOrFail]() -> QFuture<ResultBase> {
-                        if (d->operationGeneration != syncGeneration || d->retiring) {
-                            return AsyncFuture::completed(ResultBase(QStringLiteral("Operation canceled.")));
-                        }
-
-                        const auto pullResult = pullFuture.result();
-                        if (pullResult.hasError()) {
-                            return AsyncFuture::completed(ResultBase(pullResult.errorMessage()));
-                        }
-
-                        const auto pullState = toPullState(pullResult.value().state());
-                        if (pullState == SyncReport::PullState::MergeConflicts) {
-                            return AsyncFuture::completed(ResultBase(QStringLiteral("Merge Conflicts need to be resolved")));
-                        }
-
-                        const auto pulledProjectResult = cwSaveLoad::loadProject(d->projectFileName);
-                        if (pulledProjectResult.hasError()) {
-                            return AsyncFuture::completed(ResultBase(pulledProjectResult.errorMessage(),
-                                                                     pulledProjectResult.errorCode()));
-                        }
-
-                        const auto afterHeadResult = QQuickGit::GitRepository::headCommitOid(repoPath);
-                        if (afterHeadResult.hasError()) {
-                            return AsyncFuture::completed(ResultBase(afterHeadResult.errorMessage()));
-                        }
-                        const QString afterHead = afterHeadResult.value();
-                        const quint64 planEpoch = d->modelMutationEpoch;
-
-                        auto reportFuture = QtConcurrent::run([repoPath, beforeHead, afterHead, pullState, beforeSnapshotFuture]() {
-                            return buildSyncReport(repoPath,
-                                                   beforeHead,
-                                                   afterHead,
-                                                   pullState,
-                                                   beforeSnapshotFuture.result());
-                        });
-
-                        return AsyncFuture::observe(reportFuture)
-                            .context(this, [this, repo, reportFuture, syncGeneration, planEpoch, retryOrFail]() -> QFuture<ResultBase> {
-                                if (d->operationGeneration != syncGeneration || d->retiring) {
-                                    return AsyncFuture::completed(ResultBase(QStringLiteral("Operation canceled.")));
-                                }
-
-                                d->lastSyncReport = reportFuture.result();
-                                if (!d->lastSyncReport.has_value()) {
-                                    return AsyncFuture::completed(ResultBase(QStringLiteral("Sync report is unavailable.")));
-                                }
-
-                                const auto pushWithRetry = [this, repo, syncGeneration, retryOrFail]() -> QFuture<ResultBase> {
-                                    auto pushFuture = repo->push();
-                                    return AsyncFuture::observe(pushFuture)
-                                        .context(this, [this, pushFuture, syncGeneration, retryOrFail]() -> QFuture<ResultBase> {
-                                            if (d->operationGeneration != syncGeneration || d->retiring) {
-                                                return AsyncFuture::completed(ResultBase(QStringLiteral("Operation canceled.")));
-                                            }
-
-                                            const auto pushResult = pushFuture.result();
-                                            if (isPushRejectedByRemoteAdvance(pushResult)) {
-                                                return retryOrFail(QStringLiteral("remote advanced during push"));
-                                            }
-                                            return AsyncFuture::completed(pushResult);
-                                        })
-                                        .future();
-                                };
-
-                                auto reconcileFuture = reconcileExternalImpl(*d->lastSyncReport, syncGeneration, planEpoch);
-                                return AsyncFuture::observe(reconcileFuture)
-                                    .context(this, [this, reconcileFuture, pushWithRetry, syncGeneration, retryOrFail]() -> QFuture<ResultBase> {
-                                        if (d->operationGeneration != syncGeneration || d->retiring) {
-                                            return AsyncFuture::completed(ResultBase(QStringLiteral("Operation canceled.")));
-                                        }
-
-                                        const auto reconcileResult = reconcileFuture.result();
-                                        if (reconcileResult.hasError()) {
-                                            if (reconcileResult.errorCodeTo<SyncErrorCode>() == SyncErrorCode::RetryEpochChanged) {
-                                                return retryOrFail(QStringLiteral("model changed before reconcile apply"));
-                                            }
-                                            return AsyncFuture::completed(ResultBase(reconcileResult.errorMessage(),
-                                                                                     reconcileResult.errorCode()));
-                                        }
-
-                                        const auto outcome = reconcileResult.value().outcome;
-                                        if (outcome != ReconcileExternalResult::Outcome::Mutated) {
-                                            return pushWithRetry();
-                                        }
-
-                                        auto repairFuture = persistIdentityRepairSave();
-                                        return AsyncFuture::observe(repairFuture)
-                                            .context(this, [this, repairFuture, pushWithRetry, syncGeneration]() -> QFuture<ResultBase> {
-                                                if (d->operationGeneration != syncGeneration || d->retiring) {
-                                                    return AsyncFuture::completed(ResultBase(QStringLiteral("Operation canceled.")));
-                                                }
-
-                                                const auto repairResult = repairFuture.result();
-                                                if (repairResult.hasError()) {
-                                                    return AsyncFuture::completed(repairResult);
-                                                }
-
-                                                d->pendingIdentityRepairSave = false;
-                                                ++d->modelMutationEpoch;
-
-                                                auto commitResult = commitProjectChanges(defaultCommitSubject(QStringLiteral("Sync Reconcile")),
-                                                                                         defaultCommitDescription());
-                                                if (commitResult.hasError()) {
-                                                    return AsyncFuture::completed(commitResult);
-                                                }
-
-                                                return pushWithRetry();
-                                            })
-                                            .future();
-                                    })
-                                    .future();
-                            })
-                            .future();
-                    })
-                    .future();
-            })
-            .unwrap();
-    };
-
-    return (*syncAttempt)(0);
 }
 
 QFuture<void> cwSaveLoad::retire()

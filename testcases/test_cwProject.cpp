@@ -2633,6 +2633,161 @@ TEST_CASE("cwProject sync reconciles pulled cave updates into memory", "[cwProje
     CHECK(localCave->name() == remoteCaveName);
 }
 
+TEST_CASE("cwProject sync reconciles pulled model changes before pushing local changes", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Sync Tester"));
+    rootData->account()->setEmail(QStringLiteral("sync.tester@example.com"));
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Reconcile Push Baseline Cave"));
+
+    QTemporaryDir projectDir;
+    REQUIRE(projectDir.isValid());
+    const QString projectPath = QDir(projectDir.path()).filePath(QStringLiteral("sync-reconcile-push.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+
+    auto* repository = project->repository();
+    REQUIRE(repository != nullptr);
+
+    QTemporaryDir remoteRoot;
+    REQUIRE(remoteRoot.isValid());
+    const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
+
+    git_repository* remoteRepo = nullptr;
+    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
+    if (remoteRepo) {
+        git_repository_free(remoteRepo);
+        remoteRepo = nullptr;
+    }
+
+    const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
+                                                         QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(addRemoteError.isEmpty());
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+
+    QTemporaryDir cloneDir;
+    REQUIRE(cloneDir.isValid());
+    const QString clonePath = QDir(cloneDir.path()).filePath(QStringLiteral("clone-2"));
+
+    QQuickGit::GitRepository cloneRepository;
+    cloneRepository.setDirectory(QDir(clonePath));
+    cloneRepository.setAccount(rootData->account());
+
+    auto cloneFuture = cloneRepository.clone(QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(AsyncFuture::waitForFinished(cloneFuture, 10000));
+    INFO("Clone error:" << cloneFuture.result().errorMessage().toStdString());
+    REQUIRE(!cloneFuture.result().hasError());
+
+    auto remoteRootData = std::make_unique<cwRootData>();
+    remoteRootData->account()->setName(QStringLiteral("Remote Sync Tester"));
+    remoteRootData->account()->setEmail(QStringLiteral("remote.sync.tester@example.com"));
+
+    auto remoteProject = remoteRootData->project();
+    const QString clonedProjectPath = QDir(clonePath).filePath(QFileInfo(projectPath).fileName());
+    REQUIRE(QFileInfo::exists(clonedProjectPath));
+    remoteProject->loadFile(clonedProjectPath);
+    remoteProject->waitLoadToFinish();
+    remoteProject->waitSaveToFinish();
+
+    auto* remoteRepository = remoteProject->repository();
+    REQUIRE(remoteRepository != nullptr);
+    remoteRepository->setAccount(remoteRootData->account());
+
+    auto* remoteCave = remoteProject->cavingRegion()->cave(0);
+    REQUIRE(remoteCave != nullptr);
+    const QString remoteCaveName = QStringLiteral("Reconcile Push Updated Cave");
+    remoteCave->setName(remoteCaveName);
+    remoteProject->waitSaveToFinish();
+    REQUIRE(remoteProject->isModified());
+
+    remoteProject->errorModel()->clear();
+    REQUIRE(remoteProject->sync());
+    remoteRootData->futureManagerModel()->waitForFinished();
+    remoteProject->waitSaveToFinish();
+    CHECK(remoteProject->errorModel()->count() == 0);
+
+    const QString localRepoPath = QFileInfo(project->filename()).absoluteDir().absolutePath();
+    const QString localOnlyFileName = QStringLiteral("local-after-reconcile.txt");
+    const QString localOnlyFilePath = QDir(localRepoPath).filePath(localOnlyFileName);
+    QFile localOnlyFile(localOnlyFilePath);
+    REQUIRE(localOnlyFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    REQUIRE(localOnlyFile.write("local change after remote rename\n") > 0);
+    localOnlyFile.close();
+    project->waitSaveToFinish();
+    REQUIRE(project->isModified());
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+    CHECK(project->isModified() == false);
+
+    auto* localCave = project->cavingRegion()->cave(0);
+    REQUIRE(localCave != nullptr);
+    CHECK(localCave->name() == remoteCaveName);
+
+    QFile localFileCheck(localOnlyFilePath);
+    REQUIRE(localFileCheck.open(QIODevice::ReadOnly));
+    CHECK(localFileCheck.readAll() == QByteArray("local change after remote rename\n"));
+
+    REQUIRE(git_repository_open(&remoteRepo, remoteRepoPath.toLocal8Bit().constData()) == GIT_OK);
+    auto remoteRepoGuard = qScopeGuard([&remoteRepo]() {
+        if (remoteRepo) {
+            git_repository_free(remoteRepo);
+        }
+    });
+
+    const QString remoteRefName = QStringLiteral("refs/heads/") + repository->headBranchName();
+    git_reference* remoteBranch = nullptr;
+    REQUIRE(git_reference_lookup(&remoteBranch, remoteRepo, remoteRefName.toLocal8Bit().constData()) == GIT_OK);
+    auto remoteBranchGuard = qScopeGuard([&remoteBranch]() {
+        if (remoteBranch) {
+            git_reference_free(remoteBranch);
+        }
+    });
+
+    const git_oid* remoteHeadOid = git_reference_target(remoteBranch);
+    REQUIRE(remoteHeadOid != nullptr);
+
+    git_commit* remoteHeadCommit = nullptr;
+    REQUIRE(git_commit_lookup(&remoteHeadCommit, remoteRepo, remoteHeadOid) == GIT_OK);
+    auto remoteHeadCommitGuard = qScopeGuard([&remoteHeadCommit]() {
+        if (remoteHeadCommit) {
+            git_commit_free(remoteHeadCommit);
+        }
+    });
+
+    git_tree* remoteTree = nullptr;
+    REQUIRE(git_commit_tree(&remoteTree, remoteHeadCommit) == GIT_OK);
+    auto remoteTreeGuard = qScopeGuard([&remoteTree]() {
+        if (remoteTree) {
+            git_tree_free(remoteTree);
+        }
+    });
+
+    git_tree_entry* localOnlyEntry = nullptr;
+    REQUIRE(git_tree_entry_bypath(&localOnlyEntry,
+                                  remoteTree,
+                                  localOnlyFileName.toLocal8Bit().constData()) == GIT_OK);
+    auto localOnlyEntryGuard = qScopeGuard([&localOnlyEntry]() {
+        if (localOnlyEntry) {
+            git_tree_entry_free(localOnlyEntry);
+        }
+    });
+}
+
 TEST_CASE("cwProject sync creates and pushes merge commit for diverged non-conflicting changes", "[cwProject]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
