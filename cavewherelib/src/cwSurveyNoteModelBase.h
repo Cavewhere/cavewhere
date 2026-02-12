@@ -49,6 +49,7 @@ public:
 
     // Access
     QList<QObject*> notes() const;
+    bool reorderNotes(const QList<QObject*>& orderedNotes);
     Q_INVOKABLE void removeNote(int index);
     Q_INVOKABLE bool hasNotes() const;
 

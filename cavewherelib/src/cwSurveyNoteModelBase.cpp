@@ -7,6 +7,7 @@
 
 // Qt
 #include <QDebug>
+#include <QSet>
 
 cwSurveyNoteModelBase::cwSurveyNoteModelBase(QObject* parent)
     : QAbstractListModel(parent),
@@ -55,6 +56,44 @@ QVariant cwSurveyNoteModelBase::data(const QModelIndex& index, int role) const
 QList<QObject*> cwSurveyNoteModelBase::notes() const
 {
     return m_notes;
+}
+
+bool cwSurveyNoteModelBase::reorderNotes(const QList<QObject*>& orderedNotes)
+{
+    if (orderedNotes.size() != m_notes.size()) {
+        return false;
+    }
+
+    QSet<QObject*> expected;
+    expected.reserve(m_notes.size());
+    for (QObject* note : std::as_const(m_notes)) {
+        if (note == nullptr || expected.contains(note)) {
+            return false;
+        }
+        expected.insert(note);
+    }
+
+    QSet<QObject*> provided;
+    provided.reserve(orderedNotes.size());
+    for (QObject* note : orderedNotes) {
+        if (note == nullptr || provided.contains(note)) {
+            return false;
+        }
+        provided.insert(note);
+    }
+
+    if (provided != expected) {
+        return false;
+    }
+
+    if (m_notes == orderedNotes) {
+        return true;
+    }
+
+    beginResetModel();
+    m_notes = orderedNotes;
+    endResetModel();
+    return true;
 }
 
 void cwSurveyNoteModelBase::removeNote(int index)

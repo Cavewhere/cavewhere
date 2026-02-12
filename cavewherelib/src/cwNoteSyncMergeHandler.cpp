@@ -111,6 +111,22 @@ struct NoteStructuralMergePlan {
     std::vector<QUuid> mergedScrapOrder;
 };
 
+struct NoteStructuralMergePreparation {
+    QList<NoteStructuralMergePlan> plans;
+    QList<cwNote*> orderedNotes;
+};
+
+bool haveSameIdsIgnoringOrder(const std::vector<QUuid>& currentIds, const std::vector<QUuid>& loadedIds)
+{
+    if (currentIds.size() != loadedIds.size()) {
+        return false;
+    }
+
+    QSet<QUuid> currentIdSet(currentIds.begin(), currentIds.end());
+    QSet<QUuid> loadedIdSet(loadedIds.begin(), loadedIds.end());
+    return currentIdSet == loadedIdSet;
+}
+
 NoteDescriptorApplyMode determineNoteDescriptorApplyMode(cwSurveyNoteModel* noteModel,
                                                          const cwSurveyNoteModelData& loadedNoteModelData)
 {
@@ -134,6 +150,10 @@ NoteDescriptorApplyMode determineNoteDescriptorApplyMode(cwSurveyNoteModel* note
     }
 
     if (currentNoteIds.value() == loadedNoteIds.value()) {
+        return NoteDescriptorApplyMode::StructuralMerge;
+    }
+
+    if (haveSameIdsIgnoringOrder(currentNoteIds.value(), loadedNoteIds.value())) {
         return NoteDescriptorApplyMode::StructuralMerge;
     }
 
@@ -170,8 +190,8 @@ std::optional<std::vector<QUuid>> mergedScrapOrderForNote(const cwNote* note, co
     return mergedOrder;
 }
 
-std::optional<QList<NoteStructuralMergePlan>> buildNoteStructuralMergePlans(cwSurveyNoteModel* noteModel,
-                                                                             const cwSurveyNoteModelData& loadedNoteModelData)
+std::optional<NoteStructuralMergePreparation> buildNoteStructuralMergePreparation(cwSurveyNoteModel* noteModel,
+                                                                                  const cwSurveyNoteModelData& loadedNoteModelData)
 {
     if (noteModel == nullptr) {
         return std::nullopt;
@@ -186,8 +206,13 @@ std::optional<QList<NoteStructuralMergePlan>> buildNoteStructuralMergePlans(cwSu
         currentNotesById.insert(note->id(), note);
     }
 
-    QList<NoteStructuralMergePlan> plans;
-    plans.reserve(loadedNoteModelData.notes.size());
+    if (currentNotesById.size() != loadedNoteModelData.notes.size()) {
+        return std::nullopt;
+    }
+
+    NoteStructuralMergePreparation preparation;
+    preparation.plans.reserve(loadedNoteModelData.notes.size());
+    preparation.orderedNotes.reserve(loadedNoteModelData.notes.size());
     QSet<QUuid> seenLoadedNoteIds;
     for (const cwNoteData& loadedNoteData : loadedNoteModelData.notes) {
         if (loadedNoteData.id.isNull()
@@ -197,19 +222,21 @@ std::optional<QList<NoteStructuralMergePlan>> buildNoteStructuralMergePlans(cwSu
         }
 
         seenLoadedNoteIds.insert(loadedNoteData.id);
-        auto mergedScrapOrder = mergedScrapOrderForNote(currentNotesById.value(loadedNoteData.id), loadedNoteData);
+        cwNote* const currentNote = currentNotesById.value(loadedNoteData.id);
+        auto mergedScrapOrder = mergedScrapOrderForNote(currentNote, loadedNoteData);
         if (!mergedScrapOrder.has_value()) {
             return std::nullopt;
         }
 
         NoteStructuralMergePlan plan;
-        plan.note = currentNotesById.value(loadedNoteData.id);
+        plan.note = currentNote;
         plan.loadedNoteData = &loadedNoteData;
         plan.mergedScrapOrder = std::move(mergedScrapOrder.value());
-        plans.append(std::move(plan));
+        preparation.plans.append(std::move(plan));
+        preparation.orderedNotes.append(currentNote);
     }
 
-    return plans;
+    return preparation;
 }
 
 void applyNoteStructuralMergePlan(const NoteStructuralMergePlan& plan)
@@ -296,6 +323,7 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
         bool assetChanged = false;
         NoteDescriptorApplyMode noteDescriptorApplyMode = NoteDescriptorApplyMode::FullModelReplace;
         QList<NoteStructuralMergePlan> noteStructuralMergePlans;
+        QList<cwNote*> reorderedNotes;
     };
 
     QHash<QString, cwTrip*> tripsByNotesDir;
@@ -419,16 +447,17 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
         }
 
         if (update.noteDescriptorApplyMode == NoteDescriptorApplyMode::StructuralMerge) {
-            const auto plans = buildNoteStructuralMergePlans(update.trip->notes(),
-                                                             update.loadedTripData->noteModel);
-            if (!plans.has_value()) {
+            const auto mergePreparation = buildNoteStructuralMergePreparation(update.trip->notes(),
+                                                                              update.loadedTripData->noteModel);
+            if (!mergePreparation.has_value()) {
                 cwReconcileMergeResult result;
                 result.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;
                 result.handlerName = name();
                 result.fallbackReason = QStringLiteral("Unable to build deterministic note scrap merge plan.");
                 return result;
             }
-            update.noteStructuralMergePlans = plans.value();
+            update.noteStructuralMergePlans = mergePreparation->plans;
+            update.reorderedNotes = mergePreparation->orderedNotes;
         }
     }
 
@@ -446,6 +475,14 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
                 for (const NoteStructuralMergePlan& plan : update.noteStructuralMergePlans) {
                     applyNoteStructuralMergePlan(plan);
                 }
+
+                QList<QObject*> reorderedNotes;
+                reorderedNotes.reserve(update.reorderedNotes.size());
+                for (cwNote* note : update.reorderedNotes) {
+                    reorderedNotes.append(note);
+                }
+                const bool reorderApplied = update.trip->notes()->reorderNotes(reorderedNotes);
+                Q_ASSERT(reorderApplied);
             } else {
                 update.trip->notes()->setData(update.loadedTripData->noteModel);
             }
