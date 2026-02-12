@@ -2768,6 +2768,283 @@ TEST_CASE("cwProject sync incrementally reconciles pulled note updates without r
                       }));
 }
 
+TEST_CASE("cwProject sync structurally reconciles note scraps by id without replacing note object", "[cwProject][sync]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Sync Tester"));
+    rootData->account()->setEmail(QStringLiteral("sync.tester@example.com"));
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Structural Note Reconcile Cave"));
+    cave->addTrip();
+    auto trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
+    trip->setName(QStringLiteral("Structural Note Reconcile Trip"));
+
+    QTemporaryDir projectDir;
+    REQUIRE(projectDir.isValid());
+    const QString projectPath = QDir(projectDir.path()).filePath(QStringLiteral("sync-note-structural.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+
+    const QString pngSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    REQUIRE(QFileInfo::exists(pngSource));
+    trip->notes()->addFromFiles({QUrl::fromLocalFile(pngSource)});
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    REQUIRE(trip->notes()->rowCount() == 1);
+
+    auto* localNote = trip->notes()->notes().first();
+    REQUIRE(localNote != nullptr);
+
+    auto addTriangleScrap = [](cwNote* note, const QPointF& origin) -> cwScrap* {
+        auto* scrap = new cwScrap();
+        scrap->insertPoint(0, origin + QPointF(0.10, 0.10));
+        scrap->insertPoint(1, origin + QPointF(0.35, 0.10));
+        scrap->insertPoint(2, origin + QPointF(0.22, 0.35));
+        scrap->close();
+        note->addScrap(scrap);
+        return scrap;
+    };
+
+    cwScrap* const localFirstScrap = addTriangleScrap(localNote, QPointF(0.0, 0.0));
+    cwScrap* const localSecondScrap = addTriangleScrap(localNote, QPointF(0.5, 0.0));
+    REQUIRE(localFirstScrap != nullptr);
+    REQUIRE(localSecondScrap != nullptr);
+
+    QPointer<cwTrip> localTripPtr = trip;
+    QPointer<cwNote> localNotePtr = localNote;
+
+    project->waitSaveToFinish();
+
+    auto* repository = project->repository();
+    REQUIRE(repository != nullptr);
+
+    QTemporaryDir remoteRoot;
+    REQUIRE(remoteRoot.isValid());
+    const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
+
+    git_repository* remoteRepo = nullptr;
+    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
+    if (remoteRepo) {
+        git_repository_free(remoteRepo);
+        remoteRepo = nullptr;
+    }
+
+    const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
+                                                         QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(addRemoteError.isEmpty());
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+
+    QTemporaryDir cloneDir;
+    REQUIRE(cloneDir.isValid());
+    const QString clonePath = QDir(cloneDir.path()).filePath(QStringLiteral("clone-2"));
+
+    QQuickGit::GitRepository cloneRepository;
+    cloneRepository.setDirectory(QDir(clonePath));
+    cloneRepository.setAccount(rootData->account());
+
+    auto cloneFuture = cloneRepository.clone(QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(AsyncFuture::waitForFinished(cloneFuture, 10000));
+    INFO("Clone error:" << cloneFuture.result().errorMessage().toStdString());
+    REQUIRE(!cloneFuture.result().hasError());
+
+    QDirIterator noteFileIterator(clonePath,
+                                  QStringList{QStringLiteral("*.cwnote")},
+                                  QDir::Files,
+                                  QDirIterator::Subdirectories);
+    REQUIRE(noteFileIterator.hasNext());
+    const QString clonedNotePath = noteFileIterator.next();
+
+    auto noteProto = loadProtoFromJsonFile<CavewhereProto::Note>(clonedNotePath);
+    REQUIRE(noteProto.scraps_size() == 2);
+    REQUIRE(noteProto.scraps(0).has_id());
+    REQUIRE(noteProto.scraps(1).has_id());
+
+    const QUuid reorderedFirstScrapId = QUuid(QString::fromStdString(noteProto.scraps(1).id()));
+    REQUIRE(!reorderedFirstScrapId.isNull());
+
+    CavewhereProto::Scrap originalFirstScrap = noteProto.scraps(0);
+    *noteProto.mutable_scraps(0) = noteProto.scraps(1);
+    *noteProto.mutable_scraps(1) = originalFirstScrap;
+
+    REQUIRE(noteProto.scraps(0).outlinepoints_size() > 1);
+    auto* updatedOutlinePoint = noteProto.mutable_scraps(0)->mutable_outlinepoints(1);
+    updatedOutlinePoint->set_x(0.39);
+    updatedOutlinePoint->set_y(0.14);
+
+    writeProtoToJsonFile(clonedNotePath, noteProto);
+
+    REQUIRE_NOTHROW(cloneRepository.commitAll(QStringLiteral("Reorder scraps"),
+                                              QStringLiteral("swap scrap order and mutate geometry")));
+    auto clonePushFuture = cloneRepository.push();
+    REQUIRE(AsyncFuture::waitForFinished(clonePushFuture, 10000));
+    INFO("Remote clone push error:" << clonePushFuture.result().errorMessage().toStdString());
+    REQUIRE(!clonePushFuture.result().hasError());
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+
+    REQUIRE(localTripPtr != nullptr);
+    REQUIRE(localNotePtr != nullptr);
+    CHECK(localTripPtr->notes()->notes().first() == localNotePtr.data());
+
+    REQUIRE(localNotePtr->scraps().size() == 2);
+    CHECK(localNotePtr->scrap(0)->id() == reorderedFirstScrapId);
+    CHECK(localNotePtr->scrap(1)->id() != reorderedFirstScrapId);
+
+    auto findScrapById = [](cwNote* note, const QUuid& id) -> cwScrap* {
+        for (cwScrap* scrap : note->scraps()) {
+            if (scrap != nullptr && scrap->id() == id) {
+                return scrap;
+            }
+        }
+        return nullptr;
+    };
+
+    cwScrap* const reorderedScrapAfterSync = findScrapById(localNotePtr, reorderedFirstScrapId);
+    REQUIRE(reorderedScrapAfterSync != nullptr);
+    REQUIRE(reorderedScrapAfterSync->points().size() > 1);
+    CHECK(reorderedScrapAfterSync->points().at(1) == QPointF(0.39, 0.14));
+}
+
+TEST_CASE("cwProject sync incrementally reconciles pulled scrap station updates", "[cwProject][sync]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Sync Tester"));
+    rootData->account()->setEmail(QStringLiteral("sync.tester@example.com"));
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Station Reconcile Cave"));
+    cave->addTrip();
+    auto trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
+    trip->setName(QStringLiteral("Station Reconcile Trip"));
+
+    QTemporaryDir projectDir;
+    REQUIRE(projectDir.isValid());
+    const QString projectPath = QDir(projectDir.path()).filePath(QStringLiteral("sync-station-reconcile.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+
+    const QString pngSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    REQUIRE(QFileInfo::exists(pngSource));
+    trip->notes()->addFromFiles({QUrl::fromLocalFile(pngSource)});
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    REQUIRE(trip->notes()->rowCount() == 1);
+
+    auto* localNote = trip->notes()->notes().first();
+    REQUIRE(localNote != nullptr);
+
+    auto* localScrap = new cwScrap();
+    localScrap->insertPoint(0, QPointF(0.10, 0.10));
+    localScrap->insertPoint(1, QPointF(0.40, 0.10));
+    localScrap->insertPoint(2, QPointF(0.20, 0.40));
+    localScrap->close();
+
+    cwNoteStation initialStation;
+    initialStation.setName(QStringLiteral("A1"));
+    initialStation.setPositionOnNote(QPointF(0.20, 0.20));
+    localScrap->addStation(initialStation);
+    localNote->addScrap(localScrap);
+
+    QPointer<cwNote> localNotePtr = localNote;
+    project->waitSaveToFinish();
+
+    auto* repository = project->repository();
+    REQUIRE(repository != nullptr);
+
+    QTemporaryDir remoteRoot;
+    REQUIRE(remoteRoot.isValid());
+    const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
+
+    git_repository* remoteRepo = nullptr;
+    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
+    if (remoteRepo) {
+        git_repository_free(remoteRepo);
+        remoteRepo = nullptr;
+    }
+
+    const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
+                                                         QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(addRemoteError.isEmpty());
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+
+    QTemporaryDir cloneDir;
+    REQUIRE(cloneDir.isValid());
+    const QString clonePath = QDir(cloneDir.path()).filePath(QStringLiteral("clone-2"));
+
+    QQuickGit::GitRepository cloneRepository;
+    cloneRepository.setDirectory(QDir(clonePath));
+    cloneRepository.setAccount(rootData->account());
+
+    auto cloneFuture = cloneRepository.clone(QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(AsyncFuture::waitForFinished(cloneFuture, 10000));
+    INFO("Clone error:" << cloneFuture.result().errorMessage().toStdString());
+    REQUIRE(!cloneFuture.result().hasError());
+
+    QDirIterator noteFileIterator(clonePath,
+                                  QStringList{QStringLiteral("*.cwnote")},
+                                  QDir::Files,
+                                  QDirIterator::Subdirectories);
+    REQUIRE(noteFileIterator.hasNext());
+    const QString clonedNotePath = noteFileIterator.next();
+
+    auto noteProto = loadProtoFromJsonFile<CavewhereProto::Note>(clonedNotePath);
+    REQUIRE(noteProto.scraps_size() == 1);
+    REQUIRE(noteProto.scraps(0).notestations_size() == 1);
+
+    auto* protoStation = noteProto.mutable_scraps(0)->mutable_notestations(0);
+    protoStation->set_name(QStringLiteral("A1-remote").toStdString());
+    protoStation->mutable_positiononnote()->set_x(0.44);
+    protoStation->mutable_positiononnote()->set_y(0.33);
+
+    writeProtoToJsonFile(clonedNotePath, noteProto);
+
+    REQUIRE_NOTHROW(cloneRepository.commitAll(QStringLiteral("Update scrap station"),
+                                              QStringLiteral("mutate station name and position in note payload")));
+    auto clonePushFuture = cloneRepository.push();
+    REQUIRE(AsyncFuture::waitForFinished(clonePushFuture, 10000));
+    INFO("Remote clone push error:" << clonePushFuture.result().errorMessage().toStdString());
+    REQUIRE(!clonePushFuture.result().hasError());
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+
+    REQUIRE(localNotePtr != nullptr);
+    REQUIRE(localNotePtr->scraps().size() == 1);
+    cwScrap* const syncedScrap = localNotePtr->scrap(0);
+    REQUIRE(syncedScrap != nullptr);
+    REQUIRE(syncedScrap->numberOfStations() == 1);
+    CHECK(syncedScrap->stationData(cwScrap::StationName, 0).toString() == QStringLiteral("A1-remote"));
+    CHECK(syncedScrap->stationData(cwScrap::StationPosition, 0).toPointF() == QPointF(0.44, 0.33));
+}
+
 TEST_CASE("cwProject sync handles local edit churn during reconcile apply window", "[cwProject][sync]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();

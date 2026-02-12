@@ -25,6 +25,7 @@
 #include "cwImageResolution.h"
 #include "cwUniqueConnectionChecker.h"
 #include "cwGlobals.h"
+#include "cwDiff.h"
 
 //Async future
 #include <asyncfuture.h>
@@ -342,7 +343,8 @@ QString normalizeSyncPath(const QString& path)
 
 enum class NoteChangedPathKind {
     Unsupported,
-    Descriptor,
+    NoteDescriptor,
+    NoteLiDARDescriptor,
     Asset
 };
 
@@ -360,9 +362,12 @@ std::optional<QString> notesDirectoryPathForChangedFile(const QString& path)
 
 NoteChangedPathKind classifyNoteChangedPath(const QString& path, const QSet<QString>& trackedExtensions)
 {
-    if (path.endsWith(QStringLiteral(".cwnote"), Qt::CaseInsensitive)
-        || path.endsWith(QStringLiteral(".cwnote3d"), Qt::CaseInsensitive)) {
-        return NoteChangedPathKind::Descriptor;
+    if (path.endsWith(QStringLiteral(".cwnote"), Qt::CaseInsensitive)) {
+        return NoteChangedPathKind::NoteDescriptor;
+    }
+
+    if (path.endsWith(QStringLiteral(".cwnote3d"), Qt::CaseInsensitive)) {
+        return NoteChangedPathKind::NoteLiDARDescriptor;
     }
 
     const QString extension = QFileInfo(path).suffix().trimmed().toLower();
@@ -371,6 +376,194 @@ NoteChangedPathKind classifyNoteChangedPath(const QString& path, const QSet<QStr
     }
 
     return NoteChangedPathKind::Unsupported;
+}
+
+template<typename Container, typename IdAccessor>
+std::optional<std::vector<QUuid>> collectOrderedUniqueIds(const Container& items, IdAccessor idAccessor)
+{
+    std::vector<QUuid> orderedIds;
+    orderedIds.reserve(static_cast<size_t>(items.size()));
+    QSet<QUuid> seenIds;
+
+    for (const auto& item : items) {
+        const QUuid id = idAccessor(item);
+        if (id.isNull() || seenIds.contains(id)) {
+            return std::nullopt;
+        }
+        seenIds.insert(id);
+        orderedIds.push_back(id);
+    }
+
+    return orderedIds;
+}
+
+enum class NoteDescriptorApplyMode {
+    FullModelReplace,
+    StructuralMerge,
+    Ambiguous
+};
+
+struct NoteStructuralMergePlan {
+    cwNote* note = nullptr;
+    const cwNoteData* loadedNoteData = nullptr;
+    std::vector<QUuid> mergedScrapOrder;
+};
+
+NoteDescriptorApplyMode determineNoteDescriptorApplyMode(cwSurveyNoteModel* noteModel,
+                                                         const cwSurveyNoteModelData& loadedNoteModelData)
+{
+    if (noteModel == nullptr) {
+        return NoteDescriptorApplyMode::Ambiguous;
+    }
+
+    const auto currentNoteIds = collectOrderedUniqueIds(
+        noteModel->notes(),
+        [](const cwNote* note) {
+            return note != nullptr ? note->id() : QUuid();
+        });
+    const auto loadedNoteIds = collectOrderedUniqueIds(
+        loadedNoteModelData.notes,
+        [](const cwNoteData& noteData) {
+            return noteData.id;
+        });
+
+    if (!currentNoteIds.has_value() || !loadedNoteIds.has_value()) {
+        return NoteDescriptorApplyMode::Ambiguous;
+    }
+
+    if (currentNoteIds.value() == loadedNoteIds.value()) {
+        return NoteDescriptorApplyMode::StructuralMerge;
+    }
+
+    return NoteDescriptorApplyMode::FullModelReplace;
+}
+
+std::optional<std::vector<QUuid>> mergedScrapOrderForNote(const cwNote* note, const cwNoteData& loadedNoteData)
+{
+    if (note == nullptr) {
+        return std::nullopt;
+    }
+
+    const auto currentScrapIds = collectOrderedUniqueIds(
+        note->scraps(),
+        [](const cwScrap* scrap) {
+            return scrap != nullptr ? scrap->id() : QUuid();
+        });
+    const auto loadedScrapIds = collectOrderedUniqueIds(
+        loadedNoteData.scraps,
+        [](const cwScrapData& scrapData) {
+            return scrapData.id;
+        });
+
+    if (!currentScrapIds.has_value() || !loadedScrapIds.has_value()) {
+        return std::nullopt;
+    }
+
+    const auto edits = cwDiff::diff<QUuid>(currentScrapIds.value(), loadedScrapIds.value());
+    const auto mergedOrder = cwDiff::applyEditScript(edits, currentScrapIds.value(), loadedScrapIds.value());
+    if (mergedOrder != loadedScrapIds.value()) {
+        return std::nullopt;
+    }
+
+    return mergedOrder;
+}
+
+std::optional<QList<NoteStructuralMergePlan>> buildNoteStructuralMergePlans(cwSurveyNoteModel* noteModel,
+                                                                             const cwSurveyNoteModelData& loadedNoteModelData)
+{
+    if (noteModel == nullptr) {
+        return std::nullopt;
+    }
+
+    QHash<QUuid, cwNote*> currentNotesById;
+    currentNotesById.reserve(noteModel->rowCount());
+    for (cwNote* note : noteModel->notes()) {
+        if (note == nullptr || note->id().isNull() || currentNotesById.contains(note->id())) {
+            return std::nullopt;
+        }
+        currentNotesById.insert(note->id(), note);
+    }
+
+    QList<NoteStructuralMergePlan> plans;
+    plans.reserve(loadedNoteModelData.notes.size());
+    QSet<QUuid> seenLoadedNoteIds;
+    for (const cwNoteData& loadedNoteData : loadedNoteModelData.notes) {
+        if (loadedNoteData.id.isNull()
+            || seenLoadedNoteIds.contains(loadedNoteData.id)
+            || !currentNotesById.contains(loadedNoteData.id)) {
+            return std::nullopt;
+        }
+
+        seenLoadedNoteIds.insert(loadedNoteData.id);
+        auto mergedScrapOrder = mergedScrapOrderForNote(currentNotesById.value(loadedNoteData.id), loadedNoteData);
+        if (!mergedScrapOrder.has_value()) {
+            return std::nullopt;
+        }
+
+        NoteStructuralMergePlan plan;
+        plan.note = currentNotesById.value(loadedNoteData.id);
+        plan.loadedNoteData = &loadedNoteData;
+        plan.mergedScrapOrder = std::move(mergedScrapOrder.value());
+        plans.append(std::move(plan));
+    }
+
+    return plans;
+}
+
+void applyNoteStructuralMergePlan(const NoteStructuralMergePlan& plan)
+{
+    Q_ASSERT(plan.note != nullptr);
+    Q_ASSERT(plan.loadedNoteData != nullptr);
+    if (plan.note == nullptr || plan.loadedNoteData == nullptr) {
+        return;
+    }
+
+    cwNote* const note = plan.note;
+    const cwNoteData& loadedNoteData = *plan.loadedNoteData;
+
+    note->setName(loadedNoteData.name);
+    note->setId(loadedNoteData.id);
+    note->setRotate(loadedNoteData.rotate);
+    note->setImage(loadedNoteData.image);
+    note->imageResolution()->setData(loadedNoteData.imageResolution);
+
+    const QList<cwScrap*> currentScraps = note->scraps();
+    QHash<QUuid, const cwScrapData*> loadedScrapsById;
+    loadedScrapsById.reserve(loadedNoteData.scraps.size());
+    for (const cwScrapData& loadedScrapData : loadedNoteData.scraps) {
+        loadedScrapsById.insert(loadedScrapData.id, &loadedScrapData);
+    }
+
+    const int currentCount = currentScraps.size();
+    const int loadedCount = static_cast<int>(plan.mergedScrapOrder.size());
+    const int sharedCount = std::min(currentCount, loadedCount);
+    for (int index = 0; index < sharedCount; ++index) {
+        cwScrap* const scrap = currentScraps.at(index);
+        const QUuid targetScrapId = plan.mergedScrapOrder.at(static_cast<size_t>(index));
+        const cwScrapData* loadedScrapData = loadedScrapsById.value(targetScrapId, nullptr);
+        Q_ASSERT(scrap != nullptr);
+        Q_ASSERT(loadedScrapData != nullptr);
+        if (scrap == nullptr || loadedScrapData == nullptr) {
+            continue;
+        }
+
+        scrap->setData(*loadedScrapData);
+    }
+
+    if (currentCount > loadedCount) {
+        note->removeScraps(loadedCount, currentCount - 1);
+    } else if (loadedCount > currentCount) {
+        for (int index = currentCount; index < loadedCount; ++index) {
+            auto* scrap = new cwScrap();
+            note->addScrap(scrap);
+            const QUuid targetScrapId = plan.mergedScrapOrder.at(static_cast<size_t>(index));
+            const cwScrapData* loadedScrapData = loadedScrapsById.value(targetScrapId, nullptr);
+            Q_ASSERT(loadedScrapData != nullptr);
+            if (loadedScrapData != nullptr) {
+                scrap->setData(*loadedScrapData);
+            }
+        }
+    }
 }
 
 struct LfsCandidateState {
@@ -4579,8 +4772,11 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
             struct NoteTripUpdate {
                 cwTrip* trip = nullptr;
                 const cwTripData* loadedTripData = nullptr;
-                bool descriptorChanged = false;
+                bool noteDescriptorChanged = false;
+                bool noteLiDARDescriptorChanged = false;
                 bool assetChanged = false;
+                NoteDescriptorApplyMode noteDescriptorApplyMode = NoteDescriptorApplyMode::FullModelReplace;
+                QList<NoteStructuralMergePlan> noteStructuralMergePlans;
             };
 
             QHash<QString, cwTrip*> tripsByNotesDir;
@@ -4642,8 +4838,10 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
                     updateIt = tripUpdatesByNotesDir.insert(*notesDirPath, update);
                 }
 
-                if (changedKind == NoteChangedPathKind::Descriptor) {
-                    updateIt->descriptorChanged = true;
+                if (changedKind == NoteChangedPathKind::NoteDescriptor) {
+                    updateIt->noteDescriptorChanged = true;
+                } else if (changedKind == NoteChangedPathKind::NoteLiDARDescriptor) {
+                    updateIt->noteLiDARDescriptorChanged = true;
                 } else {
                     updateIt->assetChanged = true;
                 }
@@ -4672,20 +4870,58 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
                 }
             }
 
+            if (canApplyNoteIncremental) {
+                for (NoteTripUpdate& update : noteTripUpdates) {
+                    Q_ASSERT(update.trip != nullptr);
+                    Q_ASSERT(update.loadedTripData != nullptr);
+
+                    if (!update.noteDescriptorChanged) {
+                        continue;
+                    }
+
+                    update.noteDescriptorApplyMode = determineNoteDescriptorApplyMode(update.trip->notes(),
+                                                                                       update.loadedTripData->noteModel);
+                    if (update.noteDescriptorApplyMode == NoteDescriptorApplyMode::Ambiguous) {
+                        canApplyNoteIncremental = false;
+                        break;
+                    }
+
+                    if (update.noteDescriptorApplyMode == NoteDescriptorApplyMode::StructuralMerge) {
+                        const auto plans = buildNoteStructuralMergePlans(update.trip->notes(),
+                                                                         update.loadedTripData->noteModel);
+                        if (!plans.has_value()) {
+                            canApplyNoteIncremental = false;
+                            break;
+                        }
+                        update.noteStructuralMergePlans = plans.value();
+                    }
+                }
+            }
+
             bool modelMutated = false;
             if (canApplyNoteIncremental && !noteTripUpdates.isEmpty()) {
                 for (const NoteTripUpdate& update : noteTripUpdates) {
                     Q_ASSERT(update.trip != nullptr);
                     Q_ASSERT(update.loadedTripData != nullptr);
 
-                    if (update.descriptorChanged) {
-                        update.trip->notes()->setData(update.loadedTripData->noteModel);
+                    if (update.noteDescriptorChanged) {
+                        if (update.noteDescriptorApplyMode == NoteDescriptorApplyMode::StructuralMerge) {
+                            for (const NoteStructuralMergePlan& plan : update.noteStructuralMergePlans) {
+                                applyNoteStructuralMergePlan(plan);
+                            }
+                        } else {
+                            update.trip->notes()->setData(update.loadedTripData->noteModel);
+                        }
+                        modelMutated = true;
+                    }
+
+                    if (update.noteLiDARDescriptorChanged) {
                         update.trip->notesLiDAR()->setData(update.loadedTripData->noteLiDARModel);
                         modelMutated = true;
                     }
 
                     // Refresh note role bindings for descriptor and asset-only updates.
-                    if (update.descriptorChanged || update.assetChanged) {
+                    if (update.noteDescriptorChanged || update.noteLiDARDescriptorChanged || update.assetChanged) {
                         emit objectPathReady(update.trip);
                     }
                 }
