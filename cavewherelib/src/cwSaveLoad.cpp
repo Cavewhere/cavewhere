@@ -335,6 +335,44 @@ QStringList uniqueSortedPaths(const QStringList& paths)
     return result;
 }
 
+QString normalizeSyncPath(const QString& path)
+{
+    return QDir::cleanPath(QDir::fromNativeSeparators(path));
+}
+
+enum class NoteChangedPathKind {
+    Unsupported,
+    Descriptor,
+    Asset
+};
+
+std::optional<QString> notesDirectoryPathForChangedFile(const QString& path)
+{
+    const QString normalized = normalizeSyncPath(path);
+    const QString marker = QStringLiteral("/notes/");
+    const int markerIndex = normalized.indexOf(marker, 0, Qt::CaseInsensitive);
+    if (markerIndex < 0) {
+        return std::nullopt;
+    }
+
+    return normalized.left(markerIndex + QStringLiteral("/notes").size());
+}
+
+NoteChangedPathKind classifyNoteChangedPath(const QString& path, const QSet<QString>& trackedExtensions)
+{
+    if (path.endsWith(QStringLiteral(".cwnote"), Qt::CaseInsensitive)
+        || path.endsWith(QStringLiteral(".cwnote3d"), Qt::CaseInsensitive)) {
+        return NoteChangedPathKind::Descriptor;
+    }
+
+    const QString extension = QFileInfo(path).suffix().trimmed().toLower();
+    if (trackedExtensions.contains(extension)) {
+        return NoteChangedPathKind::Asset;
+    }
+
+    return NoteChangedPathKind::Unsupported;
+}
+
 struct LfsCandidateState {
     bool isPointer = false;
     QString pointerOid;
@@ -4423,7 +4461,7 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
 
     auto loadFuture = cwSaveLoad::loadAll(d->projectFileName);
     return AsyncFuture::observe(loadFuture)
-        .context(this, [this, loadFuture, syncGeneration, planEpoch]() -> Monad::Result<ReconcileExternalResult> {
+        .context(this, [this, loadFuture, report, syncGeneration, planEpoch]() -> Monad::Result<ReconcileExternalResult> {
             const auto loadResult = loadFuture.result();
             if (loadResult.hasError()) {
                 return Monad::Result<ReconcileExternalResult>(loadResult.errorMessage(), loadResult.errorCode());
@@ -4457,9 +4495,128 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
             d->projectMetadata = loadData.metadata;
             d->pendingIdentityRepairSave = loadData.identityRepair.required;
 
-            region->setData(loadData.region);
-            d->resetObjectStates(this);
-            ++d->modelMutationEpoch;
+            struct NoteTripUpdate {
+                cwTrip* trip = nullptr;
+                const cwTripData* loadedTripData = nullptr;
+                bool descriptorChanged = false;
+                bool assetChanged = false;
+            };
+
+            QHash<QString, cwTrip*> tripsByNotesDir;
+            const QDir repoRoot = projectRootDir();
+            for (cwCave* cave : region->caves()) {
+                if (cave == nullptr) {
+                    continue;
+                }
+
+                for (cwTrip* trip : cave->trips()) {
+                    if (trip == nullptr) {
+                        continue;
+                    }
+
+                    const QString notesDirRelativePath = normalizeSyncPath(
+                        repoRoot.relativeFilePath(noteDirHelper(dirPrivate(trip)).absolutePath()));
+                    if (!notesDirRelativePath.isEmpty()) {
+                        tripsByNotesDir.insert(notesDirRelativePath, trip);
+                    }
+                }
+            }
+
+            QHash<QUuid, const cwTripData*> loadedTripsById;
+            for (const cwCaveData& caveData : loadData.region.caves) {
+                for (const cwTripData& tripData : caveData.trips) {
+                    if (!tripData.id.isNull()) {
+                        loadedTripsById.insert(tripData.id, &tripData);
+                    }
+                }
+            }
+
+            bool canApplyNoteIncremental = !report.changedPaths.isEmpty();
+            QHash<QString, NoteTripUpdate> tripUpdatesByNotesDir;
+            const QSet<QString> trackedExtensions = cavewhereTrackedExtensions();
+            for (const QString& changedPath : report.changedPaths) {
+                const QString normalizedPath = normalizeSyncPath(changedPath);
+                const std::optional<QString> notesDirPath = notesDirectoryPathForChangedFile(normalizedPath);
+                if (!notesDirPath.has_value()) {
+                    canApplyNoteIncremental = false;
+                    break;
+                }
+
+                const auto tripIt = tripsByNotesDir.constFind(*notesDirPath);
+                if (tripIt == tripsByNotesDir.constEnd()) {
+                    canApplyNoteIncremental = false;
+                    break;
+                }
+
+                const NoteChangedPathKind changedKind = classifyNoteChangedPath(normalizedPath, trackedExtensions);
+                if (changedKind == NoteChangedPathKind::Unsupported) {
+                    canApplyNoteIncremental = false;
+                    break;
+                }
+
+                auto updateIt = tripUpdatesByNotesDir.find(*notesDirPath);
+                if (updateIt == tripUpdatesByNotesDir.end()) {
+                    NoteTripUpdate update;
+                    update.trip = tripIt.value();
+                    updateIt = tripUpdatesByNotesDir.insert(*notesDirPath, update);
+                }
+
+                if (changedKind == NoteChangedPathKind::Descriptor) {
+                    updateIt->descriptorChanged = true;
+                } else {
+                    updateIt->assetChanged = true;
+                }
+            }
+
+            QList<NoteTripUpdate> noteTripUpdates;
+            if (canApplyNoteIncremental) {
+                noteTripUpdates.reserve(tripUpdatesByNotesDir.size());
+                for (auto updateIt = tripUpdatesByNotesDir.cbegin();
+                     updateIt != tripUpdatesByNotesDir.cend();
+                     ++updateIt) {
+                    NoteTripUpdate update = updateIt.value();
+                    if (update.trip == nullptr || update.trip->id().isNull()) {
+                        canApplyNoteIncremental = false;
+                        break;
+                    }
+
+                    const auto loadedTripIt = loadedTripsById.constFind(update.trip->id());
+                    if (loadedTripIt == loadedTripsById.constEnd()) {
+                        canApplyNoteIncremental = false;
+                        break;
+                    }
+
+                    update.loadedTripData = loadedTripIt.value();
+                    noteTripUpdates.append(update);
+                }
+            }
+
+            bool modelMutated = false;
+            if (canApplyNoteIncremental && !noteTripUpdates.isEmpty()) {
+                for (const NoteTripUpdate& update : noteTripUpdates) {
+                    Q_ASSERT(update.trip != nullptr);
+                    Q_ASSERT(update.loadedTripData != nullptr);
+
+                    if (update.descriptorChanged) {
+                        update.trip->notes()->setData(update.loadedTripData->noteModel);
+                        update.trip->notesLiDAR()->setData(update.loadedTripData->noteLiDARModel);
+                        modelMutated = true;
+                    }
+
+                    // Refresh note role bindings for descriptor and asset-only updates.
+                    if (update.descriptorChanged || update.assetChanged) {
+                        emit objectPathReady(update.trip);
+                    }
+                }
+            } else {
+                region->setData(loadData.region);
+                modelMutated = true;
+            }
+
+            if (modelMutated) {
+                d->resetObjectStates(this);
+                ++d->modelMutationEpoch;
+            }
 
             if (previousMetadata.dataRoot != d->projectMetadata.dataRoot
                 || previousMetadata.gitMode != d->projectMetadata.gitMode
