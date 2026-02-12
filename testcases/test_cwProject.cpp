@@ -3045,6 +3045,140 @@ TEST_CASE("cwProject sync incrementally reconciles pulled scrap station updates"
     CHECK(syncedScrap->stationData(cwScrap::StationPosition, 0).toPointF() == QPointF(0.44, 0.33));
 }
 
+TEST_CASE("cwProject sync falls back to full reconcile for ambiguous scrap structural mapping", "[cwProject][sync]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Sync Tester"));
+    rootData->account()->setEmail(QStringLiteral("sync.tester@example.com"));
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Ambiguous Scrap Merge Cave"));
+    cave->addTrip();
+    auto trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
+    trip->setName(QStringLiteral("Ambiguous Scrap Merge Trip"));
+
+    QTemporaryDir projectDir;
+    REQUIRE(projectDir.isValid());
+    const QString projectPath = QDir(projectDir.path()).filePath(QStringLiteral("sync-ambiguous-scrap.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+
+    const QString pngSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    REQUIRE(QFileInfo::exists(pngSource));
+    trip->notes()->addFromFiles({QUrl::fromLocalFile(pngSource)});
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    REQUIRE(trip->notes()->rowCount() == 1);
+
+    auto* localNote = trip->notes()->notes().first();
+    REQUIRE(localNote != nullptr);
+
+    auto addTriangleScrap = [](cwNote* note, const QPointF& origin) -> cwScrap* {
+        auto* scrap = new cwScrap();
+        scrap->insertPoint(0, origin + QPointF(0.10, 0.10));
+        scrap->insertPoint(1, origin + QPointF(0.35, 0.10));
+        scrap->insertPoint(2, origin + QPointF(0.22, 0.35));
+        scrap->close();
+        note->addScrap(scrap);
+        return scrap;
+    };
+
+    cwScrap* const firstScrap = addTriangleScrap(localNote, QPointF(0.0, 0.0));
+    cwScrap* const secondScrap = addTriangleScrap(localNote, QPointF(0.5, 0.0));
+    REQUIRE(firstScrap != nullptr);
+    REQUIRE(secondScrap != nullptr);
+    REQUIRE(!firstScrap->id().isNull());
+    secondScrap->setId(firstScrap->id());
+    CHECK(secondScrap->id() == firstScrap->id());
+
+    project->waitSaveToFinish();
+
+    auto* repository = project->repository();
+    REQUIRE(repository != nullptr);
+
+    QTemporaryDir remoteRoot;
+    REQUIRE(remoteRoot.isValid());
+    const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
+
+    git_repository* remoteRepo = nullptr;
+    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
+    if (remoteRepo) {
+        git_repository_free(remoteRepo);
+        remoteRepo = nullptr;
+    }
+
+    const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
+                                                         QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(addRemoteError.isEmpty());
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+
+    QTemporaryDir cloneDir;
+    REQUIRE(cloneDir.isValid());
+    const QString clonePath = QDir(cloneDir.path()).filePath(QStringLiteral("clone-2"));
+
+    QQuickGit::GitRepository cloneRepository;
+    cloneRepository.setDirectory(QDir(clonePath));
+    cloneRepository.setAccount(rootData->account());
+
+    auto cloneFuture = cloneRepository.clone(QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(AsyncFuture::waitForFinished(cloneFuture, 10000));
+    INFO("Clone error:" << cloneFuture.result().errorMessage().toStdString());
+    REQUIRE(!cloneFuture.result().hasError());
+
+    QDirIterator noteFileIterator(clonePath,
+                                  QStringList{QStringLiteral("*.cwnote")},
+                                  QDir::Files,
+                                  QDirIterator::Subdirectories);
+    REQUIRE(noteFileIterator.hasNext());
+    const QString clonedNotePath = noteFileIterator.next();
+
+    auto noteProto = loadProtoFromJsonFile<CavewhereProto::Note>(clonedNotePath);
+    const QString remoteName = QStringLiteral("Remote rename with ambiguous local scrap ids");
+    noteProto.set_name(remoteName.toStdString());
+    writeProtoToJsonFile(clonedNotePath, noteProto);
+
+    REQUIRE_NOTHROW(cloneRepository.commitAll(QStringLiteral("Rename note"),
+                                              QStringLiteral("change note metadata only")));
+    auto clonePushFuture = cloneRepository.push();
+    REQUIRE(AsyncFuture::waitForFinished(clonePushFuture, 10000));
+    INFO("Remote clone push error:" << clonePushFuture.result().errorMessage().toStdString());
+    REQUIRE(!clonePushFuture.result().hasError());
+
+    QPointer<cwCave> localCavePtr = cave;
+    QPointer<cwTrip> localTripPtr = trip;
+    QPointer<cwNote> localNotePtr = localNote;
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+
+    auto* syncedCave = project->cavingRegion()->cave(0);
+    REQUIRE(syncedCave != nullptr);
+    auto* syncedTrip = syncedCave->trip(0);
+    REQUIRE(syncedTrip != nullptr);
+    REQUIRE(syncedTrip->notes()->rowCount() == 1);
+    auto* syncedNote = syncedTrip->notes()->notes().first();
+    REQUIRE(syncedNote != nullptr);
+    CHECK(syncedNote->name() == remoteName);
+
+    // Ambiguous structural mapping should force broad reconcile fallback, replacing model objects.
+    CHECK(syncedCave != localCavePtr.data());
+    CHECK(syncedTrip != localTripPtr.data());
+    CHECK(syncedNote != localNotePtr.data());
+}
+
 TEST_CASE("cwProject sync handles local edit churn during reconcile apply window", "[cwProject][sync]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
