@@ -3,6 +3,8 @@
 #include "cwSaveLoad.h"
 #include "cwSyncMergeApplyUtils.h"
 #include "cwTrip.h"
+#include "cwTripCalibrationMergeApplier.h"
+#include "cwTripCalibrationMergePlanBuilder.h"
 #include "cavewhere.pb.h"
 
 #include <optional>
@@ -14,6 +16,7 @@ std::unique_ptr<CavewhereProto::Trip> normalizedTripProtoForObject(const cwTrip*
     auto protoTrip = cwSaveLoad::toProtoTrip(trip);
     protoTrip->clear_name();
     protoTrip->clear_date();
+    protoTrip->clear_tripcalibration();
     return protoTrip;
 }
 
@@ -24,6 +27,7 @@ std::unique_ptr<CavewhereProto::Trip> normalizedTripProtoForData(const cwTripDat
     auto protoTrip = cwSaveLoad::toProtoTrip(&tempTrip);
     protoTrip->clear_name();
     protoTrip->clear_date();
+    protoTrip->clear_tripcalibration();
     return protoTrip;
 }
 
@@ -63,6 +67,9 @@ bool cwTripMergeApplier::applyTripMergePlan(const cwTripMergePlan& plan, QString
     const std::optional<QDateTime> baseDate = plan.baseTripData.has_value()
         ? std::optional<QDateTime>(plan.baseTripData->date)
         : std::nullopt;
+    const std::optional<cwTripCalibrationData> baseCalibration = plan.baseTripData.has_value()
+        ? std::optional<cwTripCalibrationData>(plan.baseTripData->calibrations)
+        : std::nullopt;
 
     currentTrip->setName(cwSyncMergeApplyUtils::chooseBundleValue(
         currentTrip->name(),
@@ -75,6 +82,28 @@ bool cwTripMergeApplier::applyTripMergePlan(const cwTripMergePlan& plan, QString
         loadedTripData.date,
         baseDate,
         [](const QDateTime& lhs, const QDateTime& rhs) { return lhs == rhs; }));
+
+    QString calibrationPlanFailureReason;
+    const auto calibrationMergePlan = cwTripCalibrationMergePlanBuilder::build(
+        currentTrip->calibrations(),
+        &loadedTripData.calibrations,
+        baseCalibration,
+        &calibrationPlanFailureReason);
+    if (!calibrationMergePlan.has_value()) {
+        if (failureReason != nullptr) {
+            *failureReason = calibrationPlanFailureReason.isEmpty()
+                                 ? QStringLiteral("Trip calibration merge plan is missing required objects.")
+                                 : calibrationPlanFailureReason;
+        }
+        return false;
+    }
+
+    if (!cwTripCalibrationMergeApplier::applyTripCalibrationMergePlan(*calibrationMergePlan)) {
+        if (failureReason != nullptr) {
+            *failureReason = QStringLiteral("Trip calibration merge apply failed.");
+        }
+        return false;
+    }
 
     return true;
 }

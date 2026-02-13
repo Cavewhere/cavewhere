@@ -82,6 +82,40 @@ TEST_CASE("cwTrip merge applier merges name and date bundles independently", "[c
     CHECK(currentTrip.date() == QDateTime(QDate(2024, 5, 10), QTime()));
 }
 
+TEST_CASE("cwTrip merge applier merges calibration fields independently", "[cwTripMerge][sync]")
+{
+    cwTrip currentTrip;
+
+    cwTripData baseTripData = currentTrip.data();
+    baseTripData.calibrations.setTapeCalibration(1.0);
+    baseTripData.calibrations.setDeclination(2.0);
+    baseTripData.calibrations.setFrontSights(true);
+    currentTrip.calibrations()->setData(baseTripData.calibrations);
+
+    cwTripData loadedTripData = currentTrip.data();
+    loadedTripData.calibrations.setTapeCalibration(3.0); // Remote-only change.
+    loadedTripData.calibrations.setDeclination(2.0); // Unchanged from base.
+    loadedTripData.calibrations.setFrontSights(false); // Remote-only change.
+
+    cwTripCalibrationData oursCalibration = currentTrip.calibrations()->data();
+    oursCalibration.setDeclination(4.0); // Local-only change.
+    currentTrip.calibrations()->setData(oursCalibration);
+
+    cwTripMergePlan plan;
+    plan.currentTrip = &currentTrip;
+    plan.loadedTripData = &loadedTripData;
+    plan.baseTripData = baseTripData;
+
+    QString failureReason;
+    REQUIRE(cwTripMergeApplier::applyTripMergePlan(plan, &failureReason));
+    CHECK(failureReason.isEmpty());
+
+    const cwTripCalibrationData merged = currentTrip.calibrations()->data();
+    CHECK(merged.tapeCalibration() == 3.0);
+    CHECK(merged.declination() == 4.0);
+    CHECK(merged.hasFrontSights() == false);
+}
+
 TEST_CASE("cwTrip merge applier returns false when trip subobjects differ", "[cwTripMerge][sync]")
 {
     cwTrip currentTrip;
@@ -101,4 +135,3 @@ TEST_CASE("cwTrip merge applier returns false when trip subobjects differ", "[cw
     CHECK_FALSE(cwTripMergeApplier::applyTripMergePlan(plan, &failureReason));
     CHECK(failureReason == QStringLiteral("Trip subobject merge is not implemented for incremental trip merge."));
 }
-
