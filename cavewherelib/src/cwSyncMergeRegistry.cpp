@@ -1,5 +1,6 @@
 #include "cwSyncMergeRegistry.h"
 
+#include "cwCaveSyncMergeHandler.h"
 #include "cwNoteLiDARSyncMergeHandler.h"
 #include "cwNoteSyncMergeHandler.h"
 #include "cwTripSyncMergeHandler.h"
@@ -8,6 +9,7 @@
 
 cwSyncMergeRegistry::cwSyncMergeRegistry()
 {
+    m_handlers.emplace_back(std::make_unique<cwCaveSyncMergeHandler>());
     m_handlers.emplace_back(std::make_unique<cwTripSyncMergeHandler>());
     m_handlers.emplace_back(std::make_unique<cwNoteLiDARSyncMergeHandler>());
     m_handlers.emplace_back(std::make_unique<cwNoteSyncMergeHandler>());

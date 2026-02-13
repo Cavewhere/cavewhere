@@ -515,12 +515,12 @@ Implementation breakdown:
 - [x] Add `cwSurveyChunkMergePlanBuilder` + `cwSurveyChunkMergeApplier` skeletons.
 - [ ] Keep subobject appliers no-op or conservative fallback until each bundle policy is implemented.
 
-- [ ] 5D Cave-level skeleton follow-up
-- [ ] Add `cwCaveMergePlanBuilder` + `cwCaveMergeApplier` skeletons for `cwCaveData`.
-- [ ] Initial cave bundle matrix:
-- [ ] scalar metadata: `name`
-- [ ] trips list: identity-based by `cwTripData.id` and delegated to trip handler
-- [ ] Cave `stationPositionLookup` is cache/runtime derived and is not serialized canonical payload for reconcile; do not include it in cave merge bundles.
+- [x] 5D Cave-level skeleton follow-up
+- [x] Add `cwCaveMergePlanBuilder` + `cwCaveMergeApplier` skeletons for `cwCaveData`.
+- [x] Initial cave bundle matrix:
+- [x] scalar metadata: `name`
+- [x] trip list merge is intentionally out-of-scope for cave merge; trip payload reconciliation stays in trip handlers because trips are descriptor-scoped in separate files.
+- [x] Cave `stationPositionLookup` is cache/runtime derived and is not serialized canonical payload for reconcile; do not include it in cave merge bundles.
 
 Test checklist for Phase 5 skeleton kickoff:
 - [x] Add `testcases/test_cwTripMergePlanBuilder.cpp` with identity/ambiguity planning tests.
