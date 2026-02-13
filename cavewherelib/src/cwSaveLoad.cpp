@@ -585,6 +585,13 @@ void repairNestedScrapIds(cwSaveLoad::ProjectLoadData& loadData)
                     }
                 }
             }
+
+            for (cwNoteLiDARData& noteLiDAR : trip.noteLiDARModel.notes) {
+                QSet<QUuid> seenLiDARStationIds;
+                for (cwNoteLiDARStation& station : noteLiDAR.stations) {
+                    station.setId(repairedTopLevelId(station.id(), seenLiDARStationIds, loadData.identityRepair));
+                }
+            }
         }
     }
 }
@@ -2615,6 +2622,9 @@ std::unique_ptr<CavewhereProto::NoteLiDAR> cwSaveLoad::toProtoNoteLiDAR(const cw
         auto protoNoteStation = protoNote->add_notestations();
         *(protoNoteStation->mutable_name()) = noteStation.name().toStdString();
         cwRegionSaveTask::saveVector3D(protoNoteStation->mutable_positiononnote(), noteStation.positionOnNote());
+        if (!noteStation.id().isNull()) {
+            *(protoNoteStation->mutable_id()) = uuidToProtoString(noteStation.id()).toStdString();
+        }
     }
 
     saveNoteLiDARTranformation(protoNote->mutable_notetransformation(), note->noteTransformation());
@@ -3027,6 +3037,11 @@ Monad::Result<cwNoteLiDARData> cwSaveLoad::loadNoteLiDAR(const QString& filename
             cwNoteLiDARStation newStation;
             newStation.setPositionOnNote(cwRegionLoadTask::loadVector3D(protoNoteStation.positiononnote()));
             newStation.setName(QString::fromStdString(protoNoteStation.name()));
+            if (protoNoteStation.has_id()) {
+                newStation.setId(toUuid(protoNoteStation.id()));
+            } else {
+                newStation.setId(QUuid());
+            }
             noteData.stations.append(std::move(newStation));
         }
 

@@ -113,16 +113,20 @@ std::optional<cwNoteLiDARData> lidarDataFromProto(const CavewhereProto::NoteLiDA
 
     noteData.stations.reserve(protoNote.notestations_size());
     for (const auto& protoStation : protoNote.notestations()) {
-        if (!protoStation.has_name() || protoStation.name().empty()) {
-            return std::nullopt;
-        }
         cwNoteLiDARStation station;
-        station.setName(QString::fromStdString(protoStation.name()));
+        if (protoStation.has_name()) {
+            station.setName(QString::fromStdString(protoStation.name()));
+        }
         if (protoStation.has_positiononnote()) {
             const auto& position = protoStation.positiononnote();
             station.setPositionOnNote(QVector3D(position.x(), position.y(), position.z()));
         } else {
             station.setPositionOnNote(QVector3D());
+        }
+        if (protoStation.has_id()) {
+            station.setId(uuidFromProtoString(protoStation.id()));
+        } else {
+            station.setId(QUuid());
         }
         noteData.stations.append(station);
     }
@@ -167,6 +171,14 @@ std::optional<std::pair<QUuid, cwNoteLiDARData>> loadBaseLiDARDataForNote(
     auto noteData = lidarDataFromProto(protoNote);
     if (!noteData.has_value()) {
         return std::nullopt;
+    }
+
+    QSet<QUuid> seenStationIds;
+    for (const cwNoteLiDARStation& station : noteData->stations) {
+        if (station.id().isNull() || seenStationIds.contains(station.id())) {
+            return std::nullopt;
+        }
+        seenStationIds.insert(station.id());
     }
 
     return std::make_optional(std::make_pair(noteData->id, *noteData));

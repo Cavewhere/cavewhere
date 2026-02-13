@@ -1323,6 +1323,109 @@ TEST_CASE("Loading a project repairs duplicate scrap station and lead ids", "[cw
     CHECK(leads.at(0).id() != leads.at(1).id());
 }
 
+TEST_CASE("Loading a project repairs duplicate LiDAR station ids", "[cwProject][repair]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto* region = project->cavingRegion();
+
+    region->addCave();
+    auto* cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Repair Duplicate LiDAR Station IDs Cave"));
+    cave->addTrip();
+    auto* trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
+    trip->setName(QStringLiteral("Repair Duplicate LiDAR Station IDs Trip"));
+
+    const QString glbPath = copyToTempFolder("://datasets/test_cwSurveyNotesConcatModel/bones.glb");
+    REQUIRE(QFileInfo::exists(glbPath));
+    trip->notesLiDAR()->addFromFiles({QUrl::fromLocalFile(glbPath)});
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    REQUIRE(trip->notesLiDAR()->rowCount() == 1);
+    auto* note = qobject_cast<cwNoteLiDAR*>(trip->notesLiDAR()->notes().at(0));
+    REQUIRE(note != nullptr);
+
+    cwNoteLiDARStation stationA;
+    stationA.setName(QStringLiteral("L-A"));
+    stationA.setPositionOnNote(QVector3D(0.10f, 0.20f, 0.30f));
+    note->addStation(stationA);
+
+    cwNoteLiDARStation stationB;
+    stationB.setName(QStringLiteral("L-B"));
+    stationB.setPositionOnNote(QVector3D(0.40f, 0.50f, 0.60f));
+    note->addStation(stationB);
+    project->waitSaveToFinish();
+
+    QTemporaryDir saveDir;
+    REQUIRE(saveDir.isValid());
+    const QString savePath = QDir(saveDir.path()).filePath(QStringLiteral("repair-duplicate-lidar-station-ids.cwproj"));
+    REQUIRE(project->saveAs(savePath));
+    project->waitSaveToFinish();
+    const QString savedProjectFile = project->filename();
+    REQUIRE(QFileInfo::exists(savedProjectFile));
+
+    QDirIterator noteFileIterator(QFileInfo(savedProjectFile).absolutePath(),
+                                  QStringList{QStringLiteral("*.cwnote3d")},
+                                  QDir::Files,
+                                  QDirIterator::Subdirectories);
+    REQUIRE(noteFileIterator.hasNext());
+    const QString noteFile = noteFileIterator.next();
+    CHECK_FALSE(noteFileIterator.hasNext());
+    REQUIRE(QFileInfo::exists(noteFile));
+
+    rootData.reset();
+
+    const std::string duplicateStationId = "aaaaaaaa-2222-3333-4444-555555555555";
+    {
+        auto noteProto = loadProtoFromJsonFile<CavewhereProto::NoteLiDAR>(noteFile);
+        REQUIRE(noteProto.notestations_size() == 2);
+        noteProto.mutable_notestations(0)->set_id(duplicateStationId);
+        noteProto.mutable_notestations(1)->set_id(duplicateStationId);
+        writeProtoToJsonFile(noteFile, noteProto);
+    }
+
+    auto reloaded = std::make_unique<cwProject>();
+    addTokenManager(reloaded.get());
+    reloaded->loadOrConvert(savedProjectFile);
+    reloaded->waitLoadToFinish();
+    reloaded->waitSaveToFinish();
+
+    const auto repairedNoteProto = loadProtoFromJsonFile<CavewhereProto::NoteLiDAR>(noteFile);
+    REQUIRE(repairedNoteProto.notestations_size() == 2);
+
+    int duplicateCount = 0;
+    QSet<QString> repairedIds;
+    for (const auto& station : repairedNoteProto.notestations()) {
+        REQUIRE(station.has_id());
+        CHECK_FALSE(station.id().empty());
+        const QString id = QString::fromStdString(station.id());
+        repairedIds.insert(id);
+        if (station.id() == duplicateStationId) {
+            ++duplicateCount;
+        }
+    }
+    CHECK(duplicateCount == 1);
+    CHECK(repairedIds.size() == repairedNoteProto.notestations_size());
+
+    REQUIRE(reloaded->cavingRegion()->caveCount() == 1);
+    auto* loadedCave = reloaded->cavingRegion()->cave(0);
+    REQUIRE(loadedCave != nullptr);
+    REQUIRE(loadedCave->tripCount() == 1);
+    auto* loadedTrip = loadedCave->trip(0);
+    REQUIRE(loadedTrip != nullptr);
+    REQUIRE(loadedTrip->notesLiDAR()->rowCount() == 1);
+
+    auto* loadedNote = qobject_cast<cwNoteLiDAR*>(loadedTrip->notesLiDAR()->notes().at(0));
+    REQUIRE(loadedNote != nullptr);
+    const auto stations = loadedNote->stations();
+    REQUIRE(stations.size() == 2);
+    CHECK_FALSE(stations.at(0).id().isNull());
+    CHECK_FALSE(stations.at(1).id().isNull());
+    CHECK(stations.at(0).id() != stations.at(1).id());
+}
+
 TEST_CASE("Loading a project surfaces repair save failures", "[cwProject][repair]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
@@ -3727,8 +3830,12 @@ TEST_CASE("cwProject sync incrementally reconciles pulled LiDAR note updates", "
     auto noteProto = loadProtoFromJsonFile<CavewhereProto::NoteLiDAR>(clonedNotePath);
     REQUIRE(noteProto.notestations_size() == 2);
 
-    const QString originalStationZeroName = QString::fromStdString(noteProto.notestations(0).name());
-    const QString originalStationOneName = QString::fromStdString(noteProto.notestations(1).name());
+    REQUIRE(noteProto.notestations(0).has_id());
+    REQUIRE(noteProto.notestations(1).has_id());
+    const QUuid stationZeroId = QUuid(QString::fromStdString(noteProto.notestations(0).id()));
+    const QUuid stationOneId = QUuid(QString::fromStdString(noteProto.notestations(1).id()));
+    REQUIRE(!stationZeroId.isNull());
+    REQUIRE(!stationOneId.isNull());
 
     CavewhereProto::NoteLiDARStation firstStation = noteProto.notestations(0);
     *noteProto.mutable_notestations(0) = noteProto.notestations(1);
@@ -3772,21 +3879,23 @@ TEST_CASE("cwProject sync incrementally reconciles pulled LiDAR note updates", "
     const QList<cwNoteLiDARStation> syncedStations = syncedNote->stations();
     REQUIRE(syncedStations.size() == 2);
 
-    auto findStation = [&](const QString& name) -> std::optional<cwNoteLiDARStation> {
+    auto findStation = [&](const QUuid& id) -> std::optional<cwNoteLiDARStation> {
         for (const cwNoteLiDARStation& station : syncedStations) {
-            if (station.name() == name) {
+            if (station.id() == id) {
                 return station;
             }
         }
         return std::nullopt;
     };
 
-    const auto stationOne = findStation(originalStationOneName);
+    const auto stationOne = findStation(stationOneId);
     REQUIRE(stationOne.has_value());
+    CHECK(stationOne->name() == QStringLiteral("L1"));
     CHECK(stationOne->positionOnNote() == QVector3D(0.88f, 0.77f, 0.66f));
 
-    const auto stationZero = findStation(originalStationZeroName);
+    const auto stationZero = findStation(stationZeroId);
     REQUIRE(stationZero.has_value());
+    CHECK(stationZero->name() == QStringLiteral("L0"));
     CHECK(stationZero->positionOnNote() == QVector3D(0.10f, 0.20f, 0.30f));
 
 }

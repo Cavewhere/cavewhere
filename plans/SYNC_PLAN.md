@@ -432,7 +432,8 @@ Implementation checklist:
 - [x] Implement 3-way merge bundles for `cwNoteLiDARData`:
 - [x] `filename` bundle
 - [x] `transform + autoCalculateNorth` bundle
-- [x] `stations` bundle (order-insensitive with strict ambiguous-name fallback)
+- [x] `stations` bundle with stable station IDs (order-insensitive ID matching, strict ambiguous fallback)
+- [x] Add stable IDs for `NoteLiDARStation` in schema/runtime/serialization and repair pass.
 - [x] Keep strict fallback to full reload on ambiguous `cwNoteLiDAR` structural mapping.
 - [ ] 4B.6 Diagnostics and fallback
 - [ ] Emit explicit diagnostics for: note reorder applied, station/lead merge conflict resolved by ours, geometry conflict kept ours, and ambiguous mapping fallback.

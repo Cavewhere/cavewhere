@@ -385,6 +385,7 @@ message ClinoReading {
 message NoteLiDARStation {
     optional string name = 1; //Relative path to 3d asset
     optional QtProto.QVector3D positionOnNote = 2;
+    optional string id = 3;
 }
 
 message NoteLiDARTransformation {

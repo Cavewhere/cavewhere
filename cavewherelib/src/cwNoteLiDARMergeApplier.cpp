@@ -31,7 +31,8 @@ bool lidarTransformsEqual(const cwNoteLiDARTransformationData& lhs, const cwNote
 
 bool lidarStationsEqual(const cwNoteLiDARStation& lhs, const cwNoteLiDARStation& rhs)
 {
-    return lhs.name() == rhs.name()
+    return lhs.id() == rhs.id()
+           && lhs.name() == rhs.name()
            && lhs.positionOnNote() == rhs.positionOnNote();
 }
 
@@ -55,63 +56,66 @@ T chooseBundleValue(const T& currentValue,
     return currentValue;
 }
 
-std::optional<QHash<QString, cwNoteLiDARStation>> keyedStationsByName(const QList<cwNoteLiDARStation>& stations)
+std::optional<QHash<QUuid, cwNoteLiDARStation>> keyedStationsById(const QList<cwNoteLiDARStation>& stations)
 {
-    QHash<QString, cwNoteLiDARStation> byName;
-    byName.reserve(stations.size());
+    QHash<QUuid, cwNoteLiDARStation> byId;
+    byId.reserve(stations.size());
     for (const cwNoteLiDARStation& station : stations) {
-        const QString key = station.name().trimmed();
-        if (key.isEmpty() || byName.contains(key)) {
+        const QUuid key = station.id();
+        if (key.isNull() || byId.contains(key)) {
             return std::nullopt;
         }
-        byName.insert(key, station);
+        byId.insert(key, station);
     }
-    return byName;
+    return byId;
 }
 
-std::optional<QList<cwNoteLiDARStation>> mergeStationsByName(const QList<cwNoteLiDARStation>& currentStations,
-                                                             const QList<cwNoteLiDARStation>& loadedStations,
-                                                             const std::optional<QList<cwNoteLiDARStation>>& baseStations)
+std::optional<QList<cwNoteLiDARStation>> mergeStationsById(const QList<cwNoteLiDARStation>& currentStations,
+                                                           const QList<cwNoteLiDARStation>& loadedStations,
+                                                           const std::optional<QList<cwNoteLiDARStation>>& baseStations)
 {
     if (!baseStations.has_value()) {
+        if (!keyedStationsById(loadedStations).has_value()) {
+            return std::nullopt;
+        }
         return loadedStations;
     }
 
-    const auto currentByName = keyedStationsByName(currentStations);
-    const auto loadedByName = keyedStationsByName(loadedStations);
-    const auto baseByName = keyedStationsByName(*baseStations);
-    if (!currentByName.has_value() || !loadedByName.has_value() || !baseByName.has_value()) {
+    const auto currentById = keyedStationsById(currentStations);
+    const auto loadedById = keyedStationsById(loadedStations);
+    const auto baseById = keyedStationsById(*baseStations);
+    if (!currentById.has_value() || !loadedById.has_value() || !baseById.has_value()) {
         return std::nullopt;
     }
 
-    QList<QString> orderedNames;
-    orderedNames.reserve(currentStations.size() + loadedStations.size());
-    QSet<QString> seenNames;
+    QList<QUuid> orderedIds;
+    orderedIds.reserve(currentStations.size() + loadedStations.size());
+    QSet<QUuid> seenIds;
     for (const cwNoteLiDARStation& station : currentStations) {
-        const QString name = station.name().trimmed();
-        if (!seenNames.contains(name)) {
-            seenNames.insert(name);
-            orderedNames.append(name);
+        const QUuid id = station.id();
+        if (!seenIds.contains(id)) {
+            seenIds.insert(id);
+            orderedIds.append(id);
         }
     }
     for (const cwNoteLiDARStation& station : loadedStations) {
-        const QString name = station.name().trimmed();
-        if (!seenNames.contains(name)) {
-            seenNames.insert(name);
-            orderedNames.append(name);
+        const QUuid id = station.id();
+        if (!seenIds.contains(id)) {
+            seenIds.insert(id);
+            orderedIds.append(id);
         }
     }
 
     QList<cwNoteLiDARStation> mergedStations;
-    mergedStations.reserve(orderedNames.size());
-    for (const QString& name : orderedNames) {
-        const auto currentIt = currentByName->constFind(name);
-        const auto loadedIt = loadedByName->constFind(name);
-        const auto baseIt = baseByName->constFind(name);
+    mergedStations.reserve(orderedIds.size());
+    for (const QUuid& id : orderedIds) {
+        const auto currentIt = currentById->constFind(id);
+        const auto loadedIt = loadedById->constFind(id);
+        const auto baseIt = baseById->constFind(id);
 
-        const bool hasCurrent = currentIt != currentByName->constEnd();
-        const bool hasLoaded = loadedIt != loadedByName->constEnd();
-        const bool hasBase = baseIt != baseByName->constEnd();
+        const bool hasCurrent = currentIt != currentById->constEnd();
+        const bool hasLoaded = loadedIt != loadedById->constEnd();
+        const bool hasBase = baseIt != baseById->constEnd();
 
         if (hasCurrent && hasLoaded) {
             const std::optional<cwNoteLiDARStation> baseStation = hasBase
@@ -198,7 +202,7 @@ bool cwNoteLiDARMergeApplier::applyNoteLiDARMergePlan(const cwNoteLiDARMergePlan
     plan.currentNote->noteTransformation()->setData(mergedTransformBundle.transform);
     plan.currentNote->noteTransformation()->setUpSign(mergedTransformBundle.transform.upSign);
 
-    const auto mergedStations = mergeStationsByName(
+    const auto mergedStations = mergeStationsById(
         plan.currentNote->stations(),
         plan.loadedNoteData->stations,
         plan.baseNoteData.has_value() ? std::optional<QList<cwNoteLiDARStation>>(plan.baseNoteData->stations)

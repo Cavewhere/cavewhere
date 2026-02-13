@@ -321,8 +321,8 @@ if(BUILD_TESTING)
         AUTOUIC ON
     )
 
-    file(GLOB cavewhere_test_CPP_FILES "testcases/*.cpp")
-    file(GLOB cavewhere_test_H_FILES "testcases/*.h")
+    file(GLOB cavewhere_test_CPP_FILES CONFIGURE_DEPENDS "testcases/*.cpp")
+    file(GLOB cavewhere_test_H_FILES CONFIGURE_DEPENDS "testcases/*.h")
     target_sources(cavewhere-test PRIVATE ${cavewhere_test_CPP_FILES} ${cavewhere_test_H_FILES})
 
     target_link_libraries(cavewhere-test
