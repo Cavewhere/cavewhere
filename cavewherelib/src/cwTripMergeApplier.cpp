@@ -1,6 +1,8 @@
 #include "cwTripMergeApplier.h"
 
 #include "cwSaveLoad.h"
+#include "cwSurveyChunkSyncMergeHandler.h"
+#include "cwSyncIdUtils.h"
 #include "cwSyncMergeApplyUtils.h"
 #include "cwTeamSyncMergeHandler.h"
 #include "cwTrip.h"
@@ -18,6 +20,13 @@ std::unique_ptr<CavewhereProto::Trip> normalizedTripProtoForObject(const cwTrip*
     protoTrip->clear_name();
     protoTrip->clear_date();
     protoTrip->clear_tripcalibration();
+    for (int i = 0; i < protoTrip->chunks_size(); ++i) {
+        auto* chunk = protoTrip->mutable_chunks(i);
+        chunk->clear_stations();
+        chunk->clear_shots();
+        chunk->clear_calibrations();
+        chunk->clear_leg();
+    }
     return protoTrip;
 }
 
@@ -29,6 +38,13 @@ std::unique_ptr<CavewhereProto::Trip> normalizedTripProtoForData(const cwTripDat
     protoTrip->clear_name();
     protoTrip->clear_date();
     protoTrip->clear_tripcalibration();
+    for (int i = 0; i < protoTrip->chunks_size(); ++i) {
+        auto* chunk = protoTrip->mutable_chunks(i);
+        chunk->clear_stations();
+        chunk->clear_shots();
+        chunk->clear_calibrations();
+        chunk->clear_leg();
+    }
     return protoTrip;
 }
 
@@ -71,6 +87,9 @@ Monad::ResultBase cwTripMergeApplier::applyTripMergePlan(const cwTripMergePlan& 
     const std::optional<cwTeamData> baseTeamData = plan.baseTripData.has_value()
         ? std::optional<cwTeamData>(plan.baseTripData->team)
         : std::nullopt;
+    const std::optional<QList<cwSurveyChunkData>> baseChunks = plan.baseTripData.has_value()
+        ? std::optional<QList<cwSurveyChunkData>>(plan.baseTripData->chunks)
+        : std::nullopt;
 
     currentTrip->setName(cwSyncMergeApplyUtils::chooseBundleValue(
         currentTrip->name(),
@@ -109,6 +128,65 @@ Monad::ResultBase cwTripMergeApplier::applyTripMergePlan(const cwTripMergePlan& 
     const auto applyTeamResult = cwTeamSyncMergeHandler::applyTeamMergePlan(teamMergePlan.value());
     if (applyTeamResult.hasError()) {
         return Monad::ResultBase(applyTeamResult.errorMessage());
+    }
+
+    const auto currentChunksById = cwSyncIdUtils::buildUniqueIdPointerMap(
+        currentTrip->chunks(),
+        [](cwSurveyChunk* chunk) { return chunk; },
+        [](const cwSurveyChunk* chunk) { return chunk->id(); });
+    if (!currentChunksById.has_value()) {
+        return Monad::ResultBase(QStringLiteral("Ambiguous current survey chunk ids."));
+    }
+
+    const auto loadedChunksById = cwSyncIdUtils::buildUniqueIdValueMap(
+        loadedTripData.chunks,
+        [](const cwSurveyChunkData& chunkData) { return chunkData.id; });
+    if (!loadedChunksById.has_value()) {
+        return Monad::ResultBase(QStringLiteral("Ambiguous loaded survey chunk ids."));
+    }
+
+    std::optional<QHash<QUuid, cwSurveyChunkData>> baseChunksById;
+    if (baseChunks.has_value()) {
+        baseChunksById = cwSyncIdUtils::buildUniqueIdValueMap(
+            *baseChunks,
+            [](const cwSurveyChunkData& chunkData) { return chunkData.id; });
+        if (!baseChunksById.has_value()) {
+            return Monad::ResultBase(QStringLiteral("Ambiguous base survey chunk ids."));
+        }
+    }
+
+    const auto currentChunkIds = cwSyncIdUtils::collectOrderedUniqueIds(
+        currentTrip->chunks(),
+        [](const cwSurveyChunk* chunk) { return chunk->id(); });
+    const auto loadedChunkIds = cwSyncIdUtils::collectOrderedUniqueIds(
+        loadedTripData.chunks,
+        [](const cwSurveyChunkData& chunkData) { return chunkData.id; });
+    if (!currentChunkIds.has_value() || !loadedChunkIds.has_value() || *currentChunkIds != *loadedChunkIds) {
+        return Monad::ResultBase(QStringLiteral("Survey chunk structure changed and requires full reload fallback."));
+    }
+
+    for (const cwSurveyChunkData& loadedChunkData : loadedTripData.chunks) {
+        const auto currentChunkIt = currentChunksById->constFind(loadedChunkData.id);
+        if (currentChunkIt == currentChunksById->constEnd()) {
+            return Monad::ResultBase(QStringLiteral("Missing current survey chunk object for incremental merge."));
+        }
+
+        const auto baseChunkData = baseChunksById.has_value() && baseChunksById->contains(loadedChunkData.id)
+            ? std::optional<cwSurveyChunkData>(baseChunksById->value(loadedChunkData.id))
+            : std::nullopt;
+
+        const auto chunkPlan = cwSurveyChunkSyncMergeHandler::buildSurveyChunkMergePlan(
+            *currentChunkIt,
+            &loadedChunkData,
+            baseChunkData);
+        if (chunkPlan.hasError()) {
+            return Monad::ResultBase(chunkPlan.errorMessage());
+        }
+
+        const auto chunkApplyResult = cwSurveyChunkSyncMergeHandler::applySurveyChunkMergePlan(chunkPlan.value());
+        if (chunkApplyResult.hasError()) {
+            return Monad::ResultBase(chunkApplyResult.errorMessage());
+        }
     }
 
     return Monad::ResultBase();

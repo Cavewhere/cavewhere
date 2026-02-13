@@ -7,6 +7,7 @@ using namespace Catch;
 #include "cwTrip.h"
 #include "cwTripMergeApplier.h"
 #include "cwTripMergePlanBuilder.h"
+#include "cwSurveyChunk.h"
 #include "cwSurveyChunkData.h"
 
 namespace {
@@ -129,4 +130,50 @@ TEST_CASE("cwTrip merge applier returns false when non-mergeable trip subobjects
     CHECK(applyResult.hasError());
     CHECK(applyResult.errorMessage()
           == QStringLiteral("Trip subobject merge is not implemented for incremental trip merge."));
+}
+
+TEST_CASE("cwTrip merge applier merges survey chunk payloads by stable id", "[cwTripMerge][sync]")
+{
+    cwTrip currentTrip;
+    auto* chunk = new cwSurveyChunk();
+    chunk->appendNewShot();
+    currentTrip.addChunk(chunk);
+
+    const QUuid stationAId = QUuid::createUuid();
+    const QUuid stationBId = QUuid::createUuid();
+    const QUuid shotAId = QUuid::createUuid();
+
+    cwSurveyChunkData baseChunkData = chunk->data();
+    baseChunkData.stations[0].setId(stationAId);
+    baseChunkData.stations[1].setId(stationBId);
+    baseChunkData.stations[0].setName(QStringLiteral("A0"));
+    baseChunkData.stations[1].setName(QStringLiteral("B0"));
+    baseChunkData.shots[0].setId(shotAId);
+    baseChunkData.shots[0].setDistance(QStringLiteral("10.0"));
+    chunk->setData(baseChunkData);
+
+    cwTripData baseTripData = currentTrip.data();
+    baseTripData.chunks[0] = baseChunkData;
+
+    cwSurveyChunkData currentChunkData = chunk->data();
+    currentChunkData.stations[0].setName(QStringLiteral("A-local"));
+    chunk->setData(currentChunkData);
+
+    cwTripData loadedTripData = currentTrip.data();
+    loadedTripData.chunks[0] = baseChunkData;
+    loadedTripData.chunks[0].stations[1].setName(QStringLiteral("B-remote"));
+    loadedTripData.chunks[0].shots[0].setDistance(QStringLiteral("12.5"));
+
+    cwTripMergePlan plan;
+    plan.currentTrip = &currentTrip;
+    plan.loadedTripData = &loadedTripData;
+    plan.baseTripData = baseTripData;
+
+    const auto applyResult = cwTripMergeApplier::applyTripMergePlan(plan);
+    REQUIRE_FALSE(applyResult.hasError());
+
+    const cwSurveyChunkData mergedChunkData = currentTrip.chunk(0)->data();
+    CHECK(mergedChunkData.stations[0].name() == QStringLiteral("A-local"));
+    CHECK(mergedChunkData.stations[1].name() == QStringLiteral("B-remote"));
+    CHECK(mergedChunkData.shots[0].distance().value() == QStringLiteral("12.5"));
 }
