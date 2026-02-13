@@ -42,6 +42,7 @@ Monad::ResultBase cwTeamMergeApplier::applyTeamMergePlan(const cwTeamMergePlan& 
         currentMembers,
         loadedMembers,
         baseMembers,
+        [](const cwTeamMember& member) { return member.id(); },
         [](const cwTeamMember& currentMember,
            const cwTeamMember& loadedMember,
            const std::optional<cwTeamMember>& baseMember) {

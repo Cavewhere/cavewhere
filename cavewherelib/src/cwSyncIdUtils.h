@@ -96,20 +96,21 @@ auto buildUniqueIdValueMap(const Container& items, IdAccessor idAccessor)
     return byId;
 }
 
-template<typename T, typename MergeSharedFn, typename PreferredOrderFn>
+template<typename T, typename IdAccessor, typename MergeSharedFn, typename PreferredOrderFn>
 Monad::Result<QList<T>> buildMergedOrderedList(const QList<T>& currentValues,
                                                const QList<T>& loadedValues,
                                                const std::optional<QList<T>>& baseValues,
+                                               IdAccessor idAccessor,
                                                MergeSharedFn mergeSharedValue,
                                                PreferredOrderFn preferredOrder,
                                                const QString& contextLabel)
 {
     const auto currentById = buildUniqueIdValueMap(
         currentValues,
-        [](const T& value) { return value.id(); });
+        idAccessor);
     const auto loadedById = buildUniqueIdValueMap(
         loadedValues,
-        [](const T& value) { return value.id(); });
+        idAccessor);
     if (!currentById.has_value() || !loadedById.has_value()) {
         return Monad::Result<QList<T>>(QStringLiteral("Ambiguous ids in %1.").arg(contextLabel));
     }
@@ -118,7 +119,7 @@ Monad::Result<QList<T>> buildMergedOrderedList(const QList<T>& currentValues,
     if (baseValues.has_value()) {
         baseById = buildUniqueIdValueMap(
             *baseValues,
-            [](const T& value) { return value.id(); });
+            idAccessor);
         if (!baseById.has_value()) {
             return Monad::Result<QList<T>>(QStringLiteral("Ambiguous base ids in %1.").arg(contextLabel));
         }
@@ -126,10 +127,10 @@ Monad::Result<QList<T>> buildMergedOrderedList(const QList<T>& currentValues,
 
     const auto currentIds = collectOrderedUniqueIds(
         currentValues,
-        [](const T& value) { return value.id(); });
+        idAccessor);
     const auto loadedIds = collectOrderedUniqueIds(
         loadedValues,
-        [](const T& value) { return value.id(); });
+        idAccessor);
     if (!currentIds.has_value() || !loadedIds.has_value()) {
         return Monad::Result<QList<T>>(QStringLiteral("Ambiguous ordered ids in %1.").arg(contextLabel));
     }
@@ -138,7 +139,7 @@ Monad::Result<QList<T>> buildMergedOrderedList(const QList<T>& currentValues,
     if (baseValues.has_value()) {
         baseIds = collectOrderedUniqueIds(
             *baseValues,
-            [](const T& value) { return value.id(); });
+            idAccessor);
         if (!baseIds.has_value()) {
             return Monad::Result<QList<T>>(QStringLiteral("Ambiguous ordered base ids in %1.").arg(contextLabel));
         }
@@ -163,10 +164,26 @@ Monad::Result<QList<T>> buildMergedOrderedList(const QList<T>& currentValues,
         const bool hasBase = baseById.has_value() && baseById->contains(id);
 
         if (hasCurrent && hasLoaded) {
-            mergedById.insert(id,
-                              mergeSharedValue(*currentIt,
-                                               *loadedIt,
-                                               hasBase ? std::optional<T>(baseById->value(id)) : std::nullopt));
+            using MergeResult = std::decay_t<decltype(mergeSharedValue(
+                *currentIt,
+                *loadedIt,
+                hasBase ? std::optional<T>(baseById->value(id)) : std::nullopt))>;
+
+            if constexpr (std::is_same_v<MergeResult, Monad::Result<T>>) {
+                const auto mergedValue = mergeSharedValue(
+                    *currentIt,
+                    *loadedIt,
+                    hasBase ? std::optional<T>(baseById->value(id)) : std::nullopt);
+                if (mergedValue.hasError()) {
+                    return Monad::Result<QList<T>>(mergedValue.errorMessage());
+                }
+                mergedById.insert(id, mergedValue.value());
+            } else {
+                mergedById.insert(id,
+                                  mergeSharedValue(*currentIt,
+                                                   *loadedIt,
+                                                   hasBase ? std::optional<T>(baseById->value(id)) : std::nullopt));
+            }
             continue;
         }
 

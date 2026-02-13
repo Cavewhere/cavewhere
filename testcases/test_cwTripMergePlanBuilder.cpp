@@ -17,6 +17,46 @@ cwTripData makeTripDataWithIdentity(const cwTrip& trip)
     return trip.data();
 }
 
+cwSurveyChunkData makeChunkData(const QUuid& chunkId,
+                                const QUuid& firstStationId,
+                                const QUuid& secondStationId,
+                                const QUuid& shotId,
+                                const QString& firstStationName,
+                                const QString& secondStationName,
+                                const QString& shotDistance)
+{
+    cwSurveyChunkData chunkData;
+    chunkData.id = chunkId;
+
+    cwStation firstStation;
+    firstStation.setId(firstStationId);
+    firstStation.setName(firstStationName);
+
+    cwStation secondStation;
+    secondStation.setId(secondStationId);
+    secondStation.setName(secondStationName);
+
+    cwShot shot;
+    shot.setId(shotId);
+    shot.setDistance(shotDistance);
+    shot.setCompass(QStringLiteral("0"));
+    shot.setBackCompass(QStringLiteral("180"));
+    shot.setClino(QStringLiteral("0"));
+    shot.setBackClino(QStringLiteral("0"));
+    shot.setDistanceIncluded(true);
+
+    chunkData.stations = {firstStation, secondStation};
+    chunkData.shots = {shot};
+    return chunkData;
+}
+
+void addChunkWithData(cwTrip& trip, const cwSurveyChunkData& chunkData)
+{
+    auto* chunk = new cwSurveyChunk();
+    chunk->setData(chunkData);
+    trip.addChunk(chunk);
+}
+
 } // namespace
 
 TEST_CASE("cwTrip merge plan builder maps loaded trips by stable id", "[cwTripMerge][sync]")
@@ -113,14 +153,16 @@ TEST_CASE("cwTrip merge applier merges calibration fields independently", "[cwTr
     CHECK(merged.hasFrontSights() == false);
 }
 
-TEST_CASE("cwTrip merge applier returns false when non-mergeable trip subobjects differ", "[cwTripMerge][sync]")
+TEST_CASE("cwTrip merge applier returns error when trip chunk ids are ambiguous", "[cwTripMerge][sync]")
 {
     cwTrip currentTrip;
     cwTripData loadedTripData = currentTrip.data();
 
-    cwSurveyChunkData remoteOnlyChunk;
-    remoteOnlyChunk.id = QUuid::createUuid();
-    loadedTripData.chunks.append(remoteOnlyChunk);
+    cwSurveyChunkData duplicateChunkA;
+    duplicateChunkA.id = QUuid::createUuid();
+    cwSurveyChunkData duplicateChunkB;
+    duplicateChunkB.id = duplicateChunkA.id;
+    loadedTripData.chunks = {duplicateChunkA, duplicateChunkB};
 
     cwTripMergePlan plan;
     plan.currentTrip = &currentTrip;
@@ -128,8 +170,106 @@ TEST_CASE("cwTrip merge applier returns false when non-mergeable trip subobjects
 
     const auto applyResult = cwTripMergeApplier::applyTripMergePlan(plan);
     CHECK(applyResult.hasError());
-    CHECK(applyResult.errorMessage()
-          == QStringLiteral("Trip subobject merge is not implemented for incremental trip merge."));
+    CHECK(applyResult.errorMessage() == QStringLiteral("Ambiguous ids in trip chunk list."));
+}
+
+TEST_CASE("cwTrip merge applier structurally merges chunk list by stable id with deterministic order", "[cwTripMerge][sync]")
+{
+    cwTrip currentTrip;
+
+    const QUuid chunkAId = QUuid::createUuid();
+    const QUuid chunkBId = QUuid::createUuid();
+    const QUuid chunkCId = QUuid::createUuid();
+    const QUuid chunkDId = QUuid::createUuid();
+    const QUuid chunkEId = QUuid::createUuid();
+
+    const QUuid stationA0Id = QUuid::createUuid();
+    const QUuid stationA1Id = QUuid::createUuid();
+    const QUuid shotAId = QUuid::createUuid();
+    const QUuid stationB0Id = QUuid::createUuid();
+    const QUuid stationB1Id = QUuid::createUuid();
+    const QUuid shotBId = QUuid::createUuid();
+
+    const cwSurveyChunkData chunkABase = makeChunkData(
+        chunkAId,
+        stationA0Id,
+        stationA1Id,
+        shotAId,
+        QStringLiteral("A0"),
+        QStringLiteral("A1"),
+        QStringLiteral("10.0"));
+    const cwSurveyChunkData chunkBBase = makeChunkData(
+        chunkBId,
+        stationB0Id,
+        stationB1Id,
+        shotBId,
+        QStringLiteral("B0"),
+        QStringLiteral("B1"),
+        QStringLiteral("20.0"));
+    const cwSurveyChunkData chunkEBase = makeChunkData(
+        chunkEId,
+        QUuid::createUuid(),
+        QUuid::createUuid(),
+        QUuid::createUuid(),
+        QStringLiteral("E0"),
+        QStringLiteral("E1"),
+        QStringLiteral("50.0"));
+
+    cwSurveyChunkData chunkACurrent = chunkABase;
+    chunkACurrent.stations[0].setName(QStringLiteral("A-local"));
+    const cwSurveyChunkData chunkBCurrent = chunkBBase;
+    const cwSurveyChunkData chunkCCurrent = makeChunkData(
+        chunkCId,
+        QUuid::createUuid(),
+        QUuid::createUuid(),
+        QUuid::createUuid(),
+        QStringLiteral("C0"),
+        QStringLiteral("C1"),
+        QStringLiteral("30.0"));
+
+    addChunkWithData(currentTrip, chunkBCurrent);
+    addChunkWithData(currentTrip, chunkACurrent);
+    addChunkWithData(currentTrip, chunkCCurrent);
+
+    cwSurveyChunkData chunkALoaded = chunkABase;
+    chunkALoaded.shots[0].setDistance(QStringLiteral("11.1"));
+    cwSurveyChunkData chunkBLoaded = chunkBBase;
+    chunkBLoaded.stations[1].setName(QStringLiteral("B1-remote"));
+    const cwSurveyChunkData chunkDLoaded = makeChunkData(
+        chunkDId,
+        QUuid::createUuid(),
+        QUuid::createUuid(),
+        QUuid::createUuid(),
+        QStringLiteral("D0"),
+        QStringLiteral("D1"),
+        QStringLiteral("40.0"));
+    cwSurveyChunkData chunkELoaded = chunkEBase;
+    chunkELoaded.stations[0].setName(QStringLiteral("E0-remote"));
+
+    cwTripData loadedTripData = currentTrip.data();
+    loadedTripData.chunks = {chunkALoaded, chunkDLoaded, chunkBLoaded, chunkELoaded};
+
+    cwTripData baseTripData = currentTrip.data();
+    baseTripData.chunks = {chunkABase, chunkBBase, chunkEBase};
+
+    cwTripMergePlan plan;
+    plan.currentTrip = &currentTrip;
+    plan.loadedTripData = &loadedTripData;
+    plan.baseTripData = baseTripData;
+
+    const auto applyResult = cwTripMergeApplier::applyTripMergePlan(plan);
+    REQUIRE_FALSE(applyResult.hasError());
+
+    const QList<cwSurveyChunk*> mergedChunks = currentTrip.chunks();
+    REQUIRE(mergedChunks.size() == 4);
+    CHECK(mergedChunks[0]->id() == chunkBId);
+    CHECK(mergedChunks[1]->id() == chunkAId);
+    CHECK(mergedChunks[2]->id() == chunkCId);
+    CHECK(mergedChunks[3]->id() == chunkDId);
+
+    CHECK(mergedChunks[1]->data().stations[0].name() == QStringLiteral("A-local"));
+    CHECK(mergedChunks[1]->data().shots[0].distance().value() == QStringLiteral("11.1"));
+    CHECK(mergedChunks[0]->data().stations[1].name() == QStringLiteral("B1-remote"));
 }
 
 TEST_CASE("cwTrip merge applier merges survey chunk payloads by stable id", "[cwTripMerge][sync]")

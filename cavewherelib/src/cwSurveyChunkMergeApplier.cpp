@@ -98,6 +98,7 @@ Monad::ResultBase cwSurveyChunkMergeApplier::applySurveyChunkMergePlan(const cwS
         baseChunkData.has_value()
             ? std::optional<QList<cwStation>>(baseChunkData->stations)
             : std::nullopt,
+        [](const cwStation& station) { return station.id(); },
         [](const cwStation& currentStation, const cwStation& loadedStation, const std::optional<cwStation>& baseStation) {
             return mergeSharedStation(currentStation, loadedStation, baseStation);
         },
@@ -121,6 +122,7 @@ Monad::ResultBase cwSurveyChunkMergeApplier::applySurveyChunkMergePlan(const cwS
         baseChunkData.has_value()
             ? std::optional<QList<cwShot>>(baseChunkData->shots)
             : std::nullopt,
+        [](const cwShot& shot) { return shot.id(); },
         [](const cwShot& currentShot, const cwShot& loadedShot, const std::optional<cwShot>& baseShot) {
             return mergeSharedShot(currentShot, loadedShot, baseShot);
         },
