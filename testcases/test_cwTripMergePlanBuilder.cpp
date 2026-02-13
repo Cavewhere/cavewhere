@@ -7,6 +7,7 @@ using namespace Catch;
 #include "cwTrip.h"
 #include "cwTripMergeApplier.h"
 #include "cwTripMergePlanBuilder.h"
+#include "cwSurveyChunkData.h"
 
 namespace {
 
@@ -111,16 +112,14 @@ TEST_CASE("cwTrip merge applier merges calibration fields independently", "[cwTr
     CHECK(merged.hasFrontSights() == false);
 }
 
-TEST_CASE("cwTrip merge applier returns false when trip subobjects differ", "[cwTripMerge][sync]")
+TEST_CASE("cwTrip merge applier returns false when non-mergeable trip subobjects differ", "[cwTripMerge][sync]")
 {
     cwTrip currentTrip;
     cwTripData loadedTripData = currentTrip.data();
 
-    cwTeamMember remoteOnlyMember;
-    remoteOnlyMember.setId(QUuid::createUuid());
-    remoteOnlyMember.setName(QStringLiteral("remote-member"));
-    remoteOnlyMember.setJobs({QStringLiteral("Sketch")});
-    loadedTripData.team.members.append(remoteOnlyMember);
+    cwSurveyChunkData remoteOnlyChunk;
+    remoteOnlyChunk.id = QUuid::createUuid();
+    loadedTripData.chunks.append(remoteOnlyChunk);
 
     cwTripMergePlan plan;
     plan.currentTrip = &currentTrip;

@@ -2,6 +2,7 @@
 
 #include "cwSaveLoad.h"
 #include "cwSyncMergeApplyUtils.h"
+#include "cwTeamSyncMergeHandler.h"
 #include "cwTrip.h"
 #include "cwTripCalibrationMergeApplier.h"
 #include "cwTripCalibrationMergePlanBuilder.h"
@@ -31,10 +32,12 @@ std::unique_ptr<CavewhereProto::Trip> normalizedTripProtoForData(const cwTripDat
     return protoTrip;
 }
 
-bool hasOnlyNameAndDateDiff(const cwTrip* currentTrip, const cwTripData& loadedTripData)
+bool hasOnlyMergeableDiff(const cwTrip* currentTrip, const cwTripData& loadedTripData)
 {
     const auto currentNormalized = normalizedTripProtoForObject(currentTrip);
     const auto loadedNormalized = normalizedTripProtoForData(loadedTripData);
+    currentNormalized->clear_team();
+    loadedNormalized->clear_team();
     return currentNormalized->SerializeAsString() == loadedNormalized->SerializeAsString();
 }
 
@@ -51,7 +54,7 @@ Monad::ResultBase cwTripMergeApplier::applyTripMergePlan(const cwTripMergePlan& 
     cwTrip* const currentTrip = plan.currentTrip;
     const cwTripData& loadedTripData = *plan.loadedTripData;
 
-    if (!hasOnlyNameAndDateDiff(currentTrip, loadedTripData)) {
+    if (!hasOnlyMergeableDiff(currentTrip, loadedTripData)) {
         return Monad::ResultBase(
             QStringLiteral("Trip subobject merge is not implemented for incremental trip merge."));
     }
@@ -64,6 +67,9 @@ Monad::ResultBase cwTripMergeApplier::applyTripMergePlan(const cwTripMergePlan& 
         : std::nullopt;
     const std::optional<cwTripCalibrationData> baseCalibration = plan.baseTripData.has_value()
         ? std::optional<cwTripCalibrationData>(plan.baseTripData->calibrations)
+        : std::nullopt;
+    const std::optional<cwTeamData> baseTeamData = plan.baseTripData.has_value()
+        ? std::optional<cwTeamData>(plan.baseTripData->team)
         : std::nullopt;
 
     currentTrip->setName(cwSyncMergeApplyUtils::chooseBundleValue(
@@ -90,6 +96,19 @@ Monad::ResultBase cwTripMergeApplier::applyTripMergePlan(const cwTripMergePlan& 
         cwTripCalibrationMergeApplier::applyTripCalibrationMergePlan(calibrationMergePlan.value());
     if (applyCalibrationResult.hasError()) {
         return Monad::ResultBase(applyCalibrationResult.errorMessage());
+    }
+
+    const auto teamMergePlan = cwTeamSyncMergeHandler::buildTeamMergePlan(
+        currentTrip->team(),
+        &loadedTripData.team,
+        baseTeamData);
+    if (teamMergePlan.hasError()) {
+        return Monad::ResultBase(teamMergePlan.errorMessage());
+    }
+
+    const auto applyTeamResult = cwTeamSyncMergeHandler::applyTeamMergePlan(teamMergePlan.value());
+    if (applyTeamResult.hasError()) {
+        return Monad::ResultBase(applyTeamResult.errorMessage());
     }
 
     return Monad::ResultBase();
