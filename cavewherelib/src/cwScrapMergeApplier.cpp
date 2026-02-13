@@ -301,12 +301,6 @@ bool cwScrapMergeApplier::applyNoteStructuralMergePlan(const cwNoteStructuralMer
     cwNote* const note = plan.note;
     const cwNoteData& loadedNoteData = *plan.loadedNoteData;
 
-    note->setName(loadedNoteData.name);
-    note->setId(loadedNoteData.id);
-    note->setRotate(loadedNoteData.rotate);
-    note->setImage(loadedNoteData.image);
-    note->imageResolution()->setData(loadedNoteData.imageResolution);
-
     const QList<cwScrap*> currentScraps = note->scraps();
     QHash<QUuid, const cwScrapData*> loadedScrapsById;
     loadedScrapsById.reserve(loadedNoteData.scraps.size());

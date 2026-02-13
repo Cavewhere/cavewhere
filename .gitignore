@@ -4,7 +4,6 @@ qtc_Desktop-debug/*
 qtc_*/*
 .moc/*
 .ui/*
-docs/*
 *.qbs.user*
 *.qmlc
 *.jsc

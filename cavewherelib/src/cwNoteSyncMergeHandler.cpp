@@ -2,6 +2,10 @@
 
 #include "cwCavingRegion.h"
 #include "cwGlobals.h"
+#include "cwImage.h"
+#include "cwImageResolution.h"
+#include "cwNoteMergeApplier.h"
+#include "cwNoteMergePlanBuilder.h"
 #include "cwNote.h"
 #include "cwScrapSyncMergeHandler.h"
 #include "cwSyncIdUtils.h"
@@ -87,7 +91,42 @@ QUuid uuidFromProtoString(const std::string& uuidString)
     return uuid.isNull() ? QUuid() : uuid;
 }
 
-std::optional<std::pair<QUuid, QHash<QUuid, cwScrapBaseIdentityData>>> loadBaseScrapIdentityForNote(
+cwImage imageFromProtoForMergeBase(const CavewhereProto::Image& protoImage)
+{
+    cwImage image;
+    if (protoImage.has_path()) {
+        image.setPath(QString::fromStdString(protoImage.path()));
+    }
+    if (protoImage.has_page()) {
+        image.setPage(protoImage.page());
+    }
+    if (protoImage.has_size()) {
+        image.setOriginalSize(QSize(protoImage.size().width(), protoImage.size().height()));
+    }
+    if (protoImage.has_dotpermeter()) {
+        image.setOriginalDotsPerMeter(protoImage.dotpermeter());
+    }
+    if (protoImage.has_imageunit()) {
+        image.setUnit(static_cast<cwImage::Unit>(protoImage.imageunit()));
+    }
+    return image;
+}
+
+cwImageResolution::Data imageResolutionFromProtoForMergeBase(const CavewhereProto::ImageResolution& protoImageResolution)
+{
+    cwImageResolution::Data data;
+    data.value = protoImageResolution.value();
+    data.unit = protoImageResolution.unit();
+    data.updateValueWhenUnitChanged = false;
+    return data;
+}
+
+struct BaseNoteMergeData {
+    cwNoteData noteData;
+    QHash<QUuid, cwScrapBaseIdentityData> baseScrapIdentityByScrapId;
+};
+
+std::optional<std::pair<QUuid, BaseNoteMergeData>> loadBaseMergeDataForNote(
     const QDir& repoRoot,
     const QString& mergeBaseHead,
     const QString& relativeNotePath)
@@ -123,7 +162,19 @@ std::optional<std::pair<QUuid, QHash<QUuid, cwScrapBaseIdentityData>>> loadBaseS
         return std::nullopt;
     }
 
-    QHash<QUuid, cwScrapBaseIdentityData> baseIdentityByScrapId;
+    BaseNoteMergeData baseMergeData;
+    baseMergeData.noteData.id = noteId;
+    if (protoNote.has_name()) {
+        baseMergeData.noteData.name = QString::fromStdString(protoNote.name());
+    }
+    baseMergeData.noteData.rotate = protoNote.rotation();
+    if (protoNote.has_image()) {
+        baseMergeData.noteData.image = imageFromProtoForMergeBase(protoNote.image());
+    }
+    if (protoNote.has_imageresolution()) {
+        baseMergeData.noteData.imageResolution = imageResolutionFromProtoForMergeBase(protoNote.imageresolution());
+    }
+
     for (const auto& protoScrap : protoNote.scraps()) {
         if (!protoScrap.has_id()) {
             continue;
@@ -215,10 +266,10 @@ std::optional<std::pair<QUuid, QHash<QUuid, cwScrapBaseIdentityData>>> loadBaseS
             }
         }
 
-        baseIdentityByScrapId.insert(scrapId, std::move(identityData));
+        baseMergeData.baseScrapIdentityByScrapId.insert(scrapId, std::move(identityData));
     }
 
-    return std::make_optional(std::make_pair(noteId, std::move(baseIdentityByScrapId)));
+    return std::make_optional(std::make_pair(noteId, std::move(baseMergeData)));
 }
 
 enum class NoteDescriptorApplyMode {
@@ -286,8 +337,10 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
         bool noteDescriptorChanged = false;
         bool assetChanged = false;
         NoteDescriptorApplyMode noteDescriptorApplyMode = NoteDescriptorApplyMode::FullModelReplace;
+        QList<cwNoteMergePlan> noteMergePlans;
         QList<cwNoteStructuralMergePlan> noteStructuralMergePlans;
         QList<cwNote*> reorderedNotes;
+        QHash<QUuid, cwNoteData> baseNoteDataByNoteId;
         QHash<QUuid, QHash<QUuid, cwScrapBaseIdentityData>> baseScrapIdentityByNoteId;
     };
 
@@ -351,11 +404,13 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
 
         if (changedKind == NoteChangedPathKind::NoteDescriptor) {
             updateIt->noteDescriptorChanged = true;
-            const auto baseIdentity = loadBaseScrapIdentityForNote(context.repoRoot,
-                                                                   context.report->mergeBaseHead,
-                                                                   normalizedPath);
-            if (baseIdentity.has_value()) {
-                updateIt->baseScrapIdentityByNoteId.insert(baseIdentity->first, baseIdentity->second);
+            const auto baseMergeData = loadBaseMergeDataForNote(context.repoRoot,
+                                                                context.report->mergeBaseHead,
+                                                                normalizedPath);
+            if (baseMergeData.has_value()) {
+                updateIt->baseNoteDataByNoteId.insert(baseMergeData->first, baseMergeData->second.noteData);
+                updateIt->baseScrapIdentityByNoteId.insert(baseMergeData->first,
+                                                           baseMergeData->second.baseScrapIdentityByScrapId);
             }
         } else {
             updateIt->assetChanged = true;
@@ -419,6 +474,23 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
         }
 
         if (update.noteDescriptorApplyMode == NoteDescriptorApplyMode::StructuralMerge) {
+            QString noteMergeFailureReason;
+            const auto noteMergePreparation = cwNoteMergePlanBuilder::build(
+                update.trip->notes(),
+                update.loadedTripData->noteModel,
+                update.baseNoteDataByNoteId,
+                &noteMergeFailureReason);
+            if (!noteMergePreparation.has_value()) {
+                cwReconcileMergeResult result;
+                result.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;
+                result.handlerName = name();
+                result.fallbackReason = noteMergeFailureReason.isEmpty()
+                                            ? QStringLiteral("Unable to build deterministic note merge plan.")
+                                            : noteMergeFailureReason;
+                return result;
+            }
+            update.noteMergePlans = noteMergePreparation->plans;
+
             const auto mergePreparation = cwScrapSyncMergeHandler::buildNoteStructuralMergePreparation(
                 update.trip->notes(),
                 update.loadedTripData->noteModel);
@@ -455,6 +527,11 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
 
         if (update.noteDescriptorChanged) {
             if (update.noteDescriptorApplyMode == NoteDescriptorApplyMode::StructuralMerge) {
+                for (const cwNoteMergePlan& plan : update.noteMergePlans) {
+                    const bool applied = cwNoteMergeApplier::applyNoteMergePlan(plan);
+                    Q_ASSERT(applied);
+                }
+
                 for (const cwNoteStructuralMergePlan& plan : update.noteStructuralMergePlans) {
                     const bool geometryConflictKeptOurs =
                         cwScrapSyncMergeHandler::applyNoteStructuralMergePlan(plan);
