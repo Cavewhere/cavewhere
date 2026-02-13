@@ -12,7 +12,7 @@
 struct cwCaveData {
     QString name;
     QList<cwTripData> trips;
-    cwStationPositionLookup stationPositionModel;
+    cwStationPositionLookup stationPositionModel; //TODO: remove stationPositionModel?
     QUuid id;
 };
 
