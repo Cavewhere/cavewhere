@@ -3,10 +3,13 @@
 #include <QList>
 #include <QHash>
 #include <QSet>
+#include <QPolygonF>
 #include <QtCore/quuid.h>
 
 #include "cwLead.h"
+#include "cwNoteTransformationData.h"
 #include "cwNoteStation.h"
+#include "cwScrapType.h"
 
 #include <optional>
 #include <vector>
@@ -17,10 +20,24 @@ struct cwNoteData;
 struct cwSurveyNoteModelData;
 
 struct cwScrapBaseIdentityData {
+    struct GeometryData {
+        QPolygonF outlinePoints;
+        struct TransformBundle {
+            cwNoteTransformationData noteTransformation;
+            bool calculateNoteTransform = false;
+            cwScrapType::Type viewType = cwScrapType::Plan;
+            bool hasProjectedProfileView = false;
+            double projectedAzimuth = 0.0;
+            int projectedDirection = 0;
+        } transform;
+    };
+
     QSet<QUuid> stationIds;
     QSet<QUuid> leadIds;
     QHash<QUuid, cwNoteStation> stationsById;
     QHash<QUuid, cwLead> leadsById;
+    bool hasGeometryData = false;
+    GeometryData geometry;
 };
 
 struct cwNoteStructuralMergePlan {
@@ -42,5 +59,5 @@ public:
         cwSurveyNoteModel* noteModel,
         const cwSurveyNoteModelData& loadedNoteModelData);
 
-    static void applyNoteStructuralMergePlan(const cwNoteStructuralMergePlan& plan);
+    static bool applyNoteStructuralMergePlan(const cwNoteStructuralMergePlan& plan);
 };

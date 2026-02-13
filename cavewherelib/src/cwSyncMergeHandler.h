@@ -29,6 +29,7 @@ struct cwReconcileMergeResult {
     QString fallbackReason;
     bool modelMutated = false;
     QList<QObject*> objectsPathReady;
+    QStringList diagnostics;
 };
 
 class cwSyncMergeHandler

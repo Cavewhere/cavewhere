@@ -10,7 +10,7 @@ std::optional<cwNoteStructuralMergePreparation> cwScrapSyncMergeHandler::buildNo
     return cwScrapMergePlanBuilder::buildNoteStructuralMergePreparation(noteModel, loadedNoteModelData);
 }
 
-void cwScrapSyncMergeHandler::applyNoteStructuralMergePlan(const cwNoteStructuralMergePlan& plan)
+bool cwScrapSyncMergeHandler::applyNoteStructuralMergePlan(const cwNoteStructuralMergePlan& plan)
 {
-    cwScrapMergeApplier::applyNoteStructuralMergePlan(plan);
+    return cwScrapMergeApplier::applyNoteStructuralMergePlan(plan);
 }

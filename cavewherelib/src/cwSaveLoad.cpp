@@ -4634,6 +4634,9 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
             if (!reconcileDiagnostic.isEmpty() && d->lastSyncReport.has_value()) {
                 d->lastSyncReport->diagnostics.append(reconcileDiagnostic);
             }
+            if (!mergeResult.diagnostics.isEmpty() && d->lastSyncReport.has_value()) {
+                d->lastSyncReport->diagnostics.append(mergeResult.diagnostics);
+            }
 
             if (modelMutated) {
                 d->resetObjectStates(this);

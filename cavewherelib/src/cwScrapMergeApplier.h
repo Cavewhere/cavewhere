@@ -5,5 +5,5 @@
 class cwScrapMergeApplier
 {
 public:
-    static void applyNoteStructuralMergePlan(const cwNoteStructuralMergePlan& plan);
+    static bool applyNoteStructuralMergePlan(const cwNoteStructuralMergePlan& plan);
 };

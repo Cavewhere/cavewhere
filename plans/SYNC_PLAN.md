@@ -424,9 +424,9 @@ Implementation checklist:
 - [x] Use base/ours/theirs keyed by stable IDs (order ignored).
 - [x] Conflict matrix: value-vs-value -> ours; delete-vs-modify -> ours; delete-vs-delete -> deleted.
 - [x] Concurrent add with different IDs -> keep both.
-- [ ] 4B.5 Scrap geometry policy
-- [ ] Use wholesale geometry replacement only when no local geometry conflict is detected.
-- [ ] If both sides changed geometry from base, keep ours and add a reconcile diagnostic.
+- [x] 4B.5 Scrap geometry policy
+- [x] Use wholesale geometry replacement only when no local geometry conflict is detected.
+- [x] If both sides changed geometry from base, keep ours and add a reconcile diagnostic.
 - [ ] 4B.6 Diagnostics and fallback
 - [ ] Emit explicit diagnostics for: note reorder applied, station/lead merge conflict resolved by ours, geometry conflict kept ours, and ambiguous mapping fallback.
 - [ ] Keep strict fallback to full reload on ambiguous structural mapping.
@@ -457,6 +457,8 @@ Focused unit tests (`testcases/test_cwScrapMergePlanBuilder.cpp`):
 - [x] `TEST_CASE("cwScrap merge applier merges stations and leads by stable id with local precedence", "[cwScrapMerge][sync]")`
 - [x] `TEST_CASE("cwScrap merge applier falls back to loaded stations and leads when ids are ambiguous", "[cwScrapMerge][sync]")`
 - [x] `TEST_CASE("cwScrap merge applier keeps local deletes when base marks remote-only ids as pre-existing", "[cwScrapMerge][sync]")`
+- [x] `TEST_CASE("cwScrap merge applier replaces geometry when only remote geometry changed", "[cwScrapMerge][sync]")`
+- [x] `TEST_CASE("cwScrap merge applier keeps local geometry on concurrent geometry conflict", "[cwScrapMerge][sync]")`
 
 Exit criteria:
 - concurrent note+scrap edits merge deterministically or explicitly fallback with no silent data loss.

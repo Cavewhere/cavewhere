@@ -140,6 +140,45 @@ std::optional<std::pair<QUuid, QHash<QUuid, cwScrapBaseIdentityData>>> loadBaseS
         }
 
         cwScrapBaseIdentityData identityData;
+        identityData.hasGeometryData = true;
+        for (const auto& protoPoint : protoScrap.outlinepoints()) {
+            identityData.geometry.outlinePoints.append(QPointF(protoPoint.x(), protoPoint.y()));
+        }
+        if (protoScrap.has_notetransformation()) {
+            const auto& protoTransform = protoScrap.notetransformation();
+            identityData.geometry.transform.noteTransformation.north = protoTransform.northup();
+            if (protoTransform.has_scalenumerator()) {
+                identityData.geometry.transform.noteTransformation.scale.scaleNumerator.value = protoTransform.scalenumerator().value();
+                identityData.geometry.transform.noteTransformation.scale.scaleNumerator.unit = protoTransform.scalenumerator().unit();
+            }
+            if (protoTransform.has_scaledenominator()) {
+                identityData.geometry.transform.noteTransformation.scale.scaleDenominator.value = protoTransform.scaledenominator().value();
+                identityData.geometry.transform.noteTransformation.scale.scaleDenominator.unit = protoTransform.scaledenominator().unit();
+            }
+        }
+        identityData.geometry.transform.calculateNoteTransform = protoScrap.calculatenotetransform();
+        if (protoScrap.has_type()) {
+            switch (protoScrap.type()) {
+            case CavewhereProto::Scrap_ScrapType_Plan:
+                identityData.geometry.transform.viewType = cwScrapType::Plan;
+                break;
+            case CavewhereProto::Scrap_ScrapType_RunningProfile:
+                identityData.geometry.transform.viewType = cwScrapType::RunningProfile;
+                break;
+            case CavewhereProto::Scrap_ScrapType_ProjectedProfile:
+                identityData.geometry.transform.viewType = cwScrapType::ProjectedProfile;
+                if (protoScrap.has_profileviewmatrix()) {
+                    identityData.geometry.transform.hasProjectedProfileView = true;
+                    identityData.geometry.transform.projectedAzimuth = protoScrap.profileviewmatrix().azimuth();
+                    identityData.geometry.transform.projectedDirection = protoScrap.profileviewmatrix().direction();
+                }
+                break;
+            default:
+                identityData.geometry.transform.viewType = cwScrapType::Plan;
+                break;
+            }
+        }
+
         for (const auto& protoStation : protoScrap.notestations()) {
             if (!protoStation.has_id()) {
                 continue;
@@ -452,7 +491,11 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
         if (update.noteDescriptorChanged) {
             if (update.noteDescriptorApplyMode == NoteDescriptorApplyMode::StructuralMerge) {
                 for (const cwNoteStructuralMergePlan& plan : update.noteStructuralMergePlans) {
-                    cwScrapSyncMergeHandler::applyNoteStructuralMergePlan(plan);
+                    const bool geometryConflictKeptOurs =
+                        cwScrapSyncMergeHandler::applyNoteStructuralMergePlan(plan);
+                    if (geometryConflictKeptOurs) {
+                        result.diagnostics.append(QStringLiteral("reconcile scrap geometry conflict resolved to ours"));
+                    }
                 }
 
                 QList<QObject*> reorderedNotes;

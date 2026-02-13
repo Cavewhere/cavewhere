@@ -2,6 +2,7 @@
 
 #include "cwImageResolution.h"
 #include "cwNote.h"
+#include "cwProjectedProfileScrapViewMatrix.h"
 #include "cwScrap.h"
 
 #include <QHash>
@@ -17,22 +18,134 @@ bool almostEqual(qreal lhs, qreal rhs)
     return qAbs(lhs - rhs) <= 1.0e-6;
 }
 
+bool pointsAlmostEqual(const QPointF& lhs, const QPointF& rhs)
+{
+    return almostEqual(lhs.x(), rhs.x()) && almostEqual(lhs.y(), rhs.y());
+}
+
+QVector<QPointF> normalizeOutline(const QPolygonF& outline)
+{
+    QVector<QPointF> normalized = outline.toVector();
+    if (normalized.size() >= 2 && pointsAlmostEqual(normalized.first(), normalized.last())) {
+        normalized.removeLast();
+    }
+    return normalized;
+}
+
 bool areStationsEquivalent(const cwNoteStation& lhs, const cwNoteStation& rhs)
 {
     return lhs.name() == rhs.name()
-           && almostEqual(lhs.positionOnNote().x(), rhs.positionOnNote().x())
-           && almostEqual(lhs.positionOnNote().y(), rhs.positionOnNote().y());
+           && pointsAlmostEqual(lhs.positionOnNote(), rhs.positionOnNote());
 }
 
 bool areLeadsEquivalent(const cwLead& lhs, const cwLead& rhs)
 {
     return lhs.desciption() == rhs.desciption()
-           && almostEqual(lhs.positionOnNote().x(), rhs.positionOnNote().x())
-           && almostEqual(lhs.positionOnNote().y(), rhs.positionOnNote().y())
+           && pointsAlmostEqual(lhs.positionOnNote(), rhs.positionOnNote())
            && almostEqual(lhs.size().width(), rhs.size().width())
            && almostEqual(lhs.size().height(), rhs.size().height())
            && lhs.completed() == rhs.completed();
 }
+
+bool areGeometryEquivalent(const cwScrapBaseIdentityData::GeometryData& lhs,
+                           const cwScrapBaseIdentityData::GeometryData& rhs)
+{
+    const QVector<QPointF> lhsOutline = normalizeOutline(lhs.outlinePoints);
+    const QVector<QPointF> rhsOutline = normalizeOutline(rhs.outlinePoints);
+    if (lhsOutline.size() != rhsOutline.size()) {
+        return false;
+    }
+    for (int i = 0; i < lhsOutline.size(); ++i) {
+        if (!pointsAlmostEqual(lhsOutline[i], rhsOutline[i])) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool areTransformBundleEquivalent(const cwScrapBaseIdentityData::GeometryData::TransformBundle& lhs,
+                                  const cwScrapBaseIdentityData::GeometryData::TransformBundle& rhs)
+{
+    if (!almostEqual(lhs.noteTransformation.north, rhs.noteTransformation.north)) {
+        return false;
+    }
+
+    const auto& lhsNum = lhs.noteTransformation.scale.scaleNumerator;
+    const auto& rhsNum = rhs.noteTransformation.scale.scaleNumerator;
+    if (!almostEqual(lhsNum.value, rhsNum.value)
+        || lhsNum.unit != rhsNum.unit
+        || lhsNum.updateValueWhenUnitChanged != rhsNum.updateValueWhenUnitChanged) {
+        return false;
+    }
+
+    const auto& lhsDen = lhs.noteTransformation.scale.scaleDenominator;
+    const auto& rhsDen = rhs.noteTransformation.scale.scaleDenominator;
+    if (!almostEqual(lhsDen.value, rhsDen.value)
+        || lhsDen.unit != rhsDen.unit
+        || lhsDen.updateValueWhenUnitChanged != rhsDen.updateValueWhenUnitChanged) {
+        return false;
+    }
+
+    if (lhs.calculateNoteTransform != rhs.calculateNoteTransform
+        || lhs.viewType != rhs.viewType
+        || lhs.hasProjectedProfileView != rhs.hasProjectedProfileView) {
+        return false;
+    }
+
+    if (lhs.hasProjectedProfileView) {
+        if (!almostEqual(lhs.projectedAzimuth, rhs.projectedAzimuth)
+            || lhs.projectedDirection != rhs.projectedDirection) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+cwScrapBaseIdentityData::GeometryData geometryDataFromScrapData(const cwScrapData& scrapData)
+{
+    cwScrapBaseIdentityData::GeometryData geometry;
+    geometry.outlinePoints = scrapData.outlinePoints;
+    geometry.transform.noteTransformation = scrapData.noteTransformation;
+    geometry.transform.calculateNoteTransform = scrapData.calculateNoteTransform;
+
+    if (scrapData.viewMatrix) {
+        geometry.transform.viewType = static_cast<cwScrapType::Type>(scrapData.viewMatrix->type());
+        if (scrapData.viewMatrix->type() == cwAbstractScrapViewMatrix::ProjectedProfile) {
+            const auto* projectedData =
+                dynamic_cast<const cwProjectedProfileScrapViewMatrix::Data*>(scrapData.viewMatrix.get());
+            if (projectedData != nullptr) {
+                geometry.transform.hasProjectedProfileView = true;
+                geometry.transform.projectedAzimuth = projectedData->azimuth();
+                geometry.transform.projectedDirection = static_cast<int>(projectedData->direction());
+            }
+        }
+    } else {
+        geometry.transform.viewType = cwScrapType::Plan;
+    }
+
+    return geometry;
+}
+
+void applyOutlineFrom(const cwScrapData& source, cwScrapData& destination)
+{
+    destination.outlinePoints = source.outlinePoints;
+}
+
+void applyTransformFrom(const cwScrapData& source, cwScrapData& destination)
+{
+    destination.noteTransformation = source.noteTransformation;
+    destination.calculateNoteTransform = source.calculateNoteTransform;
+    destination.viewMatrix = source.viewMatrix
+                                 ? std::unique_ptr<cwAbstractScrapViewMatrix::Data>(source.viewMatrix->clone())
+                                 : nullptr;
+}
+
+struct MergedScrapDataResult {
+    cwScrapData data;
+    bool geometryConflictKeptOurs = false;
+};
 
 template<typename ItemT, typename ItemEqualsFn, typename IdAccessor>
 QList<ItemT> mergeUnorderedByIdPreferOurs(const QList<ItemT>& ours,
@@ -114,12 +227,12 @@ QList<ItemT> mergeUnorderedByIdPreferOurs(const QList<ItemT>& ours,
     return merged;
 }
 
-cwScrapData mergedScrapDataPreferOursForStationsAndLeads(const cwScrap* currentScrap,
-                                                         const cwScrapData& loadedScrapData,
-                                                         const cwScrapBaseIdentityData* baseScrapIdentity)
+MergedScrapDataResult mergedScrapDataPreferOursForStationsAndLeads(const cwScrapData* currentScrapData,
+                                                                   const cwScrapData& loadedScrapData,
+                                                                   const cwScrapBaseIdentityData* baseScrapIdentity)
 {
-    if (currentScrap == nullptr) {
-        return loadedScrapData;
+    if (currentScrapData == nullptr) {
+        return MergedScrapDataResult{loadedScrapData, false};
     }
 
     const QSet<QUuid>* baseStationIds = baseScrapIdentity != nullptr ? &baseScrapIdentity->stationIds : nullptr;
@@ -128,30 +241,61 @@ cwScrapData mergedScrapDataPreferOursForStationsAndLeads(const cwScrap* currentS
     const QHash<QUuid, cwLead>* baseLeadsById = baseScrapIdentity != nullptr ? &baseScrapIdentity->leadsById : nullptr;
     cwScrapData mergedData = loadedScrapData;
     mergedData.stations = mergeUnorderedByIdPreferOurs(
-        currentScrap->stations(),
+        currentScrapData->stations,
         loadedScrapData.stations,
         baseStationIds,
         baseStationsById,
         [](const cwNoteStation& lhs, const cwNoteStation& rhs) { return areStationsEquivalent(lhs, rhs); },
         [](const cwNoteStation& station) { return station.id(); });
     mergedData.leads = mergeUnorderedByIdPreferOurs(
-        currentScrap->leads(),
+        currentScrapData->leads,
         loadedScrapData.leads,
         baseLeadIds,
         baseLeadsById,
         [](const cwLead& lhs, const cwLead& rhs) { return areLeadsEquivalent(lhs, rhs); },
         [](const cwLead& lead) { return lead.id(); });
-    return mergedData;
+
+    bool geometryConflictKeptOurs = false;
+    if (baseScrapIdentity != nullptr && baseScrapIdentity->hasGeometryData) {
+        const auto currentGeometry = geometryDataFromScrapData(*currentScrapData);
+        const auto loadedGeometry = geometryDataFromScrapData(loadedScrapData);
+        const bool oursOutlineChanged = !areGeometryEquivalent(currentGeometry, baseScrapIdentity->geometry);
+        const bool loadedOutlineChanged = !areGeometryEquivalent(loadedGeometry, baseScrapIdentity->geometry);
+
+        if (oursOutlineChanged && loadedOutlineChanged) {
+            applyOutlineFrom(*currentScrapData, mergedData);
+            geometryConflictKeptOurs = true;
+        } else if (oursOutlineChanged && !loadedOutlineChanged) {
+            applyOutlineFrom(*currentScrapData, mergedData);
+        } else if (!oursOutlineChanged && loadedOutlineChanged) {
+            applyOutlineFrom(loadedScrapData, mergedData);
+        }
+
+        const bool oursTransformChanged =
+            !areTransformBundleEquivalent(currentGeometry.transform, baseScrapIdentity->geometry.transform);
+        const bool loadedTransformChanged =
+            !areTransformBundleEquivalent(loadedGeometry.transform, baseScrapIdentity->geometry.transform);
+        if (oursTransformChanged && loadedTransformChanged) {
+            applyTransformFrom(*currentScrapData, mergedData);
+            geometryConflictKeptOurs = true;
+        } else if (oursTransformChanged && !loadedTransformChanged) {
+            applyTransformFrom(*currentScrapData, mergedData);
+        } else if (!oursTransformChanged && loadedTransformChanged) {
+            applyTransformFrom(loadedScrapData, mergedData);
+        }
+    }
+
+    return MergedScrapDataResult{std::move(mergedData), geometryConflictKeptOurs};
 }
 
 } // namespace
 
-void cwScrapMergeApplier::applyNoteStructuralMergePlan(const cwNoteStructuralMergePlan& plan)
+bool cwScrapMergeApplier::applyNoteStructuralMergePlan(const cwNoteStructuralMergePlan& plan)
 {
     Q_ASSERT(plan.note != nullptr);
     Q_ASSERT(plan.loadedNoteData != nullptr);
     if (plan.note == nullptr || plan.loadedNoteData == nullptr) {
-        return;
+        return false;
     }
 
     cwNote* const note = plan.note;
@@ -169,7 +313,16 @@ void cwScrapMergeApplier::applyNoteStructuralMergePlan(const cwNoteStructuralMer
     for (const cwScrapData& loadedScrapData : loadedNoteData.scraps) {
         loadedScrapsById.insert(loadedScrapData.id, &loadedScrapData);
     }
+    QHash<QUuid, cwScrapData> currentScrapDataById;
+    currentScrapDataById.reserve(currentScraps.size());
+    for (cwScrap* scrap : currentScraps) {
+        if (scrap == nullptr) {
+            continue;
+        }
+        currentScrapDataById.insert(scrap->id(), scrap->data());
+    }
 
+    bool geometryConflictKeptOurs = false;
     const int currentCount = currentScraps.size();
     const int loadedCount = static_cast<int>(plan.mergedScrapOrder.size());
     const int sharedCount = std::min(currentCount, loadedCount);
@@ -186,7 +339,13 @@ void cwScrapMergeApplier::applyNoteStructuralMergePlan(const cwNoteStructuralMer
         const auto baseIdentityIt = plan.baseScrapIdentityByScrapId.constFind(targetScrapId);
         const cwScrapBaseIdentityData* baseIdentity =
             (baseIdentityIt != plan.baseScrapIdentityByScrapId.constEnd()) ? &baseIdentityIt.value() : nullptr;
-        scrap->setData(mergedScrapDataPreferOursForStationsAndLeads(scrap, *loadedScrapData, baseIdentity));
+        const auto currentScrapDataIt = currentScrapDataById.constFind(targetScrapId);
+        const cwScrapData* currentScrapDataForId =
+            currentScrapDataIt != currentScrapDataById.constEnd() ? &currentScrapDataIt.value() : nullptr;
+        const auto mergedResult =
+            mergedScrapDataPreferOursForStationsAndLeads(currentScrapDataForId, *loadedScrapData, baseIdentity);
+        scrap->setData(mergedResult.data);
+        geometryConflictKeptOurs = geometryConflictKeptOurs || mergedResult.geometryConflictKeptOurs;
     }
 
     if (currentCount > loadedCount) {
@@ -202,8 +361,16 @@ void cwScrapMergeApplier::applyNoteStructuralMergePlan(const cwNoteStructuralMer
                 const auto baseIdentityIt = plan.baseScrapIdentityByScrapId.constFind(targetScrapId);
                 const cwScrapBaseIdentityData* baseIdentity =
                     (baseIdentityIt != plan.baseScrapIdentityByScrapId.constEnd()) ? &baseIdentityIt.value() : nullptr;
-                scrap->setData(mergedScrapDataPreferOursForStationsAndLeads(scrap, *loadedScrapData, baseIdentity));
+                const auto currentScrapDataIt = currentScrapDataById.constFind(targetScrapId);
+                const cwScrapData* currentScrapDataForId =
+                    currentScrapDataIt != currentScrapDataById.constEnd() ? &currentScrapDataIt.value() : nullptr;
+                const auto mergedResult =
+                    mergedScrapDataPreferOursForStationsAndLeads(currentScrapDataForId, *loadedScrapData, baseIdentity);
+                scrap->setData(mergedResult.data);
+                geometryConflictKeptOurs = geometryConflictKeptOurs || mergedResult.geometryConflictKeptOurs;
             }
         }
     }
+
+    return geometryConflictKeptOurs;
 }
