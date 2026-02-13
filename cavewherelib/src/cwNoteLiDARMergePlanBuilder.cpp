@@ -1,43 +1,8 @@
 #include "cwNoteLiDARMergePlanBuilder.h"
 
 #include "cwNoteLiDAR.h"
+#include "cwSyncIdUtils.h"
 #include "cwSurveyNoteLiDARModel.h"
-
-#include <QSet>
-
-namespace {
-
-template<typename Container, typename IdAccessor>
-std::optional<std::vector<QUuid>> collectOrderedUniqueIds(const Container& items, IdAccessor idAccessor)
-{
-    std::vector<QUuid> orderedIds;
-    orderedIds.reserve(static_cast<size_t>(items.size()));
-    QSet<QUuid> seenIds;
-
-    for (const auto& item : items) {
-        const QUuid id = idAccessor(item);
-        if (id.isNull() || seenIds.contains(id)) {
-            return std::nullopt;
-        }
-        seenIds.insert(id);
-        orderedIds.push_back(id);
-    }
-
-    return orderedIds;
-}
-
-bool haveSameIdsIgnoringOrder(const std::vector<QUuid>& currentIds, const std::vector<QUuid>& loadedIds)
-{
-    if (currentIds.size() != loadedIds.size()) {
-        return false;
-    }
-
-    QSet<QUuid> currentIdSet(currentIds.begin(), currentIds.end());
-    QSet<QUuid> loadedIdSet(loadedIds.begin(), loadedIds.end());
-    return currentIdSet == loadedIdSet;
-}
-
-} // namespace
 
 cwNoteLiDARDescriptorApplyMode cwNoteLiDARMergePlanBuilder::determineApplyMode(
     cwSurveyNoteLiDARModel* noteLiDARModel,
@@ -47,13 +12,13 @@ cwNoteLiDARDescriptorApplyMode cwNoteLiDARMergePlanBuilder::determineApplyMode(
         return cwNoteLiDARDescriptorApplyMode::Ambiguous;
     }
 
-    const auto currentNoteIds = collectOrderedUniqueIds(
+    const auto currentNoteIds = cwSyncIdUtils::collectOrderedUniqueIds(
         noteLiDARModel->notes(),
         [](const QObject* noteObject) {
             const auto* note = qobject_cast<const cwNoteLiDAR*>(noteObject);
             return note != nullptr ? note->id() : QUuid();
         });
-    const auto loadedNoteIds = collectOrderedUniqueIds(
+    const auto loadedNoteIds = cwSyncIdUtils::collectOrderedUniqueIds(
         loadedNoteLiDARModelData.notes,
         [](const cwNoteLiDARData& noteData) {
             return noteData.id;
@@ -67,7 +32,7 @@ cwNoteLiDARDescriptorApplyMode cwNoteLiDARMergePlanBuilder::determineApplyMode(
         return cwNoteLiDARDescriptorApplyMode::IncrementalMerge;
     }
 
-    if (haveSameIdsIgnoringOrder(currentNoteIds.value(), loadedNoteIds.value())) {
+    if (cwSyncIdUtils::haveSameIdsIgnoringOrder(currentNoteIds.value(), loadedNoteIds.value())) {
         return cwNoteLiDARDescriptorApplyMode::IncrementalMerge;
     }
 
@@ -87,16 +52,15 @@ std::optional<cwNoteLiDARMergePreparation> cwNoteLiDARMergePlanBuilder::build(
         return std::nullopt;
     }
 
-    QHash<QUuid, cwNoteLiDAR*> currentNotesById;
-    for (QObject* noteObject : noteLiDARModel->notes()) {
-        auto* note = qobject_cast<cwNoteLiDAR*>(noteObject);
-        if (note == nullptr || note->id().isNull() || currentNotesById.contains(note->id())) {
-            if (failureReason != nullptr) {
-                *failureReason = QStringLiteral("Ambiguous current LiDAR note ids.");
-            }
-            return std::nullopt;
+    const auto currentNotesById = cwSyncIdUtils::buildUniqueIdPointerMap(
+        noteLiDARModel->notes(),
+        [](QObject* noteObject) { return qobject_cast<cwNoteLiDAR*>(noteObject); },
+        [](const cwNoteLiDAR* note) { return note->id(); });
+    if (!currentNotesById.has_value()) {
+        if (failureReason != nullptr) {
+            *failureReason = QStringLiteral("Ambiguous current LiDAR note ids.");
         }
-        currentNotesById.insert(note->id(), note);
+        return std::nullopt;
     }
 
     cwNoteLiDARMergePreparation preparation;
@@ -104,8 +68,8 @@ std::optional<cwNoteLiDARMergePreparation> cwNoteLiDARMergePlanBuilder::build(
     preparation.plans.reserve(loadedNoteLiDARModelData.notes.size());
 
     for (const cwNoteLiDARData& loadedNoteData : loadedNoteLiDARModelData.notes) {
-        auto currentNoteIt = currentNotesById.constFind(loadedNoteData.id);
-        if (currentNoteIt == currentNotesById.constEnd()) {
+        auto currentNoteIt = currentNotesById->constFind(loadedNoteData.id);
+        if (currentNoteIt == currentNotesById->constEnd()) {
             if (failureReason != nullptr) {
                 *failureReason = QStringLiteral("Missing current LiDAR note object for incremental merge.");
             }

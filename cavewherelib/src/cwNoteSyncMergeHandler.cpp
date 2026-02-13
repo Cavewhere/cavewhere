@@ -4,6 +4,7 @@
 #include "cwGlobals.h"
 #include "cwNote.h"
 #include "cwScrapSyncMergeHandler.h"
+#include "cwSyncIdUtils.h"
 #include "cwSurveyNoteModel.h"
 #include "cwTrip.h"
 #include "cwNoteStation.h"
@@ -220,41 +221,11 @@ std::optional<std::pair<QUuid, QHash<QUuid, cwScrapBaseIdentityData>>> loadBaseS
     return std::make_optional(std::make_pair(noteId, std::move(baseIdentityByScrapId)));
 }
 
-template<typename Container, typename IdAccessor>
-std::optional<std::vector<QUuid>> collectOrderedUniqueIds(const Container& items, IdAccessor idAccessor)
-{
-    std::vector<QUuid> orderedIds;
-    orderedIds.reserve(static_cast<size_t>(items.size()));
-    QSet<QUuid> seenIds;
-
-    for (const auto& item : items) {
-        const QUuid id = idAccessor(item);
-        if (id.isNull() || seenIds.contains(id)) {
-            return std::nullopt;
-        }
-        seenIds.insert(id);
-        orderedIds.push_back(id);
-    }
-
-    return orderedIds;
-}
-
 enum class NoteDescriptorApplyMode {
     FullModelReplace,
     StructuralMerge,
     Ambiguous
 };
-
-bool haveSameIdsIgnoringOrder(const std::vector<QUuid>& currentIds, const std::vector<QUuid>& loadedIds)
-{
-    if (currentIds.size() != loadedIds.size()) {
-        return false;
-    }
-
-    QSet<QUuid> currentIdSet(currentIds.begin(), currentIds.end());
-    QSet<QUuid> loadedIdSet(loadedIds.begin(), loadedIds.end());
-    return currentIdSet == loadedIdSet;
-}
 
 NoteDescriptorApplyMode determineNoteDescriptorApplyMode(cwSurveyNoteModel* noteModel,
                                                          const cwSurveyNoteModelData& loadedNoteModelData)
@@ -263,12 +234,12 @@ NoteDescriptorApplyMode determineNoteDescriptorApplyMode(cwSurveyNoteModel* note
         return NoteDescriptorApplyMode::Ambiguous;
     }
 
-    const auto currentNoteIds = collectOrderedUniqueIds(
+    const auto currentNoteIds = cwSyncIdUtils::collectOrderedUniqueIds(
         noteModel->notes(),
         [](const cwNote* note) {
             return note != nullptr ? note->id() : QUuid();
         });
-    const auto loadedNoteIds = collectOrderedUniqueIds(
+    const auto loadedNoteIds = cwSyncIdUtils::collectOrderedUniqueIds(
         loadedNoteModelData.notes,
         [](const cwNoteData& noteData) {
             return noteData.id;
@@ -282,7 +253,7 @@ NoteDescriptorApplyMode determineNoteDescriptorApplyMode(cwSurveyNoteModel* note
         return NoteDescriptorApplyMode::StructuralMerge;
     }
 
-    if (haveSameIdsIgnoringOrder(currentNoteIds.value(), loadedNoteIds.value())) {
+    if (cwSyncIdUtils::haveSameIdsIgnoringOrder(currentNoteIds.value(), loadedNoteIds.value())) {
         return NoteDescriptorApplyMode::StructuralMerge;
     }
 

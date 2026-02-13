@@ -3,6 +3,7 @@
 #include "cwDiff.h"
 #include "cwNote.h"
 #include "cwScrap.h"
+#include "cwSyncIdUtils.h"
 #include "cwSurveyNoteModel.h"
 
 #include <QHash>
@@ -13,37 +14,18 @@
 
 namespace {
 
-template<typename Container, typename IdAccessor>
-std::optional<std::vector<QUuid>> collectOrderedUniqueIds(const Container& items, IdAccessor idAccessor)
-{
-    std::vector<QUuid> orderedIds;
-    orderedIds.reserve(static_cast<size_t>(items.size()));
-    QSet<QUuid> seenIds;
-
-    for (const auto& item : items) {
-        const QUuid id = idAccessor(item);
-        if (id.isNull() || seenIds.contains(id)) {
-            return std::nullopt;
-        }
-        seenIds.insert(id);
-        orderedIds.push_back(id);
-    }
-
-    return orderedIds;
-}
-
 std::optional<std::vector<QUuid>> mergedScrapOrderForNote(const cwNote* note, const cwNoteData& loadedNoteData)
 {
     if (note == nullptr) {
         return std::nullopt;
     }
 
-    const auto currentScrapIds = collectOrderedUniqueIds(
+    const auto currentScrapIds = cwSyncIdUtils::collectOrderedUniqueIds(
         note->scraps(),
         [](const cwScrap* scrap) {
             return scrap != nullptr ? scrap->id() : QUuid();
         });
-    const auto loadedScrapIds = collectOrderedUniqueIds(
+    const auto loadedScrapIds = cwSyncIdUtils::collectOrderedUniqueIds(
         loadedNoteData.scraps,
         [](const cwScrapData& scrapData) {
             return scrapData.id;
@@ -72,16 +54,15 @@ std::optional<cwNoteStructuralMergePreparation> cwScrapMergePlanBuilder::buildNo
         return std::nullopt;
     }
 
-    QHash<QUuid, cwNote*> currentNotesById;
-    currentNotesById.reserve(noteModel->rowCount());
-    for (cwNote* note : noteModel->notes()) {
-        if (note == nullptr || note->id().isNull() || currentNotesById.contains(note->id())) {
-            return std::nullopt;
-        }
-        currentNotesById.insert(note->id(), note);
+    const auto currentNotesById = cwSyncIdUtils::buildUniqueIdPointerMap(
+        noteModel->notes(),
+        [](cwNote* note) { return note; },
+        [](const cwNote* note) { return note->id(); });
+    if (!currentNotesById.has_value()) {
+        return std::nullopt;
     }
 
-    if (currentNotesById.size() != loadedNoteModelData.notes.size()) {
+    if (currentNotesById->size() != loadedNoteModelData.notes.size()) {
         return std::nullopt;
     }
 
@@ -92,12 +73,12 @@ std::optional<cwNoteStructuralMergePreparation> cwScrapMergePlanBuilder::buildNo
     for (const cwNoteData& loadedNoteData : loadedNoteModelData.notes) {
         if (loadedNoteData.id.isNull()
             || seenLoadedNoteIds.contains(loadedNoteData.id)
-            || !currentNotesById.contains(loadedNoteData.id)) {
+            || !currentNotesById->contains(loadedNoteData.id)) {
             return std::nullopt;
         }
 
         seenLoadedNoteIds.insert(loadedNoteData.id);
-        cwNote* const currentNote = currentNotesById.value(loadedNoteData.id);
+        cwNote* const currentNote = currentNotesById->value(loadedNoteData.id);
         auto mergedScrapOrder = mergedScrapOrderForNote(currentNote, loadedNoteData);
         if (!mergedScrapOrder.has_value()) {
             return std::nullopt;
