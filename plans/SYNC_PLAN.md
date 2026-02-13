@@ -413,13 +413,13 @@ Implementation checklist:
 - [x] Add `cwScrapSyncMergeHandler` (or equivalent merge component) and move nested scrap merge logic out of note handler.
 - [x] Keep note handler responsible for note-level routing/dispatch only.
 - [x] Add focused unit tests for scrap merge planning/apply in `testcases/test_cwScrapMergePlanBuilder.cpp`.
-- [ ] 4B.3 Stable identity for stations/leads
-- [ ] Add stable IDs for `NoteStation` and `Lead` in proto schema, runtime data structs, and serialization.
-- [ ] Add load-time backfill/repair for missing/duplicate station/lead IDs with deterministic repair policy.
-- [ ] Include station/lead identity repair persistence in normal `RepairSave` flow.
-- [ ] 4B.3a Centralized top-level repair registration
-- [ ] Add a centralized registration for top-level repairable identity types (`Cave`, `Trip`, `Note`, `NoteLiDAR`) so repair traversal is not hardcoded in multiple loops.
-- [ ] Route both top-level identity repair pass and `RepairSave` traversal through the same registration contracts to reduce missed-update risk when adding new top-level types.
+- [x] 4B.3 Stable identity for stations/leads
+- [x] Add stable IDs for `NoteStation` and `Lead` in proto schema, runtime data structs, and serialization.
+- [x] Add load-time backfill/repair for missing/duplicate station/lead IDs with deterministic repair policy.
+- [x] Include station/lead identity repair persistence in normal `RepairSave` flow.
+- [ ] ~~4B.3a Centralized top-level repair registration~~
+- [ ] ~~Add a centralized registration for top-level repairable identity types (`Cave`, `Trip`, `Note`, `NoteLiDAR`) so repair traversal is not hardcoded in multiple loops.~~
+- [ ] ~~Route both top-level identity repair pass and `RepairSave` traversal through the same registration contracts to reduce missed-update risk when adding new top-level types.~~
 - [ ] 4B.4 3-way stations/leads policy
 - [ ] Use base/ours/theirs keyed by stable IDs (order ignored).
 - [ ] Conflict matrix: value-vs-value -> ours; delete-vs-modify -> ours; delete-vs-delete -> deleted.
