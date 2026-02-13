@@ -4,7 +4,6 @@
 #include "cwGlobals.h"
 #include "cwNote.h"
 #include "cwScrapSyncMergeHandler.h"
-#include "cwSurveyNoteLiDARModel.h"
 #include "cwSurveyNoteModel.h"
 #include "cwTrip.h"
 #include "cwNoteStation.h"
@@ -48,7 +47,6 @@ QSet<QString> trackedExtensionsForSyncMerge()
 enum class NoteChangedPathKind {
     Unsupported,
     NoteDescriptor,
-    NoteLiDARDescriptor,
     Asset
 };
 
@@ -68,10 +66,6 @@ NoteChangedPathKind classifyNoteChangedPath(const QString& path, const QSet<QStr
 {
     if (path.endsWith(QStringLiteral(".cwnote"), Qt::CaseInsensitive)) {
         return NoteChangedPathKind::NoteDescriptor;
-    }
-
-    if (path.endsWith(QStringLiteral(".cwnote3d"), Qt::CaseInsensitive)) {
-        return NoteChangedPathKind::NoteLiDARDescriptor;
     }
 
     const QString extension = QFileInfo(path).suffix().trimmed().toLower();
@@ -319,7 +313,6 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
         cwTrip* trip = nullptr;
         const cwTripData* loadedTripData = nullptr;
         bool noteDescriptorChanged = false;
-        bool noteLiDARDescriptorChanged = false;
         bool assetChanged = false;
         NoteDescriptorApplyMode noteDescriptorApplyMode = NoteDescriptorApplyMode::FullModelReplace;
         QList<cwNoteStructuralMergePlan> noteStructuralMergePlans;
@@ -366,7 +359,7 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
 
         const NoteChangedPathKind changedKind = classifyNoteChangedPath(normalizedPath, trackedExtensions);
         if (changedKind == NoteChangedPathKind::Unsupported) {
-            return {};
+            continue;
         }
 
         const auto tripIt = tripsByNotesDir.constFind(*notesDirPath);
@@ -393,8 +386,6 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
             if (baseIdentity.has_value()) {
                 updateIt->baseScrapIdentityByNoteId.insert(baseIdentity->first, baseIdentity->second);
             }
-        } else if (changedKind == NoteChangedPathKind::NoteLiDARDescriptor) {
-            updateIt->noteLiDARDescriptorChanged = true;
         } else {
             updateIt->assetChanged = true;
         }
@@ -424,6 +415,9 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
         }
 
         update.loadedTripData = loadedTripIt.value();
+        if (!update.noteDescriptorChanged && !update.assetChanged) {
+            continue;
+        }
         noteTripUpdates.append(update);
     }
 
@@ -511,12 +505,7 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
             result.modelMutated = true;
         }
 
-        if (update.noteLiDARDescriptorChanged) {
-            update.trip->notesLiDAR()->setData(update.loadedTripData->noteLiDARModel);
-            result.modelMutated = true;
-        }
-
-        if (update.noteDescriptorChanged || update.noteLiDARDescriptorChanged || update.assetChanged) {
+        if (update.noteDescriptorChanged || update.assetChanged) {
             objectPathReadySet.insert(update.trip);
         }
     }

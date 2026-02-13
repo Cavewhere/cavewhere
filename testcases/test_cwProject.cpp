@@ -3631,6 +3631,166 @@ TEST_CASE("cwProject sync incrementally reconciles pulled scrap station updates"
     CHECK(syncedScrap->stationData(cwScrap::StationPosition, 0).toPointF() == QPointF(0.44, 0.33));
 }
 
+TEST_CASE("cwProject sync incrementally reconciles pulled LiDAR note updates", "[cwProject][sync]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Sync Tester"));
+    rootData->account()->setEmail(QStringLiteral("sync.tester@example.com"));
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("LiDAR Reconcile Cave"));
+    cave->addTrip();
+    auto trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
+    trip->setName(QStringLiteral("LiDAR Reconcile Trip"));
+
+    QTemporaryDir projectDir;
+    REQUIRE(projectDir.isValid());
+    const QString projectPath = QDir(projectDir.path()).filePath(QStringLiteral("sync-lidar-reconcile.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+
+    const QString glbSource = copyToTempFolder("://datasets/test_cwSurveyNotesConcatModel/bones.glb");
+    REQUIRE(QFileInfo::exists(glbSource));
+    trip->notesLiDAR()->addFromFiles({QUrl::fromLocalFile(glbSource)});
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    REQUIRE(trip->notesLiDAR()->rowCount() == 1);
+
+    auto* localNote = qobject_cast<cwNoteLiDAR*>(trip->notesLiDAR()->notes().first());
+    REQUIRE(localNote != nullptr);
+    QPointer<cwNoteLiDAR> localNotePtr = localNote;
+
+    cwNoteLiDARStation station0;
+    station0.setName(QStringLiteral("L0"));
+    station0.setPositionOnNote(QVector3D(0.10f, 0.20f, 0.30f));
+    localNote->addStation(station0);
+    cwNoteLiDARStation station1;
+    station1.setName(QStringLiteral("L1"));
+    station1.setPositionOnNote(QVector3D(0.40f, 0.50f, 0.60f));
+    localNote->addStation(station1);
+
+    localNote->setAutoCalculateNorth(false);
+    localNote->noteTransformation()->setNorthUp(12.0);
+    localNote->noteTransformation()->setUpMode(cwNoteLiDARTransformation::UpMode::YisUp);
+    localNote->noteTransformation()->setUpSign(1.0f);
+    project->waitSaveToFinish();
+
+    auto* repository = project->repository();
+    REQUIRE(repository != nullptr);
+
+    QTemporaryDir remoteRoot;
+    REQUIRE(remoteRoot.isValid());
+    const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
+
+    git_repository* remoteRepo = nullptr;
+    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
+    if (remoteRepo) {
+        git_repository_free(remoteRepo);
+        remoteRepo = nullptr;
+    }
+
+    const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
+                                                         QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(addRemoteError.isEmpty());
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+
+    QTemporaryDir cloneDir;
+    REQUIRE(cloneDir.isValid());
+    const QString clonePath = QDir(cloneDir.path()).filePath(QStringLiteral("clone-2"));
+
+    QQuickGit::GitRepository cloneRepository;
+    cloneRepository.setDirectory(QDir(clonePath));
+    cloneRepository.setAccount(rootData->account());
+
+    auto cloneFuture = cloneRepository.clone(QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(AsyncFuture::waitForFinished(cloneFuture, 10000));
+    INFO("Clone error:" << cloneFuture.result().errorMessage().toStdString());
+    REQUIRE(!cloneFuture.result().hasError());
+
+    QDirIterator noteFileIterator(clonePath,
+                                  QStringList{QStringLiteral("*.cwnote3d")},
+                                  QDir::Files,
+                                  QDirIterator::Subdirectories);
+    REQUIRE(noteFileIterator.hasNext());
+    const QString clonedNotePath = noteFileIterator.next();
+
+    auto noteProto = loadProtoFromJsonFile<CavewhereProto::NoteLiDAR>(clonedNotePath);
+    REQUIRE(noteProto.notestations_size() == 2);
+
+    const QString originalStationZeroName = QString::fromStdString(noteProto.notestations(0).name());
+    const QString originalStationOneName = QString::fromStdString(noteProto.notestations(1).name());
+
+    CavewhereProto::NoteLiDARStation firstStation = noteProto.notestations(0);
+    *noteProto.mutable_notestations(0) = noteProto.notestations(1);
+    *noteProto.mutable_notestations(1) = firstStation;
+    noteProto.mutable_notestations(0)->mutable_positiononnote()->set_x(0.88f);
+    noteProto.mutable_notestations(0)->mutable_positiononnote()->set_y(0.77f);
+    noteProto.mutable_notestations(0)->mutable_positiononnote()->set_z(0.66f);
+
+    noteProto.set_filename(QStringLiteral("renamed-remote.glb").toStdString());
+    noteProto.set_autocalculatenorth(false);
+    noteProto.mutable_notetransformation()->mutable_plantransform()->set_northup(42.0);
+    noteProto.mutable_notetransformation()->set_upmode(CavewhereProto::NoteLiDARTransformation_UpMode_XisUp);
+    noteProto.mutable_notetransformation()->set_upsign(-1.0f);
+
+    writeProtoToJsonFile(clonedNotePath, noteProto);
+
+    REQUIRE_NOTHROW(cloneRepository.commitAll(QStringLiteral("Update LiDAR note"),
+                                              QStringLiteral("reorder lidar stations and mutate descriptor bundles")));
+    auto clonePushFuture = cloneRepository.push();
+    REQUIRE(AsyncFuture::waitForFinished(clonePushFuture, 10000));
+    INFO("Remote clone push error:" << clonePushFuture.result().errorMessage().toStdString());
+    REQUIRE(!clonePushFuture.result().hasError());
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+
+    REQUIRE(localNotePtr != nullptr);
+    auto* syncedNote = qobject_cast<cwNoteLiDAR*>(trip->notesLiDAR()->notes().first());
+    REQUIRE(syncedNote != nullptr);
+    CHECK(syncedNote == localNotePtr.data());
+
+    CHECK(syncedNote->filename() == QStringLiteral("renamed-remote.glb"));
+    CHECK(syncedNote->autoCalculateNorth() == false);
+    CHECK(syncedNote->noteTransformation()->northUp() == Catch::Approx(42.0));
+    CHECK(syncedNote->noteTransformation()->upMode() == cwNoteLiDARTransformation::UpMode::XisUp);
+    CHECK(syncedNote->noteTransformation()->upSign() == Catch::Approx(-1.0f));
+
+    const QList<cwNoteLiDARStation> syncedStations = syncedNote->stations();
+    REQUIRE(syncedStations.size() == 2);
+
+    auto findStation = [&](const QString& name) -> std::optional<cwNoteLiDARStation> {
+        for (const cwNoteLiDARStation& station : syncedStations) {
+            if (station.name() == name) {
+                return station;
+            }
+        }
+        return std::nullopt;
+    };
+
+    const auto stationOne = findStation(originalStationOneName);
+    REQUIRE(stationOne.has_value());
+    CHECK(stationOne->positionOnNote() == QVector3D(0.88f, 0.77f, 0.66f));
+
+    const auto stationZero = findStation(originalStationZeroName);
+    REQUIRE(stationZero.has_value());
+    CHECK(stationZero->positionOnNote() == QVector3D(0.10f, 0.20f, 0.30f));
+
+}
+
 TEST_CASE("cwProject sync falls back to full reconcile for ambiguous scrap structural mapping", "[cwProject][sync]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();

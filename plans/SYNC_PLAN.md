@@ -427,13 +427,13 @@ Implementation checklist:
 - [x] 4B.5 Scrap geometry policy
 - [x] Use wholesale geometry replacement only when no local geometry conflict is detected.
 - [x] If both sides changed geometry from base, keep ours and add a reconcile diagnostic.
-- [ ] 4B.5a `cwNoteLiDAR` merge handler (prerequisite for 4B.6)
-- [ ] Add `cwNoteLiDAR` merge path via `cwSyncMergeHandler` (or dedicated handler wired through the registry), not ad-hoc in `cwSaveLoad`.
-- [ ] Implement 3-way merge bundles for `cwNoteLiDARData`:
-- [ ] `filename` bundle
-- [ ] `transform + autoCalculateNorth` bundle
-- [ ] `stations` bundle (stable-id match, order-insensitive like scrap stations)
-- [ ] Keep strict fallback to full reload on ambiguous `cwNoteLiDAR` structural mapping.
+- [x] 4B.5a `cwNoteLiDAR` merge handler (prerequisite for 4B.6)
+- [x] Add `cwNoteLiDAR` merge path via `cwSyncMergeHandler` (or dedicated handler wired through the registry), not ad-hoc in `cwSaveLoad`.
+- [x] Implement 3-way merge bundles for `cwNoteLiDARData`:
+- [x] `filename` bundle
+- [x] `transform + autoCalculateNorth` bundle
+- [x] `stations` bundle (order-insensitive with strict ambiguous-name fallback)
+- [x] Keep strict fallback to full reload on ambiguous `cwNoteLiDAR` structural mapping.
 - [ ] 4B.6 Diagnostics and fallback
 - [ ] Emit explicit diagnostics for: note reorder applied, station/lead merge conflict resolved by ours, geometry conflict kept ours, and ambiguous mapping fallback.
 - [ ] Keep strict fallback to full reload on ambiguous structural mapping.
@@ -456,6 +456,7 @@ Test checklist (add to `testcases/test_cwProject.cpp`):
 - [ ] `TEST_CASE("cwProject sync emits diagnostic when geometry conflict resolves to ours", "[cwProject][sync]")`
 - [ ] `TEST_CASE("cwProject sync falls back to full reconcile when station id mapping is ambiguous", "[cwProject][sync]")`
 - [ ] `TEST_CASE("cwProject sync falls back to full reconcile when lead id mapping is ambiguous", "[cwProject][sync]")`
+- [x] `TEST_CASE("cwProject sync incrementally reconciles pulled LiDAR note updates", "[cwProject][sync]")`
 
 Focused unit tests (`testcases/test_cwScrapMergePlanBuilder.cpp`):
 - [x] `TEST_CASE("cwScrap merge plan builder accepts note reorder with stable identities", "[cwScrapMerge][sync]")`
