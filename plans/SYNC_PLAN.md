@@ -486,8 +486,53 @@ Exit criteria:
 - Integrate `cwDiff`-assisted payload merge for trip/cave-level data.
 - Apply field-safe updates; avoid destructive broad `setData` where payload incomplete.
 - Keep strict fallback for structural ambiguity.
+- Follow `docs/addNewTypesForMerge.md` pattern: identity-first, planner/applier separation, explicit bundle policies, and test-first ambiguous fallback.
+
+Implementation breakdown:
+- [ ] 5A cwTrip skeleton architecture
+- [ ] Add `cwTripMergePlanBuilder` with planning-only responsibilities:
+- [ ] validate stable identity mapping by `cwTripData.id`
+- [ ] produce deterministic ordered trip plan list for incremental apply
+- [ ] fail with explicit ambiguous reason on null/duplicate/missing ids
+- [ ] Add `cwTripMergeApplier` with apply-only responsibilities:
+- [ ] apply trip-level bundles only (no note/notelidar bundles here)
+- [ ] delegate/chain to subobject handlers for team/calibration/chunks
+- [ ] return explicit apply result for fallback decisions
+- [ ] Wire `cwTripSyncMergeHandler` into `cwSyncMergeRegistry` using planner/applier pair.
+
+- [ ] 5B cwTrip bundle matrix (define now, implement incrementally)
+- [ ] Trip `name` bundle (independent scalar bundle)
+- [ ] Trip `date` bundle (independent scalar bundle)
+- [ ] Trip calibration bundle: `cwTripCalibrationData` (single-value object; field-wise 3-way inside bundle)
+- [ ] Team bundle: `cwTeamData.members` identity-based by `cwTeamMember.id`, order-insensitive membership merge
+- [ ] Chunks structural bundle: `cwTripData.chunks` identity-based by `cwSurveyChunkData.id`, order-sensitive list semantics (chunk order is semantic and must be preserved/merged deterministically)
+- [ ] Chunk payload ordering contract: within each `cwSurveyChunkData`, `stations` and `shots` ordering is semantic and must never be treated as unordered during merge.
+- [ ] Notes bundles are out-of-scope for Phase 5 bundle work because `noteModel` and `noteLiDARModel` merge paths are already implemented.
+
+- [ ] 5C Subobject skeletons under trip
+- [ ] Add `cwTeamMergePlanBuilder` + `cwTeamMergeApplier` skeletons.
+- [ ] Add `cwTripCalibrationMergePlanBuilder` + `cwTripCalibrationMergeApplier` skeletons.
+- [ ] Add `cwSurveyChunkMergePlanBuilder` + `cwSurveyChunkMergeApplier` skeletons.
+- [ ] Keep subobject appliers no-op or conservative fallback until each bundle policy is implemented.
+
+- [ ] 5D Cave-level skeleton follow-up
+- [ ] Add `cwCaveMergePlanBuilder` + `cwCaveMergeApplier` skeletons for `cwCaveData`.
+- [ ] Initial cave bundle matrix:
+- [ ] scalar metadata: `name`
+- [ ] trips list: identity-based by `cwTripData.id` and delegated to trip handler
+- [ ] Cave `stationPositionLookup` is cache/runtime derived and is not serialized canonical payload for reconcile; do not include it in cave merge bundles.
+
+Test checklist for Phase 5 skeleton kickoff:
+- [ ] Add `testcases/test_cwTripMergePlanBuilder.cpp` with identity/ambiguity planning tests.
+- [ ] Add `testcases/test_cwTripMergeApplier.cpp` with trip scalar bundle apply tests.
+- [ ] Add `testcases/test_cwTeamMergePlanBuilder.cpp` and `testcases/test_cwTeamMergeApplier.cpp` skeleton tests.
+- [ ] Add `testcases/test_cwSurveyChunkMergePlanBuilder.cpp` and `testcases/test_cwSurveyChunkMergeApplier.cpp` skeleton tests.
+- [ ] Add `cwProject` sync integration smoke test for trip-level incremental path (no full reload on trip metadata-only change).
 
 Exit criteria:
+- cwTrip/cwCave merge handler skeletons exist and are registered.
+- trip/subobject bundle matrix is explicit in code and plan (no implicit `setData` merge policy).
+- note and notelidar merges remain delegated to existing handlers.
 - common trip/cave updates reconcile incrementally with no child-loss regressions.
 
 ## Phase 6: External Change Detection
