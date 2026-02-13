@@ -1,38 +1,13 @@
 #include "cwTripMergeApplier.h"
 
 #include "cwSaveLoad.h"
+#include "cwSyncMergeApplyUtils.h"
 #include "cwTrip.h"
 #include "cavewhere.pb.h"
 
 #include <optional>
 
 namespace {
-
-template<typename T, typename IsEqualFn>
-T chooseBundleValue(const T& currentValue,
-                    const T& loadedValue,
-                    const std::optional<T>& baseValue,
-                    IsEqualFn isEqual)
-{
-    if (!baseValue.has_value()) {
-        return loadedValue;
-    }
-
-    const bool currentMatchesBase = isEqual(currentValue, *baseValue);
-    const bool loadedMatchesBase = isEqual(loadedValue, *baseValue);
-
-    if (currentMatchesBase && !loadedMatchesBase) {
-        return loadedValue;
-    }
-    if (!currentMatchesBase && loadedMatchesBase) {
-        return currentValue;
-    }
-    if (!currentMatchesBase && !loadedMatchesBase) {
-        return currentValue;
-    }
-
-    return currentValue;
-}
 
 std::unique_ptr<CavewhereProto::Trip> normalizedTripProtoForObject(const cwTrip* trip)
 {
@@ -89,13 +64,13 @@ bool cwTripMergeApplier::applyTripMergePlan(const cwTripMergePlan& plan, QString
         ? std::optional<QDateTime>(plan.baseTripData->date)
         : std::nullopt;
 
-    currentTrip->setName(chooseBundleValue(
+    currentTrip->setName(cwSyncMergeApplyUtils::chooseBundleValue(
         currentTrip->name(),
         loadedTripData.name,
         baseName,
         [](const QString& lhs, const QString& rhs) { return lhs == rhs; }));
 
-    currentTrip->setDate(chooseBundleValue(
+    currentTrip->setDate(cwSyncMergeApplyUtils::chooseBundleValue(
         currentTrip->date(),
         loadedTripData.date,
         baseDate,
@@ -103,4 +78,3 @@ bool cwTripMergeApplier::applyTripMergePlan(const cwTripMergePlan& plan, QString
 
     return true;
 }
-

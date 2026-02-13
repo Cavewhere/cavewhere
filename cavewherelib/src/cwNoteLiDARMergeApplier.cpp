@@ -1,6 +1,7 @@
 #include "cwNoteLiDARMergeApplier.h"
 
 #include "cwNoteLiDAR.h"
+#include "cwSyncMergeApplyUtils.h"
 
 #include <QHash>
 #include <QSet>
@@ -34,26 +35,6 @@ bool lidarStationsEqual(const cwNoteLiDARStation& lhs, const cwNoteLiDARStation&
     return lhs.id() == rhs.id()
            && lhs.name() == rhs.name()
            && lhs.positionOnNote() == rhs.positionOnNote();
-}
-
-template<typename T, typename EqualsFn>
-T chooseBundleValue(const T& currentValue,
-                    const T& loadedValue,
-                    const std::optional<T>& baseValue,
-                    const EqualsFn& equals)
-{
-    if (!baseValue.has_value()) {
-        return loadedValue;
-    }
-
-    const bool currentMatchesBase = equals(currentValue, *baseValue);
-    const bool loadedMatchesBase = equals(loadedValue, *baseValue);
-
-    if (currentMatchesBase && !loadedMatchesBase) {
-        return loadedValue;
-    }
-
-    return currentValue;
 }
 
 std::optional<QHash<QUuid, cwNoteLiDARStation>> keyedStationsById(const QList<cwNoteLiDARStation>& stations)
@@ -121,12 +102,13 @@ std::optional<QList<cwNoteLiDARStation>> mergeStationsById(const QList<cwNoteLiD
             const std::optional<cwNoteLiDARStation> baseStation = hasBase
                                                                       ? std::optional<cwNoteLiDARStation>(*baseIt)
                                                                       : std::nullopt;
-            mergedStations.append(chooseBundleValue(*currentIt,
-                                                    *loadedIt,
-                                                    baseStation,
-                                                    [](const cwNoteLiDARStation& lhs, const cwNoteLiDARStation& rhs) {
-                                                        return lidarStationsEqual(lhs, rhs);
-                                                    }));
+            mergedStations.append(cwSyncMergeApplyUtils::chooseBundleValue(
+                *currentIt,
+                *loadedIt,
+                baseStation,
+                [](const cwNoteLiDARStation& lhs, const cwNoteLiDARStation& rhs) {
+                    return lidarStationsEqual(lhs, rhs);
+                }));
             continue;
         }
 
@@ -158,7 +140,7 @@ bool cwNoteLiDARMergeApplier::applyNoteLiDARMergePlan(const cwNoteLiDARMergePlan
         return false;
     }
 
-    const QString mergedFilename = chooseBundleValue<QString>(
+    const QString mergedFilename = cwSyncMergeApplyUtils::chooseBundleValue<QString>(
         plan.currentNote->filename(),
         plan.loadedNoteData->filename,
         plan.baseNoteData.has_value() ? std::optional<QString>(plan.baseNoteData->filename)
@@ -189,7 +171,7 @@ bool cwNoteLiDARMergeApplier::applyNoteLiDARMergePlan(const cwNoteLiDARMergePlan
                                                                          })
                                                                    : std::nullopt;
 
-    const TransformBundle mergedTransformBundle = chooseBundleValue<TransformBundle>(
+    const TransformBundle mergedTransformBundle = cwSyncMergeApplyUtils::chooseBundleValue<TransformBundle>(
         currentTransformBundle,
         loadedTransformBundle,
         baseTransformBundle,

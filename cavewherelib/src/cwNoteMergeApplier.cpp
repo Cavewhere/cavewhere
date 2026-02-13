@@ -3,6 +3,7 @@
 #include "cwImage.h"
 #include "cwImageResolution.h"
 #include "cwNote.h"
+#include "cwSyncMergeApplyUtils.h"
 
 #include <optional>
 
@@ -13,32 +14,6 @@ bool imageResolutionDataEqual(const cwImageResolution::Data& lhs, const cwImageR
     return lhs.unit == rhs.unit
            && lhs.value == rhs.value
            && lhs.updateValueWhenUnitChanged == rhs.updateValueWhenUnitChanged;
-}
-
-template<typename T, typename IsEqualFn>
-T chooseBundleValue(const T& currentValue,
-                    const T& loadedValue,
-                    const std::optional<T>& baseValue,
-                    IsEqualFn isEqual)
-{
-    if (!baseValue.has_value()) {
-        return loadedValue;
-    }
-
-    const bool currentMatchesBase = isEqual(currentValue, *baseValue);
-    const bool loadedMatchesBase = isEqual(loadedValue, *baseValue);
-
-    if (currentMatchesBase && !loadedMatchesBase) {
-        return loadedValue;
-    }
-    if (!currentMatchesBase && loadedMatchesBase) {
-        return currentValue;
-    }
-    if (!currentMatchesBase && !loadedMatchesBase) {
-        return currentValue;
-    }
-
-    return currentValue;
 }
 
 } // namespace
@@ -67,19 +42,19 @@ bool cwNoteMergeApplier::applyNoteMergePlan(const cwNoteMergePlan& plan)
     currentNote->setName(loadedNoteData.name);
     currentNote->setId(loadedNoteData.id);
 
-    currentNote->setImage(chooseBundleValue(
+    currentNote->setImage(cwSyncMergeApplyUtils::chooseBundleValue(
         currentNote->image(),
         loadedNoteData.image,
         baseImage,
         [](const cwImage& lhs, const cwImage& rhs) { return lhs == rhs; }));
 
-    currentNote->imageResolution()->setData(chooseBundleValue(
+    currentNote->imageResolution()->setData(cwSyncMergeApplyUtils::chooseBundleValue(
         currentNote->imageResolution()->data(),
         loadedNoteData.imageResolution,
         baseImageResolution,
         imageResolutionDataEqual));
 
-    currentNote->setRotate(chooseBundleValue(
+    currentNote->setRotate(cwSyncMergeApplyUtils::chooseBundleValue(
         currentNote->rotate(),
         loadedNoteData.rotate,
         baseRotate,
@@ -87,4 +62,3 @@ bool cwNoteMergeApplier::applyNoteMergePlan(const cwNoteMergePlan& plan)
 
     return true;
 }
-
