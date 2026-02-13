@@ -2,11 +2,13 @@
 
 #include "cwNoteLiDARSyncMergeHandler.h"
 #include "cwNoteSyncMergeHandler.h"
+#include "cwTripSyncMergeHandler.h"
 
 #include <QSet>
 
 cwSyncMergeRegistry::cwSyncMergeRegistry()
 {
+    m_handlers.emplace_back(std::make_unique<cwTripSyncMergeHandler>());
     m_handlers.emplace_back(std::make_unique<cwNoteLiDARSyncMergeHandler>());
     m_handlers.emplace_back(std::make_unique<cwNoteSyncMergeHandler>());
 }

@@ -490,19 +490,19 @@ Exit criteria:
 
 Implementation breakdown:
 - [ ] 5A cwTrip skeleton architecture
-- [ ] Add `cwTripMergePlanBuilder` with planning-only responsibilities:
-- [ ] validate stable identity mapping by `cwTripData.id`
-- [ ] produce deterministic ordered trip plan list for incremental apply
-- [ ] fail with explicit ambiguous reason on null/duplicate/missing ids
+- [x] Add `cwTripMergePlanBuilder` with planning-only responsibilities:
+- [x] validate stable identity mapping by `cwTripData.id`
+- [x] produce deterministic ordered trip plan list for incremental apply
+- [x] fail with explicit ambiguous reason on null/duplicate/missing ids
 - [ ] Add `cwTripMergeApplier` with apply-only responsibilities:
-- [ ] apply trip-level bundles only (no note/notelidar bundles here)
+- [x] apply trip-level bundles only (no note/notelidar bundles here)
 - [ ] delegate/chain to subobject handlers for team/calibration/chunks
 - [ ] return explicit apply result for fallback decisions
-- [ ] Wire `cwTripSyncMergeHandler` into `cwSyncMergeRegistry` using planner/applier pair.
+- [x] Wire `cwTripSyncMergeHandler` into `cwSyncMergeRegistry` using planner/applier pair.
 
 - [ ] 5B cwTrip bundle matrix (define now, implement incrementally)
-- [ ] Trip `name` bundle (independent scalar bundle)
-- [ ] Trip `date` bundle (independent scalar bundle)
+- [x] Trip `name` bundle (independent scalar bundle)
+- [x] Trip `date` bundle (independent scalar bundle)
 - [ ] Trip calibration bundle: `cwTripCalibrationData` (single-value object; field-wise 3-way inside bundle)
 - [ ] Team bundle: `cwTeamData.members` identity-based by `cwTeamMember.id`, order-insensitive membership merge
 - [ ] Chunks structural bundle: `cwTripData.chunks` identity-based by `cwSurveyChunkData.id`, order-sensitive list semantics (chunk order is semantic and must be preserved/merged deterministically)
@@ -523,8 +523,8 @@ Implementation breakdown:
 - [ ] Cave `stationPositionLookup` is cache/runtime derived and is not serialized canonical payload for reconcile; do not include it in cave merge bundles.
 
 Test checklist for Phase 5 skeleton kickoff:
-- [ ] Add `testcases/test_cwTripMergePlanBuilder.cpp` with identity/ambiguity planning tests.
-- [ ] Add `testcases/test_cwTripMergeApplier.cpp` with trip scalar bundle apply tests.
+- [x] Add `testcases/test_cwTripMergePlanBuilder.cpp` with identity/ambiguity planning tests.
+- [x] Add trip scalar bundle apply tests (currently in `testcases/test_cwTripMergePlanBuilder.cpp`).
 - [ ] Add `testcases/test_cwTeamMergePlanBuilder.cpp` and `testcases/test_cwTeamMergeApplier.cpp` skeleton tests.
 - [ ] Add `testcases/test_cwSurveyChunkMergePlanBuilder.cpp` and `testcases/test_cwSurveyChunkMergeApplier.cpp` skeleton tests.
 - [ ] Add `cwProject` sync integration smoke test for trip-level incremental path (no full reload on trip metadata-only change).
