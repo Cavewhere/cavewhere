@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls as QC
 import QtQuick.Layouts
 import QtQuick.Dialogs
+import QtQml.Models as QM
 import cavewherelib
 import QQuickGit
 
@@ -314,6 +315,33 @@ StandardPage {
             sourceComponent: ColumnLayout {
                 spacing: 12
 
+                QM.SortFilterProxyModel {
+                    id: repositorySortFilterModel
+                    model: gitHub.repositories
+                    sorters: [
+                        QM.StringSorter {
+                            roleName: "name"
+                            sortOrder: Qt.AscendingOrder
+                            caseSensitivity: Qt.CaseInsensitive
+                        }
+                    ]
+                    filters: [
+                        QM.FunctionFilter {
+                            component RoleData: QtObject {
+                                property string name
+                            }
+
+                            function filter(data: RoleData): bool {
+                                const normalizedFilter = repositoryFilterField.text.trim().toLowerCase()
+                                if (normalizedFilter.length === 0) {
+                                    return true
+                                }
+                                return data.name.toLowerCase().indexOf(normalizedFilter) !== -1
+                            }
+                        }
+                    ]
+                }
+
                 RowLayout {
                     Layout.fillWidth: true
 
@@ -342,6 +370,16 @@ StandardPage {
                     }
                 }
 
+                QC.TextField {
+                    id: repositoryFilterField
+                    Layout.fillWidth: true
+                    placeholderText: "Filter repositories by name"
+                    onTextChanged: {
+                        page.selectedRepoIndex = -1
+                        repositorySortFilterModel.invalidate()
+                    }
+                }
+
                 ListView {
                     id: repoList
                     currentIndex: page.selectedRepoIndex
@@ -349,7 +387,7 @@ StandardPage {
                     Layout.fillHeight: true
                     // Layout.preferredHeight: 240
                     clip: true
-                    model: gitHub.repositories
+                    model: repositorySortFilterModel
                     QC.ScrollBar.vertical: QC.ScrollBar {
                         policy: QC.ScrollBar.AsNeeded
                     }
@@ -360,7 +398,11 @@ StandardPage {
                     }
 
                     delegate: Rectangle {
-                        required property var modelData
+                        required property string name
+                        required property bool isPrivate
+                        required property string description
+                        required property string cloneUrl
+                        required property string sshUrl
                         required property int index
 
                         width: repoList.width
@@ -384,20 +426,20 @@ StandardPage {
 
                                 RowLayout {
                                     Text {
-                                        text: modelData.name
+                                        text: name
                                         font.bold: true
                                         elide: Text.ElideRight
                                     }
 
                                     Text {
-                                        text: modelData.isPrivate ? "Private" : "Public"
-                                        color: modelData.isPrivate ? Theme.warning : Theme.success
+                                        text: isPrivate ? "Private" : "Public"
+                                        color: isPrivate ? Theme.warning : Theme.success
                                         font.pixelSize: 12
                                     }
                                 }
 
                                 Text {
-                                    text: modelData.description.length > 0 ? modelData.description : modelData.cloneUrl
+                                    text: description.length > 0 ? description : cloneUrl
                                     wrapMode: Text.WordWrap
                                     elide: Text.ElideRight
                                     color: Theme.textSubtle
@@ -411,19 +453,19 @@ StandardPage {
                             cursorShape: Qt.PointingHandCursor
                             onTapped: {
                                 page.selectedRepoIndex = index
-                                page.repositoryPicked(modelData.sshUrl)
+                                page.repositoryPicked(sshUrl)
                             }
                         }
                     }
 
                     footer: Item {
                         width: repoList.width
-                        height: gitHub.repositories.length === 0 ? 40 : 0
+                        height: repoList.count === 0 ? 40 : 0
 
                         Text {
                             anchors.centerIn: parent
                             text: "No repositories found."
-                            visible: gitHub.repositories.length === 0
+                            visible: repoList.count === 0
                             color: Theme.textSubtle
                         }
                     }

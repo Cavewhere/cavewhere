@@ -2,14 +2,16 @@
 
 //Qt
 #include <QObject>
-#include <QVariantList>
 #include <QVariantMap>
+#include <QRangeModel>
 #include <QUrl>
 #include <QNetworkAccessManager>
 #include <QQmlEngine>
+#include <QMetaType>
 
 //Std includes
 #include <memory>
+#include <vector>
 
 //Our
 #include "cwGitHubDeviceAuth.h"
@@ -17,6 +19,34 @@
 namespace QQuickGit {
 class RSAKeyGenerator;
 }
+
+struct cwGitHubRepositoryItem
+{
+    Q_GADGET
+    Q_PROPERTY(QString name MEMBER name)
+    Q_PROPERTY(QString description MEMBER description)
+    Q_PROPERTY(QString cloneUrl MEMBER cloneUrl)
+    Q_PROPERTY(QString sshUrl MEMBER sshUrl)
+    Q_PROPERTY(QString htmlUrl MEMBER htmlUrl)
+    Q_PROPERTY(bool isPrivate MEMBER isPrivate)
+
+public:
+    QString name;
+    QString description;
+    QString cloneUrl;
+    QString sshUrl;
+    QString htmlUrl;
+    bool isPrivate = false;
+};
+Q_DECLARE_METATYPE(cwGitHubRepositoryItem)
+
+QT_BEGIN_NAMESPACE
+template<>
+struct QRangeModel::RowOptions<::cwGitHubRepositoryItem>
+{
+    static constexpr auto rowCategory = QRangeModel::RowCategory::MultiRoleItem;
+};
+QT_END_NAMESPACE
 
 class cwGitHubIntegration : public QObject
 {
@@ -28,7 +58,7 @@ class cwGitHubIntegration : public QObject
     Q_PROPERTY(QString userCode READ userCode NOTIFY deviceCodeChanged)
     Q_PROPERTY(QUrl verificationUrl READ verificationUrl NOTIFY deviceCodeChanged)
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY errorMessageChanged)
-    Q_PROPERTY(QVariantList repositories READ repositories NOTIFY repositoriesChanged)
+    Q_PROPERTY(QRangeModel* repositories READ repositories NOTIFY repositoriesChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
     Q_PROPERTY(int secondsUntilNextPoll READ secondsUntilNextPoll NOTIFY secondsUntilNextPollChanged)
     Q_PROPERTY(bool verificationOpened READ verificationOpened NOTIFY verificationOpenedChanged)
@@ -50,7 +80,7 @@ public:
     QString userCode() const { return m_deviceInfo.userCode; }
     QUrl verificationUrl() const { return m_deviceInfo.verificationWebAddress; }
     QString errorMessage() const { return m_errorMessage; }
-    QVariantList repositories() const { return m_repositories; }
+    QRangeModel* repositories() const { return m_repositories; }
     bool busy() const { return m_busy; }
     int secondsUntilNextPoll() const { return m_secondsUntilNextPoll; }
     bool verificationOpened() const { return m_hasOpenedVerificationUrl; }
@@ -91,6 +121,7 @@ private:
     void loadStoredAccessToken();
     void clearStoredAccessToken();
     void fetchUserProfile();
+    void setRepositories(std::vector<cwGitHubRepositoryItem> repositories);
 
     static QString resolveClientId();
 
@@ -101,7 +132,7 @@ private:
     cwGitHubDeviceAuth::DeviceCodeInfo m_deviceInfo;
     QString m_accessToken;
     QString m_errorMessage;
-    QVariantList m_repositories;
+    QRangeModel* m_repositories = nullptr;
     QNetworkAccessManager m_network;
 
     std::unique_ptr<QQuickGit::RSAKeyGenerator> m_keyGenerator;

@@ -14,6 +14,7 @@
 #include <QScopedPointer>
 #include <QScopedPointerDeleteLater>
 #include <qtkeychain/keychain.h>
+#include <vector>
 
 //Our
 #include "RSAKeyGenerator.h"
@@ -32,6 +33,8 @@ cwGitHubIntegration::cwGitHubIntegration(QObject* parent)
     : QObject(parent)
     , m_deviceAuth(resolveClientId(), this)
 {
+    setRepositories({});
+
     QObject::connect(&m_deviceAuth, &cwGitHubDeviceAuth::deviceCodeReceived,
                      this, &cwGitHubIntegration::handleDeviceCode);
 
@@ -80,9 +83,8 @@ void cwGitHubIntegration::cancelLogin()
         emit deviceCodeChanged();
     }
     m_accessToken.clear();
-    m_repositories.clear();
+    setRepositories({});
     emit accessTokenChanged();
-    emit repositoriesChanged();
     setAuthState(AuthState::Idle);
 
     if (m_secondsUntilNextPoll != 0) {
@@ -179,8 +181,7 @@ void cwGitHubIntegration::logout()
     clearStoredAccessToken();
     m_accessToken.clear();
     emit accessTokenChanged();
-    m_repositories.clear();
-    emit repositoriesChanged();
+    setRepositories({});
     setErrorMessage({});
     if (!m_username.isEmpty()) {
         m_username.clear();
@@ -342,6 +343,16 @@ void cwGitHubIntegration::fetchUserProfile()
     });
 }
 
+void cwGitHubIntegration::setRepositories(std::vector<cwGitHubRepositoryItem> repositories)
+{
+    auto* newModel = new QRangeModel(std::move(repositories), this);
+    if (m_repositories != nullptr) {
+        m_repositories->deleteLater();
+    }
+    m_repositories = newModel;
+    emit repositoriesChanged();
+}
+
 void cwGitHubIntegration::handleUserProfileReply(QNetworkReply* reply)
 {
     QScopedPointer<QNetworkReply, QScopedPointerDeleteLater> guard(reply);
@@ -383,24 +394,23 @@ void cwGitHubIntegration::handleRepositoryReply(QNetworkReply* reply)
         return;
     }
 
-    QVariantList items;
+    std::vector<cwGitHubRepositoryItem> items;
     const auto array = doc.array();
     items.reserve(array.size());
     for (const QJsonValue& entry : array) {
         const QJsonObject obj = entry.toObject();
-        QVariantMap repo;
-        repo.insert(QStringLiteral("name"), obj.value(QStringLiteral("name")).toString());
-        repo.insert(QStringLiteral("description"), obj.value(QStringLiteral("description")).toString());
-        repo.insert(QStringLiteral("cloneUrl"), obj.value(QStringLiteral("clone_url")).toString());
-        repo.insert(QStringLiteral("sshUrl"), obj.value(QStringLiteral("ssh_url")).toString());
-        repo.insert(QStringLiteral("htmlUrl"), obj.value(QStringLiteral("html_url")).toString());
-        repo.insert(QStringLiteral("isPrivate"), obj.value(QStringLiteral("private")).toBool());
-        items.append(repo);
+        cwGitHubRepositoryItem repo;
+        repo.name = obj.value(QStringLiteral("name")).toString();
+        repo.description = obj.value(QStringLiteral("description")).toString();
+        repo.cloneUrl = obj.value(QStringLiteral("clone_url")).toString();
+        repo.sshUrl = obj.value(QStringLiteral("ssh_url")).toString();
+        repo.htmlUrl = obj.value(QStringLiteral("html_url")).toString();
+        repo.isPrivate = obj.value(QStringLiteral("private")).toBool();
+        items.push_back(std::move(repo));
     }
 
-    m_repositories = items;
+    setRepositories(std::move(items));
     setErrorMessage({});
-    emit repositoriesChanged();
 }
 
 void cwGitHubIntegration::handleUploadReply(QNetworkReply* reply)
