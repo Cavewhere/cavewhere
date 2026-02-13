@@ -39,17 +39,13 @@ cwNoteLiDARDescriptorApplyMode cwNoteLiDARMergePlanBuilder::determineApplyMode(
     return cwNoteLiDARDescriptorApplyMode::FullModelReplace;
 }
 
-std::optional<cwNoteLiDARMergePreparation> cwNoteLiDARMergePlanBuilder::build(
+Monad::Result<cwNoteLiDARMergePreparation> cwNoteLiDARMergePlanBuilder::build(
     cwSurveyNoteLiDARModel* noteLiDARModel,
     const cwSurveyNoteLiDARModelData& loadedNoteLiDARModelData,
-    const QHash<QUuid, cwNoteLiDARData>& baseNoteLiDARByNoteId,
-    QString* failureReason)
+    const QHash<QUuid, cwNoteLiDARData>& baseNoteLiDARByNoteId)
 {
     if (noteLiDARModel == nullptr) {
-        if (failureReason != nullptr) {
-            *failureReason = QStringLiteral("LiDAR note model is null.");
-        }
-        return std::nullopt;
+        return Monad::Result<cwNoteLiDARMergePreparation>(QStringLiteral("LiDAR note model is null."));
     }
 
     const auto currentNotesById = cwSyncIdUtils::buildUniqueIdPointerMap(
@@ -57,10 +53,8 @@ std::optional<cwNoteLiDARMergePreparation> cwNoteLiDARMergePlanBuilder::build(
         [](QObject* noteObject) { return qobject_cast<cwNoteLiDAR*>(noteObject); },
         [](const cwNoteLiDAR* note) { return note->id(); });
     if (!currentNotesById.has_value()) {
-        if (failureReason != nullptr) {
-            *failureReason = QStringLiteral("Ambiguous current LiDAR note ids.");
-        }
-        return std::nullopt;
+        return Monad::Result<cwNoteLiDARMergePreparation>(
+            QStringLiteral("Ambiguous current LiDAR note ids."));
     }
 
     cwNoteLiDARMergePreparation preparation;
@@ -70,10 +64,8 @@ std::optional<cwNoteLiDARMergePreparation> cwNoteLiDARMergePlanBuilder::build(
     for (const cwNoteLiDARData& loadedNoteData : loadedNoteLiDARModelData.notes) {
         auto currentNoteIt = currentNotesById->constFind(loadedNoteData.id);
         if (currentNoteIt == currentNotesById->constEnd()) {
-            if (failureReason != nullptr) {
-                *failureReason = QStringLiteral("Missing current LiDAR note object for incremental merge.");
-            }
-            return std::nullopt;
+            return Monad::Result<cwNoteLiDARMergePreparation>(
+                QStringLiteral("Missing current LiDAR note object for incremental merge."));
         }
 
         cwNoteLiDARMergePlan plan;
@@ -89,5 +81,5 @@ std::optional<cwNoteLiDARMergePreparation> cwNoteLiDARMergePlanBuilder::build(
         preparation.orderedNotes.append(plan.currentNote);
     }
 
-    return preparation;
+    return Monad::Result<cwNoteLiDARMergePreparation>(preparation);
 }

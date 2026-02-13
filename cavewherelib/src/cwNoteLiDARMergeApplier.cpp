@@ -134,10 +134,10 @@ cwNoteLiDARTransformationData currentTransformData(const cwNoteLiDAR* note)
 
 } // namespace
 
-bool cwNoteLiDARMergeApplier::applyNoteLiDARMergePlan(const cwNoteLiDARMergePlan& plan)
+Monad::ResultBase cwNoteLiDARMergeApplier::applyNoteLiDARMergePlan(const cwNoteLiDARMergePlan& plan)
 {
     if (plan.currentNote == nullptr || plan.loadedNoteData == nullptr) {
-        return false;
+        return Monad::ResultBase(QStringLiteral("LiDAR note merge plan is missing required objects."));
     }
 
     const QString mergedFilename = cwSyncMergeApplyUtils::chooseBundleValue<QString>(
@@ -148,7 +148,6 @@ bool cwNoteLiDARMergeApplier::applyNoteLiDARMergePlan(const cwNoteLiDARMergePlan
         [](const QString& lhs, const QString& rhs) {
             return lhs == rhs;
         });
-    plan.currentNote->setFilename(mergedFilename);
 
     struct TransformBundle {
         cwNoteLiDARTransformationData transform;
@@ -180,19 +179,19 @@ bool cwNoteLiDARMergeApplier::applyNoteLiDARMergePlan(const cwNoteLiDARMergePlan
                    && lidarTransformsEqual(lhs.transform, rhs.transform);
         });
 
-    plan.currentNote->setAutoCalculateNorth(mergedTransformBundle.autoCalculateNorth);
-    plan.currentNote->noteTransformation()->setData(mergedTransformBundle.transform);
-    plan.currentNote->noteTransformation()->setUpSign(mergedTransformBundle.transform.upSign);
-
     const auto mergedStations = mergeStationsById(
         plan.currentNote->stations(),
         plan.loadedNoteData->stations,
         plan.baseNoteData.has_value() ? std::optional<QList<cwNoteLiDARStation>>(plan.baseNoteData->stations)
                                       : std::nullopt);
     if (!mergedStations.has_value()) {
-        return false;
+        return Monad::ResultBase(QStringLiteral("Ambiguous LiDAR station mapping during incremental merge."));
     }
 
+    plan.currentNote->setFilename(mergedFilename);
+    plan.currentNote->setAutoCalculateNorth(mergedTransformBundle.autoCalculateNorth);
+    plan.currentNote->noteTransformation()->setData(mergedTransformBundle.transform);
+    plan.currentNote->noteTransformation()->setUpSign(mergedTransformBundle.transform.upSign);
     plan.currentNote->setStations(*mergedStations);
-    return true;
+    return Monad::ResultBase();
 }

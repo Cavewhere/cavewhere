@@ -210,34 +210,33 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
         return {};
     }
 
-    QString buildFailureReason;
     const auto mergePreparation = cwTripMergePlanBuilder::build(changedCurrentTrips,
                                                                 changedLoadedTrips,
-                                                                baseTripById,
-                                                                &buildFailureReason);
-    if (!mergePreparation.has_value()) {
+                                                                baseTripById);
+    if (mergePreparation.hasError()) {
         cwReconcileMergeResult result;
         result.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;
         result.handlerName = name();
-        result.fallbackReason = buildFailureReason.isEmpty()
+        result.fallbackReason = mergePreparation.errorMessage().isEmpty()
                                     ? QStringLiteral("Unable to build deterministic trip merge plan.")
-                                    : buildFailureReason;
+                                    : mergePreparation.errorMessage();
         return result;
     }
+    const cwTripMergePreparation mergePreparationValue = mergePreparation.value();
 
     cwReconcileMergeResult result;
     result.outcome = cwReconcileMergeResult::Outcome::Applied;
     result.handlerName = name();
 
-    for (const cwTripMergePlan& plan : mergePreparation->plans) {
-        QString applyFailureReason;
-        if (!cwTripMergeApplier::applyTripMergePlan(plan, &applyFailureReason)) {
+    for (const cwTripMergePlan& plan : mergePreparationValue.plans) {
+        const auto applyResult = cwTripMergeApplier::applyTripMergePlan(plan);
+        if (applyResult.hasError()) {
             cwReconcileMergeResult fullReloadResult;
             fullReloadResult.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;
             fullReloadResult.handlerName = name();
-            fullReloadResult.fallbackReason = applyFailureReason.isEmpty()
+            fullReloadResult.fallbackReason = applyResult.errorMessage().isEmpty()
                                                   ? QStringLiteral("Unable to apply deterministic trip merge plan.")
-                                                  : applyFailureReason;
+                                                  : applyResult.errorMessage();
             return fullReloadResult;
         }
 

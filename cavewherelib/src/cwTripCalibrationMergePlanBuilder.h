@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cwTripCalibration.h"
+#include "Monad/Result.h"
 
 #include <QString>
 
@@ -15,9 +16,8 @@ struct cwTripCalibrationMergePlan {
 class cwTripCalibrationMergePlanBuilder
 {
 public:
-    static std::optional<cwTripCalibrationMergePlan> build(
+    static Monad::Result<cwTripCalibrationMergePlan> build(
         cwTripCalibration* currentCalibration,
         const cwTripCalibrationData* loadedCalibrationData,
-        const std::optional<cwTripCalibrationData>& baseCalibrationData,
-        QString* failureReason = nullptr);
+        const std::optional<cwTripCalibrationData>& baseCalibrationData);
 };

@@ -335,33 +335,35 @@ cwReconcileMergeResult cwNoteLiDARSyncMergeHandler::reconcile(const cwReconcileM
             continue;
         }
 
-        QString buildFailureReason;
         const auto mergePreparation = cwNoteLiDARMergePlanBuilder::build(
             update.trip->notesLiDAR(),
             update.loadedTripData->noteLiDARModel,
-            update.baseNoteLiDARByNoteId,
-            &buildFailureReason);
-        if (!mergePreparation.has_value()) {
+            update.baseNoteLiDARByNoteId);
+        if (mergePreparation.hasError()) {
             cwReconcileMergeResult fullReloadResult;
             fullReloadResult.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;
             fullReloadResult.handlerName = name();
-            fullReloadResult.fallbackReason = buildFailureReason.isEmpty()
+            fullReloadResult.fallbackReason = mergePreparation.errorMessage().isEmpty()
                                                   ? QStringLiteral("Unable to build deterministic LiDAR note merge plan.")
-                                                  : buildFailureReason;
+                                                  : mergePreparation.errorMessage();
             return fullReloadResult;
         }
+        const cwNoteLiDARMergePreparation mergePreparationValue = mergePreparation.value();
 
-        for (const cwNoteLiDARMergePlan& plan : mergePreparation->plans) {
-            if (!cwNoteLiDARMergeApplier::applyNoteLiDARMergePlan(plan)) {
+        for (const cwNoteLiDARMergePlan& plan : mergePreparationValue.plans) {
+            const auto applyResult = cwNoteLiDARMergeApplier::applyNoteLiDARMergePlan(plan);
+            if (applyResult.hasError()) {
                 cwReconcileMergeResult fullReloadResult;
                 fullReloadResult.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;
                 fullReloadResult.handlerName = name();
-                fullReloadResult.fallbackReason = QStringLiteral("Ambiguous LiDAR station mapping during incremental merge.");
+                fullReloadResult.fallbackReason = applyResult.errorMessage().isEmpty()
+                                                      ? QStringLiteral("Ambiguous LiDAR station mapping during incremental merge.")
+                                                      : applyResult.errorMessage();
                 return fullReloadResult;
             }
         }
 
-        const bool reorderApplied = update.trip->notesLiDAR()->reorderNotes(mergePreparation->orderedNotes);
+        const bool reorderApplied = update.trip->notesLiDAR()->reorderNotes(mergePreparationValue.orderedNotes);
         if (!reorderApplied) {
             cwReconcileMergeResult fullReloadResult;
             fullReloadResult.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;

@@ -290,12 +290,14 @@ MergedScrapDataResult mergedScrapDataPreferOursForStationsAndLeads(const cwScrap
 
 } // namespace
 
-bool cwScrapMergeApplier::applyNoteStructuralMergePlan(const cwNoteStructuralMergePlan& plan)
+Monad::Result<cwScrapMergeApplyResult> cwScrapMergeApplier::applyNoteStructuralMergePlan(
+    const cwNoteStructuralMergePlan& plan)
 {
     Q_ASSERT(plan.note != nullptr);
     Q_ASSERT(plan.loadedNoteData != nullptr);
     if (plan.note == nullptr || plan.loadedNoteData == nullptr) {
-        return false;
+        return Monad::Result<cwScrapMergeApplyResult>(
+            QStringLiteral("Note structural merge plan is missing required objects."));
     }
 
     cwNote* const note = plan.note;
@@ -316,6 +318,26 @@ bool cwScrapMergeApplier::applyNoteStructuralMergePlan(const cwNoteStructuralMer
         currentScrapDataById.insert(scrap->id(), scrap->data());
     }
 
+    // Validate the planned mapping up front so apply is all-or-nothing.
+    QSet<QUuid> seenOrderedIds;
+    for (const QUuid& orderedId : plan.mergedScrapOrder) {
+        if (orderedId.isNull() || seenOrderedIds.contains(orderedId)) {
+            return Monad::Result<cwScrapMergeApplyResult>(
+                QStringLiteral("Note structural merge plan contains ambiguous scrap ids."));
+        }
+        seenOrderedIds.insert(orderedId);
+        if (!loadedScrapsById.contains(orderedId)) {
+            return Monad::Result<cwScrapMergeApplyResult>(
+                QStringLiteral("Note structural merge plan references missing loaded scrap data."));
+        }
+    }
+    for (cwScrap* scrap : currentScraps) {
+        if (scrap == nullptr) {
+            return Monad::Result<cwScrapMergeApplyResult>(
+                QStringLiteral("Note structural merge plan references null current scrap object."));
+        }
+    }
+
     bool geometryConflictKeptOurs = false;
     const int currentCount = currentScraps.size();
     const int loadedCount = static_cast<int>(plan.mergedScrapOrder.size());
@@ -326,9 +348,6 @@ bool cwScrapMergeApplier::applyNoteStructuralMergePlan(const cwNoteStructuralMer
         const cwScrapData* loadedScrapData = loadedScrapsById.value(targetScrapId, nullptr);
         Q_ASSERT(scrap != nullptr);
         Q_ASSERT(loadedScrapData != nullptr);
-        if (scrap == nullptr || loadedScrapData == nullptr) {
-            continue;
-        }
 
         const auto baseIdentityIt = plan.baseScrapIdentityByScrapId.constFind(targetScrapId);
         const cwScrapBaseIdentityData* baseIdentity =
@@ -351,20 +370,20 @@ bool cwScrapMergeApplier::applyNoteStructuralMergePlan(const cwNoteStructuralMer
             const QUuid targetScrapId = plan.mergedScrapOrder.at(static_cast<size_t>(index));
             const cwScrapData* loadedScrapData = loadedScrapsById.value(targetScrapId, nullptr);
             Q_ASSERT(loadedScrapData != nullptr);
-            if (loadedScrapData != nullptr) {
-                const auto baseIdentityIt = plan.baseScrapIdentityByScrapId.constFind(targetScrapId);
-                const cwScrapBaseIdentityData* baseIdentity =
-                    (baseIdentityIt != plan.baseScrapIdentityByScrapId.constEnd()) ? &baseIdentityIt.value() : nullptr;
-                const auto currentScrapDataIt = currentScrapDataById.constFind(targetScrapId);
-                const cwScrapData* currentScrapDataForId =
-                    currentScrapDataIt != currentScrapDataById.constEnd() ? &currentScrapDataIt.value() : nullptr;
-                const auto mergedResult =
-                    mergedScrapDataPreferOursForStationsAndLeads(currentScrapDataForId, *loadedScrapData, baseIdentity);
-                scrap->setData(mergedResult.data);
-                geometryConflictKeptOurs = geometryConflictKeptOurs || mergedResult.geometryConflictKeptOurs;
-            }
+            const auto baseIdentityIt = plan.baseScrapIdentityByScrapId.constFind(targetScrapId);
+            const cwScrapBaseIdentityData* baseIdentity =
+                (baseIdentityIt != plan.baseScrapIdentityByScrapId.constEnd()) ? &baseIdentityIt.value() : nullptr;
+            const auto currentScrapDataIt = currentScrapDataById.constFind(targetScrapId);
+            const cwScrapData* currentScrapDataForId =
+                currentScrapDataIt != currentScrapDataById.constEnd() ? &currentScrapDataIt.value() : nullptr;
+            const auto mergedResult =
+                mergedScrapDataPreferOursForStationsAndLeads(currentScrapDataForId, *loadedScrapData, baseIdentity);
+            scrap->setData(mergedResult.data);
+            geometryConflictKeptOurs = geometryConflictKeptOurs || mergedResult.geometryConflictKeptOurs;
         }
     }
 
-    return geometryConflictKeptOurs;
+    cwScrapMergeApplyResult result;
+    result.geometryConflictKeptOurs = geometryConflictKeptOurs;
+    return Monad::Result<cwScrapMergeApplyResult>(result);
 }

@@ -55,11 +55,11 @@ TEST_CASE("cwNoteLiDAR merge plan builder accepts note reorder with stable ident
     CHECK(applyMode == cwNoteLiDARDescriptorApplyMode::IncrementalMerge);
 
     const auto preparation = cwNoteLiDARMergePlanBuilder::build(&model, loadedData, {});
-    REQUIRE(preparation.has_value());
-    REQUIRE(preparation->orderedNotes.size() == 2);
-    CHECK(preparation->orderedNotes.at(0) == secondNote);
-    CHECK(preparation->orderedNotes.at(1) == firstNote);
-    REQUIRE(preparation->plans.size() == 2);
+    REQUIRE_FALSE(preparation.hasError());
+    REQUIRE(preparation.value().orderedNotes.size() == 2);
+    CHECK(preparation.value().orderedNotes.at(0) == secondNote);
+    CHECK(preparation.value().orderedNotes.at(1) == firstNote);
+    REQUIRE(preparation.value().plans.size() == 2);
 }
 
 TEST_CASE("cwNoteLiDAR merge plan builder rejects ambiguous note identities", "[cwNoteLiDARMerge][sync]")
@@ -135,7 +135,7 @@ TEST_CASE("cwNoteLiDAR merge applier merges stations by stable id with local pre
     plan.loadedNoteData = &loadedData;
     plan.baseNoteData = baseData;
 
-    REQUIRE(cwNoteLiDARMergeApplier::applyNoteLiDARMergePlan(plan));
+    REQUIRE_FALSE(cwNoteLiDARMergeApplier::applyNoteLiDARMergePlan(plan).hasError());
 
     CHECK(note->filename() == QStringLiteral("theirs.glb"));
     const QList<cwNoteLiDARStation> mergedStations = note->stations();
@@ -185,7 +185,7 @@ TEST_CASE("cwNoteLiDAR merge applier applies remote station value when local mat
     plan.loadedNoteData = &loadedData;
     plan.baseNoteData = baseData;
 
-    REQUIRE(cwNoteLiDARMergeApplier::applyNoteLiDARMergePlan(plan));
+    REQUIRE_FALSE(cwNoteLiDARMergeApplier::applyNoteLiDARMergePlan(plan).hasError());
 
     const QList<cwNoteLiDARStation> mergedStations = note->stations();
     REQUIRE(mergedStations.size() == 1);
@@ -221,5 +221,5 @@ TEST_CASE("cwNoteLiDAR merge applier returns false for ambiguous station ids", "
     plan.loadedNoteData = &loadedData;
     plan.baseNoteData = baseData;
 
-    CHECK_FALSE(cwNoteLiDARMergeApplier::applyNoteLiDARMergePlan(plan));
+    CHECK(cwNoteLiDARMergeApplier::applyNoteLiDARMergePlan(plan).hasError());
 }

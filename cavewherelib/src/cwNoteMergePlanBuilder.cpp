@@ -6,17 +6,13 @@
 
 #include <QSet>
 
-std::optional<cwNoteMergePreparation> cwNoteMergePlanBuilder::build(
+Monad::Result<cwNoteMergePreparation> cwNoteMergePlanBuilder::build(
     cwSurveyNoteModel* noteModel,
     const cwSurveyNoteModelData& loadedNoteModelData,
-    const QHash<QUuid, cwNoteData>& baseNoteById,
-    QString* failureReason)
+    const QHash<QUuid, cwNoteData>& baseNoteById)
 {
     if (noteModel == nullptr) {
-        if (failureReason != nullptr) {
-            *failureReason = QStringLiteral("Note model is null.");
-        }
-        return std::nullopt;
+        return Monad::Result<cwNoteMergePreparation>(QStringLiteral("Note model is null."));
     }
 
     const auto currentNotesById = cwSyncIdUtils::buildUniqueIdPointerMap(
@@ -24,10 +20,7 @@ std::optional<cwNoteMergePreparation> cwNoteMergePlanBuilder::build(
         [](cwNote* note) { return note; },
         [](const cwNote* note) { return note->id(); });
     if (!currentNotesById.has_value()) {
-        if (failureReason != nullptr) {
-            *failureReason = QStringLiteral("Ambiguous current note ids.");
-        }
-        return std::nullopt;
+        return Monad::Result<cwNoteMergePreparation>(QStringLiteral("Ambiguous current note ids."));
     }
 
     cwNoteMergePreparation preparation;
@@ -36,19 +29,14 @@ std::optional<cwNoteMergePreparation> cwNoteMergePlanBuilder::build(
     QSet<QUuid> seenLoadedIds;
     for (const cwNoteData& loadedNoteData : loadedNoteModelData.notes) {
         if (loadedNoteData.id.isNull() || seenLoadedIds.contains(loadedNoteData.id)) {
-            if (failureReason != nullptr) {
-                *failureReason = QStringLiteral("Ambiguous loaded note ids.");
-            }
-            return std::nullopt;
+            return Monad::Result<cwNoteMergePreparation>(QStringLiteral("Ambiguous loaded note ids."));
         }
         seenLoadedIds.insert(loadedNoteData.id);
 
         const auto currentNoteIt = currentNotesById->constFind(loadedNoteData.id);
         if (currentNoteIt == currentNotesById->constEnd()) {
-            if (failureReason != nullptr) {
-                *failureReason = QStringLiteral("Missing current note object for incremental merge.");
-            }
-            return std::nullopt;
+            return Monad::Result<cwNoteMergePreparation>(
+                QStringLiteral("Missing current note object for incremental merge."));
         }
 
         cwNoteMergePlan plan;
@@ -63,6 +51,5 @@ std::optional<cwNoteMergePreparation> cwNoteMergePlanBuilder::build(
         preparation.plans.append(std::move(plan));
     }
 
-    return preparation;
+    return Monad::Result<cwNoteMergePreparation>(preparation);
 }
-

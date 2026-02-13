@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cwScrapSyncMergeHandler.h"
+#include "Monad/Result.h"
 
 class cwSurveyNoteModel;
 struct cwSurveyNoteModelData;
@@ -8,7 +9,7 @@ struct cwSurveyNoteModelData;
 class cwScrapMergePlanBuilder
 {
 public:
-    static std::optional<cwNoteStructuralMergePreparation> buildNoteStructuralMergePreparation(
+    static Monad::Result<cwNoteStructuralMergePreparation> buildNoteStructuralMergePreparation(
         cwSurveyNoteModel* noteModel,
         const cwSurveyNoteModelData& loadedNoteModelData);
 };

@@ -2,6 +2,7 @@
 
 #include "cwNoteData.h"
 #include "cwSurveyNoteModelData.h"
+#include "Monad/Result.h"
 
 #include <QHash>
 #include <QList>
@@ -25,10 +26,8 @@ struct cwNoteMergePreparation {
 class cwNoteMergePlanBuilder
 {
 public:
-    static std::optional<cwNoteMergePreparation> build(
+    static Monad::Result<cwNoteMergePreparation> build(
         cwSurveyNoteModel* noteModel,
         const cwSurveyNoteModelData& loadedNoteModelData,
-        const QHash<QUuid, cwNoteData>& baseNoteById,
-        QString* failureReason = nullptr);
+        const QHash<QUuid, cwNoteData>& baseNoteById);
 };
-

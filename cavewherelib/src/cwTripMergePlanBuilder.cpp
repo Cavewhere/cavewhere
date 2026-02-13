@@ -5,21 +5,17 @@
 
 #include <QSet>
 
-std::optional<cwTripMergePreparation> cwTripMergePlanBuilder::build(
+Monad::Result<cwTripMergePreparation> cwTripMergePlanBuilder::build(
     const QList<cwTrip*>& currentTrips,
     const QList<const cwTripData*>& loadedTrips,
-    const QHash<QUuid, cwTripData>& baseTripById,
-    QString* failureReason)
+    const QHash<QUuid, cwTripData>& baseTripById)
 {
     const auto currentTripsById = cwSyncIdUtils::buildUniqueIdPointerMap(
         currentTrips,
         [](cwTrip* trip) { return trip; },
         [](const cwTrip* trip) { return trip->id(); });
     if (!currentTripsById.has_value()) {
-        if (failureReason != nullptr) {
-            *failureReason = QStringLiteral("Ambiguous current trip ids.");
-        }
-        return std::nullopt;
+        return Monad::Result<cwTripMergePreparation>(QStringLiteral("Ambiguous current trip ids."));
     }
 
     cwTripMergePreparation preparation;
@@ -30,19 +26,14 @@ std::optional<cwTripMergePreparation> cwTripMergePlanBuilder::build(
         if (loadedTripData == nullptr
             || loadedTripData->id.isNull()
             || seenLoadedIds.contains(loadedTripData->id)) {
-            if (failureReason != nullptr) {
-                *failureReason = QStringLiteral("Ambiguous loaded trip ids.");
-            }
-            return std::nullopt;
+            return Monad::Result<cwTripMergePreparation>(QStringLiteral("Ambiguous loaded trip ids."));
         }
         seenLoadedIds.insert(loadedTripData->id);
 
         const auto currentTripIt = currentTripsById->constFind(loadedTripData->id);
         if (currentTripIt == currentTripsById->constEnd()) {
-            if (failureReason != nullptr) {
-                *failureReason = QStringLiteral("Missing current trip object for incremental merge.");
-            }
-            return std::nullopt;
+            return Monad::Result<cwTripMergePreparation>(
+                QStringLiteral("Missing current trip object for incremental merge."));
         }
 
         cwTripMergePlan plan;
@@ -57,6 +48,5 @@ std::optional<cwTripMergePreparation> cwTripMergePlanBuilder::build(
         preparation.plans.append(std::move(plan));
     }
 
-    return preparation;
+    return Monad::Result<cwTripMergePreparation>(preparation);
 }
-

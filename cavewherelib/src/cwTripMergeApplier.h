@@ -1,10 +1,10 @@
 #pragma once
 
 #include "cwTripMergePlanBuilder.h"
+#include "Monad/Result.h"
 
 class cwTripMergeApplier
 {
 public:
-    static bool applyTripMergePlan(const cwTripMergePlan& plan, QString* failureReason = nullptr);
+    static Monad::ResultBase applyTripMergePlan(const cwTripMergePlan& plan);
 };
-

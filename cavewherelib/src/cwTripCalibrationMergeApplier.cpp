@@ -11,10 +11,10 @@ bool doublesEqual(double lhs, double rhs)
 
 } // namespace
 
-bool cwTripCalibrationMergeApplier::applyTripCalibrationMergePlan(const cwTripCalibrationMergePlan& plan)
+Monad::ResultBase cwTripCalibrationMergeApplier::applyTripCalibrationMergePlan(const cwTripCalibrationMergePlan& plan)
 {
     if (plan.currentCalibration == nullptr || plan.loadedCalibrationData == nullptr) {
-        return false;
+        return Monad::ResultBase(QStringLiteral("Trip calibration merge plan is missing required objects."));
     }
 
     const cwTripCalibrationData currentCalibrationData = plan.currentCalibration->data();
@@ -128,6 +128,5 @@ bool cwTripCalibrationMergeApplier::applyTripCalibrationMergePlan(const cwTripCa
         [](bool lhs, bool rhs) { return lhs == rhs; }));
 
     plan.currentCalibration->setData(mergedData);
-    return true;
+    return Monad::ResultBase();
 }
-

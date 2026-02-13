@@ -1,10 +1,10 @@
 #pragma once
 
 #include "cwTripCalibrationMergePlanBuilder.h"
+#include "Monad/Result.h"
 
 class cwTripCalibrationMergeApplier
 {
 public:
-    static bool applyTripCalibrationMergePlan(const cwTripCalibrationMergePlan& plan);
+    static Monad::ResultBase applyTripCalibrationMergePlan(const cwTripCalibrationMergePlan& plan);
 };
-

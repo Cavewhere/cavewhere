@@ -1,9 +1,10 @@
 #pragma once
 
 #include "cwScrapSyncMergeHandler.h"
+#include "Monad/Result.h"
 
 class cwScrapMergeApplier
 {
 public:
-    static bool applyNoteStructuralMergePlan(const cwNoteStructuralMergePlan& plan);
+    static Monad::Result<cwScrapMergeApplyResult> applyNoteStructuralMergePlan(const cwNoteStructuralMergePlan& plan);
 };

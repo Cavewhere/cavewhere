@@ -474,34 +474,36 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
         }
 
         if (update.noteDescriptorApplyMode == NoteDescriptorApplyMode::StructuralMerge) {
-            QString noteMergeFailureReason;
             const auto noteMergePreparation = cwNoteMergePlanBuilder::build(
                 update.trip->notes(),
                 update.loadedTripData->noteModel,
-                update.baseNoteDataByNoteId,
-                &noteMergeFailureReason);
-            if (!noteMergePreparation.has_value()) {
+                update.baseNoteDataByNoteId);
+            if (noteMergePreparation.hasError()) {
                 cwReconcileMergeResult result;
                 result.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;
                 result.handlerName = name();
-                result.fallbackReason = noteMergeFailureReason.isEmpty()
+                result.fallbackReason = noteMergePreparation.errorMessage().isEmpty()
                                             ? QStringLiteral("Unable to build deterministic note merge plan.")
-                                            : noteMergeFailureReason;
+                                            : noteMergePreparation.errorMessage();
                 return result;
             }
-            update.noteMergePlans = noteMergePreparation->plans;
+            const cwNoteMergePreparation noteMergePreparationValue = noteMergePreparation.value();
+            update.noteMergePlans = noteMergePreparationValue.plans;
 
             const auto mergePreparation = cwScrapSyncMergeHandler::buildNoteStructuralMergePreparation(
                 update.trip->notes(),
                 update.loadedTripData->noteModel);
-            if (!mergePreparation.has_value()) {
+            if (mergePreparation.hasError()) {
                 cwReconcileMergeResult result;
                 result.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;
                 result.handlerName = name();
-                result.fallbackReason = QStringLiteral("Unable to build deterministic note scrap merge plan.");
+                result.fallbackReason = mergePreparation.errorMessage().isEmpty()
+                                            ? QStringLiteral("Unable to build deterministic note scrap merge plan.")
+                                            : mergePreparation.errorMessage();
                 return result;
             }
-            update.noteStructuralMergePlans = mergePreparation->plans;
+            const cwNoteStructuralMergePreparation scrapMergePreparationValue = mergePreparation.value();
+            update.noteStructuralMergePlans = scrapMergePreparationValue.plans;
             for (cwNoteStructuralMergePlan& plan : update.noteStructuralMergePlans) {
                 if (plan.loadedNoteData == nullptr) {
                     continue;
@@ -512,7 +514,7 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
                     plan.baseScrapIdentityByScrapId = baseIdentityIt.value();
                 }
             }
-            update.reorderedNotes = mergePreparation->orderedNotes;
+            update.reorderedNotes = scrapMergePreparationValue.orderedNotes;
         }
     }
 
@@ -528,14 +530,30 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
         if (update.noteDescriptorChanged) {
             if (update.noteDescriptorApplyMode == NoteDescriptorApplyMode::StructuralMerge) {
                 for (const cwNoteMergePlan& plan : update.noteMergePlans) {
-                    const bool applied = cwNoteMergeApplier::applyNoteMergePlan(plan);
-                    Q_ASSERT(applied);
+                    const auto applyResult = cwNoteMergeApplier::applyNoteMergePlan(plan);
+                    if (applyResult.hasError()) {
+                        cwReconcileMergeResult fullReloadResult;
+                        fullReloadResult.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;
+                        fullReloadResult.handlerName = name();
+                        fullReloadResult.fallbackReason = applyResult.errorMessage().isEmpty()
+                                                              ? QStringLiteral("Unable to apply deterministic note merge plan.")
+                                                              : applyResult.errorMessage();
+                        return fullReloadResult;
+                    }
                 }
 
                 for (const cwNoteStructuralMergePlan& plan : update.noteStructuralMergePlans) {
-                    const bool geometryConflictKeptOurs =
-                        cwScrapSyncMergeHandler::applyNoteStructuralMergePlan(plan);
-                    if (geometryConflictKeptOurs) {
+                    const auto applyResult = cwScrapSyncMergeHandler::applyNoteStructuralMergePlan(plan);
+                    if (applyResult.hasError()) {
+                        cwReconcileMergeResult fullReloadResult;
+                        fullReloadResult.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;
+                        fullReloadResult.handlerName = name();
+                        fullReloadResult.fallbackReason = applyResult.errorMessage().isEmpty()
+                                                              ? QStringLiteral("Unable to apply deterministic note scrap merge plan.")
+                                                              : applyResult.errorMessage();
+                        return fullReloadResult;
+                    }
+                    if (applyResult.value().geometryConflictKeptOurs) {
                         result.diagnostics.append(QStringLiteral("reconcile scrap geometry conflict resolved to ours"));
                     }
                 }
@@ -546,7 +564,13 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
                     reorderedNotes.append(note);
                 }
                 const bool reorderApplied = update.trip->notes()->reorderNotes(reorderedNotes);
-                Q_ASSERT(reorderApplied);
+                if (!reorderApplied) {
+                    cwReconcileMergeResult fullReloadResult;
+                    fullReloadResult.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;
+                    fullReloadResult.handlerName = name();
+                    fullReloadResult.fallbackReason = QStringLiteral("Unable to apply deterministic note order.");
+                    return fullReloadResult;
+                }
             } else {
                 update.trip->notes()->setData(update.loadedTripData->noteModel);
             }

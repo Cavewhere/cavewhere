@@ -2,6 +2,7 @@
 
 #include "cwNoteLiDARData.h"
 #include "cwSurveyNoteLiDARModelData.h"
+#include "Monad/Result.h"
 
 #include <QHash>
 #include <QList>
@@ -38,9 +39,8 @@ public:
         cwSurveyNoteLiDARModel* noteLiDARModel,
         const cwSurveyNoteLiDARModelData& loadedNoteLiDARModelData);
 
-    static std::optional<cwNoteLiDARMergePreparation> build(
+    static Monad::Result<cwNoteLiDARMergePreparation> build(
         cwSurveyNoteLiDARModel* noteLiDARModel,
         const cwSurveyNoteLiDARModelData& loadedNoteLiDARModelData,
-        const QHash<QUuid, cwNoteLiDARData>& baseNoteLiDARByNoteId,
-        QString* failureReason = nullptr);
+        const QHash<QUuid, cwNoteLiDARData>& baseNoteLiDARByNoteId);
 };

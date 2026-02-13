@@ -7,6 +7,7 @@
 #include <QtCore/quuid.h>
 
 #include "cwLead.h"
+#include "Monad/Result.h"
 #include "cwNoteTransformationData.h"
 #include "cwNoteStation.h"
 #include "cwScrapType.h"
@@ -52,12 +53,16 @@ struct cwNoteStructuralMergePreparation {
     QList<cwNote*> orderedNotes;
 };
 
+struct cwScrapMergeApplyResult {
+    bool geometryConflictKeptOurs = false;
+};
+
 class cwScrapSyncMergeHandler
 {
 public:
-    static std::optional<cwNoteStructuralMergePreparation> buildNoteStructuralMergePreparation(
+    static Monad::Result<cwNoteStructuralMergePreparation> buildNoteStructuralMergePreparation(
         cwSurveyNoteModel* noteModel,
         const cwSurveyNoteModelData& loadedNoteModelData);
 
-    static bool applyNoteStructuralMergePlan(const cwNoteStructuralMergePlan& plan);
+    static Monad::Result<cwScrapMergeApplyResult> applyNoteStructuralMergePlan(const cwNoteStructuralMergePlan& plan);
 };

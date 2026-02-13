@@ -46,12 +46,12 @@ std::optional<std::vector<QUuid>> mergedScrapOrderForNote(const cwNote* note, co
 
 } // namespace
 
-std::optional<cwNoteStructuralMergePreparation> cwScrapMergePlanBuilder::buildNoteStructuralMergePreparation(
+Monad::Result<cwNoteStructuralMergePreparation> cwScrapMergePlanBuilder::buildNoteStructuralMergePreparation(
     cwSurveyNoteModel* noteModel,
     const cwSurveyNoteModelData& loadedNoteModelData)
 {
     if (noteModel == nullptr) {
-        return std::nullopt;
+        return Monad::Result<cwNoteStructuralMergePreparation>(QStringLiteral("Note model is null."));
     }
 
     const auto currentNotesById = cwSyncIdUtils::buildUniqueIdPointerMap(
@@ -59,11 +59,12 @@ std::optional<cwNoteStructuralMergePreparation> cwScrapMergePlanBuilder::buildNo
         [](cwNote* note) { return note; },
         [](const cwNote* note) { return note->id(); });
     if (!currentNotesById.has_value()) {
-        return std::nullopt;
+        return Monad::Result<cwNoteStructuralMergePreparation>(QStringLiteral("Ambiguous current note ids."));
     }
 
     if (currentNotesById->size() != loadedNoteModelData.notes.size()) {
-        return std::nullopt;
+        return Monad::Result<cwNoteStructuralMergePreparation>(
+            QStringLiteral("Loaded note count does not match current note count."));
     }
 
     cwNoteStructuralMergePreparation preparation;
@@ -74,14 +75,16 @@ std::optional<cwNoteStructuralMergePreparation> cwScrapMergePlanBuilder::buildNo
         if (loadedNoteData.id.isNull()
             || seenLoadedNoteIds.contains(loadedNoteData.id)
             || !currentNotesById->contains(loadedNoteData.id)) {
-            return std::nullopt;
+            return Monad::Result<cwNoteStructuralMergePreparation>(
+                QStringLiteral("Ambiguous loaded note ids."));
         }
 
         seenLoadedNoteIds.insert(loadedNoteData.id);
         cwNote* const currentNote = currentNotesById->value(loadedNoteData.id);
         auto mergedScrapOrder = mergedScrapOrderForNote(currentNote, loadedNoteData);
         if (!mergedScrapOrder.has_value()) {
-            return std::nullopt;
+            return Monad::Result<cwNoteStructuralMergePreparation>(
+                QStringLiteral("Unable to build deterministic scrap order for note."));
         }
 
         cwNoteStructuralMergePlan plan;
@@ -92,5 +95,5 @@ std::optional<cwNoteStructuralMergePreparation> cwScrapMergePlanBuilder::buildNo
         preparation.orderedNotes.append(currentNote);
     }
 
-    return preparation;
+    return Monad::Result<cwNoteStructuralMergePreparation>(preparation);
 }

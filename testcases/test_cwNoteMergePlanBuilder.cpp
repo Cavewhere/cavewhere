@@ -68,7 +68,7 @@ TEST_CASE("cwNote merge applier merges note bundles independently", "[cwNoteMerg
     plan.loadedNoteData = &loaded;
     plan.baseNoteData = base;
 
-    REQUIRE(cwNoteMergeApplier::applyNoteMergePlan(plan));
+    REQUIRE_FALSE(cwNoteMergeApplier::applyNoteMergePlan(plan).hasError());
 
     CHECK(note.name() == QStringLiteral("loaded-name"));
     CHECK(note.rotate() == 20.0); // current matched base -> take loaded
@@ -97,7 +97,7 @@ TEST_CASE("cwNote merge applier uses loaded bundles when base is unavailable", "
     plan.currentNote = &note;
     plan.loadedNoteData = &loaded;
 
-    REQUIRE(cwNoteMergeApplier::applyNoteMergePlan(plan));
+    REQUIRE_FALSE(cwNoteMergeApplier::applyNoteMergePlan(plan).hasError());
     CHECK(note.rotate() == 15.0);
     CHECK(note.image() == makeImage(QStringLiteral("loaded.png"), 400));
     CHECK(note.imageResolution()->data().unit == cwUnits::DotsPerMeter);
@@ -115,9 +115,7 @@ TEST_CASE("cwNote merge plan builder rejects ambiguous loaded note ids", "[cwNot
     REQUIRE(loaded.notes.size() == 2);
     loaded.notes[1].id = loaded.notes[0].id;
 
-    QString failureReason;
-    const auto preparation = cwNoteMergePlanBuilder::build(&model, loaded, {}, &failureReason);
-    CHECK_FALSE(preparation.has_value());
-    CHECK(failureReason == QStringLiteral("Ambiguous loaded note ids."));
+    const auto preparation = cwNoteMergePlanBuilder::build(&model, loaded, {});
+    CHECK(preparation.hasError());
+    CHECK(preparation.errorMessage() == QStringLiteral("Ambiguous loaded note ids."));
 }
-

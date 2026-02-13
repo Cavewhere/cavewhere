@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cwTripData.h"
+#include "Monad/Result.h"
 
 #include <QHash>
 #include <QList>
@@ -23,10 +24,8 @@ struct cwTripMergePreparation {
 class cwTripMergePlanBuilder
 {
 public:
-    static std::optional<cwTripMergePreparation> build(
+    static Monad::Result<cwTripMergePreparation> build(
         const QList<cwTrip*>& currentTrips,
         const QList<const cwTripData*>& loadedTrips,
-        const QHash<QUuid, cwTripData>& baseTripById,
-        QString* failureReason = nullptr);
+        const QHash<QUuid, cwTripData>& baseTripById);
 };
-

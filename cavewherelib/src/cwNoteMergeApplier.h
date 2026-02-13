@@ -1,10 +1,10 @@
 #pragma once
 
 #include "cwNoteMergePlanBuilder.h"
+#include "Monad/Result.h"
 
 class cwNoteMergeApplier
 {
 public:
-    static bool applyNoteMergePlan(const cwNoteMergePlan& plan);
+    static Monad::ResultBase applyNoteMergePlan(const cwNoteMergePlan& plan);
 };
-

@@ -18,12 +18,12 @@ bool imageResolutionDataEqual(const cwImageResolution::Data& lhs, const cwImageR
 
 } // namespace
 
-bool cwNoteMergeApplier::applyNoteMergePlan(const cwNoteMergePlan& plan)
+Monad::ResultBase cwNoteMergeApplier::applyNoteMergePlan(const cwNoteMergePlan& plan)
 {
     Q_ASSERT(plan.currentNote != nullptr);
     Q_ASSERT(plan.loadedNoteData != nullptr);
     if (plan.currentNote == nullptr || plan.loadedNoteData == nullptr) {
-        return false;
+        return Monad::ResultBase(QStringLiteral("Note merge plan is missing required objects."));
     }
 
     cwNote* const currentNote = plan.currentNote;
@@ -60,5 +60,5 @@ bool cwNoteMergeApplier::applyNoteMergePlan(const cwNoteMergePlan& plan)
         baseRotate,
         [](double lhs, double rhs) { return lhs == rhs; }));
 
-    return true;
+    return Monad::ResultBase();
 }

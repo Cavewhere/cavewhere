@@ -27,14 +27,13 @@ TEST_CASE("cwTrip merge plan builder maps loaded trips by stable id", "[cwTripMe
 
     const auto preparation = cwTripMergePlanBuilder::build({&firstTrip, &secondTrip},
                                                             {&secondLoaded, &firstLoaded},
-                                                            {},
-                                                            nullptr);
-    REQUIRE(preparation.has_value());
-    REQUIRE(preparation->plans.size() == 2);
-    CHECK(preparation->plans[0].currentTrip == &secondTrip);
-    CHECK(preparation->plans[0].loadedTripData == &secondLoaded);
-    CHECK(preparation->plans[1].currentTrip == &firstTrip);
-    CHECK(preparation->plans[1].loadedTripData == &firstLoaded);
+                                                            {});
+    REQUIRE_FALSE(preparation.hasError());
+    REQUIRE(preparation.value().plans.size() == 2);
+    CHECK(preparation.value().plans[0].currentTrip == &secondTrip);
+    CHECK(preparation.value().plans[0].loadedTripData == &secondLoaded);
+    CHECK(preparation.value().plans[1].currentTrip == &firstTrip);
+    CHECK(preparation.value().plans[1].loadedTripData == &firstLoaded);
 }
 
 TEST_CASE("cwTrip merge plan builder rejects ambiguous loaded trip ids", "[cwTripMerge][sync]")
@@ -46,13 +45,11 @@ TEST_CASE("cwTrip merge plan builder rejects ambiguous loaded trip ids", "[cwTri
     cwTripData secondLoaded = makeTripDataWithIdentity(secondTrip);
     secondLoaded.id = firstLoaded.id;
 
-    QString failureReason;
     const auto preparation = cwTripMergePlanBuilder::build({&firstTrip, &secondTrip},
                                                             {&firstLoaded, &secondLoaded},
-                                                            {},
-                                                            &failureReason);
-    CHECK_FALSE(preparation.has_value());
-    CHECK(failureReason == QStringLiteral("Ambiguous loaded trip ids."));
+                                                            {});
+    CHECK(preparation.hasError());
+    CHECK(preparation.errorMessage() == QStringLiteral("Ambiguous loaded trip ids."));
 }
 
 TEST_CASE("cwTrip merge applier merges name and date bundles independently", "[cwTripMerge][sync]")
@@ -75,9 +72,8 @@ TEST_CASE("cwTrip merge applier merges name and date bundles independently", "[c
     plan.loadedTripData = &loadedTripData;
     plan.baseTripData = baseTripData;
 
-    QString failureReason;
-    REQUIRE(cwTripMergeApplier::applyTripMergePlan(plan, &failureReason));
-    CHECK(failureReason.isEmpty());
+    const auto applyResult = cwTripMergeApplier::applyTripMergePlan(plan);
+    REQUIRE_FALSE(applyResult.hasError());
     CHECK(currentTrip.name() == QStringLiteral("ours-name"));
     CHECK(currentTrip.date() == QDateTime(QDate(2024, 5, 10), QTime()));
 }
@@ -106,9 +102,8 @@ TEST_CASE("cwTrip merge applier merges calibration fields independently", "[cwTr
     plan.loadedTripData = &loadedTripData;
     plan.baseTripData = baseTripData;
 
-    QString failureReason;
-    REQUIRE(cwTripMergeApplier::applyTripMergePlan(plan, &failureReason));
-    CHECK(failureReason.isEmpty());
+    const auto applyResult = cwTripMergeApplier::applyTripMergePlan(plan);
+    REQUIRE_FALSE(applyResult.hasError());
 
     const cwTripCalibrationData merged = currentTrip.calibrations()->data();
     CHECK(merged.tapeCalibration() == 3.0);
@@ -131,7 +126,8 @@ TEST_CASE("cwTrip merge applier returns false when trip subobjects differ", "[cw
     plan.currentTrip = &currentTrip;
     plan.loadedTripData = &loadedTripData;
 
-    QString failureReason;
-    CHECK_FALSE(cwTripMergeApplier::applyTripMergePlan(plan, &failureReason));
-    CHECK(failureReason == QStringLiteral("Trip subobject merge is not implemented for incremental trip merge."));
+    const auto applyResult = cwTripMergeApplier::applyTripMergePlan(plan);
+    CHECK(applyResult.hasError());
+    CHECK(applyResult.errorMessage()
+          == QStringLiteral("Trip subobject merge is not implemented for incremental trip merge."));
 }

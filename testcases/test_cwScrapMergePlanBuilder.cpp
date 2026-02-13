@@ -1,6 +1,5 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/catch_approx.hpp>
 using namespace Catch;
 
 //Our includes
@@ -66,11 +65,11 @@ TEST_CASE("cwScrap merge plan builder accepts note reorder with stable identitie
 
     const auto preparation =
         cwScrapMergePlanBuilder::buildNoteStructuralMergePreparation(&noteModel, loadedNoteModelData);
-    REQUIRE(preparation.has_value());
-    REQUIRE(preparation->orderedNotes.size() == 2);
-    CHECK(preparation->orderedNotes.at(0) == secondNote);
-    CHECK(preparation->orderedNotes.at(1) == firstNote);
-    REQUIRE(preparation->plans.size() == 2);
+    REQUIRE_FALSE(preparation.hasError());
+    REQUIRE(preparation.value().orderedNotes.size() == 2);
+    CHECK(preparation.value().orderedNotes.at(0) == secondNote);
+    CHECK(preparation.value().orderedNotes.at(1) == firstNote);
+    REQUIRE(preparation.value().plans.size() == 2);
 }
 
 TEST_CASE("cwScrap merge plan builder rejects ambiguous note identities", "[cwScrapMerge][sync]") {
@@ -98,7 +97,7 @@ TEST_CASE("cwScrap merge plan builder rejects ambiguous note identities", "[cwSc
 
         const auto preparation =
             cwScrapMergePlanBuilder::buildNoteStructuralMergePreparation(&noteModel, loadedNoteModelData);
-        CHECK_FALSE(preparation.has_value());
+        CHECK(preparation.hasError());
     }
 
     SECTION("null loaded note id") {
@@ -108,7 +107,7 @@ TEST_CASE("cwScrap merge plan builder rejects ambiguous note identities", "[cwSc
 
         const auto preparation =
             cwScrapMergePlanBuilder::buildNoteStructuralMergePreparation(&noteModel, loadedNoteModelData);
-        CHECK_FALSE(preparation.has_value());
+        CHECK(preparation.hasError());
     }
 
     SECTION("duplicate current note ids") {
@@ -117,7 +116,7 @@ TEST_CASE("cwScrap merge plan builder rejects ambiguous note identities", "[cwSc
 
         const auto preparation =
             cwScrapMergePlanBuilder::buildNoteStructuralMergePreparation(&noteModel, loadedNoteModelData);
-        CHECK_FALSE(preparation.has_value());
+        CHECK(preparation.hasError());
     }
 }
 
@@ -142,9 +141,6 @@ TEST_CASE("cwScrap merge applier applies deterministic payload by planned scrap 
     cwNoteData loadedNoteData = note->data();
     REQUIRE(loadedNoteData.scraps.size() == 2);
     std::swap(loadedNoteData.scraps[0], loadedNoteData.scraps[1]);
-    loadedNoteData.name = QStringLiteral("Remote Ordered Note");
-    loadedNoteData.rotate = 42.0;
-
     REQUIRE(loadedNoteData.scraps[0].outlinePoints.size() > 1);
     loadedNoteData.scraps[0].outlinePoints[1] = QPointF(0.77, 0.55);
 
@@ -159,11 +155,10 @@ TEST_CASE("cwScrap merge applier applies deterministic payload by planned scrap 
         loadedNoteData.scraps[1].id
     };
 
-    const bool geometryConflictKeptOurs = cwScrapMergeApplier::applyNoteStructuralMergePlan(plan);
-    CHECK_FALSE(geometryConflictKeptOurs);
+    const auto applyResult = cwScrapMergeApplier::applyNoteStructuralMergePlan(plan);
+    REQUIRE_FALSE(applyResult.hasError());
+    CHECK_FALSE(applyResult.value().geometryConflictKeptOurs);
 
-    CHECK(note->name() == QStringLiteral("Remote Ordered Note"));
-    CHECK(note->rotate() == Catch::Approx(42.0));
     REQUIRE(note->scraps().size() == 2);
     CHECK(note->scrap(0)->id() == reorderedFirstId);
     CHECK(note->scrap(1)->id() != reorderedFirstId);
@@ -209,8 +204,9 @@ TEST_CASE("cwScrap merge applier merges stations and leads by stable id with loc
     plan.note = note.get();
     plan.loadedNoteData = &loadedNoteData;
     plan.mergedScrapOrder = {loadedScrap.id};
-    const bool geometryConflictKeptOurs = cwScrapMergeApplier::applyNoteStructuralMergePlan(plan);
-    CHECK_FALSE(geometryConflictKeptOurs);
+    const auto applyResult = cwScrapMergeApplier::applyNoteStructuralMergePlan(plan);
+    REQUIRE_FALSE(applyResult.hasError());
+    CHECK_FALSE(applyResult.value().geometryConflictKeptOurs);
 
     REQUIRE(note->scraps().size() == 1);
     const QList<cwNoteStation> mergedStations = note->scrap(0)->stations();
@@ -264,8 +260,9 @@ TEST_CASE("cwScrap merge applier falls back to loaded stations and leads when id
     plan.note = note.get();
     plan.loadedNoteData = &loadedNoteData;
     plan.mergedScrapOrder = {loadedScrap.id};
-    const bool geometryConflictKeptOurs = cwScrapMergeApplier::applyNoteStructuralMergePlan(plan);
-    CHECK_FALSE(geometryConflictKeptOurs);
+    const auto applyResult = cwScrapMergeApplier::applyNoteStructuralMergePlan(plan);
+    REQUIRE_FALSE(applyResult.hasError());
+    CHECK_FALSE(applyResult.value().geometryConflictKeptOurs);
 
     const QList<cwNoteStation> mergedStations = note->scrap(0)->stations();
     REQUIRE(mergedStations.size() == 2);
@@ -320,8 +317,9 @@ TEST_CASE("cwScrap merge applier keeps local deletes when base marks remote-only
     plan.loadedNoteData = &loadedNoteData;
     plan.mergedScrapOrder = {loadedScrap.id};
     plan.baseScrapIdentityByScrapId.insert(loadedScrap.id, baseIdentity);
-    const bool geometryConflictKeptOurs = cwScrapMergeApplier::applyNoteStructuralMergePlan(plan);
-    CHECK_FALSE(geometryConflictKeptOurs);
+    const auto applyResult = cwScrapMergeApplier::applyNoteStructuralMergePlan(plan);
+    REQUIRE_FALSE(applyResult.hasError());
+    CHECK_FALSE(applyResult.value().geometryConflictKeptOurs);
 
     const QList<cwNoteStation> mergedStations = note->scrap(0)->stations();
     REQUIRE(mergedStations.size() == 1);
@@ -361,8 +359,9 @@ TEST_CASE("cwScrap merge applier applies remote value when local matches base fo
     plan.loadedNoteData = &loadedNoteData;
     plan.mergedScrapOrder = {loadedScrap.id};
     plan.baseScrapIdentityByScrapId.insert(loadedScrap.id, baseIdentity);
-    const bool geometryConflictKeptOurs = cwScrapMergeApplier::applyNoteStructuralMergePlan(plan);
-    CHECK_FALSE(geometryConflictKeptOurs);
+    const auto applyResult = cwScrapMergeApplier::applyNoteStructuralMergePlan(plan);
+    REQUIRE_FALSE(applyResult.hasError());
+    CHECK_FALSE(applyResult.value().geometryConflictKeptOurs);
 
     const QList<cwNoteStation> mergedStations = note->scrap(0)->stations();
     REQUIRE(mergedStations.size() == 1);
@@ -399,8 +398,9 @@ TEST_CASE("cwScrap merge applier replaces geometry when only remote geometry cha
     plan.mergedScrapOrder = {loadedScrap.id};
     plan.baseScrapIdentityByScrapId.insert(loadedScrap.id, baseIdentity);
 
-    const bool geometryConflictKeptOurs = cwScrapMergeApplier::applyNoteStructuralMergePlan(plan);
-    CHECK_FALSE(geometryConflictKeptOurs);
+    const auto applyResult = cwScrapMergeApplier::applyNoteStructuralMergePlan(plan);
+    REQUIRE_FALSE(applyResult.hasError());
+    CHECK_FALSE(applyResult.value().geometryConflictKeptOurs);
     CHECK(note->scrap(0)->points().at(1) == QPointF(0.42, 0.18));
 }
 
@@ -442,7 +442,8 @@ TEST_CASE("cwScrap merge applier keeps local geometry on concurrent geometry con
     plan.mergedScrapOrder = {loadedScrap.id};
     plan.baseScrapIdentityByScrapId.insert(loadedScrap.id, baseIdentity);
 
-    const bool geometryConflictKeptOurs = cwScrapMergeApplier::applyNoteStructuralMergePlan(plan);
-    CHECK(geometryConflictKeptOurs);
+    const auto applyResult = cwScrapMergeApplier::applyNoteStructuralMergePlan(plan);
+    REQUIRE_FALSE(applyResult.hasError());
+    CHECK(applyResult.value().geometryConflictKeptOurs);
     CHECK(note->scrap(0)->points().at(1) == QPointF(0.36, 0.14));
 }
