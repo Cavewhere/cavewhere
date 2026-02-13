@@ -4,6 +4,7 @@
 #include <QQmlEngine>
 #include <QPointer>
 #include <QString>
+#include <QUrl>
 
 #include "cwRepositoryModel.h"
 #include "CaveWhereLibExport.h"
@@ -42,6 +43,7 @@ public:
     Q_INVOKABLE QString repositoryNameFromUrl(const QString& urlText) const;
     Q_INVOKABLE QString normalizeCloneUrl(const QString& urlText) const;
     Q_INVOKABLE void clone(const QString& urlText);
+    Q_INVOKABLE void clone(const QString& urlText, const QUrl& destinationParentDir);
 
 signals:
     void cloneErrorMessageChanged();

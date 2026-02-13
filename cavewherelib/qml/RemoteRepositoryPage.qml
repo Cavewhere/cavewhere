@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls as QC
 import QtQuick.Layouts
+import QtQuick.Dialogs
 import cavewherelib
 import QQuickGit
 
@@ -10,6 +11,29 @@ StandardPage {
     property GitHubIntegration gitHub: RootData.gitHubIntegration
     property int selectedRepoIndex: -1
     signal repositoryPicked(string repositoryUrl)
+
+    readonly property url cloneDestinationParentFolder: {
+        if (cloneDestinationDialog.selectedFolder.toString() !== "") {
+            return cloneDestinationDialog.selectedFolder
+        }
+        if (cloneDestinationDialog.currentFolder.toString() !== "") {
+            return cloneDestinationDialog.currentFolder
+        }
+        return RootData.repositoryModel.defaultRepositoryDir
+    }
+    readonly property string cloneDestinationRepoName: remoteRepositoryCloner.repositoryNameFromUrl(manualUrlField.textField.text)
+    readonly property string cloneDestinationPathText: {
+        const parentPath = RootData.urlToLocal(cloneDestinationParentFolder)
+        if (parentPath.length === 0) {
+            return repoName
+        }
+        if(cloneDestinationRepoName.length === 0) {
+            return parentPath
+        }
+
+        const separator = parentPath.endsWith("/") || parentPath.endsWith("\\") ? "" : "/"
+        return parentPath + separator + cloneDestinationRepoName
+    }
 
     RemoteRepositoryCloner {
         id: remoteRepositoryCloner
@@ -32,7 +56,7 @@ StandardPage {
         // Text {
         //     text: "Sign in with GitHub to pick from your repositories or paste a repository URL to clone directly."
         //     wrapMode: Text.WordWrap
-        //     color: "#666666"
+        //     color: Theme.textSubtle
         //     Layout.fillWidth: true
         // }
 
@@ -41,30 +65,49 @@ StandardPage {
             Layout.fillWidth: true
             title: "Clone from HTTP/SSH"
 
-            RowLayout {
-                // anchors.fill: parent
-                // Layout.fillWidth: true
+            ColumnLayout {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.margins: 12
                 spacing: 8
 
-                TextFieldWithError {
-                    id: manualUrlField
-                    // width: 100
+                RowLayout {
                     Layout.fillWidth: true
 
-                    textField.placeholderText: "https://github.com/user/repo.git"
+                    TextFieldWithError {
+                        id: manualUrlField
+                        Layout.fillWidth: true
+
+                        textField.placeholderText: "https://github.com/user/repo.git"
+                    }
+
+                    QC.Button {
+                        id: cloneButton
+                        text: cloneWatcher.state === GitFutureWatcher.Loading ? "Cloning..." : "Clone"
+                        enabled: manualUrlField.textField.text.length > 0
+                                 && cloneWatcher.state !== GitFutureWatcher.Loading
+                        transformOrigin: Item.Center
+                        onClicked: {
+                            remoteRepositoryCloner.clone(manualUrlField.textField.text, page.cloneDestinationParentFolder)
+                        }
+                    }
                 }
 
-                QC.Button {
-                    id: cloneButton
-                    text: cloneWatcher.state === GitFutureWatcher.Loading ? "Cloning..." : "Clone"
-                    enabled: manualUrlField.textField.text.length > 0
-                             && cloneWatcher.state !== GitFutureWatcher.Loading
-                    transformOrigin: Item.Center
-                    onClicked: {
-                        remoteRepositoryCloner.clone(manualUrlField.textField.text)
+                RowLayout {
+                    Layout.fillWidth: true
+
+                    Text {
+                        text: "Destination:"
+                        color: Theme.textSubtle
+                    }
+
+                    LinkText {
+                        Layout.fillWidth: true
+                        elide: Text.ElideLeft
+                        text: page.cloneDestinationPathText
+                        onClicked: {
+                            cloneDestinationDialog.open()
+                        }
                     }
                 }
             }
@@ -89,7 +132,7 @@ StandardPage {
                 Layout.fillWidth: true
                 visible: remoteRepositoryCloner.cloneStatusMessage.length > 0
                 wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-                color: "#444444"
+                color: Theme.textSecondary
                 text: remoteRepositoryCloner.cloneStatusMessage
             }
 
@@ -115,7 +158,7 @@ StandardPage {
                 Text {
                     Layout.fillWidth: true
                     wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-                    color: "#444444"
+                    color: Theme.textSecondary
                     text: {
                         switch (gitHub.authState) {
                         case GitHubIntegration.RequestingCode:
@@ -161,7 +204,7 @@ StandardPage {
                     visible: gitHub.authState === GitHubIntegration.AwaitingVerification
                               && gitHub.verificationOpened
                               && gitHub.secondsUntilNextPoll > 0
-                    color: "#666666"
+                    color: Theme.textSubtle
                     font.pixelSize: 12
                     text: qsTr("Trying connection in %1 s").arg(gitHub.secondsUntilNextPoll)
                 }
@@ -257,7 +300,7 @@ StandardPage {
                         anchors.right: parent.right
                         anchors.margins: 5
                         height: 1
-                        color: "black"
+                        color: Theme.divider
                     }
                 }
             }
@@ -323,8 +366,8 @@ StandardPage {
                         width: repoList.width
                         height: layoutId.height + 10
                         color: page.selectedRepoIndex === index
-                               ? "#d6ecff"
-                               : (index % 2 === 0 ? "#ffffff" : "#f7f7f7")
+                               ? Theme.highlight
+                               : (index % 2 === 0 ? Theme.surface : Theme.surfaceMuted)
 
                         RowLayout {
                             id: layoutId
@@ -348,7 +391,7 @@ StandardPage {
 
                                     Text {
                                         text: modelData.isPrivate ? "Private" : "Public"
-                                        color: modelData.isPrivate ? "#b85600" : "#2e7d32"
+                                        color: modelData.isPrivate ? Theme.warning : Theme.success
                                         font.pixelSize: 12
                                     }
                                 }
@@ -357,7 +400,7 @@ StandardPage {
                                     text: modelData.description.length > 0 ? modelData.description : modelData.cloneUrl
                                     wrapMode: Text.WordWrap
                                     elide: Text.ElideRight
-                                    color: "#666666"
+                                    color: Theme.textSubtle
                                 }
                             }
 
@@ -381,7 +424,7 @@ StandardPage {
                             anchors.centerIn: parent
                             text: "No repositories found."
                             visible: gitHub.repositories.length === 0
-                            color: "#666666"
+                            color: Theme.textSubtle
                         }
                     }
                 }
@@ -394,11 +437,17 @@ StandardPage {
         //     Layout.fillWidth: true
         //     visible: gitHub.errorMessage.length > 0 && gitHub.authState === GitHubIntegration.Authorized
         //     wrapMode: Text.WordWrap
-        //     color: "#b00020"
+        //     color: Theme.danger
         //     text: gitHub.errorMessage
         // }
 
         // Item { Layout.fillHeight: true }
+    }
+
+    FolderDialog {
+        id: cloneDestinationDialog
+        currentFolder: RootData.repositoryModel.defaultRepositoryDir
+        selectedFolder: currentFolder
     }
 
     SequentialAnimation {

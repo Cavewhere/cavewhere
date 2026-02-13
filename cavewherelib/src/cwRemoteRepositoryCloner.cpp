@@ -94,6 +94,11 @@ QString cwRemoteRepositoryCloner::normalizeCloneUrl(const QString& urlText) cons
 
 void cwRemoteRepositoryCloner::clone(const QString& urlText)
 {
+    clone(urlText, QUrl());
+}
+
+void cwRemoteRepositoryCloner::clone(const QString& urlText, const QUrl& destinationParentDir)
+{
     setCloneErrorMessage(QString());
     setCloneStatusMessage(QString());
 
@@ -119,7 +124,11 @@ void cwRemoteRepositoryCloner::clone(const QString& urlText)
         return;
     }
 
-    cwResultDir resultDir = m_repositoryModel->repositoryDir(m_repositoryModel->defaultRepositoryDir(), repoName);
+    const QUrl cloneParentDir = destinationParentDir.isValid()
+        ? destinationParentDir
+        : m_repositoryModel->defaultRepositoryDir();
+
+    cwResultDir resultDir = m_repositoryModel->repositoryDir(cloneParentDir, repoName);
     if (resultDir.hasError()) {
         setCloneErrorMessage(resultDir.errorMessage());
         return;
