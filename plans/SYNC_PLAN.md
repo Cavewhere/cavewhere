@@ -423,7 +423,7 @@ Implementation checklist:
 - [ ] 4B.4 3-way stations/leads policy
 - [ ] Use base/ours/theirs keyed by stable IDs (order ignored).
 - [ ] Conflict matrix: value-vs-value -> ours; delete-vs-modify -> ours; delete-vs-delete -> deleted.
-- [ ] Concurrent add with different IDs -> keep both.
+- [x] Concurrent add with different IDs -> keep both.
 - [ ] 4B.5 Scrap geometry policy
 - [ ] Use wholesale geometry replacement only when no local geometry conflict is detected.
 - [ ] If both sides changed geometry from base, keep ours and add a reconcile diagnostic.
@@ -454,6 +454,8 @@ Focused unit tests (`testcases/test_cwScrapMergePlanBuilder.cpp`):
 - [x] `TEST_CASE("cwScrap merge plan builder accepts note reorder with stable identities", "[cwScrapMerge][sync]")`
 - [x] `TEST_CASE("cwScrap merge plan builder rejects ambiguous note identities", "[cwScrapMerge][sync]")`
 - [x] `TEST_CASE("cwScrap merge applier applies deterministic payload by planned scrap order", "[cwScrapMerge][sync]")`
+- [x] `TEST_CASE("cwScrap merge applier merges stations and leads by stable id with local precedence", "[cwScrapMerge][sync]")`
+- [x] `TEST_CASE("cwScrap merge applier falls back to loaded stations and leads when ids are ambiguous", "[cwScrapMerge][sync]")`
 
 Exit criteria:
 - concurrent note+scrap edits merge deterministically or explicitly fallback with no silent data loss.

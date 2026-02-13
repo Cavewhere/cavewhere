@@ -5,8 +5,69 @@
 #include "cwScrap.h"
 
 #include <QHash>
+#include <QSet>
 
 #include <algorithm>
+
+namespace {
+
+template<typename ItemT, typename IdAccessor>
+QList<ItemT> mergeUnorderedByIdPreferOurs(const QList<ItemT>& ours,
+                                          const QList<ItemT>& loaded,
+                                          IdAccessor idAccessor)
+{
+    QHash<QUuid, const ItemT*> oursById;
+    oursById.reserve(ours.size());
+    for (const ItemT& item : ours) {
+        const QUuid id = idAccessor(item);
+        if (id.isNull() || oursById.contains(id)) {
+            return loaded;
+        }
+        oursById.insert(id, &item);
+    }
+
+    QSet<QUuid> loadedIds;
+    loadedIds.reserve(loaded.size());
+    for (const ItemT& item : loaded) {
+        const QUuid id = idAccessor(item);
+        if (id.isNull() || loadedIds.contains(id)) {
+            return loaded;
+        }
+        loadedIds.insert(id);
+    }
+
+    QList<ItemT> merged = ours;
+    for (const ItemT& item : loaded) {
+        const QUuid id = idAccessor(item);
+        if (!oursById.contains(id)) {
+            // Preserve remote-only identity additions while keeping local values for shared ids.
+            merged.append(item);
+        }
+    }
+
+    return merged;
+}
+
+cwScrapData mergedScrapDataPreferOursForStationsAndLeads(const cwScrap* currentScrap,
+                                                         const cwScrapData& loadedScrapData)
+{
+    if (currentScrap == nullptr) {
+        return loadedScrapData;
+    }
+
+    cwScrapData mergedData = loadedScrapData;
+    mergedData.stations = mergeUnorderedByIdPreferOurs(
+        currentScrap->stations(),
+        loadedScrapData.stations,
+        [](const cwNoteStation& station) { return station.id(); });
+    mergedData.leads = mergeUnorderedByIdPreferOurs(
+        currentScrap->leads(),
+        loadedScrapData.leads,
+        [](const cwLead& lead) { return lead.id(); });
+    return mergedData;
+}
+
+} // namespace
 
 void cwScrapMergeApplier::applyNoteStructuralMergePlan(const cwNoteStructuralMergePlan& plan)
 {
@@ -45,7 +106,7 @@ void cwScrapMergeApplier::applyNoteStructuralMergePlan(const cwNoteStructuralMer
             continue;
         }
 
-        scrap->setData(*loadedScrapData);
+        scrap->setData(mergedScrapDataPreferOursForStationsAndLeads(scrap, *loadedScrapData));
     }
 
     if (currentCount > loadedCount) {
@@ -58,7 +119,7 @@ void cwScrapMergeApplier::applyNoteStructuralMergePlan(const cwNoteStructuralMer
             const cwScrapData* loadedScrapData = loadedScrapsById.value(targetScrapId, nullptr);
             Q_ASSERT(loadedScrapData != nullptr);
             if (loadedScrapData != nullptr) {
-                scrap->setData(*loadedScrapData);
+                scrap->setData(mergedScrapDataPreferOursForStationsAndLeads(scrap, *loadedScrapData));
             }
         }
     }
