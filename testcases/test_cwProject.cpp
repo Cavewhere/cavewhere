@@ -1001,6 +1001,328 @@ TEST_CASE("Loading a project repairs duplicate cave ids", "[cwProject][repair]")
     CHECK(repairedFirst.id() != repairedSecond.id());
 }
 
+TEST_CASE("Loading a project repairs and persists missing scrap station and lead ids", "[cwProject][repair]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto* region = project->cavingRegion();
+
+    region->addCave();
+    auto* cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Repair Scrap Child IDs Cave"));
+    cave->addTrip();
+    auto* trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
+    trip->setName(QStringLiteral("Repair Scrap Child IDs Trip"));
+
+    const QString imagePath = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    REQUIRE(QFileInfo::exists(imagePath));
+    trip->notes()->addFromFiles({QUrl::fromLocalFile(imagePath)});
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    REQUIRE(trip->notes()->rowCount() == 1);
+    auto* note = trip->notes()->notes().at(0);
+    REQUIRE(note != nullptr);
+
+    auto* scrap = new cwScrap();
+    scrap->insertPoint(0, QPointF(0.10, 0.10));
+    scrap->insertPoint(1, QPointF(0.40, 0.10));
+    scrap->insertPoint(2, QPointF(0.20, 0.40));
+    scrap->close();
+
+    cwNoteStation stationA;
+    stationA.setName(QStringLiteral("A1"));
+    stationA.setPositionOnNote(QPointF(0.20, 0.20));
+    scrap->addStation(stationA);
+
+    cwNoteStation stationB;
+    stationB.setName(QStringLiteral("B1"));
+    stationB.setPositionOnNote(QPointF(0.30, 0.30));
+    scrap->addStation(stationB);
+
+    cwLead leadA;
+    leadA.setDescription(QStringLiteral("Lead A"));
+    leadA.setPositionOnNote(QPointF(0.50, 0.20));
+    scrap->addLead(leadA);
+
+    cwLead leadB;
+    leadB.setDescription(QStringLiteral("Lead B"));
+    leadB.setPositionOnNote(QPointF(0.55, 0.25));
+    scrap->addLead(leadB);
+
+    note->addScrap(scrap);
+    project->waitSaveToFinish();
+
+    QTemporaryDir saveDir;
+    REQUIRE(saveDir.isValid());
+    const QString savePath = QDir(saveDir.path()).filePath(QStringLiteral("repair-missing-scrap-child-ids.cwproj"));
+    REQUIRE(project->saveAs(savePath));
+    project->waitSaveToFinish();
+    const QString savedProjectFile = project->filename();
+    REQUIRE(QFileInfo::exists(savedProjectFile));
+
+    QDirIterator noteFileIterator(QFileInfo(savedProjectFile).absolutePath(),
+                                  QStringList{QStringLiteral("*.cwnote")},
+                                  QDir::Files,
+                                  QDirIterator::Subdirectories);
+    REQUIRE(noteFileIterator.hasNext());
+    const QString noteFile = noteFileIterator.next();
+    CHECK_FALSE(noteFileIterator.hasNext());
+    REQUIRE(QFileInfo::exists(noteFile));
+
+    {
+        auto noteProto = loadProtoFromJsonFile<CavewhereProto::Note>(noteFile);
+        REQUIRE(noteProto.scraps_size() == 1);
+        REQUIRE(noteProto.scraps(0).notestations_size() == 2);
+        REQUIRE(noteProto.scraps(0).leads_size() == 2);
+
+        for (int stationIndex = 0; stationIndex < noteProto.mutable_scraps(0)->notestations_size(); ++stationIndex) {
+            noteProto.mutable_scraps(0)->mutable_notestations(stationIndex)->clear_id();
+        }
+        for (int leadIndex = 0; leadIndex < noteProto.mutable_scraps(0)->leads_size(); ++leadIndex) {
+            noteProto.mutable_scraps(0)->mutable_leads(leadIndex)->clear_id();
+        }
+
+        writeProtoToJsonFile(noteFile, noteProto);
+    }
+
+    {
+        const auto noteProto = loadProtoFromJsonFile<CavewhereProto::Note>(noteFile);
+        REQUIRE(noteProto.scraps_size() == 1);
+        REQUIRE(noteProto.scraps(0).notestations_size() == 2);
+        REQUIRE(noteProto.scraps(0).leads_size() == 2);
+        for (const auto& station : noteProto.scraps(0).notestations()) {
+            CHECK_FALSE(station.has_id());
+        }
+        for (const auto& lead : noteProto.scraps(0).leads()) {
+            CHECK_FALSE(lead.has_id());
+        }
+    }
+
+    rootData.reset();
+
+    auto reloaded = std::make_unique<cwProject>();
+    addTokenManager(reloaded.get());
+    reloaded->loadOrConvert(savedProjectFile);
+    reloaded->waitLoadToFinish();
+    reloaded->waitSaveToFinish();
+
+    const auto repairedNoteProto = loadProtoFromJsonFile<CavewhereProto::Note>(noteFile);
+    REQUIRE(repairedNoteProto.scraps_size() == 1);
+    REQUIRE(repairedNoteProto.scraps(0).notestations_size() == 2);
+    REQUIRE(repairedNoteProto.scraps(0).leads_size() == 2);
+
+    QSet<QString> repairedStationIds;
+    for (const auto& station : repairedNoteProto.scraps(0).notestations()) {
+        REQUIRE(station.has_id());
+        CHECK_FALSE(station.id().empty());
+        repairedStationIds.insert(QString::fromStdString(station.id()));
+    }
+    CHECK(repairedStationIds.size() == repairedNoteProto.scraps(0).notestations_size());
+
+    QSet<QString> repairedLeadIds;
+    for (const auto& lead : repairedNoteProto.scraps(0).leads()) {
+        REQUIRE(lead.has_id());
+        CHECK_FALSE(lead.id().empty());
+        repairedLeadIds.insert(QString::fromStdString(lead.id()));
+    }
+    CHECK(repairedLeadIds.size() == repairedNoteProto.scraps(0).leads_size());
+
+    REQUIRE(reloaded->cavingRegion()->caveCount() == 1);
+    auto* loadedCave = reloaded->cavingRegion()->cave(0);
+    REQUIRE(loadedCave != nullptr);
+    REQUIRE(loadedCave->tripCount() == 1);
+    auto* loadedTrip = loadedCave->trip(0);
+    REQUIRE(loadedTrip != nullptr);
+    REQUIRE(loadedTrip->notes()->rowCount() == 1);
+
+    auto* loadedNote = loadedTrip->notes()->notes().at(0);
+    REQUIRE(loadedNote != nullptr);
+    REQUIRE(loadedNote->scraps().size() == 1);
+    auto* loadedScrap = loadedNote->scrap(0);
+    REQUIRE(loadedScrap != nullptr);
+
+    const auto stations = loadedScrap->stations();
+    REQUIRE(stations.size() == 2);
+    for (const auto& station : stations) {
+        CHECK_FALSE(station.id().isNull());
+    }
+
+    const auto leads = loadedScrap->leads();
+    REQUIRE(leads.size() == 2);
+    for (const auto& lead : leads) {
+        CHECK_FALSE(lead.id().isNull());
+    }
+}
+
+TEST_CASE("Loading a project repairs duplicate scrap station and lead ids", "[cwProject][repair]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto* region = project->cavingRegion();
+
+    region->addCave();
+    auto* cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Repair Duplicate Scrap Child IDs Cave"));
+    cave->addTrip();
+    auto* trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
+    trip->setName(QStringLiteral("Repair Duplicate Scrap Child IDs Trip"));
+
+    const QString imagePath = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    REQUIRE(QFileInfo::exists(imagePath));
+    trip->notes()->addFromFiles({QUrl::fromLocalFile(imagePath)});
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    REQUIRE(trip->notes()->rowCount() == 1);
+    auto* note = trip->notes()->notes().at(0);
+    REQUIRE(note != nullptr);
+
+    auto* scrap = new cwScrap();
+    scrap->insertPoint(0, QPointF(0.10, 0.10));
+    scrap->insertPoint(1, QPointF(0.40, 0.10));
+    scrap->insertPoint(2, QPointF(0.20, 0.40));
+    scrap->close();
+
+    cwNoteStation stationA;
+    stationA.setName(QStringLiteral("A1"));
+    stationA.setPositionOnNote(QPointF(0.20, 0.20));
+    scrap->addStation(stationA);
+
+    cwNoteStation stationB;
+    stationB.setName(QStringLiteral("B1"));
+    stationB.setPositionOnNote(QPointF(0.30, 0.30));
+    scrap->addStation(stationB);
+
+    cwLead leadA;
+    leadA.setDescription(QStringLiteral("Lead A"));
+    leadA.setPositionOnNote(QPointF(0.50, 0.20));
+    scrap->addLead(leadA);
+
+    cwLead leadB;
+    leadB.setDescription(QStringLiteral("Lead B"));
+    leadB.setPositionOnNote(QPointF(0.55, 0.25));
+    scrap->addLead(leadB);
+
+    note->addScrap(scrap);
+    project->waitSaveToFinish();
+
+    QTemporaryDir saveDir;
+    REQUIRE(saveDir.isValid());
+    const QString savePath = QDir(saveDir.path()).filePath(QStringLiteral("repair-duplicate-scrap-child-ids.cwproj"));
+    REQUIRE(project->saveAs(savePath));
+    project->waitSaveToFinish();
+    const QString savedProjectFile = project->filename();
+    REQUIRE(QFileInfo::exists(savedProjectFile));
+
+    QDirIterator noteFileIterator(QFileInfo(savedProjectFile).absolutePath(),
+                                  QStringList{QStringLiteral("*.cwnote")},
+                                  QDir::Files,
+                                  QDirIterator::Subdirectories);
+    REQUIRE(noteFileIterator.hasNext());
+    const QString noteFile = noteFileIterator.next();
+    CHECK_FALSE(noteFileIterator.hasNext());
+    REQUIRE(QFileInfo::exists(noteFile));
+
+    rootData.reset();
+
+    const std::string duplicateStationId = "11111111-2222-3333-4444-555555555555";
+    const std::string duplicateLeadId = "66666666-7777-8888-9999-000000000000";
+    {
+        auto noteProto = loadProtoFromJsonFile<CavewhereProto::Note>(noteFile);
+        REQUIRE(noteProto.scraps_size() == 1);
+        REQUIRE(noteProto.scraps(0).notestations_size() == 2);
+        REQUIRE(noteProto.scraps(0).leads_size() == 2);
+
+        for (int stationIndex = 0; stationIndex < noteProto.mutable_scraps(0)->notestations_size(); ++stationIndex) {
+            noteProto.mutable_scraps(0)->mutable_notestations(stationIndex)->set_id(duplicateStationId);
+        }
+        for (int leadIndex = 0; leadIndex < noteProto.mutable_scraps(0)->leads_size(); ++leadIndex) {
+            noteProto.mutable_scraps(0)->mutable_leads(leadIndex)->set_id(duplicateLeadId);
+        }
+
+        writeProtoToJsonFile(noteFile, noteProto);
+    }
+
+    {
+        const auto duplicateNoteProto = loadProtoFromJsonFile<CavewhereProto::Note>(noteFile);
+        REQUIRE(duplicateNoteProto.scraps_size() == 1);
+        REQUIRE(duplicateNoteProto.scraps(0).notestations_size() == 2);
+        REQUIRE(duplicateNoteProto.scraps(0).leads_size() == 2);
+        CHECK(duplicateNoteProto.scraps(0).notestations(0).id() == duplicateStationId);
+        CHECK(duplicateNoteProto.scraps(0).notestations(1).id() == duplicateStationId);
+        CHECK(duplicateNoteProto.scraps(0).leads(0).id() == duplicateLeadId);
+        CHECK(duplicateNoteProto.scraps(0).leads(1).id() == duplicateLeadId);
+    }
+
+    auto reloaded = std::make_unique<cwProject>();
+    addTokenManager(reloaded.get());
+    reloaded->loadOrConvert(savedProjectFile);
+    reloaded->waitLoadToFinish();
+    reloaded->waitSaveToFinish();
+
+    const auto repairedNoteProto = loadProtoFromJsonFile<CavewhereProto::Note>(noteFile);
+    REQUIRE(repairedNoteProto.scraps_size() == 1);
+    REQUIRE(repairedNoteProto.scraps(0).notestations_size() == 2);
+    REQUIRE(repairedNoteProto.scraps(0).leads_size() == 2);
+
+    int stationDuplicateCount = 0;
+    QSet<QString> repairedStationIds;
+    for (const auto& station : repairedNoteProto.scraps(0).notestations()) {
+        REQUIRE(station.has_id());
+        CHECK_FALSE(station.id().empty());
+        const QString id = QString::fromStdString(station.id());
+        repairedStationIds.insert(id);
+        if (station.id() == duplicateStationId) {
+            ++stationDuplicateCount;
+        }
+    }
+    CHECK(stationDuplicateCount == 1);
+    CHECK(repairedStationIds.size() == repairedNoteProto.scraps(0).notestations_size());
+
+    int leadDuplicateCount = 0;
+    QSet<QString> repairedLeadIds;
+    for (const auto& lead : repairedNoteProto.scraps(0).leads()) {
+        REQUIRE(lead.has_id());
+        CHECK_FALSE(lead.id().empty());
+        const QString id = QString::fromStdString(lead.id());
+        repairedLeadIds.insert(id);
+        if (lead.id() == duplicateLeadId) {
+            ++leadDuplicateCount;
+        }
+    }
+    CHECK(leadDuplicateCount == 1);
+    CHECK(repairedLeadIds.size() == repairedNoteProto.scraps(0).leads_size());
+
+    REQUIRE(reloaded->cavingRegion()->caveCount() == 1);
+    auto* loadedCave = reloaded->cavingRegion()->cave(0);
+    REQUIRE(loadedCave != nullptr);
+    REQUIRE(loadedCave->tripCount() == 1);
+    auto* loadedTrip = loadedCave->trip(0);
+    REQUIRE(loadedTrip != nullptr);
+    REQUIRE(loadedTrip->notes()->rowCount() == 1);
+
+    auto* loadedNote = loadedTrip->notes()->notes().at(0);
+    REQUIRE(loadedNote != nullptr);
+    REQUIRE(loadedNote->scraps().size() == 1);
+    auto* loadedScrap = loadedNote->scrap(0);
+    REQUIRE(loadedScrap != nullptr);
+
+    const auto stations = loadedScrap->stations();
+    REQUIRE(stations.size() == 2);
+    CHECK_FALSE(stations.at(0).id().isNull());
+    CHECK_FALSE(stations.at(1).id().isNull());
+    CHECK(stations.at(0).id() != stations.at(1).id());
+
+    const auto leads = loadedScrap->leads();
+    REQUIRE(leads.size() == 2);
+    CHECK_FALSE(leads.at(0).id().isNull());
+    CHECK_FALSE(leads.at(1).id().isNull());
+    CHECK(leads.at(0).id() != leads.at(1).id());
+}
+
 TEST_CASE("Loading a project surfaces repair save failures", "[cwProject][repair]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();

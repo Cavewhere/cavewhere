@@ -15,6 +15,7 @@ public:
     QString Description;
     QSizeF Size;
     bool Completed = false;
+    QUuid Id = QUuid::createUuid();
 
 };
 
@@ -115,3 +116,12 @@ bool cwLead::completed() const
     return data->Completed;
 }
 
+void cwLead::setId(const QUuid& id)
+{
+    data->Id = id;
+}
+
+QUuid cwLead::id() const
+{
+    return data->Id;
+}

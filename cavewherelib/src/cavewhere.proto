@@ -267,6 +267,7 @@ message TriangulatedData {
 message NoteStation {
     optional string name = 3;
     optional QtProto.QPointF positionOnNote = 2;
+    optional string id = 4;
 
     //Deprecated types, don't use
     optional QtProto.QString legacy_name = 1;
@@ -337,6 +338,7 @@ message Lead {
     optional string description = 5;
     optional QtProto.QSizeF size = 3;
     optional bool completed = 4;
+    optional string id = 6;
 
     optional QtProto.QString legacy_description = 2;
 }

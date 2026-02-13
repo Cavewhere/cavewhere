@@ -337,6 +337,9 @@ void cwRegionSaveTask::saveNoteStation(CavewhereProto::NoteStation* protoNoteSta
 {
     saveString(protoNoteStation->mutable_name(), noteStation.name());
     savePointF(protoNoteStation->mutable_positiononnote(), noteStation.positionOnNote());
+    if (!noteStation.id().isNull()) {
+        saveQUuid(protoNoteStation->mutable_id(), noteStation.id());
+    }
 }
 
 /**
@@ -662,6 +665,9 @@ void cwRegionSaveTask::saveLead(CavewhereProto::Lead *protoLead, const cwLead &l
     }
 
     protoLead->set_completed(lead.completed());
+    if (!lead.id().isNull()) {
+        saveQUuid(protoLead->mutable_id(), lead.id());
+    }
 }
 
 void cwRegionSaveTask::saveSurveyNetwork(CavewhereProto::SurveyNetwork *protoSurveyNetwork, const cwSurveyNetwork &network)

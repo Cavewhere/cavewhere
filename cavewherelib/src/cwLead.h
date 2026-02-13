@@ -13,6 +13,7 @@
 #include <QSharedDataPointer>
 #include <QPointF>
 #include <QSizeF>
+#include <QUuid>
 
 //Our includes
 #include "cwUnits.h"
@@ -39,6 +40,9 @@ public:
 
     void setCompleted(bool compeleted);
     bool completed() const;
+
+    void setId(const QUuid& id);
+    QUuid id() const;
 
 private:
     QSharedDataPointer<cwLeadData> data;

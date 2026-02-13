@@ -509,6 +509,12 @@ QString uuidToProtoString(const QUuid& uuid)
     return uuid.toString(QUuid::WithoutBraces);
 }
 
+QString fromLegacyQtString(const QtProto::QString& protoString)
+{
+    const std::string& stringData = protoString.stringdata();
+    return QString::fromUtf8(stringData.c_str(), static_cast<int>(stringData.length()));
+}
+
 QUuid repairedTopLevelId(const QUuid& candidateId,
                          QSet<QUuid>& seenIds,
                          cwSaveLoad::IdentityRepairData& repair)
@@ -550,6 +556,27 @@ void repairTopLevelIds(cwSaveLoad::ProjectLoadData& loadData)
             }
             for (cwNoteLiDARData& note : trip.noteLiDARModel.notes) {
                 note.id = repairedTopLevelId(note.id, seenNoteLiDARIds, loadData.identityRepair);
+            }
+        }
+    }
+}
+
+void repairNestedScrapIds(cwSaveLoad::ProjectLoadData& loadData)
+{
+    for (cwCaveData& cave : loadData.region.caves) {
+        for (cwTripData& trip : cave.trips) {
+            for (cwNoteData& note : trip.noteModel.notes) {
+                for (cwScrapData& scrap : note.scraps) {
+                    QSet<QUuid> seenStationIds;
+                    for (cwNoteStation& station : scrap.stations) {
+                        station.setId(repairedTopLevelId(station.id(), seenStationIds, loadData.identityRepair));
+                    }
+
+                    QSet<QUuid> seenLeadIds;
+                    for (cwLead& lead : scrap.leads) {
+                        lead.setId(repairedTopLevelId(lead.id(), seenLeadIds, loadData.identityRepair));
+                    }
+                }
             }
         }
     }
@@ -2818,6 +2845,7 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
             }
 
             repairTopLevelIds(loadData);
+            repairNestedScrapIds(loadData);
             return Result(loadData);
         });
     });
@@ -3210,8 +3238,17 @@ cwScrapData cwSaveLoad::fromProtoScrap(const CavewhereProto::Scrap &protoScrap)
 cwNoteStation cwSaveLoad::fromProtoNoteStation(const CavewhereProto::NoteStation &protoNoteStation)
 {
     cwNoteStation noteStation;
-    noteStation.setName(QString::fromStdString(protoNoteStation.name()));
+    if (protoNoteStation.has_name()) {
+        noteStation.setName(QString::fromStdString(protoNoteStation.name()));
+    } else if (protoNoteStation.has_legacy_name()) {
+        noteStation.setName(fromLegacyQtString(protoNoteStation.legacy_name()));
+    }
     noteStation.setPositionOnNote(cwRegionLoadTask::loadPointF(protoNoteStation.positiononnote()));
+    if (protoNoteStation.has_id()) {
+        noteStation.setId(toUuid(protoNoteStation.id()));
+    } else {
+        noteStation.setId(QUuid());
+    }
     return noteStation;
 }
 
@@ -3225,6 +3262,8 @@ cwLead cwSaveLoad::fromProtoLead(const CavewhereProto::Lead &protoLead)
     // Load description if present
     if (protoLead.has_description()) {
         lead.setDescription(QString::fromStdString(protoLead.description()));
+    } else if (protoLead.has_legacy_description()) {
+        lead.setDescription(fromLegacyQtString(protoLead.legacy_description()));
     }
 
     // Load size if present and valid
@@ -3237,6 +3276,11 @@ cwLead cwSaveLoad::fromProtoLead(const CavewhereProto::Lead &protoLead)
 
     // Load completed flag
     lead.setCompleted(protoLead.completed());
+    if (protoLead.has_id()) {
+        lead.setId(toUuid(protoLead.id()));
+    } else {
+        lead.setId(QUuid());
+    }
 
     return lead;
 }
