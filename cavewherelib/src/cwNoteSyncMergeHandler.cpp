@@ -7,10 +7,16 @@
 #include "cwSurveyNoteLiDARModel.h"
 #include "cwSurveyNoteModel.h"
 #include "cwTrip.h"
+#include "cwNoteStation.h"
+#include "cwLead.h"
+#include "GitRepository.h"
+#include "cavewhere.pb.h"
+#include "google/protobuf/util/json_util.h"
 
 #include <QFileInfo>
 #include <QImageReader>
 #include <QSet>
+#include <QHash>
 #include <QUuid>
 
 #include <optional>
@@ -74,6 +80,111 @@ NoteChangedPathKind classifyNoteChangedPath(const QString& path, const QSet<QStr
     }
 
     return NoteChangedPathKind::Unsupported;
+}
+
+QUuid uuidFromProtoString(const std::string& uuidString)
+{
+    if (uuidString.empty()) {
+        return QUuid();
+    }
+
+    const QUuid uuid(QString::fromStdString(uuidString));
+    return uuid.isNull() ? QUuid() : uuid;
+}
+
+std::optional<std::pair<QUuid, QHash<QUuid, cwScrapBaseIdentityData>>> loadBaseScrapIdentityForNote(
+    const QDir& repoRoot,
+    const QString& mergeBaseHead,
+    const QString& relativeNotePath)
+{
+    if (mergeBaseHead.isEmpty()) {
+        return std::nullopt;
+    }
+
+    const auto contentResult = QQuickGit::GitRepository::fileContentAtCommit(
+        repoRoot.absolutePath(),
+        mergeBaseHead,
+        relativeNotePath);
+    if (contentResult.hasError() || contentResult.value().isEmpty()) {
+        return std::nullopt;
+    }
+
+    CavewhereProto::Note protoNote;
+    if (!protoNote.ParseFromArray(contentResult.value().constData(), contentResult.value().size())) {
+        const std::string jsonPayload(contentResult.value().constData(),
+                                      static_cast<size_t>(contentResult.value().size()));
+        const auto parseStatus = google::protobuf::util::JsonStringToMessage(jsonPayload, &protoNote);
+        if (!parseStatus.ok()) {
+            return std::nullopt;
+        }
+    }
+
+    if (!protoNote.has_id()) {
+        return std::nullopt;
+    }
+
+    const QUuid noteId = uuidFromProtoString(protoNote.id());
+    if (noteId.isNull()) {
+        return std::nullopt;
+    }
+
+    QHash<QUuid, cwScrapBaseIdentityData> baseIdentityByScrapId;
+    for (const auto& protoScrap : protoNote.scraps()) {
+        if (!protoScrap.has_id()) {
+            continue;
+        }
+
+        const QUuid scrapId = uuidFromProtoString(protoScrap.id());
+        if (scrapId.isNull()) {
+            continue;
+        }
+
+        cwScrapBaseIdentityData identityData;
+        for (const auto& protoStation : protoScrap.notestations()) {
+            if (!protoStation.has_id()) {
+                continue;
+            }
+            const QUuid stationId = uuidFromProtoString(protoStation.id());
+            if (!stationId.isNull()) {
+                identityData.stationIds.insert(stationId);
+                cwNoteStation station;
+                station.setId(stationId);
+                if (protoStation.has_name()) {
+                    station.setName(QString::fromStdString(protoStation.name()));
+                }
+                station.setPositionOnNote(QPointF(protoStation.positiononnote().x(),
+                                                  protoStation.positiononnote().y()));
+                identityData.stationsById.insert(stationId, station);
+            }
+        }
+
+        for (const auto& protoLead : protoScrap.leads()) {
+            if (!protoLead.has_id()) {
+                continue;
+            }
+            const QUuid leadId = uuidFromProtoString(protoLead.id());
+            if (!leadId.isNull()) {
+                identityData.leadIds.insert(leadId);
+                cwLead lead;
+                lead.setId(leadId);
+                lead.setPositionOnNote(QPointF(protoLead.positiononnote().x(),
+                                               protoLead.positiononnote().y()));
+                if (protoLead.has_description()) {
+                    lead.setDescription(QString::fromStdString(protoLead.description()));
+                }
+                if (protoLead.has_size()) {
+                    lead.setSize(QSizeF(protoLead.size().width(),
+                                        protoLead.size().height()));
+                }
+                lead.setCompleted(protoLead.completed());
+                identityData.leadsById.insert(leadId, lead);
+            }
+        }
+
+        baseIdentityByScrapId.insert(scrapId, std::move(identityData));
+    }
+
+    return std::make_optional(std::make_pair(noteId, std::move(baseIdentityByScrapId)));
 }
 
 template<typename Container, typename IdAccessor>
@@ -174,6 +285,7 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
         NoteDescriptorApplyMode noteDescriptorApplyMode = NoteDescriptorApplyMode::FullModelReplace;
         QList<cwNoteStructuralMergePlan> noteStructuralMergePlans;
         QList<cwNote*> reorderedNotes;
+        QHash<QUuid, QHash<QUuid, cwScrapBaseIdentityData>> baseScrapIdentityByNoteId;
     };
 
     QHash<QString, cwTrip*> tripsByNotesDir;
@@ -236,6 +348,12 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
 
         if (changedKind == NoteChangedPathKind::NoteDescriptor) {
             updateIt->noteDescriptorChanged = true;
+            const auto baseIdentity = loadBaseScrapIdentityForNote(context.repoRoot,
+                                                                   context.report->mergeBaseHead,
+                                                                   normalizedPath);
+            if (baseIdentity.has_value()) {
+                updateIt->baseScrapIdentityByNoteId.insert(baseIdentity->first, baseIdentity->second);
+            }
         } else if (changedKind == NoteChangedPathKind::NoteLiDARDescriptor) {
             updateIt->noteLiDARDescriptorChanged = true;
         } else {
@@ -308,6 +426,16 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
                 return result;
             }
             update.noteStructuralMergePlans = mergePreparation->plans;
+            for (cwNoteStructuralMergePlan& plan : update.noteStructuralMergePlans) {
+                if (plan.loadedNoteData == nullptr) {
+                    continue;
+                }
+
+                const auto baseIdentityIt = update.baseScrapIdentityByNoteId.constFind(plan.loadedNoteData->id);
+                if (baseIdentityIt != update.baseScrapIdentityByNoteId.constEnd()) {
+                    plan.baseScrapIdentityByScrapId = baseIdentityIt.value();
+                }
+            }
             update.reorderedNotes = mergePreparation->orderedNotes;
         }
     }

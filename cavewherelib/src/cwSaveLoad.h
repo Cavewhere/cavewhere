@@ -148,6 +148,7 @@ public:
 
         QString beforeHead;
         QString afterHead;
+        QString mergeBaseHead;
         PullState pullState = PullState::Unknown;
         QStringList backendPaths;
         QStringList commitDiffPaths;

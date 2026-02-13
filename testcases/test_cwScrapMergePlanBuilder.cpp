@@ -274,3 +274,93 @@ TEST_CASE("cwScrap merge applier falls back to loaded stations and leads when id
     CHECK(mergedLeads[0].desciption() == QStringLiteral("theirs-lead-a"));
     CHECK(mergedLeads[1].desciption() == QStringLiteral("theirs-lead-b"));
 }
+
+TEST_CASE("cwScrap merge applier keeps local deletes when base marks remote-only ids as pre-existing", "[cwScrapMerge][sync]")
+{
+    auto note = std::make_unique<cwNote>();
+    auto* scrap = new cwScrap();
+    note->addScrap(scrap);
+
+    const QUuid keptStationId = QUuid::createUuid();
+    const QUuid deletedStationId = QUuid::createUuid();
+    const QUuid keptLeadId = QUuid::createUuid();
+    const QUuid deletedLeadId = QUuid::createUuid();
+
+    // Ours deleted deletedStationId/deletedLeadId and kept only keptStationId/keptLeadId.
+    scrap->setStations({
+        makeStation(keptStationId, QStringLiteral("ours-kept"), QPointF(1.0, 1.0))
+    });
+    scrap->setLeads({
+        makeLead(keptLeadId, QStringLiteral("ours-kept"), QPointF(2.0, 2.0), QSizeF(1.0, 1.0), false)
+    });
+
+    cwNoteData loadedNoteData = note->data();
+    REQUIRE(loadedNoteData.scraps.size() == 1);
+    auto& loadedScrap = loadedNoteData.scraps[0];
+
+    // Theirs still has deleted ids (remote kept/modified), and also includes the kept ids.
+    loadedScrap.stations = {
+        makeStation(keptStationId, QStringLiteral("theirs-kept"), QPointF(10.0, 10.0)),
+        makeStation(deletedStationId, QStringLiteral("theirs-deleted"), QPointF(11.0, 11.0))
+    };
+    loadedScrap.leads = {
+        makeLead(keptLeadId, QStringLiteral("theirs-kept"), QPointF(12.0, 12.0), QSizeF(2.0, 2.0), true),
+        makeLead(deletedLeadId, QStringLiteral("theirs-deleted"), QPointF(13.0, 13.0), QSizeF(3.0, 3.0), true)
+    };
+
+    cwScrapBaseIdentityData baseIdentity;
+    baseIdentity.stationIds = {keptStationId, deletedStationId};
+    baseIdentity.leadIds = {keptLeadId, deletedLeadId};
+
+    cwNoteStructuralMergePlan plan;
+    plan.note = note.get();
+    plan.loadedNoteData = &loadedNoteData;
+    plan.mergedScrapOrder = {loadedScrap.id};
+    plan.baseScrapIdentityByScrapId.insert(loadedScrap.id, baseIdentity);
+    cwScrapMergeApplier::applyNoteStructuralMergePlan(plan);
+
+    const QList<cwNoteStation> mergedStations = note->scrap(0)->stations();
+    REQUIRE(mergedStations.size() == 1);
+    CHECK(mergedStations[0].id() == keptStationId);
+    CHECK(mergedStations[0].name() == QStringLiteral("ours-kept"));
+
+    const QList<cwLead> mergedLeads = note->scrap(0)->leads();
+    REQUIRE(mergedLeads.size() == 1);
+    CHECK(mergedLeads[0].id() == keptLeadId);
+    CHECK(mergedLeads[0].desciption() == QStringLiteral("ours-kept"));
+}
+
+TEST_CASE("cwScrap merge applier applies remote value when local matches base for shared id", "[cwScrapMerge][sync]")
+{
+    auto note = std::make_unique<cwNote>();
+    auto* scrap = new cwScrap();
+    note->addScrap(scrap);
+
+    const QUuid stationId = QUuid::createUuid();
+
+    cwNoteStation oursStation = makeStation(stationId, QStringLiteral("A1"), QPointF(0.20, 0.20));
+    scrap->setStations({oursStation});
+
+    cwNoteData loadedNoteData = note->data();
+    REQUIRE(loadedNoteData.scraps.size() == 1);
+    auto& loadedScrap = loadedNoteData.scraps[0];
+    loadedScrap.stations = {
+        makeStation(stationId, QStringLiteral("A1-remote"), QPointF(0.44, 0.33))
+    };
+
+    cwScrapBaseIdentityData baseIdentity;
+    baseIdentity.stationIds = {stationId};
+    baseIdentity.stationsById.insert(stationId, oursStation);
+
+    cwNoteStructuralMergePlan plan;
+    plan.note = note.get();
+    plan.loadedNoteData = &loadedNoteData;
+    plan.mergedScrapOrder = {loadedScrap.id};
+    plan.baseScrapIdentityByScrapId.insert(loadedScrap.id, baseIdentity);
+    cwScrapMergeApplier::applyNoteStructuralMergePlan(plan);
+
+    const QList<cwNoteStation> mergedStations = note->scrap(0)->stations();
+    REQUIRE(mergedStations.size() == 1);
+    CHECK(mergedStations[0].name() == QStringLiteral("A1-remote"));
+    CHECK(mergedStations[0].positionOnNote() == QPointF(0.44, 0.33));
+}

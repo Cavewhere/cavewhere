@@ -420,9 +420,9 @@ Implementation checklist:
 - [ ] ~~4B.3a Centralized top-level repair registration~~
 - [ ] ~~Add a centralized registration for top-level repairable identity types (`Cave`, `Trip`, `Note`, `NoteLiDAR`) so repair traversal is not hardcoded in multiple loops.~~
 - [ ] ~~Route both top-level identity repair pass and `RepairSave` traversal through the same registration contracts to reduce missed-update risk when adding new top-level types.~~
-- [ ] 4B.4 3-way stations/leads policy
-- [ ] Use base/ours/theirs keyed by stable IDs (order ignored).
-- [ ] Conflict matrix: value-vs-value -> ours; delete-vs-modify -> ours; delete-vs-delete -> deleted.
+- [x] 4B.4 3-way stations/leads policy
+- [x] Use base/ours/theirs keyed by stable IDs (order ignored).
+- [x] Conflict matrix: value-vs-value -> ours; delete-vs-modify -> ours; delete-vs-delete -> deleted.
 - [x] Concurrent add with different IDs -> keep both.
 - [ ] 4B.5 Scrap geometry policy
 - [ ] Use wholesale geometry replacement only when no local geometry conflict is detected.
@@ -456,6 +456,7 @@ Focused unit tests (`testcases/test_cwScrapMergePlanBuilder.cpp`):
 - [x] `TEST_CASE("cwScrap merge applier applies deterministic payload by planned scrap order", "[cwScrapMerge][sync]")`
 - [x] `TEST_CASE("cwScrap merge applier merges stations and leads by stable id with local precedence", "[cwScrapMerge][sync]")`
 - [x] `TEST_CASE("cwScrap merge applier falls back to loaded stations and leads when ids are ambiguous", "[cwScrapMerge][sync]")`
+- [x] `TEST_CASE("cwScrap merge applier keeps local deletes when base marks remote-only ids as pre-existing", "[cwScrapMerge][sync]")`
 
 Exit criteria:
 - concurrent note+scrap edits merge deterministically or explicitly fallback with no silent data loss.

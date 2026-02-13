@@ -8,61 +8,138 @@
 #include <QSet>
 
 #include <algorithm>
+#include <functional>
 
 namespace {
 
-template<typename ItemT, typename IdAccessor>
+bool almostEqual(qreal lhs, qreal rhs)
+{
+    return qAbs(lhs - rhs) <= 1.0e-6;
+}
+
+bool areStationsEquivalent(const cwNoteStation& lhs, const cwNoteStation& rhs)
+{
+    return lhs.name() == rhs.name()
+           && almostEqual(lhs.positionOnNote().x(), rhs.positionOnNote().x())
+           && almostEqual(lhs.positionOnNote().y(), rhs.positionOnNote().y());
+}
+
+bool areLeadsEquivalent(const cwLead& lhs, const cwLead& rhs)
+{
+    return lhs.desciption() == rhs.desciption()
+           && almostEqual(lhs.positionOnNote().x(), rhs.positionOnNote().x())
+           && almostEqual(lhs.positionOnNote().y(), rhs.positionOnNote().y())
+           && almostEqual(lhs.size().width(), rhs.size().width())
+           && almostEqual(lhs.size().height(), rhs.size().height())
+           && lhs.completed() == rhs.completed();
+}
+
+template<typename ItemT, typename ItemEqualsFn, typename IdAccessor>
 QList<ItemT> mergeUnorderedByIdPreferOurs(const QList<ItemT>& ours,
                                           const QList<ItemT>& loaded,
+                                          const QSet<QUuid>* baseIds,
+                                          const QHash<QUuid, ItemT>* baseItemsById,
+                                          ItemEqualsFn itemEquals,
                                           IdAccessor idAccessor)
 {
-    QHash<QUuid, const ItemT*> oursById;
+    QHash<QUuid, ItemT> oursById;
     oursById.reserve(ours.size());
     for (const ItemT& item : ours) {
         const QUuid id = idAccessor(item);
         if (id.isNull() || oursById.contains(id)) {
             return loaded;
         }
-        oursById.insert(id, &item);
+        oursById.insert(id, item);
     }
 
-    QSet<QUuid> loadedIds;
-    loadedIds.reserve(loaded.size());
+    QHash<QUuid, ItemT> loadedById;
+    loadedById.reserve(loaded.size());
     for (const ItemT& item : loaded) {
         const QUuid id = idAccessor(item);
-        if (id.isNull() || loadedIds.contains(id)) {
+        if (id.isNull() || loadedById.contains(id)) {
             return loaded;
         }
-        loadedIds.insert(id);
+        loadedById.insert(id, item);
     }
 
-    QList<ItemT> merged = ours;
-    for (const ItemT& item : loaded) {
-        const QUuid id = idAccessor(item);
-        if (!oursById.contains(id)) {
-            // Preserve remote-only identity additions while keeping local values for shared ids.
-            merged.append(item);
+    QList<ItemT> merged;
+    merged.reserve(std::max(ours.size(), loaded.size()));
+
+    for (const ItemT& oursItem : ours) {
+        const QUuid id = idAccessor(oursItem);
+        if (!loadedById.contains(id)) {
+            // Local-only id means local add or local keep; both preserve ours.
+            merged.append(oursItem);
+            continue;
         }
+
+        const ItemT loadedItem = loadedById.value(id);
+        if (baseItemsById != nullptr && baseItemsById->contains(id)) {
+            const ItemT baseItem = baseItemsById->value(id);
+            const bool oursChanged = !itemEquals(oursItem, baseItem);
+            const bool loadedChanged = !itemEquals(loadedItem, baseItem);
+            if (!oursChanged && loadedChanged) {
+                // Remote-only change.
+                merged.append(loadedItem);
+            } else if (oursChanged && !loadedChanged) {
+                // Local-only change.
+                merged.append(oursItem);
+            } else if (!oursChanged && !loadedChanged) {
+                merged.append(oursItem);
+            } else {
+                // Conflict changed on both sides.
+                merged.append(oursItem);
+            }
+        } else {
+            // Without base item payload we preserve local value on shared ids.
+            merged.append(oursItem);
+        }
+    }
+
+    for (const ItemT& loadedItem : loaded) {
+        const QUuid id = idAccessor(loadedItem);
+        if (oursById.contains(id)) {
+            continue;
+        }
+
+        // Remote-only id present in base implies local delete vs remote modify -> keep delete.
+        if (baseIds != nullptr && baseIds->contains(id)) {
+            continue;
+        }
+
+        // Concurrent remote add with distinct id.
+        merged.append(loadedItem);
     }
 
     return merged;
 }
 
 cwScrapData mergedScrapDataPreferOursForStationsAndLeads(const cwScrap* currentScrap,
-                                                         const cwScrapData& loadedScrapData)
+                                                         const cwScrapData& loadedScrapData,
+                                                         const cwScrapBaseIdentityData* baseScrapIdentity)
 {
     if (currentScrap == nullptr) {
         return loadedScrapData;
     }
 
+    const QSet<QUuid>* baseStationIds = baseScrapIdentity != nullptr ? &baseScrapIdentity->stationIds : nullptr;
+    const QSet<QUuid>* baseLeadIds = baseScrapIdentity != nullptr ? &baseScrapIdentity->leadIds : nullptr;
+    const QHash<QUuid, cwNoteStation>* baseStationsById = baseScrapIdentity != nullptr ? &baseScrapIdentity->stationsById : nullptr;
+    const QHash<QUuid, cwLead>* baseLeadsById = baseScrapIdentity != nullptr ? &baseScrapIdentity->leadsById : nullptr;
     cwScrapData mergedData = loadedScrapData;
     mergedData.stations = mergeUnorderedByIdPreferOurs(
         currentScrap->stations(),
         loadedScrapData.stations,
+        baseStationIds,
+        baseStationsById,
+        [](const cwNoteStation& lhs, const cwNoteStation& rhs) { return areStationsEquivalent(lhs, rhs); },
         [](const cwNoteStation& station) { return station.id(); });
     mergedData.leads = mergeUnorderedByIdPreferOurs(
         currentScrap->leads(),
         loadedScrapData.leads,
+        baseLeadIds,
+        baseLeadsById,
+        [](const cwLead& lhs, const cwLead& rhs) { return areLeadsEquivalent(lhs, rhs); },
         [](const cwLead& lead) { return lead.id(); });
     return mergedData;
 }
@@ -106,7 +183,10 @@ void cwScrapMergeApplier::applyNoteStructuralMergePlan(const cwNoteStructuralMer
             continue;
         }
 
-        scrap->setData(mergedScrapDataPreferOursForStationsAndLeads(scrap, *loadedScrapData));
+        const auto baseIdentityIt = plan.baseScrapIdentityByScrapId.constFind(targetScrapId);
+        const cwScrapBaseIdentityData* baseIdentity =
+            (baseIdentityIt != plan.baseScrapIdentityByScrapId.constEnd()) ? &baseIdentityIt.value() : nullptr;
+        scrap->setData(mergedScrapDataPreferOursForStationsAndLeads(scrap, *loadedScrapData, baseIdentity));
     }
 
     if (currentCount > loadedCount) {
@@ -119,7 +199,10 @@ void cwScrapMergeApplier::applyNoteStructuralMergePlan(const cwNoteStructuralMer
             const cwScrapData* loadedScrapData = loadedScrapsById.value(targetScrapId, nullptr);
             Q_ASSERT(loadedScrapData != nullptr);
             if (loadedScrapData != nullptr) {
-                scrap->setData(mergedScrapDataPreferOursForStationsAndLeads(scrap, *loadedScrapData));
+                const auto baseIdentityIt = plan.baseScrapIdentityByScrapId.constFind(targetScrapId);
+                const cwScrapBaseIdentityData* baseIdentity =
+                    (baseIdentityIt != plan.baseScrapIdentityByScrapId.constEnd()) ? &baseIdentityIt.value() : nullptr;
+                scrap->setData(mergedScrapDataPreferOursForStationsAndLeads(scrap, *loadedScrapData, baseIdentity));
             }
         }
     }

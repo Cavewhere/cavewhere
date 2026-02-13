@@ -1,7 +1,12 @@
 #pragma once
 
 #include <QList>
+#include <QHash>
+#include <QSet>
 #include <QtCore/quuid.h>
+
+#include "cwLead.h"
+#include "cwNoteStation.h"
 
 #include <optional>
 #include <vector>
@@ -11,9 +16,17 @@ class cwSurveyNoteModel;
 struct cwNoteData;
 struct cwSurveyNoteModelData;
 
+struct cwScrapBaseIdentityData {
+    QSet<QUuid> stationIds;
+    QSet<QUuid> leadIds;
+    QHash<QUuid, cwNoteStation> stationsById;
+    QHash<QUuid, cwLead> leadsById;
+};
+
 struct cwNoteStructuralMergePlan {
     cwNote* note = nullptr;
     const cwNoteData* loadedNoteData = nullptr;
+    QHash<QUuid, cwScrapBaseIdentityData> baseScrapIdentityByScrapId;
     std::vector<QUuid> mergedScrapOrder;
 };
 

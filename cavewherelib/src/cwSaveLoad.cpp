@@ -451,6 +451,13 @@ cwSaveLoad::SyncReport buildSyncReport(const QString& repoPath,
     report.beforeHead = beforeHead;
     report.afterHead = afterHead;
     report.pullState = pullState;
+    const auto mergeBaseResult =
+        QQuickGit::GitRepository::mergeBaseCommitOid(repoPath, beforeHead, afterHead);
+    if (mergeBaseResult.hasError()) {
+        report.diagnostics.append(mergeBaseResult.errorMessage());
+    } else {
+        report.mergeBaseHead = mergeBaseResult.value();
+    }
 
     const auto commitPathsResult =
         QQuickGit::GitRepository::diffPathsBetweenCommits(repoPath, beforeHead, afterHead);
