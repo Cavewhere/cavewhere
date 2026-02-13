@@ -489,30 +489,30 @@ Exit criteria:
 - Follow `docs/addNewTypesForMerge.md` pattern: identity-first, planner/applier separation, explicit bundle policies, and test-first ambiguous fallback.
 
 Implementation breakdown:
-- [ ] 5A cwTrip skeleton architecture
+- [x] 5A cwTrip skeleton architecture
 - [x] Add `cwTripMergePlanBuilder` with planning-only responsibilities:
 - [x] validate stable identity mapping by `cwTripData.id`
 - [x] produce deterministic ordered trip plan list for incremental apply
 - [x] fail with explicit ambiguous reason on null/duplicate/missing ids
-- [ ] Add `cwTripMergeApplier` with apply-only responsibilities:
+- [x] Add `cwTripMergeApplier` with apply-only responsibilities:
 - [x] apply trip-level bundles only (no note/notelidar bundles here)
-- [ ] delegate/chain to subobject handlers for team/calibration/chunks
-- [ ] return explicit apply result for fallback decisions
+- [x] delegate/chain to subobject handlers for team/calibration/chunks
+- [x] return explicit apply result for fallback decisions
 - [x] Wire `cwTripSyncMergeHandler` into `cwSyncMergeRegistry` using planner/applier pair.
 
 - [ ] 5B cwTrip bundle matrix (define now, implement incrementally)
 - [x] Trip `name` bundle (independent scalar bundle)
 - [x] Trip `date` bundle (independent scalar bundle)
-- [ ] Trip calibration bundle: `cwTripCalibrationData` (single-value object; field-wise 3-way inside bundle)
-- [ ] Team bundle: `cwTeamData.members` identity-based by `cwTeamMember.id`, order-insensitive membership merge
+- [x] Trip calibration bundle: `cwTripCalibrationData` (single-value object; field-wise 3-way inside bundle)
+- [x] Team bundle: `cwTeamData.members` identity-based by `cwTeamMember.id`, order-insensitive membership merge
 - [ ] Chunks structural bundle: `cwTripData.chunks` identity-based by `cwSurveyChunkData.id`, order-sensitive list semantics (chunk order is semantic and must be preserved/merged deterministically)
-- [ ] Chunk payload ordering contract: within each `cwSurveyChunkData`, `stations` and `shots` ordering is semantic and must never be treated as unordered during merge.
+- [x] Chunk payload ordering contract: within each `cwSurveyChunkData`, `stations` and `shots` ordering is semantic and must never be treated as unordered during merge.
 - [ ] Notes bundles are out-of-scope for Phase 5 bundle work because `noteModel` and `noteLiDARModel` merge paths are already implemented.
 
 - [ ] 5C Subobject skeletons under trip
-- [ ] Add `cwTeamMergePlanBuilder` + `cwTeamMergeApplier` skeletons.
-- [ ] Add `cwTripCalibrationMergePlanBuilder` + `cwTripCalibrationMergeApplier` skeletons.
-- [ ] Add `cwSurveyChunkMergePlanBuilder` + `cwSurveyChunkMergeApplier` skeletons.
+- [x] Add `cwTeamMergePlanBuilder` + `cwTeamMergeApplier` skeletons.
+- [x] Add `cwTripCalibrationMergePlanBuilder` + `cwTripCalibrationMergeApplier` skeletons.
+- [x] Add `cwSurveyChunkMergePlanBuilder` + `cwSurveyChunkMergeApplier` skeletons.
 - [ ] Keep subobject appliers no-op or conservative fallback until each bundle policy is implemented.
 
 - [ ] 5D Cave-level skeleton follow-up
@@ -525,8 +525,8 @@ Implementation breakdown:
 Test checklist for Phase 5 skeleton kickoff:
 - [x] Add `testcases/test_cwTripMergePlanBuilder.cpp` with identity/ambiguity planning tests.
 - [x] Add trip scalar bundle apply tests (currently in `testcases/test_cwTripMergePlanBuilder.cpp`).
-- [ ] Add `testcases/test_cwTeamMergePlanBuilder.cpp` and `testcases/test_cwTeamMergeApplier.cpp` skeleton tests.
-- [ ] Add `testcases/test_cwSurveyChunkMergePlanBuilder.cpp` and `testcases/test_cwSurveyChunkMergeApplier.cpp` skeleton tests.
+- [x] Add `testcases/test_cwTeamMergePlanBuilder.cpp` and `testcases/test_cwTeamMergeApplier.cpp` skeleton tests.
+- [x] Add `testcases/test_cwSurveyChunkMergePlanBuilder.cpp` and `testcases/test_cwSurveyChunkMergeApplier.cpp` skeleton tests.
 - [ ] Add `cwProject` sync integration smoke test for trip-level incremental path (no full reload on trip metadata-only change).
 
 Exit criteria:
