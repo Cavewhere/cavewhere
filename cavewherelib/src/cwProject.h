@@ -15,6 +15,7 @@
 // #include "cwImageData.h"
 #include "cwGlobals.h"
 #include "cwSaveLoad.h"
+#include "cwProjectSyncStatus.h"
 // #include "cwRegionLoadResult.h"
 // #include "cwError.h"
 #include "cwFutureManagerToken.h"
@@ -70,6 +71,7 @@ class CAVEWHERE_LIB_EXPORT cwProject :  public QObject{
     Q_PROPERTY(QString filename READ filename NOTIFY filenameChanged)
     Q_PROPERTY(bool canSaveDirectly READ canSaveDirectly NOTIFY canSaveDirectlyChanged)
     Q_PROPERTY(bool isTemporaryProject READ isTemporaryProject NOTIFY isTemporaryProjectChanged)
+    Q_PROPERTY(cwProjectSyncStatus* syncStatus READ syncStatus CONSTANT)
 
 public:
     enum FileType {
@@ -140,6 +142,7 @@ public:
     bool canSaveDirectly() const;
     bool isTemporaryProject() const;
     QQuickGit::GitRepository* repository() const;
+    cwProjectSyncStatus* syncStatus() const;
 
     void addImages(QList<QUrl> noteImagePath,
                    const QDir &dir,
@@ -234,6 +237,7 @@ private:
                                                           bool isTemporary = false);
 
     QList<QFuture<void>> RetiringSaveFutures;
+    cwProjectSyncStatus* m_syncStatus = nullptr;
 };
 
 /**
@@ -263,6 +267,8 @@ inline QUndoStack *cwProject::undoStack() const
 inline cwErrorListModel* cwProject::errorModel() const {
     return ErrorModel;
 }
+
+inline cwProjectSyncStatus* cwProject::syncStatus() const { return m_syncStatus; }
 
 inline bool cwProject::canSaveDirectly() const {
     return !saveWillCauseDataLoss() && !isTemporaryProject();

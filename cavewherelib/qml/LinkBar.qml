@@ -135,6 +135,18 @@ QQ.Item {
                     implicitHeight: 1
                 }
 
+                SyncButton {
+                    implicitWidth: sizeItemId.height
+                    implicitHeight: implicitWidth
+                    syncStatus: RootData.project.syncStatus
+                    onSyncRequested: {
+                        RootData.project.sync()
+                    }
+                    onRemoteSettingsRequested: {
+                        RootData.pageSelectionModel.gotoPageByName(null, "Remote")
+                    }
+                }
+
                 DiscordChatButton {
                     implicitWidth: sizeItemId.height
                     implicitHeight: implicitWidth

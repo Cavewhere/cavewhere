@@ -1010,7 +1010,7 @@ struct cwSaveLoad::Data {
         }
     };
 
-    QQuickGit::GitRepository* repository;
+    QQuickGit::GitRepository* repository = nullptr;
 
     QString projectFileName;
     cwSaveLoad::ProjectMetadataData projectMetadata;

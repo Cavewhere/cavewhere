@@ -52,6 +52,7 @@ Follow Qt Quick coding conventions:
 - Use strict property types rather than `var`.
 - Use lowerCamelCase for property names.
 - Capitalize QML component filenames.
+- Use `Theme.qml` color tokens for UI colors; avoid hardcoded hex colors in QML files (except inside `Theme.qml` itself).
 - Only use `opacity` when necessary.
 - Keep bindings simple and avoid binding loops.
 - Prefer `id` selectors instead of `objectName`.
@@ -105,5 +106,5 @@ macOS builds use `entitlements.plist`. Windows installers live under `installer/
 - Avoid `property var` and favor typed properties.
 - Keep bindings efficient.
 - Avoid deep nesting.
+- Use `Theme.qml` for colors; do not hardcode hex colors in component QML.
 - Follow Qt’s coding conventions.
-

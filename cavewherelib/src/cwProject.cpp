@@ -28,6 +28,7 @@
 #include "cwSaveLoad.h"
 #include "cwNote.h"
 #include "cwNoteLiDAR.h"
+#include "cwProjectSyncStatus.h"
 
 //Quick Git
 #include <GitRepository.h>
@@ -108,7 +109,8 @@ cwProject::cwProject(QObject* parent) :
     SQLiteTempProject(false),
     Region(new cwCavingRegion(this)),
     UndoStack(new QUndoStack(this)),
-    ErrorModel(new cwErrorListModel(this))
+    ErrorModel(new cwErrorListModel(this)),
+    m_syncStatus(new cwProjectSyncStatus(this))
 {
     connectSaveLoad(m_saveLoad);
     m_saveLoad->newProject();
@@ -128,6 +130,9 @@ void cwProject::connectSaveLoad(cwSaveLoad* saveLoad)
     if (auto* repo = saveLoad->repository()) {
         repo->setAccount(m_gitAccount);
     }
+
+    m_syncStatus->setRepository(saveLoad->repository());
+
     // saveLoad->setUndoStack(UndoStack);
     saveLoad->setFutureManagerToken(FutureToken);
 
@@ -159,6 +164,9 @@ void cwProject::disconnectSaveLoad(cwSaveLoad *saveLoad)
     Q_ASSERT(saveLoad);
     disconnect(saveLoad, nullptr, this, nullptr);
     saveLoad->setCavingRegion(nullptr);
+    if (m_syncStatus && m_saveLoad == saveLoad) {
+        m_syncStatus->setRepository(nullptr);
+    }
 }
 
 
@@ -350,6 +358,7 @@ bool cwProject::save()
         ErrorModel->append(cwError(commitResult.errorMessage(), cwError::Warning));
         qWarning() << "Save commit skipped:" << commitResult.errorMessage();
     }
+    m_syncStatus->refresh();
     emit fileSaved();
     return true;
 }
@@ -360,6 +369,7 @@ bool cwProject::sync()
         return false;
     }
 
+    m_syncStatus->setInProgress(true);
     auto syncFuture = m_saveLoad->sync();
     AsyncFuture::observe(syncFuture)
         .context(this, [this, syncFuture]() {
@@ -367,6 +377,8 @@ bool cwProject::sync()
             if (result.hasError()) {
                 ErrorModel->append(cwError(result.errorMessage(), cwError::Warning));
             }
+            m_syncStatus->setInProgress(false);
+            m_syncStatus->refresh();
         }).future();
 
     return true;
@@ -420,6 +432,7 @@ bool cwProject::saveAs(QString newFilename)
     }
 
     emit fileSaved();
+    m_syncStatus->refresh();
     return true;
 }
 
@@ -442,6 +455,7 @@ bool cwProject::deleteTemporaryProject()
 void cwProject::setSqliteTemporaryProject(bool isTemp)
 {
     SQLiteTempProject = isTemp;
+    m_syncStatus->refresh();
 }
 
 // void cwProject::addImageHelper(std::function<void (QList<cwImage>)> outputCallBackFunc,
@@ -725,6 +739,7 @@ void cwProject::newProject() {
     m_saveLoad = new cwSaveLoad(this);
     connectSaveLoad(m_saveLoad);
     m_saveLoad->newProject();
+    m_syncStatus->refresh();
 }
 
 // /**
@@ -767,6 +782,7 @@ void cwProject::setFilename(QString newFilename, bool initRepository) {
     if(newFilename != filename()) {
         m_saveLoad->setFileName(newFilename, initRepository);
         emit filenameChanged(newFilename);
+        m_syncStatus->refresh();
     }
 }
 
@@ -878,8 +894,12 @@ void cwProject::waitSaveToFinish()
 bool cwProject::isModified()
 {
     m_saveLoad->waitForFinished();
-    m_saveLoad->repository()->checkStatus();
-    return m_saveLoad->repository()->modifiedFileCount() > 0;
+    auto* repo = m_saveLoad->repository();
+    if (repo == nullptr) {
+        return false;
+    }
+    repo->checkStatus();
+    return repo->modifiedFileCount() > 0;
 }
 
 bool cwProject::isNewProject() const
