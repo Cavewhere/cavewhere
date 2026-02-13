@@ -552,6 +552,78 @@ Exit criteria:
 - stable behavior under concurrency stress, acceptable sync/apply latency.
 - UI/API surfaces expose and handle `IncompatibleVersion`/`Conflict`/sync-incomplete outcomes without silent downgrade to bool semantics.
 
+## Phase 8: Sync UX + Multi-Remote Management
+- Add a Sync button to `cavewherelib/qml/LinkBar.qml` next to `DiscordChatButton`.
+- Left click: run project sync to configured remotes.
+- Right click: open context menu with `Sync now` and `Remote settings...` that navigates to `cavewherelib/qml/RemoteRepositoryPage.qml`.
+- Keep Sync button non-reentrant while sync is running (busy/disabled state).
+
+### 8A Sync Button Status Indicators
+- [ ] Add `SyncStatus` backend surface for QML:
+- [ ] local dirty state (uncommitted changes)
+- [ ] ahead count (commits to push)
+- [ ] behind count (commits to pull)
+- [ ] stale/unavailable status when fetch/remote status cannot be resolved
+- [ ] Configure Sync button badge/label:
+- [ ] show `↑N ↓M` for ahead/behind counts
+- [ ] show `•` when local working tree has uncommitted changes
+- [ ] show degraded state (`↑N ↓?` or `!`) for stale/unavailable remote status
+- [ ] Add tooltip diagnostics, e.g. `origin/main: 3 to push, 1 to pull, local edits pending`.
+- [ ] Refresh status on save/commit/fetch/pull/push/remote-config changes.
+
+### 8B Remote Repository Page Expansion
+- [ ] Expand `RemoteRepositoryPage` from clone-only into remote management:
+- [ ] list remotes
+- [ ] add/edit/remove remote
+- [ ] connect current project to a remote without cloning
+- [ ] initial publish flow (new project -> first remote push/upstream setup)
+- [ ] set pull/push roles for remotes
+- [ ] preserve existing clone flow behavior
+
+### 8C Multi-Remote Sync Roles
+- [ ] Add per-project remote role config:
+- [ ] `pullRemote` (single source of truth for pull)
+- [ ] `pushRemotes` (one or more push targets)
+- [ ] Default policy:
+- [ ] if only `origin` exists, use `origin` as both pull and push target
+- [ ] if remote roles are unset, keep behavior deterministic and explicit in UI
+- [ ] Sync execution policy:
+- [ ] pull from `pullRemote`
+- [ ] reconcile locally
+- [ ] push sequentially to each remote in `pushRemotes`
+- [ ] capture/report per-remote push outcomes
+
+### 8D User Flows to Support
+- [ ] New project -> add data -> configure new remote -> first push -> one-click sync afterwards.
+- [ ] Existing project on remote -> clone -> sync already configured.
+- [ ] New project -> add data -> connect to existing project remote -> reconcile and converge safely.
+- [ ] Multi-remote topology:
+- [ ] local/edge remote (e.g. mini computer) for offline sync
+- [ ] internet remote (hosted git) for eventual upstream sync
+- [ ] Partial-availability behavior:
+- [ ] local remote success with internet remote failure should not block local success
+- [ ] UI should surface deferred failures clearly
+
+### 8E Validation and Tests
+- [ ] QML tests:
+- [ ] Sync button visibility and placement in `LinkBar.qml`
+- [ ] left-click triggers sync
+- [ ] right-click opens context menu and navigates to `RemoteRepositoryPage.qml`
+- [ ] status/badge visual state transitions (`↑/↓`, dirty, stale/error, busy)
+- [ ] `cwProject`/backend tests:
+- [ ] no-remote configured behavior and actionable error/report
+- [ ] single-remote sync path
+- [ ] multi-remote partial failure reporting
+- [ ] pull/push role selection correctness
+- [ ] integration tests for first publish and connect-existing-remote flows
+
+Exit criteria:
+- Sync button supports one-click sync with clear visual state.
+- Users can configure and manage remotes from `RemoteRepositoryPage`.
+- Multi-remote pull/push roles are explicit and stable.
+- Ahead/behind/dirty indicators are accurate and updated on key events.
+- Partial remote failures are surfaced without silent data-loss behavior.
+
 ## 10. API Changes (Proposed)
 
 `cwSaveLoad::sync()` should return structured result:
