@@ -138,7 +138,8 @@ QQ.Item {
                 SyncButton {
                     implicitWidth: sizeItemId.height
                     implicitHeight: implicitWidth
-                    syncStatus: RootData.project.syncStatus
+                    syncHealth: RootData.project.syncHealth
+                    syncInProgress: RootData.project.syncInProgress
                     onSyncRequested: {
                         RootData.project.sync()
                     }

@@ -7,20 +7,21 @@ import cavewherelib
 RoundButton {
     id: syncButtonId
 
-    required property ProjectSyncStatus syncStatus
+    required property ProjectSyncHealth syncHealth
+    required property bool syncInProgress
 
     signal syncRequested()
     signal remoteSettingsRequested()
 
     icon.source: "qrc:/twbs-icons/icons/arrow-repeat.svg"
-    enabled: !syncStatus.inProgress
+    enabled: !syncInProgress
 
     onClicked: {
         syncRequested()
     }
 
     QQ.Component.onCompleted: {
-        syncStatus.refresh()
+        syncHealth.refresh()
     }
 
     QQ.TapHandler {
@@ -32,20 +33,20 @@ RoundButton {
     }
 
     QC.ToolTip.visible: hovered
-    QC.ToolTip.text: syncStatus.status.message
+    QC.ToolTip.text: syncHealth.status.message
 
     QQ.Rectangle {
         id: syncBadgeId
-        visible: syncStatus.status.stale
-                 || syncStatus.status.hasLocalChanges
-                 || syncStatus.status.aheadCount > 0
-                 || syncStatus.status.behindCount > 0
-                 || syncStatus.inProgress
+        visible: syncHealth.status.stale
+                 || syncHealth.status.hasLocalChanges
+                 || syncHealth.status.aheadCount > 0
+                 || syncHealth.status.behindCount > 0
+                 || syncInProgress
 
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         radius: 7
-        color: syncStatus.status.stale ? Theme.warning : Theme.success
+        color: syncHealth.status.stale ? Theme.warning : Theme.success
         border.width: 1
         border.color: Theme.surface
         implicitHeight: 14
@@ -58,16 +59,16 @@ RoundButton {
             font.pixelSize: 9
             font.bold: true
             text: {
-                if (syncStatus.inProgress) {
+                if (syncInProgress) {
                     return "..."
                 }
 
-                if (syncStatus.status.stale) {
+                if (syncHealth.status.stale) {
                     return "!"
                 }
 
-                let suffix = syncStatus.status.hasLocalChanges ? " \u2022" : ""
-                return "\u2191" + syncStatus.status.aheadCount + " \u2193" + syncStatus.status.behindCount + suffix
+                let suffix = syncHealth.status.hasLocalChanges ? " \u2022" : ""
+                return "\u2191" + syncHealth.status.aheadCount + " \u2193" + syncHealth.status.behindCount + suffix
             }
         }
     }
@@ -77,7 +78,7 @@ RoundButton {
 
         QC.MenuItem {
             text: "Sync now"
-            enabled: !syncStatus.inProgress
+            enabled: !syncInProgress
             onTriggered: {
                 syncRequested()
             }

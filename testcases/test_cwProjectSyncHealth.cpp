@@ -11,7 +11,7 @@
 #include <functional>
 
 // Ours
-#include "cwProjectSyncStatus.h"
+#include "cwProjectSyncHealth.h"
 #include "GitRepository.h"
 #include "Account.h"
 #include "asyncfuture.h"
@@ -50,9 +50,9 @@ bool waitUntil(const std::function<bool()>& condition, int timeoutMs = 3000)
 }
 } // namespace
 
-TEST_CASE("cwProjectSyncStatus reports repository unavailable warning", "[cwProjectSyncStatus]")
+TEST_CASE("cwProjectSyncHealth reports repository unavailable warning", "[cwProjectSyncHealth]")
 {
-    cwProjectSyncStatus syncStatus;
+    cwProjectSyncHealth syncStatus;
     syncStatus.setRepository(nullptr);
     syncStatus.refresh();
 
@@ -62,7 +62,7 @@ TEST_CASE("cwProjectSyncStatus reports repository unavailable warning", "[cwProj
     CHECK(syncStatus.status().behindCount() == 0);
 }
 
-TEST_CASE("cwProjectSyncStatus reports missing remote warning", "[cwProjectSyncStatus]")
+TEST_CASE("cwProjectSyncHealth reports missing remote warning", "[cwProjectSyncHealth]")
 {
     auto tempDir = QTemporaryDir();
     REQUIRE(tempDir.isValid());
@@ -79,7 +79,7 @@ TEST_CASE("cwProjectSyncStatus reports missing remote warning", "[cwProjectSyncS
     writeFile(tempDir.path(), QStringLiteral("state.txt"), QStringLiteral("initial\n"));
     CHECK_NOTHROW(repo.commitAll(QStringLiteral("Initial"), QStringLiteral("initial commit")));
 
-    cwProjectSyncStatus syncStatus;
+    cwProjectSyncHealth syncStatus;
     syncStatus.setRepository(&repo);
     syncStatus.refresh();
 
@@ -89,7 +89,7 @@ TEST_CASE("cwProjectSyncStatus reports missing remote warning", "[cwProjectSyncS
     CHECK(syncStatus.status().stale());
 }
 
-TEST_CASE("cwProjectSyncStatus prefers missing remote warning for new repository", "[cwProjectSyncStatus]")
+TEST_CASE("cwProjectSyncHealth prefers missing remote warning for new repository", "[cwProjectSyncHealth]")
 {
     auto tempDir = QTemporaryDir();
     REQUIRE(tempDir.isValid());
@@ -98,7 +98,7 @@ TEST_CASE("cwProjectSyncStatus prefers missing remote warning for new repository
     repo.setDirectory(QDir(tempDir.path()));
     repo.initRepository();
 
-    cwProjectSyncStatus syncStatus;
+    cwProjectSyncHealth syncStatus;
     syncStatus.setRepository(&repo);
     syncStatus.refresh();
 
@@ -108,7 +108,7 @@ TEST_CASE("cwProjectSyncStatus prefers missing remote warning for new repository
     CHECK(syncStatus.status().stale());
 }
 
-TEST_CASE("cwProjectSyncStatus resolves remote ahead/behind asynchronously", "[cwProjectSyncStatus]")
+TEST_CASE("cwProjectSyncHealth resolves remote ahead/behind asynchronously", "[cwProjectSyncHealth]")
 {
     auto tempDir = QTemporaryDir();
     REQUIRE(tempDir.isValid());
@@ -147,7 +147,7 @@ TEST_CASE("cwProjectSyncStatus resolves remote ahead/behind asynchronously", "[c
     CHECK_NOTHROW(peer.commitAll(QStringLiteral("Peer"), QStringLiteral("advance remote tip")));
     waitForGitFuture(peer.push());
 
-    cwProjectSyncStatus syncStatus;
+    cwProjectSyncHealth syncStatus;
     syncStatus.setRepository(&author);
     syncStatus.refresh();
 

@@ -1,4 +1,4 @@
-#include "cwProjectSyncStatus.h"
+#include "cwProjectSyncHealth.h"
 
 #include "GitRemoteInfo.h"
 #include "GitRepository.h"
@@ -6,12 +6,12 @@
 #include "asyncfuture.h"
 #include <algorithm>
 
-cwProjectSyncStatus::cwProjectSyncStatus(QObject* parent) :
+cwProjectSyncHealth::cwProjectSyncHealth(QObject* parent) :
     QObject(parent),
     m_remoteStatusRestarter(this)
 {
     m_pollTimer.setInterval(5 * 60 * 1000);
-    connect(&m_pollTimer, &QTimer::timeout, this, &cwProjectSyncStatus::refresh);
+    connect(&m_pollTimer, &QTimer::timeout, this, &cwProjectSyncHealth::refresh);
 
     m_remoteStatusRestarter.onFutureChanged([this]() {
         const auto future = m_remoteStatusRestarter.future();
@@ -53,17 +53,12 @@ cwProjectSyncStatus::cwProjectSyncStatus(QObject* parent) :
     });
 }
 
-bool cwProjectSyncStatus::inProgress() const
-{
-    return m_inProgress;
-}
-
-cwSyncStatus cwProjectSyncStatus::status() const
+cwSyncStatus cwProjectSyncHealth::status() const
 {
     return m_status;
 }
 
-void cwProjectSyncStatus::setRepository(QQuickGit::GitRepository* repository)
+void cwProjectSyncHealth::setRepository(QQuickGit::GitRepository* repository)
 {
     if (m_repository == repository) {
         return;
@@ -87,15 +82,15 @@ void cwProjectSyncStatus::setRepository(QQuickGit::GitRepository* repository)
         m_modifiedCountConnection = connect(m_repository,
                                             &QQuickGit::GitRepository::modifiedFileCountChanged,
                                             this,
-                                            &cwProjectSyncStatus::refresh);
+                                            &cwProjectSyncHealth::refresh);
         m_headBranchConnection = connect(m_repository,
                                          &QQuickGit::GitRepository::headBranchNameChanged,
                                          this,
-                                         &cwProjectSyncStatus::refresh);
+                                         &cwProjectSyncHealth::refresh);
         m_remotesConnection = connect(m_repository,
                                       &QQuickGit::GitRepository::remotesChanged,
                                       this,
-                                      &cwProjectSyncStatus::refresh);
+                                      &cwProjectSyncHealth::refresh);
         if (!m_pollTimer.isActive()) {
             m_pollTimer.start();
         }
@@ -106,17 +101,7 @@ void cwProjectSyncStatus::setRepository(QQuickGit::GitRepository* repository)
     refresh();
 }
 
-void cwProjectSyncStatus::setInProgress(bool inProgress)
-{
-    if (m_inProgress == inProgress) {
-        return;
-    }
-
-    m_inProgress = inProgress;
-    emit inProgressChanged();
-}
-
-void cwProjectSyncStatus::refresh()
+void cwProjectSyncHealth::refresh()
 {
     if (m_repository == nullptr) {
         m_pollTimer.stop();
@@ -170,7 +155,7 @@ void cwProjectSyncStatus::refresh()
     scheduleRemoteStatusRefresh(localChanges, remoteName, currentBranch);
 }
 
-void cwProjectSyncStatus::scheduleRemoteStatusRefresh(bool hasLocalChanges,
+void cwProjectSyncHealth::scheduleRemoteStatusRefresh(bool hasLocalChanges,
                                                       const QString& remoteName,
                                                       const QString& branchName)
 {
@@ -200,7 +185,7 @@ void cwProjectSyncStatus::scheduleRemoteStatusRefresh(bool hasLocalChanges,
     });
 }
 
-void cwProjectSyncStatus::setStatus(cwSyncStatus status)
+void cwProjectSyncHealth::setStatus(cwSyncStatus status)
 {
     if (m_status == status) {
         return;

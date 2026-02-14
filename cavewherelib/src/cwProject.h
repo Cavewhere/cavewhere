@@ -15,7 +15,7 @@
 // #include "cwImageData.h"
 #include "cwGlobals.h"
 #include "cwSaveLoad.h"
-#include "cwProjectSyncStatus.h"
+#include "cwProjectSyncHealth.h"
 // #include "cwRegionLoadResult.h"
 // #include "cwError.h"
 #include "cwFutureManagerToken.h"
@@ -71,7 +71,8 @@ class CAVEWHERE_LIB_EXPORT cwProject :  public QObject{
     Q_PROPERTY(QString filename READ filename NOTIFY filenameChanged)
     Q_PROPERTY(bool canSaveDirectly READ canSaveDirectly NOTIFY canSaveDirectlyChanged)
     Q_PROPERTY(bool isTemporaryProject READ isTemporaryProject NOTIFY isTemporaryProjectChanged)
-    Q_PROPERTY(cwProjectSyncStatus* syncStatus READ syncStatus CONSTANT)
+    Q_PROPERTY(cwProjectSyncHealth* syncHealth READ syncHealth CONSTANT)
+    Q_PROPERTY(bool syncInProgress READ syncInProgress NOTIFY syncInProgressChanged)
 
 public:
     enum FileType {
@@ -142,7 +143,8 @@ public:
     bool canSaveDirectly() const;
     bool isTemporaryProject() const;
     QQuickGit::GitRepository* repository() const;
-    cwProjectSyncStatus* syncStatus() const;
+    cwProjectSyncHealth* syncHealth() const;
+    bool syncInProgress() const;
 
     void addImages(QList<QUrl> noteImagePath,
                    const QDir &dir,
@@ -173,6 +175,7 @@ signals:
     void fileSaved();
     void loaded();
     void objectPathReady(QObject* object);
+    void syncInProgressChanged();
 
 public slots:
     void loadFile(QString filename);
@@ -227,6 +230,7 @@ private:
 
     bool saveWillCauseDataLoss() const;
     void setSqliteTemporaryProject(bool isTemp);
+    void setSyncInProgress(bool inProgress);
 
     // void addImageHelper(std::function<void (QList<cwImage>)> outputCallBackFunc,
     //                     std::function<void (cwAddImageTask*)> setImagesFunc);
@@ -237,7 +241,8 @@ private:
                                                           bool isTemporary = false);
 
     QList<QFuture<void>> RetiringSaveFutures;
-    cwProjectSyncStatus* m_syncStatus = nullptr;
+    cwProjectSyncHealth* m_syncHealth = nullptr;
+    bool m_syncInProgress = false;
 };
 
 /**
@@ -268,7 +273,8 @@ inline cwErrorListModel* cwProject::errorModel() const {
     return ErrorModel;
 }
 
-inline cwProjectSyncStatus* cwProject::syncStatus() const { return m_syncStatus; }
+inline cwProjectSyncHealth* cwProject::syncHealth() const { return m_syncHealth; }
+inline bool cwProject::syncInProgress() const { return m_syncInProgress; }
 
 inline bool cwProject::canSaveDirectly() const {
     return !saveWillCauseDataLoss() && !isTemporaryProject();

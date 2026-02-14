@@ -40,27 +40,23 @@ public:
 };
 Q_DECLARE_METATYPE(cwSyncStatus)
 
-class CAVEWHERE_LIB_EXPORT cwProjectSyncStatus : public QObject
+class CAVEWHERE_LIB_EXPORT cwProjectSyncHealth : public QObject
 {
     Q_OBJECT
-    QML_NAMED_ELEMENT(ProjectSyncStatus)
+    QML_NAMED_ELEMENT(ProjectSyncHealth)
 
-    Q_PROPERTY(bool inProgress READ inProgress NOTIFY inProgressChanged)
     Q_PROPERTY(cwSyncStatus status READ status NOTIFY statusChanged)
 
 public:
-    explicit cwProjectSyncStatus(QObject* parent = nullptr);
+    explicit cwProjectSyncHealth(QObject* parent = nullptr);
 
-    bool inProgress() const;
     cwSyncStatus status() const;
 
     void setRepository(QQuickGit::GitRepository* repository);
-    void setInProgress(bool inProgress);
 
     Q_INVOKABLE void refresh();
 
 signals:
-    void inProgressChanged();
     void statusChanged();
 
 private:
@@ -81,7 +77,6 @@ private:
     QString m_pendingRemoteName;
     QString m_pendingBranchName;
 
-    bool m_inProgress = false;
     cwSyncStatus m_status;
 };
 
