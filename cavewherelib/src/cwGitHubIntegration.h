@@ -59,6 +59,7 @@ class cwGitHubIntegration : public QObject
     Q_PROPERTY(QUrl verificationUrl READ verificationUrl NOTIFY deviceCodeChanged)
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY errorMessageChanged)
     Q_PROPERTY(QRangeModel* repositories READ repositories NOTIFY repositoriesChanged)
+    Q_PROPERTY(bool active READ active WRITE setActive NOTIFY activeChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
     Q_PROPERTY(int secondsUntilNextPoll READ secondsUntilNextPoll NOTIFY secondsUntilNextPollChanged)
     Q_PROPERTY(bool verificationOpened READ verificationOpened NOTIFY verificationOpenedChanged)
@@ -81,13 +82,17 @@ public:
     QUrl verificationUrl() const { return m_deviceInfo.verificationWebAddress; }
     QString errorMessage() const { return m_errorMessage; }
     QRangeModel* repositories() const { return m_repositories; }
+    bool active() const { return m_active; }
     bool busy() const { return m_busy; }
     int secondsUntilNextPoll() const { return m_secondsUntilNextPoll; }
     bool verificationOpened() const { return m_hasOpenedVerificationUrl; }
     QString username() const { return m_username; }
 
+    void setActive(bool active);
+
     Q_INVOKABLE void startDeviceLogin();
     Q_INVOKABLE void cancelLogin();
+    Q_INVOKABLE void cancelDeviceLoginFlow();
     Q_INVOKABLE void refreshRepositories();
     Q_INVOKABLE QVariantMap ensureKeyPair();
     Q_INVOKABLE void uploadPublicKey(const QString& title);
@@ -101,6 +106,7 @@ signals:
     void accessTokenChanged();
     void errorMessageChanged();
     void repositoriesChanged();
+    void activeChanged();
     void busyChanged();
     void secondsUntilNextPollChanged();
     void verificationOpenedChanged();
@@ -134,6 +140,9 @@ private:
     QString m_errorMessage;
     QRangeModel* m_repositories = nullptr;
     QNetworkAccessManager m_network;
+    bool m_active = false;
+    bool m_hasLoadedStoredToken = false;
+    bool m_loadingStoredToken = false;
 
     std::unique_ptr<QQuickGit::RSAKeyGenerator> m_keyGenerator;
     int m_secondsUntilNextPoll = 0;

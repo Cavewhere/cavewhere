@@ -10,8 +10,79 @@ StandardPage {
     id: page
 
     property GitHubIntegration gitHub: RootData.gitHubIntegration
-    property int selectedRepoIndex: -1
-    signal repositoryPicked(string repositoryUrl)
+    state: "none"
+    states: [
+        State {
+            name: "none"
+            changes: [
+                PropertyChanges {
+                    target: gitHub
+                    active: false
+                },
+                PropertyChanges {
+                    target: gitHubGroup
+                    visible: false
+                },
+                PropertyChanges {
+                    target: repositoryLoader
+                    active: false
+                },
+                StateChangeScript {
+                    script: gitHub.cancelDeviceLoginFlow()
+                }
+            ]
+        },
+        State {
+            name: "addAccount"
+            changes: [
+                PropertyChanges {
+                    target: gitHub
+                    active: true
+                },
+                PropertyChanges {
+                    target: gitHubGroup
+                    visible: gitHub.authState !== GitHubIntegration.Authorized
+                },
+                PropertyChanges {
+                    target: repositoryLoader
+                    active: false
+                }
+            ]
+        },
+        State {
+            name: "githubAccount"
+            changes: [
+                PropertyChanges {
+                    target: gitHub
+                    active: true
+                },
+                PropertyChanges {
+                    target: gitHubGroup
+                    visible: false
+                },
+                PropertyChanges {
+                    target: repositoryLoader
+                    active: gitHub.authState === GitHubIntegration.Authorized
+                },
+                StateChangeScript {
+                    script: {
+                        gitHub.cancelDeviceLoginFlow()
+                        if (gitHub.authState === GitHubIntegration.Authorized) {
+                            gitHub.refreshRepositories()
+                        }
+                    }
+                }
+            ]
+        }
+    ]
+    transitions: [
+        Transition {
+            from: "githubAccount"
+            ScriptAction {
+                script: gitHub.cancelDeviceLoginFlow()
+            }
+        }
+    ]
 
     readonly property url cloneDestinationParentFolder: {
         if (cloneDestinationDialog.selectedFolder.toString() !== "") {
@@ -144,10 +215,115 @@ StandardPage {
             }
         }
 
+        RowLayout {
+            Layout.fillWidth: true
+
+            Text {
+                text: "Account:"
+            }
+
+            QC.ComboBox {
+                id: accountCombo
+                Layout.fillWidth: true
+                textRole: "label"
+
+                model: RemoteAccountSelectionModel {
+                    id: accountSelectionModel
+                    sourceModel: RootData.remoteAccountModel
+                    onEntriesChanged: {
+                        accountCombo.currentIndex = 0
+                        page.state = "none"
+                    }
+                }
+
+                // Component.onCompleted: currentIndex = 0
+
+                delegate: Loader {
+                    required property int entryType
+                    required property int provider
+                    required property string label
+                    required property int index
+
+                    width: accountCombo.width
+                    sourceComponent: {
+                        switch (entryType) {
+                        case RemoteAccountSelectionModel.SeparatorEntry:
+                            return separatorDelegate
+                        case RemoteAccountSelectionModel.NoneEntry:
+                            return noneEntryDelegate
+                        case RemoteAccountSelectionModel.AddEntry:
+                            return addEntryDelegate
+                        default:
+                            return userAccountEntryDelegate
+                        }
+                    }
+                }
+
+                Component {
+                    id: noneEntryDelegate
+                    QC.ItemDelegate {
+                        text: parent.label
+
+                        onClicked: {
+                            accountCombo.currentIndex = parent.index
+                            page.state = "none"
+                            accountCombo.popup.close()
+                        }
+                        highlighted: hovered
+                    }
+                }
+
+                Component {
+                    id: userAccountEntryDelegate
+                    QC.ItemDelegate {
+                        text: parent.label
+
+                        property int provider: parent.provider
+
+                        enabled: provider !== RemoteAccountModel.Unknown
+                        onClicked: {
+                            accountCombo.currentIndex = parent.index
+                            page.state = provider === RemoteAccountModel.GitHub ? "githubAccount" : "none"
+                            accountCombo.popup.close()
+                        }
+                        highlighted: hovered
+                    }
+                }
+
+                Component {
+                    id: addEntryDelegate
+                    QC.ItemDelegate {
+                        text: parent.label
+                        onClicked: {
+                            accountCombo.currentIndex = parent.index
+                            page.state = "addAccount"
+                            gitHub.startDeviceLogin()
+                            accountCombo.popup.close()
+                        }
+                        highlighted: hovered
+                    }
+                }
+
+                Component {
+                    id: separatorDelegate
+
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.margins: 5
+                        height: 1
+                        color: Theme.divider
+                    }
+                }
+            }
+        }
+
+
         QC.GroupBox {
+            id: gitHubGroup
             Layout.fillWidth: true
             title: "GitHub"
-            visible: gitHub.authState !== GitHubIntegration.Authorized
+            visible: false
 
             ColumnLayout {
                 // anchors.fill: parent
@@ -229,86 +405,9 @@ StandardPage {
             }
         }
 
-
-        RowLayout {
-            Layout.fillWidth: true
-
-            Text {
-                text: "Account:"
-            }
-
-            QC.ComboBox {
-                id: accountCombo
-                Layout.fillWidth: true
-                textRole: "label"
-
-                model: RemoteAccountSelectionModel {
-                    id: accountSelectionModel
-                    sourceModel: RootData.remoteAccountModel
-                    onEntriesChanged: accountCombo.currentIndex = 0
-                }
-
-                // Component.onCompleted: currentIndex = 0
-
-                delegate: Loader {
-                    required property int entryType
-                    required property int provider
-                    required property string label
-                    required property int index
-
-                    width: accountCombo.width
-                    // sourceComponent: separatorDelegate
-                    sourceComponent: entryType === RemoteAccountSelectionModel.SeparatorEntry ? separatorDelegate : accountEntryDelegate
-                }
-
-                Component {
-                    id: accountEntryDelegate
-                    QC.ItemDelegate {
-                        text: parent.label
-
-                        property int entryType: parent.entryType
-                        property int provider: parent.provider
-
-                        enabled: entryType !== RemoteAccountSelectionModel.AccountEntry || provider !== RemoteAccountModel.Unknown
-                        onClicked: {
-                            accountCombo.currentIndex = parent.index
-
-                            if (entryType === RemoteAccountSelectionModel.NoneEntry) {
-                                return
-                            } else if (entryType === RemoteAccountSelectionModel.AddEntry) {
-                                gitHub.startDeviceLogin()
-                            } else if (entryType === RemoteAccountSelectionModel.AccountEntry) {
-                                if (provider === RemoteAccountModel.GitHub) {
-                                    if (gitHub.authState === GitHubIntegration.Authorized) {
-                                        gitHub.refreshRepositories()
-                                    } else {
-                                        gitHub.startDeviceLogin()
-                                    }
-                                }
-                            }
-                            accountCombo.popup.close()
-                        }
-
-                        highlighted: hovered
-                    }
-                }
-
-                Component {
-                    id: separatorDelegate
-
-                    Rectangle {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.margins: 5
-                        height: 1
-                        color: Theme.divider
-                    }
-                }
-            }
-        }
-
         Loader {
-            active: gitHub.authState === GitHubIntegration.Authorized
+            id: repositoryLoader
+            active: false
             Layout.fillWidth: true
             Layout.fillHeight: true
 
@@ -375,14 +474,13 @@ StandardPage {
                     Layout.fillWidth: true
                     placeholderText: "Filter repositories by name"
                     onTextChanged: {
-                        page.selectedRepoIndex = -1
+                        repoList.currentIndex = -1
                         repositorySortFilterModel.invalidate()
                     }
                 }
 
                 ListView {
                     id: repoList
-                    currentIndex: page.selectedRepoIndex
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     // Layout.preferredHeight: 240
@@ -392,8 +490,8 @@ StandardPage {
                         policy: QC.ScrollBar.AsNeeded
                     }
                     onCountChanged: {
-                        if (page.selectedRepoIndex >= count) {
-                            page.selectedRepoIndex = -1
+                        if (repoList.currentIndex >= count) {
+                            repoList.currentIndex = -1
                         }
                     }
 
@@ -407,7 +505,7 @@ StandardPage {
 
                         width: repoList.width
                         height: layoutId.height + 10
-                        color: page.selectedRepoIndex === index
+                        color: repoList.currentIndex === index
                                ? Theme.highlight
                                : (index % 2 === 0 ? Theme.surface : Theme.surfaceMuted)
 
@@ -452,8 +550,11 @@ StandardPage {
                             acceptedButtons: Qt.LeftButton
                             cursorShape: Qt.PointingHandCursor
                             onTapped: {
-                                page.selectedRepoIndex = index
-                                page.repositoryPicked(sshUrl)
+                                repoList.currentIndex = index
+                                manualUrlField.textField.text = sshUrl
+                                manualUrlField.textField.focus = true
+                                manualUrlField.textField.selectAll()
+                                cloneButtonPulse.restart()
                             }
                         }
                     }
@@ -464,7 +565,7 @@ StandardPage {
 
                         Text {
                             anchors.centerIn: parent
-                            text: "No repositories found."
+                            text: gitHub.busy ? "Refreshing repositories..." : "No repositories found."
                             visible: repoList.count === 0
                             color: Theme.textSubtle
                         }
@@ -520,10 +621,4 @@ StandardPage {
         initialProgressText: "Cloning"
     }
 
-    onRepositoryPicked: {
-        manualUrlField.textField.text = repositoryUrl
-        manualUrlField.textField.focus = true
-        manualUrlField.textField.selectAll()
-        cloneButtonPulse.restart()
-    }
 }

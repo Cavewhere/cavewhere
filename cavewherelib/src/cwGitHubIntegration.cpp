@@ -48,12 +48,32 @@ cwGitHubIntegration::cwGitHubIntegration(QObject* parent)
                              emit secondsUntilNextPollChanged();
                          }
                      });
+}
 
-    loadStoredAccessToken();
+void cwGitHubIntegration::setActive(bool active)
+{
+    if (m_active == active) {
+        return;
+    }
+
+    m_active = active;
+    emit activeChanged();
+
+    if (m_active && !m_hasLoadedStoredToken && !m_loadingStoredToken) {
+        m_loadingStoredToken = true;
+        loadStoredAccessToken();
+    } else if (m_active && !m_accessToken.isEmpty() && m_authState == AuthState::Authorized) {
+        fetchUserProfile();
+        refreshRepositories();
+    }
 }
 
 void cwGitHubIntegration::startDeviceLogin()
 {
+    if (!m_active) {
+        setActive(true);
+    }
+
     if (m_authState == AuthState::AwaitingVerification) {
         return;
     }
@@ -97,8 +117,36 @@ void cwGitHubIntegration::cancelLogin()
     }
 }
 
+void cwGitHubIntegration::cancelDeviceLoginFlow()
+{
+    m_deviceAuth.cancel();
+    if (!m_deviceInfo.deviceCode.isEmpty() || !m_deviceInfo.userCode.isEmpty()) {
+        m_deviceInfo = {};
+        emit deviceCodeChanged();
+    }
+
+    if (m_secondsUntilNextPoll != 0) {
+        m_secondsUntilNextPoll = 0;
+        emit secondsUntilNextPollChanged();
+    }
+    if (m_hasOpenedVerificationUrl) {
+        m_hasOpenedVerificationUrl = false;
+        emit verificationOpenedChanged();
+    }
+
+    if (m_accessToken.isEmpty()) {
+        setAuthState(AuthState::Idle);
+    } else {
+        setAuthState(AuthState::Authorized);
+    }
+}
+
 void cwGitHubIntegration::refreshRepositories()
 {
+    if (!m_active) {
+        return;
+    }
+
     if (m_accessToken.isEmpty()) {
         setErrorMessage(tr("Please sign in before listing repositories."));
         return;
@@ -248,8 +296,10 @@ void cwGitHubIntegration::handleAccessToken(const cwGitHubDeviceAuth::AccessToke
     storeAccessToken(result.accessToken);
     setAuthState(AuthState::Authorized);
     setErrorMessage({});
-    fetchUserProfile();
-    refreshRepositories();
+    if (m_active) {
+        fetchUserProfile();
+        refreshRepositories();
+    }
 
     if (!m_deviceInfo.deviceCode.isEmpty() || !m_deviceInfo.userCode.isEmpty()) {
         m_deviceInfo = {};
@@ -306,6 +356,9 @@ void cwGitHubIntegration::loadStoredAccessToken()
     job->setAutoDelete(true);
     job->setKey(KeychainTokenKey);
     QObject::connect(job, &QKeychain::Job::finished, this, [this, job]() {
+        m_loadingStoredToken = false;
+        m_hasLoadedStoredToken = true;
+
         if (job->error() == QKeychain::NoError) {
             const QString token = job->textData();
             if (!token.isEmpty()) {
@@ -315,8 +368,10 @@ void cwGitHubIntegration::loadStoredAccessToken()
                 setErrorMessage({});
                 m_secondsUntilNextPoll = 0;
                 emit secondsUntilNextPollChanged();
-                fetchUserProfile();
-                refreshRepositories();
+                if (m_active) {
+                    fetchUserProfile();
+                    refreshRepositories();
+                }
             }
         } else if (job->error() != QKeychain::EntryNotFound) {
             qWarning() << "Failed to read GitHub token:" << job->errorString();

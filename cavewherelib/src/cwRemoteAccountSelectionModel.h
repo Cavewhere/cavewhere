@@ -27,6 +27,7 @@ public:
         UsernameRole,
         EntryTypeRole
     };
+    Q_ENUM(Roles);
 
     Q_PROPERTY(cwRemoteAccountModel* sourceModel READ sourceModel WRITE setSourceModel NOTIFY sourceModelChanged)
 
