@@ -49,6 +49,7 @@ private:
     QByteArray buildFormBody(const QList<QPair<QString, QString>>& items) const;
     QNetworkRequest makeFormRequest(const QUrl& url) const;
     void resetCountdown(int seconds);
+    void scheduleNextPoll(int intervalSeconds);
 
     QNetworkAccessManager m_network;
     QString m_clientIdentifier;
@@ -57,5 +58,7 @@ private:
     QTimer m_pollTimer;
     QTimer m_countdownTimer;
     bool m_isPolling = false;
+    bool m_pollRequestInFlight = false;
     int m_secondsUntilNextPoll = 0;
+    int m_currentPollIntervalSeconds = 5;
 };

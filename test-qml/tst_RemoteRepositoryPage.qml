@@ -195,7 +195,6 @@ MainWindowTest {
             }, 30000)
             mouseClick(copyAndOpenButton)
 
-            console.log("[Tester Assisted] Complete GitHub device authorization in the opened browser page.")
             tryVerify(() => {
                                   let username = RootData.gitHubIntegration.username
 

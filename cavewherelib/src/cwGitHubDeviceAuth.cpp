@@ -18,6 +18,7 @@ cwGitHubDeviceAuth::cwGitHubDeviceAuth(QString clientIdentifier, QObject* parent
     : QObject(parent),
       m_clientIdentifier(std::move(clientIdentifier))
 {
+    m_pollTimer.setSingleShot(true);
     QObject::connect(&m_pollTimer, &QTimer::timeout, this, &cwGitHubDeviceAuth::poll);
 
     m_countdownTimer.setInterval(1000);
@@ -84,13 +85,15 @@ void cwGitHubDeviceAuth::requestDeviceCode(const QStringList& scopes) {
 void cwGitHubDeviceAuth::startPollingForAccessToken(const DeviceCodeInfo& info) {
     m_currentDeviceInfo = info;
     m_isPolling = true;
-    m_pollTimer.start(m_currentDeviceInfo.pollIntervalSeconds * 1000);
-    resetCountdown(m_currentDeviceInfo.pollIntervalSeconds);
-    poll();
+    m_pollRequestInFlight = false;
+    m_currentPollIntervalSeconds = qMax(1, m_currentDeviceInfo.pollIntervalSeconds);
+    // Respect GitHub pacing by waiting one full interval before first poll.
+    scheduleNextPoll(m_currentPollIntervalSeconds);
 }
 
 void cwGitHubDeviceAuth::cancel() {
     m_isPolling = false;
+    m_pollRequestInFlight = false;
     m_pollTimer.stop();
     resetCountdown(0);
 }
@@ -99,6 +102,11 @@ void cwGitHubDeviceAuth::poll() {
     if (!m_isPolling) {
         return;
     }
+    if (m_pollRequestInFlight) {
+        return;
+    }
+
+    m_pollRequestInFlight = true;
 
     QList<QPair<QString, QString>> params;
     params.append({QStringLiteral("client_id"), m_clientIdentifier});
@@ -109,10 +117,9 @@ void cwGitHubDeviceAuth::poll() {
     QNetworkReply* reply = m_network.post(request, buildFormBody(params));
 
     QObject::connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        m_pollRequestInFlight = false;
         const QByteArray data = reply->readAll();
         reply->deleteLater();
-
-        qDebug() << "Poll reply:" << data;
 
         QJsonParseError parseError{};
         const QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
@@ -122,6 +129,7 @@ void cwGitHubDeviceAuth::poll() {
             result.success = false;
             result.errorName = QStringLiteral("parse_error");
             result.errorDescription = QStringLiteral("Failed to parse token response.");
+            scheduleNextPoll(m_currentPollIntervalSeconds);
             emit accessTokenReceived(result);
             return;
         }
@@ -135,17 +143,17 @@ void cwGitHubDeviceAuth::poll() {
             result.errorDescription = obj.value(QStringLiteral("error_description")).toString();
 
             if (result.errorName == QStringLiteral("slow_down")) {
-                const int intervalSec = obj.value(QStringLiteral("interval")).toInt(m_currentDeviceInfo.pollIntervalSeconds);
-                constexpr int bufferMs = 50;
-                constexpr int secToMsec = 1000;
-                m_pollTimer.start(intervalSec * secToMsec + bufferMs);
-                resetCountdown(intervalSec);
-                qDebug() << "Slow down";
+                const int serverInterval = obj.value(QStringLiteral("interval")).toInt(0);
+                const int intervalSec = serverInterval > 0 ? serverInterval : (m_currentPollIntervalSeconds + 5);
+                m_currentPollIntervalSeconds = qMax(1, intervalSec);
+                scheduleNextPoll(m_currentPollIntervalSeconds);
             } else if (result.errorName == QStringLiteral("expired_token") ||
                        result.errorName == QStringLiteral("access_denied")) {
                 cancel();
+            } else if (result.errorName == QStringLiteral("authorization_pending")) {
+                scheduleNextPoll(m_currentPollIntervalSeconds);
             } else {
-                resetCountdown(qMax(1, m_pollTimer.interval() / 1000));
+                scheduleNextPoll(m_currentPollIntervalSeconds);
             }
             emit accessTokenReceived(result);
             return;
@@ -159,11 +167,6 @@ void cwGitHubDeviceAuth::poll() {
         cancel();
         emit accessTokenReceived(result);
     });
-
-    if (m_isPolling) {
-        const int intervalSec = qMax(1, m_pollTimer.interval() / 1000);
-        resetCountdown(intervalSec);
-    }
 }
 
 void cwGitHubDeviceAuth::updateCountdown()
@@ -199,4 +202,17 @@ void cwGitHubDeviceAuth::resetCountdown(int seconds)
     } else {
         m_countdownTimer.stop();
     }
+}
+
+void cwGitHubDeviceAuth::scheduleNextPoll(int intervalSeconds)
+{
+    if (!m_isPolling || m_pollRequestInFlight) {
+        return;
+    }
+
+    m_currentPollIntervalSeconds = qMax(1, intervalSeconds);
+    constexpr int bufferMs = 50;
+    constexpr int secToMsec = 1000;
+    m_pollTimer.start(m_currentPollIntervalSeconds * secToMsec + bufferMs);
+    resetCountdown(m_currentPollIntervalSeconds);
 }
