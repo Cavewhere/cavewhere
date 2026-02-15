@@ -8,6 +8,7 @@ import QQuickGit
 
 StandardPage {
     id: page
+    objectName: "remoteRepositoryPage"
 
     property GitHubIntegration gitHub: RootData.gitHubIntegration
     state: "none"
@@ -112,6 +113,21 @@ StandardPage {
         repositoryModel: RootData.repositoryModel
         cloneWatcher: cloneWatcher
         account: RootData.account
+
+        onRepositoryClonedIndex: function(clonedIndex) {
+            if (clonedIndex < 0) {
+                console.warn("Cloned repository not found in model.")
+                return
+            }
+
+            const openResult = RootData.repositoryModel.openRepository(clonedIndex, RootData.project)
+            if (openResult.hasError) {
+                console.warn("Failed to open cloned repository:", openResult.errorMessage)
+                return
+            }
+
+            RootData.pageSelectionModel.gotoPageByName(null, "View")
+        }
     }
 
     ColumnLayout {
@@ -148,6 +164,7 @@ StandardPage {
 
                     TextFieldWithError {
                         id: manualUrlField
+                        objectName: "remoteManualUrlField"
                         Layout.fillWidth: true
 
                         textField.placeholderText: "https://github.com/user/repo.git"
@@ -155,6 +172,7 @@ StandardPage {
 
                     QC.Button {
                         id: cloneButton
+                        objectName: "remoteCloneButton"
                         text: cloneWatcher.state === GitFutureWatcher.Loading ? "Cloning..." : "Clone"
                         enabled: manualUrlField.textField.text.length > 0
                                  && cloneWatcher.state !== GitFutureWatcher.Loading
@@ -201,6 +219,7 @@ StandardPage {
             }
 
             Text {
+                objectName: "remoteCloneStatusText"
                 Layout.fillWidth: true
                 visible: remoteRepositoryCloner.cloneStatusMessage.length > 0
                 wrapMode: Text.WrapAtWordBoundaryOrAnywhere
@@ -209,6 +228,7 @@ StandardPage {
             }
 
             ErrorHelpArea {
+                objectName: "remoteCloneErrorArea"
                 Layout.fillWidth: true
                 text: remoteRepositoryCloner.cloneErrorMessage
                 visible: remoteRepositoryCloner.cloneErrorMessage.length > 0

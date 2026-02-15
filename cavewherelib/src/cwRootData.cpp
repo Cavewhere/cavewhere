@@ -25,6 +25,7 @@
 #include "cwPageSelectionModel.h"
 #include "cwSettings.h"
 #include "cwGitHubIntegration.h"
+#include "cwGitHubLfsAuthProvider.h"
 #include "cwRemoteAccountModel.h"
 #include "cwRemoteAccountSelectionModel.h"
 // #include "cwImageCompressionUpdater.h"
@@ -41,12 +42,14 @@
 #include <QProcess>
 #include <QDesktopServices>
 #include <QClipboard>
+#include <memory>
 
 //Generated files from qbs
 #include "cavewhereVersion.h"
 
 //QQuickGit
 #include "GitRepository.h"
+#include "LfsBatchClient.h"
 
 //QuickQanave includes
 #include <QuickQanava>
@@ -75,6 +78,9 @@ cwRootData::cwRootData(QObject *parent) :
     // Project->setTaskManager(TaskManagerModel);
     Project->setFutureManagerToken(FutureManagerModel);
     m_repositoryModel->setProject(Project);
+
+    QQuickGit::LfsBatchClient::setLfsAuthProvider(
+        std::make_shared<cwGitHubLfsAuthProvider>(gitHubIntegration()));
 
     Region = Project->cavingRegion();
     Region->setUndoStack(undoStack());

@@ -498,6 +498,16 @@ QByteArray cwGitHubIntegration::authorizationHeader() const
     return QByteArrayLiteral("Bearer ") + m_accessToken.toUtf8();
 }
 
+QByteArray cwGitHubIntegration::lfsAuthorizationHeader() const
+{
+    if (m_accessToken.isEmpty()) {
+        return {};
+    }
+
+    const QByteArray credentials = QByteArrayLiteral("x-access-token:") + m_accessToken.toUtf8();
+    return QByteArrayLiteral("Basic ") + credentials.toBase64();
+}
+
 QString cwGitHubIntegration::defaultKeyTitle() const
 {
     QString username = qEnvironmentVariable("USER");

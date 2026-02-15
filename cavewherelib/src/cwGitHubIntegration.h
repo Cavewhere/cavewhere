@@ -8,6 +8,7 @@
 #include <QNetworkAccessManager>
 #include <QQmlEngine>
 #include <QMetaType>
+#include <QByteArray>
 
 //Std includes
 #include <memory>
@@ -99,6 +100,7 @@ public:
     Q_INVOKABLE void clearSession();
     Q_INVOKABLE void markVerificationOpened();
     Q_INVOKABLE void logout();
+    QByteArray lfsAuthorizationHeader() const;
 
 signals:
     void authStateChanged();

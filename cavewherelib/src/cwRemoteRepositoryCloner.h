@@ -50,6 +50,8 @@ signals:
     void cloneStatusMessageChanged();
     void pendingCloneDirChanged();
     void accountChanged();
+    void repositoryCloned(QString repositoryPath);
+    void repositoryClonedIndex(int index);
 
 private:
     void setCloneErrorMessage(const QString& message);

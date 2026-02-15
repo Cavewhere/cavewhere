@@ -197,6 +197,17 @@ void cwRemoteRepositoryCloner::handleCloneWatcherStateChanged()
         setCloneErrorMessage(addResult.errorMessage());
     } else {
         setCloneStatusMessage(QStringLiteral("Clone complete."));
+        emit repositoryCloned(m_pendingCloneDir);
+        int clonedIndex = -1;
+        for (int row = 0; row < m_repositoryModel->rowCount(); ++row) {
+            const QString rowPath = m_repositoryModel->data(m_repositoryModel->index(row, 0),
+                                                            cwRepositoryModel::PathRole).toString();
+            if (QDir(rowPath).absolutePath() == QDir(m_pendingCloneDir).absolutePath()) {
+                clonedIndex = row;
+                break;
+            }
+        }
+        emit repositoryClonedIndex(clonedIndex);
     }
     setPendingCloneDir(QString());
 }

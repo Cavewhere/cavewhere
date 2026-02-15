@@ -14,6 +14,7 @@
 #include <QString>
 #include <QObject>
 #include <QTemporaryDir>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwProject.h"
@@ -39,6 +40,27 @@ void CAVEWHERE_TESTLIB_EXPORT addTokenManager(cwProject* project);
 std::shared_ptr<cwProject> CAVEWHERE_TESTLIB_EXPORT fileToProject(QString filename);
 QString CAVEWHERE_TESTLIB_EXPORT fileToProject(cwProject* project, const QString& filename);
 
+class CAVEWHERE_TESTLIB_EXPORT cwCloneFixtureInfo
+{
+    Q_GADGET
+    QML_NAMED_ELEMENT(cloneFixtureInfo)
+    Q_PROPERTY(QString errorMessage MEMBER errorMessage)
+    Q_PROPERTY(QString remoteUrl MEMBER remoteUrl)
+    Q_PROPERTY(QString remoteRepoPath MEMBER remoteRepoPath)
+    Q_PROPERTY(QString cloneParentPath MEMBER cloneParentPath)
+    Q_PROPERTY(QString repoName MEMBER repoName)
+    Q_PROPERTY(QString expectedClonePath MEMBER expectedClonePath)
+
+public:
+    QString errorMessage;
+    QString remoteUrl;
+    QString remoteRepoPath;
+    QString cloneParentPath;
+    QString repoName;
+    QString expectedClonePath;
+};
+Q_DECLARE_METATYPE(cwCloneFixtureInfo)
+
 class CAVEWHERE_TESTLIB_EXPORT TestHelper : public QObject {
     Q_OBJECT
     QML_ELEMENT
@@ -54,8 +76,14 @@ public:
     Q_INVOKABLE QString copyToTempDir(const QString& filename);
 
     Q_INVOKABLE bool fileExists(const QUrl& filename) const;
+    Q_INVOKABLE bool directoryExists(const QUrl& directory) const;
     Q_INVOKABLE size_t fileSize(const QUrl& filename) const;
     Q_INVOKABLE void removeFile(const QUrl& filename) const;
+    Q_INVOKABLE QString environmentVariable(const QString& name) const;
+    Q_INVOKABLE QString repositoryRemoteUrl(const QUrl& repositoryDirectory,
+                                            const QString& remoteName = QStringLiteral("origin")) const;
+    Q_INVOKABLE QString normalizeFileGitUrl(const QString& url) const;
+    Q_INVOKABLE cwCloneFixtureInfo createLocalBareRemoteForCloneTest();
 
     Q_INVOKABLE QUrl tempDirectoryUrl() {
         QTemporaryDir dir;
@@ -70,4 +98,3 @@ public:
 };
 
 #endif // LOADPROJECTHELPER
-

@@ -31,6 +31,7 @@ public:
         PathRole = Qt::UserRole + 1,
         NameRole
     };
+    Q_ENUM(RepositoryRoles)
 
     enum ErrorCode {
         NameError = Monad::ResultBase::CustomError + 1,
