@@ -139,5 +139,6 @@
         <file>twbs-icons/icons/file-earmark.svg</file>
         <file>twbs-icons/icons/chevron-double-down.svg</file>
         <file>twbs-icons/icons/chevron-double-right.svg</file>
+        <file>twbs-icons/icons/list.svg</file>
     </qresource>
 </RCC>

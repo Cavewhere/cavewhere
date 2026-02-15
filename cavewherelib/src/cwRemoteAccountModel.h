@@ -23,6 +23,7 @@ public:
         UsernameRole,
         LabelRole
     };
+    Q_ENUM(Roles)
 
     explicit cwRemoteAccountModel(QObject* parent = nullptr);
 

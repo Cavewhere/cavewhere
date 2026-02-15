@@ -11,6 +11,32 @@ StandardPage {
     objectName: "remoteRepositoryPage"
 
     property GitHubIntegration gitHub: RootData.gitHubIntegration
+
+    function syncAuthorizedGitHubAccount() {
+        if (gitHub.authState !== GitHubIntegration.Authorized) {
+            return
+        }
+        if (gitHub.username.length === 0) {
+            return
+        }
+
+        RootData.remoteAccountModel.addOrUpdateAccount(RemoteAccountModel.GitHub, gitHub.username)
+
+        if (page.state === "addAccount") {
+            page.state = "githubAccount"
+        }
+    }
+
+    Connections {
+        target: gitHub
+        function onAuthStateChanged() {
+            page.syncAuthorizedGitHubAccount()
+        }
+        function onUsernameChanged() {
+            page.syncAuthorizedGitHubAccount()
+        }
+    }
+
     state: "none"
     states: [
         State {
@@ -244,6 +270,7 @@ StandardPage {
 
             QC.ComboBox {
                 id: accountCombo
+                objectName: "remoteAccountCombo"
                 Layout.fillWidth: true
                 textRole: "label"
 
@@ -251,8 +278,9 @@ StandardPage {
                     id: accountSelectionModel
                     sourceModel: RootData.remoteAccountModel
                     onEntriesChanged: {
-                        accountCombo.currentIndex = 0
-                        page.state = "none"
+                        if (accountCombo.currentIndex < 0 || accountCombo.currentIndex >= accountCombo.count) {
+                            accountCombo.currentIndex = 0
+                        }
                     }
                 }
 
@@ -313,6 +341,7 @@ StandardPage {
                 Component {
                     id: addEntryDelegate
                     QC.ItemDelegate {
+                        objectName: "remoteAddAccountEntry"
                         text: parent.label
                         onClicked: {
                             accountCombo.currentIndex = parent.index
@@ -383,6 +412,7 @@ StandardPage {
                     }
 
                     QC.Button {
+                        objectName: "remoteGitHubCopyOpenButton"
                         text: "Copy and Open GitHub"
                         onClicked: {
                             if (gitHub.userCode && gitHub.userCode.length > 0) {
@@ -470,22 +500,71 @@ StandardPage {
                         Layout.fillWidth: true
                     }
 
-                    QC.Button {
-                        text: gitHub.busy ? "Refreshing…" : "Refresh"
-                        enabled: !gitHub.busy
-                        onClicked: gitHub.refreshRepositories()
+                    QC.ToolButton {
+                        objectName: "remoteRepositoryActionsButton"
+                        icon.source: "qrc:/twbs-icons/icons/list.svg"
+                        onClicked: repositoryActionsMenu.open()
+
+                        QC.Menu {
+                            id: repositoryActionsMenu
+
+                            QC.MenuItem {
+                                text: gitHub.busy ? "Refreshing…" : "Refresh"
+                                enabled: !gitHub.busy
+                                onTriggered: gitHub.refreshRepositories()
+                            }
+
+                            QC.MenuItem {
+                                text: "Upload SSH Key"
+                                enabled: !gitHub.busy
+                                onTriggered: gitHub.uploadPublicKey("")
+                            }
+
+                            QC.MenuSeparator {}
+
+                            QC.MenuItem {
+                                objectName: "remoteForgetAccountMenuItem"
+                                text: "Forget Account"
+                                enabled: !gitHub.busy
+                                onTriggered: forgetAccountDialog.open()
+                            }
+                        }
+                    }
+                }
+
+                QC.Dialog {
+                    id: forgetAccountDialog
+                    parent: page.Window.window ? page.Window.window.contentItem : page
+                    anchors.centerIn: parent
+                    modal: true
+                    title: "Forget GitHub Account?"
+
+                    Text {
+                        width: 320
+                        wrapMode: Text.WordWrap
+                        color: Theme.textSecondary
+                        text: "This will remove your saved GitHub account from CaveWhere on this device."
                     }
 
-                    QC.Button {
-                        text: "Upload SSH Key"
-                        enabled: !gitHub.busy
-                        onClicked: gitHub.uploadPublicKey("")
+                    footer: QC.DialogButtonBox {
+                        standardButtons: QC.DialogButtonBox.Cancel
+
+                        QC.Button {
+                            objectName: "remoteForgetAccountConfirmButton"
+                            text: "Remove"
+                            QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.AcceptRole
+                        }
                     }
 
-                    QC.Button {
-                        text: "Logout"
-                        enabled: !gitHub.busy
-                        onClicked: gitHub.logout()
+                    onAccepted: {
+                        const username = gitHub.username
+                        if (username.length > 0) {
+                            RootData.remoteAccountModel.removeAccount(RemoteAccountModel.GitHub, username)
+                        }
+
+                        gitHub.logout()
+                        accountCombo.currentIndex = 0
+                        page.state = "none"
                     }
                 }
 

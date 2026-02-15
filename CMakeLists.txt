@@ -280,6 +280,8 @@ if(BUILD_TESTING)
         SOURCES
             testlib/LoadProjectHelper.cpp
             testlib/LoadProjectHelper.h
+        QML_FILES
+            testlib/TesterAssistedGateDialog.qml
         # STATIC
         #QML_FILES
     )

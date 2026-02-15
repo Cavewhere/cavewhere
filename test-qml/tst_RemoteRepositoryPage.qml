@@ -7,9 +7,31 @@ import QmlTestRecorder
 MainWindowTest {
     id: rootId
 
+    TesterAssistedGateDialog {
+        id: testerAssistedGate
+        dialogParent: rootId
+        autoSkipCountdownSeconds: 5
+    }
+
     TestCase {
         name: "RemoteRepositoryPage"
         when: windowShown
+
+        function hasGitHubAccount(username) {
+            let expectedUsername = username === undefined ? "" : username.trim().toLowerCase()
+            for (let i = 0; i < RootData.remoteAccountModel.rowCount(); ++i) {
+                let accountIndex = RootData.remoteAccountModel.index(i, 0)
+                let provider = RootData.remoteAccountModel.data(accountIndex, RemoteAccountModel.ProviderRole)
+                let accountUsername = RootData.remoteAccountModel.data(accountIndex, RemoteAccountModel.UsernameRole)
+                let providerNumber = Number(provider)
+                let accountUsernameNormalized = String(accountUsername).trim().toLowerCase()
+                if (providerNumber === Number(RemoteAccountModel.GitHub)
+                        && (expectedUsername.length === 0 || accountUsernameNormalized === expectedUsername)) {
+                    return true
+                }
+            }
+            return false
+        }
 
         function init() {
             RootData.repositoryModel.clear()
@@ -124,6 +146,97 @@ MainWindowTest {
                 }
             }
             verify(foundPhakeCave)
+        }
+
+        function test_testerAssisted_addAndForgetGithubAccount() {
+            testerAssistedGate.beginDecision(
+                        "Add and forget GitHub account",
+                        "The test will click through the UI automatically.\n"
+                        + "You only need to complete GitHub device authorization when prompted.")
+            tryVerify(() => {
+                return testerAssistedGate.decisionReady
+            }, testerAssistedGate.decisionTimeoutMs)
+
+            if (!testerAssistedGate.runCurrentTest) {
+                skip("Tester-assisted tests were skipped by dialog choice or timeout.")
+                return
+            }
+
+            let remotePage = RootData.pageView.currentPageItem
+            verify(remotePage !== null)
+            compare(remotePage.objectName, "remoteRepositoryPage")
+
+            RootData.gitHubIntegration.logout()
+            RootData.remoteAccountModel.clear()
+            tryVerify(() => {
+                return RootData.gitHubIntegration.authState === GitHubIntegration.Idle
+                        && !hasGitHubAccount()
+            }, 10000)
+
+
+            let remoteAccountCombo_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->remoteRepositoryPage->remoteAccountCombo")
+            mouseClick(remoteAccountCombo_obj1)
+
+            let addAccountEntry = null
+            tryVerify(() => {
+                addAccountEntry = ObjectFinder.findObjectByChain(mainWindow, "Popup->remoteAddAccountEntry")
+                // addAccountEntry = findChild(mainWindow, "remoteAddAccountEntry")
+                return addAccountEntry !== null
+            }, 100000)
+            mouseClick(addAccountEntry)
+            // mouseClick(addAccountEntry)
+
+            let copyAndOpenButton = null
+            tryVerify(() => {
+                copyAndOpenButton = findChild(mainWindow, "remoteGitHubCopyOpenButton")
+                return RootData.gitHubIntegration.authState === GitHubIntegration.AwaitingVerification
+                        && copyAndOpenButton !== null
+                        && copyAndOpenButton.visible
+            }, 30000)
+            mouseClick(copyAndOpenButton)
+
+            console.log("[Tester Assisted] Complete GitHub device authorization in the opened browser page.")
+            tryVerify(() => {
+                                  let username = RootData.gitHubIntegration.username
+
+                                  let isAuthorized = RootData.gitHubIntegration.authState === GitHubIntegration.Authorized
+                                  let hasAccount = hasGitHubAccount(username)
+
+                                  return isAuthorized
+                                  && username.length > 0
+                                  && hasAccount
+                      }, 300000)
+
+            let connectedUsername = RootData.gitHubIntegration.username
+            verify(connectedUsername.length > 0)
+            verify(hasGitHubAccount(connectedUsername))
+
+            let repositoryActionsButton = null
+            tryVerify(() => {
+                repositoryActionsButton = findChild(mainWindow, "remoteRepositoryActionsButton")
+                return repositoryActionsButton !== null && repositoryActionsButton.visible && !RootData.gitHubIntegration.busy
+            }, 3000)
+            mouseClick(repositoryActionsButton)
+
+            let forgetAccountMenuItem = null
+            tryVerify(() => {
+                forgetAccountMenuItem = findChild(mainWindow, "remoteForgetAccountMenuItem")
+                return forgetAccountMenuItem !== null && forgetAccountMenuItem.visible && forgetAccountMenuItem.enabled
+            }, 1000)
+            mouseClick(forgetAccountMenuItem)
+
+            let removeButton = null
+            tryVerify(() => {
+                removeButton = findChild(mainWindow, "remoteForgetAccountConfirmButton")
+                return removeButton !== null && removeButton.visible
+            }, 1000)
+            mouseClick(removeButton)
+
+            tryVerify(() => {
+                return RootData.gitHubIntegration.authState === GitHubIntegration.Idle
+                        && remotePage.state === "none"
+                        && !hasGitHubAccount(connectedUsername)
+            }, 3000)
         }
     }
 }
