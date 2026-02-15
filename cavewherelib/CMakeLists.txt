@@ -166,7 +166,7 @@ foreach(file ${cavewhere_H_FILES})
 endforeach()
 
 # Get all QML and JS files
-file(GLOB cavewhere_QML_FILES "qml/*.qml" "qml/*.js")
+file(GLOB cavewhere_QML_FILES CONFIGURE_DEPENDS "qml/*.qml" "qml/*.js")
 
 # Define the list of QML singletons
 set(qml_singletons

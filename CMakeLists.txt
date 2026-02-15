@@ -361,7 +361,7 @@ if(BUILD_TESTING)
     target_sources(cavewhere-qml-test PRIVATE ${cavewhere_qml_test_QT_RESOURCES})
 
     # Make the remaining QML files relative to the project directory
-    file(GLOB cavewhere_qmltest_QML_FILES "test-qml/*.qml")
+    file(GLOB cavewhere_qmltest_QML_FILES CONFIGURE_DEPENDS "test-qml/*.qml")
     set(cavewhere_qmltest_RELATIVE_QML_FILES "")
     foreach(file ${cavewhere_qmltest_QML_FILES})
         file(RELATIVE_PATH relFile "${CMAKE_CURRENT_SOURCE_DIR}" "${file}")

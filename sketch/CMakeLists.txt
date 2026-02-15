@@ -78,7 +78,7 @@ foreach(file ${cwsketch_H_FILES})
 endforeach()
 
 # Get all QML and JS files
-file(GLOB cwsketch_QML_FILES "qml/*.qml" "qml/*.js")
+file(GLOB cwsketch_QML_FILES CONFIGURE_DEPENDS "qml/*.qml" "qml/*.js")
 
 # Define the list of QML singletons
 set(qml_singletons
@@ -279,5 +279,4 @@ target_link_libraries(cavewhere-sketch-test
     Catch2::Catch2
     Qt6::Test
 )
-
 
