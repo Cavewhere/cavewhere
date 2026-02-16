@@ -100,6 +100,7 @@ public:
     Q_INVOKABLE void cancelLogin();
     Q_INVOKABLE void cancelDeviceLoginFlow();
     Q_INVOKABLE void refreshRepositories();
+    Q_INVOKABLE void reloadAccessTokenFromCredentialStore();
     QVariantMap ensureKeyPair();
     Q_INVOKABLE void uploadPublicKey(const QString& title);
     void clearSession();
@@ -125,6 +126,7 @@ signals:
     void authorizationFailed(const QString& message);
     void profileResolved(const QString& username);
     void loggedOut(const QString& accountId);
+    void tokenInvalidated(const QString& accountId, const QString& message);
 
 private:
     void setAuthState(AuthState state);
@@ -135,6 +137,8 @@ private:
     void handleRepositoryReply(QNetworkReply* reply);
     void handleUploadReply(QNetworkReply* reply);
     void handleUserProfileReply(QNetworkReply* reply);
+    bool isUnauthorizedReply(QNetworkReply* reply) const;
+    void invalidateActiveAccountToken(const QString& message);
     QByteArray authorizationHeader() const;
     QString defaultKeyTitle() const;
     void storeAccessToken(const QString& token, const QString& accountId);

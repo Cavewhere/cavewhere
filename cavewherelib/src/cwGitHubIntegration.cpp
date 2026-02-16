@@ -171,6 +171,28 @@ void cwGitHubIntegration::refreshRepositories()
     });
 }
 
+void cwGitHubIntegration::reloadAccessTokenFromCredentialStore()
+{
+    if (!m_active) {
+        setActive(true);
+    }
+
+    if (!m_accessToken.isEmpty()) {
+        m_accessToken.clear();
+        emit accessTokenChanged();
+    }
+    if (!m_username.isEmpty()) {
+        m_username.clear();
+        emit usernameChanged();
+    }
+
+    setRepositories({});
+    setErrorMessage({});
+    setAuthState(AuthState::Idle);
+    m_hasLoadedStoredToken = false;
+    loadStoredAccessToken();
+}
+
 QVariantMap cwGitHubIntegration::ensureKeyPair()
 {
     if (!m_keyGenerator) {
@@ -438,6 +460,11 @@ void cwGitHubIntegration::setRepositories(std::vector<cwGitHubRepositoryItem> re
 void cwGitHubIntegration::handleUserProfileReply(QNetworkReply* reply)
 {
     QScopedPointer<QNetworkReply, QScopedPointerDeleteLater> guard(reply);
+    if (isUnauthorizedReply(reply)) {
+        invalidateActiveAccountToken(tr("GitHub session expired. Please sign in again."));
+        return;
+    }
+
     if (reply->error() != QNetworkReply::NoError) {
         qWarning() << "Failed to fetch GitHub profile:" << reply->errorString();
         return;
@@ -467,6 +494,11 @@ void cwGitHubIntegration::handleRepositoryReply(QNetworkReply* reply)
 {
     QScopedPointer<QNetworkReply, QScopedPointerDeleteLater> guard(reply);
     setBusy(false);
+
+    if (isUnauthorizedReply(reply)) {
+        invalidateActiveAccountToken(tr("GitHub session expired. Please sign in again."));
+        return;
+    }
 
     if (reply->error() != QNetworkReply::NoError) {
         setErrorMessage(reply->errorString());
@@ -505,6 +537,11 @@ void cwGitHubIntegration::handleUploadReply(QNetworkReply* reply)
     QScopedPointer<QNetworkReply, QScopedPointerDeleteLater> guard(reply);
     setBusy(false);
 
+    if (isUnauthorizedReply(reply)) {
+        invalidateActiveAccountToken(tr("GitHub session expired. Please sign in again."));
+        return;
+    }
+
     if (reply->error() == QNetworkReply::NoError) {
         setErrorMessage({});
         return;
@@ -528,6 +565,42 @@ void cwGitHubIntegration::handleUploadReply(QNetworkReply* reply)
 QByteArray cwGitHubIntegration::authorizationHeader() const
 {
     return QByteArrayLiteral("Bearer ") + m_accessToken.toUtf8();
+}
+
+bool cwGitHubIntegration::isUnauthorizedReply(QNetworkReply* reply) const
+{
+    if (reply == nullptr) {
+        return false;
+    }
+
+    const int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    return statusCode == 401;
+}
+
+void cwGitHubIntegration::invalidateActiveAccountToken(const QString& message)
+{
+    const QString accountId = resolveActiveGitHubAccountId();
+
+    if (!accountId.isEmpty()) {
+        clearStoredAccessToken(accountId);
+    }
+
+    if (!m_accessToken.isEmpty()) {
+        m_accessToken.clear();
+        emit accessTokenChanged();
+    }
+
+    if (!m_username.isEmpty()) {
+        m_username.clear();
+        emit usernameChanged();
+    }
+
+    setRepositories({});
+    setAuthState(AuthState::Error);
+    setErrorMessage(message.isEmpty()
+                        ? tr("GitHub session expired. Please sign in again.")
+                        : message);
+    emit tokenInvalidated(accountId, m_errorMessage);
 }
 
 QByteArray cwGitHubIntegration::lfsAuthorizationHeader() const

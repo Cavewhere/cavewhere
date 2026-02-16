@@ -17,10 +17,13 @@
 #include "cwErrorListModel.h"
 #include "GitRepository.h"
 #include "Account.h"
+#include "cwRemoteCredentialStore.h"
 #include "asyncfuture.h"
 
 //libgit2
 #include "git2.h"
+#include <qtkeychain/keychain.h>
+#include <QSignalSpy>
 
 //Std includes
 #include <exception>
@@ -335,6 +338,48 @@ cwCloneFixtureInfo TestHelper::createLocalBareRemoteForCloneTest()
     result.repoName = repoName;
     result.expectedClonePath = expectedClonePath;
     return result;
+}
+
+bool TestHelper::setGitHubAccessTokenForAccount(const QString& accountId,
+                                                const QString& token) const
+{
+    const QString key = cwRemoteCredentialStore::accessTokenKey(cwRemoteAccountModel::Provider::GitHub,
+                                                                 accountId);
+    if (key.isEmpty()) {
+        return false;
+    }
+
+    QKeychain::WritePasswordJob job(QStringLiteral("CaveWhere"));
+    job.setAutoDelete(false);
+    job.setKey(key);
+    job.setTextData(token);
+    QSignalSpy spy(&job, &QKeychain::Job::finished);
+    job.start();
+    if (!spy.wait(5000)) {
+        return false;
+    }
+
+    return job.error() == QKeychain::NoError;
+}
+
+bool TestHelper::clearGitHubAccessTokenForAccount(const QString& accountId) const
+{
+    const QString key = cwRemoteCredentialStore::accessTokenKey(cwRemoteAccountModel::Provider::GitHub,
+                                                                 accountId);
+    if (key.isEmpty()) {
+        return false;
+    }
+
+    QKeychain::DeletePasswordJob job(QStringLiteral("CaveWhere"));
+    job.setAutoDelete(false);
+    job.setKey(key);
+    QSignalSpy spy(&job, &QKeychain::Job::finished);
+    job.start();
+    if (!spy.wait(5000)) {
+        return false;
+    }
+
+    return job.error() == QKeychain::NoError || job.error() == QKeychain::EntryNotFound;
 }
 
 

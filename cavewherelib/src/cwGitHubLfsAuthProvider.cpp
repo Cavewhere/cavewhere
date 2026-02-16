@@ -28,6 +28,13 @@ cwGitHubLfsAuthProvider::cwGitHubLfsAuthProvider(cwGitHubIntegration* integratio
                              m_headerByAccountId.remove(accountId.trimmed());
                              m_inFlightLoads.remove(accountId.trimmed());
                          });
+        QObject::connect(m_integration, &cwGitHubIntegration::tokenInvalidated,
+                         this, [this](const QString& accountId, const QString& message) {
+                             Q_UNUSED(message)
+                             QWriteLocker locker(&m_headerByAccountLock);
+                             m_headerByAccountId.remove(accountId.trimmed());
+                             m_inFlightLoads.remove(accountId.trimmed());
+                         });
         QObject::connect(m_integration, &QObject::destroyed,
                          this, [this]() {
                              m_integration = nullptr;

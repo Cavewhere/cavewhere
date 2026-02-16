@@ -32,6 +32,8 @@ private:
     void bootstrapGitHubActiveAccount();
     void syncAuthorizedGitHubAccount();
     void handleGitHubLoggedOut(const QString& accountId);
+    void handleGitHubTokenInvalidated(const QString& accountId, const QString& message);
+    QString firstAuthorizedGitHubAccountExcluding(const QString& accountId) const;
 
     QPointer<cwGitHubIntegration> m_gitHubIntegration;
     QPointer<cwRemoteAccountModel> m_remoteAccountModel;

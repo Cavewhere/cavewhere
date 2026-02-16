@@ -17,6 +17,8 @@ cwRemoteAccountCoordinator::cwRemoteAccountCoordinator(cwGitHubIntegration* gitH
                 this, &cwRemoteAccountCoordinator::syncAuthorizedGitHubAccount);
         connect(m_gitHubIntegration, &cwGitHubIntegration::loggedOut,
                 this, &cwRemoteAccountCoordinator::handleGitHubLoggedOut);
+        connect(m_gitHubIntegration, &cwGitHubIntegration::tokenInvalidated,
+                this, &cwRemoteAccountCoordinator::handleGitHubTokenInvalidated);
     }
 
     bootstrapGitHubActiveAccount();
@@ -172,4 +174,60 @@ void cwRemoteAccountCoordinator::handleGitHubLoggedOut(const QString& accountId)
     }
 
     m_remoteAccountModel->setAuthState(accountId, cwRemoteAccountModel::AuthState::SignedOut);
+}
+
+void cwRemoteAccountCoordinator::handleGitHubTokenInvalidated(const QString& accountId, const QString& message)
+{
+    Q_UNUSED(message)
+
+    if (!m_remoteAccountModel) {
+        return;
+    }
+
+    const QString normalizedId = accountId.trimmed();
+    if (!normalizedId.isEmpty()) {
+        m_remoteAccountModel->setAuthState(normalizedId, cwRemoteAccountModel::AuthState::Revoked);
+    }
+
+    if (!m_gitHubIntegration) {
+        return;
+    }
+
+    const QString fallbackAccountId = firstAuthorizedGitHubAccountExcluding(normalizedId);
+    if (fallbackAccountId.isEmpty()) {
+        return;
+    }
+
+    m_remoteAccountModel->setActiveAccount(cwRemoteAccountModel::Provider::GitHub, fallbackAccountId);
+    m_gitHubIntegration->setActiveAccountId(fallbackAccountId);
+}
+
+QString cwRemoteAccountCoordinator::firstAuthorizedGitHubAccountExcluding(const QString& accountId) const
+{
+    if (!m_remoteAccountModel) {
+        return {};
+    }
+
+    const QString excludedId = accountId.trimmed();
+    for (int row = 0; row < m_remoteAccountModel->rowCount(); ++row) {
+        const QModelIndex index = m_remoteAccountModel->index(row, 0);
+        const auto provider = static_cast<cwRemoteAccountModel::Provider>(
+            m_remoteAccountModel->data(index, cwRemoteAccountModel::ProviderRole).toInt());
+        if (provider != cwRemoteAccountModel::Provider::GitHub) {
+            continue;
+        }
+
+        const QString candidateId = m_remoteAccountModel->data(index, cwRemoteAccountModel::AccountIdRole).toString().trimmed();
+        if (candidateId.isEmpty() || candidateId == excludedId) {
+            continue;
+        }
+
+        const auto authState = static_cast<cwRemoteAccountModel::AuthState>(
+            m_remoteAccountModel->data(index, cwRemoteAccountModel::AuthStateRole).toInt());
+        if (authState == cwRemoteAccountModel::AuthState::Authorized) {
+            return candidateId;
+        }
+    }
+
+    return {};
 }

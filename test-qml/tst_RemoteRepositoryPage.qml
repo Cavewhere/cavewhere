@@ -47,6 +47,19 @@ MainWindowTest {
             return ""
         }
 
+        function githubAccountAuthState(accountId) {
+            let expectedId = String(accountId).trim()
+            for (let i = 0; i < RootData.remote.accountModel.rowCount(); ++i) {
+                let accountIndex = RootData.remote.accountModel.index(i, 0)
+                let candidateId = String(RootData.remote.accountModel.data(accountIndex, RemoteAccountModel.AccountIdRole))
+                if (candidateId !== expectedId) {
+                    continue
+                }
+                return Number(RootData.remote.accountModel.data(accountIndex, RemoteAccountModel.AuthStateRole))
+            }
+            return Number(RemoteAccountModel.Unknown)
+        }
+
         function findObjectWithText(rootObject, expectedText) {
             if (rootObject === null || rootObject === undefined) {
                 return null
@@ -447,6 +460,61 @@ MainWindowTest {
                 return RootData.remote.gitHubIntegration.activeAccountId === firstAccountId
                         && RootData.remote.accountModel.activeAccountId(RemoteAccountModel.GitHub) === firstAccountId
             }, 3000)
+
+            forgetAllGitHubAccountsViaCoordinator()
+        }
+
+        function test_testerAssisted_invalidGithubToken_revokesAccount() {
+            testerAssistedGate.beginDecision(
+                        "Invalid GitHub token revokes account",
+                        "The test will add one GitHub account through device flow.\n"
+                        + "Then it corrupts the stored token in keychain and verifies revoke/error handling.\n"
+                        + "After the revoke message appears, please reconnect the same account in the next device-flow step.")
+            tryVerify(() => {
+                return testerAssistedGate.decisionReady
+            }, testerAssistedGate.decisionTimeoutMs)
+
+            if (!testerAssistedGate.runCurrentTest) {
+                skip("Tester-assisted tests were skipped by dialog choice or timeout.")
+                return
+            }
+
+            RootData.pageSelectionModel.currentPageAddress = "Remote"
+            tryVerify(() => {
+                return RootData.pageView.currentPageItem !== null
+                       && RootData.pageView.currentPageItem.objectName === "remoteRepositoryPage"
+            })
+
+            forgetAllGitHubAccountsViaCoordinator()
+            tryVerify(() => {
+                return RootData.remote.gitHubIntegration.authState === GitHubIntegration.Idle
+                        && !hasGitHubAccount()
+            }, 10000)
+
+            let username = addGithubAccountThroughDeviceFlow()
+            let accountId = githubAccountId(username)
+            verify(accountId.length > 0)
+
+            verify(TestHelper.setGitHubAccessTokenForAccount(accountId, "cw-invalid-token-for-assisted-test"),
+                   "Failed to overwrite active GitHub token in keychain")
+
+            RootData.remote.gitHubIntegration.reloadAccessTokenFromCredentialStore()
+            tryVerify(() => {
+                return RootData.remote.gitHubIntegration.authState === GitHubIntegration.Authorized
+            }, 10000)
+
+            RootData.remote.gitHubIntegration.refreshRepositories()
+
+            tryVerify(() => {
+                let errorText = String(RootData.remote.gitHubIntegration.errorMessage).toLowerCase()
+                return RootData.remote.gitHubIntegration.authState === GitHubIntegration.Error
+                        && githubAccountAuthState(accountId) === Number(RemoteAccountModel.Revoked)
+                        && errorText.indexOf("expired") !== -1
+            }, 30000)
+
+            let reconnectButton = findChild(mainWindow, "remoteGitHubConnectButton")
+            verify(reconnectButton !== null)
+            compare(reconnectButton.text, "Reconnect to GitHub")
 
             forgetAllGitHubAccountsViaCoordinator()
         }

@@ -61,7 +61,7 @@ StandardPage {
                 },
                 PropertyChanges {
                     target: gitHubGroup
-                    visible: false
+                    visible: gitHub.authState !== GitHubIntegration.Authorized
                 },
                 PropertyChanges {
                     target: repositoryLoader
@@ -428,7 +428,8 @@ StandardPage {
                     visible: gitHub.authState !== GitHubIntegration.AwaitingVerification
 
                     QC.Button {
-                        text: gitHub.authState === GitHubIntegration.Error ? "Try Again" : "Connect to GitHub"
+                        objectName: "remoteGitHubConnectButton"
+                        text: gitHub.authState === GitHubIntegration.Error ? "Reconnect to GitHub" : "Connect to GitHub"
                         enabled: !gitHub.busy
                         onClicked: gitHub.startDeviceLogin()
                     }

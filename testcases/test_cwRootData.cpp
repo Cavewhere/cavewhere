@@ -147,8 +147,10 @@ TEST_CASE("cwRootData GitHub LFS auth provider should use GitHub integration tok
     cwRootData rootData;
     auto* accountModel = rootData.remote()->accountModel();
     auto* bindingStore = rootData.remote()->bindingStore();
+    auto* accountCoordinator = rootData.remote()->accountCoordinator();
     REQUIRE(accountModel != nullptr);
     REQUIRE(bindingStore != nullptr);
+    REQUIRE(accountCoordinator != nullptr);
 
     const QString accountIdA = accountModel->upsertAccount(cwRemoteAccountModel::Provider::GitHub,
                                                             QStringLiteral("cwtestuser-a"));
@@ -235,6 +237,17 @@ TEST_CASE("cwRootData GitHub LFS auth provider should use GitHub integration tok
     bindingStore->bindRemoteToAccount(githubRepoB.toString(), accountIdB);
     const QByteArray activeBoundHeader = waitForHeader(provider.get(), githubRepoB, expectedHeaderB);
     CHECK(activeBoundHeader == expectedHeaderB);
+
+    // Token invalidation should revoke account B and remove its LFS authorization.
+    REQUIRE(QMetaObject::invokeMethod(integration,
+                                      "tokenInvalidated",
+                                      Qt::DirectConnection,
+                                      Q_ARG(QString, accountIdB),
+                                      Q_ARG(QString, QStringLiteral("expired"))));
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+    CHECK(accountModel->accountById(accountIdB).authState
+          == static_cast<int>(cwRemoteAccountModel::AuthState::Revoked));
+    CHECK(provider->authorizationHeader(githubRepoB).isEmpty());
 
     CHECK(provider->authorizationHeader(QUrl(QStringLiteral("https://gitlab.com/group/repo.git/info/lfs"))).isEmpty());
 }

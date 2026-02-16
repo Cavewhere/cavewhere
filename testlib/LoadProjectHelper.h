@@ -84,6 +84,9 @@ public:
                                             const QString& remoteName = QStringLiteral("origin")) const;
     Q_INVOKABLE QString normalizeFileGitUrl(const QString& url) const;
     Q_INVOKABLE cwCloneFixtureInfo createLocalBareRemoteForCloneTest();
+    Q_INVOKABLE bool setGitHubAccessTokenForAccount(const QString& accountId,
+                                                    const QString& token) const;
+    Q_INVOKABLE bool clearGitHubAccessTokenForAccount(const QString& accountId) const;
 
     Q_INVOKABLE QUrl tempDirectoryUrl() {
         QTemporaryDir dir;
