@@ -51,6 +51,7 @@ signals:
     void pendingCloneDirChanged();
     void accountChanged();
     void repositoryCloned(QString repositoryPath);
+    void repositoryClonedWithRemote(QString repositoryPath, QString remoteUrl);
     void repositoryClonedIndex(int index);
 
 private:
@@ -67,4 +68,5 @@ private:
     QString m_cloneErrorMessage;
     QString m_cloneStatusMessage;
     QString m_pendingCloneDir;
+    QString m_pendingCloneUrl;
 };

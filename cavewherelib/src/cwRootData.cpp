@@ -24,10 +24,7 @@
 #include "cwTaskManagerModel.h"
 #include "cwPageSelectionModel.h"
 #include "cwSettings.h"
-#include "cwGitHubIntegration.h"
-#include "cwGitHubLfsAuthProvider.h"
-#include "cwRemoteAccountModel.h"
-#include "cwRemoteAccountSelectionModel.h"
+#include "cwRemoteServices.h"
 // #include "cwImageCompressionUpdater.h"
 #include "cwJobSettings.h"
 #include "cwSurveyNoteModel.h"
@@ -42,7 +39,6 @@
 #include <QProcess>
 #include <QDesktopServices>
 #include <QClipboard>
-#include <memory>
 
 //Generated files from qbs
 #include "cavewhereVersion.h"
@@ -59,7 +55,6 @@ cwRootData::cwRootData(QObject *parent) :
     m_account(new QQuickGit::Account(this)),
     m_accountWatcher(new QQuickGit::AccountSettingWatcher(this)),
     m_repositoryModel(new cwRepositoryModel(this)),
-    m_gitHubIntegration(nullptr),
     DefaultTrip(new cwTrip(this)),
     DefaultTripCalibration(new cwTripCalibration(this))
 {
@@ -78,9 +73,7 @@ cwRootData::cwRootData(QObject *parent) :
     // Project->setTaskManager(TaskManagerModel);
     Project->setFutureManagerToken(FutureManagerModel);
     m_repositoryModel->setProject(Project);
-
-    QQuickGit::LfsBatchClient::setLfsAuthProvider(
-        std::make_shared<cwGitHubLfsAuthProvider>(gitHubIntegration()));
+    remote();
 
     Region = Project->cavingRegion();
     Region->setUndoStack(undoStack());
@@ -365,18 +358,10 @@ void cwRootData::initCavewherelib()
     QQuickGit::GitRepository::initGitEngine();
 }
 
-cwGitHubIntegration* cwRootData::gitHubIntegration() const
+cwRemoteServices* cwRootData::remote() const
 {
-    if (!m_gitHubIntegration) {
-        m_gitHubIntegration = new cwGitHubIntegration(const_cast<cwRootData*>(this));
+    if (!m_remoteServices) {
+        m_remoteServices = new cwRemoteServices(const_cast<cwRootData*>(this));
     }
-    return m_gitHubIntegration;
-}
-
-cwRemoteAccountModel* cwRootData::remoteAccountModel() const
-{
-    if (!m_remoteAccountModel) {
-        m_remoteAccountModel = new cwRemoteAccountModel(const_cast<cwRootData*>(this));
-    }
-    return m_remoteAccountModel;
+    return m_remoteServices;
 }

@@ -46,6 +46,8 @@ QVariant cwRemoteAccountSelectionModel::data(const QModelIndex& index, int role)
             return static_cast<int>(cwRemoteAccountModel::Provider::Unknown);
         } else if (role == UsernameRole) {
             return QString();
+        } else if (role == AccountIdRole) {
+            return QString();
         } else if (role == EntryTypeRole) {
             return NoneEntry;
         }
@@ -71,6 +73,8 @@ QVariant cwRemoteAccountSelectionModel::data(const QModelIndex& index, int role)
             return m_baseModel->data(qIdx, cwRemoteAccountModel::ProviderRole);
         case UsernameRole:
             return m_baseModel->data(qIdx, cwRemoteAccountModel::UsernameRole);
+        case AccountIdRole:
+            return m_baseModel->data(qIdx, cwRemoteAccountModel::AccountIdRole);
         case EntryTypeRole:
             return AccountEntry;
         default:
@@ -94,6 +98,8 @@ QVariant cwRemoteAccountSelectionModel::data(const QModelIndex& index, int role)
             return static_cast<int>(cwRemoteAccountModel::Provider::Unknown);
         } else if (role == UsernameRole) {
             return QString();
+        } else if (role == AccountIdRole) {
+            return QString();
         } else if (role == EntryTypeRole) {
             return AddEntry;
         }
@@ -109,6 +115,7 @@ QHash<int, QByteArray> cwRemoteAccountSelectionModel::roleNames() const
         { LabelRole, "label" },
         { ProviderRole, "provider" },
         { UsernameRole, "username" },
+        { AccountIdRole, "accountId" },
         { EntryTypeRole, "entryType" }
     };
 }

@@ -25,6 +25,7 @@ public:
         LabelRole = Qt::UserRole + 1,
         ProviderRole,
         UsernameRole,
+        AccountIdRole,
         EntryTypeRole
     };
     Q_ENUM(Roles);

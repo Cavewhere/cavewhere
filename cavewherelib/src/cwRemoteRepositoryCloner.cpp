@@ -136,6 +136,7 @@ void cwRemoteRepositoryCloner::clone(const QString& urlText, const QUrl& destina
 
     const QDir dir = resultDir.value();
     setPendingCloneDir(dir.path());
+    m_pendingCloneUrl = normalizedUrl;
     if (m_cloneRepository) {
         m_cloneRepository->setDirectory(dir);
         setCloneStatusMessage(QStringLiteral("Starting clone..."));
@@ -184,11 +185,13 @@ void cwRemoteRepositoryCloner::handleCloneWatcherStateChanged()
         setCloneErrorMessage(m_cloneWatcher->errorMessage());
         setCloneStatusMessage(QString());
         setPendingCloneDir(QString());
+        m_pendingCloneUrl.clear();
         return;
     }
 
     if (m_pendingCloneDir.isEmpty() || !m_repositoryModel) {
         setPendingCloneDir(QString());
+        m_pendingCloneUrl.clear();
         return;
     }
 
@@ -198,6 +201,7 @@ void cwRemoteRepositoryCloner::handleCloneWatcherStateChanged()
     } else {
         setCloneStatusMessage(QStringLiteral("Clone complete."));
         emit repositoryCloned(m_pendingCloneDir);
+        emit repositoryClonedWithRemote(m_pendingCloneDir, m_pendingCloneUrl);
         int clonedIndex = -1;
         for (int row = 0; row < m_repositoryModel->rowCount(); ++row) {
             const QString rowPath = m_repositoryModel->data(m_repositoryModel->index(row, 0),
@@ -210,6 +214,7 @@ void cwRemoteRepositoryCloner::handleCloneWatcherStateChanged()
         emit repositoryClonedIndex(clonedIndex);
     }
     setPendingCloneDir(QString());
+    m_pendingCloneUrl.clear();
 }
 
 void cwRemoteRepositoryCloner::handleCloneWatcherProgressTextChanged()

@@ -10,32 +10,8 @@ StandardPage {
     id: page
     objectName: "remoteRepositoryPage"
 
-    property GitHubIntegration gitHub: RootData.gitHubIntegration
-
-    function syncAuthorizedGitHubAccount() {
-        if (gitHub.authState !== GitHubIntegration.Authorized) {
-            return
-        }
-        if (gitHub.username.length === 0) {
-            return
-        }
-
-        RootData.remoteAccountModel.addOrUpdateAccount(RemoteAccountModel.GitHub, gitHub.username)
-
-        if (page.state === "addAccount") {
-            page.state = "githubAccount"
-        }
-    }
-
-    Connections {
-        target: gitHub
-        function onAuthStateChanged() {
-            page.syncAuthorizedGitHubAccount()
-        }
-        function onUsernameChanged() {
-            page.syncAuthorizedGitHubAccount()
-        }
-    }
+    property GitHubIntegration gitHub: RootData.remote.gitHubIntegration
+    property RemoteAccountCoordinator remoteAccountCoordinator: RootData.remote.accountCoordinator
 
     state: "none"
     states: [
@@ -72,7 +48,7 @@ StandardPage {
                 },
                 PropertyChanges {
                     target: repositoryLoader
-                    active: false
+                    active: gitHub.authState === GitHubIntegration.Authorized
                 }
             ]
         },
@@ -153,6 +129,10 @@ StandardPage {
             }
 
             RootData.pageSelectionModel.gotoPageByName(null, "View")
+        }
+
+        onRepositoryClonedWithRemote: function(repositoryPath, remoteUrl) {
+            remoteAccountCoordinator.bindRemoteToActiveGitHubAccount(remoteUrl)
         }
     }
 
@@ -276,7 +256,7 @@ StandardPage {
 
                 model: RemoteAccountSelectionModel {
                     id: accountSelectionModel
-                    sourceModel: RootData.remoteAccountModel
+                    sourceModel: RootData.remote.accountModel
                     onEntriesChanged: {
                         if (accountCombo.currentIndex < 0 || accountCombo.currentIndex >= accountCombo.count) {
                             accountCombo.currentIndex = 0
@@ -290,6 +270,8 @@ StandardPage {
                     required property int entryType
                     required property int provider
                     required property string label
+                    required property string username
+                    required property string accountId
                     required property int index
 
                     width: accountCombo.width
@@ -324,6 +306,7 @@ StandardPage {
                 Component {
                     id: userAccountEntryDelegate
                     QC.ItemDelegate {
+                        objectName: "remoteUserAccountEntry_" + parent.accountId
                         text: parent.label
 
                         property int provider: parent.provider
@@ -331,6 +314,10 @@ StandardPage {
                         enabled: provider !== RemoteAccountModel.Unknown
                         onClicked: {
                             accountCombo.currentIndex = parent.index
+                            let selectedUsername = parent.username === undefined ? "" : String(parent.username)
+                            if (provider === RemoteAccountModel.GitHub && selectedUsername.length > 0) {
+                                remoteAccountCoordinator.selectGitHubAccount(selectedUsername)
+                            }
                             page.state = provider === RemoteAccountModel.GitHub ? "githubAccount" : "none"
                             accountCombo.popup.close()
                         }
@@ -346,7 +333,7 @@ StandardPage {
                         onClicked: {
                             accountCombo.currentIndex = parent.index
                             page.state = "addAccount"
-                            gitHub.startDeviceLogin()
+                            remoteAccountCoordinator.startAddGitHubAccount()
                             accountCombo.popup.close()
                         }
                         highlighted: hovered
@@ -557,12 +544,7 @@ StandardPage {
                     }
 
                     onAccepted: {
-                        const username = gitHub.username
-                        if (username.length > 0) {
-                            RootData.remoteAccountModel.removeAccount(RemoteAccountModel.GitHub, username)
-                        }
-
-                        gitHub.logout()
+                        remoteAccountCoordinator.forgetGitHubAccount()
                         accountCombo.currentIndex = 0
                         page.state = "none"
                     }

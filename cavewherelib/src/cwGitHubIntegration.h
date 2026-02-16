@@ -9,6 +9,7 @@
 #include <QQmlEngine>
 #include <QMetaType>
 #include <QByteArray>
+#include <QPointer>
 
 //Std includes
 #include <memory>
@@ -20,6 +21,7 @@
 namespace QQuickGit {
 class RSAKeyGenerator;
 }
+class cwRemoteCredentialStore;
 
 struct cwGitHubRepositoryItem
 {
@@ -65,6 +67,7 @@ class cwGitHubIntegration : public QObject
     Q_PROPERTY(int secondsUntilNextPoll READ secondsUntilNextPoll NOTIFY secondsUntilNextPollChanged)
     Q_PROPERTY(bool verificationOpened READ verificationOpened NOTIFY verificationOpenedChanged)
     Q_PROPERTY(QString username READ username NOTIFY usernameChanged)
+    Q_PROPERTY(QString activeAccountId READ activeAccountId NOTIFY activeAccountIdChanged)
 
 public:
     enum class AuthState {
@@ -76,7 +79,8 @@ public:
     };
     Q_ENUM(AuthState)
 
-    explicit cwGitHubIntegration(QObject* parent = nullptr);
+    explicit cwGitHubIntegration(cwRemoteCredentialStore* credentialStore,
+                                 QObject* parent = nullptr);
 
     AuthState authState() const { return m_authState; }
     QString userCode() const { return m_deviceInfo.userCode; }
@@ -88,6 +92,7 @@ public:
     int secondsUntilNextPoll() const { return m_secondsUntilNextPoll; }
     bool verificationOpened() const { return m_hasOpenedVerificationUrl; }
     QString username() const { return m_username; }
+    QString activeAccountId() const { return m_activeAccountId; }
 
     void setActive(bool active);
 
@@ -95,11 +100,13 @@ public:
     Q_INVOKABLE void cancelLogin();
     Q_INVOKABLE void cancelDeviceLoginFlow();
     Q_INVOKABLE void refreshRepositories();
-    Q_INVOKABLE QVariantMap ensureKeyPair();
+    QVariantMap ensureKeyPair();
     Q_INVOKABLE void uploadPublicKey(const QString& title);
-    Q_INVOKABLE void clearSession();
+    void clearSession();
     Q_INVOKABLE void markVerificationOpened();
-    Q_INVOKABLE void logout();
+    void logout();
+    void setActiveAccountId(const QString& accountId);
+    void persistCurrentAccessTokenForAccount(const QString& accountId);
     QByteArray lfsAuthorizationHeader() const;
 
 signals:
@@ -113,6 +120,11 @@ signals:
     void secondsUntilNextPollChanged();
     void verificationOpenedChanged();
     void usernameChanged();
+    void activeAccountIdChanged();
+    void authorizationSucceeded();
+    void authorizationFailed(const QString& message);
+    void profileResolved(const QString& username);
+    void loggedOut(const QString& accountId);
 
 private:
     void setAuthState(AuthState state);
@@ -125,11 +137,12 @@ private:
     void handleUserProfileReply(QNetworkReply* reply);
     QByteArray authorizationHeader() const;
     QString defaultKeyTitle() const;
-    void storeAccessToken(const QString& token);
+    void storeAccessToken(const QString& token, const QString& accountId);
     void loadStoredAccessToken();
-    void clearStoredAccessToken();
+    void clearStoredAccessToken(const QString& accountId);
     void fetchUserProfile();
     void setRepositories(std::vector<cwGitHubRepositoryItem> repositories);
+    QString resolveActiveGitHubAccountId() const;
 
     static QString resolveClientId();
 
@@ -145,9 +158,11 @@ private:
     bool m_active = false;
     bool m_hasLoadedStoredToken = false;
     bool m_loadingStoredToken = false;
+    QPointer<cwRemoteCredentialStore> m_credentialStore;
 
     std::unique_ptr<QQuickGit::RSAKeyGenerator> m_keyGenerator;
     int m_secondsUntilNextPoll = 0;
     bool m_hasOpenedVerificationUrl = false;
     QString m_username;
+    QString m_activeAccountId;
 };
