@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QQmlEngine>
+#include <QUrl>
 
 #include "CaveWhereLibExport.h"
 
@@ -33,6 +34,8 @@ public:
     cwRemoteAccountCoordinator* accountCoordinator() const;
 
 private:
+    void handleLfsAuthenticationFailed(const QUrl& url, int httpStatus, const QString& message);
+
     mutable cwGitHubIntegration* m_gitHubIntegration = nullptr;
     mutable cwRemoteAccountModel* m_accountModel = nullptr;
     mutable cwRemoteCredentialStore* m_credentialStore = nullptr;

@@ -7,6 +7,7 @@
 #include "cwRemoteBindingStore.h"
 #include "cwRemoteAccountCoordinator.h"
 #include "LfsBatchClient.h"
+#include "LfsAuthFailureNotifier.h"
 
 #include <memory>
 
@@ -18,6 +19,11 @@ cwRemoteServices::cwRemoteServices(QObject* parent)
                                                   accountModel(),
                                                   bindingStore(),
                                                   credentialStore()));
+
+    QObject::connect(QQuickGit::LfsBatchClient::authFailureNotifier(),
+                     &QQuickGit::LfsAuthFailureNotifier::authenticationFailed,
+                     this,
+                     &cwRemoteServices::handleLfsAuthenticationFailed);
 }
 
 cwGitHubIntegration* cwRemoteServices::gitHubIntegration() const
@@ -62,4 +68,15 @@ cwRemoteAccountCoordinator* cwRemoteServices::accountCoordinator() const
                                                               const_cast<cwRemoteServices*>(this));
     }
     return m_accountCoordinator;
+}
+
+void cwRemoteServices::handleLfsAuthenticationFailed(const QUrl& url,
+                                                     int httpStatus,
+                                                     const QString& message)
+{
+    if (!accountCoordinator()) {
+        return;
+    }
+
+    accountCoordinator()->handleGitHubLfsAuthFailure(url, httpStatus, message);
 }

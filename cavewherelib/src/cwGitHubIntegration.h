@@ -108,6 +108,7 @@ public:
     void logout();
     void setActiveAccountId(const QString& accountId);
     void persistCurrentAccessTokenForAccount(const QString& accountId);
+    void invalidateAccountToken(const QString& accountId, const QString& message = QString());
     QByteArray lfsAuthorizationHeader() const;
 
 signals:

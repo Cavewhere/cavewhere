@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QQmlEngine>
 #include <QPointer>
+#include <QUrl>
 
 #include "CaveWhereLibExport.h"
 #include "cwGitHubIntegration.h"
@@ -26,6 +27,7 @@ public:
     Q_INVOKABLE void startAddGitHubAccount();
     Q_INVOKABLE void selectGitHubAccount(const QString& username);
     Q_INVOKABLE void bindRemoteToActiveGitHubAccount(const QString& remoteUrl);
+    void handleGitHubLfsAuthFailure(const QUrl& remoteUrl, int httpStatus, const QString& message);
 
 private:
     QString initialGitHubAccountId() const;

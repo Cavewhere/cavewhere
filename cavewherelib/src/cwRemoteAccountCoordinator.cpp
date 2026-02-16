@@ -105,6 +105,39 @@ void cwRemoteAccountCoordinator::bindRemoteToActiveGitHubAccount(const QString& 
     m_remoteBindingStore->bindRemoteToAccount(remoteUrl, accountId);
 }
 
+void cwRemoteAccountCoordinator::handleGitHubLfsAuthFailure(const QUrl& remoteUrl,
+                                                            int httpStatus,
+                                                            const QString& message)
+{
+    if (!m_gitHubIntegration) {
+        return;
+    }
+
+    QString accountId;
+    if (m_remoteBindingStore) {
+        accountId = m_remoteBindingStore->accountIdForRemote(remoteUrl.toString()).trimmed();
+    }
+
+    if (accountId.isEmpty()) {
+        accountId = m_gitHubIntegration->activeAccountId().trimmed();
+    }
+
+    if (accountId.isEmpty()) {
+        accountId = initialGitHubAccountId();
+    }
+
+    QString reason = message.trimmed();
+    if (reason.isEmpty()) {
+        if (httpStatus == 401 || httpStatus == 403) {
+            reason = tr("GitHub session expired. Please sign in again.");
+        } else {
+            reason = tr("GitHub authentication failed. Please sign in again.");
+        }
+    }
+
+    m_gitHubIntegration->invalidateAccountToken(accountId, reason);
+}
+
 void cwRemoteAccountCoordinator::syncAuthorizedGitHubAccount()
 {
     if (!m_gitHubIntegration || !m_remoteAccountModel) {

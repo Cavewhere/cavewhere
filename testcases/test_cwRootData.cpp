@@ -11,6 +11,7 @@
 #include "cwRemoteCredentialStore.h"
 #include "cwRemoteAccountModel.h"
 #include "cwRemoteBindingStore.h"
+#include "cwRemoteAccountCoordinator.h"
 #include "LfsBatchClient.h"
 
 //Qt includes
@@ -238,12 +239,10 @@ TEST_CASE("cwRootData GitHub LFS auth provider should use GitHub integration tok
     const QByteArray activeBoundHeader = waitForHeader(provider.get(), githubRepoB, expectedHeaderB);
     CHECK(activeBoundHeader == expectedHeaderB);
 
-    // Token invalidation should revoke account B and remove its LFS authorization.
-    REQUIRE(QMetaObject::invokeMethod(integration,
-                                      "tokenInvalidated",
-                                      Qt::DirectConnection,
-                                      Q_ARG(QString, accountIdB),
-                                      Q_ARG(QString, QStringLiteral("expired"))));
+    // LFS auth failure should invalidate account B token, revoke the account, and clear LFS auth.
+    accountCoordinator->handleGitHubLfsAuthFailure(githubRepoB,
+                                                   401,
+                                                   QStringLiteral("LFS auth failed"));
     QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
     CHECK(accountModel->accountById(accountIdB).authState
           == static_cast<int>(cwRemoteAccountModel::AuthState::Revoked));

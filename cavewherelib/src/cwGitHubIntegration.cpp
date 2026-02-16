@@ -289,6 +289,15 @@ void cwGitHubIntegration::persistCurrentAccessTokenForAccount(const QString& acc
     storeAccessToken(m_accessToken, normalized);
 }
 
+void cwGitHubIntegration::invalidateAccountToken(const QString& accountId, const QString& message)
+{
+    const QString normalized = accountId.trimmed();
+    if (!normalized.isEmpty()) {
+        setActiveAccountId(normalized);
+    }
+    invalidateActiveAccountToken(message);
+}
+
 void cwGitHubIntegration::setAuthState(AuthState state)
 {
     if (m_authState == state) {
