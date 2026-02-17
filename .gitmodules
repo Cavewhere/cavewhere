@@ -49,3 +49,6 @@
 [submodule "installer/linux/appimagetool"]
 	path = installer/linux/appimagetool
 	url = https://github.com/AppImage/appimagetool
+[submodule "qlibssh2"]
+	path = qlibssh2
+	url = git@github.com:vpicaver/qlibssh2.git
