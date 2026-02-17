@@ -293,8 +293,16 @@ MainWindowTest {
         }
 
         function test_repro_cloneGithubPhakeCave3000() {
-            if (TestHelper.environmentVariable("CW_QML_REPRO_GITHUB_CLONE") !== "1") {
-                skip("Set CW_QML_REPRO_GITHUB_CLONE=1 to run SSH GitHub clone repro test.")
+
+            testerAssistedGate.beginDecision(
+                        "Clone PhakeCave3000 using ssh.",
+                        "Make sure ssh keys are uploaded");
+            tryVerify(() => {
+                return testerAssistedGate.decisionReady
+            }, testerAssistedGate.decisionTimeoutMs)
+
+            if (!testerAssistedGate.runCurrentTest) {
+                skip("Tester-assisted tests were skipped by dialog choice or timeout.")
                 return
             }
 
