@@ -281,6 +281,8 @@ if(BUILD_TESTING)
         SOURCES
             testlib/LoadProjectHelper.cpp
             testlib/LoadProjectHelper.h
+            QQuickGit/tests/lfs/LfsServer.cpp
+            QQuickGit/tests/lfs/LfsServer.h
         QML_FILES
             testlib/TesterAssistedGateDialog.qml
         # STATIC
@@ -314,6 +316,9 @@ if(BUILD_TESTING)
     target_include_directories(cavewhere-testlib PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/testlib
         ${CMAKE_CURRENT_BINARY_DIR}
+    )
+    target_include_directories(cavewhere-testlib PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/QQuickGit/tests/lfs
     )
 
     #### cavewhere-test ####

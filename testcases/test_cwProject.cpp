@@ -4748,7 +4748,7 @@ TEST_CASE("cwProject sync surfaces remote access failure and preserves local com
     CHECK(project->isModified() == false);
 }
 
-TEST_CASE("cwProject sync is reentrant and converges to deterministic head", "[cwProject]") {
+TEST_CASE("cwProject sync rejects reentry and converges to deterministic head", "[cwProject]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
 
@@ -4830,7 +4830,7 @@ TEST_CASE("cwProject sync is reentrant and converges to deterministic head", "[c
 
     project->errorModel()->clear();
     REQUIRE(project->sync());
-    REQUIRE(project->sync());
+    CHECK_FALSE(project->sync());
     rootData->futureManagerModel()->waitForFinished();
     project->waitSaveToFinish();
 
@@ -7817,6 +7817,41 @@ TEST_CASE("cwProject should overwrite or touch loaded project", "[cwProject]") {
 
         //Make sure non of the other files have changed
         checkLoadTimes(modifiedLoad, initialLoad);
+    }
+}
+
+TEST_CASE("V6 conversion writes note image paths relative to note file",
+          "[cwProject][conversion][regression]")
+{
+    auto root = std::make_unique<cwRootData>();
+    const QString sourceFilename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+
+    root->project()->loadOrConvert(sourceFilename);
+    root->project()->waitLoadToFinish();
+    root->project()->waitSaveToFinish();
+
+    const QString convertedProjectFile = root->project()->filename();
+    REQUIRE(root->project()->projectType(convertedProjectFile) == cwProject::GitFileType);
+
+    const QString projectRootPath = QFileInfo(convertedProjectFile).absolutePath();
+    QStringList noteProtoFiles;
+    QDirIterator iterator(projectRootPath,
+                          QStringList{QStringLiteral("*.cwnote")},
+                          QDir::Files,
+                          QDirIterator::Subdirectories);
+    while (iterator.hasNext()) {
+        noteProtoFiles.append(iterator.next());
+    }
+    REQUIRE(!noteProtoFiles.isEmpty());
+
+    for (const QString& noteFile : noteProtoFiles) {
+        const auto noteProto = loadProtoFromJsonFile<CavewhereProto::Note>(noteFile);
+        if (!noteProto.has_image() || noteProto.image().path().empty()) {
+            continue;
+        }
+
+        const QString imagePath = QString::fromStdString(noteProto.image().path());
+        CHECK(imagePath.toStdString() == QFileInfo(imagePath).fileName().toStdString());
     }
 }
 

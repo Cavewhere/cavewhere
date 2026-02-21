@@ -14,11 +14,13 @@
 #include "cwFutureManagerModel.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
+#include "cwTrip.h"
 #include "cwErrorListModel.h"
 #include "GitRepository.h"
 #include "Account.h"
 #include "cwRemoteCredentialStore.h"
 #include "asyncfuture.h"
+#include "LfsServer.h"
 
 //libgit2
 #include "git2.h"
@@ -27,6 +29,51 @@
 
 //Std includes
 #include <exception>
+#include <memory>
+
+namespace {
+std::unique_ptr<LfsServer> g_syncLfsServer;
+
+bool setRepositoryConfigString(const QString& repositoryPath,
+                               const QString& key,
+                               const QString& value,
+                               QString* errorMessageOut = nullptr)
+{
+    git_repository* repository = nullptr;
+    if (git_repository_open(&repository, repositoryPath.toLocal8Bit().constData()) != GIT_OK || repository == nullptr) {
+        const git_error* error = git_error_last();
+        if (errorMessageOut) {
+            *errorMessageOut = error ? QString::fromUtf8(error->message)
+                                     : QStringLiteral("Failed to open repository config.");
+        }
+        return false;
+    }
+
+    git_config* config = nullptr;
+    if (git_repository_config(&config, repository) != GIT_OK || config == nullptr) {
+        const git_error* error = git_error_last();
+        if (errorMessageOut) {
+            *errorMessageOut = error ? QString::fromUtf8(error->message)
+                                     : QStringLiteral("Failed to open repository config.");
+        }
+        git_repository_free(repository);
+        return false;
+    }
+
+    const int setResult = git_config_set_string(config,
+                                                key.toLocal8Bit().constData(),
+                                                value.toLocal8Bit().constData());
+    if (setResult != GIT_OK && errorMessageOut) {
+        const git_error* error = git_error_last();
+        *errorMessageOut = error ? QString::fromUtf8(error->message)
+                                 : QStringLiteral("Failed setting git config value.");
+    }
+
+    git_config_free(config);
+    git_repository_free(repository);
+    return setResult == GIT_OK;
+}
+} // namespace
 
 std::shared_ptr<cwProject> fileToProject(QString filename) {
     auto project = std::make_shared<cwProject>();
@@ -120,6 +167,27 @@ void TestHelper::loadProjectFromZip(cwProject *project, const QString &filename)
 
 }
 
+void TestHelper::loadProjectFromPath(cwProject* project, const QString& localPath)
+{
+    if (project == nullptr) {
+        return;
+    }
+
+    project->newProject();
+    project->loadOrConvert(localPath);
+    project->waitLoadToFinish();
+
+    if (auto* repository = project->repository()) {
+        auto* account = repository->account();
+        if (account == nullptr || !account->isValid()) {
+            auto* fixtureAccount = new QQuickGit::Account(project);
+            fixtureAccount->setName(QStringLiteral("QML Sync Fixture"));
+            fixtureAccount->setEmail(QStringLiteral("qml.sync.fixture@example.com"));
+            project->setGitAccount(fixtureAccount);
+        }
+    }
+}
+
 QString TestHelper::copyToTempDir(const QString &filename)
 {
     return copyToTempFolder(filename);
@@ -191,6 +259,196 @@ QString TestHelper::normalizeFileGitUrl(const QString& url) const
 bool TestHelper::directoryExists(const QUrl& directory) const
 {
     return QDir(directory.toLocalFile()).exists();
+}
+
+QString TestHelper::projectHeadCommitOid(cwProject* project) const
+{
+    if (project == nullptr || project->repository() == nullptr) {
+        return QString();
+    }
+
+    const QString repoPath = project->repository()->directory().absolutePath();
+    const auto headResult = QQuickGit::GitRepository::headCommitOid(repoPath);
+    if (headResult.hasError()) {
+        return QString();
+    }
+    return headResult.value();
+}
+
+QString TestHelper::checkoutProjectRef(cwProject* project,
+                                       const QString& refSpec,
+                                       bool force) const
+{
+    if (project == nullptr) {
+        return QStringLiteral("Project is null.");
+    }
+
+    const int errorCountBefore = project->errorModel() ? project->errorModel()->count() : 0;
+    auto resetMode = force
+                         ? cwProject::BranchResetMode::Hard
+                         : cwProject::BranchResetMode::Mixed;
+    if (!project->resetBranchAndReconcile(refSpec, resetMode)) {
+        return QStringLiteral("Failed to start reset-branch and reconcile.");
+    }
+
+    project->waitForSyncToFinish();
+
+    if (project->syncInProgress()) {
+        return QStringLiteral("Timed out waiting for reset-branch and reconcile.");
+    }
+
+    if (project->errorModel() && project->errorModel()->count() > errorCountBefore) {
+        const cwError lastError = project->errorModel()->last();
+        if (!lastError.message().isEmpty()) {
+            return lastError.message();
+        }
+        return QStringLiteral("Reset-branch and reconcile reported an error.");
+    }
+
+    return QString();
+}
+
+cwSyncFixtureInfo TestHelper::createLocalSyncFixtureWithLfsServer()
+{
+    cwSyncFixtureInfo result;
+
+    if (!g_syncLfsServer) {
+        g_syncLfsServer = std::make_unique<LfsServer>();
+        if (!g_syncLfsServer->start()) {
+            result.errorMessage = QStringLiteral("Failed to start LFS test server.");
+            return result;
+        }
+    }
+    const QString lfsEndpoint = g_syncLfsServer->endpoint();
+
+    QTemporaryDir remoteRoot;
+    remoteRoot.setAutoRemove(false);
+    QTemporaryDir workingRoot;
+    workingRoot.setAutoRemove(false);
+
+    if (!remoteRoot.isValid() || !workingRoot.isValid()) {
+        result.errorMessage = QStringLiteral("Failed to create one or more temporary directories for sync fixture.");
+        return result;
+    }
+
+    const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("sync-fixture.git"));
+    git_repository* bareRepo = nullptr;
+    if (git_repository_init(&bareRepo, remoteRepoPath.toLocal8Bit().constData(), 1) != GIT_OK) {
+        const git_error* error = git_error_last();
+        result.errorMessage = error ? QString::fromUtf8(error->message)
+                                    : QStringLiteral("Failed to initialize bare repository.");
+        return result;
+    }
+    if (bareRepo) {
+        git_repository_free(bareRepo);
+    }
+
+    QQuickGit::Account account;
+    account.setName(QStringLiteral("QML Sync Fixture"));
+    account.setEmail(QStringLiteral("qml.sync.fixture@example.com"));
+
+    cwProject project;
+    addTokenManager(&project);
+    project.setGitAccount(&account);
+    const QString datasetFile = copyToTempFolder(QStringLiteral("://datasets/test_cwProject/Phake Cave 3000.cw"));
+    project.loadOrConvert(datasetFile);
+    project.waitLoadToFinish();
+
+    auto* region = project.cavingRegion();
+    if (region == nullptr) {
+        result.errorMessage = QStringLiteral("Failed to load fixture project data.");
+        return result;
+    }
+    if (region->caveCount() <= 0) {
+        region->addCave();
+    }
+
+    auto* cave = region->cave(0);
+    if (cave == nullptr) {
+        result.errorMessage = QStringLiteral("Failed to access fixture cave.");
+        return result;
+    }
+    if (cave->tripCount() <= 0) {
+        cave->addTrip();
+    }
+
+    const QString requestedProjectPath = QDir(workingRoot.path()).filePath(QStringLiteral("sync-fixture.cwproj"));
+    if (!project.saveAs(requestedProjectPath)) {
+        result.errorMessage = QStringLiteral("Failed to save sync fixture project.");
+        return result;
+    }
+    project.waitSaveToFinish();
+    const QString projectPath = project.filename();
+
+    QQuickGit::GitRepository* repository = project.repository();
+    if (repository == nullptr) {
+        result.errorMessage = QStringLiteral("Failed to access fixture repository.");
+        return result;
+    }
+
+    const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
+                                                         QUrl::fromLocalFile(remoteRepoPath));
+    if (!addRemoteError.isEmpty()) {
+        result.errorMessage = addRemoteError;
+        return result;
+    }
+
+    const QString workingRepoPath = repository->directory().absolutePath();
+    QString configError;
+    if (!setRepositoryConfigString(workingRepoPath, QStringLiteral("lfs.url"), lfsEndpoint, &configError)
+        || !setRepositoryConfigString(workingRepoPath,
+                                      QStringLiteral("remote.origin.lfsurl"),
+                                      lfsEndpoint,
+                                      &configError)
+        || !setRepositoryConfigString(workingRepoPath,
+                                      QStringLiteral("user.name"),
+                                      QStringLiteral("QML Sync Fixture"),
+                                      &configError)
+        || !setRepositoryConfigString(workingRepoPath,
+                                      QStringLiteral("user.email"),
+                                      QStringLiteral("qml.sync.fixture@example.com"),
+                                      &configError)) {
+        result.errorMessage = configError.isEmpty()
+                                  ? QStringLiteral("Failed to configure LFS endpoint for sync fixture.")
+                                  : configError;
+        return result;
+    }
+
+    QFile seedFile(repository->directory().filePath(QStringLiteral("README.md")));
+    if (!seedFile.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+        result.errorMessage = QStringLiteral("Failed to write sync fixture seed file.");
+        return result;
+    }
+    seedFile.write("sync fixture\n");
+    seedFile.close();
+
+    try {
+        repository->commitAll(QStringLiteral("Seed sync fixture"),
+                              QStringLiteral("Seed repository for QML sync tests"));
+    } catch (const std::exception& ex) {
+        result.errorMessage = QStringLiteral("Failed to create seed commit: %1")
+                                  .arg(QString::fromUtf8(ex.what()));
+        return result;
+    }
+
+    const auto pushFuture = repository->push();
+    if (!AsyncFuture::waitForFinished(pushFuture, 15000)) {
+        result.errorMessage = QStringLiteral("Timed out waiting for fixture push.");
+        return result;
+    }
+    const auto pushResult = pushFuture.result();
+    if (pushResult.hasError()) {
+        result.errorMessage = pushResult.errorMessage();
+        return result;
+    }
+
+    result.errorMessage = QString();
+    result.projectFilePath = projectPath;
+    result.workingRepoPath = workingRepoPath;
+    result.remoteRepoPath = remoteRepoPath;
+    result.branchName = repository->headBranchName();
+    result.lfsEndpoint = lfsEndpoint;
+    return result;
 }
 
 cwCloneFixtureInfo TestHelper::createLocalBareRemoteForCloneTest()

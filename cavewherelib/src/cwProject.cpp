@@ -363,34 +363,56 @@ bool cwProject::save()
     return true;
 }
 
-bool cwProject::sync()
+bool cwProject::beginSyncOperation(const QFuture<Monad::ResultBase>& operationFuture)
 {
-    if (!m_saveLoad) {
-        return false;
-    }
-
-    setSyncInProgress(true);
-    auto syncFuture = m_saveLoad->sync();
-    AsyncFuture::observe(syncFuture)
-        .context(this, [this, syncFuture]() {
-            const auto result = syncFuture.result();
-            if (result.hasError()) {
-                ErrorModel->append(cwError(result.errorMessage(), cwError::Warning));
-            }
-            setSyncInProgress(false);
-            m_syncHealth->refresh();
+    SyncFuture = AsyncFuture::observe(operationFuture)
+        .context(this, [this, operationFuture]() {
+            completeSyncOperation(operationFuture.result());
         }).future();
 
+    AsyncFuture::observe(SyncFuture).context(this, [this]() {
+        emit syncInProgressChanged();
+    });
+
+    emit syncInProgressChanged();
     return true;
 }
 
-void cwProject::setSyncInProgress(bool inProgress)
+bool cwProject::sync()
 {
-    if (m_syncInProgress == inProgress) {
-        return;
+    if (!m_saveLoad || syncInProgress()) {
+        return false;
     }
-    m_syncInProgress = inProgress;
-    emit syncInProgressChanged();
+
+    return beginSyncOperation(m_saveLoad->sync());
+}
+
+bool cwProject::resetBranchAndReconcile(const QString& refSpec, BranchResetMode resetMode)
+{
+    if (!m_saveLoad || syncInProgress()) {
+        return false;
+    }
+
+    return beginSyncOperation(m_saveLoad->resetBranchAndReconcile(refSpec, resetMode));
+}
+
+void cwProject::waitForSyncToFinish()
+{
+    AsyncFuture::waitForFinished(SyncFuture);
+}
+
+void cwProject::completeSyncOperation(const Monad::ResultBase& result)
+{
+    if (result.hasError()) {
+        const QString message = result.errorMessage();
+        const bool alreadyReported = ErrorModel
+                                     && ErrorModel->count() > 0
+                                     && ErrorModel->last().message() == message;
+        if (!alreadyReported) {
+            ErrorModel->append(cwError(message, cwError::Warning));
+        }
+    }
+    m_syncHealth->refresh();
 }
 
 std::optional<cwSaveLoad::SyncReport> cwProject::lastSyncReport() const
@@ -886,6 +908,7 @@ void cwProject::waitLoadToFinish()
  */
 void cwProject::waitSaveToFinish()
 {
+    waitForSyncToFinish();
     m_saveLoad->waitForFinished();
     // AsyncFuture::waitForFinished(SaveFuture);
 

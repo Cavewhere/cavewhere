@@ -1039,6 +1039,32 @@ struct cwSaveLoad::Data {
 
     //Helps watch if we already has objects connected, this is for debugging only
     cwUniqueConnectionChecker connectionChecker;
+    QSet<const QObject*> connectedObjects;
+
+    bool trackConnected(const QObject* object)
+    {
+        if (object == nullptr) {
+            return false;
+        }
+        if (connectedObjects.contains(object)) {
+            return false;
+        }
+        connectedObjects.insert(object);
+        return true;
+    }
+
+    bool isTrackedConnected(const QObject* object) const
+    {
+        return object != nullptr && connectedObjects.contains(object);
+    }
+
+    void trackDisconnected(const QObject* object)
+    {
+        if (object == nullptr) {
+            return;
+        }
+        connectedObjects.remove(object);
+    }
 
     bool retiring = false;
     QFuture<void> retireFuture;
@@ -1096,7 +1122,8 @@ struct cwSaveLoad::Data {
                 return false;
             }
 
-            return mutationObserved || currentEpoch != baselineLocalMutationEpoch;
+            const bool changed = mutationObserved || currentEpoch != baselineLocalMutationEpoch;
+            return changed;
         }
     };
 
@@ -1571,6 +1598,7 @@ struct cwSaveLoad::Data {
     template<typename T>
     void saveObject(cwSaveLoad* context, const T* object) {
         if(saveEnabled) {
+            const QString objectType = object ? object->metaObject()->className() : QStringLiteral("<null>");
             if (!suppressLocalMutationTracking) {
                 ++localMutationEpoch;
                 remoteApplyGuard.noteMutation();
@@ -1588,6 +1616,8 @@ struct cwSaveLoad::Data {
             } else {
                 static_assert(std::is_same_v<T, void>, "Unsupported saveObject type");
             }
+        } else {
+            const QString objectType = object ? object->metaObject()->className() : QStringLiteral("<null>");
         }
     }
 
@@ -2040,6 +2070,157 @@ QFuture<ResultBase> cwSaveLoad::persistIdentityRepairSave()
     return saveFlushImpl();
 }
 
+QFuture<ResultBase> cwSaveLoad::enqueueReconcilePhase(const QFuture<ResultBase>& prepareFuture,
+                                                      quint64 syncGeneration,
+                                                      const std::shared_ptr<ReconcileAttemptState>& attemptState,
+                                                      ReconcileApplyMode applyMode)
+{
+    return d->enqueueOperation(
+        this,
+        Data::Operation::Type::ReconcileExternal,
+        [this, prepareFuture, syncGeneration, attemptState, applyMode]() -> QFuture<ResultBase> {
+            Q_ASSERT(prepareFuture.isFinished());
+            const auto prepareResult = prepareFuture.result();
+            if (prepareResult.hasError()) {
+                return AsyncFuture::completed(prepareResult);
+            }
+
+            if (d->operationGeneration != syncGeneration || d->retiring) {
+                return AsyncFuture::completed(ResultBase(QStringLiteral("Operation canceled.")));
+            }
+
+            if (!attemptState->report.has_value()) {
+                return AsyncFuture::completed(ResultBase(QStringLiteral("Sync report is unavailable.")));
+            }
+
+            if (d->localMutationEpoch != attemptState->localMutationPlanEpoch) {
+                return AsyncFuture::completed(ResultBase(
+                    QStringLiteral("Sync plan is stale because the model changed before apply."),
+                    static_cast<int>(SyncErrorCode::RetryEpochChanged)));
+            }
+            auto reconcileImplFuture = reconcileExternalImpl(*attemptState->report,
+                                                             syncGeneration,
+                                                             attemptState->planEpoch,
+                                                             applyMode);
+            return AsyncFuture::observe(reconcileImplFuture)
+                .context(this, [reconcileImplFuture, attemptState]() -> ResultBase {
+                    const auto reconcileResult = reconcileImplFuture.result();
+                    if (reconcileResult.hasError()) {
+                        return ResultBase(reconcileResult.errorMessage(),
+                                          reconcileResult.errorCode());
+                    }
+
+                    attemptState->reconcileOutcome = reconcileResult.value();
+                    return ResultBase();
+                })
+                .future();
+        });
+}
+
+QFuture<ResultBase> cwSaveLoad::enqueueFinalizePhase(const QFuture<ResultBase>& reconcileFuture,
+                                                     quint64 syncGeneration,
+                                                     QQuickGit::GitRepository* repo,
+                                                     const std::shared_ptr<ReconcileAttemptState>& attemptState,
+                                                     FinalizeMode mode)
+{
+    return d->enqueueOperation(
+        this,
+        Data::Operation::Type::SyncProject,
+        [this, reconcileFuture, syncGeneration, repo, attemptState, mode]() -> QFuture<ResultBase> {
+            Q_ASSERT(reconcileFuture.isFinished());
+            const auto reconcileResult = reconcileFuture.result();
+            if (reconcileResult.hasError()) {
+                return AsyncFuture::completed(reconcileResult);
+            }
+
+            if (d->operationGeneration != syncGeneration || d->retiring) {
+                return AsyncFuture::completed(ResultBase(QStringLiteral("Operation canceled.")));
+            }
+
+            if (!attemptState->reconcileOutcome.has_value()) {
+                return AsyncFuture::completed(ResultBase(QStringLiteral("Reconcile outcome is unavailable.")));
+            }
+
+            const auto staleFromRemoteApplyGuard = [this]() -> std::optional<ResultBase> {
+                if (!d->remoteApplyGuard.hasLocalMutation(d->localMutationEpoch)) {
+                    return std::nullopt;
+                }
+                return ResultBase(
+                    QStringLiteral("Sync plan is stale because the model changed during remote apply."),
+                    static_cast<int>(SyncErrorCode::RetryEpochChanged));
+            };
+
+            const auto pushWithoutRetry = [this, repo, syncGeneration, staleFromRemoteApplyGuard]() -> QFuture<ResultBase> {
+                if (const auto staleResult = staleFromRemoteApplyGuard()) {
+                    return AsyncFuture::completed(*staleResult);
+                }
+
+                auto pushFuture = repo->push();
+                return AsyncFuture::observe(pushFuture)
+                    .context(this, [this, repo, pushFuture, syncGeneration]() -> ResultBase {
+                        if (d->operationGeneration != syncGeneration || d->retiring) {
+                            return ResultBase(QStringLiteral("Operation canceled."));
+                        }
+                        const auto pushResult = pushFuture.result();
+                        if (repo) {
+                            repo->checkStatus();
+                        }
+                        return pushResult;
+                    })
+                    .future();
+            };
+
+            if (mode == FinalizeMode::SyncPush
+                && attemptState->reconcileOutcome->outcome == ReconcileExternalResult::Outcome::NoOp) {
+                return pushWithoutRetry();
+            }
+
+            if (const auto staleResult = staleFromRemoteApplyGuard()) {
+                return AsyncFuture::completed(*staleResult);
+            }
+
+            if (attemptState->reconcileOutcome->outcome
+                != ReconcileExternalResult::Outcome::MutatedRequiresPrePushPersistence) {
+                return mode == FinalizeMode::SyncPush
+                           ? pushWithoutRetry()
+                           : AsyncFuture::completed(ResultBase());
+            }
+
+            auto repairFuture = persistIdentityRepairSave();
+            return AsyncFuture::observe(repairFuture)
+                .context(this, [this, repairFuture, pushWithoutRetry, staleFromRemoteApplyGuard, syncGeneration, mode]() -> QFuture<ResultBase> {
+                    if (d->operationGeneration != syncGeneration || d->retiring) {
+                        return AsyncFuture::completed(ResultBase(QStringLiteral("Operation canceled.")));
+                    }
+
+                    const auto repairResult = repairFuture.result();
+                    if (repairResult.hasError()) {
+                        return AsyncFuture::completed(repairResult);
+                    }
+
+                    if (const auto staleResult = staleFromRemoteApplyGuard()) {
+                        return AsyncFuture::completed(*staleResult);
+                    }
+
+                    d->pendingIdentityRepairSave = false;
+                    ++d->modelMutationEpoch;
+
+                    if (mode == FinalizeMode::CheckoutLocal) {
+                        return AsyncFuture::completed(ResultBase());
+                    }
+
+                    auto commitResult = commitProjectChanges(defaultCommitSubject(QStringLiteral("Sync Reconcile")),
+                                                             defaultCommitDescription());
+                    if (commitResult.hasError()) {
+                        return AsyncFuture::completed(commitResult);
+                    }
+
+                    return pushWithoutRetry();
+                })
+                .future();
+        });
+}
+
 void cwSaveLoad::setFileName(const QString &filename, bool initRepository)
 {
     //This should load the filename
@@ -2069,6 +2250,8 @@ const cwCavingRegion *cwSaveLoad::cavingRegion() const
 
 void cwSaveLoad::setSaveEnabled(bool enabled)
 {
+    if (d->saveEnabled != enabled) {
+    }
     d->saveEnabled = enabled;
 }
 
@@ -2697,7 +2880,8 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
 
                 cwImage noteImage = noteCopy.image();
                 QString relativeFilename = dataRootDir.relativeFilePath(filename);
-                noteImage.setPath(relativeFilename);
+                const QString noteRelativeFilename = noteDir.relativeFilePath(filename);
+                noteImage.setPath(noteRelativeFilename);
                 noteCopy.setImage(noteImage);
 
                 *updatedNoteData = noteCopy.data();
@@ -3425,7 +3609,10 @@ void cwSaveLoad::disconnectTreeModel()
     //Disconnect from the tree model
     disconnect(d->m_regionTreeModel, nullptr, this, nullptr);
 
-    d->connectionChecker.remove(d->m_regionTreeModel);
+    if (d->isTrackedConnected(d->m_regionTreeModel)) {
+        d->trackDisconnected(d->m_regionTreeModel);
+        d->connectionChecker.remove(d->m_regionTreeModel);
+    }
 
     //Disconnect all the objects watch in the tree
     disconnectObjects();
@@ -3434,9 +3621,10 @@ void cwSaveLoad::disconnectTreeModel()
 void cwSaveLoad::connectTreeModel()
 {
 
-    if(!d->connectionChecker.add(d->m_regionTreeModel)) {
+    if(!d->trackConnected(d->m_regionTreeModel)) {
         return;
     }
+    d->connectionChecker.add(d->m_regionTreeModel);
 
     //Connect when region has changed
     connect(d->m_regionTreeModel, &cwRegionTreeModel::rowsInserted,
@@ -3527,8 +3715,11 @@ void cwSaveLoad::connectTreeModel()
                         break;
                     }
 
-                    d->connectionChecker.remove(object);
                     disconnect(object, nullptr, this, nullptr);
+                    if (d->isTrackedConnected(object)) {
+                        d->trackDisconnected(object);
+                        d->connectionChecker.remove(object);
+                    }
 
                 }
             });
@@ -3538,11 +3729,50 @@ void cwSaveLoad::connectTreeModel()
 
 void cwSaveLoad::disconnectObjects()
 {
-    //Disconnect from all the objects
+    // Disconnect trip-owned objects that are not represented as region-tree objects.
+    auto trips = d->m_regionTreeModel->all<cwTrip*>(QModelIndex(), &cwRegionTreeModel::trip);
+    for (auto trip : trips) {
+        if (trip == nullptr) {
+            continue;
+        }
+
+        for (int i = 0; i < trip->chunkCount(); ++i) {
+            auto* chunk = trip->chunk(i);
+            if (chunk == nullptr) {
+                continue;
+            }
+            disconnect(chunk, nullptr, this, nullptr);
+            if (d->isTrackedConnected(chunk)) {
+                d->trackDisconnected(chunk);
+                d->connectionChecker.remove(chunk);
+            }
+        }
+
+        if (auto* teamModel = trip->team()) {
+            disconnect(teamModel, nullptr, this, nullptr);
+            if (d->isTrackedConnected(teamModel)) {
+                d->trackDisconnected(teamModel);
+                d->connectionChecker.remove(teamModel);
+            }
+        }
+
+        if (auto* calibrations = trip->calibrations()) {
+            disconnect(calibrations, nullptr, this, nullptr);
+            if (d->isTrackedConnected(calibrations)) {
+                d->trackDisconnected(calibrations);
+                d->connectionChecker.remove(calibrations);
+            }
+        }
+    }
+
+    //Disconnect from all the region-tree objects
     QList<QObject*> objects = d->m_regionTreeModel->all<QObject*>(QModelIndex(), &cwRegionTreeModel::object);
     for(auto obj : objects) {
-        d->connectionChecker.remove(obj);
         disconnect(obj, nullptr, this, nullptr);
+        if (d->isTrackedConnected(obj)) {
+            d->trackDisconnected(obj);
+            d->connectionChecker.remove(obj);
+        }
     }
 }
 
@@ -3589,9 +3819,10 @@ void cwSaveLoad::connectCave(cwCave *cave)
         d->renameDirectoryAndFile(this, cave);
     };
 
-    if(!d->connectionChecker.add(cave)) {
+    if(!d->trackConnected(cave)) {
         return;
     }
+    d->connectionChecker.add(cave);
 
     connect(cave, &cwCave::nameChanged, this, saveCaveName);
 }
@@ -3603,18 +3834,35 @@ void cwSaveLoad::connectTrip(cwTrip* trip)
         return;
     }
 
+    const auto rebindIfTracked = [this](QObject* object) -> bool {
+        if (object == nullptr) {
+            return false;
+        }
+
+        disconnect(object, nullptr, this, nullptr);
+        if (d->isTrackedConnected(object)) {
+            d->trackDisconnected(object);
+            d->connectionChecker.remove(object);
+        }
+        if (!d->trackConnected(object)) {
+            return false;
+        }
+        d->connectionChecker.add(object);
+        return true;
+    };
+
     // Lambda that saves this specific trip
     const auto saveTrip = [this, trip]() {
         save(trip);
     };
 
     // Helper to connect a survey chunk to save on any data change
-    const auto connectChunk = [this, saveTrip](cwSurveyChunk* chunk) {
+    const auto connectChunk = [this, saveTrip, rebindIfTracked](cwSurveyChunk* chunk) {
         if (chunk == nullptr) {
             return;
         }
 
-        if(!d->connectionChecker.add(chunk)) {
+        if(!rebindIfTracked(chunk)) {
             return;
         }
 
@@ -3627,7 +3875,7 @@ void cwSaveLoad::connectTrip(cwTrip* trip)
         connect(chunk, &cwSurveyChunk::dataChanged, this, saveTrip);
     };
 
-    if(!d->connectionChecker.add(trip)) {
+    if(!rebindIfTracked(trip)) {
         return;
     }
 
@@ -3663,15 +3911,13 @@ void cwSaveLoad::connectTrip(cwTrip* trip)
     // Team model changes → save
     if (QAbstractItemModel* const teamModel = trip->team()) {
 
-        if(!d->connectionChecker.add(teamModel)) {
-            return;
+        if(rebindIfTracked(teamModel)) {
+            connect(teamModel, &QAbstractItemModel::dataChanged, this, saveTrip);
+            connect(teamModel, &QAbstractItemModel::rowsInserted, this, saveTrip);
+            connect(teamModel, &QAbstractItemModel::rowsRemoved, this, saveTrip);
+            connect(teamModel, &QAbstractItemModel::modelReset, this, saveTrip);
+            connect(teamModel, &QAbstractItemModel::layoutChanged, this, saveTrip);
         }
-
-        connect(teamModel, &QAbstractItemModel::dataChanged, this, saveTrip);
-        connect(teamModel, &QAbstractItemModel::rowsInserted, this, saveTrip);
-        connect(teamModel, &QAbstractItemModel::rowsRemoved, this, saveTrip);
-        connect(teamModel, &QAbstractItemModel::modelReset, this, saveTrip);
-        connect(teamModel, &QAbstractItemModel::layoutChanged, this, saveTrip);
     }
 
     // Notes model changes → save
@@ -3681,7 +3927,7 @@ void cwSaveLoad::connectTrip(cwTrip* trip)
     // Trip calibration changes → save
     if (cwTripCalibration* const cal = trip->calibrations()) {
 
-        if(!d->connectionChecker.add(cal)) {
+        if(!rebindIfTracked(cal)) {
             return;
         }
 
@@ -3723,9 +3969,10 @@ void cwSaveLoad::connectNote(cwNote *note)
         save(note);
     };
 
-    if(!d->connectionChecker.add(note)) {
+    if(!d->trackConnected(note)) {
         return;
     }
+    d->connectionChecker.add(note);
 
     // Note-level changes
     connect(note, &cwNote::nameChanged, this, renameAndSaveNote);
@@ -3761,9 +4008,10 @@ void cwSaveLoad::connectScrap(cwScrap *scrap)
         save(scrap->parentNote());
     };
 
-    if(!d->connectionChecker.add(scrap)) {
+    if(!d->trackConnected(scrap)) {
         return;
     }
+    d->connectionChecker.add(scrap);
 
     // Scrap outline changes
     connect(scrap, &cwScrap::insertedPoints, this, saveNote);
@@ -3817,9 +4065,10 @@ void cwSaveLoad::connectNoteLiDAR(cwNoteLiDAR *lidarNote)
         save(lidarNote);
     };
 
-    if(!d->connectionChecker.add(lidarNote)) {
+    if(!d->trackConnected(lidarNote)) {
         return;
     }
+    d->connectionChecker.add(lidarNote);
 
     connect(lidarNote, &cwNoteLiDAR::filenameChanged, this, saveNote);
     connect(lidarNote, &cwNoteLiDAR::dataChanged,
@@ -3850,9 +4099,10 @@ void cwSaveLoad::connectNoteLiDAR(cwNoteLiDAR *lidarNote)
             });
     connect(lidarNote, &cwNoteLiDAR::autoCalculateNorthChanged, this, saveNote);
 
-    if(!d->connectionChecker.add(lidarNote->noteTransformation())) {
+    if(!d->trackConnected(lidarNote->noteTransformation())) {
         return;
     }
+    d->connectionChecker.add(lidarNote->noteTransformation());
 
     connect(lidarNote->noteTransformation(), &cwNoteLiDARTransformation::upSignChanged, this, saveNote);
     connect(lidarNote->noteTransformation(), &cwNoteLiDARTransformation::upModeChanged, this, saveNote);
@@ -4241,8 +4491,10 @@ Monad::ResultBase cwSaveLoad::commitProjectChanges(const QString& subject,
                                           : description.trimmed();
 
     try {
+        const auto beforeHeadResult = QQuickGit::GitRepository::headCommitOid(repo->directory().absolutePath());
         repo->commitAll(commitSubject, commitDescription);
         repo->checkStatus();
+        const auto afterHeadResult = QQuickGit::GitRepository::headCommitOid(repo->directory().absolutePath());
     } catch (const std::exception& error) {
         return ResultBase(QString::fromUtf8(error.what()));
     }
@@ -4274,13 +4526,6 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
     const QString repoPath = repo->directory().absolutePath();
     const quint64 syncGeneration = d->operationGeneration;
 
-    struct SyncAttemptState {
-        quint64 planEpoch = 0;
-        quint64 localMutationPlanEpoch = 0;
-        std::optional<SyncReport> report;
-        std::optional<ReconcileExternalResult> reconcileOutcome;
-    };
-
     auto syncDeferred = std::make_shared<AsyncFuture::Deferred<ResultBase>>();
     auto scheduleAttempt = std::make_shared<std::function<void(int)>>();
 
@@ -4294,7 +4539,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
             return;
         }
 
-        auto attemptState = std::make_shared<SyncAttemptState>();
+        auto attemptState = std::make_shared<ReconcileAttemptState>();
 
         auto saveFlushFuture = d->enqueueOperation(this, Data::Operation::Type::SaveFlush, [this]() {
             return saveFlushImpl();
@@ -4319,6 +4564,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
                 if (commitResult.hasError()) {
                     return AsyncFuture::completed(commitResult);
                 }
+                const auto postCommitHeadResult = QQuickGit::GitRepository::headCommitOid(repoPath);
 
                 if (!hasRemoteConfigured(repo)) {
                     return AsyncFuture::completed(
@@ -4392,130 +4638,15 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
                     .future();
             });
 
-        auto reconcileFuture = d->enqueueOperation(
-            this,
-            Data::Operation::Type::ReconcileExternal,
-            [this, syncPrepareFuture, syncGeneration, attemptState]() -> QFuture<ResultBase> {
-                Q_ASSERT(syncPrepareFuture.isFinished());
-                const auto syncPrepareResult = syncPrepareFuture.result();
-                if (syncPrepareResult.hasError()) {
-                    return AsyncFuture::completed(syncPrepareResult);
-                }
-
-                if (d->operationGeneration != syncGeneration || d->retiring) {
-                    return AsyncFuture::completed(ResultBase(QStringLiteral("Operation canceled.")));
-                }
-
-                if (!attemptState->report.has_value()) {
-                    return AsyncFuture::completed(ResultBase(QStringLiteral("Sync report is unavailable.")));
-                }
-
-                if (d->localMutationEpoch != attemptState->localMutationPlanEpoch) {
-                    return AsyncFuture::completed(ResultBase(
-                        QStringLiteral("Sync plan is stale because the model changed before apply."),
-                        static_cast<int>(SyncErrorCode::RetryEpochChanged)));
-                }
-
-                d->remoteApplyGuard.begin(d->localMutationEpoch);
-                auto reconcileImplFuture =
-                    reconcileExternalImpl(*attemptState->report,
-                                          syncGeneration,
-                                          attemptState->planEpoch);
-                return AsyncFuture::observe(reconcileImplFuture)
-                    .context(this, [reconcileImplFuture, attemptState]() -> ResultBase {
-                        const auto reconcileResult = reconcileImplFuture.result();
-                        if (reconcileResult.hasError()) {
-                            return ResultBase(reconcileResult.errorMessage(),
-                                              reconcileResult.errorCode());
-                        }
-
-                        attemptState->reconcileOutcome = reconcileResult.value();
-                        return ResultBase();
-                    })
-                    .future();
-            });
-
-        auto finalizeFuture = d->enqueueOperation(
-            this,
-            Data::Operation::Type::SyncProject,
-            [this, repo, reconcileFuture, syncGeneration, attemptState]() -> QFuture<ResultBase> {
-                Q_ASSERT(reconcileFuture.isFinished());
-                const auto reconcileResult = reconcileFuture.result();
-                if (reconcileResult.hasError()) {
-                    return AsyncFuture::completed(reconcileResult);
-                }
-
-                if (d->operationGeneration != syncGeneration || d->retiring) {
-                    return AsyncFuture::completed(ResultBase(QStringLiteral("Operation canceled.")));
-                }
-
-                if (!attemptState->reconcileOutcome.has_value()) {
-                    return AsyncFuture::completed(ResultBase(QStringLiteral("Reconcile outcome is unavailable.")));
-                }
-
-                const auto staleFromRemoteApplyGuard = [this]() -> std::optional<ResultBase> {
-                    if (!d->remoteApplyGuard.hasLocalMutation(d->localMutationEpoch)) {
-                        return std::nullopt;
-                    }
-
-                    return ResultBase(
-                        QStringLiteral("Sync plan is stale because the model changed during remote apply."),
-                        static_cast<int>(SyncErrorCode::RetryEpochChanged));
-                };
-
-                const auto pushWithoutRetry = [this, repo, syncGeneration, staleFromRemoteApplyGuard]() -> QFuture<ResultBase> {
-                    if (const auto staleResult = staleFromRemoteApplyGuard()) {
-                        return AsyncFuture::completed(*staleResult);
-                    }
-
-                    auto pushFuture = repo->push();
-                    return AsyncFuture::observe(pushFuture)
-                        .context(this, [this, pushFuture, syncGeneration]() -> ResultBase {
-                            if (d->operationGeneration != syncGeneration || d->retiring) {
-                                return ResultBase(QStringLiteral("Operation canceled."));
-                            }
-                            return pushFuture.result();
-                        })
-                        .future();
-                };
-
-                if (attemptState->reconcileOutcome->outcome == ReconcileExternalResult::Outcome::NoOp) {
-                    return pushWithoutRetry();
-                }
-
-                if (const auto staleResult = staleFromRemoteApplyGuard()) {
-                    return AsyncFuture::completed(*staleResult);
-                }
-
-                auto repairFuture = persistIdentityRepairSave();
-                return AsyncFuture::observe(repairFuture)
-                    .context(this, [this, repairFuture, pushWithoutRetry, staleFromRemoteApplyGuard, syncGeneration]() -> QFuture<ResultBase> {
-                        if (d->operationGeneration != syncGeneration || d->retiring) {
-                            return AsyncFuture::completed(ResultBase(QStringLiteral("Operation canceled.")));
-                        }
-
-                        const auto repairResult = repairFuture.result();
-                        if (repairResult.hasError()) {
-                            return AsyncFuture::completed(repairResult);
-                        }
-
-                        if (const auto staleResult = staleFromRemoteApplyGuard()) {
-                            return AsyncFuture::completed(*staleResult);
-                        }
-
-                        d->pendingIdentityRepairSave = false;
-                        ++d->modelMutationEpoch;
-
-                        auto commitResult = commitProjectChanges(defaultCommitSubject(QStringLiteral("Sync Reconcile")),
-                                                                 defaultCommitDescription());
-                        if (commitResult.hasError()) {
-                            return AsyncFuture::completed(commitResult);
-                        }
-
-                        return pushWithoutRetry();
-                    })
-                    .future();
-            });
+        auto reconcileFuture = enqueueReconcilePhase(syncPrepareFuture,
+                                                     syncGeneration,
+                                                     attemptState,
+                                                     ReconcileApplyMode::Merge);
+        auto finalizeFuture = enqueueFinalizePhase(reconcileFuture,
+                                                   syncGeneration,
+                                                   repo,
+                                                   attemptState,
+                                                   FinalizeMode::SyncPush);
 
         AsyncFuture::observe(finalizeFuture)
             .context(this, [this, finalizeFuture, retryCount, scheduleAttempt, syncDeferred]() {
@@ -4558,6 +4689,173 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
     return syncDeferred->future();
 }
 
+QFuture<Monad::ResultBase> cwSaveLoad::resetBranchAndReconcile(const QString& refSpec, BranchResetMode resetMode)
+{
+    d->lastSyncReport.reset();
+
+    if (gitMode() == GitMode::NoGit) {
+        return AsyncFuture::completed(ResultBase(QStringLiteral("Checkout reconcile is disabled for this project.")));
+    }
+
+    if (!syncEnabled()) {
+        return AsyncFuture::completed(ResultBase(QStringLiteral("Project sync is disabled in metadata.")));
+    }
+
+    if (d->projectFileName.isEmpty()) {
+        return AsyncFuture::completed(ResultBase(QStringLiteral("Project has no filename.")));
+    }
+
+    const QString normalizedRefSpec = refSpec.trimmed();
+    if (normalizedRefSpec.isEmpty()) {
+        return AsyncFuture::completed(ResultBase(QStringLiteral("Checkout ref is empty.")));
+    }
+
+    auto* repo = d->repository;
+    if (repo == nullptr) {
+        return AsyncFuture::completed(ResultBase(QStringLiteral("Git repository is unavailable.")));
+    }
+
+    const QString repoPath = repo->directory().absolutePath();
+    const quint64 syncGeneration = d->operationGeneration;
+    auto attemptState = std::make_shared<ReconcileAttemptState>();
+
+    auto saveFlushFuture = d->enqueueOperation(this, Data::Operation::Type::SaveFlush, [this]() {
+        return saveFlushImpl();
+    });
+
+    auto checkoutPrepareFuture = d->enqueueOperation(
+        this,
+        Data::Operation::Type::SyncProject,
+        [this, repo, repoPath, normalizedRefSpec, resetMode, syncGeneration, saveFlushFuture, attemptState]() -> QFuture<ResultBase> {
+            Q_ASSERT(saveFlushFuture.isFinished());
+            const auto saveFlushResult = saveFlushFuture.result();
+            if (saveFlushResult.hasError()) {
+                return AsyncFuture::completed(saveFlushResult);
+            }
+
+            if (d->operationGeneration != syncGeneration || d->retiring) {
+                return AsyncFuture::completed(ResultBase(QStringLiteral("Operation canceled.")));
+            }
+
+            repo->checkStatus();
+            if (repo->modifiedFileCount() > 0) {
+                return AsyncFuture::completed(ResultBase(
+                    QStringLiteral("Working directory must be clean before checkout and reconcile.")));
+            }
+
+            const QString currentBranch = repo->headBranchName();
+            if (currentBranch.isEmpty()) {
+                return AsyncFuture::completed(ResultBase(
+                    QStringLiteral("Cannot reset branch: HEAD is detached.")));
+            }
+
+            const auto beforeHeadResult = QQuickGit::GitRepository::headCommitOid(repoPath);
+            if (beforeHeadResult.hasError()) {
+                return AsyncFuture::completed(ResultBase(beforeHeadResult.errorMessage()));
+            }
+            const QString beforeHead = beforeHeadResult.value();
+
+            auto beforeSnapshotFuture = QtConcurrent::run([repoPath]() {
+                return captureLfsSnapshot(repoPath);
+            });
+
+            QQuickGit::GitRepository::ResetMode mode = QQuickGit::GitRepository::ResetMode::Hard;
+            if (resetMode == BranchResetMode::Soft) {
+                mode = QQuickGit::GitRepository::ResetMode::Soft;
+            } else if (resetMode == BranchResetMode::Mixed) {
+                mode = QQuickGit::GitRepository::ResetMode::Mixed;
+            }
+            auto checkoutFuture = repo->reset(normalizedRefSpec, mode);
+            return AsyncFuture::observe(checkoutFuture)
+                .context(this, [this, repoPath, normalizedRefSpec, beforeHead, beforeSnapshotFuture, checkoutFuture, syncGeneration, attemptState]() -> QFuture<ResultBase> {
+                    if (d->operationGeneration != syncGeneration || d->retiring) {
+                        return AsyncFuture::completed(ResultBase(QStringLiteral("Operation canceled.")));
+                    }
+
+                    const auto checkoutResult = checkoutFuture.result();
+                    if (checkoutResult.hasError()) {
+                        return AsyncFuture::completed(checkoutResult);
+                    }
+
+                    const auto checkedOutProjectResult = cwSaveLoad::loadProject(d->projectFileName);
+                    if (checkedOutProjectResult.hasError()) {
+                        return AsyncFuture::completed(ResultBase(checkedOutProjectResult.errorMessage(),
+                                                                 checkedOutProjectResult.errorCode()));
+                    }
+
+                    const auto afterHeadResult = QQuickGit::GitRepository::headCommitOid(repoPath);
+                    if (afterHeadResult.hasError()) {
+                        return AsyncFuture::completed(ResultBase(afterHeadResult.errorMessage()));
+                    }
+                    const QString afterHead = afterHeadResult.value();
+                    attemptState->planEpoch = d->modelMutationEpoch;
+                    attemptState->localMutationPlanEpoch = d->localMutationEpoch;
+
+                    auto reportFuture = QtConcurrent::run([repoPath, beforeHead, afterHead, beforeSnapshotFuture]() {
+                        return buildSyncReport(repoPath,
+                                               beforeHead,
+                                               afterHead,
+                                               SyncReport::PullState::Unknown,
+                                               beforeSnapshotFuture.result());
+                    });
+
+                    return AsyncFuture::observe(reportFuture)
+                        .context(this, [this, normalizedRefSpec, reportFuture, attemptState, syncGeneration]() -> ResultBase {
+                            if (d->operationGeneration != syncGeneration || d->retiring) {
+                                return ResultBase(QStringLiteral("Operation canceled."));
+                            }
+
+                            attemptState->report = reportFuture.result();
+                            if (attemptState->report.has_value()) {
+                                attemptState->report->diagnostics.append(
+                                    QStringLiteral("checkout reconcile target: %1").arg(normalizedRefSpec));
+                            }
+                            d->lastSyncReport = attemptState->report;
+                            if (!attemptState->report.has_value()) {
+                                return ResultBase(QStringLiteral("Sync report is unavailable."));
+                            }
+                            return ResultBase();
+                        })
+                        .future();
+                })
+                .future();
+        });
+
+    auto reconcileFuture = enqueueReconcilePhase(checkoutPrepareFuture,
+                                                 syncGeneration,
+                                                 attemptState,
+                                                 ReconcileApplyMode::TargetCommitWins);
+    auto finalizeFuture = enqueueFinalizePhase(reconcileFuture,
+                                               syncGeneration,
+                                               repo,
+                                               attemptState,
+                                               FinalizeMode::CheckoutLocal);
+
+    auto checkoutDeferred = std::make_shared<AsyncFuture::Deferred<ResultBase>>();
+    AsyncFuture::observe(finalizeFuture)
+        .context(this, [this, finalizeFuture, checkoutDeferred]() {
+            d->remoteApplyGuard.end();
+            checkoutDeferred->complete(finalizeFuture.result());
+        }).future();
+
+    if (d->futureToken.isValid()) {
+        d->futureToken.addJob(cwFuture(QFuture<void>(checkoutDeferred->future()),
+                                       QStringLiteral("Checking out project")));
+    }
+
+    return checkoutDeferred->future();
+}
+
+QFuture<Monad::ResultBase> cwSaveLoad::resetBranchAndReconcile(const QString& refSpec, int resetMode)
+{
+    return resetBranchAndReconcile(refSpec, static_cast<BranchResetMode>(resetMode));
+}
+
+QFuture<Monad::ResultBase> cwSaveLoad::checkoutAndReconcile(const QString& refSpec, int checkoutMode)
+{
+    return resetBranchAndReconcile(refSpec, static_cast<BranchResetMode>(checkoutMode));
+}
+
 std::optional<cwSaveLoad::SyncReport> cwSaveLoad::lastSyncReport() const
 {
     return d->lastSyncReport;
@@ -4565,8 +4863,21 @@ std::optional<cwSaveLoad::SyncReport> cwSaveLoad::lastSyncReport() const
 
 QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcileExternalImpl(const SyncReport& report,
                                                                                                 quint64 syncGeneration,
-                                                                                                quint64 planEpoch)
+                                                                                                quint64 planEpoch,
+                                                                                                ReconcileApplyMode applyMode)
 {
+    const auto mergeOutcomeToString = [](cwReconcileMergeResult::Outcome outcome) {
+        switch (outcome) {
+        case cwReconcileMergeResult::Outcome::NotApplicable:
+            return QStringLiteral("NotApplicable");
+        case cwReconcileMergeResult::Outcome::Applied:
+            return QStringLiteral("Applied");
+        case cwReconcileMergeResult::Outcome::RequiresFullReload:
+            return QStringLiteral("RequiresFullReload");
+        }
+        return QStringLiteral("Unknown");
+    };
+
     const bool needsApply = !report.changedPaths.isEmpty() || report.beforeHead != report.afterHead;
     if (!needsApply) {
         ReconcileExternalResult result;
@@ -4576,7 +4887,7 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
 
     auto loadFuture = cwSaveLoad::loadAll(d->projectFileName);
     return AsyncFuture::observe(loadFuture)
-        .context(this, [this, loadFuture, report, syncGeneration, planEpoch]() -> Monad::Result<ReconcileExternalResult> {
+        .context(this, [this, loadFuture, report, syncGeneration, planEpoch, applyMode, mergeOutcomeToString]() -> Monad::Result<ReconcileExternalResult> {
             const auto loadResult = loadFuture.result();
             if (loadResult.hasError()) {
                 return Monad::Result<ReconcileExternalResult>(loadResult.errorMessage(), loadResult.errorCode());
@@ -4597,6 +4908,8 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
                 return Monad::Result<ReconcileExternalResult>(QStringLiteral("No caving region is available for reconcile."));
             }
 
+            d->remoteApplyGuard.begin(d->localMutationEpoch);
+
             const bool previousSaveEnabled = d->saveEnabled;
             disconnectTreeModel();
             setSaveEnabled(false);
@@ -4610,17 +4923,23 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
             d->projectMetadata = loadData.metadata;
             d->pendingIdentityRepairSave = loadData.identityRepair.required;
 
+            bool modelMutated = false;
+            QString reconcileDiagnostic;
+            QStringList mergeDiagnostics;
+            SyncReport handlerReport = report;
+            if (applyMode == ReconcileApplyMode::TargetCommitWins) {
+                handlerReport.mergeBaseHead.clear();
+            }
+
             const cwReconcileMergeContext mergeContext {
                 this,
                 region,
                 &loadData,
-                &report,
+                &handlerReport,
                 projectRootDir()
             };
             const cwReconcileMergeResult mergeResult = cwSyncMergeRegistry::instance().reconcile(mergeContext);
 
-            bool modelMutated = false;
-            QString reconcileDiagnostic;
             if (mergeResult.outcome == cwReconcileMergeResult::Outcome::Applied) {
                 for (QObject* object : mergeResult.objectsPathReady) {
                     if (object != nullptr) {
@@ -4646,11 +4965,13 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
                 }
             }
 
+            mergeDiagnostics = mergeResult.diagnostics;
+
             if (!reconcileDiagnostic.isEmpty() && d->lastSyncReport.has_value()) {
                 d->lastSyncReport->diagnostics.append(reconcileDiagnostic);
             }
-            if (!mergeResult.diagnostics.isEmpty() && d->lastSyncReport.has_value()) {
-                d->lastSyncReport->diagnostics.append(mergeResult.diagnostics);
+            if (!mergeDiagnostics.isEmpty() && d->lastSyncReport.has_value()) {
+                d->lastSyncReport->diagnostics.append(mergeDiagnostics);
             }
 
             if (modelMutated) {

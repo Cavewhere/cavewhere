@@ -16,6 +16,7 @@
 #include "cwGlobals.h"
 #include "cwSaveLoad.h"
 #include "cwProjectSyncHealth.h"
+#include "cwSyncTypes.h"
 // #include "cwRegionLoadResult.h"
 // #include "cwError.h"
 #include "cwFutureManagerToken.h"
@@ -82,6 +83,8 @@ public:
     };
     Q_ENUM(FileType);
 
+    using BranchResetMode = cwSyncTypes::BranchResetMode;
+
     cwProject(QObject* parent = nullptr);
     ~cwProject();
 
@@ -110,6 +113,11 @@ public:
     Q_INVOKABLE void newProject();
     Q_INVOKABLE bool save();
     Q_INVOKABLE bool sync();
+
+
+    Q_INVOKABLE bool resetBranchAndReconcile(const QString& refSpec,
+                                             BranchResetMode resetMode = BranchResetMode::Hard);
+
     std::optional<cwSaveLoad::SyncReport> lastSyncReport() const;
     Q_INVOKABLE bool saveAs(QString newFilename);
     Q_INVOKABLE bool deleteTemporaryProject();
@@ -134,6 +142,7 @@ public:
 
     Q_INVOKABLE void waitLoadToFinish();
     void waitSaveToFinish();
+    Q_INVOKABLE void waitForSyncToFinish();
 
     //Old cavewhere file handling
     // static void createDefaultSchema(const QSqlDatabase& database);
@@ -181,6 +190,7 @@ public slots:
     void loadFile(QString filename);
 
 private:
+    bool beginSyncOperation(const QFuture<Monad::ResultBase>& operationFuture);
 
      // QDir m_projectDir;
     cwSaveLoad* m_saveLoad;
@@ -188,6 +198,7 @@ private:
     //save and load
     QFuture<void> LoadFuture;
     QFuture<void> SaveFuture;
+    QFuture<void> SyncFuture;
     QPointer<QQuickGit::Account> m_gitAccount;
 
     //The region that this project looks after
@@ -230,7 +241,7 @@ private:
 
     bool saveWillCauseDataLoss() const;
     void setSqliteTemporaryProject(bool isTemp);
-    void setSyncInProgress(bool inProgress);
+    void completeSyncOperation(const Monad::ResultBase& result);
 
     // void addImageHelper(std::function<void (QList<cwImage>)> outputCallBackFunc,
     //                     std::function<void (cwAddImageTask*)> setImagesFunc);
@@ -242,7 +253,6 @@ private:
 
     QList<QFuture<void>> RetiringSaveFutures;
     cwProjectSyncHealth* m_syncHealth = nullptr;
-    bool m_syncInProgress = false;
 };
 
 /**
@@ -274,7 +284,7 @@ inline cwErrorListModel* cwProject::errorModel() const {
 }
 
 inline cwProjectSyncHealth* cwProject::syncHealth() const { return m_syncHealth; }
-inline bool cwProject::syncInProgress() const { return m_syncInProgress; }
+inline bool cwProject::syncInProgress() const { return SyncFuture.isRunning(); }
 
 inline bool cwProject::canSaveDirectly() const {
     return !saveWillCauseDataLoss() && !isTemporaryProject();

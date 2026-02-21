@@ -49,7 +49,9 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
                 auto chunkDataChange = [this, chunk](cwSurveyChunk::DataRole role, int chunkIndex) {
                     auto rowType = toRowType(role);
                     auto modelIndex = toModelIndex({chunk, chunkIndex, rowType});
-                    Q_ASSERT(modelIndex.isValid());
+                    if (!modelIndex.isValid()) {
+                        return;
+                    }
                     emit dataChanged(modelIndex, modelIndex, {toModelRole(role)});
                 };
 
@@ -321,32 +323,61 @@ void cwSurveyEditorModel::addShotCalibration(int index)
 
 int cwSurveyEditorModel::toModelRow(const cwSurveyEditorRowIndex &rowIndex) const
 {
+    if (m_trip.isNull() || rowIndex.chunk() == nullptr) {
+        return -1;
+    }
+
+    const QList<cwSurveyChunk*> allChunks = m_trip->chunks();
+    const int chunkPosition = allChunks.indexOf(rowIndex.chunk());
+    if (chunkPosition < 0) {
+        return -1;
+    }
+
+    const auto rowChunk = rowIndex.chunk();
+    switch (rowIndex.rowType()) {
+    case cwSurveyEditorRowIndex::TitleRow:
+        break;
+    case cwSurveyEditorRowIndex::StationRow:
+        if (rowIndex.indexInChunk() < 0 || rowIndex.indexInChunk() >= rowChunk->stationCount()) {
+            return -1;
+        }
+        break;
+    case cwSurveyEditorRowIndex::ShotRow:
+        if (rowIndex.indexInChunk() < 0 || rowIndex.indexInChunk() >= rowChunk->shotCount()) {
+            return -1;
+        }
+        break;
+    default:
+        return -1;
+    }
+
     // Compute base model row for this chunk.
     int baseRow = 0;
-    const QList<cwSurveyChunk*> allChunks = m_trip->chunks();
-    for (cwSurveyChunk* current : allChunks) {
-        if (current == rowIndex.chunk()) {
-            break;
-        }
+    for (int i = 0; i < chunkPosition; ++i) {
+        auto* current = allChunks.at(i);
         baseRow += current->stationCount() + current->shotCount() + m_titleRowOffset;
     }
 
-    auto toIndex = [&]()->int {
-        switch(rowIndex.rowType()) {
-        case cwSurveyEditorRowIndex::TitleRow:
-            return baseRow;
-        case cwSurveyEditorRowIndex::StationRow:
-            return baseRow + rowIndex.indexInChunk() * 2 + m_titleRowOffset; //Alterate between the station and shot
-        case cwSurveyEditorRowIndex::ShotRow:
-            return baseRow + rowIndex.indexInChunk() * 2 + 1 + m_titleRowOffset;
-        default:
-            return -1;
-        }
-    };
+    int modelRow = -1;
+    switch(rowIndex.rowType()) {
+    case cwSurveyEditorRowIndex::TitleRow:
+        modelRow = baseRow;
+        break;
+    case cwSurveyEditorRowIndex::StationRow:
+        modelRow = baseRow + rowIndex.indexInChunk() * 2 + m_titleRowOffset; // Alternate between station and shot
+        break;
+    case cwSurveyEditorRowIndex::ShotRow:
+        modelRow = baseRow + rowIndex.indexInChunk() * 2 + 1 + m_titleRowOffset;
+        break;
+    default:
+        modelRow = -1;
+        break;
+    }
 
-    Q_ASSERT(toIndex() >= 0);
-    Q_ASSERT(toIndex() < rowCount());
-    return toIndex();
+    if (modelRow < 0 || modelRow >= rowCount()) {
+        return -1;
+    }
+    return modelRow;
 }
 
 cwSurveyEditorBoxIndex cwSurveyEditorModel::offsetBoxIndex(const cwSurveyEditorBoxIndex &boxIndex, int offsetIndex) const
@@ -355,8 +386,13 @@ cwSurveyEditorBoxIndex cwSurveyEditorModel::offsetBoxIndex(const cwSurveyEditorB
         return boxIndex;
     }
 
-    if(boxIndex.chunk() == nullptr) {
+    if (m_trip.isNull() || boxIndex.chunk() == nullptr) {
         qWarning() << "BoxIndex is likely invalid" << LOCATION;
+        return cwSurveyEditorBoxIndex();
+    }
+
+    const auto chunks = m_trip->chunks();
+    if (!chunks.contains(boxIndex.chunk())) {
         return cwSurveyEditorBoxIndex();
     }
 
@@ -374,9 +410,10 @@ cwSurveyEditorBoxIndex cwSurveyEditorModel::offsetBoxIndex(const cwSurveyEditorB
 
     if(nextIndexInChunk < 0 || nextIndexInChunk >= size(currentChunk)) {
         //Out of range in chunk
-        const auto chunks = m_trip->chunks();
-
         int chunkIndex = chunks.indexOf(currentChunk);
+        if (chunkIndex < 0) {
+            return cwSurveyEditorBoxIndex();
+        }
 
         if(nextIndexInChunk < 0) {
             while(nextIndexInChunk < 0 && chunkIndex >= 0) {
@@ -481,8 +518,11 @@ cwSurveyEditorRowIndex::RowType cwSurveyEditorModel::toRowType(cwSurveyChunk::Da
 
 QModelIndex cwSurveyEditorModel::toModelIndex(const cwSurveyEditorRowIndex &rowIndex) const
 {
-
-    return index(toModelRow(rowIndex));
+    const int row = toModelRow(rowIndex);
+    if (row < 0) {
+        return QModelIndex();
+    }
+    return index(row);
 }
 
 cwSurveyEditorModel::Role cwSurveyEditorModel::toModelRole(cwSurveyChunk::DataRole chunkRole) const

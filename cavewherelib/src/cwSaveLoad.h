@@ -35,6 +35,7 @@ class cwNoteLiDARData;
 #include "cwCavingRegionData.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
 #include "cwFutureManagerToken.h"
+#include "cwSyncTypes.h"
 #include "CaveWhereLibExport.h"
 
 //Google protobuffer
@@ -165,6 +166,8 @@ public:
         IncompatibleProjectVersion = Monad::ResultBase::CustomError + 2
     };
 
+    using BranchResetMode = cwSyncTypes::BranchResetMode;
+
     cwSaveLoad(QObject* parent = nullptr);
     ~cwSaveLoad();
 
@@ -247,6 +250,14 @@ public:
     void setSyncEnabled(bool enabled);
 
     QFuture<Monad::ResultBase> sync();
+    QFuture<Monad::ResultBase> resetBranchAndReconcile(const QString& refSpec,
+                                                       BranchResetMode resetMode = BranchResetMode::Hard);
+    // Compatibility overload; prefer typed BranchResetMode.
+    QFuture<Monad::ResultBase> resetBranchAndReconcile(const QString& refSpec,
+                                                       int resetMode);
+    // Compatibility wrapper; use resetBranchAndReconcile for branch-moving semantics.
+    QFuture<Monad::ResultBase> checkoutAndReconcile(const QString& refSpec,
+                                                    int checkoutMode = 1);
     std::optional<SyncReport> lastSyncReport() const;
     Monad::ResultBase commitProjectChanges(const QString& subject = QString(),
                                            const QString& description = QString());
@@ -262,6 +273,11 @@ signals:
     void objectPathReady(QObject* object);
 
 private:
+    enum class ReconcileApplyMode {
+        Merge,
+        TargetCommitWins
+    };
+
     struct ReconcileExternalResult {
         enum class Outcome {
             NoOp,
@@ -269,6 +285,18 @@ private:
         };
 
         Outcome outcome = Outcome::NoOp;
+    };
+
+    struct ReconcileAttemptState {
+        quint64 planEpoch = 0;
+        quint64 localMutationPlanEpoch = 0;
+        std::optional<SyncReport> report;
+        std::optional<ReconcileExternalResult> reconcileOutcome;
+    };
+
+    enum class FinalizeMode {
+        SyncPush,
+        CheckoutLocal
     };
 
     struct Data;
@@ -335,9 +363,19 @@ private:
 
     QFuture<Monad::ResultBase> loadImpl(const QString& filename);
     QFuture<Monad::ResultBase> saveFlushImpl();
+    QFuture<Monad::ResultBase> enqueueReconcilePhase(const QFuture<Monad::ResultBase>& prepareFuture,
+                                                     quint64 syncGeneration,
+                                                     const std::shared_ptr<ReconcileAttemptState>& attemptState,
+                                                     ReconcileApplyMode applyMode);
+    QFuture<Monad::ResultBase> enqueueFinalizePhase(const QFuture<Monad::ResultBase>& reconcileFuture,
+                                                    quint64 syncGeneration,
+                                                    QQuickGit::GitRepository* repo,
+                                                    const std::shared_ptr<ReconcileAttemptState>& attemptState,
+                                                    FinalizeMode mode);
     QFuture<Monad::Result<ReconcileExternalResult>> reconcileExternalImpl(const SyncReport& report,
                                                                            quint64 syncGeneration,
-                                                                           quint64 planEpoch);
+                                                                           quint64 planEpoch,
+                                                                           ReconcileApplyMode applyMode);
     QFuture<Monad::ResultBase> persistIdentityRepairSave();
 
 

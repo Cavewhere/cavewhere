@@ -61,6 +61,27 @@ public:
 };
 Q_DECLARE_METATYPE(cwCloneFixtureInfo)
 
+class CAVEWHERE_TESTLIB_EXPORT cwSyncFixtureInfo
+{
+    Q_GADGET
+    QML_NAMED_ELEMENT(syncFixtureInfo)
+    Q_PROPERTY(QString errorMessage MEMBER errorMessage)
+    Q_PROPERTY(QString projectFilePath MEMBER projectFilePath)
+    Q_PROPERTY(QString workingRepoPath MEMBER workingRepoPath)
+    Q_PROPERTY(QString remoteRepoPath MEMBER remoteRepoPath)
+    Q_PROPERTY(QString branchName MEMBER branchName)
+    Q_PROPERTY(QString lfsEndpoint MEMBER lfsEndpoint)
+
+public:
+    QString errorMessage;
+    QString projectFilePath;
+    QString workingRepoPath;
+    QString remoteRepoPath;
+    QString branchName;
+    QString lfsEndpoint;
+};
+Q_DECLARE_METATYPE(cwSyncFixtureInfo)
+
 class CAVEWHERE_TESTLIB_EXPORT TestHelper : public QObject {
     Q_OBJECT
     QML_ELEMENT
@@ -70,6 +91,7 @@ public:
     Q_INVOKABLE void loadProjectFromFile(cwProject* project, const QString& filename) {
         fileToProject(project, filename);
     }
+    Q_INVOKABLE void loadProjectFromPath(cwProject* project, const QString& localPath);
 
     Q_INVOKABLE void loadProjectFromZip(cwProject* project, const QString& filename);
 
@@ -83,6 +105,11 @@ public:
     Q_INVOKABLE QString repositoryRemoteUrl(const QUrl& repositoryDirectory,
                                             const QString& remoteName = QStringLiteral("origin")) const;
     Q_INVOKABLE QString normalizeFileGitUrl(const QString& url) const;
+    Q_INVOKABLE QString projectHeadCommitOid(cwProject* project) const;
+    Q_INVOKABLE QString checkoutProjectRef(cwProject* project,
+                                           const QString& refSpec,
+                                           bool force = true) const;
+    Q_INVOKABLE cwSyncFixtureInfo createLocalSyncFixtureWithLfsServer();
     Q_INVOKABLE cwCloneFixtureInfo createLocalBareRemoteForCloneTest();
     Q_INVOKABLE bool setGitHubAccessTokenForAccount(const QString& accountId,
                                                     const QString& token) const;

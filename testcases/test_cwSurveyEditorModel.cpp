@@ -107,6 +107,39 @@ TEST_CASE("cwSurveyEditorModel new chunk should work correctly", "[cwSurveyEdito
     CHECK(i3.data(cwSurveyEditorModel::ShotCalibrationRole).isNull());
 }
 
+TEST_CASE("cwSurveyEditorModel should reject stale box indices after trip replacement",
+          "[cwSurveyEditorModel][sync][regression]")
+{
+    cwTrip originalTrip;
+    originalTrip.addNewChunk();
+    REQUIRE(originalTrip.chunkCount() == 1);
+
+    cwSurveyEditorModel model;
+    model.setTrip(&originalTrip);
+    REQUIRE(model.rowCount() == 4);
+
+    const QModelIndex originalStationRow = model.index(1);
+    REQUIRE(originalStationRow.isValid());
+
+    const auto originalStationBox =
+        originalStationRow.data(cwSurveyEditorModel::StationNameRole).value<cwSurveyEditorBoxData>();
+    REQUIRE(originalStationBox.chunk() == originalTrip.chunk(0));
+
+    cwTrip replacementTrip;
+    replacementTrip.addNewChunk();
+    REQUIRE(replacementTrip.chunkCount() == 1);
+    model.setTrip(&replacementTrip);
+    REQUIRE(model.trip() == &replacementTrip);
+    REQUIRE(model.rowCount() == 4);
+
+    // Regression intent:
+    // A stale box index from the old trip should be considered invalid after setTrip().
+    // Today offsetBoxIndex() happily returns another stale index, which can later feed
+    // into toModelRow() and hit the row-count assert seen in checkout/reconcile flows.
+    const auto movedBox = model.offsetBoxIndex(originalStationBox.boxIndex(), 1);
+    CHECK(movedBox.chunk() == nullptr);
+}
+
 TEST_CASE("cwSurveyEditorModel box data stays correct after appendNewShot", "[cwSurveyEditorModel]") {
     cwTrip trip;
     trip.addNewChunk();

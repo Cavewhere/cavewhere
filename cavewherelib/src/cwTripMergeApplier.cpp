@@ -123,11 +123,12 @@ Monad::ResultBase cwTripMergeApplier::applyTripMergePlan(const cwTripMergePlan& 
         baseName,
         [](const QString& lhs, const QString& rhs) { return lhs == rhs; }));
 
-    currentTrip->setDate(cwSyncMergeApplyUtils::chooseBundleValue(
+    const QDateTime mergedDate = cwSyncMergeApplyUtils::chooseBundleValue(
         currentTrip->date(),
         loadedTripData.date,
         baseDate,
-        [](const QDateTime& lhs, const QDateTime& rhs) { return lhs == rhs; }));
+        [](const QDateTime& lhs, const QDateTime& rhs) { return lhs == rhs; });
+    currentTrip->setDate(mergedDate);
 
     const auto calibrationMergePlan = cwTripCalibrationMergePlanBuilder::build(
         currentTrip->calibrations(),
