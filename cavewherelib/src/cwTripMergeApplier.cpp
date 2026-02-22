@@ -88,13 +88,12 @@ Monad::Result<cwSurveyChunkData> mergeChunkDataViaHandler(
 Monad::ResultBase cwTripMergeApplier::applyTripMergePlan(const cwTripMergePlan& plan)
 {
     Q_ASSERT(plan.currentTrip != nullptr);
-    Q_ASSERT(plan.loadedTripData != nullptr);
-    if (plan.currentTrip == nullptr || plan.loadedTripData == nullptr) {
+    if (plan.currentTrip == nullptr) {
         return Monad::ResultBase(QStringLiteral("Trip merge plan is missing required objects."));
     }
 
     cwTrip* const currentTrip = plan.currentTrip;
-    const cwTripData& loadedTripData = *plan.loadedTripData;
+    const cwTripData& loadedTripData = plan.loadedTripData;
 
     if (!hasOnlyMergeableDiff(currentTrip, loadedTripData)) {
         return Monad::ResultBase(

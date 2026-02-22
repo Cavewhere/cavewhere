@@ -14,7 +14,7 @@ class cwTrip;
 
 struct cwTripMergePlan {
     cwTrip* currentTrip = nullptr;
-    const cwTripData* loadedTripData = nullptr;
+    cwTripData loadedTripData;
     std::optional<cwTripData> baseTripData;
     cwSyncMergeApplyUtils::ApplyMode applyMode = cwSyncMergeApplyUtils::ApplyMode::ThreeWayMerge;
 };

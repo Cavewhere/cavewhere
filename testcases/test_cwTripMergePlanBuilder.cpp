@@ -73,9 +73,9 @@ TEST_CASE("cwTrip merge plan builder maps loaded trips by stable id", "[cwTripMe
     REQUIRE_FALSE(preparation.hasError());
     REQUIRE(preparation.value().plans.size() == 2);
     CHECK(preparation.value().plans[0].currentTrip == &secondTrip);
-    CHECK(preparation.value().plans[0].loadedTripData == &secondLoaded);
+    CHECK(preparation.value().plans[0].loadedTripData.id == secondLoaded.id);
     CHECK(preparation.value().plans[1].currentTrip == &firstTrip);
-    CHECK(preparation.value().plans[1].loadedTripData == &firstLoaded);
+    CHECK(preparation.value().plans[1].loadedTripData.id == firstLoaded.id);
 }
 
 TEST_CASE("cwTrip merge plan builder rejects ambiguous loaded trip ids", "[cwTripMerge][sync]")
@@ -111,7 +111,7 @@ TEST_CASE("cwTrip merge applier merges name and date bundles independently", "[c
 
     cwTripMergePlan plan;
     plan.currentTrip = &currentTrip;
-    plan.loadedTripData = &loadedTripData;
+    plan.loadedTripData = loadedTripData;
     plan.baseTripData = baseTripData;
 
     const auto applyResult = cwTripMergeApplier::applyTripMergePlan(plan);
@@ -141,7 +141,7 @@ TEST_CASE("cwTrip merge applier merges calibration fields independently", "[cwTr
 
     cwTripMergePlan plan;
     plan.currentTrip = &currentTrip;
-    plan.loadedTripData = &loadedTripData;
+    plan.loadedTripData = loadedTripData;
     plan.baseTripData = baseTripData;
 
     const auto applyResult = cwTripMergeApplier::applyTripMergePlan(plan);
@@ -166,7 +166,7 @@ TEST_CASE("cwTrip merge applier returns error when trip chunk ids are ambiguous"
 
     cwTripMergePlan plan;
     plan.currentTrip = &currentTrip;
-    plan.loadedTripData = &loadedTripData;
+    plan.loadedTripData = loadedTripData;
 
     const auto applyResult = cwTripMergeApplier::applyTripMergePlan(plan);
     CHECK(applyResult.hasError());
@@ -254,7 +254,7 @@ TEST_CASE("cwTrip merge applier structurally merges chunk list by stable id with
 
     cwTripMergePlan plan;
     plan.currentTrip = &currentTrip;
-    plan.loadedTripData = &loadedTripData;
+    plan.loadedTripData = loadedTripData;
     plan.baseTripData = baseTripData;
 
     const auto applyResult = cwTripMergeApplier::applyTripMergePlan(plan);
@@ -306,7 +306,7 @@ TEST_CASE("cwTrip merge applier merges survey chunk payloads by stable id", "[cw
 
     cwTripMergePlan plan;
     plan.currentTrip = &currentTrip;
-    plan.loadedTripData = &loadedTripData;
+    plan.loadedTripData = loadedTripData;
     plan.baseTripData = baseTripData;
 
     const auto applyResult = cwTripMergeApplier::applyTripMergePlan(plan);

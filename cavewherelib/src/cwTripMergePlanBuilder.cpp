@@ -39,7 +39,7 @@ Monad::Result<cwTripMergePreparation> cwTripMergePlanBuilder::build(
 
         cwTripMergePlan plan;
         plan.currentTrip = *currentTripIt;
-        plan.loadedTripData = loadedTripData;
+        plan.loadedTripData = *loadedTripData;
         plan.applyMode = applyMode;
 
         const auto baseTripIt = baseTripById.constFind(loadedTripData->id);
