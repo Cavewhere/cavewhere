@@ -29,7 +29,8 @@ Monad::ResultBase cwTripCalibrationMergeApplier::applyTripCalibrationMergePlan(c
         baseCalibrationData.has_value()
             ? std::optional<bool>(baseCalibrationData->hasCorrectedCompassBacksight())
             : std::nullopt,
-        [](bool lhs, bool rhs) { return lhs == rhs; }));
+        [](bool lhs, bool rhs) { return lhs == rhs; },
+        plan.applyMode));
 
     mergedData.setCorrectedClinoBacksight(cwSyncMergeApplyUtils::chooseBundleValue(
         currentCalibrationData.hasCorrectedClinoBacksight(),
@@ -37,7 +38,8 @@ Monad::ResultBase cwTripCalibrationMergeApplier::applyTripCalibrationMergePlan(c
         baseCalibrationData.has_value()
             ? std::optional<bool>(baseCalibrationData->hasCorrectedClinoBacksight())
             : std::nullopt,
-        [](bool lhs, bool rhs) { return lhs == rhs; }));
+        [](bool lhs, bool rhs) { return lhs == rhs; },
+        plan.applyMode));
 
     mergedData.setCorrectedCompassFrontsight(cwSyncMergeApplyUtils::chooseBundleValue(
         currentCalibrationData.hasCorrectedCompassFrontsight(),
@@ -45,7 +47,8 @@ Monad::ResultBase cwTripCalibrationMergeApplier::applyTripCalibrationMergePlan(c
         baseCalibrationData.has_value()
             ? std::optional<bool>(baseCalibrationData->hasCorrectedCompassFrontsight())
             : std::nullopt,
-        [](bool lhs, bool rhs) { return lhs == rhs; }));
+        [](bool lhs, bool rhs) { return lhs == rhs; },
+        plan.applyMode));
 
     mergedData.setCorrectedClinoFrontsight(cwSyncMergeApplyUtils::chooseBundleValue(
         currentCalibrationData.hasCorrectedClinoFrontsight(),
@@ -53,7 +56,8 @@ Monad::ResultBase cwTripCalibrationMergeApplier::applyTripCalibrationMergePlan(c
         baseCalibrationData.has_value()
             ? std::optional<bool>(baseCalibrationData->hasCorrectedClinoFrontsight())
             : std::nullopt,
-        [](bool lhs, bool rhs) { return lhs == rhs; }));
+        [](bool lhs, bool rhs) { return lhs == rhs; },
+        plan.applyMode));
 
     mergedData.setTapeCalibration(cwSyncMergeApplyUtils::chooseBundleValue(
         currentCalibrationData.tapeCalibration(),
@@ -61,7 +65,8 @@ Monad::ResultBase cwTripCalibrationMergeApplier::applyTripCalibrationMergePlan(c
         baseCalibrationData.has_value()
             ? std::optional<double>(baseCalibrationData->tapeCalibration())
             : std::nullopt,
-        doublesEqual));
+        doublesEqual,
+        plan.applyMode));
 
     mergedData.setFrontCompassCalibration(cwSyncMergeApplyUtils::chooseBundleValue(
         currentCalibrationData.frontCompassCalibration(),
@@ -69,7 +74,8 @@ Monad::ResultBase cwTripCalibrationMergeApplier::applyTripCalibrationMergePlan(c
         baseCalibrationData.has_value()
             ? std::optional<double>(baseCalibrationData->frontCompassCalibration())
             : std::nullopt,
-        doublesEqual));
+        doublesEqual,
+        plan.applyMode));
 
     mergedData.setFrontClinoCalibration(cwSyncMergeApplyUtils::chooseBundleValue(
         currentCalibrationData.frontClinoCalibration(),
@@ -77,7 +83,8 @@ Monad::ResultBase cwTripCalibrationMergeApplier::applyTripCalibrationMergePlan(c
         baseCalibrationData.has_value()
             ? std::optional<double>(baseCalibrationData->frontClinoCalibration())
             : std::nullopt,
-        doublesEqual));
+        doublesEqual,
+        plan.applyMode));
 
     mergedData.setBackCompassCalibration(cwSyncMergeApplyUtils::chooseBundleValue(
         currentCalibrationData.backCompassCalibration(),
@@ -85,7 +92,8 @@ Monad::ResultBase cwTripCalibrationMergeApplier::applyTripCalibrationMergePlan(c
         baseCalibrationData.has_value()
             ? std::optional<double>(baseCalibrationData->backCompassCalibration())
             : std::nullopt,
-        doublesEqual));
+        doublesEqual,
+        plan.applyMode));
 
     mergedData.setBackClinoCalibration(cwSyncMergeApplyUtils::chooseBundleValue(
         currentCalibrationData.backClinoCalibration(),
@@ -93,7 +101,8 @@ Monad::ResultBase cwTripCalibrationMergeApplier::applyTripCalibrationMergePlan(c
         baseCalibrationData.has_value()
             ? std::optional<double>(baseCalibrationData->backClinoCalibration())
             : std::nullopt,
-        doublesEqual));
+        doublesEqual,
+        plan.applyMode));
 
     mergedData.setDeclination(cwSyncMergeApplyUtils::chooseBundleValue(
         currentCalibrationData.declination(),
@@ -101,7 +110,8 @@ Monad::ResultBase cwTripCalibrationMergeApplier::applyTripCalibrationMergePlan(c
         baseCalibrationData.has_value()
             ? std::optional<double>(baseCalibrationData->declination())
             : std::nullopt,
-        doublesEqual));
+        doublesEqual,
+        plan.applyMode));
 
     mergedData.setDistanceUnit(cwSyncMergeApplyUtils::chooseBundleValue(
         currentCalibrationData.distanceUnit(),
@@ -109,7 +119,8 @@ Monad::ResultBase cwTripCalibrationMergeApplier::applyTripCalibrationMergePlan(c
         baseCalibrationData.has_value()
             ? std::optional<cwUnits::LengthUnit>(baseCalibrationData->distanceUnit())
             : std::nullopt,
-        [](cwUnits::LengthUnit lhs, cwUnits::LengthUnit rhs) { return lhs == rhs; }));
+        [](cwUnits::LengthUnit lhs, cwUnits::LengthUnit rhs) { return lhs == rhs; },
+        plan.applyMode));
 
     mergedData.setFrontSights(cwSyncMergeApplyUtils::chooseBundleValue(
         currentCalibrationData.hasFrontSights(),
@@ -117,7 +128,8 @@ Monad::ResultBase cwTripCalibrationMergeApplier::applyTripCalibrationMergePlan(c
         baseCalibrationData.has_value()
             ? std::optional<bool>(baseCalibrationData->hasFrontSights())
             : std::nullopt,
-        [](bool lhs, bool rhs) { return lhs == rhs; }));
+        [](bool lhs, bool rhs) { return lhs == rhs; },
+        plan.applyMode));
 
     mergedData.setBackSights(cwSyncMergeApplyUtils::chooseBundleValue(
         currentCalibrationData.hasBackSights(),
@@ -125,7 +137,8 @@ Monad::ResultBase cwTripCalibrationMergeApplier::applyTripCalibrationMergePlan(c
         baseCalibrationData.has_value()
             ? std::optional<bool>(baseCalibrationData->hasBackSights())
             : std::nullopt,
-        [](bool lhs, bool rhs) { return lhs == rhs; }));
+        [](bool lhs, bool rhs) { return lhs == rhs; },
+        plan.applyMode));
 
     plan.currentCalibration->setData(mergedData);
     return Monad::ResultBase();

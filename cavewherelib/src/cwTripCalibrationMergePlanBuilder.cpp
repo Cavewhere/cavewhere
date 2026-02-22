@@ -3,7 +3,8 @@
 Monad::Result<cwTripCalibrationMergePlan> cwTripCalibrationMergePlanBuilder::build(
     cwTripCalibration* currentCalibration,
     const cwTripCalibrationData* loadedCalibrationData,
-    const std::optional<cwTripCalibrationData>& baseCalibrationData)
+    const std::optional<cwTripCalibrationData>& baseCalibrationData,
+    cwSyncMergeApplyUtils::ApplyMode applyMode)
 {
     if (currentCalibration == nullptr || loadedCalibrationData == nullptr) {
         return Monad::Result<cwTripCalibrationMergePlan>(
@@ -14,5 +15,6 @@ Monad::Result<cwTripCalibrationMergePlan> cwTripCalibrationMergePlanBuilder::bui
     plan.currentCalibration = currentCalibration;
     plan.loadedCalibrationData = loadedCalibrationData;
     plan.baseCalibrationData = baseCalibrationData;
+    plan.applyMode = applyMode;
     return Monad::Result<cwTripCalibrationMergePlan>(plan);
 }

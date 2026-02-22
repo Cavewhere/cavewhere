@@ -9,11 +9,17 @@
 class cwCavingRegion;
 class QObject;
 
+enum class cwReconcileApplyMode {
+    Merge,
+    TargetCommitWins
+};
+
 struct cwReconcileMergeContext {
     cwSaveLoad* saveLoad = nullptr;
     cwCavingRegion* region = nullptr;
     const cwSaveLoad::ProjectLoadData* loadData = nullptr;
     const cwSaveLoad::SyncReport* report = nullptr;
+    cwReconcileApplyMode applyMode = cwReconcileApplyMode::Merge;
     QDir repoRoot;
 };
 

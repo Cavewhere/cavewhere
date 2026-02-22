@@ -21,13 +21,7 @@ CheckableGroupBox {
     text: "<b>Back Sights</b>"
     checked: calibration.backSights
 
-    onCalibrationChanged: {
-        checked = calibration.backSights
-        compassCorrected.checked = calibration.correctedCompassBacksight
-        clinoCorrected.checked = calibration.correctedClinoBacksight
-    }
-
-    onCheckedChanged: {
+    onClicked: {
         calibration.backSights = checked
     }
 
@@ -47,6 +41,7 @@ CheckableGroupBox {
 
             ClickTextInput {
                 id: clinoCalInput
+                objectName: "backCompassCalibrationEdit"
                 text: Utils.fixed(editorId.calibration.backCompassCalibration, 2)
 
                 onFinishedEditting: (newText) => {
@@ -80,6 +75,7 @@ CheckableGroupBox {
 
             ClickTextInput {
                 id: compassCalInput
+                objectName: "backClinoCalibrationEdit"
                 text: Utils.fixed(editorId.calibration.backClinoCalibration, 2)
 
                 onFinishedEditting: (newText) => {
@@ -116,11 +112,12 @@ CheckableGroupBox {
 
             CheckBox {
                 id: compassCorrected
+                objectName: "correctedCompassCheck"
                 text: "Corrected <i>Compass</i>"
 
                 checked: editorId.calibration.correctedCompassBacksight
 
-                onCheckedChanged: {
+                onClicked: {
                     editorId.calibration.correctedCompassBacksight = checked
                 }
             }
@@ -146,11 +143,12 @@ CheckableGroupBox {
 
             CheckBox {
                 id: clinoCorrected
+                objectName: "correctedClinoCheck"
                 text: "Corrected <i>Clino</i>"
 
                 checked: editorId.calibration.correctedClinoBacksight
 
-                onCheckedChanged: {
+                onClicked: {
                     editorId.calibration.correctedClinoBacksight = checked
                 }
             }

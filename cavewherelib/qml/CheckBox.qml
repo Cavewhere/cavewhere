@@ -3,7 +3,6 @@ import QtQuick as QQ
 
 QC.CheckBox {
     id: control
-    checked: true
 
     // indicator: QQ.Rectangle {
     //     implicitWidth: 18

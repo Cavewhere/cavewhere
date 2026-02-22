@@ -55,12 +55,15 @@
 #include <QtCore/qscopeguard.h>
 #include <QFileInfo>
 #include <QThread>
+#include <QDebug>
 
 //QQuickGit
 #include "GitRepository.h"
 #include "Account.h"
 #include "LfsStore.h"
 #include "LfsPolicy.h"
+
+#include <git2.h>
 
 //Monad
 #include "Monad/Monad.h"
@@ -4005,7 +4008,11 @@ void cwSaveLoad::connectScrap(cwScrap *scrap)
 
     // Lambda to save this specific note
     const auto saveNote = [this, scrap]() {
-        save(scrap->parentNote());
+        cwNote* parentNote = scrap->parentNote();
+        if (parentNote == nullptr) {
+            return;
+        }
+        save(parentNote);
     };
 
     if(!d->trackConnected(scrap)) {
@@ -4032,8 +4039,23 @@ void cwSaveLoad::connectScrap(cwScrap *scrap)
     connect(scrap, &cwScrap::leadsInserted, this, saveNote);
     connect(scrap, &cwScrap::leadsBeginRemoved, this, saveNote);
     connect(scrap, &cwScrap::leadsRemoved, this, saveNote);
-    connect(scrap, &cwScrap::leadsDataChanged, this, saveNote);
     connect(scrap, &cwScrap::leadsReset, this, saveNote);
+    connect(scrap, &cwScrap::leadsDataChanged,
+            this, [saveNote](int begin, int end, QList<int> roles) {
+                Q_UNUSED(begin);
+                Q_UNUSED(end);
+
+                // LeadPosition is derived from triangulation and should not trigger note persistence.
+                const bool hasPersistentLeadRole = roles.contains(cwScrap::LeadPositionOnNote)
+                                                   || roles.contains(cwScrap::LeadDesciption)
+                                                   || roles.contains(cwScrap::LeadSize)
+                                                   || roles.contains(cwScrap::LeadCompleted);
+                if (!hasPersistentLeadRole) {
+                    return;
+                }
+
+                saveNote();
+            });
 
     // Transformations / type / view matrix
     connect(scrap, &cwScrap::noteTransformationChanged, this, saveNote);
@@ -4927,15 +4949,14 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
             QString reconcileDiagnostic;
             QStringList mergeDiagnostics;
             SyncReport handlerReport = report;
-            if (applyMode == ReconcileApplyMode::TargetCommitWins) {
-                handlerReport.mergeBaseHead.clear();
-            }
-
             const cwReconcileMergeContext mergeContext {
                 this,
                 region,
                 &loadData,
                 &handlerReport,
+                applyMode == ReconcileApplyMode::TargetCommitWins
+                    ? cwReconcileApplyMode::TargetCommitWins
+                    : cwReconcileApplyMode::Merge,
                 projectRootDir()
             };
             const cwReconcileMergeResult mergeResult = cwSyncMergeRegistry::instance().reconcile(mergeContext);

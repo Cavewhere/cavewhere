@@ -3,6 +3,7 @@
 #include "cwCavingRegion.h"
 #include "cwGlobals.h"
 #include "cwRegionLoadTask.h"
+#include "cwSyncMergeApplyUtils.h"
 #include "cwTrip.h"
 #include "cwTripMergeApplier.h"
 #include "cwTripMergePlanBuilder.h"
@@ -102,6 +103,23 @@ std::optional<std::pair<QUuid, cwTripData>> loadBaseTripDataForPath(const QDir& 
     }
     if (protoTrip.has_date()) {
         baseTripData.date = QDateTime(cwRegionLoadTask::loadDate(protoTrip.date()), QTime());
+    }
+
+    if (protoTrip.has_tripcalibration()) {
+        const auto& protoCalibration = protoTrip.tripcalibration();
+        baseTripData.calibrations.setCorrectedCompassBacksight(protoCalibration.correctedcompassbacksight());
+        baseTripData.calibrations.setCorrectedClinoBacksight(protoCalibration.correctedclinobacksight());
+        baseTripData.calibrations.setCorrectedCompassFrontsight(protoCalibration.correctedcompassfrontsight());
+        baseTripData.calibrations.setCorrectedClinoFrontsight(protoCalibration.correctedclinofrontsight());
+        baseTripData.calibrations.setTapeCalibration(protoCalibration.tapecalibration());
+        baseTripData.calibrations.setFrontCompassCalibration(protoCalibration.frontcompasscalibration());
+        baseTripData.calibrations.setFrontClinoCalibration(protoCalibration.frontclinocalibration());
+        baseTripData.calibrations.setBackCompassCalibration(protoCalibration.backcompassscalibration());
+        baseTripData.calibrations.setBackClinoCalibration(protoCalibration.backclinocalibration());
+        baseTripData.calibrations.setDeclination(protoCalibration.declination());
+        baseTripData.calibrations.setDistanceUnit(static_cast<cwUnits::LengthUnit>(protoCalibration.distanceunit()));
+        baseTripData.calibrations.setFrontSights(protoCalibration.frontsights());
+        baseTripData.calibrations.setBackSights(protoCalibration.backsights());
     }
 
     return std::make_optional(std::make_pair(baseTripData.id, baseTripData));
@@ -212,7 +230,10 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
 
     const auto mergePreparation = cwTripMergePlanBuilder::build(changedCurrentTrips,
                                                                 changedLoadedTrips,
-                                                                baseTripById);
+                                                                baseTripById,
+                                                                context.applyMode == cwReconcileApplyMode::TargetCommitWins
+                                                                    ? cwSyncMergeApplyUtils::ApplyMode::LoadedWins
+                                                                    : cwSyncMergeApplyUtils::ApplyMode::ThreeWayMerge);
     if (mergePreparation.hasError()) {
         cwReconcileMergeResult result;
         result.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;

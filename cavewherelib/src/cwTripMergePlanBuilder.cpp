@@ -8,7 +8,8 @@
 Monad::Result<cwTripMergePreparation> cwTripMergePlanBuilder::build(
     const QList<cwTrip*>& currentTrips,
     const QList<const cwTripData*>& loadedTrips,
-    const QHash<QUuid, cwTripData>& baseTripById)
+    const QHash<QUuid, cwTripData>& baseTripById,
+    cwSyncMergeApplyUtils::ApplyMode applyMode)
 {
     const auto currentTripsById = cwSyncIdUtils::buildUniqueIdPointerMap(
         currentTrips,
@@ -39,6 +40,7 @@ Monad::Result<cwTripMergePreparation> cwTripMergePlanBuilder::build(
         cwTripMergePlan plan;
         plan.currentTrip = *currentTripIt;
         plan.loadedTripData = loadedTripData;
+        plan.applyMode = applyMode;
 
         const auto baseTripIt = baseTripById.constFind(loadedTripData->id);
         if (baseTripIt != baseTripById.constEnd()) {

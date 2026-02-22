@@ -11,6 +11,8 @@ import cavewherelib
 QQ.Item {
     id: itemId
 
+    signal clicked()
+
     property QQ.color backgroundColor: Theme.background
     property alias checked: checkbox.checked
     property alias text: checkbox.text
@@ -61,6 +63,10 @@ QQ.Item {
         objectName: "checkBox"
         anchors.left: checkBoxGroup.left
         anchors.leftMargin: 6
+
+        onClicked: {
+            itemId.clicked()
+        }
     }
 
 }

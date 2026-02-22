@@ -4,12 +4,22 @@
 
 namespace cwSyncMergeApplyUtils {
 
+enum class ApplyMode {
+    ThreeWayMerge,
+    LoadedWins
+};
+
 template<typename T, typename IsEqualFn>
 T chooseBundleValue(const T& currentValue,
                     const T& loadedValue,
                     const std::optional<T>& baseValue,
-                    IsEqualFn isEqual)
+                    IsEqualFn isEqual,
+                    ApplyMode applyMode = ApplyMode::ThreeWayMerge)
 {
+    if (applyMode == ApplyMode::LoadedWins) {
+        return loadedValue;
+    }
+
     if (!baseValue.has_value()) {
         return loadedValue;
     }
@@ -25,4 +35,3 @@ T chooseBundleValue(const T& currentValue,
 }
 
 } // namespace cwSyncMergeApplyUtils
-

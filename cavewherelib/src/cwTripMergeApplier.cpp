@@ -117,23 +117,27 @@ Monad::ResultBase cwTripMergeApplier::applyTripMergePlan(const cwTripMergePlan& 
         ? std::optional<QList<cwSurveyChunkData>>(plan.baseTripData->chunks)
         : std::nullopt;
 
-    currentTrip->setName(cwSyncMergeApplyUtils::chooseBundleValue(
+    const QString mergedName = cwSyncMergeApplyUtils::chooseBundleValue(
         currentTrip->name(),
         loadedTripData.name,
         baseName,
-        [](const QString& lhs, const QString& rhs) { return lhs == rhs; }));
+        [](const QString& lhs, const QString& rhs) { return lhs == rhs; },
+        plan.applyMode);
+    currentTrip->setName(mergedName);
 
     const QDateTime mergedDate = cwSyncMergeApplyUtils::chooseBundleValue(
         currentTrip->date(),
         loadedTripData.date,
         baseDate,
-        [](const QDateTime& lhs, const QDateTime& rhs) { return lhs == rhs; });
+        [](const QDateTime& lhs, const QDateTime& rhs) { return lhs == rhs; },
+        plan.applyMode);
     currentTrip->setDate(mergedDate);
 
     const auto calibrationMergePlan = cwTripCalibrationMergePlanBuilder::build(
         currentTrip->calibrations(),
         &loadedTripData.calibrations,
-        baseCalibration);
+        baseCalibration,
+        plan.applyMode);
     if (calibrationMergePlan.hasError()) {
         return Monad::ResultBase(calibrationMergePlan.errorMessage());
     }
@@ -172,19 +176,23 @@ Monad::ResultBase cwTripMergeApplier::applyTripMergePlan(const cwTripMergePlan& 
         loadedTripData.chunks,
         baseChunks,
         [](const cwSurveyChunkData& chunkData) { return chunkData.id; },
-        [](const cwSurveyChunkData& currentChunkData,
+        [applyMode = plan.applyMode](const cwSurveyChunkData& currentChunkData,
            const cwSurveyChunkData& loadedChunkData,
            const std::optional<cwSurveyChunkData>& baseChunkData) {
+            if (applyMode == cwSyncMergeApplyUtils::ApplyMode::LoadedWins) {
+                return Monad::Result<cwSurveyChunkData>(loadedChunkData);
+            }
             return mergeChunkDataViaHandler(currentChunkData, loadedChunkData, baseChunkData);
         },
-        [](const std::vector<QUuid>& currentIds,
+        [applyMode = plan.applyMode](const std::vector<QUuid>& currentIds,
            const std::vector<QUuid>& loadedIds,
            const std::optional<std::vector<QUuid>>& baseIds) {
             return cwSyncMergeApplyUtils::chooseBundleValue(
                 currentIds,
                 loadedIds,
                 baseIds,
-                [](const std::vector<QUuid>& lhs, const std::vector<QUuid>& rhs) { return lhs == rhs; });
+                [](const std::vector<QUuid>& lhs, const std::vector<QUuid>& rhs) { return lhs == rhs; },
+                applyMode);
         },
         QStringLiteral("trip chunk list"));
     if (mergedChunkDataList.hasError()) {
