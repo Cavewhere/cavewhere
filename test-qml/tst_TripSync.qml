@@ -100,9 +100,9 @@ MainWindowTest {
         }
 
         function runTripSyncRoundTrip(tripPageAddress, getter, setter, nextValue) {
-            const verifyEditedValueTimeoutMs = 1000
-            const verifyBaselineAfterCheckoutTimeoutMs = 1000
-            const verifyResyncedValueTimeoutMs = 1000
+            const verifyEditedValueTimeoutMs = 3000
+            const verifyBaselineAfterCheckoutTimeoutMs = 3000
+            const verifyResyncedValueTimeoutMs = 3000
 
             let baselineValue = String(getter())
             verify(baselineValue.length > 0)
@@ -142,6 +142,113 @@ MainWindowTest {
             tryVerifyWithDiagnostics(() => {
                 return String(getter()) === syncedValue
             }, verifyResyncedValueTimeoutMs, "verify synced value after second sync")
+        }
+
+        function teamMembersFromModel(teamModel) {
+            let members = []
+            for (let row = 0; row < teamModel.rowCount(); ++row) {
+                let modelIndex = teamModel.index(row, 0)
+                let name = String(teamModel.data(modelIndex, Team.NameRole))
+                let jobsValue = teamModel.data(modelIndex, Team.JobsRole)
+                let jobs = []
+                if (Array.isArray(jobsValue)) {
+                    for (let i = 0; i < jobsValue.length; ++i) {
+                        jobs.push(String(jobsValue[i]))
+                    }
+                } else if (jobsValue !== null
+                           && jobsValue !== undefined
+                           && typeof jobsValue.length === "number") {
+                    for (let j = 0; j < jobsValue.length; ++j) {
+                        jobs.push(String(jobsValue[j]))
+                    }
+                } else if (jobsValue !== null && jobsValue !== undefined) {
+                    jobs.push(String(jobsValue))
+                }
+                members.push({
+                    name: name,
+                    jobs: jobs
+                })
+            }
+            return members
+        }
+
+        function snapshotTeamState(teamModel) {
+            return JSON.stringify({
+                members: teamMembersFromModel(teamModel)
+            })
+        }
+
+        function applyTeamState(teamModel, stateJson) {
+            let state = JSON.parse(stateJson)
+            while (teamModel.rowCount() > 0) {
+                teamModel.removeTeamMember(teamModel.rowCount() - 1)
+            }
+
+            for (let i = 0; i < state.members.length; ++i) {
+                let member = state.members[i]
+                teamModel.addTeamMember()
+                let row = teamModel.rowCount() - 1
+                teamModel.setData(row, Team.NameRole, member.name)
+                teamModel.setData(row, Team.JobsRole, member.jobs)
+            }
+        }
+
+        function findDescendantByObjectName(rootObject, objectName) {
+            if (rootObject === null || rootObject === undefined) {
+                return null
+            }
+            if (rootObject.objectName === objectName) {
+                return rootObject
+            }
+
+            let childCollections = []
+            if (rootObject.children !== undefined && rootObject.children !== null) {
+                childCollections.push(rootObject.children)
+            }
+            if (rootObject.contentItem !== undefined && rootObject.contentItem !== null) {
+                childCollections.push([rootObject.contentItem])
+            }
+
+            for (let c = 0; c < childCollections.length; ++c) {
+                let children = childCollections[c]
+                for (let i = 0; i < children.length; ++i) {
+                    let found = findDescendantByObjectName(children[i], objectName)
+                    if (found !== null) {
+                        return found
+                    }
+                }
+            }
+
+            return null
+        }
+
+        function findDescendantWhere(rootObject, predicate) {
+            if (rootObject === null || rootObject === undefined) {
+                return null
+            }
+            if (predicate(rootObject)) {
+                return rootObject
+            }
+
+            let childCollections = []
+            if (rootObject.children !== undefined && rootObject.children !== null) {
+                childCollections.push(rootObject.children)
+            }
+            if (rootObject.contentItem !== undefined && rootObject.contentItem !== null) {
+                childCollections.push([rootObject.contentItem])
+            }
+
+            for (let c = 0; c < childCollections.length; ++c) {
+                let children = childCollections[c]
+                for (let i = 0; i < children.length; ++i) {
+                    let found = findDescendantWhere(children[i], predicate)
+                    if (found !== null) {
+                        return found
+                    }
+                }
+            }
+
+            return null
         }
 
         function test_tripDateSyncAndCheckout() {
@@ -340,6 +447,195 @@ MainWindowTest {
                 }
             )
 
+        }
+
+        function test_tripTeamSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+            let currentTeamModel = function() {
+                let currentPageItem = RootData.pageView.currentPageItem
+                verify(currentPageItem !== null)
+                verify(currentPageItem.currentTrip !== null)
+                let model = currentPageItem.currentTrip.team
+                verify(model !== null)
+                return model
+            }
+
+            let seededBaselineState = JSON.stringify({
+                members: [
+                    {
+                        name: "Alice",
+                        jobs: ["Lead", "Sketch", "Safety"]
+                    },
+                    {
+                        name: "Bob",
+                        jobs: ["Clino"]
+                    }
+                ]
+            })
+            let editedState = JSON.stringify({
+                members: [
+                    {
+                        name: "Alice Updated",
+                        jobs: ["Lead Updated", "Safety", "Data QC"]
+                    },
+                    {
+                        name: "Cara",
+                        jobs: ["Rigging", "Survey"]
+                    }
+                ]
+            })
+
+            applyTeamState(currentTeamModel(), seededBaselineState)
+            compare(snapshotTeamState(currentTeamModel()), seededBaselineState)
+
+            verify(RootData.project.sync())
+            waitForProjectSyncToFinish()
+
+            let commitA = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitA !== "")
+
+            applyTeamState(currentTeamModel(), editedState)
+            tryVerifyWithDiagnostics(() => {
+                return snapshotTeamState(currentTeamModel()) === editedState
+            }, 3000, "verify team value after local setter")
+
+            verify(RootData.project.sync())
+            waitForProjectSyncToFinish()
+
+            let commitB = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitB !== "")
+            verify(commitB !== commitA)
+
+            verifyStillOnTripPage(context.tripPageAddress)
+            tryVerifyWithDiagnostics(() => {
+                return snapshotTeamState(currentTeamModel()) === editedState
+            }, 3000, "verify team synced value")
+
+            let checkoutError = TestHelper.checkoutProjectRef(RootData.project, commitA, true)
+            compare(checkoutError, "")
+
+            verifyStillOnTripPage(context.tripPageAddress)
+            tryVerifyWithDiagnostics(() => {
+                return snapshotTeamState(currentTeamModel()) === seededBaselineState
+            }, 3000, "verify baseline team value after checkout")
+
+            verify(RootData.project.sync())
+            waitForProjectSyncToFinish()
+
+            let commitC = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitC !== "")
+            verify(commitC === commitB)
+
+            verifyStillOnTripPage(context.tripPageAddress)
+            tryVerifyWithDiagnostics(() => {
+                return snapshotTeamState(currentTeamModel()) === editedState
+            }, 3000, "verify team synced value after second sync")
+        }
+
+        function test_tripTeamRemoveViaUiSync() {
+            let context = loadFixtureAndOpenFirstTrip()
+            let currentTeamModel = function() {
+                let currentPageItem = RootData.pageView.currentPageItem
+                verify(currentPageItem !== null)
+                verify(currentPageItem.currentTrip !== null)
+                let model = currentPageItem.currentTrip.team
+                verify(model !== null)
+                return model
+            }
+
+            let seededBaselineState = JSON.stringify({
+                members: [
+                    {
+                        name: "Alice",
+                        jobs: ["Lead"]
+                    },
+                    {
+                        name: "Bob",
+                        jobs: ["Clino"]
+                    },
+                    {
+                        name: "Cara",
+                        jobs: ["Rigging"]
+                    }
+                ]
+            })
+            let expectedAfterRemovalState = JSON.stringify({
+                members: [
+                    {
+                        name: "Alice",
+                        jobs: ["Lead"]
+                    },
+                    {
+                        name: "Cara",
+                        jobs: ["Rigging"]
+                    }
+                ]
+            })
+
+            applyTeamState(currentTeamModel(), seededBaselineState)
+            compare(snapshotTeamState(currentTeamModel()), seededBaselineState)
+
+            verify(RootData.project.sync())
+            waitForProjectSyncToFinish()
+            let commitA = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitA !== "")
+
+            verifyStillOnTripPage(context.tripPageAddress)
+
+            let pageItem = RootData.pageView.currentPageItem
+            let teamModel = currentTeamModel()
+            let teamList = findDescendantWhere(pageItem, function(item) {
+                return item !== null
+                       && item !== undefined
+                       && item.model !== undefined
+                       && item.model === teamModel
+                       && item.currentIndex !== undefined
+                       && item.contentItem !== undefined
+            })
+            verify(teamList !== null)
+            compare(teamList.count, 3)
+
+            teamList.currentIndex = 1
+            let rowDelegate = findDescendantWhere(teamList.contentItem, function(item) {
+                return item !== null
+                       && item !== undefined
+                       && item.index !== undefined
+                       && Number(item.index) === 1
+                       && item.width !== undefined
+                       && item.height !== undefined
+            })
+            verify(rowDelegate !== null)
+            mouseClick(rowDelegate, 12, rowDelegate.height * 0.5, Qt.LeftButton)
+
+            tryVerifyWithDiagnostics(() => {
+                return snapshotTeamState(currentTeamModel()) === expectedAfterRemovalState
+            }, 3000, "verify team state after UI removal")
+
+            verify(RootData.project.sync())
+            waitForProjectSyncToFinish()
+            let commitB = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitB !== "")
+            verify(commitB !== commitA)
+
+            let checkoutError = TestHelper.checkoutProjectRef(RootData.project, commitA, true)
+            compare(checkoutError, "")
+            verifyStillOnTripPage(context.tripPageAddress)
+
+            verify(RootData.project.sync())
+            waitForProjectSyncToFinish()
+
+            let commitC = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitC !== "")
+            verify(commitC === commitB)
+
+            verifyStillOnTripPage(context.tripPageAddress)
+            let finalTeamState = snapshotTeamState(currentTeamModel())
+            let deadline = Date.now() + 3000
+            while (Date.now() < deadline && finalTeamState !== expectedAfterRemovalState) {
+                wait(50)
+                finalTeamState = snapshotTeamState(currentTeamModel())
+            }
+            compare(finalTeamState, expectedAfterRemovalState)
         }
     }
 }

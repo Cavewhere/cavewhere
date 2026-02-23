@@ -9,8 +9,8 @@ public:
     static Monad::Result<cwTeamMergePlan> buildTeamMergePlan(
         cwTeam* currentTeam,
         const cwTeamData* loadedTeamData,
-        const std::optional<cwTeamData>& baseTeamData);
+        const std::optional<cwTeamData>& baseTeamData,
+        cwSyncMergeApplyUtils::ApplyMode applyMode = cwSyncMergeApplyUtils::ApplyMode::ThreeWayMerge);
 
     static Monad::ResultBase applyTeamMergePlan(const cwTeamMergePlan& plan);
 };
-

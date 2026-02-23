@@ -150,7 +150,8 @@ Monad::ResultBase cwTripMergeApplier::applyTripMergePlan(const cwTripMergePlan& 
     const auto teamMergePlan = cwTeamSyncMergeHandler::buildTeamMergePlan(
         currentTrip->team(),
         &loadedTripData.team,
-        baseTeamData);
+        baseTeamData,
+        plan.applyMode);
     if (teamMergePlan.hasError()) {
         return Monad::ResultBase(teamMergePlan.errorMessage());
     }

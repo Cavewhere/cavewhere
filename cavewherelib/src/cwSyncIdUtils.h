@@ -16,6 +16,18 @@
 
 namespace cwSyncIdUtils {
 
+enum class CurrentOnlyItemPolicy {
+    KeepAlways,
+    KeepWhenNotInBase,
+    DropAlways
+};
+
+enum class LoadedOnlyItemPolicy {
+    KeepAlways,
+    KeepWhenNotInBase,
+    DropAlways
+};
+
 template<typename Container, typename IdAccessor>
 std::optional<std::vector<QUuid>> collectOrderedUniqueIds(const Container& items, IdAccessor idAccessor)
 {
@@ -103,7 +115,9 @@ Monad::Result<QList<T>> buildMergedOrderedList(const QList<T>& currentValues,
                                                IdAccessor idAccessor,
                                                MergeSharedFn mergeSharedValue,
                                                PreferredOrderFn preferredOrder,
-                                               const QString& contextLabel)
+                                               const QString& contextLabel,
+                                               CurrentOnlyItemPolicy currentOnlyItemPolicy = CurrentOnlyItemPolicy::KeepAlways,
+                                               LoadedOnlyItemPolicy loadedOnlyItemPolicy = LoadedOnlyItemPolicy::KeepWhenNotInBase)
 {
     const auto currentById = buildUniqueIdValueMap(
         currentValues,
@@ -188,12 +202,22 @@ Monad::Result<QList<T>> buildMergedOrderedList(const QList<T>& currentValues,
         }
 
         if (hasCurrent) {
-            mergedById.insert(id, *currentIt);
+            const bool keepCurrentOnly =
+                currentOnlyItemPolicy == CurrentOnlyItemPolicy::KeepAlways
+                || (currentOnlyItemPolicy == CurrentOnlyItemPolicy::KeepWhenNotInBase && !hasBase);
+            if (keepCurrentOnly) {
+                mergedById.insert(id, *currentIt);
+            }
             continue;
         }
 
-        if (hasLoaded && !hasBase) {
-            mergedById.insert(id, *loadedIt);
+        if (hasLoaded) {
+            const bool keepLoadedOnly =
+                loadedOnlyItemPolicy == LoadedOnlyItemPolicy::KeepAlways
+                || (loadedOnlyItemPolicy == LoadedOnlyItemPolicy::KeepWhenNotInBase && !hasBase);
+            if (keepLoadedOnly) {
+                mergedById.insert(id, *loadedIt);
+            }
         }
     }
 

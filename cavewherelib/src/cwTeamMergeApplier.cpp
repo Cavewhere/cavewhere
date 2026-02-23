@@ -53,7 +53,13 @@ Monad::ResultBase cwTeamMergeApplier::applyTeamMergePlan(const cwTeamMergePlan& 
            const std::optional<std::vector<QUuid>>& /*baseIds*/) {
             return loadedIds;
         },
-        QStringLiteral("team member list"));
+        QStringLiteral("team member list"),
+        plan.applyMode == cwSyncMergeApplyUtils::ApplyMode::LoadedWins
+            ? cwSyncIdUtils::CurrentOnlyItemPolicy::DropAlways
+            : cwSyncIdUtils::CurrentOnlyItemPolicy::KeepWhenNotInBase,
+        plan.applyMode == cwSyncMergeApplyUtils::ApplyMode::LoadedWins
+            ? cwSyncIdUtils::LoadedOnlyItemPolicy::KeepAlways
+            : cwSyncIdUtils::LoadedOnlyItemPolicy::KeepWhenNotInBase);
     if (mergedMembersResult.hasError()) {
         const QString errorMessage = mergedMembersResult.errorMessage();
         if (errorMessage == QStringLiteral("Ambiguous ids in team member list.")) {

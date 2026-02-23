@@ -122,6 +122,32 @@ std::optional<std::pair<QUuid, cwTripData>> loadBaseTripDataForPath(const QDir& 
         baseTripData.calibrations.setBackSights(protoCalibration.backsights());
     }
 
+    if (protoTrip.has_team()) {
+        const auto& protoTeam = protoTrip.team();
+        QList<cwTeamMember> members;
+        members.reserve(protoTeam.teammembers_size());
+        for (int i = 0; i < protoTeam.teammembers_size(); ++i) {
+            const auto& protoMember = protoTeam.teammembers(i);
+            cwTeamMember member;
+            member.setName(QString::fromStdString(protoMember.name()));
+
+            QStringList jobs;
+            jobs.reserve(protoMember.jobs_size());
+            for (int j = 0; j < protoMember.jobs_size(); ++j) {
+                jobs.append(QString::fromStdString(protoMember.jobs(j)));
+            }
+            member.setJobs(jobs);
+
+            const QUuid memberId = uuidFromProtoString(protoMember.id());
+            if (!memberId.isNull()) {
+                member.setId(memberId);
+            }
+
+            members.append(member);
+        }
+        baseTripData.team.members = members;
+    }
+
     return std::make_optional(std::make_pair(baseTripData.id, baseTripData));
 }
 

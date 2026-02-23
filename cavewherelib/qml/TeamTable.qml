@@ -13,6 +13,7 @@ import cavewherelib
 import QtQuick.Controls as QC
 QQ.Item {
     id: teamTable
+    objectName: "teamTable"
 
     property Team model
 
@@ -88,6 +89,7 @@ QQ.Item {
 
         QQ.ListView {
             id: teamList
+            objectName: "teamList"
 
             anchors.top: addPerson.bottom
 
@@ -109,6 +111,7 @@ QQ.Item {
 
             delegate: QQ.Rectangle {
                 id: rowDelegate
+                objectName: "teamRow." + index
 
                 required property int index
                 required property string name
@@ -160,6 +163,7 @@ QQ.Item {
 
                     RemoveButton {
                         id: deletePersonButton
+                        objectName: "deletePersonButton." + rowDelegate.index
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
 

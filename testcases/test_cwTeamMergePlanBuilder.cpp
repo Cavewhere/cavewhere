@@ -6,6 +6,7 @@ using namespace Catch;
 #include "cwTeam.h"
 #include "cwTeamData.h"
 #include "cwTeamMember.h"
+#include "cwSyncMergeApplyUtils.h"
 #include "cwTeamSyncMergeHandler.h"
 
 namespace {
@@ -102,3 +103,63 @@ TEST_CASE("cwTeam merge applier rejects ambiguous member ids", "[cwTeamMerge][sy
     CHECK(applyResult.errorMessage() == QStringLiteral("Ambiguous team member ids."));
 }
 
+TEST_CASE("cwTeam merge applier drops members removed on loaded side when present in base", "[cwTeamMerge][sync]")
+{
+    cwTeam currentTeam;
+    const QUuid aliceId = QUuid::createUuid();
+    const QUuid bobId = QUuid::createUuid();
+    const QUuid carolId = QUuid::createUuid();
+
+    const cwTeamMember aliceBase = makeMember(aliceId, QStringLiteral("Alice"), {QStringLiteral("Lead")});
+    const cwTeamMember bobBase = makeMember(bobId, QStringLiteral("Bob"), {QStringLiteral("Clino")});
+    const cwTeamMember carolBase = makeMember(carolId, QStringLiteral("Carol"), {QStringLiteral("Rigging")});
+
+    currentTeam.setTeamMembers({aliceBase, bobBase, carolBase});
+    const cwTeamData baseData = currentTeam.data();
+
+    // Simulate checkout to older head where Bob still exists locally.
+    currentTeam.setTeamMembers({aliceBase, bobBase, carolBase});
+
+    cwTeamData loadedData;
+    loadedData.members = {aliceBase, carolBase}; // Bob deleted remotely.
+
+    const auto planResult = cwTeamSyncMergeHandler::buildTeamMergePlan(
+        &currentTeam,
+        &loadedData,
+        baseData,
+        cwSyncMergeApplyUtils::ApplyMode::ThreeWayMerge);
+    REQUIRE_FALSE(planResult.hasError());
+    REQUIRE_FALSE(cwTeamSyncMergeHandler::applyTeamMergePlan(planResult.value()).hasError());
+
+    const QList<cwTeamMember> mergedMembers = currentTeam.teamMembers();
+    REQUIRE(mergedMembers.size() == 2);
+    CHECK(mergedMembers[0].id() == aliceId);
+    CHECK(mergedMembers[1].id() == carolId);
+}
+
+TEST_CASE("cwTeam merge applier loaded-wins drops current-only members", "[cwTeamMerge][sync]")
+{
+    cwTeam currentTeam;
+    const QUuid aliceId = QUuid::createUuid();
+    const QUuid bobId = QUuid::createUuid();
+
+    const cwTeamMember alice = makeMember(aliceId, QStringLiteral("Alice"), {QStringLiteral("Lead")});
+    const cwTeamMember bob = makeMember(bobId, QStringLiteral("Bob"), {QStringLiteral("Clino")});
+
+    currentTeam.setTeamMembers({alice, bob});
+
+    cwTeamData loadedData;
+    loadedData.members = {alice};
+
+    const auto planResult = cwTeamSyncMergeHandler::buildTeamMergePlan(
+        &currentTeam,
+        &loadedData,
+        {},
+        cwSyncMergeApplyUtils::ApplyMode::LoadedWins);
+    REQUIRE_FALSE(planResult.hasError());
+    REQUIRE_FALSE(cwTeamSyncMergeHandler::applyTeamMergePlan(planResult.value()).hasError());
+
+    const QList<cwTeamMember> mergedMembers = currentTeam.teamMembers();
+    REQUIRE(mergedMembers.size() == 1);
+    CHECK(mergedMembers[0].id() == aliceId);
+}
