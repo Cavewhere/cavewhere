@@ -805,5 +805,180 @@ MainWindowTest {
                 }
             )
         }
+
+        function test_tripChunkInsertShotSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+
+            let currentTrip = function() {
+                let currentPageItem = RootData.pageView.currentPageItem
+                verify(currentPageItem !== null)
+                verify(currentPageItem.currentTrip !== null)
+                return currentPageItem.currentTrip
+            }
+
+            let currentChunk = function() {
+                let trip = currentTrip()
+                verify(trip.chunkCount > 0)
+                let chunk = trip.chunk(0)
+                verify(chunk !== null)
+                verify(chunk.stationCount >= 2)
+                verify(chunk.shotCount >= 1)
+                return chunk
+            }
+
+            let readingText = function(value) {
+                if (value !== null && value !== undefined && value.value !== undefined) {
+                    return String(value.value)
+                }
+                return String(value)
+            }
+
+            let rowForStationIndex = function(stationIndex) {
+                return 1 + (stationIndex * 2)
+            }
+
+            let rowForShotIndex = function(shotIndex) {
+                return 2 + (shotIndex * 2)
+            }
+
+            let surveyDataCell = function(row, role) {
+                let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+                verify(view !== null)
+                view.positionViewAtIndex(row, ListView.Contain)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + role)
+                verify(cell !== null)
+                return cell
+            }
+
+            let surveyDataCellText = function(row, role) {
+                let cell = surveyDataCell(row, role)
+                let coreTextInput = findDescendantByObjectName(cell, "coreTextInput")
+                if (coreTextInput !== null && coreTextInput.text !== undefined) {
+                    return String(coreTextInput.text)
+                }
+                if (cell.text !== undefined) {
+                    return String(cell.text)
+                }
+                let textNode = findDescendantWhere(cell, function(item) {
+                    return item !== null
+                           && item !== undefined
+                           && item.text !== undefined
+                })
+                if (textNode !== null) {
+                    return String(textNode.text)
+                }
+                return ""
+            }
+
+            let snapshotInsertedTailState = function() {
+                let trip = currentTrip()
+                let calibration = trip.calibration
+                let chunk = currentChunk()
+                let tailShotIndex = chunk.shotCount - 1
+                let tailStationIndex = chunk.stationCount - 1
+                return JSON.stringify({
+                    backSightsEnabled: calibration.backSights === true,
+                    shotCount: chunk.shotCount,
+                    stationCount: chunk.stationCount,
+                    stationName: String(chunk.data(SurveyChunk.StationNameRole, tailStationIndex)),
+                    distance: readingText(chunk.data(SurveyChunk.ShotDistanceRole, tailShotIndex)),
+                    compass: readingText(chunk.data(SurveyChunk.ShotCompassRole, tailShotIndex)),
+                    backCompass: readingText(chunk.data(SurveyChunk.ShotBackCompassRole, tailShotIndex)),
+                    clino: readingText(chunk.data(SurveyChunk.ShotClinoRole, tailShotIndex)),
+                    backClino: readingText(chunk.data(SurveyChunk.ShotBackClinoRole, tailShotIndex)),
+                    left: readingText(chunk.data(SurveyChunk.StationLeftRole, tailStationIndex)),
+                    right: readingText(chunk.data(SurveyChunk.StationRightRole, tailStationIndex)),
+                    up: readingText(chunk.data(SurveyChunk.StationUpRole, tailStationIndex)),
+                    down: readingText(chunk.data(SurveyChunk.StationDownRole, tailStationIndex))
+                })
+            }
+
+            let applyInsertedTailState = function(stateJson) {
+                let state = JSON.parse(stateJson)
+                let trip = currentTrip()
+                let calibration = trip.calibration
+                let chunk = currentChunk()
+
+                calibration.backSights = state.backSightsEnabled
+
+                let expectedShotCount = Number(state.shotCount)
+                while (chunk.shotCount < expectedShotCount) {
+                    chunk.insertShot(chunk.shotCount - 1, SurveyChunk.Below)
+                }
+
+                let tailShotIndex = chunk.shotCount - 1
+                let tailStationIndex = chunk.stationCount - 1
+
+                chunk.setData(SurveyChunk.StationNameRole, tailStationIndex, state.stationName)
+                chunk.setData(SurveyChunk.ShotDistanceRole, tailShotIndex, state.distance)
+                chunk.setData(SurveyChunk.ShotCompassRole, tailShotIndex, state.compass)
+                chunk.setData(SurveyChunk.ShotBackCompassRole, tailShotIndex, state.backCompass)
+                chunk.setData(SurveyChunk.ShotClinoRole, tailShotIndex, state.clino)
+                chunk.setData(SurveyChunk.ShotBackClinoRole, tailShotIndex, state.backClino)
+                chunk.setData(SurveyChunk.StationLeftRole, tailStationIndex, state.left)
+                chunk.setData(SurveyChunk.StationRightRole, tailStationIndex, state.right)
+                chunk.setData(SurveyChunk.StationUpRole, tailStationIndex, state.up)
+                chunk.setData(SurveyChunk.StationDownRole, tailStationIndex, state.down)
+            }
+
+            let nextInsertedTailState = function(baselineStateJson) {
+                let baseline = JSON.parse(baselineStateJson)
+                return JSON.stringify({
+                    backSightsEnabled: true,
+                    shotCount: Number(baseline.shotCount) + 1,
+                    stationCount: Number(baseline.stationCount) + 1,
+                    stationName: "SYNC-ADD-1",
+                    distance: "9.87",
+                    compass: "111.10",
+                    backCompass: "291.10",
+                    clino: "-6.50",
+                    backClino: "6.50",
+                    left: "1.20",
+                    right: "2.30",
+                    up: "3.40",
+                    down: "4.50"
+                })
+            }
+
+            let snapshotInsertedTailUiState = function() {
+                let trip = currentTrip()
+                let chunk = currentChunk()
+                let tailShotIndex = chunk.shotCount - 1
+                let tailStationIndex = chunk.stationCount - 1
+                let backSightsCheck = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->backSightCalibrationEditor->checkBox")
+                verify(backSightsCheck !== null)
+                return JSON.stringify({
+                    backSightsEnabled: backSightsCheck.checked === true,
+                    shotCount: chunk.shotCount,
+                    stationCount: chunk.stationCount,
+                    stationName: surveyDataCellText(rowForStationIndex(tailStationIndex), SurveyChunk.StationNameRole),
+                    distance: surveyDataCellText(rowForShotIndex(tailShotIndex), SurveyChunk.ShotDistanceRole),
+                    compass: surveyDataCellText(rowForShotIndex(tailShotIndex), SurveyChunk.ShotCompassRole),
+                    backCompass: surveyDataCellText(rowForShotIndex(tailShotIndex), SurveyChunk.ShotBackCompassRole),
+                    clino: surveyDataCellText(rowForShotIndex(tailShotIndex), SurveyChunk.ShotClinoRole),
+                    backClino: surveyDataCellText(rowForShotIndex(tailShotIndex), SurveyChunk.ShotBackClinoRole),
+                    left: surveyDataCellText(rowForStationIndex(tailStationIndex), SurveyChunk.StationLeftRole),
+                    right: surveyDataCellText(rowForStationIndex(tailStationIndex), SurveyChunk.StationRightRole),
+                    up: surveyDataCellText(rowForStationIndex(tailStationIndex), SurveyChunk.StationUpRole),
+                    down: surveyDataCellText(rowForStationIndex(tailStationIndex), SurveyChunk.StationDownRole)
+                })
+            }
+
+            runTripSyncRoundTrip(
+                context.tripPageAddress,
+                function() {
+                    return snapshotInsertedTailState()
+                },
+                function(stateJson) {
+                    applyInsertedTailState(stateJson)
+                },
+                function(baselineStateJson) {
+                    return nextInsertedTailState(baselineStateJson)
+                },
+                function() {
+                    return snapshotInsertedTailUiState()
+                }
+            )
+        }
     }
 }
