@@ -99,13 +99,18 @@ MainWindowTest {
             }, 3000, "waitForProjectSyncToFinish")
         }
 
-        function runTripSyncRoundTrip(tripPageAddress, getter, setter, nextValue) {
+        function runTripSyncRoundTrip(tripPageAddress, getter, setter, nextValue, uiGetter) {
             const verifyEditedValueTimeoutMs = 3000
             const verifyBaselineAfterCheckoutTimeoutMs = 3000
             const verifyResyncedValueTimeoutMs = 3000
 
             let baselineValue = String(getter())
             verify(baselineValue.length > 0)
+            if (uiGetter !== undefined && uiGetter !== null) {
+                tryVerifyWithDiagnostics(() => {
+                    return String(uiGetter()) === baselineValue
+                }, verifyEditedValueTimeoutMs, "verify baseline UI value")
+            }
 
             let commitA = TestHelper.projectHeadCommitOid(RootData.project)
             verify(commitA !== "")
@@ -115,6 +120,11 @@ MainWindowTest {
             tryVerifyWithDiagnostics(() => {
                 return String(getter()) === syncedValue
             }, verifyEditedValueTimeoutMs, "verify value after local setter")
+            if (uiGetter !== undefined && uiGetter !== null) {
+                tryVerifyWithDiagnostics(() => {
+                    return String(uiGetter()) === syncedValue
+                }, verifyEditedValueTimeoutMs, "verify edited UI value")
+            }
 
             verify(RootData.project.sync())
             waitForProjectSyncToFinish()
@@ -130,6 +140,11 @@ MainWindowTest {
             tryVerifyWithDiagnostics(() => {
                 return String(getter()) === baselineValue
             }, verifyBaselineAfterCheckoutTimeoutMs, "verify baseline after checkout")
+            if (uiGetter !== undefined && uiGetter !== null) {
+                tryVerifyWithDiagnostics(() => {
+                    return String(uiGetter()) === baselineValue
+                }, verifyBaselineAfterCheckoutTimeoutMs, "verify baseline UI after checkout")
+            }
 
             verify(RootData.project.sync())
             waitForProjectSyncToFinish()
@@ -142,6 +157,11 @@ MainWindowTest {
             tryVerifyWithDiagnostics(() => {
                 return String(getter()) === syncedValue
             }, verifyResyncedValueTimeoutMs, "verify synced value after second sync")
+            if (uiGetter !== undefined && uiGetter !== null) {
+                tryVerifyWithDiagnostics(() => {
+                    return String(uiGetter()) === syncedValue
+                }, verifyResyncedValueTimeoutMs, "verify synced UI value after second sync")
+            }
         }
 
         function teamMembersFromModel(teamModel) {
@@ -636,6 +656,154 @@ MainWindowTest {
                 finalTeamState = snapshotTeamState(currentTeamModel())
             }
             compare(finalTeamState, expectedAfterRemovalState)
+        }
+
+        function test_tripChunkDataSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+
+            let currentTrip = function() {
+                let currentPageItem = RootData.pageView.currentPageItem
+                verify(currentPageItem !== null)
+                verify(currentPageItem.currentTrip !== null)
+                return currentPageItem.currentTrip
+            }
+
+            let currentChunk = function() {
+                let trip = currentTrip()
+                verify(trip.chunkCount > 0)
+                let chunk = trip.chunk(0)
+                verify(chunk !== null)
+                verify(chunk.stationCount >= 2)
+                verify(chunk.shotCount >= 1)
+                return chunk
+            }
+
+            let readingText = function(value) {
+                if (value !== null && value !== undefined && value.value !== undefined) {
+                    return String(value.value)
+                }
+                return String(value)
+            }
+
+            let snapshotChunkState = function() {
+                let trip = currentTrip()
+                let calibration = trip.calibration
+                let chunk = currentChunk()
+                return JSON.stringify({
+                    backSightsEnabled: calibration.backSights === true,
+                    stationName: String(chunk.data(SurveyChunk.StationNameRole, 1)),
+                    distance: readingText(chunk.data(SurveyChunk.ShotDistanceRole, 0)),
+                    compass: readingText(chunk.data(SurveyChunk.ShotCompassRole, 0)),
+                    backCompass: readingText(chunk.data(SurveyChunk.ShotBackCompassRole, 0)),
+                    clino: readingText(chunk.data(SurveyChunk.ShotClinoRole, 0)),
+                    backClino: readingText(chunk.data(SurveyChunk.ShotBackClinoRole, 0)),
+                    left: readingText(chunk.data(SurveyChunk.StationLeftRole, 0)),
+                    right: readingText(chunk.data(SurveyChunk.StationRightRole, 0)),
+                    up: readingText(chunk.data(SurveyChunk.StationUpRole, 0)),
+                    down: readingText(chunk.data(SurveyChunk.StationDownRole, 0))
+                })
+            }
+
+            let applyChunkState = function(stateJson) {
+                let state = JSON.parse(stateJson)
+                let trip = currentTrip()
+                let calibration = trip.calibration
+                let chunk = currentChunk()
+
+                calibration.backSights = state.backSightsEnabled
+                chunk.setData(SurveyChunk.StationNameRole, 1, state.stationName)
+                chunk.setData(SurveyChunk.ShotDistanceRole, 0, state.distance)
+                chunk.setData(SurveyChunk.ShotCompassRole, 0, state.compass)
+                chunk.setData(SurveyChunk.ShotBackCompassRole, 0, state.backCompass)
+                chunk.setData(SurveyChunk.ShotClinoRole, 0, state.clino)
+                chunk.setData(SurveyChunk.ShotBackClinoRole, 0, state.backClino)
+                chunk.setData(SurveyChunk.StationLeftRole, 0, state.left)
+                chunk.setData(SurveyChunk.StationRightRole, 0, state.right)
+                chunk.setData(SurveyChunk.StationUpRole, 0, state.up)
+                chunk.setData(SurveyChunk.StationDownRole, 0, state.down)
+            }
+
+            let nextChunkState = function(baselineStateJson) {
+                let baseline = JSON.parse(baselineStateJson)
+                return JSON.stringify({
+                    backSightsEnabled: true,
+                    stationName: baseline.stationName === "TS-01" ? "TS-02" : "TS-01",
+                    distance: baseline.distance === "12.34" ? "10.01" : "12.34",
+                    compass: baseline.compass === "123.45" ? "45.67" : "123.45",
+                    backCompass: baseline.backCompass === "321.54" ? "210.98" : "321.54",
+                    clino: baseline.clino === "-12.30" ? "5.60" : "-12.30",
+                    backClino: baseline.backClino === "11.70" ? "-4.20" : "11.70",
+                    left: baseline.left === "1.10" ? "0.50" : "1.10",
+                    right: baseline.right === "2.20" ? "0.80" : "2.20",
+                    up: baseline.up === "3.30" ? "1.20" : "3.30",
+                    down: baseline.down === "4.40" ? "1.60" : "4.40"
+                })
+            }
+
+            let surveyDataCell = function(row, role) {
+                let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+                verify(view !== null)
+                view.positionViewAtIndex(row, ListView.Contain)
+                // waitForRendering(rootId)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + role)
+                verify(cell !== null)
+                return cell
+            }
+
+            let surveyDataCellText = function(row, role) {
+                let cell = surveyDataCell(row, role)
+                let coreTextInput = findDescendantByObjectName(cell, "coreTextInput")
+                if (coreTextInput !== null && coreTextInput.text !== undefined) {
+                    return String(coreTextInput.text)
+                }
+                if (cell.text !== undefined) {
+                    return String(cell.text)
+                }
+                let textNode = findDescendantWhere(cell, function(item) {
+                    return item !== null
+                           && item !== undefined
+                           && item.text !== undefined
+                })
+                if (textNode !== null) {
+                    return String(textNode.text)
+                }
+                return ""
+            }
+
+            let snapshotChunkUiState = function() {
+                let backSightsCheck = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->backSightCalibrationEditor->checkBox")
+                verify(backSightsCheck !== null)
+                let uiState = JSON.stringify({
+                    backSightsEnabled: backSightsCheck.checked === true,
+                    stationName: surveyDataCellText(3, SurveyChunk.StationNameRole),
+                    distance: surveyDataCellText(2, SurveyChunk.ShotDistanceRole),
+                    compass: surveyDataCellText(2, SurveyChunk.ShotCompassRole),
+                    backCompass: surveyDataCellText(2, SurveyChunk.ShotBackCompassRole),
+                    clino: surveyDataCellText(2, SurveyChunk.ShotClinoRole),
+                    backClino: surveyDataCellText(2, SurveyChunk.ShotBackClinoRole),
+                    left: surveyDataCellText(1, SurveyChunk.StationLeftRole),
+                    right: surveyDataCellText(1, SurveyChunk.StationRightRole),
+                    up: surveyDataCellText(1, SurveyChunk.StationUpRole),
+                    down: surveyDataCellText(1, SurveyChunk.StationDownRole)
+                })
+                return uiState
+            }
+
+            runTripSyncRoundTrip(
+                context.tripPageAddress,
+                function() {
+                    return snapshotChunkState()
+                },
+                function(stateJson) {
+                    applyChunkState(stateJson)
+                },
+                function(baselineStateJson) {
+                    return nextChunkState(baselineStateJson)
+                },
+                function() {
+                    return snapshotChunkUiState()
+                }
+            )
         }
     }
 }
