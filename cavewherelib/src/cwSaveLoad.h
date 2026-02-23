@@ -97,6 +97,7 @@ class Account;
 #include <Monad/Result.h>
 
 //Qt includes
+#include <QByteArray>
 #include <QDir>
 #include <QFuture>
 #include <QHash>
@@ -197,6 +198,8 @@ public:
 
     static Monad::Result<cwCavingRegionData> loadCavingRegion(const QString& filename);
     static Monad::Result<ProjectLoadData> loadProject(const QString& filename);
+    static Monad::Result<cwTripData> loadTrip(const QString& filename);
+    static Monad::Result<cwTripData> loadTrip(const QByteArray& content);
 
     static QString sanitizeFileName(QString input);
 
@@ -395,9 +398,9 @@ private:
     static std::unique_ptr<CavewhereProto::NoteLiDAR> toProtoNoteLiDAR(const cwNoteLiDAR* note);
 
     static Monad::Result<cwCaveData> loadCave(const QString& filename);
-    static Monad::Result<cwTripData> loadTrip(const QString& filename);
     static Monad::Result<cwNoteData> loadNote(const QString& filename, const QDir &projectDir);
     static Monad::Result<cwNoteLiDARData> loadNoteLiDAR(const QString& filename, const QDir &projectDir);
+    static cwTripData tripDataFromProtoTrip(const CavewhereProto::Trip& proto);
 
     static cwTripCalibrationData fromProtoTripCalibration(const CavewhereProto::TripCalibration& proto);
     static cwTeamData fromProtoTeam(const CavewhereProto::Team& proto);

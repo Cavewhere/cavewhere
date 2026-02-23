@@ -10,9 +10,22 @@
 #include "cwTripCalibrationMergePlanBuilder.h"
 #include "cavewhere.pb.h"
 
+#include <QDebug>
+#include <QStringList>
+
 #include <optional>
 
 namespace {
+
+QString summarizeChunkIds(const QList<cwSurveyChunkData>& chunks)
+{
+    QStringList ids;
+    ids.reserve(chunks.size());
+    for (const cwSurveyChunkData& chunk : chunks) {
+        ids.append(chunk.id.toString(QUuid::WithoutBraces));
+    }
+    return ids.join(QStringLiteral(", "));
+}
 
 std::unique_ptr<CavewhereProto::Trip> normalizedTripProtoForObject(const cwTrip* trip)
 {
@@ -62,7 +75,8 @@ bool hasOnlyMergeableDiff(const cwTrip* currentTrip, const cwTripData& loadedTri
 Monad::Result<cwSurveyChunkData> mergeChunkDataViaHandler(
     const cwSurveyChunkData& currentChunkData,
     const cwSurveyChunkData& loadedChunkData,
-    const std::optional<cwSurveyChunkData>& baseChunkData)
+    const std::optional<cwSurveyChunkData>& baseChunkData,
+    cwSyncMergeApplyUtils::ApplyMode applyMode)
 {
     cwSurveyChunk tempChunk;
     tempChunk.setData(currentChunkData);
@@ -70,7 +84,8 @@ Monad::Result<cwSurveyChunkData> mergeChunkDataViaHandler(
     const auto chunkPlan = cwSurveyChunkSyncMergeHandler::buildSurveyChunkMergePlan(
         &tempChunk,
         &loadedChunkData,
-        baseChunkData);
+        baseChunkData,
+        applyMode);
     if (chunkPlan.hasError()) {
         return Monad::Result<cwSurveyChunkData>(chunkPlan.errorMessage());
     }
@@ -115,6 +130,15 @@ Monad::ResultBase cwTripMergeApplier::applyTripMergePlan(const cwTripMergePlan& 
     const std::optional<QList<cwSurveyChunkData>> baseChunks = plan.baseTripData.has_value()
         ? std::optional<QList<cwSurveyChunkData>>(plan.baseTripData->chunks)
         : std::nullopt;
+
+    qDebug().noquote()
+        << QStringLiteral("[TripSyncDebug] trip apply plan tripId=%1 applyMode=%2 currentChunkCount=%3 loadedChunkCount=%4 baseChunkCount=%5")
+               .arg(currentTrip->id().toString(QUuid::WithoutBraces))
+               .arg(plan.applyMode == cwSyncMergeApplyUtils::ApplyMode::LoadedWins ? QStringLiteral("LoadedWins")
+                                                                                     : QStringLiteral("ThreeWayMerge"))
+               .arg(currentTrip->chunkCount())
+               .arg(loadedTripData.chunks.size())
+               .arg(baseChunks.has_value() ? baseChunks->size() : -1);
 
     const QString mergedName = cwSyncMergeApplyUtils::chooseBundleValue(
         currentTrip->name(),
@@ -171,6 +195,12 @@ Monad::ResultBase cwTripMergeApplier::applyTripMergePlan(const cwTripMergePlan& 
         currentChunkDataList.append(chunk->data());
     }
 
+    qDebug().noquote()
+        << QStringLiteral("[TripSyncDebug] trip apply chunk ids current=[%1] loaded=[%2] base=[%3]")
+               .arg(summarizeChunkIds(currentChunkDataList))
+               .arg(summarizeChunkIds(loadedTripData.chunks))
+               .arg(baseChunks.has_value() ? summarizeChunkIds(*baseChunks) : QStringLiteral("<none>"));
+
     const auto mergedChunkDataList = cwSyncIdUtils::buildMergedOrderedList<cwSurveyChunkData>(
         currentChunkDataList,
         loadedTripData.chunks,
@@ -179,10 +209,16 @@ Monad::ResultBase cwTripMergeApplier::applyTripMergePlan(const cwTripMergePlan& 
         [applyMode = plan.applyMode](const cwSurveyChunkData& currentChunkData,
            const cwSurveyChunkData& loadedChunkData,
            const std::optional<cwSurveyChunkData>& baseChunkData) {
+            qDebug().noquote()
+                << QStringLiteral("[TripSyncDebug] trip apply shared chunk merge chunkId=%1 basePresent=%2 currentStations=%3 loadedStations=%4")
+                       .arg(currentChunkData.id.toString(QUuid::WithoutBraces))
+                       .arg(baseChunkData.has_value())
+                       .arg(currentChunkData.stations.size())
+                       .arg(loadedChunkData.stations.size());
             if (applyMode == cwSyncMergeApplyUtils::ApplyMode::LoadedWins) {
                 return Monad::Result<cwSurveyChunkData>(loadedChunkData);
             }
-            return mergeChunkDataViaHandler(currentChunkData, loadedChunkData, baseChunkData);
+            return mergeChunkDataViaHandler(currentChunkData, loadedChunkData, baseChunkData, applyMode);
         },
         [applyMode = plan.applyMode](const std::vector<QUuid>& currentIds,
            const std::vector<QUuid>& loadedIds,

@@ -5,7 +5,8 @@
 Monad::Result<cwSurveyChunkMergePlan> cwSurveyChunkMergePlanBuilder::build(
     cwSurveyChunk* currentChunk,
     const cwSurveyChunkData* loadedChunkData,
-    const std::optional<cwSurveyChunkData>& baseChunkData)
+    const std::optional<cwSurveyChunkData>& baseChunkData,
+    cwSyncMergeApplyUtils::ApplyMode applyMode)
 {
     if (currentChunk == nullptr || loadedChunkData == nullptr) {
         return Monad::Result<cwSurveyChunkMergePlan>(
@@ -21,5 +22,6 @@ Monad::Result<cwSurveyChunkMergePlan> cwSurveyChunkMergePlanBuilder::build(
     plan.currentChunk = currentChunk;
     plan.loadedChunkData = loadedChunkData;
     plan.baseChunkData = baseChunkData;
+    plan.applyMode = applyMode;
     return Monad::Result<cwSurveyChunkMergePlan>(plan);
 }

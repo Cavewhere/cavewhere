@@ -3,6 +3,7 @@
 #include "cwCavingRegion.h"
 #include "cwGlobals.h"
 #include "cwRegionLoadTask.h"
+#include "cwSaveLoad.h"
 #include "cwSyncMergeApplyUtils.h"
 #include "cwTrip.h"
 #include "cwTripMergeApplier.h"
@@ -11,6 +12,7 @@
 #include "cavewhere.pb.h"
 #include "google/protobuf/util/json_util.h"
 
+#include <QDebug>
 #include <QFile>
 #include <QHash>
 #include <QUuid>
@@ -79,73 +81,13 @@ std::optional<std::pair<QUuid, cwTripData>> loadBaseTripDataForPath(const QDir& 
         return std::nullopt;
     }
 
-    CavewhereProto::Trip protoTrip;
-    if (!protoTrip.ParseFromArray(contentResult.value().constData(), contentResult.value().size())) {
-        const std::string jsonPayload(contentResult.value().constData(),
-                                      static_cast<size_t>(contentResult.value().size()));
-        const auto parseStatus = google::protobuf::util::JsonStringToMessage(jsonPayload, &protoTrip);
-        if (!parseStatus.ok()) {
-            return std::nullopt;
-        }
-    }
-
-    if (!protoTrip.has_id()) {
+    const auto tripResult = cwSaveLoad::loadTrip(contentResult.value());
+    if (tripResult.hasError()) {
         return std::nullopt;
     }
-
-    cwTripData baseTripData;
-    baseTripData.id = uuidFromProtoString(protoTrip.id());
+    const cwTripData baseTripData = tripResult.value();
     if (baseTripData.id.isNull()) {
         return std::nullopt;
-    }
-    if (protoTrip.has_name()) {
-        baseTripData.name = QString::fromStdString(protoTrip.name());
-    }
-    if (protoTrip.has_date()) {
-        baseTripData.date = QDateTime(cwRegionLoadTask::loadDate(protoTrip.date()), QTime());
-    }
-
-    if (protoTrip.has_tripcalibration()) {
-        const auto& protoCalibration = protoTrip.tripcalibration();
-        baseTripData.calibrations.setCorrectedCompassBacksight(protoCalibration.correctedcompassbacksight());
-        baseTripData.calibrations.setCorrectedClinoBacksight(protoCalibration.correctedclinobacksight());
-        baseTripData.calibrations.setCorrectedCompassFrontsight(protoCalibration.correctedcompassfrontsight());
-        baseTripData.calibrations.setCorrectedClinoFrontsight(protoCalibration.correctedclinofrontsight());
-        baseTripData.calibrations.setTapeCalibration(protoCalibration.tapecalibration());
-        baseTripData.calibrations.setFrontCompassCalibration(protoCalibration.frontcompasscalibration());
-        baseTripData.calibrations.setFrontClinoCalibration(protoCalibration.frontclinocalibration());
-        baseTripData.calibrations.setBackCompassCalibration(protoCalibration.backcompassscalibration());
-        baseTripData.calibrations.setBackClinoCalibration(protoCalibration.backclinocalibration());
-        baseTripData.calibrations.setDeclination(protoCalibration.declination());
-        baseTripData.calibrations.setDistanceUnit(static_cast<cwUnits::LengthUnit>(protoCalibration.distanceunit()));
-        baseTripData.calibrations.setFrontSights(protoCalibration.frontsights());
-        baseTripData.calibrations.setBackSights(protoCalibration.backsights());
-    }
-
-    if (protoTrip.has_team()) {
-        const auto& protoTeam = protoTrip.team();
-        QList<cwTeamMember> members;
-        members.reserve(protoTeam.teammembers_size());
-        for (int i = 0; i < protoTeam.teammembers_size(); ++i) {
-            const auto& protoMember = protoTeam.teammembers(i);
-            cwTeamMember member;
-            member.setName(QString::fromStdString(protoMember.name()));
-
-            QStringList jobs;
-            jobs.reserve(protoMember.jobs_size());
-            for (int j = 0; j < protoMember.jobs_size(); ++j) {
-                jobs.append(QString::fromStdString(protoMember.jobs(j)));
-            }
-            member.setJobs(jobs);
-
-            const QUuid memberId = uuidFromProtoString(protoMember.id());
-            if (!memberId.isNull()) {
-                member.setId(memberId);
-            }
-
-            members.append(member);
-        }
-        baseTripData.team.members = members;
     }
 
     return std::make_optional(std::make_pair(baseTripData.id, baseTripData));
@@ -246,7 +188,19 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
                                                           context.report->mergeBaseHead,
                                                           normalizedPath);
         if (baseTripData.has_value()) {
+            qDebug().noquote()
+                << QStringLiteral("[TripSyncDebug] base trip resolved path=%1 changedTripId=%2 baseTripId=%3 baseChunkCount=%4")
+                       .arg(normalizedPath)
+                       .arg(tripId->toString(QUuid::WithoutBraces))
+                       .arg(baseTripData->first.toString(QUuid::WithoutBraces))
+                       .arg(baseTripData->second.chunks.size());
             baseTripById.insert(baseTripData->first, baseTripData->second);
+        } else {
+            qDebug().noquote()
+                << QStringLiteral("[TripSyncDebug] base trip missing path=%1 changedTripId=%2 mergeBaseHead=%3")
+                       .arg(normalizedPath)
+                       .arg(tripId->toString(QUuid::WithoutBraces))
+                       .arg(context.report->mergeBaseHead);
         }
     }
 
@@ -260,6 +214,13 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
                                                                 context.applyMode == cwReconcileApplyMode::TargetCommitWins
                                                                     ? cwSyncMergeApplyUtils::ApplyMode::LoadedWins
                                                                     : cwSyncMergeApplyUtils::ApplyMode::ThreeWayMerge);
+    qDebug().noquote()
+        << QStringLiteral("[TripSyncDebug] trip merge preparation changedTrips=%1 loadedTrips=%2 baseTrips=%3 applyMode=%4")
+               .arg(changedCurrentTrips.size())
+               .arg(changedLoadedTrips.size())
+               .arg(baseTripById.size())
+               .arg(context.applyMode == cwReconcileApplyMode::TargetCommitWins ? QStringLiteral("LoadedWins")
+                                                                                 : QStringLiteral("ThreeWayMerge"));
     if (mergePreparation.hasError()) {
         cwReconcileMergeResult result;
         result.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;

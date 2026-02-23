@@ -12,9 +12,22 @@ MainWindowTest {
         when: windowShown
 
         function tryVerifyWithDiagnostics(predicate, timeoutMs, label, onPending) {
-            tryVerify(function() {
-                return predicate()
-            }, timeoutMs)
+            let startMs = Date.now()
+            let attempts = 0
+            while (Date.now() - startMs < timeoutMs) {
+                if (predicate()) {
+                    return
+                }
+                attempts += 1
+                if (onPending !== undefined && onPending !== null && attempts % 20 === 0) {
+                    onPending(attempts, Date.now() - startMs)
+                }
+                wait(50)
+            }
+            if (onPending !== undefined && onPending !== null) {
+                onPending(attempts, Date.now() - startMs)
+            }
+            verify(false, label + " timed out after " + timeoutMs + "ms")
         }
 
         function openTripPage(caveName, tripName) {
@@ -979,6 +992,389 @@ MainWindowTest {
                     return snapshotInsertedTailUiState()
                 }
             )
+        }
+
+        function test_tripChunkRemoveShotSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+
+            let currentTrip = function() {
+                let currentPageItem = RootData.pageView.currentPageItem
+                verify(currentPageItem !== null)
+                verify(currentPageItem.currentTrip !== null)
+                return currentPageItem.currentTrip
+            }
+
+            let currentChunk = function() {
+                let trip = currentTrip()
+                verify(trip.chunkCount > 0)
+                let chunk = trip.chunk(0)
+                verify(chunk !== null)
+                verify(chunk.stationCount >= 2)
+                verify(chunk.shotCount >= 1)
+                return chunk
+            }
+
+            let readingText = function(value) {
+                if (value !== null && value !== undefined && value.value !== undefined) {
+                    return String(value.value)
+                }
+                return String(value)
+            }
+
+            let canonicalNumericText = function(value) {
+                let stringValue = String(value)
+                let numberValue = Number(stringValue)
+                if (!Number.isFinite(numberValue)) {
+                    return stringValue
+                }
+                return String(numberValue)
+            }
+
+            let rowForStationIndex = function(stationIndex) {
+                return 1 + (stationIndex * 2)
+            }
+
+            let rowForShotIndex = function(shotIndex) {
+                return 2 + (shotIndex * 2)
+            }
+
+            let surveyDataCell = function(row, role) {
+                let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+                verify(view !== null)
+                view.positionViewAtIndex(row, ListView.Contain)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + role)
+                verify(cell !== null)
+                return cell
+            }
+
+            let surveyDataCellText = function(row, role) {
+                let cell = surveyDataCell(row, role)
+                let coreTextInput = findDescendantByObjectName(cell, "coreTextInput")
+                if (coreTextInput !== null && coreTextInput.text !== undefined) {
+                    return String(coreTextInput.text)
+                }
+                if (cell.text !== undefined) {
+                    return String(cell.text)
+                }
+                let textNode = findDescendantWhere(cell, function(item) {
+                    return item !== null
+                           && item !== undefined
+                           && item.text !== undefined
+                })
+                if (textNode !== null) {
+                    return String(textNode.text)
+                }
+                return ""
+            }
+
+            let containsStationName = function(chunk, stationName) {
+                for (let i = 0; i < chunk.stationCount; ++i) {
+                    if (String(chunk.data(SurveyChunk.StationNameRole, i)) === stationName) {
+                        return true
+                    }
+                }
+                return false
+            }
+
+            let modelChunkSummary = function(chunk) {
+                let stationNames = []
+                for (let i = 0; i < chunk.stationCount; ++i) {
+                    stationNames.push(String(chunk.data(SurveyChunk.StationNameRole, i)))
+                }
+
+                let shotSummary = []
+                for (let i = 0; i < chunk.shotCount; ++i) {
+                    shotSummary.push(String(chunk.data(SurveyChunk.ShotDistanceRole, i)) + "/"
+                                     + String(chunk.data(SurveyChunk.ShotCompassRole, i)) + "/"
+                                     + String(chunk.data(SurveyChunk.ShotClinoRole, i)))
+                }
+
+                return "stations=[" + stationNames.join(", ") + "] shots=[" + shotSummary.join(", ") + "]"
+            }
+
+            let verifyTailUiMatchesModel = function(chunk) {
+                let tailShotIndex = chunk.shotCount - 1
+                let tailStationIndex = chunk.stationCount - 1
+                compare(canonicalNumericText(surveyDataCellText(rowForShotIndex(tailShotIndex), SurveyChunk.ShotDistanceRole)),
+                        canonicalNumericText(readingText(chunk.data(SurveyChunk.ShotDistanceRole, tailShotIndex))))
+                compare(canonicalNumericText(surveyDataCellText(rowForShotIndex(tailShotIndex), SurveyChunk.ShotCompassRole)),
+                        canonicalNumericText(readingText(chunk.data(SurveyChunk.ShotCompassRole, tailShotIndex))))
+                compare(canonicalNumericText(surveyDataCellText(rowForShotIndex(tailShotIndex), SurveyChunk.ShotClinoRole)),
+                        canonicalNumericText(readingText(chunk.data(SurveyChunk.ShotClinoRole, tailShotIndex))))
+                compare(surveyDataCellText(rowForStationIndex(tailStationIndex), SurveyChunk.StationNameRole),
+                        String(chunk.data(SurveyChunk.StationNameRole, tailStationIndex)))
+            }
+
+            let trip = currentTrip()
+            let chunk = currentChunk()
+            let baselineShotCount = chunk.shotCount
+            let baselineStationCount = chunk.stationCount
+            let removedStationName = String(chunk.data(SurveyChunk.StationNameRole, chunk.stationCount - 1))
+            verify(removedStationName.length > 0)
+            console.log("[TripSyncQmlDebug] remove-shot baseline summary=", modelChunkSummary(chunk))
+
+            let commitA = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitA !== "")
+
+            trip.calibration.backSights = true
+            chunk.removeShot(chunk.shotCount - 1, SurveyChunk.Below)
+
+            tryVerifyWithDiagnostics(() => {
+                let updatedChunk = currentChunk()
+                return updatedChunk.shotCount === baselineShotCount - 1
+                       && updatedChunk.stationCount === baselineStationCount - 1
+            }, 3000, "verify removal after local setter")
+            console.log("[TripSyncQmlDebug] remove-shot after local remove summary=", modelChunkSummary(currentChunk()))
+
+            let backSightsCheck = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->backSightCalibrationEditor->checkBox")
+            verify(backSightsCheck !== null)
+            compare(backSightsCheck.checked, true)
+            verifyTailUiMatchesModel(currentChunk())
+
+            verify(RootData.project.sync())
+            waitForProjectSyncToFinish()
+
+            let commitB = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitB !== "")
+            verify(commitB !== commitA)
+
+            let checkoutError = TestHelper.checkoutProjectRef(RootData.project, commitA, true)
+            compare(checkoutError, "")
+            verifyStillOnTripPage(context.tripPageAddress)
+
+            tryVerifyWithDiagnostics(() => {
+                let restoredChunk = currentChunk()
+                return restoredChunk.shotCount === baselineShotCount
+                       && restoredChunk.stationCount === baselineStationCount
+            }, 3000, "verify baseline after checkout", function(attempts, elapsedMs) {
+                console.log("[TripSyncQmlDebug] remove-shot pending baseline-after-checkout attempts=" + attempts
+                            + " elapsedMs=" + elapsedMs
+                            + " summary=" + modelChunkSummary(currentChunk()))
+            })
+            console.log("[TripSyncQmlDebug] remove-shot after checkout summary=", modelChunkSummary(currentChunk()))
+
+            verifyTailUiMatchesModel(currentChunk())
+
+            verify(RootData.project.sync())
+            waitForProjectSyncToFinish()
+
+            let commitC = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitC !== "")
+            verify(commitB === commitC)
+            verifyStillOnTripPage(context.tripPageAddress)
+
+            tryVerifyWithDiagnostics(() => {
+                let resyncedChunk = currentChunk()
+                return resyncedChunk.shotCount === baselineShotCount - 1
+                       && resyncedChunk.stationCount === baselineStationCount - 1
+            }, 3000, "verify removal after second sync", function(attempts, elapsedMs) {
+                let pendingChunk = currentChunk()
+                console.log("[TripSyncQmlDebug] remove-shot pending second-sync attempts=" + attempts
+                            + " elapsedMs=" + elapsedMs
+                            + " shotCount=" + pendingChunk.shotCount
+                            + " stationCount=" + pendingChunk.stationCount
+                            + " containsRemovedStation=" + containsStationName(pendingChunk, removedStationName)
+                            + " summary=" + modelChunkSummary(pendingChunk))
+            })
+            console.log("[TripSyncQmlDebug] remove-shot after second sync summary=", modelChunkSummary(currentChunk()))
+
+            compare(backSightsCheck.checked, true)
+            verifyTailUiMatchesModel(currentChunk())
+        }
+
+        function test_tripChunkRemoveAboveSelectedTailStationSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+
+            let currentTrip = function() {
+                let currentPageItem = RootData.pageView.currentPageItem
+                verify(currentPageItem !== null)
+                verify(currentPageItem.currentTrip !== null)
+                return currentPageItem.currentTrip
+            }
+
+            let currentChunk = function() {
+                let trip = currentTrip()
+                verify(trip.chunkCount > 0)
+                let chunk = trip.chunk(0)
+                verify(chunk !== null)
+                verify(chunk.stationCount >= 3)
+                verify(chunk.shotCount >= 2)
+                return chunk
+            }
+
+            let readingText = function(value) {
+                if (value !== null && value !== undefined && value.value !== undefined) {
+                    return String(value.value)
+                }
+                return String(value)
+            }
+
+            let rowForStationIndex = function(stationIndex) {
+                return 1 + (stationIndex * 2)
+            }
+
+            let rowForShotIndex = function(shotIndex) {
+                return 2 + (shotIndex * 2)
+            }
+
+            let surveyDataCell = function(row, role) {
+                let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+                verify(view !== null)
+                view.positionViewAtIndex(row, ListView.Contain)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + role)
+                verify(cell !== null)
+                return cell
+            }
+
+            let surveyDataCellText = function(row, role) {
+                let cell = surveyDataCell(row, role)
+                let coreTextInput = findDescendantByObjectName(cell, "coreTextInput")
+                if (coreTextInput !== null && coreTextInput.text !== undefined) {
+                    return String(coreTextInput.text)
+                }
+                if (cell.text !== undefined) {
+                    return String(cell.text)
+                }
+                let textNode = findDescendantWhere(cell, function(item) {
+                    return item !== null
+                           && item !== undefined
+                           && item.text !== undefined
+                })
+                if (textNode !== null) {
+                    return String(textNode.text)
+                }
+                return ""
+            }
+
+            let chunkSummary = function(chunk) {
+                let stationNames = []
+                for (let i = 0; i < chunk.stationCount; ++i) {
+                    stationNames.push(String(chunk.data(SurveyChunk.StationNameRole, i)))
+                }
+
+                let shotValues = []
+                for (let i = 0; i < chunk.shotCount; ++i) {
+                    shotValues.push({
+                        distance: readingText(chunk.data(SurveyChunk.ShotDistanceRole, i)),
+                        compass: readingText(chunk.data(SurveyChunk.ShotCompassRole, i)),
+                        backCompass: readingText(chunk.data(SurveyChunk.ShotBackCompassRole, i)),
+                        clino: readingText(chunk.data(SurveyChunk.ShotClinoRole, i)),
+                        backClino: readingText(chunk.data(SurveyChunk.ShotBackClinoRole, i))
+                    })
+                }
+
+                return JSON.stringify({
+                    stationCount: chunk.stationCount,
+                    shotCount: chunk.shotCount,
+                    stationNames: stationNames,
+                    shots: shotValues
+                })
+            }
+
+            let containsStationName = function(chunk, stationName) {
+                for (let i = 0; i < chunk.stationCount; ++i) {
+                    if (String(chunk.data(SurveyChunk.StationNameRole, i)) === stationName) {
+                        return true
+                    }
+                }
+                return false
+            }
+
+            let findLastNamedStationIndex = function(chunk) {
+                for (let i = chunk.stationCount - 1; i >= 0; --i) {
+                    let stationName = String(chunk.data(SurveyChunk.StationNameRole, i)).trim()
+                    if (stationName.length > 0) {
+                        return i
+                    }
+                }
+                return -1
+            }
+
+            let trip = currentTrip()
+            trip.calibration.backSights = true
+
+            let chunk = currentChunk()
+            let baselineSummary = chunkSummary(chunk)
+            let baselineShotCount = chunk.shotCount
+            let baselineStationCount = chunk.stationCount
+            let baselineLastNamedStationIndex = findLastNamedStationIndex(chunk)
+            verify(baselineLastNamedStationIndex >= 1)
+            verify(baselineLastNamedStationIndex < baselineStationCount)
+
+            let hadTrailingEmptyStationBefore = String(chunk.data(SurveyChunk.StationNameRole, baselineStationCount - 1)).trim().length === 0
+            let expectedShotCountAfterSelection = hadTrailingEmptyStationBefore ? baselineShotCount : baselineShotCount + 1
+            let expectedStationCountAfterSelection = hadTrailingEmptyStationBefore ? baselineStationCount : baselineStationCount + 1
+
+            let selectedStationCell = surveyDataCell(rowForStationIndex(baselineLastNamedStationIndex), SurveyChunk.StationNameRole)
+            mouseClick(selectedStationCell, 8, selectedStationCell.height * 0.5, Qt.LeftButton)
+
+            tryVerifyWithDiagnostics(() => {
+                let selectedChunk = currentChunk()
+                if (selectedChunk.shotCount !== expectedShotCountAfterSelection
+                        || selectedChunk.stationCount !== expectedStationCountAfterSelection) {
+                    return false
+                }
+
+                let lastStationName = String(selectedChunk.data(SurveyChunk.StationNameRole, selectedChunk.stationCount - 1)).trim()
+                return lastStationName.length === 0
+            }, 3000, "verify selecting last named station appends transient empty tail row")
+
+            tryVerifyWithDiagnostics(() => {
+                return TestHelper.projectModifiedFileCount(RootData.project) === 0
+            }, 3000, "verify transient tail row does not dirty working tree")
+
+            let commitA = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitA !== "")
+
+            let removalChunkBefore = currentChunk()
+            let selectedStationIndexBeforeRemoval = findLastNamedStationIndex(removalChunkBefore)
+            verify(selectedStationIndexBeforeRemoval >= 1)
+            let removedStationName = String(removalChunkBefore.data(SurveyChunk.StationNameRole, selectedStationIndexBeforeRemoval - 1))
+            verify(removedStationName.trim().length > 0)
+            removalChunkBefore.removeShot(selectedStationIndexBeforeRemoval - 1, SurveyChunk.Above)
+
+            tryVerifyWithDiagnostics(() => {
+                let updatedChunk = currentChunk()
+                return !containsStationName(updatedChunk, removedStationName)
+            }, 3000, "verify station above selected station removed")
+
+            let removedSummary = chunkSummary(currentChunk())
+            verify(removedSummary !== baselineSummary)
+
+            verify(RootData.project.sync())
+            waitForProjectSyncToFinish()
+
+            let commitB = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitB !== "")
+            verify(commitB !== commitA)
+
+            let checkoutError = TestHelper.checkoutProjectRef(RootData.project, commitA, true)
+            compare(checkoutError, "")
+            verifyStillOnTripPage(context.tripPageAddress)
+
+            tryVerifyWithDiagnostics(() => {
+                return chunkSummary(currentChunk()) === baselineSummary
+            }, 3000, "verify baseline chunk state after checkout")
+
+            verify(RootData.project.sync())
+            waitForProjectSyncToFinish()
+
+            let commitC = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitC !== "")
+            verify(commitC === commitB)
+            verifyStillOnTripPage(context.tripPageAddress)
+
+            tryVerifyWithDiagnostics(() => {
+                return chunkSummary(currentChunk()) === removedSummary
+            }, 3000, "verify removed chunk state after second sync")
+
+            let finalChunk = currentChunk()
+            let finalTailStationIndex = finalChunk.stationCount - 1
+            let finalTailShotIndex = finalChunk.shotCount - 1
+            compare(surveyDataCellText(rowForStationIndex(finalTailStationIndex), SurveyChunk.StationNameRole),
+                    String(finalChunk.data(SurveyChunk.StationNameRole, finalTailStationIndex)))
+            compare(surveyDataCellText(rowForShotIndex(finalTailShotIndex), SurveyChunk.ShotDistanceRole),
+                    readingText(finalChunk.data(SurveyChunk.ShotDistanceRole, finalTailShotIndex)))
         }
     }
 }

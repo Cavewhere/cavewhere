@@ -275,6 +275,16 @@ QString TestHelper::projectHeadCommitOid(cwProject* project) const
     return headResult.value();
 }
 
+int TestHelper::projectModifiedFileCount(cwProject* project) const
+{
+    if (project == nullptr || project->repository() == nullptr) {
+        return -1;
+    }
+
+    project->repository()->checkStatus();
+    return project->repository()->modifiedFileCount();
+}
+
 QString TestHelper::checkoutProjectRef(cwProject* project,
                                        const QString& refSpec,
                                        bool force) const

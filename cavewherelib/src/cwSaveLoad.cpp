@@ -645,21 +645,36 @@ void cwSaveLoad::ensureGitExcludeHasCacheEntry(const QDir& repoDir)
 }
 
 template<typename ProtoType>
-static Result<ProtoType> loadMessage(const QString& filename) {
+static Result<ProtoType> loadMessage(const QByteArray& content, const QString& sourceLabel)
+{
+    if (content.isEmpty()) {
+        return Result<ProtoType>(QStringLiteral("No data in %1.").arg(sourceLabel));
+    }
+
+    ProtoType proto;
+    if (!proto.ParseFromArray(content.constData(), content.size())) {
+        const std::string jsonPayload(content.constData(),
+                                      static_cast<size_t>(content.size()));
+        const auto status = google::protobuf::util::JsonStringToMessage(jsonPayload, &proto);
+        if (!status.ok()) {
+            return Result<ProtoType>(
+                QStringLiteral("Failed to parse %1: %2")
+                    .arg(sourceLabel, QString::fromStdString(std::string(status.message()))));
+        }
+    }
+
+    return Result<ProtoType>(proto);
+}
+
+template<typename ProtoType>
+static Result<ProtoType> loadMessage(const QString& filename)
+{
     QFile file(filename);
-    bool success = file.open(QFile::ReadOnly);
-    if(!success) {
+    if (!file.open(QFile::ReadOnly)) {
         return Result<ProtoType>(file.errorString());
     }
 
-    auto allData = file.readAll();
-
-    ProtoType proto;
-    auto status = google::protobuf::util::JsonStringToMessage(allData.toStdString(), &proto);
-    if (!status.ok()) {
-        return Result<ProtoType>(QString("Failed to parse JSON: %1").arg(QString::fromStdString(status.message().data())));
-    }
-    return Result<ProtoType>(proto);
+    return loadMessage<ProtoType>(file.readAll(), filename);
 }
 
 // template<typename NoteT>
@@ -2905,6 +2920,24 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
     auto saveTrips = [this, projectFileName, makeDir, saveNotes](const QDir& caveDir, const cwCave* cave) {
         for(const auto trip : cave->trips()) {
             const QDir tripDir = makeDir(tripDirHelper(caveDir, trip));
+            int missingChunkIds = 0;
+            QStringList missingChunkIndices;
+            const QList<cwSurveyChunk*> chunks = trip->chunks();
+            for (int i = 0; i < chunks.size(); ++i) {
+                const cwSurveyChunk* chunk = chunks.at(i);
+                if (chunk == nullptr || chunk->id().isNull()) {
+                    ++missingChunkIds;
+                    missingChunkIndices.append(QString::number(i));
+                }
+            }
+
+            qDebug().noquote()
+                << QStringLiteral("[TripSyncDebug] saveAllFromV6 trip=%1 chunkCount=%2 missingChunkIds=%3 missingChunkIndices=[%4]")
+                       .arg(trip->name())
+                       .arg(chunks.size())
+                       .arg(missingChunkIds)
+                       .arg(missingChunkIndices.join(QStringLiteral(",")));
+
             save(trip);
             saveNotes(tripDir, trip->notes());
         }
@@ -3139,35 +3172,44 @@ Monad::Result<cwCaveData> cwSaveLoad::loadCave(const QString &filename)
 Monad::Result<cwTripData> cwSaveLoad::loadTrip(const QString &filename)
 {
     auto tripResult = loadMessage<CavewhereProto::Trip>(filename);
-    return Monad::mbind(tripResult, [](const Result<CavewhereProto::Trip>& result)
-                        {
-                            auto tripProto = result.value();
-                            cwTripData tripData;
+    return Monad::mbind(tripResult, [](const Result<CavewhereProto::Trip>& result) {
+        return Result(cwSaveLoad::tripDataFromProtoTrip(result.value()));
+    });
+}
 
-                            if(tripProto.has_name()) {
-                                tripData.name = QString::fromStdString(tripProto.name());
-                            }
-                            if (tripProto.has_id()) {
-                                tripData.id = toUuid(tripProto.id());
-                            }
+Monad::Result<cwTripData> cwSaveLoad::loadTrip(const QByteArray& content)
+{
+    auto tripResult = loadMessage<CavewhereProto::Trip>(content, QStringLiteral("trip payload"));
+    return Monad::mbind(tripResult, [](const Result<CavewhereProto::Trip>& result) {
+        return Result(cwSaveLoad::tripDataFromProtoTrip(result.value()));
+    });
+}
 
-                            if(tripProto.has_date()) {
-                                tripData.date = QDateTime(cwRegionLoadTask::loadDate(tripProto.date()), QTime());
-                            }
+cwTripData cwSaveLoad::tripDataFromProtoTrip(const CavewhereProto::Trip& tripProto)
+{
+    cwTripData tripData;
 
-                            if(tripProto.has_tripcalibration()) {
-                                tripData.calibrations = fromProtoTripCalibration(tripProto.tripcalibration());
-                            }
+    if (tripProto.has_name()) {
+        tripData.name = QString::fromStdString(tripProto.name());
+    }
+    if (tripProto.has_id()) {
+        tripData.id = toUuid(tripProto.id());
+    }
 
-                            if(tripProto.has_team()) {
-                                tripData.team = fromProtoTeam(tripProto.team());
-                            }
+    if (tripProto.has_date()) {
+        tripData.date = QDateTime(cwRegionLoadTask::loadDate(tripProto.date()), QTime());
+    }
 
-                            tripData.chunks = cwSaveLoad::Data::fromProtoSurveyChunks(tripProto.chunks());
+    if (tripProto.has_tripcalibration()) {
+        tripData.calibrations = fromProtoTripCalibration(tripProto.tripcalibration());
+    }
 
+    if (tripProto.has_team()) {
+        tripData.team = fromProtoTeam(tripProto.team());
+    }
 
-                            return Result(tripData);
-                        });
+    tripData.chunks = cwSaveLoad::Data::fromProtoSurveyChunks(tripProto.chunks());
+    return tripData;
 }
 
 Monad::Result<cwNoteData> cwSaveLoad::loadNote(const QString &filename, const QDir& projectDir)
