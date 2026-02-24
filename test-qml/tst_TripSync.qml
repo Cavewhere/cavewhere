@@ -1570,5 +1570,172 @@ MainWindowTest {
                 return JSON.stringify(snapshotTripState()) === expectedRemovedSummary
             }, 3000, "verify removed state after second sync")
         }
+
+        function test_tripAddEmptyChunkFromAddAnotherDataBlockSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+
+            let currentTrip = function() {
+                let currentPageItem = RootData.pageView.currentPageItem
+                verify(currentPageItem !== null)
+                verify(currentPageItem.currentTrip !== null)
+                return currentPageItem.currentTrip
+            }
+
+            let snapshotTripState = function() {
+                let trip = currentTrip()
+                let lastChunk = trip.chunkCount > 0 ? trip.chunk(trip.chunkCount - 1) : null
+                return JSON.stringify({
+                    chunkCount: trip.chunkCount,
+                    lastChunk: lastChunk === null
+                               ? null
+                               : {
+                                     stationCount: lastChunk.stationCount,
+                                     shotCount: lastChunk.shotCount
+                                 }
+                })
+            }
+
+            runTripSyncRoundTrip(
+                context.tripPageAddress,
+                function() {
+                    return snapshotTripState()
+                },
+                function(expectedStateJson) {
+                    let addDataBlockButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->spaceAddBar")
+                    verify(addDataBlockButton !== null)
+                    addDataBlockButton.clicked()
+                    waitForRendering(rootId)
+
+                    tryVerifyWithDiagnostics(() => {
+                        return snapshotTripState() === expectedStateJson
+                    }, 3000, "verify new empty chunk after add another data block")
+                },
+                function(baselineStateJson) {
+                    let nextState = JSON.parse(baselineStateJson)
+                    nextState.chunkCount += 1
+                    nextState.lastChunk = {
+                        stationCount: 2,
+                        shotCount: 1
+                    }
+                    return JSON.stringify(nextState)
+                }
+            )
+        }
+
+        function test_tripAddFilledChunkFromSpacebarSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+            verify(view !== null)
+            let editorModel = view.model
+            verify(editorModel !== null)
+
+            let currentTrip = function() {
+                let currentPageItem = RootData.pageView.currentPageItem
+                verify(currentPageItem !== null)
+                verify(currentPageItem.currentTrip !== null)
+                return currentPageItem.currentTrip
+            }
+
+            let readingText = function(value) {
+                if (value !== null && value !== undefined && value.value !== undefined) {
+                    return String(value.value)
+                }
+                return String(value)
+            }
+
+            let snapshotTripState = function() {
+                let trip = currentTrip()
+                let lastChunk = trip.chunkCount > 0 ? trip.chunk(trip.chunkCount - 1) : null
+                return JSON.stringify({
+                    chunkCount: trip.chunkCount,
+                    lastChunk: lastChunk === null
+                               ? null
+                               : {
+                                     stationCount: lastChunk.stationCount,
+                                     shotCount: lastChunk.shotCount,
+                                     station0: String(lastChunk.data(SurveyChunk.StationNameRole, 0)),
+                                     station1: String(lastChunk.data(SurveyChunk.StationNameRole, 1)),
+                                     distance0: readingText(lastChunk.data(SurveyChunk.ShotDistanceRole, 0)),
+                                     compass0: readingText(lastChunk.data(SurveyChunk.ShotCompassRole, 0)),
+                                     clino0: readingText(lastChunk.data(SurveyChunk.ShotClinoRole, 0))
+                                 }
+                })
+            }
+
+            let rowForStationIndex = function(chunk, stationIndex) {
+                return editorModel.toModelRow(
+                            editorModel.rowIndex(chunk, stationIndex, SurveyEditorRowIndex.StationRow))
+            }
+
+            let surveyDataCell = function(row, role) {
+                view.positionViewAtIndex(row, ListView.Contain)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + role)
+                verify(cell !== null)
+                return cell
+            }
+
+            runTripSyncRoundTrip(
+                context.tripPageAddress,
+                function() {
+                    return snapshotTripState()
+                },
+                function(expectedStateJson) {
+                    let tripBeforeAdd = currentTrip()
+                    let baselineChunkCountBeforeAdd = tripBeforeAdd.chunkCount
+                    let sourceChunk = tripBeforeAdd.chunk(tripBeforeAdd.chunkCount - 1)
+                    verify(sourceChunk !== null)
+                    if (sourceChunk.isStationAndShotsEmpty()) {
+                        sourceChunk.setData(SurveyChunk.StationNameRole, 0, "PRE-SPACE-1")
+                        sourceChunk.setData(SurveyChunk.StationNameRole, 1, "PRE-SPACE-2")
+                        sourceChunk.setData(SurveyChunk.ShotDistanceRole, 0, "1")
+                        sourceChunk.setData(SurveyChunk.ShotCompassRole, 0, "10")
+                        sourceChunk.setData(SurveyChunk.ShotClinoRole, 0, "0")
+                        tryVerifyWithDiagnostics(() => {
+                            return sourceChunk.isStationAndShotsEmpty() === false
+                        }, 3000, "ensure last chunk is non-empty before spacebar add")
+                    }
+                    let sourceRow = rowForStationIndex(sourceChunk, sourceChunk.stationCount - 1)
+                    verify(sourceRow >= 0)
+                    let sourceCell = surveyDataCell(sourceRow, SurveyChunk.StationNameRole)
+                    sourceCell.addNewChunk()
+                    waitForRendering(rootId)
+
+                    tryVerifyWithDiagnostics(() => {
+                        return currentTrip().chunkCount === baselineChunkCountBeforeAdd + 1
+                    }, 3000, "verify chunk added via spacebar")
+
+                    let expectedState = JSON.parse(expectedStateJson)
+                    let expectedChunk = expectedState.lastChunk
+                    let newChunk = currentTrip().chunk(currentTrip().chunkCount - 1)
+                    verify(newChunk !== null)
+                    compare(newChunk.stationCount, 2)
+                    compare(newChunk.shotCount, 1)
+
+                    newChunk.setData(SurveyChunk.StationNameRole, 0, expectedChunk.station0)
+                    newChunk.setData(SurveyChunk.StationNameRole, 1, expectedChunk.station1)
+                    newChunk.setData(SurveyChunk.ShotDistanceRole, 0, expectedChunk.distance0)
+                    newChunk.setData(SurveyChunk.ShotCompassRole, 0, expectedChunk.compass0)
+                    newChunk.setData(SurveyChunk.ShotClinoRole, 0, expectedChunk.clino0)
+
+                    tryVerifyWithDiagnostics(() => {
+                        return snapshotTripState() === expectedStateJson
+                    }, 3000, "verify new filled chunk after spacebar add")
+                },
+                function(baselineStateJson) {
+                    let nextState = JSON.parse(baselineStateJson)
+                    nextState.chunkCount += 1
+                    nextState.lastChunk = {
+                        stationCount: 2,
+                        shotCount: 1,
+                        station0: "SYNC-NEW-A1",
+                        station1: "SYNC-NEW-A2",
+                        distance0: "5.67",
+                        compass0: "123.40",
+                        clino0: "-8.90"
+                    }
+                    return JSON.stringify(nextState)
+                }
+            )
+        }
     }
 }
