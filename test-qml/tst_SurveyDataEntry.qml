@@ -264,6 +264,15 @@ MainWindowTest {
             //Auto guess next row
             keyClick(16777217, 0) //Tab
             verify(secondChunk.data(SurveyChunk.StationNameRole, 1) === "a2")
+            let secondChunkVirtualShotRow = editorModel.toModelRow(
+                        editorModel.rowIndex(secondChunk, secondChunk.shotCount, SurveyEditorRowIndex.ShotRow))
+            verify(secondChunkVirtualShotRow >= 0)
+            let secondChunkVirtualShotBoxIndex = editorModel.boxIndex(
+                        secondChunk,
+                        secondChunk.shotCount,
+                        SurveyEditorRowIndex.ShotRow,
+                        SurveyChunk.ShotDistanceRole)
+            compare(editorModel.shotDistanceIncluded(secondChunkVirtualShotBoxIndex), true)
 
             waitForRendering(rootId);
 

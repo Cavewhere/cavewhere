@@ -412,12 +412,24 @@ bool cwSurveyEditorModel::setData(const cwSurveyEditorBoxIndex& boxIndex, const 
 bool cwSurveyEditorModel::shotDistanceIncluded(const cwSurveyEditorBoxIndex& boxIndex) const
 {
     cwSurveyChunk* chunk = boxIndex.chunk();
-    if(chunk == nullptr || boxIndex.rowType() != cwSurveyEditorRowIndex::ShotRow) {
+    if(chunk == nullptr || boxIndex.rowType() != cwSurveyEditorRowIndex::ShotRow || m_trip.isNull()) {
+        return false;
+    }
+
+    if(!m_trip->chunks().contains(chunk)) {
         return false;
     }
 
     const int indexInChunk = boxIndex.indexInChunk();
-    if(indexInChunk < 0 || indexInChunk >= chunk->shotCount()) {
+    if(indexInChunk < 0) {
+        return false;
+    }
+
+    if(indexInChunk == chunk->shotCount()) {
+        return hasVirtualTrailingStationShot(chunk);
+    }
+
+    if(indexInChunk > chunk->shotCount() - 1) {
         return false;
     }
 
