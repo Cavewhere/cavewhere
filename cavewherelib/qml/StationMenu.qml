@@ -104,7 +104,9 @@ QQ.Loader {
                 QC.MenuItem {
                     objectName: "stationMenuInsertAbove"
                     text: "Station above"
-                    enabled: dataValue.chunk !== null && stationMenuLoader.model !== null
+                    enabled: dataValue.chunk !== null
+                             && stationMenuLoader.model !== null
+                             && stationMenuLoader.model.canInsertStation(dataValue.boxIndex, SurveyChunk.Above)
                     onTriggered: {
                         stationMenuLoader.model.insertStation(dataValue.boxIndex, SurveyChunk.Above)
                     }
@@ -113,7 +115,9 @@ QQ.Loader {
                 QC.MenuItem {
                     objectName: "stationMenuInsertBelow"
                     text: "Station below"
-                    enabled: dataValue.chunk !== null && stationMenuLoader.model !== null
+                    enabled: dataValue.chunk !== null
+                             && stationMenuLoader.model !== null
+                             && stationMenuLoader.model.canInsertStation(dataValue.boxIndex, SurveyChunk.Below)
                     onTriggered: {
                         stationMenuLoader.model.insertStation(dataValue.boxIndex, SurveyChunk.Below)
                     }

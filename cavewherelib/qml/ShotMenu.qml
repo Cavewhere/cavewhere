@@ -104,7 +104,9 @@ QQ.Loader {
                 QC.MenuItem {
                     objectName: "shotMenuInsertAbove"
                     text: "Above"
-                    enabled: dataValue.chunk !== null && shotMenuLoader.model !== null
+                    enabled: dataValue.chunk !== null
+                             && shotMenuLoader.model !== null
+                             && shotMenuLoader.model.canInsertShot(dataValue.boxIndex, SurveyChunk.Above)
                     onTriggered: {
                         shotMenuLoader.model.insertShot(dataValue.boxIndex, SurveyChunk.Above)
                     }
@@ -113,7 +115,9 @@ QQ.Loader {
                 QC.MenuItem {
                     objectName: "shotMenuInsertBelow"
                     text: "Below"
-                    enabled: dataValue.chunk !== null && shotMenuLoader.model !== null
+                    enabled: dataValue.chunk !== null
+                             && shotMenuLoader.model !== null
+                             && shotMenuLoader.model.canInsertShot(dataValue.boxIndex, SurveyChunk.Below)
                     onTriggered: {
                         shotMenuLoader.model.insertShot(dataValue.boxIndex, SurveyChunk.Below)
                     }
