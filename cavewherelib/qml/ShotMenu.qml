@@ -12,6 +12,7 @@ QQ.Loader {
     id: shotMenuLoader
     objectName: "shotMenuLoader"
 
+    required property SurveyEditorModel model
     required property cwSurveyEditorBoxData dataValue
     required property RemovePreview removePreview
 
@@ -101,18 +102,18 @@ QQ.Loader {
                 QC.MenuItem {
                     objectName: "shotMenuInsertAbove"
                     text: "Above"
-                    enabled: dataValue.chunk !== null
+                    enabled: dataValue.chunk !== null && shotMenuLoader.model !== null
                     onTriggered: {
-                        dataValue.chunk.insertShot(dataValue.indexInChunk, SurveyChunk.Above)
+                        shotMenuLoader.model.insertShot(dataValue.boxIndex, SurveyChunk.Above)
                     }
                 }
 
                 QC.MenuItem {
                     objectName: "shotMenuInsertBelow"
                     text: "Below"
-                    enabled: dataValue.chunk !== null
+                    enabled: dataValue.chunk !== null && shotMenuLoader.model !== null
                     onTriggered: {
-                        dataValue.chunk.insertShot(dataValue.indexInChunk, SurveyChunk.Below)
+                        shotMenuLoader.model.insertShot(dataValue.boxIndex, SurveyChunk.Below)
                     }
                 }
             }

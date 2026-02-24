@@ -13,6 +13,7 @@ ReadingBox {
 
     ShotMenu {
         id: removeMenuId
+        model: clinoReadBox.model
         dataValue: clinoReadBox.dataValue
         removePreview: clinoReadBox.removePreview
     }

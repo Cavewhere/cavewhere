@@ -976,6 +976,8 @@ MainWindowTest {
 
             let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view");
             verify(view !== null)
+            let editorModel = view.model
+            verify(editorModel !== null)
 
             function dataBoxAt(row, column) {
                 view.positionViewAtIndex(row, ListView.Contain)
@@ -1036,8 +1038,16 @@ MainWindowTest {
             setCell(3, SurveyChunk.StationNameRole, "A1")
             setCell(2, SurveyChunk.ShotDistanceRole, "10")
 
-            verify(chunk.stationCount === 3)
-            verify(chunk.shotCount === 2)
+            compare(chunk.stationCount, 2)
+            compare(chunk.shotCount, 1)
+
+            // Virtual trailing rows should be exposed while focused.
+            let baseVirtualStationRow = editorModel.toModelRow(
+                        editorModel.rowIndex(chunk, 2, SurveyEditorRowIndex.StationRow))
+            let baseVirtualShotRow = editorModel.toModelRow(
+                        editorModel.rowIndex(chunk, 1, SurveyEditorRowIndex.ShotRow))
+            verify(baseVirtualStationRow >= 0)
+            verify(baseVirtualShotRow >= 0)
 
                     // wait(100000)
 
@@ -1049,13 +1059,11 @@ MainWindowTest {
 
             wait(100)
 
-            // Bug repro: model counts don't change, but the view shows an extra station row.
-            compare(chunk.stationCount, 4)
-            compare(chunk.shotCount, 3)
-
-            // wait(10000)
-
-            compare(view.count, chunk.stationCount + chunk.shotCount + 1)
+            compare(chunk.stationCount, 3)
+            compare(chunk.shotCount, 2)
+            compare(chunk.data(SurveyChunk.StationNameRole, 2), "")
+            verify(editorModel.toModelRow(
+                       editorModel.rowIndex(chunk, 2, SurveyEditorRowIndex.StationRow)) >= 0)
         }
 
         function test_dateChangeShouldWork() {

@@ -12,6 +12,7 @@ QQ.Loader {
     id: stationMenuLoader
     objectName: "stationMenuLoader"
 
+    required property SurveyEditorModel model
     required property cwSurveyEditorBoxData dataValue
     required property RemovePreview removePreview
 
@@ -101,20 +102,18 @@ QQ.Loader {
                 QC.MenuItem {
                     objectName: "stationMenuInsertAbove"
                     text: "Station above"
-                    enabled: dataValue.chunk !== null
+                    enabled: dataValue.chunk !== null && stationMenuLoader.model !== null
                     onTriggered: {
-                        console.log("Triggered!" + dataValue.indexInChunk);
-                        console.log("Chunk!" + dataValue.chunk);
-                        dataValue.chunk.insertStation(dataValue.indexInChunk, SurveyChunk.Above)
+                        stationMenuLoader.model.insertStation(dataValue.boxIndex, SurveyChunk.Above)
                     }
                 }
 
                 QC.MenuItem {
                     objectName: "stationMenuInsertBelow"
                     text: "Station below"
-                    enabled: dataValue.chunk !== null
+                    enabled: dataValue.chunk !== null && stationMenuLoader.model !== null
                     onTriggered: {
-                        dataValue.chunk.insertStation(dataValue.indexInChunk, SurveyChunk.Below)
+                        stationMenuLoader.model.insertStation(dataValue.boxIndex, SurveyChunk.Below)
                     }
                 }
             }

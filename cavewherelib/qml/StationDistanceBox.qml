@@ -7,6 +7,7 @@ DataBox {
 
     StationMenu {
         id: removeMenuId
+        model: stationDistanceBox.model
         dataValue: stationDistanceBox.dataValue
         removePreview: stationDistanceBox.removePreview
     }

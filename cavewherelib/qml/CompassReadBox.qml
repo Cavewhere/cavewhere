@@ -13,6 +13,7 @@ ReadingBox {
 
     ShotMenu {
         id: removeMenuId
+        model: compassReadBox.model
         dataValue: compassReadBox.dataValue
         removePreview: compassReadBox.removePreview
     }

@@ -424,6 +424,60 @@ bool cwSurveyEditorModel::shotDistanceIncluded(const cwSurveyEditorBoxIndex& box
     return chunk->data(cwSurveyChunk::ShotDistanceIncludedRole, indexInChunk).toBool();
 }
 
+void cwSurveyEditorModel::insertStation(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction)
+{
+    cwSurveyChunk* chunk = boxIndex.chunk();
+    if(chunk == nullptr || m_trip.isNull() || boxIndex.rowType() != cwSurveyEditorRowIndex::StationRow) {
+        return;
+    }
+
+    if(!m_trip->chunks().contains(chunk)) {
+        return;
+    }
+
+    const int indexInChunk = boxIndex.indexInChunk();
+    const bool isVirtualStation = indexInChunk == chunk->stationCount()
+                                  && hasVirtualTrailingStationShot(chunk);
+
+    if(isVirtualStation) {
+        chunk->appendNewShot();
+        return;
+    }
+
+    if(indexInChunk < 0 || indexInChunk >= chunk->stationCount()) {
+        return;
+    }
+
+    chunk->insertStation(indexInChunk, direction);
+}
+
+void cwSurveyEditorModel::insertShot(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction)
+{
+    cwSurveyChunk* chunk = boxIndex.chunk();
+    if(chunk == nullptr || m_trip.isNull() || boxIndex.rowType() != cwSurveyEditorRowIndex::ShotRow) {
+        return;
+    }
+
+    if(!m_trip->chunks().contains(chunk)) {
+        return;
+    }
+
+    const int indexInChunk = boxIndex.indexInChunk();
+    const bool isVirtualShot = indexInChunk == chunk->shotCount()
+                               && hasVirtualTrailingStationShot(chunk);
+
+    if(isVirtualShot) {
+        chunk->appendNewShot();
+        return;
+    }
+
+    if(indexInChunk < 0 || indexInChunk >= chunk->shotCount()) {
+        return;
+    }
+
+    chunk->insertShot(indexInChunk, direction);
+}
+
 /**
  * @brief cwSurveyEditorModel::roleNames
  * @return

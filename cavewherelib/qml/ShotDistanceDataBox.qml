@@ -16,6 +16,7 @@ DataBox {
 
     ShotMenu {
         id: removeMenuId
+        model: dataBoxId.model
         dataValue: dataBoxId.dataValue
         removePreview: dataBoxId.removePreview
     }
