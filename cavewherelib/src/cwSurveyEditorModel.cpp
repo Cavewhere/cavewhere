@@ -341,6 +341,25 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
     return QVariant();
 }
 
+QVariant cwSurveyEditorModel::data(const cwSurveyEditorBoxIndex& boxIndex) const
+{
+    cwSurveyChunk* chunk = boxIndex.chunk();
+    if(chunk == nullptr || m_trip.isNull()) {
+        return QVariant();
+    }
+
+    if(!m_trip->chunks().contains(chunk)) {
+        return QVariant();
+    }
+
+    const QModelIndex modelIndex = toModelIndex(boxIndex.rowIndex());
+    if(!modelIndex.isValid()) {
+        return QVariant();
+    }
+
+    return data(modelIndex, toModelRole(boxIndex.chunkDataRole()));
+}
+
 /**
  * @brief cwSurveyEditorModel::rowCount
  * @param parent

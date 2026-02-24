@@ -24,10 +24,16 @@ QQ.Loader {
             objectName: "shotMenuRoot"
 
             function stationLabel(index) {
-                if(dataValue.chunk === null) {
+                if(dataValue.chunk === null || shotMenuLoader.model === null) {
                     return "empty station"
                 }
-                let name = dataValue.chunk.data(SurveyChunk.StationNameRole, index)
+                let stationBoxData = shotMenuLoader.model.data(
+                            shotMenuLoader.model.boxIndex(
+                                dataValue.chunk,
+                                index,
+                                SurveyEditorRowIndex.StationRow,
+                                SurveyChunk.StationNameRole))
+                let name = stationBoxData.reading.value
                 if(name === "") {
                     return "empty station"
                 }

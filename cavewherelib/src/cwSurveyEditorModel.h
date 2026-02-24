@@ -56,6 +56,7 @@ public:
     Q_INVOKABLE void setFocusedChunk(cwSurveyChunk* chunk);
 
     QVariant data(const QModelIndex &index, int role) const;
+    Q_INVOKABLE QVariant data(const cwSurveyEditorBoxIndex& boxIndex) const;
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
     Q_INVOKABLE bool setData(const cwSurveyEditorBoxIndex& boxIndex, const QVariant& data);
     Q_INVOKABLE bool shotDistanceIncluded(const cwSurveyEditorBoxIndex& boxIndex) const;
