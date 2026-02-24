@@ -1436,5 +1436,139 @@ MainWindowTest {
             compare(surveyDataCellText(rowForShotIndex(finalChunk, finalTailShotIndex), SurveyChunk.ShotDistanceRole),
                     readingText(shotReadingAt(finalChunk, finalTailShotIndex, SurveyChunk.ShotDistanceRole)))
         }
+
+        function test_tripRemoveChunkFromStationContextMenuSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+            verify(view !== null)
+            let editorModel = view.model
+            verify(editorModel !== null)
+
+            let currentTrip = function() {
+                let currentPageItem = RootData.pageView.currentPageItem
+                verify(currentPageItem !== null)
+                verify(currentPageItem.currentTrip !== null)
+                return currentPageItem.currentTrip
+            }
+
+            let rowForStationIndex = function(chunk, stationIndex) {
+                return editorModel.toModelRow(
+                            editorModel.rowIndex(chunk, stationIndex, SurveyEditorRowIndex.StationRow))
+            }
+
+            let surveyDataCell = function(row, role) {
+                view.positionViewAtIndex(row, ListView.Contain)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + role)
+                verify(cell !== null)
+                return cell
+            }
+
+            let openContextMenu = function(row, role) {
+                let cell = surveyDataCell(row, role)
+                mouseClick(cell, cell.width * 0.5, cell.height * 0.5, Qt.RightButton)
+                waitForRendering(rootId)
+            }
+
+            let triggerMenuItemFromLoader = function(row, role, loaderObjectName, itemObjectName) {
+                let loaderPath = "rootId->tripPage->view->dataBox." + row + "." + role + "->" + loaderObjectName
+                let loader = ObjectFinder.findObjectByChain(mainWindow, loaderPath)
+                verify(loader !== null)
+                verify(loader.item !== null)
+                let item = findChild(loader.item, itemObjectName)
+                verify(item !== null)
+                item.triggered()
+                waitForRendering(rootId)
+            }
+
+            let snapshotTripState = function() {
+                let trip = currentTrip()
+                let chunks = []
+                for (let c = 0; c < trip.chunkCount; ++c) {
+                    let chunk = trip.chunk(c)
+                    verify(chunk !== null)
+
+                    chunks.push({
+                        firstStationName: chunk.stationCount > 0
+                                          ? String(chunk.data(SurveyChunk.StationNameRole, 0))
+                                          : "",
+                        stationCount: chunk.stationCount,
+                        shotCount: chunk.shotCount
+                    })
+                }
+
+                return {
+                    chunkCount: trip.chunkCount,
+                    chunks: chunks
+                }
+            }
+
+            let trip = currentTrip()
+            if (trip.chunkCount < 2) {
+                trip.addNewChunk()
+                tryVerifyWithDiagnostics(() => {
+                    return currentTrip().chunkCount >= 2
+                }, 3000, "ensure second chunk exists before removal")
+
+                verify(RootData.project.sync())
+                waitForProjectSyncToFinish()
+                verifyStillOnTripPage(context.tripPageAddress)
+            }
+
+            let baselineState = snapshotTripState()
+            verify(baselineState.chunkCount >= 2)
+            let baselineSummary = JSON.stringify(baselineState)
+            verify(baselineSummary.length > 0)
+
+            let targetChunkIndex = baselineState.chunkCount - 1
+            let expectedRemovedState = JSON.parse(baselineSummary)
+            expectedRemovedState.chunks.splice(targetChunkIndex, 1)
+            expectedRemovedState.chunkCount -= 1
+            let expectedRemovedSummary = JSON.stringify(expectedRemovedState)
+
+            let commitA = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitA !== "")
+
+            let targetChunk = currentTrip().chunk(targetChunkIndex)
+            verify(targetChunk !== null)
+            let targetRow = rowForStationIndex(targetChunk, 0)
+            verify(targetRow >= 0)
+
+            openContextMenu(targetRow, SurveyChunk.StationNameRole)
+            triggerMenuItemFromLoader(targetRow,
+                                      SurveyChunk.StationNameRole,
+                                      "stationMenuLoader",
+                                      "stationMenuRemoveChunk")
+
+            tryVerifyWithDiagnostics(() => {
+                return JSON.stringify(snapshotTripState()) === expectedRemovedSummary
+            }, 3000, "verify chunk removal after local context-menu action")
+
+            verify(RootData.project.sync())
+            waitForProjectSyncToFinish()
+
+            let commitB = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitB !== "")
+            verify(commitB !== commitA)
+
+            let checkoutError = TestHelper.checkoutProjectRef(RootData.project, commitA, true)
+            compare(checkoutError, "")
+            verifyStillOnTripPage(context.tripPageAddress)
+
+            tryVerifyWithDiagnostics(() => {
+                return JSON.stringify(snapshotTripState()) === baselineSummary
+            }, 3000, "verify baseline state after checkout")
+
+            verify(RootData.project.sync())
+            waitForProjectSyncToFinish()
+
+            let commitC = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitC !== "")
+            verify(commitC === commitB)
+            verifyStillOnTripPage(context.tripPageAddress)
+
+            tryVerifyWithDiagnostics(() => {
+                return JSON.stringify(snapshotTripState()) === expectedRemovedSummary
+            }, 3000, "verify removed state after second sync")
+        }
     }
 }

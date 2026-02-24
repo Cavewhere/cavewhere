@@ -130,6 +130,14 @@ Monad::ResultBase cwTripMergeApplier::applyTripMergePlan(const cwTripMergePlan& 
     const std::optional<QList<cwSurveyChunkData>> baseChunks = plan.baseTripData.has_value()
         ? std::optional<QList<cwSurveyChunkData>>(plan.baseTripData->chunks)
         : std::nullopt;
+    const cwSyncIdUtils::CurrentOnlyItemPolicy currentOnlyItemPolicy =
+        plan.applyMode == cwSyncMergeApplyUtils::ApplyMode::LoadedWins
+            ? cwSyncIdUtils::CurrentOnlyItemPolicy::DropAlways
+            : cwSyncIdUtils::CurrentOnlyItemPolicy::KeepWhenNotInBase;
+    const cwSyncIdUtils::LoadedOnlyItemPolicy loadedOnlyItemPolicy =
+        plan.applyMode == cwSyncMergeApplyUtils::ApplyMode::LoadedWins
+            ? cwSyncIdUtils::LoadedOnlyItemPolicy::KeepAlways
+            : cwSyncIdUtils::LoadedOnlyItemPolicy::KeepWhenNotInBase;
 
     qDebug().noquote()
         << QStringLiteral("[TripSyncDebug] trip apply plan tripId=%1 applyMode=%2 currentChunkCount=%3 loadedChunkCount=%4 baseChunkCount=%5")
@@ -230,7 +238,9 @@ Monad::ResultBase cwTripMergeApplier::applyTripMergePlan(const cwTripMergePlan& 
                 [](const std::vector<QUuid>& lhs, const std::vector<QUuid>& rhs) { return lhs == rhs; },
                 applyMode);
         },
-        QStringLiteral("trip chunk list"));
+        QStringLiteral("trip chunk list"),
+        currentOnlyItemPolicy,
+        loadedOnlyItemPolicy);
     if (mergedChunkDataList.hasError()) {
         return Monad::ResultBase(mergedChunkDataList.errorMessage());
     }
