@@ -60,7 +60,8 @@ QQ.Loader {
                     objectName: "shotMenuRemoveAbove"
                     text: "and " + stationLabel(dataValue.indexInChunk)
                     enabled: dataValue.chunk !== null
-                             && dataValue.chunk.canRemoveShot(dataValue.indexInChunk, SurveyChunk.Above)
+                             && shotMenuLoader.model !== null
+                             && shotMenuLoader.model.canRemoveShot(dataValue.boxIndex, SurveyChunk.Above)
                     onHighlightedChanged: {
                         if(highlighted) {
                             previewRemoveShot(SurveyChunk.Above)
@@ -70,14 +71,15 @@ QQ.Loader {
                     }
                     onTriggered: {
                         clearRemovePreview()
-                        dataValue.chunk.removeShot(dataValue.indexInChunk, SurveyChunk.Above)
+                        shotMenuLoader.model.removeShot(dataValue.boxIndex, SurveyChunk.Above)
                     }
                 }
                 QC.MenuItem {
                     objectName: "shotMenuRemoveBelow"
                     text: "and " + stationLabel(dataValue.indexInChunk + 1)
                     enabled: dataValue.chunk !== null
-                             && dataValue.chunk.canRemoveShot(dataValue.indexInChunk, SurveyChunk.Below)
+                             && shotMenuLoader.model !== null
+                             && shotMenuLoader.model.canRemoveShot(dataValue.boxIndex, SurveyChunk.Below)
                     onHighlightedChanged: {
                         if(highlighted) {
                             previewRemoveShot(SurveyChunk.Below)
@@ -87,7 +89,7 @@ QQ.Loader {
                     }
                     onTriggered: {
                         clearRemovePreview()
-                        dataValue.chunk.removeShot(dataValue.indexInChunk, SurveyChunk.Below)
+                        shotMenuLoader.model.removeShot(dataValue.boxIndex, SurveyChunk.Below)
                     }
                 }
             }

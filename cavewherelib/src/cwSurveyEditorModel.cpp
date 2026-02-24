@@ -424,6 +424,82 @@ bool cwSurveyEditorModel::shotDistanceIncluded(const cwSurveyEditorBoxIndex& box
     return chunk->data(cwSurveyChunk::ShotDistanceIncludedRole, indexInChunk).toBool();
 }
 
+bool cwSurveyEditorModel::canRemoveStation(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction) const
+{
+    cwSurveyChunk* chunk = boxIndex.chunk();
+    if(chunk == nullptr || m_trip.isNull() || boxIndex.rowType() != cwSurveyEditorRowIndex::StationRow) {
+        return false;
+    }
+
+    if(!m_trip->chunks().contains(chunk)) {
+        return false;
+    }
+
+    const int indexInChunk = boxIndex.indexInChunk();
+    if(indexInChunk < 0 || indexInChunk >= chunk->stationCount()) {
+        return false;
+    }
+
+    return chunk->canRemoveStation(indexInChunk, direction);
+}
+
+bool cwSurveyEditorModel::canRemoveShot(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction) const
+{
+    cwSurveyChunk* chunk = boxIndex.chunk();
+    if(chunk == nullptr || m_trip.isNull() || boxIndex.rowType() != cwSurveyEditorRowIndex::ShotRow) {
+        return false;
+    }
+
+    if(!m_trip->chunks().contains(chunk)) {
+        return false;
+    }
+
+    const int indexInChunk = boxIndex.indexInChunk();
+    if(indexInChunk < 0 || indexInChunk >= chunk->shotCount()) {
+        return false;
+    }
+
+    return chunk->canRemoveShot(indexInChunk, direction);
+}
+
+void cwSurveyEditorModel::removeStation(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction)
+{
+    cwSurveyChunk* chunk = boxIndex.chunk();
+    if(chunk == nullptr || m_trip.isNull() || boxIndex.rowType() != cwSurveyEditorRowIndex::StationRow) {
+        return;
+    }
+
+    if(!m_trip->chunks().contains(chunk)) {
+        return;
+    }
+
+    const int indexInChunk = boxIndex.indexInChunk();
+    if(indexInChunk < 0 || indexInChunk >= chunk->stationCount()) {
+        return;
+    }
+
+    chunk->removeStation(indexInChunk, direction);
+}
+
+void cwSurveyEditorModel::removeShot(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction)
+{
+    cwSurveyChunk* chunk = boxIndex.chunk();
+    if(chunk == nullptr || m_trip.isNull() || boxIndex.rowType() != cwSurveyEditorRowIndex::ShotRow) {
+        return;
+    }
+
+    if(!m_trip->chunks().contains(chunk)) {
+        return;
+    }
+
+    const int indexInChunk = boxIndex.indexInChunk();
+    if(indexInChunk < 0 || indexInChunk >= chunk->shotCount()) {
+        return;
+    }
+
+    chunk->removeShot(indexInChunk, direction);
+}
+
 void cwSurveyEditorModel::insertStation(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction)
 {
     cwSurveyChunk* chunk = boxIndex.chunk();

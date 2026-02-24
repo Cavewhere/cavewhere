@@ -660,6 +660,8 @@ MainWindowTest {
 
             let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view");
             verify(view !== null)
+            let editorModel = view.model
+            verify(editorModel !== null)
 
             function dataBoxAt(row, column) {
                 view.positionViewAtIndex(row, ListView.Contain)
@@ -714,6 +716,14 @@ MainWindowTest {
             verify(trip !== null)
             let chunk = trip.chunk(0)
             verify(chunk !== null)
+            function verifyFocusedCounts(realStationCount, realShotCount) {
+                compare(chunk.stationCount, realStationCount)
+                compare(chunk.shotCount, realShotCount)
+                verify(editorModel.toModelRow(
+                           editorModel.rowIndex(chunk, realStationCount, SurveyEditorRowIndex.StationRow)) >= 0)
+                verify(editorModel.toModelRow(
+                           editorModel.rowIndex(chunk, realShotCount, SurveyEditorRowIndex.ShotRow)) >= 0)
+            }
 
             // Base data: A0 -> A1 -> A2, two shots
             setCell(1, SurveyChunk.StationNameRole, "A0")
@@ -723,8 +733,7 @@ MainWindowTest {
             setCell(4, SurveyChunk.ShotDistanceRole, "20")
 
 
-            verify(chunk.stationCount === 4)
-            verify(chunk.shotCount === 3)
+            verifyFocusedCounts(3, 2)
             verify(chunk.data(SurveyChunk.StationNameRole, 0) === "A0")
             verify(chunk.data(SurveyChunk.StationNameRole, 1) === "A1")
             verify(chunk.data(SurveyChunk.StationNameRole, 2) === "A2")
@@ -734,14 +743,12 @@ MainWindowTest {
             wait(100);
             triggerMenuItemFromLoader(3, SurveyChunk.StationNameRole, "stationMenuLoader", "stationMenuInsertAbove")
 
-            verify(chunk.stationCount === 5)
-            verify(chunk.shotCount === 4)
+            verifyFocusedCounts(4, 3)
 
             verify(chunk.data(SurveyChunk.StationNameRole, 0) === "A0")
             verify(chunk.data(SurveyChunk.StationNameRole, 1) === "")
             verify(chunk.data(SurveyChunk.StationNameRole, 2) === "A1")
             verify(chunk.data(SurveyChunk.StationNameRole, 3) === "A2")
-            verify(chunk.data(SurveyChunk.StationNameRole, 4) === "")
 
             // Edit inserted station/shot
             setCell(3, SurveyChunk.StationNameRole, "B0")
@@ -751,24 +758,20 @@ MainWindowTest {
             openContextMenu(3, SurveyChunk.StationNameRole)
             triggerMenuItemFromLoader(3, SurveyChunk.StationNameRole, "stationMenuLoader", "stationMenuRemoveBelow")
 
-            verify(chunk.stationCount === 4)
-            verify(chunk.shotCount === 3)
+            verifyFocusedCounts(3, 2)
             verify(chunk.data(SurveyChunk.StationNameRole, 0) === "A0")
             verify(chunk.data(SurveyChunk.StationNameRole, 1) === "A1")
             verify(chunk.data(SurveyChunk.StationNameRole, 2) === "A2")
-            verify(chunk.data(SurveyChunk.StationNameRole, 3) === "")
 
             // Insert station below A1
             openContextMenu(3, SurveyChunk.StationNameRole)
             triggerMenuItemFromLoader(3, SurveyChunk.StationNameRole, "stationMenuLoader", "stationMenuInsertBelow")
 
-            verify(chunk.stationCount === 5)
-            verify(chunk.shotCount === 4)
+            verifyFocusedCounts(4, 3)
             verify(chunk.data(SurveyChunk.StationNameRole, 0) === "A0")
             verify(chunk.data(SurveyChunk.StationNameRole, 1) === "A1")
             verify(chunk.data(SurveyChunk.StationNameRole, 2) === "")
             verify(chunk.data(SurveyChunk.StationNameRole, 3) === "A2")
-                    verify(chunk.data(SurveyChunk.StationNameRole, 4) === "")
 
             setCell(5, SurveyChunk.StationNameRole, "B1")
             setCell(6, SurveyChunk.ShotDistanceRole, "25")
@@ -776,19 +779,16 @@ MainWindowTest {
             openContextMenu(5, SurveyChunk.StationNameRole)
             triggerMenuItemFromLoader(5, SurveyChunk.StationNameRole, "stationMenuLoader", "stationMenuRemoveAbove")
 
-            verify(chunk.stationCount === 4)
-            verify(chunk.shotCount === 3)
+            verifyFocusedCounts(3, 2)
             verify(chunk.data(SurveyChunk.StationNameRole, 0) === "A0")
             verify(chunk.data(SurveyChunk.StationNameRole, 1) === "A1")
             verify(chunk.data(SurveyChunk.StationNameRole, 2) === "A2")
-                    verify(chunk.data(SurveyChunk.StationNameRole, 3) === "")
 
             // Insert shot below shot 0
             openContextMenu(2, SurveyChunk.ShotDistanceRole)
             triggerMenuItemFromLoader(2, SurveyChunk.ShotDistanceRole, "shotMenuLoader", "shotMenuInsertBelow")
 
-            verify(chunk.stationCount === 5)
-            verify(chunk.shotCount === 4)
+            verifyFocusedCounts(4, 3)
             verify(chunk.data(SurveyChunk.StationNameRole, 1) === "")
             setCell(3, SurveyChunk.StationNameRole, "C0")
             setCell(4, SurveyChunk.ShotDistanceRole, "12")
@@ -796,19 +796,16 @@ MainWindowTest {
             openContextMenu(4, SurveyChunk.ShotDistanceRole)
             triggerMenuItemFromLoader(4, SurveyChunk.ShotDistanceRole, "shotMenuLoader", "shotMenuRemoveAbove")
 
-            verify(chunk.stationCount === 4)
-            verify(chunk.shotCount === 3)
+            verifyFocusedCounts(3, 2)
             verify(chunk.data(SurveyChunk.StationNameRole, 0) === "A0")
             verify(chunk.data(SurveyChunk.StationNameRole, 1) === "A1")
             verify(chunk.data(SurveyChunk.StationNameRole, 2) === "A2")
-                    verify(chunk.data(SurveyChunk.StationNameRole, 3) === "")
 
             // Insert shot above shot 1
             openContextMenu(4, SurveyChunk.ShotDistanceRole)
             triggerMenuItemFromLoader(4, SurveyChunk.ShotDistanceRole, "shotMenuLoader", "shotMenuInsertAbove")
 
-            verify(chunk.stationCount === 5)
-            verify(chunk.shotCount === 4)
+            verifyFocusedCounts(4, 3)
             verify(chunk.data(SurveyChunk.StationNameRole, 2) === "")
             setCell(5, SurveyChunk.StationNameRole, "C1")
             setCell(4, SurveyChunk.ShotDistanceRole, "18")
@@ -816,12 +813,10 @@ MainWindowTest {
             openContextMenu(4, SurveyChunk.ShotDistanceRole)
             triggerMenuItemFromLoader(4, SurveyChunk.ShotDistanceRole, "shotMenuLoader", "shotMenuRemoveBelow")
 
-            verify(chunk.stationCount === 4)
-            verify(chunk.shotCount === 3)
+            verifyFocusedCounts(3, 2)
             verify(chunk.data(SurveyChunk.StationNameRole, 0) === "A0")
             verify(chunk.data(SurveyChunk.StationNameRole, 1) === "A1")
             verify(chunk.data(SurveyChunk.StationNameRole, 2) === "A2")
-            verify(chunk.data(SurveyChunk.StationNameRole, 3) === "")
         }
 
         function test_insertAboveRowOneTwice() {

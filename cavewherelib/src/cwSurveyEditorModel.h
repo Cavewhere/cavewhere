@@ -59,6 +59,10 @@ public:
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
     Q_INVOKABLE bool setData(const cwSurveyEditorBoxIndex& boxIndex, const QVariant& data);
     Q_INVOKABLE bool shotDistanceIncluded(const cwSurveyEditorBoxIndex& boxIndex) const;
+    Q_INVOKABLE bool canRemoveStation(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction) const;
+    Q_INVOKABLE bool canRemoveShot(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction) const;
+    Q_INVOKABLE void removeStation(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction);
+    Q_INVOKABLE void removeShot(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction);
     Q_INVOKABLE void insertStation(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction);
     Q_INVOKABLE void insertShot(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction);
 

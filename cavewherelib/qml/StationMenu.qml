@@ -60,7 +60,8 @@ QQ.Loader {
                     objectName: "stationMenuRemoveAbove"
                     text: "and the shot <b>above</b>"
                     enabled: dataValue.chunk !== null
-                             && dataValue.chunk.canRemoveStation(dataValue.indexInChunk, SurveyChunk.Above)
+                             && stationMenuLoader.model !== null
+                             && stationMenuLoader.model.canRemoveStation(dataValue.boxIndex, SurveyChunk.Above)
                     onHighlightedChanged: {
                         if(highlighted) {
                             previewRemoveStation(SurveyChunk.Above)
@@ -70,14 +71,15 @@ QQ.Loader {
                     }
                     onTriggered: {
                         clearRemovePreview()
-                        dataValue.chunk.removeStation(dataValue.indexInChunk, SurveyChunk.Above)
+                        stationMenuLoader.model.removeStation(dataValue.boxIndex, SurveyChunk.Above)
                     }
                 }
                 QC.MenuItem {
                     objectName: "stationMenuRemoveBelow"
                     text: "and the shot <b>below</b>"
                     enabled: dataValue.chunk !== null
-                             && dataValue.chunk.canRemoveStation(dataValue.indexInChunk, SurveyChunk.Below)
+                             && stationMenuLoader.model !== null
+                             && stationMenuLoader.model.canRemoveStation(dataValue.boxIndex, SurveyChunk.Below)
                     onHighlightedChanged: {
                         if(highlighted) {
                             previewRemoveStation(SurveyChunk.Below)
@@ -87,7 +89,7 @@ QQ.Loader {
                     }
                     onTriggered: {
                         clearRemovePreview()
-                        dataValue.chunk.removeStation(dataValue.indexInChunk, SurveyChunk.Below)
+                        stationMenuLoader.model.removeStation(dataValue.boxIndex, SurveyChunk.Below)
                     }
                 }
 
