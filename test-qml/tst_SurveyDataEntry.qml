@@ -1156,7 +1156,15 @@ MainWindowTest {
         }
 
         function test_trimAfterInsertShotAboveLastStationAndFocusChange() {
-            addSurvey();
+            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+            RootData.futureManagerModel.waitForFinished();
+
+            let cave = RootData.region.cave(0)
+            verify(cave !== null)
+            let tripFromRegion = cave.trip(0)
+            verify(tripFromRegion !== null)
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + cave.name + "/Trip=" + tripFromRegion.name
+            tryVerify(() => { return RootData.pageView.currentPageItem.objectName === "tripPage" })
 
             let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view");
             verify(view !== null)
@@ -1215,46 +1223,162 @@ MainWindowTest {
                 waitForRendering(rootId)
             }
 
+            function findStationRowForChunk(chunk, stationIndex) {
+                for(let row = 0; row < editorModel.rowCount(); ++row) {
+                    let rowIndex = editorModel.data(editorModel.index(row, 0), SurveyEditorModel.RowIndexRole)
+                    if(rowIndex.chunk === chunk
+                            && rowIndex.rowType === SurveyEditorRowIndex.StationRow
+                            && rowIndex.indexInChunk === stationIndex)
+                    {
+                        return row
+                    }
+                }
+                return -1
+            }
+
             let trip = RootData.pageView.currentPageItem.currentTrip as Trip
             verify(trip !== null)
             let firstChunk = trip.chunk(0)
             verify(firstChunk !== null)
-
-            // Base data in chunk 0: A0 -> A1 with one shot.
-            setCell(1, SurveyChunk.StationNameRole, "A0")
-            setCell(3, SurveyChunk.StationNameRole, "A1")
-            setCell(2, SurveyChunk.ShotDistanceRole, "10")
-
-            compare(firstChunk.stationCount, 2)
-            compare(firstChunk.shotCount, 1)
-
-            // Insert a shot above row 2.
-            openContextMenu(2, SurveyChunk.ShotDistanceRole)
-            triggerMenuItemFromLoader(2, SurveyChunk.ShotDistanceRole, "shotMenuLoader", "shotMenuInsertAbove")
-
-            compare(firstChunk.stationCount, 3)
-            compare(firstChunk.shotCount, 2)
-
-            // Clear the moved last non-empty station data.
-            clearCell(5, SurveyChunk.StationNameRole)
-            compare(firstChunk.data(SurveyChunk.StationNameRole, 2), "")
-
-            // Add and focus chunk 1.
-            dataBoxAt(1, SurveyChunk.StationNameRole)
-            keyClick(32, 0) //Space
-            tryVerify(() => { return trip.chunkCount === 2 })
-
             let secondChunk = trip.chunk(1)
             verify(secondChunk !== null)
-            let secondChunkStation0Row = editorModel.toModelRow(
-                        editorModel.rowIndex(secondChunk, 0, SurveyEditorRowIndex.StationRow))
+
+            // Focus first chunk and verify virtual tail is shown.
+            let firstChunkStation0Row = editorModel.toModelRow(
+                        editorModel.rowIndex(firstChunk, 0, SurveyEditorRowIndex.StationRow))
+            verify(firstChunkStation0Row >= 0)
+            let firstChunkStation0Box = dataBoxAt(firstChunkStation0Row, SurveyChunk.StationNameRole)
+            verify(firstChunkStation0Box.focus === true)
+
+            tryVerify(() => {
+                          return editorModel.toModelRow(
+                                     editorModel.rowIndex(firstChunk, firstChunk.stationCount, SurveyEditorRowIndex.StationRow)) >= 0
+                      })
+            tryVerify(() => {
+                          return editorModel.toModelRow(
+                                     editorModel.rowIndex(firstChunk, firstChunk.shotCount, SurveyEditorRowIndex.ShotRow)) >= 0
+                      })
+
+            // Find last non-empty station, insert station above it, then clear moved station data.
+            let lastNonEmptyStationIndex = -1
+            for(let i = firstChunk.stationCount - 1; i >= 1; --i) {
+                if(firstChunk.data(SurveyChunk.StationNameRole, i) !== "") {
+                    lastNonEmptyStationIndex = i
+                    break
+                }
+            }
+            verify(lastNonEmptyStationIndex >= 1)
+            let lastNonEmptyStationName = firstChunk.data(SurveyChunk.StationNameRole, lastNonEmptyStationIndex)
+            verify(lastNonEmptyStationName !== "")
+
+            let lastNonEmptyStationRow = editorModel.toModelRow(
+                        editorModel.rowIndex(firstChunk, lastNonEmptyStationIndex, SurveyEditorRowIndex.StationRow))
+            verify(lastNonEmptyStationRow >= 0)
+            openContextMenu(lastNonEmptyStationRow, SurveyChunk.StationNameRole)
+            triggerMenuItemFromLoader(lastNonEmptyStationRow, SurveyChunk.StationNameRole, "stationMenuLoader", "stationMenuInsertAbove")
+
+            let movedStationIndex = -1
+            for(let i = firstChunk.stationCount - 1; i >= 1; --i) {
+                if(firstChunk.data(SurveyChunk.StationNameRole, i) === lastNonEmptyStationName) {
+                    movedStationIndex = i
+                    break
+                }
+            }
+            verify(movedStationIndex >= 1)
+
+            let movedStationRow = editorModel.toModelRow(
+                        editorModel.rowIndex(firstChunk, movedStationIndex, SurveyEditorRowIndex.StationRow))
+            verify(movedStationRow >= 0)
+            clearCell(movedStationRow, SurveyChunk.StationLeftRole)
+            clearCell(movedStationRow, SurveyChunk.StationRightRole)
+            clearCell(movedStationRow, SurveyChunk.StationUpRole)
+            clearCell(movedStationRow, SurveyChunk.StationDownRole)
+            let contentYBeforeNameDelete = view.contentY
+            clearCell(movedStationRow, SurveyChunk.StationNameRole)
+            let contentYAfterDelete = view.contentY
+            if(contentYBeforeNameDelete > 10) {
+                verify(contentYAfterDelete > 1)
+                verify(view.atYBeginning === false)
+            }
+            verify(Math.abs(contentYAfterDelete - contentYBeforeNameDelete) < view.height)
+
+            // While still focused on first chunk, there should be exactly one virtual station/shot pair.
+            verify(editorModel.toModelRow(
+                       editorModel.rowIndex(firstChunk, firstChunk.stationCount, SurveyEditorRowIndex.StationRow)) >= 0)
+            verify(editorModel.toModelRow(
+                       editorModel.rowIndex(firstChunk, firstChunk.shotCount, SurveyEditorRowIndex.ShotRow)) >= 0)
+            compare(editorModel.toModelRow(
+                        editorModel.rowIndex(firstChunk, firstChunk.stationCount + 1, SurveyEditorRowIndex.StationRow)), -1)
+            compare(editorModel.toModelRow(
+                        editorModel.rowIndex(firstChunk, firstChunk.shotCount + 1, SurveyEditorRowIndex.ShotRow)), -1)
+
+            // Focus next chunk.
+            let secondChunkStation0Row = findStationRowForChunk(secondChunk, 0)
             verify(secondChunkStation0Row >= 0)
-            let secondChunkStation0Box = dataBoxAt(secondChunkStation0Row, SurveyChunk.StationNameRole)
+            let secondRowIndexBeforeClick = editorModel.data(
+                        editorModel.index(secondChunkStation0Row, 0), SurveyEditorModel.RowIndexRole)
+            verify(secondRowIndexBeforeClick.chunk === secondChunk)
+            verify(secondRowIndexBeforeClick.rowType === SurveyEditorRowIndex.StationRow)
+            verify(secondRowIndexBeforeClick.indexInChunk === 0)
+
+            view.positionViewAtIndex(secondChunkStation0Row, ListView.Contain)
+            waitForRendering(rootId)
+            let secondChunkStation0Box = null
+            tryVerify(() => {
+                          secondChunkStation0Box = ObjectFinder.findObjectByChain(
+                                      mainWindow,
+                                      "rootId->tripPage->view->dataBox." + secondChunkStation0Row + "." + SurveyChunk.StationNameRole)
+                          if(secondChunkStation0Box === null) {
+                              return false
+                          }
+                          return secondChunkStation0Box.dataValue.rowIndex.chunk === secondChunk
+                                  && secondChunkStation0Box.dataValue.rowIndex.rowType === SurveyEditorRowIndex.StationRow
+                                  && secondChunkStation0Box.dataValue.rowIndex.indexInChunk === 0
+                      })
+            mouseClick(secondChunkStation0Box)
             verify(secondChunkStation0Box.focus === true)
 
-            // Once first chunk loses focus, trailing empty station/shot should be trimmed.
-            compare(firstChunk.stationCount, 2)
-            compare(firstChunk.shotCount, 1)
+            // First chunk should no longer expose virtual rows after focus moves.
+            compare(editorModel.toModelRow(
+                        editorModel.rowIndex(firstChunk, firstChunk.stationCount, SurveyEditorRowIndex.StationRow)), -1)
+            compare(editorModel.toModelRow(
+                        editorModel.rowIndex(firstChunk, firstChunk.shotCount, SurveyEditorRowIndex.ShotRow)), -1)
+
+            // Chunk separation should remain intact and title row for chunk 1 must still exist.
+            let firstChunkLastStationRow = editorModel.toModelRow(
+                        editorModel.rowIndex(firstChunk, firstChunk.stationCount - 1, SurveyEditorRowIndex.StationRow))
+            let secondChunkTitleRow = editorModel.toModelRow(
+                        editorModel.rowIndex(secondChunk, -1, SurveyEditorRowIndex.TitleRow))
+            let firstChunkTitleRow = editorModel.toModelRow(
+                        editorModel.rowIndex(firstChunk, -1, SurveyEditorRowIndex.TitleRow))
+            verify(firstChunkLastStationRow >= 0)
+            verify(secondChunkTitleRow >= 0)
+            verify(firstChunkTitleRow >= 0)
+            compare(secondChunkTitleRow, firstChunkLastStationRow + 1)
+            compare(secondChunkTitleRow, firstChunkTitleRow + firstChunk.stationCount + firstChunk.shotCount + 1)
+
+            view.positionViewAtIndex(secondChunkTitleRow, ListView.Contain)
+            waitForRendering(rootId)
+            let secondChunkTitleDelegate = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->chunkErrorDelegate." + secondChunkTitleRow)
+            verify(secondChunkTitleDelegate !== null)
+
+            let rowBeforeTitle = editorModel.data(editorModel.index(secondChunkTitleRow - 1, 0), SurveyEditorModel.RowIndexRole)
+            let rowAtTitle = editorModel.data(editorModel.index(secondChunkTitleRow, 0), SurveyEditorModel.RowIndexRole)
+            let rowAfterTitle = editorModel.data(editorModel.index(secondChunkTitleRow + 1, 0), SurveyEditorModel.RowIndexRole)
+            verify(rowBeforeTitle.chunk === firstChunk)
+            verify(rowAtTitle.chunk === secondChunk)
+            verify(rowAtTitle.rowType === SurveyEditorRowIndex.TitleRow)
+            verify(rowAfterTitle.chunk === secondChunk)
+
+            // Focused second chunk should expose exactly one virtual station/shot pair.
+            verify(editorModel.toModelRow(
+                       editorModel.rowIndex(secondChunk, secondChunk.stationCount, SurveyEditorRowIndex.StationRow)) >= 0)
+            verify(editorModel.toModelRow(
+                       editorModel.rowIndex(secondChunk, secondChunk.shotCount, SurveyEditorRowIndex.ShotRow)) >= 0)
+            compare(editorModel.toModelRow(
+                        editorModel.rowIndex(secondChunk, secondChunk.stationCount + 1, SurveyEditorRowIndex.StationRow)), -1)
+            compare(editorModel.toModelRow(
+                        editorModel.rowIndex(secondChunk, secondChunk.shotCount + 1, SurveyEditorRowIndex.ShotRow)), -1)
         }
 
         function test_dateChangeShouldWork() {

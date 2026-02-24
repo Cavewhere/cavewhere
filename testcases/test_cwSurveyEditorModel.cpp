@@ -7,6 +7,9 @@
 #include "cwSurveyChunk.h"
 #include "cwSurveyEditorBoxData.h"
 #include "cwErrorListModel.h"
+#include "cwProject.h"
+#include "cwCavingRegion.h"
+#include "cwCave.h"
 
 //Qt includes
 #include <QSignalSpy>
@@ -138,6 +141,105 @@ TEST_CASE("cwSurveyEditorModel should reject stale box indices after trip replac
     // into toModelRow() and hit the row-count assert seen in checkout/reconcile flows.
     const auto movedBox = model.offsetBoxIndex(originalStationBox.boxIndex(), 1);
     CHECK(movedBox.chunk() == nullptr);
+}
+
+TEST_CASE("cwSurveyEditorModel trims trailing empty rows when focus changes after insert above",
+          "[cwSurveyEditorModel][focus][regression]")
+{
+    auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
+
+    const QString filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+    project->loadOrConvert(filename);
+    project->waitLoadToFinish();
+
+    REQUIRE(project->cavingRegion() != nullptr);
+    REQUIRE(project->cavingRegion()->caveCount() > 0);
+    auto cave = project->cavingRegion()->cave(0);
+    REQUIRE(cave != nullptr);
+    REQUIRE(cave->tripCount() > 0);
+    auto trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
+    REQUIRE(trip->chunkCount() > 1);
+
+    auto* firstChunk = trip->chunk(0);
+    auto* secondChunk = trip->chunk(1);
+    REQUIRE(firstChunk != nullptr);
+    REQUIRE(secondChunk != nullptr);
+    REQUIRE(firstChunk->stationCount() > 2);
+    REQUIRE(firstChunk->shotCount() > 1);
+
+    cwSurveyEditorModel model;
+    model.setTrip(trip);
+    model.setFocusedChunk(firstChunk);
+
+    auto isStationShotEmpty = [](cwSurveyChunk* chunk, int stationIndex) {
+        if(chunk == nullptr || stationIndex <= 0 || stationIndex >= chunk->stationCount()) {
+            return false;
+        }
+        const cwStation station = chunk->station(stationIndex);
+        const cwShot shot = chunk->shot(stationIndex - 1);
+        return station.name().trimmed().isEmpty()
+                && station.left().state() == cwDistanceReading::State::Empty
+                && station.right().state() == cwDistanceReading::State::Empty
+                && station.up().state() == cwDistanceReading::State::Empty
+                && station.down().state() == cwDistanceReading::State::Empty
+                && shot.distance().state() == cwDistanceReading::State::Empty
+                && shot.compass().state() == cwCompassReading::State::Empty
+                && shot.backCompass().state() == cwCompassReading::State::Empty
+                && shot.clino().state() == cwClinoReading::State::Empty
+                && shot.backClino().state() == cwClinoReading::State::Empty;
+    };
+
+    while(firstChunk->stationCount() > 2 && isStationShotEmpty(firstChunk, firstChunk->stationCount() - 1)) {
+        firstChunk->removeStation(firstChunk->stationCount() - 1, cwSurveyChunk::Above);
+    }
+
+    const int lastNonEmptyStationIndex = firstChunk->stationCount() - 1;
+    REQUIRE(lastNonEmptyStationIndex >= 1);
+    if(firstChunk->station(lastNonEmptyStationIndex).name().trimmed().isEmpty()) {
+        REQUIRE(model.setData(model.boxIndex(firstChunk, lastNonEmptyStationIndex, cwSurveyEditorRowIndex::StationRow, cwSurveyChunk::StationNameRole), "temp_last_station"));
+    }
+
+    const auto insertBox = model.boxIndex(firstChunk,
+                                          lastNonEmptyStationIndex - 1,
+                                          cwSurveyEditorRowIndex::ShotRow,
+                                          cwSurveyChunk::ShotDistanceRole);
+    REQUIRE(model.canInsertShot(insertBox, cwSurveyChunk::Above));
+    model.insertShot(insertBox, cwSurveyChunk::Above);
+
+    const int movedStationIndex = firstChunk->stationCount() - 1;
+    REQUIRE(movedStationIndex >= 1);
+
+    REQUIRE(model.setData(model.boxIndex(firstChunk, movedStationIndex, cwSurveyEditorRowIndex::StationRow, cwSurveyChunk::StationNameRole), ""));
+    REQUIRE(model.setData(model.boxIndex(firstChunk, movedStationIndex, cwSurveyEditorRowIndex::StationRow, cwSurveyChunk::StationLeftRole), ""));
+    REQUIRE(model.setData(model.boxIndex(firstChunk, movedStationIndex, cwSurveyEditorRowIndex::StationRow, cwSurveyChunk::StationRightRole), ""));
+    REQUIRE(model.setData(model.boxIndex(firstChunk, movedStationIndex, cwSurveyEditorRowIndex::StationRow, cwSurveyChunk::StationUpRole), ""));
+    REQUIRE(model.setData(model.boxIndex(firstChunk, movedStationIndex, cwSurveyEditorRowIndex::StationRow, cwSurveyChunk::StationDownRole), ""));
+
+    const int chunk0TitleBefore = model.toModelRow(model.rowIndex(firstChunk, -1, cwSurveyEditorRowIndex::TitleRow));
+    const int chunk1TitleBefore = model.toModelRow(model.rowIndex(secondChunk, -1, cwSurveyEditorRowIndex::TitleRow));
+    REQUIRE(chunk0TitleBefore >= 0);
+    REQUIRE(chunk1TitleBefore > chunk0TitleBefore);
+
+    CHECK(model.toModelRow(model.rowIndex(firstChunk, firstChunk->stationCount(), cwSurveyEditorRowIndex::StationRow)) >= 0);
+    CHECK(model.toModelRow(model.rowIndex(firstChunk, firstChunk->shotCount(), cwSurveyEditorRowIndex::ShotRow)) >= 0);
+    CHECK(model.toModelRow(model.rowIndex(firstChunk, firstChunk->stationCount() + 1, cwSurveyEditorRowIndex::StationRow)) == -1);
+    CHECK(model.toModelRow(model.rowIndex(firstChunk, firstChunk->shotCount() + 1, cwSurveyEditorRowIndex::ShotRow)) == -1);
+
+    const int expectedFocusedRows = firstChunk->stationCount() + firstChunk->shotCount() + 1 + 2;
+    CHECK((chunk1TitleBefore - chunk0TitleBefore) == expectedFocusedRows);
+
+    model.setFocusedChunk(secondChunk);
+
+    const int chunk0TitleAfter = model.toModelRow(model.rowIndex(firstChunk, -1, cwSurveyEditorRowIndex::TitleRow));
+    const int chunk1TitleAfter = model.toModelRow(model.rowIndex(secondChunk, -1, cwSurveyEditorRowIndex::TitleRow));
+    REQUIRE(chunk0TitleAfter >= 0);
+    REQUIRE(chunk1TitleAfter > chunk0TitleAfter);
+
+    CHECK(model.toModelRow(model.rowIndex(firstChunk, firstChunk->stationCount(), cwSurveyEditorRowIndex::StationRow)) == -1);
+    CHECK(model.toModelRow(model.rowIndex(firstChunk, firstChunk->shotCount(), cwSurveyEditorRowIndex::ShotRow)) == -1);
+    CHECK((chunk1TitleAfter - chunk0TitleAfter) == (firstChunk->stationCount() + firstChunk->shotCount() + 1));
 }
 
 TEST_CASE("cwSurveyEditorModel box data stays correct after appendNewShot", "[cwSurveyEditorModel]") {

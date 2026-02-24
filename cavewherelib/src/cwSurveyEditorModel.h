@@ -102,7 +102,7 @@ private:
 
     QPointer<cwTrip> m_trip; //!<
     QPointer<cwSurveyChunk> m_focusedChunk;
-    bool m_virtualRowsInsertedForFocusedChunk = false;
+    QPointer<cwSurveyChunk> m_virtualRowsVisibleChunk;
 
     const int m_titleRowOffset = 1;
 

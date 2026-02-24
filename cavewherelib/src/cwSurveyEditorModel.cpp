@@ -15,7 +15,7 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
     if(m_trip != trip) {
         beginResetModel();
         m_focusedChunk = nullptr;
-        m_virtualRowsInsertedForFocusedChunk = false;
+        m_virtualRowsVisibleChunk = nullptr;
 
         auto disconnectChunk = [this](cwSurveyChunk* chunk) {
             disconnect(chunk, nullptr, this, nullptr);
@@ -72,6 +72,9 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
                             beginInsertRows(QModelIndex(), first, last);
                             endInsertRows();
                             emitDataChangedForChunk(chunk, last + 1);
+                            if(rowCount() > 0 && first >= 0 && first < rowCount()) {
+                                emit dataChanged(index(first), index(rowCount() - 1));
+                            }
                         });
                 // Stations removed.
                 connect(chunk, &cwSurveyChunk::aboutToRemove, this,
@@ -86,11 +89,15 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
                 });
 
                 connect(chunk, &cwSurveyChunk::removed, this,
-                        [this, chunk, emitDataChangedForChunk](int stationBegin, int stationEnd, int shotBegin, int shotEnd) {
+                        [this, chunk](int stationBegin, int stationEnd, int shotBegin, int shotEnd) {
                             endRemoveRows();
                             Q_ASSERT(m_removeToken.chunk != nullptr);
-                            emitDataChangedForChunk(m_removeToken.chunk, m_removeToken.firstIndex);
                             syncVirtualRows(chunk);
+                            if(rowCount() > 0
+                                    && m_removeToken.firstIndex >= 0
+                                    && m_removeToken.firstIndex < rowCount()) {
+                                emit dataChanged(index(m_removeToken.firstIndex), index(rowCount() - 1));
+                            }
                             m_removeToken = {};
                         });
             };
@@ -147,7 +154,7 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
                         for (int i = begin; i <= end && i < allChunks.size(); ++i) {
                             auto chunk = allChunks.at(i);
                             if(chunk == m_focusedChunk) {
-                                m_virtualRowsInsertedForFocusedChunk = false;
+                                m_virtualRowsVisibleChunk = nullptr;
                             }
                             disconnectChunk(allChunks.at(i));
                         }
@@ -183,12 +190,12 @@ void cwSurveyEditorModel::setFocusedChunk(cwSurveyChunk* chunk)
         trim(oldFocusedChunk, FullTrim);
     }
 
-    if(oldFocusedChunk && m_virtualRowsInsertedForFocusedChunk) {
-        const int baseRow = toModelRow({oldFocusedChunk, -1, cwSurveyEditorRowIndex::TitleRow});
-        const int first = baseRow + oldFocusedChunk->stationCount() + oldFocusedChunk->shotCount() + m_titleRowOffset;
+    if(m_virtualRowsVisibleChunk) {
+        const int baseRow = toModelRow({m_virtualRowsVisibleChunk, -1, cwSurveyEditorRowIndex::TitleRow});
+        const int first = baseRow + m_virtualRowsVisibleChunk->stationCount() + m_virtualRowsVisibleChunk->shotCount() + m_titleRowOffset;
         const int last = first + 1;
         beginRemoveRows(QModelIndex(), first, last);
-        m_virtualRowsInsertedForFocusedChunk = false;
+        m_virtualRowsVisibleChunk = nullptr;
         endRemoveRows();
     }
 
@@ -197,7 +204,7 @@ void cwSurveyEditorModel::setFocusedChunk(cwSurveyChunk* chunk)
     if(m_focusedChunk) {
         connect(m_focusedChunk, &QObject::destroyed, this, [this]() {
             m_focusedChunk = nullptr;
-            m_virtualRowsInsertedForFocusedChunk = false;
+            m_virtualRowsVisibleChunk = nullptr;
             beginResetModel();
             endResetModel();
         });
@@ -406,6 +413,13 @@ bool cwSurveyEditorModel::setData(const cwSurveyEditorBoxIndex& boxIndex, const 
     }
 
     chunk->setData(boxIndex.chunkDataRole(), indexInChunk, data);
+
+    // Keep only non-empty trailing real rows while focused; the UI tail should
+    // be provided by virtual rows, not persisted empty stations/shots.
+    if(chunk == m_focusedChunk) {
+        trim(chunk, FullTrim);
+    }
+
     return true;
 }
 
@@ -960,16 +974,12 @@ bool cwSurveyEditorModel::hasVirtualTrailingStationShot(const cwSurveyChunk* chu
         return false;
     }
 
-    if(!chunk->station(chunk->stationCount() - 1).isValid()) {
-        return false;
-    }
-
     return !isStationShotEmpty(const_cast<cwSurveyChunk*>(chunk), chunk->stationCount() - 1);
 }
 
 bool cwSurveyEditorModel::hasVisibleVirtualRows(const cwSurveyChunk* chunk) const
 {
-    return chunk != nullptr && chunk == m_focusedChunk && m_virtualRowsInsertedForFocusedChunk;
+    return chunk != nullptr && chunk == m_virtualRowsVisibleChunk;
 }
 
 void cwSurveyEditorModel::syncVirtualRows(cwSurveyChunk* chunk)
@@ -995,11 +1005,13 @@ void cwSurveyEditorModel::syncVirtualRows(cwSurveyChunk* chunk)
 
     if(shouldHaveVirtualRows) {
         beginInsertRows(QModelIndex(), first, last);
-        m_virtualRowsInsertedForFocusedChunk = true;
+        m_virtualRowsVisibleChunk = chunk;
         endInsertRows();
     } else {
         beginRemoveRows(QModelIndex(), first, last);
-        m_virtualRowsInsertedForFocusedChunk = false;
+        if(m_virtualRowsVisibleChunk == chunk) {
+            m_virtualRowsVisibleChunk = nullptr;
+        }
         endRemoveRows();
     }
 }
