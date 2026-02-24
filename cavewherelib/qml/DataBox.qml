@@ -12,11 +12,13 @@ import QtQuick.Controls as QC
 
 QQ.Item {
     id: dataBox
-    objectName: "dataBox." + listViewIndex + "." + dataValue.chunkDataRole
+    objectName: listViewIndex >= 0 ?
+                    ("dataBox." + listViewIndex + "." + dataValue.chunkDataRole) :
+                    ("templateCell." + listViewIndex + "." + dataValue.chunkDataRole)
 
     property alias dataValidator: editor.validator
 
-    required property SurveyChunkTrimmer surveyChunkTrimmer; //For interaction
+    required property SurveyEditorModel model
     property alias aboutToDelete: removeBoxId.visible
     readonly property ErrorModel errorModel: dataValue.errorModel
     required property QC.ButtonGroup errorButtonGroup
@@ -80,6 +82,9 @@ QQ.Item {
     // }
 
     function shouldHaveFocus() {
+        if(listViewIndex < 0) {
+            return false
+        }
         return editorFocus.boxIndex === dataValue.boxIndex
     }
 
@@ -327,8 +332,10 @@ QQ.Item {
 
 
     onFocusChanged: {
+        if(listViewIndex < 0) {
+            return
+        }
         if(focus) {
-            surveyChunkTrimmer.chunk = dataValue.chunk;
             editorFocus.setIndex(dataValue.boxIndex)
         }
     }
@@ -341,8 +348,7 @@ QQ.Item {
         text: dataBox.dataValue.reading.value
 
         onFinishedEditting: (newText) => {
-                                let chunk = dataBox.dataValue.chunk
-                                chunk.setData(dataBox.dataValue.chunkDataRole, dataBox.dataValue.indexInChunk, newText)
+                                model.setData(dataBox.dataValue.boxIndex, newText)
                                 dataBox.state = ""; //Go back to the default state
                                 dataBox.forceActiveFocus();
                             }

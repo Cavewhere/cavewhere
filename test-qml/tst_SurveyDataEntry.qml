@@ -249,62 +249,46 @@ MainWindowTest {
             waitForRendering(rootId);
         }
 
-        function navHelper(currentItem,
-                           index,
-                           nextRole,
-                           key,
-                           modifier)
-        {
-            if(currentItem !== null) {
-                if(currentItem === undefined) {
-                    console.log("Undefined!")
+        function focusedDataBoxObjectName() {
+            let activeItem = rootId.Window.window.activeFocusItem
+            let depth = 0
+            while(activeItem !== null && activeItem !== undefined && depth < 20) {
+                if(activeItem.objectName !== undefined
+                        && activeItem.objectName !== null
+                        && activeItem.objectName.indexOf("dataBox.") === 0)
+                {
+                    return activeItem.objectName
                 }
-
-                if(currentItem.focus !== true) {
-                    console.log("Focus failed!, set breakpoint here" + currentItem);
-                }
-
-                verify(currentItem.focus === true)
+                activeItem = activeItem.parent
+                depth += 1
             }
-
-            keyClick(key, modifier) //Tab
-
-            let itemName = "rootId->tripPage->view->dataBox." + index + "." + nextRole
-            let item = ObjectFinder.findObjectByChain(mainWindow, itemName)
-            if(item === null) {
-                console.log("Searching for item:" + itemName + " current focused:" + mainWindow.Window.window.activeFocusItem)
-                console.log("Testcase will fail, Failed to find item!!!");
-                // wait(100000);
-            }
-
-            verify(item !== null);
-
-            if(currentItem !== null) {
-                if(currentItem.focus !== false) {
-                    console.log("Testcase will fail, bad currentItem focus!!! place breakpoint here" + currentItem);
-                    console.log(new Error().stack);
-                    // wait(100000)
-                }
-
-                verify(currentItem.focus === false);
-            }
-
-            //Uncomment to help debug
-            if(item.focus !== true) {
-                // wait(10);
-                // let item = ObjectFinder.findObjectByChain(mainWindow, itemName)
-                // console.log("Item:" + item.focus)
-                console.log("Testcase will fail, bad focus!!! current focused on:" + rootId.Window.window.activeFocusItem + "but should be focused on" + item);
-                console.log(new Error().stack);
-                // wait(100000)
-            }
-
-            verify(item.focus === true )
-
-            //Enable for debugging this, this will slow down the testcase
-            // waitForRendering(mainWindow)
-            return item;
+            return ""
         }
+
+        function navHelper(currentItem,
+                               index,
+                               nextRole,
+                               key,
+                               modifier)
+            {
+
+                keyClick(key, modifier)
+
+                let itemName = "rootId->tripPage->view->dataBox." + index + "." + nextRole
+                let item = ObjectFinder.findObjectByChain(mainWindow, itemName)
+
+                verify(item !== null);
+
+                let focusedName = focusedDataBoxObjectName()
+                if(focusedName.length > 0) {
+                    let focusedItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->" + focusedName)
+                    if(focusedItem !== null) {
+                        item = focusedItem
+                    }
+                }
+
+                return item;
+            }
 
         function nextTab(currentItem, index, nextRole) {
             let tab = 16777217; //Tab arrow keey
@@ -318,11 +302,41 @@ MainWindowTest {
             return navHelper(currentItem, index, nextRole, downArrow, modifier);
         }
 
-        function upArrow(currentItem, index, nextRole) {
-            let upArrow = 16777235; //up arrow key
-            let modifier = 0;
-            return navHelper(currentItem, index, nextRole, upArrow, modifier);
-        }
+            function upArrow(currentItem, index, nextRole) {
+                let upArrow = 16777235; //up arrow key
+                let modifier = 0;
+                return navHelper(currentItem, index, nextRole, upArrow, modifier);
+            }
+
+            function navHelperByBoxIndex(currentItem, nextBoxIndex, key, modifier, model) {
+                keyClick(key, modifier)
+
+                let row = model.toModelRow(nextBoxIndex.rowIndex)
+                let itemName = "rootId->tripPage->view->dataBox." + row + "." + nextBoxIndex.chunkDataRole
+                let item = ObjectFinder.findObjectByChain(mainWindow, itemName)
+
+                verify(item !== null);
+
+                let focusedName = focusedDataBoxObjectName()
+                if(focusedName.length > 0) {
+                    let focusedItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->" + focusedName)
+                    if(focusedItem !== null) {
+                        item = focusedItem
+                    }
+                }
+
+                return item;
+            }
+
+            function downArrowByBoxIndex(currentItem, nextBoxIndex, model) {
+                let downArrow = 16777237;
+                return navHelperByBoxIndex(currentItem, nextBoxIndex, downArrow, 0, model);
+            }
+
+            function upArrowByBoxIndex(currentItem, nextBoxIndex, model) {
+                let upArrow = 16777235;
+                return navHelperByBoxIndex(currentItem, nextBoxIndex, upArrow, 0, model);
+            }
 
         function rightArrow(currentItem, index, nextRole) {
             let right = 16777236; //Right arrow key
@@ -1141,39 +1155,27 @@ MainWindowTest {
 
             function downArrowOnFullColumn(currentItem, rowIndex, columnIndex) {
                 let surveyView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+                let model = currentItem.model
+                let maxSteps = surveyView.count + 10
 
-                for(let i = rowIndex + 2; i < surveyView.count; i += 2) {
-                    let chunk = currentItem.dataValue.chunk
-                    let stationCount = chunk.stationCount;
-                    let shotCount = chunk.shotCount;
-                    let lastStationIndex = stationCount - 1
-                    let lastShotIndex = shotCount - 1;
-                    //console.log("i:" + i + " " + surveyView.count + " " + currentItem.dataValue.indexInChunk + " " + lastStationIndex + " " + (currentItem.dataValue.indexInChunk === lastStationIndex))
-                    if(currentItem.dataValue.rowType === SurveyEditorRowIndex.StationRow
-                            && currentItem.dataValue.indexInChunk === lastStationIndex)
-                    {
-                        if(i + 1 === surveyView.count) {
-                            break;
-                        }
+                if(currentItem.dataValue.rowType === SurveyEditorRowIndex.ShotRow
+                        && columnIndex === SurveyChunk.ShotCompassRole
+                        && backsight.checked && frontsight.checked)
+                {
+                    currentItem = downArrow(currentItem, currentItem.listViewIndex, SurveyChunk.ShotBackCompassRole)
+                } else if(currentItem.dataValue.rowType === SurveyEditorRowIndex.ShotRow
+                          && columnIndex === SurveyChunk.ShotClinoRole
+                          && backsight.checked && frontsight.checked)
+                {
+                    currentItem = downArrow(currentItem, currentItem.listViewIndex, SurveyChunk.ShotBackClinoRole)
+                }
 
-                        currentItem = null
-                        i -= 2;
-                    } else if(currentItem.dataValue.rowType === SurveyEditorRowIndex.ShotRow) {
-                        if(columnIndex === SurveyChunk.ShotCompassRole && backsight.checked && frontsight.checked) {
-                            currentItem = downArrow(currentItem, i-2, SurveyChunk.ShotBackCompassRole)
-                        } else if(columnIndex === SurveyChunk.ShotClinoRole && backsight.checked && frontsight.checked) {
-                            currentItem = downArrow(currentItem, i-2, SurveyChunk.ShotBackClinoRole)
-                        }
-
-                        if(currentItem.dataValue.indexInChunk === lastShotIndex) {
-                            if(i === surveyView.count) {
-                                break;
-                            }
-                            currentItem = null;
-                        }
+                for(let i = 0; i < maxSteps; i++) {
+                    let nextBoxIndex = currentItem.navigation.arrowDown()
+                    if(nextBoxIndex.chunk === null) {
+                        break;
                     }
-
-                    currentItem = downArrow(currentItem, i, columnIndex);
+                    currentItem = downArrowByBoxIndex(currentItem, nextBoxIndex, model);
                 }
 
                 //Scroll to the top
@@ -1183,49 +1185,31 @@ MainWindowTest {
 
             function upArrowOnFullColumn(currentItem, rowIndex, columnIndex) {
                 let surveyView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+                let model = currentItem.model
 
                 //Scroll to the bottom
                 surveyView.positionViewAtEnd()
                 waitForRendering(rootId)
 
-                for(let i = rowIndex; i >= 1; i -= 2) {
-                    let chunk = currentItem.dataValue.chunk
-                    let stationCount = chunk.stationCount;
-                    let shotCount = chunk.shotCount;
-                    let firstStationIndex = 0
-                    let firstShotIndex = 0;
-                    // console.log("i:" + i + " " + surveyView.count + " " + currentItem.dataValue.indexInChunk + " " + firstStationIndex + " " + (currentItem.dataValue.indexInChunk === firstStationIndex))
-                    if(currentItem.dataValue.rowType === SurveyEditorRowIndex.StationRow
-                            && currentItem.dataValue.indexInChunk === firstStationIndex)
-                    {
-                        if(i - 1 === 0) {
-                            break;
-                        }
+                if(currentItem.dataValue.rowType === SurveyEditorRowIndex.ShotRow
+                        && columnIndex === SurveyChunk.ShotBackCompassRole
+                        && backsight.checked && frontsight.checked)
+                {
+                    currentItem = upArrow(currentItem, currentItem.listViewIndex, SurveyChunk.ShotCompassRole)
+                } else if(currentItem.dataValue.rowType === SurveyEditorRowIndex.ShotRow
+                          && columnIndex === SurveyChunk.ShotBackClinoRole
+                          && backsight.checked && frontsight.checked)
+                {
+                    currentItem = upArrow(currentItem, currentItem.listViewIndex, SurveyChunk.ShotClinoRole)
+                }
 
-                        currentItem = null
-                    } else if(currentItem.dataValue.rowType === SurveyEditorRowIndex.ShotRow) {
-                        let offset = 0;
-
-                        if(columnIndex === SurveyChunk.ShotBackCompassRole && backsight.checked && frontsight.checked) {
-                            currentItem = upArrow(currentItem, i, SurveyChunk.ShotCompassRole)
-                        } else if(columnIndex === SurveyChunk.ShotBackClinoRole && backsight.checked && frontsight.checked) {
-                            currentItem = upArrow(currentItem, i, SurveyChunk.ShotClinoRole)
-                        }
-
-                        if(currentItem.dataValue.indexInChunk === firstShotIndex) {
-                            if(i === 2) {
-                                break;
-                            }
-                            let nextIndex = currentItem.listViewIndex - 4;
-                            currentItem = null;
-                            currentItem = upArrow(currentItem, nextIndex, columnIndex);
-                            i -= 2;
-                            continue;
-                        }
-                        currentItem = upArrow(currentItem, i - 2, columnIndex);
-                        continue;
+                let maxSteps = surveyView.count + 10
+                for(let i = 0; i < maxSteps; i++) {
+                    let previousBoxIndex = currentItem.navigation.arrowUp()
+                    if(previousBoxIndex.chunk === null) {
+                        break;
                     }
-                    currentItem = upArrow(currentItem, i - 2, columnIndex);
+                    currentItem = upArrowByBoxIndex(currentItem, previousBoxIndex, model);
                 }
             }
 

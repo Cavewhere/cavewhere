@@ -69,10 +69,6 @@ QQ.Item {
                 id: errorButtonGroupId
             }
 
-            SurveyChunkTrimmer {
-                id: surveyChunkTrimmerId
-            }
-
             StationValidator {
                 id: stationValidatorId
             }
@@ -96,6 +92,8 @@ QQ.Item {
                 model: editorModel
 
                 onBoxIndexChanged: {
+                    editorModel.setFocusedChunk(boxIndex.chunk)
+
                     //Move the list view
                     let listViewIndex = editorModel.toModelRow(boxIndex.rowIndex)
                     if(boxIndex.rowType === SurveyEditorRowIndex.ShotRow) {
@@ -231,7 +229,6 @@ QQ.Item {
             delegate: DrySurveyComponent {
                 calibration: currentCalibration
                 errorButtonGroup: errorButtonGroupId
-                surveyChunkTrimmer: surveyChunkTrimmerId
                 // view: viewId
                 model: editorModel
                 removePreview: removePreviewId

@@ -53,9 +53,12 @@ public:
 
     cwTrip* trip() const;
     void setTrip(cwTrip* trip);
+    Q_INVOKABLE void setFocusedChunk(cwSurveyChunk* chunk);
 
     QVariant data(const QModelIndex &index, int role) const;
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
+    Q_INVOKABLE bool setData(const cwSurveyEditorBoxIndex& boxIndex, const QVariant& data);
+    Q_INVOKABLE bool shotDistanceIncluded(const cwSurveyEditorBoxIndex& boxIndex) const;
 
 
     QHash<int, QByteArray> roleNames() const;
@@ -90,11 +93,17 @@ private:
     };
 
     QPointer<cwTrip> m_trip; //!<
+    QPointer<cwSurveyChunk> m_focusedChunk;
 
     const int m_titleRowOffset = 1;
 
     //For bookkeeping on row removal
     RemoveToken m_removeToken;
+
+    enum TrimType {
+        FullTrim,
+        PreserveLastEmptyOne
+    };
 
     cwSurveyEditorRowIndex toRowIndex(const QModelIndex& index) const;
     cwSurveyEditorRowIndex toRowIndex(int index) const;
@@ -102,6 +111,13 @@ private:
 
     Role toModelRole(cwSurveyChunk::DataRole chunkRole) const;
     cwSurveyEditorRowIndex::RowType toRowType(cwSurveyChunk::DataRole chunkRole) const;
+    int stationCount(const cwSurveyChunk* chunk) const;
+    int shotCount(const cwSurveyChunk* chunk) const;
+    int chunkRowCount(const cwSurveyChunk* chunk) const;
+    bool hasVirtualTrailingStationShot(const cwSurveyChunk* chunk) const;
+    static bool isStationShotEmpty(cwSurveyChunk* chunk, int stationIndex);
+    static void trim(cwSurveyChunk* chunk, TrimType trimType);
+    static void trim(cwSurveyChunk* chunk);
 
 
 signals:

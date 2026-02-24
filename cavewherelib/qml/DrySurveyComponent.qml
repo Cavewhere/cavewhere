@@ -22,7 +22,6 @@ Item {
     property bool canEditTripCalibration: false
     required property int index;
     required property QC.ButtonGroup errorButtonGroup
-    required property SurveyChunkTrimmer surveyChunkTrimmer;
     required property var removePreview
 
     //Data that comes from the model
@@ -140,7 +139,7 @@ Item {
                 dataValue: itemId.stationName
                 listViewIndex: itemId.index
                 errorButtonGroup: itemId.errorButtonGroup
-                surveyChunkTrimmer: itemId.surveyChunkTrimmer
+                model: itemId.model
                 removePreview: itemId.removePreview
                 view: itemId.ListView.view
                 dataValidator: stationValidator
@@ -204,7 +203,7 @@ Item {
                 listViewIndex: itemId.index
                 errorButtonGroup: itemId.errorButtonGroup
 
-                surveyChunkTrimmer: itemId.surveyChunkTrimmer
+                model: itemId.model
                 removePreview: itemId.removePreview
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
@@ -258,7 +257,7 @@ Item {
                 dataValue: stationRight
                 listViewIndex: itemId.index
                 errorButtonGroup: itemId.errorButtonGroup
-                surveyChunkTrimmer: itemId.surveyChunkTrimmer
+                model: itemId.model
                 removePreview: itemId.removePreview
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
@@ -314,7 +313,7 @@ Item {
                 dataValue:  stationUp
                 listViewIndex: itemId.index
                 errorButtonGroup: itemId.errorButtonGroup
-                surveyChunkTrimmer: itemId.surveyChunkTrimmer
+                model: itemId.model
                 removePreview: itemId.removePreview
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
@@ -370,7 +369,7 @@ Item {
                 dataValue: stationDown
                 listViewIndex: itemId.index
                 errorButtonGroup: itemId.errorButtonGroup
-                surveyChunkTrimmer: itemId.surveyChunkTrimmer
+                model: itemId.model
                 removePreview: itemId.removePreview
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
@@ -448,12 +447,12 @@ Item {
                 dataValue: shotDistance
                 listViewIndex: itemId.index
                 errorButtonGroup: itemId.errorButtonGroup
-                surveyChunkTrimmer: itemId.surveyChunkTrimmer
+                model: itemId.model
                 removePreview: itemId.removePreview
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
                 editorFocus: itemId.editorFocus
-                distanceIncluded:  dataValue.chunk ? dataValue.chunk.data(SurveyChunk.ShotDistanceIncludedRole, dataValue.indexInChunk) : false
+                distanceIncluded: itemId.model.shotDistanceIncluded(dataValue.boxIndex)
             }
 
             CompassReadBox {
@@ -519,7 +518,7 @@ Item {
                 dataValue: shotCompass
                 listViewIndex: itemId.index
                 errorButtonGroup: itemId.errorButtonGroup
-                surveyChunkTrimmer: itemId.surveyChunkTrimmer
+                model: itemId.model
                 removePreview: itemId.removePreview
                 view: itemId.ListView.view
                 readingText: "fs"
@@ -600,7 +599,7 @@ Item {
                 dataValue: shotBackCompass
                 listViewIndex: itemId.index
                 errorButtonGroup: itemId.errorButtonGroup
-                surveyChunkTrimmer: itemId.surveyChunkTrimmer
+                model: itemId.model
                 removePreview: itemId.removePreview
                 view: itemId.ListView.view
                 readingText: "bs"
@@ -682,7 +681,7 @@ Item {
                 dataValue: shotClino
                 listViewIndex: itemId.index
                 errorButtonGroup: itemId.errorButtonGroup
-                surveyChunkTrimmer: itemId.surveyChunkTrimmer
+                model: itemId.model
                 removePreview: itemId.removePreview
                 view: itemId.ListView.view
                 readingText: "fs"
@@ -756,7 +755,7 @@ Item {
                 dataValue: shotBackClino
                 listViewIndex: itemId.index
                 errorButtonGroup: itemId.errorButtonGroup
-                surveyChunkTrimmer: itemId.surveyChunkTrimmer
+                model: itemId.model
                 removePreview: itemId.removePreview
                 view: itemId.ListView.view
                 readingText: "bs"

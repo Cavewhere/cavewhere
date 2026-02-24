@@ -14,6 +14,7 @@ cwSurveyEditorModel::cwSurveyEditorModel()
 void cwSurveyEditorModel::setTrip(cwTrip* trip) {
     if(m_trip != trip) {
         beginResetModel();
+        m_focusedChunk = nullptr;
 
         auto disconnectChunk = [this](cwSurveyChunk* chunk) {
             disconnect(chunk, nullptr, this, nullptr);
@@ -36,7 +37,7 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
                 }
 
                 int baseRow = toModelRow({chunk, -1, cwSurveyEditorRowIndex::TitleRow});
-                int lastRow = baseRow + chunk->stationCount() + chunk->shotCount() + m_titleRowOffset - 1;
+                int lastRow = baseRow + chunkRowCount(chunk) - 1;
                 if(firstRow <= lastRow) {
                     emit dataChanged(index(firstRow), index(lastRow));
                 }
@@ -101,12 +102,12 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
                 const QList<cwSurveyChunk*> allChunks = m_trip->chunks();
                 for (int i = 0; i < chunkBegin && i < allChunks.size(); ++i) {
                     const auto chunk = allChunks.at(i);
-                    modelRow += chunk->stationCount() + chunk->shotCount()  + m_titleRowOffset;
+                    modelRow += chunkRowCount(chunk);
                 }
                 int totalNewRows = 0;
                 for (int i = chunkBegin; i <= chunkEnd && i < allChunks.size(); ++i) {
                     const auto chunk = allChunks.at(i);
-                    totalNewRows += chunk->stationCount() + chunk->shotCount() + m_titleRowOffset;
+                    totalNewRows += chunkRowCount(chunk);
                 }
                 return {modelRow, modelRow + totalNewRows - 1};
             };
@@ -163,6 +164,53 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
     }
 }
 
+void cwSurveyEditorModel::setFocusedChunk(cwSurveyChunk* chunk)
+{
+    if(m_focusedChunk == chunk) {
+        return;
+    }
+
+    auto realChunkRows = [this](cwSurveyChunk* targetChunk) {
+        if(targetChunk == nullptr) {
+            return 0;
+        }
+        return targetChunk->stationCount() + targetChunk->shotCount() + m_titleRowOffset;
+    };
+
+    auto oldFocusedChunk = m_focusedChunk;
+    const bool oldHadVirtualRows = hasVirtualTrailingStationShot(oldFocusedChunk);
+
+    if(oldFocusedChunk) {
+        trim(oldFocusedChunk, FullTrim);
+    }
+
+    if(oldHadVirtualRows && oldFocusedChunk != nullptr) {
+        const int baseRow = toModelRow({oldFocusedChunk, -1, cwSurveyEditorRowIndex::TitleRow});
+        const int first = baseRow + realChunkRows(oldFocusedChunk);
+        const int last = first + 1;
+        beginRemoveRows(QModelIndex(), first, last);
+        endRemoveRows();
+    }
+
+    m_focusedChunk = chunk;
+
+    if(m_focusedChunk) {
+        connect(m_focusedChunk, &QObject::destroyed, this, [this]() {
+            m_focusedChunk = nullptr;
+            beginResetModel();
+            endResetModel();
+        });
+    }
+
+    if(hasVirtualTrailingStationShot(m_focusedChunk)) {
+        const int baseRow = toModelRow({m_focusedChunk, -1, cwSurveyEditorRowIndex::TitleRow});
+        const int first = baseRow + realChunkRows(m_focusedChunk);
+        const int last = first + 1;
+        beginInsertRows(QModelIndex(), first, last);
+        endInsertRows();
+    }
+}
+
 
 
 QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
@@ -206,6 +254,22 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
     auto stationData = [index, role, data](const cwSurveyEditorRowIndex& chunkIndex)->QVariant {
         const auto chunk = chunkIndex.chunk();
         const int stationIndex = chunkIndex.indexInChunk();
+        if(stationIndex == chunk->stationCount()) {
+            switch(role) {
+            case StationNameRole:
+                return data(cwSurveyChunk::StationNameRole, [&]() { return cwReading(QString()); });
+            case StationLeftRole:
+                return data(cwSurveyChunk::StationLeftRole, [&]() { return cwReading(QString()); });
+            case StationRightRole:
+                return data(cwSurveyChunk::StationRightRole, [&]() { return cwReading(QString()); });
+            case StationUpRole:
+                return data(cwSurveyChunk::StationUpRole, [&]() { return cwReading(QString()); });
+            case StationDownRole:
+                return data(cwSurveyChunk::StationDownRole, [&]() { return cwReading(QString()); });
+            default:
+                return QVariant();
+            }
+        }
         switch(role) {
         case StationNameRole:
             return data(cwSurveyChunk::StationNameRole, [&]() { return cwReading(chunk->station(stationIndex).name()); });
@@ -225,6 +289,25 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
     auto shotData = [index, role, data](const cwSurveyEditorRowIndex& chunkIndex)->QVariant {
         const auto chunk = chunkIndex.chunk();
         const int shotIndex = chunkIndex.indexInChunk();
+        if(shotIndex == chunk->shotCount()) {
+            if(role == ShotCalibrationRole) {
+                return QVariant::fromValue(static_cast<cwTripCalibration*>(nullptr));
+            }
+            switch(role) {
+            case ShotDistanceRole:
+                return data(cwSurveyChunk::ShotDistanceRole, [&]() { return cwReading(QString()); });
+            case ShotCompassRole:
+                return data(cwSurveyChunk::ShotCompassRole, [&]() { return cwReading(QString()); });
+            case ShotBackCompassRole:
+                return data(cwSurveyChunk::ShotBackCompassRole, [&]() { return cwReading(QString()); });
+            case ShotClinoRole:
+                return data(cwSurveyChunk::ShotClinoRole, [&]() { return cwReading(QString()); });
+            case ShotBackClinoRole:
+                return data(cwSurveyChunk::ShotBackClinoRole, [&]() { return cwReading(QString()); });
+            default:
+                return QVariant();
+            }
+        }
         switch(role) {
         case ShotDistanceRole:
             return data(cwSurveyChunk::ShotDistanceRole, [&]() { return chunk->shot(shotIndex).distance(); });
@@ -272,9 +355,78 @@ int cwSurveyEditorModel::rowCount(const QModelIndex& parent) const
     auto chunks = m_trip->chunks();
     int count = 0;
     for(const auto chunk : std::as_const(chunks)) {
-        count += chunk->stationCount() + chunk->shotCount() + m_titleRowOffset;
+        count += chunkRowCount(chunk);
     }
     return count;
+}
+
+bool cwSurveyEditorModel::setData(const cwSurveyEditorBoxIndex& boxIndex, const QVariant& data)
+{
+    cwSurveyChunk* chunk = boxIndex.chunk();
+    if(chunk == nullptr || m_trip.isNull()) {
+        return false;
+    }
+
+    if(!m_trip->chunks().contains(chunk)) {
+        return false;
+    }
+
+    if(boxIndex.rowType() == cwSurveyEditorRowIndex::TitleRow) {
+        return false;
+    }
+
+    const QString stringData = data.toString();
+    const bool isEmptyData = stringData.trimmed().isEmpty();
+
+    int indexInChunk = boxIndex.indexInChunk();
+    const bool isStationVirtual = boxIndex.rowType() == cwSurveyEditorRowIndex::StationRow
+                                  && indexInChunk == chunk->stationCount()
+                                  && hasVirtualTrailingStationShot(chunk);
+    const bool isShotVirtual = boxIndex.rowType() == cwSurveyEditorRowIndex::ShotRow
+                               && indexInChunk == chunk->shotCount()
+                               && hasVirtualTrailingStationShot(chunk);
+
+    if(isStationVirtual || isShotVirtual) {
+        if(isEmptyData) {
+            return true;
+        }
+
+        chunk->appendNewShot();
+        if(isStationVirtual) {
+            indexInChunk = chunk->stationCount() - 1;
+        } else {
+            indexInChunk = chunk->shotCount() - 1;
+        }
+    }
+
+    if(indexInChunk < 0) {
+        return false;
+    }
+
+    if(boxIndex.rowType() == cwSurveyEditorRowIndex::StationRow && indexInChunk >= chunk->stationCount()) {
+        return false;
+    }
+    if(boxIndex.rowType() == cwSurveyEditorRowIndex::ShotRow && indexInChunk >= chunk->shotCount()) {
+        return false;
+    }
+
+    chunk->setData(boxIndex.chunkDataRole(), indexInChunk, data);
+    return true;
+}
+
+bool cwSurveyEditorModel::shotDistanceIncluded(const cwSurveyEditorBoxIndex& boxIndex) const
+{
+    cwSurveyChunk* chunk = boxIndex.chunk();
+    if(chunk == nullptr || boxIndex.rowType() != cwSurveyEditorRowIndex::ShotRow) {
+        return false;
+    }
+
+    const int indexInChunk = boxIndex.indexInChunk();
+    if(indexInChunk < 0 || indexInChunk >= chunk->shotCount()) {
+        return false;
+    }
+
+    return chunk->data(cwSurveyChunk::ShotDistanceIncludedRole, indexInChunk).toBool();
 }
 
 /**
@@ -338,12 +490,12 @@ int cwSurveyEditorModel::toModelRow(const cwSurveyEditorRowIndex &rowIndex) cons
     case cwSurveyEditorRowIndex::TitleRow:
         break;
     case cwSurveyEditorRowIndex::StationRow:
-        if (rowIndex.indexInChunk() < 0 || rowIndex.indexInChunk() >= rowChunk->stationCount()) {
+        if (rowIndex.indexInChunk() < 0 || rowIndex.indexInChunk() >= stationCount(rowChunk)) {
             return -1;
         }
         break;
     case cwSurveyEditorRowIndex::ShotRow:
-        if (rowIndex.indexInChunk() < 0 || rowIndex.indexInChunk() >= rowChunk->shotCount()) {
+        if (rowIndex.indexInChunk() < 0 || rowIndex.indexInChunk() >= shotCount(rowChunk)) {
             return -1;
         }
         break;
@@ -355,7 +507,7 @@ int cwSurveyEditorModel::toModelRow(const cwSurveyEditorRowIndex &rowIndex) cons
     int baseRow = 0;
     for (int i = 0; i < chunkPosition; ++i) {
         auto* current = allChunks.at(i);
-        baseRow += current->stationCount() + current->shotCount() + m_titleRowOffset;
+        baseRow += chunkRowCount(current);
     }
 
     int modelRow = -1;
@@ -396,75 +548,46 @@ cwSurveyEditorBoxIndex cwSurveyEditorModel::offsetBoxIndex(const cwSurveyEditorB
         return cwSurveyEditorBoxIndex();
     }
 
-    auto size = [&boxIndex](const cwSurveyChunk* chunk){
+    auto size = [this, &boxIndex](const cwSurveyChunk* chunk){
         if(boxIndex.rowType() == cwSurveyEditorRowIndex::StationRow) {
-            return chunk->stationCount();
+            return stationCount(chunk);
         }  else if(boxIndex.rowType() == cwSurveyEditorRowIndex::ShotRow) {
-            return chunk->shotCount();
+            return shotCount(chunk);
         }
         return -1;
     };
 
-    auto currentChunk = boxIndex.chunk();
+    int currentChunkIndex = chunks.indexOf(boxIndex.chunk());
     int nextIndexInChunk = boxIndex.indexInChunk() + offsetIndex;
 
-    if(nextIndexInChunk < 0 || nextIndexInChunk >= size(currentChunk)) {
-        //Out of range in chunk
-        int chunkIndex = chunks.indexOf(currentChunk);
-        if (chunkIndex < 0) {
-            return cwSurveyEditorBoxIndex();
+    while(currentChunkIndex >= 0 && currentChunkIndex < chunks.size()) {
+        const auto currentChunk = chunks.at(currentChunkIndex);
+        const int currentSize = size(currentChunk);
+
+        if(currentSize <= 0) {
+            if(nextIndexInChunk >= 0) {
+                ++currentChunkIndex;
+            } else {
+                --currentChunkIndex;
+            }
+            continue;
+        }
+
+        if(nextIndexInChunk >= 0 && nextIndexInChunk < currentSize) {
+            return cwSurveyEditorBoxIndex(cwSurveyEditorRowIndex(currentChunk, nextIndexInChunk, boxIndex.rowType()),
+                                          boxIndex.chunkDataRole());
         }
 
         if(nextIndexInChunk < 0) {
-            while(nextIndexInChunk < 0 && chunkIndex >= 0) {
-                int diff = abs(nextIndexInChunk);
-                chunkIndex--;
-                if(chunkIndex < 0) {
-                    currentChunk = nullptr;
-                    break;
-                }
-                currentChunk = chunks.at(chunkIndex);
-                nextIndexInChunk = size(currentChunk) - diff;
-            }
-
-            if(currentChunk) {
-                //Found
-                return cwSurveyEditorBoxIndex(cwSurveyEditorRowIndex(currentChunk, nextIndexInChunk, boxIndex.rowType()),
-                                              boxIndex.chunkDataRole());
-            } else {
+            --currentChunkIndex;
+            if(currentChunkIndex < 0) {
                 return cwSurveyEditorBoxIndex();
             }
+            nextIndexInChunk += size(chunks.at(currentChunkIndex));
+        } else {
+            nextIndexInChunk -= currentSize;
+            ++currentChunkIndex;
         }
-
-        if(nextIndexInChunk >= size(currentChunk)) {
-            int currentIndexInChunk = boxIndex.indexInChunk();
-            while(nextIndexInChunk >= size(currentChunk)) {
-                int diff = size(currentChunk) - currentIndexInChunk;
-                offsetIndex = offsetIndex - diff;
-                nextIndexInChunk = offsetIndex;
-                currentIndexInChunk = 0;
-
-                chunkIndex++;
-                if(chunkIndex >= chunks.size()) {
-                    currentChunk = nullptr;
-                    break;
-                }
-
-                currentChunk = chunks.at(chunkIndex);
-            }
-
-            if(currentChunk) {
-                //Found
-                return cwSurveyEditorBoxIndex(cwSurveyEditorRowIndex(currentChunk, nextIndexInChunk, boxIndex.rowType()),
-                                              boxIndex.chunkDataRole());
-            } else {
-                return cwSurveyEditorBoxIndex();
-            }
-        }
-    } else {
-        //In range in chunk
-        return cwSurveyEditorBoxIndex(cwSurveyEditorRowIndex(currentChunk, nextIndexInChunk, boxIndex.rowType()),
-                                      boxIndex.chunkDataRole());
     }
 
     return cwSurveyEditorBoxIndex();
@@ -582,7 +705,7 @@ cwSurveyEditorRowIndex cwSurveyEditorModel::toRowIndex(int index) const
 {
     auto chunks = m_trip->chunks();
     for(const auto chunk : std::as_const(chunks)) {
-        auto diff = index - (chunk->stationCount() + chunk->shotCount() + m_titleRowOffset);
+        auto diff = index - chunkRowCount(chunk);
         if(diff < 0) {
             index = index - m_titleRowOffset;
             if(index < 0) {
@@ -594,13 +717,13 @@ cwSurveyEditorRowIndex cwSurveyEditorModel::toRowIndex(int index) const
                 //Is a station
                 int stationIndex = index / 2;
                 Q_ASSERT(stationIndex >= 0);
-                Q_ASSERT(stationIndex < chunk->stationCount());
+                Q_ASSERT(stationIndex < stationCount(chunk));
                 return {chunk, stationIndex, cwSurveyEditorRowIndex::StationRow};
             } else {
                 //Is a shot
                 int shotIndex = index / 2;
                 Q_ASSERT(shotIndex >= 0);
-                Q_ASSERT(shotIndex < chunk->shotCount());
+                Q_ASSERT(shotIndex < shotCount(chunk));
                 return {chunk, shotIndex, cwSurveyEditorRowIndex::ShotRow};
             }
         }
@@ -609,4 +732,108 @@ cwSurveyEditorRowIndex cwSurveyEditorModel::toRowIndex(int index) const
 
     //Nothing found
     return cwSurveyEditorRowIndex();
+}
+
+int cwSurveyEditorModel::stationCount(const cwSurveyChunk* chunk) const
+{
+    if(chunk == nullptr) {
+        return 0;
+    }
+    return chunk->stationCount() + (hasVirtualTrailingStationShot(chunk) ? 1 : 0);
+}
+
+int cwSurveyEditorModel::shotCount(const cwSurveyChunk* chunk) const
+{
+    if(chunk == nullptr) {
+        return 0;
+    }
+    return chunk->shotCount() + (hasVirtualTrailingStationShot(chunk) ? 1 : 0);
+}
+
+int cwSurveyEditorModel::chunkRowCount(const cwSurveyChunk* chunk) const
+{
+    return stationCount(chunk) + shotCount(chunk) + m_titleRowOffset;
+}
+
+bool cwSurveyEditorModel::hasVirtualTrailingStationShot(const cwSurveyChunk* chunk) const
+{
+    if(chunk == nullptr || chunk != m_focusedChunk || chunk->stationCount() == 0 || chunk->shotCount() == 0) {
+        return false;
+    }
+
+    if(chunk->isStationAndShotsEmpty()) {
+        return false;
+    }
+
+    if(!chunk->station(chunk->stationCount() - 1).isValid()) {
+        return false;
+    }
+
+    return !isStationShotEmpty(const_cast<cwSurveyChunk*>(chunk), chunk->stationCount() - 1);
+}
+
+void cwSurveyEditorModel::trim(cwSurveyChunk* chunk)
+{
+    if(chunk == nullptr) {
+        return;
+    }
+
+    if(chunk->stationCount() <= 2) {
+        if(isStationShotEmpty(chunk, 1)) {
+            chunk->removeStation(1, cwSurveyChunk::Above);
+        }
+
+        if(isStationShotEmpty(chunk, 0)) {
+            chunk->removeStation(0, cwSurveyChunk::Above);
+        }
+    }
+
+    trim(chunk, FullTrim);
+}
+
+void cwSurveyEditorModel::trim(cwSurveyChunk* chunk, TrimType trimType)
+{
+    if(chunk == nullptr || chunk->stationCount() <= 2) {
+        return;
+    }
+
+    switch(trimType) {
+    case FullTrim: {
+        for(int i = chunk->stationCount() - 1; i > 1; i--) {
+            if(isStationShotEmpty(chunk, i)) {
+                chunk->removeStation(i, cwSurveyChunk::Above);
+            }
+        }
+        break;
+    }
+    case PreserveLastEmptyOne: {
+        for(int i = chunk->stationCount() - 1; i > 1; i--) {
+            if(isStationShotEmpty(chunk, i - 1) && isStationShotEmpty(chunk, i)) {
+                chunk->removeStation(i, cwSurveyChunk::Above);
+            }
+        }
+        break;
+    }
+    }
+}
+
+bool cwSurveyEditorModel::isStationShotEmpty(cwSurveyChunk* chunk, int stationIndex)
+{
+    if(chunk == nullptr || stationIndex == 0 || stationIndex >= chunk->stationCount()) {
+        return false;
+    }
+
+    cwStation station = chunk->station(stationIndex);
+    cwShot shot = chunk->shot(stationIndex - 1);
+
+    return station.name().isEmpty() &&
+        station.left().state() == cwDistanceReading::State::Empty &&
+        station.right().state() == cwDistanceReading::State::Empty &&
+        station.down().state() == cwDistanceReading::State::Empty &&
+        station.up().state() == cwDistanceReading::State::Empty &&
+        shot.distance().state() == cwDistanceReading::State::Empty &&
+        shot.compass().state() == cwCompassReading::State::Empty &&
+        shot.clino().state() == cwClinoReading::State::Empty &&
+        shot.backCompass().state() == cwCompassReading::State::Empty &&
+        shot.backClino().state() == cwClinoReading::State::Empty;
 }
