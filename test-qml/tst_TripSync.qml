@@ -1184,6 +1184,10 @@ MainWindowTest {
 
         function test_tripChunkRemoveAboveSelectedTailStationSyncAndCheckout() {
             let context = loadFixtureAndOpenFirstTrip()
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+            verify(view !== null)
+            let editorModel = view.model
+            verify(editorModel !== null)
 
             let currentTrip = function() {
                 let currentPageItem = RootData.pageView.currentPageItem
@@ -1209,12 +1213,14 @@ MainWindowTest {
                 return String(value)
             }
 
-            let rowForStationIndex = function(stationIndex) {
-                return 1 + (stationIndex * 2)
+            let rowForStationIndex = function(chunk, stationIndex) {
+                return editorModel.toModelRow(
+                            editorModel.rowIndex(chunk, stationIndex, SurveyEditorRowIndex.StationRow))
             }
 
-            let rowForShotIndex = function(shotIndex) {
-                return 2 + (shotIndex * 2)
+            let rowForShotIndex = function(chunk, shotIndex) {
+                return editorModel.toModelRow(
+                            editorModel.rowIndex(chunk, shotIndex, SurveyEditorRowIndex.ShotRow))
             }
 
             let surveyDataCell = function(row, role) {
@@ -1246,34 +1252,86 @@ MainWindowTest {
                 return ""
             }
 
+            let visibleStationCount = function(chunk) {
+                let count = 0
+                while (rowForStationIndex(chunk, count) >= 0) {
+                    count += 1
+                }
+                return count
+            }
+
+            let visibleShotCount = function(chunk) {
+                let count = 0
+                while (rowForShotIndex(chunk, count) >= 0) {
+                    count += 1
+                }
+                return count
+            }
+
+            let stationNameAt = function(chunk, stationIndex) {
+                let stationData = editorModel.data(editorModel.boxIndex(
+                                                       chunk,
+                                                       stationIndex,
+                                                       SurveyEditorRowIndex.StationRow,
+                                                       SurveyChunk.StationNameRole))
+                return String(stationData.reading.value)
+            }
+
+            let shotReadingAt = function(chunk, shotIndex, role) {
+                let shotData = editorModel.data(editorModel.boxIndex(
+                                                    chunk,
+                                                    shotIndex,
+                                                    SurveyEditorRowIndex.ShotRow,
+                                                    role))
+                return shotData.reading
+            }
+
             let chunkSummary = function(chunk) {
+                let stationCount = visibleStationCount(chunk)
+                let shotCount = visibleShotCount(chunk)
                 let stationNames = []
-                for (let i = 0; i < chunk.stationCount; ++i) {
-                    stationNames.push(String(chunk.data(SurveyChunk.StationNameRole, i)))
+                for (let i = 0; i < stationCount; ++i) {
+                    stationNames.push(stationNameAt(chunk, i))
                 }
 
                 let shotValues = []
-                for (let i = 0; i < chunk.shotCount; ++i) {
+                for (let i = 0; i < shotCount; ++i) {
                     shotValues.push({
-                        distance: readingText(chunk.data(SurveyChunk.ShotDistanceRole, i)),
-                        compass: readingText(chunk.data(SurveyChunk.ShotCompassRole, i)),
-                        backCompass: readingText(chunk.data(SurveyChunk.ShotBackCompassRole, i)),
-                        clino: readingText(chunk.data(SurveyChunk.ShotClinoRole, i)),
-                        backClino: readingText(chunk.data(SurveyChunk.ShotBackClinoRole, i))
+                        distance: readingText(shotReadingAt(chunk, i, SurveyChunk.ShotDistanceRole)),
+                        compass: readingText(shotReadingAt(chunk, i, SurveyChunk.ShotCompassRole)),
+                        backCompass: readingText(shotReadingAt(chunk, i, SurveyChunk.ShotBackCompassRole)),
+                        clino: readingText(shotReadingAt(chunk, i, SurveyChunk.ShotClinoRole)),
+                        backClino: readingText(shotReadingAt(chunk, i, SurveyChunk.ShotBackClinoRole))
                     })
                 }
 
+                while (stationNames.length > 0 && shotValues.length > 0) {
+                    let lastStationEmpty = String(stationNames[stationNames.length - 1]).trim().length === 0
+                    let lastShot = shotValues[shotValues.length - 1]
+                    let lastShotEmpty = String(lastShot.distance).trim().length === 0
+                            && String(lastShot.compass).trim().length === 0
+                            && String(lastShot.backCompass).trim().length === 0
+                            && String(lastShot.clino).trim().length === 0
+                            && String(lastShot.backClino).trim().length === 0
+                    if (!(lastStationEmpty && lastShotEmpty)) {
+                        break
+                    }
+                    stationNames.pop()
+                    shotValues.pop()
+                }
+
                 return JSON.stringify({
-                    stationCount: chunk.stationCount,
-                    shotCount: chunk.shotCount,
+                    stationCount: stationNames.length,
+                    shotCount: shotValues.length,
                     stationNames: stationNames,
                     shots: shotValues
                 })
             }
 
             let containsStationName = function(chunk, stationName) {
-                for (let i = 0; i < chunk.stationCount; ++i) {
-                    if (String(chunk.data(SurveyChunk.StationNameRole, i)) === stationName) {
+                let stationCount = visibleStationCount(chunk)
+                for (let i = 0; i < stationCount; ++i) {
+                    if (stationNameAt(chunk, i) === stationName) {
                         return true
                     }
                 }
@@ -1281,8 +1339,9 @@ MainWindowTest {
             }
 
             let findLastNamedStationIndex = function(chunk) {
-                for (let i = chunk.stationCount - 1; i >= 0; --i) {
-                    let stationName = String(chunk.data(SurveyChunk.StationNameRole, i)).trim()
+                let stationCount = visibleStationCount(chunk)
+                for (let i = stationCount - 1; i >= 0; --i) {
+                    let stationName = stationNameAt(chunk, i).trim()
                     if (stationName.length > 0) {
                         return i
                     }
@@ -1295,32 +1354,33 @@ MainWindowTest {
 
             let chunk = currentChunk()
             let baselineSummary = chunkSummary(chunk)
-            let baselineShotCount = chunk.shotCount
-            let baselineStationCount = chunk.stationCount
+            let baselineShotCount = visibleShotCount(chunk)
+            let baselineStationCount = visibleStationCount(chunk)
             let baselineLastNamedStationIndex = findLastNamedStationIndex(chunk)
             verify(baselineLastNamedStationIndex >= 1)
             verify(baselineLastNamedStationIndex < baselineStationCount)
 
-            let hadTrailingEmptyStationBefore = String(chunk.data(SurveyChunk.StationNameRole, baselineStationCount - 1)).trim().length === 0
+            let hadTrailingEmptyStationBefore = stationNameAt(chunk, baselineStationCount - 1).trim().length === 0
             let expectedShotCountAfterSelection = hadTrailingEmptyStationBefore ? baselineShotCount : baselineShotCount + 1
             let expectedStationCountAfterSelection = hadTrailingEmptyStationBefore ? baselineStationCount : baselineStationCount + 1
+            let baselineModifiedFileCount = TestHelper.projectModifiedFileCount(RootData.project)
 
-            let selectedStationCell = surveyDataCell(rowForStationIndex(baselineLastNamedStationIndex), SurveyChunk.StationNameRole)
+            let selectedStationCell = surveyDataCell(rowForStationIndex(chunk, baselineLastNamedStationIndex), SurveyChunk.StationNameRole)
             mouseClick(selectedStationCell, 8, selectedStationCell.height * 0.5, Qt.LeftButton)
 
             tryVerifyWithDiagnostics(() => {
                 let selectedChunk = currentChunk()
-                if (selectedChunk.shotCount !== expectedShotCountAfterSelection
-                        || selectedChunk.stationCount !== expectedStationCountAfterSelection) {
+                if (visibleShotCount(selectedChunk) !== expectedShotCountAfterSelection
+                        || visibleStationCount(selectedChunk) !== expectedStationCountAfterSelection) {
                     return false
                 }
 
-                let lastStationName = String(selectedChunk.data(SurveyChunk.StationNameRole, selectedChunk.stationCount - 1)).trim()
+                let lastStationName = stationNameAt(selectedChunk, visibleStationCount(selectedChunk) - 1).trim()
                 return lastStationName.length === 0
             }, 3000, "verify selecting last named station appends transient empty tail row")
 
             tryVerifyWithDiagnostics(() => {
-                return TestHelper.projectModifiedFileCount(RootData.project) === 0
+                return TestHelper.projectModifiedFileCount(RootData.project) === baselineModifiedFileCount
             }, 3000, "verify transient tail row does not dirty working tree")
 
             let commitA = TestHelper.projectHeadCommitOid(RootData.project)
@@ -1329,7 +1389,7 @@ MainWindowTest {
             let removalChunkBefore = currentChunk()
             let selectedStationIndexBeforeRemoval = findLastNamedStationIndex(removalChunkBefore)
             verify(selectedStationIndexBeforeRemoval >= 1)
-            let removedStationName = String(removalChunkBefore.data(SurveyChunk.StationNameRole, selectedStationIndexBeforeRemoval - 1))
+            let removedStationName = stationNameAt(removalChunkBefore, selectedStationIndexBeforeRemoval - 1)
             verify(removedStationName.trim().length > 0)
             removalChunkBefore.removeShot(selectedStationIndexBeforeRemoval - 1, SurveyChunk.Above)
 
@@ -1369,12 +1429,12 @@ MainWindowTest {
             }, 3000, "verify removed chunk state after second sync")
 
             let finalChunk = currentChunk()
-            let finalTailStationIndex = finalChunk.stationCount - 1
-            let finalTailShotIndex = finalChunk.shotCount - 1
-            compare(surveyDataCellText(rowForStationIndex(finalTailStationIndex), SurveyChunk.StationNameRole),
-                    String(finalChunk.data(SurveyChunk.StationNameRole, finalTailStationIndex)))
-            compare(surveyDataCellText(rowForShotIndex(finalTailShotIndex), SurveyChunk.ShotDistanceRole),
-                    readingText(finalChunk.data(SurveyChunk.ShotDistanceRole, finalTailShotIndex)))
+            let finalTailStationIndex = visibleStationCount(finalChunk) - 1
+            let finalTailShotIndex = visibleShotCount(finalChunk) - 1
+            compare(surveyDataCellText(rowForStationIndex(finalChunk, finalTailStationIndex), SurveyChunk.StationNameRole),
+                    stationNameAt(finalChunk, finalTailStationIndex))
+            compare(surveyDataCellText(rowForShotIndex(finalChunk, finalTailShotIndex), SurveyChunk.ShotDistanceRole),
+                    readingText(shotReadingAt(finalChunk, finalTailShotIndex, SurveyChunk.ShotDistanceRole)))
         }
     }
 }
