@@ -61,15 +61,29 @@ MainWindowTest {
             //Check that we have two stations
             let trip = RootData.pageView.currentPageItem.currentTrip as Trip;
             verify(trip !== null);
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+            verify(view !== null)
+            let editorModel = view.model
+            verify(editorModel !== null)
 
             // wait(100000);
 
 
             let firstChunk = trip.chunk(0);
-            verify(firstChunk.stationCount === 3)
+            verify(firstChunk.stationCount === 2)
             verify(firstChunk.data(SurveyChunk.StationNameRole, 0) === "b1")
             verify(firstChunk.data(SurveyChunk.StationNameRole, 1) === "b2")
-            verify(firstChunk.data(SurveyChunk.StationNameRole, 2) === "")
+
+            // Virtual trailing station is exposed by the model while this chunk is focused.
+            let virtualStationRow = editorModel.toModelRow(
+                        editorModel.rowIndex(firstChunk, 2, SurveyEditorRowIndex.StationRow))
+            verify(virtualStationRow >= 0)
+            compare(editorModel.toModelRow(
+                        editorModel.rowIndex(firstChunk, 3, SurveyEditorRowIndex.StationRow)), -1)
+
+            let virtualStationIndex = editorModel.index(virtualStationRow, 0)
+            let virtualStationData = editorModel.data(virtualStationIndex, SurveyEditorModel.StationNameRole)
+            verify(virtualStationData.reading.value === "")
 
             //Enter distance of 10
             verify(firstChunk.data(SurveyChunk.ShotCompassRole, 0).value === "")
@@ -153,10 +167,32 @@ MainWindowTest {
 
 
             //Connect to a1
+            let firstChunkVirtualStationRowNow = editorModel.toModelRow(
+                        editorModel.rowIndex(firstChunk, 2, SurveyEditorRowIndex.StationRow))
+            verify(firstChunkVirtualStationRowNow >= 0)
+            view.positionViewAtIndex(firstChunkVirtualStationRowNow, ListView.Contain)
+            waitForRendering(rootId)
+            let firstChunkVirtualStationBox = null
+            tryVerify(() => {
+                          firstChunkVirtualStationBox = ObjectFinder.findObjectByChain(
+                                      rootId.mainWindow,
+                                      "rootId->tripPage->view->dataBox." + firstChunkVirtualStationRowNow + ".0")
+                          return firstChunkVirtualStationBox !== null
+                      })
+            let firstChunkVirtualStationInput = ObjectFinder.findObjectByChain(
+                        rootId.mainWindow,
+                        "rootId->tripPage->view->dataBox." + firstChunkVirtualStationRowNow + ".0->coreTextInput")
+            if(firstChunkVirtualStationInput !== null) {
+                mouseClick(firstChunkVirtualStationInput)
+            } else {
+                mouseClick(firstChunkVirtualStationBox)
+            }
+            firstChunkVirtualStationBox.forceActiveFocus()
+            tryVerify(() => { return firstChunkVirtualStationBox.focus === true })
             keyClick("a")
             keyClick(49, 0) //1
             keyClick(16777217, 0) //Tab
-            verify(firstChunk.data(SurveyChunk.StationNameRole, 2) === "a1")
+            tryVerify(() => { return firstChunk.data(SurveyChunk.StationNameRole, 2) === "a1" })
             waitForRendering(rootId)
 
 
@@ -175,6 +211,7 @@ MainWindowTest {
 
             //Skip backcompass
             keyClick(16777217, 0) //Tab
+            verify(firstChunk.data(SurveyChunk.ShotBackCompassRole, 1).value === "")
 
             //Clino of 0
             keyClick(48, 0) //0
@@ -188,33 +225,40 @@ MainWindowTest {
             //Make a new scrap
             keyClick(32, 0) //Space
             verify(firstChunk)
+            tryVerify(() => { return trip.chunkCount === 2 });
 
             //Make sure focus is on the secondChunk
             let stationBox = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->view->dataBox.7.0")
             verify(stationBox.focus === true);
             verify(stationBox === mainWindow.Window.window.activeFocusItem)
 
-            // verify
-
             //Make sure the first chunk gets trimmed
             verify(firstChunk.stationCount === 3)
             verify(firstChunk.shotCount === 2)
 
             //Make sure the new scrap exists
-            verify(trip.chunkCount === 2);
             let secondChunk = trip.chunk(1);
             verify(secondChunk !== null);
 
             wait(50)
 
             //Add data
+            let secondChunkStation0Row = editorModel.toModelRow(
+                        editorModel.rowIndex(secondChunk, 0, SurveyEditorRowIndex.StationRow))
+            verify(secondChunkStation0Row >= 0)
+            view.positionViewAtIndex(secondChunkStation0Row, ListView.Contain)
+            waitForRendering(rootId)
+            let secondChunkStation0Box = null
+            tryVerify(() => {
+                          secondChunkStation0Box = ObjectFinder.findObjectByChain(
+                                      rootId.mainWindow,
+                                      "rootId->tripPage->view->dataBox." + secondChunkStation0Row + ".0")
+                          return secondChunkStation0Box !== null
+                      })
+            mouseClick(secondChunkStation0Box)
             keyClick("a")
-            // wait(1000)
             keyClick(49, 0) //1
-            // wait(1000)
             keyClick(16777217, 0) //Tab
-            // wait(1000)
-
             tryVerify(() => {return secondChunk.data(SurveyChunk.StationNameRole, 0) === "a1"})
 
             //Auto guess next row

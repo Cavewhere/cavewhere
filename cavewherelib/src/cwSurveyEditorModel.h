@@ -94,6 +94,7 @@ private:
 
     QPointer<cwTrip> m_trip; //!<
     QPointer<cwSurveyChunk> m_focusedChunk;
+    bool m_virtualRowsInsertedForFocusedChunk = false;
 
     const int m_titleRowOffset = 1;
 
@@ -115,6 +116,8 @@ private:
     int shotCount(const cwSurveyChunk* chunk) const;
     int chunkRowCount(const cwSurveyChunk* chunk) const;
     bool hasVirtualTrailingStationShot(const cwSurveyChunk* chunk) const;
+    bool hasVisibleVirtualRows(const cwSurveyChunk* chunk) const;
+    void syncVirtualRows(cwSurveyChunk* chunk);
     static bool isStationShotEmpty(cwSurveyChunk* chunk, int stationIndex);
     static void trim(cwSurveyChunk* chunk, TrimType trimType);
     static void trim(cwSurveyChunk* chunk);
