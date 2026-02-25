@@ -632,6 +632,91 @@ MainWindowTest {
             verify(virtualStationRow >= 0)
         }
 
+        function test_tabFromFourthStation_shouldGoToThirdShot() {
+            addSurvey();
+
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+            verify(view !== null)
+            let editorModel = view.model
+            verify(editorModel !== null)
+
+            function dataBoxAt(row, column) {
+                view.positionViewAtIndex(row, ListView.Contain)
+                waitForRendering(rootId)
+                let cell = ObjectFinder.findObjectByChain(
+                            mainWindow,
+                            "rootId->tripPage->view->dataBox." + row + "." + column)
+                verify(cell !== null, "Missing dataBox at row=" + row + " column=" + column)
+                return cell
+            }
+
+            function keyClickText(text) {
+                for(let i = 0; i < text.length; i++) {
+                    let ch = text[i]
+                    if(ch >= "0" && ch <= "9") {
+                        keyClick(ch.charCodeAt(0), 0)
+                    } else {
+                        keyClick(ch)
+                    }
+                }
+            }
+
+            function setCell(row, column, text) {
+                let cell = dataBoxAt(row, column)
+                mouseClick(cell)
+                keyClickText(text)
+                keyClick(16777220, 0) // Return
+                waitForRendering(rootId)
+            }
+
+            let trip = RootData.pageView.currentPageItem.currentTrip as Trip
+            verify(trip !== null)
+            compare(trip.chunkCount, 1)
+            let chunk = trip.chunk(0)
+            verify(chunk !== null)
+
+            // Seed 3 station names.
+            for(let stationIndex = 0; stationIndex < 3; ++stationIndex) {
+                let stationRow = editorModel.toModelRow(
+                            editorModel.rowIndex(chunk, stationIndex, SurveyEditorRowIndex.StationRow))
+                verify(stationRow >= 0)
+                setCell(stationRow, SurveyChunk.StationNameRole, "a" + (stationIndex + 1))
+            }
+
+            // Fill only 2 shots to match repro.
+            for(let shotIndex = 0; shotIndex < 2; ++shotIndex) {
+                let shotRow = editorModel.toModelRow(
+                            editorModel.rowIndex(chunk, shotIndex, SurveyEditorRowIndex.ShotRow))
+                verify(shotRow >= 0)
+                setCell(shotRow, SurveyChunk.ShotDistanceRole, "" + (shotIndex + 1))
+            }
+
+            compare(chunk.stationCount, 3)
+            compare(chunk.shotCount, 2)
+            compare(chunk.data(SurveyChunk.ShotDistanceRole, 0).value, "1")
+            compare(chunk.data(SurveyChunk.ShotDistanceRole, 1).value, "2")
+
+            // Station 4 starts as virtual.
+            let station4Row = editorModel.toModelRow(
+                        editorModel.rowIndex(chunk, chunk.stationCount, SurveyEditorRowIndex.StationRow))
+            verify(station4Row >= 0)
+
+            let station4Box = dataBoxAt(station4Row, SurveyChunk.StationNameRole)
+            mouseClick(station4Box)
+            tryVerify(() => { return focusedDataBoxObjectName() === "dataBox." + station4Row + "." + SurveyChunk.StationNameRole })
+
+            // Repro path: type station 4 into the virtual station row then Tab.
+            keyClick("a")
+            keyClick("4")
+            keyClick(16777217, 0) // Tab
+
+            let shot3Row = editorModel.toModelRow(
+                        editorModel.rowIndex(chunk, 2, SurveyEditorRowIndex.ShotRow))
+            verify(shot3Row >= 0)
+            let expectedFocus = "dataBox." + shot3Row + "." + SurveyChunk.ShotDistanceRole
+            tryVerify(() => { return focusedDataBoxObjectName() === expectedFocus })
+        }
+
         function test_spaceBarVisible() {
             addSurvey();
             let spaceBar = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->view->spaceAddBar")
