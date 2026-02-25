@@ -89,7 +89,7 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
                 });
 
                 connect(chunk, &cwSurveyChunk::removed, this,
-                        [this, chunk](int stationBegin, int stationEnd, int shotBegin, int shotEnd) {
+                        [this, chunk](int, int, int, int) {
                             endRemoveRows();
                             Q_ASSERT(m_removeToken.chunk != nullptr);
                             syncVirtualRows(chunk);
@@ -339,25 +339,6 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
         return shotData(rowIndex);
     }
     return QVariant();
-}
-
-QVariant cwSurveyEditorModel::data(const cwSurveyEditorBoxIndex& boxIndex) const
-{
-    cwSurveyChunk* chunk = boxIndex.chunk();
-    if(chunk == nullptr || m_trip.isNull()) {
-        return QVariant();
-    }
-
-    if(!m_trip->chunks().contains(chunk)) {
-        return QVariant();
-    }
-
-    const QModelIndex modelIndex = toModelIndex(boxIndex.rowIndex());
-    if(!modelIndex.isValid()) {
-        return QVariant();
-    }
-
-    return data(modelIndex, toModelRole(boxIndex.chunkDataRole()));
 }
 
 /**
@@ -758,6 +739,52 @@ int cwSurveyEditorModel::toModelRow(const cwSurveyEditorRowIndex &rowIndex) cons
         return -1;
     }
     return modelRow;
+}
+
+bool cwSurveyEditorModel::isSelectedBox(const cwSurveyEditorBoxIndex& selectedBoxIndex,
+                                        const cwSurveyEditorBoxIndex& candidateBoxIndex) const
+{
+    if(m_trip.isNull() || selectedBoxIndex.chunk() == nullptr) {
+        return false;
+    }
+
+    const int selectedRow = toModelRow(selectedBoxIndex.rowIndex());
+    const int candidateRow = toModelRow(candidateBoxIndex.rowIndex());
+    if(selectedRow < 0 || candidateRow < 0) {
+        return false;
+    }
+
+    return selectedRow == candidateRow
+           && selectedBoxIndex.chunkDataRole() == candidateBoxIndex.chunkDataRole();
+}
+
+bool cwSurveyEditorModel::isSelectedBoxAtRow(const cwSurveyEditorBoxIndex& selectedBoxIndex,
+                                             const cwSurveyEditorBoxIndex& candidateBoxIndex,
+                                             int candidateModelRow) const
+{
+    if(!isSelectedBox(selectedBoxIndex, candidateBoxIndex)) {
+        return false;
+    }
+
+    const int resolvedCandidateRow = toModelRow(candidateBoxIndex.rowIndex());
+    return resolvedCandidateRow == candidateModelRow;
+}
+
+cwSurveyEditorBoxIndex cwSurveyEditorModel::boxIndexForRowRole(int modelRow, cwSurveyChunk::DataRole dataRole) const
+{
+    if(m_trip.isNull() || modelRow < 0 || modelRow >= rowCount()) {
+        return cwSurveyEditorBoxIndex();
+    }
+
+    const cwSurveyEditorRowIndex rowIndex = toRowIndex(modelRow);
+    if(rowIndex.chunk() == nullptr
+            || rowIndex.rowType() == cwSurveyEditorRowIndex::TitleRow
+            || rowIndex.rowType() != toRowType(dataRole))
+    {
+        return cwSurveyEditorBoxIndex();
+    }
+
+    return cwSurveyEditorBoxIndex(rowIndex, dataRole);
 }
 
 cwSurveyEditorBoxIndex cwSurveyEditorModel::offsetBoxIndex(const cwSurveyEditorBoxIndex &boxIndex, int offsetIndex) const

@@ -63,7 +63,8 @@ QQ.Item {
     //For changing the focus to other data boxs
     required property SurveyEditorFocus editorFocus
 
-    readonly property bool hasEditorFocus: shouldHaveFocus()
+    property bool hasEditorFocus: false
+    property cwSurveyEditorBoxIndex editTargetBoxIndex: model.boxIndex()
 
     property GlobalShadowTextInput _globalShadowTextInput: GlobalShadowTextInput
     property GlobalTextInputHelper _globalTextInput: GlobalShadowTextInput.textInput
@@ -85,13 +86,29 @@ QQ.Item {
         if(listViewIndex < 0) {
             return false
         }
-        return editorFocus.boxIndex === dataValue.boxIndex
+        return model.isSelectedBoxAtRow(editorFocus.boxIndex, liveBoxIndex(), listViewIndex)
+    }
+
+    function liveBoxIndex() {
+        return model.boxIndexForRowRole(listViewIndex, dataValue.chunkDataRole)
     }
 
     function deletePressedHandler() {
         editor.text = "";
         editor.openEditor();
         state = 'MiddleTyping';
+    }
+
+    function syncEditorFocusState() {
+        let selected = shouldHaveFocus()
+        if(hasEditorFocus === selected && focus === selected) {
+            return
+        }
+        hasEditorFocus = selected
+        if(hasEditorFocus) {
+            forceActiveFocus()
+        }
+        focus = hasEditorFocus
     }
 
     function handleNextTab() {
@@ -168,9 +185,6 @@ QQ.Item {
     }
 
     onHasEditorFocusChanged: {
-        if(hasEditorFocus) {
-            forceActiveFocus()
-        }
         focus = hasEditorFocus
     }
 
@@ -180,7 +194,7 @@ QQ.Item {
     QQ.Connections {
         target: dataBox.view
         function onCurrentIndexChanged() {
-            dataBox.focus = shouldHaveFocus(); //We need to use this instead of property, because property could be out of data, and cause binding loop
+            dataBox.syncEditorFocusState()
             if(dataBox.focus) {
                 // console.log("CurrentIndexChanged:" + dataBox.view.currentIndex + " " + editorFocus.boxIndex + dataBox.dataValue.boxIndex
                 //             + " hasfocus:" + dataBox.hasEditorFocus
@@ -188,6 +202,13 @@ QQ.Item {
                 //             + " shouldHaveFocus:" + shouldHaveFocus())
                 dataBox.forceActiveFocus()
             }
+        }
+    }
+
+    QQ.Connections {
+        target: dataBox.editorFocus
+        function onBoxIndexChanged() {
+            dataBox.syncEditorFocusState()
         }
     }
 
@@ -232,7 +253,7 @@ QQ.Item {
         acceptedButtons: Qt.LeftButton | Qt.RightButton
 
         onClicked: (mouse) => {
-                       dataBox.editorFocus.setIndex(dataBox.dataValue.boxIndex)
+                       dataBox.editorFocus.setIndex(dataBox.liveBoxIndex())
                        // dataBox.focus = true
 
                        if(mouse.button === Qt.RightButton) {
@@ -285,7 +306,7 @@ QQ.Item {
         anchors.margins: 1
         border.width: 1
         color: Theme.highlight
-        visible: dataBox.focus || editor.isEditting
+        visible: dataBox.shouldHaveFocus() || editor.isEditting
     }
 
     QQ.Keys.onPressed: (event) => {
@@ -336,8 +357,20 @@ QQ.Item {
             return
         }
         if(focus) {
-            editorFocus.setIndex(dataValue.boxIndex)
+            editorFocus.setIndex(liveBoxIndex())
         }
+    }
+
+    onDataValueChanged: {
+        syncEditorFocusState()
+    }
+
+    onListViewIndexChanged: {
+        syncEditorFocusState()
+    }
+
+    QQ.Component.onCompleted: {
+        syncEditorFocusState()
     }
 
 
@@ -348,12 +381,13 @@ QQ.Item {
         text: dataBox.dataValue.reading.value
 
         onFinishedEditting: (newText) => {
-                                model.setData(dataBox.dataValue.boxIndex, newText)
+                                model.setData(dataBox.editTargetBoxIndex, newText)
                                 dataBox.state = ""; //Go back to the default state
                                 dataBox.forceActiveFocus();
                             }
 
         onStartedEditting: {
+            dataBox.editTargetBoxIndex = dataBox.liveBoxIndex()
             dataBox.state = 'MiddleTyping';
         }
 

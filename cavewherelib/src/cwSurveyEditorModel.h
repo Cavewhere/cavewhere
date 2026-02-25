@@ -56,7 +56,6 @@ public:
     Q_INVOKABLE void setFocusedChunk(cwSurveyChunk* chunk);
 
     QVariant data(const QModelIndex &index, int role) const;
-    Q_INVOKABLE QVariant data(const cwSurveyEditorBoxIndex& boxIndex) const;
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
     Q_INVOKABLE bool setData(const cwSurveyEditorBoxIndex& boxIndex, const QVariant& data);
     Q_INVOKABLE bool shotDistanceIncluded(const cwSurveyEditorBoxIndex& boxIndex) const;
@@ -75,6 +74,11 @@ public:
     Q_INVOKABLE void addShotCalibration(int index);
 
     Q_INVOKABLE int toModelRow(const cwSurveyEditorRowIndex& rowIndex) const;
+    Q_INVOKABLE bool isSelectedBox(const cwSurveyEditorBoxIndex& selectedBoxIndex,
+                                   const cwSurveyEditorBoxIndex& candidateBoxIndex) const;
+    Q_INVOKABLE bool isSelectedBoxAtRow(const cwSurveyEditorBoxIndex& selectedBoxIndex,
+                                        const cwSurveyEditorBoxIndex& candidateBoxIndex,
+                                        int candidateModelRow) const;
 
     Q_INVOKABLE cwSurveyEditorRowIndex rowIndex(cwSurveyChunk *chunk, int chunkIndex, cwSurveyEditorRowIndex::RowType type) const
     {
@@ -92,6 +96,7 @@ public:
         return boxIndex(rowIndex(chunk, chunkIndex, type), dataRole);
     }
     Q_INVOKABLE cwSurveyEditorBoxIndex boxIndex() const { return cwSurveyEditorBoxIndex(); }
+    Q_INVOKABLE cwSurveyEditorBoxIndex boxIndexForRowRole(int modelRow, cwSurveyChunk::DataRole dataRole) const;
 
     Q_INVOKABLE cwSurveyEditorBoxIndex offsetBoxIndex(const cwSurveyEditorBoxIndex& boxIndex, int offsetIndex) const;
 

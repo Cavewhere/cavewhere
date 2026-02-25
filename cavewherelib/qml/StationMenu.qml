@@ -27,12 +27,14 @@ QQ.Loader {
                 if(dataValue.chunk === null || stationMenuLoader.model === null) {
                     return "empty station"
                 }
-                let stationBoxData = stationMenuLoader.model.data(
-                            stationMenuLoader.model.boxIndex(
+                let row = stationMenuLoader.model.toModelRow(
+                            stationMenuLoader.model.rowIndex(
                                 dataValue.chunk,
                                 index,
-                                SurveyEditorRowIndex.StationRow,
-                                SurveyChunk.StationNameRole))
+                                SurveyEditorRowIndex.StationRow))
+                let stationBoxData = stationMenuLoader.model.data(
+                            stationMenuLoader.model.index(row, 0),
+                            SurveyEditorModel.StationNameRole)
                 let name = stationBoxData.reading.value
                 if(name === "") {
                     return "empty station"

@@ -1269,20 +1269,39 @@ MainWindowTest {
             }
 
             let stationNameAt = function(chunk, stationIndex) {
-                let stationData = editorModel.data(editorModel.boxIndex(
-                                                       chunk,
-                                                       stationIndex,
-                                                       SurveyEditorRowIndex.StationRow,
-                                                       SurveyChunk.StationNameRole))
+                let row = editorModel.toModelRow(editorModel.rowIndex(
+                                                     chunk,
+                                                     stationIndex,
+                                                     SurveyEditorRowIndex.StationRow))
+                let stationData = editorModel.data(editorModel.index(row, 0),
+                                                   SurveyEditorModel.StationNameRole)
                 return String(stationData.reading.value)
             }
 
             let shotReadingAt = function(chunk, shotIndex, role) {
-                let shotData = editorModel.data(editorModel.boxIndex(
-                                                    chunk,
-                                                    shotIndex,
-                                                    SurveyEditorRowIndex.ShotRow,
-                                                    role))
+                let row = editorModel.toModelRow(editorModel.rowIndex(
+                                                     chunk,
+                                                     shotIndex,
+                                                     SurveyEditorRowIndex.ShotRow))
+                let modelRole = SurveyEditorModel.ShotDistanceRole
+                switch (role) {
+                case SurveyChunk.ShotDistanceRole:
+                    modelRole = SurveyEditorModel.ShotDistanceRole
+                    break
+                case SurveyChunk.ShotCompassRole:
+                    modelRole = SurveyEditorModel.ShotCompassRole
+                    break
+                case SurveyChunk.ShotBackCompassRole:
+                    modelRole = SurveyEditorModel.ShotBackCompassRole
+                    break
+                case SurveyChunk.ShotClinoRole:
+                    modelRole = SurveyEditorModel.ShotClinoRole
+                    break
+                case SurveyChunk.ShotBackClinoRole:
+                    modelRole = SurveyEditorModel.ShotBackClinoRole
+                    break
+                }
+                let shotData = editorModel.data(editorModel.index(row, 0), modelRole)
                 return shotData.reading
             }
 

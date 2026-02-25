@@ -189,10 +189,12 @@ MainWindowTest {
             }
             firstChunkVirtualStationBox.forceActiveFocus()
             tryVerify(() => { return firstChunkVirtualStationBox.focus === true })
+            verifySingleDataBoxSelection("a1 virtual station selected")
             keyClick("a")
             keyClick(49, 0) //1
             keyClick(16777217, 0) //Tab
             tryVerify(() => { return firstChunk.data(SurveyChunk.StationNameRole, 2) === "a1" })
+            verifySingleDataBoxSelection("after entering a1")
             waitForRendering(rootId)
 
 
@@ -200,6 +202,7 @@ MainWindowTest {
             keyClick(49, 0) //1
             keyClick(16777217, 0) //Tab
             verify(firstChunk.data(SurveyChunk.ShotDistanceRole, 1).value === "1")
+            verifySingleDataBoxSelection("after entering a1 distance")
             waitForRendering(rootId)
 
             //Compasss of 10
@@ -207,16 +210,19 @@ MainWindowTest {
             keyClick(48, 0) //0
             keyClick(16777217, 0) //Tab
             verify(firstChunk.data(SurveyChunk.ShotCompassRole, 1).value === "10")
+            verifySingleDataBoxSelection("after entering a1 compass")
             waitForRendering(rootId)
 
             //Skip backcompass
             keyClick(16777217, 0) //Tab
             verify(firstChunk.data(SurveyChunk.ShotBackCompassRole, 1).value === "")
+            verifySingleDataBoxSelection("after a1 back compass skip")
 
             //Clino of 0
             keyClick(48, 0) //0
             keyClick(16777217, 0) //Tab
             verify(firstChunk.data(SurveyChunk.ShotClinoRole, 1).value === "0")
+            verifySingleDataBoxSelection("after entering a1 clino")
             waitForRendering(rootId)
 
             //make sure the secondChunk chunk doesn't exist before we create it
@@ -228,18 +234,23 @@ MainWindowTest {
             tryVerify(() => { return trip.chunkCount === 2 });
 
             //Make sure focus is on the secondChunk
-            let stationBox = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->view->dataBox.7.0")
-            verify(stationBox.focus === true);
+            let secondChunk = trip.chunk(1);
+            verify(secondChunk !== null);
+            let focusedSecondChunkStation0Row = editorModel.toModelRow(
+                        editorModel.rowIndex(secondChunk, 0, SurveyEditorRowIndex.StationRow))
+            verify(focusedSecondChunkStation0Row >= 0)
+            let stationBox = ObjectFinder.findObjectByChain(
+                        rootId.mainWindow,
+                        "rootId->tripPage->view->dataBox." + focusedSecondChunkStation0Row + ".0")
+            verify(stationBox !== null)
+            tryVerify(() => { return stationBox.focus === true; })
             verify(stationBox === mainWindow.Window.window.activeFocusItem)
 
             //Make sure the first chunk gets trimmed
-            verify(firstChunk.stationCount === 3)
-            verify(firstChunk.shotCount === 2)
+            compare(firstChunk.stationCount, 3)
+            compare(firstChunk.shotCount, 2)
 
             //Make sure the new scrap exists
-            let secondChunk = trip.chunk(1);
-            verify(secondChunk !== null);
-
             wait(50)
 
             //Add data
@@ -316,6 +327,53 @@ MainWindowTest {
                 depth += 1
             }
             return ""
+        }
+
+        function collectDataBoxes(item, boxes) {
+            if(item === null || item === undefined) {
+                return
+            }
+
+            if(item.objectName !== undefined
+                    && item.objectName !== null
+                    && item.objectName.indexOf("dataBox.") === 0)
+            {
+                boxes.push(item)
+            }
+
+            let children = item.children
+            if(children === undefined || children === null) {
+                return
+            }
+            for(let i = 0; i < children.length; ++i) {
+                collectDataBoxes(children[i], boxes)
+            }
+        }
+
+        function selectedDataBoxObjectNames() {
+            let boxes = []
+            collectDataBoxes(rootId.mainWindow, boxes)
+
+            let selected = []
+            for(let i = 0; i < boxes.length; ++i) {
+                let box = boxes[i]
+                let editorFocused = false
+                if(box.shouldHaveFocus !== undefined) {
+                    editorFocused = box.shouldHaveFocus()
+                } else if(box.hasEditorFocus !== undefined) {
+                    editorFocused = box.hasEditorFocus === true
+                }
+                if(editorFocused) {
+                    selected.push(box.objectName)
+                }
+            }
+            return selected
+        }
+
+        function verifySingleDataBoxSelection(stepName) {
+            waitForRendering(rootId)
+            let selected = selectedDataBoxObjectNames()
+            compare(selected.length, 1, stepName + " selected boxes: " + selected.join(", "))
         }
 
         function navHelper(currentItem,
@@ -413,6 +471,165 @@ MainWindowTest {
             addSurvey();
 
             enterSurveyData();
+        }
+
+        function test_enterSurveyData_fiveStationsFourShots_cannotContinueEditing() {
+            addSurvey();
+
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+            verify(view !== null)
+            let editorModel = view.model
+            verify(editorModel !== null)
+
+            function logEditorSnapshot(tag, chunk) {
+                let stationRows = []
+                for(let i = 0; i <= chunk.stationCount; ++i) {
+                    let stationRowIndex = editorModel.rowIndex(chunk, i, SurveyEditorRowIndex.StationRow)
+                    stationRows.push("s" + i + "->" + editorModel.toModelRow(stationRowIndex))
+                }
+
+                let shotRows = []
+                for(let i = 0; i <= chunk.shotCount; ++i) {
+                    let shotRowIndex = editorModel.rowIndex(chunk, i, SurveyEditorRowIndex.ShotRow)
+                    shotRows.push("sh" + i + "->" + editorModel.toModelRow(shotRowIndex))
+                }
+
+                console.log("[SurveyDataEntryDebug]", tag,
+                            "stationCount=", chunk.stationCount,
+                            "shotCount=", chunk.shotCount,
+                            "stationRows=[" + stationRows.join(", ") + "]",
+                            "shotRows=[" + shotRows.join(", ") + "]")
+            }
+
+            function logRowCells(row, roles) {
+                let present = []
+                for(let i = 0; i < roles.length; ++i) {
+                    let role = roles[i]
+                    let objectName = "rootId->tripPage->view->dataBox." + row + "." + role
+                    let cell = ObjectFinder.findObjectByChain(mainWindow, objectName)
+                    if(cell !== null) {
+                        present.push(role)
+                    }
+                }
+                console.log("[SurveyDataEntryDebug]",
+                            "row=", row,
+                            "presentRoles=[" + present.join(", ") + "]")
+            }
+
+            function dataBoxAt(row, column) {
+                view.positionViewAtIndex(row, ListView.Contain)
+                waitForRendering(rootId)
+                let cell = null
+                for(let attempt = 0; attempt < 50; ++attempt) {
+                    cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
+                    if(cell !== null) {
+                        break
+                    }
+                    wait(100)
+                }
+                if(cell === null) {
+                    console.log("[SurveyDataEntryDebug]", "Missing dataBox", "row=", row, "column=", column)
+                    let activeTrip = RootData.pageView.currentPageItem.currentTrip as Trip
+                    if(activeTrip !== null && activeTrip.chunkCount > 0) {
+                        let activeChunk = activeTrip.chunk(0)
+                        if(activeChunk !== null) {
+                            logEditorSnapshot("missing-cell-state", activeChunk)
+                        }
+                    }
+                    logRowCells(row, [
+                                    SurveyChunk.StationNameRole,
+                                    SurveyChunk.ShotDistanceRole,
+                                    SurveyChunk.ShotCompassRole,
+                                    SurveyChunk.ShotBackCompassRole,
+                                    SurveyChunk.ShotClinoRole,
+                                    SurveyChunk.ShotBackClinoRole,
+                                    SurveyChunk.StationLeftRole,
+                                    SurveyChunk.StationRightRole,
+                                    SurveyChunk.StationUpRole,
+                                    SurveyChunk.StationDownRole
+                                ])
+                }
+                verify(cell !== null, "Missing dataBox at row=" + row + " column=" + column)
+                mouseClick(cell)
+                return cell
+            }
+
+            function keyClickText(text) {
+                for(let i = 0; i < text.length; i++) {
+                    let ch = text[i]
+                    if(ch >= "0" && ch <= "9") {
+                        keyClick(ch.charCodeAt(0), 0)
+                    } else if(ch === ".") {
+                        keyClick(46, 0)
+                    } else if(ch === "-") {
+                        keyClick(45, 0)
+                    } else {
+                        keyClick(ch)
+                    }
+                }
+            }
+
+            function setCell(row, column, text) {
+                console.log("[SurveyDataEntryDebug]", "setCell", "row=", row, "column=", column, "text=", text)
+                dataBoxAt(row, column)
+                keyClickText(text)
+                keyClick(16777220, 0) //Return
+                waitForRendering(rootId)
+            }
+
+            // Fill 5 stations and 4 shots (all data fields) in one chunk.
+            for(let stationIndex = 0; stationIndex < 5; stationIndex++) {
+                let stationRow = 1 + (stationIndex * 2)
+                let stationNumber = stationIndex + 1
+
+                setCell(stationRow, SurveyChunk.StationNameRole, "a" + stationNumber)
+                setCell(stationRow, SurveyChunk.StationLeftRole, "" + stationNumber)
+                setCell(stationRow, SurveyChunk.StationRightRole, "" + (stationNumber + 10))
+                setCell(stationRow, SurveyChunk.StationUpRole, "" + (stationNumber + 20))
+                setCell(stationRow, SurveyChunk.StationDownRole, "" + (stationNumber + 30))
+
+                if(stationIndex < 4) {
+                    let shotRow = stationRow + 1
+                    let shotNumber = stationIndex + 1
+                    setCell(shotRow, SurveyChunk.ShotDistanceRole, "" + (shotNumber * 10))
+                    setCell(shotRow, SurveyChunk.ShotCompassRole, "" + (shotNumber * 20))
+                    setCell(shotRow, SurveyChunk.ShotBackCompassRole, "" + (shotNumber * 20 + 180))
+                    setCell(shotRow, SurveyChunk.ShotClinoRole, "" + shotNumber)
+                    setCell(shotRow, SurveyChunk.ShotBackClinoRole, "" + (-shotNumber))
+                }
+            }
+
+            let trip = RootData.pageView.currentPageItem.currentTrip as Trip
+            verify(trip !== null)
+            compare(trip.chunkCount, 1)
+            let chunk = trip.chunk(0)
+            verify(chunk !== null)
+            compare(chunk.stationCount, 5)
+            compare(chunk.shotCount, 4)
+            logEditorSnapshot("after full fill", chunk)
+            logRowCells(8, [
+                            SurveyChunk.ShotDistanceRole,
+                            SurveyChunk.ShotCompassRole,
+                            SurveyChunk.ShotBackCompassRole,
+                            SurveyChunk.ShotClinoRole,
+                            SurveyChunk.ShotBackClinoRole
+                        ])
+
+            // Repro step: with 5 stations/4 shots already filled, editing should still work.
+            // Current bug: entry stops working once this size is reached.
+            setCell(8, SurveyChunk.ShotDistanceRole, "99")
+            compare(chunk.data(SurveyChunk.ShotDistanceRole, 3).value, "99")
+
+            setCell(9, SurveyChunk.StationDownRole, "55")
+            compare(chunk.data(SurveyChunk.StationDownRole, 4).value, "55")
+
+            // Keep model in view and validate trailing virtual rows still resolve.
+            let virtualShotRow = editorModel.toModelRow(
+                        editorModel.rowIndex(chunk, chunk.shotCount, SurveyEditorRowIndex.ShotRow))
+            let virtualStationRow = editorModel.toModelRow(
+                        editorModel.rowIndex(chunk, chunk.stationCount, SurveyEditorRowIndex.StationRow))
+            verify(virtualShotRow >= 0)
+            verify(virtualStationRow >= 0)
         }
 
         function test_spaceBarVisible() {
