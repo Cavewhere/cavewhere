@@ -1,130 +1,152 @@
 # Survey Editor Virtual Index Architecture Plan
 
 ## Goal
-Remove virtual-row special-casing from QML by making virtual rows first-class in the survey editor index model and moving navigation/index resolution to C++.
+Make survey editor cells "dumb" at the QML boundary:
+- A `DataBox` should only know `listViewIndex` and `chunkDataRole`.
+- QML should not hold or reason about `cwSurveyEditorBoxIndex`/`cwSurveyEditorRowIndex`.
+- All row/virtual/navigation/insert semantics should live in `cwSurveyEditorModel`.
 
-## Current Problems
-- QML delegates rely on mixed sources (`dataValue.rowIndex`, `listViewIndex`, `liveBoxIndex()`), which can diverge after insert/remove/focus transitions.
-- Virtual station/shot behavior is inferred indirectly from row math (`index == count`) and delegate position, causing stale-index bugs.
-- Navigation behavior (Tab/arrows) is spread across many QML lambdas and encodes model internals.
-- Fixes like row offsets are fragile and regress adjacent flows.
+## Decision Summary
+- Target state (good): remove `cwSurveyEditorBoxIndex` and `cwSurveyEditorRowIndex` from QML and eventually from public model APIs.
+- Immediate hard delete (bad): high-risk because these types are deeply embedded in model APIs, focus state, menus, and tests.
+- Recommended path: first migrate to row+role APIs everywhere, then delete index types once unused.
 
-## Target Architecture
-- `cwSurveyEditorRowIndex` and `cwSurveyEditorBoxIndex` explicitly encode virtual state.
-- `cwSurveyEditorModel` is the single source of truth for:
-  - row/box resolution
-  - virtual/real transitions
-  - keyboard navigation targets
-- QML delegates become thin renderers and event forwarders.
+## Why This Change Is Needed
+- `DataBox.qml` currently mixes `dataValue.rowIndex`, `dataValue.boxIndex`, `listViewIndex`, and `liveBoxIndex()`.
+- `DrySurveyComponent.qml` contains extensive row math and hand-authored navigation logic.
+- The model already has enough information to resolve everything from `(modelRow, role)`, so duplicating index state in QML is unnecessary and stale-prone.
 
-## Index Model Changes
-### 1. Row index representation
-Add explicit row kind metadata to `cwSurveyEditorRowIndex`:
-- `rowType` (existing): `TitleRow`, `StationRow`, `ShotRow`
-- `rowKind` (new): `Real`, `VirtualTrailing`
-- `indexInChunk` remains logical index, but no implicit virtual inference from `index == count` in QML.
+## Target Contract
+### DataBox contract
+- Inputs: `listViewIndex`, `dataValue.chunkDataRole`, `model`.
+- No `cwSurveyEditorBoxIndex` property in DataBox state.
+- No dependence on `dataValue.rowIndex` for focus, commit target, or navigation.
 
-### 2. Box index representation
-Add explicit virtual metadata to `cwSurveyEditorBoxIndex`:
-- keep existing row/data role fields
-- add `isVirtual` (or mirror `rowKind`)
+### Model contract
+Model owns all translation and behavior:
+- Resolve row metadata from `modelRow`.
+- Resolve/validate virtual rows.
+- Resolve navigation target for tab/arrows.
+- Resolve edit/insert/remove operations from `(modelRow, role)`.
 
-### 3. Model API additions
-Add model-owned APIs for navigation and index resolution:
-- `Q_INVOKABLE cwSurveyEditorBoxIndex boxIndexForRowRole(int modelRow, cwSurveyChunk::DataRole role) const` (already present; keep)
-- `Q_INVOKABLE cwSurveyEditorBoxIndex nextBoxIndex(const cwSurveyEditorBoxIndex& current, NavigationKey key) const`
-- `Q_INVOKABLE bool isVirtualBox(const cwSurveyEditorBoxIndex& idx) const`
-- Optional convenience: `Q_INVOKABLE cwSurveyEditorBoxIndex normalizeBoxIndex(const cwSurveyEditorBoxIndex& idx) const`
+## Required API Shape (Row+Role First)
+Add row+role APIs in `cwSurveyEditorModel` (names can vary, shape should not):
+- `Q_INVOKABLE bool setDataAt(int modelRow, cwSurveyChunk::DataRole role, const QVariant& data)`
+- `Q_INVOKABLE bool shotDistanceIncludedAt(int modelRow, cwSurveyChunk::DataRole role) const`
+- `Q_INVOKABLE bool canRemoveStationAt(int modelRow, cwSurveyChunk::DataRole role, cwSurveyChunk::Direction direction) const`
+- `Q_INVOKABLE bool canRemoveShotAt(int modelRow, cwSurveyChunk::DataRole role, cwSurveyChunk::Direction direction) const`
+- `Q_INVOKABLE void removeStationAt(int modelRow, cwSurveyChunk::DataRole role, cwSurveyChunk::Direction direction)`
+- `Q_INVOKABLE void removeShotAt(int modelRow, cwSurveyChunk::DataRole role, cwSurveyChunk::Direction direction)`
+- `Q_INVOKABLE void insertStationAt(int modelRow, cwSurveyChunk::DataRole role, cwSurveyChunk::Direction direction)`
+- `Q_INVOKABLE void insertShotAt(int modelRow, cwSurveyChunk::DataRole role, cwSurveyChunk::Direction direction)`
+- `Q_INVOKABLE int nextCellRow(int modelRow, cwSurveyChunk::DataRole role, NavigationKey key) const`
+- `Q_INVOKABLE int nextCellRole(int modelRow, cwSurveyChunk::DataRole role, NavigationKey key) const`
 
-Where `NavigationKey` includes: `Tab`, `BackTab`, `Left`, `Right`, `Up`, `Down`.
+Add explicit row metadata roles to the list model so delegates do not need `cwSurveyEditorRowIndex`:
+- `RowTypeRole`
+- `IndexInChunkRole`
+- `ChunkRole`
+- `IsVirtualRole`
 
-## Navigation Refactor
-### 1. Move behavior to C++
-Implement key navigation rules in `cwSurveyEditorModel` only:
-- all station/shot calibration-mode transitions
-- virtual trailing station/shot transitions
-- chunk boundary transitions
+## QML Migration Scope
+### `DataBox.qml`
+- Replace `editTargetBoxIndex` with `editTargetRow` + `editTargetRole`.
+- Replace selection/focus checks using `isSelectedBox*` with row+role equivalents.
+- Remove `liveBoxIndex()` and all `cwSurveyEditorBoxIndex` usage.
+- Keep visual behavior; only change addressing/navigation calls.
 
-### 2. QML contract
-QML should do:
-- compute current box via model row+role (`boxIndexForRowRole`)
-- call `nextBoxIndex(current, key)`
-- set editor focus to returned index
+### DataBox-derived components
+- Migrate all `DataBox`/`ReadingBox` descendants to row+role-only model calls:
+  - `StationBox.qml`
+  - `StationDistanceBox.qml`
+  - `ShotDistanceDataBox.qml`
+  - `ReadingBox.qml`
+  - `CompassReadBox.qml`
+  - `ClinoReadBox.qml`
+- Remove any `dataValue.rowIndex`/`dataValue.boxIndex` reads from derived components.
+- Keep specialized UI behavior, but route side effects through model row+role APIs:
+  - station auto-name commit in `StationBox.qml`
+  - shot-distance include/exclude toggle in `ShotDistanceDataBox.qml`
 
-QML should not:
-- do row arithmetic (`-1`, `-3`, etc.)
-- infer virtual rows from counts
-- branch on stale `dataValue.rowIndex` for navigation
+### `DrySurveyComponent.qml`
+- Keep only presentational branching by `rowType`.
+- Replace all `navigation.*` lambdas with calls to model-owned navigation API using current row+role.
+- Remove direct row math and `model.boxIndex()/offsetBoxIndex()` chaining.
 
-## Data Commit Path Refactor
-- Keep commits model-driven using `setData(cwSurveyEditorBoxIndex, QVariant)`.
-- Ensure edit commit always targets a model-resolved current box index (resolved at edit start and validated at commit).
-- Define behavior for committing into virtual boxes in C++ only (append/insert semantics).
+### `SurveyEditorFocus.qml`
+- Store `row + role` instead of `cwSurveyEditorBoxIndex`.
+- Provide helpers to set focus only when row/role is valid.
 
-## QML Simplification Plan
-### DataBox.qml
-- Keep one index source for focus identity (prefer model-resolved box index by row+role).
-- Remove virtual-row-specific checks.
-- Remove ad-hoc live/stale fallback logic once model API is complete.
+### Menus and helpers
+- Update `StationMenu.qml`, `ShotMenu.qml`, and any right-click actions to row+role APIs.
 
-### DrySurveyComponent.qml
-- Replace all `navigation.*` row math with model navigation API calls.
-- Remove per-cell virtual handling branches.
+## Type Removal Plan
+### Phase 1: Compatibility APIs
+- Implement row+role APIs by internally resolving to existing index helpers.
+- Keep `cwSurveyEditorBoxIndex` and `cwSurveyEditorRowIndex` in C++ only for transition.
 
-## Phased Implementation
-## Phase 1: Index Types
-- Add `rowKind`/`isVirtual` metadata in `cwSurveyEditorRowIndex` and `cwSurveyEditorBoxIndex`.
-- Update QVariant/QML registration and equality/hash behavior.
-- Update serialization/debug helpers if present.
+### Phase 2: QML Cutover
+- Migrate `DataBox.qml`, `DrySurveyComponent.qml`, `SurveyEditorFocus.qml`, and menus to row+role only.
+- Remove QML type dependencies on `cwSurveyEditorBoxIndex`/`cwSurveyEditorRowIndex`.
 
-## Phase 2: Model Resolution
-- Centralize virtual-row creation and mapping logic in model helpers.
-- Make `toRowIndex`, `toModelRow`, `boxIndexForRowRole` preserve virtual metadata.
-- Add tests for row/box mapping invariants (real + virtual).
+### Phase 3: Public API Cleanup
+- Remove/deprecate public `Q_INVOKABLE` methods that take index structs.
+- Stop exposing `RowIndexRole` and index-struct properties from `cwSurveyEditorBoxData`.
 
-## Phase 3: Navigation API
-- Implement `nextBoxIndex(current, key)` with full station/shot + calibration + chunk rules.
-- Add unit tests for edge cases:
-  - trailing virtual station -> expected shot
-  - trailing virtual shot -> expected station
-  - first/last row boundaries
-  - chunk transitions
+### Phase 4: Delete Types
+- Delete `cwSurveyEditorBoxIndex.*` and `cwSurveyEditorRowIndex.*` only after:
+  - no call sites remain in `cavewherelib/qml`
+  - no tests depend on these QML value types
+  - no `Q_PROPERTY`/`Q_INVOKABLE` signatures require them
 
-## Phase 4: QML Migration
-- Migrate `DataBox.qml` and `DrySurveyComponent.qml` to call model navigation API.
-- Remove old row arithmetic and virtual checks.
-- Keep temporary compatibility wrappers only if needed.
-
-## Phase 5: Cleanup
-- Remove `liveBoxIndex()` if fully redundant after migration.
-- Remove any remaining special-case QML navigation logic.
-- Document new contract in code comments near model API.
+## Code Areas Affected
+- `cavewherelib/src/cwSurveyEditorModel.h/.cpp`
+- `cavewherelib/src/cwSurveyEditorBoxData.h` (and model data construction)
+- `cavewherelib/qml/DataBox.qml`
+- `cavewherelib/qml/StationBox.qml`
+- `cavewherelib/qml/StationDistanceBox.qml`
+- `cavewherelib/qml/ShotDistanceDataBox.qml`
+- `cavewherelib/qml/ReadingBox.qml`
+- `cavewherelib/qml/CompassReadBox.qml`
+- `cavewherelib/qml/ClinoReadBox.qml`
+- `cavewherelib/qml/DrySurveyComponent.qml`
+- `cavewherelib/qml/SurveyEditorFocus.qml`
+- `cavewherelib/qml/StationMenu.qml`
+- `cavewherelib/qml/ShotMenu.qml`
+- `test-qml/tst_SurveyDataEntry.qml`
+- `test-qml/tst_TripSync.qml`
 
 ## Test Plan
-### C++ tests
-Add/extend tests for:
-- row/box mapping correctness for real and virtual rows
-- `nextBoxIndex` transitions for all keys and boundary conditions
+### C++
+- Add row+role API tests for:
+  - virtual trailing station/shot commit behavior
+  - insert/remove guards at boundaries
+  - row+role validity checks
 
-### QML tests
-Keep/add focused tests in `tst_SurveyDataEntry.qml`:
-- `test_enterSurveyData` (regression guard)
-- `test_tabFromFourthStation_shouldGoToThirdShot` (current bug)
-- new arrow-key virtual-row navigation regression tests
+### QML
+- Update tests that currently assert/construct `rowIndex`/`boxIndex`.
+- Keep regression coverage for:
+  - tab flow across station/shot boundaries
+  - arrow behavior in front/backsight calibration combinations
+  - virtual trailing row transitions
 
-### Acceptance criteria
-- No QML row-offset hacks.
-- Tab and arrow navigation behave consistently across virtual/real rows.
-- Existing survey entry tests pass without per-test hacks.
+### Acceptance Criteria
+- `DataBox` uses only `listViewIndex` and `chunkDataRole` for addressing.
+- All `DataBox`-derived components use row+role APIs only (no `rowIndex`/`boxIndex` value-type dependence).
+- No QML code calls `model.boxIndex(...)` or uses `cwSurveyEditorRowIndex` / `cwSurveyEditorBoxIndex`.
+- No stale index bugs from row insertion/removal during edit/focus transitions.
+- Existing survey entry and trip sync tests pass.
 
 ## Risks and Mitigations
-- Risk: behavior changes in obscure calibration combinations.
-  - Mitigation: enumerate those flows in `nextBoxIndex` tests before removing old QML logic.
-- Risk: transient focus mismatch during model row inserts/removes.
-  - Mitigation: model-owned index normalization and focus updates through box indices, not view rows.
+- Risk: deleting index structs too early breaks many APIs/tests at once.
+  - Mitigation: do row+role API compatibility phase first, then delete.
+- Risk: focus regressions during model row insert/remove.
+  - Mitigation: focus state becomes row+role, always revalidated through model.
+- Risk: behavior drift in calibration-specific navigation.
+  - Mitigation: encode full navigation matrix in model tests before removing old QML logic.
 
 ## Deliverables
-- Updated index structs with explicit virtual metadata.
-- New model navigation API with tests.
-- Simplified QML delegates using model API only.
-- Passing regression tests for tab/arrow navigation around virtual rows.
+- Row+role-first survey editor API in `cwSurveyEditorModel`.
+- QML delegates simplified to renderer/event-forwarder behavior.
+- Removal of index struct usage from QML boundary.
+- Final deletion of `cwSurveyEditorBoxIndex` and `cwSurveyEditorRowIndex` when fully unused.
