@@ -72,7 +72,7 @@ QQ.Loader {
                     text: "and the shot <b>above</b>"
                     enabled: dataValue.chunk !== null
                              && stationMenuLoader.model !== null
-                             && stationMenuLoader.model.canRemoveStationAt(listViewIndex, dataValue.chunkDataRole, SurveyChunk.Above)
+                             && stationMenuLoader.model.canRemoveStationAt(stationMenuLoader.model.cellIndex(listViewIndex, dataValue.chunkDataRole), SurveyChunk.Above)
                     onHighlightedChanged: {
                         if(highlighted) {
                             previewRemoveStation(SurveyChunk.Above)
@@ -82,7 +82,7 @@ QQ.Loader {
                     }
                     onTriggered: {
                         clearRemovePreview()
-                        stationMenuLoader.model.removeStationAt(listViewIndex, dataValue.chunkDataRole, SurveyChunk.Above)
+                        stationMenuLoader.model.removeStationAt(stationMenuLoader.model.cellIndex(listViewIndex, dataValue.chunkDataRole), SurveyChunk.Above)
                     }
                 }
                 QC.MenuItem {
@@ -90,7 +90,7 @@ QQ.Loader {
                     text: "and the shot <b>below</b>"
                     enabled: dataValue.chunk !== null
                              && stationMenuLoader.model !== null
-                             && stationMenuLoader.model.canRemoveStationAt(listViewIndex, dataValue.chunkDataRole, SurveyChunk.Below)
+                             && stationMenuLoader.model.canRemoveStationAt(stationMenuLoader.model.cellIndex(listViewIndex, dataValue.chunkDataRole), SurveyChunk.Below)
                     onHighlightedChanged: {
                         if(highlighted) {
                             previewRemoveStation(SurveyChunk.Below)
@@ -100,7 +100,7 @@ QQ.Loader {
                     }
                     onTriggered: {
                         clearRemovePreview()
-                        stationMenuLoader.model.removeStationAt(listViewIndex, dataValue.chunkDataRole, SurveyChunk.Below)
+                        stationMenuLoader.model.removeStationAt(stationMenuLoader.model.cellIndex(listViewIndex, dataValue.chunkDataRole), SurveyChunk.Below)
                     }
                 }
 
@@ -117,9 +117,9 @@ QQ.Loader {
                     text: "Station above"
                     enabled: dataValue.chunk !== null
                              && stationMenuLoader.model !== null
-                             && stationMenuLoader.model.canInsertStationAt(listViewIndex, dataValue.chunkDataRole, SurveyChunk.Above)
+                             && stationMenuLoader.model.canInsertStationAt(stationMenuLoader.model.cellIndex(listViewIndex, dataValue.chunkDataRole), SurveyChunk.Above)
                     onTriggered: {
-                        stationMenuLoader.model.insertStationAt(listViewIndex, dataValue.chunkDataRole, SurveyChunk.Above)
+                        stationMenuLoader.model.insertStationAt(stationMenuLoader.model.cellIndex(listViewIndex, dataValue.chunkDataRole), SurveyChunk.Above)
                     }
                 }
 
@@ -128,9 +128,9 @@ QQ.Loader {
                     text: "Station below"
                     enabled: dataValue.chunk !== null
                              && stationMenuLoader.model !== null
-                             && stationMenuLoader.model.canInsertStationAt(listViewIndex, dataValue.chunkDataRole, SurveyChunk.Below)
+                             && stationMenuLoader.model.canInsertStationAt(stationMenuLoader.model.cellIndex(listViewIndex, dataValue.chunkDataRole), SurveyChunk.Below)
                     onTriggered: {
-                        stationMenuLoader.model.insertStationAt(listViewIndex, dataValue.chunkDataRole, SurveyChunk.Below)
+                        stationMenuLoader.model.insertStationAt(stationMenuLoader.model.cellIndex(listViewIndex, dataValue.chunkDataRole), SurveyChunk.Below)
                     }
                 }
             }

@@ -303,12 +303,9 @@ MainWindowTest {
             let secondChunkVirtualShotRow = editorModel.toModelRow(
                         editorModel.rowIndex(secondChunk, secondChunk.shotCount, SurveyEditorRowIndex.ShotRow))
             verify(secondChunkVirtualShotRow >= 0)
-            let secondChunkVirtualShotBoxIndex = editorModel.boxIndex(
-                        secondChunk,
-                        secondChunk.shotCount,
-                        SurveyEditorRowIndex.ShotRow,
-                        SurveyChunk.ShotDistanceRole)
-            compare(editorModel.shotDistanceIncluded(secondChunkVirtualShotBoxIndex), true)
+            compare(editorModel.shotDistanceIncludedAt(
+                        editorModel.cellIndex(secondChunkVirtualShotRow,
+                                              SurveyChunk.ShotDistanceRole)), true)
 
             waitForRendering(rootId);
 

@@ -74,8 +74,8 @@ DataBox {
                     objectName: "excludeDistanceMenuItem"
                     text: dataBoxId.distanceIncluded ? "Exclude Distance" : "Include Distance"
                     onTriggered: {
-                        dataBoxId.model.setDataAt(dataBoxId.listViewIndex,
-                                                  SurveyChunk.ShotDistanceIncludedRole,
+                        dataBoxId.model.setDataAt(dataBoxId.model.cellIndex(dataBoxId.listViewIndex,
+                                                                            SurveyChunk.ShotDistanceIncludedRole),
                                                   !dataBoxId.distanceIncluded)
                     }
                 }

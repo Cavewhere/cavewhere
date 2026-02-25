@@ -10,7 +10,7 @@ QtObject {
     property int role: -1
 
     function setIndex(newRow, newRole) {
-        if(model.isCellValid(newRow, newRole)) {
+        if(model.isCellValid(model.cellIndex(newRow, newRole))) {
             role = newRole
             row = newRow
         }

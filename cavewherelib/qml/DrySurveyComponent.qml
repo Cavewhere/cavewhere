@@ -84,8 +84,6 @@ Item {
                 removePreview: itemId.removePreview
                 view: itemId.ListView.view
                 dataValidator: stationValidator
-                frontSights: itemId.frontSights
-                backSights: itemId.backSights
             }
 
 
@@ -105,8 +103,6 @@ Item {
                 removePreview: itemId.removePreview
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
-                frontSights: itemId.frontSights
-                backSights: itemId.backSights
             }
 
             StationDistanceBox {
@@ -125,8 +121,6 @@ Item {
                 removePreview: itemId.removePreview
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
-                frontSights: itemId.frontSights
-                backSights: itemId.backSights
             }
 
             StationDistanceBox {
@@ -145,8 +139,6 @@ Item {
                 removePreview: itemId.removePreview
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
-                frontSights: itemId.frontSights
-                backSights: itemId.backSights
             }
 
             StationDistanceBox {
@@ -165,8 +157,6 @@ Item {
                 removePreview: itemId.removePreview
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
-                frontSights: itemId.frontSights
-                backSights: itemId.backSights
             }
         }
 
@@ -193,9 +183,7 @@ Item {
                 removePreview: itemId.removePreview
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
-                frontSights: itemId.frontSights
-                backSights: itemId.backSights
-                distanceIncluded: itemId.model.shotDistanceIncludedAt(itemId.index, SurveyChunk.ShotDistanceRole)
+                distanceIncluded: itemId.model.shotDistanceIncludedAt(itemId.model.cellIndex(itemId.index, SurveyChunk.ShotDistanceRole))
             }
 
             CompassReadBox {
@@ -207,6 +195,7 @@ Item {
                 anchors.top: shotDistanceDataBox.top
                 anchors.topMargin: 0
 
+                visible: itemId.frontSights
                 dataValue: shotCompass
                 listViewIndex: itemId.index
                 errorButtonGroup: itemId.errorButtonGroup
@@ -215,8 +204,6 @@ Item {
                 view: itemId.ListView.view
                 readingText: "fs"
                 dataValidator: compassValidator
-                frontSights: itemId.frontSights
-                backSights: itemId.backSights
             }
 
             CompassReadBox {
@@ -227,6 +214,7 @@ Item {
                 anchors.top: itemId.frontSights ? shotDistanceDataBox.verticalCenter : shotDistanceDataBox.top
                 anchors.topMargin: itemId.frontSights ? -1 : 0
 
+                visible: itemId.backSights
                 dataValue: shotBackCompass
                 listViewIndex: itemId.index
                 errorButtonGroup: itemId.errorButtonGroup
@@ -235,8 +223,6 @@ Item {
                 view: itemId.ListView.view
                 readingText: "bs"
                 dataValidator: compassValidator
-                frontSights: itemId.frontSights
-                backSights: itemId.backSights
             }
 
             ClinoReadBox {
@@ -247,6 +233,7 @@ Item {
                 anchors.topMargin: 0
                 anchors.left: compassFrontReadBox.right
                 anchors.leftMargin: -1
+                visible: itemId.frontSights
 
                 dataValue: shotClino
                 listViewIndex: itemId.index
@@ -256,8 +243,6 @@ Item {
                 view: itemId.ListView.view
                 readingText: "fs"
                 dataValidator: clinoValidator
-                frontSights: itemId.frontSights
-                backSights: itemId.backSights
             }
 
             ClinoReadBox {
@@ -278,8 +263,6 @@ Item {
                 view: itemId.ListView.view
                 readingText: "bs"
                 dataValidator: clinoValidator
-                frontSights: itemId.frontSights
-                backSights: itemId.backSights
             }
 
         }

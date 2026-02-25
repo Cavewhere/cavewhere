@@ -26,7 +26,7 @@ DataBox {
 
     function commitAutoStation() {
         var stationName = dataValue.chunk.guessLastStationName();
-        model.setDataAt(listViewIndex, dataValue.chunkDataRole, stationName)
+        model.setDataAt(model.cellIndex(listViewIndex, dataValue.chunkDataRole), stationName)
     }
 
     onFocusChanged: {

@@ -90,7 +90,8 @@ QQ.Item {
                 if(row < 0 || role < 0) {
                     return
                 }
-                if(!editorModel.isCellValid(row, role)) {
+                let focusedCell = editorModel.cellIndex(row, role)
+                if(!editorModel.isCellValid(focusedCell)) {
                     return
                 }
 

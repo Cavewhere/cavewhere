@@ -48,7 +48,6 @@ QQ.Item {
         }
         return false
     }
-    property KeyNavigationContainer navigation: KeyNavigationContainer {}
 
     //The index informantion from cwSurveyEditorModel
     required property cwSurveyEditorBoxData dataValue
@@ -104,17 +103,12 @@ QQ.Item {
     }
 
     function moveFocus(navKey) {
-        let nextRow = model.nextCellRow(listViewIndex,
-                                        dataValue.chunkDataRole,
-                                        navKey,
-                                        frontSights,
-                                        backSights)
-        let nextRole = model.nextCellRole(listViewIndex,
-                                          dataValue.chunkDataRole,
-                                          navKey,
-                                          frontSights,
-                                          backSights)
-        dataBox.model.setFocusedCell(nextRow, nextRole)
+        let currentCell = model.cellIndex(listViewIndex, dataValue.chunkDataRole)
+        let nextCell = model.nextCell(currentCell,
+                                      navKey,
+                                      frontSights,
+                                      backSights)
+        dataBox.model.setFocusedCell(nextCell)
     }
 
     function handleNextTab() {
@@ -183,7 +177,7 @@ QQ.Item {
             var lastChunk = trip.chunk(lastChunkIndex);
             if(lastChunk.isStationAndShotsEmpty()) {
                 let row = model.modelRowForChunkRole(lastChunk, 0, SurveyChunk.StationNameRole)
-                model.setFocusedCell(row, SurveyChunk.StationNameRole)
+                model.setFocusedCell(model.cellIndex(row, SurveyChunk.StationNameRole))
                 return;
             }
         }
@@ -259,7 +253,7 @@ QQ.Item {
         acceptedButtons: Qt.LeftButton | Qt.RightButton
 
         onClicked: (mouse) => {
-                       dataBox.model.setFocusedCell(dataBox.listViewIndex, dataBox.dataValue.chunkDataRole)
+                       dataBox.model.setFocusedCell(dataBox.model.cellIndex(dataBox.listViewIndex, dataBox.dataValue.chunkDataRole))
                        // dataBox.focus = true
 
                        if(mouse.button === Qt.RightButton) {
@@ -363,7 +357,7 @@ QQ.Item {
             return
         }
         if(focus) {
-            model.setFocusedCell(listViewIndex, dataValue.chunkDataRole)
+            model.setFocusedCell(model.cellIndex(listViewIndex, dataValue.chunkDataRole))
         }
     }
 
@@ -387,7 +381,7 @@ QQ.Item {
         text: dataBox.dataValue.reading.value
 
         onFinishedEditting: (newText) => {
-                                model.setDataAt(dataBox.editTargetRow, dataBox.editTargetRole, newText)
+                                model.setDataAt(model.cellIndex(dataBox.editTargetRow, dataBox.editTargetRole), newText)
                                 dataBox.state = ""; //Go back to the default state
                                 dataBox.forceActiveFocus();
                             }
