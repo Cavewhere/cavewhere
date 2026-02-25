@@ -11,6 +11,7 @@
 //Qt includes
 #include <QAbstractListModel>
 #include <QPointer>
+#include <QPersistentModelIndex>
 #include <QQmlEngine>
 
 /**
@@ -26,13 +27,29 @@ class CAVEWHERE_LIB_EXPORT cwSurveyEditorModel : public QAbstractListModel
     QML_NAMED_ELEMENT(SurveyEditorModel)
 
     Q_PROPERTY(cwTrip* trip READ trip WRITE setTrip NOTIFY tripChanged)
+    Q_PROPERTY(int focusedRow READ focusedRow NOTIFY focusedRowChanged)
+    Q_PROPERTY(int focusedRole READ focusedRole NOTIFY focusedRoleChanged)
 
 public:
     cwSurveyEditorModel();
 
+    enum NavigationKey {
+        Tab,
+        BackTab,
+        Left,
+        Right,
+        Up,
+        Down
+    };
+    Q_ENUM(NavigationKey)
+
     enum Role {
         //The type of role: TitleRow, StationRow, ShotRow
         RowIndexRole,
+        RowTypeRole,
+        IndexInChunkRole,
+        ChunkRole,
+        IsVirtualRole,
 
         //Station Data Roles
         StationNameRole,
@@ -58,20 +75,55 @@ public:
     QVariant data(const QModelIndex &index, int role) const;
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
     Q_INVOKABLE bool setData(const cwSurveyEditorBoxIndex& boxIndex, const QVariant& data);
+    Q_INVOKABLE bool setDataAt(int modelRow, cwSurveyChunk::DataRole dataRole, const QVariant& data);
     Q_INVOKABLE bool shotDistanceIncluded(const cwSurveyEditorBoxIndex& boxIndex) const;
+    Q_INVOKABLE bool shotDistanceIncludedAt(int modelRow, cwSurveyChunk::DataRole dataRole) const;
     Q_INVOKABLE bool canRemoveStation(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction) const;
+    Q_INVOKABLE bool canRemoveStationAt(int modelRow, cwSurveyChunk::DataRole dataRole, cwSurveyChunk::Direction direction) const;
     Q_INVOKABLE bool canRemoveShot(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction) const;
+    Q_INVOKABLE bool canRemoveShotAt(int modelRow, cwSurveyChunk::DataRole dataRole, cwSurveyChunk::Direction direction) const;
     Q_INVOKABLE bool canInsertStation(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction) const;
+    Q_INVOKABLE bool canInsertStationAt(int modelRow, cwSurveyChunk::DataRole dataRole, cwSurveyChunk::Direction direction) const;
     Q_INVOKABLE bool canInsertShot(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction) const;
+    Q_INVOKABLE bool canInsertShotAt(int modelRow, cwSurveyChunk::DataRole dataRole, cwSurveyChunk::Direction direction) const;
     Q_INVOKABLE void removeStation(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction);
+    Q_INVOKABLE void removeStationAt(int modelRow, cwSurveyChunk::DataRole dataRole, cwSurveyChunk::Direction direction);
     Q_INVOKABLE void removeShot(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction);
+    Q_INVOKABLE void removeShotAt(int modelRow, cwSurveyChunk::DataRole dataRole, cwSurveyChunk::Direction direction);
     Q_INVOKABLE void insertStation(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction);
+    Q_INVOKABLE void insertStationAt(int modelRow, cwSurveyChunk::DataRole dataRole, cwSurveyChunk::Direction direction);
     Q_INVOKABLE void insertShot(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction);
+    Q_INVOKABLE void insertShotAt(int modelRow, cwSurveyChunk::DataRole dataRole, cwSurveyChunk::Direction direction);
 
 
     QHash<int, QByteArray> roleNames() const;
 
     Q_INVOKABLE void addShotCalibration(int index);
+
+    Q_INVOKABLE cwSurveyChunk* chunkForRow(int modelRow) const;
+    Q_INVOKABLE bool isCellValid(int modelRow, cwSurveyChunk::DataRole role) const;
+    Q_INVOKABLE int modelRowForChunkRole(cwSurveyChunk* chunk, int indexInChunk, cwSurveyChunk::DataRole role) const;
+    Q_INVOKABLE bool isStationRole(cwSurveyChunk::DataRole role) const;
+    Q_INVOKABLE bool isShotRole(cwSurveyChunk::DataRole role) const;
+    Q_INVOKABLE bool isCellSelected(int selectedRow,
+                                    cwSurveyChunk::DataRole selectedRole,
+                                    int candidateRow,
+                                    cwSurveyChunk::DataRole candidateRole) const;
+    Q_INVOKABLE bool isFocusedCell(int row, cwSurveyChunk::DataRole role) const;
+    int focusedRow() const;
+    int focusedRole() const;
+    Q_INVOKABLE void setFocusedCell(int row, cwSurveyChunk::DataRole role);
+    Q_INVOKABLE void focusOnLastChunk();
+    Q_INVOKABLE int nextCellRow(int modelRow,
+                                cwSurveyChunk::DataRole currentRole,
+                                NavigationKey key,
+                                bool frontSights,
+                                bool backSights) const;
+    Q_INVOKABLE int nextCellRole(int modelRow,
+                                 cwSurveyChunk::DataRole currentRole,
+                                 NavigationKey key,
+                                 bool frontSights,
+                                 bool backSights) const;
 
     Q_INVOKABLE int toModelRow(const cwSurveyEditorRowIndex& rowIndex) const;
     Q_INVOKABLE bool isSelectedBox(const cwSurveyEditorBoxIndex& selectedBoxIndex,
@@ -109,6 +161,10 @@ private:
     QPointer<cwTrip> m_trip; //!<
     QPointer<cwSurveyChunk> m_focusedChunk;
     QPointer<cwSurveyChunk> m_virtualRowsVisibleChunk;
+    QPersistentModelIndex m_focusedRowIndex;
+    cwSurveyChunk::DataRole m_focusedDataRole = static_cast<cwSurveyChunk::DataRole>(-1);
+    int m_lastNotifiedFocusedRow = -1;
+    int m_lastNotifiedFocusedRole = -1;
 
     const int m_titleRowOffset = 1;
 
@@ -131,14 +187,25 @@ private:
     int chunkRowCount(const cwSurveyChunk* chunk) const;
     bool hasVirtualTrailingStationShot(const cwSurveyChunk* chunk) const;
     bool hasVisibleVirtualRows(const cwSurveyChunk* chunk) const;
+    // void removeVisibleVirtualRows(cwSurveyChunk* chunk);
     void syncVirtualRows(cwSurveyChunk* chunk);
+    void connectChunkSignals(cwSurveyChunk* chunk);
+    void disconnectChunkSignals(cwSurveyChunk* chunk);
+    void syncFocusedCellSignals();
     static bool isStationShotEmpty(cwSurveyChunk* chunk, int stationIndex);
     static void trim(cwSurveyChunk* chunk, TrimType trimType);
     static void trim(cwSurveyChunk* chunk);
+    cwSurveyEditorBoxIndex nextCellBoxIndex(int modelRow,
+                                            cwSurveyChunk::DataRole currentRole,
+                                            NavigationKey key,
+                                            bool frontSights,
+                                            bool backSights) const;
 
 
 signals:
     void tripChanged();
+    void focusedRowChanged();
+    void focusedRoleChanged();
 
     //Called when a chunk has been added to the end of the model
     void lastChunkAdded();

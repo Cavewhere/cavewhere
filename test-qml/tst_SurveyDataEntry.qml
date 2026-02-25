@@ -228,17 +228,42 @@ MainWindowTest {
             //make sure the secondChunk chunk doesn't exist before we create it
             verify(trip.chunkCount === 1);
 
-            //Make a new scrap
+            // wait(1000000)
+
+            //Make a new chunk
             keyClick(32, 0) //Space
             verify(firstChunk)
             tryVerify(() => { return trip.chunkCount === 2 });
+            tryVerify(() => {
+                          return editorModel.data(editorModel.index(6, 0), SurveyEditorModel.RowTypeRole) === SurveyEditorRowIndex.TitleRow
+                      })
+            tryVerify(() => {
+                          return editorModel.data(editorModel.index(7, 0), SurveyEditorModel.RowTypeRole) === SurveyEditorRowIndex.StationRow
+                      })
+            tryVerify(() => { return editorModel.focusedRow === 7 })
+            tryVerify(() => { return editorModel.focusedRole === SurveyChunk.StationNameRole })
+            view.positionViewAtIndex(6, ListView.Contain)
+            waitForRendering(rootId)
+            tryVerify(() => { return view.itemAtIndex(6) !== null })
+            compare(ObjectFinder.findObjectByChain(
+                        rootId.mainWindow,
+                        "rootId->tripPage->view->dataBox.6.0"), null)
+            let secondChunkStationRowBox = null
+            tryVerify(() => {
+                          secondChunkStationRowBox = ObjectFinder.findObjectByChain(
+                                      rootId.mainWindow,
+                                      "rootId->tripPage->view->dataBox.7.0")
+                          return secondChunkStationRowBox !== null
+                      })
+            tryVerify(() => { return secondChunkStationRowBox.focus === true })
+            verifySingleDataBoxSelection("after creating second chunk")
 
             //Make sure focus is on the secondChunk
             let secondChunk = trip.chunk(1);
             verify(secondChunk !== null);
             let focusedSecondChunkStation0Row = editorModel.toModelRow(
                         editorModel.rowIndex(secondChunk, 0, SurveyEditorRowIndex.StationRow))
-            verify(focusedSecondChunkStation0Row >= 0)
+            compare(focusedSecondChunkStation0Row, 7)
             let stationBox = ObjectFinder.findObjectByChain(
                         rootId.mainWindow,
                         "rootId->tripPage->view->dataBox." + focusedSecondChunkStation0Row + ".0")
@@ -286,6 +311,8 @@ MainWindowTest {
             compare(editorModel.shotDistanceIncluded(secondChunkVirtualShotBoxIndex), true)
 
             waitForRendering(rootId);
+
+            // wait(1000000)
 
             keyClick(52, 0) //4
             keyClick(16777217, 0) //Tab

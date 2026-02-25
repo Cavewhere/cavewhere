@@ -9,6 +9,7 @@ DataBox {
         id: removeMenuId
         model: stationDistanceBox.model
         dataValue: stationDistanceBox.dataValue
+        listViewIndex: stationDistanceBox.listViewIndex
         removePreview: stationDistanceBox.removePreview
     }
 

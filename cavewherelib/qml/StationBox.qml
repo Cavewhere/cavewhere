@@ -18,14 +18,15 @@ DataBox {
         id: removeMenuId
         model: stationBox.model
         dataValue: stationBox.dataValue
+        listViewIndex: stationBox.listViewIndex
         removePreview: stationBox.removePreview
     }
 
     rightClickMenuLoader: removeMenuId
 
     function commitAutoStation() {
-        var stationName = dataValue.rowIndex.chunk.guessLastStationName();
-        dataValue.rowIndex.chunk.setData(dataValue.chunkDataRole, dataValue.rowIndex.indexInChunk, stationName);
+        var stationName = dataValue.chunk.guessLastStationName();
+        model.setDataAt(listViewIndex, dataValue.chunkDataRole, stationName)
     }
 
     onFocusChanged: {

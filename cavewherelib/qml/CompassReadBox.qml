@@ -15,6 +15,7 @@ ReadingBox {
         id: removeMenuId
         model: compassReadBox.model
         dataValue: compassReadBox.dataValue
+        listViewIndex: compassReadBox.listViewIndex
         removePreview: compassReadBox.removePreview
     }
 

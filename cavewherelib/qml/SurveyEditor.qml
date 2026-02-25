@@ -21,8 +21,6 @@ QQ.Item {
 
     signal collapseClicked();
 
-    property var window: QQ.Window.window
-
     clip: false
 
     width: scrollAreaId.width
@@ -43,7 +41,8 @@ QQ.Item {
         trip: clipArea.currentTrip
 
         onLastChunkAdded: {
-            editorFocusId.focusOnLastChunk()
+            editorModel.focusOnLastChunk()
+            Qt.callLater(() => viewId.syncFocusedCellInView())
         }
     }
 
@@ -85,24 +84,34 @@ QQ.Item {
                 id: clinoValidatorId
             }
 
-            SurveyEditorFocus {
-                id: editorFocusId
-                trip: clipArea.currentTrip
-                view: viewId
-                model: editorModel
+            function syncFocusedCellInView() {
+                let row = editorModel.focusedRow
+                let role = editorModel.focusedRole
+                if(row < 0 || role < 0) {
+                    return
+                }
+                if(!editorModel.isCellValid(row, role)) {
+                    return
+                }
 
-                onBoxIndexChanged: {
-                    editorModel.setFocusedChunk(boxIndex.chunk)
+                editorModel.setFocusedChunk(editorModel.chunkForRow(row))
 
-                    //Move the list view
-                    let listViewIndex = editorModel.toModelRow(boxIndex.rowIndex)
-                    if(boxIndex.rowType === SurveyEditorRowIndex.ShotRow) {
-                        //Since the shot row has a height of zero, this -1 and +1 forces shot to be visible in the list view
-                        view.positionViewAtIndex(listViewIndex - 1, QQ.ListView.Contain)
-                        view.positionViewAtIndex(listViewIndex + 1, QQ.ListView.Contain)
-                    } else {
-                        view.positionViewAtIndex(listViewIndex, QQ.ListView.Contain)
-                    }
+                if(editorModel.isShotRole(role)) {
+                    //Since the shot row has a height of zero, this -1 and +1 forces shot to be visible in the list view
+                    viewId.positionViewAtIndex(row - 1, QQ.ListView.Contain)
+                    viewId.positionViewAtIndex(row + 1, QQ.ListView.Contain)
+                } else {
+                    viewId.positionViewAtIndex(row, QQ.ListView.Contain)
+                }
+            }
+
+            QQ.Connections {
+                target: editorModel
+                function onFocusedRowChanged() {
+                    viewId.syncFocusedCellInView()
+                }
+                function onFocusedRoleChanged() {
+                    viewId.syncFocusedCellInView()
                 }
             }
 
@@ -236,7 +245,6 @@ QQ.Item {
                 distanceValidator: distanceValidatorId
                 compassValidator: compassValidatorId
                 clinoValidator: clinoValidatorId
-                editorFocus: editorFocusId
                 columnTemplate: titleTemplate
             }
 

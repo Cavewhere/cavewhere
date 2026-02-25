@@ -6,12 +6,13 @@ QtObject {
     required property ListView view;
     required property SurveyEditorModel model;
 
-    property cwSurveyEditorBoxIndex boxIndex;
+    property int row: -1
+    property int role: -1
 
-    function setIndex(newBoxIndex) {
-        if(newBoxIndex.chunk && newBoxIndex.indexInChunk >= 0)
-        {
-            boxIndex = newBoxIndex
+    function setIndex(newRow, newRole) {
+        if(model.isCellValid(newRow, newRole)) {
+            role = newRole
+            row = newRow
         }
     }
 
@@ -19,10 +20,8 @@ QtObject {
         let lastChunkIndex = trip.chunkCount - 1
         let lastChunk = trip.chunk(lastChunkIndex);
         if(lastChunk.stationCount > 0) {
-            let lastBoxIndex = model.boxIndex(lastChunk, 0, SurveyEditorRowIndex.StationRow, SurveyChunk.StationNameRole);
-
-            setIndex(lastBoxIndex);
-            boxIndex = lastBoxIndex
+            let lastRow = model.modelRowForChunkRole(lastChunk, 0, SurveyChunk.StationNameRole)
+            setIndex(lastRow, SurveyChunk.StationNameRole)
         }
     }
 }

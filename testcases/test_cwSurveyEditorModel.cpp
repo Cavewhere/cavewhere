@@ -143,6 +143,300 @@ TEST_CASE("cwSurveyEditorModel should reject stale box indices after trip replac
     CHECK(movedBox.chunk() == nullptr);
 }
 
+TEST_CASE("cwSurveyEditorModel row+role APIs mirror box-index APIs",
+          "[cwSurveyEditorModel][row-role-api]")
+{
+    cwTrip trip;
+    trip.addNewChunk();
+    auto* chunk = trip.chunk(0);
+    REQUIRE(chunk != nullptr);
+
+    cwSurveyEditorModel model;
+    model.setTrip(&trip);
+    model.setFocusedChunk(chunk);
+
+    const int stationRow = model.toModelRow(model.rowIndex(chunk, 1, cwSurveyEditorRowIndex::StationRow));
+    const int shotRow = model.toModelRow(model.rowIndex(chunk, 0, cwSurveyEditorRowIndex::ShotRow));
+    REQUIRE(stationRow >= 0);
+    REQUIRE(shotRow >= 0);
+
+    const auto stationBox = model.boxIndexForRowRole(stationRow, cwSurveyChunk::StationNameRole);
+    const auto shotBox = model.boxIndexForRowRole(shotRow, cwSurveyChunk::ShotDistanceRole);
+    REQUIRE(stationBox.chunk() == chunk);
+    REQUIRE(shotBox.chunk() == chunk);
+
+    CHECK(model.setDataAt(stationRow, cwSurveyChunk::StationNameRole, "S1"));
+    CHECK(chunk->station(1).name() == "S1");
+
+    CHECK_FALSE(model.setDataAt(stationRow, cwSurveyChunk::ShotDistanceRole, "bad-role"));
+
+    CHECK(model.shotDistanceIncludedAt(shotRow, cwSurveyChunk::ShotDistanceRole)
+          == model.shotDistanceIncluded(shotBox));
+    CHECK_FALSE(model.shotDistanceIncludedAt(stationRow, cwSurveyChunk::StationNameRole));
+
+    CHECK(model.canInsertStationAt(stationRow, cwSurveyChunk::StationNameRole, cwSurveyChunk::Above)
+          == model.canInsertStation(stationBox, cwSurveyChunk::Above));
+    CHECK(model.canRemoveStationAt(stationRow, cwSurveyChunk::StationNameRole, cwSurveyChunk::Above)
+          == model.canRemoveStation(stationBox, cwSurveyChunk::Above));
+    CHECK(model.canInsertShotAt(shotRow, cwSurveyChunk::ShotDistanceRole, cwSurveyChunk::Above)
+          == model.canInsertShot(shotBox, cwSurveyChunk::Above));
+    CHECK(model.canRemoveShotAt(shotRow, cwSurveyChunk::ShotDistanceRole, cwSurveyChunk::Above)
+          == model.canRemoveShot(shotBox, cwSurveyChunk::Above));
+
+    CHECK_FALSE(model.canInsertStationAt(stationRow, cwSurveyChunk::ShotDistanceRole, cwSurveyChunk::Above));
+    CHECK_FALSE(model.canInsertShotAt(shotRow, cwSurveyChunk::StationNameRole, cwSurveyChunk::Above));
+}
+
+TEST_CASE("cwSurveyEditorModel setDataAt appends from virtual trailing rows",
+          "[cwSurveyEditorModel][row-role-api][virtual]")
+{
+    cwTrip trip;
+    trip.addNewChunk();
+    auto* chunk = trip.chunk(0);
+    REQUIRE(chunk != nullptr);
+
+    cwSurveyEditorModel model;
+    model.setTrip(&trip);
+    model.setFocusedChunk(chunk);
+
+    // Make trailing real station non-empty so virtual station/shot rows are visible.
+    REQUIRE(model.setDataAt(model.toModelRow(model.rowIndex(chunk, 1, cwSurveyEditorRowIndex::StationRow)),
+                            cwSurveyChunk::StationNameRole,
+                            "S1"));
+    REQUIRE(model.toModelRow(model.rowIndex(chunk, chunk->stationCount(), cwSurveyEditorRowIndex::StationRow)) >= 0);
+
+    const int stationsBefore = chunk->stationCount();
+    const int shotsBefore = chunk->shotCount();
+
+    const int virtualStationRow = model.toModelRow(model.rowIndex(chunk,
+                                                                  chunk->stationCount(),
+                                                                  cwSurveyEditorRowIndex::StationRow));
+    REQUIRE(virtualStationRow >= 0);
+    REQUIRE(model.setDataAt(virtualStationRow, cwSurveyChunk::StationNameRole, "S2"));
+
+    CHECK(chunk->stationCount() == stationsBefore + 1);
+    CHECK(chunk->shotCount() == shotsBefore + 1);
+    CHECK(chunk->station(chunk->stationCount() - 1).name() == "S2");
+}
+
+TEST_CASE("cwSurveyEditorModel exposes row metadata roles for real and virtual rows",
+          "[cwSurveyEditorModel][row-role-api][row-metadata]")
+{
+    cwTrip trip;
+    trip.addNewChunk();
+    auto* chunk = trip.chunk(0);
+    REQUIRE(chunk != nullptr);
+
+    cwSurveyEditorModel model;
+    model.setTrip(&trip);
+    model.setFocusedChunk(chunk);
+
+    const int titleRow = model.toModelRow(model.rowIndex(chunk, -1, cwSurveyEditorRowIndex::TitleRow));
+    const int station0Row = model.toModelRow(model.rowIndex(chunk, 0, cwSurveyEditorRowIndex::StationRow));
+    const int shot0Row = model.toModelRow(model.rowIndex(chunk, 0, cwSurveyEditorRowIndex::ShotRow));
+    REQUIRE(titleRow >= 0);
+    REQUIRE(station0Row >= 0);
+    REQUIRE(shot0Row >= 0);
+
+    auto titleIndex = model.index(titleRow, 0);
+    auto station0Index = model.index(station0Row, 0);
+    auto shot0Index = model.index(shot0Row, 0);
+
+    CHECK(titleIndex.data(cwSurveyEditorModel::RowTypeRole).toInt() == cwSurveyEditorRowIndex::TitleRow);
+    CHECK(titleIndex.data(cwSurveyEditorModel::IndexInChunkRole).toInt() == -1);
+    CHECK(titleIndex.data(cwSurveyEditorModel::ChunkRole).value<cwSurveyChunk*>() == chunk);
+    CHECK_FALSE(titleIndex.data(cwSurveyEditorModel::IsVirtualRole).toBool());
+
+    CHECK(station0Index.data(cwSurveyEditorModel::RowTypeRole).toInt() == cwSurveyEditorRowIndex::StationRow);
+    CHECK(station0Index.data(cwSurveyEditorModel::IndexInChunkRole).toInt() == 0);
+    CHECK(station0Index.data(cwSurveyEditorModel::ChunkRole).value<cwSurveyChunk*>() == chunk);
+    CHECK_FALSE(station0Index.data(cwSurveyEditorModel::IsVirtualRole).toBool());
+
+    CHECK(shot0Index.data(cwSurveyEditorModel::RowTypeRole).toInt() == cwSurveyEditorRowIndex::ShotRow);
+    CHECK(shot0Index.data(cwSurveyEditorModel::IndexInChunkRole).toInt() == 0);
+    CHECK(shot0Index.data(cwSurveyEditorModel::ChunkRole).value<cwSurveyChunk*>() == chunk);
+    CHECK_FALSE(shot0Index.data(cwSurveyEditorModel::IsVirtualRole).toBool());
+
+    // Make trailing real station non-empty so virtual trailing rows appear.
+    REQUIRE(model.setDataAt(model.toModelRow(model.rowIndex(chunk, 1, cwSurveyEditorRowIndex::StationRow)),
+                            cwSurveyChunk::StationNameRole,
+                            "S1"));
+
+    const int virtualStationRow = model.toModelRow(model.rowIndex(chunk,
+                                                                  chunk->stationCount(),
+                                                                  cwSurveyEditorRowIndex::StationRow));
+    const int virtualShotRow = model.toModelRow(model.rowIndex(chunk,
+                                                               chunk->shotCount(),
+                                                               cwSurveyEditorRowIndex::ShotRow));
+    REQUIRE(virtualStationRow >= 0);
+    REQUIRE(virtualShotRow >= 0);
+
+    auto virtualStationIndex = model.index(virtualStationRow, 0);
+    auto virtualShotIndex = model.index(virtualShotRow, 0);
+
+    CHECK(virtualStationIndex.data(cwSurveyEditorModel::RowTypeRole).toInt() == cwSurveyEditorRowIndex::StationRow);
+    CHECK(virtualStationIndex.data(cwSurveyEditorModel::IndexInChunkRole).toInt() == chunk->stationCount());
+    CHECK(virtualStationIndex.data(cwSurveyEditorModel::ChunkRole).value<cwSurveyChunk*>() == chunk);
+    CHECK(virtualStationIndex.data(cwSurveyEditorModel::IsVirtualRole).toBool());
+
+    CHECK(virtualShotIndex.data(cwSurveyEditorModel::RowTypeRole).toInt() == cwSurveyEditorRowIndex::ShotRow);
+    CHECK(virtualShotIndex.data(cwSurveyEditorModel::IndexInChunkRole).toInt() == chunk->shotCount());
+    CHECK(virtualShotIndex.data(cwSurveyEditorModel::ChunkRole).value<cwSurveyChunk*>() == chunk);
+    CHECK(virtualShotIndex.data(cwSurveyEditorModel::IsVirtualRole).toBool());
+}
+
+TEST_CASE("cwSurveyEditorModel row+role helpers and nextCell navigation",
+          "[cwSurveyEditorModel][row-role-api][navigation]")
+{
+    cwTrip trip;
+    trip.addNewChunk();
+    auto* chunk = trip.chunk(0);
+    REQUIRE(chunk != nullptr);
+
+    cwSurveyEditorModel model;
+    model.setTrip(&trip);
+    model.setFocusedChunk(chunk);
+
+    const int station1Row = model.modelRowForChunkRole(chunk, 1, cwSurveyChunk::StationNameRole);
+    const int shot0Row = model.modelRowForChunkRole(chunk, 0, cwSurveyChunk::ShotDistanceRole);
+    REQUIRE(station1Row >= 0);
+    REQUIRE(shot0Row >= 0);
+
+    CHECK(model.data(model.index(station1Row, 0), cwSurveyEditorModel::RowTypeRole).toInt()
+          == cwSurveyEditorRowIndex::StationRow);
+    CHECK(model.chunkForRow(station1Row) == chunk);
+    CHECK(model.isCellValid(station1Row, cwSurveyChunk::StationNameRole));
+    CHECK_FALSE(model.isCellValid(station1Row, cwSurveyChunk::ShotDistanceRole));
+
+    CHECK(model.isCellSelected(station1Row,
+                               cwSurveyChunk::StationNameRole,
+                               station1Row,
+                               cwSurveyChunk::StationNameRole));
+    CHECK_FALSE(model.isCellSelected(station1Row,
+                                     cwSurveyChunk::StationNameRole,
+                                     shot0Row,
+                                     cwSurveyChunk::ShotDistanceRole));
+
+    const int tabFromStationRow = model.nextCellRow(station1Row,
+                                                    cwSurveyChunk::StationNameRole,
+                                                    cwSurveyEditorModel::Tab,
+                                                    false,
+                                                    false);
+    const int tabFromStationRole = model.nextCellRole(station1Row,
+                                                      cwSurveyChunk::StationNameRole,
+                                                      cwSurveyEditorModel::Tab,
+                                                      false,
+                                                      false);
+    CHECK(tabFromStationRow == shot0Row);
+    CHECK(tabFromStationRole == cwSurveyChunk::ShotDistanceRole);
+
+    const int backTabFromShotRow = model.nextCellRow(shot0Row,
+                                                     cwSurveyChunk::ShotDistanceRole,
+                                                     cwSurveyEditorModel::BackTab,
+                                                     false,
+                                                     false);
+    const int backTabFromShotRole = model.nextCellRole(shot0Row,
+                                                       cwSurveyChunk::ShotDistanceRole,
+                                                       cwSurveyEditorModel::BackTab,
+                                                       false,
+                                                       false);
+    CHECK(backTabFromShotRow == station1Row);
+    CHECK(backTabFromShotRole == cwSurveyChunk::StationNameRole);
+
+    const int rightFromShotNoFrontRole = model.nextCellRole(shot0Row,
+                                                             cwSurveyChunk::ShotDistanceRole,
+                                                             cwSurveyEditorModel::Right,
+                                                             false,
+                                                             false);
+    CHECK(rightFromShotNoFrontRole == cwSurveyChunk::StationLeftRole);
+
+    const int rightFromShotFrontRole = model.nextCellRole(shot0Row,
+                                                           cwSurveyChunk::ShotDistanceRole,
+                                                           cwSurveyEditorModel::Right,
+                                                           true,
+                                                           false);
+    CHECK(rightFromShotFrontRole == cwSurveyChunk::ShotCompassRole);
+}
+
+TEST_CASE("cwSurveyEditorModel virtual row commit emits coherent row/data signals",
+          "[cwSurveyEditorModel][row-role-api][virtual-signals]")
+{
+    cwTrip trip;
+    trip.addNewChunk();
+    auto* chunk = trip.chunk(0);
+    REQUIRE(chunk != nullptr);
+
+    cwSurveyEditorModel model;
+    model.setTrip(&trip);
+    model.setFocusedChunk(chunk);
+
+    // Make trailing real station/shot non-empty so virtual rows are visible.
+    REQUIRE(model.setDataAt(model.modelRowForChunkRole(chunk, 1, cwSurveyChunk::StationNameRole),
+                            cwSurveyChunk::StationNameRole,
+                            "S1"));
+    const int virtualShotRowBefore = model.modelRowForChunkRole(chunk, chunk->shotCount(), cwSurveyChunk::ShotDistanceRole);
+    REQUIRE(virtualShotRowBefore >= 0);
+
+    QSignalSpy rowsInsertedSpy(&model, &QAbstractItemModel::rowsInserted);
+    QSignalSpy rowsRemovedSpy(&model, &QAbstractItemModel::rowsRemoved);
+    QSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+    rowsInsertedSpy.clear();
+    rowsRemovedSpy.clear();
+    dataChangedSpy.clear();
+
+    const int rowsBefore = model.rowCount();
+    REQUIRE(model.setDataAt(virtualShotRowBefore, cwSurveyChunk::ShotDistanceRole, "30"));
+
+    CHECK(model.rowCount() == rowsBefore + 2);
+    CHECK(rowsRemovedSpy.count() == 0);  // virtual rows are preserved and remapped to real rows
+    CHECK(rowsInsertedSpy.count() >= 1); // trailing virtual station/shot rows inserted
+    CHECK(dataChangedSpy.count() >= 1);
+
+    const int committedShotIndex = chunk->shotCount() - 1;
+    const int committedShotRow = model.modelRowForChunkRole(chunk, committedShotIndex, cwSurveyChunk::ShotDistanceRole);
+    REQUIRE(committedShotRow >= 0);
+    const auto committedShotData = model.data(model.index(committedShotRow, 0), cwSurveyEditorModel::ShotDistanceRole)
+                                       .value<cwSurveyEditorBoxData>();
+    CHECK(committedShotData.reading().value() == "30");
+
+    const int virtualShotRowAfter = model.modelRowForChunkRole(chunk, chunk->shotCount(), cwSurveyChunk::ShotDistanceRole);
+    CHECK(virtualShotRowAfter >= 0);
+}
+
+TEST_CASE("cwSurveyEditorModel focused row tracks persistent row shifts",
+          "[cwSurveyEditorModel][focus][persistent]")
+{
+    cwTrip trip;
+    trip.addNewChunk();
+    trip.addNewChunk();
+
+    auto* firstChunk = trip.chunk(0);
+    auto* secondChunk = trip.chunk(1);
+    REQUIRE(firstChunk != nullptr);
+    REQUIRE(secondChunk != nullptr);
+
+    cwSurveyEditorModel model;
+    model.setTrip(&trip);
+
+    const int secondStation0Row = model.modelRowForChunkRole(secondChunk, 0, cwSurveyChunk::StationNameRole);
+    REQUIRE(secondStation0Row >= 0);
+    model.setFocusedCell(secondStation0Row, cwSurveyChunk::StationNameRole);
+    REQUIRE(model.focusedRow() == secondStation0Row);
+    REQUIRE(model.focusedRole() == static_cast<int>(cwSurveyChunk::StationNameRole));
+
+    QSignalSpy focusedRowSpy(&model, &cwSurveyEditorModel::focusedRowChanged);
+    QSignalSpy focusedRoleSpy(&model, &cwSurveyEditorModel::focusedRoleChanged);
+    focusedRowSpy.clear();
+    focusedRoleSpy.clear();
+
+    firstChunk->insertShot(0, cwSurveyChunk::Below); // Inserts two rows before the focused row.
+
+    CHECK(model.focusedRow() == secondStation0Row + 2);
+    CHECK(model.focusedRole() == static_cast<int>(cwSurveyChunk::StationNameRole));
+    CHECK(focusedRowSpy.count() >= 1);
+    CHECK(focusedRoleSpy.count() == 0);
+}
+
 TEST_CASE("cwSurveyEditorModel trims trailing empty rows when focus changes after insert above",
           "[cwSurveyEditorModel][focus][regression]")
 {

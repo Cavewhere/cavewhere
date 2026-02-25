@@ -15,6 +15,7 @@ ReadingBox {
         id: removeMenuId
         model: clinoReadBox.model
         dataValue: clinoReadBox.dataValue
+        listViewIndex: clinoReadBox.listViewIndex
         removePreview: clinoReadBox.removePreview
     }
 

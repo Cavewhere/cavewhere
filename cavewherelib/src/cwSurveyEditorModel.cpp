@@ -6,9 +6,108 @@
 #include "cwSurveyEditorBoxData.h"
 #include "cwDebug.h"
 
+namespace {
+cwSurveyEditorBoxIndex resolveBoxIndexForRowRole(const cwSurveyEditorModel* model,
+                                                 int modelRow,
+                                                 cwSurveyChunk::DataRole dataRole)
+{
+    if(model == nullptr) {
+        return cwSurveyEditorBoxIndex();
+    }
+    return model->boxIndexForRowRole(modelRow, dataRole);
+}
+}
+
 cwSurveyEditorModel::cwSurveyEditorModel()
 {
+    connect(this, &QAbstractItemModel::rowsInserted, this, [this]() {
+        syncFocusedCellSignals();
+    });
+    connect(this, &QAbstractItemModel::rowsRemoved, this, [this]() {
+        syncFocusedCellSignals();
+    });
+    connect(this, &QAbstractItemModel::modelReset, this, [this]() {
+        syncFocusedCellSignals();
+    });
+}
 
+void cwSurveyEditorModel::disconnectChunkSignals(cwSurveyChunk* chunk)
+{
+    if(chunk == nullptr) {
+        return;
+    }
+    disconnect(chunk, nullptr, this, nullptr);
+}
+
+void cwSurveyEditorModel::connectChunkSignals(cwSurveyChunk* chunk)
+{
+    if(chunk == nullptr) {
+        return;
+    }
+
+    auto emitDataChangedForChunk = [this](cwSurveyChunk* changedChunk, int firstRow) {
+        if(!changedChunk) {
+            return;
+        }
+
+        int baseRow = toModelRow({changedChunk, -1, cwSurveyEditorRowIndex::TitleRow});
+        int lastRow = baseRow + chunkRowCount(changedChunk) - 1;
+        if(firstRow <= lastRow) {
+            emit dataChanged(index(firstRow), index(lastRow));
+        }
+    };
+
+    auto chunkDataChange = [this, chunk](cwSurveyChunk::DataRole role, int chunkIndex) {
+        auto rowType = toRowType(role);
+        auto modelIndex = toModelIndex({chunk, chunkIndex, rowType});
+        if(!modelIndex.isValid()) {
+            syncVirtualRows(chunk);
+            return;
+        }
+        emit dataChanged(modelIndex, modelIndex, {toModelRole(role)});
+        syncVirtualRows(chunk);
+    };
+
+    connect(chunk, &cwSurveyChunk::dataChanged, this, chunkDataChange);
+    connect(chunk, &cwSurveyChunk::errorsChanged, this, chunkDataChange);
+
+    connect(chunk, &cwSurveyChunk::added, this,
+            [this, chunk, emitDataChangedForChunk](int stationBegin, int stationEnd, int shotBegin, int shotEnd) {
+                int first = std::min(toModelRow({chunk, stationBegin, cwSurveyEditorRowIndex::StationRow}),
+                                     toModelRow({chunk, shotBegin, cwSurveyEditorRowIndex::ShotRow}));
+                int last = std::max(toModelRow({chunk, stationEnd, cwSurveyEditorRowIndex::StationRow}),
+                                    toModelRow({chunk, shotEnd, cwSurveyEditorRowIndex::ShotRow}));
+                beginInsertRows(QModelIndex(), first, last);
+                endInsertRows();
+                emitDataChangedForChunk(chunk, last + 1);
+                if(rowCount() > 0 && first >= 0 && first < rowCount()) {
+                    emit dataChanged(index(first), index(rowCount() - 1));
+                }
+            });
+
+    connect(chunk, &cwSurveyChunk::aboutToRemove, this,
+            [this, chunk](int stationBegin, int stationEnd, int shotBegin, int shotEnd) {
+                int first = std::min(toModelRow({chunk, stationBegin, cwSurveyEditorRowIndex::StationRow}),
+                                     toModelRow({chunk, shotBegin, cwSurveyEditorRowIndex::ShotRow}));
+                int last = std::max(toModelRow({chunk, stationEnd, cwSurveyEditorRowIndex::StationRow}),
+                                    toModelRow({chunk, shotEnd, cwSurveyEditorRowIndex::ShotRow}));
+                Q_ASSERT(m_removeToken.chunk == nullptr);
+                m_removeToken = {chunk, first};
+                beginRemoveRows(QModelIndex(), first, last);
+            });
+
+    connect(chunk, &cwSurveyChunk::removed, this,
+            [this, chunk](int, int, int, int) {
+                endRemoveRows();
+                Q_ASSERT(m_removeToken.chunk != nullptr);
+                syncVirtualRows(chunk);
+                if(rowCount() > 0
+                        && m_removeToken.firstIndex >= 0
+                        && m_removeToken.firstIndex < rowCount()) {
+                    emit dataChanged(index(m_removeToken.firstIndex), index(rowCount() - 1));
+                }
+                m_removeToken = {};
+            });
 }
 
 void cwSurveyEditorModel::setTrip(cwTrip* trip) {
@@ -16,15 +115,13 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
         beginResetModel();
         m_focusedChunk = nullptr;
         m_virtualRowsVisibleChunk = nullptr;
-
-        auto disconnectChunk = [this](cwSurveyChunk* chunk) {
-            disconnect(chunk, nullptr, this, nullptr);
-        };
+        m_focusedRowIndex = QPersistentModelIndex();
+        m_focusedDataRole = static_cast<cwSurveyChunk::DataRole>(-1);
 
         if(m_trip) {
             const auto chunks = m_trip->chunks();
             for(auto chunk : chunks) {
-                disconnectChunk(chunk);
+                disconnectChunkSignals(chunk);
             }
             disconnect(m_trip, nullptr, this, nullptr);
         }
@@ -32,77 +129,6 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
         m_trip = trip;
 
         if(m_trip) {
-            auto emitDataChangedForChunk = [this](cwSurveyChunk* chunk, int firstRow) {
-                if(!chunk) {
-                    return;
-                }
-
-                int baseRow = toModelRow({chunk, -1, cwSurveyEditorRowIndex::TitleRow});
-                int lastRow = baseRow + chunkRowCount(chunk) - 1;
-                if(firstRow <= lastRow) {
-                    emit dataChanged(index(firstRow), index(lastRow));
-                }
-            };
-
-            // Lambda to connect signals for a cwSurveyChunk.
-            auto connectChunk = [this, emitDataChangedForChunk](cwSurveyChunk* chunk) {
-                // Data changes in the chunk.
-
-                auto chunkDataChange = [this, chunk](cwSurveyChunk::DataRole role, int chunkIndex) {
-                    auto rowType = toRowType(role);
-                    auto modelIndex = toModelIndex({chunk, chunkIndex, rowType});
-                    if (!modelIndex.isValid()) {
-                        syncVirtualRows(chunk);
-                        return;
-                    }
-                    emit dataChanged(modelIndex, modelIndex, {toModelRole(role)});
-                    syncVirtualRows(chunk);
-                };
-
-                connect(chunk, &cwSurveyChunk::dataChanged, this, chunkDataChange);
-                connect(chunk, &cwSurveyChunk::errorsChanged, this, chunkDataChange);
-
-                // Stations added.
-                connect(chunk, &cwSurveyChunk::added, this,
-                        [this, chunk, emitDataChangedForChunk](int stationBegin, int stationEnd, int shotBegin, int shotEnd) {
-                            int first = std::min(toModelRow({chunk, stationBegin, cwSurveyEditorRowIndex::StationRow} ),
-                                                 toModelRow({chunk, shotBegin, cwSurveyEditorRowIndex::ShotRow}));
-                            int last = std::max(toModelRow({chunk, stationEnd, cwSurveyEditorRowIndex::StationRow}),
-                                                toModelRow({chunk, shotEnd, cwSurveyEditorRowIndex::ShotRow}));
-                            beginInsertRows(QModelIndex(), first, last);
-                            endInsertRows();
-                            emitDataChangedForChunk(chunk, last + 1);
-                            if(rowCount() > 0 && first >= 0 && first < rowCount()) {
-                                emit dataChanged(index(first), index(rowCount() - 1));
-                            }
-                        });
-                // Stations removed.
-                connect(chunk, &cwSurveyChunk::aboutToRemove, this,
-                        [this, chunk](int stationBegin, int stationEnd, int shotBegin, int shotEnd) {
-                            int first = std::min(toModelRow({chunk, stationBegin, cwSurveyEditorRowIndex::StationRow}),
-                                                 toModelRow({chunk, shotBegin, cwSurveyEditorRowIndex::ShotRow}));
-                            int last = std::max(toModelRow({chunk, stationEnd, cwSurveyEditorRowIndex::StationRow}),
-                                                toModelRow({chunk, shotEnd, cwSurveyEditorRowIndex::ShotRow}));
-                            Q_ASSERT(m_removeToken.chunk == nullptr); //Multiple aboutToRemoves called, if this is the case we shuold switch to QHash
-                            m_removeToken = {chunk, first};
-                            beginRemoveRows(QModelIndex(), first, last);
-                });
-
-                connect(chunk, &cwSurveyChunk::removed, this,
-                        [this, chunk](int, int, int, int) {
-                            endRemoveRows();
-                            Q_ASSERT(m_removeToken.chunk != nullptr);
-                            syncVirtualRows(chunk);
-                            if(rowCount() > 0
-                                    && m_removeToken.firstIndex >= 0
-                                    && m_removeToken.firstIndex < rowCount()) {
-                                emit dataChanged(index(m_removeToken.firstIndex), index(rowCount() - 1));
-                            }
-                            m_removeToken = {};
-                        });
-            };
-
-
             struct Range {
                 int begin;
                 int end;
@@ -125,13 +151,13 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
 
             // Map cwTrip chunk-level changes to model row changes
             connect(m_trip, &cwTrip::chunksInserted, this,
-                    [this, connectChunk, modelRowRange](int begin, int end) {
+                    [this, modelRowRange](int begin, int end) {
                         // Calculate the model row where insertion begins.
                         auto modelRange = modelRowRange(begin, end);
 
                         const QList<cwSurveyChunk*> allChunks = m_trip->chunks();
                         for (int i = begin; i <= end && i < allChunks.size(); ++i) {
-                            connectChunk(allChunks.at(i));
+                            connectChunkSignals(allChunks.at(i));
                         }
 
                         beginInsertRows(QModelIndex(), modelRange.begin, modelRange.end);
@@ -142,11 +168,10 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
                             emit lastChunkAdded();
                         }
 
-                        // qDebug() << "chunk inserted editor model:" << begin << end;
                     });
 
             connect(m_trip, &cwTrip::chunksAboutToBeRemoved, this,
-                    [this, disconnectChunk, modelRowRange](int begin, int end) {
+                    [this, modelRowRange](int begin, int end) {
                         auto modelRange = modelRowRange(begin, end);
                         beginRemoveRows(QModelIndex(), modelRange.begin, modelRange.end);
 
@@ -156,23 +181,26 @@ void cwSurveyEditorModel::setTrip(cwTrip* trip) {
                             if(chunk == m_focusedChunk) {
                                 m_virtualRowsVisibleChunk = nullptr;
                             }
-                            disconnectChunk(allChunks.at(i));
+                            disconnectChunkSignals(allChunks.at(i));
                         }
                     });
 
             connect(m_trip, &cwTrip::chunksRemoved, this,
-                    [this, disconnectChunk](int begin, int end) {
+                    [this](int begin, int end) {
+                        Q_UNUSED(begin);
+                        Q_UNUSED(end);
                         endRemoveRows();
                     });
 
             // Connect signals for all existing chunks.
             const auto chunks = m_trip->chunks();
             for (cwSurveyChunk* chunk : chunks) {
-                connectChunk(chunk);
+                connectChunkSignals(chunk);
             }
         }
 
         endResetModel();
+        syncFocusedCellSignals();
 
         emit tripChanged();
     }
@@ -228,17 +256,38 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
         return QVariant::fromValue(rowIndex);
     }
 
-    // switch(role) {
-    // case ChunkRole:
-    //     return QVariant::fromValue(rowIndex.chunk);
-    // case RowTypeRole:
-    //     return rowIndex.type;
-    // case IndexInChunkRole:
-    //     qDebug() << "IndexInChunkRole:" << rowIndex.index << index << role;
-    //     return rowIndex.index;
-    // default:
-    //     break;
-    // }
+    if(role == RowTypeRole) {
+        return static_cast<int>(rowIndex.rowType());
+    }
+
+    if(role == IndexInChunkRole) {
+        return rowIndex.indexInChunk();
+    }
+
+    if(role == ChunkRole) {
+        return QVariant::fromValue(rowIndex.chunk());
+    }
+
+    if(role == IsVirtualRole) {
+        if(rowIndex.chunk() == nullptr) {
+            return false;
+        }
+
+        const bool hasVirtualRows = hasVirtualTrailingStationShot(rowIndex.chunk());
+        if(!hasVirtualRows) {
+            return false;
+        }
+
+        if(rowIndex.rowType() == cwSurveyEditorRowIndex::StationRow) {
+            return rowIndex.indexInChunk() == rowIndex.chunk()->stationCount();
+        }
+
+        if(rowIndex.rowType() == cwSurveyEditorRowIndex::ShotRow) {
+            return rowIndex.indexInChunk() == rowIndex.chunk()->shotCount();
+        }
+
+        return false;
+    }
 
     auto titleData = [index, role](const cwSurveyEditorRowIndex& chunkIndex)->QVariant {
         return QVariant();
@@ -393,12 +442,23 @@ bool cwSurveyEditorModel::setData(const cwSurveyEditorBoxIndex& boxIndex, const 
             return true;
         }
 
+        const int oldRowCount = rowCount();
+        disconnectChunkSignals(chunk);
+
         chunk->appendNewShot();
-        if(isStationVirtual) {
-            indexInChunk = chunk->stationCount() - 1;
-        } else {
-            indexInChunk = chunk->shotCount() - 1;
+        chunk->setData(boxIndex.chunkDataRole(), indexInChunk, data);
+        connectChunkSignals(chunk);
+
+        const auto changedModelIndex = toModelIndex({chunk, indexInChunk, boxIndex.rowType()});
+        if(changedModelIndex.isValid()) {
+            emit dataChanged(changedModelIndex, changedModelIndex, {toModelRole(boxIndex.chunkDataRole())});
         }
+
+        //Adds the next virtual row
+        beginInsertRows(QModelIndex(), oldRowCount, oldRowCount + 1);
+        endInsertRows();
+
+        return true;
     }
 
     if(indexInChunk < 0) {
@@ -419,8 +479,14 @@ bool cwSurveyEditorModel::setData(const cwSurveyEditorBoxIndex& boxIndex, const 
     if(chunk == m_focusedChunk) {
         trim(chunk, FullTrim);
     }
+    syncVirtualRows(chunk);
 
     return true;
+}
+
+bool cwSurveyEditorModel::setDataAt(int modelRow, cwSurveyChunk::DataRole dataRole, const QVariant& data)
+{
+    return setData(resolveBoxIndexForRowRole(this, modelRow, dataRole), data);
 }
 
 bool cwSurveyEditorModel::shotDistanceIncluded(const cwSurveyEditorBoxIndex& boxIndex) const
@@ -450,6 +516,11 @@ bool cwSurveyEditorModel::shotDistanceIncluded(const cwSurveyEditorBoxIndex& box
     return chunk->data(cwSurveyChunk::ShotDistanceIncludedRole, indexInChunk).toBool();
 }
 
+bool cwSurveyEditorModel::shotDistanceIncludedAt(int modelRow, cwSurveyChunk::DataRole dataRole) const
+{
+    return shotDistanceIncluded(resolveBoxIndexForRowRole(this, modelRow, dataRole));
+}
+
 bool cwSurveyEditorModel::canRemoveStation(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction) const
 {
     cwSurveyChunk* chunk = boxIndex.chunk();
@@ -469,6 +540,13 @@ bool cwSurveyEditorModel::canRemoveStation(const cwSurveyEditorBoxIndex& boxInde
     return chunk->canRemoveStation(indexInChunk, direction);
 }
 
+bool cwSurveyEditorModel::canRemoveStationAt(int modelRow,
+                                             cwSurveyChunk::DataRole dataRole,
+                                             cwSurveyChunk::Direction direction) const
+{
+    return canRemoveStation(resolveBoxIndexForRowRole(this, modelRow, dataRole), direction);
+}
+
 bool cwSurveyEditorModel::canRemoveShot(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction) const
 {
     cwSurveyChunk* chunk = boxIndex.chunk();
@@ -486,6 +564,13 @@ bool cwSurveyEditorModel::canRemoveShot(const cwSurveyEditorBoxIndex& boxIndex, 
     }
 
     return chunk->canRemoveShot(indexInChunk, direction);
+}
+
+bool cwSurveyEditorModel::canRemoveShotAt(int modelRow,
+                                          cwSurveyChunk::DataRole dataRole,
+                                          cwSurveyChunk::Direction direction) const
+{
+    return canRemoveShot(resolveBoxIndexForRowRole(this, modelRow, dataRole), direction);
 }
 
 bool cwSurveyEditorModel::canInsertStation(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction) const
@@ -520,6 +605,13 @@ bool cwSurveyEditorModel::canInsertStation(const cwSurveyEditorBoxIndex& boxInde
     return true;
 }
 
+bool cwSurveyEditorModel::canInsertStationAt(int modelRow,
+                                             cwSurveyChunk::DataRole dataRole,
+                                             cwSurveyChunk::Direction direction) const
+{
+    return canInsertStation(resolveBoxIndexForRowRole(this, modelRow, dataRole), direction);
+}
+
 bool cwSurveyEditorModel::canInsertShot(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction) const
 {
     cwSurveyChunk* chunk = boxIndex.chunk();
@@ -552,6 +644,13 @@ bool cwSurveyEditorModel::canInsertShot(const cwSurveyEditorBoxIndex& boxIndex, 
     return true;
 }
 
+bool cwSurveyEditorModel::canInsertShotAt(int modelRow,
+                                          cwSurveyChunk::DataRole dataRole,
+                                          cwSurveyChunk::Direction direction) const
+{
+    return canInsertShot(resolveBoxIndexForRowRole(this, modelRow, dataRole), direction);
+}
+
 void cwSurveyEditorModel::removeStation(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction)
 {
     cwSurveyChunk* chunk = boxIndex.chunk();
@@ -571,6 +670,13 @@ void cwSurveyEditorModel::removeStation(const cwSurveyEditorBoxIndex& boxIndex, 
     chunk->removeStation(indexInChunk, direction);
 }
 
+void cwSurveyEditorModel::removeStationAt(int modelRow,
+                                          cwSurveyChunk::DataRole dataRole,
+                                          cwSurveyChunk::Direction direction)
+{
+    removeStation(resolveBoxIndexForRowRole(this, modelRow, dataRole), direction);
+}
+
 void cwSurveyEditorModel::removeShot(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction)
 {
     cwSurveyChunk* chunk = boxIndex.chunk();
@@ -588,6 +694,13 @@ void cwSurveyEditorModel::removeShot(const cwSurveyEditorBoxIndex& boxIndex, cwS
     }
 
     chunk->removeShot(indexInChunk, direction);
+}
+
+void cwSurveyEditorModel::removeShotAt(int modelRow,
+                                       cwSurveyChunk::DataRole dataRole,
+                                       cwSurveyChunk::Direction direction)
+{
+    removeShot(resolveBoxIndexForRowRole(this, modelRow, dataRole), direction);
 }
 
 void cwSurveyEditorModel::insertStation(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction)
@@ -614,6 +727,13 @@ void cwSurveyEditorModel::insertStation(const cwSurveyEditorBoxIndex& boxIndex, 
     chunk->insertStation(indexInChunk, direction);
 }
 
+void cwSurveyEditorModel::insertStationAt(int modelRow,
+                                          cwSurveyChunk::DataRole dataRole,
+                                          cwSurveyChunk::Direction direction)
+{
+    insertStation(resolveBoxIndexForRowRole(this, modelRow, dataRole), direction);
+}
+
 void cwSurveyEditorModel::insertShot(const cwSurveyEditorBoxIndex& boxIndex, cwSurveyChunk::Direction direction)
 {
     if(!canInsertShot(boxIndex, direction)) {
@@ -638,6 +758,13 @@ void cwSurveyEditorModel::insertShot(const cwSurveyEditorBoxIndex& boxIndex, cwS
     chunk->insertShot(indexInChunk, direction);
 }
 
+void cwSurveyEditorModel::insertShotAt(int modelRow,
+                                       cwSurveyChunk::DataRole dataRole,
+                                       cwSurveyChunk::Direction direction)
+{
+    insertShot(resolveBoxIndexForRowRole(this, modelRow, dataRole), direction);
+}
+
 /**
  * @brief cwSurveyEditorModel::roleNames
  * @return
@@ -646,6 +773,10 @@ QHash<int, QByteArray> cwSurveyEditorModel::roleNames() const
 {
     QHash<int, QByteArray> roles;
     roles.insert(RowIndexRole, "rowIndex");
+    roles.insert(RowTypeRole, "rowType");
+    roles.insert(IndexInChunkRole, "indexInChunk");
+    roles.insert(ChunkRole, "chunk");
+    roles.insert(IsVirtualRole, "isVirtual");
     roles.insert(StationNameRole, "stationName");
     roles.insert(StationLeftRole, "stationLeft");
     roles.insert(StationRightRole, "stationRight");
@@ -680,6 +811,409 @@ void cwSurveyEditorModel::addShotCalibration(int index)
 
     //     emit dataChanged(dataChangeIndex, dataChangeIndex, QVector<int>() << ShotCalibrationRole);
     // }
+}
+
+cwSurveyChunk* cwSurveyEditorModel::chunkForRow(int modelRow) const
+{
+    if(m_trip.isNull() || modelRow < 0 || modelRow >= rowCount()) {
+        return nullptr;
+    }
+    return toRowIndex(modelRow).chunk();
+}
+
+bool cwSurveyEditorModel::isCellValid(int modelRow, cwSurveyChunk::DataRole role) const
+{
+    return boxIndexForRowRole(modelRow, role).chunk() != nullptr;
+}
+
+int cwSurveyEditorModel::modelRowForChunkRole(cwSurveyChunk* chunk, int indexInChunk, cwSurveyChunk::DataRole role) const
+{
+    if(chunk == nullptr || m_trip.isNull() || !m_trip->chunks().contains(chunk)) {
+        return -1;
+    }
+    return toModelRow(cwSurveyEditorRowIndex(chunk, indexInChunk, toRowType(role)));
+}
+
+bool cwSurveyEditorModel::isStationRole(cwSurveyChunk::DataRole role) const
+{
+    return toRowType(role) == cwSurveyEditorRowIndex::StationRow;
+}
+
+bool cwSurveyEditorModel::isShotRole(cwSurveyChunk::DataRole role) const
+{
+    return toRowType(role) == cwSurveyEditorRowIndex::ShotRow;
+}
+
+bool cwSurveyEditorModel::isCellSelected(int selectedRow,
+                                         cwSurveyChunk::DataRole selectedRole,
+                                         int candidateRow,
+                                         cwSurveyChunk::DataRole candidateRole) const
+{
+    const auto selected = boxIndexForRowRole(selectedRow, selectedRole);
+    const auto candidate = boxIndexForRowRole(candidateRow, candidateRole);
+    return isSelectedBox(selected, candidate);
+}
+
+bool cwSurveyEditorModel::isFocusedCell(int row, cwSurveyChunk::DataRole role) const
+{
+    if(row < 0 || role < 0) {
+        return false;
+    }
+    return focusedRow() == row && focusedRole() == static_cast<int>(role);
+}
+
+int cwSurveyEditorModel::focusedRow() const
+{
+    return m_focusedRowIndex.isValid() ? m_focusedRowIndex.row() : -1;
+}
+
+int cwSurveyEditorModel::focusedRole() const
+{
+    return static_cast<int>(m_focusedDataRole);
+}
+
+void cwSurveyEditorModel::setFocusedCell(int row, cwSurveyChunk::DataRole role)
+{
+    if(!isCellValid(row, role)) {
+        return;
+    }
+
+    m_focusedRowIndex = QPersistentModelIndex(index(row, 0));
+    m_focusedDataRole = role;
+    setFocusedChunk(chunkForRow(row));
+    syncFocusedCellSignals();
+
+    emit dataChanged(index(0), index(rowCount()));
+}
+
+void cwSurveyEditorModel::focusOnLastChunk()
+{
+    if(m_trip.isNull() || m_trip->chunkCount() <= 0) {
+        return;
+    }
+
+    auto* lastChunk = m_trip->chunk(m_trip->chunkCount() - 1);
+    if(lastChunk == nullptr || lastChunk->stationCount() <= 0) {
+        return;
+    }
+
+    const int row = modelRowForChunkRole(lastChunk, 0, cwSurveyChunk::StationNameRole);
+    setFocusedCell(row, cwSurveyChunk::StationNameRole);
+}
+
+cwSurveyEditorBoxIndex cwSurveyEditorModel::nextCellBoxIndex(int modelRow,
+                                                             cwSurveyChunk::DataRole currentRole,
+                                                             NavigationKey key,
+                                                             bool frontSights,
+                                                             bool backSights) const
+{
+    const auto current = boxIndexForRowRole(modelRow, currentRole);
+    if(current.chunk() == nullptr) {
+        return cwSurveyEditorBoxIndex();
+    }
+
+    cwSurveyChunk* chunk = current.chunk();
+    const int indexInChunk = current.indexInChunk();
+
+    auto makeBox = [&](cwSurveyChunk* targetChunk,
+                       int targetIndexInChunk,
+                       cwSurveyEditorRowIndex::RowType targetRowType,
+                       cwSurveyChunk::DataRole targetRole) {
+        if(targetChunk == nullptr) {
+            return cwSurveyEditorBoxIndex();
+        }
+        return cwSurveyEditorBoxIndex(cwSurveyEditorRowIndex(targetChunk, targetIndexInChunk, targetRowType), targetRole);
+    };
+
+    auto makeCurrentRowRoleBox = [&](cwSurveyChunk::DataRole targetRole) {
+        return makeBox(chunk, indexInChunk, current.rowType(), targetRole);
+    };
+
+    auto offsetCurrentRowRole = [&](cwSurveyChunk::DataRole targetRole, int offset) {
+        return offsetBoxIndex(makeCurrentRowRoleBox(targetRole), offset);
+    };
+
+    auto stationBox = [&](int stationIndex, cwSurveyChunk::DataRole stationRole, int offset = 0) {
+        return offsetBoxIndex(makeBox(chunk,
+                                      stationIndex,
+                                      cwSurveyEditorRowIndex::StationRow,
+                                      stationRole),
+                              offset);
+    };
+
+    auto shotBox = [&](int shotIndex, cwSurveyChunk::DataRole shotRole, int offset = 0) {
+        return offsetBoxIndex(makeBox(chunk,
+                                      shotIndex,
+                                      cwSurveyEditorRowIndex::ShotRow,
+                                      shotRole),
+                              offset);
+    };
+
+    auto nextLeftFromClino = [&]() {
+        const int stationIndex = indexInChunk == 0 ? indexInChunk : indexInChunk + 1;
+        return stationBox(stationIndex, cwSurveyChunk::StationLeftRole, 0);
+    };
+
+    switch(currentRole) {
+    case cwSurveyChunk::StationNameRole:
+        switch(key) {
+        case Tab:
+            if(indexInChunk == 0) {
+                return offsetCurrentRowRole(cwSurveyChunk::StationNameRole, 1);
+            }
+            return shotBox(indexInChunk - 1, cwSurveyChunk::ShotDistanceRole, 0);
+        case BackTab:
+        case Left:
+            if(key == Left) {
+                return cwSurveyEditorBoxIndex();
+            }
+            if(indexInChunk == 1) {
+                return offsetCurrentRowRole(cwSurveyChunk::StationNameRole, -1);
+            }
+            return offsetCurrentRowRole(cwSurveyChunk::StationDownRole, -1);
+        case Right: {
+            const int shotOffset = indexInChunk == 0 ? 0 : -1;
+            return shotBox(indexInChunk + shotOffset, cwSurveyChunk::ShotDistanceRole, 0);
+        }
+        case Down:
+            return offsetCurrentRowRole(cwSurveyChunk::StationNameRole, 1);
+        case Up:
+            return offsetCurrentRowRole(cwSurveyChunk::StationNameRole, -1);
+        }
+        break;
+    case cwSurveyChunk::StationLeftRole:
+        switch(key) {
+        case Tab:
+        case Right:
+            return offsetCurrentRowRole(cwSurveyChunk::StationRightRole, 0);
+        case BackTab:
+        case Left:
+            if(indexInChunk == 1) {
+                return offsetCurrentRowRole(cwSurveyChunk::StationDownRole, -1);
+            } else {
+                const int shotOffset = indexInChunk == 0 ? 0 : -1;
+                if(backSights) {
+                    return shotBox(indexInChunk + shotOffset, cwSurveyChunk::ShotBackClinoRole, 0);
+                } else if(frontSights) {
+                    return shotBox(indexInChunk + shotOffset, cwSurveyChunk::ShotClinoRole, 0);
+                }
+                return shotBox(indexInChunk + shotOffset, cwSurveyChunk::ShotDistanceRole, 0);
+            }
+        case Down:
+            return offsetCurrentRowRole(cwSurveyChunk::StationLeftRole, 1);
+        case Up:
+            return offsetCurrentRowRole(cwSurveyChunk::StationLeftRole, -1);
+        }
+        break;
+    case cwSurveyChunk::StationRightRole:
+        switch(key) {
+        case Tab:
+        case Right:
+            return offsetCurrentRowRole(cwSurveyChunk::StationUpRole, 0);
+        case BackTab:
+        case Left:
+            return offsetCurrentRowRole(cwSurveyChunk::StationLeftRole, 0);
+        case Down:
+            return offsetCurrentRowRole(cwSurveyChunk::StationRightRole, 1);
+        case Up:
+            return offsetCurrentRowRole(cwSurveyChunk::StationRightRole, -1);
+        }
+        break;
+    case cwSurveyChunk::StationUpRole:
+        switch(key) {
+        case Tab:
+        case Right:
+            return offsetCurrentRowRole(cwSurveyChunk::StationDownRole, 0);
+        case BackTab:
+        case Left:
+            return offsetCurrentRowRole(cwSurveyChunk::StationRightRole, 0);
+        case Down:
+            return offsetCurrentRowRole(cwSurveyChunk::StationUpRole, 1);
+        case Up:
+            return offsetCurrentRowRole(cwSurveyChunk::StationUpRole, -1);
+        }
+        break;
+    case cwSurveyChunk::StationDownRole:
+        switch(key) {
+        case Tab:
+            if(indexInChunk == 0) {
+                return offsetCurrentRowRole(cwSurveyChunk::StationLeftRole, 1);
+            }
+            return offsetCurrentRowRole(cwSurveyChunk::StationNameRole, 1);
+        case BackTab:
+        case Left:
+            return offsetCurrentRowRole(cwSurveyChunk::StationUpRole, 0);
+        case Right:
+            return cwSurveyEditorBoxIndex();
+        case Down:
+            return offsetCurrentRowRole(cwSurveyChunk::StationDownRole, 1);
+        case Up:
+            return offsetCurrentRowRole(cwSurveyChunk::StationDownRole, -1);
+        }
+        break;
+    case cwSurveyChunk::ShotDistanceRole:
+        switch(key) {
+        case Tab:
+        case Right:
+            if(frontSights) {
+                return offsetCurrentRowRole(cwSurveyChunk::ShotCompassRole, 0);
+            } else if(backSights) {
+                return offsetCurrentRowRole(cwSurveyChunk::ShotBackCompassRole, 0);
+            }
+            return stationBox(indexInChunk + 1, cwSurveyChunk::StationLeftRole, 0);
+        case BackTab:
+        case Left:
+            return stationBox(indexInChunk + 1, cwSurveyChunk::StationNameRole, 0);
+        case Down:
+            return offsetCurrentRowRole(cwSurveyChunk::ShotDistanceRole, 1);
+        case Up:
+            return offsetCurrentRowRole(cwSurveyChunk::ShotDistanceRole, -1);
+        }
+        break;
+    case cwSurveyChunk::ShotCompassRole:
+        switch(key) {
+        case Tab:
+            if(backSights) {
+                return offsetCurrentRowRole(cwSurveyChunk::ShotBackCompassRole, 0);
+            } else if(frontSights) {
+                return offsetCurrentRowRole(cwSurveyChunk::ShotClinoRole, 0);
+            }
+            return stationBox(indexInChunk + 1, cwSurveyChunk::StationLeftRole, 0);
+        case BackTab:
+        case Left:
+            return offsetCurrentRowRole(cwSurveyChunk::ShotDistanceRole, 0);
+        case Right:
+            return offsetCurrentRowRole(cwSurveyChunk::ShotClinoRole, 0);
+        case Down:
+            if(backSights) {
+                return offsetCurrentRowRole(cwSurveyChunk::ShotBackCompassRole, 0);
+            }
+            return offsetCurrentRowRole(cwSurveyChunk::ShotCompassRole, 1);
+        case Up:
+            if(backSights) {
+                return offsetCurrentRowRole(cwSurveyChunk::ShotBackCompassRole, -1);
+            }
+            return offsetCurrentRowRole(cwSurveyChunk::ShotCompassRole, -1);
+        }
+        break;
+    case cwSurveyChunk::ShotBackCompassRole:
+        switch(key) {
+        case Tab:
+            if(frontSights) {
+                return offsetCurrentRowRole(cwSurveyChunk::ShotClinoRole, 0);
+            } else if(backSights) {
+                return offsetCurrentRowRole(cwSurveyChunk::ShotBackClinoRole, 0);
+            }
+            return stationBox(indexInChunk + 1, cwSurveyChunk::StationLeftRole, 0);
+        case BackTab:
+            if(frontSights) {
+                return offsetCurrentRowRole(cwSurveyChunk::ShotCompassRole, 0);
+            }
+            return offsetCurrentRowRole(cwSurveyChunk::ShotDistanceRole, 0);
+        case Right:
+            return offsetCurrentRowRole(cwSurveyChunk::ShotBackClinoRole, 0);
+        case Left:
+            return offsetCurrentRowRole(cwSurveyChunk::ShotDistanceRole, 0);
+        case Down:
+            if(frontSights) {
+                return offsetCurrentRowRole(cwSurveyChunk::ShotCompassRole, 1);
+            }
+            return offsetCurrentRowRole(cwSurveyChunk::ShotBackCompassRole, 1);
+        case Up:
+            if(frontSights) {
+                return offsetCurrentRowRole(cwSurveyChunk::ShotCompassRole, 0);
+            }
+            return offsetCurrentRowRole(cwSurveyChunk::ShotBackCompassRole, -1);
+        }
+        break;
+    case cwSurveyChunk::ShotClinoRole:
+        switch(key) {
+        case Tab:
+            if(backSights) {
+                return offsetCurrentRowRole(cwSurveyChunk::ShotBackClinoRole, 0);
+            }
+            return nextLeftFromClino();
+        case BackTab:
+            if(backSights) {
+                return offsetCurrentRowRole(cwSurveyChunk::ShotBackCompassRole, 0);
+            } else if(frontSights) {
+                return offsetCurrentRowRole(cwSurveyChunk::ShotCompassRole, 0);
+            }
+            return offsetCurrentRowRole(cwSurveyChunk::ShotDistanceRole, 0);
+        case Right:
+            return stationBox(indexInChunk + 1, cwSurveyChunk::StationLeftRole, 0);
+        case Left:
+            return offsetCurrentRowRole(cwSurveyChunk::ShotCompassRole, 0);
+        case Down:
+            if(backSights) {
+                return offsetCurrentRowRole(cwSurveyChunk::ShotBackClinoRole, 0);
+            }
+            return offsetCurrentRowRole(cwSurveyChunk::ShotClinoRole, 1);
+        case Up:
+            if(backSights) {
+                return offsetCurrentRowRole(cwSurveyChunk::ShotBackClinoRole, -1);
+            }
+            return offsetCurrentRowRole(cwSurveyChunk::ShotClinoRole, -1);
+        }
+        break;
+    case cwSurveyChunk::ShotBackClinoRole:
+        switch(key) {
+        case Tab:
+            return nextLeftFromClino();
+        case BackTab:
+            if(frontSights) {
+                return offsetCurrentRowRole(cwSurveyChunk::ShotClinoRole, 0);
+            } else if(backSights) {
+                return offsetCurrentRowRole(cwSurveyChunk::ShotBackCompassRole, 0);
+            }
+            return offsetCurrentRowRole(cwSurveyChunk::ShotDistanceRole, 0);
+        case Right:
+            return stationBox(indexInChunk + 1, cwSurveyChunk::StationLeftRole, 0);
+        case Left:
+            return offsetCurrentRowRole(cwSurveyChunk::ShotBackCompassRole, 0);
+        case Down:
+            if(frontSights) {
+                return offsetCurrentRowRole(cwSurveyChunk::ShotClinoRole, 1);
+            }
+            return offsetCurrentRowRole(cwSurveyChunk::ShotBackClinoRole, 1);
+        case Up:
+            if(frontSights) {
+                return offsetCurrentRowRole(cwSurveyChunk::ShotClinoRole, 0);
+            }
+            return offsetCurrentRowRole(cwSurveyChunk::ShotBackClinoRole, -1);
+        }
+        break;
+    default:
+        break;
+    }
+
+    return cwSurveyEditorBoxIndex();
+}
+
+int cwSurveyEditorModel::nextCellRow(int modelRow,
+                                     cwSurveyChunk::DataRole currentRole,
+                                     NavigationKey key,
+                                     bool frontSights,
+                                     bool backSights) const
+{
+    const auto nextBox = nextCellBoxIndex(modelRow, currentRole, key, frontSights, backSights);
+    if(nextBox.chunk() == nullptr) {
+        return -1;
+    }
+    return toModelRow(nextBox.rowIndex());
+}
+
+int cwSurveyEditorModel::nextCellRole(int modelRow,
+                                      cwSurveyChunk::DataRole currentRole,
+                                      NavigationKey key,
+                                      bool frontSights,
+                                      bool backSights) const
+{
+    const auto nextBox = nextCellBoxIndex(modelRow, currentRole, key, frontSights, backSights);
+    if(nextBox.chunk() == nullptr) {
+        return -1;
+    }
+    return static_cast<int>(nextBox.chunkDataRole());
 }
 
 int cwSurveyEditorModel::toModelRow(const cwSurveyEditorRowIndex &rowIndex) const
@@ -1026,6 +1560,26 @@ bool cwSurveyEditorModel::hasVirtualTrailingStationShot(const cwSurveyChunk* chu
 bool cwSurveyEditorModel::hasVisibleVirtualRows(const cwSurveyChunk* chunk) const
 {
     return chunk != nullptr && chunk == m_virtualRowsVisibleChunk;
+}
+
+void cwSurveyEditorModel::syncFocusedCellSignals()
+{
+    if(!m_focusedRowIndex.isValid()) {
+        m_focusedDataRole = static_cast<cwSurveyChunk::DataRole>(-1);
+    }
+
+    const int row = focusedRow();
+    const int role = focusedRole();
+
+    if(m_lastNotifiedFocusedRow != row) {
+        m_lastNotifiedFocusedRow = row;
+        emit focusedRowChanged();
+    }
+
+    if(m_lastNotifiedFocusedRole != role) {
+        m_lastNotifiedFocusedRole = role;
+        emit focusedRoleChanged();
+    }
 }
 
 void cwSurveyEditorModel::syncVirtualRows(cwSurveyChunk* chunk)
