@@ -553,10 +553,4 @@ QQ.Item {
             }
         }
     ]
-
-    Text {
-        text: listViewIndex + "," + dataValue.chunkDataRole
-        color: "#aaaaaa"
-    }
-
 }

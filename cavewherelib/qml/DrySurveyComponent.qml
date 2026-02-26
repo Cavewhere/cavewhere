@@ -278,9 +278,4 @@ Item {
 
         }
     }
-
-    Text {
-        x: 20
-        text: itemId.rowType + " " + index
-    }
 }
