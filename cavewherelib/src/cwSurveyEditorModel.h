@@ -60,6 +60,7 @@ public:
 
         //Shot Data Roles
         ShotDistanceRole,
+        ShotDistanceIncludedRole,
         ShotCompassRole,
         ShotBackCompassRole,
         ShotClinoRole,

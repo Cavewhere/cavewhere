@@ -355,6 +355,8 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
             switch(role) {
             case ShotDistanceRole:
                 return data(cwSurveyChunk::ShotDistanceRole, [&]() { return cwReading(QString()); });
+            case ShotDistanceIncludedRole:
+                return true;
             case ShotCompassRole:
                 return data(cwSurveyChunk::ShotCompassRole, [&]() { return cwReading(QString()); });
             case ShotBackCompassRole:
@@ -370,6 +372,8 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
         switch(role) {
         case ShotDistanceRole:
             return data(cwSurveyChunk::ShotDistanceRole, [&]() { return chunk->shot(shotIndex).distance(); });
+        case ShotDistanceIncludedRole:
+            return chunk->shot(shotIndex).isDistanceIncluded();
         case ShotCompassRole:
             return data(cwSurveyChunk::ShotCompassRole, [&]() { return chunk->shot(shotIndex).compass(); });
         case ShotBackCompassRole:
@@ -784,6 +788,7 @@ QHash<int, QByteArray> cwSurveyEditorModel::roleNames() const
     roles.insert(StationUpRole, "stationUp");
     roles.insert(StationDownRole, "stationDown");
     roles.insert(ShotDistanceRole, "shotDistance");
+    roles.insert(ShotDistanceIncludedRole, "shotDistanceIncluded");
     roles.insert(ShotCompassRole, "shotCompass");
     roles.insert(ShotBackCompassRole, "shotBackCompass");
     roles.insert(ShotClinoRole, "shotClino");
@@ -1458,7 +1463,7 @@ cwSurveyEditorModel::Role cwSurveyEditorModel::toModelRole(cwSurveyChunk::DataRo
     case cwSurveyChunk::StationDownRole:
         return StationDownRole;
     case cwSurveyChunk::ShotDistanceIncludedRole:
-        //Fallthrought to ShotDistanceRole, this will cause view updates
+        return ShotDistanceIncludedRole;
     case cwSurveyChunk::ShotDistanceRole:
         return ShotDistanceRole;
     case cwSurveyChunk::ShotCompassRole:

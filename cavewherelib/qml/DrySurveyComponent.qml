@@ -34,6 +34,7 @@ Item {
     required property cwSurveyEditorBoxData stationUp;
     required property cwSurveyEditorBoxData stationDown;
     required property cwSurveyEditorBoxData shotDistance;
+    required property bool shotDistanceIncluded;
     required property cwSurveyEditorBoxData shotCompass;
     required property cwSurveyEditorBoxData shotBackCompass;
     required property cwSurveyEditorBoxData shotClino;
@@ -189,7 +190,7 @@ Item {
                 calibration: itemId.calibration
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
-                distanceIncluded: itemId.model.shotDistanceIncludedAt(itemId.model.cellIndex(itemId.index, SurveyChunk.ShotDistanceRole))
+                distanceIncluded: shotDistanceIncluded
             }
 
             CompassReadBox {
