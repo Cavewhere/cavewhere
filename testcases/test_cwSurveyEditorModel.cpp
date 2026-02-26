@@ -1024,11 +1024,14 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
         newChunk->appendNewShot();
 
         spyChecker[&rowsInsertedSpy]++;
+        // appendNewShot() also triggers a model dataChanged range refresh.
+        spyChecker[&dataChangedSpy]++;
         spyChecker.requireSpies();
         REQUIRE(rowsInsertedSpy.last().size() == 3);
         REQUIRE(rowsInsertedSpy.last().at(0) == QModelIndex());
         REQUIRE(rowsInsertedSpy.last().at(1).toInt() == 4);
         REQUIRE(rowsInsertedSpy.last().at(2).toInt() == 5);
+        spyChecker.clearSpyCounts();
 
         CHECK(model.rowCount() == 6); //3 stations + 2 shots + 1 title
         auto idx3 = model.index(4); //New shot
