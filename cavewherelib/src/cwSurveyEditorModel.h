@@ -80,6 +80,7 @@ public:
         return cwSurveyEditorCellIndex(modelRow, dataRole);
     }
     Q_INVOKABLE bool setDataAt(const cwSurveyEditorCellIndex& cell, const QVariant& data);
+    Q_INVOKABLE QString guessStationNameAt(const cwSurveyEditorCellIndex& cell) const;
     Q_INVOKABLE bool shotDistanceIncludedAt(const cwSurveyEditorCellIndex& cell) const;
     Q_INVOKABLE bool canRemoveStationAt(const cwSurveyEditorCellIndex& cell, cwSurveyChunk::Direction direction) const;
     Q_INVOKABLE bool canRemoveShotAt(const cwSurveyEditorCellIndex& cell, cwSurveyChunk::Direction direction) const;

@@ -524,6 +524,64 @@ MainWindowTest {
             enterSurveyData();
         }
 
+        function test_stationNameGuesser_runsOnVirtualThirdStationRow() {
+            addSurvey()
+
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+            verify(view !== null)
+            let editorModel = view.model
+            verify(editorModel !== null)
+
+            let trip = RootData.pageView.currentPageItem.currentTrip as Trip
+            verify(trip !== null)
+            compare(trip.chunkCount, 1)
+            let chunk = trip.chunk(0)
+            verify(chunk !== null)
+
+            function stationRow(indexInChunk) {
+                return editorModel.toModelRow(
+                            editorModel.rowIndex(chunk, indexInChunk, SurveyEditorRowIndex.StationRow))
+            }
+
+            function stationBoxAtRow(row) {
+                view.positionViewAtIndex(row, ListView.Contain)
+                waitForRendering(rootId)
+                let box = ObjectFinder.findObjectByChain(
+                            mainWindow,
+                            "rootId->tripPage->view->dataBox." + row + "." + SurveyChunk.StationNameRole)
+                verify(box !== null)
+                return box
+            }
+
+            let station0Box = stationBoxAtRow(stationRow(0))
+            mouseClick(station0Box)
+            keyClick("a")
+            keyClick(49, 0) //1
+            keyClick(16777220, 0) //Return
+
+            let station1Box = stationBoxAtRow(stationRow(1))
+            mouseClick(station1Box)
+            keyClick("a")
+            keyClick(50, 0) //2
+            keyClick(16777220, 0) //Return
+
+            compare(chunk.data(SurveyChunk.StationNameRole, 0), "a1")
+            compare(chunk.data(SurveyChunk.StationNameRole, 1), "a2")
+            compare(chunk.stationCount, 2)
+
+            let station2Row = stationRow(chunk.stationCount)
+            verify(station2Row >= 0)
+            let station2Box = stationBoxAtRow(station2Row)
+            mouseClick(station2Box)
+
+            // Regression check: focusing virtual station row should trigger the guess UI.
+            tryVerify(() => { return station2Box.focus === true })
+            tryVerify(() => { return station2Box.state === "AutoNameState" })
+            keyClick(16777217, 0) //Tab accepts guess
+
+            tryVerify(() => { return chunk.data(SurveyChunk.StationNameRole, 2) === "a3" })
+        }
+
         function test_enterSurveyData_fiveStationsFourShots_cannotContinueEditing() {
             addSurvey();
 

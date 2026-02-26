@@ -24,8 +24,12 @@ DataBox {
 
     rightClickMenuLoader: removeMenuId
 
+    function guessedStationName() {
+        return model.guessStationNameAt(model.cellIndex(listViewIndex, dataValue.chunkDataRole))
+    }
+
     function commitAutoStation() {
-        var stationName = dataValue.chunk.guessLastStationName();
+        var stationName = guessedStationName();
         model.setDataAt(model.cellIndex(listViewIndex, dataValue.chunkDataRole), stationName)
     }
 
@@ -37,13 +41,17 @@ DataBox {
             if(dataValue.chunk) {
                 var lastStationIndex = dataValue.chunk.stationCount - 1
 
-                //Try to guess for new stations what the next station is
-                //Make sure the station is the last station in the chunk
-                if(lastStationIndex  === dataValue.indexInChunk) {
+                // Try to guess for new stations on the trailing station row.
+                // With virtual rows enabled, that row may be one past the real last station.
+                let isTrailingStationRow =
+                        (lastStationIndex === dataValue.indexInChunk)
+                        || (dataValue.chunk.stationCount === dataValue.indexInChunk)
+                if(isTrailingStationRow) {
 
-                    //Make sure the data is empty
-                    if(dataValue.reading.value === "") {
-                        var guessedstationName = dataValue.chunk.guessLastStationName();
+                    // Make sure the data is empty.
+                    let currentValue = dataValue.reading.value
+                    if(currentValue === "" || currentValue === null || currentValue === undefined) {
+                        var guessedstationName = guessedStationName();
                         if(guessedstationName !== "") {
                             stationName.text = guessedstationName
                             state = "AutoNameState"

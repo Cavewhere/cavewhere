@@ -497,6 +497,62 @@ bool cwSurveyEditorModel::setDataAt(const cwSurveyEditorCellIndex& cell, const Q
     return true;
 }
 
+QString cwSurveyEditorModel::guessStationNameAt(const cwSurveyEditorCellIndex& cell) const
+{
+    if(m_trip.isNull()) {
+        return QString();
+    }
+
+    const int modelRow = cell.modelRow();
+    if(modelRow < 0 || modelRow >= rowCount()) {
+        return QString();
+    }
+
+    if(cell.dataRole() != cwSurveyChunk::StationNameRole) {
+        return QString();
+    }
+
+    const auto rowIndex = toRowIndex(modelRow);
+    cwSurveyChunk* chunk = rowIndex.chunk();
+    if(chunk == nullptr
+            || rowIndex.rowType() != cwSurveyEditorRowIndex::StationRow
+            || !m_trip->chunks().contains(chunk))
+    {
+        return QString();
+    }
+
+    const int stationIndex = rowIndex.indexInChunk();
+    if(stationIndex < 0) {
+        return QString();
+    }
+
+    const bool hasVirtual = hasVisibleVirtualRows(chunk);
+    const bool isVirtualStation = stationIndex == chunk->stationCount() && hasVirtual;
+    const bool isLastRealStation = stationIndex == chunk->stationCount() - 1;
+    if(!isVirtualStation && !isLastRealStation) {
+        return QString();
+    }
+
+    if(!isVirtualStation) {
+        const QString currentName = chunk->data(cwSurveyChunk::StationNameRole, stationIndex).toString();
+        if(!currentName.isEmpty()) {
+            return QString();
+        }
+    }
+
+    QString guessedStationName = chunk->guessLastStationName();
+    if(!guessedStationName.isEmpty()) {
+        return guessedStationName;
+    }
+
+    if(isVirtualStation && stationIndex > 0) {
+        const QString previousStationName = chunk->data(cwSurveyChunk::StationNameRole, stationIndex - 1).toString();
+        guessedStationName = chunk->guessNextStation(previousStationName);
+    }
+
+    return guessedStationName;
+}
+
 bool cwSurveyEditorModel::shotDistanceIncludedAt(const cwSurveyEditorCellIndex& cell) const
 {
     if(m_trip.isNull()) {
