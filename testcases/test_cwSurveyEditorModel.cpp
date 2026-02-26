@@ -339,7 +339,7 @@ TEST_CASE("cwSurveyEditorModel ShotDistance Tab prefers front/back readings then
     const int compass0Row = model.modelRowForChunkRole(chunk, 0, cwSurveyChunk::ShotCompassRole);
     const int compass1Row = model.modelRowForChunkRole(chunk, 1, cwSurveyChunk::ShotCompassRole);
     const int station0Row = model.modelRowForChunkRole(chunk, 0, cwSurveyChunk::StationLeftRole);
-    const int station1Row = model.modelRowForChunkRole(chunk, 0, cwSurveyChunk::StationLeftRole);
+    const int station1Row = model.modelRowForChunkRole(chunk, 1, cwSurveyChunk::StationLeftRole);
     REQUIRE(station0Row >= 0);
     REQUIRE(station1Row >= 0);
     REQUIRE(shot0Row >= 0);

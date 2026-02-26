@@ -24,8 +24,9 @@ QQ.Item {
     required property QC.ButtonGroup errorButtonGroup
     property RemovePreview removePreview: null
     property QQ.Loader rightClickMenuLoader: null
-    property bool frontSights: false
-    property bool backSights: false
+    property TripCalibration calibration: null
+    readonly property bool frontSights: calibration !== null && calibration.frontSights
+    readonly property bool backSights: calibration !== null && calibration.backSights
     readonly property bool removePreviewActive: {
         if(removePreview === null || removePreview.chunk === null) {
             return false

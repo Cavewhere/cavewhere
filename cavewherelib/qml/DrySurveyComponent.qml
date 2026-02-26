@@ -82,6 +82,7 @@ Item {
                 errorButtonGroup: itemId.errorButtonGroup
                 model: itemId.model
                 removePreview: itemId.removePreview
+                calibration: itemId.calibration
                 view: itemId.ListView.view
                 dataValidator: stationValidator
             }
@@ -101,6 +102,7 @@ Item {
 
                 model: itemId.model
                 removePreview: itemId.removePreview
+                calibration: itemId.calibration
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
             }
@@ -119,6 +121,7 @@ Item {
                 errorButtonGroup: itemId.errorButtonGroup
                 model: itemId.model
                 removePreview: itemId.removePreview
+                calibration: itemId.calibration
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
             }
@@ -137,6 +140,7 @@ Item {
                 errorButtonGroup: itemId.errorButtonGroup
                 model: itemId.model
                 removePreview: itemId.removePreview
+                calibration: itemId.calibration
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
             }
@@ -155,6 +159,7 @@ Item {
                 errorButtonGroup: itemId.errorButtonGroup
                 model: itemId.model
                 removePreview: itemId.removePreview
+                calibration: itemId.calibration
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
             }
@@ -181,6 +186,7 @@ Item {
                 errorButtonGroup: itemId.errorButtonGroup
                 model: itemId.model
                 removePreview: itemId.removePreview
+                calibration: itemId.calibration
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
                 distanceIncluded: itemId.model.shotDistanceIncludedAt(itemId.model.cellIndex(itemId.index, SurveyChunk.ShotDistanceRole))
@@ -201,6 +207,7 @@ Item {
                 errorButtonGroup: itemId.errorButtonGroup
                 model: itemId.model
                 removePreview: itemId.removePreview
+                calibration: itemId.calibration
                 view: itemId.ListView.view
                 readingText: "fs"
                 dataValidator: compassValidator
@@ -220,6 +227,7 @@ Item {
                 errorButtonGroup: itemId.errorButtonGroup
                 model: itemId.model
                 removePreview: itemId.removePreview
+                calibration: itemId.calibration
                 view: itemId.ListView.view
                 readingText: "bs"
                 dataValidator: compassValidator
@@ -240,6 +248,7 @@ Item {
                 errorButtonGroup: itemId.errorButtonGroup
                 model: itemId.model
                 removePreview: itemId.removePreview
+                calibration: itemId.calibration
                 view: itemId.ListView.view
                 readingText: "fs"
                 dataValidator: clinoValidator
@@ -260,6 +269,7 @@ Item {
                 errorButtonGroup: itemId.errorButtonGroup
                 model: itemId.model
                 removePreview: itemId.removePreview
+                calibration: itemId.calibration
                 view: itemId.ListView.view
                 readingText: "bs"
                 dataValidator: clinoValidator

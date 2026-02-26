@@ -105,6 +105,7 @@ public:
     int focusedRow() const;
     int focusedRole() const;
     Q_INVOKABLE void setFocusedCell(const cwSurveyEditorCellIndex& cell);
+    Q_INVOKABLE void dumpModel();
     Q_INVOKABLE void focusOnLastChunk();
     Q_INVOKABLE cwSurveyEditorCellIndex nextCell(const cwSurveyEditorCellIndex& currentCell,
                                                  NavigationKey key,

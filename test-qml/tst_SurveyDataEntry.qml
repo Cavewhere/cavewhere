@@ -406,15 +406,33 @@ MainWindowTest {
                                key,
                                modifier)
             {
+                if(currentItem !== null
+                        && currentItem !== undefined
+                        && currentItem.model !== undefined
+                        && currentItem.dataValue !== undefined)
+                {
+                    currentItem.model.setFocusedCell(
+                                currentItem.model.cellIndex(currentItem.listViewIndex,
+                                                            currentItem.dataValue.chunkDataRole))
+                }
 
                 keyClick(key, modifier)
 
                 let itemName = "rootId->tripPage->view->dataBox." + index + "." + nextRole
-                let item = ObjectFinder.findObjectByChain(mainWindow, itemName)
+                let item = null
+                let focusedName = ""
+                tryVerify(() => {
+                              item = ObjectFinder.findObjectByChain(mainWindow, itemName)
+                              focusedName = focusedDataBoxObjectName()
+                              return item !== null || focusedName.length > 0
+                          })
 
-                verify(item !== null);
+                if(item === null && focusedName.length > 0) {
+                    item = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->" + focusedName)
+                }
+                verify(item !== null)
 
-                let focusedName = focusedDataBoxObjectName()
+                focusedName = focusedDataBoxObjectName()
                 if(focusedName.length > 0) {
                     let focusedItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->" + focusedName)
                     if(focusedItem !== null) {
@@ -448,11 +466,20 @@ MainWindowTest {
 
                 let row = model.toModelRow(nextBoxIndex.rowIndex)
                 let itemName = "rootId->tripPage->view->dataBox." + row + "." + nextBoxIndex.chunkDataRole
-                let item = ObjectFinder.findObjectByChain(mainWindow, itemName)
+                let item = null
+                let focusedName = ""
+                tryVerify(() => {
+                              item = ObjectFinder.findObjectByChain(mainWindow, itemName)
+                              focusedName = focusedDataBoxObjectName()
+                              return item !== null || focusedName.length > 0
+                          })
 
-                verify(item !== null);
+                if(item === null && focusedName.length > 0) {
+                    item = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->" + focusedName)
+                }
+                verify(item !== null)
 
-                let focusedName = focusedDataBoxObjectName()
+                focusedName = focusedDataBoxObjectName()
                 if(focusedName.length > 0) {
                     let focusedItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->" + focusedName)
                     if(focusedItem !== null) {
@@ -1707,6 +1734,253 @@ MainWindowTest {
                         editorModel.rowIndex(secondChunk, secondChunk.shotCount + 1, SurveyEditorRowIndex.ShotRow)), -1)
         }
 
+        function test_stationNameArrowSwitchesFocusedChunkVirtualRows() {
+            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+            RootData.futureManagerModel.waitForFinished();
+
+            let cave = RootData.region.cave(0)
+            verify(cave !== null)
+            let tripFromRegion = cave.trip(0)
+            verify(tripFromRegion !== null)
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + cave.name + "/Trip=" + tripFromRegion.name
+            tryVerify(() => { return RootData.pageView.currentPageItem.objectName === "tripPage" })
+
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+            verify(view !== null)
+            let editorModel = view.model
+            verify(editorModel !== null)
+
+            let trip = RootData.pageView.currentPageItem.currentTrip as Trip
+            verify(trip !== null)
+            verify(trip.chunkCount >= 2)
+
+            wait(1);
+
+            let chunks = []
+            let initialRealEmptyTail = []
+            for(let i = 0; i < trip.chunkCount; ++i) {
+                let chunk = trip.chunk(i)
+                verify(chunk !== null)
+                chunks.push(chunk)
+                initialRealEmptyTail.push(false)
+            }
+
+            function clickStationName(row) {
+                view.positionViewAtIndex(row, ListView.Contain)
+                // waitForRendering(rootId)
+                        wait(1);
+                let cell = null
+                tryVerify(() => {
+                              cell = ObjectFinder.findObjectByChain(
+                                          mainWindow,
+                                          "rootId->tripPage->view->dataBox." + row + "." + SurveyChunk.StationNameRole)
+                              return cell !== null
+                          })
+                mouseClick(cell)
+                tryVerify(() => { return editorModel.focusedRow === row
+                                      && editorModel.focusedRole === SurveyChunk.StationNameRole })
+            }
+
+            function focusedChunkAndType() {
+                let focusedRow = editorModel.focusedRow
+                verify(focusedRow >= 0)
+                let rowIndex = editorModel.data(editorModel.index(focusedRow, 0), SurveyEditorModel.RowIndexRole)
+                return rowIndex
+            }
+
+            function chunkIndexOf(chunk) {
+                for(let i = 0; i < chunks.length; ++i) {
+                    if(chunks[i] === chunk) {
+                        return i
+                    }
+                }
+                return -1
+            }
+
+            function keyName(key) {
+                if(key === Qt.Key_Down) {
+                    return "Down"
+                } else if(key === Qt.Key_Up) {
+                    return "Up"
+                }
+                return "" + key
+            }
+
+            function shotValue(data) {
+                if(data !== null && data !== undefined && data.value !== undefined) {
+                    return data.value
+                }
+                return data
+            }
+
+            function isEmptyValue(value) {
+                return value === "" || value === null || value === undefined
+            }
+
+            function chunkHasRealEmptyTail(chunk) {
+                if(chunk.stationCount <= 0 || chunk.shotCount <= 0) {
+                    return false
+                }
+
+                let stationIndex = chunk.stationCount - 1
+                let shotIndex = chunk.shotCount - 1
+
+                let stationNameEmpty = isEmptyValue(chunk.data(SurveyChunk.StationNameRole, stationIndex))
+                let shotDistanceEmpty = isEmptyValue(shotValue(chunk.data(SurveyChunk.ShotDistanceRole, shotIndex)))
+                return stationNameEmpty && shotDistanceEmpty
+            }
+
+            function verifyFocusedRowInListView() {
+                let focusedRow = editorModel.focusedRow
+                verify(focusedRow >= 0)
+                view.positionViewAtIndex(focusedRow, ListView.Contain)
+                waitForRendering(rootId)
+                let cell = null
+                tryVerify(() => {
+                              cell = ObjectFinder.findObjectByChain(
+                                          mainWindow,
+                                          "rootId->tripPage->view->dataBox." + focusedRow + "." + SurveyChunk.StationNameRole)
+                              return cell !== null
+                          })
+                verify(cell.visible === true)
+            }
+
+            function modelRoleForChunkRole(chunkRole) {
+                switch(chunkRole) {
+                case SurveyChunk.StationNameRole: return SurveyEditorModel.StationNameRole
+                case SurveyChunk.StationLeftRole: return SurveyEditorModel.StationLeftRole
+                case SurveyChunk.StationRightRole: return SurveyEditorModel.StationRightRole
+                case SurveyChunk.StationUpRole: return SurveyEditorModel.StationUpRole
+                case SurveyChunk.StationDownRole: return SurveyEditorModel.StationDownRole
+                case SurveyChunk.ShotDistanceRole: return SurveyEditorModel.ShotDistanceRole
+                case SurveyChunk.ShotCompassRole: return SurveyEditorModel.ShotCompassRole
+                case SurveyChunk.ShotBackCompassRole: return SurveyEditorModel.ShotBackCompassRole
+                case SurveyChunk.ShotClinoRole: return SurveyEditorModel.ShotClinoRole
+                case SurveyChunk.ShotBackClinoRole: return SurveyEditorModel.ShotBackClinoRole
+                default: return -1
+                }
+            }
+
+            function verifyVisibleDataBoxesMatchModel(tag) {
+                let boxes = []
+                collectDataBoxes(view, boxes)
+                for(let i = 0; i < boxes.length; ++i) {
+                    let box = boxes[i]
+                    if(box === null || box === undefined || box.visible !== true) {
+                        continue
+                    }
+
+                    let row = box.listViewIndex
+                    let chunkRole = box.dataValue.chunkDataRole
+                    let modelRole = modelRoleForChunkRole(chunkRole)
+                    if(modelRole < 0 || row < 0) {
+                        continue
+                    }
+
+                    let modelIndex = editorModel.index(row, 0)
+                    let modelBoxData = editorModel.data(modelIndex, modelRole)
+                    let modelValue = modelBoxData.reading.value
+                    let boxValue = box.dataValue.reading.value
+                    compare(boxValue,
+                            modelValue,
+                            tag + " value mismatch row=" + row + " chunkRole=" + chunkRole)
+                }
+            }
+
+            function verifyOnlyFocusedChunkHasVirtualRows(visibleChunk) {
+                for(let i = 0; i < chunks.length; ++i) {
+                    let chunk = chunks[i]
+                    let virtualStationRow = editorModel.toModelRow(
+                                editorModel.rowIndex(chunk, chunk.stationCount, SurveyEditorRowIndex.StationRow))
+                    let virtualShotRow = editorModel.toModelRow(
+                                editorModel.rowIndex(chunk, chunk.shotCount, SurveyEditorRowIndex.ShotRow))
+
+                    if(chunk === visibleChunk) {
+                        let hasVirtualTail = virtualStationRow >= 0 && virtualShotRow >= 0
+                        let hasRealEmptyTail = initialRealEmptyTail[i] && chunkHasRealEmptyTail(chunk)
+                        verify(hasVirtualTail || hasRealEmptyTail)
+                    } else {
+                        tryVerify(() => {
+                                      return editorModel.toModelRow(
+                                                 editorModel.rowIndex(chunk, chunk.stationCount, SurveyEditorRowIndex.StationRow)) === -1
+                                  })
+                        tryVerify(() => {
+                                      return editorModel.toModelRow(
+                                                 editorModel.rowIndex(chunk, chunk.shotCount, SurveyEditorRowIndex.ShotRow)) === -1
+                                  })
+                        if(!initialRealEmptyTail[i]) {
+                            compare(chunkHasRealEmptyTail(chunk), false)
+                        }
+                    }
+                }
+            }
+
+            function verifyUnfocusedChunksAreClean(focusedChunk, tag) {
+                for(let i = 0; i < chunks.length; ++i) {
+                    let chunk = chunks[i]
+                    if(chunk === focusedChunk) {
+                        continue
+                    }
+
+                    let virtualStationRow = editorModel.toModelRow(
+                                editorModel.rowIndex(chunk, chunk.stationCount, SurveyEditorRowIndex.StationRow))
+                    let virtualShotRow = editorModel.toModelRow(
+                                editorModel.rowIndex(chunk, chunk.shotCount, SurveyEditorRowIndex.ShotRow))
+
+                    compare(virtualStationRow, -1, tag + " chunk[" + i + "] should not have virtual station row")
+                    compare(virtualShotRow, -1, tag + " chunk[" + i + "] should not have virtual shot row")
+
+                    if(!initialRealEmptyTail[i]) {
+                        compare(chunkHasRealEmptyTail(chunk), false, tag + " chunk[" + i + "] should not gain real empty tail")
+                    }
+                }
+            }
+
+            function stepUntilStationChunk(targetChunk, key, maxSteps) {
+                for(let i = 0; i < maxSteps; ++i) {
+                    keyClick(key, 0)
+                            wait(1);
+                    // waitForRendering(rootId)
+                    let rowIndex = focusedChunkAndType()
+                    verifyVisibleDataBoxesMatchModel("step " + i + " key=" + keyName(key))
+                    verifyUnfocusedChunksAreClean(rowIndex.chunk,
+                                                  "step " + i + " key=" + keyName(key))
+                    if(rowIndex.chunk === targetChunk
+                            && rowIndex.rowType === SurveyEditorRowIndex.StationRow)
+                    {
+                        verifyFocusedRowInListView()
+                        return
+                    }
+                }
+                verify(false, "Failed to navigate to target chunk station row")
+            }
+
+            let firstChunk = chunks[0]
+            let firstStation0Row = editorModel.toModelRow(
+                        editorModel.rowIndex(firstChunk, 0, SurveyEditorRowIndex.StationRow))
+            verify(firstStation0Row >= 0)
+            clickStationName(firstStation0Row)
+            for(let i = 0; i < chunks.length; ++i) {
+                initialRealEmptyTail[i] = chunkHasRealEmptyTail(chunks[i])
+            }
+            verifyVisibleDataBoxesMatchModel("initial")
+            verifyFocusedRowInListView()
+            verifyOnlyFocusedChunkHasVirtualRows(firstChunk)
+
+            let maxSteps = editorModel.rowCount() + 10
+            for(let i = 1; i < chunks.length; ++i) {
+                let targetChunk = chunks[i]
+                stepUntilStationChunk(targetChunk, Qt.Key_Down, maxSteps)
+                verifyOnlyFocusedChunkHasVirtualRows(targetChunk)
+            }
+
+            for(let i = chunks.length - 2; i >= 0; --i) {
+                let targetChunk = chunks[i]
+                stepUntilStationChunk(targetChunk, Qt.Key_Up, maxSteps)
+                verifyOnlyFocusedChunkHasVirtualRows(targetChunk)
+            }
+        }
+
         function test_dateChangeShouldWork() {
             addSurvey();
 
@@ -1864,11 +2138,16 @@ MainWindowTest {
                 }
 
                 for(let i = 0; i < maxSteps; i++) {
-                    let nextBoxIndex = currentItem.navigation.arrowDown()
-                    if(nextBoxIndex.chunk === null) {
+                    let currentCell = model.cellIndex(currentItem.listViewIndex,
+                                                      currentItem.dataValue.chunkDataRole)
+                    let nextCell = model.nextCell(currentCell,
+                                                  SurveyEditorModel.Down,
+                                                  frontsight.checked,
+                                                  backsight.checked)
+                    if(!model.isCellValid(nextCell)) {
                         break;
                     }
-                    currentItem = downArrowByBoxIndex(currentItem, nextBoxIndex, model);
+                    currentItem = downArrow(currentItem, nextCell.modelRow, nextCell.dataRole);
                 }
 
                 //Scroll to the top
@@ -1898,11 +2177,16 @@ MainWindowTest {
 
                 let maxSteps = surveyView.count + 10
                 for(let i = 0; i < maxSteps; i++) {
-                    let previousBoxIndex = currentItem.navigation.arrowUp()
-                    if(previousBoxIndex.chunk === null) {
+                    let currentCell = model.cellIndex(currentItem.listViewIndex,
+                                                      currentItem.dataValue.chunkDataRole)
+                    let previousCell = model.nextCell(currentCell,
+                                                      SurveyEditorModel.Up,
+                                                      frontsight.checked,
+                                                      backsight.checked)
+                    if(!model.isCellValid(previousCell)) {
                         break;
                     }
-                    currentItem = upArrowByBoxIndex(currentItem, previousBoxIndex, model);
+                    currentItem = upArrow(currentItem, previousCell.modelRow, previousCell.dataRole);
                 }
             }
 
@@ -1912,11 +2196,12 @@ MainWindowTest {
 
 
                 let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
-                mouseClick(cell)
+                cell.model.setFocusedCell(cell.model.cellIndex(cell.listViewIndex, cell.dataValue.chunkDataRole))
 
                 verify(frontsight.checked === true)
                 verify(backsight.checked === false)
-                verify(cell.focus === true);
+                verify(cell.model.focusedRow === row)
+                verify(cell.model.focusedRole === column)
 
                 direction(cell, row, column);
 
@@ -1944,14 +2229,24 @@ MainWindowTest {
                     wait(50);
 
                     //We need to click twice because, this could change the number of the cells
-                    cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + startColumn)
-                    mouseClick(cell)
-                    cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + startColumn)
-                    mouseClick(cell)
+                    tryVerify(() => {
+                                  cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + startColumn)
+                                  return cell !== null
+                              })
+                    cell.model.setFocusedCell(cell.model.cellIndex(cell.listViewIndex, cell.dataValue.chunkDataRole))
+                    tryVerify(() => {
+                                  cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + startColumn)
+                                  return cell !== null
+                              })
+                    cell.model.setFocusedCell(cell.model.cellIndex(cell.listViewIndex, cell.dataValue.chunkDataRole))
 
-                    verify(cell.focus === true);
+                    let focusedName = focusedDataBoxObjectName()
+                    let focusedItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->" + focusedName)
+                    if(focusedItem !== null) {
+                        cell = focusedItem
+                    }
 
-                    direction(cell, row, startColumn);
+                    direction(cell, cell.listViewIndex, cell.dataValue.chunkDataRole);
 
                     // ----- Enable the backsights only
                     view.positionViewAtBeginning()
@@ -1970,13 +2265,23 @@ MainWindowTest {
                     view.positionViewAtIndex(row + 1, ListView.Contain)
                     wait(50);
 
-                    cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
-                    mouseClick(cell)
-                    cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
-                    mouseClick(cell)
-                    verify(cell.focus === true);
+                    tryVerify(() => {
+                                  cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
+                                  return cell !== null
+                              })
+                    cell.model.setFocusedCell(cell.model.cellIndex(cell.listViewIndex, cell.dataValue.chunkDataRole))
+                    tryVerify(() => {
+                                  cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
+                                  return cell !== null
+                              })
+                    cell.model.setFocusedCell(cell.model.cellIndex(cell.listViewIndex, cell.dataValue.chunkDataRole))
+                    focusedName = focusedDataBoxObjectName()
+                    focusedItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->" + focusedName)
+                    if(focusedItem !== null) {
+                        cell = focusedItem
+                    }
 
-                    direction(cell, row, column);
+                    direction(cell, cell.listViewIndex, cell.dataValue.chunkDataRole);
 
                     view.positionViewAtBeginning()
                     wait(50);
@@ -2005,7 +2310,7 @@ MainWindowTest {
             //Test last row
             testRow(9, SurveyChunk.StationDownRole, leftArrowOnFullRow)
 
-            // //Test Down arrow
+            // // //Test Down arrow
             let testBacksights = false;
             testRow(1, SurveyChunk.StationNameRole, downArrowOnFullColumn, testBacksights)
             testRow(2, SurveyChunk.ShotDistanceRole, downArrowOnFullColumn, testBacksights)

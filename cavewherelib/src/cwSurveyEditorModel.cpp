@@ -5,6 +5,9 @@
 #include "cwTripCalibration.h"
 #include "cwSurveyEditorBoxData.h"
 #include "cwDebug.h"
+#include "cwReading.h"
+
+#include <QDebug>
 
 cwSurveyEditorModel::cwSurveyEditorModel()
 {
@@ -200,6 +203,19 @@ void cwSurveyEditorModel::setFocusedChunk(cwSurveyChunk* chunk)
         return;
     }
 
+    auto firstAffectedRowForChunk = [this](cwSurveyChunk* candidate) {
+        if(candidate == nullptr) {
+            return rowCount();
+        }
+        const int base = toModelRow({candidate, -1, cwSurveyEditorRowIndex::TitleRow});
+        return base >= 0 ? base : rowCount();
+    };
+
+    int firstAffectedRow = std::min(firstAffectedRowForChunk(m_focusedChunk),
+                                    firstAffectedRowForChunk(chunk));
+    firstAffectedRow = std::min(firstAffectedRow,
+                                firstAffectedRowForChunk(m_virtualRowsVisibleChunk));
+
     auto oldFocusedChunk = m_focusedChunk;
 
     if(oldFocusedChunk) {
@@ -227,6 +243,10 @@ void cwSurveyEditorModel::setFocusedChunk(cwSurveyChunk* chunk)
     }
 
     syncVirtualRows(m_focusedChunk);
+
+    if(rowCount() > 0 && firstAffectedRow < rowCount()) {
+        emit dataChanged(index(firstAffectedRow, 0), index(rowCount() - 1, 0));
+    }
 }
 
 
@@ -884,8 +904,47 @@ void cwSurveyEditorModel::setFocusedCell(const cwSurveyEditorCellIndex& cell)
     m_focusedDataRole = cell.dataRole();
     setFocusedChunk(chunkForRow(row));
     syncFocusedCellSignals();
+}
 
-    emit dataChanged(index(0), index(rowCount()));
+void cwSurveyEditorModel::dumpModel()
+{
+    const QList<cwSurveyChunk*> chunks = m_trip ? m_trip->chunks() : QList<cwSurveyChunk*>();
+    qInfo() << "[SurveyEditorModelDump] begin rowCount=" << rowCount()
+            << "focusedRow=" << focusedRow()
+            << "focusedRole=" << focusedRole();
+
+    for(int row = 0; row < rowCount(); ++row) {
+        const cwSurveyEditorRowIndex rowIndex = toRowIndex(row);
+        cwSurveyChunk* chunk = rowIndex.chunk();
+        const int chunkIndex = chunks.indexOf(chunk);
+        const auto rowType = rowIndex.rowType();
+        const int indexInChunk = rowIndex.indexInChunk();
+        QString stationName;
+        QString shotDistance;
+
+        if(chunk != nullptr) {
+            if(rowType == cwSurveyEditorRowIndex::StationRow && indexInChunk >= 0) {
+                stationName = chunk->data(cwSurveyChunk::StationNameRole, indexInChunk).toString();
+            } else if(rowType == cwSurveyEditorRowIndex::ShotRow && indexInChunk >= 0) {
+                const QVariant distanceValue = chunk->data(cwSurveyChunk::ShotDistanceRole, indexInChunk);
+                if(distanceValue.canConvert<cwReading>()) {
+                    shotDistance = distanceValue.value<cwReading>().value();
+                } else {
+                    shotDistance = distanceValue.toString();
+                }
+            }
+        }
+
+        qInfo() << "[SurveyEditorModelDump] row=" << row
+                << "chunkIndex=" << chunkIndex
+                << "rowType=" << rowType
+                << "indexInChunk=" << indexInChunk
+                << "isFocused=" << (focusedRow() == row)
+                << "stationName=" << stationName
+                << "shotDistance=" << shotDistance;
+    }
+
+    qInfo() << "[SurveyEditorModelDump] end";
 }
 
 void cwSurveyEditorModel::focusOnLastChunk()
