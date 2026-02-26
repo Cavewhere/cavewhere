@@ -784,28 +784,67 @@ MainWindowTest {
             addSurvey();
             enterSurveyData();
 
-            let a1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.7.0->coreTextInput")
-            mouseClick(a1, 38.9219, 10.4531)
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+            verify(view !== null)
+            let editorModel = view.model
+            verify(editorModel !== null)
 
-            let chunkError = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->chunkErrorDelegate.6")
-            let errorText = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->chunkErrorDelegate.6->errorText")
-            verify(chunkError.visible === false);
-            verify(errorText.text === "")
+            let trip = RootData.pageView.currentPageItem.currentTrip as Trip
+            verify(trip !== null)
+            let originalChunkCount = trip.chunkCount
+            verify(originalChunkCount >= 1)
 
-            //Change to a1 to c1, this will disconnect the chunk
-            keyClick("c")
+            keyClick(32, 0) //Space - create a second chunk
+            tryVerify(() => { return trip.chunkCount === originalChunkCount + 1 })
+
+            let secondChunk = trip.chunk(originalChunkCount)
+            verify(secondChunk !== null)
+
+            let secondStation0Row = editorModel.toModelRow(
+                        editorModel.rowIndex(secondChunk, 0, SurveyEditorRowIndex.StationRow))
+            verify(secondStation0Row >= 0)
+
+            let secondStation0Box = ObjectFinder.findObjectByChain(
+                        mainWindow, "rootId->tripPage->view->dataBox." + secondStation0Row + "." + SurveyChunk.StationNameRole + "->coreTextInput")
+            verify(secondStation0Box !== null)
+            mouseClick(secondStation0Box)
+
+            keyClick("z")
+            keyClick("z")
+            keyClick("z")
+            keyClick(49, 0) //1
+            keyClick(48, 0) //0
             keyClick(49, 0) //1
             keyClick(16777220, 0) //Return
+            tryVerify(() => { return secondChunk.data(SurveyChunk.StationNameRole, 0) === "zzz101" })
 
-            let a2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.9.0->coreTextInput")
-            mouseClick(a2)
+            let secondStation1Row = editorModel.toModelRow(
+                        editorModel.rowIndex(secondChunk, 1, SurveyEditorRowIndex.StationRow))
+            verify(secondStation1Row >= 0)
 
-            keyClick("d")
+            let secondStation1Box = ObjectFinder.findObjectByChain(
+                        mainWindow, "rootId->tripPage->view->dataBox." + secondStation1Row + "." + SurveyChunk.StationNameRole + "->coreTextInput")
+            verify(secondStation1Box !== null)
+            mouseClick(secondStation1Box)
+
+            keyClick("z")
+            keyClick("z")
+            keyClick("z")
+            keyClick(49, 0) //1
+            keyClick(48, 0) //0
             keyClick(50, 0) //2
             keyClick(16777220, 0) //Return
+            tryVerify(() => { return secondChunk.data(SurveyChunk.StationNameRole, 1) === "zzz102" })
 
-            tryVerify( () => {return chunkError.visible === true });
-            verify(errorText.text === "Survey leg isn't connect to the cave")
+            let secondChunkTitleRow = editorModel.toModelRow(
+                        editorModel.rowIndex(secondChunk, -1, SurveyEditorRowIndex.TitleRow))
+            verify(secondChunkTitleRow >= 0)
+            view.positionViewAtIndex(secondChunkTitleRow, ListView.Contain)
+            waitForRendering(rootId)
+            tryVerify(() => {
+                          return secondChunk.errorModel.errors.count > 0
+                                  && secondChunk.errorModel.errors.first().message === "Survey leg isn't connect to the cave"
+                      })
         }
 
         function test_errorButtonsShouldWork() {
