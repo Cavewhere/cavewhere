@@ -7950,3 +7950,58 @@ TEST_CASE("Note should be removed correctly simple", "[cwProject]") {
     //Notes directory should still exist because we store multiple notes in it
     CHECK(QFileInfo::exists(noteDir.absolutePath()));
 }
+
+TEST_CASE("LiDAR note should be removed correctly simple", "[cwProject][regression]") {
+    auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
+    project->waitSaveToFinish();
+
+    auto* cave = new cwCave();
+    cave->setName(QStringLiteral("lidar-remove-cave"));
+
+    auto* trip = new cwTrip();
+    trip->setName(QStringLiteral("lidar-remove-trip"));
+    cave->addTrip(trip);
+
+    project->cavingRegion()->addCave(cave);
+    project->waitSaveToFinish();
+
+    cwSurveyNoteLiDARModel* const lidarModel = trip->notesLiDAR();
+    REQUIRE(lidarModel != nullptr);
+
+    const QString glbSource = copyToTempFolder("://datasets/test_cwSurveyNotesConcatModel/bones.glb");
+    REQUIRE(QFileInfo::exists(glbSource));
+
+    lidarModel->addFromFiles({QUrl::fromLocalFile(glbSource)});
+    project->waitSaveToFinish();
+
+    REQUIRE(lidarModel->rowCount() == 1);
+    auto* lidarNote = qobject_cast<cwNoteLiDAR*>(lidarModel->notes().at(0));
+    REQUIRE(lidarNote != nullptr);
+
+    const QString lidarMetadataPath = ProjectFilenameTestHelper::absolutePath(lidarNote);
+    const QString lidarGlbPath = ProjectFilenameTestHelper::absolutePath(lidarNote, lidarNote->filename());
+
+    CAPTURE(lidarMetadataPath.toStdString());
+    CAPTURE(lidarGlbPath.toStdString());
+    CHECK(QFileInfo::exists(lidarMetadataPath));
+    CHECK(QFileInfo::exists(lidarGlbPath));
+
+    lidarModel->removeNote(0);
+    project->waitSaveToFinish();
+
+    CHECK(lidarModel->rowCount() == 0);
+    CHECK_FALSE(QFileInfo::exists(lidarMetadataPath));
+    CHECK_FALSE(QFileInfo::exists(lidarGlbPath));
+
+    auto reloaded = std::make_unique<cwProject>();
+    addTokenManager(reloaded.get());
+    reloaded->loadOrConvert(project->filename());
+    reloaded->waitLoadToFinish();
+
+    REQUIRE(reloaded->cavingRegion()->caveCount() == 1);
+    auto* loadedTrip = reloaded->cavingRegion()->cave(0)->trip(0);
+    REQUIRE(loadedTrip != nullptr);
+    REQUIRE(loadedTrip->notesLiDAR() != nullptr);
+    CHECK(loadedTrip->notesLiDAR()->rowCount() == 0);
+}

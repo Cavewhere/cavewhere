@@ -1848,6 +1848,357 @@ MainWindowTest {
             compare(snapshotUiState(), expectedEditedState)
         }
 
+        function test_tripAddLiDARNoteSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+
+            let currentTrip = function() {
+                let currentPageItem = RootData.pageView.currentPageItem
+                verify(currentPageItem !== null)
+                verify(currentPageItem.currentTrip !== null)
+                return currentPageItem.currentTrip
+            }
+
+            let imageNotesModel = function() {
+                let model = currentTrip().notes
+                verify(model !== null)
+                return model
+            }
+
+            let lidarNotesModel = function() {
+                let model = currentTrip().notesLiDAR
+                verify(model !== null)
+                return model
+            }
+
+            let noteGallery = function() {
+                let gallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery")
+                verify(gallery !== null)
+                return gallery
+            }
+
+            let noteGalleryView = function() {
+                let galleryView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView")
+                verify(galleryView !== null)
+                return galleryView
+            }
+
+            let noteLiDARViewer = function() {
+                let viewer = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId")
+                verify(viewer !== null)
+                return viewer
+            }
+
+            let snapshotModelState = function() {
+                return JSON.stringify({
+                    imageNoteCount: imageNotesModel().rowCount(),
+                    lidarNoteCount: lidarNotesModel().rowCount(),
+                    totalNoteCount: imageNotesModel().rowCount() + lidarNotesModel().rowCount()
+                })
+            }
+
+            let snapshotUiState = function() {
+                return JSON.stringify({
+                    totalNoteCount: noteGalleryView().count
+                })
+            }
+
+            let verifySelectedLiDARNote = function(expectedFileName) {
+                let galleryItem = ObjectFinder.findObjectByChain(
+                    mainWindow,
+                    "rootId->tripPage->noteGallery->galleryView->noteImage" + (noteGalleryView().count - 1))
+                verify(galleryItem !== null)
+                mouseClick(galleryItem)
+
+                tryVerifyWithDiagnostics(() => {
+                    return noteGallery().currentNoteLiDAR !== null
+                           && String(noteGallery().currentNoteLiDAR.filename) === expectedFileName
+                }, 10000, "verify selected LiDAR note")
+
+                tryVerifyWithDiagnostics(() => {
+                    return noteLiDARViewer().scene.gltf.status === RenderGLTF.Ready
+                }, 10000, "verify LiDAR viewer ready")
+            }
+
+            let selectLastLiDARNote = function() {
+                let galleryItem = ObjectFinder.findObjectByChain(
+                    mainWindow,
+                    "rootId->tripPage->noteGallery->galleryView->noteImage" + (noteGalleryView().count - 1))
+                verify(galleryItem !== null)
+                mouseClick(galleryItem)
+
+                tryVerifyWithDiagnostics(() => {
+                    return noteGallery().currentNoteLiDAR !== null
+                }, 10000, "verify selected last LiDAR note")
+
+                tryVerifyWithDiagnostics(() => {
+                    return noteLiDARViewer().scene.gltf.status === RenderGLTF.Ready
+                }, 10000, "verify selected last LiDAR viewer ready")
+
+                return String(noteGallery().currentNoteLiDAR.filename)
+            }
+
+            let caveName = String(currentTrip().parentCave.name)
+            let tripName = String(currentTrip().name)
+            verify(caveName.length > 0)
+            verify(tripName.length > 0)
+
+            let baselineModelState = snapshotModelState()
+            let baselineUiState = snapshotUiState()
+            compare(snapshotUiState(), JSON.stringify({
+                totalNoteCount: JSON.parse(baselineModelState).totalNoteCount
+            }))
+
+            let commitA = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitA !== "")
+
+            let copiedLiDARPath = TestHelper.copyToTempDir("://datasets/lidarProjects/9_15_2025 3.glb")
+            verify(copiedLiDARPath !== "")
+            let copiedLiDARUrl = Qt.url("file://" + copiedLiDARPath)
+            let expectedFileName = "9_15_2025 3.glb"
+
+            let editedState = JSON.parse(baselineModelState)
+            editedState.lidarNoteCount += 1
+            editedState.totalNoteCount += 1
+            let expectedEditedModelState = JSON.stringify(editedState)
+            let expectedEditedUiState = JSON.stringify({
+                totalNoteCount: editedState.totalNoteCount
+            })
+
+            noteGallery().imagesAdded([copiedLiDARUrl])
+
+            tryVerifyWithDiagnostics(() => {
+                return snapshotModelState() === expectedEditedModelState
+            }, 5000, "verify LiDAR note added to model")
+            tryVerifyWithDiagnostics(() => {
+                return snapshotUiState() === expectedEditedUiState
+            }, 5000, "verify LiDAR note added to UI")
+            verifySelectedLiDARNote(expectedFileName)
+
+            verify(RootData.project.sync())
+            waitForProjectSyncToFinish()
+
+            let commitB = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitB !== "")
+            verify(commitB !== commitA)
+
+            let checkoutError = TestHelper.checkoutProjectRef(RootData.project, commitA, true)
+            compare(checkoutError, "")
+
+            openTripPage(caveName, tripName)
+            compare(snapshotModelState(), baselineModelState)
+            compare(snapshotUiState(), baselineUiState)
+
+            verify(RootData.project.sync())
+            waitForProjectSyncToFinish()
+
+            let commitC = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitC !== "")
+            verify(commitC === commitB)
+
+            openTripPage(caveName, tripName)
+            compare(snapshotModelState(), expectedEditedModelState)
+            compare(snapshotUiState(), expectedEditedUiState)
+            verifySelectedLiDARNote(expectedFileName)
+        }
+
+        function test_tripRemoveLiDARNoteSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+
+            let currentTrip = function() {
+                let currentPageItem = RootData.pageView.currentPageItem
+                verify(currentPageItem !== null)
+                verify(currentPageItem.currentTrip !== null)
+                return currentPageItem.currentTrip
+            }
+
+            let imageNotesModel = function() {
+                let model = currentTrip().notes
+                verify(model !== null)
+                return model
+            }
+
+            let lidarNotesModel = function() {
+                let model = currentTrip().notesLiDAR
+                verify(model !== null)
+                return model
+            }
+
+            let noteGallery = function() {
+                let gallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery")
+                verify(gallery !== null)
+                return gallery
+            }
+
+            let noteGalleryView = function() {
+                let galleryView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView")
+                verify(galleryView !== null)
+                return galleryView
+            }
+
+            let noteLiDARViewer = function() {
+                let viewer = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId")
+                verify(viewer !== null)
+                return viewer
+            }
+
+            let snapshotModelState = function() {
+                return JSON.stringify({
+                    imageNoteCount: imageNotesModel().rowCount(),
+                    lidarNoteCount: lidarNotesModel().rowCount(),
+                    totalNoteCount: imageNotesModel().rowCount() + lidarNotesModel().rowCount()
+                })
+            }
+
+            let snapshotUiState = function() {
+                return JSON.stringify({
+                    totalNoteCount: noteGalleryView().count
+                })
+            }
+
+            let verifySelectedLiDARNote = function(expectedFileName) {
+                let galleryItem = ObjectFinder.findObjectByChain(
+                    mainWindow,
+                    "rootId->tripPage->noteGallery->galleryView->noteImage" + (noteGalleryView().count - 1))
+                verify(galleryItem !== null)
+                mouseClick(galleryItem)
+
+                tryVerifyWithDiagnostics(() => {
+                    return noteGallery().currentNoteLiDAR !== null
+                           && String(noteGallery().currentNoteLiDAR.filename) === expectedFileName
+                }, 10000, "verify selected LiDAR note")
+
+                tryVerifyWithDiagnostics(() => {
+                    return noteLiDARViewer().scene.gltf.status === RenderGLTF.Ready
+                }, 10000, "verify LiDAR viewer ready")
+            }
+
+            let selectLastLiDARNote = function() {
+                let galleryItem = ObjectFinder.findObjectByChain(
+                    mainWindow,
+                    "rootId->tripPage->noteGallery->galleryView->noteImage" + (noteGalleryView().count - 1))
+                verify(galleryItem !== null)
+                mouseClick(galleryItem)
+
+                tryVerifyWithDiagnostics(() => {
+                    return noteGallery().currentNoteLiDAR !== null
+                }, 10000, "verify selected last LiDAR note")
+
+                tryVerifyWithDiagnostics(() => {
+                    return noteLiDARViewer().scene.gltf.status === RenderGLTF.Ready
+                }, 10000, "verify selected last LiDAR viewer ready")
+
+                return String(noteGallery().currentNoteLiDAR.filename)
+            }
+
+            let ensureAtLeastOneLiDARNote = function() {
+                if (lidarNotesModel().rowCount() > 0) {
+                    return
+                }
+
+                let copiedLiDARPath = TestHelper.copyToTempDir("://datasets/lidarProjects/9_15_2025 3.glb")
+                verify(copiedLiDARPath !== "")
+                let copiedLiDARUrl = Qt.url("file://" + copiedLiDARPath)
+                let expectedFileName = "9_15_2025 3.glb"
+
+                noteGallery().imagesAdded([copiedLiDARUrl])
+
+                tryVerifyWithDiagnostics(() => {
+                    return lidarNotesModel().rowCount() > 0
+                }, 5000, "seed at least one LiDAR note")
+                tryVerifyWithDiagnostics(() => {
+                    return noteGalleryView().count === imageNotesModel().rowCount() + lidarNotesModel().rowCount()
+                }, 5000, "verify seeded LiDAR note in UI")
+                verifySelectedLiDARNote(expectedFileName)
+
+                verify(RootData.project.sync())
+                waitForProjectSyncToFinish()
+            }
+
+            let caveName = String(currentTrip().parentCave.name)
+            let tripName = String(currentTrip().name)
+            verify(caveName.length > 0)
+            verify(tripName.length > 0)
+
+            ensureAtLeastOneLiDARNote()
+
+            let baselineModelState = snapshotModelState()
+            let baselineUiState = snapshotUiState()
+            let baselineModel = JSON.parse(baselineModelState)
+            let baselineUi = JSON.parse(baselineUiState)
+            verify(Number(baselineModel.lidarNoteCount) > 0)
+
+            let commitA = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitA !== "")
+
+            let removedLiDARAbsolutePath = ""
+            let removedLiDARMetadataPath = ""
+            let removedFileName = selectLastLiDARNote()
+            verify(removedFileName.length > 0)
+            removedLiDARAbsolutePath = String(RootData.project.absolutePath(noteGallery().currentNoteLiDAR))
+            verify(removedLiDARAbsolutePath.length > 0)
+            let lastSlashIndex = removedLiDARAbsolutePath.lastIndexOf("/")
+            verify(lastSlashIndex >= 0)
+            removedLiDARMetadataPath = removedLiDARAbsolutePath.slice(0, lastSlashIndex + 1) + removedFileName + ".cwnote3d"
+
+            lidarNotesModel().removeNote(lidarNotesModel().rowCount() - 1)
+
+            let expectedEditedModel = {
+                imageNoteCount: Number(baselineModel.imageNoteCount),
+                lidarNoteCount: Number(baselineModel.lidarNoteCount) - 1,
+                totalNoteCount: Number(baselineModel.totalNoteCount) - 1
+            }
+            let expectedEditedUi = {
+                totalNoteCount: Number(baselineUi.totalNoteCount) - 1
+            }
+            let expectedEditedModelState = JSON.stringify(expectedEditedModel)
+            let expectedEditedUiState = JSON.stringify(expectedEditedUi)
+
+            tryVerifyWithDiagnostics(() => {
+                return snapshotModelState() === expectedEditedModelState
+            }, 5000, "verify LiDAR note removed from model")
+            tryVerifyWithDiagnostics(() => {
+                return snapshotUiState() === expectedEditedUiState
+            }, 5000, "verify LiDAR note removed from UI")
+            tryVerifyWithDiagnostics(() => {
+                return noteGallery().currentNoteLiDAR === null
+                       || String(noteGallery().currentNoteLiDAR.filename) !== removedFileName
+            }, 5000, "verify removed LiDAR note no longer selected")
+
+            RootData.futureManagerModel.waitForFinished()
+            wait(50)
+
+            let saveResult = RootData.project.save()
+            verify(saveResult)
+
+            let commitAfterSave = TestHelper.projectHeadCommitOid(RootData.project)
+
+            verify(RootData.project.sync())
+            waitForProjectSyncToFinish()
+
+            let commitB = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitB !== "")
+            verify(commitB !== commitA)
+
+            let checkoutError = TestHelper.checkoutProjectRef(RootData.project, commitA, true)
+            compare(checkoutError, "")
+
+            openTripPage(caveName, tripName)
+            compare(snapshotModelState(), baselineModelState)
+            compare(snapshotUiState(), baselineUiState)
+            verifySelectedLiDARNote(removedFileName)
+
+            verify(RootData.project.sync())
+            waitForProjectSyncToFinish()
+
+            let commitC = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitC !== "")
+            verify(commitC === commitB)
+
+            openTripPage(caveName, tripName)
+            compare(snapshotModelState(), expectedEditedModelState)
+            compare(snapshotUiState(), expectedEditedUiState)
+        }
+
         function test_tripRemoveImageNoteSyncAndCheckout() {
             let context = loadFixtureAndOpenFirstTrip()
 

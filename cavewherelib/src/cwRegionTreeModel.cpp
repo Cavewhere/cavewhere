@@ -986,7 +986,7 @@ void cwRegionTreeModel::addTripConnections(cwCave* parentCave, int beginIndex, i
                     });
 
             connect(lidars, &cwSurveyNoteLiDARModel::rowsRemoved,
-                    this, [this](const QModelIndex& parent, int first, int last) {
+                    this, [this, lidars](const QModelIndex& parent, int first, int last) {
                         Q_UNUSED(parent); Q_UNUSED(first); Q_UNUSED(last);
                         endRemoveRows();
                     });

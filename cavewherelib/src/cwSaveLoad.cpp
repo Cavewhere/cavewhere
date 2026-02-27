@@ -1520,6 +1520,7 @@ struct cwSaveLoad::Data {
         addObjects(m_regionTreeModel->all<cwCave*>(QModelIndex(), &cwRegionTreeModel::cave));
         addObjects(m_regionTreeModel->all<cwTrip*>(QModelIndex(), &cwRegionTreeModel::trip));
         addObjects(m_regionTreeModel->all<cwNote*>(QModelIndex(), &cwRegionTreeModel::note));
+        addObjects(m_regionTreeModel->all<cwNoteLiDAR*>(QModelIndex(), &cwRegionTreeModel::noteLiDAR));
     }
 
     // Normalize paths for queued jobs in a way that is stable across aliases/symlinks.
@@ -3726,6 +3727,28 @@ void cwSaveLoad::connectTreeModel()
                                         this);
                 };
 
+                auto removeFile = [this](const QObject* object) {
+                    d->addFileSystemJob(Data::Job
+                                        {
+                                            object,
+                                            Data::Job::Kind::File,
+                                            Data::Job::Action::Remove
+                                        },
+                                        this);
+                };
+
+                auto removeResolvedFile = [this](const QString& path) {
+                    if (path.isEmpty()) {
+                        return;
+                    }
+
+                    Data::Job removeJob;
+                    removeJob.kind = Data::Job::Kind::File;
+                    removeJob.action = Data::Job::Action::Remove;
+                    removeJob.oldPath = path;
+                    d->addExplicitFileSystemJob(removeJob, this);
+                };
+
                 for(int i = first; i <= last; i++) {
                     auto index = d->m_regionTreeModel->index(i, 0, parent);
                     auto object = index.data(cwRegionTreeModel::ObjectRole).value<QObject*>();
@@ -3745,15 +3768,13 @@ void cwSaveLoad::connectTreeModel()
                     }
                     case cwRegionTreeModel::NoteType: {
                         auto note = d->m_regionTreeModel->note(index);
-                        auto noteFilename = absolutePathPrivate(note);
-                        // qDebug() << "Deleting:" << noteFilename << note << note->name();
-                        d->addFileSystemJob(Data::Job
-                                            {
-                                                note,
-                                                Data::Job::Kind::File,
-                                                Data::Job::Action::Remove
-                                            },
-                                            this);
+                        removeFile(note);
+                        break;
+                    }
+                    case cwRegionTreeModel::NoteLiDARType: {
+                        auto* noteLiDAR = d->m_regionTreeModel->noteLiDAR(index);
+                        removeFile(noteLiDAR);
+                        removeResolvedFile(absolutePathPrivate(noteLiDAR, noteLiDAR->filename()));
                         break;
                     }
                     default:
@@ -4555,10 +4576,8 @@ Monad::ResultBase cwSaveLoad::commitProjectChanges(const QString& subject,
                                           : description.trimmed();
 
     try {
-        const auto beforeHeadResult = QQuickGit::GitRepository::headCommitOid(repo->directory().absolutePath());
         repo->commitAll(commitSubject, commitDescription);
         repo->checkStatus();
-        const auto afterHeadResult = QQuickGit::GitRepository::headCommitOid(repo->directory().absolutePath());
     } catch (const std::exception& error) {
         return ResultBase(QString::fromUtf8(error.what()));
     }
