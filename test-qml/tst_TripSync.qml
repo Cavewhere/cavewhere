@@ -1756,5 +1756,207 @@ MainWindowTest {
                 }
             )
         }
+
+        function test_tripAddImageNoteSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+
+            let currentTrip = function() {
+                let currentPageItem = RootData.pageView.currentPageItem
+                verify(currentPageItem !== null)
+                verify(currentPageItem.currentTrip !== null)
+                return currentPageItem.currentTrip
+            }
+
+            let notesModel = function() {
+                let model = currentTrip().notes
+                verify(model !== null)
+                return model
+            }
+
+            let noteGalleryView = function() {
+                let galleryView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView")
+                verify(galleryView !== null)
+                return galleryView
+            }
+
+            let snapshotModelState = function() {
+                return JSON.stringify({
+                    noteCount: notesModel().rowCount()
+                })
+            }
+
+            let snapshotUiState = function() {
+                return JSON.stringify({
+                    noteCount: noteGalleryView().count
+                })
+            }
+
+            let caveName = String(currentTrip().parentCave.name)
+            let tripName = String(currentTrip().name)
+            verify(caveName.length > 0)
+            verify(tripName.length > 0)
+
+            let baselineModelState = snapshotModelState()
+            let baselineUiState = snapshotUiState()
+            compare(baselineUiState, baselineModelState)
+
+            let commitA = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitA !== "")
+
+            let editedState = JSON.parse(baselineModelState)
+            editedState.noteCount += 1
+            let expectedEditedState = JSON.stringify(editedState)
+
+            let copiedImagePath = TestHelper.copyToTempDir("://datasets/test_cwTextureUploadTask/PhakeCave.PNG")
+            verify(copiedImagePath !== "")
+            let copiedImageUrl = Qt.url("file://" + copiedImagePath)
+
+            let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery")
+            verify(noteGallery !== null)
+            noteGallery.imagesAdded([copiedImageUrl])
+
+            tryVerifyWithDiagnostics(() => {
+                return snapshotModelState() === expectedEditedState
+            }, 5000, "verify note added to model")
+            tryVerifyWithDiagnostics(() => {
+                return snapshotUiState() === expectedEditedState
+            }, 5000, "verify note added to UI")
+
+            verify(RootData.project.sync())
+            waitForProjectSyncToFinish()
+
+            let commitB = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitB !== "")
+            verify(commitB !== commitA)
+
+            let checkoutError = TestHelper.checkoutProjectRef(RootData.project, commitA, true)
+            compare(checkoutError, "")
+
+            openTripPage(caveName, tripName)
+            compare(snapshotModelState(), baselineModelState)
+            compare(snapshotUiState(), baselineUiState)
+
+            verify(RootData.project.sync())
+            waitForProjectSyncToFinish()
+
+            let commitC = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitC !== "")
+            verify(commitC === commitB)
+
+            openTripPage(caveName, tripName)
+            compare(snapshotModelState(), expectedEditedState)
+            compare(snapshotUiState(), expectedEditedState)
+        }
+
+        function test_tripRemoveImageNoteSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+
+            let currentTrip = function() {
+                let currentPageItem = RootData.pageView.currentPageItem
+                verify(currentPageItem !== null)
+                verify(currentPageItem.currentTrip !== null)
+                return currentPageItem.currentTrip
+            }
+
+            let notesModel = function() {
+                let model = currentTrip().notes
+                verify(model !== null)
+                return model
+            }
+
+            let noteGalleryView = function() {
+                let galleryView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView")
+                verify(galleryView !== null)
+                return galleryView
+            }
+
+            let snapshotModelState = function() {
+                return JSON.stringify({
+                    noteCount: notesModel().rowCount()
+                })
+            }
+
+            let snapshotUiState = function() {
+                return JSON.stringify({
+                    noteCount: noteGalleryView().count
+                })
+            }
+
+            let ensureAtLeastOneImageNote = function() {
+                if (notesModel().rowCount() > 0) {
+                    return
+                }
+
+                let copiedImagePath = TestHelper.copyToTempDir("://datasets/test_cwTextureUploadTask/PhakeCave.PNG")
+                verify(copiedImagePath !== "")
+                let copiedImageUrl = Qt.url("file://" + copiedImagePath)
+
+                let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery")
+                verify(noteGallery !== null)
+                noteGallery.imagesAdded([copiedImageUrl])
+
+                tryVerifyWithDiagnostics(() => {
+                    return notesModel().rowCount() > 0
+                }, 5000, "seed at least one image note")
+            }
+
+            let caveName = String(currentTrip().parentCave.name)
+            let tripName = String(currentTrip().name)
+            verify(caveName.length > 0)
+            verify(tripName.length > 0)
+
+            ensureAtLeastOneImageNote()
+            let baselineModelState = snapshotModelState()
+            let baselineUiState = snapshotUiState()
+            let baselineModel = JSON.parse(baselineModelState)
+            let baselineUi = JSON.parse(baselineUiState)
+            verify(Number(baselineModel.noteCount) > 0)
+
+            let commitA = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitA !== "")
+
+            notesModel().removeNote(notesModel().rowCount() - 1)
+
+            let expectedEditedModel = {
+                noteCount: Number(baselineModel.noteCount) - 1
+            }
+            let expectedEditedUi = {
+                noteCount: Number(baselineUi.noteCount) - 1
+            }
+            let expectedEditedModelState = JSON.stringify(expectedEditedModel)
+            let expectedEditedUiState = JSON.stringify(expectedEditedUi)
+
+            tryVerifyWithDiagnostics(() => {
+                return snapshotModelState() === expectedEditedModelState
+            }, 5000, "verify note removed from model")
+            tryVerifyWithDiagnostics(() => {
+                return snapshotUiState() === expectedEditedUiState
+            }, 5000, "verify note removed from UI")
+
+            verify(RootData.project.sync())
+            waitForProjectSyncToFinish()
+
+            let commitB = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitB !== "")
+            verify(commitB !== commitA)
+
+            let checkoutError = TestHelper.checkoutProjectRef(RootData.project, commitA, true)
+            compare(checkoutError, "")
+
+            openTripPage(caveName, tripName)
+            compare(snapshotModelState(), baselineModelState)
+            compare(snapshotUiState(), baselineUiState)
+
+            verify(RootData.project.sync())
+            waitForProjectSyncToFinish()
+
+            let commitC = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitC !== "")
+            verify(commitC === commitB)
+
+            openTripPage(caveName, tripName)
+            compare(snapshotModelState(), expectedEditedModelState)
+            compare(snapshotUiState(), expectedEditedUiState)
+        }
     }
 }
