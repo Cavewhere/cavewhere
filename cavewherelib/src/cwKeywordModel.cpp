@@ -183,6 +183,9 @@ bool cwKeywordModel::setData(const QModelIndex &index, const QVariant &value, in
         auto extension = modelAt(index);
         auto model = extension.first;
         auto modelRow = extension.second;
+        if(model == nullptr) {
+            return false;
+        }
         return model->setData(model->index(modelRow), value, role);
     }
 
@@ -198,8 +201,10 @@ void cwKeywordModel::addExtension(cwKeywordModel *model)
         return;
     }
 
-    if(Extentions.contains(model)) {
-        return; //Model already exists
+    for (const auto& extension : std::as_const(Extentions)) {
+        if (extension.rawModel == model) {
+            return; // Model already exists
+        }
     }
 
     connect(model, &cwKeywordModel::destroyed,
@@ -265,7 +270,7 @@ void cwKeywordModel::addExtension(cwKeywordModel *model)
     const int firstIndex = rowCount();
     const int lastIndex = firstIndex + count - 1;
 
-    Extentions.append(model);
+    Extentions.append({QPointer<cwKeywordModel>(model), model});
 
     if(count > 0) {
         beginInsertRows(QModelIndex(), firstIndex, lastIndex);
@@ -278,28 +283,41 @@ void cwKeywordModel::removeExtension(cwKeywordModel *model)
 {
     disconnect(model, nullptr, this, nullptr);
 
-    int modelFirstIndex = Keywords.size();
-    int lastCount = 0;
-    QVector<cwKeywordModel*>::iterator keywordToRemoveIter = Extentions.end();
-    for(auto iter = Extentions.begin(); iter != Extentions.end(); iter++) {
-        auto currentModel = *iter;
-        if(currentModel == model) {
-            keywordToRemoveIter = iter;
-        } else if (keywordToRemoveIter != Extentions.end()) {
-            modelFirstIndex += currentModel->rowCount();
+    int rowsBefore = 0;
+    int rowsAfter = 0;
+    bool foundModel = false;
+    auto extensionToRemoveIter = Extentions.end();
+    for(auto iter = Extentions.begin(); iter != Extentions.end(); ++iter) {
+        const auto& extension = *iter;
+        if(extension.rawModel == model) {
+            extensionToRemoveIter = iter;
+            foundModel = true;
+            continue;
+        }
+
+        const int currentRows = extension.model ? extension.model->rowCount() : 0;
+        if(!foundModel) {
+            rowsBefore += currentRows;
         } else {
-            lastCount += currentModel->rowCount();
+            rowsAfter += currentRows;
         }
     }
 
-    int modelLastIndex = rowCount() - lastCount - 1;
-    int count = modelLastIndex - modelFirstIndex + 1;
+    if(extensionToRemoveIter == Extentions.end()) {
+        return;
+    }
 
-    if(modelFirstIndex <= modelLastIndex) {
+    const int modelFirstIndex = Keywords.size() + rowsBefore;
+    const int count = qMax(0, rowCount() - Keywords.size() - rowsBefore - rowsAfter);
+    const int modelLastIndex = modelFirstIndex + count - 1;
+
+    if(count > 0 && modelFirstIndex <= modelLastIndex) {
         beginRemoveRows(QModelIndex(), modelFirstIndex, modelLastIndex);
         CachedRowCount -= count;
-        Extentions.erase(keywordToRemoveIter);
+        Extentions.erase(extensionToRemoveIter);
         endRemoveRows();
+    } else {
+        Extentions.erase(extensionToRemoveIter);
     }
 }
 
@@ -326,14 +344,23 @@ int cwKeywordModel::firstIndex(cwKeywordModel *model) const
         return 0;
     }
 
-    Q_ASSERT(Extentions.contains(model));
+    bool containsModel = false;
+    for(const auto& extension : std::as_const(Extentions)) {
+        if(extension.rawModel == model) {
+            containsModel = true;
+            break;
+        }
+    }
+    Q_ASSERT(containsModel);
 
     int extentionCount = Keywords.size();
-    for(auto keywordModel : Extentions) {
-        if(keywordModel == model) {
+    for(const auto& extension : std::as_const(Extentions)) {
+        if(extension.rawModel == model) {
             return extentionCount;
         }
-        extentionCount += keywordModel->rowCount();
+        if(extension.model) {
+            extentionCount += extension.model->rowCount();
+        }
     }
     return -1;
 }
@@ -346,7 +373,12 @@ int cwKeywordModel::localIndex(cwKeywordModel *model, int index) const
 std::pair<cwKeywordModel *, int> cwKeywordModel::modelAt(const QModelIndex &index) const
 {
     int row = index.row() - Keywords.size();
-    for(auto model : Extentions) {
+    for(const auto& extension : std::as_const(Extentions)) {
+        auto model = extension.model.data();
+        if(model == nullptr) {
+            continue;
+        }
+
         int currentCount = model->rowCount();
         if(row < currentCount) {
             return {model, row};
@@ -380,11 +412,14 @@ QVector<cwKeyword> cwKeywordModel::keywords() const
         return Keywords;
     }
 
-    QVector<cwKeyword> keywords;
-    keywords.reserve(rowCount());
-    for(int i = 0; i < rowCount(); i++) {
-        auto keyword = index(i).data(KeywordRole).value<cwKeyword>();
-        keywords.append(keyword);
+    QVector<cwKeyword> keywords = Keywords;
+    for(const auto& extension : std::as_const(Extentions)) {
+        auto model = extension.model.data();
+        if(model == nullptr) {
+            continue;
+        }
+
+        keywords.append(model->keywords());
     }
     return keywords;
 }

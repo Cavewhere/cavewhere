@@ -4,6 +4,7 @@
 //Qt includes
 #include <QAbstractItemModel>
 #include <QMultiMap>
+#include <QPointer>
 
 //Our includes
 #include "cwKeyword.h"
@@ -52,7 +53,12 @@ public:
     Q_INVOKABLE cwKeyword createKeyword(const QString key, QString value) const;
 
 private:
-    QVector<cwKeywordModel*> Extentions;
+    struct ExtensionEntry {
+        QPointer<cwKeywordModel> model;
+        cwKeywordModel* rawModel = nullptr;
+    };
+
+    QVector<ExtensionEntry> Extentions;
     QVector<cwKeyword> Keywords;
     int CachedRowCount = 0;
 

@@ -351,3 +351,33 @@ TEST_CASE("cwKeyordItemKeyFilter should categorize objects correctly", "[cwKeywo
         }
     }
 }
+
+TEST_CASE("cwKeywordGroupByKeyModel survives extension destruction during filtering", "[cwKeywordGroupByKeyModel][regression]") {
+    cwKeywordItemModel keywordItemModel;
+    cwKeywordGroupByKeyModel groupedModel;
+    groupedModel.setKey("Trip");
+    groupedModel.setSourceModel(&keywordItemModel);
+
+    auto* keywordItem = new cwKeywordItem();
+    QObject entity;
+    entity.setObjectName("entity");
+    keywordItem->setObject(&entity);
+    keywordItemModel.addItem(keywordItem);
+
+    auto* baseKeywordModel = keywordItem->keywordModel();
+    REQUIRE(baseKeywordModel != nullptr);
+    baseKeywordModel->add({"Type", "Note"});
+
+    auto extensionModel = std::make_unique<cwKeywordModel>();
+    extensionModel->add({"Trip", "Trip-1"});
+    baseKeywordModel->addExtension(extensionModel.get());
+
+    REQUIRE(groupedModel.rowCount() >= 2);
+
+    // Destroying an extension while groupedModel is connected used to crash due to
+    // re-entrant reads of a dying extension model during beginRemoveRows.
+    extensionModel.reset();
+
+    CHECK(groupedModel.rowCount() >= 1);
+    CHECK(keywordItemModel.rowCount() == 1);
+}
