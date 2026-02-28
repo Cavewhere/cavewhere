@@ -3767,8 +3767,9 @@ void cwSaveLoad::connectTreeModel()
                         break;
                     }
                     case cwRegionTreeModel::NoteType: {
-                        auto note = d->m_regionTreeModel->note(index);
+                        auto* note = d->m_regionTreeModel->note(index);
                         removeFile(note);
+                        removeResolvedFile(absolutePathPrivate(note, note->image().path()));
                         break;
                     }
                     case cwRegionTreeModel::NoteLiDARType: {

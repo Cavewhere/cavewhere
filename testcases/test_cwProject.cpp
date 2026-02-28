@@ -7935,9 +7935,11 @@ TEST_CASE("Note should be removed correctly simple", "[cwProject]") {
     auto note = trip->notes()->notes().at(0);
 
     auto noteFileName = ProjectFilenameTestHelper::absolutePath(note);
+    auto noteImageFileName = ProjectFilenameTestHelper::absolutePath(note, note->image().path());
     auto noteDir = QFileInfo(noteFileName).absoluteDir();
 
     CHECK(QFileInfo::exists(noteFileName));
+    CHECK(QFileInfo::exists(noteImageFileName));
     CHECK(QFileInfo::exists(noteDir.absolutePath()));
 
     //Remove the note
@@ -7946,6 +7948,7 @@ TEST_CASE("Note should be removed correctly simple", "[cwProject]") {
     project->waitSaveToFinish();
 
     CHECK(!QFileInfo::exists(noteFileName));
+    CHECK(!QFileInfo::exists(noteImageFileName));
 
     //Notes directory should still exist because we store multiple notes in it
     CHECK(QFileInfo::exists(noteDir.absolutePath()));
