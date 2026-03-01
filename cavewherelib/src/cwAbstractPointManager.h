@@ -32,6 +32,7 @@ class CAVEWHERE_LIB_EXPORT cwAbstractPointManager : public QQuickItem
     QML_NAMED_ELEMENT(AbstractPointManager)
     QML_UNCREATABLE("AbstractPointManager is a abstract class")
 
+    Q_PROPERTY(int count READ count NOTIFY countChanged)
     Q_PROPERTY(int selectedItemIndex READ selectedItemIndex WRITE setSelectedItemIndex NOTIFY selectedItemIndexChanged)
     Q_PROPERTY(cwSelectionManager* selectionManager READ selectionManager WRITE setSelectionManager NOTIFY selectionManagerChanged)
     Q_PROPERTY(QQmlComponent* component READ component WRITE setComponent NOTIFY componentChanged)
@@ -43,9 +44,11 @@ public:
     void updateItemParents();
     
     void clearSelection();
+    int count() const;
     int selectedItemIndex() const;
     void setSelectedItemIndex(int selectedItemIndex);
     Q_INVOKABLE QQuickItem* selectedItem() const;
+    Q_INVOKABLE QVariantList itemObjectNames() const;
 
     QList<QQuickItem *> items() const;
 
@@ -61,6 +64,7 @@ public:
 
 signals:
     // void transformUpdaterChanged();
+    void countChanged();
     void selectedItemIndexChanged();
     void selectionManagerChanged();
     void pointParentItemChanged();
@@ -133,6 +137,11 @@ inline int cwAbstractPointManager::selectedItemIndex() const {
   */
 inline void cwAbstractPointManager::clearSelection() {
     setSelectedItemIndex(-1);
+}
+
+inline int cwAbstractPointManager::count() const
+{
+    return m_items.size();
 }
 
 /**

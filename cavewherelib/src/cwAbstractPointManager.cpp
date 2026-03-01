@@ -216,6 +216,7 @@ void cwAbstractPointManager::pointsInserted(int begin, int end)
         return;
     }
 
+    const int oldCount = m_items.size();
     for(int i = begin; i <= end; i++) {
         QQuickItem* item = createItem(i); // pass index
         if(item == nullptr) {
@@ -230,6 +231,10 @@ void cwAbstractPointManager::pointsInserted(int begin, int end)
 
     for(int i = end + 1; i < m_items.size(); i++) {
         privateUpdateItemData(m_items.at(i), i);
+    }
+
+    if(m_items.size() != oldCount) {
+        emit countChanged();
     }
 
 
@@ -267,6 +272,7 @@ void cwAbstractPointManager::pointsRemoved(int begin, int end)
     if(begin < 0) { return; }
     if(end >= m_items.size()) { return; }
 
+    const int oldCount = m_items.size();
     for(int index = end; index >= begin; index--) {
         if(selectedItemIndex() == index) {
             clearSelection();
@@ -277,6 +283,10 @@ void cwAbstractPointManager::pointsRemoved(int begin, int end)
     }
 
     updateAllItemData();
+
+    if(m_items.size() != oldCount) {
+        emit countChanged();
+    }
 }
 
 /**
@@ -355,6 +365,7 @@ bool cwAbstractPointManager::ensureComponentReady() const
 void cwAbstractPointManager::resizeNumberOfItems(int numberOfPoints)
 {
     ensureComponent();
+    const int oldCount = m_items.size();
 
     if(m_items.size() < numberOfPoints) {
         const int toAdd = numberOfPoints - m_items.size();
@@ -378,6 +389,10 @@ void cwAbstractPointManager::resizeNumberOfItems(int numberOfPoints)
     }
 
     updateAllItemData();
+
+    if(m_items.size() != oldCount) {
+        emit countChanged();
+    }
 }
 
     // //Make sure we have a note component so we can create it
@@ -462,6 +477,16 @@ QQuickItem* cwAbstractPointManager::selectedItem() const {
         }
     }
     return nullptr;
+}
+
+QVariantList cwAbstractPointManager::itemObjectNames() const
+{
+    QVariantList names;
+    names.reserve(m_items.size());
+    for (QQuickItem* item : m_items) {
+        names.append(item != nullptr ? item->objectName() : QString());
+    }
+    return names;
 }
 
 /**

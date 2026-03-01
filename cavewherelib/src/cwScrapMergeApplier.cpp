@@ -181,8 +181,18 @@ QList<ItemT> mergeUnorderedByIdPreferOurs(const QList<ItemT>& ours,
     for (const ItemT& oursItem : ours) {
         const QUuid id = idAccessor(oursItem);
         if (!loadedById.contains(id)) {
-            // Local-only id means local add or local keep; both preserve ours.
-            merged.append(oursItem);
+            if (baseItemsById != nullptr && baseItemsById->contains(id)) {
+                const ItemT baseItem = baseItemsById->value(id);
+                const bool oursChanged = !itemEquals(oursItem, baseItem);
+                if (oursChanged) {
+                    // Remote delete vs local modify keeps the local value.
+                    merged.append(oursItem);
+                }
+                // Remote-only delete with no local change keeps the delete.
+            } else {
+                // Local-only add or keep without base payload preserves ours.
+                merged.append(oursItem);
+            }
             continue;
         }
 

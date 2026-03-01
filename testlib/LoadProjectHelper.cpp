@@ -357,6 +357,27 @@ QVariantMap TestHelper::scrapOutlineState(cwNote* note, int scrapIndex) const
     return state;
 }
 
+bool TestHelper::addScrapStation(cwNote* note,
+                                 int scrapIndex,
+                                 const QString& name,
+                                 const QPointF& positionOnNote) const
+{
+    if (note == nullptr) {
+        return false;
+    }
+
+    cwScrap* scrap = note->scrap(scrapIndex);
+    if (scrap == nullptr) {
+        return false;
+    }
+
+    cwNoteStation station;
+    station.setName(name);
+    station.setPositionOnNote(positionOnNote);
+    scrap->addStation(station);
+    return true;
+}
+
 cwSyncFixtureInfo TestHelper::createLocalSyncFixtureWithLfsServer()
 {
     cwSyncFixtureInfo result;

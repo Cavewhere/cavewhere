@@ -114,6 +114,10 @@ public:
                                            bool force = true) const;
     Q_INVOKABLE int noteScrapCount(cwNote* note) const;
     Q_INVOKABLE QVariantMap scrapOutlineState(cwNote* note, int scrapIndex) const;
+    Q_INVOKABLE bool addScrapStation(cwNote* note,
+                                     int scrapIndex,
+                                     const QString& name,
+                                     const QPointF& positionOnNote) const;
     Q_INVOKABLE cwSyncFixtureInfo createLocalSyncFixtureWithLfsServer();
     Q_INVOKABLE cwCloneFixtureInfo createLocalBareRemoteForCloneTest();
     Q_INVOKABLE bool setGitHubAccessTokenForAccount(const QString& accountId,

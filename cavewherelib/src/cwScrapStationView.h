@@ -34,8 +34,8 @@ public:
     explicit cwScrapStationView(QQuickItem *parent = 0);
     ~cwScrapStationView();
 
-    void setScrap(cwScrap* scrap);
-    void setScrapItem(cwScrapItem* scrapItem);
+    void setScrap(cwScrap* scrap) override;
+    void setScrapItem(cwScrapItem* scrapItem) override;
     void setZoom(double zoom);
 
     cwNoteStation selectedNoteStation() const;
@@ -59,14 +59,16 @@ private:
 
     // cwTransformItemUpdater* OldTransformUpdater;
 
-    virtual void updateItemPosition(QQuickItem* item, int index);
+    void updateItemData(QQuickItem* item, int index) override;
+    void updateItemPosition(QQuickItem* item, int index) override;
 
 private slots:
+    void syncStationsFromScrap();
     void updateShotLinesWithAnimation();
     void updateShotLines();
 
 protected:
-    virtual QSGNode* updatePaintNode(QSGNode * oldNode, UpdatePaintNodeData *);
+    QSGNode* updatePaintNode(QSGNode * oldNode, UpdatePaintNodeData *) override;
 
     QMatrix4x4 runningProfileDirection() const;
 

@@ -68,7 +68,11 @@ void cwScrapStationView::setScrap(cwScrap* scrap) {
             connect(Scrap, SIGNAL(stationAdded()), SLOT(pointAdded()));
             connect(Scrap, SIGNAL(stationRemoved(int)), SLOT(pointRemoved(int)));
             connect(Scrap, SIGNAL(stationPositionChanged(int, int)), SLOT(updateItemsPositions(int, int)));
-            connect(Scrap, SIGNAL(stationNameChanged(int)), SLOT(updateShotLines()));
+            connect(Scrap, &cwScrap::stationNameChanged, this, [this](int index) {
+                refreshItemAt(index);
+                updateShotLines();
+            });
+            connect(Scrap, &cwScrap::stationsReset, this, &cwScrapStationView::syncStationsFromScrap);
             connect(Scrap->noteTransformation(), SIGNAL(scaleChanged()), SLOT(updateShotLines()));
             connect(Scrap->noteTransformation(), SIGNAL(northUpChanged()), SLOT(updateShotLines()));
             resizeNumberOfItems(Scrap->numberOfStations());
@@ -102,6 +106,28 @@ void cwScrapStationView::setZoom(double zoom)
 {
     m_zoom = zoom;
     update();
+}
+
+void cwScrapStationView::updateItemData(QQuickItem* item, int index)
+{
+    cwScrapPointView::updateItemData(item, index);
+    QMetaObject::invokeMethod(item, "updateItem");
+}
+
+void cwScrapStationView::syncStationsFromScrap()
+{
+    if (scrap() == nullptr) {
+        resizeNumberOfItems(0);
+        updateShotLines();
+        return;
+    }
+
+    resizeNumberOfItems(scrap()->numberOfStations());
+    updateAllItemData();
+    if (scrap()->numberOfStations() > 0) {
+        updateItemsPositions(0, scrap()->numberOfStations() - 1);
+    }
+    updateShotLines();
 }
 
 /**

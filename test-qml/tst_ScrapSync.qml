@@ -81,6 +81,12 @@ MainWindowTest {
             return button
         }
 
+        function addScrapStationButton() {
+            let button = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->addScrapStation")
+            verify(button !== null)
+            return button
+        }
+
         function noteArea() {
             let area = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea")
             verify(area !== null)
@@ -108,22 +114,11 @@ MainWindowTest {
         function findFirstNoteIndexWithScraps() {
             let model = currentTrip().notes
             verify(model !== null)
-            let gallery = noteGallery()
-            let galleryView = noteGalleryView()
-
-            tryVerifyWithDiagnostics(() => {
-                return RootData.pageView.currentPageItem !== null
-                       && RootData.pageView.currentPageItem.objectName === "tripPage"
-                       && galleryView.count > 0
-            }, 5000, "wait for note gallery before scrap scan")
 
             for (let row = 0; row < model.rowCount(); ++row) {
-                galleryView.currentIndex = row
-                tryVerifyWithDiagnostics(() => {
-                    return gallery.currentNote !== null && galleryView.currentIndex === row
-                }, 5000, "select note during scrap scan")
+                selectNoteIndex(row, "select note during scrap scan", true)
 
-                if (TestHelper.noteScrapCount(gallery.currentNote) > 0) {
+                if (TestHelper.noteScrapCount(noteGallery().currentNote) > 0) {
                     return row
                 }
             }
@@ -134,22 +129,11 @@ MainWindowTest {
         function findFirstNoteIndexWithoutScraps() {
             let model = currentTrip().notes
             verify(model !== null)
-            let gallery = noteGallery()
-            let galleryView = noteGalleryView()
-
-            tryVerifyWithDiagnostics(() => {
-                return RootData.pageView.currentPageItem !== null
-                       && RootData.pageView.currentPageItem.objectName === "tripPage"
-                       && galleryView.count > 0
-            }, 5000, "wait for note gallery before empty scrap scan")
 
             for (let row = 0; row < model.rowCount(); ++row) {
-                galleryView.currentIndex = row
-                tryVerifyWithDiagnostics(() => {
-                    return gallery.currentNote !== null && galleryView.currentIndex === row
-                }, 5000, "select note during empty scrap scan")
+                selectNoteIndex(row, "select note during empty scrap scan", true)
 
-                if (TestHelper.noteScrapCount(gallery.currentNote) === 0) {
+                if (TestHelper.noteScrapCount(noteGallery().currentNote) === 0) {
                     return row
                 }
             }
@@ -157,12 +141,43 @@ MainWindowTest {
             return -1
         }
 
-        function selectNoteIndex(noteIndex, label) {
+        function selectNoteIndex(noteIndex, label, forceRebind) {
             let gallery = noteGallery()
             let galleryView = noteGalleryView()
-            galleryView.currentIndex = noteIndex
+
             tryVerifyWithDiagnostics(() => {
-                return gallery.currentNote !== null && galleryView.currentIndex === noteIndex
+                return RootData.pageView.currentPageItem !== null
+                       && RootData.pageView.currentPageItem.objectName === "tripPage"
+                       && galleryView.count > noteIndex
+            }, 5000, label + " wait for gallery row")
+
+            let shouldForceRebind = forceRebind === true
+
+            if (shouldForceRebind && galleryView.currentIndex === noteIndex) {
+                galleryView.currentIndex = -1
+                wait(50)
+            }
+            if (galleryView.currentIndex !== noteIndex) {
+                galleryView.currentIndex = noteIndex
+            }
+
+            tryVerifyWithDiagnostics(() => {
+                if (galleryView.currentIndex !== noteIndex) {
+                    galleryView.currentIndex = noteIndex
+                }
+
+                if (shouldForceRebind
+                        && gallery.currentNote === null
+                        && galleryView.currentIndex === noteIndex
+                        && gallery.state === "NO_NOTES") {
+                    galleryView.currentIndex = -1
+                    wait(50)
+                    galleryView.currentIndex = noteIndex
+                }
+
+                return gallery.state !== "NO_NOTES"
+                       && gallery.currentNote !== null
+                       && galleryView.currentIndex === noteIndex
             }, 5000, label)
         }
 
@@ -273,7 +288,11 @@ MainWindowTest {
         }
 
         function selectedScrapItem() {
-            let item = scrapView().selectedScrapItem
+            let view = scrapView()
+            if (view.selectedScrapItem === null && view.count > 0 && view.selectScrapIndex !== 0) {
+                view.selectScrapIndex = 0
+            }
+            let item = view.selectedScrapItem
             verify(item !== null)
             return item
         }
@@ -306,6 +325,28 @@ MainWindowTest {
             }
 
             return renderedState
+        }
+
+        function snapshotSelectedScrapStationState() {
+            let scrap = selectedScrapItem().scrap
+            verify(scrap !== null)
+
+            let state = {
+                stationCount: scrap.numberOfStations(),
+                stations: []
+            }
+
+            for (let i = 0; i < scrap.numberOfStations(); ++i) {
+                let position = scrap.stationData(Scrap.StationPosition, i)
+                state.stations.push({
+                    index: i,
+                    name: String(scrap.stationData(Scrap.StationName, i)),
+                    x: Number(position.x.toFixed(4)),
+                    y: Number(position.y.toFixed(4))
+                })
+            }
+
+            return state
         }
 
         function snapshotSelectedScrapRenderedOutlineState() {
@@ -429,6 +470,141 @@ MainWindowTest {
             }
             nextState.pointCount = nextState.points.length
             return nextState
+        }
+
+        function nextStationStateWithAddedStation(state) {
+            let nextState = {
+                stationCount: state.stationCount + 1,
+                stations: []
+            }
+
+            for (let i = 0; i < state.stations.length; ++i) {
+                let station = state.stations[i]
+                nextState.stations.push({
+                    index: station.index,
+                    name: station.name,
+                    x: station.x,
+                    y: station.y
+                })
+            }
+
+            nextState.stations.push({
+                index: nextState.stations.length,
+                name: "sync-added-station",
+                x: 0.52,
+                y: 0.58
+            })
+
+            return nextState
+        }
+
+        function nextStationStateWithRemovedStation(state) {
+            verify(state.stationCount > 0)
+
+            let nextState = {
+                stationCount: state.stationCount - 1,
+                stations: []
+            }
+
+            for (let i = 0; i < state.stations.length - 1; ++i) {
+                let station = state.stations[i]
+                nextState.stations.push({
+                    index: i,
+                    name: station.name,
+                    x: station.x,
+                    y: station.y
+                })
+            }
+
+            return nextState
+        }
+
+        function nextStationStateWithRenamedStation(state) {
+            verify(state.stationCount > 0)
+
+            let nextState = {
+                stationCount: state.stationCount,
+                stations: []
+            }
+
+            for (let i = 0; i < state.stations.length; ++i) {
+                let station = state.stations[i]
+                nextState.stations.push({
+                    index: i,
+                    name: station.name,
+                    x: station.x,
+                    y: station.y
+                })
+            }
+
+            let targetIndex = nextState.stations.length - 1
+            let baselineName = nextState.stations[targetIndex].name
+            nextState.stations[targetIndex].name =
+                    baselineName === "syncrenamedstation"
+                    ? "syncrenamedstation2"
+                    : "syncrenamedstation"
+
+            return nextState
+        }
+
+        function renderedSelectedScrapStationNames() {
+            let stationView = selectedScrapItem().stationView
+            let names = []
+            let objectNames = stationView.itemObjectNames()
+            for (let i = 0; i < objectNames.length; ++i) {
+                let objectName = String(objectNames[i])
+                if (objectName.startsWith("station")) {
+                    names.push(objectName.slice("station".length))
+                }
+            }
+            names.sort()
+            return names
+        }
+
+        function applySelectedScrapStationState(state) {
+            let scrap = selectedScrapItem().scrap
+            verify(scrap !== null)
+            let currentCount = scrap.numberOfStations()
+
+            if (state.stations.length === currentCount + 1) {
+                let note = noteGallery().currentNote
+                verify(note !== null)
+                let addedStation = state.stations[state.stations.length - 1]
+
+                verify(TestHelper.addScrapStation(note, 0, addedStation.name, Qt.point(addedStation.x, addedStation.y)))
+
+                tryVerifyWithDiagnostics(() => {
+                    return scrap.numberOfStations() === state.stations.length
+                }, 5000, "wait for added scrap station")
+            } else if (state.stations.length === currentCount - 1) {
+                scrap.removeStation(currentCount - 1)
+
+                tryVerifyWithDiagnostics(() => {
+                    return scrap.numberOfStations() === state.stations.length
+                }, 5000, "wait for removed scrap station")
+            } else {
+                compare(state.stations.length, currentCount)
+            }
+
+            compare(scrap.numberOfStations(), state.stations.length)
+
+            for (let i = 0; i < state.stations.length; ++i) {
+                let expectedStation = state.stations[i]
+                let currentName = String(scrap.stationData(Scrap.StationName, i))
+                let currentPosition = scrap.stationData(Scrap.StationPosition, i)
+                if (currentName !== expectedStation.name) {
+                    scrap.setStationData(Scrap.StationName, i, expectedStation.name)
+                }
+                if (Number(currentPosition.x.toFixed(4)) !== expectedStation.x
+                        || Number(currentPosition.y.toFixed(4)) !== expectedStation.y) {
+                    scrap.setStationData(Scrap.StationPosition, i, Qt.point(expectedStation.x, expectedStation.y))
+                }
+            }
+
+            tryVerifyWithDiagnostics(() => {
+                let currentState = snapshotSelectedScrapStationState()
+                return SyncTestHelper.deepEqual(currentState, state)
+            }, 5000, "wait for applied scrap station state")
         }
 
         function createNewOpenScrapWithThreePoints(existingScrapCount) {
@@ -695,6 +871,142 @@ MainWindowTest {
                 verifyResyncUi: false,
                 setter: applyNewScrapState,
                 nextValue: removeCreatedScrapState
+            })
+        }
+
+        function test_existingScrapAddStationSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+            let addedStationName = "syncaddedstation"
+            let prepareStationUi = function(stage) {
+                prepareScrapOutlineUi(stage)
+
+                let needsSelectionForUi = stage === "after-set-ui"
+                                       || stage === "after-checkout-ui"
+                                       || stage === "after-resync-ui"
+                if (!needsSelectionForUi) {
+                    return
+                }
+
+                let currentScrapView = scrapView()
+                if (currentScrapView.selectScrapIndex !== 0) {
+                    currentScrapView.selectScrapIndex = 0
+                }
+                tryVerifyWithDiagnostics(() => {
+                    return currentScrapView.selectedScrapItem !== null
+                           && currentScrapView.selectedScrapItem.scrap !== null
+                }, 5000, "select scrap for station UI assertions")
+            }
+
+            SyncTestHelper.runProjectSyncRoundTrip(testCaseId, RootData, TestHelper, {
+                tripPageAddress: context.tripPageAddress,
+                prepare: prepareStationUi,
+                restorePage: () => restoreTripPage(context.tripPageAddress),
+                getter: snapshotSelectedScrapStationState,
+                uiExpectedFromValue: (state) => {
+                    return state.stationCount
+                },
+                uiGetter: () => {
+                    return selectedScrapItem().stationView.count
+                },
+                verifyBaselineUi: true,
+                verifyEditedUi: true,
+                verifyCheckoutUi: true,
+                verifyResyncUi: true,
+                setter: applySelectedScrapStationState,
+                nextValue: (state) => {
+                    let nextState = nextStationStateWithAddedStation(state)
+                    nextState.stations[nextState.stations.length - 1].name = addedStationName
+                    return nextState
+                }
+            })
+        }
+
+        function test_existingScrapRemoveStationSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+            let prepareStationUi = function(stage) {
+                prepareScrapOutlineUi(stage)
+
+                let needsSelectionForUi = stage === "after-set-ui"
+                                       || stage === "after-checkout-ui"
+                                       || stage === "after-resync-ui"
+                if (!needsSelectionForUi) {
+                    return
+                }
+
+                let currentScrapView = scrapView()
+                if (currentScrapView.selectScrapIndex !== 0) {
+                    currentScrapView.selectScrapIndex = 0
+                }
+                tryVerifyWithDiagnostics(() => {
+                    return currentScrapView.selectedScrapItem !== null
+                           && currentScrapView.selectedScrapItem.scrap !== null
+                }, 5000, "select scrap for station UI assertions")
+            }
+
+            SyncTestHelper.runProjectSyncRoundTrip(testCaseId, RootData, TestHelper, {
+                tripPageAddress: context.tripPageAddress,
+                prepare: prepareStationUi,
+                restorePage: () => restoreTripPage(context.tripPageAddress),
+                getter: snapshotSelectedScrapStationState,
+                uiExpectedFromValue: (state) => {
+                    return state.stationCount
+                },
+                uiGetter: () => {
+                    return selectedScrapItem().stationView.count
+                },
+                verifyBaselineUi: true,
+                verifyEditedUi: true,
+                verifyCheckoutUi: true,
+                verifyResyncUi: true,
+                setter: applySelectedScrapStationState,
+                nextValue: nextStationStateWithRemovedStation
+            })
+        }
+
+        function test_existingScrapRenameStationSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+            let prepareStationUi = function(stage) {
+                prepareScrapOutlineUi(stage)
+
+                let needsSelectionForUi = stage === "after-set-ui"
+                                       || stage === "after-checkout-ui"
+                                       || stage === "after-resync-ui"
+                if (!needsSelectionForUi) {
+                    return
+                }
+
+                let currentScrapView = scrapView()
+                if (currentScrapView.selectScrapIndex !== 0) {
+                    currentScrapView.selectScrapIndex = 0
+                }
+                tryVerifyWithDiagnostics(() => {
+                    return currentScrapView.selectedScrapItem !== null
+                           && currentScrapView.selectedScrapItem.scrap !== null
+                }, 5000, "select scrap for station rename UI assertions")
+            }
+
+            SyncTestHelper.runProjectSyncRoundTrip(testCaseId, RootData, TestHelper, {
+                tripPageAddress: context.tripPageAddress,
+                prepare: prepareStationUi,
+                restorePage: () => restoreTripPage(context.tripPageAddress),
+                getter: snapshotSelectedScrapStationState,
+                uiExpectedFromValue: (state) => {
+                    let names = []
+                    for (let i = 0; i < state.stations.length; ++i) {
+                        names.push(state.stations[i].name)
+                    }
+                    names.sort()
+                    return names
+                },
+                uiGetter: () => {
+                    return renderedSelectedScrapStationNames()
+                },
+                verifyBaselineUi: true,
+                verifyEditedUi: true,
+                verifyCheckoutUi: true,
+                verifyResyncUi: true,
+                setter: applySelectedScrapStationState,
+                nextValue: nextStationStateWithRenamedStation
             })
         }
     }
