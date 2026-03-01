@@ -34,6 +34,9 @@ void cwScrapLeadView::setScrap(cwScrap *scrap)
             connect(Scrap, &cwScrap::leadsInserted, this, &cwScrapLeadView::pointsInserted);
             connect(Scrap, &cwScrap::leadsRemoved, this, &cwScrapLeadView::pointsRemoved);
             connect(Scrap, &cwScrap::leadsDataChanged, this, &cwScrapLeadView::updateViewWithData);
+            connect(Scrap, &cwScrap::leadsReset, this, [this]() {
+                resizeNumberOfItems(Scrap != nullptr ? Scrap->numberOfLeads() : 0);
+            });
             resizeNumberOfItems(Scrap->leads().size());
         } else {
             resizeNumberOfItems(0);
@@ -57,4 +60,3 @@ void cwScrapLeadView::updateViewWithData(int begin, int end, QList<int> roles)
         updateItemsPositions(begin, end);
     }
 }
-

@@ -18,6 +18,7 @@ QQ.QtObject {
         QQ.Connections {
         target: listener.scrap === null ? null : listener.scrap
         function onLeadsDataChanged(begin, end, roles) { listener.updateData(begin, end, roles); }
+        function onLeadsReset() { listener.update(); }
         ignoreUnknownSignals: true
     }
 
@@ -76,10 +77,10 @@ QQ.QtObject {
     onDescriptionChanged: scrap.setLeadData(Scrap.LeadDesciption, index, description)
     onWidthChanged: scrap.setLeadData(Scrap.LeadSize,
                                       index,
-                                      Qt.size(width, height))
+                                      Qt.size(toLeadDim(width), toLeadDim(height)))
     onHeightChanged: scrap.setLeadData(Scrap.LeadSize,
                                        index,
-                                       Qt.size(width, height))
+                                       Qt.size(toLeadDim(width), toLeadDim(height)))
     onCompletedChanged: scrap.setLeadData(Scrap.LeadCompleted,
                                           index,
                                           completed)
@@ -90,4 +91,3 @@ QQ.QtObject {
 
 
 }
-

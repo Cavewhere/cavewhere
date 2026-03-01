@@ -87,6 +87,12 @@ MainWindowTest {
             return button
         }
 
+        function addLeadButton() {
+            let button = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->addLeads")
+            verify(button !== null)
+            return button
+        }
+
         function noteArea() {
             let area = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea")
             verify(area !== null)
@@ -103,6 +109,30 @@ MainWindowTest {
             let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->scrapViewId")
             verify(view !== null)
             return view
+        }
+
+        function leadEditor() {
+            let editor = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->leadEditor")
+            verify(editor !== null)
+            return editor
+        }
+
+        function leadEditorWidthText() {
+            let input = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->leadEditor->widthText")
+            verify(input !== null)
+            return input
+        }
+
+        function leadEditorHeightText() {
+            let input = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->leadEditor->heightText")
+            verify(input !== null)
+            return input
+        }
+
+        function leadEditorDescription() {
+            let input = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->leadEditor->description")
+            verify(input !== null)
+            return input
         }
 
         function autoCalculateScrapCheckBox() {
@@ -242,6 +272,35 @@ MainWindowTest {
             }
 
             return -1
+        }
+
+        function findFirstNoteAndScrapIndexWithLeads() {
+            let model = currentTrip().notes
+            verify(model !== null)
+
+            for (let row = 0; row < model.rowCount(); ++row) {
+                selectNoteIndex(row, "select note during lead scan", true)
+                enterCarpetMode()
+
+                let currentScrapView = scrapView()
+                tryVerifyWithDiagnostics(() => {
+                    return currentScrapView.note === noteGallery().currentNote
+                           && currentScrapView.count > 0
+                }, 5000, "bind scrap view during lead scan")
+
+                for (let scrapIndex = 0; scrapIndex < currentScrapView.count; ++scrapIndex) {
+                    selectScrapIndex(scrapIndex, "select scrap during lead scan")
+
+                    if (currentScrapView.selectedScrapItem.scrap.numberOfLeads() > 0) {
+                        return {
+                            noteIndex: row,
+                            scrapIndex: scrapIndex
+                        }
+                    }
+                }
+            }
+
+            return null
         }
 
         function selectNoteIndex(noteIndex, label, forceRebind) {
@@ -392,12 +451,23 @@ MainWindowTest {
 
         function selectedScrapItem() {
             let view = scrapView()
-            if (view.selectedScrapItem === null && view.count > 0 && view.selectScrapIndex !== 0) {
-                view.selectScrapIndex = 0
-            }
             let item = view.selectedScrapItem
             verify(item !== null)
             return item
+        }
+
+        function selectScrapIndex(scrapIndex, label) {
+            let view = scrapView()
+
+            if (view.selectScrapIndex !== scrapIndex) {
+                view.selectScrapIndex = scrapIndex
+            }
+
+            tryVerifyWithDiagnostics(() => {
+                return view.selectScrapIndex === scrapIndex
+                       && view.selectedScrapItem !== null
+                       && view.selectedScrapItem.scrap !== null
+            }, 5000, label)
         }
 
         function snapshotSelectedScrapOutlineState() {
@@ -433,6 +503,16 @@ MainWindowTest {
         function roundToDigits(value, digits) {
             let scale = Math.pow(10, digits)
             return Math.round(Number(value) * scale) / scale
+        }
+
+        function leadDimensionText(value) {
+            let numericValue = Number(value)
+            return !isFinite(numericValue) || numericValue < 0 ? "?" : String(numericValue)
+        }
+
+        function normalizedLeadDimensionValue(value) {
+            let numericValue = Number(value)
+            return !isFinite(numericValue) || numericValue < 0 ? -1 : numericValue
         }
 
         function projectedProfileDirectionText(direction) {
@@ -715,6 +795,116 @@ MainWindowTest {
             }
 
             return state
+        }
+
+        function selectedLeadItem(leadIndex) {
+            let scrapItem = selectedScrapItem()
+            let item = null
+            tryVerifyWithDiagnostics(() => {
+                item = findDescendantWhere(noteArea(), (child) => {
+                    return child !== null
+                           && child.objectName === "noteLead" + leadIndex
+                           && child.scrapItem !== undefined
+                           && child.scrapItem === scrapItem
+                })
+                return item !== null
+            }, 5000, "find rendered lead item")
+            verify(item !== null)
+            return item
+        }
+
+        function snapshotSelectedScrapLeadState() {
+            let scrap = selectedScrapItem().scrap
+            verify(scrap !== null)
+            verify(scrap.numberOfLeads() > 0)
+
+            let size = scrap.leadData(Scrap.LeadSize, 0)
+            let position = scrap.leadData(Scrap.LeadPositionOnNote, 0)
+            return {
+                leadCount: scrap.numberOfLeads(),
+                x: Number(position.x.toFixed(4)),
+                y: Number(position.y.toFixed(4)),
+                width: normalizedLeadDimensionValue(size.width),
+                height: normalizedLeadDimensionValue(size.height),
+                description: String(scrap.leadData(Scrap.LeadDesciption, 0))
+            }
+        }
+
+        function selectedScrapLeadUiState() {
+            let note = noteGallery().currentNote
+            verify(note !== null)
+            let leadView = selectedScrapItem().leadView
+            let leadItem = selectedLeadItem(0)
+
+            return {
+                leadCount: leadView.count,
+                selectedLeadIndex: leadView.selectedItemIndex,
+                editorVisible: leadEditor().visible,
+                leadItemX: Math.floor(leadItem.x),
+                leadItemY: Math.floor(leadItem.y),
+                width: String(leadEditorWidthText().text),
+                height: String(leadEditorHeightText().text),
+                description: String(leadEditorDescription().text)
+            }
+        }
+
+        function expectedScrapLeadUiState(state) {
+            let note = noteGallery().currentNote
+            verify(note !== null)
+            let renderSize = note.renderSize()
+            return {
+                leadCount: state.leadCount,
+                selectedLeadIndex: 0,
+                editorVisible: true,
+                leadItemX: Math.floor(state.x * renderSize.width),
+                leadItemY: Math.floor((1.0 - state.y) * renderSize.height),
+                width: leadDimensionText(state.width),
+                height: leadDimensionText(state.height),
+                description: state.description
+            }
+        }
+
+        function applySelectedScrapLeadState(state) {
+            let scrap = selectedScrapItem().scrap
+            verify(scrap !== null)
+            compare(scrap.numberOfLeads(), state.leadCount)
+            verify(state.leadCount > 0)
+
+            let currentPosition = scrap.leadData(Scrap.LeadPositionOnNote, 0)
+            if (Number(currentPosition.x.toFixed(4)) !== state.x
+                    || Number(currentPosition.y.toFixed(4)) !== state.y) {
+                scrap.setLeadData(Scrap.LeadPositionOnNote, 0, Qt.point(state.x, state.y))
+            }
+
+            let currentSize = scrap.leadData(Scrap.LeadSize, 0)
+            if (Number(currentSize.width.toFixed(2)) !== state.width
+                    || Number(currentSize.height.toFixed(2)) !== state.height) {
+                scrap.setLeadData(Scrap.LeadSize, 0, Qt.size(state.width, state.height))
+            }
+
+            let currentDescription = String(scrap.leadData(Scrap.LeadDesciption, 0))
+            if (currentDescription !== state.description) {
+                scrap.setLeadData(Scrap.LeadDesciption, 0, state.description)
+            }
+
+            tryVerifyWithDiagnostics(() => {
+                return SyncTestHelper.deepEqual(snapshotSelectedScrapLeadState(), state)
+            }, 5000, "wait for applied scrap lead state")
+
+            TestHelper.waitForProjectSaveToFinish(RootData.project)
+        }
+
+        function nextLeadState(state) {
+            return {
+                leadCount: state.leadCount,
+                x: state.x === 0.63 ? 0.58 : 0.63,
+                y: state.y === 0.44 ? 0.49 : 0.44,
+                width: state.width === 7 ? 5 : 7,
+                height: state.height === 6 ? 4 : 6,
+                description: state.description === "Sync lead updated"
+                           ? "Sync lead updated again"
+                           : "Sync lead updated"
+            }
         }
 
         function snapshotSelectedScrapRenderedOutlineState() {
@@ -1554,6 +1744,64 @@ MainWindowTest {
                 verifyResyncUi: true,
                 setter: applySelectedScrapStationState,
                 nextValue: nextStationStateWithRenamedStation
+            })
+        }
+
+        function test_existingScrapModifyLeadSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+            let leadContext = findFirstNoteAndScrapIndexWithLeads()
+            verify(leadContext !== null)
+
+            let prepareLeadUi = function(stage) {
+                disableNoteLoadUi()
+                selectNoteIndex(leadContext.noteIndex, "select note for lead test")
+                waitForNoteCanvasReady("wait for note canvas in lead test")
+                enterCarpetMode()
+
+                let currentScrapView = scrapView()
+                tryVerifyWithDiagnostics(() => {
+                    return currentScrapView.note === noteGallery().currentNote
+                           && currentScrapView.count > leadContext.scrapIndex
+                }, 5000, "bind scrap view for lead test")
+
+                selectScrapIndex(leadContext.scrapIndex, "select scrap for lead test")
+                tryVerifyWithDiagnostics(() => {
+                    return currentScrapView.selectedScrapItem.scrap.numberOfLeads() > 0
+                }, 5000, "wait for leads in selected scrap")
+
+                let needsLeadSelection = stage === "baseline-ui"
+                                      || stage === "after-set-ui"
+                                      || stage === "after-checkout-ui"
+                                      || stage === "after-resync-ui"
+                if (!needsLeadSelection) {
+                    return
+                }
+
+                let leadView = currentScrapView.selectedScrapItem.leadView
+                if (leadView.selectedItemIndex !== 0) {
+                    leadView.selectedItemIndex = 0
+                }
+
+                tryVerifyWithDiagnostics(() => {
+                    return leadView.count > 0
+                           && leadView.selectedItemIndex === 0
+                           && selectedLeadItem(0) !== null
+                           && leadEditor().visible === true
+                }, 5000, "select lead for ui test")
+            }
+
+            SyncTestHelper.runProjectSyncRoundTrip(testCaseId, RootData, TestHelper, {
+                tripPageAddress: context.tripPageAddress,
+                prepare: prepareLeadUi,
+                restorePage: () => restoreTripPage(context.tripPageAddress),
+                getter: snapshotSelectedScrapLeadState,
+                uiExpectedFromValue: expectedScrapLeadUiState,
+                uiGetter: selectedScrapLeadUiState,
+                verifyEditedUi: false,
+                verifyBaselineAfterCheckoutTimeoutMs: 10000,
+                verifyResyncedValueTimeoutMs: 10000,
+                setter: applySelectedScrapLeadState,
+                nextValue: nextLeadState
             })
         }
     }

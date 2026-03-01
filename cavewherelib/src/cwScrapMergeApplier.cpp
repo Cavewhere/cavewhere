@@ -15,6 +15,9 @@ namespace {
 
 bool almostEqual(qreal lhs, qreal rhs)
 {
+    if (qIsNaN(lhs) || qIsNaN(rhs)) {
+        return qIsNaN(lhs) && qIsNaN(rhs);
+    }
     return qAbs(lhs - rhs) <= 1.0e-6;
 }
 

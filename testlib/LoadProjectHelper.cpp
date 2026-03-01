@@ -288,6 +288,15 @@ int TestHelper::projectModifiedFileCount(cwProject* project) const
     return project->repository()->modifiedFileCount();
 }
 
+void TestHelper::waitForProjectSaveToFinish(cwProject* project) const
+{
+    if (project == nullptr) {
+        return;
+    }
+
+    project->waitSaveToFinish();
+}
+
 QString TestHelper::checkoutProjectRef(cwProject* project,
                                        const QString& refSpec,
                                        bool force) const
