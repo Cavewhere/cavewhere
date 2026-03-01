@@ -406,6 +406,7 @@ QQ.Rectangle {
             }
 
             LoadNotesIconButton {
+                objectName: "toolbarLoadNotesButton"
                 sourceSize: mainToolBar.iconSize
                 onFilesSelected: (images) =>  {
                     noteGallery.imagesAdded(images)

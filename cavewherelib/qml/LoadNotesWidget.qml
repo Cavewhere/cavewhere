@@ -80,6 +80,7 @@ QQ.Item {
                     LoadNotesIconButton {
                         Layout.alignment: Qt.AlignVCenter
                         id: loadNoteButtonId
+                        objectName: "emptyStateLoadNotesButton"
                         onFilesSelected: (images) => widgetId.filesSelected(images)
                         sourceSize: Qt.size(48, 48)
                     }
