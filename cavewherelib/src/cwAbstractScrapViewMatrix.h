@@ -50,7 +50,7 @@ public:
         return m_data.get();
     }
 
-    void setData(cwAbstractScrapViewMatrix::Data* data) {
+    virtual void setData(cwAbstractScrapViewMatrix::Data* data) {
         m_data.reset(data);
         emit matrixChanged();
     }

@@ -111,6 +111,109 @@ MainWindowTest {
             return checkBox
         }
 
+        function noteTransformEditor() {
+            let editor = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteTransformEditor")
+            verify(editor !== null)
+            return editor
+        }
+
+        function noteTransformTypeComboBox() {
+            let comboBox = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteTransformEditor->typeComboBox")
+            verify(comboBox !== null)
+            return comboBox
+        }
+
+        function noteTransformUpInput() {
+            let input = findDescendantWhere(noteTransformEditor(), (child) => {
+                return child !== null
+                       && child.northUpHelp !== undefined
+                       && child.northUpInteractionActivated !== undefined
+            })
+            verify(input !== null)
+            return input
+        }
+
+        function noteTransformUpLabel() {
+            let label = findDescendantWhere(noteTransformUpInput(), (child) => {
+                return child !== null
+                       && child.helpArea !== undefined
+                       && child.text !== undefined
+            })
+            verify(label !== null)
+            return label
+        }
+
+        function noteTransformUpValueInput() {
+            let input = findDescendantWhere(noteTransformUpInput(), (child) => {
+                return child !== null
+                       && child.readOnly !== undefined
+                       && child.text !== undefined
+            })
+            verify(input !== null)
+            return input
+        }
+
+        function noteTransformScaleInput() {
+            let input = findDescendantWhere(noteTransformEditor(), (child) => {
+                return child !== null
+                       && child.scaleObject !== undefined
+                       && child.onPaperLabel !== undefined
+                       && child.inCaveLabel !== undefined
+            })
+            verify(input !== null)
+            return input
+        }
+
+        function noteTransformScaleOnPaperInput() {
+            let input = findDescendantWhere(noteTransformScaleInput(), (child) => {
+                return child !== null && child.objectName === "onPaperLengthInput"
+            })
+            verify(input !== null)
+            return input
+        }
+
+        function noteTransformScaleInCaveInput() {
+            let input = findDescendantWhere(noteTransformScaleInput(), (child) => {
+                return child !== null && child.objectName === "inCaveLengthInput"
+            })
+            verify(input !== null)
+            return input
+        }
+
+        function noteTransformScaleOnPaperUnitInput() {
+            let input = findDescendantWhere(noteTransformScaleOnPaperInput(), (child) => {
+                return child !== null && child.objectName === "unitInput"
+            })
+            verify(input !== null)
+            return input
+        }
+
+        function noteTransformScaleInCaveUnitInput() {
+            let input = findDescendantWhere(noteTransformScaleInCaveInput(), (child) => {
+                return child !== null && child.objectName === "unitInput"
+            })
+            verify(input !== null)
+            return input
+        }
+
+        function noteTransformAzimuthRow() {
+            let row = noteTransformDirectionComboBox().parent
+            verify(row !== null)
+            return row
+        }
+
+        function noteTransformDirectionComboBox() {
+            let comboBox = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteTransformEditor->autoCalculate->directionComboBox")
+            verify(comboBox !== null)
+            return comboBox
+        }
+
+        function noteTransformAzimuthTextInput() {
+            let input = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteTransformEditor->autoCalculate->azimuthTextInput")
+            verify(input !== null)
+            return input
+        }
+
         function findFirstNoteIndexWithScraps() {
             let model = currentTrip().notes
             verify(model !== null)
@@ -325,6 +428,271 @@ MainWindowTest {
             }
 
             return renderedState
+        }
+
+        function roundToDigits(value, digits) {
+            let scale = Math.pow(10, digits)
+            return Math.round(Number(value) * scale) / scale
+        }
+
+        function projectedProfileDirectionText(direction) {
+            switch (direction) {
+            case ProjectedProfileScrapViewMatrix.LookingAt:
+                return "looking at"
+            case ProjectedProfileScrapViewMatrix.LeftToRight:
+                return "left → right"
+            case ProjectedProfileScrapViewMatrix.RightToLeft:
+                return "left ← right"
+            default:
+                return ""
+            }
+        }
+
+        function convertLengthValue(value, fromUnit, toUnit) {
+            let factorsToMeters = {}
+            factorsToMeters[Units.Inches] = 0.0254
+            factorsToMeters[Units.Feet] = 0.3048
+            factorsToMeters[Units.Yards] = 0.9144
+            factorsToMeters[Units.Meters] = 1.0
+            factorsToMeters[Units.Millimeters] = 0.001
+            factorsToMeters[Units.Centimeters] = 0.01
+            factorsToMeters[Units.Kilometers] = 1000.0
+            factorsToMeters[Units.LengthUnitless] = 1.0
+            factorsToMeters[Units.Miles] = 1609.34
+
+            let fromFactor = factorsToMeters[fromUnit]
+            let toFactor = factorsToMeters[toUnit]
+            if (fromFactor === undefined || toFactor === undefined) {
+                return value
+            }
+            return Number(value) * fromFactor / toFactor
+        }
+
+        function snapshotSelectedScrapTransformState() {
+            let scrap = selectedScrapItem().scrap
+            verify(scrap !== null)
+            verify(scrap.noteTransformation !== null)
+
+            let scaleObject = scrap.noteTransformation.scaleObject
+            verify(scaleObject !== null)
+            verify(scaleObject.scaleNumerator !== null)
+            verify(scaleObject.scaleDenominator !== null)
+
+            let state = {
+                type: scrap.type,
+                calculateNoteTransform: scrap.calculateNoteTransform,
+                northUp: roundToDigits(scrap.noteTransformation.northUp, 2),
+                scaleNumeratorValue: roundToDigits(scaleObject.scaleNumerator.value, 2),
+                scaleNumeratorUnit: scaleObject.scaleNumerator.unit,
+                scaleDenominatorValue: roundToDigits(scaleObject.scaleDenominator.value, 2),
+                scaleDenominatorUnit: scaleObject.scaleDenominator.unit,
+                scale: roundToDigits(scaleObject.scale, 6),
+                direction: null,
+                azimuth: null
+            }
+
+            if (scrap.type === Scrap.ProjectedProfile) {
+                state.direction = scrap.viewMatrix.direction
+                state.azimuth = roundToDigits(scrap.viewMatrix.azimuth, 1)
+            }
+
+            return state
+        }
+
+        function selectedScrapTransformUiState() {
+            let scaleOnPaperInput = noteTransformScaleOnPaperInput()
+            let scaleInCaveInput = noteTransformScaleInCaveInput()
+            let scaleOnPaperUnitInput = noteTransformScaleOnPaperUnitInput()
+            let scaleInCaveUnitInput = noteTransformScaleInCaveUnitInput()
+            let azimuthRow = noteTransformAzimuthRow()
+            let state = {
+                type: noteTransformTypeComboBox().currentIndex,
+                autoCalculate: autoCalculateScrapCheckBox().checked,
+                upLabel: noteTransformUpLabel().text,
+                upValue: Number(noteTransformUpValueInput().text),
+                upReadOnly: noteTransformUpValueInput().readOnly,
+                scaleOnPaperValue: roundToDigits(scaleOnPaperInput.unitValue.value, 2),
+                scaleOnPaperUnit: scaleOnPaperInput.unitValue.unit,
+                scaleOnPaperVisible: scaleOnPaperInput.valueVisible,
+                scaleOnPaperReadOnly: scaleOnPaperInput.valueReadOnly,
+                scaleInCaveValue: roundToDigits(scaleInCaveInput.unitValue.value, 2),
+                scaleInCaveUnit: scaleInCaveInput.unitValue.unit,
+                scaleInCaveVisible: scaleInCaveInput.valueVisible,
+                scaleInCaveReadOnly: scaleInCaveInput.valueReadOnly,
+                azimuthVisible: azimuthRow.visible,
+                direction: null,
+                directionText: null,
+                azimuth: null,
+                azimuthReadOnly: null
+            }
+
+            if (state.azimuthVisible) {
+                state.direction = noteTransformDirectionComboBox().currentIndex
+                state.directionText = noteTransformDirectionComboBox().currentText
+                state.azimuth = Number(noteTransformAzimuthTextInput().text)
+                state.azimuthReadOnly = noteTransformAzimuthTextInput().readOnly
+            }
+
+            return state
+        }
+
+        function expectedScrapTransformUiState(state) {
+            let autoScale = state.calculateNoteTransform
+            let typeIsPlan = state.type === Scrap.Plan
+            let typeIsProjected = state.type === Scrap.ProjectedProfile
+            return {
+                type: state.type,
+                autoCalculate: autoScale,
+                upLabel: typeIsPlan ? "North" : "Up",
+                upValue: state.northUp,
+                upReadOnly: autoScale,
+                scaleOnPaperValue: state.scaleNumeratorValue,
+                scaleOnPaperUnit: state.scaleNumeratorUnit,
+                scaleOnPaperVisible: !autoScale || state.scaleNumeratorUnit !== Units.LengthUnitless,
+                scaleOnPaperReadOnly: autoScale,
+                scaleInCaveValue: state.scaleDenominatorValue,
+                scaleInCaveUnit: state.scaleDenominatorUnit,
+                scaleInCaveVisible: !autoScale || state.scaleDenominatorUnit !== Units.LengthUnitless,
+                scaleInCaveReadOnly: autoScale,
+                azimuthVisible: typeIsProjected,
+                direction: typeIsProjected ? state.direction : null,
+                directionText: typeIsProjected ? projectedProfileDirectionText(state.direction) : null,
+                azimuth: typeIsProjected ? state.azimuth : null,
+                azimuthReadOnly: typeIsProjected ? autoScale : null
+            }
+        }
+
+        function selectedScrapTransformTypeUiState() {
+            return {
+                type: noteTransformTypeComboBox().currentIndex,
+                autoCalculate: autoCalculateScrapCheckBox().checked,
+                upLabel: noteTransformUpLabel().text,
+                upReadOnly: noteTransformUpValueInput().readOnly,
+                azimuthVisible: noteTransformAzimuthRow().visible
+            }
+        }
+
+        function expectedScrapTransformTypeUiState(state) {
+            return {
+                type: state.type,
+                autoCalculate: state.calculateNoteTransform,
+                upLabel: state.type === Scrap.Plan ? "North" : "Up",
+                upReadOnly: state.calculateNoteTransform,
+                azimuthVisible: state.type === Scrap.ProjectedProfile
+            }
+        }
+
+        function applySelectedScrapTransformState(state) {
+            let scrap = selectedScrapItem().scrap
+            verify(scrap !== null)
+            verify(scrap.noteTransformation !== null)
+            verify(scrap.noteTransformation.scaleObject !== null)
+
+            if (scrap.type !== state.type) {
+                scrap.type = state.type
+            }
+
+            tryVerifyWithDiagnostics(() => {
+                return scrap.type === state.type
+            }, 5000, "wait for scrap type change")
+
+            if (scrap.calculateNoteTransform !== state.calculateNoteTransform) {
+                scrap.calculateNoteTransform = state.calculateNoteTransform
+            }
+
+            if (roundToDigits(scrap.noteTransformation.northUp, 2) !== state.northUp) {
+                scrap.noteTransformation.northUp = state.northUp
+            }
+
+            let scaleObject = scrap.noteTransformation.scaleObject
+            if (scaleObject.scaleNumerator.unit !== state.scaleNumeratorUnit) {
+                scaleObject.scaleNumerator.unit = state.scaleNumeratorUnit
+            }
+            if (roundToDigits(scaleObject.scaleNumerator.value, 2) !== state.scaleNumeratorValue) {
+                scaleObject.scaleNumerator.value = state.scaleNumeratorValue
+            }
+            if (scaleObject.scaleDenominator.unit !== state.scaleDenominatorUnit) {
+                scaleObject.scaleDenominator.unit = state.scaleDenominatorUnit
+            }
+            if (roundToDigits(scaleObject.scaleDenominator.value, 2) !== state.scaleDenominatorValue) {
+                scaleObject.scaleDenominator.value = state.scaleDenominatorValue
+            }
+
+            if (state.type === Scrap.ProjectedProfile) {
+                verify(scrap.viewMatrix !== null)
+                if (scrap.viewMatrix.direction !== state.direction) {
+                    scrap.viewMatrix.direction = state.direction
+                }
+                if (roundToDigits(scrap.viewMatrix.azimuth, 1) !== state.azimuth) {
+                    scrap.viewMatrix.azimuth = state.azimuth
+                }
+            }
+
+            tryVerifyWithDiagnostics(() => {
+                return SyncTestHelper.deepEqual(snapshotSelectedScrapTransformState(), state)
+            }, 5000, "wait for applied scrap transform state")
+        }
+
+        function nextTransformStateWithType(state, type) {
+            let nextState = {
+                type: type,
+                calculateNoteTransform: state.calculateNoteTransform,
+                northUp: state.northUp,
+                scaleNumeratorValue: state.scaleNumeratorValue,
+                scaleNumeratorUnit: state.scaleNumeratorUnit,
+                scaleDenominatorValue: state.scaleDenominatorValue,
+                scaleDenominatorUnit: state.scaleDenominatorUnit,
+                scale: state.scale,
+                direction: null,
+                azimuth: null
+            }
+
+            if (type === Scrap.ProjectedProfile) {
+                nextState.direction = state.direction !== null
+                                      ? state.direction
+                                      : ProjectedProfileScrapViewMatrix.LookingAt
+                nextState.azimuth = state.azimuth !== null ? state.azimuth : 0.0
+            }
+
+            return nextState
+        }
+
+        function nextPlanManualTransformState(state) {
+            let nextState = nextTransformStateWithType(state, Scrap.Plan)
+            nextState.calculateNoteTransform = false
+            nextState.northUp = state.northUp === 27.5 ? 42.25 : 27.5
+            nextState.scaleNumeratorUnit = Units.Centimeters
+            nextState.scaleNumeratorValue = 1.0
+            nextState.scaleDenominatorUnit = Units.Meters
+            nextState.scaleDenominatorValue = state.scaleDenominatorValue === 2.5 ? 4.0 : 2.5
+            nextState.scale = roundToDigits(convertLengthValue(nextState.scaleNumeratorValue,
+                                                               nextState.scaleNumeratorUnit,
+                                                               Units.Meters)
+                                            / convertLengthValue(nextState.scaleDenominatorValue,
+                                                                 nextState.scaleDenominatorUnit,
+                                                                 Units.Meters), 6)
+            return nextState
+        }
+
+        function nextProjectedManualTransformState(state) {
+            let nextState = nextTransformStateWithType(state, Scrap.ProjectedProfile)
+            nextState.calculateNoteTransform = false
+            nextState.northUp = state.northUp === 91.5 ? 123.75 : 91.5
+            nextState.scaleNumeratorUnit = Units.Centimeters
+            nextState.scaleNumeratorValue = 1.0
+            nextState.scaleDenominatorUnit = Units.Meters
+            nextState.scaleDenominatorValue = state.scaleDenominatorValue === 3.0 ? 5.5 : 3.0
+            nextState.scale = roundToDigits(convertLengthValue(nextState.scaleNumeratorValue,
+                                                               nextState.scaleNumeratorUnit,
+                                                               Units.Meters)
+                                            / convertLengthValue(nextState.scaleDenominatorValue,
+                                                                 nextState.scaleDenominatorUnit,
+                                                                 Units.Meters), 6)
+            nextState.direction = state.direction === ProjectedProfileScrapViewMatrix.LeftToRight
+                                  ? ProjectedProfileScrapViewMatrix.RightToLeft
+                                  : ProjectedProfileScrapViewMatrix.LeftToRight
+            nextState.azimuth = state.azimuth === 37.5 ? 148.0 : 37.5
+            return nextState
         }
 
         function snapshotSelectedScrapStationState() {
@@ -650,6 +1018,77 @@ MainWindowTest {
             }, 5000, "wait for three-point scrap")
         }
 
+        function prepareScrapTransformUi(stage) {
+            prepareScrapOutlineUi(stage)
+
+            let needsTransformEditor = stage === "baseline-ui"
+                                     || stage === "before-set"
+                                     || stage === "after-set"
+                                     || stage === "after-set-ui"
+                                     || stage === "after-checkout"
+                                     || stage === "after-checkout-ui"
+                                     || stage === "after-resync"
+                                     || stage === "after-resync-ui"
+            if (!needsTransformEditor) {
+                return
+            }
+
+            enterCarpetMode()
+
+            let currentScrapView = scrapView()
+            tryVerifyWithDiagnostics(() => {
+                return currentScrapView.note === noteGallery().currentNote
+                       && currentScrapView.count > 0
+            }, 5000, "bind scrap view for transform editor")
+
+            if (currentScrapView.selectScrapIndex !== 0) {
+                currentScrapView.selectScrapIndex = 0
+            }
+
+            let editor = noteTransformEditor()
+            tryVerifyWithDiagnostics(() => {
+                return editor.visible === true
+                       && editor.scrap !== null
+                       && editor.noteTransform !== null
+            }, 5000, "wait for note transform editor")
+        }
+
+        function verifyLiveScrapTransformUi(label) {
+            let gallery = noteGallery()
+            let currentScrapView = scrapView()
+            let editor = noteTransformEditor()
+
+            tryVerifyWithDiagnostics(() => {
+                return RootData.pageView.currentPageItem !== null
+                       && RootData.pageView.currentPageItem.objectName === "tripPage"
+                       && gallery.currentNote !== null
+                       && gallery.mode === "CARPET"
+                       && currentScrapView.note === gallery.currentNote
+                       && currentScrapView.selectedScrapItem !== null
+                       && currentScrapView.selectedScrapItem.scrap !== null
+                       && editor.visible === true
+                       && editor.scrap !== null
+                       && editor.noteTransform !== null
+                       && editor.scrap === currentScrapView.selectedScrapItem.scrap
+            }, 5000, label)
+        }
+
+        function prepareScrapTransformUiWithoutRefresh(stage) {
+            let needsLiveUiOnly = stage === "after-checkout"
+                               || stage === "after-checkout-ui"
+                               || stage === "after-resync"
+                               || stage === "after-resync-ui"
+
+            if (!needsLiveUiOnly) {
+                prepareScrapTransformUi(stage)
+                return
+            }
+
+            disableNoteLoadUi()
+            waitForNoteCanvasReady("wait for note canvas for live transform ui")
+            verifyLiveScrapTransformUi("verify live scrap transform ui")
+        }
+
         function test_existingScrapOutlineSyncAndCheckout() {
             let context = loadFixtureAndOpenFirstTrip()
 
@@ -871,6 +1310,114 @@ MainWindowTest {
                 verifyResyncUi: false,
                 setter: applyNewScrapState,
                 nextValue: removeCreatedScrapState
+            })
+        }
+
+        function test_existingScrapSwitchPlanAndRunningProfileSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+
+            SyncTestHelper.runProjectSyncRoundTrip(testCaseId, RootData, TestHelper, {
+                tripPageAddress: context.tripPageAddress,
+                prepare: prepareScrapTransformUi,
+                restorePage: () => restoreTripPage(context.tripPageAddress),
+                getter: snapshotSelectedScrapTransformState,
+                uiExpectedFromValue: expectedScrapTransformTypeUiState,
+                uiGetter: selectedScrapTransformTypeUiState,
+                verifyEditedUi: false,
+                verifyBaselineAfterCheckoutTimeoutMs: 10000,
+                verifyResyncedValueTimeoutMs: 10000,
+                setter: applySelectedScrapTransformState,
+                nextValue: (state) => {
+                    return nextTransformStateWithType(state, Scrap.Plan)
+                }
+            })
+
+            SyncTestHelper.runProjectSyncRoundTrip(testCaseId, RootData, TestHelper, {
+                tripPageAddress: context.tripPageAddress,
+                prepare: prepareScrapTransformUi,
+                restorePage: () => restoreTripPage(context.tripPageAddress),
+                getter: snapshotSelectedScrapTransformState,
+                uiExpectedFromValue: expectedScrapTransformTypeUiState,
+                uiGetter: selectedScrapTransformTypeUiState,
+                verifyEditedUi: false,
+                verifyBaselineAfterCheckoutTimeoutMs: 10000,
+                verifyResyncedValueTimeoutMs: 10000,
+                setter: applySelectedScrapTransformState,
+                nextValue: (state) => {
+                    return nextTransformStateWithType(state, Scrap.RunningProfile)
+                }
+            })
+        }
+
+        function test_existingScrapSwitchPlanAndProjectedProfileSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+
+            SyncTestHelper.runProjectSyncRoundTrip(testCaseId, RootData, TestHelper, {
+                tripPageAddress: context.tripPageAddress,
+                prepare: prepareScrapTransformUiWithoutRefresh,
+                restorePage: () => restoreTripPage(context.tripPageAddress),
+                getter: snapshotSelectedScrapTransformState,
+                uiExpectedFromValue: expectedScrapTransformTypeUiState,
+                uiGetter: selectedScrapTransformTypeUiState,
+                verifyEditedUi: false,
+                verifyBaselineAfterCheckoutTimeoutMs: 10000,
+                verifyResyncedValueTimeoutMs: 10000,
+                setter: applySelectedScrapTransformState,
+                nextValue: (state) => {
+                    return nextTransformStateWithType(state, Scrap.Plan)
+                }
+            })
+
+            SyncTestHelper.runProjectSyncRoundTrip(testCaseId, RootData, TestHelper, {
+                tripPageAddress: context.tripPageAddress,
+                prepare: prepareScrapTransformUiWithoutRefresh,
+                restorePage: () => restoreTripPage(context.tripPageAddress),
+                getter: snapshotSelectedScrapTransformState,
+                uiExpectedFromValue: expectedScrapTransformTypeUiState,
+                uiGetter: selectedScrapTransformTypeUiState,
+                verifyEditedUi: false,
+                verifyBaselineAfterCheckoutTimeoutMs: 10000,
+                verifyResyncedValueTimeoutMs: 10000,
+                setter: applySelectedScrapTransformState,
+                nextValue: (state) => {
+                    return nextTransformStateWithType(state, Scrap.ProjectedProfile)
+                }
+            })
+        }
+
+        function test_existingScrapManualPlanTransformSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+
+            SyncTestHelper.runProjectSyncRoundTrip(testCaseId, RootData, TestHelper, {
+                tripPageAddress: context.tripPageAddress,
+                prepare: prepareScrapTransformUi,
+                restorePage: () => restoreTripPage(context.tripPageAddress),
+                getter: snapshotSelectedScrapTransformState,
+                uiExpectedFromValue: expectedScrapTransformUiState,
+                uiGetter: selectedScrapTransformUiState,
+                verifyEditedUi: false,
+                verifyBaselineAfterCheckoutTimeoutMs: 10000,
+                verifyResyncedValueTimeoutMs: 10000,
+                setter: applySelectedScrapTransformState,
+                nextValue: nextPlanManualTransformState
+            })
+        }
+
+        function test_existingScrapManualProjectedProfileTransformSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+
+            SyncTestHelper.runProjectSyncRoundTrip(testCaseId, RootData, TestHelper, {
+                tripPageAddress: context.tripPageAddress,
+                prepare: prepareScrapTransformUiWithoutRefresh,
+                restorePage: () => restoreTripPage(context.tripPageAddress),
+                getter: snapshotSelectedScrapTransformState,
+                uiExpectedFromValue: expectedScrapTransformUiState,
+                uiGetter: selectedScrapTransformUiState,
+                verifyEditedUi: false,
+                verifyBaselineAfterCheckoutTimeoutMs: 10000,
+                verifyResyncedValueTimeoutMs: 10000,
+                setter: applySelectedScrapTransformState,
+                nextValue: nextProjectedManualTransformState
             })
         }
 

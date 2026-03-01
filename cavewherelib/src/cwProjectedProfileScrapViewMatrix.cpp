@@ -24,6 +24,27 @@ void cwProjectedProfileScrapViewMatrix::setAzimuth(double azimuth) {
     }
 }
 
+void cwProjectedProfileScrapViewMatrix::setData(cwAbstractScrapViewMatrix::Data* data)
+{
+    const auto* projectedData = dynamic_cast<const cwProjectedProfileScrapViewMatrix::Data*>(data);
+    if (projectedData == nullptr) {
+        cwAbstractScrapViewMatrix::setData(data);
+        return;
+    }
+
+    const double previousAzimuth = azimuth();
+    const AzimuthDirection previousDirection = direction();
+
+    cwAbstractScrapViewMatrix::setData(data);
+
+    if (previousAzimuth != azimuth()) {
+        emit azimuthChanged();
+    }
+    if (previousDirection != direction()) {
+        emit directionChanged();
+    }
+}
+
 
 
 cwProjectedProfileScrapViewMatrix *cwProjectedProfileScrapViewMatrix::clone() const

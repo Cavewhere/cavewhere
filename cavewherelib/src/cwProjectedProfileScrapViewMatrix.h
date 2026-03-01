@@ -66,6 +66,7 @@ public:
 
     AzimuthDirection direction() const;
     void setDirection(AzimuthDirection direction);
+    void setData(cwAbstractScrapViewMatrix::Data* data) override;
 
     const cwProjectedProfileScrapViewMatrix::Data *data() const
     {

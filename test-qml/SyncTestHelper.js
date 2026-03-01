@@ -62,6 +62,14 @@ function deepEqual(lhs, rhs) {
     return false
 }
 
+function debugValueString(value) {
+    try {
+        return JSON.stringify(value)
+    } catch (error) {
+        return String(value)
+    }
+}
+
 function tryVerifyWithDiagnostics(testCase, predicate, timeoutMs, label, onPending) {
     let startMs = Date.now()
     let attempts = 0
@@ -146,13 +154,32 @@ function waitForProjectSyncToFinish(testCase, rootData) {
 }
 
 function runProjectSyncRoundTrip(testCase, rootData, testHelper, options) {
-    const verifyEditedValueTimeoutMs = 3000
-    const verifyBaselineAfterCheckoutTimeoutMs = 3000
-    const verifyResyncedValueTimeoutMs = 3000
+    const verifyEditedValueTimeoutMs = options.verifyEditedValueTimeoutMs !== undefined
+                                     ? options.verifyEditedValueTimeoutMs
+                                     : 3000
+    const verifyBaselineAfterCheckoutTimeoutMs = options.verifyBaselineAfterCheckoutTimeoutMs !== undefined
+                                               ? options.verifyBaselineAfterCheckoutTimeoutMs
+                                               : 3000
+    const verifyResyncedValueTimeoutMs = options.verifyResyncedValueTimeoutMs !== undefined
+                                       ? options.verifyResyncedValueTimeoutMs
+                                       : 3000
     const verifyBaselineUi = options.verifyBaselineUi !== false
     const verifyEditedUi = options.verifyEditedUi !== false
     const verifyCheckoutUi = options.verifyCheckoutUi !== false
     const verifyResyncUi = options.verifyResyncUi !== false
+
+    function verifyStateEquals(getter, expectedValue, timeoutMs, label) {
+        tryVerifyWithDiagnostics(testCase, () => {
+            return deepEqual(getter(), expectedValue)
+        }, timeoutMs, label, (_, elapsedMs) => {
+            if (elapsedMs < timeoutMs) {
+                return
+            }
+            console.log("[SyncTestHelper]", label,
+                        "expected=", debugValueString(expectedValue),
+                        "actual=", debugValueString(getter()))
+        })
+    }
 
     if (options.prepare !== undefined && options.prepare !== null) {
         options.prepare("baseline")
@@ -174,9 +201,7 @@ function runProjectSyncRoundTrip(testCase, rootData, testHelper, options) {
         if (options.prepare !== undefined && options.prepare !== null) {
             options.prepare("baseline-ui")
         }
-        tryVerifyWithDiagnostics(testCase, () => {
-            return deepEqual(options.uiGetter(), baselineUiValue)
-        }, verifyEditedValueTimeoutMs, "verify baseline UI value")
+        verifyStateEquals(options.uiGetter, baselineUiValue, verifyEditedValueTimeoutMs, "verify baseline UI value")
     }
 
     let commitA = testHelper.projectHeadCommitOid(rootData.project)
@@ -195,17 +220,13 @@ function runProjectSyncRoundTrip(testCase, rootData, testHelper, options) {
     if (options.prepare !== undefined && options.prepare !== null) {
         options.prepare("after-set")
     }
-    tryVerifyWithDiagnostics(testCase, () => {
-        return deepEqual(options.getter(), syncedValue)
-    }, verifyEditedValueTimeoutMs, "verify value after local setter")
+    verifyStateEquals(options.getter, syncedValue, verifyEditedValueTimeoutMs, "verify value after local setter")
 
     if (options.uiGetter !== undefined && options.uiGetter !== null && verifyEditedUi) {
         if (options.prepare !== undefined && options.prepare !== null) {
             options.prepare("after-set-ui")
         }
-        tryVerifyWithDiagnostics(testCase, () => {
-            return deepEqual(options.uiGetter(), syncedUiValue)
-        }, verifyEditedValueTimeoutMs, "verify edited UI value")
+        verifyStateEquals(options.uiGetter, syncedUiValue, verifyEditedValueTimeoutMs, "verify edited UI value")
     }
 
     testCase.verify(rootData.project.sync())
@@ -227,17 +248,13 @@ function runProjectSyncRoundTrip(testCase, rootData, testHelper, options) {
     if (options.prepare !== undefined && options.prepare !== null) {
         options.prepare("after-checkout")
     }
-    tryVerifyWithDiagnostics(testCase, () => {
-        return deepEqual(options.getter(), baselineValue)
-    }, verifyBaselineAfterCheckoutTimeoutMs, "verify baseline after checkout")
+    verifyStateEquals(options.getter, baselineValue, verifyBaselineAfterCheckoutTimeoutMs, "verify baseline after checkout")
 
     if (options.uiGetter !== undefined && options.uiGetter !== null && verifyCheckoutUi) {
         if (options.prepare !== undefined && options.prepare !== null) {
             options.prepare("after-checkout-ui")
         }
-        tryVerifyWithDiagnostics(testCase, () => {
-            return deepEqual(options.uiGetter(), baselineUiValue)
-        }, verifyBaselineAfterCheckoutTimeoutMs, "verify baseline UI after checkout")
+        verifyStateEquals(options.uiGetter, baselineUiValue, verifyBaselineAfterCheckoutTimeoutMs, "verify baseline UI after checkout")
     }
 
     testCase.verify(rootData.project.sync())
@@ -256,16 +273,12 @@ function runProjectSyncRoundTrip(testCase, rootData, testHelper, options) {
     if (options.prepare !== undefined && options.prepare !== null) {
         options.prepare("after-resync")
     }
-    tryVerifyWithDiagnostics(testCase, () => {
-        return deepEqual(options.getter(), syncedValue)
-    }, verifyResyncedValueTimeoutMs, "verify synced value after second sync")
+    verifyStateEquals(options.getter, syncedValue, verifyResyncedValueTimeoutMs, "verify synced value after second sync")
 
     if (options.uiGetter !== undefined && options.uiGetter !== null && verifyResyncUi) {
         if (options.prepare !== undefined && options.prepare !== null) {
             options.prepare("after-resync-ui")
         }
-        tryVerifyWithDiagnostics(testCase, () => {
-            return deepEqual(options.uiGetter(), syncedUiValue)
-        }, verifyResyncedValueTimeoutMs, "verify synced UI value after second sync")
+        verifyStateEquals(options.uiGetter, syncedUiValue, verifyResyncedValueTimeoutMs, "verify synced UI value after second sync")
     }
 }

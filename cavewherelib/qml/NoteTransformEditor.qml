@@ -203,6 +203,7 @@ QQ.Item {
 
                         ClickTextInput {
                             id: azimuthTextInputId
+                            objectName: "azimuthTextInput"
                             text: {
                                 if(directionComboBoxId.isValid()) {
                                     let matrix = (editor.scrap.viewMatrix as ProjectedProfileScrapViewMatrix)

@@ -4126,6 +4126,8 @@ void cwSaveLoad::connectScrap(cwScrap *scrap)
     connect(scrap, &cwScrap::calculateNoteTransformChanged, this, saveNote);
     connect(scrap, &cwScrap::viewMatrixChanged, this, saveNote);
     connect(scrap, &cwScrap::typeChanged, this, saveNote);
+    connect(scrap->noteTransformation(), &cwNoteTranformation::northUpChanged, this, saveNote);
+    connect(scrap->noteTransformation(), &cwNoteTranformation::scaleChanged, this, saveNote);
 
     auto connectProjectedViewMatrixSignals = [this, saveNote, scrap]() {
         if (auto projected = qobject_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix()))
