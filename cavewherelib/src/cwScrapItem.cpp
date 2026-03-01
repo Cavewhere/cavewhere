@@ -31,10 +31,6 @@ cwScrapItem::cwScrapItem(QQuickItem *parent) :
     TransformNodeDirty(false),
     PolygonNode(nullptr),
     OutlineNode(nullptr),
-    StationView(new cwScrapStationView(this)),
-    LeadView(new cwScrapLeadView(this)),
-    OutlinePointView(new cwScrapOutlinePointView(this)),
-    SelectionManager(nullptr),
     Selected(false)
 {
     initilize(QQmlEngine::contextForObject(this));
@@ -46,9 +42,6 @@ cwScrapItem::cwScrapItem(QQmlContext *context, QQuickItem *parent) :
     TransformNodeDirty(false),
     PolygonNode(nullptr),
     OutlineNode(nullptr),
-    StationView(new cwScrapStationView(this)),
-    LeadView(new cwScrapLeadView(this)),
-    OutlinePointView(new cwScrapOutlinePointView(this)),
     Selected(false)
 {
     initilize(context);
@@ -60,6 +53,12 @@ cwScrapItem::~cwScrapItem()
 
 void cwScrapItem::initilize(QQmlContext *context)
 {
+    QQmlEngine::setContextForObject(this, context);
+
+    StationView = new cwScrapStationView(this);
+    LeadView = new cwScrapLeadView(this);
+    OutlinePointView = new cwScrapOutlinePointView(this);
+
     StationView->setScrapItem(this);
     LeadView->setScrapItem(this);
     OutlinePointView->setScrapItem(this);

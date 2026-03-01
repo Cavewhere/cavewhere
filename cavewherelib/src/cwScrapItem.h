@@ -102,9 +102,9 @@ private:
     bool TransformNodeDirty;
     cwSGPolygonNode* PolygonNode; //!< Draws the polygon
     cwSGLinesNode* OutlineNode; //!< Drawing the outline of the polygon
-    cwScrapStationView* StationView; //!< All the stations in the scrap
-    cwScrapLeadView* LeadView; //!< All the leads in the scrap
-    cwScrapOutlinePointView* OutlinePointView; //!< All the control points around the scrap
+    cwScrapStationView* StationView = nullptr; //!< All the stations in the scrap
+    cwScrapLeadView* LeadView = nullptr; //!< All the leads in the scrap
+    cwScrapOutlinePointView* OutlinePointView = nullptr; //!< All the control points around the scrap
     QVector<QPointF> ScrapPoints;
 
     //For showing all the control points around the scrap
@@ -112,7 +112,7 @@ private:
     // QList<QQuickItem*> OutlineStation;
 
 
-    cwSelectionManager* SelectionManager; //!< For selection for control items (this is passed to child class)
+    cwSelectionManager* SelectionManager = nullptr; //!< For selection for control items (this is passed to child class)
     bool Selected; //!< True if the scrap is select and false if it isn't
 
     void initilize(QQmlContext* context);

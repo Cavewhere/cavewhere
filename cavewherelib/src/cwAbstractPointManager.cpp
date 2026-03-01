@@ -14,6 +14,18 @@
 #include <QQmlEngine>
 #include <QQmlContext>
 
+namespace {
+QQmlContext* contextForObjectOrParents(const QObject* object)
+{
+    for(const QObject* current = object; current != nullptr; current = current->parent()) {
+        if(auto* context = QQmlEngine::contextForObject(current)) {
+            return context;
+        }
+    }
+    return nullptr;
+}
+}
+
 cwAbstractPointManager::cwAbstractPointManager(QQuickItem *parent) :
     QQuickItem(parent),
     m_selectionManager(nullptr),
@@ -98,7 +110,7 @@ QQuickItem* cwAbstractPointManager::createItem(int index)
         return nullptr;
     }
 
-    QQmlContext* context = QQmlEngine::contextForObject(this);
+    QQmlContext* context = contextForObjectOrParents(this);
     if(context == nullptr) {
         qDebug() << "Context is nullptr. THIS IS A BUG" << LOCATION;
         return nullptr;
@@ -324,7 +336,7 @@ void cwAbstractPointManager::ensureComponent()
         return;
     }
 
-    QQmlContext* context = QQmlEngine::contextForObject(this);
+    QQmlContext* context = contextForObjectOrParents(this);
     if(context == nullptr) {
         qDebug() << "Context is nullptr. THIS IS A BUG" << LOCATION;
         return;

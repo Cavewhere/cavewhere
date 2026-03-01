@@ -5,6 +5,7 @@ using namespace Catch;
 //Qt includes
 #include <QQmlComponent>
 #include <QQmlEngine>
+#include <QQmlContext>
 #include <QQuickItem>
 #include <memory>
 
@@ -90,4 +91,35 @@ TEST_CASE("ScrapView doesn't retain old scrap after note data reset", "[cwScrapV
         CHECK(view->selectedScrapItem()->scrap() != scrap1);
     }
 
+}
+
+TEST_CASE("ScrapView-created scrap point managers keep a QML context", "[cwScrapView]") {
+    QQmlEngine engine;
+    std::unique_ptr<QObject> root;
+    cwScrapView* view = createScrapView(engine, root);
+
+    auto note = std::make_unique<cwNote>();
+    auto scrap = new cwScrap();
+    scrap->addPoint(QPointF(0.1, 0.1));
+    scrap->addPoint(QPointF(0.9, 0.1));
+    scrap->addPoint(QPointF(0.9, 0.9));
+    cwNoteStation station;
+    station.setName(QStringLiteral("A1"));
+    station.setPositionOnNote(QPointF(0.5, 0.5));
+    scrap->addStation(station);
+    note->addScrap(scrap);
+
+    view->setNote(note.get());
+
+    auto* scrapItem = view->scrapItemAt(0);
+    REQUIRE(scrapItem != nullptr);
+
+    CHECK(QQmlEngine::contextForObject(view) != nullptr);
+    CHECK(QQmlEngine::contextForObject(scrapItem) != nullptr);
+    CHECK(QQmlEngine::contextForObject(scrapItem->stationView()) != nullptr);
+    CHECK(QQmlEngine::contextForObject(scrapItem->outlinePointView()) != nullptr);
+    CHECK(QQmlEngine::contextForObject(scrapItem->leadView()) != nullptr);
+    CHECK(scrapItem->stationView()->items().size() == 1);
+    CHECK(scrapItem->outlinePointView()->items().size() == 3);
+    CHECK(scrapItem->leadView()->items().isEmpty());
 }
