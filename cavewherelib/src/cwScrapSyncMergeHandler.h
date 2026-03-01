@@ -11,6 +11,7 @@
 #include "cwNoteTransformationData.h"
 #include "cwNoteStation.h"
 #include "cwScrapType.h"
+#include "cwSyncMergeHandler.h"
 
 #include <optional>
 #include <vector>
@@ -46,6 +47,7 @@ struct cwNoteStructuralMergePlan {
     const cwNoteData* loadedNoteData = nullptr;
     QHash<QUuid, cwScrapBaseIdentityData> baseScrapIdentityByScrapId;
     std::vector<QUuid> mergedScrapOrder;
+    cwReconcileApplyMode applyMode = cwReconcileApplyMode::Merge;
 };
 
 struct cwNoteStructuralMergePreparation {

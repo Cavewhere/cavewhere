@@ -3,47 +3,26 @@ import QtTest
 import cavewherelib
 import cw.TestLib
 import QmlTestRecorder
+import "SyncTestHelper.js" as SyncTestHelper
 
 MainWindowTest {
     id: rootId
 
     TestCase {
+        id: testCaseId
         name: "TripSync"
         when: windowShown
 
         function tryVerifyWithDiagnostics(predicate, timeoutMs, label, onPending) {
-            let startMs = Date.now()
-            let attempts = 0
-            while (Date.now() - startMs < timeoutMs) {
-                if (predicate()) {
-                    return
-                }
-                attempts += 1
-                if (onPending !== undefined && onPending !== null && attempts % 20 === 0) {
-                    onPending(attempts, Date.now() - startMs)
-                }
-                wait(50)
-            }
-            if (onPending !== undefined && onPending !== null) {
-                onPending(attempts, Date.now() - startMs)
-            }
-            verify(false, label + " timed out after " + timeoutMs + "ms")
+            SyncTestHelper.tryVerifyWithDiagnostics(testCaseId, predicate, timeoutMs, label, onPending)
         }
 
         function openTripPage(caveName, tripName) {
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + caveName + "/Trip=" + tripName
-            tryVerifyWithDiagnostics(() => {
-                return RootData.pageView.currentPageItem !== null
-                       && RootData.pageView.currentPageItem.objectName === "tripPage"
-            }, 10000, "openTripPage")
+            SyncTestHelper.openTripPage(testCaseId, RootData, caveName, tripName)
         }
 
         function verifyStillOnTripPage(tripPageAddress) {
-            tryCompare(RootData.pageSelectionModel, "currentPageAddress", tripPageAddress)
-            tryVerifyWithDiagnostics(() => {
-                return RootData.pageView.currentPageItem !== null
-                       && RootData.pageView.currentPageItem.objectName === "tripPage"
-            }, 10000, "verifyStillOnTripPage")
+            SyncTestHelper.verifyStillOnTripPage(testCaseId, RootData, tripPageAddress)
         }
 
         function setTripDate(dateInput, newDateText) {
@@ -73,108 +52,21 @@ MainWindowTest {
         }
 
         function loadFixtureAndOpenFirstTrip() {
-            let fixture = TestHelper.createLocalSyncFixtureWithLfsServer()
-            compare(fixture.errorMessage, "")
-            verify(fixture.projectFilePath !== "")
-            verify(fixture.remoteRepoPath !== "")
-            verify(fixture.lfsEndpoint !== "")
-            compare(TestHelper.fileExists(TestHelper.toLocalUrl(fixture.projectFilePath)), true)
-
-            TestHelper.loadProjectFromPath(RootData.project, fixture.projectFilePath)
-            tryVerify(() => {
-                return RootData.region.caveCount > 0
-            }, 10000)
-            let cave = null
-            let trip = null
-            for (let i = 0; i < RootData.region.caveCount; ++i) {
-                let candidateCave = RootData.region.cave(i)
-                if (candidateCave !== null && candidateCave.rowCount() > 0) {
-                    cave = candidateCave
-                    trip = candidateCave.trip(0)
-                    break
-                }
-            }
-            verify(cave !== null)
-            verify(trip !== null)
-            let caveName = String(cave.name)
-            let tripName = String(trip.name)
-            verify(caveName.length > 0)
-            verify(tripName.length > 0)
-            openTripPage(caveName, tripName)
-            return {
-                tripPageAddress: "Source/Data/Cave=" + caveName + "/Trip=" + tripName
-            }
+            return SyncTestHelper.loadFixtureAndOpenFirstTrip(testCaseId, RootData, TestHelper)
         }
 
         function waitForProjectSyncToFinish() {
-            tryVerifyWithDiagnostics(() => {
-                return RootData.project.syncInProgress === false
-            }, 3000, "waitForProjectSyncToFinish")
+            SyncTestHelper.waitForProjectSyncToFinish(testCaseId, RootData)
         }
 
         function runTripSyncRoundTrip(tripPageAddress, getter, setter, nextValue, uiGetter) {
-            const verifyEditedValueTimeoutMs = 3000
-            const verifyBaselineAfterCheckoutTimeoutMs = 3000
-            const verifyResyncedValueTimeoutMs = 3000
-
-            let baselineValue = String(getter())
-            verify(baselineValue.length > 0)
-            if (uiGetter !== undefined && uiGetter !== null) {
-                tryVerifyWithDiagnostics(() => {
-                    return String(uiGetter()) === baselineValue
-                }, verifyEditedValueTimeoutMs, "verify baseline UI value")
-            }
-
-            let commitA = TestHelper.projectHeadCommitOid(RootData.project)
-            verify(commitA !== "")
-
-            let syncedValue = String(nextValue(baselineValue))
-            setter(syncedValue)
-            tryVerifyWithDiagnostics(() => {
-                return String(getter()) === syncedValue
-            }, verifyEditedValueTimeoutMs, "verify value after local setter")
-            if (uiGetter !== undefined && uiGetter !== null) {
-                tryVerifyWithDiagnostics(() => {
-                    return String(uiGetter()) === syncedValue
-                }, verifyEditedValueTimeoutMs, "verify edited UI value")
-            }
-
-            verify(RootData.project.sync())
-            waitForProjectSyncToFinish()
-
-            let commitB = TestHelper.projectHeadCommitOid(RootData.project)
-            verify(commitB !== "")
-            verify(commitB !== commitA)
-
-            let checkoutError = TestHelper.checkoutProjectRef(RootData.project, commitA, true)
-            compare(checkoutError, "")
-
-            verifyStillOnTripPage(tripPageAddress)
-            tryVerifyWithDiagnostics(() => {
-                return String(getter()) === baselineValue
-            }, verifyBaselineAfterCheckoutTimeoutMs, "verify baseline after checkout")
-            if (uiGetter !== undefined && uiGetter !== null) {
-                tryVerifyWithDiagnostics(() => {
-                    return String(uiGetter()) === baselineValue
-                }, verifyBaselineAfterCheckoutTimeoutMs, "verify baseline UI after checkout")
-            }
-
-            verify(RootData.project.sync())
-            waitForProjectSyncToFinish()
-
-            let commitC = TestHelper.projectHeadCommitOid(RootData.project)
-            verify(commitC !== "")
-            verify(commitB === commitC)
-
-            verifyStillOnTripPage(tripPageAddress)
-            tryVerifyWithDiagnostics(() => {
-                return String(getter()) === syncedValue
-            }, verifyResyncedValueTimeoutMs, "verify synced value after second sync")
-            if (uiGetter !== undefined && uiGetter !== null) {
-                tryVerifyWithDiagnostics(() => {
-                    return String(uiGetter()) === syncedValue
-                }, verifyResyncedValueTimeoutMs, "verify synced UI value after second sync")
-            }
+            SyncTestHelper.runProjectSyncRoundTrip(testCaseId, RootData, TestHelper, {
+                tripPageAddress: tripPageAddress,
+                getter: getter,
+                setter: setter,
+                nextValue: nextValue,
+                uiGetter: uiGetter
+            })
         }
 
         function teamMembersFromModel(teamModel) {

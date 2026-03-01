@@ -378,7 +378,7 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
         const QString normalizedPath = normalizeSyncPath(changedPath);
         const std::optional<QString> notesDirPath = notesDirectoryPathForChangedFile(normalizedPath);
         if (!notesDirPath.has_value()) {
-            return {};
+            continue;
         }
 
         const NoteChangedPathKind changedKind = classifyNoteChangedPath(normalizedPath, trackedExtensions);
@@ -508,6 +508,8 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
                 if (plan.loadedNoteData == nullptr) {
                     continue;
                 }
+
+                plan.applyMode = context.applyMode;
 
                 const auto baseIdentityIt = update.baseScrapIdentityByNoteId.constFind(plan.loadedNoteData->id);
                 if (baseIdentityIt != update.baseScrapIdentityByNoteId.constEnd()) {

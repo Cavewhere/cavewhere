@@ -13,6 +13,7 @@
 #include <QQuickTransform>
 #include <QQmlEngine>
 #include <QPropertyNotifier>
+#include <QVariantMap>
 
 //Our includes
 #include "cwScrap.h"
@@ -70,6 +71,8 @@ public:
     // QRectF boundingRect() const { return QRectF(0, 0, 1000, 1000); }
 
     Q_INVOKABLE QPointF toNoteCoordinates(QPointF imageCoordinates) const;
+    // Exposes the current rendered outline for automated tests only.
+    Q_INVOKABLE QVariantMap renderedOutlineState() const;
 
     QQuickItem *targetItem() const;
     void setTargetItem(QQuickItem *newTargetItem);

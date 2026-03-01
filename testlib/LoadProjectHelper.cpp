@@ -8,6 +8,7 @@
 #include <QDirIterator>
 #include <QUrl>
 #include <QProcessEnvironment>
+#include <QVariantList>
 
 //Our includes
 #include "cwZip.h"
@@ -15,6 +16,8 @@
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwTrip.h"
+#include "cwNote.h"
+#include "cwScrap.h"
 #include "cwErrorListModel.h"
 #include "GitRepository.h"
 #include "Account.h"
@@ -316,6 +319,42 @@ QString TestHelper::checkoutProjectRef(cwProject* project,
     }
 
     return QString();
+}
+
+int TestHelper::noteScrapCount(cwNote* note) const
+{
+    if (note == nullptr) {
+        return -1;
+    }
+    return note->scraps().size();
+}
+
+QVariantMap TestHelper::scrapOutlineState(cwNote* note, int scrapIndex) const
+{
+    if (note == nullptr || scrapIndex < 0 || scrapIndex >= note->scraps().size()) {
+        return {};
+    }
+
+    const cwScrap* scrap = note->scrap(scrapIndex);
+    if (scrap == nullptr) {
+        return {};
+    }
+
+    QVariantList points;
+    const QVector<QPointF> scrapPoints = scrap->points();
+    for (int i = 0; i < scrapPoints.size(); ++i) {
+        const QPointF& point = scrapPoints.at(i);
+        QVariantMap pointObject;
+        pointObject.insert(QStringLiteral("index"), i);
+        pointObject.insert(QStringLiteral("x"), point.x());
+        pointObject.insert(QStringLiteral("y"), point.y());
+        points.append(pointObject);
+    }
+
+    QVariantMap state;
+    state.insert(QStringLiteral("pointCount"), scrap->numberOfPoints());
+    state.insert(QStringLiteral("points"), points);
+    return state;
 }
 
 cwSyncFixtureInfo TestHelper::createLocalSyncFixtureWithLfsServer()

@@ -12,12 +12,14 @@
 //Qt includes
 #include <QVector3D>
 #include <QString>
+#include <QVariantMap>
 #include <QObject>
 #include <QTemporaryDir>
 #include <QQmlEngine>
 
 //Our includes
 #include "cwProject.h"
+#include "cwNote.h"
 #include "CaveWhereTestLibExport.h"
 
 //Std includes
@@ -110,6 +112,8 @@ public:
     Q_INVOKABLE QString checkoutProjectRef(cwProject* project,
                                            const QString& refSpec,
                                            bool force = true) const;
+    Q_INVOKABLE int noteScrapCount(cwNote* note) const;
+    Q_INVOKABLE QVariantMap scrapOutlineState(cwNote* note, int scrapIndex) const;
     Q_INVOKABLE cwSyncFixtureInfo createLocalSyncFixtureWithLfsServer();
     Q_INVOKABLE cwCloneFixtureInfo createLocalBareRemoteForCloneTest();
     Q_INVOKABLE bool setGitHubAccessTokenForAccount(const QString& accountId,

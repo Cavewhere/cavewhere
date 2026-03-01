@@ -23,6 +23,7 @@
 #include <QPen>
 #include <QQmlEngine>
 #include <QQmlContext>
+#include <QVariantList>
 
 cwScrapItem::cwScrapItem(QQuickItem *parent) :
     QQuickItem(parent),
@@ -83,7 +84,10 @@ void cwScrapItem::initilize(QQmlContext *context)
 void cwScrapItem::setScrap(cwScrap* scrap) {
     if(Scrap != scrap) {
         if(Scrap != nullptr) {
-            disconnect(Scrap, nullptr, this, nullptr);
+            disconnect(Scrap, &cwScrap::insertedPoints, this, &cwScrapItem::updatePoints);
+            disconnect(Scrap, &cwScrap::removedPoints, this, &cwScrapItem::updatePoints);
+            disconnect(Scrap, &cwScrap::pointChanged, this, &cwScrapItem::updatePoints);
+            disconnect(Scrap, &cwScrap::pointsReset, this, &cwScrapItem::updatePoints);
         }
 
         Scrap = scrap;
@@ -92,11 +96,13 @@ void cwScrapItem::setScrap(cwScrap* scrap) {
         OutlinePointView->setScrap(Scrap);
 
         if(Scrap != nullptr) {
-            connect(Scrap, SIGNAL(insertedPoints(int,int)), SLOT(updatePoints()));
-            connect(Scrap, SIGNAL(removedPoints(int,int)), SLOT(updatePoints()));
-            connect(Scrap, SIGNAL(pointChanged(int,int)), SLOT(updatePoints()));
-            updatePoints();
+            connect(Scrap, &cwScrap::insertedPoints, this, &cwScrapItem::updatePoints);
+            connect(Scrap, &cwScrap::removedPoints, this, &cwScrapItem::updatePoints);
+            connect(Scrap, &cwScrap::pointChanged, this, &cwScrapItem::updatePoints);
+            connect(Scrap, &cwScrap::pointsReset, this, &cwScrapItem::updatePoints);
         }
+
+        updatePoints();
 
         emit scrapChanged();
     }
@@ -159,9 +165,11 @@ void cwScrapItem::updatePoints()
         for(int i = 0; i < points.size(); ++i) {
             ScrapPoints[i] = transform.map(points.at(i));
         }
-
-        update();
+    } else {
+        ScrapPoints.clear();
     }
+
+    update();
 }
 
 /**
@@ -200,6 +208,25 @@ void cwScrapItem::setSelectionManager(cwSelectionManager* selectionManager) {
 QPointF cwScrapItem::toNoteCoordinates(QPointF imageCoordinates) const
 {
     return cwScrapView::toNormalized(Scrap->parentNote()).map(imageCoordinates);
+}
+
+QVariantMap cwScrapItem::renderedOutlineState() const
+{
+    QVariantList points;
+
+    for (int i = 0; i < ScrapPoints.size(); ++i) {
+        const QPointF point = ScrapPoints.at(i);
+        QVariantMap pointObject;
+        pointObject.insert(QStringLiteral("index"), i);
+        pointObject.insert(QStringLiteral("x"), point.x());
+        pointObject.insert(QStringLiteral("y"), point.y());
+        points.append(pointObject);
+    }
+
+    QVariantMap state;
+    state.insert(QStringLiteral("pointCount"), ScrapPoints.size());
+    state.insert(QStringLiteral("points"), points);
+    return state;
 }
 
 

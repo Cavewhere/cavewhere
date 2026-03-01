@@ -229,8 +229,14 @@ QList<ItemT> mergeUnorderedByIdPreferOurs(const QList<ItemT>& ours,
 
 MergedScrapDataResult mergedScrapDataPreferOursForStationsAndLeads(const cwScrapData* currentScrapData,
                                                                    const cwScrapData& loadedScrapData,
-                                                                   const cwScrapBaseIdentityData* baseScrapIdentity)
+                                                                   const cwScrapBaseIdentityData* baseScrapIdentity,
+                                                                   cwReconcileApplyMode applyMode,
+                                                                   const QUuid& scrapId)
 {
+    if (applyMode == cwReconcileApplyMode::TargetCommitWins) {
+        return MergedScrapDataResult{loadedScrapData, false};
+    }
+
     if (currentScrapData == nullptr) {
         return MergedScrapDataResult{loadedScrapData, false};
     }
@@ -261,6 +267,10 @@ MergedScrapDataResult mergedScrapDataPreferOursForStationsAndLeads(const cwScrap
         const auto loadedGeometry = geometryDataFromScrapData(loadedScrapData);
         const bool oursOutlineChanged = !areGeometryEquivalent(currentGeometry, baseScrapIdentity->geometry);
         const bool loadedOutlineChanged = !areGeometryEquivalent(loadedGeometry, baseScrapIdentity->geometry);
+        const bool oursTransformChanged =
+            !areTransformBundleEquivalent(currentGeometry.transform, baseScrapIdentity->geometry.transform);
+        const bool loadedTransformChanged =
+            !areTransformBundleEquivalent(loadedGeometry.transform, baseScrapIdentity->geometry.transform);
 
         if (oursOutlineChanged && loadedOutlineChanged) {
             applyOutlineFrom(*currentScrapData, mergedData);
@@ -271,10 +281,6 @@ MergedScrapDataResult mergedScrapDataPreferOursForStationsAndLeads(const cwScrap
             applyOutlineFrom(loadedScrapData, mergedData);
         }
 
-        const bool oursTransformChanged =
-            !areTransformBundleEquivalent(currentGeometry.transform, baseScrapIdentity->geometry.transform);
-        const bool loadedTransformChanged =
-            !areTransformBundleEquivalent(loadedGeometry.transform, baseScrapIdentity->geometry.transform);
         if (oursTransformChanged && loadedTransformChanged) {
             applyTransformFrom(*currentScrapData, mergedData);
             geometryConflictKeptOurs = true;
@@ -356,7 +362,11 @@ Monad::Result<cwScrapMergeApplyResult> cwScrapMergeApplier::applyNoteStructuralM
         const cwScrapData* currentScrapDataForId =
             currentScrapDataIt != currentScrapDataById.constEnd() ? &currentScrapDataIt.value() : nullptr;
         const auto mergedResult =
-            mergedScrapDataPreferOursForStationsAndLeads(currentScrapDataForId, *loadedScrapData, baseIdentity);
+            mergedScrapDataPreferOursForStationsAndLeads(currentScrapDataForId,
+                                                         *loadedScrapData,
+                                                         baseIdentity,
+                                                         plan.applyMode,
+                                                         targetScrapId);
         scrap->setData(mergedResult.data);
         geometryConflictKeptOurs = geometryConflictKeptOurs || mergedResult.geometryConflictKeptOurs;
     }
@@ -377,7 +387,11 @@ Monad::Result<cwScrapMergeApplyResult> cwScrapMergeApplier::applyNoteStructuralM
             const cwScrapData* currentScrapDataForId =
                 currentScrapDataIt != currentScrapDataById.constEnd() ? &currentScrapDataIt.value() : nullptr;
             const auto mergedResult =
-                mergedScrapDataPreferOursForStationsAndLeads(currentScrapDataForId, *loadedScrapData, baseIdentity);
+                mergedScrapDataPreferOursForStationsAndLeads(currentScrapDataForId,
+                                                             *loadedScrapData,
+                                                             baseIdentity,
+                                                             plan.applyMode,
+                                                             targetScrapId);
             scrap->setData(mergedResult.data);
             geometryConflictKeptOurs = geometryConflictKeptOurs || mergedResult.geometryConflictKeptOurs;
         }
