@@ -119,6 +119,11 @@ public:
                                      int scrapIndex,
                                      const QString& name,
                                      const QPointF& positionOnNote) const;
+    Q_INVOKABLE bool addScrapLead(cwNote* note,
+                                  int scrapIndex,
+                                  const QPointF& positionOnNote,
+                                  const QSizeF& size,
+                                  const QString& description) const;
     Q_INVOKABLE cwSyncFixtureInfo createLocalSyncFixtureWithLfsServer();
     Q_INVOKABLE cwCloneFixtureInfo createLocalBareRemoteForCloneTest();
     Q_INVOKABLE bool setGitHubAccessTokenForAccount(const QString& accountId,

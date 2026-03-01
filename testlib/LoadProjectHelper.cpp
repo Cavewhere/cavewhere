@@ -18,6 +18,7 @@
 #include "cwTrip.h"
 #include "cwNote.h"
 #include "cwScrap.h"
+#include "cwLead.h"
 #include "cwErrorListModel.h"
 #include "GitRepository.h"
 #include "Account.h"
@@ -384,6 +385,29 @@ bool TestHelper::addScrapStation(cwNote* note,
     station.setName(name);
     station.setPositionOnNote(positionOnNote);
     scrap->addStation(station);
+    return true;
+}
+
+bool TestHelper::addScrapLead(cwNote* note,
+                              int scrapIndex,
+                              const QPointF& positionOnNote,
+                              const QSizeF& size,
+                              const QString& description) const
+{
+    if (note == nullptr) {
+        return false;
+    }
+
+    cwScrap* scrap = note->scrap(scrapIndex);
+    if (scrap == nullptr) {
+        return false;
+    }
+
+    cwLead lead;
+    lead.setPositionOnNote(positionOnNote);
+    lead.setSize(size);
+    lead.setDescription(description);
+    scrap->addLead(lead);
     return true;
 }
 

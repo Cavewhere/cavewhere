@@ -101,25 +101,6 @@ void cwLeadView::addScrap(cwScrap *scrap)
         }
     };
 
-    auto resetScrap = [this, scrap, updatePosition, itemAt]() {
-        auto& entry = m_leadItems[scrap];
-        if(entry.items.size() < scrap->numberOfLeads()) {
-            //Need to add new lead items
-        } else if(entry.items.size() > scrap->numberOfLeads()) {
-            //Need to remove lead items
-        }
-        Q_ASSERT(entry.items.size() == scrap->numberOfLeads());
-
-        for(int i = 0; i < scrap->numberOfLeads(); i++) {
-            //Update data for the item
-            auto item = itemAt(entry.items, i);
-
-            auto position = scrap->leadData(cwScrap::LeadPosition, i).value<QVector3D>();
-            item->setProperty("pointIndex", i);
-            updatePosition(item, i);
-        }
-    };
-
     auto updateIndexesToEnd = [scrap, itemAt, this](int begin) {
         auto& entry = m_leadItems[scrap];
         for(int i = begin; i < entry.items.size(); i++) {
@@ -146,6 +127,23 @@ void cwLeadView::addScrap(cwScrap *scrap)
         }
     };
 
+    auto removeItems = [this, scrap, updateIndexesToEnd](int begin, int end) {
+        auto& entry = m_leadItems[scrap];
+        if(entry.items.isEmpty()) { return; }
+        if(begin > end) { return; }
+        if(begin < 0) { return; }
+        if(end >= entry.items.size()) { return; }
+
+        for(int index = end; index >= begin; index--) {
+            SelectionMananger->clear();
+            TransformUpdater->removePointItem(entry.items[index]);
+            entry.items[index]->deleteLater();
+            entry.items.removeAt(index);
+        }
+
+        updateIndexesToEnd(begin);
+    };
+
     auto insert = [this, scrap, updatePosition, itemAt](int begin, int end) {
         auto& entry = m_leadItems[scrap];
 
@@ -155,28 +153,29 @@ void cwLeadView::addScrap(cwScrap *scrap)
         }
     };
 
+    auto resetScrap = [this, scrap, itemAt, updatePosition, beginInsert, insert, removeItems]() {
+        auto& entry = m_leadItems[scrap];
+        int currentItemCount = entry.items.size();
+        int expectedLeadCount = scrap->numberOfLeads();
+
+        if(currentItemCount < expectedLeadCount) {
+            beginInsert(currentItemCount, expectedLeadCount - 1);
+            insert(currentItemCount, expectedLeadCount - 1);
+        } else if(currentItemCount > expectedLeadCount) {
+            removeItems(expectedLeadCount, currentItemCount - 1);
+        }
+        Q_ASSERT(entry.items.size() == expectedLeadCount);
+
+        for(int i = 0; i < expectedLeadCount; i++) {
+            auto item = itemAt(entry.items, i);
+            item->setProperty("pointIndex", i);
+            updatePosition(item, i);
+        }
+    };
+
     connect(scrap, &cwScrap::leadsBeginInserted, this, beginInsert);
     connect(scrap, &cwScrap::leadsInserted, this, insert);
-
-    connect(scrap, &cwScrap::leadsRemoved, this, [this, scrap, updateIndexesToEnd](int begin, int end) {
-        auto& entry = m_leadItems[scrap];
-        if(entry.items.isEmpty()) { return; }
-        if(begin > end) { return; }
-        if(begin < 0) { return; }
-        if(end >= entry.items.size()) { return; }
-
-
-        for(int index = end; index >= begin; index--) {
-            //Unselect the item that's going to be deleted
-            SelectionMananger->clear();
-            TransformUpdater->removePointItem(entry.items[index]);
-            entry.items[index]->deleteLater();
-            entry.items.removeAt(index);
-        }
-
-
-        updateIndexesToEnd(begin);
-    });
+    connect(scrap, &cwScrap::leadsRemoved, this, removeItems);
 
     connect(scrap, &cwScrap::leadsDataChanged, this, [this, scrap, updatePositions](int begin, int end, const QList<int>& roles) {
         if(roles.contains(cwScrap::LeadPosition)) {

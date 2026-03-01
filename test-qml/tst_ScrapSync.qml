@@ -813,20 +813,36 @@ MainWindowTest {
             return item
         }
 
-        function snapshotSelectedScrapLeadState() {
+        function cloneLeadState(state) {
+            return {
+                x: state.x,
+                y: state.y,
+                width: state.width,
+                height: state.height,
+                description: state.description
+            }
+        }
+
+        function snapshotSelectedScrapLeadsState() {
             let scrap = selectedScrapItem().scrap
             verify(scrap !== null)
-            verify(scrap.numberOfLeads() > 0)
 
-            let size = scrap.leadData(Scrap.LeadSize, 0)
-            let position = scrap.leadData(Scrap.LeadPositionOnNote, 0)
+            let leads = []
+            for (let i = 0; i < scrap.numberOfLeads(); ++i) {
+                let size = scrap.leadData(Scrap.LeadSize, i)
+                let position = scrap.leadData(Scrap.LeadPositionOnNote, i)
+                leads.push({
+                    x: Number(position.x.toFixed(4)),
+                    y: Number(position.y.toFixed(4)),
+                    width: normalizedLeadDimensionValue(size.width),
+                    height: normalizedLeadDimensionValue(size.height),
+                    description: String(scrap.leadData(Scrap.LeadDesciption, i))
+                })
+            }
+
             return {
-                leadCount: scrap.numberOfLeads(),
-                x: Number(position.x.toFixed(4)),
-                y: Number(position.y.toFixed(4)),
-                width: normalizedLeadDimensionValue(size.width),
-                height: normalizedLeadDimensionValue(size.height),
-                description: String(scrap.leadData(Scrap.LeadDesciption, 0))
+                leadCount: leads.length,
+                leads: leads
             }
         }
 
@@ -834,76 +850,148 @@ MainWindowTest {
             let note = noteGallery().currentNote
             verify(note !== null)
             let leadView = selectedScrapItem().leadView
-            let leadItem = selectedLeadItem(0)
-
-            return {
+            let hasLead = leadView.count > 0
+            let state = {
                 leadCount: leadView.count,
                 selectedLeadIndex: leadView.selectedItemIndex,
                 editorVisible: leadEditor().visible,
-                leadItemX: Math.floor(leadItem.x),
-                leadItemY: Math.floor(leadItem.y),
-                width: String(leadEditorWidthText().text),
-                height: String(leadEditorHeightText().text),
-                description: String(leadEditorDescription().text)
+                leadItemX: null,
+                leadItemY: null,
+                width: null,
+                height: null,
+                description: null
+            }
+
+            if (hasLead && leadView.selectedItemIndex >= 0) {
+                let leadItem = selectedLeadItem(leadView.selectedItemIndex)
+                state.leadItemX = Math.floor(leadItem.x)
+                state.leadItemY = Math.floor(leadItem.y)
+                state.width = String(leadEditorWidthText().text)
+                state.height = String(leadEditorHeightText().text)
+                state.description = String(leadEditorDescription().text)
+            }
+
+            return state
+        }
+
+        function expectedScrapLeadUiStateForSelection(state, selectedLeadIndex) {
+            let note = noteGallery().currentNote
+            verify(note !== null)
+            let renderSize = note.renderSize()
+            let hasLead = state.leadCount > 0
+            let effectiveSelectedIndex = hasLead ? selectedLeadIndex : -1
+            let selectedLead = hasLead ? state.leads[effectiveSelectedIndex] : null
+            return {
+                leadCount: state.leadCount,
+                selectedLeadIndex: effectiveSelectedIndex,
+                editorVisible: hasLead,
+                leadItemX: hasLead ? Math.floor(selectedLead.x * renderSize.width) : null,
+                leadItemY: hasLead ? Math.floor((1.0 - selectedLead.y) * renderSize.height) : null,
+                width: hasLead ? leadDimensionText(selectedLead.width) : null,
+                height: hasLead ? leadDimensionText(selectedLead.height) : null,
+                description: hasLead ? selectedLead.description : null
             }
         }
 
         function expectedScrapLeadUiState(state) {
-            let note = noteGallery().currentNote
-            verify(note !== null)
-            let renderSize = note.renderSize()
-            return {
-                leadCount: state.leadCount,
-                selectedLeadIndex: 0,
-                editorVisible: true,
-                leadItemX: Math.floor(state.x * renderSize.width),
-                leadItemY: Math.floor((1.0 - state.y) * renderSize.height),
-                width: leadDimensionText(state.width),
-                height: leadDimensionText(state.height),
-                description: state.description
-            }
+            return expectedScrapLeadUiStateForSelection(state, state.leadCount > 0 ? 0 : -1)
         }
 
-        function applySelectedScrapLeadState(state) {
+        function applySelectedScrapLeadsState(state) {
             let scrap = selectedScrapItem().scrap
             verify(scrap !== null)
-            compare(scrap.numberOfLeads(), state.leadCount)
-            verify(state.leadCount > 0)
 
-            let currentPosition = scrap.leadData(Scrap.LeadPositionOnNote, 0)
-            if (Number(currentPosition.x.toFixed(4)) !== state.x
-                    || Number(currentPosition.y.toFixed(4)) !== state.y) {
-                scrap.setLeadData(Scrap.LeadPositionOnNote, 0, Qt.point(state.x, state.y))
+            while (scrap.numberOfLeads() > state.leadCount) {
+                scrap.removeLead(scrap.numberOfLeads() - 1)
             }
 
-            let currentSize = scrap.leadData(Scrap.LeadSize, 0)
-            if (Number(currentSize.width.toFixed(2)) !== state.width
-                    || Number(currentSize.height.toFixed(2)) !== state.height) {
-                scrap.setLeadData(Scrap.LeadSize, 0, Qt.size(state.width, state.height))
+            while (scrap.numberOfLeads() < state.leadCount) {
+                let leadIndex = scrap.numberOfLeads()
+                let added = TestHelper.addScrapLead(noteGallery().currentNote,
+                                                    scrapView().selectScrapIndex,
+                                                    Qt.point(state.leads[leadIndex].x,
+                                                             state.leads[leadIndex].y),
+                                                    Qt.size(state.leads[leadIndex].width,
+                                                            state.leads[leadIndex].height),
+                                                    state.leads[leadIndex].description)
+                verify(added)
             }
 
-            let currentDescription = String(scrap.leadData(Scrap.LeadDesciption, 0))
-            if (currentDescription !== state.description) {
-                scrap.setLeadData(Scrap.LeadDesciption, 0, state.description)
+            for (let i = 0; i < state.leadCount; ++i) {
+                let leadState = state.leads[i]
+                let currentPosition = scrap.leadData(Scrap.LeadPositionOnNote, i)
+                if (Number(currentPosition.x.toFixed(4)) !== leadState.x
+                        || Number(currentPosition.y.toFixed(4)) !== leadState.y) {
+                    scrap.setLeadData(Scrap.LeadPositionOnNote, i, Qt.point(leadState.x, leadState.y))
+                }
+
+                let currentSize = scrap.leadData(Scrap.LeadSize, i)
+                if (Number(currentSize.width.toFixed(2)) !== leadState.width
+                        || Number(currentSize.height.toFixed(2)) !== leadState.height) {
+                    scrap.setLeadData(Scrap.LeadSize, i, Qt.size(leadState.width, leadState.height))
+                }
+
+                let currentDescription = String(scrap.leadData(Scrap.LeadDesciption, i))
+                if (currentDescription !== leadState.description) {
+                    scrap.setLeadData(Scrap.LeadDesciption, i, leadState.description)
+                }
             }
 
             tryVerifyWithDiagnostics(() => {
-                return SyncTestHelper.deepEqual(snapshotSelectedScrapLeadState(), state)
-            }, 5000, "wait for applied scrap lead state")
+                return SyncTestHelper.deepEqual(snapshotSelectedScrapLeadsState(), state)
+            }, 5000, "wait for applied scrap leads state")
 
             TestHelper.waitForProjectSaveToFinish(RootData.project)
         }
 
         function nextLeadState(state) {
-            return {
+            verify(state.leadCount > 0)
+            let nextState = {
                 leadCount: state.leadCount,
-                x: state.x === 0.63 ? 0.58 : 0.63,
-                y: state.y === 0.44 ? 0.49 : 0.44,
-                width: state.width === 7 ? 5 : 7,
-                height: state.height === 6 ? 4 : 6,
-                description: state.description === "Sync lead updated"
+                leads: []
+            }
+
+            for (let i = 0; i < state.leads.length; ++i) {
+                nextState.leads.push(cloneLeadState(state.leads[i]))
+            }
+
+            nextState.leads[0] = {
+                x: state.leads[0].x === 0.63 ? 0.58 : 0.63,
+                y: state.leads[0].y === 0.44 ? 0.49 : 0.44,
+                width: state.leads[0].width === 7 ? 5 : 7,
+                height: state.leads[0].height === 6 ? 4 : 6,
+                description: state.leads[0].description === "Sync lead updated"
                            ? "Sync lead updated again"
                            : "Sync lead updated"
+            }
+
+            return nextState
+        }
+
+        function nextLeadAddedState(state) {
+            return {
+                leadCount: state.leadCount + 1,
+                leads: state.leads.concat([{
+                    x: 0.63,
+                    y: 0.44,
+                    width: -1,
+                    height: -1,
+                    description: "Sync lead added"
+                }])
+            }
+        }
+
+        function nextLeadRemovedState(state) {
+            verify(state.leadCount > 0)
+
+            let nextLeads = []
+            for (let i = 0; i < state.leads.length - 1; ++i) {
+                nextLeads.push(cloneLeadState(state.leads[i]))
+            }
+
+            return {
+                leadCount: state.leadCount - 1,
+                leads: nextLeads
             }
         }
 
@@ -1765,10 +1853,6 @@ MainWindowTest {
                 }, 5000, "bind scrap view for lead test")
 
                 selectScrapIndex(leadContext.scrapIndex, "select scrap for lead test")
-                tryVerifyWithDiagnostics(() => {
-                    return currentScrapView.selectedScrapItem.scrap.numberOfLeads() > 0
-                }, 5000, "wait for leads in selected scrap")
-
                 let needsLeadSelection = stage === "baseline-ui"
                                       || stage === "after-set-ui"
                                       || stage === "after-checkout-ui"
@@ -1778,6 +1862,10 @@ MainWindowTest {
                 }
 
                 let leadView = currentScrapView.selectedScrapItem.leadView
+                tryVerifyWithDiagnostics(() => {
+                    return leadView.count > 0
+                }, 5000, "wait for leads in selected scrap")
+
                 if (leadView.selectedItemIndex !== 0) {
                     leadView.selectedItemIndex = 0
                 }
@@ -1794,14 +1882,134 @@ MainWindowTest {
                 tripPageAddress: context.tripPageAddress,
                 prepare: prepareLeadUi,
                 restorePage: () => restoreTripPage(context.tripPageAddress),
-                getter: snapshotSelectedScrapLeadState,
+                getter: snapshotSelectedScrapLeadsState,
                 uiExpectedFromValue: expectedScrapLeadUiState,
                 uiGetter: selectedScrapLeadUiState,
                 verifyEditedUi: false,
                 verifyBaselineAfterCheckoutTimeoutMs: 10000,
                 verifyResyncedValueTimeoutMs: 10000,
-                setter: applySelectedScrapLeadState,
+                setter: applySelectedScrapLeadsState,
                 nextValue: nextLeadState
+            })
+        }
+
+        function test_existingScrapAddLeadSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+            let leadContext = findFirstNoteAndScrapIndexWithLeads()
+            verify(leadContext !== null)
+
+            let prepareLeadUi = function(stage) {
+                disableNoteLoadUi()
+                selectNoteIndex(leadContext.noteIndex, "select note for add lead test")
+                waitForNoteCanvasReady("wait for note canvas in add lead test")
+                enterCarpetMode()
+
+                let currentScrapView = scrapView()
+                tryVerifyWithDiagnostics(() => {
+                    return currentScrapView.note === noteGallery().currentNote
+                           && currentScrapView.count > leadContext.scrapIndex
+                }, 5000, "bind scrap view for add lead test")
+
+                selectScrapIndex(leadContext.scrapIndex, "select scrap for add lead test")
+
+                let needsLeadSelection = stage === "baseline-ui"
+                                      || stage === "after-set-ui"
+                                      || stage === "after-checkout-ui"
+                                      || stage === "after-resync-ui"
+                if (!needsLeadSelection) {
+                    return
+                }
+
+                let leadView = currentScrapView.selectedScrapItem.leadView
+                let desiredLeadIndex = leadView.count > 0 ? leadView.count - 1 : -1
+                if (leadView.selectedItemIndex !== desiredLeadIndex) {
+                    leadView.selectedItemIndex = desiredLeadIndex
+                }
+
+                tryVerifyWithDiagnostics(() => {
+                    if (leadView.count === 0) {
+                        return leadView.selectedItemIndex < 0
+                               && leadEditor().visible === false
+                    }
+                    return leadView.selectedItemIndex === desiredLeadIndex
+                           && selectedLeadItem(desiredLeadIndex) !== null
+                           && leadEditor().visible === true
+                }, 5000, "select lead for add lead ui test")
+            }
+
+            SyncTestHelper.runProjectSyncRoundTrip(testCaseId, RootData, TestHelper, {
+                tripPageAddress: context.tripPageAddress,
+                prepare: prepareLeadUi,
+                restorePage: () => restoreTripPage(context.tripPageAddress),
+                getter: snapshotSelectedScrapLeadsState,
+                uiExpectedFromValue: (state) => {
+                    return expectedScrapLeadUiStateForSelection(state,
+                                                                state.leadCount > 0 ? state.leadCount - 1 : -1)
+                },
+                uiGetter: selectedScrapLeadUiState,
+                verifyEditedUi: true,
+                verifyBaselineAfterCheckoutTimeoutMs: 10000,
+                verifyResyncedValueTimeoutMs: 10000,
+                setter: applySelectedScrapLeadsState,
+                nextValue: nextLeadAddedState
+            })
+        }
+
+        function test_existingScrapRemoveLeadSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+            let leadContext = findFirstNoteAndScrapIndexWithLeads()
+            verify(leadContext !== null)
+
+            let prepareLeadUi = function(stage) {
+                disableNoteLoadUi()
+                selectNoteIndex(leadContext.noteIndex, "select note for remove lead test")
+                waitForNoteCanvasReady("wait for note canvas in remove lead test")
+                enterCarpetMode()
+
+                let currentScrapView = scrapView()
+                tryVerifyWithDiagnostics(() => {
+                    return currentScrapView.note === noteGallery().currentNote
+                           && currentScrapView.count > leadContext.scrapIndex
+                }, 5000, "bind scrap view for remove lead test")
+
+                selectScrapIndex(leadContext.scrapIndex, "select scrap for remove lead test")
+
+                let needsLeadSelection = stage === "baseline-ui"
+                                      || stage === "after-set-ui"
+                                      || stage === "after-checkout-ui"
+                                      || stage === "after-resync-ui"
+                if (!needsLeadSelection) {
+                    return
+                }
+
+                let leadView = currentScrapView.selectedScrapItem.leadView
+                if (leadView.count > 0 && leadView.selectedItemIndex !== 0) {
+                    leadView.selectedItemIndex = 0
+                }
+
+                tryVerifyWithDiagnostics(() => {
+                    if (leadView.count === 0) {
+                        return leadView.selectedItemIndex < 0
+                               && leadEditor().visible === false
+                    }
+                    return leadView.selectedItemIndex === 0
+                           && selectedLeadItem(0) !== null
+                           && leadEditor().visible === true
+                }, 5000, "select lead for remove lead ui test")
+            }
+
+            SyncTestHelper.runProjectSyncRoundTrip(testCaseId, RootData, TestHelper, {
+                tripPageAddress: context.tripPageAddress,
+                prepare: prepareLeadUi,
+                restorePage: () => restoreTripPage(context.tripPageAddress),
+                getter: snapshotSelectedScrapLeadsState,
+                uiExpectedFromValue: expectedScrapLeadUiState,
+                uiGetter: selectedScrapLeadUiState,
+                verifyEditedUi: true,
+                verifyBaselineAfterCheckoutTimeoutMs: 10000,
+                verifyResyncedValueTimeoutMs: 10000,
+                setter: applySelectedScrapLeadsState,
+                nextValue: nextLeadRemovedState
             })
         }
     }
