@@ -42,7 +42,8 @@ cwNoteLiDARDescriptorApplyMode cwNoteLiDARMergePlanBuilder::determineApplyMode(
 Monad::Result<cwNoteLiDARMergePreparation> cwNoteLiDARMergePlanBuilder::build(
     cwSurveyNoteLiDARModel* noteLiDARModel,
     const cwSurveyNoteLiDARModelData& loadedNoteLiDARModelData,
-    const QHash<QUuid, cwNoteLiDARData>& baseNoteLiDARByNoteId)
+    const QHash<QUuid, cwNoteLiDARData>& baseNoteLiDARByNoteId,
+    cwSyncMergeApplyUtils::ApplyMode applyMode)
 {
     if (noteLiDARModel == nullptr) {
         return Monad::Result<cwNoteLiDARMergePreparation>(QStringLiteral("LiDAR note model is null."));
@@ -71,6 +72,7 @@ Monad::Result<cwNoteLiDARMergePreparation> cwNoteLiDARMergePlanBuilder::build(
         cwNoteLiDARMergePlan plan;
         plan.currentNote = *currentNoteIt;
         plan.loadedNoteData = &loadedNoteData;
+        plan.applyMode = applyMode;
 
         const auto baseIt = baseNoteLiDARByNoteId.constFind(loadedNoteData.id);
         if (baseIt != baseNoteLiDARByNoteId.constEnd()) {

@@ -53,13 +53,16 @@ std::optional<QHash<QUuid, cwNoteLiDARStation>> keyedStationsById(const QList<cw
 
 std::optional<QList<cwNoteLiDARStation>> mergeStationsById(const QList<cwNoteLiDARStation>& currentStations,
                                                            const QList<cwNoteLiDARStation>& loadedStations,
-                                                           const std::optional<QList<cwNoteLiDARStation>>& baseStations)
+                                                           const std::optional<QList<cwNoteLiDARStation>>& baseStations,
+                                                           cwSyncMergeApplyUtils::ApplyMode applyMode)
 {
     if (!baseStations.has_value()) {
         if (!keyedStationsById(loadedStations).has_value()) {
             return std::nullopt;
         }
-        return loadedStations;
+        return applyMode == cwSyncMergeApplyUtils::ApplyMode::LoadedWins
+                   ? loadedStations
+                   : loadedStations;
     }
 
     const auto currentById = keyedStationsById(currentStations);
@@ -108,17 +111,37 @@ std::optional<QList<cwNoteLiDARStation>> mergeStationsById(const QList<cwNoteLiD
                 baseStation,
                 [](const cwNoteLiDARStation& lhs, const cwNoteLiDARStation& rhs) {
                     return lidarStationsEqual(lhs, rhs);
-                }));
+                },
+                applyMode));
             continue;
         }
 
         if (hasCurrent) {
+            if (applyMode == cwSyncMergeApplyUtils::ApplyMode::LoadedWins) {
+                continue;
+            }
+
+            if (hasBase && lidarStationsEqual(*currentIt, *baseIt)) {
+                continue;
+            }
             mergedStations.append(*currentIt);
             continue;
         }
 
-        if (hasLoaded && !hasBase) {
-            mergedStations.append(*loadedIt);
+        if (hasLoaded) {
+            if (!hasBase) {
+                mergedStations.append(*loadedIt);
+                continue;
+            }
+
+            if (applyMode == cwSyncMergeApplyUtils::ApplyMode::LoadedWins) {
+                mergedStations.append(*loadedIt);
+                continue;
+            }
+
+            if (!lidarStationsEqual(*loadedIt, *baseIt)) {
+                continue;
+            }
         }
     }
 
@@ -147,7 +170,8 @@ Monad::ResultBase cwNoteLiDARMergeApplier::applyNoteLiDARMergePlan(const cwNoteL
                                       : std::nullopt,
         [](const QString& lhs, const QString& rhs) {
             return lhs == rhs;
-        });
+        },
+        plan.applyMode);
 
     struct TransformBundle {
         cwNoteLiDARTransformationData transform;
@@ -177,13 +201,15 @@ Monad::ResultBase cwNoteLiDARMergeApplier::applyNoteLiDARMergePlan(const cwNoteL
         [](const TransformBundle& lhs, const TransformBundle& rhs) {
             return lhs.autoCalculateNorth == rhs.autoCalculateNorth
                    && lidarTransformsEqual(lhs.transform, rhs.transform);
-        });
+        },
+        plan.applyMode);
 
     const auto mergedStations = mergeStationsById(
         plan.currentNote->stations(),
         plan.loadedNoteData->stations,
         plan.baseNoteData.has_value() ? std::optional<QList<cwNoteLiDARStation>>(plan.baseNoteData->stations)
-                                      : std::nullopt);
+                                      : std::nullopt,
+        plan.applyMode);
     if (!mergedStations.has_value()) {
         return Monad::ResultBase(QStringLiteral("Ambiguous LiDAR station mapping during incremental merge."));
     }

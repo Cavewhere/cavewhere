@@ -7,6 +7,7 @@
 #include "cwSurveyNoteLiDARModel.h"
 #include "cwTrip.h"
 #include "GitRepository.h"
+#include "cwSyncMergeApplyUtils.h"
 #include "cavewhere.pb.h"
 #include "qt.pb.h"
 #include "google/protobuf/util/json_util.h"
@@ -338,7 +339,10 @@ cwReconcileMergeResult cwNoteLiDARSyncMergeHandler::reconcile(const cwReconcileM
         const auto mergePreparation = cwNoteLiDARMergePlanBuilder::build(
             update.trip->notesLiDAR(),
             update.loadedTripData->noteLiDARModel,
-            update.baseNoteLiDARByNoteId);
+            update.baseNoteLiDARByNoteId,
+            context.applyMode == cwReconcileApplyMode::TargetCommitWins
+                ? cwSyncMergeApplyUtils::ApplyMode::LoadedWins
+                : cwSyncMergeApplyUtils::ApplyMode::ThreeWayMerge);
         if (mergePreparation.hasError()) {
             cwReconcileMergeResult fullReloadResult;
             fullReloadResult.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;

@@ -30,6 +30,7 @@
 #include <QTemporaryFile>
 #include <QRegularExpression>
 #include <QFileInfo>
+#include <QFile>
 #include <QDir>
 #include <QProcess>
 #include <QEventLoop>

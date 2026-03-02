@@ -2,6 +2,7 @@
 
 #include "cwNoteLiDARData.h"
 #include "cwSurveyNoteLiDARModelData.h"
+#include "cwSyncMergeApplyUtils.h"
 #include "Monad/Result.h"
 
 #include <QHash>
@@ -25,6 +26,7 @@ struct cwNoteLiDARMergePlan {
     cwNoteLiDAR* currentNote = nullptr;
     const cwNoteLiDARData* loadedNoteData = nullptr;
     std::optional<cwNoteLiDARData> baseNoteData;
+    cwSyncMergeApplyUtils::ApplyMode applyMode = cwSyncMergeApplyUtils::ApplyMode::ThreeWayMerge;
 };
 
 struct cwNoteLiDARMergePreparation {
@@ -42,5 +44,6 @@ public:
     static Monad::Result<cwNoteLiDARMergePreparation> build(
         cwSurveyNoteLiDARModel* noteLiDARModel,
         const cwSurveyNoteLiDARModelData& loadedNoteLiDARModelData,
-        const QHash<QUuid, cwNoteLiDARData>& baseNoteLiDARByNoteId);
+        const QHash<QUuid, cwNoteLiDARData>& baseNoteLiDARByNoteId,
+        cwSyncMergeApplyUtils::ApplyMode applyMode = cwSyncMergeApplyUtils::ApplyMode::ThreeWayMerge);
 };

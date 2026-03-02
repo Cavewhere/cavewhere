@@ -17,8 +17,11 @@
 #include "cwCave.h"
 #include "cwTrip.h"
 #include "cwNote.h"
+#include "cwNoteLiDAR.h"
+#include "cwSurveyNoteLiDARModel.h"
 #include "cwScrap.h"
 #include "cwLead.h"
+#include "cwLinePlotManager.h"
 #include "cwErrorListModel.h"
 #include "GitRepository.h"
 #include "Account.h"
@@ -411,6 +414,72 @@ bool TestHelper::addScrapLead(cwNote* note,
     return true;
 }
 
+bool TestHelper::addLiDARStation(cwNoteLiDAR* note,
+                                 const QString& name,
+                                 const QVector3D& positionOnNote) const
+{
+    if (note == nullptr) {
+        return false;
+    }
+
+    cwNoteLiDARStation station;
+    station.setName(name);
+    station.setPositionOnNote(positionOnNote);
+    note->addStation(station);
+    return true;
+}
+
+int TestHelper::liDARStationLookupSize(cwNoteLiDAR* note) const
+{
+    if (note == nullptr) {
+        return 0;
+    }
+
+    cwCave* cave = note->parentCave();
+    if (cave == nullptr) {
+        return 0;
+    }
+
+    return cave->stationPositionLookup().positions().size();
+}
+
+bool TestHelper::liDARSurveyNetworkIsEmpty(cwNoteLiDAR* note) const
+{
+    if (note == nullptr) {
+        return true;
+    }
+
+    cwCave* cave = note->parentCave();
+    if (cave == nullptr) {
+        return true;
+    }
+
+    return cave->network().isEmpty();
+}
+
+QString TestHelper::firstUnusedTripStationName(cwTrip* trip,
+                                               const QStringList& excludedNames) const
+{
+    if (trip == nullptr) {
+        return QString();
+    }
+
+    QSet<QString> excluded;
+    for (const QString& name : excludedNames) {
+        excluded.insert(name.trimmed().toLower());
+    }
+
+    const QList<cwStation> tripStations = trip->uniqueStations();
+    for (const cwStation& station : tripStations) {
+        const QString name = station.name().trimmed();
+        if (!name.isEmpty() && !excluded.contains(name.toLower())) {
+            return name;
+        }
+    }
+
+    return QString();
+}
+
 cwSyncFixtureInfo TestHelper::createLocalSyncFixtureWithLfsServer()
 {
     cwSyncFixtureInfo result;
@@ -528,6 +597,219 @@ cwSyncFixtureInfo TestHelper::createLocalSyncFixtureWithLfsServer()
     try {
         repository->commitAll(QStringLiteral("Seed sync fixture"),
                               QStringLiteral("Seed repository for QML sync tests"));
+    } catch (const std::exception& ex) {
+        result.errorMessage = QStringLiteral("Failed to create seed commit: %1")
+                                  .arg(QString::fromUtf8(ex.what()));
+        return result;
+    }
+
+    const auto pushFuture = repository->push();
+    if (!AsyncFuture::waitForFinished(pushFuture, 15000)) {
+        result.errorMessage = QStringLiteral("Timed out waiting for fixture push.");
+        return result;
+    }
+    const auto pushResult = pushFuture.result();
+    if (pushResult.hasError()) {
+        result.errorMessage = pushResult.errorMessage();
+        return result;
+    }
+
+    result.errorMessage = QString();
+    result.projectFilePath = projectPath;
+    result.workingRepoPath = workingRepoPath;
+    result.remoteRepoPath = remoteRepoPath;
+    result.branchName = repository->headBranchName();
+    result.lfsEndpoint = lfsEndpoint;
+    return result;
+}
+
+cwSyncFixtureInfo TestHelper::createLocalLiDARSyncFixtureWithLfsServer()
+{
+    cwSyncFixtureInfo result;
+
+    if (!g_syncLfsServer) {
+        g_syncLfsServer = std::make_unique<LfsServer>();
+        if (!g_syncLfsServer->start()) {
+            result.errorMessage = QStringLiteral("Failed to start LFS test server.");
+            return result;
+        }
+    }
+    const QString lfsEndpoint = g_syncLfsServer->endpoint();
+
+    QTemporaryDir remoteRoot;
+    remoteRoot.setAutoRemove(false);
+    QTemporaryDir workingRoot;
+    workingRoot.setAutoRemove(false);
+
+    if (!remoteRoot.isValid() || !workingRoot.isValid()) {
+        result.errorMessage = QStringLiteral("Failed to create one or more temporary directories for sync fixture.");
+        return result;
+    }
+
+    const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("sync-fixture.git"));
+    git_repository* bareRepo = nullptr;
+    if (git_repository_init(&bareRepo, remoteRepoPath.toLocal8Bit().constData(), 1) != GIT_OK) {
+        const git_error* error = git_error_last();
+        result.errorMessage = error ? QString::fromUtf8(error->message)
+                                    : QStringLiteral("Failed to initialize bare repository.");
+        return result;
+    }
+    if (bareRepo) {
+        git_repository_free(bareRepo);
+    }
+
+    QQuickGit::Account account;
+    account.setName(QStringLiteral("QML Sync Fixture"));
+    account.setEmail(QStringLiteral("qml.sync.fixture@example.com"));
+
+    cwProject project;
+    addTokenManager(&project);
+    project.setGitAccount(&account);
+
+    const QString datasetFileZip = copyToTempFolder(QStringLiteral("://datasets/lidarProjects/jaws of the beast.zip"));
+    QFileInfo zipInfo(datasetFileZip);
+    cwZip::extractAll(datasetFileZip, zipInfo.canonicalPath());
+
+    QString datasetProjectFile;
+    QDirIterator it(zipInfo.canonicalPath(),
+                    QStringList() << "*.cwproj" << "*.cw",
+                    QDir::Files,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        const QString filePath = it.next();
+        QFileInfo fileInfo(filePath);
+        if (filePath.contains(QStringLiteral("__MACOSX")) || fileInfo.fileName().startsWith("._")) {
+            continue;
+        }
+        datasetProjectFile = filePath;
+        break;
+    }
+
+    if (datasetProjectFile.isEmpty()) {
+        result.errorMessage = QStringLiteral("Failed to find LiDAR fixture project file.");
+        return result;
+    }
+
+    project.loadOrConvert(datasetProjectFile);
+    project.waitLoadToFinish();
+
+    auto* region = project.cavingRegion();
+    if (region == nullptr || region->caveCount() <= 0) {
+        result.errorMessage = QStringLiteral("Failed to load LiDAR fixture project data.");
+        return result;
+    }
+
+    auto* cave = region->cave(0);
+    if (cave == nullptr || cave->tripCount() <= 0) {
+        result.errorMessage = QStringLiteral("Failed to access LiDAR fixture cave.");
+        return result;
+    }
+
+    auto* trip = cave->trip(0);
+    if (trip == nullptr || trip->notesLiDAR() == nullptr) {
+        result.errorMessage = QStringLiteral("Failed to access LiDAR notes model for fixture.");
+        return result;
+    }
+
+    const QString requestedProjectPath = QDir(workingRoot.path()).filePath(QStringLiteral("sync-fixture.cwproj"));
+    if (!project.saveAs(requestedProjectPath)) {
+        result.errorMessage = QStringLiteral("Failed to save sync fixture project.");
+        return result;
+    }
+    project.waitSaveToFinish();
+    const QString projectPath = project.filename();
+    const QString projectDataDirPath =
+        QFileInfo(projectPath).dir().filePath(QFileInfo(projectPath).completeBaseName());
+    const QString nestedGitDirPath = QDir(projectDataDirPath).filePath(QStringLiteral(".git"));
+    if (QFileInfo::exists(nestedGitDirPath)) {
+        QDir nestedGitDir(nestedGitDirPath);
+        if (!nestedGitDir.removeRecursively()) {
+            result.errorMessage = QStringLiteral("Failed to remove nested git directory from LiDAR sync fixture.");
+            return result;
+        }
+    }
+
+    const QString sourceGlbPath = copyToTempFolder(QStringLiteral("://datasets/lidarProjects/9_15_2025 3.glb"));
+    const QFileInfo sourceGlbInfo(sourceGlbPath);
+    const QString lidarFileName = sourceGlbInfo.fileName();
+    const QString destinationGlbPath = project.notesDir(trip->notesLiDAR()).filePath(lidarFileName);
+    if (QFileInfo::exists(destinationGlbPath) && !QFile::remove(destinationGlbPath)) {
+        result.errorMessage = QStringLiteral("Failed to replace existing LiDAR fixture file.");
+        return result;
+    }
+    if (!QFile::copy(sourceGlbPath, destinationGlbPath)) {
+        result.errorMessage = QStringLiteral("Failed to seed LiDAR fixture GLB file.");
+        return result;
+    }
+
+    auto* lidarNote = new cwNoteLiDAR(trip->notesLiDAR());
+    lidarNote->setParentTrip(trip);
+    lidarNote->setName(lidarFileName);
+    lidarNote->setFilename(lidarFileName);
+
+    cwNoteLiDARStation stationA;
+    stationA.setName(QStringLiteral("6"));
+    stationA.setPositionOnNote(QVector3D(-0.25f, 0.0f, 0.0f));
+    lidarNote->addStation(stationA);
+
+    cwNoteLiDARStation stationB;
+    stationB.setName(QStringLiteral("7"));
+    stationB.setPositionOnNote(QVector3D(0.25f, 0.0f, 0.0f));
+    lidarNote->addStation(stationB);
+
+    trip->notesLiDAR()->addNotes({lidarNote});
+
+    if (!project.save()) {
+        result.errorMessage = QStringLiteral("Failed to save LiDAR sync fixture project.");
+        return result;
+    }
+    project.waitSaveToFinish();
+
+    QQuickGit::GitRepository* repository = project.repository();
+    if (repository == nullptr) {
+        result.errorMessage = QStringLiteral("Failed to access fixture repository.");
+        return result;
+    }
+
+    const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
+                                                         QUrl::fromLocalFile(remoteRepoPath));
+    if (!addRemoteError.isEmpty()) {
+        result.errorMessage = addRemoteError;
+        return result;
+    }
+
+    const QString workingRepoPath = repository->directory().absolutePath();
+    QString configError;
+    if (!setRepositoryConfigString(workingRepoPath, QStringLiteral("lfs.url"), lfsEndpoint, &configError)
+        || !setRepositoryConfigString(workingRepoPath,
+                                      QStringLiteral("remote.origin.lfsurl"),
+                                      lfsEndpoint,
+                                      &configError)
+        || !setRepositoryConfigString(workingRepoPath,
+                                      QStringLiteral("user.name"),
+                                      QStringLiteral("QML Sync Fixture"),
+                                      &configError)
+        || !setRepositoryConfigString(workingRepoPath,
+                                      QStringLiteral("user.email"),
+                                      QStringLiteral("qml.sync.fixture@example.com"),
+                                      &configError)) {
+        result.errorMessage = configError.isEmpty()
+                                  ? QStringLiteral("Failed to configure LFS endpoint for sync fixture.")
+                                  : configError;
+        return result;
+    }
+
+    QFile seedFile(repository->directory().filePath(QStringLiteral("README.md")));
+    if (!seedFile.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+        result.errorMessage = QStringLiteral("Failed to write sync fixture seed file.");
+        return result;
+    }
+    seedFile.write("sync fixture\n");
+    seedFile.close();
+
+    try {
+        repository->commitAll(QStringLiteral("Seed LiDAR sync fixture"),
+                              QStringLiteral("Seed repository for LiDAR QML sync tests"));
     } catch (const std::exception& ex) {
         result.errorMessage = QStringLiteral("Failed to create seed commit: %1")
                                   .arg(QString::fromUtf8(ex.what()));

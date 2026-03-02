@@ -19,7 +19,9 @@
 
 //Our includes
 #include "cwProject.h"
+#include "cwTrip.h"
 #include "cwNote.h"
+#include "cwNoteLiDAR.h"
 #include "CaveWhereTestLibExport.h"
 
 //Std includes
@@ -124,7 +126,15 @@ public:
                                   const QPointF& positionOnNote,
                                   const QSizeF& size,
                                   const QString& description) const;
+    Q_INVOKABLE bool addLiDARStation(cwNoteLiDAR* note,
+                                     const QString& name,
+                                     const QVector3D& positionOnNote) const;
+    Q_INVOKABLE int liDARStationLookupSize(cwNoteLiDAR* note) const;
+    Q_INVOKABLE bool liDARSurveyNetworkIsEmpty(cwNoteLiDAR* note) const;
+    Q_INVOKABLE QString firstUnusedTripStationName(cwTrip* trip,
+                                                   const QStringList& excludedNames) const;
     Q_INVOKABLE cwSyncFixtureInfo createLocalSyncFixtureWithLfsServer();
+    Q_INVOKABLE cwSyncFixtureInfo createLocalLiDARSyncFixtureWithLfsServer();
     Q_INVOKABLE cwCloneFixtureInfo createLocalBareRemoteForCloneTest();
     Q_INVOKABLE bool setGitHubAccessTokenForAccount(const QString& accountId,
                                                     const QString& token) const;
