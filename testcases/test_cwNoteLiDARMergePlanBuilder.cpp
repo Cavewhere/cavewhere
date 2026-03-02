@@ -1,4 +1,5 @@
 // Catch includes
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 using namespace Catch;
 
@@ -32,6 +33,25 @@ cwNoteLiDARData makeLiDARData(const QUuid& noteId,
     data.stations = stations;
     data.autoCalculateNorth = false;
     data.transfrom.north = 0.0;
+    return data;
+}
+
+cwNoteLiDARTransformationData makeTransformData(double north,
+                                                double scaleNumeratorValue,
+                                                cwUnits::LengthUnit scaleNumeratorUnit,
+                                                double scaleDenominatorValue,
+                                                cwUnits::LengthUnit scaleDenominatorUnit,
+                                                cwNoteLiDARTransformationData::UpMode upMode = cwNoteLiDARTransformationData::UpMode::YisUp,
+                                                float upSign = 1.0f)
+{
+    cwNoteLiDARTransformationData data;
+    data.north = north;
+    data.scale.scaleNumerator.value = scaleNumeratorValue;
+    data.scale.scaleNumerator.unit = scaleNumeratorUnit;
+    data.scale.scaleDenominator.value = scaleDenominatorValue;
+    data.scale.scaleDenominator.unit = scaleDenominatorUnit;
+    data.upMode = upMode;
+    data.upSign = upSign;
     return data;
 }
 
@@ -222,4 +242,84 @@ TEST_CASE("cwNoteLiDAR merge applier returns false for ambiguous station ids", "
     plan.baseNoteData = baseData;
 
     CHECK(cwNoteLiDARMergeApplier::applyNoteLiDARMergePlan(plan).hasError());
+}
+
+TEST_CASE("cwNoteLiDAR merge applier ignores derived north when auto north is enabled", "[cwNoteLiDARMerge][sync]")
+{
+    auto note = std::make_unique<cwNoteLiDAR>();
+    note->setFilename(QStringLiteral("base.glb"));
+    note->setAutoCalculateNorth(true);
+    note->noteTransformation()->setData(
+        makeTransformData(135.0, 1.0, cwUnits::LengthUnit::Meters, 100.0, cwUnits::LengthUnit::Meters));
+
+    const QUuid noteId = note->id();
+    cwNoteLiDARData baseData = makeLiDARData(noteId, QStringLiteral("base.glb"), {});
+    baseData.autoCalculateNorth = true;
+    baseData.transfrom = makeTransformData(10.0,
+                                           1.0,
+                                           cwUnits::LengthUnit::Meters,
+                                           100.0,
+                                           cwUnits::LengthUnit::Meters);
+
+    cwNoteLiDARData loadedData = makeLiDARData(noteId, QStringLiteral("remote.glb"), {});
+    loadedData.autoCalculateNorth = true;
+    loadedData.transfrom = makeTransformData(10.0,
+                                             1.0,
+                                             cwUnits::LengthUnit::Meters,
+                                             250.0,
+                                             cwUnits::LengthUnit::Meters);
+
+    cwNoteLiDARMergePlan plan;
+    plan.currentNote = note.get();
+    plan.loadedNoteData = &loadedData;
+    plan.baseNoteData = baseData;
+
+    REQUIRE_FALSE(cwNoteLiDARMergeApplier::applyNoteLiDARMergePlan(plan).hasError());
+
+    CHECK(note->autoCalculateNorth());
+    CHECK(note->filename() == QStringLiteral("remote.glb"));
+    CHECK(note->noteTransformation()->northUp() == Approx(10.0));
+    CHECK(note->noteTransformation()->scaleObject()->scaleDenominator()->value() == Approx(250.0));
+    CHECK(note->noteTransformation()->scaleObject()->scaleDenominator()->unit() == cwUnits::LengthUnit::Meters);
+}
+
+TEST_CASE("cwNoteLiDAR merge applier keeps up mode authoritative when auto north is enabled", "[cwNoteLiDARMerge][sync]")
+{
+    auto note = std::make_unique<cwNoteLiDAR>();
+    note->setFilename(QStringLiteral("base.glb"));
+    note->setAutoCalculateNorth(true);
+    note->noteTransformation()->setData(
+        makeTransformData(135.0, 1.0, cwUnits::LengthUnit::Meters, 100.0, cwUnits::LengthUnit::Meters));
+
+    const QUuid noteId = note->id();
+    cwNoteLiDARData baseData = makeLiDARData(noteId, QStringLiteral("base.glb"), {});
+    baseData.autoCalculateNorth = true;
+    baseData.transfrom = makeTransformData(10.0,
+                                           1.0,
+                                           cwUnits::LengthUnit::Meters,
+                                           100.0,
+                                           cwUnits::LengthUnit::Meters,
+                                           cwNoteLiDARTransformationData::UpMode::YisUp);
+
+    cwNoteLiDARData loadedData = makeLiDARData(noteId, QStringLiteral("remote.glb"), {});
+    loadedData.autoCalculateNorth = true;
+    loadedData.transfrom = makeTransformData(10.0,
+                                             1.0,
+                                             cwUnits::LengthUnit::Meters,
+                                             100.0,
+                                             cwUnits::LengthUnit::Meters,
+                                             cwNoteLiDARTransformationData::UpMode::ZisUp,
+                                             -1.0f);
+
+    cwNoteLiDARMergePlan plan;
+    plan.currentNote = note.get();
+    plan.loadedNoteData = &loadedData;
+    plan.baseNoteData = baseData;
+
+    REQUIRE_FALSE(cwNoteLiDARMergeApplier::applyNoteLiDARMergePlan(plan).hasError());
+
+    CHECK(note->autoCalculateNorth());
+    CHECK(note->noteTransformation()->northUp() == Approx(10.0));
+    CHECK(note->noteTransformation()->upMode() == cwNoteLiDARTransformation::UpMode::ZisUp);
+    CHECK(note->noteTransformation()->upSign() == Approx(-1.0f));
 }

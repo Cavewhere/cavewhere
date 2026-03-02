@@ -21,9 +21,11 @@ bool scalesEqual(const cwScale::Data& lhs, const cwScale::Data& rhs)
            && lengthsEqual(lhs.scaleDenominator, rhs.scaleDenominator);
 }
 
-bool lidarTransformsEqual(const cwNoteLiDARTransformationData& lhs, const cwNoteLiDARTransformationData& rhs)
+bool lidarTransformsEqual(const cwNoteLiDARTransformationData& lhs,
+                          const cwNoteLiDARTransformationData& rhs,
+                          bool ignoreNorth)
 {
-    return qFuzzyCompare(1.0 + lhs.north, 1.0 + rhs.north)
+    return (ignoreNorth || qFuzzyCompare(1.0 + lhs.north, 1.0 + rhs.north))
            && scalesEqual(lhs.scale, rhs.scale)
            && lhs.upMode == rhs.upMode
            && qFuzzyCompare(1.0f + lhs.upSign, 1.0f + rhs.upSign)
@@ -200,7 +202,9 @@ Monad::ResultBase cwNoteLiDARMergeApplier::applyNoteLiDARMergePlan(const cwNoteL
         baseTransformBundle,
         [](const TransformBundle& lhs, const TransformBundle& rhs) {
             return lhs.autoCalculateNorth == rhs.autoCalculateNorth
-                   && lidarTransformsEqual(lhs.transform, rhs.transform);
+                   && lidarTransformsEqual(lhs.transform,
+                                           rhs.transform,
+                                           lhs.autoCalculateNorth && rhs.autoCalculateNorth);
         },
         plan.applyMode);
 
