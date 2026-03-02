@@ -13,6 +13,15 @@ MainWindowTest {
         name: "ScrapSync"
         when: windowShown
 
+        function cleanup() {
+            RootData.pageSelectionModel.gotoPageByName(null, "View")
+            tryVerifyWithDiagnostics(() => {
+                return RootData.pageView.currentPageItem !== null
+                       && RootData.pageView.currentPageItem.objectName === "viewPage"
+            }, 5000, "return to view page during cleanup")
+            RootData.newProject()
+        }
+
         function tryVerifyWithDiagnostics(predicate, timeoutMs, label, onPending) {
             SyncTestHelper.tryVerifyWithDiagnostics(testCaseId, predicate, timeoutMs, label, onPending)
         }
@@ -133,6 +142,18 @@ MainWindowTest {
             let input = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->leadEditor->description")
             verify(input !== null)
             return input
+        }
+
+        function leadPage() {
+            let page = ObjectFinder.findObjectByChain(mainWindow, "rootId->leadPage")
+            verify(page !== null)
+            return page
+        }
+
+        function leadTableView() {
+            let tableView = ObjectFinder.findObjectByChain(mainWindow, "rootId->leadPage->leadTableView")
+            verify(tableView !== null)
+            return tableView
         }
 
         function autoCalculateScrapCheckBox() {
@@ -399,13 +420,10 @@ MainWindowTest {
             let scrapNoteIndex = findFirstNoteIndexWithScraps()
             verify(scrapNoteIndex >= 0)
 
+            disableNoteLoadUi()
             let gallery = noteGallery()
-            let galleryView = noteGalleryView()
-            galleryView.currentIndex = scrapNoteIndex
-
-            tryVerifyWithDiagnostics(() => {
-                return gallery.currentNote !== null
-            }, 5000, "select note with scraps")
+            selectNoteIndex(scrapNoteIndex, "select note with scraps", true)
+            waitForNoteCanvasReady("wait for note canvas with scraps")
 
             let requiresScrapSelection = stage === "before-set"
                                          || stage === "after-set"
@@ -431,14 +449,7 @@ MainWindowTest {
                 return currentScrapView.count > 0
             }, 5000, "wait for scraps in note area")
 
-            if (currentScrapView.selectScrapIndex !== 0) {
-                currentScrapView.selectScrapIndex = 0
-            }
-
-            tryVerifyWithDiagnostics(() => {
-                return currentScrapView.selectedScrapItem !== null
-                       && currentScrapView.selectedScrapItem.scrap !== null
-            }, 5000, "select first scrap")
+            selectScrapIndex(0, "select first scrap")
         }
 
         function restoreTripPage(tripPageAddress) {
@@ -449,10 +460,43 @@ MainWindowTest {
             }, 10000, "restore trip page")
         }
 
+        function openCaveLeadPage(caveName) {
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + caveName
+            tryVerifyWithDiagnostics(() => {
+                return RootData.pageView.currentPageItem !== null
+                       && RootData.pageView.currentPageItem.objectName === "cavePage"
+            }, 10000, "open cave page")
+
+            let leadsButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->cavePage->leadsButton")
+            verify(leadsButton !== null)
+            mouseClick(leadsButton)
+
+            tryVerifyWithDiagnostics(() => {
+                return RootData.pageView.currentPageItem !== null
+                       && RootData.pageView.currentPageItem.objectName === "leadPage"
+                       && leadTableView().model !== null
+            }, 10000, "open lead page")
+        }
+
+        function verifyStillOnLeadPage() {
+            tryVerifyWithDiagnostics(() => {
+                return RootData.pageView.currentPageItem !== null
+                       && RootData.pageView.currentPageItem.objectName === "leadPage"
+                       && leadTableView().model !== null
+            }, 10000, "verify still on lead page")
+        }
+
         function selectedScrapItem() {
             let view = scrapView()
-            let item = view.selectedScrapItem
-            verify(item !== null)
+            let item = null
+            tryVerifyWithDiagnostics(() => {
+                let targetIndex = view.selectScrapIndex >= 0 ? view.selectScrapIndex : 0
+                if (view.count > 0 && view.selectScrapIndex !== targetIndex) {
+                    view.selectScrapIndex = targetIndex
+                }
+                item = view.selectedScrapItem
+                return item !== null && item.scrap !== null
+            }, 5000, "wait for selected scrap item")
             return item
         }
 
@@ -464,6 +508,9 @@ MainWindowTest {
             }
 
             tryVerifyWithDiagnostics(() => {
+                if (view.selectScrapIndex !== scrapIndex) {
+                    view.selectScrapIndex = scrapIndex
+                }
                 return view.selectScrapIndex === scrapIndex
                        && view.selectedScrapItem !== null
                        && view.selectedScrapItem.scrap !== null
@@ -508,6 +555,11 @@ MainWindowTest {
         function leadDimensionText(value) {
             let numericValue = Number(value)
             return !isFinite(numericValue) || numericValue < 0 ? "?" : String(numericValue)
+        }
+
+        function leadPageDimensionText(value) {
+            let numericValue = Number(value)
+            return !isFinite(numericValue) ? "?" : String(numericValue)
         }
 
         function normalizedLeadDimensionValue(value) {
@@ -896,6 +948,129 @@ MainWindowTest {
         function expectedScrapLeadUiState(state) {
             return expectedScrapLeadUiStateForSelection(state, state.leadCount > 0 ? 0 : -1)
         }
+
+        function snapshotLeadState(scrap, leadIndex) {
+            verify(scrap !== null)
+            verify(leadIndex >= 0)
+            verify(leadIndex < scrap.numberOfLeads())
+
+            let size = scrap.leadData(Scrap.LeadSize, leadIndex)
+            return {
+                description: String(scrap.leadData(Scrap.LeadDesciption, leadIndex)),
+                width: normalizedLeadDimensionValue(size.width),
+                height: normalizedLeadDimensionValue(size.height),
+                completed: Boolean(scrap.leadData(Scrap.LeadCompleted, leadIndex))
+            }
+        }
+
+        function applyLeadState(scrap, leadIndex, state) {
+            verify(scrap !== null)
+            verify(leadIndex >= 0)
+            verify(leadIndex < scrap.numberOfLeads())
+
+            let currentSize = scrap.leadData(Scrap.LeadSize, leadIndex)
+            if (Number(currentSize.width.toFixed(2)) !== state.width
+                    || Number(currentSize.height.toFixed(2)) !== state.height) {
+                scrap.setLeadData(Scrap.LeadSize, leadIndex, Qt.size(state.width, state.height))
+            }
+
+            let currentDescription = String(scrap.leadData(Scrap.LeadDesciption, leadIndex))
+            if (currentDescription !== state.description) {
+                scrap.setLeadData(Scrap.LeadDesciption, leadIndex, state.description)
+            }
+
+            let currentCompleted = Boolean(scrap.leadData(Scrap.LeadCompleted, leadIndex))
+            if (currentCompleted !== state.completed) {
+                scrap.setLeadData(Scrap.LeadCompleted, leadIndex, state.completed)
+            }
+
+            tryVerifyWithDiagnostics(() => {
+                return SyncTestHelper.deepEqual(snapshotLeadState(scrap, leadIndex), state)
+            }, 5000, "wait for applied lead state")
+
+            TestHelper.waitForProjectSaveToFinish(RootData.project)
+        }
+
+        function nextLeadPageState(state) {
+            return {
+                description: state.description === "Sync lead page updated"
+                           ? "Sync lead page updated again"
+                           : "Sync lead page updated",
+                width: state.width === 7 ? 5 : 7,
+                height: state.height === 6 ? 4 : 6,
+                completed: !state.completed
+            }
+        }
+
+        function findLeadTableRowForState(state) {
+            let model = leadTableView().model
+            verify(model !== null)
+            let expectedSizeAsString = leadPageDimensionText(state.width) + " x " + leadPageDimensionText(state.height)
+
+            for (let row = 0; row < model.rowCount(); ++row) {
+                let modelIndex = model.index(row, 0)
+                if (Boolean(model.data(modelIndex, LeadModel.LeadCompleted)) === state.completed
+                        && String(model.data(modelIndex, LeadModel.LeadDesciption)) === state.description
+                        && String(model.data(modelIndex, LeadModel.LeadSizeAsString)) === expectedSizeAsString) {
+                    return row
+                }
+            }
+
+            return -1
+        }
+
+        function snapshotCaveLeadPageRowState(state) {
+            let tableView = leadTableView()
+            let model = tableView.model
+            verify(model !== null)
+
+            let row = -1
+            tryVerifyWithDiagnostics(() => {
+                row = findLeadTableRowForState(state)
+                return row >= 0
+            }, 5000, "find lead row in cave lead page")
+
+            let modelIndex = model.index(row, 0)
+            return {
+                row: row,
+                count: model.rowCount(),
+                completed: Boolean(model.data(modelIndex, LeadModel.LeadCompleted)),
+                description: String(model.data(modelIndex, LeadModel.LeadDesciption)),
+                sizeAsString: String(model.data(modelIndex, LeadModel.LeadSizeAsString))
+            }
+        }
+
+        function expectedCaveLeadPageRowState(state) {
+            return {
+                row: findLeadTableRowForState(state),
+                count: leadTableView().model.rowCount(),
+                completed: state.completed,
+                description: state.description,
+                sizeAsString: leadPageDimensionText(state.width) + " x " + leadPageDimensionText(state.height)
+            }
+        }
+
+        function caveLeadPageRowMatchesState(state) {
+            let model = leadTableView().model
+            if (model === null) {
+                return false
+            }
+
+            let row = findLeadTableRowForState(state)
+            if (row < 0) {
+                return false
+            }
+
+            let modelIndex = model.index(row, 0)
+            return SyncTestHelper.deepEqual({
+                row: row,
+                count: model.rowCount(),
+                completed: Boolean(model.data(modelIndex, LeadModel.LeadCompleted)),
+                description: String(model.data(modelIndex, LeadModel.LeadDesciption)),
+                sizeAsString: String(model.data(modelIndex, LeadModel.LeadSizeAsString))
+            }, expectedCaveLeadPageRowState(state))
+        }
+
 
         function applySelectedScrapLeadsState(state) {
             let scrap = selectedScrapItem().scrap
@@ -1319,9 +1494,7 @@ MainWindowTest {
                        && currentScrapView.count > 0
             }, 5000, "bind scrap view for transform editor")
 
-            if (currentScrapView.selectScrapIndex !== 0) {
-                currentScrapView.selectScrapIndex = 0
-            }
+            selectScrapIndex(0, "select scrap for transform editor")
 
             let editor = noteTransformEditor()
             tryVerifyWithDiagnostics(() => {
@@ -2011,6 +2184,84 @@ MainWindowTest {
                 setter: applySelectedScrapLeadsState,
                 nextValue: nextLeadRemovedState
             })
+        }
+
+        function test_caveLeadPageLeadDataSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+            let leadContext = findFirstNoteAndScrapIndexWithLeads()
+            verify(leadContext !== null)
+
+            disableNoteLoadUi()
+            selectNoteIndex(leadContext.noteIndex, "select note for cave lead page test")
+            waitForNoteCanvasReady("wait for note canvas in cave lead page test")
+            enterCarpetMode()
+
+            let currentScrapView = scrapView()
+            tryVerifyWithDiagnostics(() => {
+                return currentScrapView.note === noteGallery().currentNote
+                       && currentScrapView.count > leadContext.scrapIndex
+            }, 5000, "bind scrap view for cave lead page test")
+
+            selectScrapIndex(leadContext.scrapIndex, "select scrap for cave lead page test")
+            tryVerifyWithDiagnostics(() => {
+                return currentScrapView.selectedScrapItem !== null
+                       && currentScrapView.selectedScrapItem.scrap !== null
+                       && currentScrapView.selectedScrapItem.scrap.numberOfLeads() > 0
+            }, 5000, "wait for target scrap leads")
+
+            let targetScrap = currentScrapView.selectedScrapItem.scrap
+            let targetLeadIndex = 0
+            let caveName = String(RootData.region.cave(0).name)
+            let baselineState = snapshotLeadState(targetScrap, targetLeadIndex)
+
+            openCaveLeadPage(caveName)
+            tryVerifyWithDiagnostics(() => {
+                return caveLeadPageRowMatchesState(baselineState)
+            }, 5000, "verify baseline cave lead page row")
+
+            let commitA = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitA !== "")
+
+            let syncedState = nextLeadPageState(baselineState)
+            applyLeadState(targetScrap, targetLeadIndex, syncedState)
+
+            tryVerifyWithDiagnostics(() => {
+                return SyncTestHelper.deepEqual(snapshotLeadState(targetScrap, targetLeadIndex), syncedState)
+            }, 5000, "verify edited lead state")
+            tryVerifyWithDiagnostics(() => {
+                return caveLeadPageRowMatchesState(syncedState)
+            }, 5000, "verify edited cave lead page row")
+
+            verify(RootData.project.sync())
+            SyncTestHelper.waitForProjectSyncToFinish(testCaseId, RootData)
+
+            let commitB = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitB !== "")
+            verify(commitB !== commitA)
+
+            let checkoutError = TestHelper.checkoutProjectRef(RootData.project, commitA, true)
+            compare(checkoutError, "")
+            verifyStillOnLeadPage()
+
+            tryVerifyWithDiagnostics(() => {
+                return SyncTestHelper.deepEqual(snapshotLeadState(targetScrap, targetLeadIndex), baselineState)
+            }, 10000, "verify baseline lead state after checkout")
+            tryVerifyWithDiagnostics(() => {
+                return caveLeadPageRowMatchesState(baselineState)
+            }, 10000, "verify baseline cave lead page row after checkout")
+
+            verify(RootData.project.sync())
+            SyncTestHelper.waitForProjectSyncToFinish(testCaseId, RootData)
+            verifyStillOnLeadPage()
+
+            tryVerifyWithDiagnostics(() => {
+                return SyncTestHelper.deepEqual(snapshotLeadState(targetScrap, targetLeadIndex), syncedState)
+            }, 10000, "verify resynced lead state")
+            tryVerifyWithDiagnostics(() => {
+                return caveLeadPageRowMatchesState(syncedState)
+            }, 10000, "verify resynced cave lead page row")
+
+            restoreTripPage(context.tripPageAddress)
         }
     }
 }

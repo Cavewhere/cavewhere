@@ -226,6 +226,7 @@ void cwLeadModel::addScrap(cwScrap *scrap)
     connect(scrap, &cwScrap::leadsInserted, this, &cwLeadModel::endInsertLeads);
     connect(scrap, &cwScrap::leadsRemoved, this, &cwLeadModel::beginRemoveLeads);
     connect(scrap, &cwScrap::leadsRemoved, this, &cwLeadModel::endRemoveLeads);
+    connect(scrap, &cwScrap::leadsReset, this, &cwLeadModel::fullModelReset);
     connect(scrap, &cwScrap::leadsDataChanged, this, [this, scrap](int begin, int end, const QList<int>& roles) {
         leadDataUpdated(scrap, begin, end, roles);
     });
@@ -349,7 +350,7 @@ void cwLeadModel::endRemoveLeads(int begin, int end)
 
     updateOffsets(scrap);
 
-    endInsertRows();
+    endRemoveRows();
 }
 
 /**
