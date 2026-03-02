@@ -171,8 +171,11 @@ function runProjectSyncRoundTrip(testCase, rootData, testHelper, options) {
     const verifyCheckoutUi = options.verifyCheckoutUi !== false
     const verifyResyncUi = options.verifyResyncUi !== false
 
-    function verifyStateEquals(getter, expectedValue, timeoutMs, label) {
+    function verifyStateEquals(getter, expectedValueOrFactory, timeoutMs, label) {
         tryVerifyWithDiagnostics(testCase, () => {
+            let expectedValue = typeof expectedValueOrFactory === "function"
+                              ? expectedValueOrFactory()
+                              : expectedValueOrFactory
             return deepEqual(getter(), expectedValue)
         }, timeoutMs, label)
     }
@@ -184,7 +187,7 @@ function runProjectSyncRoundTrip(testCase, rootData, testHelper, options) {
 
     let baselineValue = options.getter()
     let baselineUiValue = options.uiExpectedFromValue !== undefined && options.uiExpectedFromValue !== null
-                        ? options.uiExpectedFromValue(baselineValue)
+                        ? () => options.uiExpectedFromValue(baselineValue)
                         : baselineValue
     if (options.requireNonEmptyBaseline !== false) {
         if (typeof baselineValue === "string") {
@@ -206,7 +209,7 @@ function runProjectSyncRoundTrip(testCase, rootData, testHelper, options) {
 
     let syncedValue = options.nextValue(baselineValue)
     let syncedUiValue = options.uiExpectedFromValue !== undefined && options.uiExpectedFromValue !== null
-                      ? options.uiExpectedFromValue(syncedValue)
+                      ? () => options.uiExpectedFromValue(syncedValue)
                       : syncedValue
 
     if (options.prepare !== undefined && options.prepare !== null) {

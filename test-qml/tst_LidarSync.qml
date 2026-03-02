@@ -234,9 +234,15 @@ MainWindowTest {
             let stations = []
             for (let i = 0; i < note.rowCount(); ++i) {
                 let modelIndex = note.index(i, 0)
+                let positionOnNote = note.data(modelIndex, NoteLiDAR.PositionOnNoteRole)
                 stations.push({
                     index: i,
-                    name: String(note.data(modelIndex, NoteLiDAR.NameRole))
+                    name: String(note.data(modelIndex, NoteLiDAR.NameRole)),
+                    positionOnNote: {
+                        x: roundNumber(positionOnNote.x),
+                        y: roundNumber(positionOnNote.y),
+                        z: roundNumber(positionOnNote.z)
+                    }
                 })
             }
 
@@ -251,6 +257,7 @@ MainWindowTest {
                 return child !== null
                        && child.objectName !== undefined
                        && String(child.objectName).startsWith("noteLiDARStation_")
+                       && child.visible === true
             })
 
             stationItems.sort((lhs, rhs) => {
@@ -258,25 +265,44 @@ MainWindowTest {
             })
 
             let stationNames = []
+            let stationPositions = []
             for (let i = 0; i < stationItems.length; ++i) {
                 stationNames.push(String(stationItems[i].name))
+                stationPositions.push({
+                    x: roundNumber(stationItems[i].position3D.x),
+                    y: roundNumber(stationItems[i].position3D.y),
+                    z: roundNumber(stationItems[i].position3D.z)
+                })
             }
 
             return {
                 stationCount: stationItems.length,
-                stationNames: stationNames
+                stationNames: stationNames,
+                stationPositions: stationPositions
             }
         }
 
         function expectedLiDARStationUiState(state) {
+            let note = currentLiDARNote()
             let stationNames = []
+            let stationPositions = []
             for (let i = 0; i < state.stations.length; ++i) {
-                stationNames.push(state.stations[i].name)
+                let station = state.stations[i]
+                stationNames.push(station.name)
+
+                let modelIndex = note.index(i, 0)
+                let upPosition = note.data(modelIndex, NoteLiDAR.UpPositionRole)
+                stationPositions.push({
+                    x: roundNumber(upPosition.x),
+                    y: roundNumber(upPosition.y),
+                    z: roundNumber(upPosition.z)
+                })
             }
 
             return {
                 stationCount: state.stationCount,
-                stationNames: stationNames
+                stationNames: stationNames,
+                stationPositions: stationPositions
             }
         }
 
@@ -294,6 +320,27 @@ MainWindowTest {
                 note.removeStation(currentCount - 1)
             } else {
                 compare(state.stationCount, currentCount)
+                for (let i = 0; i < currentCount; ++i) {
+                    let expectedStation = state.stations[i]
+                    let modelIndex = note.index(i, 0)
+                    let currentName = String(note.data(modelIndex, NoteLiDAR.NameRole))
+                    let currentPosition = note.data(modelIndex, NoteLiDAR.PositionOnNoteRole)
+
+                    if (currentName !== expectedStation.name) {
+                        verify(note.setData(modelIndex, expectedStation.name, NoteLiDAR.NameRole))
+                    }
+
+                    if (roundNumber(currentPosition.x) !== expectedStation.positionOnNote.x
+                            || roundNumber(currentPosition.y) !== expectedStation.positionOnNote.y
+                            || roundNumber(currentPosition.z) !== expectedStation.positionOnNote.z) {
+                        verify(note.setData(
+                                   modelIndex,
+                                   Qt.vector3d(expectedStation.positionOnNote.x,
+                                               expectedStation.positionOnNote.y,
+                                               expectedStation.positionOnNote.z),
+                                   NoteLiDAR.PositionOnNoteRole))
+                    }
+                }
             }
 
             tryVerifyWithDiagnostics(() => {
@@ -319,13 +366,19 @@ MainWindowTest {
                 let station = state.stations[i]
                 nextState.stations.push({
                     index: station.index,
-                    name: station.name
+                    name: station.name,
+                    positionOnNote: station.positionOnNote
                 })
             }
 
             nextState.stations.push({
                 index: nextState.stations.length,
-                name: addedStationName
+                name: addedStationName,
+                positionOnNote: {
+                    x: 0.1,
+                    y: 0.2,
+                    z: 0.3
+                }
             })
 
             return nextState
@@ -343,7 +396,35 @@ MainWindowTest {
                 let station = state.stations[i]
                 nextState.stations.push({
                     index: i,
-                    name: station.name
+                    name: station.name,
+                    positionOnNote: station.positionOnNote
+                })
+            }
+
+            return nextState
+        }
+
+        function nextLiDARStationStateWithRenamedStation(state) {
+            verify(state.stationCount > 0)
+
+            let excludedNames = []
+            for (let i = 0; i < state.stations.length; ++i) {
+                excludedNames.push(state.stations[i].name)
+            }
+            let renamedStationName = TestHelper.firstUnusedTripStationName(currentTrip(), excludedNames)
+            verify(renamedStationName.length > 0)
+
+            let nextState = {
+                stationCount: state.stationCount,
+                stations: []
+            }
+
+            for (let i = 0; i < state.stations.length; ++i) {
+                let station = state.stations[i]
+                nextState.stations.push({
+                    index: station.index,
+                    name: i === 0 ? renamedStationName : station.name,
+                    positionOnNote: station.positionOnNote
                 })
             }
 
@@ -389,5 +470,26 @@ MainWindowTest {
                 }
             })
         }
+
+        function test_existingLiDARRenameStationSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+            let targetFileName = selectAnyLiDARNote()
+            verify(targetFileName.length > 0)
+
+            SyncTestHelper.runProjectSyncRoundTrip(testCaseId, RootData, TestHelper, {
+                tripPageAddress: context.tripPageAddress,
+                getter: snapshotSelectedLiDARStationState,
+                uiGetter: selectedLiDARStationUiState,
+                uiExpectedFromValue: expectedLiDARStationUiState,
+                verifyBaselineAfterCheckoutTimeoutMs: 10000,
+                verifyResyncedValueTimeoutMs: 10000,
+                nextValue: nextLiDARStationStateWithRenamedStation,
+                setter: applySelectedLiDARStationState,
+                prepare: function() {
+                    prepareLiDARNoteUi(targetFileName)
+                }
+            })
+        }
+
     }
 }
