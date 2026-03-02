@@ -111,6 +111,68 @@ MainWindowTest {
             return Number(Number(value).toFixed(4))
         }
 
+        function roundToDigits(value, digits) {
+            return Number(Number(value).toFixed(digits))
+        }
+
+        function noteLiDARTransformEditor() {
+            let editor = ObjectFinder.findObjectByChain(
+                mainWindow,
+                "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor")
+            verify(editor !== null)
+            return editor
+        }
+
+        function noteLiDARAutoCalculateCheckBox() {
+            let checkBox = ObjectFinder.findObjectByChain(
+                mainWindow,
+                "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->checkBox")
+            verify(checkBox !== null)
+            return checkBox
+        }
+
+        function noteLiDARNorthField() {
+            let field = ObjectFinder.findObjectByChain(
+                mainWindow,
+                "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->northField")
+            verify(field !== null)
+            return field
+        }
+
+        function noteLiDARUpModeCombo() {
+            let combo = ObjectFinder.findObjectByChain(
+                mainWindow,
+                "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->upModeCombo")
+            verify(combo !== null)
+            return combo
+        }
+
+        function findDescendantByObjectName(rootObject, objectName) {
+            let matches = findDescendantsWhere(rootObject, (child) => {
+                return child !== null
+                       && child.objectName !== undefined
+                       && String(child.objectName) === objectName
+            })
+            verify(matches.length > 0)
+            return matches[0]
+        }
+
+        function noteLiDARScaleOnPaperInput() {
+            return findDescendantByObjectName(noteLiDARTransformEditor(), "onPaperLengthInput")
+        }
+
+        function noteLiDARScaleInCaveInput() {
+            return findDescendantByObjectName(noteLiDARTransformEditor(), "inCaveLengthInput")
+        }
+
+        function noteLiDARUnitValueTextInput(unitValueInput) {
+            return findDescendantByObjectName(unitValueInput, "coreTextInput")
+        }
+
+        function noteLiDARUnitValueUnitInput(unitValueInput) {
+            return findDescendantByObjectName(unitValueInput, "unitInput")
+        }
+
         function findDescendantsWhere(rootObject, predicate, matches) {
             if (matches === undefined || matches === null) {
                 matches = []
@@ -172,7 +234,9 @@ MainWindowTest {
 
             tryVerifyWithDiagnostics(() => {
                 return noteLiDARViewer().scene.gltf.status === RenderGLTF.Ready
-            }, 10000, "wait for LiDAR viewer ready")
+            }, 10000, "wait for LiDAR viewer ready", () => {
+                SyncTestHelper.waitForFutureManagerToFinish(testCaseId, RootData)
+            })
         }
 
         function prepareLiDARNoteUi(fileName) {
@@ -224,7 +288,9 @@ MainWindowTest {
 
             tryVerifyWithDiagnostics(() => {
                 return noteLiDARViewer().scene.gltf.status === RenderGLTF.Ready
-            }, 10000, "wait for any LiDAR viewer ready")
+            }, 10000, "wait for any LiDAR viewer ready", () => {
+                SyncTestHelper.waitForFutureManagerToFinish(testCaseId, RootData)
+            })
 
             return String(gallery.currentNoteLiDAR.filename)
         }
@@ -304,6 +370,104 @@ MainWindowTest {
                 stationNames: stationNames,
                 stationPositions: stationPositions
             }
+        }
+
+        function snapshotSelectedLiDARTransformState() {
+            let note = currentLiDARNote()
+            let noteTransform = note.noteTransformation
+            let scaleObject = noteTransform.scaleObject
+            verify(noteTransform !== null)
+            verify(scaleObject !== null)
+            verify(scaleObject.scaleNumerator !== null)
+            verify(scaleObject.scaleDenominator !== null)
+
+            return {
+                autoCalculateNorth: note.autoCalculateNorth,
+                northUp: roundToDigits(noteTransform.northUp, 1),
+                upMode: noteTransform.upMode,
+                upSign: roundToDigits(noteTransform.upSign, 1),
+                scaleNumeratorValue: roundToDigits(scaleObject.scaleNumerator.value, 2),
+                scaleNumeratorUnit: scaleObject.scaleNumerator.unit,
+                scaleDenominatorValue: roundToDigits(scaleObject.scaleDenominator.value, 2),
+                scaleDenominatorUnit: scaleObject.scaleDenominator.unit,
+                scale: roundToDigits(scaleObject.scale, 6)
+            }
+        }
+
+        function selectedLiDARTransformUiState() {
+            let onPaperInput = noteLiDARScaleOnPaperInput()
+            let inCaveInput = noteLiDARScaleInCaveInput()
+
+            return {
+                autoCalculateNorth: noteLiDARAutoCalculateCheckBox().checked,
+                northUp: roundToDigits(Number(noteLiDARNorthField().text), 1),
+                northReadOnly: noteLiDARNorthField().readOnly,
+                upModeIndex: noteLiDARUpModeCombo().currentIndex,
+                upModeText: String(noteLiDARUpModeCombo().currentText),
+                scaleNumeratorValue: roundToDigits(Number(noteLiDARUnitValueTextInput(onPaperInput).text), 2),
+                scaleNumeratorUnit: noteLiDARUnitValueUnitInput(onPaperInput).unit,
+                scaleNumeratorReadOnly: noteLiDARUnitValueTextInput(onPaperInput).readOnly,
+                scaleDenominatorValue: roundToDigits(Number(noteLiDARUnitValueTextInput(inCaveInput).text), 2),
+                scaleDenominatorUnit: noteLiDARUnitValueUnitInput(inCaveInput).unit,
+                scaleDenominatorReadOnly: noteLiDARUnitValueTextInput(inCaveInput).readOnly
+            }
+        }
+
+        function expectedLiDARTransformUiState(state) {
+            let editor = noteLiDARTransformEditor()
+            return {
+                autoCalculateNorth: state.autoCalculateNorth,
+                northUp: state.northUp,
+                northReadOnly: state.autoCalculateNorth,
+                upModeIndex: editor.upModeToIndex(state.upMode, state.upSign),
+                upModeText: String(editor.upModeEntries[editor.upModeToIndex(state.upMode, state.upSign)].label),
+                scaleNumeratorValue: state.scaleNumeratorValue,
+                scaleNumeratorUnit: state.scaleNumeratorUnit,
+                scaleNumeratorReadOnly: false,
+                scaleDenominatorValue: state.scaleDenominatorValue,
+                scaleDenominatorUnit: state.scaleDenominatorUnit,
+                scaleDenominatorReadOnly: false
+            }
+        }
+
+        function applySelectedLiDARTransformState(state) {
+            let note = currentLiDARNote()
+            let noteTransform = note.noteTransformation
+            let scaleObject = noteTransform.scaleObject
+            verify(noteTransform !== null)
+            verify(scaleObject !== null)
+            verify(scaleObject.scaleNumerator !== null)
+            verify(scaleObject.scaleDenominator !== null)
+
+            if (note.autoCalculateNorth !== state.autoCalculateNorth) {
+                note.autoCalculateNorth = state.autoCalculateNorth
+            }
+            if (roundToDigits(noteTransform.northUp, 1) !== state.northUp) {
+                noteTransform.northUp = state.northUp
+            }
+            if (noteTransform.upMode !== state.upMode) {
+                noteTransform.upMode = state.upMode
+            }
+            if (roundToDigits(noteTransform.upSign, 1) !== state.upSign) {
+                noteTransform.upSign = state.upSign
+            }
+            if (scaleObject.scaleNumerator.unit !== state.scaleNumeratorUnit) {
+                scaleObject.scaleNumerator.unit = state.scaleNumeratorUnit
+            }
+            if (roundToDigits(scaleObject.scaleNumerator.value, 2) !== state.scaleNumeratorValue) {
+                scaleObject.scaleNumerator.value = state.scaleNumeratorValue
+            }
+            if (scaleObject.scaleDenominator.unit !== state.scaleDenominatorUnit) {
+                scaleObject.scaleDenominator.unit = state.scaleDenominatorUnit
+            }
+            if (roundToDigits(scaleObject.scaleDenominator.value, 2) !== state.scaleDenominatorValue) {
+                scaleObject.scaleDenominator.value = state.scaleDenominatorValue
+            }
+
+            tryVerifyWithDiagnostics(() => {
+                return SyncTestHelper.deepEqual(snapshotSelectedLiDARTransformState(), state)
+            }, 5000, "wait for applied LiDAR transform state")
+            TestHelper.waitForProjectSaveToFinish(RootData.project)
         }
 
         function applySelectedLiDARStationState(state) {
@@ -431,6 +595,66 @@ MainWindowTest {
             return nextState
         }
 
+        function nextLiDARStationStateWithMovedStation(state) {
+            verify(state.stationCount > 0)
+
+            let nextState = {
+                stationCount: state.stationCount,
+                stations: []
+            }
+
+            for (let i = 0; i < state.stations.length; ++i) {
+                let station = state.stations[i]
+                let positionOnNote = station.positionOnNote
+                if (i === 0) {
+                    positionOnNote = {
+                        x: roundNumber(positionOnNote.x + 0.25),
+                        y: roundNumber(positionOnNote.y - 0.15),
+                        z: roundNumber(positionOnNote.z + 0.1)
+                    }
+                }
+                nextState.stations.push({
+                    index: station.index,
+                    name: station.name,
+                    positionOnNote: positionOnNote
+                })
+            }
+
+            return nextState
+        }
+
+        function nextLiDARTransformStateWithManualNorthAndScale(state) {
+            let nextScaleDenominatorValue = state.scaleDenominatorValue === 2.5 ? 3.75 : 2.5
+            let denominatorMeters = nextScaleDenominatorValue
+            let numeratorMeters = 0.3048
+
+            return {
+                autoCalculateNorth: false,
+                northUp: state.northUp === 123.4 ? 247.8 : 123.4,
+                upMode: state.upMode,
+                upSign: state.upSign,
+                scaleNumeratorValue: 1.0,
+                scaleNumeratorUnit: Units.Feet,
+                scaleDenominatorValue: nextScaleDenominatorValue,
+                scaleDenominatorUnit: Units.Meters,
+                scale: roundToDigits(numeratorMeters / denominatorMeters, 6)
+            }
+        }
+
+        function nextLiDARTransformStateWithUpModeChange(state) {
+            return {
+                autoCalculateNorth: false,
+                northUp: state.northUp,
+                upMode: NoteLiDARTransformation.UpMode.ZisUp,
+                upSign: -1.0,
+                scaleNumeratorValue: state.scaleNumeratorValue,
+                scaleNumeratorUnit: state.scaleNumeratorUnit,
+                scaleDenominatorValue: state.scaleDenominatorValue,
+                scaleDenominatorUnit: state.scaleDenominatorUnit,
+                scale: state.scale
+            }
+        }
+
         function test_existingLiDARAddStationSyncAndCheckout() {
             let context = loadFixtureAndOpenFirstTrip()
             let targetFileName = selectAnyLiDARNote()
@@ -487,6 +711,73 @@ MainWindowTest {
                 setter: applySelectedLiDARStationState,
                 prepare: function() {
                     prepareLiDARNoteUi(targetFileName)
+                }
+            })
+        }
+
+        function test_existingLiDARMoveStationSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+            let targetFileName = selectAnyLiDARNote()
+            verify(targetFileName.length > 0)
+
+            SyncTestHelper.runProjectSyncRoundTrip(testCaseId, RootData, TestHelper, {
+                tripPageAddress: context.tripPageAddress,
+                getter: snapshotSelectedLiDARStationState,
+                uiGetter: selectedLiDARStationUiState,
+                uiExpectedFromValue: expectedLiDARStationUiState,
+                verifyEditedUi: false,
+                verifyBaselineAfterCheckoutTimeoutMs: 10000,
+                verifyResyncedValueTimeoutMs: 10000,
+                nextValue: nextLiDARStationStateWithMovedStation,
+                setter: applySelectedLiDARStationState,
+                prepare: function() {
+                    prepareLiDARNoteUi(targetFileName)
+                }
+            })
+        }
+
+        function test_existingLiDARManualNorthAndScaleSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+            let targetFileName = selectAnyLiDARNote()
+            verify(targetFileName.length > 0)
+
+            SyncTestHelper.runProjectSyncRoundTrip(testCaseId, RootData, TestHelper, {
+                tripPageAddress: context.tripPageAddress,
+                getter: snapshotSelectedLiDARTransformState,
+                uiGetter: selectedLiDARTransformUiState,
+                uiExpectedFromValue: expectedLiDARTransformUiState,
+                verifyBaselineAfterCheckoutTimeoutMs: 10000,
+                verifyResyncedValueTimeoutMs: 10000,
+                nextValue: nextLiDARTransformStateWithManualNorthAndScale,
+                setter: applySelectedLiDARTransformState,
+                prepare: function() {
+                    prepareLiDARNoteUi(targetFileName)
+                    tryVerifyWithDiagnostics(() => {
+                        return noteLiDARTransformEditor().visible === true
+                    }, 5000, "wait for LiDAR transform editor visible")
+                }
+            })
+        }
+
+        function test_existingLiDARUpModeSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+            let targetFileName = selectAnyLiDARNote()
+            verify(targetFileName.length > 0)
+
+            SyncTestHelper.runProjectSyncRoundTrip(testCaseId, RootData, TestHelper, {
+                tripPageAddress: context.tripPageAddress,
+                getter: snapshotSelectedLiDARTransformState,
+                uiGetter: selectedLiDARTransformUiState,
+                uiExpectedFromValue: expectedLiDARTransformUiState,
+                verifyBaselineAfterCheckoutTimeoutMs: 10000,
+                verifyResyncedValueTimeoutMs: 10000,
+                nextValue: nextLiDARTransformStateWithUpModeChange,
+                setter: applySelectedLiDARTransformState,
+                prepare: function() {
+                    prepareLiDARNoteUi(targetFileName)
+                    tryVerifyWithDiagnostics(() => {
+                        return noteLiDARTransformEditor().visible === true
+                    }, 5000, "wait for LiDAR transform editor visible")
                 }
             })
         }
