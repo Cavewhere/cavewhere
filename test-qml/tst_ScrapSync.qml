@@ -704,6 +704,26 @@ MainWindowTest {
             }
         }
 
+        function snapshotSelectedScrapTransformTypeState() {
+            let scrap = selectedScrapItem().scrap
+            verify(scrap !== null)
+
+            let state = {
+                type: scrap.type,
+                calculateNoteTransform: scrap.calculateNoteTransform,
+                direction: null,
+                azimuth: null
+            }
+
+            if (scrap.type === Scrap.ProjectedProfile) {
+                verify(scrap.viewMatrix !== null)
+                state.direction = scrap.viewMatrix.direction
+                state.azimuth = roundToDigits(scrap.viewMatrix.azimuth, 1)
+            }
+
+            return state
+        }
+
         function expectedScrapTransformTypeUiState(state) {
             return {
                 type: state.type,
@@ -765,6 +785,38 @@ MainWindowTest {
             }, 5000, "wait for applied scrap transform state")
         }
 
+        function applySelectedScrapTransformTypeState(state) {
+            let scrap = selectedScrapItem().scrap
+            verify(scrap !== null)
+
+            if (scrap.type !== state.type) {
+                scrap.type = state.type
+            }
+
+            tryVerifyWithDiagnostics(() => {
+                return scrap.type === state.type
+            }, 5000, "wait for scrap type change")
+
+            if (scrap.calculateNoteTransform !== state.calculateNoteTransform) {
+                scrap.calculateNoteTransform = state.calculateNoteTransform
+            }
+
+            if (state.type === Scrap.ProjectedProfile) {
+                verify(scrap.viewMatrix !== null)
+                if (state.direction !== null && scrap.viewMatrix.direction !== state.direction) {
+                    scrap.viewMatrix.direction = state.direction
+                }
+                if (state.azimuth !== null
+                    && roundToDigits(scrap.viewMatrix.azimuth, 1) !== state.azimuth) {
+                    scrap.viewMatrix.azimuth = state.azimuth
+                }
+            }
+
+            tryVerifyWithDiagnostics(() => {
+                return SyncTestHelper.deepEqual(snapshotSelectedScrapTransformTypeState(), state)
+            }, 5000, "wait for applied scrap transform type state")
+        }
+
         function nextTransformStateWithType(state, type) {
             let nextState = {
                 type: type,
@@ -775,6 +827,24 @@ MainWindowTest {
                 scaleDenominatorValue: state.scaleDenominatorValue,
                 scaleDenominatorUnit: state.scaleDenominatorUnit,
                 scale: state.scale,
+                direction: null,
+                azimuth: null
+            }
+
+            if (type === Scrap.ProjectedProfile) {
+                nextState.direction = state.direction !== null
+                                      ? state.direction
+                                      : ProjectedProfileScrapViewMatrix.LookingAt
+                nextState.azimuth = state.azimuth !== null ? state.azimuth : 0.0
+            }
+
+            return nextState
+        }
+
+        function nextTransformTypeStateWithType(state, type) {
+            let nextState = {
+                type: type,
+                calculateNoteTransform: state.calculateNoteTransform,
                 direction: null,
                 azimuth: null
             }
@@ -1771,15 +1841,15 @@ MainWindowTest {
                 tripPageAddress: context.tripPageAddress,
                 prepare: prepareScrapTransformUi,
                 restorePage: () => restoreTripPage(context.tripPageAddress),
-                getter: snapshotSelectedScrapTransformState,
+                getter: snapshotSelectedScrapTransformTypeState,
                 uiExpectedFromValue: expectedScrapTransformTypeUiState,
                 uiGetter: selectedScrapTransformTypeUiState,
                 verifyEditedUi: false,
                 verifyBaselineAfterCheckoutTimeoutMs: 10000,
                 verifyResyncedValueTimeoutMs: 10000,
-                setter: applySelectedScrapTransformState,
+                setter: applySelectedScrapTransformTypeState,
                 nextValue: (state) => {
-                    return nextTransformStateWithType(state, Scrap.Plan)
+                    return nextTransformTypeStateWithType(state, Scrap.Plan)
                 }
             })
 
@@ -1787,15 +1857,15 @@ MainWindowTest {
                 tripPageAddress: context.tripPageAddress,
                 prepare: prepareScrapTransformUi,
                 restorePage: () => restoreTripPage(context.tripPageAddress),
-                getter: snapshotSelectedScrapTransformState,
+                getter: snapshotSelectedScrapTransformTypeState,
                 uiExpectedFromValue: expectedScrapTransformTypeUiState,
                 uiGetter: selectedScrapTransformTypeUiState,
                 verifyEditedUi: false,
                 verifyBaselineAfterCheckoutTimeoutMs: 10000,
                 verifyResyncedValueTimeoutMs: 10000,
-                setter: applySelectedScrapTransformState,
+                setter: applySelectedScrapTransformTypeState,
                 nextValue: (state) => {
-                    return nextTransformStateWithType(state, Scrap.RunningProfile)
+                    return nextTransformTypeStateWithType(state, Scrap.RunningProfile)
                 }
             })
         }
@@ -1807,15 +1877,15 @@ MainWindowTest {
                 tripPageAddress: context.tripPageAddress,
                 prepare: prepareScrapTransformUiWithoutRefresh,
                 restorePage: () => restoreTripPage(context.tripPageAddress),
-                getter: snapshotSelectedScrapTransformState,
+                getter: snapshotSelectedScrapTransformTypeState,
                 uiExpectedFromValue: expectedScrapTransformTypeUiState,
                 uiGetter: selectedScrapTransformTypeUiState,
                 verifyEditedUi: false,
                 verifyBaselineAfterCheckoutTimeoutMs: 10000,
                 verifyResyncedValueTimeoutMs: 10000,
-                setter: applySelectedScrapTransformState,
+                setter: applySelectedScrapTransformTypeState,
                 nextValue: (state) => {
-                    return nextTransformStateWithType(state, Scrap.Plan)
+                    return nextTransformTypeStateWithType(state, Scrap.Plan)
                 }
             })
 
@@ -1823,15 +1893,15 @@ MainWindowTest {
                 tripPageAddress: context.tripPageAddress,
                 prepare: prepareScrapTransformUiWithoutRefresh,
                 restorePage: () => restoreTripPage(context.tripPageAddress),
-                getter: snapshotSelectedScrapTransformState,
+                getter: snapshotSelectedScrapTransformTypeState,
                 uiExpectedFromValue: expectedScrapTransformTypeUiState,
                 uiGetter: selectedScrapTransformTypeUiState,
                 verifyEditedUi: false,
                 verifyBaselineAfterCheckoutTimeoutMs: 10000,
                 verifyResyncedValueTimeoutMs: 10000,
-                setter: applySelectedScrapTransformState,
+                setter: applySelectedScrapTransformTypeState,
                 nextValue: (state) => {
-                    return nextTransformStateWithType(state, Scrap.ProjectedProfile)
+                    return nextTransformTypeStateWithType(state, Scrap.ProjectedProfile)
                 }
             })
         }
