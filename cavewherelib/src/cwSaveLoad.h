@@ -270,6 +270,12 @@ public:
     QFuture<void> retire();
 
     static void ensureGitExcludeHasCacheEntry(const QDir& repoDir);
+    static Monad::Result<cwCaveData> loadCave(const QString& filename);
+    static Monad::Result<cwNoteLiDARData> loadNoteLiDAR(const QString& filename, const QDir &projectDir);
+    static Monad::Result<cwNoteLiDARData> loadNoteLiDAR(const QByteArray& content, const QString& filename, const QDir &projectDir);
+    static cwTripData tripDataFromProtoTrip(const CavewhereProto::Trip& proto);
+    static cwNoteData noteDataFromProtoNote(const CavewhereProto::Note& protoNote, const QString& filename);
+    static cwNoteLiDARData noteLiDARDataFromProtoNoteLiDAR(const CavewhereProto::NoteLiDAR& protoNote, const QString& filename);
 
 signals:
     void fileNameChanged();
@@ -398,11 +404,6 @@ private:
 
     void save(const cwNoteLiDAR* note);
     static std::unique_ptr<CavewhereProto::NoteLiDAR> toProtoNoteLiDAR(const cwNoteLiDAR* note);
-
-    static Monad::Result<cwCaveData> loadCave(const QString& filename);
-    static Monad::Result<cwNoteLiDARData> loadNoteLiDAR(const QString& filename, const QDir &projectDir);
-    static cwTripData tripDataFromProtoTrip(const CavewhereProto::Trip& proto);
-    static cwNoteData noteDataFromProtoNote(const CavewhereProto::Note& protoNote, const QString& filename);
 
     static cwTripCalibrationData fromProtoTripCalibration(const CavewhereProto::TripCalibration& proto);
     static cwTeamData fromProtoTeam(const CavewhereProto::Team& proto);

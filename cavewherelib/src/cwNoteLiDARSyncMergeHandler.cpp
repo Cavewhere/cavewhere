@@ -6,16 +6,13 @@
 #include "cwNoteLiDARMergePlanBuilder.h"
 #include "cwSurveyNoteLiDARModel.h"
 #include "cwTrip.h"
+#include "cwSaveLoad.h"
 #include "GitRepository.h"
 #include "cwSyncMergeApplyUtils.h"
-#include "cavewhere.pb.h"
-#include "qt.pb.h"
-#include "google/protobuf/util/json_util.h"
 
 #include <QFileInfo>
 #include <QHash>
 #include <QUuid>
-#include <QVector3D>
 
 #include <optional>
 
@@ -38,110 +35,6 @@ std::optional<QString> notesDirectoryPathForChangedFile(const QString& path)
     return normalized.left(markerIndex + QStringLiteral("/notes").size());
 }
 
-QUuid uuidFromProtoString(const std::string& uuidString)
-{
-    if (uuidString.empty()) {
-        return QUuid();
-    }
-
-    const QUuid uuid(QString::fromStdString(uuidString));
-    return uuid.isNull() ? QUuid() : uuid;
-}
-
-cwLength::Data lengthDataFromProto(const CavewhereProto::Length& protoLength)
-{
-    cwLength::Data data;
-    if (protoLength.has_unit()) {
-        data.unit = protoLength.unit();
-    }
-    if (protoLength.has_value()) {
-        data.value = protoLength.value();
-    }
-    return data;
-}
-
-cwNoteLiDARTransformationData lidarTransformationFromProto(
-    const CavewhereProto::NoteLiDARTransformation& protoTransform)
-{
-    cwNoteLiDARTransformationData transform;
-    if (protoTransform.has_plantransform()) {
-        const auto& protoPlanTransform = protoTransform.plantransform();
-        if (protoPlanTransform.has_northup()) {
-            transform.north = protoPlanTransform.northup();
-        }
-        if (protoPlanTransform.has_scalenumerator()) {
-            transform.scale.scaleNumerator = lengthDataFromProto(protoPlanTransform.scalenumerator());
-        }
-        if (protoPlanTransform.has_scaledenominator()) {
-            transform.scale.scaleDenominator = lengthDataFromProto(protoPlanTransform.scaledenominator());
-        }
-    }
-
-    if (protoTransform.has_upmode()) {
-        transform.upMode = static_cast<cwNoteLiDARTransformationData::UpMode>(protoTransform.upmode());
-    }
-    if (protoTransform.has_upsign()) {
-        transform.upSign = protoTransform.upsign();
-    }
-    if (protoTransform.has_upcustom()) {
-        const auto& upCustom = protoTransform.upcustom();
-        transform.upRotation = QQuaternion(upCustom.scalar(),
-                                           upCustom.x(),
-                                           upCustom.y(),
-                                           upCustom.z());
-    }
-
-    return transform;
-}
-
-std::optional<cwNoteLiDARData> lidarDataFromProto(const CavewhereProto::NoteLiDAR& protoNote)
-{
-    if (!protoNote.has_id()) {
-        return std::nullopt;
-    }
-
-    cwNoteLiDARData noteData;
-    noteData.id = uuidFromProtoString(protoNote.id());
-    if (noteData.id.isNull()) {
-        return std::nullopt;
-    }
-
-    noteData.name = QString::fromStdString(protoNote.name());
-    const QString rawFilename = QString::fromStdString(protoNote.filename());
-    noteData.filename = QFileInfo(rawFilename).fileName().isEmpty()
-                            ? rawFilename
-                            : QFileInfo(rawFilename).fileName();
-
-    noteData.stations.reserve(protoNote.notestations_size());
-    for (const auto& protoStation : protoNote.notestations()) {
-        cwNoteLiDARStation station;
-        if (protoStation.has_name()) {
-            station.setName(QString::fromStdString(protoStation.name()));
-        }
-        if (protoStation.has_positiononnote()) {
-            const auto& position = protoStation.positiononnote();
-            station.setPositionOnNote(QVector3D(position.x(), position.y(), position.z()));
-        } else {
-            station.setPositionOnNote(QVector3D());
-        }
-        if (protoStation.has_id()) {
-            station.setId(uuidFromProtoString(protoStation.id()));
-        } else {
-            station.setId(QUuid());
-        }
-        noteData.stations.append(station);
-    }
-
-    if (protoNote.has_notetransformation()) {
-        noteData.transfrom = lidarTransformationFromProto(protoNote.notetransformation());
-    }
-    if (protoNote.has_autocalculatenorth()) {
-        noteData.autoCalculateNorth = protoNote.autocalculatenorth();
-    }
-
-    return noteData;
-}
-
 std::optional<std::pair<QUuid, cwNoteLiDARData>> loadBaseLiDARDataForNote(
     const QDir& repoRoot,
     const QString& mergeBaseHead,
@@ -159,30 +52,25 @@ std::optional<std::pair<QUuid, cwNoteLiDARData>> loadBaseLiDARDataForNote(
         return std::nullopt;
     }
 
-    CavewhereProto::NoteLiDAR protoNote;
-    if (!protoNote.ParseFromArray(contentResult.value().constData(), contentResult.value().size())) {
-        const std::string jsonPayload(contentResult.value().constData(),
-                                      static_cast<size_t>(contentResult.value().size()));
-        const auto parseStatus = google::protobuf::util::JsonStringToMessage(jsonPayload, &protoNote);
-        if (!parseStatus.ok()) {
-            return std::nullopt;
-        }
+    const QString absoluteNotePath = repoRoot.absoluteFilePath(relativeNotePath);
+    const auto noteResult = cwSaveLoad::loadNoteLiDAR(contentResult.value(), absoluteNotePath, repoRoot);
+    if (noteResult.hasError()) {
+        return std::nullopt;
     }
-
-    auto noteData = lidarDataFromProto(protoNote);
-    if (!noteData.has_value()) {
+    const cwNoteLiDARData noteData = noteResult.value();
+    if (noteData.id.isNull()) {
         return std::nullopt;
     }
 
     QSet<QUuid> seenStationIds;
-    for (const cwNoteLiDARStation& station : noteData->stations) {
+    for (const cwNoteLiDARStation& station : noteData.stations) {
         if (station.id().isNull() || seenStationIds.contains(station.id())) {
             return std::nullopt;
         }
         seenStationIds.insert(station.id());
     }
 
-    return std::make_optional(std::make_pair(noteData->id, *noteData));
+    return std::make_optional(std::make_pair(noteData.id, noteData));
 }
 
 } // namespace

@@ -3074,7 +3074,9 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
 
                         //Load 3D lidar notes
                         loadObjectsFromNotesDir(QStringLiteral("cwnote3d"),
-                                                loadNoteLiDAR,
+                                                [](const QString& filename, const QDir& regionDir) {
+                                                    return loadNoteLiDAR(filename, regionDir);
+                                                },
                                                 trip.noteLiDARModel.notes);
 
                         cave.trips.append(trip);
@@ -3259,41 +3261,60 @@ Monad::Result<cwNoteLiDARData> cwSaveLoad::loadNoteLiDAR(const QString& filename
     auto noteResult = loadMessage<CavewhereProto::NoteLiDAR>(filename);
 
     return Monad::mbind(noteResult, [filename, projectDir](const Result<CavewhereProto::NoteLiDAR>& result) -> Monad::Result<cwNoteLiDARData> {
-        const CavewhereProto::NoteLiDAR& protoNote = result.value();
-
-        cwNoteLiDARData noteData;
-
-        const QString rawFilename = QString::fromStdString(protoNote.filename());
-        // Older saves may contain project-relative paths; normalize to just the filename to stay resilient to renames.
-        noteData.filename = QFileInfo(rawFilename).fileName().isEmpty() ? rawFilename : QFileInfo(rawFilename).fileName();
-        noteData.name = QString::fromStdString(protoNote.name());
-        if (protoNote.has_id()) {
-            noteData.id = toUuid(protoNote.id());
-        }
-
-        noteData.stations.reserve(protoNote.notestations_size());
-        for(const auto& protoNoteStation : protoNote.notestations()) {
-            cwNoteLiDARStation newStation;
-            newStation.setPositionOnNote(cwRegionLoadTask::loadVector3D(protoNoteStation.positiononnote()));
-            newStation.setName(QString::fromStdString(protoNoteStation.name()));
-            if (protoNoteStation.has_id()) {
-                newStation.setId(toUuid(protoNoteStation.id()));
-            } else {
-                newStation.setId(QUuid());
-            }
-            noteData.stations.append(std::move(newStation));
-        }
-
-        if(protoNote.has_autocalculatenorth()) {
-            noteData.autoCalculateNorth = protoNote.autocalculatenorth();
-        }
-
-        if(protoNote.has_notetransformation()) {
-            noteData.transfrom = fromProtoLiDARNoteTransformation(protoNote.notetransformation());
-        }
-
-        return noteData;
+        Q_UNUSED(projectDir)
+        return cwSaveLoad::noteLiDARDataFromProtoNoteLiDAR(result.value(), filename);
     });
+}
+
+Monad::Result<cwNoteLiDARData> cwSaveLoad::loadNoteLiDAR(const QByteArray& content,
+                                                         const QString& filename,
+                                                         const QDir& projectDir)
+{
+    auto noteResult = loadMessage<CavewhereProto::NoteLiDAR>(content, filename);
+
+    return Monad::mbind(noteResult, [filename, projectDir](const Result<CavewhereProto::NoteLiDAR>& result) -> Monad::Result<cwNoteLiDARData> {
+        Q_UNUSED(projectDir)
+        return cwSaveLoad::noteLiDARDataFromProtoNoteLiDAR(result.value(), filename);
+    });
+}
+
+cwNoteLiDARData cwSaveLoad::noteLiDARDataFromProtoNoteLiDAR(const CavewhereProto::NoteLiDAR& protoNote,
+                                                            const QString& filename)
+{
+    Q_UNUSED(filename)
+
+    cwNoteLiDARData noteData;
+
+    const QString rawFilename = QString::fromStdString(protoNote.filename());
+    // Older saves may contain project-relative paths; normalize to just the filename to stay resilient to renames.
+    noteData.filename = QFileInfo(rawFilename).fileName().isEmpty() ? rawFilename : QFileInfo(rawFilename).fileName();
+    noteData.name = QString::fromStdString(protoNote.name());
+    if (protoNote.has_id()) {
+        noteData.id = toUuid(protoNote.id());
+    }
+
+    noteData.stations.reserve(protoNote.notestations_size());
+    for (const auto& protoNoteStation : protoNote.notestations()) {
+        cwNoteLiDARStation newStation;
+        newStation.setPositionOnNote(cwRegionLoadTask::loadVector3D(protoNoteStation.positiononnote()));
+        newStation.setName(QString::fromStdString(protoNoteStation.name()));
+        if (protoNoteStation.has_id()) {
+            newStation.setId(toUuid(protoNoteStation.id()));
+        } else {
+            newStation.setId(QUuid());
+        }
+        noteData.stations.append(std::move(newStation));
+    }
+
+    if (protoNote.has_autocalculatenorth()) {
+        noteData.autoCalculateNorth = protoNote.autocalculatenorth();
+    }
+
+    if (protoNote.has_notetransformation()) {
+        noteData.transfrom = fromProtoLiDARNoteTransformation(protoNote.notetransformation());
+    }
+
+    return noteData;
 }
 
 
