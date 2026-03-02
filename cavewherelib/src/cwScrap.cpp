@@ -1164,6 +1164,27 @@ void cwScrap::setData(const cwScrapData &data)
 
     //Order matters since auto calculate can change the NoteTransformation
     setCalculateNoteTransform(data.calculateNoteTransform);
+
+    if(calculateNoteTransform()) {
+        cwNoteTransformationData computedTransform = NoteTransformation->data();
+        const auto desiredNumeratorUnit = static_cast<cwUnits::LengthUnit>(data.noteTransformation.scale.scaleNumerator.unit);
+        const auto desiredDenominatorUnit = static_cast<cwUnits::LengthUnit>(data.noteTransformation.scale.scaleDenominator.unit);
+        const auto currentNumeratorUnit = static_cast<cwUnits::LengthUnit>(computedTransform.scale.scaleNumerator.unit);
+        const auto currentDenominatorUnit = static_cast<cwUnits::LengthUnit>(computedTransform.scale.scaleDenominator.unit);
+
+        computedTransform.scale.scaleNumerator.value = cwUnits::convert(computedTransform.scale.scaleNumerator.value,
+                                                                        currentNumeratorUnit,
+                                                                        desiredNumeratorUnit);
+        computedTransform.scale.scaleNumerator.unit = data.noteTransformation.scale.scaleNumerator.unit;
+        computedTransform.scale.scaleDenominator.value = cwUnits::convert(computedTransform.scale.scaleDenominator.value,
+                                                                          currentDenominatorUnit,
+                                                                          desiredDenominatorUnit);
+        computedTransform.scale.scaleDenominator.unit = data.noteTransformation.scale.scaleDenominator.unit;
+
+        NoteTransformation->setData(computedTransform);
+        return;
+    }
+
     NoteTransformation->setData(data.noteTransformation);
 }
 

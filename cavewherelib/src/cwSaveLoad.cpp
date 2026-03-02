@@ -3067,7 +3067,9 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
 
                         //Load 2D notes
                         loadObjectsFromNotesDir(QStringLiteral("cwnote"),
-                                                loadNote,
+                                                [](const QString& filename, const QDir& regionDir) {
+                                                    return loadNote(filename, regionDir);
+                                                },
                                                 trip.noteModel.notes);
 
                         //Load 3D lidar notes
@@ -3213,36 +3215,43 @@ cwTripData cwSaveLoad::tripDataFromProtoTrip(const CavewhereProto::Trip& tripPro
     return tripData;
 }
 
+cwNoteData cwSaveLoad::noteDataFromProtoNote(const CavewhereProto::Note& protoNote, const QString& filename)
+{
+    cwNoteData noteData;
+
+    noteData.rotate = protoNote.rotation();
+    noteData.imageResolution = fromProtoImageResolution(protoNote.imageresolution());
+    noteData.image = loadImage(protoNote.image(), filename);
+
+    for (const auto& protoScrap : protoNote.scraps()) {
+        noteData.scraps.append(fromProtoScrap(protoScrap));
+    }
+
+    noteData.name = QString::fromStdString(protoNote.name());
+    if (protoNote.has_id()) {
+        noteData.id = toUuid(protoNote.id());
+    }
+
+    return noteData;
+}
+
 Monad::Result<cwNoteData> cwSaveLoad::loadNote(const QString &filename, const QDir& projectDir)
 {
     auto noteResult = loadMessage<CavewhereProto::Note>(filename);
 
     return Monad::mbind(noteResult, [filename, projectDir](const Result<CavewhereProto::Note>& result) -> Monad::Result<cwNoteData> {
-        const CavewhereProto::Note& protoNote = result.value();
+        Q_UNUSED(projectDir)
+        return cwSaveLoad::noteDataFromProtoNote(result.value(), filename);
+    });
+}
 
-        cwNoteData noteData;
+Monad::Result<cwNoteData> cwSaveLoad::loadNote(const QByteArray& content, const QString& filename, const QDir& projectDir)
+{
+    auto noteResult = loadMessage<CavewhereProto::Note>(content, filename);
 
-        // Load rotation
-        noteData.rotate = protoNote.rotation();
-
-        // Load image resolution
-        noteData.imageResolution = fromProtoImageResolution(protoNote.imageresolution());
-
-        // Load image metadata, reloading from disk if legacy fields are missing.
-        noteData.image = loadImage(protoNote.image(), filename);
-
-        // Load scraps
-        for (const auto& protoScrap : protoNote.scraps()) {
-            auto scrap = fromProtoScrap(protoScrap);
-            noteData.scraps.append(scrap);
-        }
-
-        noteData.name = QString::fromStdString(protoNote.name());
-        if (protoNote.has_id()) {
-            noteData.id = toUuid(protoNote.id());
-        }
-
-        return noteData;
+    return Monad::mbind(noteResult, [filename, projectDir](const Result<CavewhereProto::Note>& result) -> Monad::Result<cwNoteData> {
+        Q_UNUSED(projectDir)
+        return cwSaveLoad::noteDataFromProtoNote(result.value(), filename);
     });
 }
 

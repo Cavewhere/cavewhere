@@ -70,6 +70,26 @@ bool areGeometryEquivalent(const cwScrapBaseIdentityData::GeometryData& lhs,
 bool areTransformBundleEquivalent(const cwScrapBaseIdentityData::GeometryData::TransformBundle& lhs,
                                   const cwScrapBaseIdentityData::GeometryData::TransformBundle& rhs)
 {
+    if (lhs.calculateNoteTransform != rhs.calculateNoteTransform
+        || lhs.viewType != rhs.viewType
+        || lhs.hasProjectedProfileView != rhs.hasProjectedProfileView) {
+        return false;
+    }
+
+    if (lhs.hasProjectedProfileView) {
+        if (!almostEqual(lhs.projectedAzimuth, rhs.projectedAzimuth)
+            || lhs.projectedDirection != rhs.projectedDirection) {
+            return false;
+        }
+    }
+
+    if (lhs.calculateNoteTransform) {
+        // Auto-calculated scraps derive north/scale from stations and geometry, so
+        // persisted note-transform values are not authoritative for merge conflict
+        // detection. Compare only mode and view settings above.
+        return true;
+    }
+
     if (!almostEqual(lhs.noteTransformation.north, rhs.noteTransformation.north)) {
         return false;
     }
@@ -88,19 +108,6 @@ bool areTransformBundleEquivalent(const cwScrapBaseIdentityData::GeometryData::T
         || lhsDen.unit != rhsDen.unit
         || lhsDen.updateValueWhenUnitChanged != rhsDen.updateValueWhenUnitChanged) {
         return false;
-    }
-
-    if (lhs.calculateNoteTransform != rhs.calculateNoteTransform
-        || lhs.viewType != rhs.viewType
-        || lhs.hasProjectedProfileView != rhs.hasProjectedProfileView) {
-        return false;
-    }
-
-    if (lhs.hasProjectedProfileView) {
-        if (!almostEqual(lhs.projectedAzimuth, rhs.projectedAzimuth)
-            || lhs.projectedDirection != rhs.projectedDirection) {
-            return false;
-        }
     }
 
     return true;

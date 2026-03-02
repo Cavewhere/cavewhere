@@ -7,6 +7,7 @@
 #include "cwNoteMergeApplier.h"
 #include "cwNoteMergePlanBuilder.h"
 #include "cwNote.h"
+#include "cwSaveLoad.h"
 #include "cwScrapSyncMergeHandler.h"
 #include "cwSyncIdUtils.h"
 #include "cwSurveyNoteModel.h"
@@ -14,9 +15,6 @@
 #include "cwNoteStation.h"
 #include "cwLead.h"
 #include "GitRepository.h"
-#include "cavewhere.pb.h"
-#include "google/protobuf/util/json_util.h"
-
 #include <QFileInfo>
 #include <QImageReader>
 #include <QSet>
@@ -81,50 +79,50 @@ NoteChangedPathKind classifyNoteChangedPath(const QString& path, const QSet<QStr
     return NoteChangedPathKind::Unsupported;
 }
 
-QUuid uuidFromProtoString(const std::string& uuidString)
-{
-    if (uuidString.empty()) {
-        return QUuid();
-    }
-
-    const QUuid uuid(QString::fromStdString(uuidString));
-    return uuid.isNull() ? QUuid() : uuid;
-}
-
-cwImage imageFromProtoForMergeBase(const CavewhereProto::Image& protoImage)
-{
-    cwImage image;
-    if (protoImage.has_path()) {
-        image.setPath(QString::fromStdString(protoImage.path()));
-    }
-    if (protoImage.has_page()) {
-        image.setPage(protoImage.page());
-    }
-    if (protoImage.has_size()) {
-        image.setOriginalSize(QSize(protoImage.size().width(), protoImage.size().height()));
-    }
-    if (protoImage.has_dotpermeter()) {
-        image.setOriginalDotsPerMeter(protoImage.dotpermeter());
-    }
-    if (protoImage.has_imageunit()) {
-        image.setUnit(static_cast<cwImage::Unit>(protoImage.imageunit()));
-    }
-    return image;
-}
-
-cwImageResolution::Data imageResolutionFromProtoForMergeBase(const CavewhereProto::ImageResolution& protoImageResolution)
-{
-    cwImageResolution::Data data;
-    data.value = protoImageResolution.value();
-    data.unit = protoImageResolution.unit();
-    data.updateValueWhenUnitChanged = false;
-    return data;
-}
-
 struct BaseNoteMergeData {
     cwNoteData noteData;
     QHash<QUuid, cwScrapBaseIdentityData> baseScrapIdentityByScrapId;
 };
+
+cwScrapBaseIdentityData baseScrapIdentityFromScrapData(const cwScrapData& scrapData)
+{
+    cwScrapBaseIdentityData identityData;
+    identityData.hasGeometryData = true;
+    identityData.geometry.outlinePoints = QPolygonF(scrapData.outlinePoints);
+    identityData.geometry.transform.noteTransformation = scrapData.noteTransformation;
+    identityData.geometry.transform.calculateNoteTransform = scrapData.calculateNoteTransform;
+    identityData.geometry.transform.viewType = scrapData.viewMatrix
+                                                   ? static_cast<cwScrapType::Type>(scrapData.viewMatrix->type())
+                                                   : cwScrapType::Plan;
+
+    if (identityData.geometry.transform.viewType == cwScrapType::ProjectedProfile) {
+        const auto* projectedData =
+            dynamic_cast<const cwProjectedProfileScrapViewMatrix::Data*>(scrapData.viewMatrix.get());
+        if (projectedData != nullptr) {
+            identityData.geometry.transform.hasProjectedProfileView = true;
+            identityData.geometry.transform.projectedAzimuth = projectedData->azimuth();
+            identityData.geometry.transform.projectedDirection = static_cast<int>(projectedData->direction());
+        }
+    }
+
+    for (const cwNoteStation& station : scrapData.stations) {
+        if (station.id().isNull()) {
+            continue;
+        }
+        identityData.stationIds.insert(station.id());
+        identityData.stationsById.insert(station.id(), station);
+    }
+
+    for (const cwLead& lead : scrapData.leads) {
+        if (lead.id().isNull()) {
+            continue;
+        }
+        identityData.leadIds.insert(lead.id());
+        identityData.leadsById.insert(lead.id(), lead);
+    }
+
+    return identityData;
+}
 
 std::optional<std::pair<QUuid, BaseNoteMergeData>> loadBaseMergeDataForNote(
     const QDir& repoRoot,
@@ -143,133 +141,28 @@ std::optional<std::pair<QUuid, BaseNoteMergeData>> loadBaseMergeDataForNote(
         return std::nullopt;
     }
 
-    CavewhereProto::Note protoNote;
-    if (!protoNote.ParseFromArray(contentResult.value().constData(), contentResult.value().size())) {
-        const std::string jsonPayload(contentResult.value().constData(),
-                                      static_cast<size_t>(contentResult.value().size()));
-        const auto parseStatus = google::protobuf::util::JsonStringToMessage(jsonPayload, &protoNote);
-        if (!parseStatus.ok()) {
-            return std::nullopt;
-        }
-    }
-
-    if (!protoNote.has_id()) {
+    const QString absoluteNotePath = repoRoot.absoluteFilePath(relativeNotePath);
+    const auto noteResult = cwSaveLoad::loadNote(contentResult.value(), absoluteNotePath, repoRoot);
+    if (noteResult.hasError()) {
         return std::nullopt;
     }
 
-    const QUuid noteId = uuidFromProtoString(protoNote.id());
-    if (noteId.isNull()) {
+    const cwNoteData noteData = noteResult.value();
+    if (noteData.id.isNull()) {
         return std::nullopt;
     }
 
     BaseNoteMergeData baseMergeData;
-    baseMergeData.noteData.id = noteId;
-    if (protoNote.has_name()) {
-        baseMergeData.noteData.name = QString::fromStdString(protoNote.name());
-    }
-    baseMergeData.noteData.rotate = protoNote.rotation();
-    if (protoNote.has_image()) {
-        baseMergeData.noteData.image = imageFromProtoForMergeBase(protoNote.image());
-    }
-    if (protoNote.has_imageresolution()) {
-        baseMergeData.noteData.imageResolution = imageResolutionFromProtoForMergeBase(protoNote.imageresolution());
-    }
+    baseMergeData.noteData = noteData;
 
-    for (const auto& protoScrap : protoNote.scraps()) {
-        if (!protoScrap.has_id()) {
+    for (const cwScrapData& scrapData : noteData.scraps) {
+        if (scrapData.id.isNull()) {
             continue;
         }
-
-        const QUuid scrapId = uuidFromProtoString(protoScrap.id());
-        if (scrapId.isNull()) {
-            continue;
-        }
-
-        cwScrapBaseIdentityData identityData;
-        identityData.hasGeometryData = true;
-        for (const auto& protoPoint : protoScrap.outlinepoints()) {
-            identityData.geometry.outlinePoints.append(QPointF(protoPoint.x(), protoPoint.y()));
-        }
-        if (protoScrap.has_notetransformation()) {
-            const auto& protoTransform = protoScrap.notetransformation();
-            identityData.geometry.transform.noteTransformation.north = protoTransform.northup();
-            if (protoTransform.has_scalenumerator()) {
-                identityData.geometry.transform.noteTransformation.scale.scaleNumerator.value = protoTransform.scalenumerator().value();
-                identityData.geometry.transform.noteTransformation.scale.scaleNumerator.unit = protoTransform.scalenumerator().unit();
-            }
-            if (protoTransform.has_scaledenominator()) {
-                identityData.geometry.transform.noteTransformation.scale.scaleDenominator.value = protoTransform.scaledenominator().value();
-                identityData.geometry.transform.noteTransformation.scale.scaleDenominator.unit = protoTransform.scaledenominator().unit();
-            }
-        }
-        identityData.geometry.transform.calculateNoteTransform = protoScrap.calculatenotetransform();
-        if (protoScrap.has_type()) {
-            switch (protoScrap.type()) {
-            case CavewhereProto::Scrap_ScrapType_Plan:
-                identityData.geometry.transform.viewType = cwScrapType::Plan;
-                break;
-            case CavewhereProto::Scrap_ScrapType_RunningProfile:
-                identityData.geometry.transform.viewType = cwScrapType::RunningProfile;
-                break;
-            case CavewhereProto::Scrap_ScrapType_ProjectedProfile:
-                identityData.geometry.transform.viewType = cwScrapType::ProjectedProfile;
-                if (protoScrap.has_profileviewmatrix()) {
-                    identityData.geometry.transform.hasProjectedProfileView = true;
-                    identityData.geometry.transform.projectedAzimuth = protoScrap.profileviewmatrix().azimuth();
-                    identityData.geometry.transform.projectedDirection = protoScrap.profileviewmatrix().direction();
-                }
-                break;
-            default:
-                identityData.geometry.transform.viewType = cwScrapType::Plan;
-                break;
-            }
-        }
-
-        for (const auto& protoStation : protoScrap.notestations()) {
-            if (!protoStation.has_id()) {
-                continue;
-            }
-            const QUuid stationId = uuidFromProtoString(protoStation.id());
-            if (!stationId.isNull()) {
-                identityData.stationIds.insert(stationId);
-                cwNoteStation station;
-                station.setId(stationId);
-                if (protoStation.has_name()) {
-                    station.setName(QString::fromStdString(protoStation.name()));
-                }
-                station.setPositionOnNote(QPointF(protoStation.positiononnote().x(),
-                                                  protoStation.positiononnote().y()));
-                identityData.stationsById.insert(stationId, station);
-            }
-        }
-
-        for (const auto& protoLead : protoScrap.leads()) {
-            if (!protoLead.has_id()) {
-                continue;
-            }
-            const QUuid leadId = uuidFromProtoString(protoLead.id());
-            if (!leadId.isNull()) {
-                identityData.leadIds.insert(leadId);
-                cwLead lead;
-                lead.setId(leadId);
-                lead.setPositionOnNote(QPointF(protoLead.positiononnote().x(),
-                                               protoLead.positiononnote().y()));
-                if (protoLead.has_description()) {
-                    lead.setDescription(QString::fromStdString(protoLead.description()));
-                }
-                if (protoLead.has_size()) {
-                    lead.setSize(QSizeF(protoLead.size().width(),
-                                        protoLead.size().height()));
-                }
-                lead.setCompleted(protoLead.completed());
-                identityData.leadsById.insert(leadId, lead);
-            }
-        }
-
-        baseMergeData.baseScrapIdentityByScrapId.insert(scrapId, std::move(identityData));
+        baseMergeData.baseScrapIdentityByScrapId.insert(scrapData.id, baseScrapIdentityFromScrapData(scrapData));
     }
 
-    return std::make_optional(std::make_pair(noteId, std::move(baseMergeData)));
+    return std::make_optional(std::make_pair(noteData.id, std::move(baseMergeData)));
 }
 
 enum class NoteDescriptorApplyMode {

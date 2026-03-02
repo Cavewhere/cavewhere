@@ -971,5 +971,3 @@ void cwRegionLoadTask::insureVacuuming()
     }
     }
 }
-
-

@@ -1,5 +1,6 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 using namespace Catch;
 
 //Our includes
@@ -446,4 +447,115 @@ TEST_CASE("cwScrap merge applier keeps local geometry on concurrent geometry con
     REQUIRE_FALSE(applyResult.hasError());
     CHECK(applyResult.value().geometryConflictKeptOurs);
     CHECK(note->scrap(0)->points().at(1) == QPointF(0.36, 0.14));
+}
+
+TEST_CASE("cwScrap merge applier applies remote manual transform over local recomputed auto-calc transform", "[cwScrapMerge][sync]")
+{
+    auto note = std::make_unique<cwNote>();
+    auto* scrap = new cwScrap();
+    note->addScrap(scrap);
+
+    scrap->insertPoint(0, QPointF(0.10, 0.10));
+    scrap->insertPoint(1, QPointF(0.30, 0.10));
+    scrap->insertPoint(2, QPointF(0.20, 0.30));
+    scrap->close();
+
+    scrap->setCalculateNoteTransform(true);
+    scrap->noteTransformation()->setNorthUp(2.32195);
+    scrap->noteTransformation()->scaleNumerator()->setUnit(cwUnits::Inches);
+    scrap->noteTransformation()->scaleNumerator()->setValue(1.0);
+    scrap->noteTransformation()->scaleDenominator()->setUnit(cwUnits::Inches);
+    scrap->noteTransformation()->scaleDenominator()->setValue(141.808);
+
+    cwNoteData loadedNoteData = note->data();
+    REQUIRE(loadedNoteData.scraps.size() == 1);
+    auto& loadedScrap = loadedNoteData.scraps[0];
+    loadedScrap.calculateNoteTransform = false;
+    loadedScrap.noteTransformation.north = 27.5;
+    loadedScrap.noteTransformation.scale.scaleNumerator.unit = cwUnits::Centimeters;
+    loadedScrap.noteTransformation.scale.scaleNumerator.value = 1.0;
+    loadedScrap.noteTransformation.scale.scaleDenominator.unit = cwUnits::Meters;
+    loadedScrap.noteTransformation.scale.scaleDenominator.value = 2.5;
+
+    cwScrapBaseIdentityData baseIdentity;
+    baseIdentity.hasGeometryData = true;
+    baseIdentity.geometry.outlinePoints = {
+        QPointF(0.10, 0.10),
+        QPointF(0.30, 0.10),
+        QPointF(0.20, 0.30),
+        QPointF(0.10, 0.10)
+    };
+    baseIdentity.geometry.transform.calculateNoteTransform = true;
+    baseIdentity.geometry.transform.viewType = cwScrapType::Plan;
+    baseIdentity.geometry.transform.noteTransformation.north = 90.0;
+    baseIdentity.geometry.transform.noteTransformation.scale.scaleNumerator.unit = cwUnits::Inches;
+    baseIdentity.geometry.transform.noteTransformation.scale.scaleNumerator.value = 1.0;
+    baseIdentity.geometry.transform.noteTransformation.scale.scaleDenominator.unit = cwUnits::Inches;
+    baseIdentity.geometry.transform.noteTransformation.scale.scaleDenominator.value = 0.0;
+
+    cwNoteStructuralMergePlan plan;
+    plan.note = note.get();
+    plan.loadedNoteData = &loadedNoteData;
+    plan.mergedScrapOrder = {loadedScrap.id};
+    plan.baseScrapIdentityByScrapId.insert(loadedScrap.id, baseIdentity);
+    plan.applyMode = cwReconcileApplyMode::Merge;
+
+    const auto applyResult = cwScrapMergeApplier::applyNoteStructuralMergePlan(plan);
+    REQUIRE_FALSE(applyResult.hasError());
+    CHECK_FALSE(applyResult.value().geometryConflictKeptOurs);
+
+    CHECK_FALSE(note->scrap(0)->calculateNoteTransform());
+    CHECK(note->scrap(0)->noteTransformation()->northUp() == Catch::Approx(27.5));
+    CHECK(note->scrap(0)->noteTransformation()->scaleNumerator()->unit() == cwUnits::Centimeters);
+    CHECK(note->scrap(0)->noteTransformation()->scaleNumerator()->value() == Catch::Approx(1.0));
+    CHECK(note->scrap(0)->noteTransformation()->scaleDenominator()->unit() == cwUnits::Meters);
+    CHECK(note->scrap(0)->noteTransformation()->scaleDenominator()->value() == Catch::Approx(2.5));
+}
+
+TEST_CASE("cwScrap merge applier keeps local projected profile settings when auto-calc conflicts on view settings", "[cwScrapMerge][sync]")
+{
+    auto note = std::make_unique<cwNote>();
+    auto* scrap = new cwScrap();
+    note->addScrap(scrap);
+
+    scrap->setType(cwScrap::ProjectedProfile);
+    scrap->setCalculateNoteTransform(true);
+    auto* currentView = qobject_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix());
+    REQUIRE(currentView != nullptr);
+    currentView->setAzimuth(75.0);
+    currentView->setDirection(cwProjectedProfileScrapViewMatrix::RightToLeft);
+
+    cwNoteData loadedNoteData = note->data();
+    REQUIRE(loadedNoteData.scraps.size() == 1);
+    auto& loadedScrap = loadedNoteData.scraps[0];
+    auto* loadedView = dynamic_cast<cwProjectedProfileScrapViewMatrix::Data*>(loadedScrap.viewMatrix.get());
+    REQUIRE(loadedView != nullptr);
+    loadedView->setAzimuth(15.0);
+    loadedView->setDirection(cwProjectedProfileScrapViewMatrix::LeftToRight);
+
+    cwScrapBaseIdentityData baseIdentity;
+    baseIdentity.hasGeometryData = true;
+    baseIdentity.geometry.transform.calculateNoteTransform = true;
+    baseIdentity.geometry.transform.viewType = cwScrapType::ProjectedProfile;
+    baseIdentity.geometry.transform.hasProjectedProfileView = true;
+    baseIdentity.geometry.transform.projectedAzimuth = 30.0;
+    baseIdentity.geometry.transform.projectedDirection = cwProjectedProfileScrapViewMatrix::LookingAt;
+
+    cwNoteStructuralMergePlan plan;
+    plan.note = note.get();
+    plan.loadedNoteData = &loadedNoteData;
+    plan.mergedScrapOrder = {loadedScrap.id};
+    plan.baseScrapIdentityByScrapId.insert(loadedScrap.id, baseIdentity);
+    plan.applyMode = cwReconcileApplyMode::Merge;
+
+    const auto applyResult = cwScrapMergeApplier::applyNoteStructuralMergePlan(plan);
+    REQUIRE_FALSE(applyResult.hasError());
+    CHECK(applyResult.value().geometryConflictKeptOurs);
+
+    auto* mergedView = qobject_cast<cwProjectedProfileScrapViewMatrix*>(note->scrap(0)->viewMatrix());
+    REQUIRE(mergedView != nullptr);
+    CHECK(note->scrap(0)->calculateNoteTransform());
+    CHECK(note->scrap(0)->type() == cwScrap::ProjectedProfile);
+    CHECK(mergedView->azimuth() == Catch::Approx(75.0));
+    CHECK(mergedView->direction() == cwProjectedProfileScrapViewMatrix::RightToLeft);
 }

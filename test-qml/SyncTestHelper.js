@@ -62,14 +62,6 @@ function deepEqual(lhs, rhs) {
     return false
 }
 
-function debugValueString(value) {
-    try {
-        return JSON.stringify(value)
-    } catch (error) {
-        return String(value)
-    }
-}
-
 function tryVerifyWithDiagnostics(testCase, predicate, timeoutMs, label, onPending) {
     let startMs = Date.now()
     let attempts = 0
@@ -171,14 +163,7 @@ function runProjectSyncRoundTrip(testCase, rootData, testHelper, options) {
     function verifyStateEquals(getter, expectedValue, timeoutMs, label) {
         tryVerifyWithDiagnostics(testCase, () => {
             return deepEqual(getter(), expectedValue)
-        }, timeoutMs, label, (_, elapsedMs) => {
-            if (elapsedMs < timeoutMs) {
-                return
-            }
-            console.log("[SyncTestHelper]", label,
-                        "expected=", debugValueString(expectedValue),
-                        "actual=", debugValueString(getter()))
-        })
+        }, timeoutMs, label)
     }
 
     if (options.prepare !== undefined && options.prepare !== null) {
