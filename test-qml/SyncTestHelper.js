@@ -145,6 +145,17 @@ function waitForProjectSyncToFinish(testCase, rootData) {
     }, 3000, "waitForProjectSyncToFinish")
 }
 
+function waitForFutureManagerToFinish(testCase, rootData) {
+    if (rootData.futureManagerModel === null || rootData.futureManagerModel === undefined) {
+        return
+    }
+
+    rootData.futureManagerModel.waitForFinished()
+    tryVerifyWithDiagnostics(testCase, () => {
+        return rootData.futureManagerModel.rowCount() === 0
+    }, 3000, "waitForFutureManagerToFinish")
+}
+
 function runProjectSyncRoundTrip(testCase, rootData, testHelper, options) {
     const verifyEditedValueTimeoutMs = options.verifyEditedValueTimeoutMs !== undefined
                                      ? options.verifyEditedValueTimeoutMs
@@ -169,6 +180,7 @@ function runProjectSyncRoundTrip(testCase, rootData, testHelper, options) {
     if (options.prepare !== undefined && options.prepare !== null) {
         options.prepare("baseline")
     }
+    waitForFutureManagerToFinish(testCase, rootData)
 
     let baselineValue = options.getter()
     let baselineUiValue = options.uiExpectedFromValue !== undefined && options.uiExpectedFromValue !== null
