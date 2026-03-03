@@ -52,6 +52,7 @@ using namespace Catch;
 #include <QSignalSpy>
 #include <QElapsedTimer>
 #include <QCoreApplication>
+#include <QProcess>
 #include <QThread>
 #include <QtCore/qscopeguard.h>
 
@@ -69,6 +70,155 @@ void requireCleanRepository(QQuickGit::GitRepository* repository)
     REQUIRE(repository != nullptr);
     repository->checkStatus();
     CHECK(repository->modifiedFileCount() == 0);
+}
+
+QString entryPath(const git_status_entry* entry)
+{
+    if (entry == nullptr) {
+        return QString();
+    }
+
+    if (entry->index_to_workdir != nullptr && entry->index_to_workdir->new_file.path != nullptr) {
+        return QString::fromUtf8(entry->index_to_workdir->new_file.path);
+    }
+    if (entry->head_to_index != nullptr && entry->head_to_index->new_file.path != nullptr) {
+        return QString::fromUtf8(entry->head_to_index->new_file.path);
+    }
+    return QString();
+}
+
+QStringList rawStatusPaths(const QString& repositoryPath)
+{
+    git_repository* repo = nullptr;
+    if (git_repository_open(&repo, repositoryPath.toLocal8Bit().constData()) != GIT_OK) {
+        return {};
+    }
+    auto repoGuard = qScopeGuard([&repo]() {
+        if (repo) {
+            git_repository_free(repo);
+        }
+    });
+
+    git_status_list* list = nullptr;
+    git_status_options opt = GIT_STATUS_OPTIONS_INIT;
+    opt.show = GIT_STATUS_SHOW_INDEX_AND_WORKDIR;
+    opt.flags = GIT_STATUS_OPT_INCLUDE_UNTRACKED | GIT_STATUS_OPT_RECURSE_UNTRACKED_DIRS;
+
+    if (git_status_list_new(&list, repo, &opt) != GIT_OK || list == nullptr) {
+        return {};
+    }
+    auto listGuard = qScopeGuard([&list]() {
+        if (list) {
+            git_status_list_free(list);
+        }
+    });
+
+    QStringList paths;
+    const size_t entryCount = git_status_list_entrycount(list);
+    for (size_t i = 0; i < entryCount; ++i) {
+        const git_status_entry* entry = git_status_byindex(list, i);
+        const QString path = entryPath(entry);
+        if (!path.isEmpty()) {
+            paths.append(path);
+        }
+    }
+    return paths;
+}
+
+void requireRawCleanRepository(QQuickGit::GitRepository* repository)
+{
+    REQUIRE(repository != nullptr);
+    const QStringList paths = rawStatusPaths(repository->directory().absolutePath());
+    INFO("Raw status paths:" << paths.join(QStringLiteral(", ")).toStdString());
+    CHECK(paths.isEmpty());
+}
+
+QStringList gitCliStatusLines(const QString& repositoryPath)
+{
+    QProcess process;
+    process.setProgram(QStringLiteral("git"));
+    process.setArguments({
+        QStringLiteral("-C"),
+        repositoryPath,
+        QStringLiteral("status"),
+        QStringLiteral("--porcelain=v2")
+    });
+    process.start();
+    const bool finished = process.waitForFinished(10000);
+    if (!finished || process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
+        return {
+            QStringLiteral("git status failed: %1")
+                .arg(QString::fromUtf8(process.readAllStandardError()).trimmed())
+        };
+    }
+
+    const QString output = QString::fromUtf8(process.readAllStandardOutput()).trimmed();
+    if (output.isEmpty()) {
+        return {};
+    }
+    return output.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+}
+
+void requireGitCliCleanRepository(QQuickGit::GitRepository* repository)
+{
+    REQUIRE(repository != nullptr);
+    const QStringList lines = gitCliStatusLines(repository->directory().absolutePath());
+    INFO("Git CLI status:" << lines.join(QStringLiteral(" | ")).toStdString());
+    CHECK(lines.isEmpty());
+}
+
+int unmergedIndexEntryCount(const QString& repositoryPath)
+{
+    git_repository* repo = nullptr;
+    if (git_repository_open(&repo, repositoryPath.toLocal8Bit().constData()) != GIT_OK) {
+        return -1;
+    }
+    auto repoGuard = qScopeGuard([&repo]() {
+        if (repo) {
+            git_repository_free(repo);
+        }
+    });
+
+    git_index* index = nullptr;
+    if (git_repository_index(&index, repo) != GIT_OK) {
+        return -1;
+    }
+    auto indexGuard = qScopeGuard([&index]() {
+        if (index) {
+            git_index_free(index);
+        }
+    });
+
+    git_index_conflict_iterator* iterator = nullptr;
+    const int iteratorError = git_index_conflict_iterator_new(&iterator, index);
+    if (iteratorError == GIT_ITEROVER) {
+        return 0;
+    }
+    if (iteratorError != GIT_OK) {
+        return git_index_has_conflicts(index) ? 1 : 0;
+    }
+    auto iteratorGuard = qScopeGuard([&iterator]() {
+        if (iterator) {
+            git_index_conflict_iterator_free(iterator);
+        }
+    });
+
+    int count = 0;
+    const git_index_entry* ancestor = nullptr;
+    const git_index_entry* ours = nullptr;
+    const git_index_entry* theirs = nullptr;
+    while (git_index_conflict_next(&ancestor, &ours, &theirs, iterator) == GIT_OK) {
+        ++count;
+    }
+    return count;
+}
+
+void requireNoUnmergedIndexEntries(QQuickGit::GitRepository* repository)
+{
+    REQUIRE(repository != nullptr);
+    const int count = unmergedIndexEntryCount(repository->directory().absolutePath());
+    REQUIRE(count >= 0);
+    CHECK(count == 0);
 }
 
 cwScrap* firstScrap(cwProject* project) {
@@ -3836,6 +3986,456 @@ TEST_CASE("cwProject sync incrementally reconciles local trip rename with remote
                             [](const QString& diagnostic) {
                                 return diagnostic.contains(QStringLiteral("reconcile fallback to full reload"));
                             }));
+}
+
+TEST_CASE("cwProject sync keeps repository clean for local trip rename with remote date change and multiple note assets", "[cwProject][sync][trip-rename]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Sync Tester"));
+    rootData->account()->setEmail(QStringLiteral("sync.tester@example.com"));
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Incremental Local Rename Multi Asset Cave"));
+    cave->addTrip();
+    auto trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
+    trip->setName(QStringLiteral("Incremental Local Rename Multi Asset Trip"));
+
+    QTemporaryDir projectDir;
+    REQUIRE(projectDir.isValid());
+    const QString projectPath = QDir(projectDir.path()).filePath(QStringLiteral("sync-trip-local-rename-multi-asset.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+    const QString localRepoPath = QFileInfo(project->filename()).absoluteDir().absolutePath();
+
+    const QString firstJpegSource = QDir(QFileInfo(QString::fromUtf8(__FILE__)).absolutePath())
+                                        .filePath(QStringLiteral("datasets/test_cwAddImageTask/supportedImage.jpeg"));
+    const QString secondJpegSource = QDir(QFileInfo(QString::fromUtf8(__FILE__)).absolutePath())
+                                         .filePath(QStringLiteral("datasets/test_cwAddImageTask/supportedImage.jpg"));
+    REQUIRE(QFileInfo::exists(firstJpegSource));
+    REQUIRE(QFileInfo::exists(secondJpegSource));
+    QTemporaryDir importDir;
+    REQUIRE(importDir.isValid());
+    const QString firstImportPath = QDir(importDir.path()).filePath(QStringLiteral("1.jpeg"));
+    const QString secondImportPath = QDir(importDir.path()).filePath(QStringLiteral("2.jpeg"));
+    REQUIRE(QFile::copy(firstJpegSource, firstImportPath));
+    REQUIRE(QFile::copy(secondJpegSource, secondImportPath));
+    trip->notes()->addFromFiles({QUrl::fromLocalFile(firstImportPath), QUrl::fromLocalFile(secondImportPath)});
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    REQUIRE(trip->notes()->rowCount() == 2);
+
+    auto* repository = project->repository();
+    REQUIRE(repository != nullptr);
+
+    QTemporaryDir remoteRoot;
+    REQUIRE(remoteRoot.isValid());
+    const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
+
+    git_repository* remoteRepo = nullptr;
+    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
+    if (remoteRepo) {
+        git_repository_free(remoteRepo);
+        remoteRepo = nullptr;
+    }
+
+    const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
+                                                         QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(addRemoteError.isEmpty());
+
+    REQUIRE(trip->notes()->rowCount() == 2);
+    const auto seedNotes = trip->notes()->notes();
+    REQUIRE(seedNotes.size() == 2);
+    const QString firstSeedImagePath = ProjectFilenameTestHelper::absolutePath(seedNotes.at(0), seedNotes.at(0)->image().path());
+    const QString secondSeedImagePath = ProjectFilenameTestHelper::absolutePath(seedNotes.at(1), seedNotes.at(1)->image().path());
+    REQUIRE(QFileInfo::exists(firstSeedImagePath));
+    REQUIRE(QFileInfo::exists(secondSeedImagePath));
+
+    QFile firstSeedImageFile(firstSeedImagePath);
+    REQUIRE(firstSeedImageFile.open(QIODevice::ReadOnly));
+    const QByteArray firstSeedBytes = firstSeedImageFile.readAll();
+    REQUIRE_FALSE(firstSeedBytes.isEmpty());
+    const QString firstSeedOid = QString::fromLatin1(QCryptographicHash::hash(firstSeedBytes, QCryptographicHash::Sha256).toHex());
+
+    QFile secondSeedImageFile(secondSeedImagePath);
+    REQUIRE(secondSeedImageFile.open(QIODevice::ReadOnly));
+    const QByteArray secondSeedBytes = secondSeedImageFile.readAll();
+    REQUIRE_FALSE(secondSeedBytes.isEmpty());
+    const QString secondSeedOid = QString::fromLatin1(QCryptographicHash::hash(secondSeedBytes, QCryptographicHash::Sha256).toHex());
+
+    LfsServer lfsServer;
+    if (!lfsServer.start()) {
+        SKIP("LFS test server could not bind a local TCP port in this environment.");
+        return;
+    }
+    lfsServer.setExpectedUploadObject(firstSeedOid, firstSeedBytes.size());
+    lfsServer.setExpectedUploadObject(secondSeedOid, secondSeedBytes.size());
+    lfsServer.setDownloadObject(firstSeedOid, firstSeedBytes);
+    lfsServer.setDownloadObject(secondSeedOid, secondSeedBytes);
+    REQUIRE(setGitConfigString(localRepoPath, "lfs.url", lfsServer.endpoint()));
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+    requireCleanRepository(repository);
+    requireNoUnmergedIndexEntries(repository);
+
+    QPointer<cwCave> localCavePtr = project->cavingRegion()->cave(0);
+    REQUIRE(localCavePtr != nullptr);
+    QPointer<cwTrip> localTripPtr = localCavePtr->trip(0);
+    REQUIRE(localTripPtr != nullptr);
+    REQUIRE(localTripPtr->notes()->rowCount() == 2);
+    const auto localNotes = localTripPtr->notes()->notes();
+    REQUIRE(localNotes.size() == 2);
+    QPointer<cwNote> firstLocalNote = localNotes.at(0);
+    QPointer<cwNote> secondLocalNote = localNotes.at(1);
+    REQUIRE(firstLocalNote != nullptr);
+    REQUIRE(secondLocalNote != nullptr);
+
+    const QString oldTripFilePath = ProjectFilenameTestHelper::absolutePath(localTripPtr);
+    const QString oldFirstNoteFilePath = ProjectFilenameTestHelper::absolutePath(firstLocalNote);
+    const QString oldSecondNoteFilePath = ProjectFilenameTestHelper::absolutePath(secondLocalNote);
+    const QString oldFirstImagePath = ProjectFilenameTestHelper::absolutePath(firstLocalNote, firstLocalNote->image().path());
+    const QString oldSecondImagePath = ProjectFilenameTestHelper::absolutePath(secondLocalNote, secondLocalNote->image().path());
+
+    QTemporaryDir cloneDir;
+    REQUIRE(cloneDir.isValid());
+    const QString clonePath = QDir(cloneDir.path()).filePath(QStringLiteral("clone-2"));
+
+    QQuickGit::GitRepository cloneRepository;
+    cloneRepository.setDirectory(QDir(clonePath));
+    cloneRepository.setAccount(rootData->account());
+
+    auto cloneFuture = cloneRepository.clone(QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(AsyncFuture::waitForFinished(cloneFuture, 10000));
+    INFO("Clone error:" << cloneFuture.result().errorMessage().toStdString());
+    REQUIRE(!cloneFuture.result().hasError());
+
+    auto remoteRootData = std::make_unique<cwRootData>();
+    remoteRootData->account()->setName(QStringLiteral("Remote Sync Tester"));
+    remoteRootData->account()->setEmail(QStringLiteral("remote.sync.tester@example.com"));
+
+    auto remoteProject = remoteRootData->project();
+    const QString clonedProjectPath = QDir(clonePath).filePath(QFileInfo(projectPath).fileName());
+    REQUIRE(QFileInfo::exists(clonedProjectPath));
+    REQUIRE(setGitConfigString(clonePath, "lfs.url", lfsServer.endpoint()));
+    remoteProject->loadFile(clonedProjectPath);
+    remoteProject->waitLoadToFinish();
+    remoteProject->waitSaveToFinish();
+
+    auto* remoteRepository = remoteProject->repository();
+    REQUIRE(remoteRepository != nullptr);
+    remoteRepository->setAccount(remoteRootData->account());
+
+    auto* remoteTrip = remoteProject->cavingRegion()->cave(0)->trip(0);
+    REQUIRE(remoteTrip != nullptr);
+    REQUIRE(remoteTrip->notes()->rowCount() == 2);
+
+    const QDate remoteDate(2025, 2, 26);
+    remoteTrip->setDate(QDateTime(remoteDate, QTime(0, 0)));
+    remoteProject->waitSaveToFinish();
+    REQUIRE(remoteProject->sync());
+    remoteRootData->futureManagerModel()->waitForFinished();
+    remoteProject->waitSaveToFinish();
+    CHECK(remoteProject->errorModel()->count() == 0);
+    requireCleanRepository(remoteRepository);
+    requireNoUnmergedIndexEntries(remoteRepository);
+
+    const QString renamedTripName = QStringLiteral("Incremental Local Rename Multi Asset Trip Renamed");
+    localTripPtr->setName(renamedTripName);
+    project->waitSaveToFinish();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+    requireCleanRepository(repository);
+    requireNoUnmergedIndexEntries(repository);
+
+    REQUIRE(localCavePtr != nullptr);
+    REQUIRE(localTripPtr != nullptr);
+    REQUIRE(firstLocalNote != nullptr);
+    REQUIRE(secondLocalNote != nullptr);
+
+    CHECK(project->cavingRegion()->cave(0) == localCavePtr.data());
+    CHECK(localCavePtr->trip(0) == localTripPtr.data());
+    CHECK(localTripPtr->name() == renamedTripName);
+    CHECK(localTripPtr->date().date() == remoteDate);
+    REQUIRE(localTripPtr->notes()->rowCount() == 2);
+
+    const auto mergedNotes = localTripPtr->notes()->notes();
+    REQUIRE(mergedNotes.size() == 2);
+    CHECK(mergedNotes.at(0) == firstLocalNote.data());
+    CHECK(mergedNotes.at(1) == secondLocalNote.data());
+
+    const QString renamedTripFilePath = ProjectFilenameTestHelper::absolutePath(localTripPtr);
+    const QString renamedFirstNoteFilePath = ProjectFilenameTestHelper::absolutePath(firstLocalNote);
+    const QString renamedSecondNoteFilePath = ProjectFilenameTestHelper::absolutePath(secondLocalNote);
+    const QString renamedFirstImagePath = ProjectFilenameTestHelper::absolutePath(firstLocalNote, firstLocalNote->image().path());
+    const QString renamedSecondImagePath = ProjectFilenameTestHelper::absolutePath(secondLocalNote, secondLocalNote->image().path());
+
+    CHECK(QFileInfo::exists(renamedTripFilePath));
+    CHECK(QFileInfo::exists(renamedFirstNoteFilePath));
+    CHECK(QFileInfo::exists(renamedSecondNoteFilePath));
+    CHECK(QFileInfo::exists(renamedFirstImagePath));
+    CHECK(QFileInfo::exists(renamedSecondImagePath));
+    CHECK_FALSE(QFileInfo::exists(oldTripFilePath));
+    CHECK_FALSE(QFileInfo::exists(oldFirstNoteFilePath));
+    CHECK_FALSE(QFileInfo::exists(oldSecondNoteFilePath));
+    CHECK_FALSE(QFileInfo::exists(oldFirstImagePath));
+    CHECK_FALSE(QFileInfo::exists(oldSecondImagePath));
+}
+
+TEST_CASE("cwProject sync keeps repository clean for remote trip rename with local date change and multiple note assets", "[cwProject][sync][trip-rename]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Sync Tester"));
+    rootData->account()->setEmail(QStringLiteral("sync.tester@example.com"));
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Incremental Remote Rename Multi Asset Cave"));
+    cave->addTrip();
+    auto trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
+    trip->setName(QStringLiteral("Incremental Remote Rename Multi Asset Trip"));
+
+    QTemporaryDir projectDir;
+    REQUIRE(projectDir.isValid());
+    const QString projectPath = QDir(projectDir.path()).filePath(QStringLiteral("sync-trip-remote-rename-multi-asset.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+    const QString localRepoPath = QFileInfo(project->filename()).absoluteDir().absolutePath();
+
+    const QString firstJpegSource = QDir(QFileInfo(QString::fromUtf8(__FILE__)).absolutePath())
+                                        .filePath(QStringLiteral("datasets/test_cwAddImageTask/supportedImage.jpeg"));
+    const QString secondJpegSource = QDir(QFileInfo(QString::fromUtf8(__FILE__)).absolutePath())
+                                         .filePath(QStringLiteral("datasets/test_cwAddImageTask/supportedImage.jpg"));
+    REQUIRE(QFileInfo::exists(firstJpegSource));
+    REQUIRE(QFileInfo::exists(secondJpegSource));
+    QTemporaryDir importDir;
+    REQUIRE(importDir.isValid());
+    const QString firstImportPath = QDir(importDir.path()).filePath(QStringLiteral("1.jpeg"));
+    const QString secondImportPath = QDir(importDir.path()).filePath(QStringLiteral("2.jpeg"));
+    REQUIRE(QFile::copy(firstJpegSource, firstImportPath));
+    REQUIRE(QFile::copy(secondJpegSource, secondImportPath));
+    trip->notes()->addFromFiles({QUrl::fromLocalFile(firstImportPath), QUrl::fromLocalFile(secondImportPath)});
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    REQUIRE(trip->notes()->rowCount() == 2);
+
+    auto* repository = project->repository();
+    REQUIRE(repository != nullptr);
+
+    QTemporaryDir remoteRoot;
+    REQUIRE(remoteRoot.isValid());
+    const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
+
+    git_repository* remoteRepo = nullptr;
+    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
+    if (remoteRepo) {
+        git_repository_free(remoteRepo);
+        remoteRepo = nullptr;
+    }
+
+    const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
+                                                         QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(addRemoteError.isEmpty());
+
+    REQUIRE(trip->notes()->rowCount() == 2);
+    const auto seedNotes = trip->notes()->notes();
+    REQUIRE(seedNotes.size() == 2);
+    const QString firstSeedImagePath = ProjectFilenameTestHelper::absolutePath(seedNotes.at(0), seedNotes.at(0)->image().path());
+    const QString secondSeedImagePath = ProjectFilenameTestHelper::absolutePath(seedNotes.at(1), seedNotes.at(1)->image().path());
+    REQUIRE(QFileInfo::exists(firstSeedImagePath));
+    REQUIRE(QFileInfo::exists(secondSeedImagePath));
+
+    QFile firstSeedImageFile(firstSeedImagePath);
+    REQUIRE(firstSeedImageFile.open(QIODevice::ReadOnly));
+    const QByteArray firstSeedBytes = firstSeedImageFile.readAll();
+    REQUIRE_FALSE(firstSeedBytes.isEmpty());
+    const QString firstSeedOid = QString::fromLatin1(QCryptographicHash::hash(firstSeedBytes, QCryptographicHash::Sha256).toHex());
+
+    QFile secondSeedImageFile(secondSeedImagePath);
+    REQUIRE(secondSeedImageFile.open(QIODevice::ReadOnly));
+    const QByteArray secondSeedBytes = secondSeedImageFile.readAll();
+    REQUIRE_FALSE(secondSeedBytes.isEmpty());
+    const QString secondSeedOid = QString::fromLatin1(QCryptographicHash::hash(secondSeedBytes, QCryptographicHash::Sha256).toHex());
+
+    LfsServer lfsServer;
+    if (!lfsServer.start()) {
+        SKIP("LFS test server could not bind a local TCP port in this environment.");
+        return;
+    }
+    lfsServer.setExpectedUploadObject(firstSeedOid, firstSeedBytes.size());
+    lfsServer.setExpectedUploadObject(secondSeedOid, secondSeedBytes.size());
+    lfsServer.setDownloadObject(firstSeedOid, firstSeedBytes);
+    lfsServer.setDownloadObject(secondSeedOid, secondSeedBytes);
+    REQUIRE(setGitConfigString(localRepoPath, "lfs.url", lfsServer.endpoint()));
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+    requireCleanRepository(repository);
+    requireNoUnmergedIndexEntries(repository);
+
+    QPointer<cwCave> localCavePtr = project->cavingRegion()->cave(0);
+    REQUIRE(localCavePtr != nullptr);
+    QPointer<cwTrip> localTripPtr = localCavePtr->trip(0);
+    REQUIRE(localTripPtr != nullptr);
+    REQUIRE(localTripPtr->notes()->rowCount() == 2);
+    const auto localNotes = localTripPtr->notes()->notes();
+    REQUIRE(localNotes.size() == 2);
+    QPointer<cwNote> firstLocalNote = localNotes.at(0);
+    QPointer<cwNote> secondLocalNote = localNotes.at(1);
+    REQUIRE(firstLocalNote != nullptr);
+    REQUIRE(secondLocalNote != nullptr);
+
+    const QString oldTripFilePath = ProjectFilenameTestHelper::absolutePath(localTripPtr);
+    const QString oldFirstNoteFilePath = ProjectFilenameTestHelper::absolutePath(firstLocalNote);
+    const QString oldSecondNoteFilePath = ProjectFilenameTestHelper::absolutePath(secondLocalNote);
+    const QString oldFirstImagePath = ProjectFilenameTestHelper::absolutePath(firstLocalNote, firstLocalNote->image().path());
+    const QString oldSecondImagePath = ProjectFilenameTestHelper::absolutePath(secondLocalNote, secondLocalNote->image().path());
+
+    QTemporaryDir cloneDir;
+    REQUIRE(cloneDir.isValid());
+    const QString clonePath = QDir(cloneDir.path()).filePath(QStringLiteral("clone-2"));
+
+    QQuickGit::GitRepository cloneRepository;
+    cloneRepository.setDirectory(QDir(clonePath));
+    cloneRepository.setAccount(rootData->account());
+
+    auto cloneFuture = cloneRepository.clone(QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(AsyncFuture::waitForFinished(cloneFuture, 10000));
+    INFO("Clone error:" << cloneFuture.result().errorMessage().toStdString());
+    REQUIRE(!cloneFuture.result().hasError());
+
+    auto remoteRootData = std::make_unique<cwRootData>();
+    remoteRootData->account()->setName(QStringLiteral("Remote Sync Tester"));
+    remoteRootData->account()->setEmail(QStringLiteral("remote.sync.tester@example.com"));
+
+    auto remoteProject = remoteRootData->project();
+    const QString clonedProjectPath = QDir(clonePath).filePath(QFileInfo(projectPath).fileName());
+    REQUIRE(QFileInfo::exists(clonedProjectPath));
+    REQUIRE(setGitConfigString(clonePath, "lfs.url", lfsServer.endpoint()));
+    remoteProject->loadFile(clonedProjectPath);
+    remoteProject->waitLoadToFinish();
+    remoteProject->waitSaveToFinish();
+
+    auto* remoteRepository = remoteProject->repository();
+    REQUIRE(remoteRepository != nullptr);
+    remoteRepository->setAccount(remoteRootData->account());
+
+    auto* remoteTrip = remoteProject->cavingRegion()->cave(0)->trip(0);
+    REQUIRE(remoteTrip != nullptr);
+    REQUIRE(remoteTrip->notes()->rowCount() == 2);
+
+    const QString renamedTripName = QStringLiteral("Incremental Remote Rename Multi Asset Trip Renamed");
+    remoteTrip->setName(renamedTripName);
+    remoteProject->waitSaveToFinish();
+    REQUIRE(remoteProject->sync());
+    remoteRootData->futureManagerModel()->waitForFinished();
+    remoteProject->waitSaveToFinish();
+    CHECK(remoteProject->errorModel()->count() == 0);
+    requireCleanRepository(remoteRepository);
+    requireNoUnmergedIndexEntries(remoteRepository);
+
+    const QDate localDate(2025, 2, 26);
+    localTripPtr->setDate(QDateTime(localDate, QTime(0, 0)));
+    project->waitSaveToFinish();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+    requireCleanRepository(repository);
+    requireNoUnmergedIndexEntries(repository);
+
+    REQUIRE(localCavePtr != nullptr);
+    REQUIRE(localTripPtr != nullptr);
+    REQUIRE(firstLocalNote != nullptr);
+    REQUIRE(secondLocalNote != nullptr);
+
+    CHECK(project->cavingRegion()->cave(0) == localCavePtr.data());
+    CHECK(localCavePtr->trip(0) == localTripPtr.data());
+    CHECK(localTripPtr->name() == renamedTripName);
+    CHECK(localTripPtr->date().date() == localDate);
+    REQUIRE(localTripPtr->notes()->rowCount() == 2);
+
+    const auto mergedNotes = localTripPtr->notes()->notes();
+    REQUIRE(mergedNotes.size() == 2);
+    CHECK(mergedNotes.at(0) == firstLocalNote.data());
+    CHECK(mergedNotes.at(1) == secondLocalNote.data());
+
+    const QString renamedTripFilePath = ProjectFilenameTestHelper::absolutePath(localTripPtr);
+    const QString renamedFirstNoteFilePath = ProjectFilenameTestHelper::absolutePath(firstLocalNote);
+    const QString renamedSecondNoteFilePath = ProjectFilenameTestHelper::absolutePath(secondLocalNote);
+    const QString renamedFirstImagePath = ProjectFilenameTestHelper::absolutePath(firstLocalNote, firstLocalNote->image().path());
+    const QString renamedSecondImagePath = ProjectFilenameTestHelper::absolutePath(secondLocalNote, secondLocalNote->image().path());
+
+    CHECK(QFileInfo::exists(renamedTripFilePath));
+    CHECK(QFileInfo::exists(renamedFirstNoteFilePath));
+    CHECK(QFileInfo::exists(renamedSecondNoteFilePath));
+    CHECK(QFileInfo::exists(renamedFirstImagePath));
+    CHECK(QFileInfo::exists(renamedSecondImagePath));
+    CHECK_FALSE(QFileInfo::exists(oldTripFilePath));
+    CHECK_FALSE(QFileInfo::exists(oldFirstNoteFilePath));
+    CHECK_FALSE(QFileInfo::exists(oldSecondNoteFilePath));
+    CHECK_FALSE(QFileInfo::exists(oldFirstImagePath));
+    CHECK_FALSE(QFileInfo::exists(oldSecondImagePath));
+
+    git_repository* localRepo = nullptr;
+    REQUIRE(git_repository_open(&localRepo, localRepoPath.toLocal8Bit().constData()) == GIT_OK);
+    auto localRepoGuard = qScopeGuard([&localRepo]() {
+        if (localRepo) {
+            git_repository_free(localRepo);
+        }
+    });
+
+    auto headOid = [](git_repository* repoInstance) -> git_oid {
+        git_reference* head = nullptr;
+        REQUIRE(git_repository_head(&head, repoInstance) == GIT_OK);
+        auto headGuard = qScopeGuard([&head]() {
+            if (head) {
+                git_reference_free(head);
+            }
+        });
+        const git_oid* target = git_reference_target(head);
+        REQUIRE(target != nullptr);
+        return *target;
+    };
+
+    const git_oid mergedHead = headOid(localRepo);
+    git_repository* syncRemoteRepo = nullptr;
+    REQUIRE(git_repository_open(&syncRemoteRepo, remoteRepoPath.toLocal8Bit().constData()) == GIT_OK);
+    auto remoteRepoGuard = qScopeGuard([&syncRemoteRepo]() {
+        if (syncRemoteRepo) {
+            git_repository_free(syncRemoteRepo);
+        }
+    });
+    const git_oid mergedRemoteHead = headOid(syncRemoteRepo);
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+
+    const git_oid afterNoOpSyncHead = headOid(localRepo);
+    const git_oid afterNoOpRemoteHead = headOid(syncRemoteRepo);
+    CHECK(git_oid_cmp(&mergedHead, &afterNoOpSyncHead) == 0);
+    CHECK(git_oid_cmp(&mergedRemoteHead, &afterNoOpRemoteHead) == 0);
+    requireCleanRepository(repository);
+    requireNoUnmergedIndexEntries(repository);
 }
 
 TEST_CASE("cwProject sync incrementally reconciles note asset updates after remote trip rename", "[cwProject][sync][trip-rename]") {
