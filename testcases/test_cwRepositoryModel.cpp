@@ -18,9 +18,9 @@
 #include "cwErrorListModel.h"
 
 namespace {
-QString readGitIgnore(const QDir& dir)
+QString readGitExclude(const QDir& dir)
 {
-    QFile file(dir.filePath(QStringLiteral(".gitignore")));
+    QFile file(dir.filePath(QStringLiteral(".git/info/exclude")));
     if (!file.open(QIODevice::ReadOnly)) {
         return QString();
     }
@@ -88,7 +88,7 @@ TEST_CASE("cwRepositoryModel addRepository and persistence", "[cwRepositoryModel
     CHECK(model2.data(model2.index(1, 0), cwRepositoryModel::PathRole).toString() == nonExistentDir.absolutePath());
 }
 
-TEST_CASE("cwRepositoryModel addRepository writes .gitignore cache entry", "[cwRepositoryModel]") {
+TEST_CASE("cwRepositoryModel addRepository writes local sync excludes", "[cwRepositoryModel]") {
     QSettings settings;
     settings.clear();
 
@@ -102,8 +102,9 @@ TEST_CASE("cwRepositoryModel addRepository writes .gitignore cache entry", "[cwR
     INFO("Error:" << result.errorMessage().toStdString());
     REQUIRE_FALSE(result.hasError());
 
-    const QString contents = readGitIgnore(repoDir);
+    const QString contents = readGitExclude(repoDir);
     CHECK(contents.contains(".cw_cache/"));
+    CHECK(contents.contains(".DS_Store"));
 }
 
 TEST_CASE("cwRepositoryModel addRepository with url and persistence", "[cwRepositoryModel]") {

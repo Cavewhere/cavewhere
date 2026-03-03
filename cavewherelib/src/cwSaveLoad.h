@@ -269,7 +269,7 @@ public:
 
     QFuture<void> retire();
 
-    static void ensureGitExcludeHasCacheEntry(const QDir& repoDir);
+    static void ensureGitExcludeHasLocalEntries(const QDir& repoDir);
     static Monad::Result<cwCaveData> loadCave(const QString& filename);
     static Monad::Result<cwNoteLiDARData> loadNoteLiDAR(const QString& filename, const QDir &projectDir);
     static Monad::Result<cwNoteLiDARData> loadNoteLiDAR(const QByteArray& content, const QString& filename, const QDir &projectDir);

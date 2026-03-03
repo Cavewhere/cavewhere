@@ -601,7 +601,7 @@ void repairNestedScrapIds(cwSaveLoad::ProjectLoadData& loadData)
 
 } // namespace
 
-void cwSaveLoad::ensureGitExcludeHasCacheEntry(const QDir& repoDir)
+void cwSaveLoad::ensureGitExcludeHasLocalEntries(const QDir& repoDir)
 {
     const QDir gitDir = gitDirForRepository(repoDir);
     if (!gitDir.exists()) {
@@ -624,13 +624,30 @@ void cwSaveLoad::ensureGitExcludeHasCacheEntry(const QDir& repoDir)
         }
     }
 
-    const QString entry = QStringLiteral(".cw_cache/");
     const QStringList lines = QString::fromUtf8(existingContents).split('\n');
-    for (const QString& line : lines) {
-        const QString trimmed = line.trimmed();
-        if (trimmed == entry || trimmed == QStringLiteral(".cw_cache")) {
-            return;
+    const QList<QPair<QString, QStringList>> entries = {
+        {QStringLiteral(".cw_cache/"), {QStringLiteral(".cw_cache/"), QStringLiteral(".cw_cache")}},
+        {QStringLiteral(".DS_Store"), {QStringLiteral(".DS_Store")}}
+    };
+
+    QStringList missingEntries;
+    for (const auto& entry : entries) {
+        bool found = false;
+        for (const QString& line : lines) {
+            const QString trimmed = line.trimmed();
+            if (entry.second.contains(trimmed)) {
+                found = true;
+                break;
+            }
         }
+
+        if (!found) {
+            missingEntries.append(entry.first);
+        }
+    }
+
+    if (missingEntries.isEmpty()) {
+        return;
     }
 
     QFile writeFile(excludePath);
@@ -641,7 +658,10 @@ void cwSaveLoad::ensureGitExcludeHasCacheEntry(const QDir& repoDir)
     if (!existingContents.isEmpty() && !existingContents.endsWith('\n')) {
         writeFile.write("\n");
     }
-    writeFile.write(".cw_cache/\n");
+    for (const QString& entry : missingEntries) {
+        writeFile.write(entry.toUtf8());
+        writeFile.write("\n");
+    }
 }
 
 template<typename ProtoType>
@@ -2249,7 +2269,7 @@ void cwSaveLoad::setFileName(const QString &filename, bool initRepository)
 
         if(initRepository) {
             d->repository->initRepository();
-            ensureGitExcludeHasCacheEntry(d->repository->directory());
+            ensureGitExcludeHasLocalEntries(d->repository->directory());
         }
 
         emit fileNameChanged();

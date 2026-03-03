@@ -15,10 +15,6 @@
 #include <QUrl>
 #include <QDebug>
 
-namespace cw::git {
-void ensureGitExcludeHasCacheEntry(const QDir& repoDir);
-}
-
 using namespace Monad;
 
 cwRepositoryModel::cwRepositoryModel(QObject* parent)
@@ -77,7 +73,7 @@ Monad::ResultBase cwRepositoryModel::addRepository(const cwResultDir& dir)
                    repo.initRepository();
 
                    qWarning() << "TODO: Repositories should be init'ed through cwSaveLoad" << LOCATION;
-                   cwSaveLoad::ensureGitExcludeHasCacheEntry(dir.value());
+                   cwSaveLoad::ensureGitExcludeHasLocalEntries(dir.value());
 
 
                    m_repositories.append(dir.value());

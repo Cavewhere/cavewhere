@@ -18,38 +18,44 @@ static QString readGitExclude(const QDir& dir)
     return QString::fromUtf8(file.readAll());
 }
 
-TEST_CASE("ensureGitExcludeHasCacheEntry writes .cw_cache entry", "[cwGitIgnore]") {
+TEST_CASE("ensureGitExcludeHasLocalEntries writes local sync excludes", "[cwGitIgnore]") {
     QTemporaryDir tmpDir;
     REQUIRE(tmpDir.isValid());
     QDir repoDir(tmpDir.path());
     REQUIRE(QDir().mkpath(repoDir.filePath(QStringLiteral(".git/info"))));
 
-    cwSaveLoad::ensureGitExcludeHasCacheEntry(repoDir);
+    cwSaveLoad::ensureGitExcludeHasLocalEntries(repoDir);
     const QString contents = readGitExclude(repoDir);
     CHECK(contents.contains(".cw_cache/"));
+    CHECK(contents.contains(".DS_Store"));
 }
 
-TEST_CASE("ensureGitExcludeHasCacheEntry is idempotent", "[cwGitIgnore]") {
+TEST_CASE("ensureGitExcludeHasLocalEntries is idempotent", "[cwGitIgnore]") {
     QTemporaryDir tmpDir;
     REQUIRE(tmpDir.isValid());
     QDir repoDir(tmpDir.path());
     REQUIRE(QDir().mkpath(repoDir.filePath(QStringLiteral(".git/info"))));
 
-    cwSaveLoad::ensureGitExcludeHasCacheEntry(repoDir);
-    cwSaveLoad::ensureGitExcludeHasCacheEntry(repoDir);
+    cwSaveLoad::ensureGitExcludeHasLocalEntries(repoDir);
+    cwSaveLoad::ensureGitExcludeHasLocalEntries(repoDir);
 
     const QString contents = readGitExclude(repoDir);
     const QStringList lines = contents.split('\n');
-    int count = 0;
+    int cacheCount = 0;
+    int dsStoreCount = 0;
     for (const QString& line : lines) {
         if (line.trimmed() == QStringLiteral(".cw_cache/")) {
-            count++;
+            cacheCount++;
+        }
+        if (line.trimmed() == QStringLiteral(".DS_Store")) {
+            dsStoreCount++;
         }
     }
-    CHECK(count == 1);
+    CHECK(cacheCount == 1);
+    CHECK(dsStoreCount == 1);
 }
 
-TEST_CASE("ensureGitExcludeHasCacheEntry respects existing .cw_cache entry", "[cwGitIgnore]") {
+TEST_CASE("ensureGitExcludeHasLocalEntries respects existing entries", "[cwGitIgnore]") {
     QTemporaryDir tmpDir;
     REQUIRE(tmpDir.isValid());
     QDir repoDir(tmpDir.path());
@@ -58,18 +64,25 @@ TEST_CASE("ensureGitExcludeHasCacheEntry respects existing .cw_cache entry", "[c
     QFile file(repoDir.filePath(QStringLiteral(".git/info/exclude")));
     REQUIRE(file.open(QIODevice::WriteOnly));
     file.write(".cw_cache\n");
+    file.write(".DS_Store\n");
     file.close();
 
-    cwSaveLoad::ensureGitExcludeHasCacheEntry(repoDir);
+    cwSaveLoad::ensureGitExcludeHasLocalEntries(repoDir);
 
     const QString contents = readGitExclude(repoDir);
     CHECK(contents.contains(".cw_cache"));
+    CHECK(contents.contains(".DS_Store"));
     const QStringList lines = contents.split('\n');
-    int count = 0;
+    int cacheCount = 0;
+    int dsStoreCount = 0;
     for (const QString& line : lines) {
         if (line.trimmed() == QStringLiteral(".cw_cache") || line.trimmed() == QStringLiteral(".cw_cache/")) {
-            count++;
+            cacheCount++;
+        }
+        if (line.trimmed() == QStringLiteral(".DS_Store")) {
+            dsStoreCount++;
         }
     }
-    CHECK(count == 1);
+    CHECK(cacheCount == 1);
+    CHECK(dsStoreCount == 1);
 }
