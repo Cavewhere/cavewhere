@@ -63,7 +63,7 @@
 #include "LfsStore.h"
 #include "LfsPolicy.h"
 
-#include <git2.h>
+//#include <git2.h>
 
 //Monad
 #include "Monad/Monad.h"

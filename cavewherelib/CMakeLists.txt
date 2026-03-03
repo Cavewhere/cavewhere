@@ -78,7 +78,10 @@ set_target_properties(cavewherelib PROPERTIES
 )
 
 if(MSVC)
-    target_compile_options(cavewherelib PRIVATE /FI${CMAKE_CURRENT_BINARY_DIR}/CaveWhereLibExport.h)
+    target_compile_options(cavewherelib PRIVATE
+        /FI${CMAKE_CURRENT_BINARY_DIR}/CaveWhereLibExport.h
+        /bigobj
+    )
 endif()
 
 target_link_libraries(cavewherelib
@@ -219,6 +222,7 @@ qt_add_qml_module(cavewherelib
     ${cavewherelib_qml_cachegen_args}
     DEPENDENCIES
         QtQuick
+        QQuickGit
         QuickQanava
     SOURCES
         ${cavewhere_RELATIVE_CPP_FILES}
@@ -230,6 +234,7 @@ qt_add_qml_module(cavewherelib
 )
 
 target_sources(cavewherelib PRIVATE ${cavewherelib_CPP_FILES} ${cavewherelib_H_FILES})
+qt_import_qml_plugins(cavewherelib)
 
 # Handle shaders
 qt_add_shaders(cavewherelib "cavewherelib_shaders"

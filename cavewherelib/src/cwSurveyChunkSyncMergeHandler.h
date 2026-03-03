@@ -1,10 +1,11 @@
 #pragma once
 
+#include "CaveWhereLibExport.h"
 #include "cwSurveyChunkMergeApplier.h"
 #include "cwSurveyChunkMergePlanBuilder.h"
 #include "cwSyncMergeApplyUtils.h"
 
-class cwSurveyChunkSyncMergeHandler
+class CAVEWHERE_LIB_EXPORT cwSurveyChunkSyncMergeHandler
 {
 public:
     static Monad::Result<cwSurveyChunkMergePlan> buildSurveyChunkMergePlan(

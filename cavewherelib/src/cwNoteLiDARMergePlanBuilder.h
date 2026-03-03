@@ -1,5 +1,6 @@
 #pragma once
 
+#include "CaveWhereLibExport.h"
 #include "cwNoteLiDARData.h"
 #include "cwSurveyNoteLiDARModelData.h"
 #include "cwSyncMergeApplyUtils.h"
@@ -34,7 +35,7 @@ struct cwNoteLiDARMergePreparation {
     QList<QObject*> orderedNotes;
 };
 
-class cwNoteLiDARMergePlanBuilder
+class CAVEWHERE_LIB_EXPORT cwNoteLiDARMergePlanBuilder
 {
 public:
     static cwNoteLiDARDescriptorApplyMode determineApplyMode(

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "CaveWhereLibExport.h"
 #include "cwSyncMergeApplyUtils.h"
 #include "cwTripData.h"
 #include "Monad/Result.h"
@@ -23,7 +24,7 @@ struct cwTripMergePreparation {
     QList<cwTripMergePlan> plans;
 };
 
-class cwTripMergePlanBuilder
+class CAVEWHERE_LIB_EXPORT cwTripMergePlanBuilder
 {
 public:
     static Monad::Result<cwTripMergePreparation> build(

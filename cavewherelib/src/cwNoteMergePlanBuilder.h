@@ -1,5 +1,6 @@
 #pragma once
 
+#include "CaveWhereLibExport.h"
 #include "cwNoteData.h"
 #include "cwSurveyNoteModelData.h"
 #include "Monad/Result.h"
@@ -23,7 +24,7 @@ struct cwNoteMergePreparation {
     QList<cwNoteMergePlan> plans;
 };
 
-class cwNoteMergePlanBuilder
+class CAVEWHERE_LIB_EXPORT cwNoteMergePlanBuilder
 {
 public:
     static Monad::Result<cwNoteMergePreparation> build(

@@ -51,6 +51,8 @@ cwGitHubIntegration::cwGitHubIntegration(cwRemoteCredentialStore* credentialStor
                      });
 }
 
+cwGitHubIntegration::~cwGitHubIntegration() = default;
+
 void cwGitHubIntegration::setActive(bool active)
 {
     if (m_active == active) {

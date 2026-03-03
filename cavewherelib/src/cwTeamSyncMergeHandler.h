@@ -1,9 +1,10 @@
 #pragma once
 
+#include "CaveWhereLibExport.h"
 #include "cwTeamMergeApplier.h"
 #include "cwTeamMergePlanBuilder.h"
 
-class cwTeamSyncMergeHandler
+class CAVEWHERE_LIB_EXPORT cwTeamSyncMergeHandler
 {
 public:
     static Monad::Result<cwTeamMergePlan> buildTeamMergePlan(

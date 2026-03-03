@@ -5,6 +5,7 @@ project(CaveWhere VERSION 1.0.0 LANGUAGES CXX)
 find_package(Qt6 REQUIRED COMPONENTS Core)
 qt_standard_project_setup()
 find_package(absl REQUIRED)
+find_package(libgit2)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -251,6 +252,7 @@ endif()
 # All packages we need to find
 find_package(Catch2 REQUIRED)
 find_package(Protobuf REQUIRED)
+find_package(openssl REQUIRED)
 find_package(Qt6
     COMPONENTS
     Core
@@ -306,6 +308,7 @@ if(BUILD_TESTING)
         Qt6::Qml
         Catch2::Catch2
         qt6keychain
+        libgit2::libgit2
         cavewherelib
     )
 
@@ -319,6 +322,7 @@ if(BUILD_TESTING)
     )
     target_include_directories(cavewhere-testlib PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/QQuickGit/tests/lfs
+        $<TARGET_PROPERTY:libgit2::libgit2,INTERFACE_INCLUDE_DIRECTORIES>
     )
 
     #### cavewhere-test ####
@@ -344,6 +348,7 @@ if(BUILD_TESTING)
         protobuf::libprotobuf
         SignalSpyChecker
         QuickQanavaplugin
+        libgit2::libgit2
     )
 
     qt_import_qml_plugins(cavewhere-test)
@@ -447,12 +452,11 @@ if(TARGET survexport)
     add_dependencies(CaveWhere survexport)
 endif()
 
-# Ensure QML modules are imported without relying on QML2_IMPORT_PATH.
-qt_import_qml_plugins(CaveWhere)
 qt_finalize_executable(CaveWhere)
 
 if(WIN32)
     set(_conan_runtime_dlls "")
+    message(STATUS "CaveWhere Windows runtime DLL collection enabled")
     set(_protobuf_bin_dirs "")
     if(DEFINED protobuf_BIN_DIRS_RELEASE)
         list(APPEND _protobuf_bin_dirs ${protobuf_BIN_DIRS_RELEASE})
@@ -463,12 +467,14 @@ if(WIN32)
     if(DEFINED protobuf_BIN_DIRS)
         list(APPEND _protobuf_bin_dirs ${protobuf_BIN_DIRS})
     endif()
+    message(STATUS "protobuf bin dirs: ${_protobuf_bin_dirs}")
     foreach(_dir IN LISTS _protobuf_bin_dirs)
         file(GLOB _protobuf_dlls
             "${_dir}/libprotobuf*.dll"
             "${_dir}/protobuf*.dll"
             "${_dir}/libutf8_validity.dll"
         )
+        message(STATUS "protobuf dlls from ${_dir}: ${_protobuf_dlls}")
         list(APPEND _conan_runtime_dlls ${_protobuf_dlls})
     endforeach()
 
@@ -482,15 +488,49 @@ if(WIN32)
     if(DEFINED abseil_BIN_DIRS)
         list(APPEND _abseil_bin_dirs ${abseil_BIN_DIRS})
     endif()
+    message(STATUS "abseil bin dirs: ${_abseil_bin_dirs}")
     foreach(_dir IN LISTS _abseil_bin_dirs)
         file(GLOB _abseil_dlls
             "${_dir}/abseil_dll.dll"
             "${_dir}/absl_*.dll"
             "${_dir}/libutf8_validity.dll"
         )
+        message(STATUS "abseil dlls from ${_dir}: ${_abseil_dlls}")
         list(APPEND _conan_runtime_dlls ${_abseil_dlls})
     endforeach()
+
+    set(_openssl_bin_dirs "")
+    if(DEFINED openssl_OpenSSL_SSL_BIN_DIRS_DEBUG)
+        list(APPEND _openssl_bin_dirs ${openssl_OpenSSL_SSL_BIN_DIRS_DEBUG})
+    endif()
+    if(DEFINED openssl_OpenSSL_SSL_BIN_DIRS_RELEASE)
+        list(APPEND _openssl_bin_dirs ${openssl_OpenSSL_SSL_BIN_DIRS_RELEASE})
+    endif()
+    if(DEFINED openssl_OpenSSL_Crypto_BIN_DIRS_DEBUG)
+        list(APPEND _openssl_bin_dirs ${openssl_OpenSSL_Crypto_BIN_DIRS_DEBUG})
+    endif()
+    if(DEFINED openssl_OpenSSL_Crypto_BIN_DIRS_RELEASE)
+        list(APPEND _openssl_bin_dirs ${openssl_OpenSSL_Crypto_BIN_DIRS_RELEASE})
+    endif()
+    if(DEFINED openssl_BIN_DIRS_DEBUG)
+        list(APPEND _openssl_bin_dirs ${openssl_BIN_DIRS_DEBUG})
+    endif()
+    if(DEFINED openssl_BIN_DIRS_RELEASE)
+        list(APPEND _openssl_bin_dirs ${openssl_BIN_DIRS_RELEASE})
+    endif()
+    list(REMOVE_DUPLICATES _openssl_bin_dirs)
+    message(STATUS "openssl component bin dirs: ${_openssl_bin_dirs}")
+    foreach(_dir IN LISTS _openssl_bin_dirs)
+        file(GLOB _openssl_dlls
+            "${_dir}/libssl*.dll"
+            "${_dir}/libcrypto*.dll"
+        )
+        message(STATUS "openssl dlls from ${_dir}: ${_openssl_dlls}")
+        list(APPEND _conan_runtime_dlls ${_openssl_dlls})
+    endforeach()
+
     list(REMOVE_DUPLICATES _conan_runtime_dlls)
+    message(STATUS "final Conan runtime DLLs: ${_conan_runtime_dlls}")
 
     if(_conan_runtime_dlls)
         add_custom_command(TARGET CaveWhere POST_BUILD
@@ -500,6 +540,8 @@ if(WIN32)
             COMMAND_EXPAND_LISTS
             COMMENT "Copying Conan runtime DLLs next to CaveWhere.exe."
         )
+    else()
+        message(WARNING "No Conan runtime DLLs were discovered for CaveWhere on Windows")
     endif()
 
     # add_custom_command(TARGET CaveWhere POST_BUILD

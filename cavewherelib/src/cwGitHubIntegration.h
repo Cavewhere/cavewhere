@@ -1,5 +1,7 @@
 #pragma once
 
+#include "CaveWhereLibExport.h"
+
 //Qt
 #include <QObject>
 #include <QVariantMap>
@@ -51,7 +53,7 @@ struct QRangeModel::RowOptions<::cwGitHubRepositoryItem>
 };
 QT_END_NAMESPACE
 
-class cwGitHubIntegration : public QObject
+class CAVEWHERE_LIB_EXPORT cwGitHubIntegration : public QObject
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(GitHubIntegration)
@@ -81,6 +83,7 @@ public:
 
     explicit cwGitHubIntegration(cwRemoteCredentialStore* credentialStore,
                                  QObject* parent = nullptr);
+    ~cwGitHubIntegration() override;
 
     AuthState authState() const { return m_authState; }
     QString userCode() const { return m_deviceInfo.userCode; }
