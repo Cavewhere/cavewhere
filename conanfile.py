@@ -46,6 +46,7 @@ class CaveWhereConan(ConanFile):
             self.requires("expat/[>=2.6.2]", override=True)
             self.requires("libpng/[>=1.6.44]", override=True)
             self.requires("proj/[>=9.3.1]")
+            self.requires("nlohmann_json/[>=3.12.0]", override=True)
 
         #Fixes a build issue on macos
         # if self.settings.os == "Macos":
