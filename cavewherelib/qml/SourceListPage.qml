@@ -158,7 +158,6 @@ StandardPage {
             horizontalAlignment: Text.AlignHCenter
             visible: listViewId.count === 0
             text: qsTr("No caving areas created or opened yet.")
-            color: Qt.darkGray
         }
     }
 

@@ -35,7 +35,7 @@ QC.ScrollView {
         Q.Item {
             implicitHeight: versionControlId.height
 
-            Q.Text {
+            BodyText {
                 id: versionControlId
                 width: columnLayoutId.width
                 text: "CaveWhere uses version control (Git) to keep track of changes to your cave data. Your name and email are used to record who made each change—just like signing your work. This information stays with your files and helps with collaboration, even if you’re working offline."
@@ -46,7 +46,7 @@ QC.ScrollView {
         Q.Item {
             implicitHeight: versionControlPrivacyId.height
 
-            Q.Text {
+            BodyText {
                 id: versionControlPrivacyId
                 width: columnLayoutId.width
                 font.italic: true
