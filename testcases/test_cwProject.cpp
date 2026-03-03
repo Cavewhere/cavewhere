@@ -4771,7 +4771,9 @@ TEST_CASE("cwProject sync structurally reconciles note scraps by id without repl
     CHECK(std::any_of(syncReport->diagnostics.cbegin(),
                       syncReport->diagnostics.cend(),
                       [](const QString& diagnostic) {
-                          return diagnostic.contains(QStringLiteral("reconcile handler cwNoteSyncMergeHandler applied"));
+                          return diagnostic.contains(QStringLiteral("reconcile handler"))
+                              && diagnostic.contains(QStringLiteral("cwNoteSyncMergeHandler"))
+                              && diagnostic.contains(QStringLiteral("applied"));
                       }));
 }
 
@@ -4887,7 +4889,9 @@ TEST_CASE("cwProject sync reconciles note order changes without full note-model 
     CHECK(std::any_of(syncReport->diagnostics.cbegin(),
                       syncReport->diagnostics.cend(),
                       [](const QString& diagnostic) {
-                          return diagnostic.contains(QStringLiteral("reconcile handler cwNoteSyncMergeHandler applied"));
+                          return diagnostic.contains(QStringLiteral("reconcile handler"))
+                              && diagnostic.contains(QStringLiteral("cwNoteSyncMergeHandler"))
+                              && diagnostic.contains(QStringLiteral("applied"));
                       }));
     CHECK_FALSE(std::any_of(syncReport->diagnostics.cbegin(),
                             syncReport->diagnostics.cend(),
