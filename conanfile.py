@@ -48,6 +48,9 @@ class CaveWhereConan(ConanFile):
             self.requires("proj/[>=9.3.1]")
             self.requires("nlohmann_json/[>=3.12.0]", override=True)
 
+        if self.settings.os == "Linux":
+            self.requires("xorg-proto/[=2024.1]", override=True)
+
         #Fixes a build issue on macos
         # if self.settings.os == "Macos":
         #     # Fixes a build issue on macOS
