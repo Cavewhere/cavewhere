@@ -4178,6 +4178,8 @@ TEST_CASE("cwProject sync keeps repository clean for local trip rename with remo
     const QString renamedSecondNoteFilePath = ProjectFilenameTestHelper::absolutePath(secondLocalNote);
     const QString renamedFirstImagePath = ProjectFilenameTestHelper::absolutePath(firstLocalNote, firstLocalNote->image().path());
     const QString renamedSecondImagePath = ProjectFilenameTestHelper::absolutePath(secondLocalNote, secondLocalNote->image().path());
+    const QString renamedFirstImageRelativePath = QDir(localRepoPath).relativeFilePath(renamedFirstImagePath);
+    const QString renamedSecondImageRelativePath = QDir(localRepoPath).relativeFilePath(renamedSecondImagePath);
 
     CHECK(QFileInfo::exists(renamedTripFilePath));
     CHECK(QFileInfo::exists(renamedFirstNoteFilePath));
@@ -4381,6 +4383,8 @@ TEST_CASE("cwProject sync keeps repository clean for remote trip rename with loc
     const QString renamedSecondNoteFilePath = ProjectFilenameTestHelper::absolutePath(secondLocalNote);
     const QString renamedFirstImagePath = ProjectFilenameTestHelper::absolutePath(firstLocalNote, firstLocalNote->image().path());
     const QString renamedSecondImagePath = ProjectFilenameTestHelper::absolutePath(secondLocalNote, secondLocalNote->image().path());
+    const QString renamedFirstImageRelativePath = QDir(localRepoPath).relativeFilePath(renamedFirstImagePath);
+    const QString renamedSecondImageRelativePath = QDir(localRepoPath).relativeFilePath(renamedSecondImagePath);
 
     CHECK(QFileInfo::exists(renamedTripFilePath));
     CHECK(QFileInfo::exists(renamedFirstNoteFilePath));
@@ -4424,6 +4428,24 @@ TEST_CASE("cwProject sync keeps repository clean for remote trip rename with loc
     });
     const git_oid mergedRemoteHead = headOid(syncRemoteRepo);
 
+    const QByteArray mergedFirstImageBlob = readBlobFromCommit(localRepo,
+                                                               mergedHead,
+                                                               renamedFirstImageRelativePath);
+    const QByteArray mergedSecondImageBlob = readBlobFromCommit(localRepo,
+                                                                mergedHead,
+                                                                renamedSecondImageRelativePath);
+    REQUIRE_FALSE(mergedFirstImageBlob.isEmpty());
+    REQUIRE_FALSE(mergedSecondImageBlob.isEmpty());
+
+    QQuickGit::LfsPointer mergedFirstPointer;
+    QQuickGit::LfsPointer mergedSecondPointer;
+    REQUIRE(QQuickGit::LfsPointer::parse(mergedFirstImageBlob, &mergedFirstPointer));
+    REQUIRE(mergedFirstPointer.isValid());
+    REQUIRE(QQuickGit::LfsPointer::parse(mergedSecondImageBlob, &mergedSecondPointer));
+    REQUIRE(mergedSecondPointer.isValid());
+    CHECK(mergedFirstPointer.oid == firstSeedOid);
+    CHECK(mergedSecondPointer.oid == secondSeedOid);
+
     project->errorModel()->clear();
     REQUIRE(project->sync());
     rootData->futureManagerModel()->waitForFinished();
@@ -4436,6 +4458,161 @@ TEST_CASE("cwProject sync keeps repository clean for remote trip rename with loc
     CHECK(git_oid_cmp(&mergedRemoteHead, &afterNoOpRemoteHead) == 0);
     requireCleanRepository(repository);
     requireNoUnmergedIndexEntries(repository);
+
+    QTemporaryDir verifyCloneDir;
+    REQUIRE(verifyCloneDir.isValid());
+    const QString verifyClonePath = QDir(verifyCloneDir.path()).filePath(QStringLiteral("verify-clone"));
+
+    QQuickGit::GitRepository verifyCloneRepository;
+    verifyCloneRepository.setDirectory(QDir(verifyClonePath));
+    verifyCloneRepository.setAccount(rootData->account());
+
+    auto verifyCloneFuture = verifyCloneRepository.clone(QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(AsyncFuture::waitForFinished(verifyCloneFuture, 10000));
+    INFO("Verify clone error:" << verifyCloneFuture.result().errorMessage().toStdString());
+    REQUIRE_FALSE(verifyCloneFuture.result().hasError());
+
+    REQUIRE(setGitConfigString(verifyClonePath, "lfs.url", lfsServer.endpoint()));
+
+    auto verifyProject = std::make_unique<cwProject>();
+    addTokenManager(verifyProject.get());
+    const QString verifyProjectPath = QDir(verifyClonePath).filePath(QFileInfo(projectPath).fileName());
+    REQUIRE(QFileInfo::exists(verifyProjectPath));
+    verifyProject->loadOrConvert(verifyProjectPath);
+    verifyProject->waitLoadToFinish();
+
+    REQUIRE(verifyProject->cavingRegion()->caveCount() == 1);
+    auto* verifyCave = verifyProject->cavingRegion()->cave(0);
+    REQUIRE(verifyCave != nullptr);
+    REQUIRE(verifyCave->tripCount() == 1);
+    auto* verifyTrip = verifyCave->trip(0);
+    REQUIRE(verifyTrip != nullptr);
+    REQUIRE(verifyTrip->notes()->rowCount() == 2);
+
+    cwImageProvider provider;
+    provider.setDataRootDir(verifyProject->dataRootDir());
+
+    for (cwNote* note : verifyTrip->notes()->notes()) {
+        REQUIRE(note != nullptr);
+        const QString storedPath = note->image().path();
+        INFO("Stored clone note image path: " << storedPath.toStdString());
+        CHECK(storedPath == QFileInfo(storedPath).fileName());
+
+        const QString absoluteImagePath = ProjectFilenameTestHelper::absolutePath(note, storedPath);
+        INFO("Resolved clone note image path: " << absoluteImagePath.toStdString());
+        CHECK(QFileInfo::exists(absoluteImagePath));
+
+        QFile imageFile(absoluteImagePath);
+        REQUIRE(imageFile.open(QIODevice::ReadOnly));
+        const QByteArray imageBytes = imageFile.readAll();
+        REQUIRE_FALSE(imageBytes.isEmpty());
+
+        QQuickGit::LfsPointer pointer;
+        const bool isPointer = QQuickGit::LfsPointer::parse(imageBytes, &pointer) && pointer.isValid();
+        INFO("Clone note image is LFS pointer: " << (isPointer ? "true" : "false"));
+        CHECK_FALSE(isPointer);
+        const QImage image = provider.image(absoluteImagePath);
+        CHECK_FALSE(image.isNull());
+    }
+
+    QTemporaryDir verifyUnhydratedCloneDir;
+    REQUIRE(verifyUnhydratedCloneDir.isValid());
+    const QString verifyUnhydratedClonePath = QDir(verifyUnhydratedCloneDir.path()).filePath(QStringLiteral("verify-clone-unhydrated"));
+
+    QQuickGit::GitRepository verifyUnhydratedCloneRepository;
+    verifyUnhydratedCloneRepository.setDirectory(QDir(verifyUnhydratedClonePath));
+    verifyUnhydratedCloneRepository.setAccount(rootData->account());
+
+    auto verifyUnhydratedCloneFuture = verifyUnhydratedCloneRepository.clone(QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(AsyncFuture::waitForFinished(verifyUnhydratedCloneFuture, 10000));
+    INFO("Verify unhydrated clone error:" << verifyUnhydratedCloneFuture.result().errorMessage().toStdString());
+    REQUIRE_FALSE(verifyUnhydratedCloneFuture.result().hasError());
+
+    REQUIRE(setGitConfigString(verifyUnhydratedClonePath, "lfs.url", lfsServer.endpoint()));
+
+    git_repository* unhydratedRepo = nullptr;
+    REQUIRE(git_repository_open(&unhydratedRepo, verifyUnhydratedClonePath.toLocal8Bit().constData()) == GIT_OK);
+    auto unhydratedRepoGuard = qScopeGuard([&unhydratedRepo]() {
+        if (unhydratedRepo) {
+            git_repository_free(unhydratedRepo);
+        }
+    });
+
+    const QByteArray firstPointerBlob = readBlobFromHead(unhydratedRepo, renamedFirstImageRelativePath);
+    const QByteArray secondPointerBlob = readBlobFromHead(unhydratedRepo, renamedSecondImageRelativePath);
+    REQUIRE_FALSE(firstPointerBlob.isEmpty());
+    REQUIRE_FALSE(secondPointerBlob.isEmpty());
+
+    const QString firstUnhydratedImagePath = QDir(verifyUnhydratedClonePath).filePath(renamedFirstImageRelativePath);
+    const QString secondUnhydratedImagePath = QDir(verifyUnhydratedClonePath).filePath(renamedSecondImageRelativePath);
+    REQUIRE(QFileInfo::exists(firstUnhydratedImagePath));
+    REQUIRE(QFileInfo::exists(secondUnhydratedImagePath));
+
+    {
+        QFile firstFile(firstUnhydratedImagePath);
+        REQUIRE(firstFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        REQUIRE(firstFile.write(firstPointerBlob) == firstPointerBlob.size());
+    }
+    {
+        QFile secondFile(secondUnhydratedImagePath);
+        REQUIRE(secondFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        REQUIRE(secondFile.write(secondPointerBlob) == secondPointerBlob.size());
+    }
+
+    QQuickGit::LfsPointer firstPointer;
+    QQuickGit::LfsPointer secondPointer;
+    REQUIRE(QQuickGit::LfsPointer::parse(firstPointerBlob, &firstPointer));
+    REQUIRE(firstPointer.isValid());
+    REQUIRE(QQuickGit::LfsPointer::parse(secondPointerBlob, &secondPointer));
+    REQUIRE(secondPointer.isValid());
+
+    const QString unhydratedGitDirPath = gitDirPathFromRepository(unhydratedRepo);
+    REQUIRE_FALSE(unhydratedGitDirPath.isEmpty());
+    const QString lfsObjectsPath = QDir(unhydratedGitDirPath).filePath(QStringLiteral("lfs/objects"));
+    if (QFileInfo::exists(lfsObjectsPath)) {
+        REQUIRE(QDir(lfsObjectsPath).removeRecursively());
+    }
+    REQUIRE(QDir().mkpath(lfsObjectsPath));
+    CHECK_FALSE(QFileInfo::exists(QQuickGit::LfsStore::objectPath(unhydratedGitDirPath, firstPointer.oid)));
+    CHECK_FALSE(QFileInfo::exists(QQuickGit::LfsStore::objectPath(unhydratedGitDirPath, secondPointer.oid)));
+
+    auto verifyUnhydratedProject = std::make_unique<cwProject>();
+    addTokenManager(verifyUnhydratedProject.get());
+    const QString verifyUnhydratedProjectPath = QDir(verifyUnhydratedClonePath).filePath(QFileInfo(projectPath).fileName());
+    REQUIRE(QFileInfo::exists(verifyUnhydratedProjectPath));
+    verifyUnhydratedProject->loadOrConvert(verifyUnhydratedProjectPath);
+    verifyUnhydratedProject->waitLoadToFinish();
+
+    REQUIRE(verifyUnhydratedProject->cavingRegion()->caveCount() == 1);
+    auto* verifyUnhydratedCave = verifyUnhydratedProject->cavingRegion()->cave(0);
+    REQUIRE(verifyUnhydratedCave != nullptr);
+    REQUIRE(verifyUnhydratedCave->tripCount() == 1);
+    auto* verifyUnhydratedTrip = verifyUnhydratedCave->trip(0);
+    REQUIRE(verifyUnhydratedTrip != nullptr);
+    REQUIRE(verifyUnhydratedTrip->notes()->rowCount() == 2);
+
+    cwImageProvider unhydratedProvider;
+    unhydratedProvider.setDataRootDir(verifyUnhydratedProject->dataRootDir());
+
+    for (cwNote* note : verifyUnhydratedTrip->notes()->notes()) {
+        REQUIRE(note != nullptr);
+        const QString absoluteImagePath = ProjectFilenameTestHelper::absolutePath(note, note->image().path());
+        INFO("Resolved unhydrated clone note image path: " << absoluteImagePath.toStdString());
+        CHECK(QFileInfo::exists(absoluteImagePath));
+
+        QFile imageFile(absoluteImagePath);
+        REQUIRE(imageFile.open(QIODevice::ReadOnly));
+        const QByteArray imageBytes = imageFile.readAll();
+        REQUIRE_FALSE(imageBytes.isEmpty());
+
+        QQuickGit::LfsPointer pointer;
+        const bool isPointer = QQuickGit::LfsPointer::parse(imageBytes, &pointer) && pointer.isValid();
+        INFO("Unhydrated clone note image is LFS pointer after load: " << (isPointer ? "true" : "false"));
+        CHECK_FALSE(isPointer);
+
+        const QImage image = unhydratedProvider.image(absoluteImagePath);
+        CHECK_FALSE(image.isNull());
+    }
 }
 
 TEST_CASE("cwProject sync incrementally reconciles note asset updates after remote trip rename", "[cwProject][sync][trip-rename]") {

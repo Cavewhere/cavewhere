@@ -2033,43 +2033,56 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                                                 return AsyncFuture::completed(canceledResult());
                                             }
 
-                                            //Find all the cave file
-                                            auto projectDataFuture = cwSaveLoad::loadAll(filename);
+                                            auto hydrateFuture = QQuickGit::GitRepository::hydrateLfsFiles(QFileInfo(filename).absoluteDir(),
+                                                                                                           this);
 
-                                            d->futureToken.addJob({QFuture<void>(projectDataFuture), QStringLiteral("Loading")});
+                                            d->futureToken.addJob({QFuture<void>(hydrateFuture), QStringLiteral("Hydrating LFS")});
 
-                                            return AsyncFuture::observe(projectDataFuture)
-                                                .context(this, [this, projectDataFuture, filename, loadGeneration, canceledResult]() {
-                                                    return mbind(projectDataFuture, [this, projectDataFuture, filename, loadGeneration, canceledResult](const ResultBase&) {
-                                                        if (d->operationGeneration != loadGeneration
-                                                            || d->retiring
-                                                            || d->m_regionTreeModel->cavingRegion() == nullptr) {
-                                                            return canceledResult();
+                                            return AsyncFuture::observe(hydrateFuture)
+                                                .context(this, [this, hydrateFuture, filename, loadGeneration, canceledResult]() {
+                                                    return mbind(hydrateFuture, [this, filename, loadGeneration, canceledResult](const ResultBase&) {
+                                                        if (d->operationGeneration != loadGeneration || d->retiring) {
+                                                            return AsyncFuture::completed(canceledResult());
                                                         }
 
-                                                        // setTemporaryProject(false);
-                                                        //The filename needs to be set first because, image providers should
-                                                        //have the filename before the region model is set
-                                                        setFileName(filename);
-                                                        setTemporary(false);
+                                                        auto projectDataFuture = cwSaveLoad::loadAll(filename);
 
-                                                        setSaveEnabled(false);
-                                                        const auto& loadData = projectDataFuture.result().value();
-                                                        d->projectMetadata = loadData.metadata;
-                                                        d->pendingIdentityRepairSave = loadData.identityRepair.required;
-                                                        emit dataRootChanged();
-                                                        d->m_regionTreeModel->cavingRegion()->setData(loadData.region);
+                                                        d->futureToken.addJob({QFuture<void>(projectDataFuture), QStringLiteral("Loading")});
 
-                                                        // d->projectFileName = filename;
+                                                        return AsyncFuture::observe(projectDataFuture)
+                                                            .context(this, [this, projectDataFuture, filename, loadGeneration, canceledResult]() {
+                                                                return mbind(projectDataFuture, [this, projectDataFuture, filename, loadGeneration, canceledResult](const ResultBase&) {
+                                                                    if (d->operationGeneration != loadGeneration
+                                                                        || d->retiring
+                                                                        || d->m_regionTreeModel->cavingRegion() == nullptr) {
+                                                                        return canceledResult();
+                                                                    }
 
-                                                        d->resetObjectStates(this);
+                                                                    // setTemporaryProject(false);
+                                                                    //The filename needs to be set first because, image providers should
+                                                                    //have the filename before the region model is set
+                                                                    setFileName(filename);
+                                                                    setTemporary(false);
 
-                                                        setSaveEnabled(true);
+                                                                    setSaveEnabled(false);
+                                                                    const auto& loadData = projectDataFuture.result().value();
+                                                                    d->projectMetadata = loadData.metadata;
+                                                                    d->pendingIdentityRepairSave = loadData.identityRepair.required;
+                                                                    emit dataRootChanged();
+                                                                    d->m_regionTreeModel->cavingRegion()->setData(loadData.region);
 
-                                                        connectTreeModel();
-                                                        ++d->modelMutationEpoch;
+                                                                    // d->projectFileName = filename;
 
-                                                        return ResultBase();
+                                                                    d->resetObjectStates(this);
+
+                                                                    setSaveEnabled(true);
+
+                                                                    connectTreeModel();
+                                                                    ++d->modelMutationEpoch;
+
+                                                                    return ResultBase();
+                                                                });
+                                                            }).future();
                                                     });
                                                 }).future();
                                         }).unwrap();
