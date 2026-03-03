@@ -275,12 +275,15 @@ if(UNIX AND NOT APPLE)
     set(APPIMAGE_LIB_DIR "${APPIMAGE_USR_DIR}/lib")
     set(APPIMAGE_SHARE_DIR "${APPIMAGE_USR_DIR}/share")
     set(APPIMAGE_APPLICATIONS_DIR "${APPIMAGE_SHARE_DIR}/applications")
+    set(APPIMAGE_MIME_PACKAGES_DIR "${APPIMAGE_SHARE_DIR}/mime/packages")
     set(APPIMAGE_QML_DIR "${APPIMAGE_USR_DIR}/qml")
     set(APPIMAGE_ICONS_DIR "${APPIMAGE_SHARE_DIR}/icons/hicolor/512x512/apps")
     set(APPIMAGE_DESKTOP_IN "${CMAKE_SOURCE_DIR}/installer/linux/CaveWhere.desktop.in")
     set(APPIMAGE_APPRUN_IN "${CMAKE_SOURCE_DIR}/installer/linux/AppRun.in")
+    set(APPIMAGE_MIME_XML_SOURCE "${CMAKE_SOURCE_DIR}/installer/linux/cavewhere-mime.xml")
     set(APPIMAGE_DESKTOP_FILE "${APPIMAGE_ROOT_DIR}/CaveWhere.desktop")
     set(APPIMAGE_APPRUN_FILE "${APPIMAGE_ROOT_DIR}/AppRun")
+    set(APPIMAGE_MIME_XML_TARGET "${APPIMAGE_MIME_PACKAGES_DIR}/cavewhere.xml")
     set(APPIMAGE_ICON_SOURCE "${CMAKE_SOURCE_DIR}/cavewherelib/icons/cave512x512.png")
     set(APPIMAGE_ICON_TARGET "${APPIMAGE_ICONS_DIR}/CaveWhere.png")
     set(APPIMAGE_STAGE_STAMP "${APPIMAGE_ROOT_DIR}/appimage-stage.stamp")
@@ -297,6 +300,7 @@ if(UNIX AND NOT APPLE)
     set(APPIMAGE_METADATA_DEPENDS
         "${APPIMAGE_DESKTOP_IN}"
         "${APPIMAGE_APPRUN_IN}"
+        "${APPIMAGE_MIME_XML_SOURCE}"
         "${APPIMAGE_VERSION_FILE}"
     )
     if(TARGET update_version)
@@ -442,6 +446,7 @@ if(UNIX AND NOT APPLE)
         COMMAND ${CMAKE_COMMAND} -E make_directory "${APPIMAGE_BIN_DIR}"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${APPIMAGE_LIB_DIR}"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${APPIMAGE_APPLICATIONS_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${APPIMAGE_MIME_PACKAGES_DIR}"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${APPIMAGE_QML_DIR}"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${APPIMAGE_ICONS_DIR}"
         COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:CaveWhere>" "${APPIMAGE_BIN_DIR}/CaveWhere"
@@ -450,6 +455,7 @@ if(UNIX AND NOT APPLE)
         COMMAND ${CMAKE_COMMAND} -E copy ${SVX_MESSAGE_FILES} "${APPIMAGE_LIB_DIR}"
         COMMAND ${CMAKE_COMMAND} -E copy "${APPIMAGE_DESKTOP_FILE}" "${APPIMAGE_APPLICATIONS_DIR}/CaveWhere.desktop"
         COMMAND ${CMAKE_COMMAND} -E copy "${APPIMAGE_APPRUN_FILE}" "${APPIMAGE_APPDIR}/AppRun"
+        COMMAND ${CMAKE_COMMAND} -E copy "${APPIMAGE_MIME_XML_SOURCE}" "${APPIMAGE_MIME_XML_TARGET}"
         COMMAND ${CMAKE_COMMAND} -E copy "${APPIMAGE_ICON_SOURCE}" "${APPIMAGE_ICON_TARGET}"
         ${APPIMAGE_QML_COPY_COMMANDS}
         COMMAND ${CMAKE_COMMAND} -E env /bin/sh -c "chmod +x \"${APPIMAGE_APPDIR}/AppRun\""
@@ -460,6 +466,7 @@ if(UNIX AND NOT APPLE)
             survexport
             ${SVX_MESSAGE_FILES}
             messageFiles
+            "${APPIMAGE_MIME_XML_SOURCE}"
             "${APPIMAGE_DESKTOP_FILE}"
             "${APPIMAGE_APPRUN_FILE}"
         COMMENT "Staging AppDir for AppImage"

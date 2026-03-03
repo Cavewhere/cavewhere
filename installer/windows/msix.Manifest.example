@@ -31,6 +31,7 @@
         <uap3:Extension Category="windows.fileTypeAssociation">
           <uap3:FileTypeAssociation Name="cw">
             <uap:SupportedFileTypes>
+              <uap:FileType>.cwproj</uap:FileType>
               <uap:FileType>.cw</uap:FileType>
             </uap:SupportedFileTypes>
             <uap:Logo>Assets\cw.png</uap:Logo>
@@ -46,4 +47,3 @@
     <rescap:Capability Name="runFullTrust" />
   </Capabilities>
 </Package>
-XXX

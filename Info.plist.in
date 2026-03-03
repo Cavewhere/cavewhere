@@ -41,6 +41,7 @@
     <dict>
       <key>CFBundleTypeExtensions</key>
       <array>
+        <string>cwproj</string>
         <string>cw</string>
       </array>
       <key>CFBundleTypeName</key>
@@ -73,6 +74,7 @@
       <dict>
         <key>public.filename-extension</key>
         <array>
+          <string>cwproj</string>
           <string>cw</string>
         </array>
       </dict>

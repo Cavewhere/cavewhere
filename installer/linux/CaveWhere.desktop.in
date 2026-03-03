@@ -6,4 +6,5 @@ Exec=CaveWhere
 Icon=CaveWhere
 Terminal=false
 Categories=Science;Graphics;
+MimeType=application/vnd.cavewhere.project;
 X-AppImage-Version=@CAVEWHERE_VERSION@

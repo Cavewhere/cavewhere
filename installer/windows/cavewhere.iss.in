@@ -49,6 +49,7 @@ Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Registry]
+Root: HKLM; Subkey: "Software\Classes\.cwproj"; ValueType: string; ValueName: ""; ValueData: "CaveWhereProjectFile"; Flags: uninsdeletevalue
 Root: HKLM; Subkey: "Software\Classes\.cw"; ValueType: string; ValueName: ""; ValueData: "CaveWhereProjectFile"; Flags: uninsdeletevalue
 Root: HKLM; Subkey: "Software\Classes\CaveWhereProjectFile"; ValueType: string; ValueName: ""; ValueData: "CaveWhere File"; Flags: uninsdeletekey
 Root: HKLM; Subkey: "Software\Classes\CaveWhereProjectFile\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\CaveWhere.EXE,0"
@@ -96,5 +97,4 @@ begin
     Exec(ExpandConstant(UninstallString), '', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   end;
 end;
-
 
