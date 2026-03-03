@@ -25,6 +25,7 @@ using namespace Catch;
 #include "cwImageResolution.h"
 #include "cwUnits.h"
 #include "cwScrap.h"
+#include "cwProjectedProfileScrapViewMatrix.h"
 #include "cwSignalSpy.h"
 #include "cwRemoteRepositoryCloner.h"
 #include "cwRepositoryModel.h"
@@ -7364,6 +7365,121 @@ static QByteArray fileSha256(const QString& absolutePath) {
         hash.addData(file.read(256 * 1024));
     }
     return hash.result();
+}
+
+TEST_CASE("Auto-calculated scrap transforms are ignored by persistence", "[cwProject][cwScrap]")
+{
+    auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
+    project->waitSaveToFinish();
+
+    auto* cave = new cwCave();
+    cave->setName(QStringLiteral("auto-transform-cave"));
+
+    auto* trip = new cwTrip();
+    trip->setName(QStringLiteral("auto-transform-trip"));
+    cave->addTrip(trip);
+
+    project->cavingRegion()->addCave(cave);
+    project->waitSaveToFinish();
+
+    cwSurveyNoteModel* const noteModel = trip->notes();
+    REQUIRE(noteModel != nullptr);
+
+    auto* note = new cwNote();
+    note->setName(QStringLiteral("Auto Transform Note"));
+    cwImage image;
+    image.setPath(QStringLiteral("auto-transform.png"));
+    note->setImage(image);
+    noteModel->addNotes(QList<cwNote*>{note});
+    project->waitSaveToFinish();
+
+    auto* scrap = new cwScrap();
+    note->addScrap(scrap);
+    scrap->setType(cwScrap::ProjectedProfile);
+    scrap->setCalculateNoteTransform(true);
+    project->waitSaveToFinish();
+
+    auto* projectedView = qobject_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix());
+    REQUIRE(projectedView != nullptr);
+
+    const QString noteFile = ProjectFilenameTestHelper::absolutePath(note);
+    INFO("Note file:" << noteFile.toStdString());
+    REQUIRE(QFileInfo::exists(noteFile));
+
+    const QString sentinelCavewhereVersion = QStringLiteral("sentinel-auto-transform-version");
+    {
+        auto noteProto = loadProtoFromJsonFile<CavewhereProto::Note>(noteFile);
+        REQUIRE(noteProto.has_fileversion());
+        noteProto.mutable_fileversion()->set_cavewhereversion(sentinelCavewhereVersion.toStdString());
+        writeProtoToJsonFile(noteFile, noteProto);
+    }
+
+    auto baselineReload = std::make_unique<cwProject>();
+    addTokenManager(baselineReload.get());
+    baselineReload->loadOrConvert(project->filename());
+    baselineReload->waitLoadToFinish();
+    cwScrap* const baselineScrap = firstScrap(baselineReload.get());
+    REQUIRE(baselineScrap != nullptr);
+    auto* baselineView = qobject_cast<cwProjectedProfileScrapViewMatrix*>(baselineScrap->viewMatrix());
+    REQUIRE(baselineView != nullptr);
+    const double expectedNorthUp = baselineScrap->noteTransformation()->northUp();
+    const double expectedScale = baselineScrap->noteTransformation()->scale();
+    const double expectedAzimuth = baselineView->azimuth();
+    const auto expectedDirection = baselineView->direction();
+
+    const QDateTime baselineLastModified = QFileInfo(noteFile).lastModified().toUTC();
+    REQUIRE(baselineLastModified.isValid());
+    const QByteArray baselineHash = fileSha256(noteFile);
+    REQUIRE_FALSE(baselineHash.isEmpty());
+
+    scrap->noteTransformation()->setNorthUp(123.4);
+    scrap->noteTransformation()->setScale(1.0 / 250.0);
+    projectedView->setAzimuth(217.5);
+    projectedView->setDirection(cwProjectedProfileScrapViewMatrix::RightToLeft);
+    project->waitSaveToFinish();
+
+    const auto savedNoteProto = loadProtoFromJsonFile<CavewhereProto::Note>(noteFile);
+    REQUIRE(savedNoteProto.has_fileversion());
+    REQUIRE(savedNoteProto.scraps_size() == 1);
+    const auto& savedScrapProto = savedNoteProto.scraps(0);
+    CHECK(QString::fromStdString(savedNoteProto.fileversion().cavewhereversion()) == sentinelCavewhereVersion);
+    CHECK(savedScrapProto.calculatenotetransform() == true);
+    CHECK_FALSE(savedScrapProto.has_notetransformation());
+    CHECK_FALSE(savedScrapProto.has_profileviewmatrix());
+    CHECK(QFileInfo(noteFile).lastModified().toUTC() == baselineLastModified);
+    CHECK(fileSha256(noteFile) == baselineHash);
+
+    auto injectedProto = savedNoteProto;
+    injectedProto.mutable_scraps(0)->set_calculatenotetransform(true);
+    injectedProto.mutable_scraps(0)->mutable_notetransformation()->set_northup(271.25);
+    injectedProto.mutable_scraps(0)->mutable_notetransformation()->mutable_scalenumerator()->set_value(1.0);
+    injectedProto.mutable_scraps(0)->mutable_notetransformation()->mutable_scalenumerator()->set_unit(
+        CavewhereProto::Units_LengthUnit_Meters);
+    injectedProto.mutable_scraps(0)->mutable_notetransformation()->mutable_scaledenominator()->set_value(999.0);
+    injectedProto.mutable_scraps(0)->mutable_notetransformation()->mutable_scaledenominator()->set_unit(
+        CavewhereProto::Units_LengthUnit_Meters);
+    injectedProto.mutable_scraps(0)->mutable_profileviewmatrix()->set_azimuth(42.0);
+    injectedProto.mutable_scraps(0)->mutable_profileviewmatrix()->set_direction(
+        CavewhereProto::ProjectedProfileScrapViewMatrix_Direction_RightToLeft);
+    writeProtoToJsonFile(noteFile, injectedProto);
+
+    auto reloaded = std::make_unique<cwProject>();
+    addTokenManager(reloaded.get());
+    reloaded->loadOrConvert(project->filename());
+    reloaded->waitLoadToFinish();
+
+    cwScrap* const loadedScrap = firstScrap(reloaded.get());
+    REQUIRE(loadedScrap != nullptr);
+    REQUIRE(loadedScrap->calculateNoteTransform() == true);
+
+    auto* loadedView = qobject_cast<cwProjectedProfileScrapViewMatrix*>(loadedScrap->viewMatrix());
+    REQUIRE(loadedView != nullptr);
+
+    CHECK(loadedScrap->noteTransformation()->northUp() == Approx(expectedNorthUp));
+    CHECK(loadedScrap->noteTransformation()->scale() == Approx(expectedScale));
+    CHECK(loadedView->azimuth() == Approx(expectedAzimuth));
+    CHECK(loadedView->direction() == expectedDirection);
 }
 
 TEST_CASE("LiDAR GLB persistence: file copy + stations", "[cwProject]") {

@@ -3483,11 +3483,13 @@ cwScrapData cwSaveLoad::fromProtoScrap(const CavewhereProto::Scrap &protoScrap)
         scrapData.leads.append(fromProtoLead(protoLead));
     }
 
-    // Load note transformation
-    scrapData.noteTransformation = fromProtoNoteTransformation(protoScrap.notetransformation());
-
     // Load calculate note transform flag
     scrapData.calculateNoteTransform = protoScrap.calculatenotetransform();
+
+    // Load note transformation only for manually-controlled scraps
+    if (!scrapData.calculateNoteTransform && protoScrap.has_notetransformation()) {
+        scrapData.noteTransformation = fromProtoNoteTransformation(protoScrap.notetransformation());
+    }
 
     //Generate the correct scrap type
     if(protoScrap.has_type()) {
@@ -3500,7 +3502,7 @@ cwScrapData cwSaveLoad::fromProtoScrap(const CavewhereProto::Scrap &protoScrap)
             break;
         case CavewhereProto::Scrap::ScrapType::Scrap_ScrapType_ProjectedProfile:
             // Load view matrix
-            if (protoScrap.has_profileviewmatrix()) {
+            if (!scrapData.calculateNoteTransform && protoScrap.has_profileviewmatrix()) {
                 scrapData.viewMatrix = fromProtoProjectedScraptViewMatrix(protoScrap.profileviewmatrix());
             } else {
                 scrapData.viewMatrix = std::make_unique<cwProjectedProfileScrapViewMatrix::Data>();
@@ -4156,14 +4158,20 @@ void cwSaveLoad::connectScrap(cwScrap *scrap)
     connect(scrap, &cwScrap::calculateNoteTransformChanged, this, saveNote);
     connect(scrap, &cwScrap::viewMatrixChanged, this, saveNote);
     connect(scrap, &cwScrap::typeChanged, this, saveNote);
-    connect(scrap->noteTransformation(), &cwNoteTranformation::northUpChanged, this, saveNote);
-    connect(scrap->noteTransformation(), &cwNoteTranformation::scaleChanged, this, saveNote);
+    const auto saveManualScrapTransform = [saveNote, scrap]() {
+        if(scrap->calculateNoteTransform()) {
+            return;
+        }
+        saveNote();
+    };
+    connect(scrap->noteTransformation(), &cwNoteTranformation::northUpChanged, this, saveManualScrapTransform);
+    connect(scrap->noteTransformation(), &cwNoteTranformation::scaleChanged, this, saveManualScrapTransform);
 
-    auto connectProjectedViewMatrixSignals = [this, saveNote, scrap]() {
+    auto connectProjectedViewMatrixSignals = [this, saveManualScrapTransform, scrap]() {
         if (auto projected = qobject_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix()))
         {
-            connect(projected, &cwProjectedProfileScrapViewMatrix::azimuthChanged, this, saveNote);
-            connect(projected, &cwProjectedProfileScrapViewMatrix::directionChanged, this, saveNote);
+            connect(projected, &cwProjectedProfileScrapViewMatrix::azimuthChanged, this, saveManualScrapTransform);
+            connect(projected, &cwProjectedProfileScrapViewMatrix::directionChanged, this, saveManualScrapTransform);
         }
     };
 

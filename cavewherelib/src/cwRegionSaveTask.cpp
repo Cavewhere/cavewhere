@@ -307,12 +307,14 @@ void cwRegionSaveTask::saveScrap(CavewhereProto::Scrap *protoScrap, cwScrap *scr
         saveLead(protoLead, lead);
     }
 
-    saveNoteTranformation(protoScrap->mutable_notetransformation(), scrap->noteTransformation());
     protoScrap->set_calculatenotetransform(scrap->calculateNoteTransform());
+    if(!scrap->calculateNoteTransform()) {
+        saveNoteTranformation(protoScrap->mutable_notetransformation(), scrap->noteTransformation());
+    }
     // saveTriangulatedData(protoScrap->mutable_triangledata(), scrap->triangulationData());
     protoScrap->set_type(static_cast<CavewhereProto::Scrap_ScrapType>(scrap->type()));
 
-    if(scrap->type() == cwScrap::ProjectedProfile) {
+    if(scrap->type() == cwScrap::ProjectedProfile && !scrap->calculateNoteTransform()) {
         saveProjectedScrapViewMatrix(protoScrap->mutable_profileviewmatrix(), static_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix()));
     }
 }
