@@ -308,7 +308,6 @@ if(BUILD_TESTING)
         Qt6::Qml
         Catch2::Catch2
         qt6keychain
-        libgit2::libgit2
         cavewherelib
     )
 
@@ -348,7 +347,10 @@ if(BUILD_TESTING)
         protobuf::libprotobuf
         SignalSpyChecker
         QuickQanavaplugin
-        libgit2::libgit2
+    )
+
+    target_include_directories(cavewhere-test PRIVATE
+        $<TARGET_PROPERTY:libgit2::libgit2,INTERFACE_INCLUDE_DIRECTORIES>
     )
 
     qt_import_qml_plugins(cavewhere-test)
