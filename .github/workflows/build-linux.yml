@@ -44,6 +44,7 @@ jobs:
             git \
             patchelf \
             pkg-config \
+            libsecret-1-dev \
             libgpgme-dev \
             libgcrypt20-dev \
             libglib2.0-dev \
