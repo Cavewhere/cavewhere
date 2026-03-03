@@ -7,34 +7,16 @@
 #include "cwSurveyNoteLiDARModel.h"
 #include "cwTrip.h"
 #include "cwSaveLoad.h"
+#include "cwSyncPathResolver.h"
 #include "GitRepository.h"
 #include "cwSyncMergeApplyUtils.h"
 
-#include <QFileInfo>
 #include <QHash>
 #include <QUuid>
 
 #include <optional>
 
 namespace {
-
-QString normalizeSyncPath(const QString& path)
-{
-    return QDir::cleanPath(QDir::fromNativeSeparators(path));
-}
-
-std::optional<QString> notesDirectoryPathForChangedFile(const QString& path)
-{
-    const QString normalized = normalizeSyncPath(path);
-    const QString marker = QStringLiteral("/notes/");
-    const int markerIndex = normalized.indexOf(marker, 0, Qt::CaseInsensitive);
-    if (markerIndex < 0) {
-        return std::nullopt;
-    }
-
-    return normalized.left(markerIndex + QStringLiteral("/notes").size());
-}
-
 std::optional<std::pair<QUuid, cwNoteLiDARData>> loadBaseLiDARDataForNote(
     const QDir& repoRoot,
     const QString& mergeBaseHead,
@@ -99,24 +81,11 @@ cwReconcileMergeResult cwNoteLiDARSyncMergeHandler::reconcile(const cwReconcileM
         QHash<QUuid, cwNoteLiDARData> baseNoteLiDARByNoteId;
     };
 
-    QHash<QString, cwTrip*> tripsByNotesDir;
-    for (cwCave* cave : context.region->caves()) {
-        if (cave == nullptr) {
-            continue;
-        }
-
-        for (cwTrip* trip : cave->trips()) {
-            if (trip == nullptr) {
-                continue;
-            }
-
-            const QString notesDirRelativePath = normalizeSyncPath(
-                context.repoRoot.relativeFilePath(context.saveLoad->dir(trip->notesLiDAR()).absolutePath()));
-            if (!notesDirRelativePath.isEmpty()) {
-                tripsByNotesDir.insert(notesDirRelativePath, trip);
-            }
-        }
-    }
+    const auto currentNoteIndex = cwSyncPathResolver::buildCurrentNoteLiDARIndex(context.repoRoot,
+                                                                                 context.saveLoad,
+                                                                                 context.region);
+    const auto loadedNoteIndex = cwSyncPathResolver::buildLoadedNoteLiDARIndex(context.repoRoot,
+                                                                               context.loadData->region);
 
     QHash<QUuid, const cwTripData*> loadedTripsById;
     for (const cwCaveData& caveData : context.loadData->region.caves) {
@@ -127,56 +96,22 @@ cwReconcileMergeResult cwNoteLiDARSyncMergeHandler::reconcile(const cwReconcileM
         }
     }
 
-    QHash<QString, NoteLiDARTripUpdate> tripUpdatesByNotesDir;
-    for (const QString& changedPath : context.report->changedPaths) {
-        const QString normalizedPath = normalizeSyncPath(changedPath);
-        if (!normalizedPath.endsWith(QStringLiteral(".cwnote3d"), Qt::CaseInsensitive)) {
-            continue;
-        }
-
-        const std::optional<QString> notesDirPath = notesDirectoryPathForChangedFile(normalizedPath);
-        if (!notesDirPath.has_value()) {
-            cwReconcileMergeResult result;
-            result.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;
-            result.handlerName = name();
-            result.fallbackReason = QStringLiteral("Changed LiDAR note path is outside notes directory layout.");
-            return result;
-        }
-
-        const auto tripIt = tripsByNotesDir.constFind(*notesDirPath);
-        if (tripIt == tripsByNotesDir.constEnd()) {
-            cwReconcileMergeResult result;
-            result.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;
-            result.handlerName = name();
-            result.fallbackReason = QStringLiteral("No trip matches changed LiDAR notes directory.");
-            return result;
-        }
-
-        auto updateIt = tripUpdatesByNotesDir.find(*notesDirPath);
-        if (updateIt == tripUpdatesByNotesDir.end()) {
-            NoteLiDARTripUpdate update;
-            update.trip = tripIt.value();
-            updateIt = tripUpdatesByNotesDir.insert(*notesDirPath, update);
-        }
-
-        const auto baseLidarData = loadBaseLiDARDataForNote(context.repoRoot,
-                                                            context.report->mergeBaseHead,
-                                                            normalizedPath);
-        if (baseLidarData.has_value()) {
-            updateIt->baseNoteLiDARByNoteId.insert(baseLidarData->first, baseLidarData->second);
-        }
-    }
-
-    if (tripUpdatesByNotesDir.isEmpty()) {
+    const QList<cwSyncPathResolver::TripChangeResolution> resolvedTripChanges =
+        cwSyncPathResolver::resolveChangedNoteLiDARPaths(context.repoRoot,
+                                                         context.saveLoad,
+                                                         context.region,
+                                                         context.report->changedPaths,
+                                                         currentNoteIndex,
+                                                         loadedNoteIndex);
+    if (resolvedTripChanges.isEmpty()) {
         return {};
     }
 
     QList<NoteLiDARTripUpdate> noteLiDARTripUpdates;
-    noteLiDARTripUpdates.reserve(tripUpdatesByNotesDir.size());
-    for (auto updateIt = tripUpdatesByNotesDir.cbegin();
-         updateIt != tripUpdatesByNotesDir.cend();
-         ++updateIt) {
-        NoteLiDARTripUpdate update = updateIt.value();
+    noteLiDARTripUpdates.reserve(resolvedTripChanges.size());
+    for (const cwSyncPathResolver::TripChangeResolution& tripChange : resolvedTripChanges) {
+        NoteLiDARTripUpdate update;
+        update.trip = tripChange.trip;
         if (update.trip == nullptr || update.trip->id().isNull()) {
             cwReconcileMergeResult result;
             result.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;
@@ -195,6 +130,18 @@ cwReconcileMergeResult cwNoteLiDARSyncMergeHandler::reconcile(const cwReconcileM
         }
 
         update.loadedTripData = loadedTripIt.value();
+
+        for (auto basePathIt = tripChange.baseLookupPathByObjectId.cbegin();
+             basePathIt != tripChange.baseLookupPathByObjectId.cend();
+             ++basePathIt) {
+            const auto baseLidarData = loadBaseLiDARDataForNote(context.repoRoot,
+                                                                context.report->mergeBaseHead,
+                                                                basePathIt.value());
+            if (baseLidarData.has_value()) {
+                update.baseNoteLiDARByNoteId.insert(baseLidarData->first, baseLidarData->second);
+            }
+        }
+
         noteLiDARTripUpdates.append(update);
     }
 

@@ -4,17 +4,16 @@
 #include "cwGlobals.h"
 #include "cwRegionLoadTask.h"
 #include "cwSaveLoad.h"
+#include "cwSyncPathResolver.h"
 #include "cwSyncMergeApplyUtils.h"
 #include "cwTrip.h"
 #include "cwTripMergeApplier.h"
 #include "cwTripMergePlanBuilder.h"
 #include "GitRepository.h"
-#include "cavewhere.pb.h"
-#include "google/protobuf/util/json_util.h"
 
-#include <QDebug>
 #include <QFile>
 #include <QHash>
+#include <QSet>
 #include <QUuid>
 
 #include <optional>
@@ -24,45 +23,6 @@ namespace {
 QString normalizeSyncPath(const QString& path)
 {
     return QDir::cleanPath(QDir::fromNativeSeparators(path));
-}
-
-QUuid uuidFromProtoString(const std::string& uuidString)
-{
-    if (uuidString.empty()) {
-        return QUuid();
-    }
-
-    const QUuid uuid(QString::fromStdString(uuidString));
-    return uuid.isNull() ? QUuid() : uuid;
-}
-
-std::optional<QUuid> loadTripIdFromPath(const QDir& repoRoot, const QString& relativeTripPath)
-{
-    QFile file(repoRoot.absoluteFilePath(relativeTripPath));
-    if (!file.open(QIODevice::ReadOnly)) {
-        return std::nullopt;
-    }
-    const QByteArray content = file.readAll();
-    if (content.isEmpty()) {
-        return std::nullopt;
-    }
-
-    CavewhereProto::Trip protoTrip;
-    if (!protoTrip.ParseFromArray(content.constData(), content.size())) {
-        const std::string jsonPayload(content.constData(),
-                                      static_cast<size_t>(content.size()));
-        const auto parseStatus = google::protobuf::util::JsonStringToMessage(jsonPayload, &protoTrip);
-        if (!parseStatus.ok()) {
-            return std::nullopt;
-        }
-    }
-
-    if (!protoTrip.has_id()) {
-        return std::nullopt;
-    }
-
-    const QUuid id = uuidFromProtoString(protoTrip.id());
-    return id.isNull() ? std::nullopt : std::make_optional(id);
 }
 
 std::optional<std::pair<QUuid, cwTripData>> loadBaseTripDataForPath(const QDir& repoRoot,
@@ -91,6 +51,28 @@ std::optional<std::pair<QUuid, cwTripData>> loadBaseTripDataForPath(const QDir& 
     }
 
     return std::make_optional(std::make_pair(baseTripData.id, baseTripData));
+}
+
+std::optional<std::pair<QUuid, cwTripData>> loadBaseTripDataForCandidatePaths(
+    const QDir& repoRoot,
+    const QString& mergeBaseHead,
+    const QStringList& candidatePaths)
+{
+    QSet<QString> seenPaths;
+    for (const QString& candidatePath : candidatePaths) {
+        const QString normalizedPath = normalizeSyncPath(candidatePath);
+        if (normalizedPath.isEmpty() || seenPaths.contains(normalizedPath)) {
+            continue;
+        }
+        seenPaths.insert(normalizedPath);
+
+        auto tripData = loadBaseTripDataForPath(repoRoot, mergeBaseHead, normalizedPath);
+        if (tripData.has_value()) {
+            return tripData;
+        }
+    }
+
+    return std::nullopt;
 }
 
 } // namespace
@@ -128,13 +110,20 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
     }
 
     QHash<QUuid, const cwTripData*> loadedTripsById;
+    QHash<QUuid, QString> loadedCaveNameByTripId;
     for (const cwCaveData& caveData : context.loadData->region.caves) {
         for (const cwTripData& tripData : caveData.trips) {
             if (!tripData.id.isNull()) {
                 loadedTripsById.insert(tripData.id, &tripData);
+                loadedCaveNameByTripId.insert(tripData.id, caveData.name);
             }
         }
     }
+
+    const auto currentTripIndex = cwSyncPathResolver::buildCurrentTripIndex(context.repoRoot,
+                                                                            context.region);
+    const auto loadedTripIndex = cwSyncPathResolver::buildLoadedTripIndex(context.repoRoot,
+                                                                          context.loadData->region);
 
     QList<cwTrip*> changedCurrentTrips;
     QList<const cwTripData*> changedLoadedTrips;
@@ -147,21 +136,33 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
             continue;
         }
 
-        const auto tripId = loadTripIdFromPath(context.repoRoot, normalizedPath);
-        if (!tripId.has_value()) {
+        const QSet<QUuid> resolvedTripIds = cwSyncPathResolver::resolveTripIdsForChangedPath(context.repoRoot,
+                                                                                              normalizedPath,
+                                                                                              currentTripIndex,
+                                                                                              loadedTripIndex);
+        if (resolvedTripIds.isEmpty()) {
             cwReconcileMergeResult result;
             result.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;
             result.handlerName = name();
             result.fallbackReason = QStringLiteral("Unable to resolve changed trip identity from descriptor.");
             return result;
         }
+        if (resolvedTripIds.size() > 1) {
+            cwReconcileMergeResult result;
+            result.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;
+            result.handlerName = name();
+            result.fallbackReason = QStringLiteral("Changed trip descriptor resolved to multiple identities.");
+            return result;
+        }
 
-        if (seenTripIds.contains(*tripId)) {
+        const QUuid tripId = *resolvedTripIds.cbegin();
+
+        if (seenTripIds.contains(tripId)) {
             continue;
         }
-        seenTripIds.insert(*tripId);
+        seenTripIds.insert(tripId);
 
-        const auto currentTripIt = currentTripsById.constFind(*tripId);
+        const auto currentTripIt = currentTripsById.constFind(tripId);
         if (currentTripIt == currentTripsById.constEnd()) {
             cwReconcileMergeResult result;
             result.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;
@@ -172,7 +173,7 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
 
         cwTrip* const currentTrip = currentTripIt.value();
 
-        const auto loadedTripIt = loadedTripsById.constFind(*tripId);
+        const auto loadedTripIt = loadedTripsById.constFind(tripId);
         if (loadedTripIt == loadedTripsById.constEnd()) {
             cwReconcileMergeResult result;
             result.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;
@@ -184,23 +185,31 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
         changedCurrentTrips.append(currentTrip);
         changedLoadedTrips.append(loadedTripIt.value());
 
-        const auto baseTripData = loadBaseTripDataForPath(context.repoRoot,
-                                                          context.report->mergeBaseHead,
-                                                          normalizedPath);
+        QStringList baseLookupPaths;
+        baseLookupPaths.append(normalizedPath);
+
+        const QString currentTripPath =
+            cwSyncPathResolver::currentTripDescriptorPath(context.repoRoot, currentTrip);
+        if (!currentTripPath.isEmpty()) {
+            baseLookupPaths.append(currentTripPath);
+        }
+
+        const QString loadedCaveName = loadedCaveNameByTripId.value(tripId);
+        if (!loadedCaveName.isEmpty()) {
+            const QString loadedTripPath = cwSyncPathResolver::loadedTripDescriptorPath(
+                context.repoRoot,
+                loadedCaveName,
+                loadedTripIt.value()->name);
+            if (!loadedTripPath.isEmpty()) {
+                baseLookupPaths.append(loadedTripPath);
+            }
+        }
+
+        auto baseTripData = loadBaseTripDataForCandidatePaths(context.repoRoot,
+                                                              context.report->mergeBaseHead,
+                                                              baseLookupPaths);
         if (baseTripData.has_value()) {
-            qDebug().noquote()
-                << QStringLiteral("[TripSyncDebug] base trip resolved path=%1 changedTripId=%2 baseTripId=%3 baseChunkCount=%4")
-                       .arg(normalizedPath)
-                       .arg(tripId->toString(QUuid::WithoutBraces))
-                       .arg(baseTripData->first.toString(QUuid::WithoutBraces))
-                       .arg(baseTripData->second.chunks.size());
             baseTripById.insert(baseTripData->first, baseTripData->second);
-        } else {
-            qDebug().noquote()
-                << QStringLiteral("[TripSyncDebug] base trip missing path=%1 changedTripId=%2 mergeBaseHead=%3")
-                       .arg(normalizedPath)
-                       .arg(tripId->toString(QUuid::WithoutBraces))
-                       .arg(context.report->mergeBaseHead);
         }
     }
 
@@ -214,13 +223,6 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
                                                                 context.applyMode == cwReconcileApplyMode::TargetCommitWins
                                                                     ? cwSyncMergeApplyUtils::ApplyMode::LoadedWins
                                                                     : cwSyncMergeApplyUtils::ApplyMode::ThreeWayMerge);
-    qDebug().noquote()
-        << QStringLiteral("[TripSyncDebug] trip merge preparation changedTrips=%1 loadedTrips=%2 baseTrips=%3 applyMode=%4")
-               .arg(changedCurrentTrips.size())
-               .arg(changedLoadedTrips.size())
-               .arg(baseTripById.size())
-               .arg(context.applyMode == cwReconcileApplyMode::TargetCommitWins ? QStringLiteral("LoadedWins")
-                                                                                 : QStringLiteral("ThreeWayMerge"));
     if (mergePreparation.hasError()) {
         cwReconcileMergeResult result;
         result.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;

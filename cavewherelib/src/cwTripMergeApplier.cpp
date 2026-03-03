@@ -10,28 +10,16 @@
 #include "cwTripCalibrationMergePlanBuilder.h"
 #include "cavewhere.pb.h"
 
-#include <QDebug>
-#include <QStringList>
-
 #include <optional>
 
 namespace {
-
-QString summarizeChunkIds(const QList<cwSurveyChunkData>& chunks)
-{
-    QStringList ids;
-    ids.reserve(chunks.size());
-    for (const cwSurveyChunkData& chunk : chunks) {
-        ids.append(chunk.id.toString(QUuid::WithoutBraces));
-    }
-    return ids.join(QStringLiteral(", "));
-}
 
 std::unique_ptr<CavewhereProto::Trip> normalizedTripProtoForObject(const cwTrip* trip)
 {
     auto protoTrip = cwSaveLoad::toProtoTrip(trip);
     protoTrip->clear_name();
     protoTrip->clear_date();
+    protoTrip->clear_notemodel();
     protoTrip->clear_tripcalibration();
     for (int i = 0; i < protoTrip->chunks_size(); ++i) {
         auto* chunk = protoTrip->mutable_chunks(i);
@@ -50,6 +38,7 @@ std::unique_ptr<CavewhereProto::Trip> normalizedTripProtoForData(const cwTripDat
     auto protoTrip = cwSaveLoad::toProtoTrip(&tempTrip);
     protoTrip->clear_name();
     protoTrip->clear_date();
+    protoTrip->clear_notemodel();
     protoTrip->clear_tripcalibration();
     for (int i = 0; i < protoTrip->chunks_size(); ++i) {
         auto* chunk = protoTrip->mutable_chunks(i);
@@ -139,15 +128,6 @@ Monad::ResultBase cwTripMergeApplier::applyTripMergePlan(const cwTripMergePlan& 
             ? cwSyncIdUtils::LoadedOnlyItemPolicy::KeepAlways
             : cwSyncIdUtils::LoadedOnlyItemPolicy::KeepWhenNotInBase;
 
-    qDebug().noquote()
-        << QStringLiteral("[TripSyncDebug] trip apply plan tripId=%1 applyMode=%2 currentChunkCount=%3 loadedChunkCount=%4 baseChunkCount=%5")
-               .arg(currentTrip->id().toString(QUuid::WithoutBraces))
-               .arg(plan.applyMode == cwSyncMergeApplyUtils::ApplyMode::LoadedWins ? QStringLiteral("LoadedWins")
-                                                                                     : QStringLiteral("ThreeWayMerge"))
-               .arg(currentTrip->chunkCount())
-               .arg(loadedTripData.chunks.size())
-               .arg(baseChunks.has_value() ? baseChunks->size() : -1);
-
     const QString mergedName = cwSyncMergeApplyUtils::chooseBundleValue(
         currentTrip->name(),
         loadedTripData.name,
@@ -203,12 +183,6 @@ Monad::ResultBase cwTripMergeApplier::applyTripMergePlan(const cwTripMergePlan& 
         currentChunkDataList.append(chunk->data());
     }
 
-    qDebug().noquote()
-        << QStringLiteral("[TripSyncDebug] trip apply chunk ids current=[%1] loaded=[%2] base=[%3]")
-               .arg(summarizeChunkIds(currentChunkDataList))
-               .arg(summarizeChunkIds(loadedTripData.chunks))
-               .arg(baseChunks.has_value() ? summarizeChunkIds(*baseChunks) : QStringLiteral("<none>"));
-
     const auto mergedChunkDataList = cwSyncIdUtils::buildMergedOrderedList<cwSurveyChunkData>(
         currentChunkDataList,
         loadedTripData.chunks,
@@ -217,12 +191,6 @@ Monad::ResultBase cwTripMergeApplier::applyTripMergePlan(const cwTripMergePlan& 
         [applyMode = plan.applyMode](const cwSurveyChunkData& currentChunkData,
            const cwSurveyChunkData& loadedChunkData,
            const std::optional<cwSurveyChunkData>& baseChunkData) {
-            qDebug().noquote()
-                << QStringLiteral("[TripSyncDebug] trip apply shared chunk merge chunkId=%1 basePresent=%2 currentStations=%3 loadedStations=%4")
-                       .arg(currentChunkData.id.toString(QUuid::WithoutBraces))
-                       .arg(baseChunkData.has_value())
-                       .arg(currentChunkData.stations.size())
-                       .arg(loadedChunkData.stations.size());
             if (applyMode == cwSyncMergeApplyUtils::ApplyMode::LoadedWins) {
                 return Monad::Result<cwSurveyChunkData>(loadedChunkData);
             }

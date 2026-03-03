@@ -454,8 +454,22 @@ cwSaveLoad::SyncReport buildSyncReport(const QString& repoPath,
     report.beforeHead = beforeHead;
     report.afterHead = afterHead;
     report.pullState = pullState;
+    QString mergeBaseSecondCommit = afterHead;
+    if (pullState == cwSaveLoad::SyncReport::PullState::MergeCommitCreated) {
+        const auto parentOidsResult =
+            QQuickGit::GitRepository::commitParentOids(repoPath, afterHead);
+        if (parentOidsResult.hasError()) {
+            report.diagnostics.append(parentOidsResult.errorMessage());
+        } else {
+            const QStringList parentOids = parentOidsResult.value();
+            if (parentOids.size() >= 2) {
+                mergeBaseSecondCommit = parentOids[1];
+            }
+        }
+    }
+
     const auto mergeBaseResult =
-        QQuickGit::GitRepository::mergeBaseCommitOid(repoPath, beforeHead, afterHead);
+        QQuickGit::GitRepository::mergeBaseCommitOid(repoPath, beforeHead, mergeBaseSecondCommit);
     if (mergeBaseResult.hasError()) {
         report.diagnostics.append(mergeBaseResult.errorMessage());
     } else {

@@ -9,14 +9,13 @@
 #include "cwNote.h"
 #include "cwSaveLoad.h"
 #include "cwScrapSyncMergeHandler.h"
+#include "cwSyncPathResolver.h"
 #include "cwSyncIdUtils.h"
 #include "cwSurveyNoteModel.h"
 #include "cwTrip.h"
 #include "cwNoteStation.h"
 #include "cwLead.h"
 #include "GitRepository.h"
-#include <QFileInfo>
-#include <QImageReader>
 #include <QSet>
 #include <QHash>
 #include <QUuid>
@@ -24,61 +23,6 @@
 #include <optional>
 
 namespace {
-
-QString normalizeSyncPath(const QString& path)
-{
-    return QDir::cleanPath(QDir::fromNativeSeparators(path));
-}
-
-QSet<QString> trackedExtensionsForSyncMerge()
-{
-    QSet<QString> trackedExtensions;
-    const QList<QByteArray> supportedFormats = QImageReader::supportedImageFormats();
-    for (const QByteArray& format : supportedFormats) {
-        const QString extension = QString::fromLatin1(format).trimmed().toLower();
-        if (!extension.isEmpty()) {
-            trackedExtensions.insert(extension);
-        }
-    }
-
-    trackedExtensions.insert(QStringLiteral("svg"));
-    trackedExtensions.insert(QStringLiteral("pdf"));
-    trackedExtensions.insert(QStringLiteral("glb"));
-    return trackedExtensions;
-}
-
-enum class NoteChangedPathKind {
-    Unsupported,
-    NoteDescriptor,
-    Asset
-};
-
-std::optional<QString> notesDirectoryPathForChangedFile(const QString& path)
-{
-    const QString normalized = normalizeSyncPath(path);
-    const QString marker = QStringLiteral("/notes/");
-    const int markerIndex = normalized.indexOf(marker, 0, Qt::CaseInsensitive);
-    if (markerIndex < 0) {
-        return std::nullopt;
-    }
-
-    return normalized.left(markerIndex + QStringLiteral("/notes").size());
-}
-
-NoteChangedPathKind classifyNoteChangedPath(const QString& path, const QSet<QString>& trackedExtensions)
-{
-    if (path.endsWith(QStringLiteral(".cwnote"), Qt::CaseInsensitive)) {
-        return NoteChangedPathKind::NoteDescriptor;
-    }
-
-    const QString extension = QFileInfo(path).suffix().trimmed().toLower();
-    if (trackedExtensions.contains(extension)) {
-        return NoteChangedPathKind::Asset;
-    }
-
-    return NoteChangedPathKind::Unsupported;
-}
-
 struct BaseNoteMergeData {
     cwNoteData noteData;
     QHash<QUuid, cwScrapBaseIdentityData> baseScrapIdentityByScrapId;
@@ -237,24 +181,11 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
         QHash<QUuid, QHash<QUuid, cwScrapBaseIdentityData>> baseScrapIdentityByNoteId;
     };
 
-    QHash<QString, cwTrip*> tripsByNotesDir;
-    for (cwCave* cave : context.region->caves()) {
-        if (cave == nullptr) {
-            continue;
-        }
-
-        for (cwTrip* trip : cave->trips()) {
-            if (trip == nullptr) {
-                continue;
-            }
-
-            const QString notesDirRelativePath = normalizeSyncPath(
-                context.repoRoot.relativeFilePath(context.saveLoad->dir(trip->notes()).absolutePath()));
-            if (!notesDirRelativePath.isEmpty()) {
-                tripsByNotesDir.insert(notesDirRelativePath, trip);
-            }
-        }
-    }
+    const auto currentNoteIndex = cwSyncPathResolver::buildCurrentNoteIndex(context.repoRoot,
+                                                                            context.saveLoad,
+                                                                            context.region);
+    const auto loadedNoteIndex = cwSyncPathResolver::buildLoadedNoteIndex(context.repoRoot,
+                                                                          context.loadData->region);
 
     QHash<QUuid, const cwTripData*> loadedTripsById;
     for (const cwCaveData& caveData : context.loadData->region.caves) {
@@ -265,57 +196,20 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
         }
     }
 
-    QHash<QString, NoteTripUpdate> tripUpdatesByNotesDir;
-    const QSet<QString> trackedExtensions = trackedExtensionsForSyncMerge();
-    for (const QString& changedPath : context.report->changedPaths) {
-        const QString normalizedPath = normalizeSyncPath(changedPath);
-        const std::optional<QString> notesDirPath = notesDirectoryPathForChangedFile(normalizedPath);
-        if (!notesDirPath.has_value()) {
-            continue;
-        }
-
-        const NoteChangedPathKind changedKind = classifyNoteChangedPath(normalizedPath, trackedExtensions);
-        if (changedKind == NoteChangedPathKind::Unsupported) {
-            continue;
-        }
-
-        const auto tripIt = tripsByNotesDir.constFind(*notesDirPath);
-        if (tripIt == tripsByNotesDir.constEnd()) {
-            cwReconcileMergeResult result;
-            result.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;
-            result.handlerName = name();
-            result.fallbackReason = QStringLiteral("No trip matches changed notes directory.");
-            return result;
-        }
-
-        auto updateIt = tripUpdatesByNotesDir.find(*notesDirPath);
-        if (updateIt == tripUpdatesByNotesDir.end()) {
-            NoteTripUpdate update;
-            update.trip = tripIt.value();
-            updateIt = tripUpdatesByNotesDir.insert(*notesDirPath, update);
-        }
-
-        if (changedKind == NoteChangedPathKind::NoteDescriptor) {
-            updateIt->noteDescriptorChanged = true;
-            const auto baseMergeData = loadBaseMergeDataForNote(context.repoRoot,
-                                                                context.report->mergeBaseHead,
-                                                                normalizedPath);
-            if (baseMergeData.has_value()) {
-                updateIt->baseNoteDataByNoteId.insert(baseMergeData->first, baseMergeData->second.noteData);
-                updateIt->baseScrapIdentityByNoteId.insert(baseMergeData->first,
-                                                           baseMergeData->second.baseScrapIdentityByScrapId);
-            }
-        } else {
-            updateIt->assetChanged = true;
-        }
-    }
-
     QList<NoteTripUpdate> noteTripUpdates;
-    noteTripUpdates.reserve(tripUpdatesByNotesDir.size());
-    for (auto updateIt = tripUpdatesByNotesDir.cbegin();
-         updateIt != tripUpdatesByNotesDir.cend();
-         ++updateIt) {
-        NoteTripUpdate update = updateIt.value();
+    const QList<cwSyncPathResolver::TripChangeResolution> resolvedTripChanges =
+        cwSyncPathResolver::resolveChangedNotePaths(context.repoRoot,
+                                                    context.saveLoad,
+                                                    context.region,
+                                                    context.report->changedPaths,
+                                                    currentNoteIndex,
+                                                    loadedNoteIndex);
+    noteTripUpdates.reserve(resolvedTripChanges.size());
+    for (const cwSyncPathResolver::TripChangeResolution& tripChange : resolvedTripChanges) {
+        NoteTripUpdate update;
+        update.trip = tripChange.trip;
+        update.noteDescriptorChanged = tripChange.descriptorChanged;
+        update.assetChanged = tripChange.assetChanged;
         if (update.trip == nullptr || update.trip->id().isNull()) {
             cwReconcileMergeResult result;
             result.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;
@@ -334,6 +228,19 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
         }
 
         update.loadedTripData = loadedTripIt.value();
+        for (auto basePathIt = tripChange.baseLookupPathByObjectId.cbegin();
+             basePathIt != tripChange.baseLookupPathByObjectId.cend();
+             ++basePathIt) {
+            const auto baseMergeData = loadBaseMergeDataForNote(context.repoRoot,
+                                                                context.report->mergeBaseHead,
+                                                                basePathIt.value());
+            if (baseMergeData.has_value()) {
+                update.baseNoteDataByNoteId.insert(baseMergeData->first, baseMergeData->second.noteData);
+                update.baseScrapIdentityByNoteId.insert(baseMergeData->first,
+                                                       baseMergeData->second.baseScrapIdentityByScrapId);
+            }
+        }
+
         if (!update.noteDescriptorChanged && !update.assetChanged) {
             continue;
         }
