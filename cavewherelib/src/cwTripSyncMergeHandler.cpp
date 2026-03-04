@@ -12,6 +12,7 @@
 #include "GitRepository.h"
 
 #include <QFile>
+#include <QDebug>
 #include <QHash>
 #include <QSet>
 #include <QUuid>
@@ -120,9 +121,13 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
         }
     }
 
+    const QString dataRootName = context.dataRootName();
+
     const auto currentTripIndex = cwSyncPathResolver::buildCurrentTripIndex(context.repoRoot,
+                                                                            dataRootName,
                                                                             context.region);
     const auto loadedTripIndex = cwSyncPathResolver::buildLoadedTripIndex(context.repoRoot,
+                                                                          dataRootName,
                                                                           context.loadData->region);
 
     QList<cwTrip*> changedCurrentTrips;
@@ -137,17 +142,29 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
         }
 
         const QSet<QUuid> resolvedTripIds = cwSyncPathResolver::resolveTripIdsForChangedPath(context.repoRoot,
+                                                                                              dataRootName,
                                                                                               normalizedPath,
                                                                                               currentTripIndex,
                                                                                               loadedTripIndex);
-        if (resolvedTripIds.isEmpty()) {
+        QSet<QUuid> effectiveResolvedTripIds = resolvedTripIds;
+        if (effectiveResolvedTripIds.isEmpty()) {
+            const auto baseTripData = loadBaseTripDataForPath(context.repoRoot,
+                                                              context.report->mergeBaseHead,
+                                                              normalizedPath);
+            if (baseTripData.has_value()) {
+                effectiveResolvedTripIds.insert(baseTripData->first);
+                baseTripById.insert(baseTripData->first, baseTripData->second);
+            }
+        }
+
+        if (effectiveResolvedTripIds.isEmpty()) {
             cwReconcileMergeResult result;
             result.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;
             result.handlerName = name();
             result.fallbackReason = QStringLiteral("Unable to resolve changed trip identity from descriptor.");
             return result;
         }
-        if (resolvedTripIds.size() > 1) {
+        if (effectiveResolvedTripIds.size() > 1) {
             cwReconcileMergeResult result;
             result.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;
             result.handlerName = name();
@@ -155,7 +172,7 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
             return result;
         }
 
-        const QUuid tripId = *resolvedTripIds.cbegin();
+        const QUuid tripId = *effectiveResolvedTripIds.cbegin();
 
         if (seenTripIds.contains(tripId)) {
             continue;
@@ -189,7 +206,7 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
         baseLookupPaths.append(normalizedPath);
 
         const QString currentTripPath =
-            cwSyncPathResolver::currentTripDescriptorPath(context.repoRoot, currentTrip);
+            cwSyncPathResolver::currentTripDescriptorPath(context.repoRoot, dataRootName, currentTrip);
         if (!currentTripPath.isEmpty()) {
             baseLookupPaths.append(currentTripPath);
         }
@@ -198,6 +215,7 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
         if (!loadedCaveName.isEmpty()) {
             const QString loadedTripPath = cwSyncPathResolver::loadedTripDescriptorPath(
                 context.repoRoot,
+                dataRootName,
                 loadedCaveName,
                 loadedTripIt.value()->name);
             if (!loadedTripPath.isEmpty()) {
@@ -211,6 +229,7 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
         if (baseTripData.has_value()) {
             baseTripById.insert(baseTripData->first, baseTripData->second);
         }
+
     }
 
     if (changedCurrentTrips.isEmpty()) {

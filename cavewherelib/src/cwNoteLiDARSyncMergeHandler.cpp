@@ -81,10 +81,14 @@ cwReconcileMergeResult cwNoteLiDARSyncMergeHandler::reconcile(const cwReconcileM
         QHash<QUuid, cwNoteLiDARData> baseNoteLiDARByNoteId;
     };
 
+    const QString dataRootName = context.dataRootName();
+
     const auto currentNoteIndex = cwSyncPathResolver::buildCurrentNoteLiDARIndex(context.repoRoot,
+                                                                                 dataRootName,
                                                                                  context.saveLoad,
                                                                                  context.region);
     const auto loadedNoteIndex = cwSyncPathResolver::buildLoadedNoteLiDARIndex(context.repoRoot,
+                                                                               dataRootName,
                                                                                context.loadData->region);
 
     QHash<QUuid, const cwTripData*> loadedTripsById;
@@ -98,6 +102,7 @@ cwReconcileMergeResult cwNoteLiDARSyncMergeHandler::reconcile(const cwReconcileM
 
     const QList<cwSyncPathResolver::TripChangeResolution> resolvedTripChanges =
         cwSyncPathResolver::resolveChangedNoteLiDARPaths(context.repoRoot,
+                                                         dataRootName,
                                                          context.saveLoad,
                                                          context.region,
                                                          context.report->changedPaths,

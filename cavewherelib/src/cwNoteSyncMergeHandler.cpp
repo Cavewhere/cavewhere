@@ -181,10 +181,14 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
         QHash<QUuid, QHash<QUuid, cwScrapBaseIdentityData>> baseScrapIdentityByNoteId;
     };
 
+    const QString dataRootName = context.dataRootName();
+
     const auto currentNoteIndex = cwSyncPathResolver::buildCurrentNoteIndex(context.repoRoot,
+                                                                            dataRootName,
                                                                             context.saveLoad,
                                                                             context.region);
     const auto loadedNoteIndex = cwSyncPathResolver::buildLoadedNoteIndex(context.repoRoot,
+                                                                          dataRootName,
                                                                           context.loadData->region);
 
     QHash<QUuid, const cwTripData*> loadedTripsById;
@@ -199,6 +203,7 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
     QList<NoteTripUpdate> noteTripUpdates;
     const QList<cwSyncPathResolver::TripChangeResolution> resolvedTripChanges =
         cwSyncPathResolver::resolveChangedNotePaths(context.repoRoot,
+                                                    dataRootName,
                                                     context.saveLoad,
                                                     context.region,
                                                     context.report->changedPaths,

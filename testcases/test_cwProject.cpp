@@ -4615,6 +4615,191 @@ TEST_CASE("cwProject sync keeps repository clean for remote trip rename with loc
     }
 }
 
+TEST_CASE("cwProject sync incrementally reconciles second fast-forward trip rename after reopen when project and cave names match", "[cwProject][sync][trip-rename]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Sync Tester"));
+    rootData->account()->setEmail(QStringLiteral("sync.tester@example.com"));
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Phake Cave 3000"));
+    cave->addTrip();
+    auto trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
+    trip->setName(QStringLiteral("2025.2 Release test11"));
+
+    QTemporaryDir projectDir;
+    REQUIRE(projectDir.isValid());
+    const QString projectPath = QDir(projectDir.path()).filePath(QStringLiteral("Phake Cave 3000.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+
+    const QString pngSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    REQUIRE(QFileInfo::exists(pngSource));
+    trip->notes()->addFromFiles({QUrl::fromLocalFile(pngSource)});
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    REQUIRE(trip->notes()->rowCount() == 1);
+
+    auto* repository = project->repository();
+    REQUIRE(repository != nullptr);
+
+    QTemporaryDir remoteRoot;
+    REQUIRE(remoteRoot.isValid());
+    const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
+
+    git_repository* remoteRepo = nullptr;
+    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
+    if (remoteRepo) {
+        git_repository_free(remoteRepo);
+        remoteRepo = nullptr;
+    }
+
+    const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
+                                                         QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(addRemoteError.isEmpty());
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+
+    QTemporaryDir cloneDir;
+    REQUIRE(cloneDir.isValid());
+    const QString clonePath = QDir(cloneDir.path()).filePath(QStringLiteral("clone-2"));
+
+    QQuickGit::GitRepository cloneRepository;
+    cloneRepository.setDirectory(QDir(clonePath));
+    cloneRepository.setAccount(rootData->account());
+
+    auto cloneFuture = cloneRepository.clone(QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(AsyncFuture::waitForFinished(cloneFuture, 10000));
+    INFO("Clone error:" << cloneFuture.result().errorMessage().toStdString());
+    REQUIRE(!cloneFuture.result().hasError());
+
+    auto remoteRootData = std::make_unique<cwRootData>();
+    remoteRootData->account()->setName(QStringLiteral("Remote Sync Tester"));
+    remoteRootData->account()->setEmail(QStringLiteral("remote.sync.tester@example.com"));
+
+    auto remoteProject = remoteRootData->project();
+    const QString clonedProjectPath = QDir(clonePath).filePath(QFileInfo(projectPath).fileName());
+    REQUIRE(QFileInfo::exists(clonedProjectPath));
+    remoteProject->loadFile(clonedProjectPath);
+    remoteProject->waitLoadToFinish();
+    remoteProject->waitSaveToFinish();
+
+    auto* remoteRepository = remoteProject->repository();
+    REQUIRE(remoteRepository != nullptr);
+    remoteRepository->setAccount(remoteRootData->account());
+
+    auto* remoteTrip = remoteProject->cavingRegion()->cave(0)->trip(0);
+    REQUIRE(remoteTrip != nullptr);
+    REQUIRE(remoteTrip->notes()->rowCount() == 1);
+
+    const QString firstRemoteTripName = QStringLiteral("2025.2 Release test12");
+    remoteTrip->setName(firstRemoteTripName);
+    remoteProject->waitSaveToFinish();
+    remoteProject->errorModel()->clear();
+    REQUIRE(remoteProject->sync());
+    remoteRootData->futureManagerModel()->waitForFinished();
+    remoteProject->waitSaveToFinish();
+    CHECK(remoteProject->errorModel()->count() == 0);
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+
+    QTemporaryDir reopenedCloneDir;
+    REQUIRE(reopenedCloneDir.isValid());
+    const QString reopenedClonePath = QDir(reopenedCloneDir.path()).filePath(QStringLiteral("reopened-clone"));
+
+    QQuickGit::GitRepository reopenedCloneRepository;
+    reopenedCloneRepository.setDirectory(QDir(reopenedClonePath));
+    reopenedCloneRepository.setAccount(rootData->account());
+
+    auto reopenedCloneFuture = reopenedCloneRepository.clone(QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(AsyncFuture::waitForFinished(reopenedCloneFuture, 10000));
+    INFO("Reopened clone error:" << reopenedCloneFuture.result().errorMessage().toStdString());
+    REQUIRE(!reopenedCloneFuture.result().hasError());
+
+    auto reopenedProject = std::make_unique<cwProject>();
+    addTokenManager(reopenedProject.get());
+    const QString reopenedProjectPath = QDir(reopenedClonePath).filePath(QFileInfo(projectPath).fileName());
+    REQUIRE(QFileInfo::exists(reopenedProjectPath));
+    reopenedProject->loadOrConvert(reopenedProjectPath);
+    reopenedProject->waitLoadToFinish();
+    reopenedProject->waitSaveToFinish();
+
+    REQUIRE(reopenedProject->cavingRegion()->caveCount() == 1);
+    auto* reopenedCave = reopenedProject->cavingRegion()->cave(0);
+    REQUIRE(reopenedCave != nullptr);
+    REQUIRE(reopenedCave->tripCount() == 1);
+    auto* reopenedTrip = reopenedCave->trip(0);
+    REQUIRE(reopenedTrip != nullptr);
+    CHECK(reopenedTrip->name() == firstRemoteTripName);
+    REQUIRE(reopenedTrip->notes()->rowCount() == 1);
+    QPointer<cwTrip> reopenedTripPtr = reopenedTrip;
+    QPointer<cwNote> reopenedNotePtr = reopenedTrip->notes()->notes().first();
+    REQUIRE(reopenedNotePtr != nullptr);
+
+    const QString secondRemoteTripName = QStringLiteral("2025.2 Release test13");
+    remoteTrip->setName(secondRemoteTripName);
+    remoteProject->waitSaveToFinish();
+    remoteProject->errorModel()->clear();
+    REQUIRE(remoteProject->sync());
+    remoteRootData->futureManagerModel()->waitForFinished();
+    remoteProject->waitSaveToFinish();
+    CHECK(remoteProject->errorModel()->count() == 0);
+
+    auto* reopenedRepository = reopenedProject->repository();
+    REQUIRE(reopenedRepository != nullptr);
+    reopenedRepository->setAccount(remoteRootData->account());
+
+    reopenedProject->errorModel()->clear();
+    REQUIRE(reopenedProject->sync());
+    reopenedProject->waitSaveToFinish();
+    CHECK(reopenedProject->errorModel()->count() == 0);
+
+    const auto syncReport = reopenedProject->lastSyncReport();
+    REQUIRE(syncReport.has_value());
+    CHECK(syncReport->pullState == cwSaveLoad::SyncReport::PullState::MergeCommitCreated);
+    CHECK(std::any_of(syncReport->changedPaths.cbegin(),
+                      syncReport->changedPaths.cend(),
+                      [](const QString& path) {
+                          return path.contains(QStringLiteral("Phake Cave 3000/Phake Cave 3000/trips/2025.2 Release test12/2025.2 Release test12.cwtrip"));
+                      }));
+    CHECK(std::any_of(syncReport->changedPaths.cbegin(),
+                      syncReport->changedPaths.cend(),
+                      [](const QString& path) {
+                          return path.contains(QStringLiteral("Phake Cave 3000/Phake Cave 3000/trips/2025.2 Release test13/2025.2 Release test13.cwtrip"));
+                      }));
+    CHECK(std::any_of(syncReport->diagnostics.cbegin(),
+                      syncReport->diagnostics.cend(),
+                      [](const QString& diagnostic) {
+                          return diagnostic.contains(QStringLiteral("reconcile handler"))
+                              && diagnostic.contains(QStringLiteral("cwTripSyncMergeHandler"))
+                              && diagnostic.contains(QStringLiteral("applied"));
+                      }));
+    CHECK_FALSE(std::any_of(syncReport->diagnostics.cbegin(),
+                            syncReport->diagnostics.cend(),
+                            [](const QString& diagnostic) {
+                                return diagnostic.contains(QStringLiteral("reconcile fallback to full reload"));
+                            }));
+
+    REQUIRE(reopenedTripPtr != nullptr);
+    REQUIRE(reopenedNotePtr != nullptr);
+    CHECK(reopenedCave->trip(0) == reopenedTripPtr.data());
+    CHECK(reopenedTripPtr->notes()->notes().first() == reopenedNotePtr.data());
+    CHECK(reopenedTripPtr->name() == secondRemoteTripName);
+}
+
 TEST_CASE("cwProject sync incrementally reconciles note asset updates after remote trip rename", "[cwProject][sync][trip-rename]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();

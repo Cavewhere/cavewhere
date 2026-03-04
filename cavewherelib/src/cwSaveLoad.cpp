@@ -1695,7 +1695,6 @@ struct cwSaveLoad::Data {
         Q_UNUSED(oldFilePath);
         Q_UNUSED(newDirPath);
 
-        // qDebug() << "Rename" << oldFilePath << newDirPath;
         addFileSystemJob(Data::Job {object, Data::Job::Kind::Directory, Data::Job::Action::Move}, context);
         addFileSystemJob(Data::Job {object, Data::Job::Kind::File, Data::Job::Action::Move}, context);
         context->save(object);
@@ -4805,14 +4804,15 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
                                     return ResultBase(QStringLiteral("Operation canceled."));
                                 }
 
-                                attemptState->report = reportFuture.result();
-                                d->lastSyncReport = attemptState->report;
-                                if (!attemptState->report.has_value()) {
-                                    return ResultBase(QStringLiteral("Sync report is unavailable."));
-                                }
-                                return ResultBase();
-                            })
-                            .future();
+                            attemptState->report = reportFuture.result();
+                            d->lastSyncReport = attemptState->report;
+                            if (!attemptState->report.has_value()) {
+                                return ResultBase(QStringLiteral("Sync report is unavailable."));
+                            }
+
+                            return ResultBase();
+                        })
+                        .future();
                     })
                     .future();
             });
@@ -4993,6 +4993,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::resetBranchAndReconcile(const QString& re
                             if (!attemptState->report.has_value()) {
                                 return ResultBase(QStringLiteral("Sync report is unavailable."));
                             }
+
                             return ResultBase();
                         })
                         .future();
@@ -5117,7 +5118,6 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
                 projectRootDir()
             };
             const cwReconcileMergeResult mergeResult = cwSyncMergeRegistry::instance().reconcile(mergeContext);
-
             if (mergeResult.outcome == cwReconcileMergeResult::Outcome::Applied) {
                 for (QObject* object : mergeResult.objectsPathReady) {
                     if (object != nullptr) {

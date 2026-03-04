@@ -15,11 +15,21 @@
 
 namespace {
 
+QString effectiveDataRootName(const QDir& repoRoot, const QString& dataRootName)
+{
+    const QString normalizedDataRoot = cwSaveLoad::sanitizeFileName(dataRootName.trimmed());
+    if (!normalizedDataRoot.isEmpty()) {
+        return normalizedDataRoot;
+    }
+    return cwSaveLoad::sanitizeFileName(repoRoot.dirName());
+}
+
 QString relativeNotesDirPath(const QDir& repoRoot,
+                             const QString& dataRootName,
                              const QString& caveName,
                              const QString& tripName)
 {
-    const QString dataRootDirName = cwSaveLoad::sanitizeFileName(repoRoot.dirName());
+    const QString dataRootDirName = effectiveDataRootName(repoRoot, dataRootName);
     const QString caveDirName = cwSaveLoad::sanitizeFileName(caveName);
     const QString tripDirName = cwSaveLoad::sanitizeFileName(tripName);
     return QDir::cleanPath(QDir::fromNativeSeparators(
@@ -221,13 +231,15 @@ QList<cwSyncPathResolver::TripChangeResolution> resolveChangedPathsImpl(
     return tripUpdatesByNotesDir.values();
 }
 
-QString currentTripDescriptorPathInternal(const QDir& repoRoot, const cwTrip* trip)
+QString currentTripDescriptorPathInternal(const QDir& repoRoot,
+                                         const QString& dataRootName,
+                                         const cwTrip* trip)
 {
     if (trip == nullptr || trip->parentCave() == nullptr) {
         return QString();
     }
 
-    const QString dataRootDirName = cwSaveLoad::sanitizeFileName(repoRoot.dirName());
+    const QString dataRootDirName = effectiveDataRootName(repoRoot, dataRootName);
     const QString caveDirName = cwSaveLoad::sanitizeFileName(trip->parentCave()->name());
     const QString tripDirName = cwSaveLoad::sanitizeFileName(trip->name());
     const QString tripFileName = cwSaveLoad::sanitizeFileName(trip->name() + QStringLiteral(".cwtrip"));
@@ -238,26 +250,32 @@ QString currentTripDescriptorPathInternal(const QDir& repoRoot, const cwTrip* tr
                     QDir(tripDirName).filePath(tripFileName))))));
 }
 
-QString currentNoteDescriptorPathInternal(const QDir& repoRoot, const cwNote* note)
+QString currentNoteDescriptorPathInternal(const QDir& repoRoot,
+                                         const QString& dataRootName,
+                                         const cwNote* note)
 {
     if (note == nullptr || note->parentTrip() == nullptr || note->parentTrip()->parentCave() == nullptr) {
         return QString();
     }
 
     const QString notesDirPath = relativeNotesDirPath(repoRoot,
+                                                      dataRootName,
                                                       note->parentTrip()->parentCave()->name(),
                                                       note->parentTrip()->name());
     const QString noteFileName = cwSaveLoad::sanitizeFileName(note->name() + QStringLiteral(".cwnote"));
     return QDir::cleanPath(QDir::fromNativeSeparators(QDir(notesDirPath).filePath(noteFileName)));
 }
 
-QString currentNoteLiDARDescriptorPathInternal(const QDir& repoRoot, const cwNoteLiDAR* note)
+QString currentNoteLiDARDescriptorPathInternal(const QDir& repoRoot,
+                                              const QString& dataRootName,
+                                              const cwNoteLiDAR* note)
 {
     if (note == nullptr || note->parentTrip() == nullptr || note->parentTrip()->parentCave() == nullptr) {
         return QString();
     }
 
     const QString notesDirPath = relativeNotesDirPath(repoRoot,
+                                                      dataRootName,
                                                       note->parentTrip()->parentCave()->name(),
                                                       note->parentTrip()->name());
     const QString noteFileName = cwSaveLoad::sanitizeFileName(note->name() + QStringLiteral(".cwnote3d"));
@@ -315,10 +333,11 @@ void addIdsForPath(const QString& path, const QHash<QString, QSet<QUuid>>& idsBy
 }
 
 QString loadedTripDescriptorPathInternal(const QDir& repoRoot,
+                                         const QString& dataRootName,
                                          const QString& caveName,
                                          const QString& tripName)
 {
-    const QString dataRootDirName = cwSaveLoad::sanitizeFileName(repoRoot.dirName());
+    const QString dataRootDirName = effectiveDataRootName(repoRoot, dataRootName);
     const QString caveDirName = cwSaveLoad::sanitizeFileName(caveName);
     const QString tripDirName = cwSaveLoad::sanitizeFileName(tripName);
     const QString tripFileName = cwSaveLoad::sanitizeFileName(tripName + QStringLiteral(".cwtrip"));
@@ -339,6 +358,7 @@ QString normalizePath(const QString& path)
 }
 
 TripCurrentIndex buildCurrentTripIndex(const QDir& repoRoot,
+                                       const QString& dataRootName,
                                        const cwCavingRegion* region)
 {
     TripCurrentIndex index;
@@ -356,7 +376,7 @@ TripCurrentIndex buildCurrentTripIndex(const QDir& repoRoot,
                 continue;
             }
 
-            const QString descriptorPath = currentTripDescriptorPathInternal(repoRoot, trip);
+            const QString descriptorPath = currentTripDescriptorPathInternal(repoRoot, dataRootName, trip);
             if (!descriptorPath.isEmpty()) {
                 index.tripIdsByDescriptorPath.insert(descriptorPath, trip->id());
             }
@@ -367,6 +387,7 @@ TripCurrentIndex buildCurrentTripIndex(const QDir& repoRoot,
 }
 
 TripLoadedIndex buildLoadedTripIndex(const QDir& repoRoot,
+                                     const QString& dataRootName,
                                      const cwCavingRegionData& regionData)
 {
     TripLoadedIndex index;
@@ -378,6 +399,7 @@ TripLoadedIndex buildLoadedTripIndex(const QDir& repoRoot,
             }
 
             const QString descriptorPath = loadedTripDescriptorPathInternal(repoRoot,
+                                                                            dataRootName,
                                                                             caveData.name,
                                                                             tripData.name);
             if (!descriptorPath.isEmpty()) {
@@ -390,6 +412,7 @@ TripLoadedIndex buildLoadedTripIndex(const QDir& repoRoot,
 }
 
 NoteCurrentIndex buildCurrentNoteIndex(const QDir& repoRoot,
+                                       const QString& dataRootName,
                                        const cwSaveLoad* saveLoad,
                                        const cwCavingRegion* region)
 {
@@ -429,13 +452,14 @@ NoteCurrentIndex buildCurrentNoteIndex(const QDir& repoRoot,
 }
 
 NoteLoadedIndex buildLoadedNoteIndex(const QDir& repoRoot,
+                                     const QString& dataRootName,
                                      const cwCavingRegionData& regionData)
 {
     NoteLoadedIndex index;
 
     for (const cwCaveData& caveData : regionData.caves) {
         for (const cwTripData& tripData : caveData.trips) {
-            const QString notesDirPath = relativeNotesDirPath(repoRoot, caveData.name, tripData.name);
+            const QString notesDirPath = relativeNotesDirPath(repoRoot, dataRootName, caveData.name, tripData.name);
             for (const cwNoteData& noteData : tripData.noteModel.notes) {
                 if (noteData.id.isNull()) {
                     continue;
@@ -453,6 +477,7 @@ NoteLoadedIndex buildLoadedNoteIndex(const QDir& repoRoot,
 }
 
 NoteLiDARCurrentIndex buildCurrentNoteLiDARIndex(const QDir& repoRoot,
+                                                 const QString& dataRootName,
                                                  const cwSaveLoad* saveLoad,
                                                  const cwCavingRegion* region)
 {
@@ -494,13 +519,14 @@ NoteLiDARCurrentIndex buildCurrentNoteLiDARIndex(const QDir& repoRoot,
 }
 
 NoteLiDARLoadedIndex buildLoadedNoteLiDARIndex(const QDir& repoRoot,
+                                               const QString& dataRootName,
                                                const cwCavingRegionData& regionData)
 {
     NoteLiDARLoadedIndex index;
 
     for (const cwCaveData& caveData : regionData.caves) {
         for (const cwTripData& tripData : caveData.trips) {
-            const QString notesDirPath = relativeNotesDirPath(repoRoot, caveData.name, tripData.name);
+            const QString notesDirPath = relativeNotesDirPath(repoRoot, dataRootName, caveData.name, tripData.name);
             for (const cwNoteLiDARData& noteData : tripData.noteLiDARModel.notes) {
                 if (noteData.id.isNull()) {
                     continue;
@@ -539,6 +565,7 @@ QSet<QUuid> resolveNoteIdsForChangedPath(const QDir& repoRoot,
 }
 
 QSet<QUuid> resolveTripIdsForChangedPath(const QDir& repoRoot,
+                                         const QString& dataRootName,
                                          const QString& changedPath,
                                          const TripCurrentIndex& currentIndex,
                                          const TripLoadedIndex& loadedIndex)
@@ -560,6 +587,7 @@ QSet<QUuid> resolveTripIdsForChangedPath(const QDir& repoRoot,
         return resolvedIds;
     }
 
+    Q_UNUSED(dataRootName);
     const auto tripId = loadTripIdFromDescriptorPath(repoRoot, normalizedPath);
     if (tripId.has_value()) {
         resolvedIds.insert(*tripId);
@@ -590,6 +618,7 @@ QSet<QUuid> resolveNoteLiDARIdsForChangedPath(const QDir& repoRoot,
 }
 
 QList<TripChangeResolution> resolveChangedNotePaths(const QDir& repoRoot,
+                                                    const QString& dataRootName,
                                                     const cwSaveLoad* saveLoad,
                                                     const cwCavingRegion* region,
                                                     const QStringList& changedPaths,
@@ -606,12 +635,13 @@ QList<TripChangeResolution> resolveChangedNotePaths(const QDir& repoRoot,
         [&](const QString& normalizedPath, const NoteCurrentIndex& current, const NoteLoadedIndex& loaded) {
             return resolveNoteIdsForChangedPath(repoRoot, normalizedPath, current, loaded);
         },
-        [](const QDir& root, const cwNote* note) {
-            return currentNoteDescriptorPath(root, note);
+        [dataRootName](const QDir& root, const cwNote* note) {
+            return currentNoteDescriptorPath(root, dataRootName, note);
         });
 }
 
 QList<TripChangeResolution> resolveChangedNoteLiDARPaths(const QDir& repoRoot,
+                                                         const QString& dataRootName,
                                                          const cwSaveLoad* saveLoad,
                                                          const cwCavingRegion* region,
                                                          const QStringList& changedPaths,
@@ -628,31 +658,32 @@ QList<TripChangeResolution> resolveChangedNoteLiDARPaths(const QDir& repoRoot,
         [&](const QString& normalizedPath, const NoteLiDARCurrentIndex& current, const NoteLiDARLoadedIndex& loaded) {
             return resolveNoteLiDARIdsForChangedPath(repoRoot, normalizedPath, current, loaded);
         },
-        [](const QDir& root, const cwNoteLiDAR* note) {
-            return currentNoteLiDARDescriptorPath(root, note);
+        [dataRootName](const QDir& root, const cwNoteLiDAR* note) {
+            return currentNoteLiDARDescriptorPath(root, dataRootName, note);
         });
 }
 
-QString currentTripDescriptorPath(const QDir& repoRoot, const cwTrip* trip)
+QString currentTripDescriptorPath(const QDir& repoRoot, const QString& dataRootName, const cwTrip* trip)
 {
-    return currentTripDescriptorPathInternal(repoRoot, trip);
+    return currentTripDescriptorPathInternal(repoRoot, dataRootName, trip);
 }
 
 QString loadedTripDescriptorPath(const QDir& repoRoot,
+                                 const QString& dataRootName,
                                  const QString& caveName,
                                  const QString& tripName)
 {
-    return loadedTripDescriptorPathInternal(repoRoot, caveName, tripName);
+    return loadedTripDescriptorPathInternal(repoRoot, dataRootName, caveName, tripName);
 }
 
-QString currentNoteDescriptorPath(const QDir& repoRoot, const cwNote* note)
+QString currentNoteDescriptorPath(const QDir& repoRoot, const QString& dataRootName, const cwNote* note)
 {
-    return currentNoteDescriptorPathInternal(repoRoot, note);
+    return currentNoteDescriptorPathInternal(repoRoot, dataRootName, note);
 }
 
-QString currentNoteLiDARDescriptorPath(const QDir& repoRoot, const cwNoteLiDAR* note)
+QString currentNoteLiDARDescriptorPath(const QDir& repoRoot, const QString& dataRootName, const cwNoteLiDAR* note)
 {
-    return currentNoteLiDARDescriptorPathInternal(repoRoot, note);
+    return currentNoteLiDARDescriptorPathInternal(repoRoot, dataRootName, note);
 }
 
 } // namespace cwSyncPathResolver

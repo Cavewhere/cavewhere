@@ -10,6 +10,7 @@
 #include "cwTripCalibrationMergePlanBuilder.h"
 #include "cavewhere.pb.h"
 
+#include <QDebug>
 #include <optional>
 
 namespace {

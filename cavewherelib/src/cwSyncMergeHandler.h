@@ -21,6 +21,14 @@ struct cwReconcileMergeContext {
     const cwSaveLoad::SyncReport* report = nullptr;
     cwReconcileApplyMode applyMode = cwReconcileApplyMode::Merge;
     QDir repoRoot;
+
+    QString dataRootName() const
+    {
+        if (loadData != nullptr && !loadData->metadata.dataRoot.isEmpty()) {
+            return loadData->metadata.dataRoot;
+        }
+        return saveLoad != nullptr ? saveLoad->dataRoot() : QString();
+    }
 };
 
 struct cwReconcileMergeResult {

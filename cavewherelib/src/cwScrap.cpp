@@ -909,7 +909,8 @@ QMatrix4x4 cwScrap::mapWorldToNoteMatrix(const cwNoteStation& referenceStation) 
 
 void cwScrap::setLeadPositions(const QVector<QVector3D> &leadPositions)
 {
-    Q_ASSERT(leadPositions.size() == Leads.size());
+    if(leadPositions.size() != Leads.size()) { return; }
+    // Q_ASSERT(leadPositions.size() == Leads.size());
     m_leadPositions = leadPositions;
     if(Leads.isEmpty() || leadPositions.isEmpty()) {
         return;

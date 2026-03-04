@@ -158,6 +158,7 @@ QQ.Item {
 
                         DoubleClickTextInput {
                             id: tripNameText
+                            objectName: "tripNameText"
                             text: clipArea.currentTrip.name
                             font.bold: true
                             font.pixelSize: 20

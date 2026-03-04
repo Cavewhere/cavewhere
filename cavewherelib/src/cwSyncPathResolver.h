@@ -55,20 +55,26 @@ struct TripChangeResolution {
 QString normalizePath(const QString& path);
 
 TripCurrentIndex buildCurrentTripIndex(const QDir& repoRoot,
+                                       const QString& dataRootName,
                                        const cwCavingRegion* region);
 TripLoadedIndex buildLoadedTripIndex(const QDir& repoRoot,
+                                     const QString& dataRootName,
                                      const cwCavingRegionData& regionData);
 
 NoteCurrentIndex buildCurrentNoteIndex(const QDir& repoRoot,
+                                       const QString& dataRootName,
                                        const cwSaveLoad* saveLoad,
                                        const cwCavingRegion* region);
 NoteLoadedIndex buildLoadedNoteIndex(const QDir& repoRoot,
+                                     const QString& dataRootName,
                                      const cwCavingRegionData& regionData);
 
 NoteLiDARCurrentIndex buildCurrentNoteLiDARIndex(const QDir& repoRoot,
+                                                 const QString& dataRootName,
                                                  const cwSaveLoad* saveLoad,
                                                  const cwCavingRegion* region);
 NoteLiDARLoadedIndex buildLoadedNoteLiDARIndex(const QDir& repoRoot,
+                                               const QString& dataRootName,
                                                const cwCavingRegionData& regionData);
 
 QSet<QUuid> resolveNoteIdsForChangedPath(const QDir& repoRoot,
@@ -76,6 +82,7 @@ QSet<QUuid> resolveNoteIdsForChangedPath(const QDir& repoRoot,
                                          const NoteCurrentIndex& currentIndex,
                                          const NoteLoadedIndex& loadedIndex);
 QSet<QUuid> resolveTripIdsForChangedPath(const QDir& repoRoot,
+                                         const QString& dataRootName,
                                          const QString& changedPath,
                                          const TripCurrentIndex& currentIndex,
                                          const TripLoadedIndex& loadedIndex);
@@ -86,6 +93,7 @@ QSet<QUuid> resolveNoteLiDARIdsForChangedPath(const QDir& repoRoot,
                                               const NoteLiDARLoadedIndex& loadedIndex);
 
 QList<TripChangeResolution> resolveChangedNotePaths(const QDir& repoRoot,
+                                                    const QString& dataRootName,
                                                     const cwSaveLoad* saveLoad,
                                                     const cwCavingRegion* region,
                                                     const QStringList& changedPaths,
@@ -93,17 +101,19 @@ QList<TripChangeResolution> resolveChangedNotePaths(const QDir& repoRoot,
                                                     const NoteLoadedIndex& loadedIndex);
 
 QList<TripChangeResolution> resolveChangedNoteLiDARPaths(const QDir& repoRoot,
+                                                         const QString& dataRootName,
                                                          const cwSaveLoad* saveLoad,
                                                          const cwCavingRegion* region,
                                                          const QStringList& changedPaths,
                                                          const NoteLiDARCurrentIndex& currentIndex,
                                                          const NoteLiDARLoadedIndex& loadedIndex);
 
-QString currentTripDescriptorPath(const QDir& repoRoot, const cwTrip* trip);
+QString currentTripDescriptorPath(const QDir& repoRoot, const QString& dataRootName, const cwTrip* trip);
 QString loadedTripDescriptorPath(const QDir& repoRoot,
+                                 const QString& dataRootName,
                                  const QString& caveName,
                                  const QString& tripName);
-QString currentNoteDescriptorPath(const QDir& repoRoot, const cwNote* note);
-QString currentNoteLiDARDescriptorPath(const QDir& repoRoot, const cwNoteLiDAR* note);
+QString currentNoteDescriptorPath(const QDir& repoRoot, const QString& dataRootName, const cwNote* note);
+QString currentNoteLiDARDescriptorPath(const QDir& repoRoot, const QString& dataRootName, const cwNoteLiDAR* note);
 
 } // namespace cwSyncPathResolver

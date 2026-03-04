@@ -199,6 +199,133 @@ MainWindowTest {
             )
         }
 
+        function test_tripRenameSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+
+            let currentPageTrip = function() {
+                let currentPageItem = RootData.pageView.currentPageItem
+                verify(currentPageItem !== null)
+                verify(currentPageItem.currentTrip !== null)
+                return currentPageItem.currentTrip
+            }
+
+            let tripId = String(currentPageTrip().id)
+            let caveName = String(currentPageTrip().parentCave.name)
+            verify(tripId.length > 0)
+            verify(caveName.length > 0)
+
+            let tripById = function() {
+                for (let caveIndex = 0; caveIndex < RootData.region.caveCount; ++caveIndex) {
+                    let cave = RootData.region.cave(caveIndex)
+                    if (cave === null || cave === undefined) {
+                        continue
+                    }
+                    for (let tripIndex = 0; tripIndex < cave.rowCount(); ++tripIndex) {
+                        let trip = cave.trip(tripIndex)
+                        if (trip !== null
+                                && trip !== undefined
+                                && String(trip.id) === tripId) {
+                            return trip
+                        }
+                    }
+                }
+                return null
+            }
+
+            let tripPageAddressForName = function(tripName) {
+                return "Source/Data/Cave=" + caveName + "/Trip=" + String(tripName)
+            }
+
+            let tripNameInput = function() {
+                let input = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->tripNameText")
+                verify(input !== null)
+                return input
+            }
+
+            let renameTripViaUi = function(newName) {
+                let input = tripNameInput()
+                setClickTextInput(input, newName)
+                tryVerifyWithDiagnostics(() => {
+                    let trip = tripById()
+                    return trip !== null
+                           && String(trip.name) === String(newName)
+                           && RootData.pageSelectionModel.currentPageAddress === tripPageAddressForName(newName)
+                }, 10000, "verify trip renamed via UI")
+            }
+
+            let snapshotUiState = function() {
+                let trip = tripById()
+                verify(trip !== null)
+                return {
+                    modelTripName: String(trip.name),
+                    tripNameText: String(tripNameInput().text),
+                    currentPageAddress: String(RootData.pageSelectionModel.currentPageAddress),
+                    currentPageObjectName: RootData.pageView.currentPageItem === null
+                                           ? ""
+                                           : String(RootData.pageView.currentPageItem.objectName)
+                }
+            }
+
+            let expectedUiState = function(expectedTripName) {
+                return {
+                    modelTripName: String(expectedTripName),
+                    tripNameText: String(expectedTripName),
+                    currentPageAddress: tripPageAddressForName(expectedTripName),
+                    currentPageObjectName: "tripPage"
+                }
+            }
+
+            let verifyTripPageState = function(expectedTripName, label, timeoutMs) {
+                tryVerifyWithDiagnostics(() => {
+                    return JSON.stringify(snapshotUiState()) === JSON.stringify(expectedUiState(expectedTripName))
+                }, timeoutMs, label)
+            }
+
+            let baselineName = String(currentPageTrip().name)
+            let syncedName = baselineName === "Release 0.08"
+                           ? "Release 0.08 Rename Sync"
+                           : "Release 0.08"
+
+            let commitA = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitA !== "")
+
+            verifyTripPageState(baselineName, "verify baseline trip rename UI", 10000)
+
+            renameTripViaUi(syncedName)
+            verifyTripPageState(syncedName, "verify renamed trip page state", 10000)
+
+            verify(RootData.project.sync())
+            waitForProjectSyncToFinish()
+
+            let commitB = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitB !== "")
+            verify(commitB !== commitA)
+
+            verifyTripPageState(syncedName, "verify renamed trip page after first sync", 10000)
+
+            console.log("About to Checked out!");
+            // wait(1000);
+            let checkoutError = TestHelper.checkoutProjectRef(RootData.project, commitA, true)
+            compare(checkoutError, "")
+            // wait(5000);
+            console.log("Checked out!");
+
+            verifyTripPageState(baselineName, "verify baseline trip page after checkout", 10000)
+
+            console.log("About to final sync!");
+            // wait(1000);
+            verify(RootData.project.sync())
+            waitForProjectSyncToFinish()
+            // wait(5000)
+            console.log("Final sync");
+
+            let commitC = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitC !== "")
+            verify(commitC === commitB)
+
+            verifyTripPageState(syncedName, "verify renamed trip page after second sync", 10000)
+        }
+
         function test_tripCalibrationSyncAndCheckout() {
             let context = loadFixtureAndOpenFirstTrip()
 

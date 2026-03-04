@@ -18,6 +18,7 @@
 #include "cwKeywordModel.h"
 
 //Qt includes
+#include <QDebug>
 #include <QMap>
 #include <QUuid>
 

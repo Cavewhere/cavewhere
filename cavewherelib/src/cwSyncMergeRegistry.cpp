@@ -5,6 +5,7 @@
 #include "cwNoteSyncMergeHandler.h"
 #include "cwTripSyncMergeHandler.h"
 
+#include <QDebug>
 #include <QSet>
 
 cwSyncMergeRegistry::cwSyncMergeRegistry()
