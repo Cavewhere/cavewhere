@@ -27,6 +27,7 @@ QQ.Item {
 
             Text {
                 id: nameTextId
+                objectName: "linkBarItemText"
                 color: buttonId.containsMouse ? Theme.palette.highlightedText : Theme.palette.text
                 anchors.centerIn: parent
             }

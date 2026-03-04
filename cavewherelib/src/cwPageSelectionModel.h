@@ -17,6 +17,7 @@
 #include <QUuid>
 #include <QQuickItem>
 #include <QQmlEngine>
+#include <QMetaObject>
 
 //Our includes
 #include "cwPage.h"
@@ -102,6 +103,10 @@ private:
     cwPage* stringToPage(const QString& pageLinkString) const;
 
     bool isPageInModel(cwPage* page) const;
+
+    void updateCurrentPageNameConnections();
+
+    QList<QMetaObject::Connection> CurrentPageNameConnections;
 
 };
 

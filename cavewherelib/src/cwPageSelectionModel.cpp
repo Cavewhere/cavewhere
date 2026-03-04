@@ -203,16 +203,8 @@ void cwPageSelectionModel::gotoPage(cwPage *page)
     Q_ASSERT(isPageInModel(page));
 
     if(CurrentPage != page) {
-
-        if(CurrentPage != nullptr) {
-            disconnect(CurrentPage.data(), &cwPage::nameChanged, this, &cwPageSelectionModel::currentPageAddressChanged);
-        }
-
         CurrentPage = page;
-
-        if(CurrentPage != nullptr) {
-            connect(CurrentPage.data(), &cwPage::nameChanged, this, &cwPageSelectionModel::currentPageAddressChanged);
-        }
+        updateCurrentPageNameConnections();
 
         if(!LockHistory) {
             //Remove old pages
@@ -313,6 +305,11 @@ void cwPageSelectionModel::forward()
  */
 void cwPageSelectionModel::clear()
 {
+    for (const auto& connection : CurrentPageNameConnections) {
+        disconnect(connection);
+    }
+    CurrentPageNameConnections.clear();
+
     RootPage->deleteLater();
     RootPage = new cwPage();
     RootPage->setParent(this);
@@ -437,6 +434,23 @@ bool cwPageSelectionModel::isPageInModel(cwPage *page) const
     return page == RootPage;
 }
 
+void cwPageSelectionModel::updateCurrentPageNameConnections()
+{
+    for (const auto& connection : CurrentPageNameConnections) {
+        disconnect(connection);
+    }
+    CurrentPageNameConnections.clear();
+
+    cwPage* page = CurrentPage;
+    while (page != nullptr) {
+        CurrentPageNameConnections.append(connect(page,
+                                                  &cwPage::nameChanged,
+                                                  this,
+                                                  &cwPageSelectionModel::currentPageAddressChanged));
+        page = page->parentPage();
+    }
+}
+
 /**
 * @brief cwPageSelectionModel::currentPage
 * @return Retruns the full name of the current page
@@ -467,6 +481,11 @@ cwPage *cwPageSelectionModel::currentPage() const
  */
 void cwPageSelectionModel::clearHistory()
 {
+    for (const auto& connection : CurrentPageNameConnections) {
+        disconnect(connection);
+    }
+    CurrentPageNameConnections.clear();
+
     CurrentPage.clear();
     PageHistory.clear();
 }
@@ -482,4 +501,3 @@ QList<QObject *> cwPageSelectionModel::history() const {
     }
     return pages;
 }
-

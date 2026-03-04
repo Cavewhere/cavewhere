@@ -326,6 +326,82 @@ MainWindowTest {
             verifyTripPageState(syncedName, "verify renamed trip page after second sync", 10000)
         }
 
+        function test_caveRenameUpdatesLinkBarOnTripPage() {
+            let context = loadFixtureAndOpenFirstTrip()
+
+            let currentPageTrip = function() {
+                let currentPageItem = RootData.pageView.currentPageItem
+                verify(currentPageItem !== null)
+                verify(currentPageItem.currentTrip !== null)
+                return currentPageItem.currentTrip
+            }
+
+            let trip = currentPageTrip()
+            let cave = trip.parentCave
+            verify(cave !== null)
+
+            let baselineCaveName = String(cave.name)
+            let renamedCaveName = baselineCaveName === "Phake Cave 3000"
+                                ? "Phake Cave 3000 LinkBar Rename"
+                                : (baselineCaveName + " LinkBar Rename")
+
+            let tripName = String(trip.name)
+            let expectedTripPageAddress = "Source/Data/Cave=" + renamedCaveName + "/Trip=" + tripName
+
+            let linkBarTexts = function() {
+                let listView = findDescendantByObjectName(mainWindow, "linkBarListView")
+                if (listView === null
+                        || listView === undefined
+                        || listView.contentItem === null
+                        || listView.contentItem === undefined
+                        || listView.contentItem.children === undefined
+                        || listView.contentItem.children === null) {
+                    return []
+                }
+
+                let texts = []
+                let children = listView.contentItem.children
+                for (let i = 0; i < children.length; ++i) {
+                    let child = children[i]
+                    if (child !== null
+                            && child !== undefined
+                            && child.text !== undefined
+                            && child.text !== null) {
+                        texts.push(String(child.text))
+                    }
+                }
+                return texts
+            }
+
+            let expectedLinkBarCaveText = function(caveName) {
+                return "Cave=" + String(caveName)
+            }
+
+            let hasLinkBarText = function(expectedText) {
+                let texts = linkBarTexts()
+                for (let i = 0; i < texts.length; ++i) {
+                    if (texts[i] === String(expectedText)) {
+                        return true
+                    }
+                }
+                return false
+            }
+
+            tryVerifyWithDiagnostics(() => {
+                return hasLinkBarText(expectedLinkBarCaveText(baselineCaveName))
+            }, 10000, "verify baseline cave name in link bar on trip page")
+
+            cave.name = renamedCaveName
+
+            tryVerifyWithDiagnostics(() => {
+                return RootData.pageView.currentPageItem !== null
+                       && String(RootData.pageView.currentPageItem.objectName) === "tripPage"
+                       && String(cave.name) === renamedCaveName
+                       && String(RootData.pageSelectionModel.currentPageAddress) === expectedTripPageAddress
+                       && hasLinkBarText(expectedLinkBarCaveText(renamedCaveName))
+            }, 10000, "verify link bar updates after cave rename while on trip page")
+        }
+
         function test_tripCalibrationSyncAndCheckout() {
             let context = loadFixtureAndOpenFirstTrip()
 
