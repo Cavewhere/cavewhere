@@ -44,6 +44,8 @@
         <string>cwproj</string>
         <string>cw</string>
       </array>
+      <key>CFBundleTypeIconFile</key>
+      <string>cavewhereIcon.icns</string>
       <key>CFBundleTypeName</key>
       <string>CaveWhere File</string>
       <key>CFBundleTypeRole</key>
