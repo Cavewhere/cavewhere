@@ -37,6 +37,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             build-essential \
+            ccache \
             cmake \
             ninja-build \
             pipx \
@@ -45,6 +46,8 @@ jobs:
             patchelf \
             pkg-config \
             libsecret-1-dev \
+            libpng-dev \
+            libjpeg-dev \
             libgpgme-dev \
             libgcrypt20-dev \
             libglib2.0-dev \
