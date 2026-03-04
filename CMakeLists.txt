@@ -252,7 +252,7 @@ endif()
 # All packages we need to find
 find_package(Catch2 REQUIRED)
 find_package(Protobuf REQUIRED)
-find_package(openssl REQUIRED)
+find_package(OpenSSL REQUIRED)
 find_package(Qt6
     COMPONENTS
     Core
@@ -501,6 +501,8 @@ if(WIN32)
         list(APPEND _conan_runtime_dlls ${_abseil_dlls})
     endforeach()
 
+    # Conan exports the package as OpenSSL, but its generated metadata variables
+    # use the lowercase recipe name prefix: openssl_*.
     set(_openssl_bin_dirs "")
     if(DEFINED openssl_OpenSSL_SSL_BIN_DIRS_DEBUG)
         list(APPEND _openssl_bin_dirs ${openssl_OpenSSL_SSL_BIN_DIRS_DEBUG})
