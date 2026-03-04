@@ -2,7 +2,7 @@
 Type=Application
 Name=CaveWhere
 Comment=Cave mapping and survey software
-Exec=CaveWhere
+Exec=CaveWhere %f
 Icon=CaveWhere
 Terminal=false
 Categories=Science;Graphics;
