@@ -2766,8 +2766,9 @@ void cwSaveLoad::initializeRepositoryForCurrentFile()
         return;
     }
 
-    initializeGitRepository(QFileInfo(d->projectFileName).absoluteDir());
     d->repository->setDirectory(QFileInfo(d->projectFileName).absoluteDir());
+    d->repository->initRepository();
+    ensureGitExcludeHasLocalEntries(d->repository->directory());
 }
 
 void cwSaveLoad::setFileName(const QString &filename)
@@ -4817,6 +4818,7 @@ QString cwSaveLoad::sanitizeFileName(QString input) {
 void cwSaveLoad::initializeGitRepository(const QDir& repoDir)
 {
     QQuickGit::GitRepository repository;
+    repository.setLfsPolicy(cavewhereLfsPolicy());
     repository.setDirectory(repoDir);
     repository.initRepository();
     ensureGitExcludeHasLocalEntries(repoDir);
