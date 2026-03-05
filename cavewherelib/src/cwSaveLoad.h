@@ -223,6 +223,7 @@ public:
 
     Monad::ResultBase moveProjectTo(const QString& destinationFileUrl);
     Monad::ResultBase copyProjectTo(const QString& destinationFileUrl);
+    QFuture<Monad::ResultBase> saveBundledArchive(const QString& targetArchivePath);
     Monad::ResultBase deleteTemporaryProject();
 
     void addFiles(QList<QUrl> files,

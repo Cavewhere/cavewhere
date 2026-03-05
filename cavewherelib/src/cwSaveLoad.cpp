@@ -21,6 +21,7 @@
 #include "cwUnits.h"
 #include "cwImageUtils.h"
 #include "cwSvgReader.h"
+#include "cwZip.h"
 #include "cwNoteLiDAR.h"
 #include "cwImageResolution.h"
 #include "cwUniqueConnectionChecker.h"
@@ -126,6 +127,55 @@ QDir gitDirForRepository(const QDir& repoDir)
 QString defaultDataRoot(const QString& projectName)
 {
     return cwSaveLoad::sanitizeFileName(projectName);
+}
+
+ResultBase saveBundledArchiveAtomic(const QString& projectRootPath, const QString& targetArchivePath)
+{
+    if (projectRootPath.isEmpty()) {
+        return ResultBase(QStringLiteral("Project root path is empty."));
+    }
+    if (targetArchivePath.isEmpty()) {
+        return ResultBase(QStringLiteral("Bundle target path is empty."));
+    }
+
+    const QFileInfo targetInfo(targetArchivePath);
+    const QString targetDirPath = targetInfo.absolutePath();
+    const QString targetFileName = targetInfo.fileName();
+    if (targetDirPath.isEmpty() || targetFileName.isEmpty()) {
+        return ResultBase(QStringLiteral("Invalid bundle target path '%1'.").arg(targetArchivePath));
+    }
+
+    const QString tempArchivePath = QDir(targetDirPath).absoluteFilePath(targetFileName + QStringLiteral(".tmp"));
+    const QString backupArchivePath = QDir(targetDirPath).absoluteFilePath(targetFileName + QStringLiteral(".bak"));
+
+    QFile::remove(tempArchivePath);
+
+    const auto zipResult = cwZip::zipDirectory(projectRootPath, tempArchivePath);
+    if (zipResult.hasError()) {
+        QFile::remove(tempArchivePath);
+        return ResultBase(QStringLiteral("Failed to package bundled project: %1").arg(zipResult.errorMessage()));
+    }
+
+    const bool targetExists = QFileInfo::exists(targetArchivePath);
+    QFile::remove(backupArchivePath);
+
+    if (targetExists) {
+        if (!QFile::rename(targetArchivePath, backupArchivePath)) {
+            QFile::remove(tempArchivePath);
+            return ResultBase(QStringLiteral("Failed to stage backup '%1'.").arg(backupArchivePath));
+        }
+    }
+
+    if (!QFile::rename(tempArchivePath, targetArchivePath)) {
+        if (targetExists) {
+            QFile::rename(backupArchivePath, targetArchivePath);
+        }
+        QFile::remove(tempArchivePath);
+        return ResultBase(QStringLiteral("Failed to finalize bundled save to '%1'.").arg(targetArchivePath));
+    }
+
+    QFile::remove(backupArchivePath);
+    return ResultBase();
 }
 
 CavewhereProto::ProjectMetadata::GitMode toProtoGitMode(cwSaveLoad::GitMode mode)
@@ -1272,6 +1322,7 @@ struct cwSaveLoad::Data {
     struct Operation {
         enum class Type {
             SaveFlush,
+            BundlePackage,
             LoadProject,
             SyncProject,
             ReconcileExternal,
@@ -3219,6 +3270,42 @@ ResultBase cwSaveLoad::moveProjectTo(const QString& destinationFileUrl)
 ResultBase cwSaveLoad::copyProjectTo(const QString& destinationFileUrl)
 {
     return transferProjectTo(destinationFileUrl, ProjectTransferMode::Copy);
+}
+
+QFuture<ResultBase> cwSaveLoad::saveBundledArchive(const QString& targetArchivePath)
+{
+    const QString normalizedTargetPath = cwGlobals::convertFromURL(targetArchivePath);
+    if (normalizedTargetPath.isEmpty()) {
+        return AsyncFuture::completed(ResultBase(QStringLiteral("Bundle target path is empty.")));
+    }
+
+    auto saveFlushFuture = d->enqueueOperation(this, Data::Operation::Type::SaveFlush, [this]() {
+        return saveFlushImpl();
+    });
+
+    return d->enqueueOperation(this, Data::Operation::Type::BundlePackage, [this, saveFlushFuture, normalizedTargetPath]() {
+        const auto flushResult = saveFlushFuture.result();
+        if (flushResult.hasError()) {
+            return AsyncFuture::completed(flushResult);
+        }
+
+        const auto commitResult = commitProjectChanges();
+        if (commitResult.hasError()) {
+            qWarning() << "Bundled save commit skipped:" << commitResult.errorMessage();
+        }
+
+        const QString workingProjectFile = fileName();
+        const QString projectRootPath = QFileInfo(workingProjectFile).absolutePath();
+        auto packageFuture = cwConcurrent::run([projectRootPath, normalizedTargetPath]() {
+            return saveBundledArchiveAtomic(projectRootPath, normalizedTargetPath);
+        });
+
+        if (d->futureToken.isValid()) {
+            d->futureToken.addJob(cwFuture(QFuture<void>(packageFuture), QStringLiteral("Bundling project")));
+        }
+
+        return packageFuture;
+    });
 }
 
 ResultBase cwSaveLoad::deleteTemporaryProject()

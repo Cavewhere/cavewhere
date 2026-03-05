@@ -121,54 +121,6 @@ QString findProjectFileInDirectory(const QString& rootPath)
     return QString();
 }
 
-ResultBase saveBundledArchiveAtomic(const QString& projectRootPath, const QString& targetArchivePath)
-{
-    if (projectRootPath.isEmpty()) {
-        return ResultBase(QStringLiteral("Project root path is empty."));
-    }
-    if (targetArchivePath.isEmpty()) {
-        return ResultBase(QStringLiteral("Bundle target path is empty."));
-    }
-
-    const QFileInfo targetInfo(targetArchivePath);
-    const QString targetDirPath = targetInfo.absolutePath();
-    const QString targetFileName = targetInfo.fileName();
-    if (targetDirPath.isEmpty() || targetFileName.isEmpty()) {
-        return ResultBase(QStringLiteral("Invalid bundle target path '%1'.").arg(targetArchivePath));
-    }
-
-    const QString tempArchivePath = QDir(targetDirPath).absoluteFilePath(targetFileName + QStringLiteral(".tmp"));
-    const QString backupArchivePath = QDir(targetDirPath).absoluteFilePath(targetFileName + QStringLiteral(".bak"));
-
-    QFile::remove(tempArchivePath);
-
-    const auto zipResult = cwZip::zipDirectory(projectRootPath, tempArchivePath);
-    if (zipResult.hasError()) {
-        QFile::remove(tempArchivePath);
-        return ResultBase(QStringLiteral("Failed to package bundled project: %1").arg(zipResult.errorMessage()));
-    }
-
-    const bool targetExists = QFileInfo::exists(targetArchivePath);
-    QFile::remove(backupArchivePath);
-
-    if (targetExists) {
-        if (!QFile::rename(targetArchivePath, backupArchivePath)) {
-            QFile::remove(tempArchivePath);
-            return ResultBase(QStringLiteral("Failed to stage backup '%1'.").arg(backupArchivePath));
-        }
-    }
-
-    if (!QFile::rename(tempArchivePath, targetArchivePath)) {
-        if (targetExists) {
-            QFile::rename(backupArchivePath, targetArchivePath);
-        }
-        QFile::remove(tempArchivePath);
-        return ResultBase(QStringLiteral("Failed to finalize bundled save to '%1'.").arg(targetArchivePath));
-    }
-
-    QFile::remove(backupArchivePath);
-    return ResultBase();
-}
 } // namespace
 
 /**
@@ -426,21 +378,28 @@ bool cwProject::save()
         return false;
     }
 
+    if (LoadedFromBundledArchive) {
+        auto bundledSaveFuture = m_saveLoad->saveBundledArchive(BundledArchivePath);
+        SaveFuture = AsyncFuture::observe(bundledSaveFuture)
+                         .context(this, [this, bundledSaveFuture]() {
+                             const auto saveResult = bundledSaveFuture.result();
+                             if (saveResult.hasError()) {
+                                 ErrorModel->append(cwError(saveResult.errorMessage(), cwError::Fatal));
+                                 return;
+                             }
+
+                             m_syncHealth->refresh();
+                             emit fileSaved();
+                         })
+                         .future();
+        return true;
+    }
+
     m_saveLoad->waitForFinished();
     const auto commitResult = m_saveLoad->commitProjectChanges();
     if (commitResult.hasError()) {
         ErrorModel->append(cwError(commitResult.errorMessage(), cwError::Warning));
         qWarning() << "Save commit skipped:" << commitResult.errorMessage();
-    }
-
-    if (LoadedFromBundledArchive) {
-        const QString workingProjectFile = m_saveLoad->fileName();
-        const QString projectRootPath = QFileInfo(workingProjectFile).absolutePath();
-        const auto packageResult = saveBundledArchiveAtomic(projectRootPath, BundledArchivePath);
-        if (packageResult.hasError()) {
-            ErrorModel->append(cwError(packageResult.errorMessage(), cwError::Fatal));
-            return false;
-        }
     }
 
     m_syncHealth->refresh();
@@ -529,34 +488,29 @@ bool cwProject::saveAs(QString newFilename)
     const bool saveAsBundled = QFileInfo(newFilename).suffix().compare(QStringLiteral("cw"), Qt::CaseInsensitive) == 0;
 
     if (saveAsBundled) {
-        ScopedProjectStateNotifier stateGuard(this);
+        auto saveAsBundledFuture = m_saveLoad->saveBundledArchive(newFilename);
+        SaveFuture = AsyncFuture::observe(saveAsBundledFuture)
+                         .context(this, [this, saveAsBundledFuture, newFilename]() {
+                             const auto saveResult = saveAsBundledFuture.result();
+                             if (saveResult.hasError()) {
+                                 ErrorModel->append(cwError(saveResult.errorMessage(), cwError::Fatal));
+                                 return;
+                             }
 
-        m_saveLoad->waitForFinished();
-        const auto commitResult = m_saveLoad->commitProjectChanges();
-        if (commitResult.hasError()) {
-            ErrorModel->append(cwError(commitResult.errorMessage(), cwError::Warning));
-            qWarning() << "SaveAs commit skipped:" << commitResult.errorMessage();
-        }
+                             ScopedProjectStateNotifier stateGuard(this);
+                             const QString baseName = QFileInfo(newFilename).completeBaseName();
+                             if (!baseName.isEmpty()) {
+                                 cavingRegion()->setName(baseName);
+                                 m_saveLoad->setDataRoot(baseName);
+                             }
 
-        const QString workingProjectFile = m_saveLoad->fileName();
-        const QString projectRootPath = QFileInfo(workingProjectFile).absolutePath();
-        const auto packageResult = saveBundledArchiveAtomic(projectRootPath, newFilename);
-        if (packageResult.hasError()) {
-            ErrorModel->append(cwError(packageResult.errorMessage(), cwError::Fatal));
-            return false;
-        }
-
-        const QString baseName = QFileInfo(newFilename).completeBaseName();
-        if (!baseName.isEmpty()) {
-            cavingRegion()->setName(baseName);
-            m_saveLoad->setDataRoot(baseName);
-        }
-
-        LoadedFromBundledArchive = true;
-        BundledArchivePath = newFilename;
-        emit filenameChanged(filename());
-        emit fileSaved();
-        m_syncHealth->refresh();
+                             LoadedFromBundledArchive = true;
+                             BundledArchivePath = newFilename;
+                             emit filenameChanged(filename());
+                             emit fileSaved();
+                             m_syncHealth->refresh();
+                         })
+                         .future();
         return true;
     }
 
@@ -1101,7 +1055,9 @@ void cwProject::waitSaveToFinish()
 {
     waitForSyncToFinish();
     m_saveLoad->waitForFinished();
-    // AsyncFuture::waitForFinished(SaveFuture);
+    if (SaveFuture.isRunning() || !SaveFuture.isFinished()) {
+        AsyncFuture::waitForFinished(SaveFuture);
+    }
 
     for (const auto& future : std::as_const(RetiringSaveFutures)) {
         if (future.isRunning() || !future.isFinished()) {
