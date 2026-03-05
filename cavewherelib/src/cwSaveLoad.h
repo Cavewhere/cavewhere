@@ -205,6 +205,7 @@ public:
     static Monad::Result<cwNoteData> loadNote(const QByteArray& content, const QString& filename, const QDir& projectDir);
 
     static QString sanitizeFileName(QString input);
+    static void initializeGitRepository(const QDir& repoDir);
 
     void saveProtoMessage(
         std::unique_ptr<const google::protobuf::Message> message,

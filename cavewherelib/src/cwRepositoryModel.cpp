@@ -68,13 +68,7 @@ Monad::ResultBase cwRepositoryModel::addRepository(const cwResultDir& dir)
                    const int newIndex = m_repositories.count();
                    beginInsertRows(QModelIndex(), newIndex, newIndex);
 
-                   QQuickGit::GitRepository repo;
-                   repo.setDirectory(dir.value());
-                   repo.initRepository();
-
-                   qWarning() << "TODO: Repositories should be init'ed through cwSaveLoad" << LOCATION;
-                   cwSaveLoad::ensureGitExcludeHasLocalEntries(dir.value());
-
+                   cwSaveLoad::initializeGitRepository(dir.value());
 
                    m_repositories.append(dir.value());
                    endInsertRows();
