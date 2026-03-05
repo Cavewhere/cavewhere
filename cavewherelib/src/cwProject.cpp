@@ -434,7 +434,7 @@ bool cwProject::save()
     }
 
     if (LoadedFromBundledArchive) {
-        const QString workingProjectFile = filename();
+        const QString workingProjectFile = m_saveLoad->fileName();
         const QString projectRootPath = QFileInfo(workingProjectFile).absolutePath();
         const auto packageResult = saveBundledArchiveAtomic(projectRootPath, BundledArchivePath);
         if (packageResult.hasError()) {
@@ -526,6 +526,40 @@ bool cwProject::saveAs(QString newFilename)
         return false;
     }
 
+    const bool saveAsBundled = QFileInfo(newFilename).suffix().compare(QStringLiteral("cw"), Qt::CaseInsensitive) == 0;
+
+    if (saveAsBundled) {
+        ScopedProjectStateNotifier stateGuard(this);
+
+        m_saveLoad->waitForFinished();
+        const auto commitResult = m_saveLoad->commitProjectChanges();
+        if (commitResult.hasError()) {
+            ErrorModel->append(cwError(commitResult.errorMessage(), cwError::Warning));
+            qWarning() << "SaveAs commit skipped:" << commitResult.errorMessage();
+        }
+
+        const QString workingProjectFile = m_saveLoad->fileName();
+        const QString projectRootPath = QFileInfo(workingProjectFile).absolutePath();
+        const auto packageResult = saveBundledArchiveAtomic(projectRootPath, newFilename);
+        if (packageResult.hasError()) {
+            ErrorModel->append(cwError(packageResult.errorMessage(), cwError::Fatal));
+            return false;
+        }
+
+        const QString baseName = QFileInfo(newFilename).completeBaseName();
+        if (!baseName.isEmpty()) {
+            cavingRegion()->setName(baseName);
+            m_saveLoad->setDataRoot(baseName);
+        }
+
+        LoadedFromBundledArchive = true;
+        BundledArchivePath = newFilename;
+        emit filenameChanged(filename());
+        emit fileSaved();
+        m_syncHealth->refresh();
+        return true;
+    }
+
     newFilename = cwGlobals::addExtension(newFilename, QStringLiteral("cwproj"));
     if (QFileInfo(newFilename).suffix().compare(QStringLiteral("cw"), Qt::CaseInsensitive) == 0) {
         newFilename = QFileInfo(newFilename).path() + QDir::separator()
@@ -545,6 +579,12 @@ bool cwProject::saveAs(QString newFilename)
     if (!baseName.isEmpty()) {
         cavingRegion()->setName(baseName);
         m_saveLoad->setDataRoot(baseName);
+    }
+
+    {
+        ScopedProjectStateNotifier stateGuard(this);
+        LoadedFromBundledArchive = false;
+        BundledArchivePath.clear();
     }
 
     emit fileSaved();
@@ -1328,6 +1368,9 @@ bool cwProject::isTemporaryProject() const {
 }
 
 QString cwProject::filename() const {
+    if (LoadedFromBundledArchive && !BundledArchivePath.isEmpty()) {
+        return BundledArchivePath;
+    }
     return m_saveLoad->fileName();
 }
 

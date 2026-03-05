@@ -12,6 +12,7 @@ using namespace Catch;
 #include "cwImageProvider.h"
 #include "cwRootData.h"
 #include "cwSurveyNoteModel.h"
+#include "cwSurveyNoteLiDARModel.h"
 #include "cwTaskManagerModel.h"
 #include "cwFutureManagerModel.h"
 #include "cwImageDatabase.h"
@@ -29,6 +30,7 @@ using namespace Catch;
 #include "cwSignalSpy.h"
 #include "cwRemoteRepositoryCloner.h"
 #include "cwRepositoryModel.h"
+#include "cwZip.h"
 #include "GitRepository.h"
 #include "GitFutureWatcher.h"
 #include "asyncfuture.h"
@@ -8957,6 +8959,243 @@ TEST_CASE("Non-temporary project saveAs reports error when destination exists", 
     CHECK(error.message() == QStringLiteral("Destination folder '%1' already exists.").arg(existingRoot));
 }
 
+TEST_CASE("SaveAs dual format matrix", "[cwProject][saveAs]") {
+    struct ProjectSnapshot {
+        int caveCount = 0;
+        int tripCount = 0;
+        int chunkCount = 0;
+        int uniqueStationCount = 0;
+        int noteCount = 0;
+        int lidarNoteCount = 0;
+        int scrapCount = 0;
+        int scrapStationCount = 0;
+        QString caveName;
+        QString tripName;
+        QString noteImageFileName;
+
+        bool operator==(const ProjectSnapshot& other) const {
+            return caveCount == other.caveCount
+                   && tripCount == other.tripCount
+                   && chunkCount == other.chunkCount
+                   && uniqueStationCount == other.uniqueStationCount
+                   && noteCount == other.noteCount
+                   && lidarNoteCount == other.lidarNoteCount
+                   && scrapCount == other.scrapCount
+                   && scrapStationCount == other.scrapStationCount
+                   && caveName == other.caveName
+                   && tripName == other.tripName
+                   && noteImageFileName == other.noteImageFileName;
+        }
+    };
+
+    constexpr int ExpectedCaveCount = 1;
+    constexpr int ExpectedTripCount = 1;
+    constexpr int ExpectedChunkCount = 9;
+    constexpr int ExpectedUniqueStationCount = 10;
+    constexpr int ExpectedNoteCount = 1;
+    constexpr int ExpectedLidarNoteCount = 0;
+    constexpr int ExpectedScrapCount = 1;
+    constexpr int ExpectedScrapStationCount = 4;
+    const QString ExpectedCaveName = QStringLiteral("Jaws of the Beast");
+    const QString ExpectedTripName = QStringLiteral("2019c154_-_party_fault");
+    const QString ExpectedNoteImageFileName = QStringLiteral("2019c154_-_party_fault-2p.svg");
+
+    auto loadProject = [] (const QString& path) {
+        auto project = std::make_unique<cwProject>();
+        addTokenManager(project.get());
+        project->loadOrConvert(path);
+        project->waitLoadToFinish();
+        REQUIRE(project->errorModel()->count() == 0);
+        return project;
+    };
+
+    auto snapshotProject = [] (cwProject* project) {
+        REQUIRE(project != nullptr);
+        REQUIRE(project->cavingRegion() != nullptr);
+        REQUIRE(project->cavingRegion()->caveCount() == 1);
+
+        ProjectSnapshot snapshot;
+        snapshot.caveCount = project->cavingRegion()->caveCount();
+
+        cwCave* cave = project->cavingRegion()->cave(0);
+        REQUIRE(cave != nullptr);
+        snapshot.caveName = cave->name();
+        snapshot.tripCount = cave->tripCount();
+        REQUIRE(snapshot.tripCount == 1);
+
+        cwTrip* trip = cave->trip(0);
+        REQUIRE(trip != nullptr);
+        snapshot.tripName = trip->name();
+        snapshot.chunkCount = trip->chunkCount();
+        snapshot.uniqueStationCount = trip->uniqueStations().size();
+
+        cwSurveyNoteModel* notes = trip->notes();
+        REQUIRE(notes != nullptr);
+        snapshot.noteCount = notes->rowCount();
+        REQUIRE(snapshot.noteCount == 1);
+
+        cwSurveyNoteLiDARModel* lidarNotes = trip->notesLiDAR();
+        REQUIRE(lidarNotes != nullptr);
+        snapshot.lidarNoteCount = lidarNotes->rowCount();
+
+        cwNote* note = notes->notes().first();
+        REQUIRE(note != nullptr);
+        snapshot.noteImageFileName = QFileInfo(note->image().path()).fileName();
+        snapshot.scrapCount = note->scraps().size();
+        REQUIRE(snapshot.scrapCount == 1);
+
+        cwScrap* scrap = note->scrap(0);
+        REQUIRE(scrap != nullptr);
+        snapshot.scrapStationCount = scrap->stations().size();
+
+        return snapshot;
+    };
+
+    auto requireExpectedFixtureSnapshot = [&] (const ProjectSnapshot& snapshot) {
+        CHECK(snapshot.caveCount == ExpectedCaveCount);
+        CHECK(snapshot.tripCount == ExpectedTripCount);
+        CHECK(snapshot.chunkCount == ExpectedChunkCount);
+        CHECK(snapshot.uniqueStationCount == ExpectedUniqueStationCount);
+        CHECK(snapshot.noteCount == ExpectedNoteCount);
+        CHECK(snapshot.lidarNoteCount == ExpectedLidarNoteCount);
+        CHECK(snapshot.scrapCount == ExpectedScrapCount);
+        CHECK(snapshot.scrapStationCount == ExpectedScrapStationCount);
+        CHECK(snapshot.caveName == ExpectedCaveName);
+        CHECK(snapshot.tripName == ExpectedTripName);
+        CHECK(snapshot.noteImageFileName == ExpectedNoteImageFileName);
+    };
+
+    auto makeExtractedCwprojFixture = []() -> QString {
+        const QString zippedFixture = copyToTempFolder("://datasets/test_cwProject/jaws of the beast with scrap.zip");
+        QFileInfo zipInfo(zippedFixture);
+        auto extractResult = cwZip::extractAll(zippedFixture, zipInfo.canonicalPath());
+        REQUIRE_FALSE(extractResult.hasError());
+
+        QDirIterator projectIt(zipInfo.canonicalPath(),
+                               QStringList() << "*.cwproj",
+                               QDir::Files,
+                               QDirIterator::Subdirectories);
+        while(projectIt.hasNext()) {
+            const QString path = projectIt.next();
+            if(path.contains(QStringLiteral("__MACOSX"))) {
+                continue;
+            }
+
+            QFileInfo fileInfo(path);
+            if(fileInfo.fileName().startsWith(QStringLiteral("._"))) {
+                continue;
+            }
+
+            return path;
+        }
+
+        FAIL("Extracted fixture did not contain a .cwproj file");
+        return QString();
+    };
+
+    auto makeBundledFixture = []() -> QString {
+        const QString bundledZip = copyToTempFolder("://datasets/test_cwProject/jaws of the beast with scrap.zip");
+        const QString bundledArchive = QFileInfo(bundledZip).path()
+            + QDir::separator()
+            + QFileInfo(bundledZip).completeBaseName()
+            + QStringLiteral(".cw");
+        REQUIRE(QFile::rename(bundledZip, bundledArchive));
+        return bundledArchive;
+    };
+
+    SECTION("cwproj -> cwproj") {
+        const QString sourceProjectFile = makeExtractedCwprojFixture();
+        auto project = loadProject(sourceProjectFile);
+        REQUIRE(project->projectType(project->filename()) == cwProject::GitFileType);
+        const ProjectSnapshot beforeSaveAs = snapshotProject(project.get());
+        requireExpectedFixtureSnapshot(beforeSaveAs);
+
+        QTemporaryDir destinationParent;
+        REQUIRE(destinationParent.isValid());
+        const QString target = destinationParent.filePath(QStringLiteral("Matrix_cwproj_to_cwproj.cwproj"));
+        REQUIRE(project->saveAs(target));
+        project->waitSaveToFinish();
+
+        CHECK(QFileInfo::exists(project->filename()));
+        CHECK(project->filename().endsWith(QStringLiteral(".cwproj")));
+        CHECK(project->projectType(project->filename()) == cwProject::GitFileType);
+
+        auto reloaded = loadProject(project->filename());
+        const ProjectSnapshot afterReload = snapshotProject(reloaded.get());
+        requireExpectedFixtureSnapshot(afterReload);
+        CHECK(afterReload == beforeSaveAs);
+    }
+
+    SECTION("cwproj -> cw (bundled)") {
+        const QString sourceProjectFile = makeExtractedCwprojFixture();
+        auto project = loadProject(sourceProjectFile);
+        REQUIRE(project->projectType(project->filename()) == cwProject::GitFileType);
+        const ProjectSnapshot beforeSaveAs = snapshotProject(project.get());
+        requireExpectedFixtureSnapshot(beforeSaveAs);
+
+        QTemporaryDir destinationParent;
+        REQUIRE(destinationParent.isValid());
+        const QString target = destinationParent.filePath(QStringLiteral("Matrix_cwproj_to_cw.cw"));
+        CHECK(project->saveAs(target));
+        project->waitSaveToFinish();
+
+        CHECK(project->filename().endsWith(QStringLiteral(".cw")));
+        CHECK(QFileInfo::exists(project->filename()));
+        CHECK(project->projectType(project->filename()) == cwProject::BundledGitFileType);
+
+        auto reloaded = loadProject(project->filename());
+        const ProjectSnapshot afterReload = snapshotProject(reloaded.get());
+        requireExpectedFixtureSnapshot(afterReload);
+        CHECK(afterReload == beforeSaveAs);
+    }
+
+    SECTION("cw (bundled) -> cw (bundled)") {
+        const QString sourceBundled = makeBundledFixture();
+        auto project = loadProject(sourceBundled);
+        REQUIRE(project->projectType(sourceBundled) == cwProject::BundledGitFileType);
+        const ProjectSnapshot beforeSaveAs = snapshotProject(project.get());
+        requireExpectedFixtureSnapshot(beforeSaveAs);
+
+        QTemporaryDir destinationParent;
+        REQUIRE(destinationParent.isValid());
+        const QString target = destinationParent.filePath(QStringLiteral("Matrix_cw_to_cw.cw"));
+        CHECK(project->saveAs(target));
+        project->waitSaveToFinish();
+
+        CHECK(project->filename().endsWith(QStringLiteral(".cw")));
+        CHECK(QFileInfo::exists(project->filename()));
+        CHECK(project->projectType(project->filename()) == cwProject::BundledGitFileType);
+
+        auto reloaded = loadProject(project->filename());
+        const ProjectSnapshot afterReload = snapshotProject(reloaded.get());
+        requireExpectedFixtureSnapshot(afterReload);
+        CHECK(afterReload == beforeSaveAs);
+    }
+
+    SECTION("cw (bundled) -> cwproj") {
+        const QString sourceBundled = makeBundledFixture();
+        auto project = loadProject(sourceBundled);
+        REQUIRE(project->projectType(sourceBundled) == cwProject::BundledGitFileType);
+        const ProjectSnapshot beforeSaveAs = snapshotProject(project.get());
+        requireExpectedFixtureSnapshot(beforeSaveAs);
+
+        QTemporaryDir destinationParent;
+        REQUIRE(destinationParent.isValid());
+        const QString target = destinationParent.filePath(QStringLiteral("Matrix_cw_to_cwproj.cwproj"));
+        CHECK(project->saveAs(target));
+        project->waitSaveToFinish();
+
+        CHECK(project->filename().endsWith(QStringLiteral(".cwproj")));
+        CHECK(QFileInfo::exists(project->filename()));
+        CHECK(project->projectType(project->filename()) == cwProject::GitFileType);
+
+        auto reloaded = loadProject(project->filename());
+        const ProjectSnapshot afterReload = snapshotProject(reloaded.get());
+        requireExpectedFixtureSnapshot(afterReload);
+        CHECK(afterReload == beforeSaveAs);
+    }
+}
+
 
 // TEST_CASE("Images should be removed correctly", "[cwProject]") {
 
@@ -9150,7 +9389,7 @@ TEST_CASE("cwProject should detect the correct file type", "[cwProject]") {
     project->loadOrConvert(bundledArchive);
     project->waitLoadToFinish();
     CHECK(project->errorModel()->size() == 0);
-    CHECK(project->projectType(project->filename()) == cwProject::GitFileType);
+    CHECK(project->projectType(project->filename()) == cwProject::BundledGitFileType);
     CHECK_FALSE(project->isTemporaryProject());
     const qint64 bundledSizeBeforeSave = QFileInfo(bundledArchive).size();
     REQUIRE(project->save());
