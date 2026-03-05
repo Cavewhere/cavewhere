@@ -163,6 +163,49 @@ TEST_CASE("cwSaveLoad writes file version metadata for saved files", "[cwSaveLoa
     checkHasId(noteLidarProto);
 }
 
+TEST_CASE("cwSaveLoad setFileName does not initialize git repository", "[cwSaveLoad]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("setter-only.cwproj"));
+    cwSaveLoad saveLoad;
+    saveLoad.setFileName(projectPath);
+
+    CHECK_FALSE(QFileInfo::exists(QDir(tempDir.path()).filePath(QStringLiteral(".git"))));
+}
+
+TEST_CASE("cwSaveLoad loading non-git project does not initialize repository", "[cwSaveLoad]") {
+    auto creatorRoot = std::make_unique<cwRootData>();
+    auto creatorProject = creatorRoot->project();
+    auto creatorRegion = creatorProject->cavingRegion();
+
+    creatorRegion->addCave();
+    auto cave = creatorRegion->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->addTrip();
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("non-git-load.cwproj"));
+    REQUIRE(creatorProject->saveAs(projectPath));
+    creatorProject->waitSaveToFinish();
+
+    const QDir projectDir = QFileInfo(projectPath).absoluteDir();
+    const QString gitPath = projectDir.filePath(QStringLiteral(".git"));
+    if (QFileInfo::exists(gitPath)) {
+        REQUIRE(QDir(gitPath).removeRecursively());
+    }
+    REQUIRE_FALSE(QFileInfo::exists(gitPath));
+
+    auto loaderProject = std::make_unique<cwProject>();
+    addTokenManager(loaderProject.get());
+    loaderProject->loadOrConvert(projectPath);
+    loaderProject->waitLoadToFinish();
+
+    CHECK_FALSE(QFileInfo::exists(gitPath));
+}
+
 TEST_CASE("cwSaveLoad reloads missing image metadata", "[cwSaveLoad]") {
     cwPDFSettings::initialize();
     auto settings = cwPDFSettings::instance();

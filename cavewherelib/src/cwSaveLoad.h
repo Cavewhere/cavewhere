@@ -175,7 +175,7 @@ public:
     void newProject();
 
     QString fileName() const;
-    void setFileName(const QString& filename, bool initRepository = true);
+    void setFileName(const QString& filename);
     QFuture<Monad::ResultBase> load(const QString& filename);
 
     // void setRootDir(const QDir& rootDir);
@@ -284,6 +284,8 @@ signals:
     void objectPathReady(QObject* object);
 
 private:
+    void initializeRepositoryForCurrentFile();
+
     enum class ReconcileApplyMode {
         Merge,
         TargetCommitWins

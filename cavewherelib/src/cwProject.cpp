@@ -558,7 +558,7 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
             m_saveLoad->setCavingRegion(nullptr);
 
             setSqliteTemporaryProject(result.isTempFile());
-            setFilename(result.filename(), false);
+            setFilename(result.filename());
             Region->setData(result.cavingRegion());
             FileVersion = result.fileVersion();
 
@@ -809,9 +809,9 @@ void cwProject::loadFile(QString filename) {
 
   \param newFilename - The new filename that this project will be moved to.
   */
-void cwProject::setFilename(QString newFilename, bool initRepository) {
+void cwProject::setFilename(QString newFilename) {
     if(newFilename != filename()) {
-        m_saveLoad->setFileName(newFilename, initRepository);
+        m_saveLoad->setFileName(newFilename);
         emit filenameChanged(newFilename);
         m_syncHealth->refresh();
     }

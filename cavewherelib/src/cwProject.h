@@ -232,7 +232,7 @@ private:
     // static void createTable(const QSqlDatabase& database, QString sql); //Helpers to createDefaultSchema
     // static void insertDocumentation(const QSqlDatabase& database, QList<QPair<QString, QString> > filenames); //Helpers to createDefaultSchema
 
-    void setFilename(QString newFilename, bool initRepository = true);
+    void setFilename(QString newFilename);
 
     void privateSave();
 

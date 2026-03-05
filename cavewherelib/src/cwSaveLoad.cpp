@@ -2323,6 +2323,9 @@ ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, Proj
     }
 
     setFileName(desiredFilePath);
+    if (d->projectMetadata.gitMode != GitMode::NoGit) {
+        initializeRepositoryForCurrentFile();
+    }
     setTemporary(false);
     d->projectMetadata.dataRoot = newDataRootName;
     emit dataRootChanged();
@@ -2379,6 +2382,7 @@ void cwSaveLoad::newProject()
 
         setTemporary(true);
         setFileName(regionFileName(tempDir, region));
+        initializeRepositoryForCurrentFile();
 
         saveProject(tempDir, region);
 
@@ -2481,6 +2485,9 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                                                             //The filename needs to be set first because, image providers should
                                                             //have the filename before the region model is set
                                                             setFileName(filename);
+                                                            if (QQuickGit::GitRepository::isRepository(QFileInfo(filename).absoluteDir())) {
+                                                                initializeRepositoryForCurrentFile();
+                                                            }
                                                             setTemporary(false);
 
                                                             setSaveEnabled(false);
@@ -2751,17 +2758,23 @@ QFuture<ResultBase> cwSaveLoad::enqueueFinalizePhase(const QFuture<ResultBase>& 
         });
 }
 
-void cwSaveLoad::setFileName(const QString &filename, bool initRepository)
+void cwSaveLoad::initializeRepositoryForCurrentFile()
+{
+    if (d->projectFileName.isEmpty()) {
+        return;
+    }
+
+    d->repository->setDirectory(QFileInfo(d->projectFileName).absoluteDir());
+    d->repository->initRepository();
+    ensureGitExcludeHasLocalEntries(d->repository->directory());
+}
+
+void cwSaveLoad::setFileName(const QString &filename)
 {
     //This should load the filename
     if(d->projectFileName != filename) {
         d->projectFileName = filename;
         d->repository->setDirectory(QFileInfo(filename).absoluteDir());
-
-        if(initRepository) {
-            d->repository->initRepository();
-            ensureGitExcludeHasLocalEntries(d->repository->directory());
-        }
 
         emit fileNameChanged();
     }
@@ -3463,6 +3476,7 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
 
     QString newProjectFilename = regionFileName(dir, &region);
     setFileName(newProjectFilename);
+    initializeRepositoryForCurrentFile();
 
     saveProject(dir, &region);
 
