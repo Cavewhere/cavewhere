@@ -76,6 +76,49 @@ std::optional<std::pair<QUuid, cwTripData>> loadBaseTripDataForCandidatePaths(
     return std::nullopt;
 }
 
+QStringList caveDirectoryCandidatesFromChangedCavePaths(const QStringList& changedPaths)
+{
+    QSet<QString> caveDirs;
+    for (const QString& changedPath : changedPaths) {
+        const QString normalizedPath = normalizeSyncPath(changedPath);
+        if (!normalizedPath.endsWith(QStringLiteral(".cwcave"), Qt::CaseInsensitive)) {
+            continue;
+        }
+
+        const QString caveDir = QFileInfo(normalizedPath).dir().dirName();
+        if (!caveDir.isEmpty()) {
+            caveDirs.insert(caveDir);
+        }
+    }
+
+    return caveDirs.values();
+}
+
+QString synthesizeTripPathWithCaveDir(const QString& dataRootName,
+                                      const QString& caveDirName,
+                                      const QString& tripDescriptorPath)
+{
+    const QString normalizedTripPath = normalizeSyncPath(tripDescriptorPath);
+    const QStringList segments = normalizedTripPath.split(QChar('/'), Qt::SkipEmptyParts);
+    const int tripsIndex = segments.indexOf(QStringLiteral("trips"));
+    if (tripsIndex <= 0 || tripsIndex + 2 >= segments.size()) {
+        return QString();
+    }
+
+    const QString tripDirName = segments.at(tripsIndex + 1);
+    const QString tripFileName = segments.at(tripsIndex + 2);
+    if (tripDirName.isEmpty() || tripFileName.isEmpty()) {
+        return QString();
+    }
+
+    const QString dataRootDir = dataRootName.isEmpty() ? segments.first() : dataRootName;
+    return normalizeSyncPath(
+        QDir(dataRootDir).filePath(
+            QDir(caveDirName).filePath(
+                QDir(QStringLiteral("trips")).filePath(
+                    QDir(tripDirName).filePath(tripFileName)))));
+}
+
 } // namespace
 
 QString cwTripSyncMergeHandler::name() const
@@ -158,6 +201,13 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
         }
 
         if (effectiveResolvedTripIds.isEmpty()) {
+            const QString absoluteChangedPath = context.repoRoot.absoluteFilePath(normalizedPath);
+            if (!QFileInfo::exists(absoluteChangedPath)) {
+                // Deleted/renamed-away descriptor paths can remain in changedPaths after merge.
+                // Skip these and rely on the surviving descriptor path for id resolution.
+                continue;
+            }
+
             cwReconcileMergeResult result;
             result.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;
             result.handlerName = name();
@@ -226,6 +276,43 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
         auto baseTripData = loadBaseTripDataForCandidatePaths(context.repoRoot,
                                                               context.report->mergeBaseHead,
                                                               baseLookupPaths);
+        if (!baseTripData.has_value()) {
+            const QStringList caveDirCandidates =
+                caveDirectoryCandidatesFromChangedCavePaths(context.report->changedPaths);
+            for (const QString& caveDirCandidate : caveDirCandidates) {
+                const QString synthesizedPath = synthesizeTripPathWithCaveDir(dataRootName,
+                                                                              caveDirCandidate,
+                                                                              normalizedPath);
+                if (synthesizedPath.isEmpty()) {
+                    continue;
+                }
+
+                const auto synthesizedBaseData = loadBaseTripDataForPath(context.repoRoot,
+                                                                          context.report->mergeBaseHead,
+                                                                          synthesizedPath);
+                if (synthesizedBaseData.has_value() && synthesizedBaseData->first == tripId) {
+                    baseTripData = synthesizedBaseData;
+                    break;
+                }
+            }
+        }
+
+        if (!baseTripData.has_value()) {
+            for (const QString& reportPath : context.report->changedPaths) {
+                const QString reportNormalizedPath = normalizeSyncPath(reportPath);
+                if (!reportNormalizedPath.endsWith(QStringLiteral(".cwtrip"), Qt::CaseInsensitive)) {
+                    continue;
+                }
+
+                const auto baseFromReportPath = loadBaseTripDataForPath(context.repoRoot,
+                                                                         context.report->mergeBaseHead,
+                                                                         reportNormalizedPath);
+                if (baseFromReportPath.has_value() && baseFromReportPath->first == tripId) {
+                    baseTripData = baseFromReportPath;
+                    break;
+                }
+            }
+        }
         if (baseTripData.has_value()) {
             baseTripById.insert(baseTripData->first, baseTripData->second);
         }

@@ -71,6 +71,7 @@
 //std includes
 #include <algorithm>
 #include <atomic>
+#include <functional>
 #include <variant>
 #include <type_traits>
 
@@ -846,6 +847,124 @@ struct cwSaveLoad::Data {
                 .arg(customPayload && customPayload->action != nullptr);
         }
 
+        static Monad::ResultBase ensureDirectoryExists(const QString& directoryPath)
+        {
+            QDir directory;
+            if (!directory.mkpath(directoryPath)) {
+                return Monad::ResultBase(QStringLiteral("Failed to create directory: %1").arg(directoryPath));
+            }
+            return Monad::ResultBase();
+        }
+
+        static Monad::ResultBase moveOrReplaceFile(const QString& sourcePath, const QString& destinationPath)
+        {
+            if (QFileInfo::exists(destinationPath)) {
+                if (QFileInfo(destinationPath).isDir()) {
+                    return Monad::ResultBase(QStringLiteral("Failed to move %1 -> %2 (destination is a directory)")
+                                                 .arg(sourcePath, destinationPath));
+                }
+                if (!QFile::remove(destinationPath)) {
+                    return Monad::ResultBase(QStringLiteral("Failed to replace file: %1").arg(destinationPath));
+                }
+            } else {
+                const QString parentDirectoryPath = QFileInfo(destinationPath).absolutePath();
+                const auto ensureParentResult = ensureDirectoryExists(parentDirectoryPath);
+                if (ensureParentResult.hasError()) {
+                    return ensureParentResult;
+                }
+            }
+
+            if (!QFile::rename(sourcePath, destinationPath)) {
+                return Monad::ResultBase(QStringLiteral("Failed to move file %1 -> %2").arg(sourcePath, destinationPath));
+            }
+
+            return Monad::ResultBase();
+        }
+
+        static Monad::ResultBase mergeDirectoryContents(const QString& sourceDirectoryPath,
+                                                        const QString& destinationDirectoryPath)
+        {
+            const auto ensureDestinationResult = ensureDirectoryExists(destinationDirectoryPath);
+            if (ensureDestinationResult.hasError()) {
+                return ensureDestinationResult;
+            }
+
+            QDir sourceDirectory(sourceDirectoryPath);
+            const QFileInfoList entries = sourceDirectory.entryInfoList(QDir::NoDotAndDotDot
+                                                                        | QDir::AllEntries
+                                                                        | QDir::Hidden
+                                                                        | QDir::System);
+            for (const QFileInfo& entryInfo : entries) {
+                const QString sourceEntryPath = entryInfo.absoluteFilePath();
+                const QString destinationEntryPath = QDir(destinationDirectoryPath).filePath(entryInfo.fileName());
+
+                if (entryInfo.isDir()) {
+                    if (QFileInfo::exists(destinationEntryPath)) {
+                        if (!QFileInfo(destinationEntryPath).isDir()) {
+                            return Monad::ResultBase(
+                                QStringLiteral("Failed to merge directory %1 into %2 (destination entry exists and is not a directory)")
+                                    .arg(sourceEntryPath, destinationEntryPath));
+                        }
+
+                        const auto nestedMergeResult = mergeDirectoryContents(sourceEntryPath, destinationEntryPath);
+                        if (nestedMergeResult.hasError()) {
+                            return nestedMergeResult;
+                        }
+
+                        if (!QDir(sourceEntryPath).removeRecursively()) {
+                            return Monad::ResultBase(QStringLiteral("Failed to remove directory after merge: %1").arg(sourceEntryPath));
+                        }
+                    } else if (!QDir().rename(sourceEntryPath, destinationEntryPath)) {
+                        return Monad::ResultBase(QStringLiteral("Failed to move directory %1 -> %2")
+                                                     .arg(sourceEntryPath, destinationEntryPath));
+                    }
+                    continue;
+                }
+
+                const auto moveFileResult = moveOrReplaceFile(sourceEntryPath, destinationEntryPath);
+                if (moveFileResult.hasError()) {
+                    return moveFileResult;
+                }
+            }
+
+            return Monad::ResultBase();
+        }
+
+        static Monad::ResultBase moveOrMergeDirectory(const QString& sourcePath, const QString& destinationPath)
+        {
+            if (QFileInfo::exists(destinationPath) && !QFileInfo(destinationPath).isDir()) {
+                return Monad::ResultBase(QStringLiteral("Failed to move %1 -> %2 (destination is not a directory)")
+                                             .arg(sourcePath, destinationPath));
+            }
+
+            if (!QFileInfo::exists(destinationPath)) {
+                if (!QDir().rename(sourcePath, destinationPath)) {
+                    return Monad::ResultBase(QStringLiteral("Failed to move %1 -> %2").arg(sourcePath, destinationPath));
+                }
+                return Monad::ResultBase();
+            }
+
+            const auto mergeResult = mergeDirectoryContents(sourcePath, destinationPath);
+            if (mergeResult.hasError()) {
+                return mergeResult;
+            }
+
+            if (!QDir(sourcePath).removeRecursively()) {
+                return Monad::ResultBase(QStringLiteral("Failed to remove directory after merge: %1").arg(sourcePath));
+            }
+
+            return Monad::ResultBase();
+        }
+
+        static Monad::ResultBase executeMoveJob(Kind kind, const QString& oldPath, const QString& newPath)
+        {
+            if (kind == Kind::Directory) {
+                return moveOrMergeDirectory(oldPath, newPath);
+            }
+
+            return moveOrReplaceFile(oldPath, newPath);
+        }
+
         Monad::ResultBase execute() const {
             auto isInsideRoot = [](const QString& rootPath, const QString& targetPath) {
                 if (rootPath.isEmpty() || targetPath.isEmpty()) {
@@ -895,8 +1014,7 @@ struct cwSaveLoad::Data {
                 }
                 return Monad::ResultBase();
             }
-            case Action::Move:
-            {
+            case Action::Move: {
                 auto oldCheck = ensureInsideRoot(oldPath);
                 if (oldCheck.hasError()) {
                     return oldCheck;
@@ -905,7 +1023,7 @@ struct cwSaveLoad::Data {
                 if (newCheck.hasError()) {
                     return newCheck;
                 }
-            }
+
                 if (!QFileInfo::exists(oldPath)) {
                     return Monad::ResultBase();
                 }
@@ -914,11 +1032,14 @@ struct cwSaveLoad::Data {
                     return Monad::ResultBase();
                 }
 
-                if (!QDir().rename(oldPath, path)) {
-                    return Monad::ResultBase(QStringLiteral("Failed to move %1 -> %2").arg(oldPath, path));
+                const auto moveResult = executeMoveJob(kind, oldPath, path);
+                if (moveResult.hasError()) {
+                    return moveResult;
                 }
+
                 Q_ASSERT(QFileInfo::exists(path));
                 return Monad::ResultBase();
+            }
             case Action::Remove:
             {
                 auto rootCheck = ensureInsideRoot(oldPath);
@@ -1069,6 +1190,31 @@ struct cwSaveLoad::Data {
 
     struct ObjectState {
         QString currentPath;
+        QString loadedPath;
+    };
+
+    struct LoadedTripPathParts {
+        QString caveName;
+        QString tripName;
+    };
+
+    struct LoadedNotePathParts {
+        QString caveName;
+        QString tripName;
+        QString noteName;
+    };
+
+    struct LoadedLiDARPathParts {
+        QString caveName;
+        QString tripName;
+        QString noteName;
+    };
+
+    struct LoadedPathIndex {
+        QHash<QUuid, QString> caveNameById;
+        QHash<QUuid, LoadedTripPathParts> tripPartsById;
+        QHash<QUuid, LoadedNotePathParts> notePartsById;
+        QHash<QUuid, LoadedLiDARPathParts> lidarPartsById;
     };
 
     //Where the objects are currently being saved
@@ -1405,12 +1551,16 @@ struct cwSaveLoad::Data {
             if (state.currentPath.isEmpty()) {
                 state.currentPath = job.path;
             } else {
-                // qDebug() << "Paths:" << state.currentPath << job.path;
-                Q_ASSERT(state.currentPath == job.path);
+                // During reconcile-driven renames, write jobs can be queued while directory/file
+                // move jobs are still normalizing object-state paths. Keep state aligned with the
+                // intended write destination instead of aborting on transient ordering.
+                state.currentPath = job.path;
             }
         } else if (job.kind == Job::Kind::File && job.action == Job::Action::Move) {
             auto& state = m_objectStates[job.objectId];
-            Q_ASSERT(state.currentPath != job.path);
+            if (state.currentPath == job.path) {
+                return;
+            }
             state.currentPath = job.path;
 
             const auto originalOnDone = job.onDone;
@@ -1432,9 +1582,9 @@ struct cwSaveLoad::Data {
             const QString oldDir = job.oldPath;
             const QString newDir = job.path;
 
-            Q_ASSERT(!oldDir.isEmpty());
-            Q_ASSERT(!newDir.isEmpty());
-            Q_ASSERT(oldDir != newDir);
+            if (oldDir.isEmpty() || newDir.isEmpty() || oldDir == newDir) {
+                return;
+            }
 
             const QString prefix = oldDir + QStringLiteral("/");
             for (auto it = m_objectStates.begin(); it != m_objectStates.end(); ++it) {
@@ -1537,8 +1687,110 @@ struct cwSaveLoad::Data {
         return QString();
     }
 
+    static QString normalizedAbsolutePath(const QString& path)
+    {
+        return QDir::cleanPath(QFileInfo(path).absoluteFilePath());
+    }
+
     ObjectState& stateFor(const void* object) {
         return m_objectStates[object];
+    }
+
+    static LoadedPathIndex buildLoadedPathIndex(const cwCavingRegionData& loadedRegion)
+    {
+        LoadedPathIndex index;
+        for (const cwCaveData& caveData : loadedRegion.caves) {
+            if (caveData.id.isNull()) {
+                continue;
+            }
+            index.caveNameById.insert(caveData.id, caveData.name);
+
+            for (const cwTripData& tripData : caveData.trips) {
+                if (tripData.id.isNull()) {
+                    continue;
+                }
+                index.tripPartsById.insert(tripData.id, LoadedTripPathParts {caveData.name, tripData.name});
+
+                for (const cwNoteData& noteData : tripData.noteModel.notes) {
+                    if (noteData.id.isNull()) {
+                        continue;
+                    }
+                    index.notePartsById.insert(noteData.id,
+                                               LoadedNotePathParts {caveData.name, tripData.name, noteData.name});
+                }
+
+                for (const cwNoteLiDARData& noteData : tripData.noteLiDARModel.notes) {
+                    if (noteData.id.isNull()) {
+                        continue;
+                    }
+                    index.lidarPartsById.insert(noteData.id,
+                                                LoadedLiDARPathParts {caveData.name, tripData.name, noteData.name});
+                }
+            }
+        }
+
+        return index;
+    }
+
+    void seedStatePathFromLoaded(const void* objectId, const QString& absolutePath)
+    {
+        if (objectId == nullptr || absolutePath.isEmpty()) {
+            return;
+        }
+
+        auto& state = m_objectStates[objectId];
+        const QString normalizedLoadedPath = normalizeQueuedPath(absolutePath);
+        state.loadedPath = normalizedLoadedPath;
+        if (state.currentPath.isEmpty()) {
+            state.currentPath = normalizedLoadedPath;
+            return;
+        }
+
+        const QString normalizedCurrentPath = normalizeQueuedPath(state.currentPath);
+        const bool currentExists = QFileInfo::exists(normalizedCurrentPath);
+        const bool loadedExists = QFileInfo::exists(normalizedLoadedPath);
+
+        // Keep the existing path when it still exists on disk; this preserves local-branch
+        // source paths needed for reconcile move jobs. Seed from loaded only when the current
+        // source is missing.
+        if (!currentExists && loadedExists) {
+            state.currentPath = normalizedLoadedPath;
+            return;
+        }
+
+        state.currentPath = normalizedCurrentPath;
+    }
+
+    template<typename TObject>
+    void enqueueRenameIfNeeded(cwSaveLoad* context, const TObject* object)
+    {
+        if (context == nullptr || object == nullptr) {
+            return;
+        }
+
+        auto& state = stateFor(object);
+        const QString desiredPath = normalizedAbsolutePath(absolutePathFor(context, object));
+        if (desiredPath.isEmpty()) {
+            return;
+        }
+
+        if (state.currentPath.isEmpty()) {
+            state.currentPath = desiredPath;
+            return;
+        }
+
+        const QString currentPath = normalizedAbsolutePath(state.currentPath);
+        if (currentPath == desiredPath) {
+            state.currentPath = currentPath;
+            return;
+        }
+
+        const QString currentDir = QFileInfo(currentPath).absoluteDir().absolutePath();
+        const QString desiredDir = QFileInfo(desiredPath).absoluteDir().absolutePath();
+        if (QDir::cleanPath(currentDir) != QDir::cleanPath(desiredDir)) {
+            addFileSystemJob(Job {object, Job::Kind::Directory, Job::Action::Move}, context);
+        }
+        addFileSystemJob(Job {object, Job::Kind::File, Job::Action::Move}, context);
     }
 
     void resetObjectStates(cwSaveLoad* context) {
@@ -1548,6 +1800,7 @@ struct cwSaveLoad::Data {
             for(const auto object : objects) {
                 auto& state = stateFor(object);
                 state.currentPath = normalizeQueuedPath(absolutePathFor(context, object));
+                state.loadedPath.clear();
             }
         };
 
@@ -1555,6 +1808,180 @@ struct cwSaveLoad::Data {
         addObjects(m_regionTreeModel->all<cwTrip*>(QModelIndex(), &cwRegionTreeModel::trip));
         addObjects(m_regionTreeModel->all<cwNote*>(QModelIndex(), &cwRegionTreeModel::note));
         addObjects(m_regionTreeModel->all<cwNoteLiDAR*>(QModelIndex(), &cwRegionTreeModel::noteLiDAR));
+    }
+
+    void seedObjectStatesFromLoadedData(cwSaveLoad* context,
+                                        const cwCavingRegionData& loadedRegion,
+                                        const QString& loadedDataRootName)
+    {
+        if (context == nullptr || m_regionTreeModel->cavingRegion() == nullptr) {
+            return;
+        }
+
+        QString dataRootName = loadedDataRootName;
+        if (dataRootName.isEmpty()) {
+            dataRootName = defaultDataRoot(loadedRegion.name);
+        }
+
+        const QDir baseDataRootDir = dataRootName.isEmpty()
+            ? context->projectRootDir()
+            : QDir(context->projectRootDir().absoluteFilePath(dataRootName));
+        const LoadedPathIndex loadedPathIndex = buildLoadedPathIndex(loadedRegion);
+
+        for (cwCave* cave : m_regionTreeModel->all<cwCave*>(QModelIndex(), &cwRegionTreeModel::cave)) {
+            if (cave == nullptr || cave->id().isNull()) {
+                continue;
+            }
+            const auto caveNameIt = loadedPathIndex.caveNameById.constFind(cave->id());
+            if (caveNameIt == loadedPathIndex.caveNameById.constEnd()) {
+                continue;
+            }
+
+            const QString caveDirName = cwSaveLoad::sanitizeFileName(caveNameIt.value());
+            const QString caveFileName = cwSaveLoad::sanitizeFileName(caveNameIt.value() + QStringLiteral(".cwcave"));
+            seedStatePathFromLoaded(cave, baseDataRootDir.filePath(QDir(caveDirName).filePath(caveFileName)));
+        }
+
+        for (cwTrip* trip : m_regionTreeModel->all<cwTrip*>(QModelIndex(), &cwRegionTreeModel::trip)) {
+            if (trip == nullptr || trip->id().isNull()) {
+                continue;
+            }
+            const auto partsIt = loadedPathIndex.tripPartsById.constFind(trip->id());
+            if (partsIt == loadedPathIndex.tripPartsById.constEnd()) {
+                continue;
+            }
+
+            const QString caveDirName = cwSaveLoad::sanitizeFileName(partsIt->caveName);
+            const QString tripDirName = cwSaveLoad::sanitizeFileName(partsIt->tripName);
+            const QString tripFileName = cwSaveLoad::sanitizeFileName(partsIt->tripName + QStringLiteral(".cwtrip"));
+            seedStatePathFromLoaded(trip, baseDataRootDir.filePath(QDir(caveDirName).filePath(
+                                              QDir(QStringLiteral("trips")).filePath(
+                                                  QDir(tripDirName).filePath(tripFileName)))));
+        }
+
+        for (cwNote* note : m_regionTreeModel->all<cwNote*>(QModelIndex(), &cwRegionTreeModel::note)) {
+            if (note == nullptr || note->id().isNull()) {
+                continue;
+            }
+            const auto partsIt = loadedPathIndex.notePartsById.constFind(note->id());
+            if (partsIt == loadedPathIndex.notePartsById.constEnd()) {
+                continue;
+            }
+
+            const QString caveDirName = cwSaveLoad::sanitizeFileName(partsIt->caveName);
+            const QString tripDirName = cwSaveLoad::sanitizeFileName(partsIt->tripName);
+            const QString noteFileName = cwSaveLoad::sanitizeFileName(partsIt->noteName + QStringLiteral(".cwnote"));
+            seedStatePathFromLoaded(note, baseDataRootDir.filePath(QDir(caveDirName).filePath(
+                                              QDir(QStringLiteral("trips")).filePath(
+                                                  QDir(tripDirName).filePath(
+                                                      QDir(QStringLiteral("notes")).filePath(noteFileName))))));
+        }
+
+        for (cwNoteLiDAR* note : m_regionTreeModel->all<cwNoteLiDAR*>(QModelIndex(), &cwRegionTreeModel::noteLiDAR)) {
+            if (note == nullptr || note->id().isNull()) {
+                continue;
+            }
+            const auto partsIt = loadedPathIndex.lidarPartsById.constFind(note->id());
+            if (partsIt == loadedPathIndex.lidarPartsById.constEnd()) {
+                continue;
+            }
+
+            const QString caveDirName = cwSaveLoad::sanitizeFileName(partsIt->caveName);
+            const QString tripDirName = cwSaveLoad::sanitizeFileName(partsIt->tripName);
+            const QString noteFileName = cwSaveLoad::sanitizeFileName(partsIt->noteName + QStringLiteral(".cwnote3d"));
+            seedStatePathFromLoaded(note, baseDataRootDir.filePath(QDir(caveDirName).filePath(
+                                              QDir(QStringLiteral("trips")).filePath(
+                                                  QDir(tripDirName).filePath(
+                                                      QDir(QStringLiteral("notes")).filePath(noteFileName))))));
+        }
+    }
+
+    static QString cleanupPathForDescriptor(const QString& absoluteDescriptorPath)
+    {
+        if (absoluteDescriptorPath.isEmpty()) {
+            return QString();
+        }
+
+        const QString normalizedPath = QDir::cleanPath(QFileInfo(absoluteDescriptorPath).absoluteFilePath());
+        if (normalizedPath.endsWith(QStringLiteral(".cwcave"), Qt::CaseInsensitive)
+            || normalizedPath.endsWith(QStringLiteral(".cwtrip"), Qt::CaseInsensitive)) {
+            return QFileInfo(absoluteDescriptorPath).absoluteDir().absolutePath();
+        }
+
+        return normalizedPath;
+    }
+
+    Monad::ResultBase cleanupStaleLoadedPaths(cwSaveLoad* context)
+    {
+        if (context == nullptr) {
+            return Monad::ResultBase();
+        }
+
+        struct RemovalTarget {
+            QString path;
+            bool isDirectory = false;
+        };
+
+        QList<RemovalTarget> targets;
+        for (auto it = m_objectStates.cbegin(); it != m_objectStates.cend(); ++it) {
+            const ObjectState& state = it.value();
+            if (state.loadedPath.isEmpty() || state.currentPath.isEmpty()) {
+                continue;
+            }
+
+            const QString cleanupLoadedPath = cleanupPathForDescriptor(state.loadedPath);
+            const QString cleanupDesiredPath = cleanupPathForDescriptor(state.currentPath);
+            if (cleanupLoadedPath.isEmpty() || cleanupDesiredPath.isEmpty()) {
+                continue;
+            }
+
+            if (QDir::cleanPath(cleanupLoadedPath) == QDir::cleanPath(cleanupDesiredPath)) {
+                continue;
+            }
+
+            const QFileInfo loadedInfo(cleanupLoadedPath);
+            if (!loadedInfo.exists()) {
+                continue;
+            }
+
+            targets.append(RemovalTarget { QDir::cleanPath(loadedInfo.absoluteFilePath()),
+                                           loadedInfo.isDir() });
+        }
+
+        if (targets.isEmpty()) {
+            return Monad::ResultBase();
+        }
+
+        std::sort(targets.begin(), targets.end(), [](const RemovalTarget& lhs, const RemovalTarget& rhs) {
+            return lhs.path.size() > rhs.path.size();
+        });
+
+        QSet<QString> removedTargets;
+        for (const RemovalTarget& target : std::as_const(targets)) {
+            if (target.path.isEmpty() || removedTargets.contains(target.path)) {
+                continue;
+            }
+
+            QFileInfo targetInfo(target.path);
+            if (!targetInfo.exists()) {
+                continue;
+            }
+
+            if (target.isDirectory || targetInfo.isDir()) {
+                if (!QDir(target.path).removeRecursively()) {
+                    return Monad::ResultBase(QStringLiteral("Failed to remove stale loaded directory: %1")
+                                                 .arg(target.path));
+                }
+            } else {
+                if (!QFile::remove(target.path)) {
+                    return Monad::ResultBase(QStringLiteral("Failed to remove stale loaded file: %1")
+                                                 .arg(target.path));
+                }
+            }
+            removedTargets.insert(target.path);
+        }
+
+        return Monad::ResultBase();
     }
 
     // Normalize paths for queued jobs in a way that is stable across aliases/symlinks.
@@ -2109,7 +2536,8 @@ QFuture<ResultBase> cwSaveLoad::saveFlushImpl()
         .future();
 }
 
-QFuture<ResultBase> cwSaveLoad::persistIdentityRepairSave()
+QFuture<ResultBase> cwSaveLoad::persistIdentityRepairSave(bool persistNoteDescriptors,
+                                                          bool persistLiDARNoteDescriptors)
 {
     auto* region = d->m_regionTreeModel->cavingRegion();
     if (region == nullptr) {
@@ -2122,25 +2550,52 @@ QFuture<ResultBase> cwSaveLoad::persistIdentityRepairSave()
         d->suppressLocalMutationTracking = previousSuppressTracking;
     });
 
-    saveProject(projectRootDir(), region);
+    // Avoid rewriting project metadata for every reconcile apply. This can create
+    // unnecessary sync churn (for example, cavewhereVersion-only diffs) when the
+    // reconcile only touches cave/trip/note payload paths.
+    if (d->pendingIdentityRepairSave) {
+        saveProject(projectRootDir(), region);
+    }
+    const bool persistAllDescriptors = d->pendingIdentityRepairSave;
+    const bool persistNotes = persistAllDescriptors || persistNoteDescriptors;
+    const bool persistLiDARNotes = persistAllDescriptors || persistLiDARNoteDescriptors;
+
     for (cwCave* cave : region->caves()) {
+        d->enqueueRenameIfNeeded(this, cave);
         save(cave);
         for (cwTrip* trip : cave->trips()) {
+            d->enqueueRenameIfNeeded(this, trip);
             save(trip);
 
             for (cwNote* note : trip->notes()->notes()) {
-                save(note);
+                d->enqueueRenameIfNeeded(this, note);
+                if (persistNotes) {
+                    save(note);
+                }
             }
 
             for (QObject* noteObject : trip->notesLiDAR()->notes()) {
                 if (auto* lidarNote = qobject_cast<cwNoteLiDAR*>(noteObject)) {
-                    save(lidarNote);
+                    d->enqueueRenameIfNeeded(this, lidarNote);
+                    if (persistLiDARNotes) {
+                        save(lidarNote);
+                    }
                 }
             }
         }
     }
 
-    return saveFlushImpl();
+    auto flushFuture = saveFlushImpl();
+    return AsyncFuture::observe(flushFuture)
+        .context(this, [this, flushFuture]() -> ResultBase {
+            const auto flushResult = flushFuture.result();
+            if (flushResult.hasError()) {
+                return flushResult;
+            }
+
+            return d->cleanupStaleLoadedPaths(this);
+        })
+        .future();
 }
 
 QFuture<ResultBase> cwSaveLoad::enqueueReconcilePhase(const QFuture<ResultBase>& prepareFuture,
@@ -2259,7 +2714,9 @@ QFuture<ResultBase> cwSaveLoad::enqueueFinalizePhase(const QFuture<ResultBase>& 
                            : AsyncFuture::completed(ResultBase());
             }
 
-            auto repairFuture = persistIdentityRepairSave();
+            auto repairFuture = persistIdentityRepairSave(
+                attemptState->reconcileOutcome->persistNoteDescriptors,
+                attemptState->reconcileOutcome->persistLiDARNoteDescriptors);
             return AsyncFuture::observe(repairFuture)
                 .context(this, [this, repairFuture, pushWithoutRetry, staleFromRemoteApplyGuard, syncGeneration, mode]() -> QFuture<ResultBase> {
                     if (d->operationGeneration != syncGeneration || d->retiring) {
@@ -5099,11 +5556,15 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
             });
 
             const auto& loadData = loadResult.value();
+            d->seedObjectStatesFromLoadedData(this, loadData.region, loadData.metadata.dataRoot);
             const auto previousMetadata = d->projectMetadata;
             d->projectMetadata = loadData.metadata;
             d->pendingIdentityRepairSave = loadData.identityRepair.required;
 
             bool modelMutated = false;
+            bool requiresPersistence = false;
+            bool persistNoteDescriptors = false;
+            bool persistLiDARNoteDescriptors = false;
             QString reconcileDiagnostic;
             QStringList mergeDiagnostics;
             SyncReport handlerReport = report;
@@ -5118,7 +5579,8 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
                 projectRootDir()
             };
             const cwReconcileMergeResult mergeResult = cwSyncMergeRegistry::instance().reconcile(mergeContext);
-            if (mergeResult.outcome == cwReconcileMergeResult::Outcome::Applied) {
+            const bool fullReloadApplied = (mergeResult.outcome != cwReconcileMergeResult::Outcome::Applied);
+            if (!fullReloadApplied) {
                 for (QObject* object : mergeResult.objectsPathReady) {
                     if (object != nullptr) {
                         emit objectPathReady(object);
@@ -5126,6 +5588,12 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
                 }
 
                 modelMutated = mergeResult.modelMutated;
+                requiresPersistence = mergeResult.modelMutated;
+                if (mergeResult.handlerName == QStringLiteral("cwNoteSyncMergeHandler")) {
+                    persistNoteDescriptors = mergeResult.modelMutated;
+                } else if (mergeResult.handlerName == QStringLiteral("cwNoteLiDARSyncMergeHandler")) {
+                    persistLiDARNoteDescriptors = mergeResult.modelMutated;
+                }
                 reconcileDiagnostic = QStringLiteral("reconcile handler %1 applied (%2)")
                                           .arg(mergeResult.handlerName,
                                                modelMutated
@@ -5134,6 +5602,11 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
             } else {
                 region->setData(loadData.region);
                 modelMutated = true;
+                // Full-reload fallback applies merged commit content from disk directly into
+                // the model. Unless identity repair is required, there is nothing to persist.
+                requiresPersistence = false;
+                persistNoteDescriptors = false;
+                persistLiDARNoteDescriptors = false;
 
                 if (mergeResult.outcome == cwReconcileMergeResult::Outcome::RequiresFullReload) {
                     reconcileDiagnostic = QStringLiteral("reconcile fallback to full reload (%1)")
@@ -5152,8 +5625,10 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
                 d->lastSyncReport->diagnostics.append(mergeDiagnostics);
             }
 
-            if (modelMutated) {
+            if (modelMutated && fullReloadApplied) {
                 d->resetObjectStates(this);
+            }
+            if (modelMutated) {
                 ++d->modelMutationEpoch;
             }
 
@@ -5164,9 +5639,11 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
             }
 
             ReconcileExternalResult reconcileResult;
-            reconcileResult.outcome = d->pendingIdentityRepairSave
+            reconcileResult.outcome = (requiresPersistence || d->pendingIdentityRepairSave)
                                           ? ReconcileExternalResult::Outcome::MutatedRequiresPrePushPersistence
                                           : ReconcileExternalResult::Outcome::NoOp;
+            reconcileResult.persistNoteDescriptors = persistNoteDescriptors;
+            reconcileResult.persistLiDARNoteDescriptors = persistLiDARNoteDescriptors;
             return Monad::Result<ReconcileExternalResult>(reconcileResult);
         })
         .future();

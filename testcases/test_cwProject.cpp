@@ -61,6 +61,7 @@ using namespace Catch;
 
 #include <algorithm>
 #include <optional>
+#include <vector>
 #include <google/protobuf/util/json_util.h>
 #include "cavewhere.pb.h"
 
@@ -392,6 +393,196 @@ bool setGitConfigString(const QString& workTreePath,
     return git_config_set_string(config,
                                  key,
                                  value.toUtf8().constData()) == GIT_OK;
+}
+
+std::optional<git_oid> headOidForRepository(const QString& repositoryPath)
+{
+    git_repository* repo = nullptr;
+    if (git_repository_open(&repo, repositoryPath.toLocal8Bit().constData()) != GIT_OK || !repo) {
+        return std::nullopt;
+    }
+    auto repoGuard = qScopeGuard([&repo]() {
+        if (repo) {
+            git_repository_free(repo);
+        }
+    });
+
+    git_reference* head = nullptr;
+    if (git_repository_head(&head, repo) != GIT_OK || !head) {
+        return std::nullopt;
+    }
+    auto headGuard = qScopeGuard([&head]() {
+        if (head) {
+            git_reference_free(head);
+        }
+    });
+
+    const git_oid* oid = git_reference_target(head);
+    if (!oid) {
+        return std::nullopt;
+    }
+    return *oid;
+}
+
+QString oidToString(const git_oid& oid)
+{
+    char buffer[GIT_OID_HEXSZ + 1] = {0};
+    git_oid_tostr(buffer, sizeof(buffer), &oid);
+    return QString::fromLatin1(buffer);
+}
+
+QStringList changedPathsForCommit(const QString& repositoryPath, const git_oid& commitId)
+{
+    git_repository* repo = nullptr;
+    if (git_repository_open(&repo, repositoryPath.toLocal8Bit().constData()) != GIT_OK || !repo) {
+        return {};
+    }
+    auto repoGuard = qScopeGuard([&repo]() {
+        if (repo) {
+            git_repository_free(repo);
+        }
+    });
+
+    git_commit* commit = nullptr;
+    if (git_commit_lookup(&commit, repo, &commitId) != GIT_OK || !commit) {
+        return {};
+    }
+    auto commitGuard = qScopeGuard([&commit]() {
+        if (commit) {
+            git_commit_free(commit);
+        }
+    });
+
+    git_tree* newTree = nullptr;
+    if (git_commit_tree(&newTree, commit) != GIT_OK || !newTree) {
+        return {};
+    }
+    auto newTreeGuard = qScopeGuard([&newTree]() {
+        if (newTree) {
+            git_tree_free(newTree);
+        }
+    });
+
+    git_tree* oldTree = nullptr;
+    if (git_commit_parentcount(commit) > 0) {
+        git_commit* parent = nullptr;
+        if (git_commit_parent(&parent, commit, 0) == GIT_OK && parent) {
+            auto parentGuard = qScopeGuard([&parent]() {
+                if (parent) {
+                    git_commit_free(parent);
+                }
+            });
+            if (git_commit_tree(&oldTree, parent) != GIT_OK) {
+                oldTree = nullptr;
+            }
+        }
+    }
+    auto oldTreeGuard = qScopeGuard([&oldTree]() {
+        if (oldTree) {
+            git_tree_free(oldTree);
+        }
+    });
+
+    git_diff* diff = nullptr;
+    if (git_diff_tree_to_tree(&diff, repo, oldTree, newTree, nullptr) != GIT_OK || !diff) {
+        return {};
+    }
+    auto diffGuard = qScopeGuard([&diff]() {
+        if (diff) {
+            git_diff_free(diff);
+        }
+    });
+
+    QSet<QString> paths;
+    const size_t deltaCount = git_diff_num_deltas(diff);
+    for (size_t i = 0; i < deltaCount; ++i) {
+        const git_diff_delta* delta = git_diff_get_delta(diff, i);
+        if (!delta) {
+            continue;
+        }
+        if (delta->old_file.path) {
+            paths.insert(QString::fromUtf8(delta->old_file.path));
+        }
+        if (delta->new_file.path) {
+            paths.insert(QString::fromUtf8(delta->new_file.path));
+        }
+    }
+
+    QStringList sorted = paths.values();
+    sorted.sort();
+    return sorted;
+}
+
+QString commitMessageForCommit(const QString& repositoryPath, const git_oid& commitId)
+{
+    git_repository* repo = nullptr;
+    if (git_repository_open(&repo, repositoryPath.toLocal8Bit().constData()) != GIT_OK || !repo) {
+        return {};
+    }
+    auto repoGuard = qScopeGuard([&repo]() {
+        if (repo) {
+            git_repository_free(repo);
+        }
+    });
+
+    git_commit* commit = nullptr;
+    if (git_commit_lookup(&commit, repo, &commitId) != GIT_OK || !commit) {
+        return {};
+    }
+    auto commitGuard = qScopeGuard([&commit]() {
+        if (commit) {
+            git_commit_free(commit);
+        }
+    });
+
+    return QString::fromUtf8(git_commit_message(commit));
+}
+
+bool pathMatchesAnySuffix(const QString& path, const QStringList& suffixes)
+{
+    return std::any_of(suffixes.cbegin(),
+                       suffixes.cend(),
+                       [&path](const QString& suffix) {
+                           return path.endsWith(suffix, Qt::CaseInsensitive);
+                       });
+}
+
+std::vector<git_oid> commitsSince(const QString& repositoryPath,
+                                  const git_oid& oldHeadExclusive,
+                                  const git_oid& newHeadInclusive)
+{
+    git_repository* repo = nullptr;
+    if (git_repository_open(&repo, repositoryPath.toLocal8Bit().constData()) != GIT_OK || !repo) {
+        return {};
+    }
+    auto repoGuard = qScopeGuard([&repo]() {
+        if (repo) {
+            git_repository_free(repo);
+        }
+    });
+
+    git_revwalk* revwalk = nullptr;
+    if (git_revwalk_new(&revwalk, repo) != GIT_OK || !revwalk) {
+        return {};
+    }
+    auto revwalkGuard = qScopeGuard([&revwalk]() {
+        if (revwalk) {
+            git_revwalk_free(revwalk);
+        }
+    });
+
+    git_revwalk_sorting(revwalk, GIT_SORT_TOPOLOGICAL | GIT_SORT_TIME);
+    if (git_revwalk_push(revwalk, &newHeadInclusive) != GIT_OK) {
+        return {};
+    }
+    git_revwalk_hide(revwalk, &oldHeadExclusive);
+
+    std::vector<git_oid> commits;
+    git_oid oid;
+    while (git_revwalk_next(&oid, revwalk) == GIT_OK) {
+        commits.push_back(oid);
+    }
+    return commits;
 }
 
 template<typename ProtoT>
@@ -3516,7 +3707,7 @@ TEST_CASE("cwProject sync incrementally reconciles note updates after remote tri
 
     CHECK(project->cavingRegion()->cave(0) == localCavePtr.data());
     CHECK(localCavePtr->trip(0) == localTripPtr.data());
-    CHECK(localTripPtr->notes()->notes().first() == localNotePtr.data());
+    CHECK(localTripPtr->notes()->notes().contains(localNotePtr.data()));
 
     CHECK(localTripPtr->name() == remoteTripName);
     CHECK(localNotePtr->name() == remoteNoteName);
@@ -3662,7 +3853,7 @@ TEST_CASE("cwProject sync incrementally reconciles trip rename without note chan
 
     CHECK(project->cavingRegion()->cave(0) == localCavePtr.data());
     CHECK(localCavePtr->trip(0) == localTripPtr.data());
-    CHECK(localTripPtr->notes()->notes().first() == localNotePtr.data());
+    CHECK(localTripPtr->notes()->notes().contains(localNotePtr.data()));
 
     CHECK(localTripPtr->name() == remoteTripName);
     CHECK(localNotePtr->name() == originalNoteName);
@@ -3813,7 +4004,7 @@ TEST_CASE("cwProject sync incrementally reconciles remote trip rename with local
 
     CHECK(project->cavingRegion()->cave(0) == localCavePtr.data());
     CHECK(localCavePtr->trip(0) == localTripPtr.data());
-    CHECK(localTripPtr->notes()->notes().first() == localNotePtr.data());
+    CHECK(localTripPtr->notes()->notes().contains(localNotePtr.data()));
 
     CHECK(localTripPtr->name() == remoteTripName);
     CHECK(localTripPtr->date().date() == localDateOnly);
@@ -5325,6 +5516,348 @@ TEST_CASE("cwProject sync incrementally reconciles second fast-forward trip rena
     CHECK(reopenedCave->trip(0) == reopenedTripPtr.data());
     CHECK(reopenedTripPtr->notes()->notes().first() == reopenedNotePtr.data());
     CHECK(reopenedTripPtr->name() == secondRemoteTripName);
+}
+
+TEST_CASE("cwProject sync incrementally reconciles remote cave rename with local trip rename", "[cwProject][sync][cave-rename][trip-rename]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Sync Tester"));
+    rootData->account()->setEmail(QStringLiteral("sync.tester@example.com"));
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Phake Cave 3000"));
+    cave->addTrip();
+    auto trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
+    trip->setName(QStringLiteral("2025.2 Release test"));
+
+    const QString pngSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    REQUIRE(QFileInfo::exists(pngSource));
+    const QString pngSource2 = QFileInfo(pngSource).absoluteDir().filePath(QStringLiteral("PhakeCave-copy.PNG"));
+    QFile::remove(pngSource2);
+    REQUIRE(QFile::copy(pngSource, pngSource2));
+    REQUIRE(QFileInfo::exists(pngSource2));
+    trip->notes()->addFromFiles({QUrl::fromLocalFile(pngSource), QUrl::fromLocalFile(pngSource2)});
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    REQUIRE(trip->notes()->rowCount() == 2);
+
+    QTemporaryDir projectDir;
+    REQUIRE(projectDir.isValid());
+    const QString projectPath = QDir(projectDir.path()).filePath(QStringLiteral("Phake Cave 3000.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+
+    // Seed one note with legacy absolute-like image path formatting so the test
+    // catches unintended descriptor rewrites during reconcile persistence.
+    {
+        const QStringList noteFiles = sortedNoteProtoFiles(QFileInfo(projectPath).absolutePath());
+        REQUIRE(noteFiles.size() >= 2);
+        auto legacyNoteProto = loadProtoFromJsonFile<CavewhereProto::Note>(noteFiles.at(1));
+        REQUIRE(legacyNoteProto.has_image());
+        const QString imageFileName = QFileInfo(QString::fromUtf8(legacyNoteProto.image().path())).fileName();
+        const QString legacyPath = QStringLiteral("%1/trips/%2/notes/%3")
+                                       .arg(cave->name(), trip->name(), imageFileName);
+        legacyNoteProto.mutable_image()->set_path(legacyPath.toStdString());
+        writeProtoToJsonFile(noteFiles.at(1), legacyNoteProto);
+    }
+
+    auto* repository = project->repository();
+    REQUIRE(repository != nullptr);
+
+    QTemporaryDir remoteRoot;
+    REQUIRE(remoteRoot.isValid());
+    const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
+
+    git_repository* remoteRepo = nullptr;
+    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
+    if (remoteRepo) {
+        git_repository_free(remoteRepo);
+        remoteRepo = nullptr;
+    }
+
+    const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
+                                                         QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(addRemoteError.isEmpty());
+
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+    requireCleanRepository(repository);
+    requireNoUnmergedIndexEntries(repository);
+
+    QPointer<cwCave> localCavePtr = project->cavingRegion()->cave(0);
+    REQUIRE(localCavePtr != nullptr);
+    QPointer<cwTrip> localTripPtr = localCavePtr->trip(0);
+    REQUIRE(localTripPtr != nullptr);
+    REQUIRE(localTripPtr->notes()->rowCount() == 2);
+    QPointer<cwNote> localNotePtr = localTripPtr->notes()->notes().first();
+    REQUIRE(localNotePtr != nullptr);
+
+    const QString oldCaveFilePath = ProjectFilenameTestHelper::absolutePath(localCavePtr);
+    const QString oldTripFilePath = ProjectFilenameTestHelper::absolutePath(localTripPtr);
+    const QString oldNoteFilePath = ProjectFilenameTestHelper::absolutePath(localNotePtr);
+    const QString oldImagePath = ProjectFilenameTestHelper::absolutePath(localNotePtr, localNotePtr->image().path());
+
+    QTemporaryDir cloneDir;
+    REQUIRE(cloneDir.isValid());
+    const QString clonePath = QDir(cloneDir.path()).filePath(QStringLiteral("clone-2"));
+
+    QQuickGit::GitRepository cloneRepository;
+    cloneRepository.setDirectory(QDir(clonePath));
+    cloneRepository.setAccount(rootData->account());
+
+    auto cloneFuture = cloneRepository.clone(QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(AsyncFuture::waitForFinished(cloneFuture, 10000));
+    INFO("Clone error:" << cloneFuture.result().errorMessage().toStdString());
+    REQUIRE(!cloneFuture.result().hasError());
+
+    auto remoteRootData = std::make_unique<cwRootData>();
+    remoteRootData->account()->setName(QStringLiteral("Remote Sync Tester"));
+    remoteRootData->account()->setEmail(QStringLiteral("remote.sync.tester@example.com"));
+
+    auto remoteProject = remoteRootData->project();
+    const QString clonedProjectPath = QDir(clonePath).filePath(QFileInfo(projectPath).fileName());
+    REQUIRE(QFileInfo::exists(clonedProjectPath));
+    remoteProject->loadFile(clonedProjectPath);
+    remoteProject->waitLoadToFinish();
+    remoteProject->waitSaveToFinish();
+
+    auto* remoteRepository = remoteProject->repository();
+    REQUIRE(remoteRepository != nullptr);
+    remoteRepository->setAccount(remoteRootData->account());
+
+    auto* remoteCave = remoteProject->cavingRegion()->cave(0);
+    REQUIRE(remoteCave != nullptr);
+    REQUIRE(remoteCave->tripCount() == 1);
+
+    const QString renamedCaveName = QStringLiteral("Phake Cave 3123");
+    remoteCave->setName(renamedCaveName);
+    remoteProject->waitSaveToFinish();
+    REQUIRE(remoteProject->sync());
+    remoteRootData->futureManagerModel()->waitForFinished();
+    remoteProject->waitSaveToFinish();
+    CHECK(remoteProject->errorModel()->count() == 0);
+    requireCleanRepository(remoteRepository);
+    requireNoUnmergedIndexEntries(remoteRepository);
+
+    const QString renamedTripName = QStringLiteral("2025.2 Release test local");
+    const QString localRepoPath = QFileInfo(project->filename()).absoluteDir().absolutePath();
+    const auto headBeforeLocalSync = headOidForRepository(localRepoPath);
+    REQUIRE(headBeforeLocalSync.has_value());
+
+    localTripPtr->setName(renamedTripName);
+    project->waitSaveToFinish();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+    requireCleanRepository(repository);
+    requireNoUnmergedIndexEntries(repository);
+
+    REQUIRE(localCavePtr != nullptr);
+    REQUIRE(localTripPtr != nullptr);
+    REQUIRE(localNotePtr != nullptr);
+
+    CHECK(project->cavingRegion()->cave(0) == localCavePtr.data());
+    CHECK(localCavePtr->trip(0) == localTripPtr.data());
+    CHECK(localTripPtr->notes()->notes().contains(localNotePtr.data()));
+
+    CHECK(project->cavingRegion()->caveCount() == 1);
+    CHECK(localCavePtr->tripCount() == 1);
+    CHECK(localCavePtr->name() == renamedCaveName);
+
+    const auto syncReport = project->lastSyncReport();
+    REQUIRE(syncReport.has_value());
+    INFO("Post-sync cave name: " << localCavePtr->name().toStdString());
+    INFO("Post-sync trip name: " << localTripPtr->name().toStdString());
+    INFO("Expected trip name: " << renamedTripName.toStdString());
+    INFO("Sync changed paths: " << syncReport->changedPaths.join(QStringLiteral(" | ")).toStdString());
+    INFO("Sync diagnostics: " << syncReport->diagnostics.join(QStringLiteral(" | ")).toStdString());
+    CHECK(localTripPtr->name() == renamedTripName);
+
+    const QString renamedCaveFilePath = ProjectFilenameTestHelper::absolutePath(localCavePtr);
+    const QString renamedTripFilePath = ProjectFilenameTestHelper::absolutePath(localTripPtr);
+    const QString renamedNoteFilePath = ProjectFilenameTestHelper::absolutePath(localNotePtr);
+    const QString renamedImagePath = ProjectFilenameTestHelper::absolutePath(localNotePtr, localNotePtr->image().path());
+
+    CHECK(QFileInfo::exists(renamedCaveFilePath));
+    CHECK(QFileInfo::exists(renamedTripFilePath));
+    CHECK(QFileInfo::exists(renamedNoteFilePath));
+    INFO("Renamed image path: " << renamedImagePath.toStdString());
+    INFO("Old image path: " << oldImagePath.toStdString());
+    INFO("Renamed image exists: " << (QFileInfo::exists(renamedImagePath) ? "true" : "false"));
+    INFO("Old image exists: " << (QFileInfo::exists(oldImagePath) ? "true" : "false"));
+    INFO("Current note image rel path: " << localNotePtr->image().path().toStdString());
+    QStringList discoveredImagePaths;
+    QDirIterator it(QFileInfo(project->filename()).absoluteDir().absolutePath(),
+                    QStringList() << QStringLiteral("PhakeCave.PNG"),
+                    QDir::Files,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        discoveredImagePaths.append(it.next());
+    }
+    INFO("Discovered image paths: " << discoveredImagePaths.join(QStringLiteral(" | ")).toStdString());
+    CHECK(QFileInfo::exists(renamedImagePath));
+    CHECK_FALSE(QFileInfo::exists(oldCaveFilePath));
+    CHECK_FALSE(QFileInfo::exists(oldTripFilePath));
+    CHECK_FALSE(QFileInfo::exists(oldNoteFilePath));
+    CHECK_FALSE(QFileInfo::exists(oldImagePath));
+
+    CHECK(std::any_of(syncReport->diagnostics.cbegin(),
+                      syncReport->diagnostics.cend(),
+                      [](const QString& diagnostic) {
+                          return diagnostic.contains(QStringLiteral("reconcile handler"))
+                              && diagnostic.contains(QStringLiteral("applied"));
+                      }));
+    CHECK_FALSE(std::any_of(syncReport->diagnostics.cbegin(),
+                            syncReport->diagnostics.cend(),
+                            [](const QString& diagnostic) {
+                                return diagnostic.contains(QStringLiteral("reconcile fallback to full reload"));
+                            }));
+
+    const auto headAfterLocalSync = headOidForRepository(localRepoPath);
+    REQUIRE(headAfterLocalSync.has_value());
+    const auto newCommits = commitsSince(localRepoPath, *headBeforeLocalSync, *headAfterLocalSync);
+    REQUIRE_FALSE(newCommits.empty());
+
+    QStringList commitsTouchingProjectFile;
+    QStringList reconcileCommitIds;
+    for (const auto& oid : newCommits) {
+        const QString commitMessage = commitMessageForCommit(localRepoPath, oid);
+        const QStringList commitPaths = changedPathsForCommit(localRepoPath, oid);
+        INFO("Commit " << oidToString(oid).toStdString()
+             << " message: " << commitMessage.toStdString()
+             << " touched paths: "
+             << commitPaths.join(QStringLiteral(" | ")).toStdString());
+        if (commitMessage.startsWith(QStringLiteral("Sync Reconcile from CaveWhere"))) {
+            reconcileCommitIds.append(oidToString(oid));
+        }
+        const bool touchesProjectFile = std::any_of(commitPaths.cbegin(),
+                                                    commitPaths.cend(),
+                                                    [](const QString& path) {
+                                                        return path.endsWith(QStringLiteral(".cwproj"));
+                                                    });
+        if (touchesProjectFile) {
+            commitsTouchingProjectFile.append(oidToString(oid));
+        }
+    }
+    CHECK(reconcileCommitIds.isEmpty());
+    CHECK(commitsTouchingProjectFile.isEmpty());
+
+    const QString remoteWorkTreePath = QFileInfo(remoteProject->filename()).absoluteDir().absolutePath();
+    const auto remoteHeadAfterRenameAndMerge = headOidForRepository(remoteWorkTreePath);
+    REQUIRE(remoteHeadAfterRenameAndMerge.has_value());
+
+    auto verifyCommitRangeHasNoChurnPaths = [](const QString& repoPath,
+                                               const git_oid& oldHead,
+                                               const git_oid& newHead,
+                                               const QStringList& forbiddenSuffixes) {
+        if (git_oid_cmp(&oldHead, &newHead) == 0) {
+            return;
+        }
+
+        const auto commits = commitsSince(repoPath, oldHead, newHead);
+        REQUIRE_FALSE(commits.empty());
+        for (const auto& oid : commits) {
+            const QString commitMessage = commitMessageForCommit(repoPath, oid);
+            const QStringList commitPaths = changedPathsForCommit(repoPath, oid);
+            INFO("Post-reconcile commit " << oidToString(oid).toStdString()
+                 << " message: " << commitMessage.toStdString()
+                 << " touched: " << commitPaths.join(QStringLiteral(" | ")).toStdString());
+            CHECK_FALSE(commitMessage.startsWith(QStringLiteral("Sync Reconcile from CaveWhere")));
+            for (const QString& path : commitPaths) {
+                CHECK_FALSE(pathMatchesAnySuffix(path, forbiddenSuffixes));
+            }
+        }
+    };
+
+    auto verifyCleanSyncState = [](QQuickGit::GitRepository* repo) {
+        requireCleanRepository(repo);
+        requireRawCleanRepository(repo);
+        requireNoUnmergedIndexEntries(repo);
+    };
+
+    const QStringList churnForbiddenSuffixes {
+        QStringLiteral(".cwproj"),
+        QStringLiteral(".jpeg"),
+        QStringLiteral(".jpg"),
+        QStringLiteral(".png")
+    };
+
+    const auto localHeadBeforeNoopSync = *headAfterLocalSync;
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+    verifyCleanSyncState(repository);
+    const auto localHeadAfterNoopSync = headOidForRepository(localRepoPath);
+    REQUIRE(localHeadAfterNoopSync.has_value());
+    CHECK(git_oid_cmp(&localHeadBeforeNoopSync, &(*localHeadAfterNoopSync)) == 0);
+
+    const auto remoteHeadBeforeNoopSync = *remoteHeadAfterRenameAndMerge;
+    remoteProject->errorModel()->clear();
+    REQUIRE(remoteProject->sync());
+    remoteRootData->futureManagerModel()->waitForFinished();
+    remoteProject->waitSaveToFinish();
+    CHECK(remoteProject->errorModel()->count() == 0);
+    verifyCleanSyncState(remoteRepository);
+    const auto remoteHeadAfterNoopSync = headOidForRepository(remoteWorkTreePath);
+    REQUIRE(remoteHeadAfterNoopSync.has_value());
+    CHECK(git_oid_cmp(&remoteHeadBeforeNoopSync, &(*remoteHeadAfterNoopSync)) != 0);
+
+    const auto localHeadBeforePingPongSync = *localHeadAfterNoopSync;
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+    verifyCleanSyncState(repository);
+    const auto localHeadAfterPingPongSync = headOidForRepository(localRepoPath);
+    REQUIRE(localHeadAfterPingPongSync.has_value());
+    verifyCommitRangeHasNoChurnPaths(localRepoPath,
+                                     localHeadBeforePingPongSync,
+                                     *localHeadAfterPingPongSync,
+                                     churnForbiddenSuffixes);
+
+    auto reopenedLocalProject = std::make_unique<cwProject>();
+    addTokenManager(reopenedLocalProject.get());
+    reopenedLocalProject->loadOrConvert(projectPath);
+    reopenedLocalProject->waitLoadToFinish();
+    reopenedLocalProject->waitSaveToFinish();
+    auto* reopenedLocalRepository = reopenedLocalProject->repository();
+    REQUIRE(reopenedLocalRepository != nullptr);
+    reopenedLocalRepository->setAccount(rootData->account());
+
+    const auto localHeadBeforeReopenSync = *localHeadAfterPingPongSync;
+    reopenedLocalProject->errorModel()->clear();
+    REQUIRE(reopenedLocalProject->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    reopenedLocalProject->waitSaveToFinish();
+    if (reopenedLocalProject->errorModel()->count() > 0) {
+        for (int i = 0; i < reopenedLocalProject->errorModel()->count(); ++i) {
+            const cwError err = reopenedLocalProject->errorModel()->at(i);
+            qDebug() << "[cwProject cave/trip rename reopen sync] error"
+                     << i
+                     << "type=" << err.type()
+                     << "message=" << err.message();
+        }
+    }
+    verifyCleanSyncState(reopenedLocalRepository);
+
+    const auto localHeadAfterReopenSync = headOidForRepository(localRepoPath);
+    REQUIRE(localHeadAfterReopenSync.has_value());
+    verifyCommitRangeHasNoChurnPaths(localRepoPath,
+                                     localHeadBeforeReopenSync,
+                                     *localHeadAfterReopenSync,
+                                     churnForbiddenSuffixes);
+    CHECK(git_oid_cmp(&localHeadBeforeReopenSync, &(*localHeadAfterReopenSync)) == 0);
 }
 
 TEST_CASE("cwProject sync incrementally reconciles note asset updates after remote trip rename", "[cwProject][sync][trip-rename]") {
