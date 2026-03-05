@@ -29,6 +29,7 @@
 //Qt includes
 #include <QStandardPaths>
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QUrl>
@@ -56,6 +57,30 @@ QDir testDir() {
     dir.mkdir("trip");
     dir.cd("trip");
     return dir;
+}
+
+QString firstCwprojInDirectory(const QString& rootPath)
+{
+    QDirIterator it(rootPath,
+                    QStringList() << QStringLiteral("*.cwproj"),
+                    QDir::Files,
+                    QDirIterator::Subdirectories);
+
+    while (it.hasNext()) {
+        const QString candidate = it.next();
+        if (candidate.contains(QStringLiteral("__MACOSX"))) {
+            continue;
+        }
+
+        const QFileInfo info(candidate);
+        if (info.fileName().startsWith(QStringLiteral("._"))) {
+            continue;
+        }
+
+        return candidate;
+    }
+
+    return {};
 }
 
 template<typename ProtoT>
@@ -878,8 +903,10 @@ TEST_CASE("cwSaveLoad should save and load old projects correctly", "[cwSaveLoad
 
     CHECK(root->project()->projectType(filename) == cwProject::SqliteFileType);
 
-    QString convertedFilename = root->project()->filename();
-    REQUIRE(!convertedFilename.isEmpty());
+    const QDir workingDataRoot = root->project()->dataRootDir();
+    const QDir workingProjectRoot = QFileInfo(workingDataRoot.absolutePath()).absoluteDir();
+    QString convertedFilename = firstCwprojInDirectory(workingProjectRoot.absolutePath());
+    REQUIRE_FALSE(convertedFilename.isEmpty());
     CHECK(QFileInfo::exists(convertedFilename));
     CHECK(root->project()->projectType(convertedFilename) == cwProject::GitFileType);
 

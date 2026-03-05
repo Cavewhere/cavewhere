@@ -251,6 +251,27 @@ QString readGitExclude(const QDir& dir)
     return QString::fromUtf8(file.readAll());
 }
 
+QString firstCwprojInDirectory(const QString& rootPath)
+{
+    QDirIterator it(rootPath,
+                    QStringList() << QStringLiteral("*.cwproj"),
+                    QDir::Files,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        const QString candidate = it.next();
+        if (candidate.contains(QStringLiteral("__MACOSX"))) {
+            continue;
+        }
+        const QFileInfo info(candidate);
+        if (info.fileName().startsWith(QStringLiteral("._"))) {
+            continue;
+        }
+        return candidate;
+    }
+
+    return {};
+}
+
 QByteArray readBlobFromHead(git_repository* repo, const QString& path)
 {
     git_reference* head = nullptr;
@@ -11390,15 +11411,18 @@ TEST_CASE("cwProject should overwrite or touch loaded project", "[cwProject]") {
 
     QString convertedFilename = [](){
         auto root = std::make_unique<cwRootData>();
-        auto filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+        const QString filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
 
         root->project()->loadOrConvert(filename);
         root->project()->waitLoadToFinish();
         root->project()->waitSaveToFinish();
 
-        REQUIRE(root->project()->projectType(root->project()->filename()) == cwProject::GitFileType);
+        REQUIRE(root->project()->projectType(root->project()->filename()) == cwProject::SqliteFileType);
+        const QDir workingProjectRoot = QFileInfo(root->project()->dataRootDir().absolutePath()).absoluteDir();
+        const QString workingProjectFile = firstCwprojInDirectory(workingProjectRoot.absolutePath());
+        REQUIRE_FALSE(workingProjectFile.isEmpty());
 
-        return root->project()->filename();
+        return workingProjectFile;
     }();
 
     auto initialLoad = scan(QFileInfo(convertedFilename).absolutePath());
@@ -11471,8 +11495,10 @@ TEST_CASE("V6 conversion writes note image paths relative to note file",
     root->project()->waitLoadToFinish();
     root->project()->waitSaveToFinish();
 
-    const QString convertedProjectFile = root->project()->filename();
-    REQUIRE(root->project()->projectType(convertedProjectFile) == cwProject::GitFileType);
+    REQUIRE(root->project()->projectType(root->project()->filename()) == cwProject::SqliteFileType);
+    const QDir workingProjectRoot = QFileInfo(root->project()->dataRootDir().absolutePath()).absoluteDir();
+    const QString convertedProjectFile = firstCwprojInDirectory(workingProjectRoot.absolutePath());
+    REQUIRE_FALSE(convertedProjectFile.isEmpty());
 
     const QString projectRootPath = QFileInfo(convertedProjectFile).absolutePath();
     QStringList noteProtoFiles;
@@ -11494,6 +11520,69 @@ TEST_CASE("V6 conversion writes note image paths relative to note file",
         const QString imagePath = QString::fromStdString(noteProto.image().path());
         CHECK(imagePath.toStdString() == QFileInfo(imagePath).fileName().toStdString());
     }
+}
+
+TEST_CASE("loadOrConvert sqlite should save back to original bundled path", "[cwProject][conversion][bundled]") {
+    const QString sqliteSource = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+    REQUIRE(QFileInfo::exists(sqliteSource));
+
+    auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
+    project->loadOrConvert(sqliteSource);
+    project->waitLoadToFinish();
+    REQUIRE(project->errorModel()->size() == 0);
+    REQUIRE(project->filename() == sqliteSource);
+    REQUIRE(project->canSaveDirectly());
+
+    REQUIRE(project->cavingRegion()->caveCount() > 0);
+    cwCave* const cave = project->cavingRegion()->cave(0);
+    REQUIRE(cave != nullptr);
+    const QString renamedCave = cave->name() + QStringLiteral(" sqlite-migrated");
+    cave->setName(renamedCave);
+    project->waitSaveToFinish();
+
+    REQUIRE(project->save());
+    project->waitSaveToFinish();
+    REQUIRE(QFileInfo::exists(sqliteSource));
+    CHECK(project->projectType(sqliteSource) == cwProject::BundledGitFileType);
+
+    auto reloaded = std::make_unique<cwProject>();
+    addTokenManager(reloaded.get());
+    reloaded->loadOrConvert(sqliteSource);
+    reloaded->waitLoadToFinish();
+    REQUIRE(reloaded->errorModel()->size() == 0);
+    REQUIRE(reloaded->cavingRegion()->caveCount() > 0);
+    cwCave* const reloadedCave = reloaded->cavingRegion()->cave(0);
+    REQUIRE(reloadedCave != nullptr);
+    CHECK(reloadedCave->name() == renamedCave);
+}
+
+TEST_CASE("loadOrConvert sqlite read-only source remains temporary and won't save directly",
+          "[cwProject][conversion][bundled]") {
+    const QString sqliteSource = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+    REQUIRE(QFileInfo::exists(sqliteSource));
+
+    QFile sourceFile(sqliteSource);
+    const QFileDevice::Permissions originalPermissions = sourceFile.permissions();
+    REQUIRE(sourceFile.setPermissions(QFileDevice::ReadOwner
+                                      | QFileDevice::ReadUser
+                                      | QFileDevice::ReadGroup
+                                      | QFileDevice::ReadOther));
+    CHECK_FALSE(QFileInfo(sqliteSource).isWritable());
+
+    auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
+    project->loadOrConvert(sqliteSource);
+    project->waitLoadToFinish();
+    REQUIRE(project->errorModel()->size() >= 1);
+    CHECK(project->errorModel()->last().type() != cwError::Fatal);
+    REQUIRE(project->filename() == sqliteSource);
+    CHECK(project->isTemporaryProject());
+    CHECK_FALSE(project->canSaveDirectly());
+    CHECK_FALSE(project->save());
+    CHECK(project->projectType(sqliteSource) == cwProject::SqliteFileType);
+
+    sourceFile.setPermissions(originalPermissions);
 }
 
 TEST_CASE("Caves should be removed correctly simple", "[cwProject]") {

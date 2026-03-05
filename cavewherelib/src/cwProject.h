@@ -252,7 +252,8 @@ private:
     QFuture<Monad::ResultBase> loadHelper(QString filename);
     QFuture<Monad::ResultBase> convertFromProjectV6Helper(QString oldProjectFilename,
                                                           const QDir &newProjectDirectory,
-                                                          bool isTemporary = false);
+                                                          bool isTemporary = false,
+                                                          const QString& bundledArchivePath = QString());
 
     QList<QFuture<void>> RetiringSaveFutures;
     cwProjectSyncHealth* m_syncHealth = nullptr;

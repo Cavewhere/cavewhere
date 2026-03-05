@@ -769,7 +769,10 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
     return QtFuture::makeReadyValueFuture(ResultBase(QStringLiteral("Couldn't open '%1' because it has a unknown file type. Is it corrupted!?").arg(filename)));
 }
 
-QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFilename, const QDir &newProjectDirectory, bool isTemporary)
+QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFilename,
+                                                          const QDir &newProjectDirectory,
+                                                          bool isTemporary,
+                                                          const QString& bundledArchivePath)
 {
     //Make a temporary project
     auto tempProject = std::make_shared<cwProject>();
@@ -808,7 +811,7 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
 
     auto finalFuture =
         AsyncFuture::observe(loadTempProjectFuture)
-            .context(this, [this, loadTempProjectFuture, tempProject, isTemporary](){
+            .context(this, [this, loadTempProjectFuture, tempProject, isTemporary, bundledArchivePath](){
                 auto result = loadTempProjectFuture.result();
                 errorModel()->append(tempProject->errorModel()->toList());
 
@@ -816,9 +819,15 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
                     ScopedProjectStateNotifier stateGuard(this);
 
                     setSqliteTemporaryProject(isTemporary);
-                    LoadedFromBundledArchive = false;
-                    BundledArchivePath.clear();
+                    const bool keepBundledTarget = !bundledArchivePath.isEmpty();
+                    LoadedFromBundledArchive = keepBundledTarget;
+                    BundledArchivePath = keepBundledTarget ? bundledArchivePath : QString();
+                    if (keepBundledTarget) {
+                        emit filenameChanged(this->filename());
+                    }
                     FileVersion = tempProject->FileVersion;
+                } else {
+                    errorModel()->append(cwError(result.errorMessage(), cwError::Fatal));
                 }
 
 
@@ -942,11 +951,7 @@ void cwProject::newProject() {
   Loads the project, loads all the files to the project
   */
 void cwProject::loadFile(QString filename) {
-    if(filename.isEmpty()) { return; }
-
-    //Only load one file at a time
-    LoadFuture.cancel();
-    LoadFuture = loadHelper(filename);
+    loadOrConvert(filename);
 }
 
 /**
@@ -1136,21 +1141,23 @@ void cwProject::loadOrConvert(const QString &filename)
 {
     if(filename.isEmpty()) { return; }
 
-    FileType type = projectType(filename);
+    const QString normalizedFilename = cwGlobals::convertFromURL(filename);
+    FileType type = projectType(normalizedFilename);
 
     LoadFuture.cancel();
 
     if(type == SqliteFileType) {
         QTemporaryDir dir;
         dir.setAutoRemove(false);
-        auto tempDir = QDir(dir.filePath(QFileInfo(filename).baseName()));
-        const QFileInfo info(filename);
+        auto tempDir = QDir(dir.filePath(QFileInfo(normalizedFilename).baseName()));
+        const QFileInfo info(normalizedFilename);
         const bool temporaryProject = !info.isWritable();
-        LoadFuture = convertFromProjectV6Helper(filename, tempDir, temporaryProject);
+        const QString bundledPath = normalizedFilename;
+        LoadFuture = convertFromProjectV6Helper(normalizedFilename, tempDir, temporaryProject, bundledPath);
         // setTemporaryProject(true);
     } else {
         //This could be Git file or a corrupted file
-        auto loadFuture = loadHelper(filename);
+        auto loadFuture = loadHelper(normalizedFilename);
         LoadFuture = AsyncFuture::observe(loadFuture)
                          .context(this, [loadFuture, this]() {
                              auto result = loadFuture.result();

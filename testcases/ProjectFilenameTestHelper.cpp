@@ -57,6 +57,11 @@ QDir ProjectFilenameTestHelper::projectDir(const cwProject* project)
         return QDir();
     }
 
+    const QDir dataRootDir = project->dataRootDir();
+    if (!dataRootDir.absolutePath().isEmpty()) {
+        return dataRootDir;
+    }
+
     QDir rootDir = projectRootDirForFile(project->filename());
     QString dataRootName = project->dataRoot();
     if (dataRootName.isEmpty()) {

@@ -228,7 +228,7 @@ MainWindowTest {
             waitForRendering(mainWindow);
 
             //Copy the test project to the test folder
-            let filename = TestHelper.copyToTempDir("://datasets/test_cwProject/Phake Cave 3000 2024.2.cw");
+            let filename = TestHelper.copyToTempDir("://datasets/test_cwProject/Phake Cave 3000.cw");
 
             // let openCavingAreaButton_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->openCavingAreaButton")
             // mouseClick(openCavingAreaButton_obj1, 61.707, 18.5938)
@@ -237,30 +237,18 @@ MainWindowTest {
 
             //Simulating opening a file
             let dialog = ObjectFinder.findObjectByChain(mainWindow, "rootId->loadProjectDialog")
-            dialog.loadFileDialog.selectedFile = Qt.url("file:/" + filename);
-            dialog.loadFileDialog.accepted()
-
-            //Make sure the convert dialog is open
-            let whereDialog = ObjectFinder.findObjectByChain(mainWindow, "rootId->loadProjectDialog->whereDialogLoader")
-            compare(whereDialog.active, true);
-
-            let folderDialog = findChild(whereDialog, "folderDialog");
-            // let folderDialog = ObjectFinder.findObjectByChain(mainWindow, "rootId->loadProjectDialog->whereDialogLoader->folderDialog")
-            folderDialog.currentFolder = TestHelper.tempDirectoryUrl()
-
-            let openButton = ObjectFinder.findObjectByChain(mainWindow, "Popup->openRepoButton")
-            mouseClick(openButton)
+            dialog.runLoadForTest(TestHelper.toLocalUrl(filename))
 
             //Make we have all the data
-            // wait(1000);
-            // console.log("Cave count:" + RootData.region.caveCount)
-            tryVerify(() => { return RootData.region.caveCount === 1})
+            tryVerify(() => { return RootData.region.caveCount > 0 }, 20000)
+            compare(RootData.project.projectType(TestHelper.toLocalUrl(filename)),
+                    Project.SqliteFileType)
 
-            // RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=BB/Trip=Trip 10"
-            // waitForRendering(mainWindow);
+            verify(RootData.project.save())
+            TestHelper.waitForProjectSaveToFinish(RootData.project)
 
-
-            // wait(100000);
+            compare(RootData.project.projectType(TestHelper.toLocalUrl(filename)),
+                    Project.BundledGitFileType)
 
         }
     }
