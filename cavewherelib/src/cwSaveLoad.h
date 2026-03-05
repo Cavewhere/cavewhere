@@ -144,6 +144,7 @@ public:
             Unknown,
             AlreadyUpToDate,
             FastForward,
+            Rebased,
             MergeCommitCreated,
             MergeConflicts
         };

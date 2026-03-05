@@ -3312,6 +3312,7 @@ TEST_CASE("cwProject sync pulls remote-only changes into a clean local repo", "[
     REQUIRE(syncReport.has_value());
     const bool isExpectedPullState =
         syncReport->pullState == cwSaveLoad::SyncReport::PullState::FastForward
+        || syncReport->pullState == cwSaveLoad::SyncReport::PullState::Rebased
         || syncReport->pullState == cwSaveLoad::SyncReport::PullState::MergeCommitCreated;
     CHECK(isExpectedPullState);
     CHECK(syncReport->beforeHead != syncReport->afterHead);
@@ -5487,7 +5488,10 @@ TEST_CASE("cwProject sync incrementally reconciles second fast-forward trip rena
 
     const auto syncReport = reopenedProject->lastSyncReport();
     REQUIRE(syncReport.has_value());
-    CHECK(syncReport->pullState == cwSaveLoad::SyncReport::PullState::MergeCommitCreated);
+    const bool isExpectedPullState =
+        syncReport->pullState == cwSaveLoad::SyncReport::PullState::Rebased
+        || syncReport->pullState == cwSaveLoad::SyncReport::PullState::MergeCommitCreated;
+    CHECK(isExpectedPullState);
     CHECK(std::any_of(syncReport->changedPaths.cbegin(),
                       syncReport->changedPaths.cend(),
                       [](const QString& path) {
@@ -7658,7 +7662,7 @@ TEST_CASE("cwProject sync persists pulled id repairs before push", "[cwProject][
     CHECK_FALSE(repairedCaveProto.id().empty());
 }
 
-TEST_CASE("cwProject sync creates and pushes merge commit for diverged non-conflicting changes", "[cwProject]") {
+TEST_CASE("cwProject sync rebases and pushes diverged non-conflicting changes", "[cwProject]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
 
@@ -7779,9 +7783,9 @@ TEST_CASE("cwProject sync creates and pushes merge commit for diverged non-confl
             git_commit_free(mergedCommit);
         }
     });
-    CHECK(git_commit_parentcount(mergedCommit) == 2);
+    CHECK(git_commit_parentcount(mergedCommit) == 1);
     CHECK(QString::fromUtf8(git_commit_message(mergedCommit))
-              == QStringLiteral("Merged branch origin/%1").arg(repository->headBranchName()));
+              .startsWith(QStringLiteral("Sync from CaveWhere")));
 
     REQUIRE(git_repository_open(&remoteRepo, remoteRepoPath.toLocal8Bit().constData()) == GIT_OK);
     auto remoteRepoGuard = qScopeGuard([&remoteRepo]() {

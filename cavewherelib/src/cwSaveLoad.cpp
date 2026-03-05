@@ -435,6 +435,8 @@ cwSaveLoad::SyncReport::PullState toPullState(QQuickGit::GitRepository::MergeRes
         return cwSaveLoad::SyncReport::PullState::AlreadyUpToDate;
     case QQuickGit::GitRepository::MergeResult::FastForward:
         return cwSaveLoad::SyncReport::PullState::FastForward;
+    case QQuickGit::GitRepository::MergeResult::Rebased:
+        return cwSaveLoad::SyncReport::PullState::Rebased;
     case QQuickGit::GitRepository::MergeResult::MergeCommitCreated:
         return cwSaveLoad::SyncReport::PullState::MergeCommitCreated;
     case QQuickGit::GitRepository::MergeResult::MergeConflicts:
@@ -5230,7 +5232,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
                     return captureLfsSnapshot(repoPath);
                 });
 
-                auto pullFuture = repo->pull();
+                auto pullFuture = repo->pullRebaseOrMerge();
                 return AsyncFuture::observe(pullFuture)
                     .context(this, [this, repoPath, beforeHead, beforeSnapshotFuture, pullFuture, syncGeneration, attemptState]() -> QFuture<ResultBase> {
                         if (d->operationGeneration != syncGeneration || d->retiring) {
