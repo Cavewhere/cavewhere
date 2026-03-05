@@ -61,6 +61,67 @@ static bool cwzip_shouldSkipEntry(const QString& entryName)
     return QFileInfo(normalized).fileName().startsWith(QStringLiteral("._"));
 }
 
+static bool cwzip_matchesExcludePattern(const QString& normalizedRelativePath,
+                                        bool isDirectory,
+                                        const QString& rawPattern)
+{
+    QString pattern = rawPattern.trimmed();
+    if (pattern.isEmpty() || pattern.startsWith(QLatin1Char('#')) || pattern.startsWith(QLatin1Char('!'))) {
+        return false;
+    }
+
+    const bool directoryPattern = pattern.endsWith(QLatin1Char('/'));
+    if (directoryPattern && !isDirectory) {
+        return false;
+    }
+
+    if (directoryPattern) {
+        pattern.chop(1);
+    }
+
+    while (pattern.startsWith(QLatin1Char('/'))) {
+        pattern.remove(0, 1);
+    }
+
+    if (pattern.isEmpty()) {
+        return false;
+    }
+
+    const QStringList pathParts = normalizedRelativePath.split(QLatin1Char('/'), Qt::SkipEmptyParts);
+    if (!pattern.contains(QLatin1Char('/'))) {
+        for (const auto& part : pathParts) {
+            if (QDir::match(pattern, part)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    if (QDir::match(pattern, normalizedRelativePath)) {
+        return true;
+    }
+
+    return directoryPattern && normalizedRelativePath.startsWith(pattern + QLatin1Char('/'));
+}
+
+static bool cwzip_shouldSkipByExcludePatterns(const QString& relativePath,
+                                              bool isDirectory,
+                                              const QStringList& excludePatterns)
+{
+    if (excludePatterns.isEmpty()) {
+        return false;
+    }
+
+    const QString normalizedRelativePath = cwzip_normalizeRelPath(relativePath);
+    for (const auto& pattern : excludePatterns) {
+        if (cwzip_matchesExcludePattern(normalizedRelativePath, isDirectory, pattern)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 
 bool cwZip::ensureParentDirectory(const QString& fullPath)
 {
@@ -289,7 +350,9 @@ Monad::ResultString cwZip::findProjectFileInArchive(const QString& zipFilePath)
 // Return: NoError on success,
 //         Warning if some files failed but the archive is still created,
 //         Error (with minizip code when available) on fatal failure.
-Monad::ResultBase cwZip::zipDirectory(const QString& sourceDirPath, const QString& zipFilePath)
+Monad::ResultBase cwZip::zipDirectory(const QString& sourceDirPath,
+                                      const QString& zipFilePath,
+                                      const QStringList& excludePatterns)
 {
 
     QDir sourceDir(sourceDirPath);
@@ -411,8 +474,14 @@ Monad::ResultBase cwZip::zipDirectory(const QString& sourceDirPath, const QStrin
             : relPath + "/" + entry.fileName();
 
             if (entry.isDir()) {
+                if (cwzip_shouldSkipByExcludePatterns(relChild, true, excludePatterns)) {
+                    continue;
+                }
                 addDirRecursive(entry.absoluteFilePath(), relChild);
             } else if (entry.isFile()) {
+                if (cwzip_shouldSkipByExcludePatterns(relChild, false, excludePatterns)) {
+                    continue;
+                }
                 addFileStreaming(relChild);
             } else {
                 // Skip symlinks/special files. Add handling here if you want to include them.

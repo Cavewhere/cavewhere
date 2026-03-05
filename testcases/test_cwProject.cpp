@@ -9450,6 +9450,72 @@ TEST_CASE("cwProject should save bundled .cw changes", "[cwProject]") {
     CHECK(reloadedCave->name() == renamedCaveName);
 }
 
+TEST_CASE("Bundled save should exclude git-excluded files", "[cwProject][bundled][exclude]") {
+    const QString bundledZip = copyToTempFolder("://datasets/test_cwProject/jaws of the beast with scrap.zip");
+    const QString bundledArchive = QFileInfo(bundledZip).path()
+        + QDir::separator()
+        + QFileInfo(bundledZip).completeBaseName()
+        + QStringLiteral(".cw");
+    REQUIRE(QFile::rename(bundledZip, bundledArchive));
+
+    auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
+    project->loadOrConvert(bundledArchive);
+    project->waitLoadToFinish();
+    REQUIRE(project->errorModel()->size() == 0);
+
+    QDir workingDataRoot = project->dataRootDir();
+    REQUIRE(workingDataRoot.exists());
+
+    QDir workingProjectRoot = workingDataRoot;
+    REQUIRE(workingProjectRoot.cdUp());
+    const QString excludeDirPath = workingProjectRoot.filePath(QStringLiteral(".git/info"));
+    REQUIRE(QDir().mkpath(excludeDirPath));
+    {
+        QFile excludeFile(QDir(excludeDirPath).filePath(QStringLiteral("exclude")));
+        REQUIRE(excludeFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        excludeFile.write(".cw_cache/\n");
+        excludeFile.close();
+    }
+
+    const QString excludeContents = readGitExclude(workingProjectRoot);
+    REQUIRE(excludeContents.contains(QStringLiteral(".cw_cache")));
+
+    const QString cacheDirPath = workingProjectRoot.filePath(QStringLiteral(".cw_cache/images"));
+    REQUIRE(QDir().mkpath(cacheDirPath));
+    const QString cacheFilePath = QDir(cacheDirPath).filePath(QStringLiteral("should-not-be-bundled.txt"));
+    QFile cacheFile(cacheFilePath);
+    REQUIRE(cacheFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    cacheFile.write("excluded-cache-data");
+    cacheFile.close();
+    REQUIRE(QFileInfo::exists(cacheFilePath));
+
+    REQUIRE(project->save());
+    project->waitSaveToFinish();
+    REQUIRE(QFileInfo::exists(bundledArchive));
+
+    QTemporaryDir extractedDir;
+    REQUIRE(extractedDir.isValid());
+    auto extractResult = cwZip::extractAll(bundledArchive, extractedDir.path());
+    REQUIRE_FALSE(extractResult.hasError());
+
+    bool foundCachePath = false;
+    QDirIterator iter(extractedDir.path(),
+                      QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot,
+                      QDirIterator::Subdirectories);
+    while (iter.hasNext()) {
+        const QString path = iter.next();
+        const QString normalized = QDir::cleanPath(path).replace('\\', '/');
+        if (normalized.contains(QStringLiteral("/.cw_cache/"))
+            || normalized.endsWith(QStringLiteral("/.cw_cache"))) {
+            foundCachePath = true;
+            break;
+        }
+    }
+
+    CHECK_FALSE(foundCachePath);
+}
+
 TEST_CASE("Updating scrap data from a loaded project should save", "[cwProject]") {
     auto root = std::make_unique<cwRootData>();
     REQUIRE(root != nullptr);

@@ -2,6 +2,7 @@
 
 //Qt includes
 #include <QString>
+#include <QStringList>
 
 //Monad
 #include <Monad/Result.h>
@@ -25,7 +26,9 @@ public:
     };
 
     static Monad::Result<ZipResult> extractAll(const QString& zipFilePath, const QString& outputDirectory);
-    static Monad::ResultBase zipDirectory(const QString& sourceDirPath, const QString& zipFilePath);
+    static Monad::ResultBase zipDirectory(const QString& sourceDirPath,
+                                          const QString& zipFilePath,
+                                          const QStringList& excludePatterns = {});
     static Monad::ResultString findProjectFileInArchive(const QString& zipFilePath);
 
 private:

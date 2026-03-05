@@ -129,7 +129,9 @@ QString defaultDataRoot(const QString& projectName)
     return cwSaveLoad::sanitizeFileName(projectName);
 }
 
-ResultBase saveBundledArchiveAtomic(const QString& projectRootPath, const QString& targetArchivePath)
+ResultBase saveBundledArchiveAtomic(const QString& projectRootPath,
+                                    const QString& targetArchivePath,
+                                    const QStringList& excludePatterns)
 {
     if (projectRootPath.isEmpty()) {
         return ResultBase(QStringLiteral("Project root path is empty."));
@@ -150,7 +152,7 @@ ResultBase saveBundledArchiveAtomic(const QString& projectRootPath, const QStrin
 
     QFile::remove(tempArchivePath);
 
-    const auto zipResult = cwZip::zipDirectory(projectRootPath, tempArchivePath);
+    const auto zipResult = cwZip::zipDirectory(projectRootPath, tempArchivePath, excludePatterns);
     if (zipResult.hasError()) {
         QFile::remove(tempArchivePath);
         return ResultBase(QStringLiteral("Failed to package bundled project: %1").arg(zipResult.errorMessage()));
@@ -664,6 +666,30 @@ void repairNestedScrapIds(cwSaveLoad::ProjectLoadData& loadData)
             }
         }
     }
+}
+
+QStringList readGitExcludePatterns(const QDir& repoDir)
+{
+    const QDir gitDir = gitDirForRepository(repoDir);
+    if (!gitDir.exists()) {
+        return {};
+    }
+
+    QFile excludeFile(gitDir.filePath(QStringLiteral("info/exclude")));
+    if (!excludeFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return {};
+    }
+
+    QStringList patterns;
+    while (!excludeFile.atEnd()) {
+        const QString line = QString::fromUtf8(excludeFile.readLine()).trimmed();
+        if (line.isEmpty() || line.startsWith(QLatin1Char('#')) || line.startsWith(QLatin1Char('!'))) {
+            continue;
+        }
+        patterns.append(line);
+    }
+
+    return patterns;
 }
 
 } // namespace
@@ -3296,8 +3322,9 @@ QFuture<ResultBase> cwSaveLoad::saveBundledArchive(const QString& targetArchiveP
 
         const QString workingProjectFile = fileName();
         const QString projectRootPath = QFileInfo(workingProjectFile).absolutePath();
-        auto packageFuture = cwConcurrent::run([projectRootPath, normalizedTargetPath]() {
-            return saveBundledArchiveAtomic(projectRootPath, normalizedTargetPath);
+        const QStringList excludePatterns = readGitExcludePatterns(QDir(projectRootPath));
+        auto packageFuture = cwConcurrent::run([projectRootPath, normalizedTargetPath, excludePatterns]() {
+            return saveBundledArchiveAtomic(projectRootPath, normalizedTargetPath, excludePatterns);
         });
 
         if (d->futureToken.isValid()) {
