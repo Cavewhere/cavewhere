@@ -9152,6 +9152,11 @@ TEST_CASE("cwProject should detect the correct file type", "[cwProject]") {
     CHECK(project->errorModel()->size() == 0);
     CHECK(project->projectType(project->filename()) == cwProject::GitFileType);
     CHECK_FALSE(project->isTemporaryProject());
+    const qint64 bundledSizeBeforeSave = QFileInfo(bundledArchive).size();
+    REQUIRE(project->save());
+    CHECK(QFileInfo::exists(bundledArchive));
+    CHECK(QFileInfo(bundledArchive).size() > 0);
+    CHECK(QFileInfo(bundledArchive).size() >= bundledSizeBeforeSave);
 
     //Empty file
     QTemporaryFile tempFile;
@@ -9163,6 +9168,47 @@ TEST_CASE("cwProject should detect the correct file type", "[cwProject]") {
     tempFile.write("Test random data");
     tempFile.close();
     CHECK(project->projectType(datasetFile) == cwProject::UnknownFileType);
+}
+
+TEST_CASE("cwProject should save bundled .cw changes", "[cwProject]") {
+    const QString bundledZip = copyToTempFolder("://datasets/test_cwProject/jaws of the beast with scrap.zip");
+    const QString bundledArchive = QFileInfo(bundledZip).path()
+        + QDir::separator()
+        + QFileInfo(bundledZip).completeBaseName()
+        + QStringLiteral(".cw");
+    REQUIRE(QFile::rename(bundledZip, bundledArchive));
+
+    auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
+    project->loadOrConvert(bundledArchive);
+    project->waitLoadToFinish();
+    REQUIRE(project->errorModel()->size() == 0);
+    REQUIRE(project->cavingRegion() != nullptr);
+    REQUIRE(project->cavingRegion()->caveCount() > 0);
+
+    cwCave* cave = project->cavingRegion()->cave(0);
+    REQUIRE(cave != nullptr);
+    const QString originalCaveName = cave->name();
+    const QString renamedCaveName = originalCaveName + QStringLiteral(" Bundled Save");
+    cave->setName(renamedCaveName);
+    project->waitSaveToFinish();
+
+    REQUIRE(project->save());
+    project->waitSaveToFinish();
+    CHECK(QFileInfo::exists(bundledArchive));
+    CHECK(QFileInfo(bundledArchive).size() > 0);
+
+    auto reloaded = std::make_unique<cwProject>();
+    addTokenManager(reloaded.get());
+    reloaded->loadOrConvert(bundledArchive);
+    reloaded->waitLoadToFinish();
+    REQUIRE(reloaded->errorModel()->size() == 0);
+    REQUIRE(reloaded->cavingRegion() != nullptr);
+    REQUIRE(reloaded->cavingRegion()->caveCount() > 0);
+
+    cwCave* reloadedCave = reloaded->cavingRegion()->cave(0);
+    REQUIRE(reloadedCave != nullptr);
+    CHECK(reloadedCave->name() == renamedCaveName);
 }
 
 TEST_CASE("Updating scrap data from a loaded project should save", "[cwProject]") {
