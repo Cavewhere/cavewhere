@@ -44,6 +44,7 @@ using namespace Catch;
 #include <QSqlRecord>
 #include <QDir>
 #include <QDebug>
+#include <QFile>
 #include <QFileInfo>
 #include <QSet>
 #include <QTemporaryDir>
@@ -9137,6 +9138,20 @@ TEST_CASE("cwProject should detect the correct file type", "[cwProject]") {
     //A file based file
     datasetFile = copyToTempFolder(":/datasets/test_cwProject/v8.cwproj");
     CHECK(project->projectType(datasetFile) == cwProject::GitFileType);
+
+    //A bundled project fixture (copy .zip fixture, rename to .cw)
+    const QString bundledZip = copyToTempFolder("://datasets/test_cwProject/jaws of the beast with scrap.zip");
+    const QString bundledArchive = QFileInfo(bundledZip).path()
+        + QDir::separator()
+        + QFileInfo(bundledZip).completeBaseName()
+        + QStringLiteral(".cw");
+    REQUIRE(QFile::rename(bundledZip, bundledArchive));
+    CHECK(project->projectType(bundledArchive) == cwProject::BundledGitFileType);
+    project->loadOrConvert(bundledArchive);
+    project->waitLoadToFinish();
+    CHECK(project->errorModel()->size() == 0);
+    CHECK(project->projectType(project->filename()) == cwProject::GitFileType);
+    CHECK_FALSE(project->isTemporaryProject());
 
     //Empty file
     QTemporaryFile tempFile;

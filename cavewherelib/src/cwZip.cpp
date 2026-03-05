@@ -6,6 +6,7 @@
 #include <QDir>
 #include <QByteArray>
 #include <QDebug>
+#include <QStringList>
 #include <functional>
 
 // minizip-ng (local to implementation)
@@ -41,6 +42,23 @@ static QString cwzip_normalizeRelPath(const QString& relPath) {
         p.remove(0, 2);
     }
     return p;
+}
+
+static bool cwzip_shouldSkipEntry(const QString& entryName)
+{
+    if (entryName.isEmpty() || entryName.endsWith('/')) {
+        return true;
+    }
+
+    const QString normalized = cwzip_normalizeRelPath(entryName);
+    const QStringList parts = normalized.split('/', Qt::SkipEmptyParts);
+    for (const QString& part : parts) {
+        if (part == QStringLiteral("__MACOSX")) {
+            return true;
+        }
+    }
+
+    return QFileInfo(normalized).fileName().startsWith(QStringLiteral("._"));
 }
 
 
@@ -185,6 +203,83 @@ Monad::Result<cwZip::ZipResult> cwZip::extractAll(const QString& zipFilePath,
     } else {
         return Monad::Result<ZipResult>(result);
     }
+}
+
+Monad::ResultString cwZip::findProjectFileInArchive(const QString& zipFilePath)
+{
+    struct ZipReader {
+        void* handle = nullptr;
+        bool opened = false;
+        ~ZipReader() {
+            if (handle != nullptr) {
+                if (opened) {
+                    mz_zip_reader_close(handle);
+                }
+                mz_zip_reader_delete(&handle);
+            }
+        }
+    } reader;
+
+    reader.handle = mz_zip_reader_create();
+    if (reader.handle == nullptr) {
+        return Monad::ResultString(QStringLiteral("Failed to create zip reader"),
+                                   Monad::ResultBase::Unknown);
+    }
+
+    const QByteArray zipPathBytes = zipFilePath.toUtf8();
+    const int32_t openStatus = mz_zip_reader_open_file(reader.handle, zipPathBytes.constData());
+    if (openStatus != MZ_OK) {
+        return Monad::ResultString(
+            QStringLiteral("Failed to open zip \"%1\": %2")
+                .arg(zipFilePath, toErrorText(openStatus)),
+            openStatus);
+    }
+    reader.opened = true;
+
+    int32_t status = mz_zip_reader_goto_first_entry(reader.handle);
+    if (status != MZ_OK && status != MZ_END_OF_LIST) {
+        return Monad::ResultString(
+            QStringLiteral("Failed to read first entry in \"%1\": %2")
+                .arg(zipFilePath, toErrorText(status)),
+            status);
+    }
+
+    QString projectEntry;
+    while (status == MZ_OK) {
+        mz_zip_file* fileInfo = nullptr;
+        if (mz_zip_reader_entry_get_info(reader.handle, &fileInfo) == MZ_OK && fileInfo != nullptr) {
+            const QString entryName = QString::fromUtf8(fileInfo->filename ? fileInfo->filename : "");
+            if (!cwzip_shouldSkipEntry(entryName)) {
+                const QString normalized = cwzip_normalizeRelPath(entryName);
+                if (normalized.endsWith(QStringLiteral(".cwproj"), Qt::CaseInsensitive)) {
+                    if (!projectEntry.isEmpty()) {
+                        return Monad::ResultString(
+                            QStringLiteral("Archive \"%1\" contains multiple .cwproj files.")
+                                .arg(zipFilePath),
+                            Monad::ResultBase::Unknown);
+                    }
+                    projectEntry = normalized;
+                }
+            }
+        }
+
+        status = mz_zip_reader_goto_next_entry(reader.handle);
+        if (status != MZ_OK && status != MZ_END_OF_LIST) {
+            return Monad::ResultString(
+                QStringLiteral("Failed while advancing entries in \"%1\": %2")
+                    .arg(zipFilePath, toErrorText(status)),
+                status);
+        }
+    }
+
+    if (projectEntry.isEmpty()) {
+        return Monad::ResultString(
+            QStringLiteral("Archive \"%1\" does not contain a .cwproj file.")
+                .arg(zipFilePath),
+            Monad::ResultBase::Unknown);
+    }
+
+    return Monad::ResultString(projectEntry);
 }
 
 

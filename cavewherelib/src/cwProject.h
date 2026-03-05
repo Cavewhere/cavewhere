@@ -79,6 +79,7 @@ public:
     enum FileType {
         UnknownFileType,
         SqliteFileType, //V6 and below
+        BundledGitFileType, //.cw zip archive containing a .cwproj
         GitFileType, //V7 and above
     };
     Q_ENUM(FileType);
@@ -209,6 +210,7 @@ private:
 
     //Mark true if temp project when loaded via legacy SQLite/v6 paths
     bool SQLiteTempProject;
+    bool LoadedFromBundledArchive;
 
     //Task manager, for visualizing running tasks
     QPointer<cwTaskManagerModel> TaskManager;
@@ -287,7 +289,7 @@ inline cwProjectSyncHealth* cwProject::syncHealth() const { return m_syncHealth;
 inline bool cwProject::syncInProgress() const { return SyncFuture.isRunning(); }
 
 inline bool cwProject::canSaveDirectly() const {
-    return !saveWillCauseDataLoss() && !isTemporaryProject();
+    return !saveWillCauseDataLoss() && !isTemporaryProject() && !LoadedFromBundledArchive;
 }
 
 

@@ -26,6 +26,7 @@
 #include "cwPDFSettings.h"
 #include "cwConcurrent.h"
 #include "cwSaveLoad.h"
+#include "cwZip.h"
 #include "cwNote.h"
 #include "cwNoteLiDAR.h"
 #include "cwProjectSyncHealth.h"
@@ -49,6 +50,8 @@
 #include <QtConcurrent>
 #include <QSharedPointer>
 #include <QSqlRecord>
+#include <QTemporaryDir>
+#include <QDirIterator>
 
 //Async Future
 #include <asyncfuture.h>
@@ -97,6 +100,25 @@ private:
     bool m_wasTemporary = false;
     bool m_couldSaveDirectly = false;
 };
+
+QString findProjectFileInDirectory(const QString& rootPath)
+{
+    QDirIterator it(rootPath, QStringList() << QStringLiteral("*.cwproj"), QDir::Files, QDirIterator::Subdirectories);
+
+    while (it.hasNext()) {
+        const QString candidate = it.next();
+        if (candidate.contains(QStringLiteral("__MACOSX"))) {
+            continue;
+        }
+        const QFileInfo info(candidate);
+        if (info.fileName().startsWith(QStringLiteral("._"))) {
+            continue;
+        }
+        return candidate;
+    }
+
+    return QString();
+}
 } // namespace
 
 /**
@@ -107,6 +129,7 @@ cwProject::cwProject(QObject* parent) :
     m_saveLoad(new cwSaveLoad(this)),
     FileVersion(cwRegionIOTask::protoVersion()),
     SQLiteTempProject(false),
+    LoadedFromBundledArchive(false),
     Region(new cwCavingRegion(this)),
     UndoStack(new QUndoStack(this)),
     ErrorModel(new cwErrorListModel(this)),
@@ -349,6 +372,9 @@ void cwProject::privateSave() {
 bool cwProject::save()
 {
     if(!canSaveDirectly()) {
+        if (LoadedFromBundledArchive) {
+            ErrorModel->append(cwError(QStringLiteral("Bundled .cw save is not implemented yet. Use Save As to save a .cwproj project directory."), cwError::Warning));
+        }
         return false;
     }
 
@@ -558,6 +584,7 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
             m_saveLoad->setCavingRegion(nullptr);
 
             setSqliteTemporaryProject(result.isTempFile());
+            LoadedFromBundledArchive = false;
             setFilename(result.filename());
             Region->setData(result.cavingRegion());
             FileVersion = result.fileVersion();
@@ -611,10 +638,64 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
                 if (!result.hasError()) {
                     ScopedProjectStateNotifier stateGuard(this);
                     setSqliteTemporaryProject(false);
+                    LoadedFromBundledArchive = false;
                     FileVersion = cwRegionIOTask::protoVersion();
                 }
 
                 return result;
+            }).future();
+    } else if (type == BundledGitFileType) {
+        auto loadBundleFuture = cwConcurrent::run([filename]() -> ResultString {
+            auto archiveProjectFileResult = cwZip::findProjectFileInArchive(filename);
+            if (archiveProjectFileResult.hasError()) {
+                return ResultString(archiveProjectFileResult.errorMessage(), archiveProjectFileResult.errorCode());
+            }
+
+            QTemporaryDir extractionRoot;
+            extractionRoot.setAutoRemove(false);
+            if (!extractionRoot.isValid()) {
+                return ResultString(QStringLiteral("Couldn't create temporary directory for bundled project extraction."), ResultBase::Unknown);
+            }
+
+            auto extractResult = cwZip::extractAll(filename, extractionRoot.path());
+            if (extractResult.hasError()) {
+                return ResultString(extractResult.errorMessage(), extractResult.errorCode());
+            }
+
+            const QString extractedProjectPath = QDir(extractionRoot.path()).absoluteFilePath(archiveProjectFileResult.value());
+            if (QFileInfo::exists(extractedProjectPath)) {
+                return ResultString(extractedProjectPath);
+            }
+
+            const QString fallbackProjectPath = findProjectFileInDirectory(extractionRoot.path());
+            if (!fallbackProjectPath.isEmpty()) {
+                return ResultString(fallbackProjectPath);
+            }
+
+            return ResultString(QStringLiteral("Couldn't locate a .cwproj in extracted bundle '%1'.").arg(filename),
+                                ResultBase::Unknown);
+        });
+
+        FutureToken.addJob({QFuture<void>(loadBundleFuture), QStringLiteral("Extracting bundled project")});
+
+        return AsyncFuture::observe(loadBundleFuture)
+            .context(this, [this, loadBundleFuture]() -> QFuture<ResultBase> {
+                if (loadBundleFuture.result().hasError()) {
+                    return QtFuture::makeReadyValueFuture(ResultBase(loadBundleFuture.result().errorMessage()));
+                }
+
+                auto extractedProjectLoadFuture = m_saveLoad->load(loadBundleFuture.result().value());
+                return AsyncFuture::observe(extractedProjectLoadFuture)
+                    .context(this, [this, extractedProjectLoadFuture]() {
+                        auto result = extractedProjectLoadFuture.result();
+                        if (!result.hasError()) {
+                            ScopedProjectStateNotifier stateGuard(this);
+                            setSqliteTemporaryProject(false);
+                            LoadedFromBundledArchive = true;
+                            FileVersion = cwRegionIOTask::protoVersion();
+                        }
+                        return result;
+                    }).future();
             }).future();
     }
 
@@ -678,6 +759,7 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
                     ScopedProjectStateNotifier stateGuard(this);
 
                     setSqliteTemporaryProject(isTemporary);
+                    LoadedFromBundledArchive = false;
                     FileVersion = tempProject->FileVersion;
                 }
 
@@ -753,6 +835,8 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
   \brief Creates a new project
   */
 void cwProject::newProject() {
+    ScopedProjectStateNotifier stateGuard(this);
+
     //Stop the save and load on the old project
     if (m_saveLoad) {
         auto retireFuture = m_saveLoad->retire();
@@ -770,6 +854,8 @@ void cwProject::newProject() {
     m_saveLoad = new cwSaveLoad(this);
     connectSaveLoad(m_saveLoad);
     m_saveLoad->newProject();
+    setSqliteTemporaryProject(false);
+    LoadedFromBundledArchive = false;
     m_syncHealth->refresh();
 }
 
@@ -1099,6 +1185,13 @@ cwProject::FileType cwProject::projectType(QString filename) const
 
     if (info.suffix().compare(QStringLiteral("cwproj"), Qt::CaseInsensitive) == 0) {
         return GitFileType;
+    }
+
+    if (info.suffix().compare(QStringLiteral("cw"), Qt::CaseInsensitive) == 0) {
+        auto archiveProjectFileResult = cwZip::findProjectFileInArchive(filename);
+        if (!archiveProjectFileResult.hasError()) {
+            return BundledGitFileType;
+        }
     }
 
     //Check if we can connect to the sqlite database, v6 and lower

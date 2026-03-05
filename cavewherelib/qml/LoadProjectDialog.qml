@@ -41,6 +41,9 @@ Item {
                     console.warn("Failed to add repository to recent list:", repoResult.errorMessage);
                 }
                 break;
+            case Project.BundledGitFileType:
+                RootData.project.loadFile(selectedFile);
+                break;
             }
         }
     }

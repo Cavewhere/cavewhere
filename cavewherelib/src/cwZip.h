@@ -26,6 +26,7 @@ public:
 
     static Monad::Result<ZipResult> extractAll(const QString& zipFilePath, const QString& outputDirectory);
     static Monad::ResultBase zipDirectory(const QString& sourceDirPath, const QString& zipFilePath);
+    static Monad::ResultString findProjectFileInArchive(const QString& zipFilePath);
 
 private:
     static bool ensureParentDirectory(const QString& fullPath);
