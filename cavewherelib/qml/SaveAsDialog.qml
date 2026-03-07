@@ -4,53 +4,45 @@ import cavewherelib
 
 FileDialog {
     id: saveAsFileDialogId
-    nameFilters: [
-        "CaveWhere Bundled Project (*.cw)",
-        "CaveWhere Project Directory (*.cwproj)"
-    ]
+    readonly property bool bundledFirst: {
+        const fileType = RootData.project.fileType;
+        return fileType === Project.BundledGitFileType
+                || fileType === Project.SqliteFileType;
+    }
+
+    nameFilters: bundledFirst
+                 ? [ "Bundled (*.cw)", "Directory (*.cwproj)" ]
+                 : [ "Directory (*.cwproj)", "Bundled (*.cw)" ]
     title: "Save CaveWhere Project As"
     fileMode: FileDialog.SaveFile
     currentFolder: RootData.lastDirectory
 
-    function selectedExtension()
-    {
-        const filter = selectedNameFilter ? selectedNameFilter.toString() : "";
-        if (filter.indexOf("*.cwproj") !== -1) {
-            return ".cwproj";
+    onVisibleChanged: {
+        if (!visible) {
+            return;
         }
-        return ".cw";
-    }
-
-    function ensureExtension(localPath, ext)
-    {
-        const lower = localPath.toLowerCase();
-        if (lower.endsWith(".cw") || lower.endsWith(".cwproj")) {
-            return localPath;
-        }
-        return localPath + ext;
-    }
-
-    function extensionForFilter(filterText)
-    {
-        const filter = filterText ? filterText.toString() : "";
-        if (filter.indexOf("*.cwproj") !== -1) {
-            return ".cwproj";
-        }
-        return ".cw";
-    }
-
-    function runSaveAsForTest(localPath, filterText)
-    {
-        const targetPath = ensureExtension(localPath, extensionForFilter(filterText));
-        if (RootData.project.saveAs(targetPath)) {
-            RootData.lastDirectory = selectedFile;
-            return targetPath;
-        }
-        return "";
     }
 
     onAccepted: {
         const localPath = RootData.urlToLocal(selectedFile);
-        runSaveAsForTest(localPath, selectedNameFilter);
+        const lower = localPath.toLowerCase();
+        const extension = selectedNameFilter
+                && selectedNameFilter.index !== undefined
+                && selectedNameFilter.index >= 0
+                && selectedNameFilter.index < nameFilters.length
+                && nameFilters[selectedNameFilter.index].toString().indexOf("*.cwproj") !== -1
+                ? ".cwproj"
+                : ".cw";
+
+        let normalizedPath = localPath;
+        if (lower.endsWith(".cwproj")) {
+            normalizedPath = localPath.slice(0, localPath.length - ".cwproj".length);
+        } else if (lower.endsWith(".cw")) {
+            normalizedPath = localPath.slice(0, localPath.length - ".cw".length);
+        }
+
+        if (RootData.project.saveAs(normalizedPath + extension)) {
+            RootData.lastDirectory = selectedFile;
+        }
     }
 }

@@ -9430,6 +9430,36 @@ TEST_CASE("cwProject should detect the correct file type", "[cwProject]") {
     CHECK(project->projectType(datasetFile) == cwProject::UnknownFileType);
 }
 
+TEST_CASE("cwProject fileType should reflect the current loaded project format", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    const QString sqliteSource = copyToTempFolder(":/datasets/test_cwProject/Phake Cave 3000.cw");
+    project->loadOrConvert(sqliteSource);
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitLoadToFinish();
+    project->waitSaveToFinish();
+    CHECK(project->fileType() == cwProject::SqliteFileType);
+
+    const QString gitSource = copyToTempFolder(":/datasets/test_cwProject/v8.cwproj");
+    project->loadOrConvert(gitSource);
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitLoadToFinish();
+    CHECK(project->fileType() == cwProject::GitFileType);
+
+    const QString bundledZip = copyToTempFolder("://datasets/test_cwProject/jaws of the beast with scrap.zip");
+    const QString bundledArchive = QFileInfo(bundledZip).path()
+        + QDir::separator()
+        + QFileInfo(bundledZip).completeBaseName()
+        + QStringLiteral(".cw");
+    REQUIRE(QFile::rename(bundledZip, bundledArchive));
+
+    project->loadOrConvert(bundledArchive);
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitLoadToFinish();
+    CHECK(project->fileType() == cwProject::BundledGitFileType);
+}
+
 TEST_CASE("cwProject should save bundled .cw changes", "[cwProject]") {
     const QString bundledZip = copyToTempFolder("://datasets/test_cwProject/jaws of the beast with scrap.zip");
     const QString bundledArchive = QFileInfo(bundledZip).path()

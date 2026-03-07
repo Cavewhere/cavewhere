@@ -61,6 +61,7 @@ Item {
 
         function saveAsViaAccepted(selectedPath, expectedPath) {
             saveAsDialogId.selectedFile = TestHelper.toLocalUrl(selectedPath);
+            saveAsDialogId.selectedNameFilter.index = expectedPath.toLowerCase().endsWith(".cwproj") ? 1 : 0;
             saveAsDialogId.accepted();
 
             TestHelper.waitForProjectSaveToFinish(RootData.project);
@@ -69,14 +70,46 @@ Item {
             });
         }
 
-        function saveAsViaFilterForTest(selectedPathWithoutExtension, selectedFilter, expectedPath) {
-            const savedPath = saveAsDialogId.runSaveAsForTest(selectedPathWithoutExtension, selectedFilter);
-            verify(savedPath !== "");
+        function test_nameFilters_defaultToBundled_forLegacyProject() {
+            loadLegacyFixture();
 
-            TestHelper.waitForProjectSaveToFinish(RootData.project);
+            compare(RootData.project.fileType, Project.BundledGitFileType);
+            compare(saveAsDialogId.nameFilters[0].toString(), "Bundled (*.cw)");
+            compare(saveAsDialogId.nameFilters[1].toString(), "Directory (*.cwproj)");
+        }
+
+        function test_nameFilters_defaultToDirectory_forDirectoryProject() {
+            loadLegacyFixture();
+            const tempDir = RootData.urlToLocal(TestHelper.tempDirectoryUrl());
+            const selectedPath = tempDir + "/namefilter-directory.cwproj";
+            const expectedPath = tempDir + "/namefilter-directory/namefilter-directory.cwproj";
+            saveAsViaAccepted(selectedPath, expectedPath);
+
             tryVerify(function() {
-                return TestHelper.fileExists(TestHelper.toLocalUrl(expectedPath));
+                return RootData.region.caveCount > 0;
             });
+
+            RootData.project.loadFile(TestHelper.toLocalUrl(expectedPath));
+            tryVerify(function() {
+                return RootData.region.caveCount > 0;
+            });
+
+            compare(RootData.project.fileType, Project.GitFileType);
+            compare(saveAsDialogId.nameFilters[0].toString(), "Directory (*.cwproj)");
+            compare(saveAsDialogId.nameFilters[1].toString(), "Bundled (*.cw)");
+        }
+
+        function test_nameFilters_defaultToBundled_forBundledProject() {
+            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+            tryVerify(function() {
+                return RootData.region.caveCount > 0;
+            });
+            RootData.project.save();
+            TestHelper.waitForProjectSaveToFinish(RootData.project);
+
+            compare(RootData.project.fileType, Project.BundledGitFileType);
+            compare(saveAsDialogId.nameFilters[0].toString(), "Bundled (*.cw)");
+            compare(saveAsDialogId.nameFilters[1].toString(), "Directory (*.cwproj)");
         }
 
         function test_saveAsDirectory_fromLegacy() {
@@ -127,11 +160,7 @@ Item {
             const tempDir = RootData.urlToLocal(TestHelper.tempDirectoryUrl());
             const selectedPathWithoutExtension = tempDir + "/qml-saveas-directory-noext";
             const expectedPath = tempDir + "/qml-saveas-directory-noext/qml-saveas-directory-noext.cwproj";
-
-            saveAsViaFilterForTest(
-                        selectedPathWithoutExtension,
-                        "CaveWhere Project Directory (*.cwproj)",
-                        expectedPath);
+            saveAsViaAccepted(selectedPathWithoutExtension, expectedPath);
 
             compare(RootData.project.projectType(TestHelper.toLocalUrl(expectedPath)), Project.GitFileType);
             RootData.project.loadFile(TestHelper.toLocalUrl(expectedPath));
@@ -151,11 +180,7 @@ Item {
             const tempDir = RootData.urlToLocal(TestHelper.tempDirectoryUrl());
             const selectedPathWithoutExtension = tempDir + "/qml-saveas-bundle-noext";
             const expectedPath = selectedPathWithoutExtension + ".cw";
-
-            saveAsViaFilterForTest(
-                        selectedPathWithoutExtension,
-                        "CaveWhere Bundled Project (*.cw)",
-                        expectedPath);
+            saveAsViaAccepted(selectedPathWithoutExtension, expectedPath);
 
             compare(RootData.project.projectType(TestHelper.toLocalUrl(expectedPath)), Project.BundledGitFileType);
             RootData.project.loadFile(TestHelper.toLocalUrl(expectedPath));

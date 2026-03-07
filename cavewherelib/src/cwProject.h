@@ -70,6 +70,7 @@ class CAVEWHERE_LIB_EXPORT cwProject :  public QObject{
 
     //Older save and load
     Q_PROPERTY(QString filename READ filename NOTIFY filenameChanged)
+    Q_PROPERTY(FileType fileType READ fileType NOTIFY fileTypeChanged)
     Q_PROPERTY(bool canSaveDirectly READ canSaveDirectly NOTIFY canSaveDirectlyChanged)
     Q_PROPERTY(bool isTemporaryProject READ isTemporaryProject NOTIFY isTemporaryProjectChanged)
     Q_PROPERTY(cwProjectSyncHealth* syncHealth READ syncHealth CONSTANT)
@@ -126,6 +127,7 @@ public:
     Q_INVOKABLE bool isModified();
 
     QString filename() const;
+    FileType fileType() const;
 
     Q_INVOKABLE QString dataRoot() const;
     // Q_INVOKABLE void setDataRoot(const QString& dataRoot);
@@ -179,6 +181,7 @@ signals:
 
     // -----Old save and load
     void filenameChanged(QString newFilename);
+    void fileTypeChanged();
     void dataRootChanged();
     void canSaveDirectlyChanged();
     void isTemporaryProjectChanged();

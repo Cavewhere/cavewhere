@@ -175,6 +175,7 @@ void cwProject::connectSaveLoad(cwSaveLoad* saveLoad)
             return;
         }
         emit filenameChanged(saveLoad->fileName());
+        emit fileTypeChanged();
     });
     connect(saveLoad, &cwSaveLoad::dataRootChanged, this, [this, saveLoad]() {
         if (m_saveLoad != saveLoad) {
@@ -507,6 +508,7 @@ bool cwProject::saveAs(QString newFilename)
                              LoadedFromBundledArchive = true;
                              BundledArchivePath = newFilename;
                              emit filenameChanged(filename());
+                             emit fileTypeChanged();
                              emit fileSaved();
                              m_syncHealth->refresh();
                          })
@@ -540,6 +542,7 @@ bool cwProject::saveAs(QString newFilename)
         LoadedFromBundledArchive = false;
         BundledArchivePath.clear();
     }
+    emit fileTypeChanged();
 
     emit fileSaved();
     m_syncHealth->refresh();
@@ -564,7 +567,11 @@ bool cwProject::deleteTemporaryProject()
 
 void cwProject::setSqliteTemporaryProject(bool isTemp)
 {
+    if (SQLiteTempProject == isTemp) {
+        return;
+    }
     SQLiteTempProject = isTemp;
+    emit fileTypeChanged();
     m_syncHealth->refresh();
 }
 
@@ -642,6 +649,7 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
             setFilename(result.filename());
             Region->setData(result.cavingRegion());
             FileVersion = result.fileVersion();
+            emit fileTypeChanged();
 
             emit loaded();
         };
@@ -695,6 +703,7 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
                     LoadedFromBundledArchive = false;
                     BundledArchivePath.clear();
                     FileVersion = cwRegionIOTask::protoVersion();
+                    emit fileTypeChanged();
                 }
 
                 return result;
@@ -750,6 +759,7 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
                             LoadedFromBundledArchive = true;
                             BundledArchivePath = bundleSourcePath;
                             FileVersion = cwRegionIOTask::protoVersion();
+                            emit fileTypeChanged();
                         }
                         return result;
                     }).future();
@@ -825,6 +835,7 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
                     if (keepBundledTarget) {
                         emit filenameChanged(this->filename());
                     }
+                    emit fileTypeChanged();
                     FileVersion = tempProject->FileVersion;
                 } else {
                     errorModel()->append(cwError(result.errorMessage(), cwError::Fatal));
@@ -924,6 +935,7 @@ void cwProject::newProject() {
     setSqliteTemporaryProject(false);
     LoadedFromBundledArchive = false;
     BundledArchivePath.clear();
+    emit fileTypeChanged();
     m_syncHealth->refresh();
 }
 
@@ -1335,6 +1347,23 @@ QString cwProject::filename() const {
         return BundledArchivePath;
     }
     return m_saveLoad->fileName();
+}
+
+cwProject::FileType cwProject::fileType() const
+{
+    if (SQLiteTempProject) {
+        return SqliteFileType;
+    }
+
+    if (LoadedFromBundledArchive) {
+        return BundledGitFileType;
+    }
+
+    if (!m_saveLoad->fileName().isEmpty()) {
+        return GitFileType;
+    }
+
+    return UnknownFileType;
 }
 
 QString cwProject::dataRoot() const
