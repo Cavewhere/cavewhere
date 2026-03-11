@@ -5,8 +5,8 @@
 ## Cave Mapping software
 
 [CaveWhere](https://cavewhere.com) is a cave mapping software with an intuitive design that enables building and visualizing underground cave maps.
-Using it’s advanced 3D engine, CaveWhere automatically morphs your 2D cave notes in 3D.
-Loop closures re-morph effected scan scraps automatically so your map is always up-to-date.
+Using its advanced 3D engine, CaveWhere automatically morphs your 2D cave notes in 3D.
+Loop closures re-morph affected scan scraps automatically so your map is always up-to-date.
 
 ## Download Binaries
 
@@ -87,7 +87,7 @@ echo "[tool_requires]" >> "$PROFILE_PATH"
 echo '!cmake/*: cmake/[>=3 <4]' >> "$PROFILE_PATH"
 ```
 
-5. **Install CaveWhere dependancies through Conan**
+5. **Install CaveWhere dependencies through Conan**
 
 ```
 conan install ../cavewhere -o "&:system_qt=False" --build=missing -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True -of conan_deps
@@ -95,7 +95,7 @@ conan install ../cavewhere -o "&:system_qt=False" --build=missing -c tools.syste
         
    Conan will try to use the local package manager to install compatible dependencies. If a dependency isn't compatible, it will download it from Conan Center or build it from source.
 
-   Conan may also build Qt from source, which can take a long time and use a large amount of ram (16GB recommend for the build, 2GB VM will not cut it). However, this ensures you get the correct version of Qt that has been tested with Cavewhere. To use the system's Qt, set ```system_qt=False```.
+   Conan may also build Qt from source, which can take a long time and use a large amount of ram (16GB recommended for the build, 2GB VM will not cut it). However, this ensures you get the correct version of Qt that has been tested with Cavewhere. To use the system's Qt, set ```system_qt=False```.
 
    **To use the system Qt libraries (note that you might encounter build errors, as Qt is typically outdated on most Linux distributions 2025.2 will build and run on 6.8 or later):**
 
