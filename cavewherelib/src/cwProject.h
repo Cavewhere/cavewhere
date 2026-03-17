@@ -103,7 +103,6 @@ public:
 
     static QString supportedImageFormats();
 
-    Q_INVOKABLE FileType projectType(QString filename) const;
     Q_INVOKABLE cwResultDir repositoryDir(const QUrl& localDir, const QString& name) const;
 
     Q_INVOKABLE void convertFromProjectV6(QString oldProjectFilename,
@@ -254,7 +253,17 @@ private:
     // void addImageHelper(std::function<void (QList<cwImage>)> outputCallBackFunc,
     //                     std::function<void (cwAddImageTask*)> setImagesFunc);
 
-    QFuture<Monad::ResultBase> loadHelper(QString filename, bool suppressLoadedEmit = false);
+    FileType projectType(const QString& filename) const;
+
+    struct LoadParameters {
+        FileType knownType;
+        bool suppressLoadedEmit;
+        LoadParameters() : knownType(UnknownFileType), suppressLoadedEmit(false) {}
+        LoadParameters(FileType type, bool suppress = false) : knownType(type), suppressLoadedEmit(suppress) {}
+    };
+
+    QFuture<Monad::ResultBase> loadHelper(QString filename, LoadParameters params = {});
+    QFuture<Monad::ResultBase> loadHelperImpl(const QString& filename, LoadParameters params);
     QFuture<Monad::ResultBase> convertFromProjectV6Helper(QString oldProjectFilename,
                                                           const QDir &newProjectDirectory,
                                                           bool isTemporary = false,

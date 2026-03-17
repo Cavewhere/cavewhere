@@ -77,7 +77,7 @@ Item {
         function test_nameFilters_defaultToBundled_forLegacyProject() {
             loadLegacyFixture();
 
-            compare(RootData.project.fileType, Project.SqliteFileType);
+            compare(RootData.project.fileType, Project.BundledGitFileType);
             compare(saveAsDialogId.nameFilters[0].toString(), "Bundled (*.cw)");
             compare(saveAsDialogId.nameFilters[1].toString(), "Directory (*.cwproj)");
         }
@@ -127,7 +127,7 @@ Item {
             const expectedPath = tempDir + "/qml-saveas-directory/qml-saveas-directory.cwproj";
             saveAsViaAccepted(selectedPath, expectedPath);
 
-            compare(RootData.project.projectType(TestHelper.toLocalUrl(expectedPath)), Project.GitFileType);
+            compare(RootData.project.fileType, Project.GitFileType);
             RootData.project.loadFile(TestHelper.toLocalUrl(expectedPath));
             tryVerify(function() {
                 return RootData.region.caveCount === before.caveCount;
@@ -146,7 +146,7 @@ Item {
             const expectedPath = tempDir + "/qml-saveas-bundle.cw";
             saveAsViaAccepted(expectedPath, expectedPath);
 
-            compare(RootData.project.projectType(TestHelper.toLocalUrl(expectedPath)), Project.BundledGitFileType);
+            compare(RootData.project.fileType, Project.BundledGitFileType);
             RootData.project.loadFile(TestHelper.toLocalUrl(expectedPath));
             tryVerify(function() {
                 return RootData.region.caveCount === before.caveCount;
@@ -185,7 +185,7 @@ Item {
             const expectedPath = tempDir + "/qml-saveas-directory-noext/qml-saveas-directory-noext.cwproj";
             saveAsViaAccepted(selectedPathWithoutExtension, expectedPath);
 
-            compare(RootData.project.projectType(TestHelper.toLocalUrl(expectedPath)), Project.GitFileType);
+            compare(RootData.project.fileType, Project.GitFileType);
             RootData.project.loadFile(TestHelper.toLocalUrl(expectedPath));
             tryVerify(function() {
                 return RootData.region.caveCount === before.caveCount;
@@ -205,7 +205,7 @@ Item {
             const expectedPath = selectedPathWithoutExtension + ".cw";
             saveAsViaAccepted(selectedPathWithoutExtension, expectedPath);
 
-            compare(RootData.project.projectType(TestHelper.toLocalUrl(expectedPath)), Project.BundledGitFileType);
+            compare(RootData.project.fileType, Project.BundledGitFileType);
             RootData.project.loadFile(TestHelper.toLocalUrl(expectedPath));
             tryVerify(function() {
                 return RootData.region.caveCount === before.caveCount;

@@ -6,29 +6,15 @@ Item {
     anchors.fill: parent
 
     property alias loadFileDialog: loadFileDialogId
-    
+
     function handleSelectedFile(path) {
         RootData.lastDirectory = path
         RootData.pageSelectionModel.clearHistory();
         RootData.pageSelectionModel.gotoPageByName(null, "View")
-
-        let fileType = RootData.project.projectType(path);
-
-        switch(fileType) {
-        case Project.UnknownFileType:
-            //Some how add an error
-            console.log("Unknown file type")
-            break;
-        case Project.SqliteFileType:
-            RootData.project.loadFile(path);
-            break;
-
-        case Project.GitFileType:
-            RootData.project.loadFile(path);
-            break;
-        case Project.BundledGitFileType:
-            RootData.project.loadFile(path);
-            break;
+        RootData.project.loadFile(path);
+        const repoResult = RootData.recentProjectModel.addRepositoryFromProjectFile(path);
+        if (repoResult.hasError) {
+            console.warn("Failed to add to recent list:", repoResult.errorMessage);
         }
     }
 
