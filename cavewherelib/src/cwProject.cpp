@@ -616,17 +616,30 @@ void cwProject::setSqliteTemporaryProject(bool isTemp)
 //                  });
 // }
 
-QFuture<ResultBase> cwProject::loadHelper(QString filename)
+QFuture<ResultBase> cwProject::loadHelper(QString filename, FileType knownType)
 {
-    if(filename.isEmpty()) { QtFuture::makeReadyValueFuture(ResultBase(QStringLiteral("File name is empty"))); }
-
-    FileType type = projectType(filename);
-
-    // //Only load one file at a time
-    // LoadFuture.cancel();
+    if(filename.isEmpty()) { return QtFuture::makeReadyValueFuture(ResultBase(QStringLiteral("File name is empty"))); }
 
     filename = cwGlobals::convertFromURL(filename);
 
+    if (knownType == UnknownFileType) {
+        // Detect file type on a worker thread to avoid blocking the main thread
+        auto typeFuture = cwConcurrent::run([filename, this]() {
+            return projectType(filename);
+        });
+        return AsyncFuture::observe(typeFuture)
+            .context(this, [this, filename, typeFuture]() {
+                // Call loadHelperImpl (not loadHelper) to avoid re-entering detection
+                // when the detected type happens to be UnknownFileType
+                return loadHelperImpl(filename, typeFuture.result());
+            }).future();
+    }
+
+    return loadHelperImpl(filename, knownType);
+}
+
+QFuture<ResultBase> cwProject::loadHelperImpl(const QString& filename, FileType type)
+{
     auto loadFromSQL = [this](const QString& filename) {
         //Run the load task async
         auto loadFuture = cwConcurrent::run([filename](){
@@ -788,8 +801,8 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
     auto tempProject = std::make_shared<cwProject>();
     tempProject->setFutureManagerToken(futureManagerToken());
 
-    //Load the old project into the temp project
-    auto oldLoadFuture = tempProject->loadHelper(oldProjectFilename);
+    //Load the old project into the temp project (type is known to be SQLite)
+    auto oldLoadFuture = tempProject->loadHelper(oldProjectFilename, SqliteFileType);
 
     // qDebug() << "oldLoadFuture:" << oldLoadFuture.isFinished();
 
@@ -810,7 +823,7 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
                               .context(this, [saveLoad, filenameFuture, this]() {
                                   // qDebug() << "Finished save on:" << filenameFuture.result().value();
                                   return Monad::mbind(filenameFuture, [this](const Monad::ResultString& filename) {
-                                      return loadHelper(filename.value());
+                                      return loadHelper(filename.value(), GitFileType);
                                   });
                               }).future();
 
@@ -1154,30 +1167,37 @@ void cwProject::loadOrConvert(const QString &filename)
     if(filename.isEmpty()) { return; }
 
     const QString normalizedFilename = cwGlobals::convertFromURL(filename);
-    FileType type = projectType(normalizedFilename);
 
     LoadFuture.cancel();
 
-    if(type == SqliteFileType) {
-        QTemporaryDir dir;
-        dir.setAutoRemove(false);
-        auto tempDir = QDir(dir.filePath(QFileInfo(normalizedFilename).baseName()));
-        const QFileInfo info(normalizedFilename);
-        const bool temporaryProject = !info.isWritable();
-        const QString bundledPath = normalizedFilename;
-        LoadFuture = convertFromProjectV6Helper(normalizedFilename, tempDir, temporaryProject, bundledPath);
-        // setTemporaryProject(true);
-    } else {
-        //This could be Git file or a corrupted file
-        auto loadFuture = loadHelper(normalizedFilename);
-        LoadFuture = AsyncFuture::observe(loadFuture)
-                         .context(this, [loadFuture, this]() {
-                             auto result = loadFuture.result();
-                             if(result.hasError()) {
-                                 errorModel()->append(cwError(result.errorMessage(), cwError::Fatal));
-                             }
-                         }).future();
-    }
+    // Detect file type on a worker thread to avoid blocking the main thread with I/O
+    auto typeFuture = cwConcurrent::run([this, normalizedFilename]() {
+        return projectType(normalizedFilename);
+    });
+
+    LoadFuture = AsyncFuture::observe(typeFuture)
+                     .context(this, [this, normalizedFilename, typeFuture]() -> QFuture<void> {
+                         const FileType type = typeFuture.result();
+                         if(type == SqliteFileType) {
+                             QTemporaryDir dir;
+                             dir.setAutoRemove(false);
+                             auto tempDir = QDir(dir.filePath(QFileInfo(normalizedFilename).baseName()));
+                             const QFileInfo info(normalizedFilename);
+                             const bool temporaryProject = !info.isWritable();
+                             const QString bundledPath = normalizedFilename;
+                             return QFuture<void>(convertFromProjectV6Helper(normalizedFilename, tempDir, temporaryProject, bundledPath));
+                         } else {
+                             //This could be Git file or a corrupted file
+                             auto loadFuture = loadHelper(normalizedFilename, type);
+                             return QFuture<void>(AsyncFuture::observe(loadFuture)
+                                                      .context(this, [loadFuture, this]() {
+                                                          auto result = loadFuture.result();
+                                                          if(result.hasError()) {
+                                                              errorModel()->append(cwError(result.errorMessage(), cwError::Fatal));
+                                                          }
+                                                      }).future());
+                         }
+                     }).future();
 }
 
 void cwProject::setGitAccount(QQuickGit::Account* account)
@@ -1237,7 +1257,7 @@ void cwProject::convertFromProjectV6(QString oldProjectFilename,
                                                                    if(!filenameFuture.result().hasError()) {
                                                                        //Load the project into this cwProject
                                                                        qDebug() << "Loading project:" << filenameFuture.result().value();
-                                                                       return loadHelper(filenameFuture.result().value());
+                                                                       return loadHelper(filenameFuture.result().value(), GitFileType);
                                                                    } else {
                                                                        return QtFuture::makeReadyValueFuture<ResultBase>(filenameFuture.result());
                                                                    }

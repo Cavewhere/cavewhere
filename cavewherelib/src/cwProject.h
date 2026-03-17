@@ -252,7 +252,8 @@ private:
     // void addImageHelper(std::function<void (QList<cwImage>)> outputCallBackFunc,
     //                     std::function<void (cwAddImageTask*)> setImagesFunc);
 
-    QFuture<Monad::ResultBase> loadHelper(QString filename);
+    QFuture<Monad::ResultBase> loadHelper(QString filename, FileType knownType = UnknownFileType);
+    QFuture<Monad::ResultBase> loadHelperImpl(const QString& filename, FileType type);
     QFuture<Monad::ResultBase> convertFromProjectV6Helper(QString oldProjectFilename,
                                                           const QDir &newProjectDirectory,
                                                           bool isTemporary = false,
