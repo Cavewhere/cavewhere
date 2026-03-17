@@ -11,28 +11,16 @@ Item {
         RootData.lastDirectory = path
         RootData.pageSelectionModel.clearHistory();
         RootData.pageSelectionModel.gotoPageByName(null, "View")
+        RootData.project.loadFile(path);
+    }
 
-        let fileType = RootData.project.projectType(path);
-
-        switch(fileType) {
-        case Project.UnknownFileType:
-            //Some how add an error
-            console.log("Unknown file type")
-            break;
-        case Project.SqliteFileType:
-            RootData.project.loadFile(path);
-            break;
-
-        case Project.GitFileType:
-            RootData.project.loadFile(path);
+    Connections {
+        target: RootData.project
+        function onGitFileOpened(path) {
             const repoResult = RootData.repositoryModel.addRepositoryFromProjectFile(path);
             if (repoResult.hasError) {
                 console.warn("Failed to add repository to recent list:", repoResult.errorMessage);
             }
-            break;
-        case Project.BundledGitFileType:
-            RootData.project.loadFile(path);
-            break;
         }
     }
 

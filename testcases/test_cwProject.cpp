@@ -9127,7 +9127,7 @@ TEST_CASE("SaveAs dual format matrix", "[cwProject][saveAs]") {
     SECTION("cwproj -> cwproj") {
         const QString sourceProjectFile = makeExtractedCwprojFixture();
         auto project = loadProject(sourceProjectFile);
-        REQUIRE(project->projectType(project->filename()) == cwProject::GitFileType);
+        REQUIRE(project->fileType() == cwProject::GitFileType);
         const ProjectSnapshot beforeSaveAs = snapshotProject(project.get());
         requireExpectedFixtureSnapshot(beforeSaveAs);
 
@@ -9139,7 +9139,7 @@ TEST_CASE("SaveAs dual format matrix", "[cwProject][saveAs]") {
 
         CHECK(QFileInfo::exists(project->filename()));
         CHECK(project->filename().endsWith(QStringLiteral(".cwproj")));
-        CHECK(project->projectType(project->filename()) == cwProject::GitFileType);
+        CHECK(project->fileType() == cwProject::GitFileType);
 
         auto reloaded = loadProject(project->filename());
         const ProjectSnapshot afterReload = snapshotProject(reloaded.get());
@@ -9150,7 +9150,7 @@ TEST_CASE("SaveAs dual format matrix", "[cwProject][saveAs]") {
     SECTION("cwproj -> cw (bundled)") {
         const QString sourceProjectFile = makeExtractedCwprojFixture();
         auto project = loadProject(sourceProjectFile);
-        REQUIRE(project->projectType(project->filename()) == cwProject::GitFileType);
+        REQUIRE(project->fileType() == cwProject::GitFileType);
         const ProjectSnapshot beforeSaveAs = snapshotProject(project.get());
         requireExpectedFixtureSnapshot(beforeSaveAs);
 
@@ -9162,7 +9162,7 @@ TEST_CASE("SaveAs dual format matrix", "[cwProject][saveAs]") {
 
         CHECK(project->filename().endsWith(QStringLiteral(".cw")));
         CHECK(QFileInfo::exists(project->filename()));
-        CHECK(project->projectType(project->filename()) == cwProject::BundledGitFileType);
+        CHECK(project->fileType() == cwProject::BundledGitFileType);
 
         auto reloaded = loadProject(project->filename());
         const ProjectSnapshot afterReload = snapshotProject(reloaded.get());
@@ -9173,7 +9173,7 @@ TEST_CASE("SaveAs dual format matrix", "[cwProject][saveAs]") {
     SECTION("cw (bundled) -> cw (bundled)") {
         const QString sourceBundled = makeBundledFixture();
         auto project = loadProject(sourceBundled);
-        REQUIRE(project->projectType(sourceBundled) == cwProject::BundledGitFileType);
+        REQUIRE(project->fileType() == cwProject::BundledGitFileType);
         const ProjectSnapshot beforeSaveAs = snapshotProject(project.get());
         requireExpectedFixtureSnapshot(beforeSaveAs);
 
@@ -9185,7 +9185,7 @@ TEST_CASE("SaveAs dual format matrix", "[cwProject][saveAs]") {
 
         CHECK(project->filename().endsWith(QStringLiteral(".cw")));
         CHECK(QFileInfo::exists(project->filename()));
-        CHECK(project->projectType(project->filename()) == cwProject::BundledGitFileType);
+        CHECK(project->fileType() == cwProject::BundledGitFileType);
 
         auto reloaded = loadProject(project->filename());
         const ProjectSnapshot afterReload = snapshotProject(reloaded.get());
@@ -9196,7 +9196,7 @@ TEST_CASE("SaveAs dual format matrix", "[cwProject][saveAs]") {
     SECTION("cw (bundled) -> cwproj") {
         const QString sourceBundled = makeBundledFixture();
         auto project = loadProject(sourceBundled);
-        REQUIRE(project->projectType(sourceBundled) == cwProject::BundledGitFileType);
+        REQUIRE(project->fileType() == cwProject::BundledGitFileType);
         const ProjectSnapshot beforeSaveAs = snapshotProject(project.get());
         requireExpectedFixtureSnapshot(beforeSaveAs);
 
@@ -9208,7 +9208,7 @@ TEST_CASE("SaveAs dual format matrix", "[cwProject][saveAs]") {
 
         CHECK(project->filename().endsWith(QStringLiteral(".cwproj")));
         CHECK(QFileInfo::exists(project->filename()));
-        CHECK(project->projectType(project->filename()) == cwProject::GitFileType);
+        CHECK(project->fileType() == cwProject::GitFileType);
 
         auto reloaded = loadProject(project->filename());
         const ProjectSnapshot afterReload = snapshotProject(reloaded.get());
@@ -9389,15 +9389,29 @@ TEST_CASE("cwProject should add PDF correctly", "[cwProject]") {
 }
 
 TEST_CASE("cwProject should detect the correct file type", "[cwProject]") {
-    //Older sqlite project
-    QString datasetFile = copyToTempFolder(":/datasets/test_cwProject/Phake Cave 3000.cw");
-    auto project = std::make_unique<cwProject>();
-    addTokenManager(project.get());
-    CHECK(project->projectType(datasetFile) == cwProject::SqliteFileType);
+    // Load a file and check that it loads without errors, returning fileType()
+    auto detectType = [](const QString& path) {
+        auto p = std::make_unique<cwProject>();
+        addTokenManager(p.get());
+        p->loadOrConvert(path);
+        p->waitLoadToFinish();
+        return p->fileType();
+    };
+
+    // Load a file and check that it fails with a fatal error (unknown type)
+    auto detectUnknownType = [](const QString& path) {
+        auto p = std::make_unique<cwProject>();
+        addTokenManager(p.get());
+        p->loadOrConvert(path);
+        p->waitLoadToFinish();
+        return p->errorModel()->size() > 0;
+    };
+
+    //Older sqlite project: detection triggers conversion, resulting in BundledGitFileType
+    CHECK(detectType(copyToTempFolder(":/datasets/test_cwProject/Phake Cave 3000.cw")) == cwProject::BundledGitFileType);
 
     //A file based file
-    datasetFile = copyToTempFolder(":/datasets/test_cwProject/v8.cwproj");
-    CHECK(project->projectType(datasetFile) == cwProject::GitFileType);
+    CHECK(detectType(copyToTempFolder(":/datasets/test_cwProject/v8.cwproj")) == cwProject::GitFileType);
 
     //A bundled project fixture (copy .zip fixture, rename to .cw)
     const QString bundledZip = copyToTempFolder("://datasets/test_cwProject/jaws of the beast with scrap.zip");
@@ -9406,11 +9420,14 @@ TEST_CASE("cwProject should detect the correct file type", "[cwProject]") {
         + QFileInfo(bundledZip).completeBaseName()
         + QStringLiteral(".cw");
     REQUIRE(QFile::rename(bundledZip, bundledArchive));
-    CHECK(project->projectType(bundledArchive) == cwProject::BundledGitFileType);
+    CHECK(detectType(bundledArchive) == cwProject::BundledGitFileType);
+
+    auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
     project->loadOrConvert(bundledArchive);
     project->waitLoadToFinish();
     CHECK(project->errorModel()->size() == 0);
-    CHECK(project->projectType(project->filename()) == cwProject::BundledGitFileType);
+    CHECK(project->fileType() == cwProject::BundledGitFileType);
     CHECK_FALSE(project->isTemporaryProject());
     const qint64 bundledSizeBeforeSave = QFileInfo(bundledArchive).size();
     REQUIRE(project->save());
@@ -9418,16 +9435,15 @@ TEST_CASE("cwProject should detect the correct file type", "[cwProject]") {
     CHECK(QFileInfo(bundledArchive).size() > 0);
     CHECK(QFileInfo(bundledArchive).size() >= bundledSizeBeforeSave);
 
-    //Empty file
+    //Empty file - unknown type produces a fatal error
     QTemporaryFile tempFile;
     tempFile.open();
-    datasetFile = tempFile.fileName();
-    CHECK(project->projectType(datasetFile) == cwProject::UnknownFileType);
+    CHECK(detectUnknownType(tempFile.fileName()));
 
-    //File with random stuff in it
+    //File with random stuff in it - also unknown type
     tempFile.write("Test random data");
     tempFile.close();
-    CHECK(project->projectType(datasetFile) == cwProject::UnknownFileType);
+    CHECK(detectUnknownType(tempFile.fileName()));
 }
 
 TEST_CASE("cwProject fileType should reflect the current loaded project format", "[cwProject]") {
@@ -9439,7 +9455,7 @@ TEST_CASE("cwProject fileType should reflect the current loaded project format",
     rootData->futureManagerModel()->waitForFinished();
     project->waitLoadToFinish();
     project->waitSaveToFinish();
-    CHECK(project->fileType() == cwProject::SqliteFileType);
+    CHECK(project->fileType() == cwProject::BundledGitFileType);
 
     const QString gitSource = copyToTempFolder(":/datasets/test_cwProject/v8.cwproj");
     project->loadOrConvert(gitSource);
@@ -11447,7 +11463,7 @@ TEST_CASE("cwProject should overwrite or touch loaded project", "[cwProject]") {
         root->project()->waitLoadToFinish();
         root->project()->waitSaveToFinish();
 
-        REQUIRE(root->project()->projectType(root->project()->filename()) == cwProject::SqliteFileType);
+        REQUIRE(root->project()->filename() == filename);
         const QDir workingProjectRoot = QFileInfo(root->project()->dataRootDir().absolutePath()).absoluteDir();
         const QString workingProjectFile = firstCwprojInDirectory(workingProjectRoot.absolutePath());
         REQUIRE_FALSE(workingProjectFile.isEmpty());
@@ -11525,7 +11541,7 @@ TEST_CASE("V6 conversion writes note image paths relative to note file",
     root->project()->waitLoadToFinish();
     root->project()->waitSaveToFinish();
 
-    REQUIRE(root->project()->projectType(root->project()->filename()) == cwProject::SqliteFileType);
+    REQUIRE(root->project()->filename() == sourceFilename);
     const QDir workingProjectRoot = QFileInfo(root->project()->dataRootDir().absolutePath()).absoluteDir();
     const QString convertedProjectFile = firstCwprojInDirectory(workingProjectRoot.absolutePath());
     REQUIRE_FALSE(convertedProjectFile.isEmpty());
@@ -11574,7 +11590,7 @@ TEST_CASE("loadOrConvert sqlite should save back to original bundled path", "[cw
     REQUIRE(project->save());
     project->waitSaveToFinish();
     REQUIRE(QFileInfo::exists(sqliteSource));
-    CHECK(project->projectType(sqliteSource) == cwProject::BundledGitFileType);
+    CHECK(project->fileType() == cwProject::BundledGitFileType);
 
     auto reloaded = std::make_unique<cwProject>();
     addTokenManager(reloaded.get());
@@ -11610,7 +11626,7 @@ TEST_CASE("loadOrConvert sqlite read-only source remains temporary and won't sav
     CHECK(project->isTemporaryProject());
     CHECK_FALSE(project->canSaveDirectly());
     CHECK_FALSE(project->save());
-    CHECK(project->projectType(sqliteSource) == cwProject::SqliteFileType);
+    CHECK(project->fileType() == cwProject::SqliteFileType);
 
     sourceFile.setPermissions(originalPermissions);
 }

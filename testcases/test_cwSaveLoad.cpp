@@ -901,14 +901,14 @@ TEST_CASE("cwSaveLoad should save and load old projects correctly", "[cwSaveLoad
 
     auto root2 = std::make_unique<cwRootData>();
 
-    CHECK(root->project()->projectType(filename) == cwProject::SqliteFileType);
+    CHECK(root->project()->fileType() == cwProject::SqliteFileType);
 
     const QDir workingDataRoot = root->project()->dataRootDir();
     const QDir workingProjectRoot = QFileInfo(workingDataRoot.absolutePath()).absoluteDir();
     QString convertedFilename = firstCwprojInDirectory(workingProjectRoot.absolutePath());
     REQUIRE_FALSE(convertedFilename.isEmpty());
     CHECK(QFileInfo::exists(convertedFilename));
-    CHECK(root->project()->projectType(convertedFilename) == cwProject::GitFileType);
+    CHECK(convertedFilename.endsWith(QStringLiteral(".cwproj")));
 
     root2->settings()->jobSettings()->setAutomaticUpdate(false);
     root2->project()->loadFile(convertedFilename);

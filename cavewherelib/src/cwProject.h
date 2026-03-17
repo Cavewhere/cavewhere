@@ -103,8 +103,6 @@ public:
 
     static QString supportedImageFormats();
 
-    Q_INVOKABLE FileType projectType(QString filename) const;
-
     Q_INVOKABLE void convertFromProjectV6(QString oldProjectFilename,
                                           const QDir &newProjectDirectory);
 
@@ -189,6 +187,7 @@ signals:
     void loaded();
     void objectPathReady(QObject* object);
     void syncInProgressChanged();
+    void gitFileOpened(const QString& path);
 
 public slots:
     void loadFile(QString filename);
@@ -252,6 +251,7 @@ private:
     // void addImageHelper(std::function<void (QList<cwImage>)> outputCallBackFunc,
     //                     std::function<void (cwAddImageTask*)> setImagesFunc);
 
+    FileType projectType(const QString& filename) const;
     QFuture<Monad::ResultBase> loadHelper(QString filename, FileType knownType = UnknownFileType);
     QFuture<Monad::ResultBase> loadHelperImpl(const QString& filename, FileType type);
     QFuture<Monad::ResultBase> convertFromProjectV6Helper(QString oldProjectFilename,

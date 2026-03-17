@@ -1188,6 +1188,9 @@ void cwProject::loadOrConvert(const QString &filename)
                              return QFuture<void>(convertFromProjectV6Helper(normalizedFilename, tempDir, temporaryProject, bundledPath));
                          } else {
                              //This could be Git file or a corrupted file
+                             if(type == GitFileType) {
+                                 emit gitFileOpened(normalizedFilename);
+                             }
                              auto loadFuture = loadHelper(normalizedFilename, type);
                              return QFuture<void>(AsyncFuture::observe(loadFuture)
                                                       .context(this, [loadFuture, this]() {
@@ -1273,10 +1276,8 @@ void cwProject::convertFromProjectV6(QString oldProjectFilename,
     tempProject->loadFile(oldProjectFilename);
 }
 
-cwProject::FileType cwProject::projectType(QString filename) const
+cwProject::FileType cwProject::projectType(const QString& filename) const
 {
-    filename = cwGlobals::convertFromURL(filename);
-
     //File is empty, return unknown
     QFileInfo info(filename);
     if(info.size() == 0) {

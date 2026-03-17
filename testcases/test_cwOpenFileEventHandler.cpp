@@ -42,7 +42,6 @@ TEST_CASE("cwOpenFileEventHandler should load and convert legacy cw files", "[cw
     root->settings()->jobSettings()->setAutomaticUpdate(false);
 
     const QString legacyProjectPath = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
-    REQUIRE(root->project()->projectType(legacyProjectPath) == cwProject::SqliteFileType);
 
     cwOpenFileEventHandler openFileHandler(QApplication::instance());
     openFileHandler.setProject(root->project());
@@ -61,5 +60,5 @@ TEST_CASE("cwOpenFileEventHandler should load and convert legacy cw files", "[cw
     CHECK(fatalErrorCount(root->project()->errorModel()) == 0);
     REQUIRE(root->project()->cavingRegion()->caveCount() >= 1);
     CHECK(root->project()->filename() != legacyProjectPath);
-    CHECK(root->project()->projectType(root->project()->filename()) == cwProject::GitFileType);
+    CHECK(root->project()->fileType() == cwProject::GitFileType);
 }
