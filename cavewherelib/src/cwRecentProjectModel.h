@@ -5,13 +5,11 @@
 
 //Qt
 #include <QAbstractListModel>
-#include <QDir>
-#include <QUrl>
-#include <QSettings>
+#include <QFileInfo>
 #include <QPropertyBinding>
 #include <QQmlEngine>
-#include <QPointer>
-#include <QMetaObject>
+#include <QSettings>
+#include <QUrl>
 
 //Our
 #include "cwResultDir.h"
@@ -19,10 +17,10 @@
 
 class cwProject;
 
-class CAVEWHERE_LIB_EXPORT cwRepositoryModel : public QAbstractListModel
+class CAVEWHERE_LIB_EXPORT cwRecentProjectModel : public QAbstractListModel
 {
     Q_OBJECT
-    QML_NAMED_ELEMENT(RepositoryModel);
+    QML_NAMED_ELEMENT(RecentProjectModel);
 
     Q_PROPERTY(QUrl defaultRepositoryDir READ defaultRepositoryDir WRITE setDefaultRepositoryDir NOTIFY defaultRepositoryDirChanged BINDABLE bindableDefaultRepositoryDir)
 
@@ -41,7 +39,7 @@ public:
 
     Q_ENUM(ErrorCode)
 
-    explicit cwRepositoryModel(QObject* parent = nullptr);
+    explicit cwRecentProjectModel(QObject* parent = nullptr);
 
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
@@ -51,11 +49,9 @@ public:
     void setDefaultRepositoryDir(const QUrl& defaultRepositoryDir) { m_defaultRepositoryDir = defaultRepositoryDir; }
     QBindable<QUrl> bindableDefaultRepositoryDir() { return &m_defaultRepositoryDir; }
 
-    Q_INVOKABLE cwResultDir repositoryDir(const QUrl &localDir, const QString &name) const;
     Q_INVOKABLE Monad::ResultBase addRepository(const cwResultDir& dir);
     Q_INVOKABLE Monad::ResultBase addRepositoryDirectory(const QDir& dir);
     Q_INVOKABLE Monad::ResultString repositoryProjectFile(int index) const;
-    Q_INVOKABLE Monad::ResultBase openRepository(int index, cwProject* project) const;
     Q_INVOKABLE Monad::ResultBase addRepositoryFromProjectFile(const QUrl& projectFileUrl);
 
     Q_INVOKABLE void clear();
@@ -65,16 +61,16 @@ signals:
     void defaultRepositoryDirChanged();
 
 private:
+    struct RepositoryEntry {
+        QString projectPath;
+    };
+
     void loadSettings();
     void saveRepositories() const;
-    void handleProjectStateChanged();
-    void clearProjectConnections();
 
-    QList<QDir> m_repositories;
-    QPointer<cwProject> m_project;
-    QList<QMetaObject::Connection> m_projectConnections;
+    QList<RepositoryEntry> m_repositories;
 
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwRepositoryModel, QUrl, m_defaultRepositoryDir, QUrl(), &cwRepositoryModel::defaultRepositoryDirChanged);
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwRecentProjectModel, QUrl, m_defaultRepositoryDir, QUrl(), &cwRecentProjectModel::defaultRepositoryDirChanged);
     QPropertyNotifier m_defaultRepositoryDirNotifier;
 
     static constexpr char SettingsKey[] = "repositories";

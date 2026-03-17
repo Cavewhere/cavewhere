@@ -104,6 +104,7 @@ public:
     static QString supportedImageFormats();
 
     Q_INVOKABLE FileType projectType(QString filename) const;
+    Q_INVOKABLE cwResultDir repositoryDir(const QUrl& localDir, const QString& name) const;
 
     Q_INVOKABLE void convertFromProjectV6(QString oldProjectFilename,
                                           const QDir &newProjectDirectory);
@@ -214,6 +215,7 @@ private:
     //Mark true if temp project when loaded via legacy SQLite/v6 paths
     bool SQLiteTempProject;
     bool LoadedFromBundledArchive;
+    bool ConvertedFromSqlite; //!< True when a SQLite .cw was auto-converted; distinguishes from a genuine bundled .cw zip
     QString BundledArchivePath;
 
     //Task manager, for visualizing running tasks
@@ -252,7 +254,7 @@ private:
     // void addImageHelper(std::function<void (QList<cwImage>)> outputCallBackFunc,
     //                     std::function<void (cwAddImageTask*)> setImagesFunc);
 
-    QFuture<Monad::ResultBase> loadHelper(QString filename);
+    QFuture<Monad::ResultBase> loadHelper(QString filename, bool suppressLoadedEmit = false);
     QFuture<Monad::ResultBase> convertFromProjectV6Helper(QString oldProjectFilename,
                                                           const QDir &newProjectDirectory,
                                                           bool isTemporary = false,

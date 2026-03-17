@@ -85,7 +85,7 @@ StandardPage {
             // Layout.rightMargin: 10
             // Layout.topMargin: 10
 
-            model: RootData.repositoryModel
+            model: RootData.recentProjectModel
 
             delegate: TableRowBackground {
                 id: delegateId
@@ -113,11 +113,12 @@ StandardPage {
                         elide: Text.ElideRight
 
                         onClicked: {
-                            const result = RootData.repositoryModel.openRepository(index, RootData.project)
-                            if (result.hasError) {
-                                console.warn("Failed to open repository:", result.errorMessage)
+                            const fileResult = RootData.recentProjectModel.repositoryProjectFile(index)
+                            if (fileResult.hasError) {
+                                console.warn("Failed to open repository:", fileResult.errorMessage)
                                 return;
                             }
+                            RootData.project.loadFile(fileResult.value)
                             RootData.pageSelectionModel.gotoPageByName(null, "View")
                         }
                     }

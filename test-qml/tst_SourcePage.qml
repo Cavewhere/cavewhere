@@ -12,7 +12,7 @@ MainWindowTest {
         when: windowShown
 
         function init() {
-            RootData.repositoryModel.clear();
+            RootData.recentProjectModel.clear();
         }
 
         function test_addRepository() {
@@ -26,10 +26,10 @@ MainWindowTest {
             mouseClick(addMenuNew)
 
             let tempDir = TestHelper.tempDirectoryUrl();
-            RootData.repositoryModel.defaultRepositoryDir = tempDir
+            RootData.recentProjectModel.defaultRepositoryDir = tempDir
 
             let dirText = findChild(mainWindow, "repositoryParentDir")
-            compare(dirText.text, RootData.urlToLocal(RootData.repositoryModel.defaultRepositoryDir))
+            compare(dirText.text, RootData.urlToLocal(RootData.recentProjectModel.defaultRepositoryDir))
             compare(dirText.text, RootData.urlToLocal(tempDir))
 
             //Write test
@@ -68,10 +68,10 @@ MainWindowTest {
             mouseClick(addMenuNew)
 
             let tempDir = TestHelper.tempDirectoryUrl();
-            RootData.repositoryModel.defaultRepositoryDir = tempDir
+            RootData.recentProjectModel.defaultRepositoryDir = tempDir
 
             let dirText = ObjectFinder.findObjectByChain(mainWindow, "Popup->repositoryParentDir")
-            compare(dirText.text, RootData.urlToLocal(RootData.repositoryModel.defaultRepositoryDir))
+            compare(dirText.text, RootData.urlToLocal(RootData.recentProjectModel.defaultRepositoryDir))
             compare(dirText.text, RootData.urlToLocal(tempDir))
 
             //Make sure the error isn't visible yet
@@ -183,10 +183,10 @@ MainWindowTest {
 
             //We're going to assume we don't have permission here and trying to add repo at root will throw an error
             let dir = TestHelper.toLocalUrl("/");
-            RootData.repositoryModel.defaultRepositoryDir = TestHelper.toLocalUrl("/")
+            RootData.recentProjectModel.defaultRepositoryDir = TestHelper.toLocalUrl("/")
 
             let dirText = ObjectFinder.findObjectByChain(mainWindow, "Popup->repositoryParentDir")
-            compare(dirText.text, RootData.urlToLocal(RootData.repositoryModel.defaultRepositoryDir))
+            compare(dirText.text, RootData.urlToLocal(RootData.recentProjectModel.defaultRepositoryDir))
             compare(dirText.text, RootData.urlToLocal(dir))
 
             //Write test
@@ -250,6 +250,63 @@ MainWindowTest {
             compare(RootData.project.projectType(TestHelper.toLocalUrl(filename)),
                     Project.BundledGitFileType)
 
+        }
+
+        function test_openLegacyProject_showsOnlyOriginalBundlePath() {
+            RootData.pageSelectionModel.currentPageAddress = "Source"
+            waitForRendering(mainWindow);
+
+            let filename = TestHelper.copyToTempDir("://datasets/test_cwProject/Phake Cave 3000.cw");
+            let dialog = ObjectFinder.findObjectByChain(mainWindow, "rootId->loadProjectDialog")
+            dialog.runLoadForTest(TestHelper.toLocalUrl(filename))
+
+            tryVerify(() => { return RootData.region.caveCount > 0 }, 20000)
+
+            let repoListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->repositoryListView")
+            tryVerify(() => { return repoListView.count === 1 })
+            waitForRendering(repoListView)
+
+            let firstDelegate = repoListView.itemAtIndex(0)
+            compare(firstDelegate.pathRole, filename)
+        }
+
+        function test_openSavedBundle_showsBundlePathInsteadOfTempDirectory() {
+            RootData.pageSelectionModel.currentPageAddress = "Source"
+            waitForRendering(mainWindow);
+
+            let filename = TestHelper.copyToTempDir("://datasets/test_cwProject/Phake Cave 3000.cw");
+            let dialog = ObjectFinder.findObjectByChain(mainWindow, "rootId->loadProjectDialog")
+            dialog.runLoadForTest(TestHelper.toLocalUrl(filename))
+
+            tryVerify(() => { return RootData.region.caveCount > 0 }, 20000)
+
+            RootData.recentProjectModel.clear()
+            compare(RootData.recentProjectModel.rowCount(), 0)
+
+            let tempDir = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
+            let bundledPath = tempDir + "/source-page-saveas-bundle.cw"
+            verify(RootData.project.saveAs(bundledPath))
+            TestHelper.waitForProjectSaveToFinish(RootData.project)
+
+            RootData.recentProjectModel.clear()
+            compare(RootData.recentProjectModel.rowCount(), 0)
+
+            dialog.runLoadForTest(TestHelper.toLocalUrl(bundledPath))
+            tryVerify(() => { return RootData.region.caveCount > 0 }, 20000)
+
+            let repoListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->repositoryListView")
+            tryVerify(() => { return repoListView.count === 1 })
+            waitForRendering(repoListView)
+
+            let firstDelegate = repoListView.itemAtIndex(0)
+            compare(firstDelegate.pathRole, bundledPath)
+
+            mouseClick(firstDelegate)
+            tryVerify(() => { return repoListView.count === 1 })
+            waitForRendering(repoListView)
+
+            firstDelegate = repoListView.itemAtIndex(0)
+            compare(firstDelegate.pathRole, bundledPath)
         }
     }
 }

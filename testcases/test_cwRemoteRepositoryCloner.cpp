@@ -3,7 +3,7 @@
 
 //Our includes
 #include "cwRemoteRepositoryCloner.h"
-#include "cwRepositoryModel.h"
+#include "cwRecentProjectModel.h"
 
 //QQuickGit includes
 #include "Account.h"
@@ -27,14 +27,14 @@ TEST_CASE("cwRemoteRepositoryCloner clones a remote repository", "[cwRemoteRepos
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
 
-    cwRepositoryModel repositoryModel;
-    repositoryModel.setDefaultRepositoryDir(QUrl::fromLocalFile(tempDir.path()));
+    cwRecentProjectModel recentProjectModel;
+    recentProjectModel.setDefaultRepositoryDir(QUrl::fromLocalFile(tempDir.path()));
 
     QQuickGit::GitFutureWatcher watcher;
     QQuickGit::Account account;
 
     cwRemoteRepositoryCloner cloner;
-    cloner.setRepositoryModel(&repositoryModel);
+    cloner.setRecentProjectModel(&recentProjectModel);
     cloner.setCloneWatcher(&watcher);
     cloner.setAccount(&account);
 
@@ -60,7 +60,7 @@ TEST_CASE("cwRemoteRepositoryCloner clones a remote repository", "[cwRemoteRepos
     CHECK(stateSpy.count() > 0);
     CHECK_FALSE(watcher.hasError());
     CHECK(cloner.cloneErrorMessage().isEmpty());
-    CHECK(repositoryModel.rowCount() == 1);
+    CHECK(recentProjectModel.rowCount() == 1);
     // const QString legacyProject = tempDir.filePath("PhakeCave3000/Phake Cave 3000.cw");
     const QString newProject = tempDir.filePath("PhakeCave3000/Phake Cave 3000.cwproj");
     CHECK(QFileInfo::exists(newProject));

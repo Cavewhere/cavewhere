@@ -25,10 +25,6 @@ Item {
 
         case Project.GitFileType:
             RootData.project.loadFile(path);
-            const repoResult = RootData.repositoryModel.addRepositoryFromProjectFile(path);
-            if (repoResult.hasError) {
-                console.warn("Failed to add repository to recent list:", repoResult.errorMessage);
-            }
             break;
         case Project.BundledGitFileType:
             RootData.project.loadFile(path);

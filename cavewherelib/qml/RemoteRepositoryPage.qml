@@ -94,7 +94,7 @@ StandardPage {
         if (cloneDestinationDialog.currentFolder.toString() !== "") {
             return cloneDestinationDialog.currentFolder
         }
-        return RootData.repositoryModel.defaultRepositoryDir
+        return RootData.recentProjectModel.defaultRepositoryDir
     }
     readonly property string cloneDestinationRepoName: remoteRepositoryCloner.repositoryNameFromUrl(manualUrlField.textField.text)
     readonly property string cloneDestinationPathText: {
@@ -112,7 +112,7 @@ StandardPage {
 
     RemoteRepositoryCloner {
         id: remoteRepositoryCloner
-        repositoryModel: RootData.repositoryModel
+        recentProjectModel: RootData.recentProjectModel
         cloneWatcher: cloneWatcher
         account: RootData.account
 
@@ -122,11 +122,12 @@ StandardPage {
                 return
             }
 
-            const openResult = RootData.repositoryModel.openRepository(clonedIndex, RootData.project)
-            if (openResult.hasError) {
-                console.warn("Failed to open cloned repository:", openResult.errorMessage)
+            const fileResult = RootData.recentProjectModel.repositoryProjectFile(clonedIndex)
+            if (fileResult.hasError) {
+                console.warn("Failed to open cloned repository:", fileResult.errorMessage)
                 return
             }
+            RootData.project.loadFile(fileResult.value)
 
             RootData.pageSelectionModel.gotoPageByName(null, "View")
         }
@@ -671,7 +672,7 @@ StandardPage {
 
     FolderDialog {
         id: cloneDestinationDialog
-        currentFolder: RootData.repositoryModel.defaultRepositoryDir
+        currentFolder: RootData.recentProjectModel.defaultRepositoryDir
         selectedFolder: currentFolder
     }
 

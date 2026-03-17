@@ -239,7 +239,7 @@ MainWindowTest {
         }
 
         function init() {
-            RootData.repositoryModel.clear()
+            RootData.recentProjectModel.clear()
             RootData.pageSelectionModel.currentPageAddress = "Remote"
             tryVerify(() => {
                 return RootData.pageView.currentPageItem !== null
@@ -254,7 +254,7 @@ MainWindowTest {
             verify(fixture.cloneParentPath !== "")
             verify(fixture.expectedClonePath !== "")
 
-            RootData.repositoryModel.defaultRepositoryDir = TestHelper.toLocalUrl(fixture.cloneParentPath)
+            RootData.recentProjectModel.defaultRepositoryDir = TestHelper.toLocalUrl(fixture.cloneParentPath)
 
             let manualUrlField = findChild(mainWindow, "remoteManualUrlField")
             verify(manualUrlField !== null)
@@ -265,7 +265,7 @@ MainWindowTest {
             mouseClick(cloneButton)
 
             tryVerify(() => {
-                return RootData.repositoryModel.rowCount() === 1
+                return RootData.recentProjectModel.rowCount() === 1
             }, 20000)
 
             compare(TestHelper.directoryExists(TestHelper.toLocalUrl(fixture.expectedClonePath)), true)
@@ -306,7 +306,7 @@ MainWindowTest {
                 return
             }
 
-            RootData.repositoryModel.clear()
+            RootData.recentProjectModel.clear()
             RootData.pageSelectionModel.currentPageAddress = "Remote"
             tryVerify(() => {
                 return RootData.pageView.currentPageItem !== null
@@ -314,7 +314,7 @@ MainWindowTest {
             })
 
             let parentDir = TestHelper.tempDirectoryUrl()
-            RootData.repositoryModel.defaultRepositoryDir = parentDir
+            RootData.recentProjectModel.defaultRepositoryDir = parentDir
 
             let manualUrlField = findChild(mainWindow, "remoteManualUrlField")
             verify(manualUrlField !== null)
@@ -329,7 +329,7 @@ MainWindowTest {
             // - page auto-opens repo
             // - current bug path may assert during load/rehydration.
             tryVerify(() => {
-                return RootData.repositoryModel.rowCount() === 1
+                return RootData.recentProjectModel.rowCount() === 1
             }, 120000)
 
             tryVerify(() => {
@@ -339,7 +339,7 @@ MainWindowTest {
 
             let originUrl = ""
             tryVerify(() => {
-                let repoPath = RootData.repositoryModel.data(RootData.repositoryModel.index(0, 0), RepositoryModel.PathRole)
+                let repoPath = RootData.recentProjectModel.data(RootData.recentProjectModel.index(0, 0), RecentProjectModel.PathRole)
                 originUrl = TestHelper.repositoryRemoteUrl(TestHelper.toLocalUrl(repoPath), "origin")
                 return originUrl !== ""
             }, 30000)

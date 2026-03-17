@@ -35,6 +35,7 @@ class cwNoteLiDARData;
 #include "cwCavingRegionData.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
 #include "cwFutureManagerToken.h"
+#include "cwResultDir.h"
 #include "cwSyncTypes.h"
 #include "CaveWhereLibExport.h"
 
@@ -273,6 +274,7 @@ public:
     QFuture<void> retire();
 
     static void ensureGitExcludeHasLocalEntries(const QDir& repoDir);
+    static cwResultDir repositoryDir(const QUrl& localDir, const QString& name);
     static Monad::Result<cwCaveData> loadCave(const QString& filename);
     static Monad::Result<cwNoteLiDARData> loadNoteLiDAR(const QString& filename, const QDir &projectDir);
     static Monad::Result<cwNoteLiDARData> loadNoteLiDAR(const QByteArray& content, const QString& filename, const QDir &projectDir);

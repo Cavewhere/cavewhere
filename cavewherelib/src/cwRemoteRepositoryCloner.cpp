@@ -1,6 +1,7 @@
 #include "cwRemoteRepositoryCloner.h"
 
-#include "cwRepositoryModel.h"
+#include "cwRecentProjectModel.h"
+#include "cwSaveLoad.h"
 
 #include "GitFutureWatcher.h"
 #include "GitRepository.h"
@@ -15,9 +16,9 @@ cwRemoteRepositoryCloner::cwRemoteRepositoryCloner(QObject* parent) :
 {
 }
 
-void cwRemoteRepositoryCloner::setRepositoryModel(cwRepositoryModel* repositoryModel)
+void cwRemoteRepositoryCloner::setRecentProjectModel(cwRecentProjectModel* recentProjectModel)
 {
-    m_repositoryModel = repositoryModel;
+    m_recentProjectModel = recentProjectModel;
 }
 
 void cwRemoteRepositoryCloner::setCloneWatcher(QQuickGit::GitFutureWatcher* cloneWatcher)
@@ -102,8 +103,8 @@ void cwRemoteRepositoryCloner::clone(const QString& urlText, const QUrl& destina
     setCloneErrorMessage(QString());
     setCloneStatusMessage(QString());
 
-    if (!m_repositoryModel) {
-        qWarning() << "RemoteRepositoryCloner requires repositoryModel to be set before cloning.";
+    if (!m_recentProjectModel) {
+        qWarning() << "RemoteRepositoryCloner requires recentProjectModel to be set before cloning.";
         return;
     }
 
@@ -126,9 +127,9 @@ void cwRemoteRepositoryCloner::clone(const QString& urlText, const QUrl& destina
 
     const QUrl cloneParentDir = destinationParentDir.isValid()
         ? destinationParentDir
-        : m_repositoryModel->defaultRepositoryDir();
+        : m_recentProjectModel->defaultRepositoryDir();
 
-    cwResultDir resultDir = m_repositoryModel->repositoryDir(cloneParentDir, repoName);
+    cwResultDir resultDir = cwSaveLoad::repositoryDir(cloneParentDir, repoName);
     if (resultDir.hasError()) {
         setCloneErrorMessage(resultDir.errorMessage());
         return;
@@ -189,13 +190,13 @@ void cwRemoteRepositoryCloner::handleCloneWatcherStateChanged()
         return;
     }
 
-    if (m_pendingCloneDir.isEmpty() || !m_repositoryModel) {
+    if (m_pendingCloneDir.isEmpty() || !m_recentProjectModel) {
         setPendingCloneDir(QString());
         m_pendingCloneUrl.clear();
         return;
     }
 
-    Monad::ResultBase addResult = m_repositoryModel->addRepositoryDirectory(QDir(m_pendingCloneDir));
+    Monad::ResultBase addResult = m_recentProjectModel->addRepositoryDirectory(QDir(m_pendingCloneDir));
     if (addResult.hasError()) {
         setCloneErrorMessage(addResult.errorMessage());
     } else {
@@ -203,9 +204,9 @@ void cwRemoteRepositoryCloner::handleCloneWatcherStateChanged()
         emit repositoryCloned(m_pendingCloneDir);
         emit repositoryClonedWithRemote(m_pendingCloneDir, m_pendingCloneUrl);
         int clonedIndex = -1;
-        for (int row = 0; row < m_repositoryModel->rowCount(); ++row) {
-            const QString rowPath = m_repositoryModel->data(m_repositoryModel->index(row, 0),
-                                                            cwRepositoryModel::PathRole).toString();
+        for (int row = 0; row < m_recentProjectModel->rowCount(); ++row) {
+            const QString rowPath = m_recentProjectModel->data(m_recentProjectModel->index(row, 0),
+                                                            cwRecentProjectModel::PathRole).toString();
             if (QDir(rowPath).absolutePath() == QDir(m_pendingCloneDir).absolutePath()) {
                 clonedIndex = row;
                 break;

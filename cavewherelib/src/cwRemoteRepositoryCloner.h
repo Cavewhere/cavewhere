@@ -6,7 +6,7 @@
 #include <QString>
 #include <QUrl>
 
-#include "cwRepositoryModel.h"
+#include "cwRecentProjectModel.h"
 #include "CaveWhereLibExport.h"
 #include "Account.h"
 #include "GitFutureWatcher.h"
@@ -20,7 +20,7 @@ class CAVEWHERE_LIB_EXPORT cwRemoteRepositoryCloner : public QObject
     Q_PROPERTY(QString cloneErrorMessage READ cloneErrorMessage NOTIFY cloneErrorMessageChanged)
     Q_PROPERTY(QString cloneStatusMessage READ cloneStatusMessage NOTIFY cloneStatusMessageChanged)
     Q_PROPERTY(QString pendingCloneDir READ pendingCloneDir NOTIFY pendingCloneDirChanged)
-    Q_PROPERTY(cwRepositoryModel* repositoryModel READ repositoryModel WRITE setRepositoryModel REQUIRED)
+    Q_PROPERTY(cwRecentProjectModel* recentProjectModel READ recentProjectModel WRITE setRecentProjectModel REQUIRED)
     Q_PROPERTY(QQuickGit::GitFutureWatcher* cloneWatcher READ cloneWatcher WRITE setCloneWatcher REQUIRED)
     Q_PROPERTY(QQuickGit::Account* account READ account WRITE setAccount NOTIFY accountChanged)
 
@@ -31,8 +31,8 @@ public:
     QString cloneStatusMessage() const { return m_cloneStatusMessage; }
     QString pendingCloneDir() const { return m_pendingCloneDir; }
 
-    cwRepositoryModel* repositoryModel() const { return m_repositoryModel; }
-    void setRepositoryModel(cwRepositoryModel* repositoryModel);
+    cwRecentProjectModel* recentProjectModel() const { return m_recentProjectModel; }
+    void setRecentProjectModel(cwRecentProjectModel* recentProjectModel);
 
     QQuickGit::GitFutureWatcher* cloneWatcher() const { return m_cloneWatcher; }
     void setCloneWatcher(QQuickGit::GitFutureWatcher* cloneWatcher);
@@ -61,7 +61,7 @@ private:
     void handleCloneWatcherStateChanged();
     void handleCloneWatcherProgressTextChanged();
 
-    QPointer<cwRepositoryModel> m_repositoryModel;
+    QPointer<cwRecentProjectModel> m_recentProjectModel;
     QPointer<QQuickGit::GitFutureWatcher> m_cloneWatcher;
     QPointer<QQuickGit::Account> m_account;
     QQuickGit::GitRepository* m_cloneRepository = nullptr;

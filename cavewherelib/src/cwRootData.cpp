@@ -39,6 +39,7 @@
 #include <QProcess>
 #include <QDesktopServices>
 #include <QClipboard>
+#include <QFileInfo>
 
 //Generated files from qbs
 #include "cavewhereVersion.h"
@@ -54,7 +55,7 @@ cwRootData::cwRootData(QObject *parent) :
     QObject(parent),
     m_account(new QQuickGit::Account(this)),
     m_accountWatcher(new QQuickGit::AccountSettingWatcher(this)),
-    m_repositoryModel(new cwRepositoryModel(this)),
+    m_recentProjectModel(new cwRecentProjectModel(this)),
     DefaultTrip(new cwTrip(this)),
     DefaultTripCalibration(new cwTripCalibration(this))
 {
@@ -72,7 +73,24 @@ cwRootData::cwRootData(QObject *parent) :
     Project->setGitAccount(m_account);
     // Project->setTaskManager(TaskManagerModel);
     Project->setFutureManagerToken(FutureManagerModel);
-    m_repositoryModel->setProject(Project);
+    m_recentProjectModel->setProject(Project);
+    auto addProjectToRecents = [this](const QString& projectPath) {
+        const QString currentProjectPath = QFileInfo(projectPath).absoluteFilePath();
+        if (currentProjectPath.isEmpty()) {
+            return;
+        }
+
+        const auto addResult = m_recentProjectModel->addRepositoryFromProjectFile(QUrl::fromLocalFile(currentProjectPath));
+        if (addResult.hasError()) {
+            qWarning() << "Failed to add recent project:" << addResult.errorMessage();
+        }
+    };
+    connect(Project, &cwProject::loaded, this, [this, addProjectToRecents]() {
+        addProjectToRecents(Project->filename());
+    });
+    connect(Project, &cwProject::fileSaved, this, [this, addProjectToRecents]() {
+        addProjectToRecents(Project->filename());
+    });
     remote();
 
     Region = Project->cavingRegion();

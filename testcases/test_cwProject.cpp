@@ -29,7 +29,7 @@ using namespace Catch;
 #include "cwProjectedProfileScrapViewMatrix.h"
 #include "cwSignalSpy.h"
 #include "cwRemoteRepositoryCloner.h"
-#include "cwRepositoryModel.h"
+#include "cwRecentProjectModel.h"
 #include "cwZip.h"
 #include "GitRepository.h"
 #include "GitFutureWatcher.h"
@@ -2091,14 +2091,14 @@ TEST_CASE("Remote clone open edit save and sync workflow preserves LFS assets",
     QTemporaryDir cloneRoot;
     REQUIRE(cloneRoot.isValid());
 
-    auto* repositoryModel = rootData->repositoryModel();
-    REQUIRE(repositoryModel != nullptr);
-    repositoryModel->setDefaultRepositoryDir(QUrl::fromLocalFile(cloneRoot.path()));
-    const int repositoryCountBeforeClone = repositoryModel->rowCount();
+    auto* recentProjectModel = rootData->recentProjectModel();
+    REQUIRE(recentProjectModel != nullptr);
+    recentProjectModel->setDefaultRepositoryDir(QUrl::fromLocalFile(cloneRoot.path()));
+    const int repositoryCountBeforeClone = recentProjectModel->rowCount();
 
     QQuickGit::GitFutureWatcher cloneWatcher;
     cwRemoteRepositoryCloner cloner;
-    cloner.setRepositoryModel(repositoryModel);
+    cloner.setRecentProjectModel(recentProjectModel);
     cloner.setCloneWatcher(&cloneWatcher);
     cloner.setAccount(rootData->account());
 
@@ -2124,15 +2124,15 @@ TEST_CASE("Remote clone open edit save and sync workflow preserves LFS assets",
     CHECK(cloner.cloneErrorMessage().isEmpty());
     CHECK(cloner.cloneStatusMessage() == QStringLiteral("Clone complete."));
     CHECK(stateSpy.count() > 0);
-    CHECK(repositoryModel->rowCount() == repositoryCountBeforeClone + 1);
+    CHECK(recentProjectModel->rowCount() == repositoryCountBeforeClone + 1);
 
     const QString clonedRepoName = cloner.repositoryNameFromUrl(cloneUrl);
     const QString clonedRepoPath = QDir(cloneRoot.path()).filePath(clonedRepoName);
     REQUIRE(QDir(clonedRepoPath).exists());
 
     int clonedIndex = -1;
-    for (int i = 0; i < repositoryModel->rowCount(); ++i) {
-        const QString path = repositoryModel->data(repositoryModel->index(i, 0), cwRepositoryModel::PathRole).toString();
+    for (int i = 0; i < recentProjectModel->rowCount(); ++i) {
+        const QString path = recentProjectModel->data(recentProjectModel->index(i, 0), cwRecentProjectModel::PathRole).toString();
         if (QDir(path).absolutePath() == QDir(clonedRepoPath).absolutePath()) {
             clonedIndex = i;
             break;
@@ -2140,9 +2140,10 @@ TEST_CASE("Remote clone open edit save and sync workflow preserves LFS assets",
     }
     REQUIRE(clonedIndex >= 0);
 
-    const auto openResult = repositoryModel->openRepository(clonedIndex, project);
-    INFO(openResult.errorMessage().toStdString());
-    REQUIRE_FALSE(openResult.hasError());
+    const auto projectFileResult = recentProjectModel->repositoryProjectFile(clonedIndex);
+    INFO(projectFileResult.errorMessage().toStdString());
+    REQUIRE_FALSE(projectFileResult.hasError());
+    project->loadFile(QUrl::fromLocalFile(projectFileResult.value()).toString());
     rootData->futureManagerModel()->waitForFinished();
     project->waitLoadToFinish();
     project->waitSaveToFinish();
@@ -3058,14 +3059,14 @@ TEST_CASE("cwProject sync hydrates pulled LFS objects from test LFS server", "[c
 
     QTemporaryDir cloneRoot;
     REQUIRE(cloneRoot.isValid());
-    auto* repositoryModel = consumerRoot->repositoryModel();
-    REQUIRE(repositoryModel != nullptr);
-    repositoryModel->setDefaultRepositoryDir(QUrl::fromLocalFile(cloneRoot.path()));
-    const int repositoryCountBeforeClone = repositoryModel->rowCount();
+    auto* recentProjectModel = consumerRoot->recentProjectModel();
+    REQUIRE(recentProjectModel != nullptr);
+    recentProjectModel->setDefaultRepositoryDir(QUrl::fromLocalFile(cloneRoot.path()));
+    const int repositoryCountBeforeClone = recentProjectModel->rowCount();
 
     QQuickGit::GitFutureWatcher cloneWatcher;
     cwRemoteRepositoryCloner cloner;
-    cloner.setRepositoryModel(repositoryModel);
+    cloner.setRecentProjectModel(recentProjectModel);
     cloner.setCloneWatcher(&cloneWatcher);
     cloner.setAccount(consumerRoot->account());
 
@@ -3086,7 +3087,7 @@ TEST_CASE("cwProject sync hydrates pulled LFS objects from test LFS server", "[c
 
     REQUIRE(cloneWatcher.state() == QQuickGit::GitFutureWatcher::Ready);
     REQUIRE_FALSE(cloneWatcher.hasError());
-    REQUIRE(repositoryModel->rowCount() == repositoryCountBeforeClone + 1);
+    REQUIRE(recentProjectModel->rowCount() == repositoryCountBeforeClone + 1);
 
     const QString clonedRepoName = cloner.repositoryNameFromUrl(cloneUrl);
     const QString clonedRepoPath = QDir(cloneRoot.path()).filePath(clonedRepoName);
@@ -3094,8 +3095,8 @@ TEST_CASE("cwProject sync hydrates pulled LFS objects from test LFS server", "[c
     REQUIRE(setGitConfigString(clonedRepoPath, "lfs.url", lfsServer.endpoint()));
 
     int clonedIndex = -1;
-    for (int i = 0; i < repositoryModel->rowCount(); ++i) {
-        const QString path = repositoryModel->data(repositoryModel->index(i, 0), cwRepositoryModel::PathRole).toString();
+    for (int i = 0; i < recentProjectModel->rowCount(); ++i) {
+        const QString path = recentProjectModel->data(recentProjectModel->index(i, 0), cwRecentProjectModel::PathRole).toString();
         if (QDir(path).absolutePath() == QDir(clonedRepoPath).absolutePath()) {
             clonedIndex = i;
             break;
@@ -3103,9 +3104,10 @@ TEST_CASE("cwProject sync hydrates pulled LFS objects from test LFS server", "[c
     }
     REQUIRE(clonedIndex >= 0);
 
-    const auto openResult = repositoryModel->openRepository(clonedIndex, consumerProject);
-    INFO(openResult.errorMessage().toStdString());
-    REQUIRE_FALSE(openResult.hasError());
+    const auto projectFileResult2 = recentProjectModel->repositoryProjectFile(clonedIndex);
+    INFO(projectFileResult2.errorMessage().toStdString());
+    REQUIRE_FALSE(projectFileResult2.hasError());
+    consumerProject->loadFile(QUrl::fromLocalFile(projectFileResult2.value()).toString());
     consumerRoot->futureManagerModel()->waitForFinished();
     consumerProject->waitLoadToFinish();
     consumerProject->waitSaveToFinish();

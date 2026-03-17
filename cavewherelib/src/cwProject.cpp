@@ -132,6 +132,7 @@ cwProject::cwProject(QObject* parent) :
     FileVersion(cwRegionIOTask::protoVersion()),
     SQLiteTempProject(false),
     LoadedFromBundledArchive(false),
+    ConvertedFromSqlite(false),
     BundledArchivePath(),
     Region(new cwCavingRegion(this)),
     UndoStack(new QUndoStack(this)),
@@ -389,6 +390,8 @@ bool cwProject::save()
                                  return;
                              }
 
+                             ConvertedFromSqlite = false;
+                             emit fileTypeChanged();
                              m_syncHealth->refresh();
                              emit fileSaved();
                          })
@@ -506,6 +509,7 @@ bool cwProject::saveAs(QString newFilename)
                              }
 
                              LoadedFromBundledArchive = true;
+                             ConvertedFromSqlite = false;
                              BundledArchivePath = newFilename;
                              emit filenameChanged(filename());
                              emit fileTypeChanged();
@@ -540,6 +544,7 @@ bool cwProject::saveAs(QString newFilename)
     {
         ScopedProjectStateNotifier stateGuard(this);
         LoadedFromBundledArchive = false;
+        ConvertedFromSqlite = false;
         BundledArchivePath.clear();
     }
     emit fileTypeChanged();
@@ -616,7 +621,7 @@ void cwProject::setSqliteTemporaryProject(bool isTemp)
 //                  });
 // }
 
-QFuture<ResultBase> cwProject::loadHelper(QString filename)
+QFuture<ResultBase> cwProject::loadHelper(QString filename, bool suppressLoadedEmit)
 {
     if(filename.isEmpty()) { QtFuture::makeReadyValueFuture(ResultBase(QStringLiteral("File name is empty"))); }
 
@@ -645,6 +650,7 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
 
             setSqliteTemporaryProject(result.isTempFile());
             LoadedFromBundledArchive = false;
+            ConvertedFromSqlite = false;
             BundledArchivePath.clear();
             setFilename(result.filename());
             Region->setData(result.cavingRegion());
@@ -694,16 +700,20 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
         auto loadFuture = m_saveLoad->load(filename);
 
         return AsyncFuture::observe(loadFuture)
-            .context(this, [this, loadFuture]() {
+            .context(this, [this, loadFuture, suppressLoadedEmit]() {
                 auto result = loadFuture.result();
 
                 if (!result.hasError()) {
                     ScopedProjectStateNotifier stateGuard(this);
                     setSqliteTemporaryProject(false);
                     LoadedFromBundledArchive = false;
+                    ConvertedFromSqlite = false;
                     BundledArchivePath.clear();
                     FileVersion = cwRegionIOTask::protoVersion();
                     emit fileTypeChanged();
+                    if (!suppressLoadedEmit) {
+                        emit loaded();
+                    }
                 }
 
                 return result;
@@ -757,9 +767,12 @@ QFuture<ResultBase> cwProject::loadHelper(QString filename)
                             ScopedProjectStateNotifier stateGuard(this);
                             setSqliteTemporaryProject(false);
                             LoadedFromBundledArchive = true;
+                            ConvertedFromSqlite = false;
                             BundledArchivePath = bundleSourcePath;
                             FileVersion = cwRegionIOTask::protoVersion();
+                            emit filenameChanged(this->filename());
                             emit fileTypeChanged();
+                            emit loaded();
                         }
                         return result;
                     }).future();
@@ -810,7 +823,7 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
                               .context(this, [saveLoad, filenameFuture, this]() {
                                   // qDebug() << "Finished save on:" << filenameFuture.result().value();
                                   return Monad::mbind(filenameFuture, [this](const Monad::ResultString& filename) {
-                                      return loadHelper(filename.value());
+                                      return loadHelper(filename.value(), true);
                                   });
                               }).future();
 
@@ -831,12 +844,14 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
                     setSqliteTemporaryProject(isTemporary);
                     const bool keepBundledTarget = !bundledArchivePath.isEmpty();
                     LoadedFromBundledArchive = keepBundledTarget;
+                    ConvertedFromSqlite = keepBundledTarget;
                     BundledArchivePath = keepBundledTarget ? bundledArchivePath : QString();
                     if (keepBundledTarget) {
                         emit filenameChanged(this->filename());
                     }
                     emit fileTypeChanged();
                     FileVersion = tempProject->FileVersion;
+                    emit loaded();
                 } else {
                     errorModel()->append(cwError(result.errorMessage(), cwError::Fatal));
                 }
@@ -934,6 +949,7 @@ void cwProject::newProject() {
     m_saveLoad->newProject();
     setSqliteTemporaryProject(false);
     LoadedFromBundledArchive = false;
+    ConvertedFromSqlite = false;
     BundledArchivePath.clear();
     emit fileTypeChanged();
     m_syncHealth->refresh();
@@ -1312,6 +1328,10 @@ cwProject::FileType cwProject::projectType(QString filename) const
     return SqliteFileType;
 }
 
+cwResultDir cwProject::repositoryDir(const QUrl& localDir, const QString& name) const
+{
+    return cwSaveLoad::repositoryDir(localDir, name);
+}
 
 /**
  * @brief cwProject::setUndoStack
@@ -1351,7 +1371,7 @@ QString cwProject::filename() const {
 
 cwProject::FileType cwProject::fileType() const
 {
-    if (SQLiteTempProject) {
+    if (SQLiteTempProject || ConvertedFromSqlite) {
         return SqliteFileType;
     }
 

@@ -37,7 +37,7 @@ Loader {
 
         property cwResultDir resultDir: {
             let folderUrl = folderDialogId.selectedFolder.toString() !== "" ? folderDialogId.selectedFolder : folderDialogId.currentFolder
-            let resultDir = RootData.repositoryModel.repositoryDir(folderUrl, repositoryNameId.textField.text);
+            let resultDir = RootData.project.repositoryDir(folderUrl, repositoryNameId.textField.text);
             return resultDir;
         }
 
@@ -108,14 +108,14 @@ Loader {
                     button.text: "Open"
                     button.onClicked: {
                         let folderUrl = folderDialogId.selectedFolder.toString() !== "" ? folderDialogId.selectedFolder : folderDialogId.currentFolder
-                        let resultDir = RootData.repositoryModel.repositoryDir(folderUrl, repositoryNameId.textField.text);
+                        let resultDir = RootData.project.repositoryDir(folderUrl, repositoryNameId.textField.text);
                         if(popupId.resultDir.hasError) {
                             repositoryNameId.ignoreErrorUntilNextFocus = false;
                             shake();
                             return;
                         } else {
                             //Good
-                            let gitResult = RootData.repositoryModel.addRepository(resultDir);
+                            let gitResult = RootData.recentProjectModel.addRepository(resultDir);
 
                             if(gitResult.hasError) {
                                 errorLabelId.text = gitResult.errorMessage
@@ -142,7 +142,7 @@ Loader {
         }
 
         // onAccepted: {
-        //     RootData.repositoryModel.addRepository(folderDialogId.currentFolder, repositoryNameId.textField.text)
+        //     RootData.recentProjectModel.addRepository(folderDialogId.currentFolder, repositoryNameId.textField.text)
         // }
 
         // standardButtons: QC.Dialog.Cancel | QC.Dialog.Open
@@ -152,7 +152,7 @@ Loader {
     FolderDialog {
         id: folderDialogId
         objectName: "folderDialog"
-        currentFolder: RootData.repositoryModel.defaultRepositoryDir
+        currentFolder: RootData.recentProjectModel.defaultRepositoryDir
         selectedFolder: currentFolder
     }
 }

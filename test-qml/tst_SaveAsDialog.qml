@@ -16,6 +16,10 @@ Item {
         name: "SaveAsDialog"
         when: windowShown
 
+        function init() {
+            RootData.recentProjectModel.clear();
+        }
+
         function loadLegacyFixture() {
             TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
             tryVerify(function() {
@@ -73,7 +77,7 @@ Item {
         function test_nameFilters_defaultToBundled_forLegacyProject() {
             loadLegacyFixture();
 
-            compare(RootData.project.fileType, Project.BundledGitFileType);
+            compare(RootData.project.fileType, Project.SqliteFileType);
             compare(saveAsDialogId.nameFilters[0].toString(), "Bundled (*.cw)");
             compare(saveAsDialogId.nameFilters[1].toString(), "Directory (*.cwproj)");
         }
@@ -149,6 +153,25 @@ Item {
             });
 
             compareSnapshots(before, projectSnapshot());
+        }
+
+        function test_saveAsBundle_addsBundlePathToRecentProjectModel() {
+            loadLegacyFixture();
+            RootData.recentProjectModel.clear();
+            compare(RootData.recentProjectModel.rowCount(), 0);
+
+            const tempDir = RootData.urlToLocal(TestHelper.tempDirectoryUrl());
+            const expectedPath = tempDir + "/qml-saveas-recent-bundle.cw";
+            saveAsViaAccepted(expectedPath, expectedPath);
+
+            tryVerify(function() {
+                return RootData.recentProjectModel.rowCount() === 1;
+            });
+
+            const storedPath = RootData.recentProjectModel.data(
+                        RootData.recentProjectModel.index(0, 0),
+                        RecentProjectModel.PathRole);
+            compare(storedPath, expectedPath);
         }
 
         function test_saveAsDirectory_withoutExtension_fromLegacy() {

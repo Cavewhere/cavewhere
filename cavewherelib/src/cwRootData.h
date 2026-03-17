@@ -37,7 +37,7 @@
 #include "cwPageSelectionModel.h"
 #include "cwSettings.h"
 #include "cwPageView.h"
-#include "cwRepositoryModel.h"
+#include "cwRecentProjectModel.h"
 class cwKeywordItemModel;
 class cwKeywordFilterPipelineModel;
 class cwRemoteServices;
@@ -73,7 +73,7 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
     Q_PROPERTY(cwTaskManagerModel* taskManagerModel READ taskManagerModel CONSTANT)
     Q_PROPERTY(cwFutureManagerModel* futureManagerModel READ futureManagerModel CONSTANT)
     Q_PROPERTY(QQuickGit::Account* account READ account CONSTANT)
-    Q_PROPERTY(cwRepositoryModel* repositoryModel READ repositoryModel CONSTANT)
+    Q_PROPERTY(cwRecentProjectModel* recentProjectModel READ recentProjectModel CONSTANT)
     Q_PROPERTY(cwRemoteServices* remote READ remote CONSTANT)
 
     Q_PROPERTY(cwPageSelectionModel* pageSelectionModel READ pageSelectionModel CONSTANT)
@@ -122,7 +122,7 @@ public:
     cwKeywordFilterPipelineModel* keywordFilterPipelineModel() const;
     cwSettings* settings() const;
     QQuickGit::Account *account() const { return m_account; }
-    cwRepositoryModel* repositoryModel() const { return m_repositoryModel; }
+    cwRecentProjectModel* recentProjectModel() const { return m_recentProjectModel; }
     cwRemoteServices* remote() const;
 
     cwPageView* pageView() const { return m_pageView; }
@@ -210,7 +210,7 @@ private:
     cwFutureManagerModel* FutureManagerModel; //!<
     cwPageSelectionModel* PageSelectionModel; //!<
     cwRegionTreeModel* RegionTreeModel; //!<
-    cwRepositoryModel* m_repositoryModel;
+    cwRecentProjectModel* m_recentProjectModel;
 
     //Git account settings
     QQuickGit::Account* m_account;

@@ -757,6 +757,35 @@ void cwSaveLoad::ensureGitExcludeHasLocalEntries(const QDir& repoDir)
     }
 }
 
+cwResultDir cwSaveLoad::repositoryDir(const QUrl& localDir, const QString& name)
+{
+    if (name.isEmpty()) {
+        return cwResultDir(QStringLiteral("Caving area name is empty"));
+    }
+
+    auto quotedFilename = [](const QString& fullName, const QString& shortName) {
+        auto quote = [](const QString& str) {
+            return QStringLiteral("\"") + str + QStringLiteral("\" ");
+        };
+#ifdef CW_MOBILE_BUILD
+        return quote(shortName);
+#else
+        Q_UNUSED(shortName)
+        return quote(fullName);
+#endif
+    };
+
+    if (localDir.isLocalFile()) {
+        QFileInfo info(localDir.toLocalFile() + QStringLiteral("/") + name);
+        if (info.exists()) {
+            return cwResultDir(quotedFilename(info.absoluteFilePath(), name) + QStringLiteral("exists, use a different name"));
+        }
+        return QDir(info.absoluteFilePath());
+    }
+
+    return cwResultDir(quotedFilename(localDir.toString(), name) + QStringLiteral("is not a non-local directory"));
+}
+
 template<typename ProtoType>
 static Result<ProtoType> loadMessage(const QByteArray& content, const QString& sourceLabel)
 {
@@ -2564,9 +2593,7 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                                                             //The filename needs to be set first because, image providers should
                                                             //have the filename before the region model is set
                                                             setFileName(filename);
-                                                            if (QQuickGit::GitRepository::isRepository(QFileInfo(filename).absoluteDir())) {
-                                                                initializeRepositoryForCurrentFile();
-                                                            }
+                                                            initializeRepositoryForCurrentFile();
                                                             setTemporary(false);
 
                                                             setSaveEnabled(false);

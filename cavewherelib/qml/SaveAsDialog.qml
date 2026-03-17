@@ -9,6 +9,24 @@ FileDialog {
         return fileType === Project.BundledGitFileType
                 || fileType === Project.SqliteFileType;
     }
+    function finalProjectPathForSelection(localPath, extension) {
+        const lower = localPath.toLowerCase();
+        let normalizedPath = localPath;
+        if (lower.endsWith(".cwproj")) {
+            normalizedPath = localPath.slice(0, localPath.length - ".cwproj".length);
+        } else if (lower.endsWith(".cw")) {
+            normalizedPath = localPath.slice(0, localPath.length - ".cw".length);
+        }
+
+        if (extension === ".cw") {
+            return normalizedPath + extension;
+        }
+
+        const separatorNeeded = normalizedPath.endsWith("/") || normalizedPath.endsWith("\\") ? "" : "/"
+        const slashIndex = Math.max(normalizedPath.lastIndexOf("/"), normalizedPath.lastIndexOf("\\"))
+        const baseName = slashIndex >= 0 ? normalizedPath.slice(slashIndex + 1) : normalizedPath
+        return normalizedPath + separatorNeeded + baseName + extension
+    }
 
     nameFilters: bundledFirst
                  ? [ "Bundled (*.cw)", "Directory (*.cwproj)" ]
@@ -25,7 +43,6 @@ FileDialog {
 
     onAccepted: {
         const localPath = RootData.urlToLocal(selectedFile);
-        const lower = localPath.toLowerCase();
         const extension = selectedNameFilter
                 && selectedNameFilter.index !== undefined
                 && selectedNameFilter.index >= 0
@@ -33,15 +50,9 @@ FileDialog {
                 && nameFilters[selectedNameFilter.index].toString().indexOf("*.cwproj") !== -1
                 ? ".cwproj"
                 : ".cw";
+        const saveTargetPath = finalProjectPathForSelection(localPath, extension)
 
-        let normalizedPath = localPath;
-        if (lower.endsWith(".cwproj")) {
-            normalizedPath = localPath.slice(0, localPath.length - ".cwproj".length);
-        } else if (lower.endsWith(".cw")) {
-            normalizedPath = localPath.slice(0, localPath.length - ".cw".length);
-        }
-
-        if (RootData.project.saveAs(normalizedPath + extension)) {
+        if (RootData.project.saveAs(saveTargetPath)) {
             RootData.lastDirectory = selectedFile;
         }
     }

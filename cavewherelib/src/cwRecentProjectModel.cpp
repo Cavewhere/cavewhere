@@ -1,8 +1,7 @@
 
 //Our includes
-#include "cwRepositoryModel.h"
+#include "cwRecentProjectModel.h"
 #include "cwRootData.h"
-#include "cwProject.h"
 #include "cwSaveLoad.h"
 
 //Monad
@@ -13,11 +12,10 @@
 #include <QStandardPaths>
 #include <QFileInfo>
 #include <QUrl>
-#include <QDebug>
 
 using namespace Monad;
 
-cwRepositoryModel::cwRepositoryModel(QObject* parent)
+cwRecentProjectModel::cwRecentProjectModel(QObject* parent)
     : QAbstractListModel(parent)
 {
     m_defaultRepositoryDirNotifier = m_defaultRepositoryDir.addNotifier([this]() {
@@ -28,7 +26,7 @@ cwRepositoryModel::cwRepositoryModel(QObject* parent)
     loadSettings();
 }
 
-int cwRepositoryModel::rowCount(const QModelIndex& parent) const
+int cwRecentProjectModel::rowCount(const QModelIndex& parent) const
 {
     if (parent.isValid()) {
         return 0;
@@ -36,24 +34,25 @@ int cwRepositoryModel::rowCount(const QModelIndex& parent) const
     return m_repositories.count();
 }
 
-QVariant cwRepositoryModel::data(const QModelIndex& index, int role) const
+QVariant cwRecentProjectModel::data(const QModelIndex& index, int role) const
 {
     if (!index.isValid() || index.row() < 0 || index.row() >= m_repositories.count()) {
         return {};
     }
 
-    const QDir& dir = m_repositories.at(index.row());
+    const RepositoryEntry& entry = m_repositories.at(index.row());
+    const QFileInfo info(entry.projectPath);
     switch (role) {
     case PathRole:
-        return dir.absolutePath();
+        return info.absoluteFilePath();
     case NameRole:
-        return dir.dirName();
+        return info.isDir() ? info.fileName() : info.fileName();
     default:
         return {};
     }
 }
 
-QHash<int, QByteArray> cwRepositoryModel::roleNames() const
+QHash<int, QByteArray> cwRecentProjectModel::roleNames() const
 {
     return QHash<int, QByteArray>{
         { PathRole, "pathRole" },
@@ -61,7 +60,7 @@ QHash<int, QByteArray> cwRepositoryModel::roleNames() const
     };
 }
 
-Monad::ResultBase cwRepositoryModel::addRepository(const cwResultDir& dir)
+Monad::ResultBase cwRecentProjectModel::addRepository(const cwResultDir& dir)
 {
     return dir.then([this](const Result<QDir>& dir)->ResultBase {
         return Monad::mtry([&](){
@@ -70,7 +69,7 @@ Monad::ResultBase cwRepositoryModel::addRepository(const cwResultDir& dir)
 
                    cwSaveLoad::initializeGitRepository(dir.value());
 
-                   m_repositories.append(dir.value());
+                   m_repositories.append({dir.value().absolutePath()});
                    endInsertRows();
                    saveRepositories();
 
@@ -81,7 +80,7 @@ Monad::ResultBase cwRepositoryModel::addRepository(const cwResultDir& dir)
     });
 }
 
-Monad::ResultBase cwRepositoryModel::addRepositoryDirectory(const QDir& dir)
+Monad::ResultBase cwRecentProjectModel::addRepositoryDirectory(const QDir& dir)
 {
     if (!dir.exists()) {
         return Monad::ResultBase(QStringLiteral("Repository path %1 does not exist").arg(dir.absolutePath()), PathError);
@@ -91,32 +90,45 @@ Monad::ResultBase cwRepositoryModel::addRepositoryDirectory(const QDir& dir)
         return Monad::ResultBase(QStringLiteral("Repository path %1 is not a git repository").arg(dir.absolutePath()), PathError);
     }
 
-    for (const QDir& repo : m_repositories) {
-        if (repo.absolutePath() == dir.absolutePath()) {
+    const QString repoPath = dir.absolutePath();
+    for (const RepositoryEntry& repo : m_repositories) {
+        if (QFileInfo(repo.projectPath).absoluteFilePath() == repoPath) {
             return Monad::ResultBase();
         }
     }
 
     const int newIndex = m_repositories.count();
     beginInsertRows(QModelIndex(), newIndex, newIndex);
-    m_repositories.append(dir);
+    m_repositories.append({repoPath});
     endInsertRows();
     saveRepositories();
 
     return Monad::ResultBase();
 }
 
-Monad::ResultString cwRepositoryModel::repositoryProjectFile(int index) const
+Monad::ResultString cwRecentProjectModel::repositoryProjectFile(int index) const
 {
     if (index < 0 || index >= m_repositories.count()) {
         return Monad::ResultString(QStringLiteral("Repository index %1 is out of range").arg(index), PathError);
     }
 
-    const QDir dir = m_repositories.at(index);
-    if (!dir.exists()) {
-        return Monad::ResultString(QStringLiteral("Repository path %1 does not exist").arg(dir.absolutePath()), PathError);
+    const QString storedPath = QFileInfo(m_repositories.at(index).projectPath).absoluteFilePath();
+    const QFileInfo entryInfo(storedPath);
+    if (!entryInfo.exists()) {
+        return Monad::ResultString(QStringLiteral("Repository path %1 does not exist").arg(storedPath), PathError);
     }
 
+    if (entryInfo.isFile()) {
+        const QString suffix = entryInfo.suffix();
+        if (suffix.compare(QStringLiteral("cwproj"), Qt::CaseInsensitive) == 0
+            || suffix.compare(QStringLiteral("cw"), Qt::CaseInsensitive) == 0) {
+            return Monad::ResultString(entryInfo.absoluteFilePath());
+        }
+
+        return Monad::ResultString(QStringLiteral("Project file %1 is not a CaveWhere project").arg(entryInfo.fileName()), PathError);
+    }
+
+    const QDir dir(entryInfo.absoluteFilePath());
     const QFileInfoList entries = dir.entryInfoList(QDir::Files | QDir::NoDotAndDotDot);
     QString projectFilePath;
     QString legacyProjectFilePath;
@@ -147,22 +159,7 @@ Monad::ResultString cwRepositoryModel::repositoryProjectFile(int index) const
     return Monad::ResultString(projectFilePath);
 }
 
-Monad::ResultBase cwRepositoryModel::openRepository(int index, cwProject* project) const
-{
-    if (project == nullptr) {
-        return Monad::ResultBase(QStringLiteral("Project instance is null"), PathError);
-    }
-
-    const Monad::ResultString fileResult = repositoryProjectFile(index);
-    if (fileResult.hasError()) {
-        return Monad::ResultBase(fileResult.errorMessage(), fileResult.errorCode());
-    }
-
-    project->loadFile(QUrl::fromLocalFile(fileResult.value()).toString());
-    return Monad::ResultBase();
-}
-
-Monad::ResultBase cwRepositoryModel::addRepositoryFromProjectFile(const QUrl& projectFileUrl)
+Monad::ResultBase cwRecentProjectModel::addRepositoryFromProjectFile(const QUrl& projectFileUrl)
 {
     if (!projectFileUrl.isValid()) {
         return Monad::ResultBase(QStringLiteral("Project file URL is invalid"), PathError);
@@ -183,17 +180,23 @@ Monad::ResultBase cwRepositoryModel::addRepositoryFromProjectFile(const QUrl& pr
         return Monad::ResultBase(QStringLiteral("Project file %1 is not a CaveWhere project").arg(fileInfo.fileName()), PathError);
     }
 
-    const QString repoPath = fileInfo.absoluteDir().absolutePath();
-    for (const QDir& repo : m_repositories) {
-        if (repo.absolutePath() == repoPath) {
+    const QString storedPath = fileInfo.absoluteFilePath();
+    for (const RepositoryEntry& repo : m_repositories) {
+        if (QFileInfo(repo.projectPath).absoluteFilePath() == storedPath) {
             return Monad::ResultBase();
         }
     }
 
-    return addRepository(QDir(repoPath));
+    const int newIndex = m_repositories.count();
+    beginInsertRows(QModelIndex(), newIndex, newIndex);
+    m_repositories.append({storedPath});
+    endInsertRows();
+    saveRepositories();
+
+    return Monad::ResultBase();
 }
 
-void cwRepositoryModel::clear()
+void cwRecentProjectModel::clear()
 {
     beginResetModel();
     m_repositories.clear();
@@ -201,73 +204,35 @@ void cwRepositoryModel::clear()
     endResetModel();
 }
 
-void cwRepositoryModel::setProject(cwProject* project)
+void cwRecentProjectModel::setProject(cwProject* project)
 {
-    if (m_project == project) {
-        return;
-    }
-
-    clearProjectConnections();
-    m_project = project;
-
-    if (!m_project) {
-        return;
-    }
-
-    m_projectConnections.append(QObject::connect(m_project, &cwProject::filenameChanged, this, [this]() {
-        handleProjectStateChanged();
-    }));
-
-    m_projectConnections.append(QObject::connect(m_project, &cwProject::isTemporaryProjectChanged, this, [this]() {
-        handleProjectStateChanged();
-    }));
-
-    handleProjectStateChanged();
+    Q_UNUSED(project);
 }
 
-cwResultDir cwRepositoryModel::repositoryDir(const QUrl &localDir, const QString &name) const
-{
-    if(name.isEmpty()) {
-        return cwResultDir(QStringLiteral("Caving area name is empty"), NameError);
-    }
-
-    auto quotedFilename = [](const QString& fullName, const QString& name) {
-        auto quote = [](const QString& str){
-            return  QStringLiteral("\"") + str + QStringLiteral("\" ");
-        };
-
-        if(!cwRootData::isMobileBuild()) {
-            //Desktop build
-            return quote(fullName);
-        } else {
-            return quote(name);
-        }
-    };
-
-    if(localDir.isLocalFile()) {
-        QFileInfo info(localDir.toLocalFile() + QStringLiteral("/") + name);
-        if(info.exists()) {
-            return cwResultDir(QString(quotedFilename(info.absoluteFilePath(), name) + QStringLiteral("exists, use a different name")), PathError);
-        } else {
-            //Success
-            return QDir(info.absoluteFilePath());
-        }
-    } else {
-        //Is a url and not a local file
-        return cwResultDir(quotedFilename(localDir.toString(), name) + QStringLiteral("is not a non-local directory"), PathError);
-    }
-}
-
-void cwRepositoryModel::loadSettings()
+void cwRecentProjectModel::loadSettings()
 {
     QSettings settings;
 
     //Load repositories list
     const QStringList list = settings.value(SettingsKey).toStringList();
     for (const QString& path : list) {
-        QDir dir(path);
-        if (dir.exists() && QQuickGit::GitRepository::isRepository(dir)) {
-            m_repositories.append(dir);
+        const QFileInfo info(path);
+        if (!info.exists()) {
+            continue;
+        }
+
+        if (info.isDir()) {
+            const QDir dir(info.absoluteFilePath());
+            if (QQuickGit::GitRepository::isRepository(dir)) {
+                m_repositories.append({dir.absolutePath()});
+            }
+            continue;
+        }
+
+        const QString suffix = info.suffix();
+        if (suffix.compare(QStringLiteral("cwproj"), Qt::CaseInsensitive) == 0
+            || suffix.compare(QStringLiteral("cw"), Qt::CaseInsensitive) == 0) {
+            m_repositories.append({info.absoluteFilePath()});
         }
     }
 
@@ -292,41 +257,12 @@ void cwRepositoryModel::loadSettings()
     }
 }
 
-void cwRepositoryModel::saveRepositories() const
+void cwRecentProjectModel::saveRepositories() const
 {
     QSettings settings;
     QStringList list;
-    for (const QDir& dir : m_repositories) {
-        list.append(dir.absolutePath());
+    for (const RepositoryEntry& entry : m_repositories) {
+        list.append(QFileInfo(entry.projectPath).absoluteFilePath());
     }
     settings.setValue(SettingsKey, list);
-}
-
-void cwRepositoryModel::handleProjectStateChanged()
-{
-    if (!m_project) {
-        return;
-    }
-
-    if (m_project->isTemporaryProject()) {
-        return;
-    }
-
-    const QString filename = m_project->filename();
-    if (filename.isEmpty()) {
-        return;
-    }
-
-    const auto result = addRepositoryFromProjectFile(QUrl::fromLocalFile(filename));
-    if (result.hasError()) {
-        qWarning() << "Failed to add repository for project" << filename << ":" << result.errorMessage();
-    }
-}
-
-void cwRepositoryModel::clearProjectConnections()
-{
-    for (const auto& connection : m_projectConnections) {
-        QObject::disconnect(connection);
-    }
-    m_projectConnections.clear();
 }
