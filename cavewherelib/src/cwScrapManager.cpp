@@ -159,6 +159,8 @@ void cwScrapManager::setRegionTreeModel(cwRegionTreeModel *regionTreeModel)
                        this, &cwScrapManager::inserted);
             disconnect(RegionModel.data(), &cwRegionTreeModel::rowsAboutToBeRemoved,
                        this, &cwScrapManager::removed);
+            disconnect(RegionModel.data(), &cwRegionTreeModel::modelReset,
+                       this, &cwScrapManager::handleRegionReset);
         }
 
         RegionModel = regionTreeModel;
@@ -168,6 +170,8 @@ void cwScrapManager::setRegionTreeModel(cwRegionTreeModel *regionTreeModel)
                     this, &cwScrapManager::inserted);
             connect(RegionModel.data(), &cwRegionTreeModel::rowsAboutToBeRemoved,
                     this, &cwScrapManager::removed);
+            connect(RegionModel.data(), &cwRegionTreeModel::modelReset,
+                    this, &cwScrapManager::handleRegionReset);
         }
 
         handleRegionReset();

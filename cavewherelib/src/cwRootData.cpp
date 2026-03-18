@@ -168,10 +168,14 @@ cwRootData::cwRootData(QObject *parent) :
     connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, [&]() { Project->waitSaveToFinish(); });
 
     connect(Project, &cwProject::filenameChanged, this, [this]() {
-        // qDebug() << "Clearing pipeline models!";
+        // Reset the filter pipeline UI state when the project file changes.
+        // Do NOT clear m_keywordItemModel here — scrap keyword items self-destruct
+        // via cwKeywordItem::setObject()'s destroyed-signal connection when their
+        // associated cwScrap objects are deleted on project unload.  Clearing the
+        // item model while new scraps are already registered (bundle load completes
+        // after scraps are inserted) permanently hides their carpeting because the
+        // guard in addKeywordItemForScrap() prevents re-registration.
         m_keywordFilterPipelineModel->clear();
-        m_keywordItemModel->clear();
-
     });
 }
 

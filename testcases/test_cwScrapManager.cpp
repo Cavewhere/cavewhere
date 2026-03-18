@@ -18,6 +18,9 @@
 #include "cwJobSettings.h"
 // #include "cwScrapsEntity.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
+#include "cwKeywordItemModel.h"
+#include "cwKeywordItem.h"
+#include "cwRenderTexturedItemVisibility.h"
 #include "cwRunningProfileScrapViewMatrix.h"
 
 //Qt includes
@@ -293,4 +296,45 @@ TEST_CASE("cwScrapManager should defer updates while editing", "[cwScrapManager]
 
 
     CHECK(scrapManager->dirtyScraps().contains(scrap) == false);
+}
+
+TEST_CASE("cwScrapManager scrap render items should remain visible after loading a bundle (.cw) file", "[cwScrapManager][regression]") {
+    // Regression test for bug #329: "Save As makes carpeting go away"
+    //
+    // Root cause: cwProject::filenameChanged fired after bundle load (which
+    // completes after scraps are already inserted and registered with the
+    // keyword item model).  cwRootData's filenameChanged handler was calling
+    // m_keywordItemModel->clear(), which triggered cwKeywordVisibility to call
+    // setVisible(false) on every cwRenderTexturedItemVisibility.  The guard in
+    // addKeywordItemForScrap() then prevented re-registration, leaving all
+    // carpeted scraps permanently invisible in the renderer.
+    requireAutomaticUpdatesEnabled();
+
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    fileToProject(project, "://datasets/test_cwScrapManager/scrapGuessNeigborPlan.cw");
+    rootData->futureManagerModel()->waitForFinished();
+
+    auto* keywordModel = rootData->keywordItemModel();
+    REQUIRE(keywordModel != nullptr);
+
+    // Every keyword item whose object is a cwRenderTexturedItemVisibility must
+    // report visible == true.  Before the fix the filenameChanged handler
+    // cleared the model mid-load, driving all visibility objects to false.
+    int visibilityItemCount = 0;
+    for (int i = 0; i < keywordModel->rowCount(); ++i) {
+        auto* kwItem = keywordModel->item(i);
+        REQUIRE(kwItem != nullptr);
+        auto* vis = qobject_cast<cwRenderTexturedItemVisibility*>(kwItem->object());
+        if (vis) {
+            ++visibilityItemCount;
+            INFO("cwRenderTexturedItemVisibility at keyword model row " << i << " is not visible");
+            CHECK(vis->isVisible());
+        }
+    }
+
+    // Sanity-check: the dataset has scraps, so we must have found at least one
+    // visibility item.
+    CHECK(visibilityItemCount > 0);
 }
