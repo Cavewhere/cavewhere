@@ -586,6 +586,7 @@ void cwNoteLiDARManager::runBatch()
             && note->parentTrip() != nullptr
             && note->parentCave() != nullptr
             && note->rowCount() > 0 //Make sure there's stations
+            && !note->parentCave()->stationPositionLookup().positions().isEmpty() //Station lookup must be populated
             )
         {
             notes.append(note);
