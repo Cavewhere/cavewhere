@@ -240,6 +240,25 @@ void cwLinePlotManager::runSurvex() {
     }
 
     if(Region != nullptr) {
+        // Skip the pipeline when no shots exist — cavern warns about empty surveys
+        // and there is nothing useful to compute.
+        bool hasShots = false;
+        for(cwCave* cave : Region->caves()) {
+            for(cwTrip* trip : cave->trips()) {
+                for(cwSurveyChunk* chunk : trip->chunks()) {
+                    if(chunk->shotCount() > 0) {
+                        hasShots = true;
+                        break;
+                    }
+                }
+                if(hasShots) break;
+            }
+            if(hasShots) break;
+        }
+        if(!hasShots) {
+            return;
+        }
+
         setCaveStationLookupAsStale(true);
         m_restarter.restart([this]() {
             if (Region.isNull()) {

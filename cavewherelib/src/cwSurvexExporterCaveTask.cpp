@@ -51,7 +51,7 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
         stream << Qt::endl;
     }
 
-    stream << "*end ; End of " << cave.name << Qt::endl;
+    stream << "*end " << caveName << " ; End of " << cave.name << Qt::endl;
 
     return true;
 }

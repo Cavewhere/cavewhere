@@ -841,4 +841,62 @@ TEST_CASE("cwLinePlotManager automatic update should work", "[cwLinePlotManager]
     spyChecker.checkSpies();
 }
 
+TEST_CASE("cwLinePlotManager skips cavern when cave or trip has no shots", "[LinePlotManager]")
+{
+    // Regression: previously cwLinePlotManager would invoke cavern even when the
+    // region contained no shots, causing cavern to warn "Survey name omitted from END"
+    // and produce no useful output.
+
+    cwCavingRegion region;
+
+    cwCave* cave = new cwCave();
+    cave->setName("Cave 1");
+    region.addCave(cave);
+
+    auto plotManager = std::make_unique<cwLinePlotManager>();
+
+    cwSignalSpy stationPositionSpy(cave, &cwCave::stationPositionPositionChanged);
+    stationPositionSpy.setObjectName("stationPositionSpy");
+    SpyChecker spyChecker {{&stationPositionSpy, 0}};
+
+    SECTION("Cave with no trips does not trigger cavern") {
+        plotManager->setRegion(&region);
+        plotManager->waitToFinish();
+
+        spyChecker.checkSpies();
+        CHECK(cave->stationPositionLookup().positions().isEmpty());
+    }
+
+    SECTION("Cave with trip but no shots does not trigger cavern") {
+        cwTrip* trip = new cwTrip();
+        trip->setName("Trip 1");
+        cave->addTrip(trip);
+
+        cwSurveyChunk* chunk = new cwSurveyChunk();
+        trip->addChunk(chunk);
+
+        plotManager->setRegion(&region);
+        plotManager->waitToFinish();
+
+        spyChecker.checkSpies();
+        CHECK(cave->stationPositionLookup().positions().isEmpty());
+
+        // Adding a shot should now trigger cavern and produce positions
+        cwStation s1("a1");
+        cwStation s2("a2");
+        cwShot shot;
+        shot.setDistance(cwDistanceReading("10.0"));
+        shot.setCompass(cwCompassReading("0.0"));
+        shot.setClino(cwClinoReading("0.0"));
+        chunk->appendShot(s1, s2, shot);
+
+        plotManager->waitToFinish();
+
+        spyChecker[&stationPositionSpy]++;
+        spyChecker.checkSpies();
+        CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+        CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, 0.0));
+    }
+}
+
 
