@@ -1506,9 +1506,9 @@ struct cwSaveLoad::Data {
         });
 
         AsyncFuture::observe(saveFlushFuture)
-            .context(context, [saveFlushFuture]() {
+            .context(context, [this, saveFlushFuture]() {
                 const auto result = saveFlushFuture.result();
-                if (result.hasError()) {
+                if (result.hasError() && !retiring) {
                     qWarning() << "Save flush failed:" << result.errorMessage();
                 }
             });
