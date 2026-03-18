@@ -1204,8 +1204,10 @@ void cwProject::loadOrConvert(const QString &filename)
                              auto tempDir = QDir(dir.filePath(QFileInfo(normalizedFilename).baseName()));
                              const QFileInfo info(normalizedFilename);
                              const bool temporaryProject = !info.isWritable();
-                             const QString bundledPath = normalizedFilename;
-                             return QFuture<void>(convertFromProjectV6Helper(normalizedFilename, tempDir, temporaryProject, bundledPath));
+                             // Pass empty bundledPath: legacy SQLite .cw files should convert to
+                             // plain GitFileType, not BundledGitFileType. BundledGitFileType is
+                             // reserved for .cw zip archives that contain a .cwproj directory.
+                             return QFuture<void>(convertFromProjectV6Helper(normalizedFilename, tempDir, temporaryProject, QString()));
                          } else {
                              //This could be Git file or a corrupted file
                              auto loadFuture = loadHelper(normalizedFilename, {type});
