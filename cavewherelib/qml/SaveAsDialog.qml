@@ -47,14 +47,27 @@ QC.Dialog {
     // Initialized from RootData.region.name when the dialog opens.
     property string _pendingName: ""
 
-    // The full save path that will be passed to Project.saveAs(). Updates
-    // reactively whenever bundleFormat, destinationFolder, bundleFilePath, or
-    // _pendingName changes.
+    // The raw path shown in the bundle path text field — reflects exactly what
+    // the user has typed so far, without normalization.  Do NOT normalize here:
+    // normalizing in a binding that feeds back into the text field would mutate
+    // the field mid-edit (e.g. ".c" → ".c.cw" while the user is still typing).
     readonly property string resolvedSavePath: {
         if (bundleFormat) {
             return bundleFilePath.length > 0 ? bundleFilePath : _projectFolder + ".cw"
         } else {
             return _projectFolder + "/" + _sanitizedName + ".cwproj"
+        }
+    }
+
+    // The path that will actually be written to disk.  Normalizes trailing
+    // .cw/.cwproj extensions so that deleting ".cw" in the field never causes
+    // the project to be saved as a directory.  Used by onAccepted and conflict
+    // detection, but NOT bound to any text field.
+    readonly property string _effectiveSavePath: {
+        if (bundleFormat) {
+            return _normalizeBundleFilePath(resolvedSavePath)
+        } else {
+            return resolvedSavePath
         }
     }
 
@@ -75,7 +88,7 @@ QC.Dialog {
     // True when a bundle-format save would overwrite an existing file.
     // Shows a warning but does not block Save.
     readonly property bool _bundleConflict: {
-        return bundleFormat && RootData.pathExists(resolvedSavePath)
+        return bundleFormat && RootData.pathExists(_effectiveSavePath)
     }
 
     // True when in directory mode and the parent folder the user typed does not exist.
@@ -145,10 +158,10 @@ QC.Dialog {
         if (RootData.project.isTemporaryProject) {
             RootData.region.name = _pendingName
         }
-        if (RootData.project.saveAs(resolvedSavePath)) {
+        if (RootData.project.saveAs(_effectiveSavePath)) {
             // Pass the saved file so setLastDirectory strips the filename and
             // stores the correct containing directory.
-            RootData.lastDirectory = Qt.resolvedUrl("file://" + resolvedSavePath)
+            RootData.lastDirectory = Qt.resolvedUrl("file://" + _effectiveSavePath)
         }
     }
 

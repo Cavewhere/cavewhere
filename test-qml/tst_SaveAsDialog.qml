@@ -399,6 +399,60 @@ Item {
             verify(!saveAsDialogId._parentNotFound);
         }
 
+        // ── Regression #327: bundle path field extension enforcement ─────────
+        //
+        // _effectiveSavePath (not resolvedSavePath) carries the normalized .cw
+        // path used for the actual save and conflict detection.
+        // resolvedSavePath intentionally reflects the raw field text so that
+        // partial edits (e.g. the user deleting "w" from ".cw") are not
+        // immediately mutated while typing.
+
+        // Regression: deleting "w" while typing must NOT cause the field to
+        // grow a ".c" suffix.  resolvedSavePath must equal what the user typed.
+        function test_bundleMode_partialExtensionTyping_doesNotMutateField() {
+            saveAsDialogId.bundleFormat = true;
+            saveAsDialogId.bundleFilePath = "/tmp/parent/MyProject.c"; // user deleted "w"
+            compare(saveAsDialogId.resolvedSavePath, "/tmp/parent/MyProject.c");
+        }
+
+        function test_bundleMode_effectiveSavePath_missingExtension() {
+            // _effectiveSavePath normalizes even when bundleFilePath has no extension.
+            saveAsDialogId.bundleFormat = true;
+            saveAsDialogId.destinationFolder = "/tmp/parent";
+            saveAsDialogId._pendingName = "MyProject";
+            saveAsDialogId.bundleFilePath = "/tmp/parent/MyProject"; // no .cw
+            compare(saveAsDialogId._effectiveSavePath, "/tmp/parent/MyProject.cw");
+        }
+
+        function test_bundleMode_effectiveSavePath_cwprojExtensionTyped() {
+            // .cwproj typed in bundle mode is corrected at save time.
+            saveAsDialogId.bundleFormat = true;
+            saveAsDialogId.bundleFilePath = "/tmp/parent/MyProject.cwproj";
+            compare(saveAsDialogId._effectiveSavePath, "/tmp/parent/MyProject.cw");
+        }
+
+        function test_bundleMode_savesAsCw_whenExtensionDeletedFromField() {
+            // Full round-trip: even with no extension in bundleFilePath the saved
+            // file must be a .cw bundle (BundledGitFileType).
+            loadLegacyFixture();
+            const tempDir = RootData.urlToLocal(TestHelper.tempDirectoryUrl());
+            const projectName = "bundle-deleted-ext-regression";
+
+            saveAsDialogId.bundleFormat = true;
+            saveAsDialogId.destinationFolder = tempDir;
+            saveAsDialogId._pendingName = projectName;
+            saveAsDialogId.bundleFilePath = tempDir + "/" + projectName; // no .cw
+
+            saveAsDialogId.accepted();
+            TestHelper.waitForProjectSaveToFinish(RootData.project);
+
+            const expectedPath = tempDir + "/" + projectName + ".cw";
+            tryVerify(function() {
+                return TestHelper.fileExists(TestHelper.toLocalUrl(expectedPath));
+            });
+            compare(RootData.project.fileType, Project.BundledGitFileType);
+        }
+
         // ── _normalizeBundleFilePath (macOS double-extension regression) ──────
         //
         // macOS SaveFile dialogs can return paths with stale or doubled extensions
