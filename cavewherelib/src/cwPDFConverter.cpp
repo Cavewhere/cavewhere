@@ -44,6 +44,11 @@ void cwPDFConverter::setResolution(int resolution) {
 QFuture<QImage> cwPDFConverter::convert()
 {
 #ifdef CW_WITH_PDF_SUPPORT
+    if(source().isEmpty()) {
+        setError("PDF Renderer error: File not found");
+        return QFuture<QImage>();
+    }
+
     QPdfDocument document;
     auto error = document.load(source());
 
