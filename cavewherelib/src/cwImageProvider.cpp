@@ -159,7 +159,6 @@ QImage cwImageProvider::requestImage(const QString &path, QSize *size, const QSi
     // qDebug() << "Requesting path:" << path << ProjectPath;
 
     if (!dataRootDir().exists()) {
-        qDebug() << "cwImageProvider: dataRootDir is empty when requesting" << path << LOCATION;
         return {};
     }
 
@@ -169,7 +168,6 @@ QImage cwImageProvider::requestImage(const QString &path, QSize *size, const QSi
     const QDir rootDir = dataRootDir();
     const QString resolvedPath = resolveFilePath(basePath, rootDir);
     if (resolvedPath.isEmpty()) {
-        qDebug() << "cwImageProvider: dataRootDir is empty when resolving" << basePath << LOCATION;
         return {};
     }
 
@@ -392,7 +390,6 @@ cwImageData cwImageProvider::data(const QString& filename) const
 {
     QDir projectDir = dataRootDir();
     if (!projectDir.exists()) {
-        qDebug() << "cwImageProvider: dataRootDir is empty when reading" << filename << LOCATION;
         return cwImageData();
     }
 

@@ -2889,7 +2889,6 @@ TEST_CASE("cwProject sync uploads LFS objects through test LFS server", "[cwProj
     REQUIRE(note != nullptr);
     const QString noteImagePath = ProjectFilenameTestHelper::absolutePath(note, note->image().path());
     REQUIRE(QFileInfo::exists(noteImagePath));
-    qDebug() << "[cwProject LFS sync test] note image path:" << noteImagePath;
     git_repository* localRepo = nullptr;
     REQUIRE(git_repository_open(&localRepo, localRepoPath.toLocal8Bit().constData()) == GIT_OK);
     auto localRepoGuard = qScopeGuard([&localRepo]() {
@@ -2905,17 +2904,11 @@ TEST_CASE("cwProject sync uploads LFS objects through test LFS server", "[cwProj
     const QString expectedOid = QString::fromLatin1(
         QCryptographicHash::hash(noteImageBytes, QCryptographicHash::Sha256).toHex());
     const qint64 expectedSize = noteImageBytes.size();
-    qDebug() << "[cwProject LFS sync test] expected upload oid/size:" << expectedOid << expectedSize;
 
     const QString relativeImagePath = QDir(localRepoPath).relativeFilePath(noteImagePath);
     const QByteArray localHeadBlob = readBlobFromHead(localRepo, relativeImagePath);
     QQuickGit::LfsPointer committedPointer;
     const bool committedAsPointer = QQuickGit::LfsPointer::parse(localHeadBlob, &committedPointer);
-    qDebug() << "[cwProject LFS sync test] head blob bytes:" << localHeadBlob.size()
-             << "relativePath=" << relativeImagePath
-             << "isPointer=" << committedAsPointer
-             << "pointerOid=" << committedPointer.oid
-             << "pointerSize=" << committedPointer.size;
 
     LfsServer lfsServer;
     if (!lfsServer.start()) {
@@ -2927,7 +2920,6 @@ TEST_CASE("cwProject sync uploads LFS objects through test LFS server", "[cwProj
     REQUIRE(setGitConfigString(localRepoPath,
                                "lfs.url",
                                lfsServer.endpoint()));
-    qDebug() << "[cwProject LFS sync test] configured lfs.url =" << lfsServer.endpoint();
 
     project->errorModel()->clear();
     REQUIRE(project->sync());
@@ -3149,38 +3141,20 @@ TEST_CASE("cwProject sync hydrates pulled LFS objects from test LFS server", "[c
     REQUIRE(consumerProject->sync());
     consumerRoot->futureManagerModel()->waitForFinished();
     consumerProject->waitSaveToFinish();
-    qDebug() << "[cwProject LFS hydration test] consumer sync error count:"
-             << consumerProject->errorModel()->count();
-    for (int i = 0; i < consumerProject->errorModel()->count(); ++i) {
-        const cwError err = consumerProject->errorModel()->at(i);
-        qDebug() << "[cwProject LFS hydration test] consumer sync error"
-                 << i
-                 << "type=" << err.type()
-                 << "message=" << err.message();
-    }
     CHECK(consumerProject->errorModel()->count() == 0);
 
-    qDebug() << "[cwProject LFS hydration test] pulled cave count:"
-             << consumerProject->cavingRegion()->caveCount();
     REQUIRE(consumerProject->cavingRegion()->caveCount() > 0);
     auto* pulledCave = consumerProject->cavingRegion()->cave(0);
     REQUIRE(pulledCave != nullptr);
-    qDebug() << "[cwProject LFS hydration test] pulled cave name:"
-             << pulledCave->name()
-             << "trip count=" << pulledCave->tripCount();
+
     REQUIRE(pulledCave->tripCount() > 0);
     auto* pulledTrip = pulledCave->trip(0);
     REQUIRE(pulledTrip != nullptr);
-    qDebug() << "[cwProject LFS hydration test] pulled trip name:"
-             << pulledTrip->name()
-             << "note count=" << pulledTrip->notes()->rowCount();
+
     for (cwNote* note : pulledTrip->notes()->notes()) {
         if (!note) {
-            qDebug() << "[cwProject LFS hydration test] pulled note is null";
             continue;
         }
-        qDebug() << "[cwProject LFS hydration test] pulled note path:"
-                 << note->image().path();
     }
 
     cwNote* pulledUpdateNote = nullptr;
@@ -3193,9 +3167,6 @@ TEST_CASE("cwProject sync hydrates pulled LFS objects from test LFS server", "[c
     CHECK(pulledUpdateNote != nullptr); // Exposes current model-refresh gap after merge/sync.
 
     const QString pulledUpdatePath = QDir(clonedRepoPath).filePath(updateRelativePath);
-    qDebug() << "[cwProject LFS hydration test] pulled update path from git working tree:"
-             << pulledUpdatePath
-             << "exists=" << QFileInfo::exists(pulledUpdatePath);
     REQUIRE(QFileInfo::exists(pulledUpdatePath));
     QFile pulledUpdateFile(pulledUpdatePath);
     REQUIRE(pulledUpdateFile.open(QIODevice::ReadOnly));
@@ -5872,15 +5843,6 @@ TEST_CASE("cwProject sync incrementally reconciles remote cave rename with local
     REQUIRE(reopenedLocalProject->sync());
     rootData->futureManagerModel()->waitForFinished();
     reopenedLocalProject->waitSaveToFinish();
-    if (reopenedLocalProject->errorModel()->count() > 0) {
-        for (int i = 0; i < reopenedLocalProject->errorModel()->count(); ++i) {
-            const cwError err = reopenedLocalProject->errorModel()->at(i);
-            qDebug() << "[cwProject cave/trip rename reopen sync] error"
-                     << i
-                     << "type=" << err.type()
-                     << "message=" << err.message();
-        }
-    }
     verifyCleanSyncState(reopenedLocalRepository);
 
     const auto localHeadAfterReopenSync = headOidForRepository(localRepoPath);
