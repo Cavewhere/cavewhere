@@ -698,11 +698,6 @@ QFuture<ResultBase> cwProject::loadHelperImpl(const QString& filename, LoadParam
                                  fatalErrors = QStringList(errorRange.begin(), errorRange.end()).join('\n');
                              }
 
-                             // qDebug() << "Result error:" << result.errors().size();
-                             for(const cwError& error : result.errors()) {
-                                 qDebug() << "Message:" << error.message();
-                             }
-
                              ErrorModel->append(result.errors());
                              return fatalErrors.isEmpty() ? ResultBase() : ResultBase(fatalErrors);
                          }

@@ -310,8 +310,6 @@ cwImage loadImage(const CavewhereProto::Image& protoImage, const QString& noteFi
                              || unitMismatch;
 
     if (needsReload) {
-        qDebug() << "Image needs reload:" << noteFilename << sizeMissing << dotsMissing << !hasImageUnit << unitMismatch;
-
         const QDir noteDir = QFileInfo(noteFilename).dir();
         const QString imagePath = noteDir.absoluteFilePath(image.path());
         const QFileInfo imageFileInfo(imagePath);
