@@ -256,6 +256,7 @@ void cwLinePlotManager::runSurvex() {
             if(hasShots) break;
         }
         if(!hasShots) {
+            updateLinePlot(cwLinePlotTask::LinePlotResultData());
             return;
         }
 

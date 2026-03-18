@@ -841,6 +841,52 @@ TEST_CASE("cwLinePlotManager automatic update should work", "[cwLinePlotManager]
     spyChecker.checkSpies();
 }
 
+TEST_CASE("cwLinePlotManager clears geometry when all caves are removed", "[LinePlotManager]")
+{
+    // Regression: bug #335 — File->New Project left the old centerline visible because
+    // clearCaves() triggered runSurvex() which returned early (no shots) without
+    // calling updateLinePlot to clear the render geometry.
+
+    cwCavingRegion region;
+
+    cwCave* cave = new cwCave();
+    cave->setName("Cave 1");
+    region.addCave(cave);
+
+    cwTrip* trip = new cwTrip();
+    trip->setName("Trip 1");
+    cave->addTrip(trip);
+
+    cwSurveyChunk* chunk = new cwSurveyChunk();
+    trip->addChunk(chunk);
+
+    cwStation s1("a1");
+    cwStation s2("a2");
+    cwShot shot;
+    shot.setDistance(cwDistanceReading("10.0"));
+    shot.setCompass(cwCompassReading("0.0"));
+    shot.setClino(cwClinoReading("0.0"));
+    chunk->appendShot(s1, s2, shot);
+
+    auto plotManager = std::make_unique<cwLinePlotManager>();
+    plotManager->setRegion(&region);
+    plotManager->waitToFinish();
+
+    REQUIRE(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, 0.0));
+
+    cwSignalSpy stationPositionInCavesSpy(plotManager.get(), &cwLinePlotManager::stationPositionInCavesChanged);
+    stationPositionInCavesSpy.setObjectName("stationPositionInCavesSpy");
+    SpyChecker spyChecker{{&stationPositionInCavesSpy, 0}};
+
+    // Simulate File->New Project: clear all caves
+    region.clearCaves();
+    plotManager->waitToFinish();
+
+    // updateLinePlot must be called so the renderer clears its geometry
+    spyChecker[&stationPositionInCavesSpy]++;
+    spyChecker.checkSpies();
+}
+
 TEST_CASE("cwLinePlotManager skips cavern when cave or trip has no shots", "[LinePlotManager]")
 {
     // Regression: previously cwLinePlotManager would invoke cavern even when the
