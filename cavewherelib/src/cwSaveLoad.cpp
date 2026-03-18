@@ -1591,7 +1591,7 @@ struct cwSaveLoad::Data {
                 }
 
                 runNextOperation(context);
-            }).future();
+            });
     }
 
     void cancelPendingOperations(const QString& reason)
@@ -5576,8 +5576,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
                 }
 
                 (*scheduleAttempt)(retryCount + 1);
-            })
-            .future();
+            });
     };
 
     (*scheduleAttempt)(0);
@@ -5738,7 +5737,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::resetBranchAndReconcile(const QString& re
         .context(this, [this, finalizeFuture, checkoutDeferred]() {
             d->remoteApplyGuard.end();
             checkoutDeferred->complete(finalizeFuture.result());
-        }).future();
+        });
 
     if (d->futureToken.isValid()) {
         d->futureToken.addJob(cwFuture(QFuture<void>(checkoutDeferred->future()),
@@ -5935,7 +5934,7 @@ QFuture<void> cwSaveLoad::retire()
     AsyncFuture::observe(d->retireFuture)
         .context(this, [this]() {
             deleteLater();
-        }).future();
+        });
 
     return d->retireFuture;
 }
