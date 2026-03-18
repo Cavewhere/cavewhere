@@ -403,7 +403,6 @@ bool cwProject::save()
     const auto commitResult = m_saveLoad->commitProjectChanges();
     if (commitResult.hasError()) {
         ErrorModel->append(cwError(commitResult.errorMessage(), cwError::Warning));
-        qWarning() << "Save commit skipped:" << commitResult.errorMessage();
     }
 
     m_syncHealth->refresh();
