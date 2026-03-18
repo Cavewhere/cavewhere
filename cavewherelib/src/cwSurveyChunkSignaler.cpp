@@ -233,7 +233,7 @@ void cwSurveyChunkSignaler::connectChunks(cwTrip* trip) {
 void cwSurveyChunkSignaler::connectChunk(cwSurveyChunk* chunk) {
     connectAll(chunk, ChunkConnections); //Connect to all user added connections
 
-    connect(chunk, &cwSurveyChunk::calibrationsChanged, this, [=]() {
+    connect(chunk, &cwSurveyChunk::calibrationsChanged, this, [this, chunk]() {
         //Connect all the
         auto calibrations = chunk->calibrations();
         for(auto iter = calibrations.begin(); iter != calibrations.end(); iter++) {

@@ -40,7 +40,7 @@ void cwStationCSVTask::runTask() {
     };
 
     QFile file(FileName);
-    file.open(QFile::ReadOnly);
+    (void)file.open(QFile::ReadOnly);
 
     //Read header
     file.readLine();

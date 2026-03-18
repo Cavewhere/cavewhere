@@ -12,8 +12,8 @@
 TEST_CASE("cwProjectedProfileScrapViewMatrix should create the matrix correctly", "[cwProjectedProfileScrapViewMatrix]")
 {
     cwProjectedProfileScrapViewMatrix view;
-    CHECK(view.type() == cwScrapType::ProjectedProfile);
-    CHECK(view.data()->type() == cwScrapType::ProjectedProfile);
+    CHECK(view.type() == cwAbstractScrapViewMatrix::ProjectedProfile);
+    CHECK(view.data()->type() == cwAbstractScrapViewMatrix::ProjectedProfile);
 
     REQUIRE(dynamic_cast<const cwProjectedProfileScrapViewMatrix::Data*>(view.data()) != nullptr);
 

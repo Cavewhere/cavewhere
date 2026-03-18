@@ -34,7 +34,7 @@ private:
         Q_ASSERT(!QFile::exists(path));
 
         auto file = new QFile(path);
-        file->open(QIODevice::ReadWrite);
+        (void)file->open(QIODevice::ReadWrite);
         checkForFileErrors(file);
 
         populate(file);

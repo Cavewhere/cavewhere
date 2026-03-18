@@ -709,8 +709,8 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
       This returns a list of sorted stations base on stations position in the x-axis
       */
     auto sortScrapStations = [&scrapData]() {
-        QList<cwTriangulateStation> stations = scrapData.stations();
-        if(scrapData.viewMatrix()->type() == cwScrap::RunningProfile) {
+        QList<cwTriangulateStation> stations = scrapData.computeStations();
+        if(scrapData.viewMatrix()->type() == cwAbstractScrapViewMatrix::RunningProfile) {
             //This assumes that up on the page is up for the scrap
             auto profileCompare = [&scrapData](const cwTriangulateStation& left, const cwTriangulateStation& right)->bool {
                 QMatrix4x4 rotation = toNoteMatrix(scrapData.noteTransform());
@@ -737,7 +737,7 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
      */
     auto findStationsToUseForMorphing = [&scrapData](QList<cwTriangulateStation> stations, QVector3D notePoint)->QList<cwTriangulateStation>
     {
-        if(scrapData.viewMatrix()->type() == cwScrap::RunningProfile) {
+        if(scrapData.viewMatrix()->type() == cwAbstractScrapViewMatrix::RunningProfile) {
 
             //Need to have a least two stations
             if(stations.size() < 2) {

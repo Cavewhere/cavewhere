@@ -7,7 +7,7 @@ cwOpenGLUtils::cwOpenGLUtils()
 
 QImage cwOpenGLUtils::toGLTexture(QImage image)
 {
-    return image.convertToFormat(QImage::Format_RGBA8888).mirrored();
+    return image.convertToFormat(QImage::Format_RGBA8888).flipped(Qt::Vertical);
 }
 
 int cwOpenGLUtils::fuzzyCompareColors(QColor c1, QColor c2) {

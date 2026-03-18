@@ -18,7 +18,8 @@ void cwKeywordFilterGroupProxyModel::setGroupIndex(int groupIndex)
     }
     m_groupIndex = groupIndex;
     emit groupIndexChanged();
-    invalidateRowsFilter();
+    beginFilterChange();
+    endFilterChange();
     // emitDerivedDataChanged();
 }
 
@@ -92,13 +93,15 @@ void cwKeywordFilterGroupProxyModel::setSourceModel(QAbstractItemModel* sourceMo
 
     connect(sourceModel, &QAbstractItemModel::rowsRemoved, this, [this, sourceModel](const QModelIndex& parent, int first, int last) {
         if(shouldInvalidate) {
-            invalidateRowsFilter();
+            beginFilterChange();
+            endFilterChange();
             shouldInvalidate = false;
         }
     });
 
     connect(sourceModel, &QAbstractItemModel::modelReset, this, [this]() {
-        invalidateFilter();
+        beginFilterChange();
+        endFilterChange();
     });
     connect(sourceModel, &QAbstractItemModel::dataChanged, this, [this](const QModelIndex& topLeft,
                                                                         const QModelIndex& bottomRight,
@@ -108,7 +111,8 @@ void cwKeywordFilterGroupProxyModel::setSourceModel(QAbstractItemModel* sourceMo
         Q_UNUSED(bottomRight)
         const bool opChanged = roles.isEmpty() || roles.contains(cwKeywordFilterPipelineModel::OperatorRole);
         if(opChanged) {
-            invalidateRowsFilter();
+            beginFilterChange();
+            endFilterChange();
         }
     });
 }

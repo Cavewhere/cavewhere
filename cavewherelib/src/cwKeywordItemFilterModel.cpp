@@ -11,6 +11,9 @@
 //Qt includes
 #include <QtConcurrent>
 
+//Std includes
+#include <utility>
+
 cwKeywordItemFilterModel::cwKeywordItemFilterModel(QObject *parent) :
     QAbstractListModel(parent),
     FilterKeywords(new cwKeywordModel(this))
@@ -74,7 +77,7 @@ void cwKeywordItemFilterModel::setKeywordModel(cwKeywordItemModel* keywordModel)
                 return pairs;
             };
 
-            auto updatePossibleKeys = [=]() {
+            auto updatePossibleKeys = [=, this]() {
                 //Any new keys
                 auto keys = cw::toList(createPossibleKeys(filterKeywords()->keywords(), entities()));
                 std::sort(keys.begin(), keys.end());
@@ -86,7 +89,7 @@ void cwKeywordItemFilterModel::setKeywordModel(cwKeywordItemModel* keywordModel)
             };
 
             connect(KeywordModel, &cwKeywordItemModel::dataChanged,
-                    this, [=](const QModelIndex& begin, const QModelIndex& end, const QVector<int>& roles)
+                    this, [=, this](const QModelIndex& begin, const QModelIndex& end, const QVector<int>& roles)
             {
                 Q_UNUSED(end)
                 Q_UNUSED(roles)
@@ -117,7 +120,7 @@ void cwKeywordItemFilterModel::setKeywordModel(cwKeywordItemModel* keywordModel)
                 auto pairs = createPairs(parent, begin, end);
 
                 auto filter = createDefaultFilter();
-                for(const auto& pair : qAsConst(pairs)) {
+                for(const auto& pair : std::as_const(pairs)) {
                     filter.filterEntity(pair);
                 }
 
@@ -147,7 +150,7 @@ void cwKeywordItemFilterModel::setKeywordModel(cwKeywordItemModel* keywordModel)
 
                 if(parent == QModelIndex()) {
                     //Entities removed
-                    for(auto pair : qAsConst(removePairs)) {
+                    for(auto pair : std::as_const(removePairs)) {
                         filter.dataChangedFunction = nullptr; //Ignore data changes, because we're removing a whole entity
                         removeKeywords(pair.keywords.begin(), pair.keywords.end(), pair.entity);
                     }
@@ -333,18 +336,18 @@ QSet<QString> cwKeywordItemFilterModel::createPossibleKeys(const QVector<cwKeywo
 {
     QSet<QString> possibleKeys;
     auto addKeys = [&possibleKeys](const EntityAndKeywords& objectKeywords) {
-        for(const auto& keyword : qAsConst(objectKeywords.keywords)) {
+        for(const auto& keyword : std::as_const(objectKeywords.keywords)) {
             possibleKeys.insert(keyword.key());
         }
     };
 
     auto removeKeys = [&possibleKeys](const QVector<cwKeyword>& keywords) {
-        for(const auto& keyword : qAsConst(keywords)) {
+        for(const auto& keyword : std::as_const(keywords)) {
             possibleKeys.remove(keyword.key());
         }
     };
 
-    for(const auto& entity : qAsConst(entities)) {
+    for(const auto& entity : std::as_const(entities)) {
         addKeys(entity);
     }
 

@@ -112,6 +112,20 @@ void cwTriangulateInData::setOutline(QPolygonF outline) {
     data->outline = outline;
 }
 
+QList<cwTriangulateStation> cwTriangulateInData::computeStations() const {
+    QList<cwTriangulateStation> stations;
+    for(const auto& noteStation : data->noteStations) {
+        if(data->stationLookup.hasPosition(noteStation.name())) {
+            cwTriangulateStation station;
+            station.setName(noteStation.name());
+            station.setNotePosition(QVector3D(noteStation.positionOnNote()));
+            station.setPosition(data->stationLookup.position(noteStation.name()));
+            stations.append(station);
+        }
+    }
+    return stations;
+}
+
 /**
   Get variableName
   */

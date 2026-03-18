@@ -16,7 +16,8 @@ cwFutureFilterModel::cwFutureFilterModel(QObject *parent) : QSortFilterProxyMode
 void cwFutureFilterModel::setDelayTime(int delayTime) {
     if(DelayTime != delayTime) {
         DelayTime = delayTime;
-        invalidateFilter();
+        beginFilterChange();
+        endFilterChange();
         emit delayTimeChanged();
     }
 }

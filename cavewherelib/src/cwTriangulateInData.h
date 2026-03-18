@@ -39,6 +39,8 @@ public:
     QPolygonF outline() const;
     void setOutline(QPolygonF outline);
 
+    QList<cwTriangulateStation> computeStations() const;
+
     [[deprecated("Use note stations, network, and lookup instead")]]
     QList<cwTriangulateStation> stations() const;
     [[deprecated("Use note stations, network, and lookup instead")]]

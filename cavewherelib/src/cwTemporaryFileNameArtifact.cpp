@@ -20,7 +20,7 @@ cwTemporaryFileNameArtifact::cwTemporaryFileNameArtifact(QObject *parent)
                                  + m_suffix);
         }
         file.setAutoRemove(false);
-        file.open();
+        (void)file.open();
         return file.fileName();
     });
 }

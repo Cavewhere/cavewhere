@@ -57,8 +57,8 @@ TEST_CASE("cwSurvexportTask should produce a CSV file from a .3d file", "[cwSurv
     //Compare the test file with the generated file
     QFile generatedFile(task.outputFilename());
     QFile testFile("://datasets/test_cwSurvexport/cwSurvexport_data.3d.csv");
-    generatedFile.open(QFile::ReadOnly);
-    testFile.open(QFile::ReadOnly);
+    REQUIRE(generatedFile.open(QFile::ReadOnly));
+    REQUIRE(testFile.open(QFile::ReadOnly));
 
     INFO("GeneratedFile errorStr:" << generatedFile.errorString().toStdString());
     CHECK(generatedFile.error() == QFile::NoError);

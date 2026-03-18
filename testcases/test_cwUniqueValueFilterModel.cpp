@@ -10,6 +10,9 @@
 #include <QVector>
 #include <QStandardItem>
 
+//Std includes
+#include <utility>
+
 template<typename T, typename INIT>
 QVector<T*> createObjs(int num, INIT func) {
     QVector<T*> objs;
@@ -47,7 +50,7 @@ TEST_CASE("cwUniqueValueFilterModel should filter values correctly", "[cwUniqueV
 
     QStandardItemModel model;
 
-    for(auto item : qAsConst(items)) {
+    for(auto item : std::as_const(items)) {
         model.appendRow(item);
     }
 
@@ -71,7 +74,7 @@ TEST_CASE("cwUniqueValueFilterModel should filter values correctly", "[cwUniqueV
             return false;
         };
 
-        for(auto obj : qAsConst(filterObjs)) {
+        for(auto obj : std::as_const(filterObjs)) {
             CHECK(modelContains(obj));
         }
     };
@@ -236,7 +239,7 @@ TEST_CASE("cwUniqueValueFilterModel should filter values correctly", "[cwUniqueV
         spyChecker.checkSpies();
     }
 
-    for(auto obj : qAsConst(objs)) {
+    for(auto obj : std::as_const(objs)) {
         delete obj;
     }
 }

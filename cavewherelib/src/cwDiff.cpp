@@ -132,7 +132,7 @@ void mergeRepeated(
                     add(*oursSub);
                     add(*thiersSub);
                 } else {
-                    auto chooseConflictValue = [&]() -> const Type& {
+                    auto chooseConflictValue = [&]() -> Type {
                         switch (p.strategy) {
                         case MergeStrategy::UseTheirsOnConflict:
                             return thiersSub;
@@ -149,7 +149,7 @@ void mergeRepeated(
                         }
                     };
 
-                    const auto& chosen = chooseConflictValue();
+                    const auto chosen = chooseConflictValue();
                     add(chosen);
                 }
             }

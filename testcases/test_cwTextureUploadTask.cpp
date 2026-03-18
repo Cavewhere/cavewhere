@@ -96,7 +96,7 @@ TEST_CASE("cwTextureUploadTask should run correctly", "[cwTextureUploadTask]") {
         CHECK(results.scaleTexCoords.y() == Catch::Approx(1.0));
 
         QImage image("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
-        image = image.convertToFormat(QImage::Format_RGBA8888).mirrored();
+        image = image.convertToFormat(QImage::Format_RGBA8888).flipped(Qt::Vertical);
         CHECK(results.image == image);
     }
 }

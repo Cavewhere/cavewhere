@@ -51,7 +51,7 @@ TEST_CASE("cwScrapManager should make the file size grow when re-calculaing scra
         fileToProject(project, "://datasets/test_cwScrapManager/scrapGuessNeigborPlan.cw");
 
         file.setFileName(project->filename());
-        file.open(QFile::ReadOnly);
+        REQUIRE(file.open(QFile::ReadOnly));
         firstSize = file.size();
 
         auto scrapManager = rootData->scrapManager();

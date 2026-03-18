@@ -671,7 +671,6 @@ cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) 
     data.setNoteStation(scrap->stations());
     data.setStationLookup(cave->stationPositionLookup());
     data.setSurveyNetwork(cave->network());
-    data.setStations(mapNoteStationsToTriangulateStation(scrap->stations(), cave->stationPositionLookup()));
     data.setNoteTransform(scrap->noteTransformAdjustedDeclination());
     data.setViewMatrix(scrap->viewMatrix()->data()->clone());
 

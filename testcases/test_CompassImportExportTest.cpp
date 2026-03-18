@@ -126,10 +126,10 @@ TEST_CASE("Export invalid data - ISSUE #115", "[Compass]") {
     exportToCompass->waitToFinish();
 
     QFile exportedFile(exportFile);
-    exportedFile.open(QFile::ReadOnly);
+    REQUIRE(exportedFile.open(QFile::ReadOnly));
 
     QFile validatedFile("://datasets/compass/missingDataValidated.dat");
-    validatedFile.open(QFile::ReadOnly);
+    REQUIRE(validatedFile.open(QFile::ReadOnly));
 
     while(!validatedFile.atEnd() && !exportedFile.atEnd()) {
         CHECK(validatedFile.readLine().trimmed().toStdString() == exportedFile.readLine().trimmed().toStdString());

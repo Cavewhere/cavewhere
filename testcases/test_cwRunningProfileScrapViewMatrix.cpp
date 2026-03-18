@@ -8,8 +8,8 @@
 TEST_CASE("Running profile scrap view matrix should produce the correct ViewMatrix", "[cwRunningProfileScrapViewMatrix]") {
 
     cwRunningProfileScrapViewMatrix matrix;
-    CHECK(matrix.type() == cwScrapType::RunningProfile);
-    CHECK(matrix.data()->type() == cwScrapType::RunningProfile);
+    CHECK(matrix.type() == cwAbstractScrapViewMatrix::RunningProfile);
+    CHECK(matrix.data()->type() == cwAbstractScrapViewMatrix::RunningProfile);
     CHECK(matrix.matrix() == QMatrix4x4());
 
     QVector3D origin;

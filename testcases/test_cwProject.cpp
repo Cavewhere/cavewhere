@@ -9411,7 +9411,7 @@ TEST_CASE("cwProject should detect the correct file type", "[cwProject]") {
 
     //Empty file - unknown type produces a fatal error
     QTemporaryFile tempFile;
-    tempFile.open();
+    REQUIRE(tempFile.open());
     CHECK(detectUnknownType(tempFile.fileName()));
 
     //File with random stuff in it - also unknown type

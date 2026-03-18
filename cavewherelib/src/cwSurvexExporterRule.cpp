@@ -133,7 +133,7 @@ void cwSurvexExporterRule::updatePipeline()
 
         auto future = cwConcurrent::run([survexFilename, region = std::move(region)]()->ResultString {
             QSaveFile file(survexFilename);
-            file.open(QIODeviceBase::WriteOnly);
+            (void)file.open(QIODeviceBase::WriteOnly);
             {
                 QTextStream stream(&file);
                 writeRegion(stream, region);

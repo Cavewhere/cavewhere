@@ -68,19 +68,19 @@ public:
     void setDirection(AzimuthDirection direction);
     void setData(cwAbstractScrapViewMatrix::Data* data) override;
 
-    const cwProjectedProfileScrapViewMatrix::Data *data() const
+    const cwProjectedProfileScrapViewMatrix::Data *data() const override
     {
         return d();
     }
 
-    cwProjectedProfileScrapViewMatrix *clone() const;
+    cwProjectedProfileScrapViewMatrix *clone() const override;
 
 signals:
     void azimuthChanged();
     void directionChanged();
 
 protected:
-    cwProjectedProfileScrapViewMatrix::Data *d() const
+    cwProjectedProfileScrapViewMatrix::Data *d() const override
     {
         return static_cast<cwProjectedProfileScrapViewMatrix::Data*>(cwAbstractScrapViewMatrix::d());
     }

@@ -441,7 +441,7 @@ cwImageData cwImageProvider::data(const QString& filename) const
     } else {
         //Normal file
         QFile file(imagePath);
-        file.open(QFile::ReadOnly);
+        (void)file.open(QFile::ReadOnly);
         data = file.readAll();
         QImageReader reader(filename);
         size = reader.size();
@@ -552,7 +552,7 @@ quint64 cwImageProvider::imageHash(const QImage &image)
 quint64 cwImageProvider::fileHash(const QString &path)
 {
     QFile file(path);
-    file.open(QFile::ReadOnly);
+    (void)file.open(QFile::ReadOnly);
     auto byteArray = file.readAll();
     return toHash(byteArray);
 }
