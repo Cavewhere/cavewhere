@@ -14,9 +14,12 @@ RowLayout {
     property alias widthTextObject: widthTextId
     property alias heightTextObject: heightTextId;
 
-
     signal widthFinishedEditting(string newText)
     signal heightFinishedEditting(string newText)
+
+    DistanceValidator {
+        id: distanceValidator
+    }
 
     TitledRectangle {
         id: rect1
@@ -27,6 +30,7 @@ RowLayout {
             objectName: "widthText"
             Layout.alignment: Qt.AlignHCenter
             QQ.KeyNavigation.tab: heightTextId
+            validator: distanceValidator
             onFinishedEditting: (newText) => editor.widthFinishedEditting(newText)
         }
     }
@@ -45,6 +49,7 @@ RowLayout {
             QQ.KeyNavigation.tab: editor.nextTab
             QQ.KeyNavigation.backtab: widthTextId
             Layout.alignment: Qt.AlignHCenter
+            validator: distanceValidator
             onFinishedEditting: (newText) => editor.heightFinishedEditting(newText)
         }
     }

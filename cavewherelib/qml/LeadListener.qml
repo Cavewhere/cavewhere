@@ -23,7 +23,7 @@ QQ.QtObject {
     }
 
     function toLeadDim(text) {
-        if(text === "?") {
+        if(text === "?" || text === "") {
             return -1;
         } else if(text < 0) {
             return -1;

@@ -22,8 +22,8 @@ FloatingGroupBox {
 
         SizeEditor {
             id: sizeEditor
-            onWidthFinishedEditting: (newText) => lead.width = lead.toLeadDim(newText)
-            onHeightFinishedEditting: (newText) => lead.height = lead.toLeadDim(newText)
+            onWidthFinishedEditting: (newText) => lead.width = (newText === "" ? "?" : newText)
+            onHeightFinishedEditting: (newText) => lead.height = (newText === "" ? "?" : newText)
             unit: lead.unit
             unitModel: lead.unitModel
             widthText: lead.width
