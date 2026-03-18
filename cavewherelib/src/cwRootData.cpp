@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwRootData.h"
+#include "cwSaveLoad.h"
 #include "cwRegionTreeModel.h"
 #include "cwCavingRegion.h"
 #include "cwLinePlotManager.h"
@@ -246,8 +247,8 @@ QUrl cwRootData::lastDirectory() const {
 * propertly position the file dialogs
 */
 void cwRootData::setLastDirectory(QUrl lastDirectory) {
-    QFileInfo info(lastDirectory.toLocalFile());
-    QUrl dir = QUrl::fromLocalFile(info.path());
+    const QString dirPath = cwSaveLoad::lastDirectoryForProjectFile(lastDirectory.toLocalFile());
+    QUrl dir = QUrl::fromLocalFile(dirPath);
 
     if(this->lastDirectory() != dir) {
         QSettings settings;
@@ -327,6 +328,16 @@ void cwRootData::copyText(const QString &text) const
     auto clipboard = QGuiApplication::clipboard();
     clipboard->setText(text);
 
+}
+
+bool cwRootData::pathExists(const QString &path) const
+{
+    return QFileInfo::exists(path);
+}
+
+QString cwRootData::sanitizeFileName(const QString &name) const
+{
+    return cwSaveLoad::sanitizeFileName(name);
 }
 
 QString cwRootData::fileBaseName(const QString &path) const

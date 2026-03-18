@@ -206,6 +206,14 @@ public:
     static Monad::Result<cwNoteData> loadNote(const QByteArray& content, const QString& filename, const QDir& projectDir);
 
     static QString sanitizeFileName(QString input);
+
+    // Returns the folder that should be stored as "last directory" for a given
+    // project file path.  For .cwproj files the .cwproj lives one level inside
+    // the project folder, so two components are stripped (filename + project
+    // folder).  For all other paths (including .cw bundles) one component is
+    // stripped (the filename), matching the behaviour callers have always
+    // expected from cwRootData::setLastDirectory.
+    static QString lastDirectoryForProjectFile(const QString& filePath);
     static void initializeGitRepository(const QDir& repoDir);
 
     void saveProtoMessage(

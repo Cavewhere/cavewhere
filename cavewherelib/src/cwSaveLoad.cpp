@@ -5169,6 +5169,19 @@ QString cwSaveLoad::sanitizeFileName(QString input) {
     return input;
 }
 
+QString cwSaveLoad::lastDirectoryForProjectFile(const QString& filePath)
+{
+    const QFileInfo info(filePath);
+    if (filePath.endsWith(QStringLiteral(".cwproj"), Qt::CaseInsensitive)) {
+        // The .cwproj file lives one level inside the project folder.
+        // Strip the filename to reach the project folder, then strip the
+        // project folder name to reach the folder the user navigated to.
+        return QFileInfo(info.path()).path();
+    }
+    // For .cw bundles and all other file types, strip only the filename.
+    return info.path();
+}
+
 void cwSaveLoad::initializeGitRepository(const QDir& repoDir)
 {
     QQuickGit::GitRepository repository;

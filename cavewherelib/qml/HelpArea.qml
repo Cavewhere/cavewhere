@@ -64,13 +64,13 @@ QQ.Rectangle {
                 smooth: true
             }
 
-            Text {
+            QQ.Text {
                 id: helpText
 
                 Layout.fillWidth: true
 
-                textFormat: Text.RichText
-                wrapMode: Text.WordWrap
+                textFormat: QQ.Text.RichText
+                wrapMode: QQ.Text.WordWrap
                 font.pixelSize: 14
                 color: Theme.text
 

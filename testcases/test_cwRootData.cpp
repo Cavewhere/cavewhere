@@ -3,6 +3,7 @@
 
 //Our includes
 #include "cwRootData.h"
+#include "cwSaveLoad.h"
 #include "cwJobSettings.h"
 #include "cwScrapManager.h"
 #include "cwLinePlotManager.h"
@@ -249,4 +250,49 @@ TEST_CASE("cwRootData GitHub LFS auth provider should use GitHub integration tok
     CHECK(provider->authorizationHeader(githubRepoB).isEmpty());
 
     CHECK(provider->authorizationHeader(QUrl(QStringLiteral("https://gitlab.com/group/repo.git/info/lfs"))).isEmpty());
+}
+
+TEST_CASE("cwSaveLoad::lastDirectoryForProjectFile strips correctly", "[cwSaveLoad]")
+{
+    // .cwproj lives one level inside the project folder — strip two components.
+    CHECK(cwSaveLoad::lastDirectoryForProjectFile(
+              "/Users/cave/Desktop/1/Phake Cave 3000/Phake Cave 3000.cwproj")
+          == "/Users/cave/Desktop/1");
+
+    // Case-insensitive extension match.
+    CHECK(cwSaveLoad::lastDirectoryForProjectFile(
+              "/Users/cave/Desktop/1/MyProject/MyProject.CWPROJ")
+          == "/Users/cave/Desktop/1");
+
+    // .cw bundle — strip only the filename.
+    CHECK(cwSaveLoad::lastDirectoryForProjectFile(
+              "/Users/cave/Desktop/1/MyProject.cw")
+          == "/Users/cave/Desktop/1");
+
+    // Unrecognised file — strip only the filename.
+    CHECK(cwSaveLoad::lastDirectoryForProjectFile(
+              "/Users/cave/Desktop/notes.jpg")
+          == "/Users/cave/Desktop");
+}
+
+TEST_CASE("cwRootData::setLastDirectory resolves to correct parent for .cwproj", "[cwRootData]")
+{
+    cwRootData rootData;
+
+    // Simulate opening a directory project: the file URL points at the .cwproj
+    // file inside the project folder.  lastDirectory should end up at the
+    // folder the user actually navigated to, not inside the project folder.
+    const QUrl cwprojUrl = QUrl::fromLocalFile(
+        "/Users/cave/Desktop/1/Phake Cave 3000/Phake Cave 3000.cwproj");
+    rootData.setLastDirectory(cwprojUrl);
+    CHECK(rootData.lastDirectory() == QUrl::fromLocalFile("/Users/cave/Desktop/1"));
+}
+
+TEST_CASE("cwRootData::setLastDirectory resolves to correct parent for .cw bundle", "[cwRootData]")
+{
+    cwRootData rootData;
+
+    const QUrl cwUrl = QUrl::fromLocalFile("/Users/cave/Desktop/1/MyProject.cw");
+    rootData.setLastDirectory(cwUrl);
+    CHECK(rootData.lastDirectory() == QUrl::fromLocalFile("/Users/cave/Desktop/1"));
 }

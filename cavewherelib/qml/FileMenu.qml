@@ -10,7 +10,7 @@ QC.Menu {
 
     property QQ.Loader mainContentLoader
     required property FileDialog loadFileDialog
-    required property FileDialog saveAsFileDialog
+    required property SaveAsDialog saveAsFileDialog
     required property QC.ApplicationWindow applicationWindow
     required property AskToSaveDialog askToSaveDialog
 

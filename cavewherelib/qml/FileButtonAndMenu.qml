@@ -17,7 +17,7 @@ QC.MenuBar {
 //    property var dataPage; //Should be a DataMainPage
     property QQ.Loader mainContentLoader;
     property FileDialog loadFileDialog;
-    property FileDialog saveAsFileDialog;
+    property SaveAsDialog saveAsFileDialog;
     property QC.ApplicationWindow applicationWindow;
     property AskToSaveDialog askToSaveDialog;
 
