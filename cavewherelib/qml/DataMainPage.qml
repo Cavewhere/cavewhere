@@ -32,10 +32,14 @@ StandardPage {
         ColumnLayout {
             Layout.alignment: Qt.AlignTop
 
-            Text {
+            DoubleClickTextInput {
                 font.bold: true
                 font.pixelSize: 20
-                text: "All Caves"
+                text: RootData.region.name
+
+                onFinishedEditting: (newText) => {
+                    RootData.region.name = newText
+                }
             }
 
             ExportImportButtons {

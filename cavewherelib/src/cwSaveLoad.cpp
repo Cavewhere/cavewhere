@@ -2502,12 +2502,17 @@ ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, Proj
         sourceFilePath = desiredPath;
     }
 
-    const QString newDataRootName = destination.sanitizedBaseName;
     const auto region = d->m_regionTreeModel->cavingRegion();
     QString oldDataRootName = d->projectMetadata.dataRoot;
     if (oldDataRootName.isEmpty()) {
         oldDataRootName = defaultDataRoot(region ? region->name() : QString());
     }
+
+    // For Copy mode on already-saved projects, preserve the existing dataRoot rather than
+    // deriving a new one from the destination basename. This keeps the copy internally
+    // consistent without mutating the loaded project's identity.
+    const bool isAlreadySavedCopy = (mode == ProjectTransferMode::Copy && !d->isTemporary);
+    const QString newDataRootName = isAlreadySavedCopy ? oldDataRootName : destination.sanitizedBaseName;
 
     if (!oldDataRootName.isEmpty() && oldDataRootName != newDataRootName) {
         const QString oldDataRootPath = targetRootDir.absoluteFilePath(oldDataRootName);
@@ -2529,10 +2534,13 @@ ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, Proj
         initializeRepositoryForCurrentFile();
     }
     setTemporary(false);
-    d->projectMetadata.dataRoot = newDataRootName;
-    emit dataRootChanged();
-    if (region != nullptr) {
-        region->setName(newDataRootName);
+    if (!isAlreadySavedCopy) {
+        d->projectMetadata.dataRoot = newDataRootName;
+        emit dataRootChanged();
+        // Do NOT call region->setName() here: the sanitizedBaseName is a filesystem-safe
+        // name and is not appropriate as the user-visible display name. The caller
+        // (cwProject::saveAs) is responsible for setting the region name to the raw
+        // user-chosen basename once the transfer completes.
     }
     d->resetObjectStates(this);
     saveProject(targetRootDir, region);
@@ -2569,9 +2577,11 @@ void cwSaveLoad::newProject()
     auto region = d->m_regionTreeModel->cavingRegion();
 
     if(region) [[likely]] {
-        //Rename the region
+        //Generate a temporary directory name (not shown to user)
         const auto tempName = randomName();
-        region->setName(tempName);
+
+        //Pre-fill the region name with a friendly human-readable name
+        region->setName(friendlyProjectName());
 
         //Create the temp directory
         auto tempDir = createTemporaryDirectory(tempName);
@@ -4439,6 +4449,14 @@ void cwSaveLoad::waitForFinished()
 
 void cwSaveLoad::disconnectTreeModel()
 {
+    // Disconnect from the region directly. cwCavingRegion is NOT included in the
+    // cwRegionTreeModel::all<QObject*> iteration (the root item uses an invalid index
+    // which returns QVariant() for ObjectRole), so disconnectObjects() below will not
+    // touch it. This explicit call is the only disconnect for the region.
+    if (auto* region = d->m_regionTreeModel->cavingRegion()) {
+        disconnect(region, nullptr, this, nullptr);
+    }
+
     //Disconnect from the tree model
     disconnect(d->m_regionTreeModel, nullptr, this, nullptr);
 
@@ -4579,6 +4597,85 @@ void cwSaveLoad::connectTreeModel()
             });
 
     connectObjects();
+
+    // React to project name changes: rename the dataRoot directory and .cwproj descriptor
+    // on disk when the region name is edited by the user. Uses the same watch pattern as
+    // cave/trip nameChanged handlers. Re-entrancy is suppressed because transferProjectTo
+    // always sets d->projectMetadata.dataRoot to the new name before calling region->setName(),
+    // so the early-out fires and the handler does nothing.
+    //
+    // The actual filesystem renames are queued as Custom jobs so they run on the background
+    // thread via the job queue, matching the async pattern used for cave/trip renames.
+    if (auto* region = d->m_regionTreeModel->cavingRegion()) {
+        connect(region, &cwCavingRegion::nameChanged, this, [this, region]() {
+            if (d->isTemporary) {
+                return;
+            }
+
+            const QString newName = region->name();
+            const QString sanitizedName = sanitizeFileName(newName);
+            if (sanitizedName.isEmpty() || d->projectMetadata.dataRoot == sanitizedName) {
+                return;
+            }
+
+            const QDir rootDir = projectRootDir();
+            const QString oldDataRoot = d->projectMetadata.dataRoot;
+            const QString oldDataRootPath = rootDir.absoluteFilePath(oldDataRoot);
+            const QString newDataRootPath = rootDir.absoluteFilePath(sanitizedName);
+
+            // Update in-memory metadata optimistically so resetObjectStates and
+            // subsequent saves use the new paths immediately.
+            d->projectMetadata.dataRoot = sanitizedName;
+            emit dataRootChanged();
+
+            // Rebuild m_objectStates so all child paths reflect the new dataRoot.
+            // compressPendingJobs will drop stale write jobs superseded by new ones.
+            d->resetObjectStates(this);
+
+            // Update the .cwproj descriptor filename optimistically.
+            const QString currentFile = fileName();
+            const QString newDescriptorPath = rootDir.absoluteFilePath(sanitizedName + QStringLiteral(".cwproj"));
+            if (currentFile != newDescriptorPath) {
+                setFileName(newDescriptorPath);
+            }
+
+            // Queue a background job to rename the dataRoot directory.
+            d->addExplicitFileSystemJob(
+                Data::Job(nullptr, Data::Job::Kind::Directory, Data::Job::Action::Custom,
+                    [oldDataRootPath, newDataRootPath]() -> Monad::ResultBase {
+                        if (!QFileInfo::exists(oldDataRootPath) || QFileInfo::exists(newDataRootPath)) {
+                            return Monad::ResultBase();
+                        }
+                        if (!QDir().rename(oldDataRootPath, newDataRootPath)) {
+                            return Monad::ResultBase(
+                                QStringLiteral("Failed to rename dataRoot: %1 -> %2")
+                                    .arg(oldDataRootPath, newDataRootPath));
+                        }
+                        return Monad::ResultBase();
+                    }),
+                this);
+
+            // Queue a background job to rename the .cwproj descriptor file.
+            if (currentFile != newDescriptorPath) {
+                d->addExplicitFileSystemJob(
+                    Data::Job(nullptr, Data::Job::Kind::File, Data::Job::Action::Custom,
+                        [currentFile, newDescriptorPath]() -> Monad::ResultBase {
+                            if (!QFileInfo::exists(currentFile) || QFileInfo::exists(newDescriptorPath)) {
+                                return Monad::ResultBase();
+                            }
+                            if (!QFile::rename(currentFile, newDescriptorPath)) {
+                                return Monad::ResultBase(
+                                    QStringLiteral("Failed to rename descriptor: %1 -> %2")
+                                        .arg(currentFile, newDescriptorPath));
+                            }
+                            return Monad::ResultBase();
+                        }),
+                    this);
+            }
+
+            saveProject(projectRootDir(), region);
+        });
+    }
 }
 
 void cwSaveLoad::disconnectObjects()
@@ -5005,6 +5102,35 @@ QString cwSaveLoad::randomName() const
 {
     quint32 randomValue = QRandomGenerator::global()->generate();
     return QStringLiteral("cavewhereTmp-") + QStringLiteral("%1").arg(randomValue, 8, 16, QChar(u'0'));
+}
+
+QString cwSaveLoad::friendlyProjectName()
+{
+    static const QStringList adjectives = {
+        QStringLiteral("Misty"), QStringLiteral("Thunder"), QStringLiteral("Obsidian"),
+        QStringLiteral("Glacier"), QStringLiteral("Crystal"), QStringLiteral("Amber"),
+        QStringLiteral("Crimson"), QStringLiteral("Silver"), QStringLiteral("Golden"),
+        QStringLiteral("Iron"), QStringLiteral("Marble"), QStringLiteral("Jade"),
+        QStringLiteral("Onyx"), QStringLiteral("Sapphire"), QStringLiteral("Copper"),
+        QStringLiteral("Azure"), QStringLiteral("Ivory"), QStringLiteral("Scarlet"),
+        QStringLiteral("Shadow"), QStringLiteral("Storm"), QStringLiteral("Frost"),
+        QStringLiteral("Ember"), QStringLiteral("Dawn"), QStringLiteral("Dusk"),
+        QStringLiteral("Ancient"), QStringLiteral("Hidden"), QStringLiteral("Silent"),
+        QStringLiteral("Forgotten"), QStringLiteral("Wild"), QStringLiteral("Mystic")
+    };
+    static const QStringList nouns = {
+        QStringLiteral("Peak"), QStringLiteral("Ridge"), QStringLiteral("Summit"),
+        QStringLiteral("Pass"), QStringLiteral("Crest"), QStringLiteral("Pinnacle"),
+        QStringLiteral("Cliff"), QStringLiteral("Gorge"), QStringLiteral("Canyon"),
+        QStringLiteral("Valley"), QStringLiteral("Hollow"), QStringLiteral("Cavern"),
+        QStringLiteral("Bluff"), QStringLiteral("Butte"), QStringLiteral("Crag"),
+        QStringLiteral("Tor"), QStringLiteral("Knoll"), QStringLiteral("Basin"),
+        QStringLiteral("Dome"), QStringLiteral("Spire")
+    };
+
+    const quint32 adjectiveIndex = QRandomGenerator::global()->bounded(static_cast<quint32>(adjectives.size()));
+    const quint32 nounIndex = QRandomGenerator::global()->bounded(static_cast<quint32>(nouns.size()));
+    return adjectives.at(adjectiveIndex) + QStringLiteral(" ") + nouns.at(nounIndex);
 }
 
 QDir cwSaveLoad::createTemporaryDirectory(const QString &subDirName)

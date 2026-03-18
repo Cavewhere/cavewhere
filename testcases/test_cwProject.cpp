@@ -11760,3 +11760,178 @@ TEST_CASE("LiDAR note should be removed correctly simple", "[cwProject][regressi
     REQUIRE(loadedTrip->notesLiDAR() != nullptr);
     CHECK(loadedTrip->notesLiDAR()->rowCount() == 0);
 }
+
+TEST_CASE("New project region name is a friendly mountain name", "[cwProject][newProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    const QString name = project->cavingRegion()->name();
+
+    // Should not be the old temp format
+    CHECK_FALSE(name.startsWith(QStringLiteral("cavewhereTmp-")));
+
+    // Should be two words separated by a space
+    const QStringList parts = name.split(QLatin1Char(' '));
+    CHECK(parts.size() == 2);
+    CHECK_FALSE(parts.value(0).isEmpty());
+    CHECK_FALSE(parts.value(1).isEmpty());
+}
+
+TEST_CASE("Temp project first save to directory initializes dataRoot from basename", "[cwProject][saveAs]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto region = project->cavingRegion();
+
+    REQUIRE(project->isTemporaryProject());
+
+    region->addCave();
+    region->cave(0)->setName(QStringLiteral("Initial Cave"));
+
+    QTemporaryDir saveDir;
+    REQUIRE(saveDir.isValid());
+    const QString target = saveDir.filePath(QStringLiteral("FirstSave.cwproj"));
+    REQUIRE(project->saveAs(target));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    REQUIRE_FALSE(project->isTemporaryProject());
+
+    // Region name and dataRoot should be initialized from the chosen basename
+    CHECK(region->name().toStdString() == std::string("FirstSave"));
+    CHECK(project->dataRoot().toStdString() == std::string("FirstSave"));
+}
+
+TEST_CASE("Temp project first save to bundle initializes dataRoot from basename", "[cwProject][saveAs]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto region = project->cavingRegion();
+
+    REQUIRE(project->isTemporaryProject());
+
+    region->addCave();
+    region->cave(0)->setName(QStringLiteral("Bundle Cave"));
+
+    QTemporaryDir saveDir;
+    REQUIRE(saveDir.isValid());
+    const QString target = saveDir.filePath(QStringLiteral("BundleFirstSave.cw"));
+    REQUIRE(project->saveAs(target));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    // Region name and dataRoot should be initialized from the chosen basename
+    CHECK(region->name().toStdString() == std::string("BundleFirstSave"));
+    CHECK(project->dataRoot().toStdString() == std::string("BundleFirstSave"));
+}
+
+TEST_CASE("SaveAs on already-saved directory project preserves identity", "[cwProject][saveAs]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto region = project->cavingRegion();
+
+    region->addCave();
+    region->cave(0)->setName(QStringLiteral("Identity Cave"));
+
+    QTemporaryDir firstSaveDir;
+    REQUIRE(firstSaveDir.isValid());
+    const QString firstTarget = firstSaveDir.filePath(QStringLiteral("IdentityProject.cwproj"));
+    REQUIRE(project->saveAs(firstTarget));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    REQUIRE_FALSE(project->isTemporaryProject());
+
+    const QString savedRegionName = region->name();
+    const QString savedDataRoot = project->dataRoot();
+
+    QTemporaryDir secondSaveDir;
+    REQUIRE(secondSaveDir.isValid());
+    const QString secondTarget = secondSaveDir.filePath(QStringLiteral("AnotherName.cwproj"));
+    REQUIRE(project->saveAs(secondTarget));
+    project->waitSaveToFinish();
+
+    CHECK(region->name().toStdString() == savedRegionName.toStdString());
+    CHECK(project->dataRoot().toStdString() == savedDataRoot.toStdString());
+}
+
+TEST_CASE("SaveAs on already-saved bundled project preserves identity", "[cwProject][saveAs]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto region = project->cavingRegion();
+
+    region->addCave();
+    region->cave(0)->setName(QStringLiteral("Bundle Cave"));
+
+    QTemporaryDir firstSaveDir;
+    REQUIRE(firstSaveDir.isValid());
+    const QString firstTarget = firstSaveDir.filePath(QStringLiteral("BundleIdentityProject.cwproj"));
+    REQUIRE(project->saveAs(firstTarget));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    REQUIRE_FALSE(project->isTemporaryProject());
+
+    const QString savedRegionName = region->name();
+    const QString savedDataRoot = project->dataRoot();
+
+    QTemporaryDir bundleSaveDir;
+    REQUIRE(bundleSaveDir.isValid());
+    const QString bundleTarget = bundleSaveDir.filePath(QStringLiteral("DifferentName.cw"));
+    REQUIRE(project->saveAs(bundleTarget));
+    project->waitSaveToFinish();
+    rootData->futureManagerModel()->waitForFinished();
+
+    CHECK(region->name().toStdString() == savedRegionName.toStdString());
+    CHECK(project->dataRoot().toStdString() == savedDataRoot.toStdString());
+}
+
+TEST_CASE("Setting region name renames dataRoot directory and descriptor file", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto region = project->cavingRegion();
+
+    region->addCave();
+    region->cave(0)->setName(QStringLiteral("Rename Test Cave"));
+
+    QTemporaryDir saveDir;
+    REQUIRE(saveDir.isValid());
+    const QString saveTarget = saveDir.filePath(QStringLiteral("OriginalProject.cwproj"));
+    REQUIRE(project->saveAs(saveTarget));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    REQUIRE_FALSE(project->isTemporaryProject());
+
+    const QString originalDescriptor = project->filename();
+    const QString originalDataRoot = project->dataRoot();
+    REQUIRE(QFileInfo::exists(originalDescriptor));
+
+    const QDir rootDir = QFileInfo(originalDescriptor).absoluteDir();
+    const QString originalDataRootPath = rootDir.absoluteFilePath(originalDataRoot);
+    REQUIRE(QFileInfo::exists(originalDataRootPath));
+
+    // Setting region name triggers the disk rename via cwSaveLoad's nameChanged handler
+    region->setName(QStringLiteral("Renamed Project"));
+    project->waitSaveToFinish();
+
+    // Region name should be updated
+    CHECK(region->name() == QStringLiteral("Renamed Project"));
+
+    // dataRoot should be updated to sanitized form (spaces allowed)
+    const QString newDataRoot = project->dataRoot();
+    CHECK(newDataRoot == QStringLiteral("Renamed Project"));
+
+    // Old descriptor file should be gone
+    CHECK_FALSE(QFileInfo::exists(originalDescriptor));
+
+    // New descriptor file should exist
+    const QString newDescriptor = rootDir.absoluteFilePath(QStringLiteral("Renamed Project.cwproj"));
+    CHECK(QFileInfo::exists(newDescriptor));
+    CHECK(project->filename().toStdString() == newDescriptor.toStdString());
+
+    // Old dataRoot directory should be gone
+    CHECK_FALSE(QFileInfo::exists(originalDataRootPath));
+
+    // New dataRoot directory should exist
+    const QString newDataRootPath = rootDir.absoluteFilePath(newDataRoot);
+    CHECK(QFileInfo::exists(newDataRootPath));
+}

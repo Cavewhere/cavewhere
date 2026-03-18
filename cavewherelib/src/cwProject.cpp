@@ -492,9 +492,10 @@ bool cwProject::saveAs(QString newFilename)
     const bool saveAsBundled = QFileInfo(newFilename).suffix().compare(QStringLiteral("cw"), Qt::CaseInsensitive) == 0;
 
     if (saveAsBundled) {
+        const bool wasTemporary = isTemporaryProject();
         auto saveAsBundledFuture = m_saveLoad->saveBundledArchive(newFilename);
         SaveFuture = AsyncFuture::observe(saveAsBundledFuture)
-                         .context(this, [this, saveAsBundledFuture, newFilename]() {
+                         .context(this, [this, saveAsBundledFuture, newFilename, wasTemporary]() {
                              const auto saveResult = saveAsBundledFuture.result();
                              if (saveResult.hasError()) {
                                  ErrorModel->append(cwError(saveResult.errorMessage(), cwError::Fatal));
@@ -503,7 +504,7 @@ bool cwProject::saveAs(QString newFilename)
 
                              ScopedProjectStateNotifier stateGuard(this);
                              const QString baseName = QFileInfo(newFilename).completeBaseName();
-                             if (!baseName.isEmpty()) {
+                             if (!baseName.isEmpty() && wasTemporary) {
                                  cavingRegion()->setName(baseName);
                                  m_saveLoad->setDataRoot(baseName);
                              }
@@ -526,7 +527,8 @@ bool cwProject::saveAs(QString newFilename)
             + QFileInfo(newFilename).completeBaseName() + QStringLiteral(".cwproj");
     }
 
-    Monad::ResultBase result = isTemporaryProject()
+    const bool wasTemporary = isTemporaryProject();
+    Monad::ResultBase result = wasTemporary
         ? m_saveLoad->moveProjectTo(newFilename)
         : m_saveLoad->copyProjectTo(newFilename);
 
@@ -536,7 +538,7 @@ bool cwProject::saveAs(QString newFilename)
     }
 
     const QString baseName = QFileInfo(newFilename).completeBaseName();
-    if (!baseName.isEmpty()) {
+    if (!baseName.isEmpty() && wasTemporary) {
         cavingRegion()->setName(baseName);
         m_saveLoad->setDataRoot(baseName);
     }

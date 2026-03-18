@@ -371,6 +371,7 @@ private:
 
     // QString
     QString randomName() const;
+    static QString friendlyProjectName();
     QDir createTemporaryDirectory(const QString& subDirName);
 
     QFuture<void> completeSaveJobs();
