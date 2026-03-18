@@ -36,6 +36,7 @@
 #ifdef CW_WITH_PDF_SUPPORT
 #include <QPdfDocument>
 #endif
+#include <QDate>
 #include <QHash>
 #include <QTemporaryDir>
 
@@ -1728,4 +1729,100 @@ TEST_CASE("cwSaveLoad should 3-way merge cwTrip correctly", "[cwSaveLoad]") {
             }
         }
     }
+}
+
+// Compression rule 1: multiple WriteFile jobs for the same object — only the last is kept.
+// Verified by changing trip date three times before the flush runs, then checking that
+// the saved file reflects the final date.
+TEST_CASE("cwSaveLoad compression rule 1: last write wins when multiple writes queue for the same object", "[cwSaveLoad]") {
+    auto root = std::make_unique<cwRootData>();
+    auto project = root->project();
+    auto region = project->cavingRegion();
+
+    region->addCave();
+    auto cave = region->cave(0);
+    cave->addTrip();
+    auto trip = cave->trip(0);
+
+    root->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    // Change date three times synchronously — each change queues a WriteFile for the
+    // same trip before the flush gets to run. Only the last write should survive.
+    const QDate date1(2020, 1, 1);
+    const QDate date2(2021, 6, 15);
+    const QDate date3(2023, 11, 30);
+    trip->setDate(QDateTime(date1, QTime(), QTimeZone::utc()));
+    trip->setDate(QDateTime(date2, QTime(), QTimeZone::utc()));
+    trip->setDate(QDateTime(date3, QTime(), QTimeZone::utc()));
+
+    project->waitSaveToFinish();
+
+    const auto tripProto = loadProtoFromJsonFile<CavewhereProto::Trip>(
+        ProjectFilenameTestHelper::absolutePath(trip));
+
+    REQUIRE(tripProto.has_date());
+    CHECK(tripProto.date().year()  == date3.year());
+    CHECK(tripProto.date().month() == date3.month());
+    CHECK(tripProto.date().day()   == date3.day());
+}
+
+// Compression rule 2: a WriteFile queued before a Remove for the same object is dropped.
+// Verified by adding a trip and immediately removing it, then checking that no directory
+// for that trip was ever created on disk.
+TEST_CASE("cwSaveLoad compression rule 2: adding then immediately removing a trip leaves no files on disk", "[cwSaveLoad]") {
+    auto root = std::make_unique<cwRootData>();
+    auto project = root->project();
+    auto region = project->cavingRegion();
+
+    region->addCave();
+    auto cave = region->cave(0);
+
+    root->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    // Add a trip — queues WriteFile. Capture its expected directory before removal.
+    cave->addTrip();
+    auto trip = cave->trip(0);
+    trip->setName("Doomed Trip");
+    const QString expectedTripDir = ProjectFilenameTestHelper::dir(trip).absolutePath();
+
+    // Remove immediately — queues Directory::Remove for the same trip before flush runs.
+    cave->removeTrip(0);
+
+    project->waitSaveToFinish();
+
+    CHECK(!QFileInfo::exists(expectedTripDir));
+}
+
+// Compression rule 3: sequential Move jobs for the same object collapse to a single move.
+// Verified by renaming a cave twice before the flush runs, then checking that only the
+// final directory exists and the intermediate name was never created on disk.
+TEST_CASE("cwSaveLoad compression rule 3: renaming an object twice before flush moves directly to the final name", "[cwSaveLoad]") {
+    auto root = std::make_unique<cwRootData>();
+    auto project = root->project();
+    auto region = project->cavingRegion();
+
+    region->addCave();
+    auto cave = region->cave(0);
+    cave->setName("Alpha");
+
+    root->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    const QDir alphaDir = ProjectFilenameTestHelper::dir(cave);
+    REQUIRE(alphaDir.exists());
+
+    // Rename twice synchronously — stacks two Move chains (dir + file) before the flush.
+    cave->setName("Beta");
+    const QDir betaDir = ProjectFilenameTestHelper::dir(cave);
+
+    cave->setName("Gamma");
+    const QDir gammaDir = ProjectFilenameTestHelper::dir(cave);
+
+    project->waitSaveToFinish();
+
+    CHECK(gammaDir.exists());
+    CHECK(!betaDir.exists());
+    CHECK(!alphaDir.exists());
 }

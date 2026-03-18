@@ -2142,19 +2142,125 @@ struct cwSaveLoad::Data {
         const void* objectId
         );
 
+    // Returns a map of objectId -> ordered job indices for all non-null objectIds.
+    QHash<const void*, QList<int>> jobIndicesByObjectId() const
+    {
+        QHash<const void*, QList<int>> result;
+        for (int i = 0; i < m_pendingJobs.size(); ++i) {
+            if (m_pendingJobs[i].objectId != nullptr) {
+                result[m_pendingJobs[i].objectId].append(i);
+            }
+        }
+        return result;
+    }
+
+    // Rule 1: For each object with multiple WriteFile jobs, drop all but the last.
+    void dropRedundantWrites(const QList<int>& indices, QSet<int>& indicesToDrop) const
+    {
+        int lastWriteIdx = -1;
+        for (int idx : indices) {
+            if (m_pendingJobs[idx].action == Job::Action::WriteFile
+                && !indicesToDrop.contains(idx)) {
+                if (lastWriteIdx != -1) {
+                    indicesToDrop.insert(lastWriteIdx);
+                }
+                lastWriteIdx = idx;
+            }
+        }
+    }
+
+    // Rule 2: If a Remove exists for an object, all its pending WriteFile jobs are moot.
+    void dropWritesSupersededByRemove(const QList<int>& indices, QSet<int>& indicesToDrop) const
+    {
+        bool hasRemove = false;
+        for (int idx : indices) {
+            if (m_pendingJobs[idx].action == Job::Action::Remove) {
+                hasRemove = true;
+                break;
+            }
+        }
+        if (!hasRemove) {
+            return;
+        }
+        for (int idx : indices) {
+            if (m_pendingJobs[idx].action == Job::Action::WriteFile) {
+                indicesToDrop.insert(idx);
+            }
+        }
+    }
+
+    // Rule 3: Collapse sequential Moves for the same object and kind (A→B + B→C becomes A→C).
+    void collapseSequentialMoves(const QList<int>& indices, QSet<int>& indicesToDrop)
+    {
+        for (Job::Kind kind : {Job::Kind::File, Job::Kind::Directory}) {
+            QList<int> moveIndices;
+            for (int idx : indices) {
+                if (m_pendingJobs[idx].action == Job::Action::Move
+                    && m_pendingJobs[idx].kind == kind) {
+                    moveIndices.append(idx);
+                }
+            }
+            if (moveIndices.size() > 1) {
+                m_pendingJobs[moveIndices.last()].oldPath =
+                    m_pendingJobs[moveIndices.first()].oldPath;
+                for (int i = 0; i < moveIndices.size() - 1; ++i) {
+                    indicesToDrop.insert(moveIndices[i]);
+                }
+            }
+        }
+    }
+
+    void compressPendingJobs()
+    {
+        if (m_pendingJobs.size() <= 1) {
+            return;
+        }
+
+        QSet<int> indicesToDrop;
+
+        const auto indexMap = jobIndicesByObjectId();
+        for (auto it = indexMap.cbegin(); it != indexMap.cend(); ++it) {
+            const QList<int>& indices = it.value();
+            if (indices.size() <= 1) {
+                continue;
+            }
+            dropWritesSupersededByRemove(indices, indicesToDrop);
+            dropRedundantWrites(indices, indicesToDrop);
+            collapseSequentialMoves(indices, indicesToDrop);
+        }
+
+        if (indicesToDrop.isEmpty()) {
+            return;
+        }
+
+        QList<Job> compressed;
+        compressed.reserve(m_pendingJobs.size() - indicesToDrop.size());
+        for (int i = 0; i < m_pendingJobs.size(); ++i) {
+            if (!indicesToDrop.contains(i)) {
+                compressed.append(m_pendingJobs[i]);
+            }
+        }
+        m_pendingJobs = std::move(compressed);
+    }
+
     void execFileSystemJobs(cwSaveLoad* context) {
         if (m_pendingJobs.isEmpty()) {
             return;
         }
 
-        Job job = m_pendingJobs.takeFirst();
-
-
-        if(m_pendingJobsDeferred.future().isFinished()) {
+        if (m_pendingJobsDeferred.future().isFinished()) {
+            compressPendingJobs();
             m_pendingJobsDeferred = {};
         }
 
+        if (m_pendingJobs.isEmpty()) {
+            m_pendingJobsDeferred.complete();
+            return;
+        }
+
         Q_ASSERT(m_pendingJobsDeferred.future().isRunning());
+
+        Job job = m_pendingJobs.takeFirst();
 
         // qDebug() << "Starting job:" << this << job.toString();
         auto future = cwConcurrent::run([job]() {
