@@ -4678,6 +4678,62 @@ void cwSaveLoad::connectTreeModel()
     }
 }
 
+void cwSaveLoad::enqueueProjectRenameJobs(const QString& oldDescriptorPath,
+                                          const QString& newDescriptorPath)
+{
+    if (d->isTemporary) {
+        return;
+    }
+
+    const QDir rootDir = projectRootDir();
+    const QString oldDataRoot = QFileInfo(oldDescriptorPath).completeBaseName();
+    const QString newDataRoot = QFileInfo(newDescriptorPath).completeBaseName();
+
+    if (oldDataRoot.isEmpty() || newDataRoot.isEmpty() || oldDataRoot == newDataRoot) {
+        return;
+    }
+
+    const QString oldDataRootPath = rootDir.absoluteFilePath(oldDataRoot);
+    const QString newDataRootPath = rootDir.absoluteFilePath(newDataRoot);
+
+    // Rebuild m_objectStates so all child paths reflect the new dataRoot.
+    d->resetObjectStates(this);
+
+    // Queue a background job to rename the dataRoot directory.
+    d->addExplicitFileSystemJob(
+        Data::Job(nullptr, Data::Job::Kind::Directory, Data::Job::Action::Custom,
+            [oldDataRootPath, newDataRootPath]() -> Monad::ResultBase {
+                if (!QFileInfo::exists(oldDataRootPath) || QFileInfo::exists(newDataRootPath)) {
+                    return Monad::ResultBase();
+                }
+                if (!QDir().rename(oldDataRootPath, newDataRootPath)) {
+                    return Monad::ResultBase(
+                        QStringLiteral("Failed to rename dataRoot: %1 -> %2")
+                            .arg(oldDataRootPath, newDataRootPath));
+                }
+                return Monad::ResultBase();
+            }),
+        this);
+
+    // Queue a background job to rename the .cwproj descriptor file.
+    if (oldDescriptorPath != newDescriptorPath) {
+        d->addExplicitFileSystemJob(
+            Data::Job(nullptr, Data::Job::Kind::File, Data::Job::Action::Custom,
+                [oldDescriptorPath, newDescriptorPath]() -> Monad::ResultBase {
+                    if (!QFileInfo::exists(oldDescriptorPath) || QFileInfo::exists(newDescriptorPath)) {
+                        return Monad::ResultBase();
+                    }
+                    if (!QFile::rename(oldDescriptorPath, newDescriptorPath)) {
+                        return Monad::ResultBase(
+                            QStringLiteral("Failed to rename descriptor: %1 -> %2")
+                                .arg(oldDescriptorPath, newDescriptorPath));
+                    }
+                    return Monad::ResultBase();
+                }),
+            this);
+    }
+}
+
 void cwSaveLoad::disconnectObjects()
 {
     // Disconnect trip-owned objects that are not represented as region-tree objects.
@@ -5623,6 +5679,20 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
                         const auto pullState = toPullState(pullResult.value().state());
                         if (pullState == SyncReport::PullState::MergeConflicts) {
                             return AsyncFuture::completed(ResultBase(QStringLiteral("Merge Conflicts need to be resolved")));
+                        }
+
+                        // If the .cwproj descriptor was renamed by the pull, update the
+                        // in-memory filename before loading — otherwise loadProject will fail
+                        // because the old filename no longer exists on disk.
+                        if (!QFileInfo::exists(d->projectFileName)) {
+                            const QDir repoRootDir(repoPath);
+                            const QStringList cwprojFiles =
+                                repoRootDir.entryList(QStringList() << QStringLiteral("*.cwproj"),
+                                                      QDir::Files);
+                            if (cwprojFiles.size() == 1) {
+                                d->projectFileName =
+                                    repoRootDir.absoluteFilePath(cwprojFiles.first());
+                            }
                         }
 
                         const auto pulledProjectResult = cwSaveLoad::loadProject(d->projectFileName);

@@ -233,6 +233,13 @@ public:
     Monad::ResultBase moveProjectTo(const QString& destinationFileUrl);
     Monad::ResultBase copyProjectTo(const QString& destinationFileUrl);
     QFuture<Monad::ResultBase> saveBundledArchive(const QString& targetArchivePath);
+
+    // Queues the dataRoot directory rename and .cwproj descriptor file rename jobs, and
+    // rebuilds internal object-state paths to reflect the new dataRoot. Called by the sync
+    // handler after a remote project rename when the nameChanged early-out has already fired
+    // (because d->projectMetadata.dataRoot was pre-set from loaded data before handlers run).
+    void enqueueProjectRenameJobs(const QString& oldDescriptorPath,
+                                  const QString& newDescriptorPath);
     Monad::ResultBase deleteTemporaryProject();
 
     void addFiles(QList<QUrl> files,
