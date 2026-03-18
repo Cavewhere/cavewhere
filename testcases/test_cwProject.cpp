@@ -8986,9 +8986,14 @@ TEST_CASE("SaveAs dual format matrix", "[cwProject][saveAs]") {
     const QString ExpectedTripName = QStringLiteral("2019c154_-_party_fault");
     const QString ExpectedNoteImageFileName = QStringLiteral("2019c154_-_party_fault-2p.svg");
 
-    auto loadProject = [] (const QString& path) {
+    QQuickGit::Account saveAsAccount;
+    saveAsAccount.setName(QStringLiteral("SaveAs Tester"));
+    saveAsAccount.setEmail(QStringLiteral("saveas.tester@example.com"));
+
+    auto loadProject = [&saveAsAccount] (const QString& path) {
         auto project = std::make_unique<cwProject>();
         addTokenManager(project.get());
+        project->setGitAccount(&saveAsAccount);
         project->loadOrConvert(path);
         project->waitLoadToFinish();
         REQUIRE(project->errorModel()->count() == 0);
@@ -9389,6 +9394,10 @@ TEST_CASE("cwProject should detect the correct file type", "[cwProject]") {
 
     auto project = std::make_unique<cwProject>();
     addTokenManager(project.get());
+    QQuickGit::Account detectAccount;
+    detectAccount.setName(QStringLiteral("Detect Tester"));
+    detectAccount.setEmail(QStringLiteral("detect.tester@example.com"));
+    project->setGitAccount(&detectAccount);
     project->loadOrConvert(bundledArchive);
     project->waitLoadToFinish();
     CHECK(project->errorModel()->size() == 0);
@@ -9451,6 +9460,10 @@ TEST_CASE("cwProject should save bundled .cw changes", "[cwProject]") {
 
     auto project = std::make_unique<cwProject>();
     addTokenManager(project.get());
+    QQuickGit::Account bundledSaveAccount;
+    bundledSaveAccount.setName(QStringLiteral("Bundled Save Tester"));
+    bundledSaveAccount.setEmail(QStringLiteral("bundled.save.tester@example.com"));
+    project->setGitAccount(&bundledSaveAccount);
     project->loadOrConvert(bundledArchive);
     project->waitLoadToFinish();
     REQUIRE(project->errorModel()->size() == 0);
@@ -9492,6 +9505,10 @@ TEST_CASE("Bundled save should exclude git-excluded files", "[cwProject][bundled
 
     auto project = std::make_unique<cwProject>();
     addTokenManager(project.get());
+    QQuickGit::Account excludeAccount;
+    excludeAccount.setName(QStringLiteral("Exclude Tester"));
+    excludeAccount.setEmail(QStringLiteral("exclude.tester@example.com"));
+    project->setGitAccount(&excludeAccount);
     project->loadOrConvert(bundledArchive);
     project->waitLoadToFinish();
     REQUIRE(project->errorModel()->size() == 0);
@@ -9551,6 +9568,9 @@ TEST_CASE("Bundled save should exclude git-excluded files", "[cwProject][bundled
 TEST_CASE("Updating scrap data from a loaded project should save", "[cwProject]") {
     auto root = std::make_unique<cwRootData>();
     REQUIRE(root != nullptr);
+
+    root->account()->setName(QStringLiteral("Scrap Save Tester"));
+    root->account()->setEmail(QStringLiteral("scrap.save.tester@example.com"));
 
     TestHelper helper;
     helper.loadProjectFromZip(root->project(), QStringLiteral("://datasets/test_cwProject/jaws of the beast with scrap.zip"));
@@ -11545,6 +11565,10 @@ TEST_CASE("loadOrConvert sqlite converts to a temporary git directory", "[cwProj
 
     auto project = std::make_unique<cwProject>();
     addTokenManager(project.get());
+    QQuickGit::Account sqliteConvertAccount;
+    sqliteConvertAccount.setName(QStringLiteral("SQLite Convert Tester"));
+    sqliteConvertAccount.setEmail(QStringLiteral("sqlite.convert.tester@example.com"));
+    project->setGitAccount(&sqliteConvertAccount);
     project->loadOrConvert(sqliteSource);
     project->waitLoadToFinish();
     REQUIRE(project->errorModel()->size() == 0);
