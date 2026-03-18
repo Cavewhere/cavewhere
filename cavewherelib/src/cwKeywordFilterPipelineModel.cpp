@@ -403,6 +403,14 @@ void cwKeywordFilterPipelineModel::updatePossibleKeys()
     mUpdatePossibleKeysTimer->start();
 }
 
+void cwKeywordFilterPipelineModel::flushPossibleKeys()
+{
+    if (mUpdatePossibleKeysTimer->isActive()) {
+        mUpdatePossibleKeysTimer->stop();
+        doUpdatePossibleKeys();
+    }
+}
+
 void cwKeywordFilterPipelineModel::doUpdatePossibleKeys()
 {
     QSet<QString> keys;

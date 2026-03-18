@@ -64,6 +64,7 @@ public:
     Q_INVOKABLE void removeRow(int i );
 
     QStringList possibleKeys() const;
+    void flushPossibleKeys();
 
 signals:
     void keywordModelChanged();

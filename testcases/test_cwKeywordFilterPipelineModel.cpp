@@ -136,6 +136,7 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
     acceptedSpy[acceptedRowsInsertedSpy] = 4;
     acceptedSpy[acceptedRowsAboutToBeInsertedSpy] = 4;
 
+    model.flushPossibleKeys(); // flush deferred possibleKeysChanged timer
     pipelineSpy.checkSpies();
     acceptedSpy.checkSpies();
 
@@ -252,6 +253,7 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
 
                 pipelineSpy[possibleKeysChanged]++;
 
+                model.flushPossibleKeys(); // flush deferred possibleKeysChanged timer
                 acceptedSpy.checkSpies();
                 pipelineSpy.checkSpies();
 
@@ -278,6 +280,7 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
                 acceptedSpy[acceptedRowsInsertedSpy] += 1;
                 pipelineSpy[possibleKeysChanged]++;
 
+                model.flushPossibleKeys(); // flush deferred possibleKeysChanged timer
                 acceptedSpy.checkSpies();
                 pipelineSpy.checkSpies();
 
@@ -342,6 +345,7 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
                 acceptedSpy[acceptedRowsRemovedSpy] += 1;
                 pipelineSpy[possibleKeysChanged]++;
 
+                model.flushPossibleKeys(); // flush deferred possibleKeysChanged timer
                 acceptedSpy.checkSpies();
                 pipelineSpy.checkSpies();
 
@@ -362,6 +366,7 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
 
                 pipelineSpy[possibleKeysChanged]++;
 
+                model.flushPossibleKeys(); // flush deferred possibleKeysChanged timer
                 acceptedSpy.checkSpies();
                 pipelineSpy.checkSpies();
 
