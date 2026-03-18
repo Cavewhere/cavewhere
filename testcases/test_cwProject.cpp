@@ -8556,7 +8556,7 @@ TEST_CASE("cwProject save skips commit and sync fails when account is invalid", 
 
     REQUIRE(project->errorModel()->count() > 0);
     auto saveError = project->errorModel()->last();
-    CHECK(saveError.type() == cwError::Warning);
+    CHECK(saveError.type() == cwError::Fatal);
     CHECK(saveError.message() == QStringLiteral("Git account is not configured. Please set your name and email in CaveWhere."));
 
     const git_oid afterSave = headOid(repo);

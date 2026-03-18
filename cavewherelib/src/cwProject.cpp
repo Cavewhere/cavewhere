@@ -402,7 +402,7 @@ bool cwProject::save()
     m_saveLoad->waitForFinished();
     const auto commitResult = m_saveLoad->commitProjectChanges();
     if (commitResult.hasError()) {
-        ErrorModel->append(cwError(commitResult.errorMessage(), cwError::Warning));
+        ErrorModel->append(cwError(commitResult.errorMessage(), cwError::Fatal));
     }
 
     m_syncHealth->refresh();
