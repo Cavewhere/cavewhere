@@ -98,6 +98,10 @@ void cwSurvexportTask::runTask() {
     arguments.append(inputFile);
     arguments.append(outputFile);
 
+    // survexport looks for message files relative to the CWD ("./survex/en.msg"),
+    // so set the working directory to the parent of the survex/ folder.
+    const QString survexDir = QFileInfo(survexportPath).absoluteDir().absolutePath();
+    SurvexportProcess->setWorkingDirectory(QFileInfo(survexDir).absoluteDir().absolutePath());
     SurvexportProcess->setProcessEnvironment(QProcessEnvironment::systemEnvironment());
     SurvexportProcess->start(survexportPath, arguments);
     SurvexportProcess->waitForFinished();

@@ -869,7 +869,9 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
                     emit fileTypeChanged();
                     FileVersion = tempProject->FileVersion;
                     emit loaded();
-                } else {
+                } else if (tempProject->errorModel()->isEmpty()) {
+                    // Only add the result error when tempProject didn't already report it,
+                    // to avoid adding the same error twice.
                     errorModel()->append(cwError(result.errorMessage(), cwError::Fatal));
                 }
 

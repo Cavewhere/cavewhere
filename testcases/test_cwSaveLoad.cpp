@@ -901,7 +901,7 @@ TEST_CASE("cwSaveLoad should save and load old projects correctly", "[cwSaveLoad
 
     auto root2 = std::make_unique<cwRootData>();
 
-    CHECK(root->project()->fileType() == cwProject::BundledGitFileType);
+    CHECK(root->project()->fileType() == cwProject::GitFileType);
 
     const QDir workingDataRoot = root->project()->dataRootDir();
     const QDir workingProjectRoot = QFileInfo(workingDataRoot.absolutePath()).absoluteDir();

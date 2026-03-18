@@ -461,6 +461,14 @@ TEST_CASE("Guess neighbor station name", "[cwScrap]") {
         cwScrap* scrap = firstScrap(planProject.get());
 
         auto plotManager = std::make_unique<cwLinePlotManager>();
+        // Update scrap note transformations when station positions change,
+        // mirroring what cwScrapManager does in the full application.
+        QObject::connect(plotManager.get(), &cwLinePlotManager::stationPositionInScrapsChanged,
+                         [](const QList<cwScrap*>& scraps) {
+                             for (cwScrap* s : scraps) {
+                                 s->updateNoteTransformation();
+                             }
+                         });
         plotManager->setRegion(planProject->cavingRegion());
         plotManager->waitToFinish();
 

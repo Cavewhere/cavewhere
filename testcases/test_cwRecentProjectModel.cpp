@@ -342,8 +342,11 @@ TEST_CASE("cwRecentProjectModel saveAs bundled project uses bundled path instead
     CHECK(actualPath == bundledPath);
 }
 
-TEST_CASE("cwRecentProjectModel opening bundled project does not add extracted temp directory twice",
+TEST_CASE("cwRecentProjectModel opening sqlite project adds converted git directory to recents",
           "[cwRecentProjectModel][bundled][open]") {
+    // SQLite .cw files now convert to a temporary git directory (GitFileType).
+    // Loading one adds the converted git dir as a second recents entry alongside the
+    // original .cw entry.
     QSettings settings;
     settings.clear();
 
@@ -365,8 +368,12 @@ TEST_CASE("cwRecentProjectModel opening bundled project does not add extracted t
     REQUIRE_FALSE(fileResult.hasError());
     project->loadFile(QUrl::fromLocalFile(fileResult.value()).toString());
     project->waitLoadToFinish();
+    root->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
     REQUIRE(project->errorModel()->count() == 0);
 
-    REQUIRE(model->rowCount() == 1);
+    // The converted git directory is added as a new entry; original .cw entry remains.
+    REQUIRE(model->rowCount() == 2);
     CHECK(model->data(model->index(0, 0), cwRecentProjectModel::PathRole).toString() == bundledSource);
+    CHECK(model->data(model->index(1, 0), cwRecentProjectModel::PathRole).toString() == project->filename());
 }
