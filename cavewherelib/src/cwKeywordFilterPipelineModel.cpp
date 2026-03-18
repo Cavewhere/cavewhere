@@ -290,8 +290,6 @@ void cwKeywordFilterPipelineModel::removeRow(int i)
 
     if(mAcceptedModel->sourceModels().contains(row.filter->acceptedModel())) {
         mAcceptedModel->removeSourceModel(row.filter->acceptedModel());
-    } else {
-        qWarning() << "Can't remove " << row.filter->acceptedModel() << "this is a bug" << LOCATION;
     }
     row.filter->deleteLater();
     mRows.removeAt(i);

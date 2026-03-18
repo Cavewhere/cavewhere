@@ -80,7 +80,6 @@ TEST_CASE("test cwImageProvider requestImage cache behavior", "[cwImageProvider]
     // 6) Verify cache file exists and is non-empty
     {
         const QFileInfo cacheInfo(expectedCachePath);
-        qDebug() << "Cache location:" << expectedCachePath;
         INFO("Expected Cache location:" << expectedCachePath.toStdString());
         REQUIRE(cacheInfo.exists());
         REQUIRE(cacheInfo.isFile());

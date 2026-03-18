@@ -256,9 +256,6 @@ QImage cwSvgReader::toImage(QByteArray& data, const QByteArray& format)
         const auto scaledSize = svgPixelSize(data, baseSize, resolutionPpi);
         if (scaledSize.has_value()) {
             const QSize clampedSize = clampImageSize(*scaledSize);
-            if (clampedSize != *scaledSize) {
-                qWarning() << "SVG render size clamped from" << scaledSize << "to" << clampedSize;
-            }
             imageReader.setScaledSize(clampedSize);
         }
     }

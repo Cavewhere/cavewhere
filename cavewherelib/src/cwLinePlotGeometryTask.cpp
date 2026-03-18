@@ -103,7 +103,7 @@ void cwLinePlotGeometryTask::addShotLines(int caveIndex) {
 
             QString fullName = fullStationName(caveIndex, cave.name, firstStation.name());
             if(!StationIndexLookup.contains(fullName)) {
-                qDebug() << "Warning! Couldn't find station position index (will result in rendering artifacts): " << fullName << LOCATION;
+                continue;
             }
 
             unsigned int previousStationIndex = StationIndexLookup.value(fullName, 0);
