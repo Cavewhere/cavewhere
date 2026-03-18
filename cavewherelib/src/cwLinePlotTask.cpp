@@ -266,6 +266,8 @@ private:
 
     bool checkForErrors(cwLinePlotTask::LinePlotResultData& result)
     {
+        bool hasUnconnectedChunks = false;
+
         for(int i = 0; i < Region.caveCount(); i++) {
             cwCave* cave = Region.cave(i);
 
@@ -277,17 +279,11 @@ private:
             if(!errorResults.isEmpty()) {
                 cwLinePlotTask::LinePlotCaveData& caveData = createLinePlotCaveDataAt(i, result);
                 caveData.setUnconnectedChunkError(errorResults);
+                hasUnconnectedChunks = true;
             }
         }
 
-        for(int i = 0; i < Region.caveCount(); i++) {
-            cwCave* cave = Region.cave(i);
-            if(cave->errorModel()->fatalCount() > 0) {
-                return false;
-            }
-        }
-
-        return true;
+        return !hasUnconnectedChunks;
     }
 
     cwLinePlotTask::LinePlotCaveData& createLinePlotCaveDataAt(int index, cwLinePlotTask::LinePlotResultData& result)

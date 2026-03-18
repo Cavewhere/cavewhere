@@ -141,7 +141,6 @@ void cwSurvexExporterRule::updatePipeline()
 
             file.commit();
 
-            qDebug() << "Finished writing survexFilename:" << survexFilename;
             return survexFilename;
         });
 
