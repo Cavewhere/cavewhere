@@ -340,7 +340,7 @@ void cwRegionTreeModel::setCavingRegion(cwCavingRegion* region) {
 
     //Reset the model
     beginResetModel();
-    if(region == nullptr) {
+    if(region == nullptr && Region != nullptr) {
         disconnect(Region, nullptr, this, nullptr);
     }
 

@@ -791,7 +791,6 @@ TEST_CASE("NewProject should not clear objects added after call", "[cwProject][n
         cave->trip(0)->setName(QStringLiteral("PreTrip-%1").arg(i));
     }
 
-    qDebug() << "Calling newProject!";
     project->newProject();
 
     region->addCave();

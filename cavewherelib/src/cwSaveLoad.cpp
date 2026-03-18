@@ -1511,7 +1511,7 @@ struct cwSaveLoad::Data {
                 if (result.hasError()) {
                     qWarning() << "Save flush failed:" << result.errorMessage();
                 }
-            }).future();
+            });
     }
 
     QString takePendingSaveJobErrors()
@@ -3598,13 +3598,6 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
                     missingChunkIndices.append(QString::number(i));
                 }
             }
-
-            qDebug().noquote()
-                << QStringLiteral("[TripSyncDebug] saveAllFromV6 trip=%1 chunkCount=%2 missingChunkIds=%3 missingChunkIndices=[%4]")
-                       .arg(trip->name())
-                       .arg(chunks.size())
-                       .arg(missingChunkIds)
-                       .arg(missingChunkIndices.join(QStringLiteral(",")));
 
             save(trip);
             saveNotes(tripDir, trip->notes());
