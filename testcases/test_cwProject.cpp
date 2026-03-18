@@ -1424,6 +1424,7 @@ TEST_CASE("Loading a project repairs and persists missing scrap station and lead
     scrap->addLead(leadB);
 
     note->addScrap(scrap);
+    rootData->futureManagerModel()->waitForFinished();
     project->waitSaveToFinish();
 
     QTemporaryDir saveDir;
@@ -1579,6 +1580,7 @@ TEST_CASE("Loading a project repairs duplicate scrap station and lead ids", "[cw
     scrap->addLead(leadB);
 
     note->addScrap(scrap);
+    rootData->futureManagerModel()->waitForFinished();
     project->waitSaveToFinish();
 
     QTemporaryDir saveDir;
