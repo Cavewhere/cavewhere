@@ -1188,7 +1188,6 @@ struct cwSaveLoad::Data {
                 return mbind(ensurePathForFile(path), [&](ResultBase /*result*/) {
                     QSaveFile file(path);
                     if (!file.open(QFile::WriteOnly)) {
-                        qWarning() << "Failed to write to " << path << file.errorString();
                         return Monad::ResultBase(QStringLiteral("Failed to open file for writing: %1").arg(path));
                     }
 
@@ -1501,17 +1500,9 @@ struct cwSaveLoad::Data {
             return;
         }
 
-        auto saveFlushFuture = enqueueOperation(context, Operation::Type::SaveFlush, [context]() {
+        enqueueOperation(context, Operation::Type::SaveFlush, [context]() {
             return context->saveFlushImpl();
         });
-
-        AsyncFuture::observe(saveFlushFuture)
-            .context(context, [this, saveFlushFuture]() {
-                const auto result = saveFlushFuture.result();
-                if (result.hasError() && !retiring) {
-                    qWarning() << "Save flush failed:" << result.errorMessage();
-                }
-            });
     }
 
     QString takePendingSaveJobErrors()
@@ -2271,7 +2262,6 @@ struct cwSaveLoad::Data {
         AsyncFuture::observe(future).context(context, [this, context, job, future]() {
             const auto data = future.result();
             if(data.hasError()) {
-                qWarning() << "Save job error:" << data.errorMessage() << job.toString();
                 m_pendingSaveJobErrors.append(
                     QStringLiteral("%1 (%2)")
                         .arg(data.errorMessage(), job.toString()));
