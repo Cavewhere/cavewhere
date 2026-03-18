@@ -149,6 +149,8 @@ cwUnits::ImageResolutionUnit cwUnits::toImageResolutionUnit(QString unitString)
         return DotsPerCentimeter;
     } else if(unitString == "Dots per meter") {
         return DotsPerMeter;
+    } else if(unitString == "Unknown") {
+        return DotsPerInch;
     } else {
         qDebug() << "This is a BUG! Can't convert " << unitString << " to image resolution, returning dots per inch";
         return DotsPerInch;
