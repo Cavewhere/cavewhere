@@ -22,6 +22,7 @@
 #include "cwSettings.h"
 #include "cwTask.h"
 #include "cwMetaTypeSystem.h"
+#include "cwGlobals.h"
 
 int main( int argc, char* argv[] )
 {
@@ -33,6 +34,9 @@ int main( int argc, char* argv[] )
   QApplication::setApplicationVersion("1.0");
 
   cwMetaTypeSystem::registerTypes();
+
+  //Load all the fonts
+  cwGlobals::loadFonts();
 
   //initilize gitlib2
   cwRootData::initCavewherelib();
