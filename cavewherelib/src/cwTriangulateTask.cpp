@@ -463,18 +463,7 @@ QVector<QPointF> cwTriangulateTask::createTrianglesPartial(const cwTriangulateTa
             QVector<QPointF> triangles;
             bool couldTrianglate = cwTriangulate::Process(simplePolygon, triangles);
 
-            if(!couldTrianglate) {
-                qDebug() << "Couldn't triangulate ... Non-simple polygon?! " << LOCATION;
-
-                foreach(QPointF point, simplePolygon) {
-                    qDebug() << point.x() << point.y();
-                }
-                qDebug() << "**Is closed**:" << simplePolygon.isClosed();
-                foreach(QPointF point, intesection) {
-                    qDebug() << point.x() << point.y();
-                }
-                qDebug() << "-------------------------------";
-            }
+            Q_UNUSED(couldTrianglate)
 
             allTriangles += triangles;
         }
