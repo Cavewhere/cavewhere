@@ -312,6 +312,8 @@ TEST_CASE("cwRecentProjectModel saveAs bundled project uses bundled path instead
     settings.clear();
 
     auto root = std::make_unique<cwRootData>();
+    root->account()->setName(QStringLiteral("Test User"));
+    root->account()->setEmail(QStringLiteral("test@example.com"));
     auto* model = root->recentProjectModel();
     auto* project = root->project();
 
