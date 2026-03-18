@@ -1,6 +1,6 @@
 # Project Name, Save, and Export Plan
 
-Issues: #326, #331
+Issues: #326, #327, #331
 
 ## Summary
 
@@ -46,6 +46,8 @@ This name (e.g., `cavewhereTmp-a1b2c3d4`) is used as both the region name and th
 ### Save As dialog
 
 `SaveAsDialog.qml` is a native `FileDialog` (mode `SaveFile`). It handles both bundle (`.cw`) and directory (`.cwproj`) formats by manipulating the selected path string, but uses a single native save-file dialog in both cases. For bundle saves this works well. For directory saves this is awkward — the user should pick a **parent folder**, not a filename, but a `FolderDialog` cannot offer format selection. A custom wrapper dialog is needed.
+
+The no-extension handling bug (#327) was fixed in `cb124177` via `finalProjectPathForSelection()` in `SaveAsDialog.qml`. This logic must be preserved when the dialog is refactored in Checkpoint 2.
 
 ### Sync and merge model
 
@@ -219,7 +221,7 @@ Update existing tests:
 
 **Goal**: replace the awkward single-native-dialog Save As with a custom dialog that correctly handles both formats.
 
-Refactor `SaveAsDialog.qml` into a custom `QC.Dialog`:
+Refactor `SaveAsDialog.qml` into a custom `QC.Dialog`. The no-extension path handling from `finalProjectPathForSelection()` (#327) must be carried forward into the new dialog — when the user types a name without an extension, the correct extension must be appended based on the selected format.
 
 For **new/temporary projects**, the dialog shows:
 
@@ -294,6 +296,7 @@ New classes: `cwCavingRegionMergePlanBuilder`, `cwCavingRegionMergeApplier`, `cw
 - QML test: Save As dialog shows name field only for new/temporary projects.
 - QML test: directory destination path appends project name as subfolder (no `.cwproj` on folder name).
 - QML test: bundle destination path uses chosen filename directly.
+- QML test: typing a name without extension appends the correct extension for the selected format (#327).
 
 ### Sync / merge tests
 
