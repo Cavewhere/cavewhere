@@ -204,6 +204,7 @@ void cwRecentProjectModel::clear()
     endResetModel();
 }
 
+
 void cwRecentProjectModel::setProject(cwProject* project)
 {
     Q_UNUSED(project);
@@ -215,9 +216,11 @@ void cwRecentProjectModel::loadSettings()
 
     //Load repositories list
     const QStringList list = settings.value(SettingsKey).toStringList();
+    bool pruned = false;
     for (const QString& path : list) {
         const QFileInfo info(path);
         if (!info.exists()) {
+            pruned = true;
             continue;
         }
 
@@ -225,6 +228,8 @@ void cwRecentProjectModel::loadSettings()
             const QDir dir(info.absoluteFilePath());
             if (QQuickGit::GitRepository::isRepository(dir)) {
                 m_repositories.append({dir.absolutePath()});
+            } else {
+                pruned = true;
             }
             continue;
         }
@@ -233,7 +238,13 @@ void cwRecentProjectModel::loadSettings()
         if (suffix.compare(QStringLiteral("cwproj"), Qt::CaseInsensitive) == 0
             || suffix.compare(QStringLiteral("cw"), Qt::CaseInsensitive) == 0) {
             m_repositories.append({info.absoluteFilePath()});
+        } else {
+            pruned = true;
         }
+    }
+
+    if (pruned) {
+        saveRepositories();
     }
 
     //Load default directory

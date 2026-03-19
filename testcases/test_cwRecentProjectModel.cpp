@@ -344,6 +344,42 @@ TEST_CASE("cwRecentProjectModel saveAs bundled project uses bundled path instead
     CHECK(actualPath == bundledPath);
 }
 
+TEST_CASE("cwRecentProjectModel loadSettings prunes missing entries from QSettings", "[cwRecentProjectModel]") {
+    QSettings settings;
+    settings.clear();
+
+    QTemporaryDir tmpDir;
+    REQUIRE(tmpDir.isValid());
+
+    // Add two existing subdirectories and persist them to QSettings
+    const QString keepPath = tmpDir.filePath("keep");
+    const QString removePath = tmpDir.filePath("remove");
+    QDir().mkpath(keepPath);
+    QDir().mkpath(removePath);
+    REQUIRE(QFileInfo::exists(keepPath));
+    REQUIRE(QFileInfo::exists(removePath));
+
+    {
+        cwRecentProjectModel model;
+        REQUIRE_FALSE(model.addRepository(QDir(keepPath)).hasError());
+        REQUIRE_FALSE(model.addRepository(QDir(removePath)).hasError());
+        REQUIRE(model.rowCount() == 2);
+    }
+
+    // Delete one directory — it now exists in QSettings but not on disk
+    QDir(removePath).removeRecursively();
+    REQUIRE_FALSE(QFileInfo::exists(removePath));
+
+    // Loading a new model should skip the missing entry and save back the clean list
+    cwRecentProjectModel model2;
+    REQUIRE(model2.rowCount() == 1);
+    CHECK(model2.data(model2.index(0, 0), cwRecentProjectModel::PathRole).toString() == QFileInfo(keepPath).absoluteFilePath());
+
+    // Verify QSettings was also cleaned: a third model should still have only 1 entry
+    cwRecentProjectModel model3;
+    REQUIRE(model3.rowCount() == 1);
+}
+
 TEST_CASE("cwRecentProjectModel opening sqlite project adds converted git directory to recents",
           "[cwRecentProjectModel][bundled][open]") {
     // SQLite .cw files now convert to a temporary git directory (GitFileType).
