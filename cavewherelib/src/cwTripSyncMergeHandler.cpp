@@ -54,6 +54,19 @@ std::optional<std::pair<QUuid, cwTripData>> loadBaseTripDataForPath(const QDir& 
     return std::make_optional(std::make_pair(baseTripData.id, baseTripData));
 }
 
+std::optional<QUuid> loadTripIdFromPath(const QDir& repoRoot, const QString& relativeTripPath)
+{
+    QFile file(repoRoot.absoluteFilePath(relativeTripPath));
+    if (!file.open(QIODevice::ReadOnly)) {
+        return std::nullopt;
+    }
+    const auto tripResult = cwSaveLoad::loadTrip(file.readAll());
+    if (tripResult.hasError() || tripResult.value().id.isNull()) {
+        return std::nullopt;
+    }
+    return tripResult.value().id;
+}
+
 std::optional<std::pair<QUuid, cwTripData>> loadBaseTripDataForCandidatePaths(
     const QDir& repoRoot,
     const QString& mergeBaseHead,
@@ -201,13 +214,14 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
         }
 
         if (effectiveResolvedTripIds.isEmpty()) {
-            const QString absoluteChangedPath = context.repoRoot.absoluteFilePath(normalizedPath);
-            if (!QFileInfo::exists(absoluteChangedPath)) {
+            if (!QFileInfo::exists(context.repoRoot.absoluteFilePath(normalizedPath))) {
                 // Deleted/renamed-away descriptor paths can remain in changedPaths after merge.
                 // Skip these and rely on the surviving descriptor path for id resolution.
                 continue;
             }
-
+            // resolveTripIdsForChangedPath already tried reading the descriptor from disk
+            // via its own loadTripIdFromDescriptorPath fallback — if that failed the id
+            // is genuinely unresolvable.
             cwReconcileMergeResult result;
             result.outcome = cwReconcileMergeResult::Outcome::RequiresFullReload;
             result.handlerName = name();
@@ -220,6 +234,23 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
             result.handlerName = name();
             result.fallbackReason = QStringLiteral("Changed trip descriptor resolved to multiple identities.");
             return result;
+        }
+
+        // If the resolved ID comes from loadedTripIndex it may carry a UUID that was
+        // reassigned by repairTopLevelIds (which runs in-memory but has not yet been
+        // persisted to disk at reconcile time).  Fall back to the on-disk UUID — it
+        // still holds the original value — so an orphan descriptor from a
+        // rename/rename conflict can be matched against the current in-memory model.
+        if (!effectiveResolvedTripIds.isEmpty()) {
+            const QUuid candidate = *effectiveResolvedTripIds.cbegin();
+            if (currentTripsById.constFind(candidate) == currentTripsById.constEnd()) {
+                const auto diskId = loadTripIdFromPath(context.repoRoot, normalizedPath);
+                if (diskId.has_value()
+                    && currentTripsById.constFind(*diskId) != currentTripsById.constEnd()) {
+                    effectiveResolvedTripIds.clear();
+                    effectiveResolvedTripIds.insert(*diskId);
+                }
+            }
         }
 
         const QUuid tripId = *effectiveResolvedTripIds.cbegin();
@@ -344,6 +375,7 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
     result.outcome = cwReconcileMergeResult::Outcome::Applied;
     result.handlerName = name();
 
+    QSet<QString> winningTripDirNames;
     for (const cwTripMergePlan& plan : mergePreparationValue.plans) {
         const auto applyResult = cwTripMergeApplier::applyTripMergePlan(plan);
         if (applyResult.hasError()) {
@@ -358,6 +390,40 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
 
         result.modelMutated = true;
         result.objectsPathReady.append(plan.currentTrip);
+        winningTripDirNames.insert(cwSaveLoad::sanitizeFileName(plan.currentTrip->name()));
+    }
+
+    // Clean up orphaned trip directories left by rename/rename conflicts.
+    // After the merge, the winning trip name is set on each applied trip.
+    // Any .cwtrip path in changedPaths whose parent directory name does not match
+    // a winning trip's sanitized name is an orphan and must be removed.
+    if (!dataRootName.isEmpty()) {
+        QSet<QString> checkedTripDirs;
+        for (const QString& changedPath : context.report->changedPaths) {
+            const QString normalizedPath = normalizeSyncPath(changedPath);
+            if (!normalizedPath.endsWith(QStringLiteral(".cwtrip"), Qt::CaseInsensitive)) {
+                continue;
+            }
+            const QString tripDirName = QFileInfo(normalizedPath).dir().dirName();
+            if (tripDirName.isEmpty() || checkedTripDirs.contains(tripDirName)) {
+                continue;
+            }
+            checkedTripDirs.insert(tripDirName);
+
+            if (!winningTripDirNames.contains(tripDirName)) {
+                // Only enqueue cleanup if the descriptor file is still on disk.
+                // In a rename/rename conflict both descriptors exist simultaneously
+                // (git checked out the losing side as a new file from the remote).
+                // In a normal rename git removes the old descriptor, so the file
+                // will not be present even if the directory structure lingers.
+                if (QFileInfo::exists(context.repoRoot.absoluteFilePath(normalizedPath))) {
+                    // Relative path to the orphan trip dir, e.g. "DataRoot/Cave A/trips/Peer Trip"
+                    const QString relOrphanDir = QFileInfo(normalizedPath).dir().path();
+                    context.saveLoad->enqueueOrphanDirectoryCleanup(relOrphanDir);
+                    result.pendingConflictCleanup = true;
+                }
+            }
+        }
     }
 
     return result;

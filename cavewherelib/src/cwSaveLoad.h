@@ -245,6 +245,9 @@ public:
     // accompanying data directory. Used to clean up the "loser" project directory left on
     // disk after a rename/rename merge conflict where ours-wins resolution was applied.
     void enqueueConflictingProjectCleanup(const QString& conflictingDescriptorRelPath);
+    // Enqueues recursive deletion of an orphaned cave or trip directory left on disk after
+    // a rename/rename merge conflict. The path is relative to the project root directory.
+    void enqueueOrphanDirectoryCleanup(const QString& orphanDirRelPath);
     Monad::ResultBase deleteTemporaryProject();
 
     void addFiles(QList<QUrl> files,

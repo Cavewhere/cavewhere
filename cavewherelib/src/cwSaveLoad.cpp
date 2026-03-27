@@ -4858,6 +4858,30 @@ void cwSaveLoad::enqueueConflictingProjectCleanup(const QString& conflictingDesc
         this);
 }
 
+void cwSaveLoad::enqueueOrphanDirectoryCleanup(const QString& orphanDirRelPath)
+{
+    if (d->isTemporary || orphanDirRelPath.isEmpty()) {
+        return;
+    }
+
+    const QString orphanDirAbsPath = projectRootDir().absoluteFilePath(orphanDirRelPath);
+
+    d->addExplicitFileSystemJob(
+        Data::Job(nullptr, Data::Job::Kind::Directory, Data::Job::Action::Custom,
+            [orphanDirAbsPath]() -> Monad::ResultBase {
+                if (!QFileInfo::exists(orphanDirAbsPath)) {
+                    return Monad::ResultBase();
+                }
+                if (!QDir(orphanDirAbsPath).removeRecursively()) {
+                    return Monad::ResultBase(
+                        QStringLiteral("Failed to remove orphan directory: %1")
+                            .arg(orphanDirAbsPath));
+                }
+                return Monad::ResultBase();
+            }),
+        this);
+}
+
 void cwSaveLoad::disconnectObjects()
 {
     // Disconnect trip-owned objects that are not represented as region-tree objects.

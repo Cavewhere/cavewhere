@@ -4,6 +4,7 @@
 #include "cwCaveMergeApplier.h"
 #include "cwCaveMergePlanBuilder.h"
 #include "cwCavingRegion.h"
+#include "cwSaveLoad.h"
 #include "GitRepository.h"
 #include "cavewhere.pb.h"
 #include "google/protobuf/util/json_util.h"
@@ -233,6 +234,44 @@ cwReconcileMergeResult cwCaveSyncMergeHandler::reconcile(const cwReconcileMergeC
     result.objectsPathReady.reserve(objectPathReadySet.size());
     for (QObject* object : std::as_const(objectPathReadySet)) {
         result.objectsPathReady.append(object);
+    }
+
+    // Clean up orphaned cave directories left by rename/rename conflicts.
+    // After the merge, the winning cave name is set on each changedCurrentCave.
+    // Any .cwcave path in changedPaths whose parent directory name does not match
+    // a winning cave's sanitized name is an orphan and must be removed.
+    const QString dataRootName = context.dataRootName();
+    if (!dataRootName.isEmpty()) {
+        QSet<QString> winningCaveDirNames;
+        for (cwCave* cave : changedCurrentCaves) {
+            winningCaveDirNames.insert(cwSaveLoad::sanitizeFileName(cave->name()));
+        }
+
+        QSet<QString> checkedCaveDirs;
+        for (const QString& changedPath : context.report->changedPaths) {
+            const QString normalizedPath = normalizeSyncPath(changedPath);
+            if (!normalizedPath.endsWith(QStringLiteral(".cwcave"), Qt::CaseInsensitive)) {
+                continue;
+            }
+            const QString caveDirName = QFileInfo(normalizedPath).dir().dirName();
+            if (caveDirName.isEmpty() || checkedCaveDirs.contains(caveDirName)) {
+                continue;
+            }
+            checkedCaveDirs.insert(caveDirName);
+
+            if (!winningCaveDirNames.contains(caveDirName)) {
+                // Only enqueue cleanup if the descriptor file is still on disk.
+                // In a rename/rename conflict both descriptors exist simultaneously
+                // (git checked out the losing side as a new file from the remote).
+                // In a normal rename git removes the old descriptor, so the file
+                // will not be present even if the directory structure lingers.
+                if (QFileInfo::exists(context.repoRoot.absoluteFilePath(normalizedPath))) {
+                    const QString relOrphanDir = dataRootName + QChar('/') + caveDirName;
+                    context.saveLoad->enqueueOrphanDirectoryCleanup(relOrphanDir);
+                    result.pendingConflictCleanup = true;
+                }
+            }
+        }
     }
 
     return result;
