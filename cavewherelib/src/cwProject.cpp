@@ -451,6 +451,10 @@ void cwProject::waitForSyncToFinish()
 void cwProject::completeSyncOperation(const Monad::ResultBase& result)
 {
     if (result.hasError()) {
+        if (result.errorCodeTo<cwSaveLoad::SyncErrorCode>() == cwSaveLoad::SyncErrorCode::HttpAuthFailed) {
+            emit syncAuthFailed();
+            return;
+        }
         const QString message = result.errorMessage();
         const bool alreadyReported = ErrorModel
                                      && ErrorModel->count() > 0

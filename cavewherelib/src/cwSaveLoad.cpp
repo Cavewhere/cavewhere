@@ -5716,7 +5716,12 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
                 }
 
                 if (retryReason.isEmpty()) {
-                    syncDeferred->complete(attemptResult);
+                    if (attemptResult.errorCode() == static_cast<int>(QQuickGit::GitRepository::GitErrorCode::HttpAuthFailed)) {
+                        syncDeferred->complete(ResultBase(attemptResult.errorMessage(),
+                                                          static_cast<int>(SyncErrorCode::HttpAuthFailed)));
+                    } else {
+                        syncDeferred->complete(attemptResult);
+                    }
                     return;
                 }
 

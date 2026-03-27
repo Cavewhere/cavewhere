@@ -191,6 +191,7 @@ signals:
     void loaded();
     void objectPathReady(QObject* object);
     void syncInProgressChanged();
+    void syncAuthFailed();
 
 public slots:
     void loadFile(QString filename);
