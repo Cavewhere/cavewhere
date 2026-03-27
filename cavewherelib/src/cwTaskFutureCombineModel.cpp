@@ -4,7 +4,14 @@
 cwTaskFutureCombineModel::cwTaskFutureCombineModel(QObject *parent)
     : QConcatenateTablesProxyModel(parent)
 {
+    connect(this, &QAbstractItemModel::rowsInserted, this, &cwTaskFutureCombineModel::countChanged);
+    connect(this, &QAbstractItemModel::rowsRemoved,  this, &cwTaskFutureCombineModel::countChanged);
+    connect(this, &QAbstractItemModel::modelReset,   this, &cwTaskFutureCombineModel::countChanged);
+}
 
+int cwTaskFutureCombineModel::count() const
+{
+    return rowCount();
 }
 
 QHash<int, QByteArray> cwTaskFutureCombineModel::roleNames() const

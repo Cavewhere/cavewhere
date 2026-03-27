@@ -26,8 +26,11 @@ QC.ApplicationWindow {
 
     title: {
         var baseName = "CaveWhere - " + RootData.version
-        var filename = RootData.project.isTemporaryProject ? "New File" : RootData.project.filename;
-        return baseName + "   " + filename
+        var isTemp = RootData.project.isTemporaryProject
+        var filename = isTemp ? "New File" : RootData.project.filename
+        var dirtyMark = !isTemp && RootData.project.modified ? "* " : ""
+
+        return baseName + "   " + filename + dirtyMark
     }
 
     menuBar: macosMenuBarLoaderId.item
@@ -87,50 +90,12 @@ QC.ApplicationWindow {
         anchors.fill: parent
     }
 
-    //This is only shown on shutdown when task still need to be completed
+    //This is only shown on shutdown when tasks still need to be completed
     QQ.Loader {
         id: shutdownLoader
         active: false
         anchors.fill: parent
-
-        sourceComponent: QQ.Item {
-            anchors.fill: parent
-
-            QQ.Rectangle {
-                anchors.fill: parent
-                color: Theme.background
-            }
-
-            ColumnLayout {
-                id: columnId
-                anchors.centerIn: parent
-
-                Text {
-                    text: "Finishing these jobs"
-                    font.pixelSize: 30
-                    Layout.alignment: Qt.AlignHCenter
-                }
-
-                QC.Button {
-                    text: "Quit Now"
-                    Layout.alignment: Qt.AlignHCenter
-                    onClicked: {
-                        Qt.quit();
-                    }
-                }
-            }
-
-            TaskListView {
-                width: Math.min(parent.width - 10, Math.max(parent.width * 0.2, 200))
-                anchors {
-                    top: columnId.bottom
-                    bottom: parent.bottom
-                    horizontalCenter: parent.horizontalCenter
-                    margins: 10
-                }
-                verticalLayoutDirection: QQ.ListView.TopToBottom
-            }
-        }
+        sourceComponent: ShutdownScreen {}
     }
 
     SaveAsDialog {
@@ -157,11 +122,17 @@ QC.ApplicationWindow {
     }
 
     onClosing: (close) => {
+        if (shutdownLoader.active) {
+            close.accepted = true;
+            return;
+        }
         askToSaveDialogId.taskName = "quiting"
-        askToSaveDialogId.afterSaveFunc = function() {
+        askToSaveDialogId.onSaveConfirmed = function() {
             mainContentId.enabled = false;
-            applicationWindowId.menuBar = null
-            shutdownLoader.active = true
+            applicationWindowId.menuBar = null;
+            shutdownLoader.active = true;
+        }
+        askToSaveDialogId.afterSaveFunc = function() {
             RootData.shutdown();
             Qt.quit();
         }

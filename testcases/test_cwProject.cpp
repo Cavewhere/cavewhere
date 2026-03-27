@@ -770,10 +770,155 @@ TEST_CASE("New temporary project detection works", "[cwProject]") {
 
     REQUIRE(project->isTemporaryProject());
     REQUIRE(project->cavingRegion()->caveCount() == 0);
-    CHECK(project->isNewProject() == true);
+    CHECK(project->isNewEmptyProject() == true);
 
     project->cavingRegion()->addCave();
-    CHECK(project->isNewProject() == false);
+    CHECK(project->isNewEmptyProject() == false);
+}
+
+TEST_CASE("discardChanges resets modified git directory project to HEAD", "[cwProject][discardChanges]") {
+    // Use a standalone cwProject (no cwRootData) so that subsystems like
+    // cwLinePlotManager don't trigger extra auto-saves that interfere with
+    // the committed baseline.
+    QQuickGit::Account account;
+    account.setName(QStringLiteral("Discard Tester"));
+    account.setEmail(QStringLiteral("discard.tester@example.com"));
+
+    auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
+    project->setGitAccount(&account);
+
+    project->cavingRegion()->addCave();
+    project->cavingRegion()->cave(0)->setName(QStringLiteral("Cave Before Discard"));
+
+    QTemporaryDir saveDir;
+    REQUIRE(saveDir.isValid());
+    const QString savePath = saveDir.filePath(QStringLiteral("discard-test.cwproj"));
+    REQUIRE(project->saveAs(savePath));
+    project->waitSaveToFinish();
+    // Flush any post-saveAs deferred writes before establishing the baseline.
+    REQUIRE(project->save());
+    project->waitSaveToFinish();
+
+    REQUIRE(project->fileType() == cwProject::GitFileType);
+    REQUIRE(project->isModified() == false);
+
+    project->cavingRegion()->cave(0)->setName(QStringLiteral("Cave After Discard"));
+    project->waitSaveToFinish();
+
+    REQUIRE(project->isModified());
+
+    // Capture the repo path before discarding (project->filename() is inside the repo dir).
+    const QString repoPath = QFileInfo(project->filename()).absoluteDir().absolutePath();
+    INFO("repoPath: " << repoPath.toStdString());
+
+    project->discardChanges();
+    project->waitForDiscardToFinish();
+
+    // Verify the working tree is clean at the git level, bypassing cwProject's
+    // save pipeline entirely (which would re-dirty the tree by flushing the
+    // modified in-memory model).
+    const QStringList modifiedPaths = rawStatusPaths(repoPath);
+    INFO("Modified paths after discard: " << modifiedPaths.join(QStringLiteral(", ")).toStdString());
+    CHECK(modifiedPaths.isEmpty());
+}
+
+TEST_CASE("discardChanges is a no-op for bundled projects", "[cwProject][discardChanges]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Discard Tester"));
+    rootData->account()->setEmail(QStringLiteral("discard.tester@example.com"));
+
+    project->cavingRegion()->addCave();
+    project->cavingRegion()->cave(0)->setName(QStringLiteral("Cave In Bundle"));
+
+    QTemporaryDir saveDir;
+    REQUIRE(saveDir.isValid());
+    const QString savePath = saveDir.filePath(QStringLiteral("discard-bundled.cw"));
+    REQUIRE(project->saveAs(savePath));
+    project->waitSaveToFinish();
+
+    REQUIRE(project->fileType() == cwProject::BundledGitFileType);
+
+    // discardChanges is a no-op for bundled projects — the temp dir is simply
+    // abandoned on close without re-bundling. Verify it does not crash and
+    // does not change the modified state.
+    const bool modifiedBefore = project->isModified();
+    project->discardChanges();
+    project->waitForDiscardToFinish();
+    CHECK(project->isModified() == modifiedBefore);
+}
+
+TEST_CASE("discardChanges removes new untracked files (e.g. newly added trip)", "[cwProject][discardChanges]") {
+    QQuickGit::Account account;
+    account.setName(QStringLiteral("Discard Tester"));
+    account.setEmail(QStringLiteral("discard.tester@example.com"));
+
+    auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
+    project->setGitAccount(&account);
+
+    project->cavingRegion()->addCave();
+    auto* cave = project->cavingRegion()->cave(0);
+    cave->setName(QStringLiteral("Test Cave"));
+    cave->addTrip();
+    cave->trip(0)->setName(QStringLiteral("Original Trip"));
+
+    QTemporaryDir saveDir;
+    REQUIRE(saveDir.isValid());
+    const QString savePath = saveDir.filePath(QStringLiteral("discard-new-trip-test.cwproj"));
+    REQUIRE(project->saveAs(savePath));
+    project->waitSaveToFinish();
+    REQUIRE(project->save());
+    project->waitSaveToFinish();
+    REQUIRE(project->isModified() == false);
+
+    // Snapshot the data root directory so we can verify file counts after discard.
+    const QDir dataRoot = project->dataRootDir();
+    REQUIRE(dataRoot.exists());
+
+    // Find the trips directory (all trips for a cave live in a shared "trips/" dir).
+    const QStringList caveDirs = dataRoot.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    REQUIRE(caveDirs.size() == 1);
+    const QDir caveDir = QDir(dataRoot.filePath(caveDirs.first()));
+    REQUIRE(caveDir.exists());
+
+    // Each trip lives in its own subdirectory under "trips/" (trips/<name>/<name>.cwtrip).
+    const QDir tripsDir = QDir(caveDir.filePath(QStringLiteral("trips")));
+    REQUIRE(tripsDir.exists());
+
+    // Should start with exactly 1 trip subdirectory (the committed original trip).
+    const QStringList tripSubdirsInitial = tripsDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    INFO("tripSubdirsInitial: " << tripSubdirsInitial.join(QStringLiteral(", ")).toStdString());
+    REQUIRE(tripSubdirsInitial.size() == 1);
+
+    // Add a new trip — cwSaveLoad eagerly writes the new .cwtrip file to the
+    // working tree (untracked, not yet committed).
+    cave->addTrip();
+    cave->trip(1)->setName(QStringLiteral("New Uncommitted Trip"));
+    project->waitSaveToFinish();
+    REQUIRE(project->isModified() == true);
+
+    // The trips directory should now have 2 subdirectories.
+    const QStringList tripSubdirsBefore = tripsDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    INFO("tripSubdirsBefore: " << tripSubdirsBefore.join(QStringLiteral(", ")).toStdString());
+    REQUIRE(tripSubdirsBefore.size() == 2);
+
+    const QString repoPath = QFileInfo(project->filename()).absoluteDir().absolutePath();
+
+    project->discardChanges();
+    project->waitForDiscardToFinish();
+
+    // After discard, the new trip subdirectory must be gone — only the committed one remains.
+    const QStringList tripSubdirsAfter = tripsDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    INFO("tripSubdirsAfter: " << tripSubdirsAfter.join(QStringLiteral(", ")).toStdString());
+    CHECK(tripSubdirsAfter.size() == 1);
+
+    // Git must also report a clean working tree.
+    const QStringList modifiedPaths = rawStatusPaths(repoPath);
+    INFO("Modified paths after discard: " << modifiedPaths.join(QStringLiteral(", ")).toStdString());
+    CHECK(modifiedPaths.isEmpty());
 }
 
 TEST_CASE("NewProject should not clear objects added after call", "[cwProject][newProject]") {
@@ -8818,7 +8963,7 @@ TEST_CASE("Temporary project saveAs reports error when destination exists", "[cw
     CHECK(error.type() == cwError::Fatal);
     CHECK(error.message() == QStringLiteral("Destination folder '%1' already exists.").arg(existingRoot));
     CHECK(project->isTemporaryProject());
-    CHECK(project->isNewProject());
+    CHECK(project->isNewEmptyProject());
 }
 
 TEST_CASE("SaveAs updates dataRoot directory to match project name", "[cwProject]") {
@@ -11958,4 +12103,446 @@ TEST_CASE("Setting region name renames dataRoot directory and descriptor file", 
     // New dataRoot directory should exist
     const QString newDataRootPath = rootDir.absoluteFilePath(newDataRoot);
     CHECK(QFileInfo::exists(newDataRootPath));
+}
+
+TEST_CASE("cwProject modified property tracks dirty/clean state", "[cwProject][modified]") {
+
+    QQuickGit::Account account;
+    account.setName(QStringLiteral("Modified Tester"));
+    account.setEmail(QStringLiteral("modified.tester@example.com"));
+
+    auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
+    project->setGitAccount(&account);
+
+    SECTION("starts clean on a fresh temporary project") {
+        CHECK(project->modified() == false);
+    }
+
+    SECTION("becomes dirty after a data write, clean after save") {
+        project->cavingRegion()->addCave();
+        project->cavingRegion()->cave(0)->setName(QStringLiteral("Initial Cave"));
+
+        QTemporaryDir saveDir;
+        REQUIRE(saveDir.isValid());
+        const QString savePath = saveDir.filePath(QStringLiteral("modified-test.cwproj"));
+        REQUIRE(project->saveAs(savePath));
+        project->waitSaveToFinish();
+        // Flush any post-saveAs deferred writes.
+        REQUIRE(project->save());
+        project->waitSaveToFinish();
+
+        CHECK(project->modified() == false);
+
+        cwSignalSpy modifiedSpy(project.get(), &cwProject::modifiedChanged);
+
+        // Rename the cave — triggers an async protobuf write → objectPathReady → dirty
+        project->cavingRegion()->cave(0)->setName(QStringLiteral("Renamed Cave"));
+        project->waitSaveToFinish();
+
+        CHECK(project->modified() == true);
+        CHECK(modifiedSpy.size() == 1);
+
+        // Committing the changes should flip modified back to false
+        REQUIRE(project->save());
+        project->waitSaveToFinish();
+
+        CHECK(project->modified() == false);
+        CHECK(modifiedSpy.size() == 2);
+    }
+
+    SECTION("resets to clean when a new project is loaded (dataRootChanged)") {
+        project->cavingRegion()->addCave();
+
+        QTemporaryDir saveDir;
+        REQUIRE(saveDir.isValid());
+        REQUIRE(project->saveAs(saveDir.filePath(QStringLiteral("modified-load-test.cwproj"))));
+        project->waitSaveToFinish();
+        REQUIRE(project->save());
+        project->waitSaveToFinish();
+
+        // Make it dirty
+        project->cavingRegion()->cave(0)->setName(QStringLiteral("Dirty Cave"));
+        project->waitSaveToFinish();
+        REQUIRE(project->modified() == true);
+
+        // Loading a new project should reset modified to false
+        project->newProject();
+        project->waitSaveToFinish();
+
+        CHECK(project->modified() == false);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers shared across modified-property data tests
+// ─────────────────────────────────────────────────────────────────────────────
+namespace {
+
+// Set up a saved, clean project with one cave and one trip ready for use.
+// Returns the cave and trip via output parameters.
+struct ModifiedTestFixture {
+    std::unique_ptr<cwRootData> rootData;
+    cwProject* project = nullptr;
+    cwCave* cave = nullptr;
+    cwTrip* trip = nullptr;
+
+    ModifiedTestFixture()
+    {
+        rootData = std::make_unique<cwRootData>();
+        project = rootData->project();
+        rootData->account()->setName(QStringLiteral("Modified Tester"));
+        rootData->account()->setEmail(QStringLiteral("modified.tester@example.com"));
+
+        project->cavingRegion()->addCave();
+        cave = project->cavingRegion()->cave(0);
+        cave->setName(QStringLiteral("Test Cave"));
+        cave->addTrip();
+        trip = cave->trip(0);
+        trip->setName(QStringLiteral("Test Trip"));
+    }
+
+    // Save to a fresh temp directory and flush so modified == false on return.
+    void saveAndFlush(const QString& name)
+    {
+        QTemporaryDir dir;
+        REQUIRE(dir.isValid());
+        dir.setAutoRemove(false);
+        REQUIRE(project->saveAs(dir.filePath(name)));
+        project->waitSaveToFinish();
+        rootData->futureManagerModel()->waitForFinished();
+        REQUIRE(project->save());
+        project->waitSaveToFinish();
+        rootData->futureManagerModel()->waitForFinished();
+        REQUIRE(project->modified() == false);
+    }
+};
+
+// Wait for all pending async work to drain.
+void waitAll(cwRootData* rootData)
+{
+    rootData->project()->waitSaveToFinish();
+    rootData->futureManagerModel()->waitForFinished();
+    rootData->project()->waitSaveToFinish();
+}
+
+} // namespace
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Trip data
+// ─────────────────────────────────────────────────────────────────────────────
+TEST_CASE("modified property - trip operations", "[cwProject][modified][trip]") {
+    ModifiedTestFixture f;
+    f.saveAndFlush(QStringLiteral("modified-trip-test.cwproj"));
+
+    SECTION("adding a trip marks the project modified") {
+        f.cave->addTrip();
+        waitAll(f.rootData.get());
+        CHECK(f.project->modified() == true);
+
+        REQUIRE(f.project->save());
+        f.project->waitSaveToFinish();
+        CHECK(f.project->modified() == false);
+    }
+
+    SECTION("renaming a trip marks the project modified") {
+        f.trip->setName(QStringLiteral("Renamed Trip"));
+        waitAll(f.rootData.get());
+        CHECK(f.project->modified() == true);
+
+        REQUIRE(f.project->save());
+        f.project->waitSaveToFinish();
+        CHECK(f.project->modified() == false);
+    }
+
+    SECTION("removing a trip marks the project modified") {
+        f.cave->addTrip();
+        waitAll(f.rootData.get());
+        REQUIRE(f.project->save());
+        f.project->waitSaveToFinish();
+        REQUIRE(f.project->modified() == false);
+
+        f.cave->removeTrip(f.cave->tripCount() - 1);
+        waitAll(f.rootData.get());
+        CHECK(f.project->modified() == true);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Survey data (chunks / shots)
+// ─────────────────────────────────────────────────────────────────────────────
+TEST_CASE("modified property - survey data operations", "[cwProject][modified][survey]") {
+    ModifiedTestFixture f;
+    f.trip->addNewChunk();
+    f.saveAndFlush(QStringLiteral("modified-survey-test.cwproj"));
+
+    auto* chunk = f.trip->chunk(0);
+    REQUIRE(chunk != nullptr);
+
+    SECTION("adding a shot marks the project modified") {
+        // The chunk from addNewChunk() has an empty last station; from must match it.
+        cwStation from;  // empty name matches the existing last station
+        cwStation to(QStringLiteral("A2"));
+        cwShot shot;
+        shot.setDistance(QStringLiteral("10.0"));
+        shot.setCompass(QStringLiteral("90.0"));
+        shot.setClino(QStringLiteral("0.0"));
+        chunk->appendShot(from, to, shot);
+        waitAll(f.rootData.get());
+        CHECK(f.project->modified() == true);
+
+        REQUIRE(f.project->save());
+        f.project->waitSaveToFinish();
+        CHECK(f.project->modified() == false);
+    }
+
+    SECTION("modifying shot data marks the project modified") {
+        cwStation from(QStringLiteral("B1"));
+        cwStation to(QStringLiteral("B2"));
+        cwShot shot;
+        shot.setDistance(QStringLiteral("5.0"));
+        shot.setCompass(QStringLiteral("45.0"));
+        shot.setClino(QStringLiteral("0.0"));
+        chunk->appendShot(from, to, shot);
+        waitAll(f.rootData.get());
+        REQUIRE(f.project->save());
+        f.project->waitSaveToFinish();
+        REQUIRE(f.project->modified() == false);
+
+        chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, QStringLiteral("15.0"));
+        waitAll(f.rootData.get());
+        CHECK(f.project->modified() == true);
+    }
+
+    SECTION("removing a chunk marks the project modified") {
+        f.trip->removeChunk(chunk);
+        waitAll(f.rootData.get());
+        CHECK(f.project->modified() == true);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Notes (image/PDF)
+// ─────────────────────────────────────────────────────────────────────────────
+TEST_CASE("modified property - note operations", "[cwProject][modified][notes]") {
+    ModifiedTestFixture f;
+    f.saveAndFlush(QStringLiteral("modified-notes-test.cwproj"));
+
+    const QString imagePath = copyToTempFolder(
+        QStringLiteral("://datasets/test_cwTextureUploadTask/PhakeCave.PNG"));
+    REQUIRE(QFileInfo::exists(imagePath));
+
+    SECTION("adding a note marks the project modified") {
+        f.trip->notes()->addFromFiles({QUrl::fromLocalFile(imagePath)});
+        waitAll(f.rootData.get());
+        CHECK(f.project->modified() == true);
+
+        REQUIRE(f.project->save());
+        f.project->waitSaveToFinish();
+        CHECK(f.project->modified() == false);
+    }
+
+    SECTION("modifying a note name marks the project modified") {
+        f.trip->notes()->addFromFiles({QUrl::fromLocalFile(imagePath)});
+        waitAll(f.rootData.get());
+        REQUIRE(f.project->save());
+        f.project->waitSaveToFinish();
+        REQUIRE(f.project->modified() == false);
+
+        auto* note = f.trip->notes()->notes().first();
+        note->setName(QStringLiteral("Renamed Note"));
+        waitAll(f.rootData.get());
+        CHECK(f.project->modified() == true);
+
+        REQUIRE(f.project->save());
+        f.project->waitSaveToFinish();
+        CHECK(f.project->modified() == false);
+    }
+
+    SECTION("removing a note marks the project modified") {
+        f.trip->notes()->addFromFiles({QUrl::fromLocalFile(imagePath)});
+        waitAll(f.rootData.get());
+        REQUIRE(f.project->save());
+        f.project->waitSaveToFinish();
+        REQUIRE(f.project->modified() == false);
+
+        f.trip->notes()->removeNote(0);
+        waitAll(f.rootData.get());
+        CHECK(f.project->modified() == true);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Scraps
+// ─────────────────────────────────────────────────────────────────────────────
+TEST_CASE("modified property - scrap operations", "[cwProject][modified][scraps]") {
+    ModifiedTestFixture f;
+
+    const QString imagePath = copyToTempFolder(
+        QStringLiteral("://datasets/test_cwTextureUploadTask/PhakeCave.PNG"));
+    REQUIRE(QFileInfo::exists(imagePath));
+
+    f.trip->notes()->addFromFiles({QUrl::fromLocalFile(imagePath)});
+    waitAll(f.rootData.get());
+    f.saveAndFlush(QStringLiteral("modified-scraps-test.cwproj"));
+
+    auto* note = f.trip->notes()->notes().first();
+    REQUIRE(note != nullptr);
+
+    SECTION("adding a scrap marks the project modified") {
+        auto* scrap = new cwScrap();
+        scrap->insertPoint(0, QPointF(0.10, 0.10));
+        scrap->insertPoint(1, QPointF(0.40, 0.10));
+        scrap->insertPoint(2, QPointF(0.20, 0.40));
+        scrap->close();
+        note->addScrap(scrap);
+        waitAll(f.rootData.get());
+        CHECK(f.project->modified() == true);
+
+        REQUIRE(f.project->save());
+        f.project->waitSaveToFinish();
+        CHECK(f.project->modified() == false);
+    }
+
+    SECTION("modifying a scrap (adding a station) marks the project modified") {
+        auto* scrap = new cwScrap();
+        scrap->insertPoint(0, QPointF(0.10, 0.10));
+        scrap->insertPoint(1, QPointF(0.40, 0.10));
+        scrap->insertPoint(2, QPointF(0.20, 0.40));
+        scrap->close();
+        note->addScrap(scrap);
+        waitAll(f.rootData.get());
+        REQUIRE(f.project->save());
+        f.project->waitSaveToFinish();
+        REQUIRE(f.project->modified() == false);
+
+        cwNoteStation station;
+        station.setName(QStringLiteral("A1"));
+        station.setPositionOnNote(QPointF(0.20, 0.20));
+        scrap->addStation(station);
+        waitAll(f.rootData.get());
+        CHECK(f.project->modified() == true);
+    }
+
+    SECTION("removing a scrap marks the project modified") {
+        auto* scrap = new cwScrap();
+        scrap->insertPoint(0, QPointF(0.10, 0.10));
+        scrap->insertPoint(1, QPointF(0.40, 0.10));
+        scrap->insertPoint(2, QPointF(0.20, 0.40));
+        scrap->close();
+        note->addScrap(scrap);
+        waitAll(f.rootData.get());
+        REQUIRE(f.project->save());
+        f.project->waitSaveToFinish();
+        REQUIRE(f.project->modified() == false);
+
+        note->removeScraps(0, 0);
+        waitAll(f.rootData.get());
+        CHECK(f.project->modified() == true);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LiDAR notes
+// ─────────────────────────────────────────────────────────────────────────────
+TEST_CASE("modified property - LiDAR operations", "[cwProject][modified][lidar]") {
+    ModifiedTestFixture f;
+    f.saveAndFlush(QStringLiteral("modified-lidar-test.cwproj"));
+
+    const QString glbPath = copyToTempFolder(
+        QStringLiteral("://datasets/test_cwSurveyNotesConcatModel/bones.glb"));
+    REQUIRE(QFileInfo::exists(glbPath));
+
+    SECTION("adding a LiDAR note marks the project modified") {
+        f.trip->notesLiDAR()->addFromFiles({QUrl::fromLocalFile(glbPath)});
+        waitAll(f.rootData.get());
+        CHECK(f.project->modified() == true);
+
+        REQUIRE(f.project->save());
+        f.project->waitSaveToFinish();
+        CHECK(f.project->modified() == false);
+    }
+
+    SECTION("modifying a LiDAR note name marks the project modified") {
+        f.trip->notesLiDAR()->addFromFiles({QUrl::fromLocalFile(glbPath)});
+        waitAll(f.rootData.get());
+        REQUIRE(f.project->save());
+        f.project->waitSaveToFinish();
+        REQUIRE(f.project->modified() == false);
+
+        auto* lidarNote = qobject_cast<cwNoteLiDAR*>(f.trip->notesLiDAR()->notes().first());
+        REQUIRE(lidarNote != nullptr);
+        lidarNote->setName(QStringLiteral("Renamed LiDAR"));
+        waitAll(f.rootData.get());
+        CHECK(f.project->modified() == true);
+
+        REQUIRE(f.project->save());
+        f.project->waitSaveToFinish();
+        CHECK(f.project->modified() == false);
+    }
+
+    SECTION("adding a station to a LiDAR note marks the project modified") {
+        f.trip->notesLiDAR()->addFromFiles({QUrl::fromLocalFile(glbPath)});
+        waitAll(f.rootData.get());
+        REQUIRE(f.project->save());
+        f.project->waitSaveToFinish();
+        REQUIRE(f.project->modified() == false);
+
+        auto* lidarNote = qobject_cast<cwNoteLiDAR*>(f.trip->notesLiDAR()->notes().first());
+        REQUIRE(lidarNote != nullptr);
+
+        cwNoteLiDARStation station;
+        station.setName(QStringLiteral("A1"));
+        station.setPositionOnNote(QVector3D(1.0f, 2.0f, 3.0f));
+        lidarNote->addStation(station);
+        waitAll(f.rootData.get());
+        CHECK(f.project->modified() == true);
+    }
+
+    SECTION("removing a LiDAR note marks the project modified") {
+        f.trip->notesLiDAR()->addFromFiles({QUrl::fromLocalFile(glbPath)});
+        waitAll(f.rootData.get());
+        REQUIRE(f.project->save());
+        f.project->waitSaveToFinish();
+        REQUIRE(f.project->modified() == false);
+
+        f.trip->notesLiDAR()->removeNote(0);
+        waitAll(f.rootData.get());
+        CHECK(f.project->modified() == true);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Force-quit: uncommitted working-tree changes detected on reload
+// ─────────────────────────────────────────────────────────────────────────────
+TEST_CASE("modified property - uncommitted changes detected after force-quit reload",
+          "[cwProject][modified][force-quit]")
+{
+    // Create a clean, committed project.
+    ModifiedTestFixture f;
+    f.saveAndFlush(QStringLiteral("modified-force-quit-test.cwproj"));
+    const QString projectPath = f.project->filename();
+    REQUIRE(!projectPath.isEmpty());
+
+    // Make a mutation — cwSaveLoad eagerly writes to the git working tree but
+    // does NOT commit.  This simulates the auto-save that runs between user
+    // edits and an explicit save, which a force-quit interrupts.
+    f.cave->setName(QStringLiteral("Cave After Force Quit"));
+    // Wait for the working-tree write to land on disk, but do NOT call save().
+    f.project->waitSaveToFinish();
+    REQUIRE(f.project->modified() == true);
+
+    // Simulate force-quit: destroy the project without saving/committing.
+    f.rootData.reset();
+
+    // Re-open from the same .cwproj path (fresh cwProject, no memory of prior state).
+    auto reloaded = std::make_unique<cwProject>();
+    addTokenManager(reloaded.get());
+    reloaded->loadOrConvert(projectPath);
+    // waitLoadToFinish() also waits for the background git status check.
+    reloaded->waitLoadToFinish();
+
+    // The working tree has uncommitted changes from the auto-saved mutation;
+    // the project should be reported as modified.
+    CHECK(reloaded->modified() == true);
 }

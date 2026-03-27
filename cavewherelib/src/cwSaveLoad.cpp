@@ -2284,6 +2284,7 @@ struct cwSaveLoad::Data {
             if (!suppressLocalMutationTracking) {
                 ++localMutationEpoch;
                 remoteApplyGuard.noteMutation();
+                emit context->localMutationOccurred();
             }
 
             // qDebug() << "Saving object:" << object << object->name() << dir(object);
@@ -4477,6 +4478,41 @@ void cwSaveLoad::waitForFinished()
     model.waitForFinished();
 }
 
+void cwSaveLoad::discardChanges()
+{
+    auto* repo = repository();
+    if (!repo) {
+        return;
+    }
+
+    setSaveEnabled(false);
+
+    // Capture the in-flight saves future before replacing the deferred so that
+    // waitForFinished() (which calls completeSaveJobs()) will wait for the
+    // discard operation itself, not just the now-drained save queue.
+    auto saveFlushed = completeSaveJobs();
+
+    // Replace the pending-jobs deferred so the discard pipeline is what
+    // waitForFinished() waits on from this point forward.
+    d->m_pendingJobsDeferred = {};
+
+    auto resetFuture = AsyncFuture::observe(saveFlushed)
+        .context(this, [repo]() -> QFuture<Monad::ResultBase> {
+            return repo->reset(QStringLiteral("HEAD"),
+                               QQuickGit::GitRepository::ResetMode::Hard);
+        })
+        .future();
+
+    d->futureToken.addJob(cwFuture(QFuture<void>(resetFuture),
+                                   QStringLiteral("Discarding changes")));
+
+    AsyncFuture::observe(resetFuture).context(this, [this, repo]() {
+        repo->cleanUntracked();
+        d->m_pendingJobsDeferred.complete();
+        emit discardCompleted();
+    });
+}
+
 void cwSaveLoad::disconnectTreeModel()
 {
     // Disconnect from the region directly. cwCavingRegion is NOT included in the
@@ -4623,6 +4659,10 @@ void cwSaveLoad::connectTreeModel()
                         d->connectionChecker.remove(object);
                     }
 
+                }
+
+                if (!d->suppressLocalMutationTracking) {
+                    emit localMutationOccurred();
                 }
             });
 
@@ -5188,6 +5228,7 @@ void cwSaveLoad::connectNoteLiDAR(cwNoteLiDAR *lidarNote)
     }
     d->connectionChecker.add(lidarNote);
 
+    connect(lidarNote, &cwNoteLiDAR::nameChanged, this, saveNote);
     connect(lidarNote, &cwNoteLiDAR::filenameChanged, this, saveNote);
     connect(lidarNote, &cwNoteLiDAR::dataChanged,
             this, [saveNote](const QModelIndex &topLeft,

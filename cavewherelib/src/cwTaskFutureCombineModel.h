@@ -10,9 +10,12 @@ class cwTaskFutureCombineModel : public QConcatenateTablesProxyModel
     Q_OBJECT
     QML_NAMED_ELEMENT(TaskFutureCombineModel)
     Q_PROPERTY(QList<QObject*> models READ models WRITE setModels NOTIFY modelsChanged)
+    Q_PROPERTY(int count READ count NOTIFY countChanged)
 
 public:
     cwTaskFutureCombineModel(QObject* parent = nullptr);
+
+    int count() const;
 
     QList<QObject*> models() const;
     void setModels(QList<QObject*> models);
@@ -21,6 +24,7 @@ public:
 
 signals:
     void modelsChanged();
+    void countChanged();
 
 private:
     QList<QObject*> Models; //!<

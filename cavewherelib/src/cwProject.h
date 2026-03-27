@@ -73,6 +73,7 @@ class CAVEWHERE_LIB_EXPORT cwProject :  public QObject{
     Q_PROPERTY(FileType fileType READ fileType NOTIFY fileTypeChanged)
     Q_PROPERTY(bool canSaveDirectly READ canSaveDirectly NOTIFY canSaveDirectlyChanged)
     Q_PROPERTY(bool isTemporaryProject READ isTemporaryProject NOTIFY isTemporaryProjectChanged)
+    Q_PROPERTY(bool modified READ modified NOTIFY modifiedChanged)
     Q_PROPERTY(cwProjectSyncHealth* syncHealth READ syncHealth CONSTANT)
     Q_PROPERTY(bool syncInProgress READ syncInProgress NOTIFY syncInProgressChanged)
 
@@ -123,8 +124,9 @@ public:
     std::optional<cwSaveLoad::SyncReport> lastSyncReport() const;
     Q_INVOKABLE bool saveAs(QString newFilename);
     Q_INVOKABLE bool deleteTemporaryProject();
-    Q_INVOKABLE bool isNewProject() const;
+    Q_INVOKABLE bool isNewEmptyProject() const;
     Q_INVOKABLE bool isModified();
+    Q_INVOKABLE void discardChanges();
 
     QString filename() const;
     FileType fileType() const;
@@ -146,6 +148,7 @@ public:
     Q_INVOKABLE void waitLoadToFinish();
     void waitSaveToFinish();
     Q_INVOKABLE void waitForSyncToFinish();
+    void waitForDiscardToFinish();
 
     //Old cavewhere file handling
     // static void createDefaultSchema(const QSqlDatabase& database);
@@ -154,6 +157,7 @@ public:
 
     bool canSaveDirectly() const;
     bool isTemporaryProject() const;
+    bool modified() const;
     QQuickGit::GitRepository* repository() const;
     cwProjectSyncHealth* syncHealth() const;
     bool syncInProgress() const;
@@ -185,6 +189,7 @@ signals:
     void dataRootChanged();
     void canSaveDirectlyChanged();
     void isTemporaryProjectChanged();
+    void modifiedChanged();
     void fileSaved();
     void loaded();
     void objectPathReady(QObject* object);
@@ -195,6 +200,7 @@ public slots:
 
 private:
     bool beginSyncOperation(const QFuture<Monad::ResultBase>& operationFuture);
+    void setModified(bool modified);
 
      // QDir m_projectDir;
     cwSaveLoad* m_saveLoad;
@@ -210,6 +216,8 @@ private:
 
     //The undo stack
     QUndoStack* UndoStack;
+
+    bool m_modified = false;
 
     //Mark true if temp project when loaded via legacy SQLite/v6 paths
     bool SQLiteTempProject;
@@ -271,6 +279,7 @@ private:
 
     QList<QFuture<void>> RetiringSaveFutures;
     cwProjectSyncHealth* m_syncHealth = nullptr;
+    QFuture<bool> m_gitStatusCheckFuture;
 };
 
 /**

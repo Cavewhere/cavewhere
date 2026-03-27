@@ -141,6 +141,13 @@ cwProject::cwProject(QObject* parent) :
 {
     connectSaveLoad(m_saveLoad);
     m_saveLoad->newProject();
+
+    connect(this, &cwProject::fileSaved, this, [this]() {
+        setModified(false);
+    });
+    connect(this, &cwProject::loaded, this, [this]() {
+        setModified(false);
+    });
 }
 
 cwProject::~cwProject()
@@ -162,6 +169,13 @@ void cwProject::connectSaveLoad(cwSaveLoad* saveLoad)
 
     // saveLoad->setUndoStack(UndoStack);
     saveLoad->setFutureManagerToken(FutureToken);
+
+    connect(saveLoad, &cwSaveLoad::discardCompleted, this, [this, saveLoad]() {
+        if (m_saveLoad != saveLoad) {
+            return;
+        }
+        setModified(false);
+    });
 
     connect(saveLoad, &cwSaveLoad::isTemporaryProjectChanged, this, [this, saveLoad]() {
         if (m_saveLoad != saveLoad) {
@@ -185,6 +199,12 @@ void cwProject::connectSaveLoad(cwSaveLoad* saveLoad)
         emit dataRootChanged();
     });
     connect(saveLoad, &cwSaveLoad::objectPathReady, this, &cwProject::objectPathReady);
+    connect(saveLoad, &cwSaveLoad::localMutationOccurred, this, [this, saveLoad]() {
+        if (m_saveLoad != saveLoad) {
+            return;
+        }
+        setModified(true);
+    });
 }
 
 void cwProject::disconnectSaveLoad(cwSaveLoad *saveLoad)
@@ -548,6 +568,7 @@ bool cwProject::saveAs(QString newFilename)
         ConvertedFromSqlite = false;
         BundledArchivePath.clear();
     }
+    emit filenameChanged(filename());
     emit fileTypeChanged();
 
     emit fileSaved();
@@ -726,6 +747,20 @@ QFuture<ResultBase> cwProject::loadHelperImpl(const QString& filename, LoadParam
                     emit fileTypeChanged();
                     if (!suppressLoadedEmit) {
                         emit loaded();
+                    }
+
+                    // After loading, check git status on a background thread.
+                    // If uncommitted changes exist (e.g. from a prior force-quit
+                    // where auto-saved mutations were never committed), set
+                    // modified=true so the user is prompted to save or discard.
+                    if (auto* repo = m_saveLoad->repository()) {
+                        auto statusFuture = repo->checkStatusAsync();
+                        m_gitStatusCheckFuture = statusFuture;
+                        AsyncFuture::observe(statusFuture).context(this, [this, statusFuture]() {
+                            if (statusFuture.result()) {
+                                setModified(true);
+                            }
+                        });
                     }
                 }
 
@@ -968,6 +1003,7 @@ void cwProject::newProject() {
     BundledArchivePath.clear();
     emit fileTypeChanged();
     m_syncHealth->refresh();
+    setModified(false);
 }
 
 // /**
@@ -1091,6 +1127,7 @@ void cwProject::waitLoadToFinish()
 {
     AsyncFuture::waitForFinished(LoadFuture);
     m_saveLoad->waitForFinished();
+    AsyncFuture::waitForFinished(m_gitStatusCheckFuture);
 }
 
 /**
@@ -1129,7 +1166,7 @@ bool cwProject::isModified()
     return repo->modifiedFileCount() > 0;
 }
 
-bool cwProject::isNewProject() const
+bool cwProject::isNewEmptyProject() const
 {
     if(!isTemporaryProject()) {
         return false;
@@ -1145,6 +1182,26 @@ bool cwProject::isNewProject() const
     }
 
     return Region->caveCount() == 0;
+}
+
+/**
+ * @brief cwProject::discardChanges
+ *
+ * For GitFileType (directory) projects, delegates to cwSaveLoad which
+ * hard-resets the working tree to HEAD asynchronously and emits
+ * cwSaveLoad::discardCompleted() when done.
+ */
+void cwProject::discardChanges()
+{
+    if (fileType() != GitFileType) {
+        return;
+    }
+    m_saveLoad->discardChanges();
+}
+
+void cwProject::waitForDiscardToFinish()
+{
+    m_saveLoad->waitForFinished();
 }
 
 /**
@@ -1380,7 +1437,24 @@ cwFutureManagerToken cwProject::futureManagerToken() const {
 
 
 
+bool cwProject::modified() const
+{
+    return m_modified;
+}
+
+void cwProject::setModified(bool modified)
+{
+    if (m_modified == modified) {
+        return;
+    }
+    m_modified = modified;
+    emit modifiedChanged();
+}
+
 bool cwProject::isTemporaryProject() const {
+    if (LoadedFromBundledArchive && !BundledArchivePath.isEmpty() && !ConvertedFromSqlite) {
+        return false;
+    }
     return m_saveLoad->isTemporaryProject() || SQLiteTempProject || saveWillCauseDataLoss();
 }
 

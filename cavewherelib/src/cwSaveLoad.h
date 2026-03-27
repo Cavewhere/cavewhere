@@ -264,6 +264,8 @@ public:
     QString absolutePath(const cwNoteLiDAR* note, const QString& lidarFilename) const;
     cwImage absolutePathNoteImage(const cwNote* note) const;
 
+    void discardChanges();
+
     //For testing
     void waitForFinished();
 
@@ -309,6 +311,8 @@ signals:
     void dataRootChanged();
     void isTemporaryProjectChanged();
     void objectPathReady(QObject* object);
+    void localMutationOccurred(); //!< Emitted when user-visible data is mutated (save queued, tracking not suppressed)
+    void discardCompleted();
 
 private:
     void initializeRepositoryForCurrentFile();
