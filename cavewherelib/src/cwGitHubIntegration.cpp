@@ -94,7 +94,7 @@ void cwGitHubIntegration::startDeviceLogin()
         emit secondsUntilNextPollChanged();
     }
     setAuthState(AuthState::RequestingCode);
-    m_deviceAuth.requestDeviceCode({QStringLiteral("repo"), QStringLiteral("read:user"), QStringLiteral("admin:public_key")});
+    m_deviceAuth.requestDeviceCode({QStringLiteral("repo"), QStringLiteral("read:user")});
 }
 
 void cwGitHubIntegration::cancelLogin()
