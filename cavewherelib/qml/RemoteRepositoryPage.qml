@@ -504,12 +504,6 @@ StandardPage {
                                 onTriggered: gitHub.refreshRepositories()
                             }
 
-                            QC.MenuItem {
-                                text: "Upload SSH Key"
-                                enabled: !gitHub.busy
-                                onTriggered: gitHub.uploadPublicKey("")
-                            }
-
                             QC.MenuSeparator {}
 
                             QC.MenuItem {
