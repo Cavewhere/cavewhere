@@ -584,7 +584,6 @@ StandardPage {
                         required property bool isPrivate
                         required property string description
                         required property string cloneUrl
-                        required property string sshUrl
                         required property int index
 
                         width: repoList.width
@@ -635,7 +634,7 @@ StandardPage {
                             cursorShape: Qt.PointingHandCursor
                             onTapped: {
                                 repoList.currentIndex = index
-                                manualUrlField.textField.text = sshUrl
+                                manualUrlField.textField.text = cloneUrl
                                 manualUrlField.textField.focus = true
                                 manualUrlField.textField.selectAll()
                                 cloneButtonPulse.restart()
