@@ -15,6 +15,44 @@
 
 using namespace Monad;
 
+namespace {
+// Scans dir for exactly one .cwproj (preferred) or .cw file.
+// Returns the path on success, or an error if none or multiple are found.
+Monad::ResultString findProjectFileInDir(const QDir& dir)
+{
+    const QFileInfoList entries = dir.entryInfoList(
+        {QStringLiteral("*.cwproj"), QStringLiteral("*.cw")},
+        QDir::Files | QDir::NoDotAndDotDot);
+    QString projectFilePath;
+    QString legacyProjectFilePath;
+
+    for (const QFileInfo& entry : entries) {
+        const QString suffix = entry.suffix();
+        if (suffix.compare(QStringLiteral("cwproj"), Qt::CaseInsensitive) == 0) {
+            if (!projectFilePath.isEmpty()) {
+                return Monad::ResultString(QStringLiteral("Multiple CaveWhere project files found in %1").arg(dir.absolutePath()), cwRecentProjectModel::PathError);
+            }
+            projectFilePath = entry.absoluteFilePath();
+        } else if (suffix.compare(QStringLiteral("cw"), Qt::CaseInsensitive) == 0) {
+            if (!legacyProjectFilePath.isEmpty()) {
+                return Monad::ResultString(QStringLiteral("Multiple CaveWhere project files found in %1").arg(dir.absolutePath()), cwRecentProjectModel::PathError);
+            }
+            legacyProjectFilePath = entry.absoluteFilePath();
+        }
+    }
+
+    if (projectFilePath.isEmpty()) {
+        projectFilePath = legacyProjectFilePath;
+    }
+
+    if (projectFilePath.isEmpty()) {
+        return Monad::ResultString(QStringLiteral("No CaveWhere project file found in %1").arg(dir.absolutePath()), cwRecentProjectModel::PathError);
+    }
+
+    return Monad::ResultString(projectFilePath);
+}
+} // namespace
+
 cwRecentProjectModel::cwRecentProjectModel(QObject* parent)
     : QAbstractListModel(parent)
 {
@@ -90,20 +128,12 @@ Monad::ResultBase cwRecentProjectModel::addRepositoryDirectory(const QDir& dir)
         return Monad::ResultBase(QStringLiteral("Repository path %1 is not a git repository").arg(dir.absolutePath()), PathError);
     }
 
-    const QString repoPath = dir.absolutePath();
-    for (const RepositoryEntry& repo : m_repositories) {
-        if (QFileInfo(repo.projectPath).absoluteFilePath() == repoPath) {
-            return Monad::ResultBase();
-        }
+    const auto fileResult = findProjectFileInDir(dir);
+    if (fileResult.hasError()) {
+        return Monad::ResultBase(fileResult.errorMessage(), fileResult.errorCode());
     }
 
-    const int newIndex = m_repositories.count();
-    beginInsertRows(QModelIndex(), newIndex, newIndex);
-    m_repositories.append({repoPath});
-    endInsertRows();
-    saveRepositories();
-
-    return Monad::ResultBase();
+    return addRepositoryFromProjectFile(QUrl::fromLocalFile(fileResult.value()));
 }
 
 Monad::ResultString cwRecentProjectModel::repositoryProjectFile(int index) const
@@ -128,35 +158,7 @@ Monad::ResultString cwRecentProjectModel::repositoryProjectFile(int index) const
         return Monad::ResultString(QStringLiteral("Project file %1 is not a CaveWhere project").arg(entryInfo.fileName()), PathError);
     }
 
-    const QDir dir(entryInfo.absoluteFilePath());
-    const QFileInfoList entries = dir.entryInfoList(QDir::Files | QDir::NoDotAndDotDot);
-    QString projectFilePath;
-    QString legacyProjectFilePath;
-
-    for (const QFileInfo& entry : entries) {
-        const QString suffix = entry.suffix();
-        if (suffix.compare(QStringLiteral("cwproj"), Qt::CaseInsensitive) == 0) {
-            if (!projectFilePath.isEmpty()) {
-                return Monad::ResultString(QStringLiteral("Multiple CaveWhere project files found in %1").arg(dir.absolutePath()), PathError);
-            }
-            projectFilePath = entry.absoluteFilePath();
-        } else if (suffix.compare(QStringLiteral("cw"), Qt::CaseInsensitive) == 0) {
-            if (!legacyProjectFilePath.isEmpty()) {
-                return Monad::ResultString(QStringLiteral("Multiple CaveWhere project files found in %1").arg(dir.absolutePath()), PathError);
-            }
-            legacyProjectFilePath = entry.absoluteFilePath();
-        }
-    }
-
-    if (projectFilePath.isEmpty()) {
-        projectFilePath = legacyProjectFilePath;
-    }
-
-    if (projectFilePath.isEmpty()) {
-        return Monad::ResultString(QStringLiteral("No CaveWhere project file found in %1").arg(dir.absolutePath()), PathError);
-    }
-
-    return Monad::ResultString(projectFilePath);
+    return findProjectFileInDir(QDir(entryInfo.absoluteFilePath()));
 }
 
 Monad::ResultBase cwRecentProjectModel::addRepositoryFromProjectFile(const QUrl& projectFileUrl)
@@ -181,15 +183,33 @@ Monad::ResultBase cwRecentProjectModel::addRepositoryFromProjectFile(const QUrl&
     }
 
     const QString storedPath = fileInfo.absoluteFilePath();
+    const QString parentDirPath = fileInfo.absoluteDir().absolutePath();
+
+    // Remove any existing directory entry for the same repository (e.g. added via addRepository())
+    int replacementIndex = -1;
+    for (int i = 0; i < m_repositories.count(); ++i) {
+        const QFileInfo repoInfo(m_repositories.at(i).projectPath);
+        if (repoInfo.isDir() && repoInfo.absoluteFilePath() == parentDirPath) {
+            replacementIndex = i;
+            beginRemoveRows(QModelIndex(), i, i);
+            m_repositories.removeAt(i);
+            endRemoveRows();
+            break;
+        }
+    }
+
     for (const RepositoryEntry& repo : m_repositories) {
         if (QFileInfo(repo.projectPath).absoluteFilePath() == storedPath) {
+            if (replacementIndex >= 0) {
+                saveRepositories();
+            }
             return Monad::ResultBase();
         }
     }
 
-    const int newIndex = m_repositories.count();
+    const int newIndex = replacementIndex >= 0 ? replacementIndex : m_repositories.count();
     beginInsertRows(QModelIndex(), newIndex, newIndex);
-    m_repositories.append({storedPath});
+    m_repositories.insert(newIndex, {storedPath});
     endInsertRows();
     saveRepositories();
 

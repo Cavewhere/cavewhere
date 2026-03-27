@@ -204,10 +204,14 @@ void cwRemoteRepositoryCloner::handleCloneWatcherStateChanged()
         emit repositoryCloned(m_pendingCloneDir);
         emit repositoryClonedWithRemote(m_pendingCloneDir, m_pendingCloneUrl);
         int clonedIndex = -1;
+        const QString cloneDirPath = QDir(m_pendingCloneDir).absolutePath();
         for (int row = 0; row < m_recentProjectModel->rowCount(); ++row) {
             const QString rowPath = m_recentProjectModel->data(m_recentProjectModel->index(row, 0),
                                                             cwRecentProjectModel::PathRole).toString();
-            if (QDir(rowPath).absolutePath() == QDir(m_pendingCloneDir).absolutePath()) {
+            const QFileInfo rowInfo(rowPath);
+            const QString rowDirPath = rowInfo.isDir() ? rowInfo.absoluteFilePath()
+                                                       : rowInfo.absoluteDir().absolutePath();
+            if (rowDirPath == cloneDirPath) {
                 clonedIndex = row;
                 break;
             }

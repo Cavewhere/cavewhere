@@ -222,6 +222,115 @@ TEST_CASE("cwRecentProjectModel repositoryProjectFile reports missing or duplica
     }
 }
 
+TEST_CASE("cwRecentProjectModel addRepositoryDirectory stores project file path not directory",
+          "[cwRecentProjectModel]") {
+    QSettings settings;
+    settings.clear();
+
+    cwRecentProjectModel model;
+
+    QTemporaryDir tmpDir;
+    REQUIRE(tmpDir.isValid());
+    QDir dir(tmpDir.path());
+
+    cwSaveLoad::initializeGitRepository(dir);
+
+    QFile projectFile(dir.filePath("TestCave.cwproj"));
+    REQUIRE(projectFile.open(QIODevice::WriteOnly));
+    projectFile.close();
+
+    auto result = model.addRepositoryDirectory(dir);
+    INFO(result.errorMessage().toStdString());
+    REQUIRE_FALSE(result.hasError());
+    REQUIRE(model.rowCount() == 1);
+
+    // Must store the file path, not the directory path
+    CHECK(model.data(model.index(0, 0), cwRecentProjectModel::PathRole).toString()
+          == QFileInfo(projectFile).absoluteFilePath());
+}
+
+TEST_CASE("cwRecentProjectModel addRepositoryDirectory prevents duplicate with addRepositoryFromProjectFile",
+          "[cwRecentProjectModel]") {
+    QSettings settings;
+    settings.clear();
+
+    cwRecentProjectModel model;
+
+    QTemporaryDir tmpDir;
+    REQUIRE(tmpDir.isValid());
+    QDir dir(tmpDir.path());
+
+    cwSaveLoad::initializeGitRepository(dir);
+
+    QFile projectFile(dir.filePath("Cave.cwproj"));
+    REQUIRE(projectFile.open(QIODevice::WriteOnly));
+    projectFile.close();
+
+    // Simulate clone: addRepositoryDirectory stores the file path
+    auto dirResult = model.addRepositoryDirectory(dir);
+    INFO(dirResult.errorMessage().toStdString());
+    REQUIRE_FALSE(dirResult.hasError());
+    REQUIRE(model.rowCount() == 1);
+
+    // Simulate project open after clone: addRepositoryFromProjectFile must not add a duplicate
+    auto fileResult = model.addRepositoryFromProjectFile(QUrl::fromLocalFile(projectFile.fileName()));
+    INFO(fileResult.errorMessage().toStdString());
+    REQUIRE_FALSE(fileResult.hasError());
+    CHECK(model.rowCount() == 1);
+}
+
+TEST_CASE("cwRecentProjectModel addRepositoryFromProjectFile replaces parent directory entry",
+          "[cwRecentProjectModel]") {
+    QSettings settings;
+    settings.clear();
+
+    cwRecentProjectModel model;
+
+    QTemporaryDir tmpDir;
+    REQUIRE(tmpDir.isValid());
+    QDir dir(tmpDir.path());
+
+    // Add directory entry first (simulating new project creation via addRepository)
+    auto dirResult = model.addRepository(dir);
+    INFO(dirResult.errorMessage().toStdString());
+    REQUIRE_FALSE(dirResult.hasError());
+    REQUIRE(model.rowCount() == 1);
+    CHECK(model.data(model.index(0, 0), cwRecentProjectModel::PathRole).toString()
+          == dir.absolutePath());
+
+    // Create the project file (simulating first save)
+    QFile projectFile(dir.filePath("NewCave.cwproj"));
+    REQUIRE(projectFile.open(QIODevice::WriteOnly));
+    projectFile.close();
+
+    // addRepositoryFromProjectFile should replace the directory entry, not add a duplicate
+    auto fileResult = model.addRepositoryFromProjectFile(QUrl::fromLocalFile(projectFile.fileName()));
+    INFO(fileResult.errorMessage().toStdString());
+    REQUIRE_FALSE(fileResult.hasError());
+    REQUIRE(model.rowCount() == 1);
+    CHECK(model.data(model.index(0, 0), cwRecentProjectModel::PathRole).toString()
+          == QFileInfo(projectFile).absoluteFilePath());
+}
+
+TEST_CASE("cwRecentProjectModel addRepositoryDirectory error when no project file",
+          "[cwRecentProjectModel]") {
+    QSettings settings;
+    settings.clear();
+
+    cwRecentProjectModel model;
+
+    QTemporaryDir tmpDir;
+    REQUIRE(tmpDir.isValid());
+    QDir dir(tmpDir.path());
+
+    cwSaveLoad::initializeGitRepository(dir);
+
+    // No .cwproj or .cw file in the directory
+    auto result = model.addRepositoryDirectory(dir);
+    CHECK(result.hasError());
+    CHECK(model.rowCount() == 0);
+}
+
 TEST_CASE("cwRecentProjectModel addRepositoryFromProjectFile adds repositories once", "[cwRecentProjectModel]") {
     QSettings settings;
     settings.clear();
