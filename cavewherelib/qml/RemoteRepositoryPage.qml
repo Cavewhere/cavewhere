@@ -115,6 +115,7 @@ StandardPage {
         recentProjectModel: RootData.recentProjectModel
         cloneWatcher: cloneWatcher
         account: RootData.account
+        gitHubIntegration: RootData.remote.gitHubIntegration
 
         onRepositoryClonedIndex: function(clonedIndex) {
             if (clonedIndex < 0) {

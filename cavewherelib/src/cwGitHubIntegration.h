@@ -96,6 +96,7 @@ public:
     bool verificationOpened() const { return m_hasOpenedVerificationUrl; }
     QString username() const { return m_username; }
     QString activeAccountId() const { return m_activeAccountId; }
+    QString accessToken() const { return m_accessToken; }
 
     void setActive(bool active);
 

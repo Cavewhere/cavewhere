@@ -1232,6 +1232,13 @@ void cwProject::setGitAccount(QQuickGit::Account* account)
     }
 }
 
+void cwProject::setGitHubIntegration(cwGitHubIntegration* gh)
+{
+    if (m_saveLoad) {
+        m_saveLoad->setGitHubIntegration(gh);
+    }
+}
+
 /**
  * Returns all the image formats
  */

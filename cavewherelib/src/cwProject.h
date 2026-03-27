@@ -39,6 +39,7 @@ namespace QQuickGit {
 class GitRepository;
 class Account;
 };
+class cwGitHubIntegration;
 
 //Qt includes
 #include <QSqlDatabase>
@@ -174,6 +175,7 @@ public:
 
     void loadOrConvert(const QString& filename);
     void setGitAccount(QQuickGit::Account* account);
+    void setGitHubIntegration(cwGitHubIntegration* gh);
 
 signals:
     void undoStackChanged();

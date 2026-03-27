@@ -32,6 +32,7 @@ class cwCavingRegion;
 class cwProject;
 class cwNoteLiDAR;
 class cwNoteLiDARData;
+class cwGitHubIntegration;
 #include "cwCavingRegionData.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
 #include "cwFutureManagerToken.h"
@@ -166,7 +167,8 @@ public:
 
     enum class SyncErrorCode : int {
         RetryEpochChanged = Monad::ResultBase::CustomError + 1,
-        IncompatibleProjectVersion = Monad::ResultBase::CustomError + 2
+        IncompatibleProjectVersion = Monad::ResultBase::CustomError + 2,
+        HttpAuthFailed = Monad::ResultBase::CustomError + 3
     };
 
     using BranchResetMode = cwSyncTypes::BranchResetMode;
@@ -266,6 +268,8 @@ public:
     bool syncEnabled() const;
     void setSyncEnabled(bool enabled);
 
+    void setGitHubIntegration(cwGitHubIntegration* gh);
+
     QFuture<Monad::ResultBase> sync();
     QFuture<Monad::ResultBase> resetBranchAndReconcile(const QString& refSpec,
                                                        BranchResetMode resetMode = BranchResetMode::Hard);
@@ -331,6 +335,7 @@ private:
     friend struct Data;
     std::unique_ptr<Data> d;
     QPointer<QUndoStack> m_undoStack;
+    QPointer<cwGitHubIntegration> m_gitHubIntegration;
 
     void saveProject(const QDir& dir, const cwCavingRegion* region);
     std::unique_ptr<CavewhereProto::Project> toProtoProject(const cwCavingRegion* region);

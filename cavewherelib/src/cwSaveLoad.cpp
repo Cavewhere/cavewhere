@@ -1,4 +1,5 @@
 #include "cwSaveLoad.h"
+#include "cwGitHubIntegration.h"
 #include "cwDebug.h"
 #include "cwTrip.h"
 #include "cwRegionSaveTask.h"
@@ -5527,6 +5528,28 @@ Monad::ResultBase cwSaveLoad::commitProjectChanges(const QString& subject,
     }
 
     return ResultBase();
+}
+
+void cwSaveLoad::setGitHubIntegration(cwGitHubIntegration* gh)
+{
+    if (m_gitHubIntegration == gh) {
+        return;
+    }
+    if (m_gitHubIntegration) {
+        disconnect(m_gitHubIntegration, &cwGitHubIntegration::accessTokenChanged,
+                   this, nullptr);
+    }
+    m_gitHubIntegration = gh;
+    auto updateCredentials = [this]() {
+        const QString token = m_gitHubIntegration
+                              ? m_gitHubIntegration->accessToken()
+                              : QString{};
+        d->repository->setCredentials(QQuickGit::GitCredentials{token});
+    };
+    if (gh) {
+        connect(gh, &cwGitHubIntegration::accessTokenChanged, this, updateCredentials);
+    }
+    updateCredentials();
 }
 
 QFuture<Monad::ResultBase> cwSaveLoad::sync()
