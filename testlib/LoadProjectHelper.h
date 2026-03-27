@@ -110,6 +110,7 @@ public:
                                             const QString& remoteName = QStringLiteral("origin")) const;
     Q_INVOKABLE QString normalizeFileGitUrl(const QString& url) const;
     Q_INVOKABLE QString projectHeadCommitOid(cwProject* project) const;
+    Q_INVOKABLE QString projectHeadCommitMessage(cwProject* project) const;
     Q_INVOKABLE int projectModifiedFileCount(cwProject* project) const;
     Q_INVOKABLE void waitForProjectSaveToFinish(cwProject* project) const;
     Q_INVOKABLE QString checkoutProjectRef(cwProject* project,

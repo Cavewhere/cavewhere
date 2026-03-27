@@ -126,6 +126,7 @@ public:
         QString dataRoot;
         GitMode gitMode = GitMode::ManagedNew;
         bool syncEnabled = true;
+        QString projectId; // UUID stable across renames; empty on legacy projects
     };
 
     struct IdentityRepairData {
@@ -240,6 +241,10 @@ public:
     // (because d->projectMetadata.dataRoot was pre-set from loaded data before handlers run).
     void enqueueProjectRenameJobs(const QString& oldDescriptorPath,
                                   const QString& newDescriptorPath);
+    // Enqueues filesystem deletion jobs for a conflicting project descriptor file and its
+    // accompanying data directory. Used to clean up the "loser" project directory left on
+    // disk after a rename/rename merge conflict where ours-wins resolution was applied.
+    void enqueueConflictingProjectCleanup(const QString& conflictingDescriptorRelPath);
     Monad::ResultBase deleteTemporaryProject();
 
     void addFiles(QList<QUrl> files,
@@ -266,6 +271,8 @@ public:
 
     QString dataRoot() const;
     void setDataRoot(const QString& dataRoot);
+
+    QString projectId() const;
 
     GitMode gitMode() const;
     void setGitMode(GitMode mode);
@@ -305,6 +312,9 @@ signals:
 
 private:
     void initializeRepositoryForCurrentFile();
+    // If the current projectFileName no longer exists on disk (e.g. after a git rename),
+    // scan repoPath for a single .cwproj and update the in-memory filename to match.
+    void updateFileNameFromSingleCwproj(const QString& repoPath);
 
     enum class ReconcileApplyMode {
         Merge,

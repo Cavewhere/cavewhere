@@ -282,6 +282,20 @@ QString TestHelper::projectHeadCommitOid(cwProject* project) const
     return headResult.value();
 }
 
+QString TestHelper::projectHeadCommitMessage(cwProject* project) const
+{
+    if (project == nullptr || project->repository() == nullptr) {
+        return QString();
+    }
+
+    const QString repoPath = project->repository()->directory().absolutePath();
+    const auto result = QQuickGit::GitRepository::headCommitMessage(repoPath);
+    if (result.hasError()) {
+        return QString();
+    }
+    return result.value();
+}
+
 int TestHelper::projectModifiedFileCount(cwProject* project) const
 {
     if (project == nullptr || project->repository() == nullptr) {

@@ -182,7 +182,9 @@ TEST_CASE("Reconcile handler renames dataRoot directory on disk when name change
     setupSyncRenameScenario(s);
 
     CHECK(QFileInfo::exists(s.expectedDataRootPath));
-    CHECK(!QFileInfo::exists(s.originalDataRootPath));
+    // The old dataRoot must be gone — including if git left it as an empty
+    // directory artifact after the fast-forward (regression test).
+    CHECK(!QDir(s.originalDataRootPath).exists());
 }
 
 TEST_CASE("Reconcile handler renames the .cwproj descriptor file on disk when name changes",
@@ -341,4 +343,44 @@ TEST_CASE("Local project rename wins on concurrent conflict",
 
     // The author's rename must survive: local wins on concurrent conflict.
     CHECK(authorProject->cavingRegion()->name() == kAuthorRename);
+
+    // After sync the repo root must contain exactly one .cwproj (ours).
+    // The peer's descriptor and data directory must have been cleaned up.
+    // saveAs places the git repo in a subdirectory named after the project, so
+    // derive the repo root from the actual project filename rather than the temp dir.
+    const QDir repoRoot = QFileInfo(authorProject->filename()).absoluteDir();
+    const QStringList cwprojFiles =
+        repoRoot.entryList(QStringList() << QStringLiteral("*.cwproj"), QDir::Files);
+    CHECK(cwprojFiles.size() == 1);
+    if (cwprojFiles.size() == 1) {
+        CHECK(cwprojFiles.first() == kAuthorRename + QStringLiteral(".cwproj"));
+    }
+    CHECK(QFileInfo::exists(repoRoot.absoluteFilePath(kAuthorRename)));
+    CHECK_FALSE(QFileInfo::exists(repoRoot.absoluteFilePath(kPeerRename)));
+    CHECK_FALSE(QFileInfo::exists(repoRoot.absoluteFilePath(kPeerRename + QStringLiteral(".cwproj"))));
+    // The peer's dataRoot directory must be fully removed — not left as an empty
+    // directory on disk after its contents are deleted.
+    CHECK(!QDir(repoRoot.absoluteFilePath(kPeerRename)).exists());
+
+    // The conflict-cleanup commit must NOT spuriously modify the OURS project's
+    // .cwcave or .cwtrip descriptors (regression for persistIdentityRepairSave
+    // over-saving). Deletions of the PEER's files are expected and allowed.
+    const QString repoPath = authorProject->repository()->directory().absolutePath();
+    const auto headOidResult = QQuickGit::GitRepository::headCommitOid(repoPath);
+    REQUIRE(!headOidResult.hasError());
+    const auto parentOidsResult = QQuickGit::GitRepository::commitParentOids(repoPath, headOidResult.value());
+    REQUIRE(!parentOidsResult.hasError());
+    REQUIRE(!parentOidsResult.value().isEmpty());
+    const auto cleanupDiffResult = QQuickGit::GitRepository::diffPathsBetweenCommits(
+        repoPath, parentOidsResult.value().first(), headOidResult.value());
+    REQUIRE(!cleanupDiffResult.hasError());
+    const QString ourPrefix = cwSaveLoad::sanitizeFileName(kAuthorRename) + QStringLiteral("/");
+    for (const QString& path : cleanupDiffResult.value()) {
+        if (!path.startsWith(ourPrefix, Qt::CaseInsensitive)) {
+            continue; // peer's files — deletions are expected
+        }
+        INFO("Ours project file unexpectedly modified in cleanup commit: " << path.toStdString());
+        CHECK_FALSE(path.endsWith(QStringLiteral(".cwcave"), Qt::CaseInsensitive));
+        CHECK_FALSE(path.endsWith(QStringLiteral(".cwtrip"), Qt::CaseInsensitive));
+    }
 }

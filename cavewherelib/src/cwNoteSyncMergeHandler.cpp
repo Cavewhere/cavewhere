@@ -209,6 +209,9 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
                                                     context.report->changedPaths,
                                                     currentNoteIndex,
                                                     loadedNoteIndex);
+    if (resolvedTripChanges.isEmpty()) {
+        return {};
+    }
     noteTripUpdates.reserve(resolvedTripChanges.size());
     for (const cwSyncPathResolver::TripChangeResolution& tripChange : resolvedTripChanges) {
         NoteTripUpdate update;

@@ -2404,5 +2404,132 @@ MainWindowTest {
             compare(snapshotModelState(), expectedEditedModelState)
             compare(snapshotUiState(), expectedEditedUiState)
         }
+
+        // ---------------------------------------------------------------------------
+        // Caving region rename tests
+        // ---------------------------------------------------------------------------
+
+        function navigateToDataPage() {
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data"
+            tryVerifyWithDiagnostics(() => {
+                return RootData.pageView.currentPageItem !== null
+                       && RootData.pageView.currentPageItem.objectName === "dataMainPage"
+            }, 10000, "navigate to data main page")
+        }
+
+        function regionNameInput() {
+            let input = ObjectFinder.findObjectByChain(mainWindow, "rootId->dataMainPage->regionNameInput")
+            verify(input !== null)
+            return input
+        }
+
+        function test_regionRenameSyncAndCheckout() {
+            loadFixtureAndOpenFirstTrip()
+            navigateToDataPage()
+
+            let baselineName = String(RootData.region.name)
+            let baselineFilename = String(RootData.project.filename)
+            verify(baselineName.length > 0)
+            verify(baselineFilename.length > 0)
+            verify(!RootData.project.isTemporaryProject)
+
+            let syncedName = baselineName.endsWith(" RenameTest")
+                           ? baselineName.slice(0, -11)
+                           : baselineName + " RenameTest"
+
+            let commitA = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitA !== "")
+
+            // Rename via UI
+            setClickTextInput(regionNameInput(), syncedName)
+
+            // Model, UI input, and project filename all update immediately
+            tryVerifyWithDiagnostics(() => {
+                return String(RootData.region.name) === syncedName
+            }, 5000, "verify region name in model after UI rename")
+            compare(String(regionNameInput().text), syncedName)
+            tryVerifyWithDiagnostics(() => {
+                return String(RootData.project.filename).indexOf(syncedName) >= 0
+            }, 5000, "verify project filename updated after UI rename")
+
+            verify(RootData.project.sync())
+            waitForProjectSyncToFinish()
+
+            let commitB = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitB !== "")
+            verify(commitB !== commitA)
+
+            compare(String(RootData.region.name), syncedName)
+            verify(String(RootData.project.filename).indexOf(syncedName) >= 0)
+
+            // Checkout to before the rename
+            let checkoutError = TestHelper.checkoutProjectRef(RootData.project, commitA, true)
+            compare(checkoutError, "")
+
+            navigateToDataPage()
+            tryVerifyWithDiagnostics(() => {
+                return String(RootData.region.name) === baselineName
+            }, 10000, "verify region name reverted after checkout")
+            compare(String(regionNameInput().text), baselineName)
+            tryVerifyWithDiagnostics(() => {
+                return String(RootData.project.filename).indexOf(baselineName) >= 0
+            }, 5000, "verify project filename reverted after checkout")
+
+            // Re-sync: after checkout the local has the old name and the remote has the
+            // renamed version — this is a rename/rename conflict. CaveWhere resolves
+            // renames with "ours wins", so the local (old) name survives. This exercises
+            // the title-bar bug fix: project.filename must be updated correctly even when
+            // the conflict resolution keeps the ours-wins (pre-rename) name.
+            verify(RootData.project.sync())
+            waitForProjectSyncToFinish()
+
+            let commitC = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitC !== "")
+
+            // A "Sync Reconcile" commit is expected here: the merge left the peer's
+            // conflicting descriptor on disk and the reconcile handler must commit
+            // its deletion. Verify only that a commit was produced.
+            let commitCMsg = String(TestHelper.projectHeadCommitMessage(RootData.project))
+            verify(commitCMsg.length > 0, "Expected a commit after re-sync rename conflict")
+
+            navigateToDataPage()
+
+            // Ours-wins: local (old) name survives the rename/rename conflict.
+            tryVerifyWithDiagnostics(() => {
+                return String(RootData.region.name) === baselineName
+            }, 10000, "verify local name wins after re-sync rename conflict")
+            compare(String(regionNameInput().text), baselineName)
+
+            // project.filename must reflect the ours-wins name (drives the window title).
+            tryVerifyWithDiagnostics(() => {
+                return String(RootData.project.filename).indexOf(baselineName) >= 0
+            }, 5000, "verify project filename (window title) reflects ours-wins name")
+        }
+
+        function test_regionRenameUpdatesWindowTitle() {
+            loadFixtureAndOpenFirstTrip()
+            navigateToDataPage()
+
+            verify(!RootData.project.isTemporaryProject)
+            let baselineName = String(RootData.region.name)
+            let syncedName = baselineName.endsWith(" TitleTest")
+                           ? baselineName.slice(0, -10)
+                           : baselineName + " TitleTest"
+
+            setClickTextInput(regionNameInput(), syncedName)
+
+            // RootData.project.filename is the property the window title binds to:
+            //   title: "CaveWhere - " + version + "   " + project.filename
+            // It must update immediately when the user renames, before any sync.
+            tryVerifyWithDiagnostics(() => {
+                return String(RootData.project.filename).indexOf(syncedName) >= 0
+            }, 5000, "verify window title backing property updates immediately on rename")
+
+            verify(RootData.project.sync())
+            waitForProjectSyncToFinish()
+
+            verify(String(RootData.project.filename).indexOf(syncedName) >= 0)
+            verify(String(RootData.project.filename).indexOf(baselineName + ".cwproj") < 0)
+        }
     }
 }

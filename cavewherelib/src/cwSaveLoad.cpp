@@ -2586,6 +2586,9 @@ void cwSaveLoad::newProject()
         //Create the temp directory
         auto tempDir = createTemporaryDirectory(tempName);
 
+        //Assign a stable UUID for this new project.
+        d->projectMetadata.projectId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+
         //Save the project file
         d->projectMetadata.dataRoot = defaultDataRoot(region->name());
         d->projectMetadata.gitMode = GitMode::ManagedNew;
@@ -2779,10 +2782,14 @@ QFuture<ResultBase> cwSaveLoad::persistIdentityRepairSave(bool persistNoteDescri
 
     for (cwCave* cave : region->caves()) {
         d->enqueueRenameIfNeeded(this, cave);
-        save(cave);
+        if (persistAllDescriptors) {
+            save(cave);
+        }
         for (cwTrip* trip : cave->trips()) {
             d->enqueueRenameIfNeeded(this, trip);
-            save(trip);
+            if (persistAllDescriptors) {
+                save(trip);
+            }
 
             for (cwNote* note : trip->notes()->notes()) {
                 d->enqueueRenameIfNeeded(this, note);
@@ -2979,6 +2986,19 @@ void cwSaveLoad::initializeRepositoryForCurrentFile()
     ensureGitExcludeHasLocalEntries(d->repository->directory());
 }
 
+void cwSaveLoad::updateFileNameFromSingleCwproj(const QString& repoPath)
+{
+    if (QFileInfo::exists(d->projectFileName)) {
+        return;
+    }
+    const QDir repoRootDir(repoPath);
+    const QStringList cwprojFiles =
+        repoRootDir.entryList(QStringList() << QStringLiteral("*.cwproj"), QDir::Files);
+    if (cwprojFiles.size() == 1) {
+        setFileName(repoRootDir.absoluteFilePath(cwprojFiles.first()));
+    }
+}
+
 void cwSaveLoad::setFileName(const QString &filename)
 {
     //This should load the filename
@@ -3045,6 +3065,12 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
 
     if (region != nullptr) {
         cwRegionSaveTask::saveString(protoProject->mutable_name(), region->name());
+    }
+
+    // Write the UUID only if one has been assigned (new projects get one in newProject();
+    // legacy projects loaded without a UUID field are left as-is to avoid spurious diffs).
+    if (!d->projectMetadata.projectId.isEmpty()) {
+        *(protoProject->mutable_id()) = d->projectMetadata.projectId.toStdString();
     }
 
     auto metadata = d->projectMetadata;
@@ -3901,6 +3927,10 @@ Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString
                                 loadData.region.name = QString::fromStdString(projectProto.name());
                             }
 
+                            if (projectProto.has_id()) {
+                                loadData.metadata.projectId = QString::fromStdString(projectProto.id());
+                            }
+
                             if (projectProto.has_metadata()) {
                                 const auto& metadataProto = projectProto.metadata();
                                 if (metadataProto.has_dataroot()) {
@@ -4703,7 +4733,16 @@ void cwSaveLoad::enqueueProjectRenameJobs(const QString& oldDescriptorPath,
     d->addExplicitFileSystemJob(
         Data::Job(nullptr, Data::Job::Kind::Directory, Data::Job::Action::Custom,
             [oldDataRootPath, newDataRootPath]() -> Monad::ResultBase {
-                if (!QFileInfo::exists(oldDataRootPath) || QFileInfo::exists(newDataRootPath)) {
+                if (!QFileInfo::exists(oldDataRootPath)) {
+                    return Monad::ResultBase();
+                }
+                if (QFileInfo::exists(newDataRootPath)) {
+                    // New dataRoot already exists (git placed files there during
+                    // fast-forward / merge). Clean up the old directory if git left
+                    // it behind as an empty artifact.
+                    if (QDir(oldDataRootPath).isEmpty()) {
+                        QDir().rmdir(oldDataRootPath);
+                    }
                     return Monad::ResultBase();
                 }
                 if (!QDir().rename(oldDataRootPath, newDataRootPath)) {
@@ -4732,6 +4771,51 @@ void cwSaveLoad::enqueueProjectRenameJobs(const QString& oldDescriptorPath,
                 }),
             this);
     }
+}
+
+void cwSaveLoad::enqueueConflictingProjectCleanup(const QString& conflictingDescriptorRelPath)
+{
+    if (d->isTemporary || conflictingDescriptorRelPath.isEmpty()) {
+        return;
+    }
+
+    const QDir rootDir = projectRootDir();
+    const QString conflictingDescPath =
+        rootDir.absoluteFilePath(conflictingDescriptorRelPath);
+    const QString conflictingDataRootPath =
+        rootDir.absoluteFilePath(QFileInfo(conflictingDescriptorRelPath).completeBaseName());
+
+    // Delete the conflicting .cwproj descriptor.
+    d->addExplicitFileSystemJob(
+        Data::Job(nullptr, Data::Job::Kind::File, Data::Job::Action::Custom,
+            [conflictingDescPath]() -> Monad::ResultBase {
+                if (!QFileInfo::exists(conflictingDescPath)) {
+                    return Monad::ResultBase();
+                }
+                if (!QFile::remove(conflictingDescPath)) {
+                    return Monad::ResultBase(
+                        QStringLiteral("Failed to remove conflicting descriptor: %1")
+                            .arg(conflictingDescPath));
+                }
+                return Monad::ResultBase();
+            }),
+        this);
+
+    // Delete the conflicting data directory.
+    d->addExplicitFileSystemJob(
+        Data::Job(nullptr, Data::Job::Kind::Directory, Data::Job::Action::Custom,
+            [conflictingDataRootPath]() -> Monad::ResultBase {
+                if (!QFileInfo::exists(conflictingDataRootPath)) {
+                    return Monad::ResultBase();
+                }
+                if (!QDir(conflictingDataRootPath).removeRecursively()) {
+                    return Monad::ResultBase(
+                        QStringLiteral("Failed to remove conflicting data directory: %1")
+                            .arg(conflictingDataRootPath));
+                }
+                return Monad::ResultBase();
+            }),
+        this);
 }
 
 void cwSaveLoad::disconnectObjects()
@@ -5487,6 +5571,11 @@ QString cwSaveLoad::dataRoot() const
     return d->projectMetadata.dataRoot;
 }
 
+QString cwSaveLoad::projectId() const
+{
+    return d->projectMetadata.projectId;
+}
+
 void cwSaveLoad::setDataRoot(const QString &dataRoot)
 {
     QString normalized = dataRoot.trimmed();
@@ -5684,16 +5773,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
                         // If the .cwproj descriptor was renamed by the pull, update the
                         // in-memory filename before loading — otherwise loadProject will fail
                         // because the old filename no longer exists on disk.
-                        if (!QFileInfo::exists(d->projectFileName)) {
-                            const QDir repoRootDir(repoPath);
-                            const QStringList cwprojFiles =
-                                repoRootDir.entryList(QStringList() << QStringLiteral("*.cwproj"),
-                                                      QDir::Files);
-                            if (cwprojFiles.size() == 1) {
-                                d->projectFileName =
-                                    repoRootDir.absoluteFilePath(cwprojFiles.first());
-                            }
-                        }
+                        updateFileNameFromSingleCwproj(repoPath);
 
                         const auto pulledProjectResult = cwSaveLoad::loadProject(d->projectFileName);
                         if (pulledProjectResult.hasError()) {
@@ -5874,6 +5954,11 @@ QFuture<Monad::ResultBase> cwSaveLoad::resetBranchAndReconcile(const QString& re
                         return AsyncFuture::completed(checkoutResult);
                     }
 
+                    // If the .cwproj descriptor was renamed by the reset, update the
+                    // in-memory filename before loading — otherwise loadProject will fail
+                    // because the old filename no longer exists on disk.
+                    updateFileNameFromSingleCwproj(repoPath);
+
                     const auto checkedOutProjectResult = cwSaveLoad::loadProject(d->projectFileName);
                     if (checkedOutProjectResult.hasError()) {
                         return AsyncFuture::completed(ResultBase(checkedOutProjectResult.errorMessage(),
@@ -6049,7 +6134,21 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
                 }
 
                 modelMutated = mergeResult.modelMutated;
-                requiresPersistence = mergeResult.modelMutated;
+
+                // For fast-forward pulls, rebases, and checkouts (Unknown), git already
+                // placed all project files at the correct on-disk locations. Individual
+                // handlers may report diskAlreadySynchronized=false because they don't
+                // inspect pullState, so override that here. Only conflict cleanup forces
+                // persistence regardless of pullState.
+                const bool gitPlacedAllFiles =
+                    report.pullState == SyncReport::PullState::FastForward
+                    || report.pullState == SyncReport::PullState::Rebased
+                    || report.pullState == SyncReport::PullState::Unknown;
+                const bool effectiveDiskAlreadySynchronized =
+                    mergeResult.diskAlreadySynchronized || gitPlacedAllFiles;
+
+                requiresPersistence = (mergeResult.modelMutated && !effectiveDiskAlreadySynchronized)
+                                       || mergeResult.pendingConflictCleanup;
                 if (mergeResult.handlerName == QStringLiteral("cwNoteSyncMergeHandler")) {
                     persistNoteDescriptors = mergeResult.modelMutated;
                 } else if (mergeResult.handlerName == QStringLiteral("cwNoteLiDARSyncMergeHandler")) {

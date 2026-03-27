@@ -33,6 +33,7 @@ StandardPage {
             Layout.alignment: Qt.AlignTop
 
             DoubleClickTextInput {
+                objectName: "regionNameInput"
                 font.bold: true
                 font.pixelSize: 20
                 text: RootData.region.name
