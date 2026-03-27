@@ -61,7 +61,8 @@ TEST_CASE("cwRemoteRepositoryCloner clones a remote repository", "[cwRemoteRepos
     CHECK_FALSE(watcher.hasError());
     CHECK(cloner.cloneErrorMessage().isEmpty());
     CHECK(recentProjectModel.rowCount() == 1);
-    // const QString legacyProject = tempDir.filePath("PhakeCave3000/Phake Cave 3000.cw");
-    const QString newProject = tempDir.filePath("PhakeCave3000/Phake Cave 3000.cwproj");
-    CHECK(QFileInfo::exists(newProject));
+    auto projectFile = recentProjectModel.repositoryProjectFile(0);
+    INFO(projectFile.errorMessage().toStdString());
+    CHECK_FALSE(projectFile.hasError());
+    CHECK(QFileInfo::exists(projectFile.value()));
 }
