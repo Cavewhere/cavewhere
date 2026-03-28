@@ -21,6 +21,7 @@ struct CAVEWHERE_LIB_EXPORT cwSyncStatus
     Q_PROPERTY(int aheadCount READ aheadCount)
     Q_PROPERTY(int behindCount READ behindCount)
     Q_PROPERTY(bool stale READ stale)
+    Q_PROPERTY(bool authExpired READ authExpired)
     Q_PROPERTY(QString message READ message)
 
 public:
@@ -28,6 +29,7 @@ public:
     int aheadCount() const;
     int behindCount() const;
     bool stale() const;
+    bool authExpired() const;
     QString message() const;
     bool operator==(const cwSyncStatus& other) const;
     bool operator!=(const cwSyncStatus& other) const;
@@ -36,6 +38,7 @@ public:
     int m_aheadCount = 0;
     int m_behindCount = 0;
     bool m_stale = true;
+    bool m_authExpired = false;
     QString m_message;
 };
 Q_DECLARE_METATYPE(cwSyncStatus)
@@ -84,6 +87,7 @@ inline bool cwSyncStatus::hasLocalChanges() const { return m_hasLocalChanges; }
 inline int cwSyncStatus::aheadCount() const { return m_aheadCount; }
 inline int cwSyncStatus::behindCount() const { return m_behindCount; }
 inline bool cwSyncStatus::stale() const { return m_stale; }
+inline bool cwSyncStatus::authExpired() const { return m_authExpired; }
 inline QString cwSyncStatus::message() const { return m_message; }
 inline bool cwSyncStatus::operator==(const cwSyncStatus& other) const
 {
@@ -91,6 +95,7 @@ inline bool cwSyncStatus::operator==(const cwSyncStatus& other) const
            && m_aheadCount == other.m_aheadCount
            && m_behindCount == other.m_behindCount
            && m_stale == other.m_stale
+           && m_authExpired == other.m_authExpired
            && m_message == other.m_message;
 }
 inline bool cwSyncStatus::operator!=(const cwSyncStatus& other) const

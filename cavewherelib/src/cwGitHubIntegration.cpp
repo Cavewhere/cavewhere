@@ -29,7 +29,7 @@ static const QString GitHubApiBase = QStringLiteral("https://api.github.com");
 
 cwGitHubIntegration::cwGitHubIntegration(cwRemoteCredentialStore* credentialStore,
                                          QObject* parent)
-    : QObject(parent)
+    : cwRemoteAuthProvider(parent)
     , m_deviceAuth(resolveClientId(), this)
     , m_credentialStore(credentialStore)
 {
@@ -228,6 +228,11 @@ void cwGitHubIntegration::setActiveAccountId(const QString& accountId)
 
     m_activeAccountId = normalized;
     emit activeAccountIdChanged();
+
+    if (!normalized.isEmpty() && !m_hasLoadedStoredToken && !m_loadingStoredToken) {
+        m_loadingStoredToken = true;
+        loadStoredAccessToken();
+    }
 }
 
 void cwGitHubIntegration::persistCurrentAccessTokenForAccount(const QString& accountId)
@@ -357,12 +362,24 @@ void cwGitHubIntegration::clearStoredAccessToken(const QString& accountId)
                                          this);
 }
 
+void cwGitHubIntegration::ensureCredentialsLoaded()
+{
+    if (m_hasLoadedStoredToken || m_loadingStoredToken) {
+        return;
+    }
+    m_loadingStoredToken = true;
+    loadStoredAccessToken();
+}
+
 void cwGitHubIntegration::loadStoredAccessToken()
 {
     const QString accountId = resolveActiveGitHubAccountId();
     if (!m_credentialStore || accountId.isEmpty()) {
         m_loadingStoredToken = false;
-        m_hasLoadedStoredToken = true;
+        // Do NOT mark m_hasLoadedStoredToken = true here: the account ID is not yet
+        // known, so we haven't actually attempted a keychain read.  When
+        // setActiveAccountId() later supplies a real ID, it will trigger another load.
+        emit credentialsLoaded();
         return;
     }
 
@@ -372,6 +389,7 @@ void cwGitHubIntegration::loadStoredAccessToken()
                                        [this, accountId](const cwRemoteCredentialStore::ReadResult& result) {
         m_loadingStoredToken = false;
         m_hasLoadedStoredToken = true;
+        emit credentialsLoaded();
 
         if (accountId != resolveActiveGitHubAccountId()) {
             return;

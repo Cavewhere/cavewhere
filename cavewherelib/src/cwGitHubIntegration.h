@@ -18,6 +18,7 @@
 
 //Our
 #include "cwGitHubDeviceAuth.h"
+#include "cwRemoteAuthProvider.h"
 
 class cwRemoteCredentialStore;
 
@@ -49,7 +50,7 @@ struct QRangeModel::RowOptions<::cwGitHubRepositoryItem>
 };
 QT_END_NAMESPACE
 
-class CAVEWHERE_LIB_EXPORT cwGitHubIntegration : public QObject
+class CAVEWHERE_LIB_EXPORT cwGitHubIntegration : public cwRemoteAuthProvider
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(GitHubIntegration)
@@ -92,7 +93,9 @@ public:
     bool verificationOpened() const { return m_hasOpenedVerificationUrl; }
     QString username() const { return m_username; }
     QString activeAccountId() const { return m_activeAccountId; }
-    QString accessToken() const { return m_accessToken; }
+    QString accessToken() const override { return m_accessToken; }
+    bool hasLoadedCredentials() const override { return m_hasLoadedStoredToken; }
+    void ensureCredentialsLoaded() override;
 
     void setActive(bool active);
 
@@ -112,7 +115,6 @@ public:
 signals:
     void authStateChanged();
     void deviceCodeChanged();
-    void accessTokenChanged();
     void errorMessageChanged();
     void repositoriesChanged();
     void activeChanged();

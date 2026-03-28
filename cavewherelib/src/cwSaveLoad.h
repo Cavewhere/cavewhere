@@ -32,7 +32,7 @@ class cwCavingRegion;
 class cwProject;
 class cwNoteLiDAR;
 class cwNoteLiDARData;
-class cwGitHubIntegration;
+#include "cwRemoteAuthProvider.h"
 #include "cwCavingRegionData.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
 #include "cwFutureManagerToken.h"
@@ -268,7 +268,9 @@ public:
     bool syncEnabled() const;
     void setSyncEnabled(bool enabled);
 
-    void setGitHubIntegration(cwGitHubIntegration* gh);
+    void setAuthProvider(cwRemoteAuthProvider* provider);
+    cwRemoteAuthProvider* authProvider() const { return m_authProvider; }
+    bool requiresProviderCredentials() const;
 
     QFuture<Monad::ResultBase> sync();
     QFuture<Monad::ResultBase> resetBranchAndReconcile(const QString& refSpec,
@@ -335,7 +337,7 @@ private:
     friend struct Data;
     std::unique_ptr<Data> d;
     QPointer<QUndoStack> m_undoStack;
-    QPointer<cwGitHubIntegration> m_gitHubIntegration;
+    QPointer<cwRemoteAuthProvider> m_authProvider;
 
     void saveProject(const QDir& dir, const cwCavingRegion* region);
     std::unique_ptr<CavewhereProto::Project> toProtoProject(const cwCavingRegion* region);

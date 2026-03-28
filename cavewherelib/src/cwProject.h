@@ -39,7 +39,7 @@ namespace QQuickGit {
 class GitRepository;
 class Account;
 };
-class cwGitHubIntegration;
+class cwRemoteAuthProvider;
 
 //Qt includes
 #include <QSqlDatabase>
@@ -175,7 +175,7 @@ public:
 
     void loadOrConvert(const QString& filename);
     void setGitAccount(QQuickGit::Account* account);
-    void setGitHubIntegration(cwGitHubIntegration* gh);
+    void setAuthProvider(cwRemoteAuthProvider* provider);
 
 signals:
     void undoStackChanged();
@@ -192,6 +192,7 @@ signals:
     void objectPathReady(QObject* object);
     void syncInProgressChanged();
     void syncAuthFailed();
+    void authProviderCredentialsNeeded();
 
 public slots:
     void loadFile(QString filename);

@@ -1,5 +1,5 @@
 #include "cwSaveLoad.h"
-#include "cwGitHubIntegration.h"
+#include "cwRemoteAuthProvider.h"
 #include "cwDebug.h"
 #include "cwTrip.h"
 #include "cwRegionSaveTask.h"
@@ -5530,24 +5530,30 @@ Monad::ResultBase cwSaveLoad::commitProjectChanges(const QString& subject,
     return ResultBase();
 }
 
-void cwSaveLoad::setGitHubIntegration(cwGitHubIntegration* gh)
+bool cwSaveLoad::requiresProviderCredentials() const
 {
-    if (m_gitHubIntegration == gh) {
+    const QUrl remote = d->repository->remoteUrl();
+    return remote.scheme().compare(QStringLiteral("https"), Qt::CaseInsensitive) == 0;
+}
+
+void cwSaveLoad::setAuthProvider(cwRemoteAuthProvider* provider)
+{
+    if (m_authProvider == provider) {
         return;
     }
-    if (m_gitHubIntegration) {
-        disconnect(m_gitHubIntegration, &cwGitHubIntegration::accessTokenChanged,
+    if (m_authProvider) {
+        disconnect(m_authProvider, &cwRemoteAuthProvider::accessTokenChanged,
                    this, nullptr);
     }
-    m_gitHubIntegration = gh;
+    m_authProvider = provider;
     auto updateCredentials = [this]() {
-        const QString token = m_gitHubIntegration
-                              ? m_gitHubIntegration->accessToken()
+        const QString token = m_authProvider
+                              ? m_authProvider->accessToken()
                               : QString{};
         d->repository->setCredentials(QQuickGit::GitCredentials{token});
     };
-    if (gh) {
-        connect(gh, &cwGitHubIntegration::accessTokenChanged, this, updateCredentials);
+    if (provider) {
+        connect(provider, &cwRemoteAuthProvider::accessTokenChanged, this, updateCredentials);
     }
     updateCredentials();
 }
@@ -5640,7 +5646,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
 
                         const auto pullResult = pullFuture.result();
                         if (pullResult.hasError()) {
-                            return AsyncFuture::completed(ResultBase(pullResult.errorMessage()));
+                            return AsyncFuture::completed(ResultBase(pullResult.errorMessage(), pullResult.errorCode()));
                         }
 
                         const auto pullState = toPullState(pullResult.value().state());

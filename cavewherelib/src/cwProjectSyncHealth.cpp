@@ -28,14 +28,20 @@ cwProjectSyncHealth::cwProjectSyncHealth(QObject* parent) :
 
                 const auto aheadBehindResult = future.result();
                 if (aheadBehindResult.hasError()) {
+                    const bool authFailed =
+                        aheadBehindResult.errorCode()
+                        == static_cast<int>(QQuickGit::GitRepository::GitErrorCode::HttpAuthFailed);
                     setStatus(cwSyncStatus{
                         .m_hasLocalChanges = localChanges,
                         .m_aheadCount = 0,
                         .m_behindCount = 0,
                         .m_stale = true,
-                        .m_message = aheadBehindResult.errorMessage().isEmpty()
-                            ? QStringLiteral("Sync status unavailable: upstream branch is missing.")
-                            : aheadBehindResult.errorMessage()});
+                        .m_authExpired = authFailed,
+                        .m_message = authFailed
+                            ? QStringLiteral("GitHub access expired.")
+                            : (aheadBehindResult.errorMessage().isEmpty()
+                               ? QStringLiteral("Sync status unavailable: upstream branch is missing.")
+                               : aheadBehindResult.errorMessage())});
                     return;
                 }
 

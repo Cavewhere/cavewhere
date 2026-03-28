@@ -11,6 +11,7 @@ class cwRemoteAccountModel;
 class cwRemoteCredentialStore;
 class cwRemoteBindingStore;
 class cwRemoteAccountCoordinator;
+class cwRemoteAuthProvider;
 
 class CAVEWHERE_LIB_EXPORT cwRemoteServices : public QObject
 {
@@ -28,10 +29,13 @@ public:
     explicit cwRemoteServices(QObject* parent = nullptr);
 
     cwGitHubIntegration* gitHubIntegration() const;
+    cwRemoteAuthProvider* authProvider() const;
     cwRemoteAccountModel* accountModel() const;
     cwRemoteCredentialStore* credentialStore() const;
     cwRemoteBindingStore* bindingStore() const;
     cwRemoteAccountCoordinator* accountCoordinator() const;
+
+    Q_INVOKABLE void ensureGitHubTokenLoaded();
 
 private:
     void handleLfsAuthenticationFailed(const QUrl& url, int httpStatus, const QString& message);

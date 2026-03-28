@@ -37,32 +37,32 @@ TEST_CASE("GitCredentials token round-trips through setCredentials", "[cwHttpsAu
 }
 
 // -----------------------------------------------------------------------
-// cwSaveLoad::setGitHubIntegration
+// cwSaveLoad::setAuthProvider
 // -----------------------------------------------------------------------
 
-TEST_CASE("cwSaveLoad::setGitHubIntegration accepts nullptr safely", "[cwHttpsAuth]")
+TEST_CASE("cwSaveLoad::setAuthProvider accepts nullptr safely", "[cwHttpsAuth]")
 {
     cwSaveLoad saveLoad;
-    CHECK_NOTHROW(saveLoad.setGitHubIntegration(nullptr));
+    CHECK_NOTHROW(saveLoad.setAuthProvider(nullptr));
     // Calling again with nullptr must also be safe.
-    CHECK_NOTHROW(saveLoad.setGitHubIntegration(nullptr));
+    CHECK_NOTHROW(saveLoad.setAuthProvider(nullptr));
 }
 
-TEST_CASE("cwSaveLoad::setGitHubIntegration wires accessTokenChanged", "[cwHttpsAuth]")
+TEST_CASE("cwSaveLoad::setAuthProvider wires accessTokenChanged", "[cwHttpsAuth]")
 {
     cwRemoteCredentialStore credentialStore;
     cwGitHubIntegration integration(&credentialStore);
     cwSaveLoad saveLoad;
 
     // Wire up — must not crash even though no token is currently set.
-    CHECK_NOTHROW(saveLoad.setGitHubIntegration(&integration));
+    CHECK_NOTHROW(saveLoad.setAuthProvider(&integration));
 
     // Replacing with a different integration cleans up the old connection.
     cwGitHubIntegration integration2(&credentialStore);
-    CHECK_NOTHROW(saveLoad.setGitHubIntegration(&integration2));
+    CHECK_NOTHROW(saveLoad.setAuthProvider(&integration2));
 
     // Clearing back to nullptr disconnects cleanly.
-    CHECK_NOTHROW(saveLoad.setGitHubIntegration(nullptr));
+    CHECK_NOTHROW(saveLoad.setAuthProvider(nullptr));
 }
 
 // -----------------------------------------------------------------------

@@ -137,6 +137,7 @@ QQ.Item {
                 }
 
                 SyncButton {
+                    id: syncButtonId
                     implicitWidth: sizeItemId.height
                     implicitHeight: implicitWidth
                     syncHealth: RootData.project.syncHealth
@@ -146,6 +147,24 @@ QQ.Item {
                     }
                     onRemoteSettingsRequested: {
                         RootData.pageSelectionModel.gotoPageByName(null, "Remote")
+                    }
+                    onReconnectRequested: {
+                        reconnectPopupId.open()
+                    }
+
+                    ReconnectPopup {
+                        id: reconnectPopupId
+                        parent: QC.Overlay.overlay
+                        gitHub: RootData.remote.gitHubIntegration
+                        x: QC.Overlay.overlay.width - width - 5
+                        y: syncButtonId.mapToItem(null, 0, syncButtonId.height + 4).y
+                    }
+                }
+
+                QQ.Connections {
+                    target: RootData.project
+                    function onSyncAuthFailed() {
+                        reconnectPopupId.open()
                     }
                 }
 

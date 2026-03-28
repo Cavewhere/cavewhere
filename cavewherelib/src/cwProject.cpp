@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwProject.h"
+#include "cwRemoteAuthProvider.h"
 #include "Monad/Monad.h"
 #include "cwCave.h"
 #include "cwTrip.h"
@@ -429,6 +430,20 @@ bool cwProject::sync()
 {
     if (!m_saveLoad || syncInProgress()) {
         return false;
+    }
+
+    auto* provider = m_saveLoad->authProvider();
+    const bool needsCreds = m_saveLoad->requiresProviderCredentials();
+    const bool credsLoaded = provider && provider->hasLoadedCredentials();
+    if (provider && needsCreds && !credsLoaded) {
+        emit authProviderCredentialsNeeded();
+        auto* saveLoad = m_saveLoad;
+        connect(provider, &cwRemoteAuthProvider::credentialsLoaded,
+                this, [this, saveLoad]() {
+                    beginSyncOperation(saveLoad->sync());
+                },
+                Qt::SingleShotConnection);
+        return true;
     }
 
     return beginSyncOperation(m_saveLoad->sync());
@@ -1236,10 +1251,14 @@ void cwProject::setGitAccount(QQuickGit::Account* account)
     }
 }
 
-void cwProject::setGitHubIntegration(cwGitHubIntegration* gh)
+void cwProject::setAuthProvider(cwRemoteAuthProvider* provider)
 {
     if (m_saveLoad) {
-        m_saveLoad->setGitHubIntegration(gh);
+        m_saveLoad->setAuthProvider(provider);
+    }
+    if (provider && m_syncHealth) {
+        connect(provider, &cwRemoteAuthProvider::accessTokenChanged,
+                m_syncHealth, &cwProjectSyncHealth::refresh);
     }
 }
 
