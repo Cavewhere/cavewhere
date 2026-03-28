@@ -268,6 +268,7 @@ QC.Dialog {
             QC.Label {
                 visible: !rootId.bundleFormat
                 Layout.fillWidth: true
+                Layout.maximumWidth: _scrollView.width
                 text: rootId.resolvedSavePath
                 font.pixelSize: 11
                 elide: QQ.Text.ElideLeft
@@ -279,6 +280,7 @@ QC.Dialog {
                 objectName: "saveAsConflictLabel"
                 visible: rootId._directoryConflict || rootId._bundleConflict || rootId._parentNotFound
                 Layout.fillWidth: true
+                Layout.maximumWidth: _scrollView.width
                 wrapMode: QQ.Text.WordWrap
                 color: (rootId._directoryConflict || rootId._parentNotFound) ? Theme.danger : Theme.warning
                 text: rootId._directoryConflict
