@@ -125,7 +125,8 @@ Item {
                                                   : 0
                                     Component.onCompleted: {
                                         if(!filterModelObjectRole.key && model.length > 0) {
-                                            filterModelObjectRole.key = model[0]
+                                            let typeIndex = model.indexOf("Type")
+                                            filterModelObjectRole.key = typeIndex >= 0 ? model[typeIndex] : model[0]
                                         }
                                     }
                                     onActivated: filterModelObjectRole.key = currentText
