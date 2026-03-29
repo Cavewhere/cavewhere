@@ -15,10 +15,13 @@ RoundButton {
     signal reconnectRequested()
 
     readonly property bool authExpired: syncHealth.status.authExpired
+    readonly property bool needsLogin: syncHealth.status.needsLogin
 
-    icon.source: authExpired
-        ? "qrc:/twbs-icons/icons/exclamation-triangle.svg"
-        : "qrc:/twbs-icons/icons/arrow-repeat.svg"
+    icon.source: needsLogin
+        ? "qrc:/twbs-icons/icons/lock.svg"
+        : (authExpired
+           ? "qrc:/twbs-icons/icons/exclamation-triangle.svg"
+           : "qrc:/twbs-icons/icons/arrow-repeat.svg")
     enabled: !syncInProgress
 
     onClicked: {
@@ -42,9 +45,11 @@ RoundButton {
     }
 
     QC.ToolTip.visible: hovered
-    QC.ToolTip.text: authExpired
-        ? qsTr("GitHub access expired — click to reconnect")
-        : syncHealth.status.message
+    QC.ToolTip.text: needsLogin
+        ? qsTr("Sign in to GitHub — click to sync")
+        : (authExpired
+           ? qsTr("GitHub access expired — click to reconnect")
+           : syncHealth.status.message)
 
     QQ.Rectangle {
         id: syncBadgeId

@@ -158,6 +158,9 @@ void cwProject::connectSaveLoad(cwSaveLoad* saveLoad)
     if (auto* repo = saveLoad->repository()) {
         repo->setAccount(m_gitAccount);
     }
+    if (m_authProvider) {
+        saveLoad->setAuthProvider(m_authProvider);
+    }
 
     m_syncHealth->setRepository(saveLoad->repository());
 
@@ -1253,11 +1256,26 @@ void cwProject::setGitAccount(QQuickGit::Account* account)
 
 void cwProject::setAuthProvider(cwRemoteAuthProvider* provider)
 {
+    if (m_authProvider == provider) {
+        return;
+    }
+    if (m_authProvider && m_syncHealth) {
+        disconnect(m_authProvider, &cwRemoteAuthProvider::accessTokenChanged,
+                   m_syncHealth, &cwProjectSyncHealth::refresh);
+        disconnect(m_authProvider, &cwRemoteAuthProvider::credentialsLoaded,
+                   m_syncHealth, &cwProjectSyncHealth::refresh);
+    }
+    m_authProvider = provider;
     if (m_saveLoad) {
         m_saveLoad->setAuthProvider(provider);
     }
+    if (m_syncHealth) {
+        m_syncHealth->setAuthProvider(provider);
+    }
     if (provider && m_syncHealth) {
         connect(provider, &cwRemoteAuthProvider::accessTokenChanged,
+                m_syncHealth, &cwProjectSyncHealth::refresh);
+        connect(provider, &cwRemoteAuthProvider::credentialsLoaded,
                 m_syncHealth, &cwProjectSyncHealth::refresh);
     }
 }

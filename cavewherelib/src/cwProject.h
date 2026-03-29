@@ -224,6 +224,7 @@ private:
     //Task manager, for visualizing running tasks
     QPointer<cwTaskManagerModel> TaskManager;
     cwFutureManagerToken FutureToken; //!<
+    cwRemoteAuthProvider* m_authProvider = nullptr;
 
     cwErrorListModel* ErrorModel; //!<
 
