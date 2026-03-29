@@ -2,19 +2,16 @@
 #include <catch2/catch_test_macros.hpp>
 
 // Qt
-#include <QCoreApplication>
 #include <QDir>
-#include <QElapsedTimer>
-#include <QEventLoop>
 #include <QFile>
 #include <QTemporaryDir>
-#include <functional>
 
 // Ours
 #include "cwProjectSyncHealth.h"
 #include "GitRepository.h"
 #include "Account.h"
 #include "asyncfuture.h"
+#include "TestHelper.h"
 
 // libgit2
 #include "git2.h"
@@ -37,16 +34,6 @@ void writeFile(const QString& directoryPath, const QString& fileName, const QStr
     QFile file(QDir(directoryPath).filePath(fileName));
     REQUIRE(file.open(QFile::WriteOnly | QFile::Truncate | QFile::Text));
     file.write(contents.toUtf8());
-}
-
-bool waitUntil(const std::function<bool()>& condition, int timeoutMs = 3000)
-{
-    QElapsedTimer timer;
-    timer.start();
-    while (!condition() && timer.elapsed() < timeoutMs) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
-    }
-    return condition();
 }
 } // namespace
 

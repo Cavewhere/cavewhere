@@ -2,10 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 // Qt
-#include <QCoreApplication>
 #include <QDir>
-#include <QElapsedTimer>
-#include <QEventLoop>
 #include <QTemporaryDir>
 
 // Ours
@@ -14,23 +11,12 @@
 #include "cwRemoteAccountModel.h"
 #include "cwRemoteBindingStore.h"
 #include "GitRepository.h"
+#include "TestHelper.h"
 
 // libgit2
 #include "git2.h"
 
 using namespace QQuickGit;
-
-namespace {
-bool waitUntil(const std::function<bool()>& condition, int timeoutMs = 3000)
-{
-    QElapsedTimer timer;
-    timer.start();
-    while (!condition() && timer.elapsed() < timeoutMs) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
-    }
-    return condition();
-}
-} // namespace
 
 TEST_CASE("cwRemoteAccountCoordinator::addRemoteToProject adds remote and skips binding when flag is false",
           "[cwRemoteAccountCoordinator]")

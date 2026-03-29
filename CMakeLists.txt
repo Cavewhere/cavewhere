@@ -269,7 +269,6 @@ find_package(Qt6
     QuickControls2
     REQUIRED)
 
-
 set(CMAKE_AUTOMOC ON)
 
 if(BUILD_TESTING)

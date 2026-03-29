@@ -2,14 +2,12 @@
 #include <catch2/catch_test_macros.hpp>
 
 // Qt
-#include <QCoreApplication>
-#include <QElapsedTimer>
-#include <QEventLoop>
 #include <QTcpServer>
 #include <QTcpSocket>
 
 // Ours
 #include "cwGitHubIntegration.h"
+#include "TestHelper.h"
 
 // ---------------------------------------------------------------------------
 // Minimal single-response HTTP/1.1 mock server
@@ -34,7 +32,8 @@ private:
     {
         QTcpSocket* socket = m_server.nextPendingConnection();
         connect(socket, &QTcpSocket::readyRead, this, [this, socket]() {
-            // Drain the request (we don't inspect it)
+            // Qt's QNAM sends the full request in one write on loopback,
+            // so the first readyRead carries the complete request.
             socket->readAll();
             const QByteArray reasonPhrase = m_statusCode == 201  ? "Created"
                                           : m_statusCode == 401  ? "Unauthorized"
@@ -63,18 +62,6 @@ private:
 #include "test_cwGitHubIntegration.moc"
 
 // ---------------------------------------------------------------------------
-
-namespace {
-bool waitUntil(const std::function<bool()>& condition, int timeoutMs = 5000)
-{
-    QElapsedTimer timer;
-    timer.start();
-    while (!condition() && timer.elapsed() < timeoutMs) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
-    }
-    return condition();
-}
-} // namespace
 
 TEST_CASE("cwGitHubIntegration::createRepository emits repositoryCreated on 201", "[cwGitHubIntegration]")
 {
