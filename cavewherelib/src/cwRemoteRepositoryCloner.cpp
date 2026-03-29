@@ -57,6 +57,9 @@ void cwRemoteRepositoryCloner::setGitHubIntegration(cwGitHubIntegration* gh)
                               ? m_gitHubIntegration->accessToken()
                               : QString{};
         m_cloneRepository->setCredentials(QQuickGit::GitCredentials{token});
+        if (m_cloneFailedDueToAuthError && !token.isEmpty() && !m_pendingCloneUrl.isEmpty()) {
+            clone(m_pendingCloneUrl, m_pendingCloneParentDir);
+        }
     };
     if (gh) {
         connect(gh, &cwGitHubIntegration::accessTokenChanged, this, updateCredentials);
@@ -126,6 +129,7 @@ void cwRemoteRepositoryCloner::clone(const QString& urlText, const QUrl& destina
 {
     setCloneErrorMessage(QString());
     setCloneStatusMessage(QString());
+    setCloneFailedDueToAuthError(false);
 
     if (!m_recentProjectModel) {
         qWarning() << "RemoteRepositoryCloner requires recentProjectModel to be set before cloning.";
@@ -162,6 +166,7 @@ void cwRemoteRepositoryCloner::clone(const QString& urlText, const QUrl& destina
     const QDir dir = resultDir.value();
     setPendingCloneDir(dir.path());
     m_pendingCloneUrl = normalizedUrl;
+    m_pendingCloneParentDir = cloneParentDir;
     if (m_cloneRepository) {
         m_cloneRepository->setDirectory(dir);
         setCloneStatusMessage(QStringLiteral("Starting clone..."));
@@ -196,6 +201,15 @@ void cwRemoteRepositoryCloner::setPendingCloneDir(const QString& dir)
     emit pendingCloneDirChanged();
 }
 
+void cwRemoteRepositoryCloner::setCloneFailedDueToAuthError(bool value)
+{
+    if (m_cloneFailedDueToAuthError == value) {
+        return;
+    }
+    m_cloneFailedDueToAuthError = value;
+    emit cloneFailedDueToAuthErrorChanged();
+}
+
 void cwRemoteRepositoryCloner::handleCloneWatcherStateChanged()
 {
     if (!m_cloneWatcher) {
@@ -207,10 +221,17 @@ void cwRemoteRepositoryCloner::handleCloneWatcherStateChanged()
     }
 
     if (m_cloneWatcher->hasError()) {
+        const auto result = m_cloneWatcher->future().result();
+        const bool isAuthError = result.errorCode()
+            == static_cast<int>(QQuickGit::GitRepository::GitErrorCode::HttpAuthFailed);
+        setCloneFailedDueToAuthError(isAuthError);
         setCloneErrorMessage(m_cloneWatcher->errorMessage());
         setCloneStatusMessage(QString());
         setPendingCloneDir(QString());
-        m_pendingCloneUrl.clear();
+        if (!isAuthError) {
+            m_pendingCloneUrl.clear();
+            m_pendingCloneParentDir = QUrl();
+        }
         return;
     }
 

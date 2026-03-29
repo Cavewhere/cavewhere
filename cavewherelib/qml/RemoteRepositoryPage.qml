@@ -238,7 +238,9 @@ StandardPage {
             ErrorHelpArea {
                 objectName: "remoteCloneErrorArea"
                 Layout.fillWidth: true
-                text: remoteRepositoryCloner.cloneErrorMessage
+                text: remoteRepositoryCloner.cloneFailedDueToAuthError
+                      ? qsTr("Select a GitHub account below to clone from GitHub.")
+                      : remoteRepositoryCloner.cloneErrorMessage
                 visible: remoteRepositoryCloner.cloneErrorMessage.length > 0
             }
         }

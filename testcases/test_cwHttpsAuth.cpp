@@ -4,6 +4,10 @@
 // Qt
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QCoreApplication>
+
+// asyncfuture
+#include "asyncfuture.h"
 
 // QQuickGit
 #include "GitRepository.h"
@@ -160,4 +164,94 @@ TEST_CASE("cwRemoteRepositoryCloner::setGitHubIntegration emits signal and wires
     // Clearing emits once more.
     cloner.setGitHubIntegration(nullptr);
     CHECK(spy.count() == 3);
+}
+
+// -----------------------------------------------------------------------
+// cwRemoteRepositoryCloner::cloneFailedDueToAuthError
+// -----------------------------------------------------------------------
+
+TEST_CASE("cloneFailedDueToAuthError is false by default", "[cwHttpsAuth]")
+{
+    cwRemoteRepositoryCloner cloner;
+    CHECK_FALSE(cloner.cloneFailedDueToAuthError());
+}
+
+TEST_CASE("cloneFailedDueToAuthError becomes true when clone fails with HttpAuthFailed", "[cwHttpsAuth]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    cwRecentProjectModel recentProjectModel;
+    recentProjectModel.setDefaultRepositoryDir(QUrl::fromLocalFile(tempDir.path()));
+    QQuickGit::GitFutureWatcher watcher;
+
+    cwRemoteRepositoryCloner cloner;
+    cloner.setRecentProjectModel(&recentProjectModel);
+    cloner.setCloneWatcher(&watcher);
+
+    QSignalSpy authSpy(&cloner, &cwRemoteRepositoryCloner::cloneFailedDueToAuthErrorChanged);
+
+    // Simulate a clone failure with the HttpAuthFailed error code via a pre-completed future.
+    auto errorFuture = AsyncFuture::completed(
+        Monad::ResultBase(QStringLiteral("401 Unauthorized: no access token"),
+                          static_cast<int>(QQuickGit::GitRepository::GitErrorCode::HttpAuthFailed)));
+    watcher.setFuture(errorFuture);
+
+    // Allow the async callback in AbstractResultFutureWatcher to fire.
+    authSpy.wait(1000);
+
+    CHECK(cloner.cloneFailedDueToAuthError());
+    CHECK(authSpy.count() == 1);
+}
+
+TEST_CASE("cloneFailedDueToAuthError is false for non-auth clone failures", "[cwHttpsAuth]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    cwRecentProjectModel recentProjectModel;
+    recentProjectModel.setDefaultRepositoryDir(QUrl::fromLocalFile(tempDir.path()));
+    QQuickGit::GitFutureWatcher watcher;
+
+    cwRemoteRepositoryCloner cloner;
+    cloner.setRecentProjectModel(&recentProjectModel);
+    cloner.setCloneWatcher(&watcher);
+
+    // Simulate a generic clone failure (not an auth error).
+    auto errorFuture = AsyncFuture::completed(
+        Monad::ResultBase(QStringLiteral("Repository not found")));
+    watcher.setFuture(errorFuture);
+
+    QSignalSpy stateSpy(&watcher, &QQuickGit::GitFutureWatcher::stateChanged);
+    stateSpy.wait(1000);
+
+    CHECK_FALSE(cloner.cloneFailedDueToAuthError());
+}
+
+TEST_CASE("cloneFailedDueToAuthError clears when a new clone starts", "[cwHttpsAuth]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    cwRecentProjectModel recentProjectModel;
+    recentProjectModel.setDefaultRepositoryDir(QUrl::fromLocalFile(tempDir.path()));
+    QQuickGit::GitFutureWatcher watcher;
+
+    cwRemoteRepositoryCloner cloner;
+    cloner.setRecentProjectModel(&recentProjectModel);
+    cloner.setCloneWatcher(&watcher);
+
+    // Put the cloner into the auth-error state.
+    auto errorFuture = AsyncFuture::completed(
+        Monad::ResultBase(QStringLiteral("401 Unauthorized: no access token"),
+                          static_cast<int>(QQuickGit::GitRepository::GitErrorCode::HttpAuthFailed)));
+    watcher.setFuture(errorFuture);
+
+    QSignalSpy authSpy(&cloner, &cwRemoteRepositoryCloner::cloneFailedDueToAuthErrorChanged);
+    authSpy.wait(1000);
+    REQUIRE(cloner.cloneFailedDueToAuthError());
+
+    // Starting a new clone must clear the flag immediately (before the future completes).
+    cloner.clone(QStringLiteral("https://github.com/Cavewhere/fake-repo.git"));
+    CHECK_FALSE(cloner.cloneFailedDueToAuthError());
 }
