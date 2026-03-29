@@ -269,6 +269,7 @@ find_package(Qt6
     QuickControls2
     REQUIRED)
 
+
 set(CMAKE_AUTOMOC ON)
 
 if(BUILD_TESTING)
@@ -341,6 +342,7 @@ if(BUILD_TESTING)
     target_link_libraries(cavewhere-test
         PRIVATE
         Qt6::Test
+        Qt6::Network
         Catch2::Catch2
         cavewhere-testlib
         cavewherelib

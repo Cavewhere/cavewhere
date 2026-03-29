@@ -9,6 +9,7 @@
 #include "cwGitHubIntegration.h"
 #include "cwRemoteAccountModel.h"
 class cwRemoteBindingStore;
+namespace QQuickGit { class GitRepository; }
 
 class CAVEWHERE_LIB_EXPORT cwRemoteAccountCoordinator : public QObject
 {
@@ -27,7 +28,13 @@ public:
     Q_INVOKABLE void startAddGitHubAccount();
     Q_INVOKABLE void selectGitHubAccount(const QString& username);
     Q_INVOKABLE void bindRemoteToActiveGitHubAccount(const QString& remoteUrl);
+    Q_INVOKABLE void addRemoteToProject(QQuickGit::GitRepository* repository,
+                                        const QUrl& remoteUrl,
+                                        bool bindToGitHubAccount = true);
     void handleGitHubLfsAuthFailure(const QUrl& remoteUrl, int httpStatus, const QString& message);
+
+signals:
+    void addRemoteFailed(const QString& errorMessage);
 
 private:
     QString initialGitHubAccountId() const;

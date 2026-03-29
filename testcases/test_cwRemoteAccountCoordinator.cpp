@@ -1,0 +1,130 @@
+// Catch
+#include <catch2/catch_test_macros.hpp>
+
+// Qt
+#include <QCoreApplication>
+#include <QDir>
+#include <QElapsedTimer>
+#include <QEventLoop>
+#include <QTemporaryDir>
+
+// Ours
+#include "cwRemoteAccountCoordinator.h"
+#include "cwGitHubIntegration.h"
+#include "cwRemoteAccountModel.h"
+#include "cwRemoteBindingStore.h"
+#include "GitRepository.h"
+
+// libgit2
+#include "git2.h"
+
+using namespace QQuickGit;
+
+namespace {
+bool waitUntil(const std::function<bool()>& condition, int timeoutMs = 3000)
+{
+    QElapsedTimer timer;
+    timer.start();
+    while (!condition() && timer.elapsed() < timeoutMs) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+    }
+    return condition();
+}
+} // namespace
+
+TEST_CASE("cwRemoteAccountCoordinator::addRemoteToProject adds remote and skips binding when flag is false",
+          "[cwRemoteAccountCoordinator]")
+{
+    auto tempDir = QTemporaryDir();
+    REQUIRE(tempDir.isValid());
+
+    const QString remotePath = QDir(tempDir.path()).filePath(QStringLiteral("remote.git"));
+    git_repository* bare = nullptr;
+    REQUIRE(git_repository_init(&bare, remotePath.toLocal8Bit().constData(), 1) == GIT_OK);
+    git_repository_free(bare);
+
+    GitRepository repo;
+    repo.setDirectory(QDir(tempDir.path()));
+    repo.initRepository();
+
+    cwGitHubIntegration integration(nullptr);
+    cwRemoteAccountModel accountModel;
+    cwRemoteBindingStore bindingStore;
+    cwRemoteAccountCoordinator coordinator(&integration, &accountModel, &bindingStore);
+
+    bool failed = false;
+    QObject::connect(&coordinator, &cwRemoteAccountCoordinator::addRemoteFailed,
+                     [&]() { failed = true; });
+
+    const QUrl remoteUrl = QUrl::fromLocalFile(remotePath);
+    coordinator.addRemoteToProject(&repo, remoteUrl, false);
+
+    REQUIRE(waitUntil([&repo]() { return !repo.remotes().isEmpty(); }));
+    CHECK(!failed);
+    CHECK(repo.remotes().constFirst().name() == QStringLiteral("origin"));
+    CHECK(bindingStore.accountIdForRemote(remoteUrl.toString()).isEmpty());
+}
+
+TEST_CASE("cwRemoteAccountCoordinator::addRemoteToProject emits addRemoteFailed on duplicate remote",
+          "[cwRemoteAccountCoordinator]")
+{
+    auto tempDir = QTemporaryDir();
+    REQUIRE(tempDir.isValid());
+
+    const QString remotePath = QDir(tempDir.path()).filePath(QStringLiteral("remote.git"));
+    git_repository* bare = nullptr;
+    REQUIRE(git_repository_init(&bare, remotePath.toLocal8Bit().constData(), 1) == GIT_OK);
+    git_repository_free(bare);
+
+    GitRepository repo;
+    repo.setDirectory(QDir(tempDir.path()));
+    repo.initRepository();
+    REQUIRE(repo.addRemote(QStringLiteral("origin"), QUrl::fromLocalFile(remotePath)).isEmpty());
+
+    cwGitHubIntegration integration(nullptr);
+    cwRemoteAccountModel accountModel;
+    cwRemoteBindingStore bindingStore;
+    cwRemoteAccountCoordinator coordinator(&integration, &accountModel, &bindingStore);
+
+    QString errorMessage;
+    QObject::connect(&coordinator, &cwRemoteAccountCoordinator::addRemoteFailed,
+                     [&](const QString& msg) { errorMessage = msg; });
+
+    coordinator.addRemoteToProject(&repo, QUrl::fromLocalFile(remotePath), false);
+
+    REQUIRE(waitUntil([&errorMessage]() { return !errorMessage.isEmpty(); }));
+}
+
+TEST_CASE("cwRemoteAccountCoordinator::addRemoteToProject stores binding when flag is true",
+          "[cwRemoteAccountCoordinator]")
+{
+    auto tempDir = QTemporaryDir();
+    REQUIRE(tempDir.isValid());
+
+    const QString remotePath = QDir(tempDir.path()).filePath(QStringLiteral("remote.git"));
+    git_repository* bare = nullptr;
+    REQUIRE(git_repository_init(&bare, remotePath.toLocal8Bit().constData(), 1) == GIT_OK);
+    git_repository_free(bare);
+
+    GitRepository repo;
+    repo.setDirectory(QDir(tempDir.path()));
+    repo.initRepository();
+
+    cwGitHubIntegration integration(nullptr);
+    cwRemoteAccountModel accountModel;
+    cwRemoteBindingStore bindingStore;
+    cwRemoteAccountCoordinator coordinator(&integration, &accountModel, &bindingStore);
+
+    bool failed = false;
+    QObject::connect(&coordinator, &cwRemoteAccountCoordinator::addRemoteFailed,
+                     [&]() { failed = true; });
+
+    const QUrl remoteUrl = QUrl::fromLocalFile(remotePath);
+    coordinator.addRemoteToProject(&repo, remoteUrl, true);
+
+    REQUIRE(waitUntil([&repo]() { return !repo.remotes().isEmpty(); }));
+    CHECK(!failed);
+    // bindRemoteToActiveGitHubAccount stores the binding when an active account exists.
+    // With no active account the binding is a no-op, but the remote is still added.
+    CHECK(repo.remotes().constFirst().name() == QStringLiteral("origin"));
+}

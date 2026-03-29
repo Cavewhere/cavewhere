@@ -1,5 +1,6 @@
 #include "cwRemoteAccountCoordinator.h"
 #include "cwRemoteBindingStore.h"
+#include "GitRepository.h"
 
 cwRemoteAccountCoordinator::cwRemoteAccountCoordinator(cwGitHubIntegration* gitHubIntegration,
                                                        cwRemoteAccountModel* remoteAccountModel,
@@ -103,6 +104,26 @@ void cwRemoteAccountCoordinator::bindRemoteToActiveGitHubAccount(const QString& 
     }
 
     m_remoteBindingStore->bindRemoteToAccount(remoteUrl, accountId);
+}
+
+void cwRemoteAccountCoordinator::addRemoteToProject(QQuickGit::GitRepository* repository,
+                                                    const QUrl& remoteUrl,
+                                                    bool bindToGitHubAccount)
+{
+    if (!repository) {
+        emit addRemoteFailed(tr("No repository available."));
+        return;
+    }
+
+    const QString error = repository->addRemote(QStringLiteral("origin"), remoteUrl);
+    if (!error.isEmpty()) {
+        emit addRemoteFailed(error);
+        return;
+    }
+
+    if (bindToGitHubAccount) {
+        bindRemoteToActiveGitHubAccount(remoteUrl.toString());
+    }
 }
 
 void cwRemoteAccountCoordinator::handleGitHubLfsAuthFailure(const QUrl& remoteUrl,

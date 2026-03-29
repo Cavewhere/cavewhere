@@ -33,16 +33,16 @@ cwProjectSyncHealth::cwProjectSyncHealth(QObject* parent) :
                         aheadBehindResult.errorCode()
                         == static_cast<int>(QQuickGit::GitRepository::GitErrorCode::HttpAuthFailed);
                     const bool credsLoaded = !m_authProvider || m_authProvider->hasLoadedCredentials();
-                    const auto authState = authFailed
-                        ? (credsLoaded ? cwSyncStatus::AuthState::Expired
-                                       : cwSyncStatus::AuthState::NeedsLogin)
-                        : cwSyncStatus::AuthState::Ok;
+                    const auto syncBlocker = authFailed
+                        ? (credsLoaded ? cwSyncStatus::SyncBlocker::Expired
+                                       : cwSyncStatus::SyncBlocker::NeedsLogin)
+                        : cwSyncStatus::SyncBlocker::None;
                     setStatus(cwSyncStatus{
                         .m_hasLocalChanges = localChanges,
                         .m_aheadCount = 0,
                         .m_behindCount = 0,
                         .m_stale = true,
-                        .m_authState = authState,
+                        .m_syncBlocker = syncBlocker,
                         .m_message = authFailed
                             ? (credsLoaded
                                ? QStringLiteral("GitHub access expired.")
@@ -148,6 +148,7 @@ void cwProjectSyncHealth::refresh()
             .m_aheadCount = 0,
             .m_behindCount = 0,
             .m_stale = true,
+            .m_syncBlocker = cwSyncStatus::SyncBlocker::NoRemote,
             .m_message = QStringLiteral("No git remote is configured for this project.")});
         return;
     }
