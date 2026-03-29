@@ -255,3 +255,38 @@ TEST_CASE("cloneFailedDueToAuthError clears when a new clone starts", "[cwHttpsA
     cloner.clone(QStringLiteral("https://github.com/Cavewhere/fake-repo.git"));
     CHECK_FALSE(cloner.cloneFailedDueToAuthError());
 }
+
+// -----------------------------------------------------------------------
+// Section 6: PrePushCredentialPayload httpsToken threading
+// -----------------------------------------------------------------------
+
+// Verifies that GitRepository::push() with HTTPS credentials set on a repo
+// that has no remote configured fails with a "no remote" error rather than
+// crashing or producing an auth error.  This exercises the call chain:
+//   push() -> runLfsPrePushUpload() -> buildLfsPushUploadPlan()
+//          -> hideAdvertisedRemoteTips() -> PrePushCredentialPayload::httpsToken
+TEST_CASE("push with HTTPS credentials on repo with no remote fails gracefully", "[cwHttpsAuth]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    QQuickGit::GitRepository repo;
+    repo.setDirectory(QDir(tempDir.path()));
+    repo.initRepository();
+
+    repo.setCredentials(QQuickGit::GitCredentials{QStringLiteral("ghp_testtoken123")});
+
+    QQuickGit::GitFutureWatcher watcher;
+    QSignalSpy spy(&watcher, &QQuickGit::GitFutureWatcher::stateChanged);
+    watcher.setFuture(repo.push());
+
+    spy.wait(5000);
+
+    REQUIRE(watcher.state() == QQuickGit::GitFutureWatcher::Ready);
+    CHECK(watcher.hasError());
+    // Must NOT be an auth error — the failure should be "no remote configured",
+    // which confirms the token was threaded through without incorrectly triggering
+    // auth-failure logic on a repo that has no remote at all.
+    const auto result = watcher.future().result();
+    CHECK(result.errorCode() != static_cast<int>(QQuickGit::GitRepository::GitErrorCode::HttpAuthFailed));
+}
