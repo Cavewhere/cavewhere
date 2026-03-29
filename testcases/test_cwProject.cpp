@@ -12554,7 +12554,7 @@ TEST_CASE("modified property - uncommitted changes detected after force-quit rel
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// syncFinished() signal and hasRemote()
+// syncFinished() signal
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST_CASE("cwProject syncFinished is emitted on successful sync", "[cwProject][sync][syncFinished]")
@@ -12588,8 +12588,8 @@ TEST_CASE("cwProject syncFinished is emitted on successful sync", "[cwProject][s
     project->cavingRegion()->cave(0)->setName(QStringLiteral("Finished Cave Updated"));
     project->waitSaveToFinish();
 
-    QSignalSpy finishedSpy(project, &cwProject::syncFinished);
-    QSignalSpy authFailedSpy(project, &cwProject::syncAuthFailed);
+    cwSignalSpy finishedSpy(project, &cwProject::syncFinished);
+    cwSignalSpy authFailedSpy(project, &cwProject::syncAuthFailed);
 
     REQUIRE(project->sync());
     rootData->futureManagerModel()->waitForFinished();
@@ -12599,7 +12599,7 @@ TEST_CASE("cwProject syncFinished is emitted on successful sync", "[cwProject][s
     CHECK(project->errorModel()->count() == 0);
 }
 
-TEST_CASE("cwProject syncFinished is emitted on general sync failure", "[cwProject][sync][syncFinished]")
+TEST_CASE("cwProject syncFinished and errorModel on failure", "[cwProject][sync][syncFinished]")
 {
     auto rootData = std::make_unique<cwRootData>();
     auto* project = rootData->project();
@@ -12618,41 +12618,27 @@ TEST_CASE("cwProject syncFinished is emitted on general sync failure", "[cwProje
     REQUIRE(project->repository() != nullptr);
     REQUIRE(project->repository()->remotes().isEmpty());
 
-    QSignalSpy finishedSpy(project, &cwProject::syncFinished);
+    SECTION("syncFinished is emitted on general sync failure") {
+        cwSignalSpy finishedSpy(project, &cwProject::syncFinished);
 
-    REQUIRE(project->sync());
-    rootData->futureManagerModel()->waitForFinished();
+        REQUIRE(project->sync());
+        rootData->futureManagerModel()->waitForFinished();
 
-    CHECK(finishedSpy.count() == 1);
-    CHECK(project->errorModel()->count() > 0);
-}
+        CHECK(finishedSpy.count() == 1);
+        CHECK(project->errorModel()->count() > 0);
+    }
 
-TEST_CASE("cwProject sync clears errorModel before starting", "[cwProject][sync][syncFinished]")
-{
-    auto rootData = std::make_unique<cwRootData>();
-    auto* project = rootData->project();
+    SECTION("sync clears errorModel before starting") {
+        project->errorModel()->append(cwError(QStringLiteral("stale error"), cwError::Warning));
+        REQUIRE(project->errorModel()->count() == 1);
 
-    rootData->account()->setName(QStringLiteral("Error Clear Tester"));
-    rootData->account()->setEmail(QStringLiteral("error.clear@example.com"));
+        REQUIRE(project->sync());
+        rootData->futureManagerModel()->waitForFinished();
 
-    project->cavingRegion()->addCave();
-
-    QTemporaryDir saveRoot;
-    REQUIRE(saveRoot.isValid());
-    const QString projectPath = QDir(saveRoot.path()).filePath(QStringLiteral("sync-clear.cwproj"));
-    REQUIRE(project->saveAs(projectPath));
-    project->waitSaveToFinish();
-
-    // Pre-load a stale error from a previous operation
-    project->errorModel()->append(cwError(QStringLiteral("stale error"), cwError::Warning));
-    REQUIRE(project->errorModel()->count() == 1);
-
-    REQUIRE(project->sync());
-    rootData->futureManagerModel()->waitForFinished();
-
-    // sync() clears errorModel at entry, so the stale error is gone.
-    // The no-remote failure adds exactly one new error — if count were 2,
-    // the stale error was not cleared.
-    CHECK(project->errorModel()->count() == 1);
-    CHECK(project->errorModel()->last().message() != QStringLiteral("stale error"));
+        // sync() clears errorModel at entry, so the stale error is gone.
+        // The no-remote failure adds exactly one new error — if count were 2,
+        // the stale error was not cleared.
+        CHECK(project->errorModel()->count() == 1);
+        CHECK(project->errorModel()->last().message() != QStringLiteral("stale error"));
+    }
 }

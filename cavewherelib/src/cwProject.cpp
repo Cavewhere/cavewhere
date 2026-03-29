@@ -496,13 +496,8 @@ void cwProject::completeSyncOperation(const Monad::ResultBase& result)
             emit syncFinished();
             return;
         }
-        const QString message = result.errorMessage();
-        const bool alreadyReported = ErrorModel
-                                     && ErrorModel->count() > 0
-                                     && ErrorModel->last().message() == message;
-        if (!alreadyReported) {
-            ErrorModel->append(cwError(message, cwError::Warning));
-        }
+        ErrorModel->append(cwError(result.errorMessage(), cwError::Warning));
+        m_syncHealth->refresh();
         emit syncFinished();
         return;
     }
