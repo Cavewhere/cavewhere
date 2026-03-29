@@ -197,6 +197,7 @@ signals:
     void objectPathReady(QObject* object);
     void syncInProgressChanged();
     void syncAuthFailed();
+    void syncFinished();
     void authProviderCredentialsNeeded();
 
 public slots:

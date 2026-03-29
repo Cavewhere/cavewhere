@@ -455,6 +455,8 @@ bool cwProject::sync()
         return false;
     }
 
+    ErrorModel->clear();
+
     auto* provider = m_saveLoad->authProvider();
     const bool needsCreds = m_saveLoad->requiresProviderCredentials();
     const bool credsLoaded = provider && provider->hasLoadedCredentials();
@@ -491,6 +493,7 @@ void cwProject::completeSyncOperation(const Monad::ResultBase& result)
     if (result.hasError()) {
         if (result.errorCodeTo<cwSaveLoad::SyncErrorCode>() == cwSaveLoad::SyncErrorCode::HttpAuthFailed) {
             emit syncAuthFailed();
+            emit syncFinished();
             return;
         }
         const QString message = result.errorMessage();
@@ -500,8 +503,11 @@ void cwProject::completeSyncOperation(const Monad::ResultBase& result)
         if (!alreadyReported) {
             ErrorModel->append(cwError(message, cwError::Warning));
         }
+        emit syncFinished();
+        return;
     }
     m_syncHealth->refresh();
+    emit syncFinished();
 }
 
 std::optional<cwSaveLoad::SyncReport> cwProject::lastSyncReport() const

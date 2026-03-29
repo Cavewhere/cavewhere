@@ -12552,3 +12552,107 @@ TEST_CASE("modified property - uncommitted changes detected after force-quit rel
     // the project should be reported as modified.
     CHECK(reloaded->modified() == true);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// syncFinished() signal and hasRemote()
+// ─────────────────────────────────────────────────────────────────────────────
+
+TEST_CASE("cwProject syncFinished is emitted on successful sync", "[cwProject][sync][syncFinished]")
+{
+    auto rootData = std::make_unique<cwRootData>();
+    auto* project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Sync Finished Tester"));
+    rootData->account()->setEmail(QStringLiteral("sync.finished@example.com"));
+
+    project->cavingRegion()->addCave();
+    project->cavingRegion()->cave(0)->setName(QStringLiteral("Finished Cave"));
+
+    QTemporaryDir projectDir;
+    REQUIRE(projectDir.isValid());
+    const QString projectPath = QDir(projectDir.path()).filePath(QStringLiteral("sync-finished.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+
+    auto* repository = project->repository();
+    REQUIRE(repository != nullptr);
+
+    QTemporaryDir remoteRoot;
+    REQUIRE(remoteRoot.isValid());
+    const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
+    git_repository* remoteRepo = nullptr;
+    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
+    git_repository_free(remoteRepo);
+    REQUIRE(repository->addRemote(QStringLiteral("origin"), QUrl::fromLocalFile(remoteRepoPath)).isEmpty());
+
+    project->cavingRegion()->cave(0)->setName(QStringLiteral("Finished Cave Updated"));
+    project->waitSaveToFinish();
+
+    QSignalSpy finishedSpy(project, &cwProject::syncFinished);
+    QSignalSpy authFailedSpy(project, &cwProject::syncAuthFailed);
+
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+
+    CHECK(finishedSpy.count() == 1);
+    CHECK(authFailedSpy.count() == 0);
+    CHECK(project->errorModel()->count() == 0);
+}
+
+TEST_CASE("cwProject syncFinished is emitted on general sync failure", "[cwProject][sync][syncFinished]")
+{
+    auto rootData = std::make_unique<cwRootData>();
+    auto* project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Sync Fail Tester"));
+    rootData->account()->setEmail(QStringLiteral("sync.fail@example.com"));
+
+    project->cavingRegion()->addCave();
+
+    QTemporaryDir saveRoot;
+    REQUIRE(saveRoot.isValid());
+    const QString projectPath = QDir(saveRoot.path()).filePath(QStringLiteral("sync-fail.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+
+    REQUIRE(project->repository() != nullptr);
+    REQUIRE(project->repository()->remotes().isEmpty());
+
+    QSignalSpy finishedSpy(project, &cwProject::syncFinished);
+
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+
+    CHECK(finishedSpy.count() == 1);
+    CHECK(project->errorModel()->count() > 0);
+}
+
+TEST_CASE("cwProject sync clears errorModel before starting", "[cwProject][sync][syncFinished]")
+{
+    auto rootData = std::make_unique<cwRootData>();
+    auto* project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Error Clear Tester"));
+    rootData->account()->setEmail(QStringLiteral("error.clear@example.com"));
+
+    project->cavingRegion()->addCave();
+
+    QTemporaryDir saveRoot;
+    REQUIRE(saveRoot.isValid());
+    const QString projectPath = QDir(saveRoot.path()).filePath(QStringLiteral("sync-clear.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+
+    // Pre-load a stale error from a previous operation
+    project->errorModel()->append(cwError(QStringLiteral("stale error"), cwError::Warning));
+    REQUIRE(project->errorModel()->count() == 1);
+
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+
+    // sync() clears errorModel at entry, so the stale error is gone.
+    // The no-remote failure adds exactly one new error — if count were 2,
+    // the stale error was not cleared.
+    CHECK(project->errorModel()->count() == 1);
+    CHECK(project->errorModel()->last().message() != QStringLiteral("stale error"));
+}
