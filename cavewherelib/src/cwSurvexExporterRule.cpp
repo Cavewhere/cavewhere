@@ -530,6 +530,7 @@ void cwSurvexExporterRule::fixFirstStation(QTextStream &stream, const cwSurveyDa
             const cwSurveyDataArtifact::SurveyChunk& firstChunk = chunks.first();
             if(!firstChunk.stations.isEmpty()) {
                 const cwStation& station = firstChunk.stations.first();
+                if(!station.isValid()) { return; }
                 stream << "*fix " << station.name() << " " << 0 << " " << 0 << " " << 0 << Qt::endl;
             }
         }
