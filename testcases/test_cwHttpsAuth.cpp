@@ -66,6 +66,51 @@ TEST_CASE("cwSaveLoad::setAuthProvider wires accessTokenChanged", "[cwHttpsAuth]
 }
 
 // -----------------------------------------------------------------------
+// cwGitHubIntegration::setActiveAccountId keychain-access guard (#351)
+// -----------------------------------------------------------------------
+
+// Regression test: setActiveAccountId while inactive (m_active=false) must NOT
+// start a keychain read.  Before the fix, it called loadStoredAccessToken()
+// unconditionally, which caused a macOS keychain prompt whenever
+// RemoteRepositoryPage loaded (via bootstrapGitHubActiveAccount) even though
+// the user had not selected a GitHub account from the combo.
+TEST_CASE("setActiveAccountId while inactive does not trigger keychain read", "[cwHttpsAuth]")
+{
+    cwRemoteCredentialStore credentialStore;
+    cwGitHubIntegration integration(&credentialStore);
+    // m_active defaults to false — no account selected by user yet.
+
+    QSignalSpy spy(&integration, &cwGitHubIntegration::credentialsLoaded);
+
+    integration.setActiveAccountId(QStringLiteral("test-account-id-inactive"));
+
+    // If loadStoredAccessToken was called (regression), the async keychain job
+    // would complete and emit credentialsLoaded within a short window.
+    // A 500 ms wait is enough for a "not found" keychain response on any platform.
+    const bool firedUnexpectedly = spy.wait(500);
+    CHECK(!firedUnexpectedly);
+    CHECK(!integration.hasLoadedCredentials());
+}
+
+// Complementary: setActive(true) after setActiveAccountId MUST trigger a
+// keychain read so credentials are available once the user picks GitHub.
+TEST_CASE("setActive(true) after setActiveAccountId triggers keychain read", "[cwHttpsAuth]")
+{
+    cwRemoteCredentialStore credentialStore;
+    cwGitHubIntegration integration(&credentialStore);
+
+    integration.setActiveAccountId(QStringLiteral("test-account-id-active"));
+
+    QSignalSpy spy(&integration, &cwGitHubIntegration::credentialsLoaded);
+    integration.setActive(true);
+
+    // credentialsLoaded fires once the keychain read completes (entry not found
+    // in tests, but the read still goes through and calls the callback).
+    const bool fired = spy.wait(5000);
+    CHECK(fired);
+}
+
+// -----------------------------------------------------------------------
 // cwRemoteRepositoryCloner::setGitHubIntegration
 // -----------------------------------------------------------------------
 

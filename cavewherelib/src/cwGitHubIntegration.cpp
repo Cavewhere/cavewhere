@@ -229,7 +229,12 @@ void cwGitHubIntegration::setActiveAccountId(const QString& accountId)
     m_activeAccountId = normalized;
     emit activeAccountIdChanged();
 
-    if (!normalized.isEmpty() && !m_hasLoadedStoredToken && !m_loadingStoredToken) {
+    // Only load from keychain if the integration is already active (e.g., user switching
+    // accounts while GitHub is selected). When inactive (bootstrap/page-load), defer loading
+    // to setActive(true) so the keychain is not accessed until the user explicitly selects
+    // a GitHub account from the UI.
+    if (m_active && !normalized.isEmpty() && !m_loadingStoredToken) {
+        m_hasLoadedStoredToken = false;
         m_loadingStoredToken = true;
         loadStoredAccessToken();
     }
