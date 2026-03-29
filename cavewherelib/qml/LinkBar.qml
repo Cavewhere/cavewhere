@@ -153,7 +153,7 @@ QQ.Item {
                         reconnectPopupId.open()
                     }
                     onSetupRemoteRequested: {
-                        // Temporary: navigate to Remote settings until SetupRemoteWizard (Commit 3) is wired
+                        // TODO: replace with SetupRemoteWizard
                         RootData.pageSelectionModel.gotoPageByName(null, "Remote")
                     }
 

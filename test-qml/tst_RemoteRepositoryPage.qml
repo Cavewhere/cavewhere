@@ -472,58 +472,37 @@ MainWindowTest {
             forgetAllGitHubAccountsViaCoordinator()
         }
 
-        function test_syncButton_noRemote_showsCloudUploadIcon() {
+        function saveProjectAndGetSyncButton(name) {
             let tmpPath = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
             RootData.newProject()
             tryVerify(() => RootData.project.isTemporaryProject, 5000)
-            verify(RootData.project.saveAs(tmpPath + "/syncbutton-noremote-test.cwproj"))
+            verify(RootData.project.saveAs(tmpPath + "/" + name + ".cwproj"))
             tryVerify(() => !RootData.project.isTemporaryProject, 5000)
-
             let syncButton = findChild(mainWindow, "syncButton")
             verify(syncButton !== null)
             tryVerify(() => syncButton.noRemote, 5000)
-            verify(syncButton.icon.source.toString().indexOf("cloud-arrow-up") >= 0)
+            return syncButton
+        }
+
+        function test_syncButton_noRemote_showsCloudUploadIcon() {
+            let syncButton = saveProjectAndGetSyncButton("syncbutton-noremote-test")
+            verify(syncButton.icon.source.toString().includes("cloud-arrow-up"))
         }
 
         function test_syncButton_noRemote_tooltip() {
-            let tmpPath = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
-            RootData.newProject()
-            tryVerify(() => RootData.project.isTemporaryProject, 5000)
-            verify(RootData.project.saveAs(tmpPath + "/syncbutton-noremote-tooltip-test.cwproj"))
-            tryVerify(() => !RootData.project.isTemporaryProject, 5000)
-
-            let syncButton = findChild(mainWindow, "syncButton")
-            verify(syncButton !== null)
-            tryVerify(() => syncButton.noRemote, 5000)
-            verify(syncButton.tooltipText.indexOf("No remote") >= 0)
+            let syncButton = saveProjectAndGetSyncButton("syncbutton-noremote-tooltip-test")
+            verify(syncButton.tooltipText.includes("No remote"))
         }
 
         function test_syncButton_noRemote_badge_hidden() {
-            let tmpPath = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
-            RootData.newProject()
-            tryVerify(() => RootData.project.isTemporaryProject, 5000)
-            verify(RootData.project.saveAs(tmpPath + "/syncbutton-noremote-badge-test.cwproj"))
-            tryVerify(() => !RootData.project.isTemporaryProject, 5000)
-
-            let syncButton = findChild(mainWindow, "syncButton")
-            verify(syncButton !== null)
-            tryVerify(() => syncButton.noRemote, 5000)
+            let syncButton = saveProjectAndGetSyncButton("syncbutton-noremote-badge-test")
             let badge = findChild(syncButton, "statusBadge")
             verify(badge !== null)
             verify(!badge.visible)
         }
 
         function test_syncButton_noRemote_click_emitsSetupRemoteRequested() {
-            let tmpPath = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
-            RootData.newProject()
-            tryVerify(() => RootData.project.isTemporaryProject, 5000)
-            verify(RootData.project.saveAs(tmpPath + "/syncbutton-noremote-click-test.cwproj"))
-            tryVerify(() => !RootData.project.isTemporaryProject, 5000)
-
-            let syncButton = findChild(mainWindow, "syncButton")
-            verify(syncButton !== null)
-            tryVerify(() => syncButton.noRemote, 5000)
-
+            let syncButton = saveProjectAndGetSyncButton("syncbutton-noremote-click-test")
             let spy = Qt.createQmlObject(
                 'import QtTest; SignalSpy { signalName: "setupRemoteRequested" }',
                 rootId)
@@ -534,15 +513,7 @@ MainWindowTest {
         }
 
         function test_syncButton_noRemote_contextMenu_syncNowDisabled() {
-            let tmpPath = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
-            RootData.newProject()
-            tryVerify(() => RootData.project.isTemporaryProject, 5000)
-            verify(RootData.project.saveAs(tmpPath + "/syncbutton-noremote-menu-test.cwproj"))
-            tryVerify(() => !RootData.project.isTemporaryProject, 5000)
-
-            let syncButton = findChild(mainWindow, "syncButton")
-            verify(syncButton !== null)
-            tryVerify(() => syncButton.noRemote, 5000)
+            let syncButton = saveProjectAndGetSyncButton("syncbutton-noremote-menu-test")
             mouseClick(syncButton, syncButton.width / 2, syncButton.height / 2, Qt.RightButton)
             let syncNowItem = findChild(syncButton, "syncNowMenuItem")
             verify(syncNowItem !== null)
