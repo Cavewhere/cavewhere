@@ -13,19 +13,33 @@ RoundButton {
     signal syncRequested()
     signal remoteSettingsRequested()
     signal reconnectRequested()
+    signal setupRemoteRequested()
 
+    readonly property bool noRemote: syncHealth.status.noRemote
     readonly property bool authExpired: syncHealth.status.authExpired
     readonly property bool needsLogin: syncHealth.status.needsLogin
 
-    icon.source: needsLogin
-        ? "qrc:/twbs-icons/icons/lock.svg"
-        : (authExpired
-           ? "qrc:/twbs-icons/icons/exclamation-triangle.svg"
-           : "qrc:/twbs-icons/icons/arrow-repeat.svg")
+    readonly property string tooltipText: noRemote
+        ? qsTr("No remote configured — click to set up sync")
+        : (needsLogin
+           ? qsTr("Sign in to GitHub — click to sync")
+           : (authExpired
+              ? qsTr("GitHub access expired — click to reconnect")
+              : syncHealth.status.message))
+
+    icon.source: noRemote
+        ? "qrc:/twbs-icons/icons/cloud-arrow-up.svg"
+        : (needsLogin
+           ? "qrc:/twbs-icons/icons/lock.svg"
+           : (authExpired
+              ? "qrc:/twbs-icons/icons/exclamation-triangle.svg"
+              : "qrc:/twbs-icons/icons/arrow-repeat.svg"))
     enabled: !syncInProgress
 
     onClicked: {
-        if (authExpired) {
+        if (noRemote) {
+            setupRemoteRequested()
+        } else if (authExpired) {
             reconnectRequested()
         } else {
             syncRequested()
@@ -45,19 +59,17 @@ RoundButton {
     }
 
     QC.ToolTip.visible: hovered
-    QC.ToolTip.text: needsLogin
-        ? qsTr("Sign in to GitHub — click to sync")
-        : (authExpired
-           ? qsTr("GitHub access expired — click to reconnect")
-           : syncHealth.status.message)
+    QC.ToolTip.text: tooltipText
 
     QQ.Rectangle {
         id: syncBadgeId
-        visible: syncHealth.status.stale
-                 || syncHealth.status.hasLocalChanges
-                 || syncHealth.status.aheadCount > 0
-                 || syncHealth.status.behindCount > 0
-                 || syncInProgress
+        objectName: "statusBadge"
+        visible: !noRemote
+                 && (syncHealth.status.stale
+                     || syncHealth.status.hasLocalChanges
+                     || syncHealth.status.aheadCount > 0
+                     || syncHealth.status.behindCount > 0
+                     || syncInProgress)
 
         anchors.right: parent.right
         anchors.bottom: parent.bottom
@@ -93,8 +105,17 @@ RoundButton {
         id: syncMenu
 
         QC.MenuItem {
+            text: "Set up remote…"
+            visible: noRemote
+            onTriggered: {
+                setupRemoteRequested()
+            }
+        }
+
+        QC.MenuItem {
+            objectName: "syncNowMenuItem"
             text: "Sync now"
-            enabled: !syncInProgress
+            enabled: !syncInProgress && !noRemote
             onTriggered: {
                 syncRequested()
             }

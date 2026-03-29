@@ -138,6 +138,7 @@ QQ.Item {
 
                 SyncButton {
                     id: syncButtonId
+                    objectName: "syncButton"
                     implicitWidth: sizeItemId.height
                     implicitHeight: implicitWidth
                     syncHealth: RootData.project.syncHealth
@@ -150,6 +151,10 @@ QQ.Item {
                     }
                     onReconnectRequested: {
                         reconnectPopupId.open()
+                    }
+                    onSetupRemoteRequested: {
+                        // Temporary: navigate to Remote settings until SetupRemoteWizard (Commit 3) is wired
+                        RootData.pageSelectionModel.gotoPageByName(null, "Remote")
                     }
 
                     ReconnectPopup {

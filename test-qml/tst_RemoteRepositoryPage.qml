@@ -472,6 +472,83 @@ MainWindowTest {
             forgetAllGitHubAccountsViaCoordinator()
         }
 
+        function test_syncButton_noRemote_showsCloudUploadIcon() {
+            let tmpPath = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
+            RootData.newProject()
+            tryVerify(() => RootData.project.isTemporaryProject, 5000)
+            verify(RootData.project.saveAs(tmpPath + "/syncbutton-noremote-test.cwproj"))
+            tryVerify(() => !RootData.project.isTemporaryProject, 5000)
+
+            let syncButton = findChild(mainWindow, "syncButton")
+            verify(syncButton !== null)
+            tryVerify(() => syncButton.noRemote, 5000)
+            verify(syncButton.icon.source.toString().indexOf("cloud-arrow-up") >= 0)
+        }
+
+        function test_syncButton_noRemote_tooltip() {
+            let tmpPath = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
+            RootData.newProject()
+            tryVerify(() => RootData.project.isTemporaryProject, 5000)
+            verify(RootData.project.saveAs(tmpPath + "/syncbutton-noremote-tooltip-test.cwproj"))
+            tryVerify(() => !RootData.project.isTemporaryProject, 5000)
+
+            let syncButton = findChild(mainWindow, "syncButton")
+            verify(syncButton !== null)
+            tryVerify(() => syncButton.noRemote, 5000)
+            verify(syncButton.tooltipText.indexOf("No remote") >= 0)
+        }
+
+        function test_syncButton_noRemote_badge_hidden() {
+            let tmpPath = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
+            RootData.newProject()
+            tryVerify(() => RootData.project.isTemporaryProject, 5000)
+            verify(RootData.project.saveAs(tmpPath + "/syncbutton-noremote-badge-test.cwproj"))
+            tryVerify(() => !RootData.project.isTemporaryProject, 5000)
+
+            let syncButton = findChild(mainWindow, "syncButton")
+            verify(syncButton !== null)
+            tryVerify(() => syncButton.noRemote, 5000)
+            let badge = findChild(syncButton, "statusBadge")
+            verify(badge !== null)
+            verify(!badge.visible)
+        }
+
+        function test_syncButton_noRemote_click_emitsSetupRemoteRequested() {
+            let tmpPath = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
+            RootData.newProject()
+            tryVerify(() => RootData.project.isTemporaryProject, 5000)
+            verify(RootData.project.saveAs(tmpPath + "/syncbutton-noremote-click-test.cwproj"))
+            tryVerify(() => !RootData.project.isTemporaryProject, 5000)
+
+            let syncButton = findChild(mainWindow, "syncButton")
+            verify(syncButton !== null)
+            tryVerify(() => syncButton.noRemote, 5000)
+
+            let spy = Qt.createQmlObject(
+                'import QtTest; SignalSpy { signalName: "setupRemoteRequested" }',
+                rootId)
+            spy.target = syncButton
+            mouseClick(syncButton)
+            compare(spy.count, 1)
+            spy.destroy()
+        }
+
+        function test_syncButton_noRemote_contextMenu_syncNowDisabled() {
+            let tmpPath = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
+            RootData.newProject()
+            tryVerify(() => RootData.project.isTemporaryProject, 5000)
+            verify(RootData.project.saveAs(tmpPath + "/syncbutton-noremote-menu-test.cwproj"))
+            tryVerify(() => !RootData.project.isTemporaryProject, 5000)
+
+            let syncButton = findChild(mainWindow, "syncButton")
+            verify(syncButton !== null)
+            tryVerify(() => syncButton.noRemote, 5000)
+            mouseClick(syncButton, syncButton.width / 2, syncButton.height / 2, Qt.RightButton)
+            let syncNowItem = findChild(syncButton, "syncNowMenuItem")
+            verify(syncNowItem !== null)
+            verify(!syncNowItem.enabled)
+        }
+
         function test_testerAssisted_invalidGithubToken_revokesAccount() {
             testerAssistedGate.beginDecision(
                         "Invalid GitHub token revokes account",
