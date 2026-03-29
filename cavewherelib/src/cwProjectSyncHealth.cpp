@@ -33,13 +33,16 @@ cwProjectSyncHealth::cwProjectSyncHealth(QObject* parent) :
                         aheadBehindResult.errorCode()
                         == static_cast<int>(QQuickGit::GitRepository::GitErrorCode::HttpAuthFailed);
                     const bool credsLoaded = !m_authProvider || m_authProvider->hasLoadedCredentials();
+                    const auto authState = authFailed
+                        ? (credsLoaded ? cwSyncStatus::AuthState::Expired
+                                       : cwSyncStatus::AuthState::NeedsLogin)
+                        : cwSyncStatus::AuthState::Ok;
                     setStatus(cwSyncStatus{
                         .m_hasLocalChanges = localChanges,
                         .m_aheadCount = 0,
                         .m_behindCount = 0,
                         .m_stale = true,
-                        .m_authExpired = authFailed && credsLoaded,
-                        .m_needsLogin = authFailed && !credsLoaded,
+                        .m_authState = authState,
                         .m_message = authFailed
                             ? (credsLoaded
                                ? QStringLiteral("GitHub access expired.")
@@ -114,6 +117,8 @@ void cwProjectSyncHealth::setRepository(QQuickGit::GitRepository* repository)
 
 void cwProjectSyncHealth::setAuthProvider(cwRemoteAuthProvider* provider)
 {
+    // Stored only to query hasLoadedCredentials() in onFutureChanged.
+    // Signal connections (credentialsLoaded, accessTokenChanged) are managed by cwProject.
     m_authProvider = provider;
 }
 

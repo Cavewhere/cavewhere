@@ -28,6 +28,13 @@ struct CAVEWHERE_LIB_EXPORT cwSyncStatus
     Q_PROPERTY(QString message READ message)
 
 public:
+    enum class AuthState {
+        Ok,        // No auth issue
+        NeedsLogin,// HttpAuthFailed; credentials have never been loaded
+        Expired    // HttpAuthFailed; credentials were loaded but rejected
+    };
+    Q_ENUM(AuthState)
+
     bool hasLocalChanges() const;
     int aheadCount() const;
     int behindCount() const;
@@ -42,8 +49,7 @@ public:
     int m_aheadCount = 0;
     int m_behindCount = 0;
     bool m_stale = true;
-    bool m_authExpired = false;
-    bool m_needsLogin = false;
+    AuthState m_authState = AuthState::Ok;
     QString m_message;
 };
 Q_DECLARE_METATYPE(cwSyncStatus)
@@ -94,8 +100,8 @@ inline bool cwSyncStatus::hasLocalChanges() const { return m_hasLocalChanges; }
 inline int cwSyncStatus::aheadCount() const { return m_aheadCount; }
 inline int cwSyncStatus::behindCount() const { return m_behindCount; }
 inline bool cwSyncStatus::stale() const { return m_stale; }
-inline bool cwSyncStatus::authExpired() const { return m_authExpired; }
-inline bool cwSyncStatus::needsLogin() const { return m_needsLogin; }
+inline bool cwSyncStatus::authExpired() const { return m_authState == AuthState::Expired; }
+inline bool cwSyncStatus::needsLogin() const { return m_authState == AuthState::NeedsLogin; }
 inline QString cwSyncStatus::message() const { return m_message; }
 inline bool cwSyncStatus::operator==(const cwSyncStatus& other) const
 {
@@ -103,8 +109,7 @@ inline bool cwSyncStatus::operator==(const cwSyncStatus& other) const
            && m_aheadCount == other.m_aheadCount
            && m_behindCount == other.m_behindCount
            && m_stale == other.m_stale
-           && m_authExpired == other.m_authExpired
-           && m_needsLogin == other.m_needsLogin
+           && m_authState == other.m_authState
            && m_message == other.m_message;
 }
 inline bool cwSyncStatus::operator!=(const cwSyncStatus& other) const
