@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwProject.h"
+#include "cwRemoteAuthProvider.h"
 #include "Monad/Monad.h"
 #include "cwCave.h"
 #include "cwTrip.h"
@@ -163,6 +164,9 @@ void cwProject::connectSaveLoad(cwSaveLoad* saveLoad)
     saveLoad->setCavingRegion(Region);
     if (auto* repo = saveLoad->repository()) {
         repo->setAccount(m_gitAccount);
+    }
+    if (m_authProvider) {
+        saveLoad->setAuthProvider(m_authProvider);
     }
 
     m_syncHealth->setRepository(saveLoad->repository());
@@ -451,6 +455,20 @@ bool cwProject::sync()
         return false;
     }
 
+    auto* provider = m_saveLoad->authProvider();
+    const bool needsCreds = m_saveLoad->requiresProviderCredentials();
+    const bool credsLoaded = provider && provider->hasLoadedCredentials();
+    if (provider && needsCreds && !credsLoaded) {
+        emit authProviderCredentialsNeeded();
+        auto* saveLoad = m_saveLoad;
+        connect(provider, &cwRemoteAuthProvider::credentialsLoaded,
+                this, [this, saveLoad]() {
+                    beginSyncOperation(saveLoad->sync());
+                },
+                Qt::SingleShotConnection);
+        return true;
+    }
+
     return beginSyncOperation(m_saveLoad->sync());
 }
 
@@ -471,6 +489,10 @@ void cwProject::waitForSyncToFinish()
 void cwProject::completeSyncOperation(const Monad::ResultBase& result)
 {
     if (result.hasError()) {
+        if (result.errorCodeTo<cwSaveLoad::SyncErrorCode>() == cwSaveLoad::SyncErrorCode::HttpAuthFailed) {
+            emit syncAuthFailed();
+            return;
+        }
         const QString message = result.errorMessage();
         const bool alreadyReported = ErrorModel
                                      && ErrorModel->count() > 0
@@ -1286,6 +1308,32 @@ void cwProject::setGitAccount(QQuickGit::Account* account)
     m_gitAccount = account;
     if (m_saveLoad && m_saveLoad->repository()) {
         m_saveLoad->repository()->setAccount(account);
+    }
+}
+
+void cwProject::setAuthProvider(cwRemoteAuthProvider* provider)
+{
+    if (m_authProvider == provider) {
+        return;
+    }
+    if (m_authProvider && m_syncHealth) {
+        disconnect(m_authProvider, &cwRemoteAuthProvider::accessTokenChanged,
+                   m_syncHealth, &cwProjectSyncHealth::refresh);
+        disconnect(m_authProvider, &cwRemoteAuthProvider::credentialsLoaded,
+                   m_syncHealth, &cwProjectSyncHealth::refresh);
+    }
+    m_authProvider = provider;
+    if (m_saveLoad) {
+        m_saveLoad->setAuthProvider(provider);
+    }
+    if (m_syncHealth) {
+        m_syncHealth->setAuthProvider(provider);
+    }
+    if (provider && m_syncHealth) {
+        connect(provider, &cwRemoteAuthProvider::accessTokenChanged,
+                m_syncHealth, &cwProjectSyncHealth::refresh);
+        connect(provider, &cwRemoteAuthProvider::credentialsLoaded,
+                m_syncHealth, &cwProjectSyncHealth::refresh);
     }
 }
 

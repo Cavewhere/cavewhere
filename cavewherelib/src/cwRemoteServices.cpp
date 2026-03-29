@@ -1,6 +1,7 @@
 #include "cwRemoteServices.h"
 
 #include "cwGitHubIntegration.h"
+#include "cwRemoteAuthProvider.h"
 #include "cwGitHubLfsAuthProvider.h"
 #include "cwRemoteAccountModel.h"
 #include "cwRemoteCredentialStore.h"
@@ -24,6 +25,12 @@ cwRemoteServices::cwRemoteServices(QObject* parent)
                      &QQuickGit::LfsAuthFailureNotifier::authenticationFailed,
                      this,
                      &cwRemoteServices::handleLfsAuthenticationFailed);
+
+}
+
+cwRemoteAuthProvider* cwRemoteServices::authProvider() const
+{
+    return gitHubIntegration();
 }
 
 cwGitHubIntegration* cwRemoteServices::gitHubIntegration() const
@@ -68,6 +75,12 @@ cwRemoteAccountCoordinator* cwRemoteServices::accountCoordinator() const
                                                               const_cast<cwRemoteServices*>(this));
     }
     return m_accountCoordinator;
+}
+
+void cwRemoteServices::ensureGitHubTokenLoaded()
+{
+    accountCoordinator(); // creates coordinator if needed, bootstraps the account ID
+    gitHubIntegration()->ensureCredentialsLoaded();
 }
 
 void cwRemoteServices::handleLfsAuthenticationFailed(const QUrl& url,

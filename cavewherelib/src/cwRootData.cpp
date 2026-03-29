@@ -93,6 +93,9 @@ cwRootData::cwRootData(QObject *parent) :
         addProjectToRecents(Project->filename());
     });
     remote();
+    Project->setAuthProvider(remote()->authProvider());
+    connect(Project, &cwProject::authProviderCredentialsNeeded,
+            remote(), &cwRemoteServices::ensureGitHubTokenLoaded);
 
     Region = Project->cavingRegion();
     Region->setUndoStack(undoStack());

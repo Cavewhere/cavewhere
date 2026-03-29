@@ -16,7 +16,6 @@
 #include <vector>
 
 //Our
-#include "RSAKeyGenerator.h"
 #include "cwRemoteAccountModel.h"
 #include "cwRemoteCredentialStore.h"
 
@@ -30,7 +29,7 @@ static const QString GitHubApiBase = QStringLiteral("https://api.github.com");
 
 cwGitHubIntegration::cwGitHubIntegration(cwRemoteCredentialStore* credentialStore,
                                          QObject* parent)
-    : QObject(parent)
+    : cwRemoteAuthProvider(parent)
     , m_deviceAuth(resolveClientId(), this)
     , m_credentialStore(credentialStore)
 {
@@ -95,7 +94,7 @@ void cwGitHubIntegration::startDeviceLogin()
         emit secondsUntilNextPollChanged();
     }
     setAuthState(AuthState::RequestingCode);
-    m_deviceAuth.requestDeviceCode({QStringLiteral("repo"), QStringLiteral("read:user"), QStringLiteral("admin:public_key")});
+    m_deviceAuth.requestDeviceCode({QStringLiteral("repo"), QStringLiteral("read:user")});
 }
 
 void cwGitHubIntegration::cancelLogin()
@@ -195,51 +194,6 @@ void cwGitHubIntegration::reloadAccessTokenFromCredentialStore()
     loadStoredAccessToken();
 }
 
-QVariantMap cwGitHubIntegration::ensureKeyPair()
-{
-    if (!m_keyGenerator) {
-        m_keyGenerator = std::make_unique<QQuickGit::RSAKeyGenerator>();
-    }
-    m_keyGenerator->loadOrGenerate();
-
-    QVariantMap map;
-    map.insert(QStringLiteral("publicKeyPath"), m_keyGenerator->publicKeyPath());
-    map.insert(QStringLiteral("privateKeyPath"), m_keyGenerator->privateKeyPath());
-    map.insert(QStringLiteral("publicKey"), QString::fromUtf8(m_keyGenerator->publicKey()).trimmed());
-    return map;
-}
-
-void cwGitHubIntegration::uploadPublicKey(const QString& title)
-{
-    if (m_accessToken.isEmpty()) {
-        setErrorMessage(tr("Please sign in before uploading a key."));
-        return;
-    }
-
-    const auto keyInfo = ensureKeyPair();
-    const QString keyValue = keyInfo.value(QStringLiteral("publicKey")).toString();
-    if (keyValue.isEmpty()) {
-        setErrorMessage(tr("Could not read SSH public key."));
-        return;
-    }
-
-    setBusy(true);
-    QNetworkRequest request(QUrl(GitHubApiBase + QStringLiteral("/user/keys")));
-    request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    request.setRawHeader("Accept", "application/vnd.github+json");
-    request.setRawHeader("User-Agent", QByteArrayLiteral("CaveWhere"));
-    request.setRawHeader("Authorization", authorizationHeader());
-
-    QJsonObject payload;
-    payload.insert(QStringLiteral("title"), title.isEmpty() ? defaultKeyTitle() : title);
-    payload.insert(QStringLiteral("key"), keyValue);
-
-    QNetworkReply* reply = m_network.post(request, QJsonDocument(payload).toJson());
-    QObject::connect(reply, &QNetworkReply::finished, this, [this, reply]() {
-        handleUploadReply(reply);
-    });
-}
-
 void cwGitHubIntegration::clearSession()
 {
     cancelLogin();
@@ -274,6 +228,11 @@ void cwGitHubIntegration::setActiveAccountId(const QString& accountId)
 
     m_activeAccountId = normalized;
     emit activeAccountIdChanged();
+
+    if (!normalized.isEmpty() && !m_hasLoadedStoredToken && !m_loadingStoredToken) {
+        m_loadingStoredToken = true;
+        loadStoredAccessToken();
+    }
 }
 
 void cwGitHubIntegration::persistCurrentAccessTokenForAccount(const QString& accountId)
@@ -403,12 +362,24 @@ void cwGitHubIntegration::clearStoredAccessToken(const QString& accountId)
                                          this);
 }
 
+void cwGitHubIntegration::ensureCredentialsLoaded()
+{
+    if (m_hasLoadedStoredToken || m_loadingStoredToken) {
+        return;
+    }
+    m_loadingStoredToken = true;
+    loadStoredAccessToken();
+}
+
 void cwGitHubIntegration::loadStoredAccessToken()
 {
     const QString accountId = resolveActiveGitHubAccountId();
     if (!m_credentialStore || accountId.isEmpty()) {
         m_loadingStoredToken = false;
-        m_hasLoadedStoredToken = true;
+        // Do NOT mark m_hasLoadedStoredToken = true here: the account ID is not yet
+        // known, so we haven't actually attempted a keychain read.  When
+        // setActiveAccountId() later supplies a real ID, it will trigger another load.
+        emit credentialsLoaded();
         return;
     }
 
@@ -418,6 +389,7 @@ void cwGitHubIntegration::loadStoredAccessToken()
                                        [this, accountId](const cwRemoteCredentialStore::ReadResult& result) {
         m_loadingStoredToken = false;
         m_hasLoadedStoredToken = true;
+        emit credentialsLoaded();
 
         if (accountId != resolveActiveGitHubAccountId()) {
             return;
@@ -543,36 +515,6 @@ void cwGitHubIntegration::handleRepositoryReply(QNetworkReply* reply)
     setErrorMessage({});
 }
 
-void cwGitHubIntegration::handleUploadReply(QNetworkReply* reply)
-{
-    QScopedPointer<QNetworkReply, QScopedPointerDeleteLater> guard(reply);
-    setBusy(false);
-
-    if (isUnauthorizedReply(reply)) {
-        invalidateActiveAccountToken(tr("GitHub session expired. Please sign in again."));
-        return;
-    }
-
-    if (reply->error() == QNetworkReply::NoError) {
-        setErrorMessage({});
-        return;
-    }
-
-    const QByteArray data = reply->readAll();
-
-    QJsonParseError parseError{};
-    const QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
-    if (parseError.error == QJsonParseError::NoError && doc.isObject()) {
-        const auto message = doc.object().value(QStringLiteral("message")).toString();
-        if (!message.isEmpty()) {
-            setErrorMessage(message);
-            return;
-        }
-    }
-
-    setErrorMessage(reply->errorString());
-}
-
 QByteArray cwGitHubIntegration::authorizationHeader() const
 {
     return QByteArrayLiteral("Bearer ") + m_accessToken.toUtf8();
@@ -627,15 +569,6 @@ QByteArray cwGitHubIntegration::lfsAuthorizationHeader() const
 QString cwGitHubIntegration::resolveActiveGitHubAccountId() const
 {
     return m_activeAccountId;
-}
-
-QString cwGitHubIntegration::defaultKeyTitle() const
-{
-    QString username = qEnvironmentVariable("USER");
-    if (username.isEmpty()) {
-        username = QCoreApplication::applicationName();
-    }
-    return QStringLiteral("CaveWhere (%1)").arg(username);
 }
 
 QString cwGitHubIntegration::resolveClientId()

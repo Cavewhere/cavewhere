@@ -32,6 +32,7 @@ class cwCavingRegion;
 class cwProject;
 class cwNoteLiDAR;
 class cwNoteLiDARData;
+#include "cwRemoteAuthProvider.h"
 #include "cwCavingRegionData.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
 #include "cwFutureManagerToken.h"
@@ -167,7 +168,8 @@ public:
 
     enum class SyncErrorCode : int {
         RetryEpochChanged = Monad::ResultBase::CustomError + 1,
-        IncompatibleProjectVersion = Monad::ResultBase::CustomError + 2
+        IncompatibleProjectVersion = Monad::ResultBase::CustomError + 2,
+        HttpAuthFailed = Monad::ResultBase::CustomError + 3
     };
 
     using BranchResetMode = cwSyncTypes::BranchResetMode;
@@ -285,6 +287,10 @@ public:
     bool syncEnabled() const;
     void setSyncEnabled(bool enabled);
 
+    void setAuthProvider(cwRemoteAuthProvider* provider);
+    cwRemoteAuthProvider* authProvider() const { return m_authProvider; }
+    bool requiresProviderCredentials() const;
+
     QFuture<Monad::ResultBase> sync();
     QFuture<Monad::ResultBase> resetBranchAndReconcile(const QString& refSpec,
                                                        BranchResetMode resetMode = BranchResetMode::Hard);
@@ -355,6 +361,7 @@ private:
     friend struct Data;
     std::unique_ptr<Data> d;
     QPointer<QUndoStack> m_undoStack;
+    QPointer<cwRemoteAuthProvider> m_authProvider;
 
     void saveProject(const QDir& dir, const cwCavingRegion* region);
     std::unique_ptr<CavewhereProto::Project> toProtoProject(const cwCavingRegion* region);

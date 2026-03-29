@@ -39,6 +39,7 @@ namespace QQuickGit {
 class GitRepository;
 class Account;
 };
+class cwRemoteAuthProvider;
 
 //Qt includes
 #include <QSqlDatabase>
@@ -178,6 +179,7 @@ public:
 
     void loadOrConvert(const QString& filename);
     void setGitAccount(QQuickGit::Account* account);
+    void setAuthProvider(cwRemoteAuthProvider* provider);
 
 signals:
     void undoStackChanged();
@@ -194,6 +196,8 @@ signals:
     void loaded();
     void objectPathReady(QObject* object);
     void syncInProgressChanged();
+    void syncAuthFailed();
+    void authProviderCredentialsNeeded();
 
 public slots:
     void loadFile(QString filename);
@@ -228,6 +232,7 @@ private:
     //Task manager, for visualizing running tasks
     QPointer<cwTaskManagerModel> TaskManager;
     cwFutureManagerToken FutureToken; //!<
+    QPointer<cwRemoteAuthProvider> m_authProvider;
 
     cwErrorListModel* ErrorModel; //!<
 

@@ -2,6 +2,7 @@
 
 #include "cwRecentProjectModel.h"
 #include "cwSaveLoad.h"
+#include "cwGitHubIntegration.h"
 
 #include "GitFutureWatcher.h"
 #include "GitRepository.h"
@@ -39,6 +40,29 @@ void cwRemoteRepositoryCloner::setCloneWatcher(QQuickGit::GitFutureWatcher* clon
         connect(m_cloneWatcher, &QQuickGit::GitFutureWatcher::progressTextChanged,
                 this, &cwRemoteRepositoryCloner::handleCloneWatcherProgressTextChanged);
     }
+}
+
+void cwRemoteRepositoryCloner::setGitHubIntegration(cwGitHubIntegration* gh)
+{
+    if (m_gitHubIntegration == gh) {
+        return;
+    }
+    if (m_gitHubIntegration) {
+        disconnect(m_gitHubIntegration, &cwGitHubIntegration::accessTokenChanged,
+                   this, nullptr);
+    }
+    m_gitHubIntegration = gh;
+    auto updateCredentials = [this]() {
+        const QString token = m_gitHubIntegration
+                              ? m_gitHubIntegration->accessToken()
+                              : QString{};
+        m_cloneRepository->setCredentials(QQuickGit::GitCredentials{token});
+    };
+    if (gh) {
+        connect(gh, &cwGitHubIntegration::accessTokenChanged, this, updateCredentials);
+    }
+    updateCredentials();
+    emit gitHubIntegrationChanged();
 }
 
 void cwRemoteRepositoryCloner::setAccount(QQuickGit::Account* account)

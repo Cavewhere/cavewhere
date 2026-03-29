@@ -12,6 +12,8 @@
 #include "GitFutureWatcher.h"
 #include "GitRepository.h"
 
+class cwGitHubIntegration;
+
 class CAVEWHERE_LIB_EXPORT cwRemoteRepositoryCloner : public QObject
 {
     Q_OBJECT
@@ -23,6 +25,7 @@ class CAVEWHERE_LIB_EXPORT cwRemoteRepositoryCloner : public QObject
     Q_PROPERTY(cwRecentProjectModel* recentProjectModel READ recentProjectModel WRITE setRecentProjectModel REQUIRED)
     Q_PROPERTY(QQuickGit::GitFutureWatcher* cloneWatcher READ cloneWatcher WRITE setCloneWatcher REQUIRED)
     Q_PROPERTY(QQuickGit::Account* account READ account WRITE setAccount NOTIFY accountChanged)
+    Q_PROPERTY(cwGitHubIntegration* gitHubIntegration WRITE setGitHubIntegration NOTIFY gitHubIntegrationChanged)
 
 public:
     explicit cwRemoteRepositoryCloner(QObject* parent = nullptr);
@@ -39,6 +42,7 @@ public:
 
     QQuickGit::Account* account() const { return m_account; }
     void setAccount(QQuickGit::Account* account);
+    void setGitHubIntegration(cwGitHubIntegration* gh);
 
     Q_INVOKABLE QString repositoryNameFromUrl(const QString& urlText) const;
     Q_INVOKABLE QString normalizeCloneUrl(const QString& urlText) const;
@@ -50,6 +54,7 @@ signals:
     void cloneStatusMessageChanged();
     void pendingCloneDirChanged();
     void accountChanged();
+    void gitHubIntegrationChanged();
     void repositoryCloned(QString repositoryPath);
     void repositoryClonedWithRemote(QString repositoryPath, QString remoteUrl);
     void repositoryClonedIndex(int index);
@@ -64,6 +69,7 @@ private:
     QPointer<cwRecentProjectModel> m_recentProjectModel;
     QPointer<QQuickGit::GitFutureWatcher> m_cloneWatcher;
     QPointer<QQuickGit::Account> m_account;
+    QPointer<cwGitHubIntegration> m_gitHubIntegration;
     QQuickGit::GitRepository* m_cloneRepository = nullptr;
     QString m_cloneErrorMessage;
     QString m_cloneStatusMessage;

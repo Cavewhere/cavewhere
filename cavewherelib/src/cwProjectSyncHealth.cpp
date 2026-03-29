@@ -1,4 +1,5 @@
 #include "cwProjectSyncHealth.h"
+#include "cwRemoteAuthProvider.h"
 
 #include "GitRemoteInfo.h"
 #include "GitRepository.h"
@@ -28,14 +29,27 @@ cwProjectSyncHealth::cwProjectSyncHealth(QObject* parent) :
 
                 const auto aheadBehindResult = future.result();
                 if (aheadBehindResult.hasError()) {
+                    const bool authFailed =
+                        aheadBehindResult.errorCode()
+                        == static_cast<int>(QQuickGit::GitRepository::GitErrorCode::HttpAuthFailed);
+                    const bool credsLoaded = !m_authProvider || m_authProvider->hasLoadedCredentials();
+                    const auto authState = authFailed
+                        ? (credsLoaded ? cwSyncStatus::AuthState::Expired
+                                       : cwSyncStatus::AuthState::NeedsLogin)
+                        : cwSyncStatus::AuthState::Ok;
                     setStatus(cwSyncStatus{
                         .m_hasLocalChanges = localChanges,
                         .m_aheadCount = 0,
                         .m_behindCount = 0,
                         .m_stale = true,
-                        .m_message = aheadBehindResult.errorMessage().isEmpty()
-                            ? QStringLiteral("Sync status unavailable: upstream branch is missing.")
-                            : aheadBehindResult.errorMessage()});
+                        .m_authState = authState,
+                        .m_message = authFailed
+                            ? (credsLoaded
+                               ? QStringLiteral("GitHub access expired.")
+                               : QStringLiteral("Sign in to GitHub to check sync status."))
+                            : (aheadBehindResult.errorMessage().isEmpty()
+                               ? QStringLiteral("Sync status unavailable: upstream branch is missing.")
+                               : aheadBehindResult.errorMessage())});
                     return;
                 }
 
@@ -99,6 +113,13 @@ void cwProjectSyncHealth::setRepository(QQuickGit::GitRepository* repository)
     }
 
     refresh();
+}
+
+void cwProjectSyncHealth::setAuthProvider(cwRemoteAuthProvider* provider)
+{
+    // Stored only to query hasLoadedCredentials() in onFutureChanged.
+    // Signal connections (credentialsLoaded, accessTokenChanged) are managed by cwProject.
+    m_authProvider = provider;
 }
 
 void cwProjectSyncHealth::refresh()

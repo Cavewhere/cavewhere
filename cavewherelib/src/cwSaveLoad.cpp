@@ -1,4 +1,5 @@
 #include "cwSaveLoad.h"
+#include "cwRemoteAuthProvider.h"
 #include "cwDebug.h"
 #include "cwTrip.h"
 #include "cwRegionSaveTask.h"
@@ -5739,6 +5740,34 @@ Monad::ResultBase cwSaveLoad::commitProjectChanges(const QString& subject,
     return ResultBase();
 }
 
+bool cwSaveLoad::requiresProviderCredentials() const
+{
+    const QUrl remote = d->repository->remoteUrl();
+    return remote.scheme().compare(QStringLiteral("https"), Qt::CaseInsensitive) == 0;
+}
+
+void cwSaveLoad::setAuthProvider(cwRemoteAuthProvider* provider)
+{
+    if (m_authProvider == provider) {
+        return;
+    }
+    if (m_authProvider) {
+        disconnect(m_authProvider, &cwRemoteAuthProvider::accessTokenChanged,
+                   this, nullptr);
+    }
+    m_authProvider = provider;
+    auto updateCredentials = [this]() {
+        const QString token = m_authProvider
+                              ? m_authProvider->accessToken()
+                              : QString{};
+        d->repository->setCredentials(QQuickGit::GitCredentials{token});
+    };
+    if (provider) {
+        connect(provider, &cwRemoteAuthProvider::accessTokenChanged, this, updateCredentials);
+    }
+    updateCredentials();
+}
+
 QFuture<Monad::ResultBase> cwSaveLoad::sync()
 {
     d->lastSyncReport.reset();
@@ -5827,7 +5856,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
 
                         const auto pullResult = pullFuture.result();
                         if (pullResult.hasError()) {
-                            return AsyncFuture::completed(ResultBase(pullResult.errorMessage()));
+                            return AsyncFuture::completed(ResultBase(pullResult.errorMessage(), pullResult.errorCode()));
                         }
 
                         const auto pullState = toPullState(pullResult.value().state());
@@ -5908,7 +5937,12 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
                 }
 
                 if (retryReason.isEmpty()) {
-                    syncDeferred->complete(attemptResult);
+                    if (attemptResult.errorCode() == static_cast<int>(QQuickGit::GitRepository::GitErrorCode::HttpAuthFailed)) {
+                        syncDeferred->complete(ResultBase(attemptResult.errorMessage(),
+                                                          static_cast<int>(SyncErrorCode::HttpAuthFailed)));
+                    } else {
+                        syncDeferred->complete(attemptResult);
+                    }
                     return;
                 }
 

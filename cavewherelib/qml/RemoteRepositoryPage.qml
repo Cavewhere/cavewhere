@@ -115,6 +115,7 @@ StandardPage {
         recentProjectModel: RootData.recentProjectModel
         cloneWatcher: cloneWatcher
         account: RootData.account
+        gitHubIntegration: RootData.remote.gitHubIntegration
 
         onRepositoryClonedIndex: function(clonedIndex) {
             if (clonedIndex < 0) {
@@ -503,12 +504,6 @@ StandardPage {
                                 onTriggered: gitHub.refreshRepositories()
                             }
 
-                            QC.MenuItem {
-                                text: "Upload SSH Key"
-                                enabled: !gitHub.busy
-                                onTriggered: gitHub.uploadPublicKey("")
-                            }
-
                             QC.MenuSeparator {}
 
                             QC.MenuItem {
@@ -583,7 +578,6 @@ StandardPage {
                         required property bool isPrivate
                         required property string description
                         required property string cloneUrl
-                        required property string sshUrl
                         required property int index
 
                         width: repoList.width
@@ -634,7 +628,7 @@ StandardPage {
                             cursorShape: Qt.PointingHandCursor
                             onTapped: {
                                 repoList.currentIndex = index
-                                manualUrlField.textField.text = sshUrl
+                                manualUrlField.textField.text = cloneUrl
                                 manualUrlField.textField.focus = true
                                 manualUrlField.textField.selectAll()
                                 cloneButtonPulse.restart()

@@ -14,15 +14,12 @@
 #include <QPointer>
 
 //Std includes
-#include <memory>
 #include <vector>
 
 //Our
 #include "cwGitHubDeviceAuth.h"
+#include "cwRemoteAuthProvider.h"
 
-namespace QQuickGit {
-class RSAKeyGenerator;
-}
 class cwRemoteCredentialStore;
 
 struct cwGitHubRepositoryItem
@@ -53,7 +50,7 @@ struct QRangeModel::RowOptions<::cwGitHubRepositoryItem>
 };
 QT_END_NAMESPACE
 
-class CAVEWHERE_LIB_EXPORT cwGitHubIntegration : public QObject
+class CAVEWHERE_LIB_EXPORT cwGitHubIntegration : public cwRemoteAuthProvider
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(GitHubIntegration)
@@ -96,6 +93,9 @@ public:
     bool verificationOpened() const { return m_hasOpenedVerificationUrl; }
     QString username() const { return m_username; }
     QString activeAccountId() const { return m_activeAccountId; }
+    QString accessToken() const override { return m_accessToken; }
+    bool hasLoadedCredentials() const override { return m_hasLoadedStoredToken; }
+    void ensureCredentialsLoaded() override;
 
     void setActive(bool active);
 
@@ -104,8 +104,6 @@ public:
     Q_INVOKABLE void cancelDeviceLoginFlow();
     Q_INVOKABLE void refreshRepositories();
     Q_INVOKABLE void reloadAccessTokenFromCredentialStore();
-    QVariantMap ensureKeyPair();
-    Q_INVOKABLE void uploadPublicKey(const QString& title);
     void clearSession();
     Q_INVOKABLE void markVerificationOpened();
     void logout();
@@ -117,7 +115,6 @@ public:
 signals:
     void authStateChanged();
     void deviceCodeChanged();
-    void accessTokenChanged();
     void errorMessageChanged();
     void repositoriesChanged();
     void activeChanged();
@@ -139,12 +136,10 @@ private:
     void handleDeviceCode(const cwGitHubDeviceAuth::DeviceCodeInfo& info);
     void handleAccessToken(const cwGitHubDeviceAuth::AccessTokenResult& result);
     void handleRepositoryReply(QNetworkReply* reply);
-    void handleUploadReply(QNetworkReply* reply);
     void handleUserProfileReply(QNetworkReply* reply);
     bool isUnauthorizedReply(QNetworkReply* reply) const;
     void invalidateActiveAccountToken(const QString& message);
     QByteArray authorizationHeader() const;
-    QString defaultKeyTitle() const;
     void storeAccessToken(const QString& token, const QString& accountId);
     void loadStoredAccessToken();
     void clearStoredAccessToken(const QString& accountId);
@@ -168,7 +163,6 @@ private:
     bool m_loadingStoredToken = false;
     QPointer<cwRemoteCredentialStore> m_credentialStore;
 
-    std::unique_ptr<QQuickGit::RSAKeyGenerator> m_keyGenerator;
     int m_secondsUntilNextPoll = 0;
     bool m_hasOpenedVerificationUrl = false;
     QString m_username;

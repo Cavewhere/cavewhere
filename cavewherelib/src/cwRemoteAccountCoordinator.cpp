@@ -144,7 +144,8 @@ void cwRemoteAccountCoordinator::syncAuthorizedGitHubAccount()
         return;
     }
 
-    if (m_gitHubIntegration->authState() != cwGitHubIntegration::AuthState::Authorized) {
+    const auto authState = m_gitHubIntegration->authState();
+    if (authState != cwGitHubIntegration::AuthState::Authorized) {
         return;
     }
 

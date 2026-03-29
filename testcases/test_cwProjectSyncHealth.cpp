@@ -108,6 +108,76 @@ TEST_CASE("cwProjectSyncHealth prefers missing remote warning for new repository
     CHECK(syncStatus.status().stale());
 }
 
+TEST_CASE("cwProjectSyncHealth updates status after initRepository on repo with existing remote",
+          "[cwProjectSyncHealth]")
+{
+    // Regression: cwProject assigns the GitRepository pointer to cwProjectSyncHealth at startup,
+    // before the file is loaded and initRepository() is called. Because initRepository() does not
+    // emit remotesChanged (or headBranchNameChanged), refresh() is never re-triggered, and the
+    // SyncButton keeps showing "No git remote is configured for this project." even though the
+    // on-disk repo has a remote configured.
+
+    auto tempDir = QTemporaryDir();
+    REQUIRE(tempDir.isValid());
+
+    const QString remotePath = QDir(tempDir.path()).filePath(QStringLiteral("remote.git"));
+    const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("project"));
+
+    // --- Phase 1: build a real on-disk git repo that has an origin remote ---
+    git_repository* bareRepo = nullptr;
+    REQUIRE(git_repository_init(&bareRepo, remotePath.toLocal8Bit().constData(), 1) == GIT_OK);
+    git_repository_free(bareRepo);
+
+    REQUIRE(QDir().mkpath(projectPath));
+
+    Account account;
+    account.setName(QStringLiteral("Tester"));
+    account.setEmail(QStringLiteral("tester@example.com"));
+
+    {
+        GitRepository setup;
+        setup.setDirectory(QDir(projectPath));
+        setup.initRepository();
+        setup.setAccount(&account);
+        setup.addRemote(QStringLiteral("origin"), QUrl::fromLocalFile(remotePath));
+        writeFile(projectPath, QStringLiteral("data.txt"), QStringLiteral("initial\n"));
+        CHECK_NOTHROW(setup.commitAll(QStringLiteral("Initial"), QStringLiteral("initial commit")));
+        waitForGitFuture(setup.push());
+    }
+    // setup is destroyed; the on-disk repo now has a remote and at least one pushed commit
+
+    // --- Phase 2: simulate cwProject startup — attach syncHealth before opening the file ---
+    // This mirrors the real app: connectSaveLoad() calls syncHealth->setRepository(repo) before
+    // any file is loaded, so the GitRepository has a directory set but initRepository() has not
+    // been called yet (d->repo == nullptr, remotes() returns empty).
+    GitRepository repo;
+    repo.setDirectory(QDir(projectPath));
+    // initRepository() deliberately NOT called yet
+
+    cwProjectSyncHealth syncHealth;
+    syncHealth.setRepository(&repo);
+
+    // Confirm the buggy initial state: no libgit2 handle → remotes() is empty → stale message
+    REQUIRE(waitUntil([&syncHealth]() {
+        return syncHealth.status().message()
+               == QStringLiteral("No git remote is configured for this project.");
+    }));
+
+    // --- Phase 3: simulate cwSaveLoad::initializeRepositoryForCurrentFile() ---
+    // This is what the load path calls after setFileName(). It opens the libgit2 handle and
+    // makes remotes() return real results. For the fix to work, initRepository() must emit
+    // remotesChanged() so that cwProjectSyncHealth::refresh() is re-triggered.
+    repo.initRepository();
+
+    // The status must change away from "No git remote is configured for this project."
+    // (it will become an ahead/behind result or a stale-but-different error — anything except
+    // the "no remote" message confirms that refresh() ran with the initialized repo)
+    REQUIRE(waitUntil([&syncHealth]() {
+        return syncHealth.status().message()
+               != QStringLiteral("No git remote is configured for this project.");
+    }));
+}
+
 TEST_CASE("cwProjectSyncHealth resolves remote ahead/behind asynchronously", "[cwProjectSyncHealth]")
 {
     auto tempDir = QTemporaryDir();
