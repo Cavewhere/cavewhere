@@ -2276,10 +2276,13 @@ TEST_CASE("Remote clone open edit save and sync workflow preserves LFS assets",
     const QString clonedRepoPath = QDir(cloneRoot.path()).filePath(clonedRepoName);
     REQUIRE(QDir(clonedRepoPath).exists());
 
+    const QString clonedRepoDirPath = QDir(clonedRepoPath).absolutePath();
     int clonedIndex = -1;
     for (int i = 0; i < recentProjectModel->rowCount(); ++i) {
         const QString path = recentProjectModel->data(recentProjectModel->index(i, 0), cwRecentProjectModel::PathRole).toString();
-        if (QDir(path).absolutePath() == QDir(clonedRepoPath).absolutePath()) {
+        const QFileInfo pathInfo(path);
+        const QString pathDirPath = pathInfo.isDir() ? pathInfo.absoluteFilePath() : pathInfo.absoluteDir().absolutePath();
+        if (pathDirPath == clonedRepoDirPath) {
             clonedIndex = i;
             break;
         }
@@ -3232,10 +3235,13 @@ TEST_CASE("cwProject sync hydrates pulled LFS objects from test LFS server", "[c
     REQUIRE(QDir(clonedRepoPath).exists());
     REQUIRE(setGitConfigString(clonedRepoPath, "lfs.url", lfsServer.endpoint()));
 
+    const QString clonedRepoDirPath = QDir(clonedRepoPath).absolutePath();
     int clonedIndex = -1;
     for (int i = 0; i < recentProjectModel->rowCount(); ++i) {
         const QString path = recentProjectModel->data(recentProjectModel->index(i, 0), cwRecentProjectModel::PathRole).toString();
-        if (QDir(path).absolutePath() == QDir(clonedRepoPath).absolutePath()) {
+        const QFileInfo pathInfo(path);
+        const QString pathDirPath = pathInfo.isDir() ? pathInfo.absoluteFilePath() : pathInfo.absoluteDir().absolutePath();
+        if (pathDirPath == clonedRepoDirPath) {
             clonedIndex = i;
             break;
         }
