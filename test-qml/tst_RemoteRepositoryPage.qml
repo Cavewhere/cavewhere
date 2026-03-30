@@ -480,28 +480,28 @@ MainWindowTest {
             tryVerify(() => !RootData.project.isTemporaryProject, 5000)
             let syncButton = findChild(mainWindow, "syncButton")
             verify(syncButton !== null)
-            tryVerify(() => syncButton.noRemote, 5000)
+            tryVerify(() => !syncButton.hasRemote, 5000)
             return syncButton
         }
 
-        function test_syncButton_noRemote_showsCloudUploadIcon() {
+        function test_syncButton_hasRemote_false_showsCloudUploadIcon() {
             let syncButton = saveProjectAndGetSyncButton("syncbutton-noremote-test")
             verify(syncButton.icon.source.toString().includes("cloud-arrow-up"))
         }
 
-        function test_syncButton_noRemote_tooltip() {
+        function test_syncButton_hasRemote_false_tooltip() {
             let syncButton = saveProjectAndGetSyncButton("syncbutton-noremote-tooltip-test")
             verify(syncButton.tooltipText.includes("No remote"))
         }
 
-        function test_syncButton_noRemote_badge_hidden() {
+        function test_syncButton_hasRemote_false_badge_hidden() {
             let syncButton = saveProjectAndGetSyncButton("syncbutton-noremote-badge-test")
             let badge = findChild(syncButton, "statusBadge")
             verify(badge !== null)
             verify(!badge.visible)
         }
 
-        function test_syncButton_noRemote_click_emitsSetupRemoteRequested() {
+        function test_syncButton_hasRemote_false_click_emitsSetupRemoteRequested() {
             let syncButton = saveProjectAndGetSyncButton("syncbutton-noremote-click-test")
             let spy = Qt.createQmlObject(
                 'import QtTest; SignalSpy { signalName: "setupRemoteRequested" }',
@@ -512,7 +512,7 @@ MainWindowTest {
             spy.destroy()
         }
 
-        function test_syncButton_noRemote_contextMenu_syncNowDisabled() {
+        function test_syncButton_hasRemote_false_contextMenu_syncNowDisabled() {
             let syncButton = saveProjectAndGetSyncButton("syncbutton-noremote-menu-test")
             mouseClick(syncButton, syncButton.width / 2, syncButton.height / 2, Qt.RightButton)
             let syncNowItem = findChild(syncButton, "syncNowMenuItem")
@@ -529,7 +529,7 @@ MainWindowTest {
                       "fixture project should load with caves")
             let syncButton = findChild(mainWindow, "syncButton")
             verify(syncButton !== null)
-            tryVerify(() => !syncButton.noRemote, 5000,
+            tryVerify(() => syncButton.hasRemote, 5000,
                       "sync button should have a remote configured")
             return syncButton
         }

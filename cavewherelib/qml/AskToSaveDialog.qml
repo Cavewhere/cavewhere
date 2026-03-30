@@ -20,7 +20,7 @@ QQ.Loader {
     // True when the project has a remote and there is something to push (or status is stale/unknown).
     // Controls visibility of the "Save & Sync" button.
     readonly property bool offerSync:
-        !RootData.project.syncHealth.status.noRemote
+        RootData.project.syncHealth.status.hasRemote
         && (RootData.project.syncHealth.status.aheadCount > 0
             || RootData.project.modified
             || RootData.project.syncHealth.status.stale)

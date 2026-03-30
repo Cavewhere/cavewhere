@@ -24,7 +24,7 @@ struct CAVEWHERE_LIB_EXPORT cwSyncStatus
     Q_PROPERTY(int aheadCount READ aheadCount)
     Q_PROPERTY(int behindCount READ behindCount)
     Q_PROPERTY(bool stale READ stale)
-    Q_PROPERTY(bool noRemote READ noRemote)
+    Q_PROPERTY(bool hasRemote READ hasRemote)
     Q_PROPERTY(bool authExpired READ authExpired)
     Q_PROPERTY(bool needsLogin READ needsLogin)
     Q_PROPERTY(QString message READ message)
@@ -43,7 +43,7 @@ public:
     int aheadCount() const;
     int behindCount() const;
     bool stale() const;
-    bool noRemote() const;
+    bool hasRemote() const;
     bool authExpired() const;
     bool needsLogin() const;
     QString message() const;
@@ -106,7 +106,7 @@ inline bool cwSyncStatus::hasLocalChanges() const { return m_hasLocalChanges; }
 inline int cwSyncStatus::aheadCount() const { return m_aheadCount; }
 inline int cwSyncStatus::behindCount() const { return m_behindCount; }
 inline bool cwSyncStatus::stale() const { return m_stale; }
-inline bool cwSyncStatus::noRemote() const { return m_syncBlocker == SyncBlocker::NoRemote; }
+inline bool cwSyncStatus::hasRemote() const { return m_syncBlocker != SyncBlocker::NoRemote; }
 inline bool cwSyncStatus::authExpired() const { return m_syncBlocker == SyncBlocker::Expired; }
 inline bool cwSyncStatus::needsLogin() const { return m_syncBlocker == SyncBlocker::NeedsLogin; }
 inline QString cwSyncStatus::message() const { return m_message; }

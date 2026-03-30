@@ -16,7 +16,7 @@ RoundButton {
     signal reconnectRequested()
     signal setupRemoteRequested()
 
-    readonly property bool noRemote: syncHealth.status.noRemote
+    readonly property bool hasRemote: syncHealth.status.hasRemote
     readonly property bool authExpired: syncHealth.status.authExpired
     readonly property bool needsLogin: syncHealth.status.needsLogin
     readonly property int aheadCount: syncHealth.status.aheadCount
@@ -24,7 +24,7 @@ RoundButton {
     readonly property bool hasLocalChanges: syncHealth.status.hasLocalChanges || projectModified
 
     readonly property string tooltipText: {
-        if (noRemote)
+        if (!hasRemote)
             return qsTr("No remote configured — click to set up sync")
         if (needsLogin)
             return qsTr("Sign in to GitHub — click to sync")
@@ -47,7 +47,7 @@ RoundButton {
         return qsTr("Up to date")
     }
 
-    icon.source: noRemote
+    icon.source: !hasRemote
         ? "qrc:/twbs-icons/icons/cloud-arrow-up.svg"
         : (needsLogin
            ? "qrc:/twbs-icons/icons/lock.svg"
@@ -57,7 +57,7 @@ RoundButton {
     enabled: !syncInProgress
 
     onClicked: {
-        if (noRemote) {
+        if (!hasRemote) {
             setupRemoteRequested()
         } else if (authExpired) {
             reconnectRequested()
@@ -84,7 +84,7 @@ RoundButton {
     QQ.Rectangle {
         id: syncBadgeId
         objectName: "statusBadge"
-        visible: !noRemote
+        visible: hasRemote
                  && (syncHealth.status.stale
                      || hasLocalChanges
                      || aheadCount > 0
@@ -130,7 +130,7 @@ RoundButton {
 
         QC.MenuItem {
             text: "Set up remote…"
-            visible: noRemote
+            visible: !hasRemote
             onTriggered: {
                 setupRemoteRequested()
             }
@@ -139,7 +139,7 @@ RoundButton {
         QC.MenuItem {
             objectName: "syncNowMenuItem"
             text: "Sync now"
-            enabled: !syncInProgress && !noRemote
+            enabled: !syncInProgress && hasRemote
             onTriggered: {
                 syncRequested()
             }
