@@ -12722,29 +12722,6 @@ TEST_CASE("shareLink generates correct https://cavewhere.com/open?repo=... URL",
     CHECK(!repoParam.isEmpty());
 }
 
-TEST_CASE("shareLink repo URL is percent-encoded when repo contains special chars", "[ShareLink]")
-{
-    // Use a synthetic HTTPS URL with special chars to verify encoding.
-    // We test the encoding by constructing a shareLink from a known repo URL.
-    const QUrl repoUrl(QStringLiteral("https://github.com/user/repo%20name"));
-    QUrl link;
-    link.setScheme(QStringLiteral("https"));
-    link.setHost(QStringLiteral("cavewhere.com"));
-    link.setPath(QStringLiteral("/open"));
-    QUrlQuery q;
-    q.addQueryItem(QStringLiteral("repo"), repoUrl.toString(QUrl::FullyEncoded));
-    link.setQuery(q);
-
-    // The repo param in the raw query string must not contain an unencoded space
-    const QString rawQuery = link.query(QUrl::FullyEncoded);
-    CHECK(!rawQuery.contains(QLatin1Char(' ')));
-
-    // Decoding the param must recover the original URL
-    const QUrlQuery decoded(link);
-    const QString recovered = decoded.queryItemValue(QStringLiteral("repo"), QUrl::FullyDecoded);
-    CHECK(recovered == repoUrl.toString());
-}
-
 TEST_CASE("shareLink round-trip: output parses back to original repo URL via cwDeepLinkHandler", "[ShareLink]")
 {
     // Use a synthetic HTTPS GitHub URL (no real remote needed) to test that
