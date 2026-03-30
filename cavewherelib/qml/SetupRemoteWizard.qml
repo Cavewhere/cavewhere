@@ -43,9 +43,8 @@ QC.Dialog {
                                               .replace(/[^a-zA-Z0-9._-]/g, "")
         }
 
-        // Activate the integration so stored credentials are loaded from keychain now.
-        // This ensures startDeviceLogin() only starts OAuth — it won't duplicate the
-        // keychain read because setActive(true) is already a no-op by then.
+        // Load cached credentials eagerly so startDeviceLogin() only initiates OAuth,
+        // avoiding a race between the keychain read and the OAuth device flow.
         root._gitHubWasActive = root.gitHubIntegration.active
         root.gitHubIntegration.active = true
 

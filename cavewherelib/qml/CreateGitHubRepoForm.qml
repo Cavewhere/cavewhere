@@ -50,6 +50,7 @@ ColumnLayout {
     QC.ButtonGroup { id: visibilityGroupId }
 
     RowLayout {
+        Layout.fillWidth: true
         spacing: 0
 
         QC.Button {
