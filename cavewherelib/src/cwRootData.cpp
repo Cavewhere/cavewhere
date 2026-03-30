@@ -26,6 +26,7 @@
 #include "cwPageSelectionModel.h"
 #include "cwSettings.h"
 #include "cwRemoteServices.h"
+#include "cwDeepLinkHandler.h"
 // #include "cwImageCompressionUpdater.h"
 #include "cwJobSettings.h"
 #include "cwSurveyNoteModel.h"
@@ -400,4 +401,12 @@ cwRemoteServices* cwRootData::remote() const
         m_remoteServices = new cwRemoteServices(const_cast<cwRootData*>(this));
     }
     return m_remoteServices;
+}
+
+cwDeepLinkHandler* cwRootData::deepLinkHandler() const
+{
+    if (!m_deepLinkHandler) {
+        m_deepLinkHandler = new cwDeepLinkHandler(const_cast<cwRootData*>(this));
+    }
+    return m_deepLinkHandler;
 }

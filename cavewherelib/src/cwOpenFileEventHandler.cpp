@@ -37,7 +37,12 @@ bool cwOpenFileEventHandler::eventFilter(QObject *obj, QEvent *event)
         Q_ASSERT(dynamic_cast<QFileOpenEvent*>(event) != nullptr);
         QFileOpenEvent* fileOpenEvent = static_cast<QFileOpenEvent*>(event);
         if(project() != nullptr) {
-            project()->loadOrConvert(fileOpenEvent->file());
+            QUrl url = fileOpenEvent->url();
+            if (url.scheme() == QLatin1String("cavewhere")) {
+                emit deepLinkReceived(url);
+            } else {
+                project()->loadOrConvert(fileOpenEvent->file());
+            }
             event->accept();
             return true;
         }

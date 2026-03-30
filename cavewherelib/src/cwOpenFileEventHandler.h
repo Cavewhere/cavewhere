@@ -12,6 +12,7 @@
 //Qt includes
 #include <QObject>
 #include <QPointer>
+#include <QUrl>
 
 //Our includes
 #include "cwProject.h"
@@ -27,6 +28,7 @@ public:
     cwProject* project() const;
 
 signals:
+    void deepLinkReceived(QUrl url);
 
 protected:
     bool eventFilter(QObject *obj, QEvent *event);

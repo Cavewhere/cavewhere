@@ -86,15 +86,15 @@ On macOS this means the URL always arrives in a live, fully-initialized app. On 
 - If so, call `rootData->deepLinkHandler()->handleUrl(url)` instead of `loadOrConvert()`
 - This covers Windows (and Linux if URL scheme ever gets registered)
 
-**Startup race on Windows**: the URL arrives at startup before QML is fully loaded and `DeepLinkConfirmDialog` exists. `cwDeepLinkHandler` must queue the incoming URL and emit `openRepoRequested` only after the app signals it is ready. Add a `setReady()` slot to `cwDeepLinkHandler` called from `CavewhereMainWindow.qml`'s `Component.onCompleted`.
+**Startup race on Windows**: the URL arrives via `argv` before QML is loaded and the `openRepoRequested` signal connection exists. `cwDeepLinkHandler::handleUrl()` always emits `openRepoRequested` immediately (a no-op if nothing is connected yet) and stores the validated repo URL as `m_pendingUrl`. `CavewhereMainWindow.qml`'s `Component.onCompleted` calls `takePendingUrl()` to drain any URL that arrived before the connection was established, then connects to `openRepoRequested` for future URLs.
 
 **Create `cwDeepLinkHandler`** (`cavewherelib/src/cwDeepLinkHandler.h/.cpp`):
-- `handleUrl(QUrl)` — called from both `cwOpenFileEventHandler` (macOS) and `main.cpp` (Windows)
-- `setReady()` — marks the app as initialized; flushes any queued URL
+- `handleUrl(QUrl)` — called from both `cwOpenFileEventHandler` (macOS) and `main.cpp` (Windows); validates and always emits `openRepoRequested` + stores `m_pendingUrl`
+- `takePendingUrl()` — returns and clears `m_pendingUrl`; called once from `Component.onCompleted` to handle the Windows startup case
 - Parses `cavewhere://open?repo=<url>`
 - Validates the `repo` param against an allowlist: `github.com`, `gitlab.com`, `bitbucket.org`
 - Requires `repo` param to use `https://` scheme — rejects `git://`, `ssh://`, `http://`
-- Emits `openRepoRequested(QUrl repoUrl)` after validation passes (or immediately after `setReady()` if queued)
+- Emits `openRepoRequested(QUrl repoUrl)` after validation passes
 - Emits `invalidLink(QString reason)` for bad URLs
 - Exposed to QML via `cwRootData`
 
@@ -113,8 +113,20 @@ Never auto-clone. Show a confirmation dialog first.
 - Buttons: "Clone & Open" (accept) / "Cancel" (reject)
 - On accept: calls `RootData.remote.cloner.clone(repoUrl.toString())` — reuses existing `cwRemoteRepositoryCloner` (`clone()` takes `QString`, not `QUrl`)
 
-**Trigger from QML** when `cwDeepLinkHandler` emits `openRepoRequested`:
-- `CavewhereMainWindow.qml` connects to the signal and opens `DeepLinkConfirmDialog`
+**Trigger from QML** in `CavewhereMainWindow.qml`'s `Component.onCompleted`:
+```qml
+Component.onCompleted: {
+    // Drain any URL that arrived before QML was loaded (Windows cold start)
+    var pending = RootData.deepLinkHandler.takePendingUrl()
+    if (pending.toString() !== "")
+        deepLinkConfirmDialog.open(pending)
+
+    // Handle URLs that arrive while the app is running (macOS)
+    RootData.deepLinkHandler.openRepoRequested.connect(function(url) {
+        deepLinkConfirmDialog.open(url)
+    })
+}
+```
 - Clone result handled by existing `repositoryCloned` / `cloneFailedDueToAuthError` signals on `cwRemoteRepositoryCloner`
 
 > **Commit checkpoint 3 — "Add DeepLinkConfirmDialog and wire clone trigger"**
@@ -201,7 +213,7 @@ This phase makes `https://cavewhere.com/open?...` open the app directly rather t
 |------|--------|
 | `Info.plist.in` (repo root) | Add `CFBundleURLTypes` for `cavewhere://` scheme |
 | `installer/windows/cavewhere.iss.in` | Add `[Registry]` section for `cavewhere://` URL scheme |
-| `main.cpp` | Handle `cavewhere://` as command-line arg (Windows); call `deepLinkHandler()->setReady()` |
+| `main.cpp` | Handle `cavewhere://` as command-line arg (Windows) |
 | `cavewherelib/src/cwOpenFileEventHandler.h/.cpp` | Detect `cavewhere://` URLs, emit signal (macOS) |
 | `cavewherelib/src/cwDeepLinkHandler.h/.cpp` | New — parse, validate, queue, emit openRepoRequested |
 | `cavewherelib/src/cwRootData.h/.cpp` | Expose cwDeepLinkHandler |
@@ -209,7 +221,7 @@ This phase makes `https://cavewhere.com/open?...` open the app directly rather t
 | `cavewherelib/qml/FileMenu.qml` | Add Share... menu item |
 | `cavewherelib/qml/ShareDialog.qml` | New — share link display + copy |
 | `cavewherelib/qml/DeepLinkConfirmDialog.qml` | New — clone confirmation |
-| `cavewherelib/qml/CavewhereMainWindow.qml` | Connect deepLinkHandler signal to dialog |
+| `cavewherelib/qml/CavewhereMainWindow.qml` | `Component.onCompleted`: call `takePendingUrl()` then connect `openRepoRequested` to dialog |
 | `cavewherelib/CMakeLists.txt` | **No change needed** — `src/*.cpp`, `src/*.h`, and `qml/*.qml` are all picked up by `file(GLOB ... CONFIGURE_DEPENDS ...)` automatically |
 | `testcases/` (root `CMakeLists.txt`) | **No change needed** — `testcases/*.cpp` is also globbed; just drop `tst_cwDeepLinkHandler.cpp` in the directory |
 
@@ -238,9 +250,11 @@ This phase makes `https://cavewhere.com/open?...` open the app directly rather t
 - `[DeepLink] Malformed URL emits invalidLink`
 - `[DeepLink] IP address as host rejected`
 - `[DeepLink] Path traversal in repo URL rejected`
-- `[DeepLink] URL received before setReady() is queued, then emitted on setReady()`
-- `[DeepLink] URL received after setReady() emits openRepoRequested immediately`
-- `[DeepLink] Second URL received before setReady() replaces the first (only one queued)`
+- `[DeepLink] takePendingUrl() returns the validated repo URL`
+- `[DeepLink] takePendingUrl() clears the pending URL`
+- `[DeepLink] takePendingUrl() returns empty when no URL was handled`
+- `[DeepLink] Second handleUrl() replaces first pending URL`
+- `[DeepLink] Invalid URL does not set a pending URL`
 
 **`tst_cwProject` (share link methods)** — extend existing project tests
 - `[ShareLink] shareLink() generates correct https://cavewhere.com/open?repo=... URL`

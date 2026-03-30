@@ -24,6 +24,7 @@
 #include "cwProject.h"
 #include "cwQmlImageProviderBinder.h"
 #include "cwOpenFileEventHandler.h"
+#include "cwDeepLinkHandler.h"
 #include "cwApplication.h"
 #include "cwGlobals.h"
 #include "cwMetaTypeSystem.h"
@@ -92,9 +93,14 @@ void handleCommandline(QCoreApplication& a, cwRootData* rootData) {
     if (!positionalArgs.isEmpty()) {
         QString filename = positionalArgs.first();
         qDebug() << "Loading file:" << filename;
-        rootData->project()->loadOrConvert(filename);
 
-        if(!pageUrl.isEmpty()) {
+        if (filename.startsWith(QLatin1String("cavewhere://"))) {
+            rootData->deepLinkHandler()->handleUrl(QUrl(filename));
+        } else {
+            rootData->project()->loadOrConvert(filename);
+        }
+
+        if(!pageUrl.isEmpty() && !filename.startsWith(QLatin1String("cavewhere://"))) {
             QObject* obj = new QObject();
 
             struct ShouldLoad {
@@ -186,6 +192,8 @@ int main(int argc, char *argv[])
     //Handles when the user clicks on a file in Finder(Mac OS X) or Explorer (Windows)
     cwOpenFileEventHandler* openFileHandler = new cwOpenFileEventHandler(&a);
     openFileHandler->setProject(rootData->project());
+    QObject::connect(openFileHandler, &cwOpenFileEventHandler::deepLinkReceived,
+                     rootData->deepLinkHandler(), &cwDeepLinkHandler::handleUrl);
     a.installEventFilter(openFileHandler);
 
     //Creates image providers for the qml engine
