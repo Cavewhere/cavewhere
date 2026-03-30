@@ -121,6 +121,10 @@ QC.ApplicationWindow {
         anchors.centerIn: parent
     }
 
+    DeepLinkConfirmDialog {
+        id: deepLinkConfirmDialogId
+    }
+
     onClosing: (close) => {
         if (shutdownLoader.active) {
             close.accepted = true;
@@ -143,5 +147,15 @@ QC.ApplicationWindow {
 
     QQ.Component.onCompleted: {
         screenSizeSaverId.resize();
+
+        // Drain any deep-link URL that arrived before QML was loaded (Windows cold start)
+        var pending = RootData.deepLinkHandler.takePendingUrl()
+        if (pending.toString() !== "")
+            deepLinkConfirmDialogId.open(pending)
+
+        // Handle deep-link URLs that arrive while the app is running (macOS)
+        RootData.deepLinkHandler.openRepoRequested.connect(function(url) {
+            deepLinkConfirmDialogId.open(url)
+        })
     }
 }
