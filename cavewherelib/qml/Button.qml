@@ -22,7 +22,6 @@ QQ.Rectangle {
     property bool hasText:  text.length > 0
     // property int buttonMargin:  container.anchors.margins
     property bool mousePressed: false
-    property bool enabled: true
     property bool globalClickToUncheck: false //This is useful, if you're connect the button to a popup
 
     signal clicked();
