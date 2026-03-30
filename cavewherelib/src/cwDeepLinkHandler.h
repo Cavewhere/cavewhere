@@ -50,8 +50,6 @@ signals:
 private:
     QUrl m_pendingUrl;
 
-    void processUrl(const QUrl& url);
-
     static const QStringList& allowedHosts();
 };
 

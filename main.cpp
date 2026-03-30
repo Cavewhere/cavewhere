@@ -94,13 +94,14 @@ void handleCommandline(QCoreApplication& a, cwRootData* rootData) {
         QString filename = positionalArgs.first();
         qDebug() << "Loading file:" << filename;
 
-        if (filename.startsWith(QLatin1String("cavewhere://"))) {
+        const bool isDeepLink = filename.startsWith(QLatin1String("cavewhere://"));
+        if (isDeepLink) {
             rootData->deepLinkHandler()->handleUrl(QUrl(filename));
         } else {
             rootData->project()->loadOrConvert(filename);
         }
 
-        if(!pageUrl.isEmpty() && !filename.startsWith(QLatin1String("cavewhere://"))) {
+        if(!pageUrl.isEmpty() && !isDeepLink) {
             QObject* obj = new QObject();
 
             struct ShouldLoad {

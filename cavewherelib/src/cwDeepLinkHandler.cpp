@@ -18,25 +18,6 @@ cwDeepLinkHandler::cwDeepLinkHandler(QObject* parent)
 
 void cwDeepLinkHandler::handleUrl(const QUrl& url)
 {
-    processUrl(url);
-}
-
-/**
- * @brief Returns and clears any URL that arrived before QML was ready.
- *
- * Call from CavewhereMainWindow.qml Component.onCompleted to handle the
- * Windows startup case where argv delivers the URL before the signal
- * connection to the confirmation dialog exists.
- */
-QUrl cwDeepLinkHandler::takePendingUrl()
-{
-    QUrl url = m_pendingUrl;
-    m_pendingUrl.clear();
-    return url;
-}
-
-void cwDeepLinkHandler::processUrl(const QUrl& url)
-{
     if (url.scheme() != QLatin1String("cavewhere")) {
         emit invalidLink(QStringLiteral("Not a cavewhere:// URL"));
         return;
@@ -67,7 +48,6 @@ void cwDeepLinkHandler::processUrl(const QUrl& url)
         return;
     }
 
-    // Reject bare IP addresses as hosts
     static const QRegularExpression ipPattern(
         QStringLiteral(R"(^\d{1,3}(\.\d{1,3}){3}$)"));
     if (ipPattern.match(host).hasMatch()) {
@@ -75,7 +55,6 @@ void cwDeepLinkHandler::processUrl(const QUrl& url)
         return;
     }
 
-    // Reject path traversal
     if (repoUrl.path().contains(QLatin1String(".."))) {
         emit invalidLink(QStringLiteral("Path traversal detected in repo URL"));
         return;
@@ -83,6 +62,20 @@ void cwDeepLinkHandler::processUrl(const QUrl& url)
 
     m_pendingUrl = repoUrl;
     emit openRepoRequested(repoUrl);
+}
+
+/**
+ * @brief Returns and clears any URL that arrived before QML was ready.
+ *
+ * Call from CavewhereMainWindow.qml Component.onCompleted to handle the
+ * Windows startup case where argv delivers the URL before the signal
+ * connection to the confirmation dialog exists.
+ */
+QUrl cwDeepLinkHandler::takePendingUrl()
+{
+    QUrl url = m_pendingUrl;
+    m_pendingUrl.clear();
+    return url;
 }
 
 const QStringList& cwDeepLinkHandler::allowedHosts()
