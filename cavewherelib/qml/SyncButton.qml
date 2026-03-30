@@ -19,6 +19,9 @@ RoundButton {
     readonly property bool noRemote: syncHealth.status.noRemote
     readonly property bool authExpired: syncHealth.status.authExpired
     readonly property bool needsLogin: syncHealth.status.needsLogin
+    readonly property int aheadCount: syncHealth.status.aheadCount
+    readonly property int behindCount: syncHealth.status.behindCount
+    readonly property bool hasLocalChanges: syncHealth.status.hasLocalChanges || projectModified
 
     readonly property string tooltipText: {
         if (noRemote)
@@ -31,18 +34,13 @@ RoundButton {
             return qsTr("Syncing…")
         if (projectModified)
             return qsTr("Unsaved changes — click to save and sync")
-
-        const ahead = syncHealth.status.aheadCount
-        const behind = syncHealth.status.behindCount
-        const localChanges = syncHealth.status.hasLocalChanges
-
-        if (localChanges && ahead === 0 && behind === 0)
+        if (syncHealth.status.hasLocalChanges && aheadCount === 0 && behindCount === 0)
             return qsTr("Local edits pending — click to sync")
-        if (ahead > 0 && behind > 0)
+        if (aheadCount > 0 && behindCount > 0)
             return qsTr("Commits to push and pull — click to sync")
-        if (ahead > 0)
+        if (aheadCount > 0)
             return qsTr("Commits ready to push — click to sync")
-        if (behind > 0)
+        if (behindCount > 0)
             return qsTr("Updates available — click to sync")
         if (syncHealth.status.stale)
             return qsTr("Sync status unavailable")
@@ -88,10 +86,9 @@ RoundButton {
         objectName: "statusBadge"
         visible: !noRemote
                  && (syncHealth.status.stale
-                     || syncHealth.status.hasLocalChanges
-                     || projectModified
-                     || syncHealth.status.aheadCount > 0
-                     || syncHealth.status.behindCount > 0
+                     || hasLocalChanges
+                     || aheadCount > 0
+                     || behindCount > 0
                      || syncInProgress)
 
         anchors.right: parent.right
@@ -118,16 +115,12 @@ RoundButton {
                     return "!"
                 }
 
-                const ahead = syncHealth.status.aheadCount
-                const behind = syncHealth.status.behindCount
-                const localChanges = syncHealth.status.hasLocalChanges || projectModified
-
-                if (ahead === 0 && behind === 0 && localChanges) {
+                if (aheadCount === 0 && behindCount === 0 && hasLocalChanges) {
                     return ""
                 }
 
-                let suffix = localChanges ? " \u2022" : ""
-                return "\u2191" + ahead + " \u2193" + behind + suffix
+                let suffix = hasLocalChanges ? " \u2022" : ""
+                return "\u2191" + aheadCount + " \u2193" + behindCount + suffix
             }
         }
     }

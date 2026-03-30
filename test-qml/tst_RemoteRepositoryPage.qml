@@ -520,6 +520,84 @@ MainWindowTest {
             verify(!syncNowItem.enabled)
         }
 
+        // Helper: load a project with a local remote configured.
+        function loadSyncFixtureAndGetSyncButton() {
+            const fixture = TestHelper.createLocalSyncFixtureWithLfsServer()
+            compare(fixture.errorMessage, "")
+            TestHelper.loadProjectFromPath(RootData.project, fixture.projectFilePath)
+            tryVerify(() => RootData.region.caveCount > 0, 10000,
+                      "fixture project should load with caves")
+            let syncButton = findChild(mainWindow, "syncButton")
+            verify(syncButton !== null)
+            tryVerify(() => !syncButton.noRemote, 5000,
+                      "sync button should have a remote configured")
+            return syncButton
+        }
+
+        function test_syncButton_withRemote_projectModified_badgeVisible() {
+            let syncButton = loadSyncFixtureAndGetSyncButton()
+            let badge = findChild(syncButton, "statusBadge")
+            verify(badge !== null)
+
+            // Wait for a clean, non-stale state so we know badge starts hidden
+            RootData.project.syncHealth.refresh()
+            tryVerify(() => !RootData.project.syncHealth.status.stale
+                          && !RootData.project.modified
+                          && syncButton.aheadCount === 0
+                          && syncButton.behindCount === 0,
+                      10000, "wait for clean sync state before testing badge")
+            verify(!badge.visible, "badge should be hidden in a clean state")
+
+            RootData.region.cave(0).name = "Modified Cave"
+            tryVerify(() => RootData.project.modified, 5000,
+                      "project should become modified after cave rename")
+            verify(badge.visible, "badge should be visible when project is modified")
+        }
+
+        function test_syncButton_withRemote_projectModified_tooltip() {
+            let syncButton = loadSyncFixtureAndGetSyncButton()
+
+            RootData.region.cave(0).name = "Modified For Tooltip"
+            tryVerify(() => RootData.project.modified, 5000,
+                      "project should become modified after cave rename")
+
+            verify(syncButton.tooltipText.includes("Unsaved changes"),
+                   "tooltip should mention unsaved changes when project is modified")
+        }
+
+        function test_syncButton_withRemote_upToDate_tooltip() {
+            let syncButton = loadSyncFixtureAndGetSyncButton()
+
+            RootData.project.syncHealth.refresh()
+            tryVerify(() => !RootData.project.syncHealth.status.stale
+                          && !RootData.project.modified
+                          && syncButton.aheadCount === 0
+                          && syncButton.behindCount === 0,
+                      10000, "wait for clean sync state")
+
+            verify(syncButton.tooltipText.includes("Up to date"),
+                   "tooltip should say 'Up to date' when synced and unmodified")
+        }
+
+        function test_syncButton_withRemote_modifiedClears_afterSync() {
+            let syncButton = loadSyncFixtureAndGetSyncButton()
+
+            RootData.region.cave(0).name = "Pre-Sync Cave"
+            tryVerify(() => RootData.project.modified, 5000,
+                      "project should become modified after cave rename")
+            verify(syncButton.projectModified,
+                   "syncButton.projectModified should reflect project.modified")
+
+            RootData.project.sync()
+            tryVerify(() => !RootData.project.syncInProgress, 30000,
+                      "sync should complete")
+
+            verify(!RootData.project.modified,
+                   "project.modified should be false after successful sync")
+            verify(!syncButton.projectModified,
+                   "syncButton.projectModified should be false after sync")
+        }
+
         function test_testerAssisted_invalidGithubToken_revokesAccount() {
             testerAssistedGate.beginDecision(
                         "Invalid GitHub token revokes account",
