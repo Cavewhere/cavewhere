@@ -26,6 +26,9 @@
 #include "cavewhereVersion.h"
 #include "ProjectFilenameTestHelper.h"
 
+//QQuickGit includes
+#include "GitRepository.h"
+
 //Qt includes
 #include <QStandardPaths>
 #include <QDir>
@@ -1825,4 +1828,75 @@ TEST_CASE("cwSaveLoad compression rule 3: renaming an object twice before flush 
     CHECK(gammaDir.exists());
     CHECK(!betaDir.exists());
     CHECK(!alphaDir.exists());
+}
+
+TEST_CASE("enqueueFlushAndCommit creates a git commit after saveAs from a temporary project", "[cwSaveLoad]") {
+    auto root = std::make_unique<cwRootData>();
+    auto project = root->project();
+    auto region = project->cavingRegion();
+
+    root->account()->setName(QStringLiteral("Test User"));
+    root->account()->setEmail(QStringLiteral("test@example.com"));
+
+    region->addCave();
+    region->cave(0)->setName("Test Cave");
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("commit-test/commit-test.cwproj"));
+
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+
+    auto* repo = project->repository();
+    REQUIRE(repo != nullptr);
+
+    // A HEAD commit must exist. Without it every project file is untracked and
+    // a subsequent discardChanges() (reset --hard HEAD + cleanUntracked) would
+    // delete the entire project from disk.
+    const auto headOid = QQuickGit::GitRepository::headCommitOid(repo->directory().absolutePath());
+    CHECK_FALSE(headOid.hasError());
+    CHECK(!headOid.value().isEmpty());
+
+    // No untracked or modified files — nothing for cleanUntracked() to delete.
+    repo->checkStatus();
+    CHECK(repo->modifiedFileCount() == 0);
+}
+
+TEST_CASE("enqueueFlushAndCommit creates a new commit on each save() call", "[cwSaveLoad]") {
+    auto root = std::make_unique<cwRootData>();
+    auto project = root->project();
+    auto region = project->cavingRegion();
+
+    root->account()->setName(QStringLiteral("Test User"));
+    root->account()->setEmail(QStringLiteral("test@example.com"));
+
+    region->addCave();
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("save-commit-test/save-commit-test.cwproj"));
+
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+
+    auto* repo = project->repository();
+    REQUIRE(repo != nullptr);
+
+    const auto firstOid = QQuickGit::GitRepository::headCommitOid(repo->directory().absolutePath());
+    REQUIRE_FALSE(firstOid.hasError());
+    REQUIRE(!firstOid.value().isEmpty());
+
+    // Modify and save again — a second distinct commit must be produced.
+    region->cave(0)->setName("Renamed Cave");
+    project->waitSaveToFinish();
+    REQUIRE(project->save());
+    project->waitSaveToFinish();
+
+    const auto secondOid = QQuickGit::GitRepository::headCommitOid(repo->directory().absolutePath());
+    REQUIRE_FALSE(secondOid.hasError());
+    CHECK(secondOid.value() != firstOid.value());
+
+    repo->checkStatus();
+    CHECK(repo->modifiedFileCount() == 0);
 }

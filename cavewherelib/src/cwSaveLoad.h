@@ -236,6 +236,7 @@ public:
     Monad::ResultBase moveProjectTo(const QString& destinationFileUrl);
     Monad::ResultBase copyProjectTo(const QString& destinationFileUrl);
     QFuture<Monad::ResultBase> saveBundledArchive(const QString& targetArchivePath);
+    QFuture<Monad::ResultBase> enqueueFlushAndCommit();
 
     // Queues the dataRoot directory rename and .cwproj descriptor file rename jobs, and
     // rebuilds internal object-state paths to reflect the new dataRoot. Called by the sync
@@ -301,8 +302,6 @@ public:
     QFuture<Monad::ResultBase> checkoutAndReconcile(const QString& refSpec,
                                                     int checkoutMode = 1);
     std::optional<SyncReport> lastSyncReport() const;
-    Monad::ResultBase commitProjectChanges(const QString& subject = QString(),
-                                           const QString& description = QString());
 
     QFuture<void> retire();
 
@@ -421,6 +420,8 @@ private:
 
     static QUuid toUuid(const std::string& uuidStr);
 
+    Monad::ResultBase commitProjectChanges(const QString& subject = QString(),
+                                           const QString& description = QString());
     QFuture<Monad::ResultBase> loadImpl(const QString& filename);
     QFuture<Monad::ResultBase> saveFlushImpl();
     QFuture<Monad::ResultBase> enqueueReconcilePhase(const QFuture<Monad::ResultBase>& prepareFuture,

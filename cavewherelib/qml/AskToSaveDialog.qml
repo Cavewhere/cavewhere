@@ -15,6 +15,7 @@ QQ.Loader {
     required property string taskName
 
     property AskToSaveInteralDialog _dialog: null
+    property bool _saveCompleted: false
 
     // True when the project has a remote and there is something to push (or status is stale/unknown).
     // Controls visibility of the "Save & Sync" button.
@@ -25,6 +26,7 @@ QQ.Loader {
             || RootData.project.syncHealth.status.stale)
 
     function askToSave() {
+        loaderId._saveCompleted = false;
         if (RootData.project.isNewEmptyProject()) {
             afterSaveFunc();
             closeDialog();
@@ -44,15 +46,14 @@ QQ.Loader {
     }
 
     function closeDialog() {
-        if(loaderId.item) {
-            loaderId._dialog.askToSaveDialog.close();
-        }
         loaderId.sourceComponent = null;
     }
 
     function _privateAfterSave() {
-        afterSaveFunc();
+        if (loaderId._saveCompleted) { return; }
+        loaderId._saveCompleted = true;
         closeDialog();
+        afterSaveFunc();
     }
 
     function handleTemporarySaveRequest() {
@@ -82,23 +83,65 @@ QQ.Loader {
         property alias askToSaveDialog: askToSaveDialogId
         property bool isTemporaryProject: RootData.project.isTemporaryProject
 
-        // idle    — waiting for user input
-        // saving  — save in progress (spinner shown, buttons hidden)
-        // syncing — sync in progress after save (spinner shown, buttons hidden)
-        // syncError — sync finished with an error; offer "Close anyway" or "Stay open"
-        property string dialogState: "idle"
         property bool syncAfterSave: false
-        property bool authFailed: false
         property string syncErrorText: ""
 
+        // Logical phase driven by JS; QML state is derived from phase + context via when: conditions.
+        property string _phase: "idle"
+
         anchors.centerIn: parent
+
+        states: [
+            // idle sub-states: each loads the exact buttons needed — no invisible delegates in the ListView.
+            QQ.State {
+                name: "idle-temp"
+                when: itemId._phase === "idle" && itemId.isTemporaryProject
+                QQ.PropertyChanges { footerLoaderId.sourceComponent: tempIdleButtonsComponent }
+            },
+            QQ.State {
+                name: "idle-nosync"
+                when: itemId._phase === "idle" && !itemId.isTemporaryProject && !loaderId.offerSync
+                QQ.PropertyChanges { footerLoaderId.sourceComponent: nonTempNoSyncButtonsComponent }
+            },
+            QQ.State {
+                name: "idle-sync"
+                when: itemId._phase === "idle" && !itemId.isTemporaryProject && loaderId.offerSync
+                QQ.PropertyChanges { footerLoaderId.sourceComponent: nonTempSyncButtonsComponent }
+            },
+            QQ.State {
+                name: "saving"
+                when: itemId._phase === "saving"
+                QQ.PropertyChanges {
+                    contentLabelId.visible: false
+                    busyIndicatorId.visible: true
+                    busyLabelId.visible: true
+                    busyLabelId.text: "Saving\u2026"
+                    footerLoaderId.sourceComponent: null
+                }
+            },
+            QQ.State {
+                name: "syncing"
+                when: itemId._phase === "syncing"
+                extend: "saving"
+                QQ.PropertyChanges { busyLabelId.text: "Syncing\u2026" }
+            },
+            QQ.State {
+                name: "syncError"
+                when: itemId._phase === "syncError"
+                QQ.PropertyChanges {
+                    contentLabelId.visible: false
+                    syncErrorLabelId.visible: true
+                    footerLoaderId.sourceComponent: syncErrorButtonsComponent
+                }
+            }
+        ]
 
         QQ.Component.onCompleted: {
             // Kick off a remote status check so offerSync updates reactively.
             RootData.project.syncHealth.refresh();
             // If a background sync is already running, wait for it instead of starting a new one.
             if (RootData.project.syncInProgress) {
-                itemId.dialogState = "syncing";
+                itemId._phase = "syncing";
             }
         }
 
@@ -107,40 +150,39 @@ QQ.Loader {
 
             function onFileSaved() {
                 if (itemId.syncAfterSave) {
-                    itemId.dialogState = "syncing";
+                    itemId._phase = "syncing";
                     RootData.project.sync();
                 } else {
-                    loaderId._privateAfterSave();
+                    Qt.callLater(loaderId._privateAfterSave);
                 }
             }
 
             function onSyncAuthFailed() {
-                itemId.authFailed = true;
+                itemId.syncErrorText = "GitHub access has expired. Your changes are saved locally.";
             }
 
             function onSyncFinished() {
-                if (itemId.dialogState !== "syncing") { return; }
+                if (itemId._phase !== "syncing") { return; }
 
-                if (itemId.authFailed) {
-                    itemId.syncErrorText = "GitHub access has expired. Your changes are saved locally.";
-                    itemId.dialogState = "syncError";
+                if (itemId.syncErrorText !== "") {
+                    itemId._phase = "syncError";
                 } else if (RootData.project.errorModel.count > 0) {
                     itemId.syncErrorText = "Sync failed: "
                         + RootData.project.errorModel.last().message
                         + "\nYour changes are saved locally.";
-                    itemId.dialogState = "syncError";
+                    itemId._phase = "syncError";
                 } else if (RootData.project.isModified()) {
                     // An in-flight sync finished but the project still has unsaved changes;
                     // save them and sync again so they are also pushed.
                     itemId.syncAfterSave = true;
-                    itemId.dialogState = "saving";
+                    itemId._phase = "saving";
                     if (RootData.project.canSaveDirectly) {
                         RootData.project.save();
                     } else {
                         loaderId.saveAsDialog.open();
                     }
                 } else {
-                    loaderId._privateAfterSave();
+                    Qt.callLater(loaderId._privateAfterSave);
                 }
             }
         }
@@ -150,8 +192,19 @@ QQ.Loader {
             function onCountChanged() {
                 // Only react to errorModel changes during save — sync errors are handled
                 // via onSyncFinished so they can show the syncError state instead of just closing.
-                if ((itemId.dialogState === "idle" || itemId.dialogState === "saving")
+                if ((itemId._phase === "idle" || itemId._phase === "saving")
                         && RootData.project.errorModel.count > 0) {
+                    loaderId.closeDialog();
+                }
+            }
+        }
+
+        QQ.Connections {
+            target: loaderId.saveAsDialog
+            // Cancelling the SaveAsDialog while in idle (temp-project Save flow) should
+            // dismiss the AskToSaveDialog too — there is no meaningful state to return to.
+            function onRejected() {
+                if (itemId._phase === "idle") {
                     loaderId.closeDialog();
                 }
             }
@@ -168,7 +221,7 @@ QQ.Loader {
                 spacing: 8
 
                 QC.Label {
-                    visible: itemId.dialogState === "idle"
+                    id: contentLabelId
                     width: parent.width
                     text: itemId.isTemporaryProject
                           ? "This project lives in a <b>temporary folder</b>.<br>Save to move it somewhere permanent"
@@ -177,94 +230,36 @@ QQ.Loader {
                 }
 
                 QC.BusyIndicator {
-                    visible: itemId.dialogState === "saving" || itemId.dialogState === "syncing"
+                    id: busyIndicatorId
+                    visible: false
                     anchors.horizontalCenter: parent.horizontalCenter
                 }
 
                 QC.Label {
-                    visible: itemId.dialogState === "saving" || itemId.dialogState === "syncing"
+                    id: busyLabelId
+                    visible: false
                     width: parent.width
-                    text: itemId.dialogState === "saving" ? "Saving\u2026" : "Syncing\u2026"
+                    text: "Saving\u2026"
                     horizontalAlignment: QQ.Text.AlignHCenter
                 }
 
                 QC.Label {
-                    visible: itemId.dialogState === "syncError"
+                    id: syncErrorLabelId
+                    visible: false
                     width: parent.width
                     text: itemId.syncErrorText
                     wrapMode: QQ.Text.WordWrap
                 }
             }
 
-            footer: QC.DialogButtonBox {
-                alignment: Qt.AlignRight
+            footer: QQ.Loader { id: footerLoaderId }
 
-                // --- idle-state buttons ---
-
-                QC.Button {
-                    visible: itemId.dialogState === "idle" && itemId.isTemporaryProject
-                    text: "Delete"
-                    QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.DestructiveRole
-                    onClicked: loaderId.handleTemporaryDeleteRequest()
-                    contentItem: DangerButtonContent { text: parent.text; font: parent.font }
-                }
-
-                QC.Button {
-                    visible: itemId.dialogState === "idle" && !itemId.isTemporaryProject
-                    text: "Discard"
-                    QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.DestructiveRole
-                    contentItem: DangerButtonContent { text: parent.text; font: parent.font }
-                }
-
-                QC.Button {
-                    visible: itemId.dialogState === "idle"
-                    text: "Cancel"
-                    QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.RejectRole
-                }
-
-                QC.Button {
-                    visible: itemId.dialogState === "idle"
-                             && loaderId.offerSync
-                             && !itemId.isTemporaryProject
-                    text: "Save && Sync"
-                    QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.ApplyRole
-                    font.bold: true
-                }
-
-                QC.Button {
-                    visible: itemId.dialogState === "idle"
-                    text: "Save"
-                    QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.AcceptRole
-                    // Bold only when "Save & Sync" is not available (Save is the primary action)
-                    font.bold: !loaderId.offerSync || itemId.isTemporaryProject
-                }
-
-                // --- syncError-state buttons ---
-
-                QC.Button {
-                    visible: itemId.dialogState === "syncError"
-                    text: "Close anyway"
-                    QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.AcceptRole
-                }
-
-                QC.Button {
-                    visible: itemId.dialogState === "syncError"
-                    text: "Stay open"
-                    QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.RejectRole
-                }
-            }
-
-            // "Save" (idle) or "Close anyway" (syncError)
             onAccepted: {
-                if (itemId.dialogState === "syncError") {
-                    loaderId._privateAfterSave();
-                    return;
-                }
-                if (itemId.dialogState !== "idle") { return; }
+                if (itemId._phase !== "idle") { return; }
                 if (itemId.isTemporaryProject) {
                     loaderId.handleTemporarySaveRequest();
                 } else {
-                    itemId.dialogState = "saving";
+                    itemId._phase = "saving";
                     loaderId.onSaveConfirmed();
                     if (RootData.project.canSaveDirectly) {
                         RootData.project.save();
@@ -274,12 +269,11 @@ QQ.Loader {
                 }
             }
 
-            // "Save & Sync"
             onApplied: {
-                if (itemId.dialogState !== "idle") { return; }
+                if (itemId._phase !== "idle") { return; }
                 itemId.syncAfterSave = true;
-                itemId.authFailed = false;
-                itemId.dialogState = "saving";
+                itemId.syncErrorText = "";
+                itemId._phase = "saving";
                 loaderId.onSaveConfirmed();
                 if (RootData.project.canSaveDirectly) {
                     RootData.project.save();
@@ -288,22 +282,116 @@ QQ.Loader {
                 }
             }
 
-            // "Discard" (idle, non-temporary)
             onDiscarded: {
-                if (itemId.dialogState !== "idle" || itemId.isTemporaryProject) { return; }
+                if (itemId._phase !== "idle" || itemId.isTemporaryProject) { return; }
                 loaderId.onSaveConfirmed();
                 RootData.project.discardChanges();
                 Qt.callLater(loaderId._privateAfterSave);
             }
 
-            // "Cancel" (idle) or "Stay open" (syncError)
             onRejected: {
-                if (itemId.dialogState === "syncError") {
+                if (itemId._phase === "idle") {
                     loaderId.closeDialog();
-                    return;
                 }
-                if (itemId.dialogState === "idle") {
-                    loaderId.closeDialog();
+            }
+        }
+
+        // idle + temporary project: Delete, Cancel, Save
+        // All buttons use NoRole + onClicked because QC.Dialog only wires role-based signals
+        // to a DialogButtonBox found directly as the footer, not one inside a Loader.
+        QQ.Component {
+            id: tempIdleButtonsComponent
+            QC.DialogButtonBox {
+                alignment: Qt.AlignRight
+                QC.Button {
+                    text: "Delete"
+                    QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.NoRole
+                    onClicked: loaderId.handleTemporaryDeleteRequest()
+                    contentItem: DangerButtonContent { text: parent.text; font: parent.font }
+                }
+                QC.Button {
+                    text: "Cancel"
+                    QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.NoRole
+                    onClicked: loaderId.closeDialog()
+                }
+                QC.Button {
+                    text: "Save"
+                    QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.NoRole
+                    font.bold: true
+                    onClicked: itemId.askToSaveDialog.accepted()
+                }
+            }
+        }
+
+        // idle + non-temporary, no remote sync available: Discard, Cancel, Save
+        QQ.Component {
+            id: nonTempNoSyncButtonsComponent
+            QC.DialogButtonBox {
+                alignment: Qt.AlignRight
+                QC.Button {
+                    text: "Discard"
+                    QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.NoRole
+                    onClicked: itemId.askToSaveDialog.discarded()
+                    contentItem: DangerButtonContent { text: parent.text; font: parent.font }
+                }
+                QC.Button {
+                    text: "Cancel"
+                    QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.NoRole
+                    onClicked: loaderId.closeDialog()
+                }
+                QC.Button {
+                    text: "Save"
+                    QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.NoRole
+                    font.bold: true
+                    onClicked: itemId.askToSaveDialog.accepted()
+                }
+            }
+        }
+
+        // idle + non-temporary, remote sync available: Discard, Cancel, Save && Sync, Save
+        QQ.Component {
+            id: nonTempSyncButtonsComponent
+            QC.DialogButtonBox {
+                alignment: Qt.AlignRight
+                QC.Button {
+                    text: "Discard"
+                    QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.NoRole
+                    onClicked: itemId.askToSaveDialog.discarded()
+                    contentItem: DangerButtonContent { text: parent.text; font: parent.font }
+                }
+                QC.Button {
+                    text: "Cancel"
+                    QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.NoRole
+                    onClicked: loaderId.closeDialog()
+                }
+                QC.Button {
+                    text: "Save && Sync"
+                    QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.NoRole
+                    font.bold: true
+                    onClicked: itemId.askToSaveDialog.applied()
+                }
+                QC.Button {
+                    text: "Save"
+                    QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.NoRole
+                    onClicked: itemId.askToSaveDialog.accepted()
+                }
+            }
+        }
+
+        // syncError state: Close anyway, Stay open
+        QQ.Component {
+            id: syncErrorButtonsComponent
+            QC.DialogButtonBox {
+                alignment: Qt.AlignRight
+                QC.Button {
+                    text: "Close anyway"
+                    QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.NoRole
+                    onClicked: loaderId._privateAfterSave()
+                }
+                QC.Button {
+                    text: "Stay open"
+                    QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.NoRole
+                    onClicked: loaderId.closeDialog()
                 }
             }
         }

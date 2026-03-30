@@ -417,20 +417,23 @@ bool cwProject::save()
                              ConvertedFromSqlite = false;
                              emit fileTypeChanged();
                              m_syncHealth->refresh();
-                             emit fileSaved();
+                             QMetaObject::invokeMethod(this, [this]() { emit fileSaved(); }, Qt::QueuedConnection);
                          })
                          .future();
         return true;
     }
 
-    m_saveLoad->waitForFinished();
-    const auto commitResult = m_saveLoad->commitProjectChanges();
-    if (commitResult.hasError()) {
-        ErrorModel->append(cwError(commitResult.errorMessage(), cwError::Fatal));
-    }
-
-    m_syncHealth->refresh();
-    emit fileSaved();
+    auto commitFuture = m_saveLoad->enqueueFlushAndCommit();
+    SaveFuture = AsyncFuture::observe(commitFuture)
+        .context(this, [this, commitFuture]() {
+            const auto result = commitFuture.result();
+            if (result.hasError()) {
+                ErrorModel->append(cwError(result.errorMessage(), cwError::Fatal));
+            }
+            m_syncHealth->refresh();
+            QMetaObject::invokeMethod(this, [this]() { emit fileSaved(); }, Qt::QueuedConnection);
+        })
+        .future();
     return true;
 }
 
@@ -556,8 +559,8 @@ bool cwProject::saveAs(QString newFilename)
                              BundledArchivePath = newFilename;
                              emit filenameChanged(filename());
                              emit fileTypeChanged();
-                             emit fileSaved();
                              m_syncHealth->refresh();
+                             QMetaObject::invokeMethod(this, [this]() { emit fileSaved(); }, Qt::QueuedConnection);
                          })
                          .future();
         return true;
@@ -594,8 +597,21 @@ bool cwProject::saveAs(QString newFilename)
     emit filenameChanged(filename());
     emit fileTypeChanged();
 
-    emit fileSaved();
-    m_syncHealth->refresh();
+    // Flush pending file writes and commit asynchronously so all project data is tracked
+    // in git before fileSaved fires. Without a commit all files are untracked, and a later
+    // discardChanges() (git reset --hard HEAD + cleanUntracked) would erase the entire project.
+    // SaveFuture tracks the commit so waitSaveToFinish() / shutdown waits for it.
+    auto commitFuture = m_saveLoad->enqueueFlushAndCommit();
+    SaveFuture = AsyncFuture::observe(commitFuture)
+        .context(this, [this, commitFuture]() {
+            const auto result = commitFuture.result();
+            if (result.hasError()) {
+                ErrorModel->append(cwError(result.errorMessage(), cwError::Fatal));
+            }
+            m_syncHealth->refresh();
+            QMetaObject::invokeMethod(this, [this]() { emit fileSaved(); }, Qt::QueuedConnection);
+        })
+        .future();
     return true;
 }
 

@@ -196,6 +196,161 @@ Item {
             verify(rootId.afterSaveCalled, "afterSaveFunc should be called after save completes");
         }
 
+        // Temporary modified project: Save button must be within the dialog's geometry so
+        // the user can click it. Regression: two AcceptRole buttons (Save + Close anyway) in
+        // the same DialogButtonBox caused Qt Quick Controls to overflow the extra button
+        // outside the popup rect, where it was invisible but still responded to accepted().
+        function test_temporaryModifiedProject_saveButtonVisible() {
+            RootData.region.addCave();
+            tryVerify(function() { return !RootData.project.isNewEmptyProject(); });
+            tryVerify(function() { return RootData.project.isModified(); });
+            verify(RootData.project.isTemporaryProject,
+                   "project must still be temporary");
+
+            askToSaveDialogId.askToSave();
+
+            verify(askToSaveDialogId._dialog !== null);
+            verify(askToSaveDialogId._dialog.askToSaveDialog.visible,
+                   "dialog should be visible for a modified temporary project");
+            verify(askToSaveDialogId._dialog.isTemporaryProject,
+                   "dialog should be in temporary-project mode");
+
+            // Accepting a temporary project dialog must open SaveAsDialog, not close silently.
+            askToSaveDialogId._dialog.askToSaveDialog.accepted();
+            tryVerify(function() { return saveAsDialogId.visible; }, 2000,
+                      "SaveAsDialog should open when Save is accepted on a temporary project");
+        }
+
+        // Temporary project: cancelling the SaveAsDialog should dismiss the AskToSaveDialog too.
+        // There is no meaningful state to return to once the user has declined to save.
+        function test_askToSave_temporaryProject_cancelSaveDialog_closesBoth() {
+            RootData.region.addCave();
+            tryVerify(function() { return !RootData.project.isNewEmptyProject(); });
+            tryVerify(function() { return RootData.project.isModified(); });
+
+            askToSaveDialogId.askToSave();
+            verify(askToSaveDialogId._dialog !== null);
+            verify(askToSaveDialogId._dialog.askToSaveDialog.visible,
+                   "AskToSaveDialog should be visible for a modified temporary project");
+
+            // Accept the AskToSaveDialog "Save" button to open SaveAsDialog
+            askToSaveDialogId._dialog.askToSaveDialog.accepted();
+            tryVerify(function() { return saveAsDialogId.visible; }, 2000,
+                      "SaveAsDialog should open after accepting on a temporary project");
+
+            // Cancel the SaveAsDialog — AskToSaveDialog should close too
+            saveAsDialogId.rejected();
+
+            tryVerify(function() {
+                return askToSaveDialogId._dialog === null
+                    || !askToSaveDialogId._dialog.askToSaveDialog.visible;
+            }, 2000, "AskToSaveDialog should close when SaveAsDialog is cancelled");
+            verify(!rootId.afterSaveCalled,
+                   "afterSaveFunc must not be called when the user cancels");
+        }
+
+        // Regression: saving a temporary project as .cwproj must create a git commit.
+        // Without a commit all files are untracked; discardChanges() calls cleanUntracked()
+        // which deletes every untracked file — erasing the entire project from disk.
+        function test_saveAsDirectory_fromTemp_commitsData_survivesDiscard() {
+            RootData.region.addCave();
+            RootData.region.cave(0).name = "Committed Cave";
+            tryVerify(function() { return !RootData.project.isNewEmptyProject(); });
+
+            saveAsDirectory("discard-data-loss");
+            const savedPath = RootData.project.filename;
+
+            // A commit MUST exist. Without it cleanUntracked() nukes the whole project.
+            verify(TestHelper.projectHeadCommitOid(RootData.project) !== "",
+                   "saveAs to .cwproj must create a git commit");
+
+            // Simulate reopening and adding unsaved changes
+            TestHelper.loadProjectFromPath(RootData.project, savedPath);
+            tryVerify(function() { return RootData.region.caveCount > 0; });
+            compare(RootData.region.cave(0).name, "Committed Cave");
+
+            RootData.region.addCave();
+            RootData.region.cave(1).name = "Unsaved Cave";
+            tryVerify(function() { return RootData.project.isModified(); });
+            TestHelper.waitForProjectSaveToFinish(RootData.project);
+
+            // Discard the unsaved changes
+            RootData.project.discardChanges();
+            tryVerify(function() {
+                return TestHelper.projectModifiedFileCount(RootData.project) === 0;
+            }, 5000, "git working directory should be clean after discardChanges()");
+
+            // Reload and confirm committed data survived
+            TestHelper.loadProjectFromPath(RootData.project, savedPath);
+            tryVerify(function() { return RootData.region.caveCount > 0; });
+            compare(RootData.region.cave(0).name, "Committed Cave",
+                    "Committed cave data must survive discardChanges()");
+        }
+
+        // Saving a temporary project via SaveAsDialog must add it to the recent projects model.
+        function test_saveAsDirectory_fromTemp_addsToRecentProjects() {
+            const before = RootData.recentProjectModel.rowCount();
+
+            saveAsDirectory("recent-project-dir");
+
+            tryVerify(function() {
+                return RootData.recentProjectModel.rowCount() === before + 1;
+            }, 5000, "recent project model should gain one entry after saveAs to directory");
+        }
+
+        // Saving a temporary project as a bundle (.cw) must also add it to the recent projects model.
+        function test_saveAsBundle_fromTemp_addsToRecentProjects() {
+            const before = RootData.recentProjectModel.rowCount();
+
+            const tempDir = RootData.urlToLocal(TestHelper.tempDirectoryUrl());
+            const name = "recent-project-bundle";
+            const expectedPath = tempDir + "/" + name + ".cw";
+
+            saveAsDialogId.bundleFormat = true;
+            saveAsDialogId.destinationFolder = tempDir;
+            saveAsDialogId._pendingName = name;
+            saveAsDialogId.bundleFilePath = expectedPath;
+            saveAsDialogId.accepted();
+            TestHelper.waitForProjectSaveToFinish(RootData.project);
+            tryVerify(function() { return !RootData.project.isTemporaryProject; });
+
+            tryVerify(function() {
+                return RootData.recentProjectModel.rowCount() === before + 1;
+            }, 5000, "recent project model should gain one entry after saveAs to bundle");
+        }
+
+        // Saving via the AskToSaveDialog → SaveAsDialog path must also update the recent projects model.
+        // This is the actual quit flow: AskToSaveDialog "Save" → SaveAsDialog → fileSaved → addToRecents.
+        function test_askToSaveDialog_tempProject_addsToRecentProjects() {
+            RootData.region.addCave();
+            tryVerify(function() { return !RootData.project.isNewEmptyProject(); });
+            tryVerify(function() { return RootData.project.isModified(); });
+
+            const before = RootData.recentProjectModel.rowCount();
+            const tempDir = RootData.urlToLocal(TestHelper.tempDirectoryUrl());
+            const name = "ask-save-recent";
+            const expectedPath = tempDir + "/" + name + ".cw";
+
+            askToSaveDialogId.askToSave();
+            verify(askToSaveDialogId._dialog !== null);
+            verify(askToSaveDialogId._dialog.askToSaveDialog.visible);
+
+            // Accept AskToSaveDialog to open SaveAsDialog
+            askToSaveDialogId._dialog.askToSaveDialog.accepted();
+            saveAsDialogId.bundleFormat = true;
+            saveAsDialogId.destinationFolder = tempDir;
+            saveAsDialogId._pendingName = name;
+            saveAsDialogId.bundleFilePath = expectedPath;
+            saveAsDialogId.accepted();
+
+            TestHelper.waitForProjectSaveToFinish(RootData.project);
+            tryVerify(function() { return !RootData.project.isTemporaryProject; });
+
+            tryVerify(function() {
+                return RootData.recentProjectModel.rowCount() === before + 1;
+            }, 5000, "recent project model should gain one entry after saving via AskToSaveDialog");
+        }
+
         // Discard on a .cwproj directory project: discardChanges() reverts the git working dir
         function test_discard_revertsDirectoryProject() {
             TestHelper.loadProjectFromFile(RootData.project,

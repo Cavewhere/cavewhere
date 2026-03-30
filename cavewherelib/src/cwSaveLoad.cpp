@@ -3494,6 +3494,20 @@ QFuture<ResultBase> cwSaveLoad::saveBundledArchive(const QString& targetArchiveP
     });
 }
 
+QFuture<ResultBase> cwSaveLoad::enqueueFlushAndCommit()
+{
+    auto flushFuture = saveFlushImpl();
+    return AsyncFuture::observe(flushFuture)
+        .context(this, [this, flushFuture]() -> ResultBase {
+            const auto flushResult = flushFuture.result();
+            if (flushResult.hasError()) {
+                return flushResult;
+            }
+            return commitProjectChanges();
+        })
+        .future();
+}
+
 ResultBase cwSaveLoad::deleteTemporaryProject()
 {
     if (!isTemporaryProject()) {

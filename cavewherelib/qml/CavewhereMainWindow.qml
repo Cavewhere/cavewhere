@@ -133,6 +133,13 @@ QC.ApplicationWindow {
             shutdownLoader.active = true;
         }
         askToSaveDialogId.afterSaveFunc = function() {
+            // Activate the shutdown screen before quitting. For non-temporary
+            // projects onSaveConfirmed already does this, but for temporary
+            // projects the user first saves via SaveAsDialog so onSaveConfirmed
+            // is never invoked — this ensures shutdown always runs.
+            mainContentId.enabled = false;
+            applicationWindowId.menuBar = null;
+            shutdownLoader.active = true;
             RootData.shutdown();
             Qt.quit();
         }
