@@ -377,5 +377,151 @@ Item {
                 return TestHelper.projectModifiedFileCount(RootData.project) === 0;
             }, 5000, "git working directory should be clean after discardChanges()");
         }
+
+        // ── offerSync / Save & Sync tests ─────────────────────────────────────────
+
+        // Helper: load the local sync fixture into RootData.project.
+        // Returns the cwSyncFixtureInfo gadget.
+        function loadSyncFixture() {
+            const fixture = TestHelper.createLocalSyncFixtureWithLfsServer()
+            compare(fixture.errorMessage, "")
+            TestHelper.loadProjectFromPath(RootData.project, fixture.projectFilePath)
+            tryVerify(function() { return RootData.region.caveCount > 0 }, 10000,
+                      "fixture project should load with caves")
+            return fixture
+        }
+
+        // Project has a remote and the sync status is still stale (initial state after
+        // load, before any refresh) → the "Save & Sync" button set (idle-sync) is shown.
+        function test_offerSync_trueWhenStale() {
+            loadSyncFixture()
+
+            RootData.region.cave(0).name = "Stale Remote Cave"
+            tryVerify(function() { return RootData.project.isModified() }, 5000)
+
+            askToSaveDialogId.askToSave()
+            verify(askToSaveDialogId._dialog !== null)
+            verify(askToSaveDialogId._dialog.askToSaveDialog.visible)
+            verify(askToSaveDialogId.offerSync,
+                   "offerSync must be true when project has remote and status is stale")
+            compare(askToSaveDialogId._dialog.state, "idle-sync")
+
+            askToSaveDialogId.closeDialog()
+        }
+
+        // After refresh, the remote status is clean (aheadCount=0, stale=false), but
+        // the project is modified → "Save & Sync" is still shown because modified=true.
+        function test_offerSync_trueWhenModifiedAfterSync() {
+            loadSyncFixture()
+
+            RootData.project.syncHealth.refresh()
+            tryVerify(function() { return !RootData.project.syncHealth.status.stale }, 10000,
+                      "sync health should become non-stale after refresh")
+
+            // Rename a cave to make the project modified
+            RootData.region.cave(0).name = "Modified After Sync"
+            tryVerify(function() { return RootData.project.modified }, 5000,
+                      "project should become modified after cave rename")
+
+            askToSaveDialogId.askToSave()
+            verify(askToSaveDialogId._dialog !== null)
+            verify(askToSaveDialogId.offerSync,
+                   "offerSync must be true when project is modified even with clean remote")
+            compare(askToSaveDialogId._dialog.state, "idle-sync")
+
+            askToSaveDialogId.closeDialog()
+        }
+
+        // Project has no remote (plain directory save, no git remote added) →
+        // "Save & Sync" button is NOT shown; dialog is in idle-nosync state.
+        function test_offerSync_falseWithNoRemote() {
+            TestHelper.loadProjectFromFile(RootData.project,
+                                           "://datasets/test_cwProject/Phake Cave 3000.cw")
+            tryVerify(function() { return RootData.region.caveCount > 0 })
+            saveAsDirectory("offerSync-no-remote")
+
+            RootData.region.cave(0).name = "No Remote Cave"
+            tryVerify(function() { return RootData.project.isModified() }, 5000)
+
+            askToSaveDialogId.askToSave()
+            verify(askToSaveDialogId._dialog !== null)
+            verify(askToSaveDialogId._dialog.askToSaveDialog.visible)
+            verify(!askToSaveDialogId.offerSync,
+                   "offerSync must be false when project has no remote")
+            compare(askToSaveDialogId._dialog.state, "idle-nosync")
+
+            askToSaveDialogId.closeDialog()
+        }
+
+        // Project has a remote but is not modified → askToSave() calls afterSaveFunc()
+        // immediately without showing the dialog (isModified() is the gate, not offerSync).
+        function test_offerSync_falseWhenSyncedAndUnmodified() {
+            loadSyncFixture()
+
+            verify(!RootData.project.isModified(),
+                   "fixture project should not be modified right after load")
+
+            askToSaveDialogId.askToSave()
+            // isModified() is false but isNewEmptyProject() is also false,
+            // so askToSave() calls afterSaveFunc() directly and skips the dialog.
+            // Verify that: no dialog shown, afterSaveFunc called.
+            verify(rootId.afterSaveCalled,
+                   "afterSaveFunc should be called immediately when project is unmodified")
+            verify(askToSaveDialogId._dialog === null
+                   || !askToSaveDialogId._dialog.askToSaveDialog.visible,
+                   "dialog should not open for an unmodified project")
+        }
+
+        // "Save & Sync" full success path: project is modified, user clicks Save & Sync,
+        // the dialog saves, syncs to the local remote, and calls afterSaveFunc.
+        function test_saveAndSync_success() {
+            loadSyncFixture()
+
+            RootData.region.cave(0).name = "Synced Cave"
+            tryVerify(function() { return RootData.project.isModified() }, 5000)
+
+            askToSaveDialogId.askToSave()
+            verify(askToSaveDialogId._dialog !== null)
+            verify(askToSaveDialogId.offerSync)
+
+            // Click "Save & Sync"
+            askToSaveDialogId._dialog.askToSaveDialog.applied()
+
+            tryVerify(function() { return rootId.afterSaveCalled }, 30000,
+                      "afterSaveFunc should be called after a successful save + sync")
+        }
+
+        // "Save & Sync" with a broken remote: save succeeds but push fails →
+        // dialog enters syncError state, shows an error message, and "Close anyway"
+        // calls afterSaveFunc so the caller (e.g. quit handler) can proceed.
+        function test_saveAndSync_generalFailure_closeAnyway() {
+            const fixture = loadSyncFixture()
+
+            // Delete the remote bare repo to make the push fail
+            TestHelper.removeDirectory(TestHelper.toLocalUrl(fixture.remoteRepoPath))
+
+            RootData.region.cave(0).name = "Broken Remote Cave"
+            tryVerify(function() { return RootData.project.isModified() }, 5000)
+
+            askToSaveDialogId.askToSave()
+            verify(askToSaveDialogId._dialog !== null)
+            askToSaveDialogId._dialog.askToSaveDialog.applied()
+
+            tryVerify(function() {
+                return askToSaveDialogId._dialog !== null
+                    && askToSaveDialogId._dialog._phase === "syncError"
+            }, 30000, "dialog should reach syncError state after a failed push")
+
+            verify(askToSaveDialogId._dialog.syncErrorText.indexOf("Sync failed:") === 0,
+                   "syncErrorText should start with 'Sync failed:'")
+            verify(askToSaveDialogId._dialog.syncErrorText.indexOf("Your changes are saved locally.") >= 0,
+                   "syncErrorText should mention that changes are saved locally")
+
+            // Simulate "Close anyway" — calls _privateAfterSave() directly, same as the button
+            askToSaveDialogId._privateAfterSave()
+
+            verify(rootId.afterSaveCalled,
+                   "afterSaveFunc should be called after 'Close anyway'")
+        }
     }
 }
