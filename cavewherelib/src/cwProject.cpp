@@ -504,6 +504,7 @@ void cwProject::completeSyncOperation(const Monad::ResultBase& result)
         emit syncFinished();
         return;
     }
+    setModified(false);
     m_syncHealth->refresh();
     emit syncFinished();
 }

@@ -9,6 +9,7 @@ RoundButton {
 
     required property ProjectSyncHealth syncHealth
     required property bool syncInProgress
+    required property bool projectModified
 
     signal syncRequested()
     signal remoteSettingsRequested()
@@ -19,13 +20,34 @@ RoundButton {
     readonly property bool authExpired: syncHealth.status.authExpired
     readonly property bool needsLogin: syncHealth.status.needsLogin
 
-    readonly property string tooltipText: noRemote
-        ? qsTr("No remote configured — click to set up sync")
-        : (needsLogin
-           ? qsTr("Sign in to GitHub — click to sync")
-           : (authExpired
-              ? qsTr("GitHub access expired — click to reconnect")
-              : syncHealth.status.message))
+    readonly property string tooltipText: {
+        if (noRemote)
+            return qsTr("No remote configured — click to set up sync")
+        if (needsLogin)
+            return qsTr("Sign in to GitHub — click to sync")
+        if (authExpired)
+            return qsTr("GitHub access expired — click to reconnect")
+        if (syncInProgress)
+            return qsTr("Syncing…")
+        if (projectModified)
+            return qsTr("Unsaved changes — click to save and sync")
+
+        const ahead = syncHealth.status.aheadCount
+        const behind = syncHealth.status.behindCount
+        const localChanges = syncHealth.status.hasLocalChanges
+
+        if (localChanges && ahead === 0 && behind === 0)
+            return qsTr("Local edits pending — click to sync")
+        if (ahead > 0 && behind > 0)
+            return qsTr("Commits to push and pull — click to sync")
+        if (ahead > 0)
+            return qsTr("Commits ready to push — click to sync")
+        if (behind > 0)
+            return qsTr("Updates available — click to sync")
+        if (syncHealth.status.stale)
+            return qsTr("Sync status unavailable")
+        return qsTr("Up to date")
+    }
 
     icon.source: noRemote
         ? "qrc:/twbs-icons/icons/cloud-arrow-up.svg"
@@ -67,6 +89,7 @@ RoundButton {
         visible: !noRemote
                  && (syncHealth.status.stale
                      || syncHealth.status.hasLocalChanges
+                     || projectModified
                      || syncHealth.status.aheadCount > 0
                      || syncHealth.status.behindCount > 0
                      || syncInProgress)
@@ -95,8 +118,16 @@ RoundButton {
                     return "!"
                 }
 
-                let suffix = syncHealth.status.hasLocalChanges ? " \u2022" : ""
-                return "\u2191" + syncHealth.status.aheadCount + " \u2193" + syncHealth.status.behindCount + suffix
+                const ahead = syncHealth.status.aheadCount
+                const behind = syncHealth.status.behindCount
+                const localChanges = syncHealth.status.hasLocalChanges || projectModified
+
+                if (ahead === 0 && behind === 0 && localChanges) {
+                    return ""
+                }
+
+                let suffix = localChanges ? " \u2022" : ""
+                return "\u2191" + ahead + " \u2193" + behind + suffix
             }
         }
     }

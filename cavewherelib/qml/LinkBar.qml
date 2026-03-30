@@ -143,6 +143,7 @@ QQ.Item {
                     implicitHeight: implicitWidth
                     syncHealth: RootData.project.syncHealth
                     syncInProgress: RootData.project.syncInProgress
+                    projectModified: RootData.project.modified
 
                     // Right-aligned popup positioning anchored below this button
                     readonly property int _popupRightEdge: QC.Overlay.overlay.width - 5
