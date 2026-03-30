@@ -153,8 +153,7 @@ QQ.Item {
                         reconnectPopupId.open()
                     }
                     onSetupRemoteRequested: {
-                        // TODO: replace with SetupRemoteWizard
-                        RootData.pageSelectionModel.gotoPageByName(null, "Remote")
+                        setupRemoteWizardId.open()
                     }
 
                     ReconnectPopup {
@@ -163,6 +162,19 @@ QQ.Item {
                         gitHub: RootData.remote.gitHubIntegration
                         x: QC.Overlay.overlay.width - width - 5
                         y: syncButtonId.mapToItem(null, 0, syncButtonId.height + 4).y
+                    }
+
+                    SetupRemoteWizard {
+                        id: setupRemoteWizardId
+                        parent: QC.Overlay.overlay
+                        gitHubIntegration: RootData.remote.gitHubIntegration
+                        accountCoordinator: RootData.remote.accountCoordinator
+                        repository: RootData.project.repository
+                        onRemoteSetupComplete: function(syncNow) {
+                            setupRemoteWizardId.close()
+                            if (syncNow) { RootData.project.sync() }
+                        }
+                        onRemoteSetupCancelled: setupRemoteWizardId.close()
                     }
                 }
 

@@ -77,6 +77,7 @@ class CAVEWHERE_LIB_EXPORT cwProject :  public QObject{
     Q_PROPERTY(bool modified READ modified NOTIFY modifiedChanged)
     Q_PROPERTY(cwProjectSyncHealth* syncHealth READ syncHealth CONSTANT)
     Q_PROPERTY(bool syncInProgress READ syncInProgress NOTIFY syncInProgressChanged)
+    Q_PROPERTY(QQuickGit::GitRepository* repository READ repository NOTIFY filenameChanged)
 
 public:
     enum FileType {

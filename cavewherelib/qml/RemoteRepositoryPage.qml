@@ -365,85 +365,11 @@ StandardPage {
             title: "GitHub"
             visible: false
 
-            ColumnLayout {
-                // anchors.fill: parent
+            GitHubAuthFlow {
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.margins: 12
-                spacing: 8
-
-                Text {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-                    color: Theme.textSecondary
-                    text: {
-                        switch (gitHub.authState) {
-                        case GitHubIntegration.RequestingCode:
-                            return "Requesting a sign-in code from GitHub…";
-                        case GitHubIntegration.AwaitingVerification:
-                            return "Enter the code below at GitHub to finish signing in.";
-                        case GitHubIntegration.Error:
-                            return gitHub.errorMessage.length > 0 ? gitHub.errorMessage : "Something went wrong.";
-                        default:
-                            return "Use your GitHub account to access remote repositories.";
-                        }
-                    }
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    visible: gitHub.authState === GitHubIntegration.AwaitingVerification
-
-                    QC.TextField {
-                        Layout.fillWidth: true
-                        text: gitHub.userCode
-                        readOnly: true
-                        horizontalAlignment: Text.AlignHCenter
-                        font.bold: true
-                    }
-
-                    QC.Button {
-                        objectName: "remoteGitHubCopyOpenButton"
-                        text: "Copy and Open GitHub"
-                        onClicked: {
-                            if (gitHub.userCode && gitHub.userCode.length > 0) {
-                                RootData.copyText(gitHub.userCode)
-                            }
-                            gitHub.markVerificationOpened()
-                            Qt.openUrlExternally(gitHub.verificationUrl)
-                        }
-                        // QC.ToolTip.visible: hovered
-                        // QC.ToolTip.text: "Copy the code and open github.com/device"
-                    }
-                }
-
-                Text {
-                    Layout.fillWidth: true
-                    visible: gitHub.authState === GitHubIntegration.AwaitingVerification
-                              && gitHub.verificationOpened
-                              && gitHub.secondsUntilNextPoll > 0
-                    color: Theme.textSubtle
-                    font.pixelSize: 12
-                    text: qsTr("Trying connection in %1 s").arg(gitHub.secondsUntilNextPoll)
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    visible: gitHub.authState !== GitHubIntegration.AwaitingVerification
-
-                    QC.Button {
-                        objectName: "remoteGitHubConnectButton"
-                        text: gitHub.authState === GitHubIntegration.Error ? "Reconnect to GitHub" : "Connect to GitHub"
-                        enabled: !gitHub.busy
-                        onClicked: gitHub.startDeviceLogin()
-                    }
-
-                    QC.Button {
-                        text: "Cancel"
-                        visible: gitHub.authState === GitHubIntegration.AwaitingVerification || gitHub.authState === GitHubIntegration.RequestingCode
-                        onClicked: gitHub.cancelLogin()
-                    }
-                }
+                gitHubIntegration: gitHub
+                contextMessage: qsTr("Sign in to GitHub to access your repositories")
             }
         }
 
