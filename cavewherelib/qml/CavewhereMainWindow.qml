@@ -125,6 +125,13 @@ QC.ApplicationWindow {
         id: deepLinkConfirmDialogId
     }
 
+    QQ.Connections {
+        target: RootData.deepLinkHandler
+        function onOpenRepoRequested(url) {
+            deepLinkConfirmDialogId.open(url)
+        }
+    }
+
     onClosing: (close) => {
         if (shutdownLoader.active) {
             close.accepted = true;
@@ -152,10 +159,5 @@ QC.ApplicationWindow {
         var pending = RootData.deepLinkHandler.takePendingUrl()
         if (pending.toString() !== "")
             deepLinkConfirmDialogId.open(pending)
-
-        // Handle deep-link URLs that arrive while the app is running (macOS)
-        RootData.deepLinkHandler.openRepoRequested.connect(function(url) {
-            deepLinkConfirmDialogId.open(url)
-        })
     }
 }
