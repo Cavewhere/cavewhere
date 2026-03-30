@@ -35,7 +35,7 @@
 class CAVEWHERE_LIB_EXPORT cwDeepLinkHandler : public QObject
 {
     Q_OBJECT
-    QML_ELEMENT
+    QML_NAMED_ELEMENT(DeepLinkHandler)
 
 public:
     explicit cwDeepLinkHandler(QObject* parent = nullptr);
