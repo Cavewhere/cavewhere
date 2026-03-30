@@ -40,6 +40,7 @@ QC.ApplicationWindow {
         saveAsFileDialog: saveAsFileDialogId
         loadFileDialog: loadDialogId.loadFileDialog
         askToSaveDialog: askToSaveDialogId
+        onShareRequested: shareDialogId.open()
     }
 
     QQ.Loader {
@@ -100,6 +101,10 @@ QC.ApplicationWindow {
 
     SaveAsDialog {
         id: saveAsFileDialogId
+    }
+
+    ShareDialog {
+        id: shareDialogId
     }
 
     ErrorDialog {
