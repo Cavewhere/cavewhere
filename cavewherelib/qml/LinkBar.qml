@@ -167,6 +167,8 @@ QQ.Item {
                     SetupRemoteWizard {
                         id: setupRemoteWizardId
                         parent: QC.Overlay.overlay
+                        x: QC.Overlay.overlay.width - width - 5
+                        y: syncButtonId.mapToItem(null, 0, syncButtonId.height + 4).y
                         gitHubIntegration: RootData.remote.gitHubIntegration
                         accountCoordinator: RootData.remote.accountCoordinator
                         repository: RootData.project.repository

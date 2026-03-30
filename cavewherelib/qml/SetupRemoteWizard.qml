@@ -23,6 +23,7 @@ QC.Dialog {
     // Private: tracks which screen to return to on addRemote failure
     property string _addRemoteReturnScreen: "createRepo"
     property bool _addRemotePending: false
+    property bool _gitHubWasActive: false
 
     title: qsTr("Set Up Remote")
     modal: true
@@ -35,16 +36,26 @@ QC.Dialog {
         createFormId.errorMessage = ""
         connectFormId.errorMessage = ""
 
-        let filename = RootData.project.filename
-        if (filename.length > 0) {
-            let base = filename.substring(filename.lastIndexOf("/") + 1)
-            if (base.endsWith(".cwproj")) { base = base.slice(0, -7) }
-            createFormId.repoName = base
+        let regionName = RootData.region.name.trim()
+        if (regionName.length > 0) {
+            // Sanitize for GitHub: spaces → hyphens, strip chars not in [a-zA-Z0-9._-]
+            createFormId.repoName = regionName.replace(/\s+/g, "-")
+                                              .replace(/[^a-zA-Z0-9._-]/g, "")
         }
+
+        // Activate the integration so stored credentials are loaded from keychain now.
+        // This ensures startDeviceLogin() only starts OAuth — it won't duplicate the
+        // keychain read because setActive(true) is already a no-op by then.
+        root._gitHubWasActive = root.gitHubIntegration.active
+        root.gitHubIntegration.active = true
 
         if (root.gitHubIntegration.authState === GitHubIntegration.Authorized) {
             root.gitHubIntegration.refreshRepositories()
         }
+    }
+
+    onClosed: {
+        root.gitHubIntegration.active = root._gitHubWasActive
     }
 
     onRejected: root.remoteSetupCancelled()

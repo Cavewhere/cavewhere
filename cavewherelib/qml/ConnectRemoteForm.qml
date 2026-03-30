@@ -10,39 +10,26 @@ ColumnLayout {
 
     property string errorMessage
 
-    signal connectRequested(url remoteUrl, bool bindToGitHubAccount)
+    signal connectRequested(string remoteUrl, bool bindToGitHubAccount)
 
     spacing: 8
 
     // true = Path C (custom URL), false = Path B (GitHub)
-    property bool customUrlMode: false
+    readonly property bool customUrlMode: tabBarId.currentIndex === 1
 
-    RowLayout {
+    QC.TabBar {
+        id: tabBarId
         Layout.fillWidth: true
-        spacing: 0
+        onCurrentIndexChanged: root.errorMessage = ""
 
-        QC.Button {
+        QC.TabButton {
             text: qsTr("GitHub repository")
-            flat: true
-            highlighted: !root.customUrlMode
-            onClicked: {
-                root.customUrlMode = false
-                root.errorMessage = ""
-            }
         }
 
-        QC.Button {
+        QC.TabButton {
             objectName: "customUrlTab"
             text: qsTr("Custom URL")
-            flat: true
-            highlighted: root.customUrlMode
-            onClicked: {
-                root.customUrlMode = true
-                root.errorMessage = ""
-            }
         }
-
-        Item { Layout.fillWidth: true }
     }
 
     // Path B: GitHub repo list

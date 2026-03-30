@@ -42,13 +42,13 @@ TEST_CASE("cwRemoteAccountCoordinator::addRemoteToProject adds remote and skips 
     QObject::connect(&coordinator, &cwRemoteAccountCoordinator::addRemoteFailed,
                      [&]() { failed = true; });
 
-    const QUrl remoteUrl = QUrl::fromLocalFile(remotePath);
+    const QString remoteUrl = QUrl::fromLocalFile(remotePath).toString();
     coordinator.addRemoteToProject(&repo, remoteUrl, false);
 
     REQUIRE(waitUntil([&repo]() { return !repo.remotes().isEmpty(); }));
     CHECK(!failed);
     CHECK(repo.remotes().constFirst().name() == QStringLiteral("origin"));
-    CHECK(bindingStore.accountIdForRemote(remoteUrl.toString()).isEmpty());
+    CHECK(bindingStore.accountIdForRemote(remoteUrl).isEmpty());
 }
 
 TEST_CASE("cwRemoteAccountCoordinator::addRemoteToProject emits addRemoteFailed on duplicate remote",
@@ -76,9 +76,40 @@ TEST_CASE("cwRemoteAccountCoordinator::addRemoteToProject emits addRemoteFailed 
     QObject::connect(&coordinator, &cwRemoteAccountCoordinator::addRemoteFailed,
                      [&](const QString& msg) { errorMessage = msg; });
 
-    coordinator.addRemoteToProject(&repo, QUrl::fromLocalFile(remotePath), false);
+    coordinator.addRemoteToProject(&repo, QUrl::fromLocalFile(remotePath).toString(), false);
 
     REQUIRE(waitUntil([&errorMessage]() { return !errorMessage.isEmpty(); }));
+}
+
+TEST_CASE("cwRemoteAccountCoordinator::addRemoteToProject accepts SSH SCP URL",
+          "[cwRemoteAccountCoordinator]")
+{
+    // Regression: git@host:user/repo.git is SSH SCP syntax, not a valid RFC 3986 URI.
+    // QUrl strict-parsing converts it to an empty URL, which libgit2 rejects with
+    // "cannot set empty url".  The fix passes the raw string directly to git_remote_create.
+    auto tempDir = QTemporaryDir();
+    REQUIRE(tempDir.isValid());
+
+    GitRepository repo;
+    repo.setDirectory(QDir(tempDir.path()));
+    repo.initRepository();
+
+    cwGitHubIntegration integration(nullptr);
+    cwRemoteAccountModel accountModel;
+    cwRemoteBindingStore bindingStore;
+    cwRemoteAccountCoordinator coordinator(&integration, &accountModel, &bindingStore);
+
+    QString errorMessage;
+    QObject::connect(&coordinator, &cwRemoteAccountCoordinator::addRemoteFailed,
+                     [&](const QString& msg) { errorMessage = msg; });
+
+    coordinator.addRemoteToProject(&repo,
+                                   QStringLiteral("git@github.com:vpicaver/holberg-conk-old.git"),
+                                   false);
+
+    REQUIRE(waitUntil([&repo]() { return !repo.remotes().isEmpty(); }));
+    CHECK(errorMessage.isEmpty());
+    CHECK(repo.remotes().constFirst().name() == QStringLiteral("origin"));
 }
 
 TEST_CASE("cwRemoteAccountCoordinator::addRemoteToProject stores binding when flag is true",
@@ -105,7 +136,7 @@ TEST_CASE("cwRemoteAccountCoordinator::addRemoteToProject stores binding when fl
     QObject::connect(&coordinator, &cwRemoteAccountCoordinator::addRemoteFailed,
                      [&]() { failed = true; });
 
-    const QUrl remoteUrl = QUrl::fromLocalFile(remotePath);
+    const QString remoteUrl = QUrl::fromLocalFile(remotePath).toString();
     coordinator.addRemoteToProject(&repo, remoteUrl, true);
 
     REQUIRE(waitUntil([&repo]() { return !repo.remotes().isEmpty(); }));

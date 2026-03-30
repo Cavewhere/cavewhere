@@ -107,7 +107,7 @@ void cwRemoteAccountCoordinator::bindRemoteToActiveGitHubAccount(const QString& 
 }
 
 void cwRemoteAccountCoordinator::addRemoteToProject(QQuickGit::GitRepository* repository,
-                                                    const QUrl& remoteUrl,
+                                                    const QString& remoteUrl,
                                                     bool bindToGitHubAccount)
 {
     if (!repository) {
@@ -122,7 +122,7 @@ void cwRemoteAccountCoordinator::addRemoteToProject(QQuickGit::GitRepository* re
     }
 
     if (bindToGitHubAccount) {
-        bindRemoteToActiveGitHubAccount(remoteUrl.toString());
+        bindRemoteToActiveGitHubAccount(remoteUrl);
     }
 }
 

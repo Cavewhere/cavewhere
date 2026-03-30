@@ -42,26 +42,45 @@ ColumnLayout {
         onTextChanged: root.errorMessage = ""
     }
 
+    Text {
+        text: qsTr("Visibility")
+        color: Theme.textSecondary
+    }
+
+    QC.ButtonGroup { id: visibilityGroupId }
+
     RowLayout {
-        Layout.fillWidth: true
+        spacing: 0
 
-        Text {
+        QC.Button {
+            id: privateButtonId
             text: qsTr("Private")
-            color: Theme.textSecondary
-        }
-
-        QC.Switch {
-            id: isPrivateSwitch
+            checkable: true
             checked: true
+            flat: true
+            highlighted: checked
+            QC.ButtonGroup.group: visibilityGroupId
         }
 
-        Text {
-            text: qsTr("Recommended for cave data")
-            color: Theme.textSubtle
-            font.pixelSize: 11
+        QC.Button {
+            id: publicButtonId
+            text: qsTr("Public")
+            checkable: true
+            flat: true
+            highlighted: checked
+            QC.ButtonGroup.group: visibilityGroupId
         }
 
         Item { Layout.fillWidth: true }
+    }
+
+    Text {
+        Layout.fillWidth: true
+        wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+        color: Theme.textSubtle
+        text: privateButtonId.checked
+            ? qsTr("Only you and collaborators can see this repository. Recommended for cave survey data.")
+            : qsTr("Anyone on the internet can view this repository and its survey data.")
     }
 
     Text {
@@ -85,7 +104,7 @@ ColumnLayout {
                     .arg(name)
                 return
             }
-            root.createRequested(name, isPrivateSwitch.checked)
+            root.createRequested(name, privateButtonId.checked)
         }
     }
 }
