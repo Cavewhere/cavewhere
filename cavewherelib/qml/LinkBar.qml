@@ -152,7 +152,7 @@ QQ.Item {
                         RootData.project.sync()
                     }
                     onRemoteSettingsRequested: {
-                        RootData.pageSelectionModel.gotoPageByName(null, "Remote")
+                        RootData.pageSelectionModel.gotoPageByName(null, "Remote Settings")
                     }
                     onReconnectRequested: {
                         reconnectPopupId.open()

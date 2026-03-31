@@ -41,6 +41,12 @@ QtObject {
     readonly property color borderSubtle: dark ? "#353a42" : "#e4e4e4"
     readonly property color divider: "#141414" // dark ? #2c3138" : "#d8d8d8"
 
+    // Git graph lane colors (8-entry cycling palette)
+    readonly property list<color> laneColors: [
+        "#4dc9f6", "#f67019", "#f53794", "#537bc4",
+        "#acc236", "#166a8f", "#00a950", "#58595b"
+    ]
+
     // Utility
     readonly property color transparent: "#00000000"
     readonly property color shadow: dark ? "#33000000" : "#22000000"

@@ -66,19 +66,28 @@ class CAVEWHERE_LIB_EXPORT cwProjectSyncHealth : public QObject
     QML_NAMED_ELEMENT(ProjectSyncHealth)
 
     Q_PROPERTY(cwSyncStatus status READ status NOTIFY statusChanged)
+    Q_PROPERTY(QString remoteName READ remoteName WRITE setRemoteName NOTIFY remoteNameChanged)
+    Q_PROPERTY(QQuickGit::GitRepository* repository READ repository WRITE setRepository NOTIFY repositoryChanged)
 
 public:
     explicit cwProjectSyncHealth(QObject* parent = nullptr);
 
     cwSyncStatus status() const;
 
+    QString remoteName() const;
+    void setRemoteName(const QString& name);
+
+    QQuickGit::GitRepository* repository() const;
     void setRepository(QQuickGit::GitRepository* repository);
+
     void setAuthProvider(cwRemoteAuthProvider* provider);
 
     Q_INVOKABLE void refresh();
 
 signals:
     void statusChanged();
+    void remoteNameChanged();
+    void repositoryChanged();
 
 private:
     void setStatus(cwSyncStatus status);
@@ -99,6 +108,7 @@ private:
     QString m_pendingRemoteName;
     QString m_pendingBranchName;
 
+    QString m_remoteName;
     cwSyncStatus m_status;
 };
 

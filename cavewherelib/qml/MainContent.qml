@@ -152,6 +152,13 @@ QQ.Item {
         }
     }
 
+    QQ.Component {
+        id: remoteManagementPageComponent
+        RemoteManagementPage {
+            anchors.fill: parent
+        }
+    }
+
     QQ.Component.onCompleted: {
         GlobalShadowTextInput.parent = overlay;
         RootPopupItem.parent = overlay
@@ -167,6 +174,7 @@ QQ.Item {
         RootData.pageSelectionModel.registerPage(null, "Settings", settingsPageComponent)
         RootData.pageSelectionModel.registerPage(null, "Colors", colorsPageComponent)
         RootData.pageSelectionModel.registerPage(null, "Pipeline", pipelinePageComponent)
+        RootData.pageSelectionModel.registerPage(null, "Remote Settings", remoteManagementPageComponent)
 
         mainSideBar.viewPage = viewPage;
         mainSideBar.dataPage = dataPage;
