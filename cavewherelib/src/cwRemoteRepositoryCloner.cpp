@@ -56,9 +56,10 @@ void cwRemoteRepositoryCloner::setGitHubIntegration(cwGitHubIntegration* gh)
         const QString token = m_gitHubIntegration
                               ? m_gitHubIntegration->accessToken()
                               : QString{};
-        m_cloneRepository->setCredentials(QQuickGit::GitCredentials{token});
         if (m_cloneFailedDueToAuthError && !token.isEmpty() && !m_pendingCloneUrl.isEmpty()) {
             clone(m_pendingCloneUrl, m_pendingCloneParentDir);
+        } else {
+            m_cloneRepository->setCredentials(QQuickGit::GitCredentials{token});
         }
     };
     if (gh) {
@@ -120,6 +121,19 @@ QString cwRemoteRepositoryCloner::normalizeCloneUrl(const QString& urlText) cons
     return trimmed;
 }
 
+void cwRemoteRepositoryCloner::resetCloneRepository()
+{
+    delete m_cloneRepository;
+    m_cloneRepository = new QQuickGit::GitRepository(this);
+    if (m_account) {
+        m_cloneRepository->setAccount(m_account);
+    }
+    if (m_gitHubIntegration) {
+        m_cloneRepository->setCredentials(
+            QQuickGit::GitCredentials{m_gitHubIntegration->accessToken()});
+    }
+}
+
 void cwRemoteRepositoryCloner::clone(const QString& urlText)
 {
     clone(urlText, QUrl());
@@ -167,11 +181,11 @@ void cwRemoteRepositoryCloner::clone(const QString& urlText, const QUrl& destina
     setPendingCloneDir(dir.path());
     m_pendingCloneUrl = normalizedUrl;
     m_pendingCloneParentDir = cloneParentDir;
-    if (m_cloneRepository) {
-        m_cloneRepository->setDirectory(dir);
-        setCloneStatusMessage(QStringLiteral("Starting clone..."));
-        m_cloneWatcher->setFuture(m_cloneRepository->clone(QUrl(normalizedUrl)));
-    }
+
+    resetCloneRepository();
+    m_cloneRepository->setDirectory(dir);
+    setCloneStatusMessage(QStringLiteral("Starting clone..."));
+    m_cloneWatcher->setFuture(m_cloneRepository->clone(QUrl(normalizedUrl)));
 }
 
 void cwRemoteRepositoryCloner::setCloneErrorMessage(const QString& message)
@@ -227,6 +241,9 @@ void cwRemoteRepositoryCloner::handleCloneWatcherStateChanged()
         setCloneFailedDueToAuthError(isAuthError);
         setCloneErrorMessage(m_cloneWatcher->errorMessage());
         setCloneStatusMessage(QString());
+        if (!m_pendingCloneDir.isEmpty()) {
+            QDir(m_pendingCloneDir).removeRecursively();
+        }
         setPendingCloneDir(QString());
         if (!isAuthError) {
             m_pendingCloneUrl.clear();

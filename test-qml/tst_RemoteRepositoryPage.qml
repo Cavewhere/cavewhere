@@ -292,6 +292,43 @@ MainWindowTest {
                     TestHelper.normalizeFileGitUrl(fixture.remoteUrl))
         }
 
+        function test_clone_retryAfterFailure() {
+            // Use a bad URL first — should fail fast with a connection/protocol error.
+            let fixture = TestHelper.createLocalBareRemoteForCloneTest()
+            compare(fixture.errorMessage, "")
+
+            RootData.recentProjectModel.defaultRepositoryDir = TestHelper.toLocalUrl(fixture.cloneParentPath)
+
+            let manualUrlField = findChild(mainWindow, "remoteManualUrlField")
+            verify(manualUrlField !== null)
+            manualUrlField.textField.text = "https://localhost:0/nosuchrepo.git"
+
+            let cloneButton = findChild(mainWindow, "remoteCloneButton")
+            verify(cloneButton !== null)
+            mouseClick(cloneButton)
+
+            // Wait for the error to appear.
+            let cloneErrorArea = findChild(mainWindow, "remoteCloneErrorArea")
+            verify(cloneErrorArea !== null)
+            tryVerify(() => cloneErrorArea.visible, 20000)
+
+            // Clone button must be re-enabled so the user can retry.
+            verify(cloneButton.enabled)
+
+            // Retry with the valid local bare-remote URL.
+            manualUrlField.textField.text = fixture.remoteUrl
+            mouseClick(cloneButton)
+
+            // Second clone must succeed — no crash, project opens.
+            tryVerify(() => RootData.recentProjectModel.rowCount() === 1, 20000)
+
+            tryVerify(() => {
+                return RootData.project.filename !== ""
+                       && RootData.project.filename.indexOf(fixture.expectedClonePath) >= 0
+            }, 10000)
+            compare(RootData.pageSelectionModel.currentPageAddress, "View")
+        }
+
         function test_repro_cloneGithubPhakeCave3000() {
 
             testerAssistedGate.beginDecision(
