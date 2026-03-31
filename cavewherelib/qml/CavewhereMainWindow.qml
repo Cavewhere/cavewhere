@@ -121,6 +121,12 @@ QC.ApplicationWindow {
         anchors.centerIn: parent
     }
 
+    LfsMissingFilesBanner {
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 20
+        anchors.horizontalCenter: parent.horizontalCenter
+    }
+
     onClosing: (close) => {
         if (shutdownLoader.active) {
             close.accepted = true;

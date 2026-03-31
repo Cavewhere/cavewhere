@@ -2726,21 +2726,11 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                                                     }).future();
                                             };
 
-                                            const QDir projectDir = QFileInfo(filename).absoluteDir();
-                                            if (!QQuickGit::GitRepository::isRepository(projectDir)) {
-                                                return continueLoad();
-                                            }
-
-                                            auto hydrateFuture = QQuickGit::GitRepository::hydrateLfsFiles(projectDir, this);
-
-                                            d->futureToken.addJob({QFuture<void>(hydrateFuture), QStringLiteral("Hydrating LFS")});
-
-                                            return AsyncFuture::observe(hydrateFuture)
-                                                .context(this, [hydrateFuture, continueLoad]() {
-                                                    return mbind(hydrateFuture, [continueLoad](const ResultBase&) {
-                                                        return continueLoad();
-                                                    });
-                                                }).future();
+                                            // LFS hydration is not attempted during load — it would
+                                            // trigger a keychain prompt before the user has interacted.
+                                            // Missing files are detected post-load and surfaced via
+                                            // cwProject::lfsFilesNeedSync; the user syncs explicitly.
+                                            return continueLoad();
                                         }).unwrap();
     return future;
 }

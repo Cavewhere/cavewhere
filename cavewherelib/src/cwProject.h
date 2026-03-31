@@ -200,6 +200,7 @@ signals:
     void syncAuthFailed();
     void syncFinished();
     void authProviderCredentialsNeeded();
+    void lfsFilesNeedSync();
 
 public slots:
     void loadFile(QString filename);

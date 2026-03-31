@@ -59,8 +59,6 @@ RoundButton {
     onClicked: {
         if (!hasRemote) {
             setupRemoteRequested()
-        } else if (authExpired) {
-            reconnectRequested()
         } else {
             syncRequested()
         }

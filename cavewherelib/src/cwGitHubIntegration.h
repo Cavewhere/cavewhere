@@ -95,6 +95,7 @@ public:
     QString activeAccountId() const { return m_activeAccountId; }
     QString accessToken() const override { return m_accessToken; }
     bool hasLoadedCredentials() const override { return m_hasLoadedStoredToken; }
+    bool tokenLoadedFromKeychain() const { return m_tokenLoadedFromKeychain; }
     void ensureCredentialsLoaded() override;
 
     void setActive(bool active);
@@ -169,6 +170,7 @@ private:
     bool m_active = false;
     bool m_hasLoadedStoredToken = false;
     bool m_loadingStoredToken = false;
+    bool m_tokenLoadedFromKeychain = false;
     QPointer<cwRemoteCredentialStore> m_credentialStore;
 
     int m_secondsUntilNextPoll = 0;

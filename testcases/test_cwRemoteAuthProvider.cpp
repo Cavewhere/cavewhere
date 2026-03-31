@@ -40,10 +40,10 @@ public:
     {
         m_token = token;
         m_hasLoaded = true;
-        emit credentialsLoaded();
         if (!token.isEmpty()) {
             emit accessTokenChanged();
         }
+        emit credentialsLoaded();
     }
 
     // Simulates the user signing in / token refreshing.
@@ -464,5 +464,6 @@ TEST_CASE("cwProjectSyncHealth sets authExpired when HttpAuthFailed and creds we
     CHECK(syncHealth.status().authExpired());
     CHECK(!syncHealth.status().needsLogin());
 }
+
 
 #include "test_cwRemoteAuthProvider.moc"

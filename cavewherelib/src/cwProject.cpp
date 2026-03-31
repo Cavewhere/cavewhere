@@ -458,19 +458,36 @@ bool cwProject::sync()
         return false;
     }
 
+    // If auth is known-expired, skip the attempt and go straight to reconnect.
+    if (m_syncHealth && m_syncHealth->status().authExpired()) {
+        emit syncAuthFailed();
+        return false;
+    }
+
     ErrorModel->clear();
 
     auto* provider = m_saveLoad->authProvider();
     const bool needsCreds = m_saveLoad->requiresProviderCredentials();
-    const bool credsLoaded = provider && provider->hasLoadedCredentials();
-    if (provider && needsCreds && !credsLoaded) {
-        emit authProviderCredentialsNeeded();
+    const bool credsLoaded = provider ? provider->hasLoadedCredentials() : true;
+    const QUrl remoteUrl = m_saveLoad->repository() ? m_saveLoad->repository()->remoteUrl() : QUrl();
+    const bool remoteUnknown = provider && remoteUrl.isEmpty();
+
+    // When the remote URL is empty (not yet known), we can't determine
+    // whether credentials are needed. Defer to be safe so the token is
+    // available for HTTPS push/LFS operations once the URL resolves.
+    if (provider && !credsLoaded && (needsCreds || remoteUnknown)) {
         auto* saveLoad = m_saveLoad;
         connect(provider, &cwRemoteAuthProvider::credentialsLoaded,
                 this, [this, saveLoad]() {
                     beginSyncOperation(saveLoad->sync());
                 },
                 Qt::SingleShotConnection);
+        // Emit authProviderCredentialsNeeded so cwRootData can bootstrap
+        // the account coordinator and trigger the keychain read. This must
+        // be emitted AFTER the connect above because the signal handler
+        // (ensureGitHubTokenLoaded) may cause credentialsLoaded to fire
+        // synchronously.
+        emit authProviderCredentialsNeeded();
         return true;
     }
 
@@ -788,6 +805,15 @@ QFuture<ResultBase> cwProject::loadHelperImpl(const QString& filename, LoadParam
                     if (!suppressLoadedEmit) {
                         emit loaded();
                     }
+
+                    // Check for missing LFS files; notify the user if any are found.
+                    const QDir projectDir = QFileInfo(this->filename()).absoluteDir();
+                    auto missingFuture = QQuickGit::GitRepository::hasMissingLfsFiles(projectDir, this);
+                    AsyncFuture::observe(missingFuture).context(this, [this, missingFuture]() {
+                        if (missingFuture.result()) {
+                            emit lfsFilesNeedSync();
+                        }
+                    });
 
                     // After loading, check git status on a background thread.
                     // If uncommitted changes exist (e.g. from a prior force-quit
