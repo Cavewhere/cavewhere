@@ -4,13 +4,13 @@ import QtQuick as QQ
 import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
-import QQuickGit
+import QQuickGit as QG
 
 StandardPage {
     id: page
     objectName: "remoteManagementPage"
 
-    readonly property GitRepository repository: RootData.project.repository
+    readonly property QG.GitRepository repository: RootData.project.repository
     readonly property var remotes: repository ? repository.remotes : []
 
     ColumnLayout {
@@ -78,14 +78,7 @@ StandardPage {
             color: Theme.textSubtle
         }
 
-        BreakLine {}
-
-        GitHistoryView {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            repository: page.repository
-            laneColors: Theme.laneColors
-        }
+        QQ.Item { Layout.fillHeight: true }
     }
 
     SetupRemoteWizard {

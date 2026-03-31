@@ -154,6 +154,9 @@ QQ.Item {
                     onRemoteSettingsRequested: {
                         RootData.pageSelectionModel.gotoPageByName(null, "Remote Settings")
                     }
+                    onHistoryRequested: {
+                        RootData.pageSelectionModel.gotoPageByName(null, "History")
+                    }
                     onReconnectRequested: {
                         reconnectPopupId.open()
                     }

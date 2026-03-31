@@ -12,6 +12,7 @@ RoundButton {
 
     signal syncRequested()
     signal remoteSettingsRequested()
+    signal historyRequested()
     signal reconnectRequested()
     signal setupRemoteRequested()
 
@@ -125,6 +126,13 @@ RoundButton {
             text: "Remote settings..."
             onTriggered: {
                 remoteSettingsRequested()
+            }
+        }
+
+        QC.MenuItem {
+            text: "History..."
+            onTriggered: {
+                historyRequested()
             }
         }
     }
