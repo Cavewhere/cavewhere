@@ -1605,8 +1605,9 @@ QString cwProject::absolutePath(const cwNote* note) const
     }
 
     const auto image = note->image();
-    if(image.mode() == cwImage::Mode::Path && !image.path().isEmpty()) {
-        return m_saveLoad->absolutePath(note, image.path());
+    const QString imagePath = image.path();
+    if(image.mode() == cwImage::Mode::Path && !imagePath.isEmpty()) {
+        return m_saveLoad->absolutePath(note, imagePath);
     }
 
     return QString();
@@ -1618,12 +1619,14 @@ QString cwProject::absolutePath(const cwNoteLiDAR* noteLiDAR) const
         return QString();
     }
 
-    if(!noteLiDAR->filename().isEmpty()) {
-        return m_saveLoad->absolutePath(noteLiDAR, noteLiDAR->filename());
+    const QString lidarFilename = noteLiDAR->filename();
+    if(!lidarFilename.isEmpty()) {
+        return m_saveLoad->absolutePath(noteLiDAR, lidarFilename);
     }
 
-    if(!noteLiDAR->iconImagePath().isEmpty()) {
-        return m_saveLoad->absolutePath(noteLiDAR, noteLiDAR->iconImagePath());
+    const QString iconPath = noteLiDAR->iconImagePath();
+    if(!iconPath.isEmpty()) {
+        return m_saveLoad->absolutePath(noteLiDAR, iconPath);
     }
 
     return QString();
