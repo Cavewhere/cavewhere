@@ -1206,14 +1206,10 @@ void cwProject::waitSaveToFinish()
 {
     waitForSyncToFinish();
     m_saveLoad->waitForFinished();
-    if (SaveFuture.isRunning() || !SaveFuture.isFinished()) {
-        AsyncFuture::waitForFinished(SaveFuture);
-    }
+    AsyncFuture::waitForFinished(SaveFuture);
 
     for (const auto& future : std::as_const(RetiringSaveFutures)) {
-        if (future.isRunning() || !future.isFinished()) {
-            AsyncFuture::waitForFinished(future);
-        }
+        AsyncFuture::waitForFinished(future);
     }
     RetiringSaveFutures.clear();
 }
