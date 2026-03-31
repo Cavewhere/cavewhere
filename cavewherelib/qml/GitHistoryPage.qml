@@ -11,5 +11,6 @@ StandardPage {
         anchors.margins: Theme.pageMargin
         repository: RootData.project.repository
         laneColors: Theme.laneColors
+        scrollBarSpacing: Theme.pageMargin
     }
 }
