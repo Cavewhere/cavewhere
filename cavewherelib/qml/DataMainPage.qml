@@ -27,7 +27,7 @@ StandardPage {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.bottom: parent.bottom
-        anchors.margins: 5
+        anchors.margins: Theme.pageMargin
 
         ColumnLayout {
             Layout.alignment: Qt.AlignTop

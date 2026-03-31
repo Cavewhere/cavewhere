@@ -6,7 +6,7 @@ import cavewherelib
 QC.ScrollView {
     id: root
 
-    anchors.margins: 5
+    anchors.margins: Theme.pageMargin
 
     // Reusable grid for color swatches
     component ColorDelegate: QQ.Item {

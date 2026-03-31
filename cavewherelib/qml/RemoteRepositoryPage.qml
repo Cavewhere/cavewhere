@@ -140,7 +140,7 @@ StandardPage {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 16
+        anchors.margins: Theme.pageMargin
         spacing: 16
 
         Text {

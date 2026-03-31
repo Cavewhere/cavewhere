@@ -8,6 +8,7 @@ StandardPage {
 
     QG.GitHistoryView {
         anchors.fill: parent
+        anchors.margins: Theme.pageMargin
         repository: RootData.project.repository
         laneColors: Theme.laneColors
     }

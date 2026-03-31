@@ -13,7 +13,8 @@ StandardPage {
         width: listViewId.implicitWidth
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        anchors.margins: 10
+        anchors.left: parent.left
+        anchors.margins: Theme.pageMargin
 
         RowLayout {
             id: rowLayoutId

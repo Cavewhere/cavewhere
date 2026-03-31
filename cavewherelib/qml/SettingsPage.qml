@@ -7,7 +7,7 @@ StandardPage {
 
     RowLayout {
         anchors.fill: parent
-        anchors.margins: 5
+        anchors.margins: Theme.pageMargin
 
         TabViewVertical {
             id: tabBarId

@@ -47,6 +47,9 @@ QtObject {
         "#acc236", "#166a8f", "#00a950", "#58595b"
     ]
 
+    // Spacing
+    readonly property int pageMargin: 8
+
     // Utility
     readonly property color transparent: "#00000000"
     readonly property color shadow: dark ? "#33000000" : "#22000000"
