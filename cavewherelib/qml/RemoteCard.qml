@@ -14,7 +14,6 @@ QQ.Rectangle {
     required property url remoteUrl
     required property GitRepository repository
 
-    signal editRequested()
     signal removeRequested()
 
     implicitHeight: cardLayout.implicitHeight + 24
@@ -22,6 +21,10 @@ QQ.Rectangle {
     color: Theme.surfaceRaised
     border.width: 1
     border.color: Theme.borderSubtle
+
+    readonly property bool syncReady: !syncHealth.status.noRemote
+                                      && !syncHealth.status.needsLogin
+                                      && !syncHealth.status.authExpired
 
     ProjectSyncHealth {
         id: syncHealth
@@ -54,7 +57,6 @@ QQ.Rectangle {
                 elide: QQ.Text.ElideRight
             }
 
-            // Auth status badge
             QQ.Rectangle {
                 visible: syncHealth.status.needsLogin || syncHealth.status.authExpired
                 radius: 3
@@ -72,22 +74,15 @@ QQ.Rectangle {
                 }
             }
 
-            // Ahead/behind indicator
             QQ.Text {
-                visible: !syncHealth.status.stale
-                         && !syncHealth.status.noRemote
-                         && !syncHealth.status.needsLogin
-                         && !syncHealth.status.authExpired
+                visible: !syncHealth.status.stale && card.syncReady
                 font.pixelSize: 12
                 color: Theme.textSecondary
                 text: "\u2191" + syncHealth.status.aheadCount + " \u2193" + syncHealth.status.behindCount
             }
 
             QC.BusyIndicator {
-                visible: syncHealth.status.stale
-                         && !syncHealth.status.noRemote
-                         && !syncHealth.status.needsLogin
-                         && !syncHealth.status.authExpired
+                visible: syncHealth.status.stale && card.syncReady
                 implicitWidth: 16
                 implicitHeight: 16
                 running: visible
@@ -102,7 +97,6 @@ QQ.Rectangle {
             elide: QQ.Text.ElideMiddle
         }
 
-        // Test connection status message
         QQ.Text {
             Layout.fillWidth: true
             visible: testConnection.state === GitTestConnection.Testing

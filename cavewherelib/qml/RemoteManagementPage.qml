@@ -11,6 +11,7 @@ StandardPage {
     objectName: "remoteManagementPage"
 
     readonly property GitRepository repository: RootData.project.repository
+    readonly property var remotes: repository ? repository.remotes : []
 
     ColumnLayout {
         anchors.fill: parent
@@ -35,13 +36,12 @@ StandardPage {
             }
         }
 
-        // Remote list
         QQ.Flickable {
             Layout.fillWidth: true
             Layout.preferredHeight: Math.min(contentHeight, 300)
             contentHeight: remoteColumn.implicitHeight
             clip: true
-            visible: page.repository !== null && page.repository.remotes.length > 0
+            visible: page.remotes.length > 0
 
             ColumnLayout {
                 id: remoteColumn
@@ -49,21 +49,16 @@ StandardPage {
                 spacing: 8
 
                 QQ.Repeater {
-                    model: page.repository ? page.repository.remotes : []
+                    model: page.remotes
 
                     RemoteCard {
                         id: remoteCard
                         required property var modelData
-                        required property int index
 
                         Layout.fillWidth: true
                         remoteName: modelData.name
                         remoteUrl: modelData.url
                         repository: page.repository
-
-                        onEditRequested: {
-                            addRemoteWizard.open()
-                        }
 
                         onRemoveRequested: {
                             removeDialog.remoteName = remoteCard.remoteName
@@ -74,24 +69,17 @@ StandardPage {
             }
         }
 
-        // Empty state
         QQ.Text {
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignHCenter
             horizontalAlignment: QQ.Text.AlignHCenter
-            visible: page.repository === null || page.repository.remotes.length === 0
+            visible: page.remotes.length === 0
             text: qsTr("No remotes configured. Add a remote to sync your project.")
             color: Theme.textSubtle
         }
 
-        // Divider
-        QQ.Rectangle {
-            Layout.fillWidth: true
-            height: 1
-            color: Theme.divider
-        }
+        BreakLine {}
 
-        // Git history graph
         GitHistoryView {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -100,7 +88,6 @@ StandardPage {
         }
     }
 
-    // ── Add Remote Wizard ────────────────────────────────────────────────
     SetupRemoteWizard {
         id: addRemoteWizard
         parent: QC.Overlay.overlay
@@ -115,7 +102,6 @@ StandardPage {
         onRemoteSetupCancelled: addRemoteWizard.close()
     }
 
-    // ── Remove Confirmation Dialog ───────────────────────────────────────
     QC.Dialog {
         id: removeDialog
         parent: QC.Overlay.overlay
