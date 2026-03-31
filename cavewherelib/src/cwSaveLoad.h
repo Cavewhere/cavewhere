@@ -201,7 +201,6 @@ public:
 
     static QFuture<Monad::Result<ProjectLoadData>> loadAll(const QString& filename);
 
-    static Monad::Result<cwCavingRegionData> loadCavingRegion(const QString& filename);
     static Monad::Result<ProjectLoadData> loadProject(const QString& filename);
     static Monad::Result<cwTripData> loadTrip(const QString& filename);
     static Monad::Result<cwTripData> loadTrip(const QByteArray& content);

@@ -3890,20 +3890,6 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
     });
 }
 
-Monad::Result<cwCavingRegionData> cwSaveLoad::loadCavingRegion(const QString &filename)
-{    
-    auto regionResult = loadMessage<CavewhereProto::CavingRegion>(filename);
-    return Monad::mbind(regionResult, [](const Result<CavewhereProto::CavingRegion>& result)
-                        {
-                            auto regionProto = result.value();
-                            cwCavingRegionData regionData;
-                            if(regionProto.has_name()) {
-                                regionData.name = QString::fromStdString(regionProto.name());
-                            }
-                            return Result(regionData);
-                        });
-}
-
 Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString &filename)
 {
     auto projectResult = loadMessage<CavewhereProto::Project>(filename);
