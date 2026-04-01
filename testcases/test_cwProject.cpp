@@ -4700,6 +4700,9 @@ TEST_CASE("cwProject sync keeps repository clean for remote trip rename with loc
     REQUIRE(project->sync());
     rootData->futureManagerModel()->waitForFinished();
     project->waitSaveToFinish();
+    for (int i = 0; i < project->errorModel()->count(); ++i) {
+        UNSCOPED_INFO("Sync error[" << i << "]: " << project->errorModel()->at(i).message().toStdString());
+    }
     CHECK(project->errorModel()->count() == 0);
     requireCleanRepository(repository);
     requireNoUnmergedIndexEntries(repository);
@@ -4822,6 +4825,11 @@ TEST_CASE("cwProject sync keeps repository clean for remote trip rename with loc
     REQUIRE(QFileInfo::exists(verifyProjectPath));
     verifyProject->loadOrConvert(verifyProjectPath);
     verifyProject->waitLoadToFinish();
+    // loadOrConvert no longer auto-downloads LFS objects (to avoid early keychain prompts).
+    // Explicitly hydrate so the verify checks below see binary content, not pointer text.
+    auto verifyHydrateFuture = QQuickGit::GitRepository::hydrateLfsFiles(QDir(verifyClonePath), verifyProject.get());
+    REQUIRE(AsyncFuture::waitForFinished(verifyHydrateFuture, 10000));
+    REQUIRE_FALSE(verifyHydrateFuture.result().hasError());
 
     REQUIRE(verifyProject->cavingRegion()->caveCount() == 1);
     auto* verifyCave = verifyProject->cavingRegion()->cave(0);
@@ -4924,6 +4932,11 @@ TEST_CASE("cwProject sync keeps repository clean for remote trip rename with loc
     REQUIRE(QFileInfo::exists(verifyUnhydratedProjectPath));
     verifyUnhydratedProject->loadOrConvert(verifyUnhydratedProjectPath);
     verifyUnhydratedProject->waitLoadToFinish();
+    // Same explicit hydration as for verifyProject above; the LFS cache was cleared so
+    // objects must be re-downloaded from the configured LFS server.
+    auto unhydratedHydrateFuture = QQuickGit::GitRepository::hydrateLfsFiles(QDir(verifyUnhydratedClonePath), verifyUnhydratedProject.get());
+    REQUIRE(AsyncFuture::waitForFinished(unhydratedHydrateFuture, 10000));
+    REQUIRE_FALSE(unhydratedHydrateFuture.result().hasError());
 
     REQUIRE(verifyUnhydratedProject->cavingRegion()->caveCount() == 1);
     auto* verifyUnhydratedCave = verifyUnhydratedProject->cavingRegion()->cave(0);
@@ -5387,6 +5400,9 @@ TEST_CASE("cwProject sync keeps repository clean for remote cave rename with loc
     REQUIRE(project->sync());
     rootData->futureManagerModel()->waitForFinished();
     project->waitSaveToFinish();
+    for (int i = 0; i < project->errorModel()->count(); ++i) {
+        UNSCOPED_INFO("Sync error[" << i << "]: " << project->errorModel()->at(i).message().toStdString());
+    }
     CHECK(project->errorModel()->count() == 0);
     requireCleanRepository(repository);
     requireNoUnmergedIndexEntries(repository);
