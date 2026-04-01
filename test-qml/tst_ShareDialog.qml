@@ -26,6 +26,19 @@ Item {
             shareDialogId.close()
         }
 
+        function setupProjectWithRemote(projectName) {
+            const tempDir = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
+            verify(RootData.project.saveAs(tempDir + "/" + projectName + ".cwproj"))
+            TestHelper.waitForProjectSaveToFinish(RootData.project)
+            tryVerify(function() { return RootData.project.repository !== null }, 5000)
+            const err = RootData.project.repository.addRemote(
+                "origin", Qt.url("https://github.com/user/testrepo"))
+            compare(err, "")
+            tryVerify(function() {
+                return RootData.project.shareLink().toString().length > 0
+            }, 5000)
+        }
+
         // ── Project state conditions ───────────────────────────────────────
 
         // A new (temporary) project has no git repository, so shareLink is empty.
@@ -51,18 +64,7 @@ Item {
 
         // After adding an origin remote, shareLink returns the expected URL.
         function test_shareLink_generatedAfterAddingRemote() {
-            const tempDir = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
-            verify(RootData.project.saveAs(tempDir + "/share-with-remote.cwproj"))
-            TestHelper.waitForProjectSaveToFinish(RootData.project)
-
-            tryVerify(function() { return RootData.project.repository !== null }, 5000)
-            const err = RootData.project.repository.addRemote(
-                "origin", Qt.url("https://github.com/user/testrepo"))
-            compare(err, "")
-
-            tryVerify(function() {
-                return RootData.project.shareLink().toString().length > 0
-            }, 5000)
+            setupProjectWithRemote("share-with-remote")
 
             const link = RootData.project.shareLink().toString()
             verify(link.startsWith("https://cavewhere.com/open?repo="),
@@ -73,14 +75,7 @@ Item {
 
         // syncHealth.status.noRemote becomes false after a remote is added.
         function test_noRemoteFalse_afterAddingRemote() {
-            const tempDir = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
-            verify(RootData.project.saveAs(tempDir + "/share-remote-health.cwproj"))
-            TestHelper.waitForProjectSaveToFinish(RootData.project)
-
-            tryVerify(function() { return RootData.project.repository !== null }, 5000)
-            const err = RootData.project.repository.addRemote(
-                "origin", Qt.url("https://github.com/user/testrepo"))
-            compare(err, "")
+            setupProjectWithRemote("share-remote-health")
 
             tryVerify(function() {
                 return RootData.project.syncHealth.status.noRemote === false
@@ -91,18 +86,7 @@ Item {
 
         // Dialog opens and shows the share link from the project.
         function test_dialog_showsShareLink() {
-            const tempDir = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
-            verify(RootData.project.saveAs(tempDir + "/share-dialog-link.cwproj"))
-            TestHelper.waitForProjectSaveToFinish(RootData.project)
-
-            tryVerify(function() { return RootData.project.repository !== null }, 5000)
-            const err = RootData.project.repository.addRemote(
-                "origin", Qt.url("https://github.com/user/testrepo"))
-            compare(err, "")
-
-            tryVerify(function() {
-                return RootData.project.shareLink().toString().length > 0
-            }, 5000)
+            setupProjectWithRemote("share-dialog-link")
 
             shareDialogId.open()
             tryVerify(function() { return shareDialogId.visible }, 1000)
@@ -139,18 +123,7 @@ Item {
 
         // Copy Link button is enabled when a share link exists.
         function test_copyLinkButton_enabledWhenLinkExists() {
-            const tempDir = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
-            verify(RootData.project.saveAs(tempDir + "/share-copy-btn.cwproj"))
-            TestHelper.waitForProjectSaveToFinish(RootData.project)
-
-            tryVerify(function() { return RootData.project.repository !== null }, 5000)
-            const err = RootData.project.repository.addRemote(
-                "origin", Qt.url("https://github.com/user/testrepo"))
-            compare(err, "")
-
-            tryVerify(function() {
-                return RootData.project.shareLink().toString().length > 0
-            }, 5000)
+            setupProjectWithRemote("share-copy-btn")
 
             shareDialogId.open()
             tryVerify(function() { return shareDialogId.visible }, 1000)

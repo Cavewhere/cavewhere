@@ -14,6 +14,7 @@ QC.Dialog {
 
     // Captured when the dialog opens so bindings see a stable value.
     property url _shareLink: Qt.url("")
+    readonly property bool _hasShareLink: _shareLink.toString().length > 0
 
     onOpened: { _shareLink = RootData.project.shareLink() }
 
@@ -61,7 +62,7 @@ QC.Dialog {
                 objectName: "manageCollaboratorsButton"
                 text: qsTr("Manage on GitHub")
                 flat: true
-                enabled: rootId._shareLink.toString().length > 0
+                enabled: rootId._hasShareLink
                 onClicked: Qt.openUrlExternally(rootId._shareLink)
             }
 
@@ -71,7 +72,7 @@ QC.Dialog {
                 objectName: "copyLinkButton"
                 text: qsTr("Copy Link")
                 font.bold: true
-                enabled: rootId._shareLink.toString().length > 0
+                enabled: rootId._hasShareLink
                 onClicked: {
                     RootData.copyText(rootId._shareLink.toString())
                     rootId.close()

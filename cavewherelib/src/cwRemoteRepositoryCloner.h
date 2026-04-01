@@ -69,6 +69,7 @@ private:
     void setCloneFailedDueToAuthError(bool value);
     void handleCloneWatcherStateChanged();
     void handleCloneWatcherProgressTextChanged();
+    void resetCloneRepository();
 
     QPointer<cwRecentProjectModel> m_recentProjectModel;
     QPointer<QQuickGit::GitFutureWatcher> m_cloneWatcher;
