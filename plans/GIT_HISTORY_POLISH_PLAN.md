@@ -6,10 +6,10 @@ Post-implementation issues found during testing of the Git Commit Detail Panel (
 
 ## Issues
 
-### 1. HEAD indicator in history view
-The history view needs a visual indicator showing which commit is currently checked out (HEAD). Consider bolding the commit message or adding an icon/badge. Should be understandable to non-git users.
+### 1. ~~HEAD indicator in history view~~ ✅
+~~The history view needs a visual indicator showing which commit is currently checked out (HEAD). Consider bolding the commit message or adding an icon/badge. Should be understandable to non-git users.~~
 
-**Independent**
+**Independent** — Done: Added IsHeadRole to GitGraphModel, "Current" RefBadge, and bold commit message for HEAD.
 
 ### 2. Default to main branch
 History should default to showing the main branch when the page is opened.
