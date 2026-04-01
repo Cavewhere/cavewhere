@@ -16,10 +16,10 @@ Post-implementation issues found during testing of the Git Commit Detail Panel (
 
 **Independent** — Done: `initRepository()` now uses `git_repository_init_ext` with `initial_head = "main"`.
 
-### 3. History doesn't update after sync
-Pressing sync (pull or push) doesn't refresh the git history view. The new commits don't appear until navigating away and back.
+### 3. ~~History doesn't update after sync~~ ✅
+~~Pressing sync (pull or push) doesn't refresh the git history view. The new commits don't appear until navigating away and back.~~
 
-**Independent — but fix before verifying 5 and 13**
+**Independent — but fix before verifying 5 and 13** — Done: Added `refsChanged()` signal to `GitRepository`, emitted from `commitAll`, `resetHard`, `createBranch`, `push`, `pull`, `pullRebaseOrMerge`, `checkout`, `reset`. `GitGraphModel` connects to it for auto-refresh.
 
 ### 4. Remove SHA copy button, make metadata selectable
 Remove the dedicated SHA copy action. Make author, date, and SHA text selectable so native right-click copy works.
