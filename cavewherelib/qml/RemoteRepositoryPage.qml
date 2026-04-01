@@ -12,7 +12,7 @@ StandardPage {
 
     property GitHubIntegration gitHub: RootData.remote.gitHubIntegration
     property RemoteAccountCoordinator remoteAccountCoordinator: RootData.remote.accountCoordinator
-    property AskToSaveDialog askToSaveDialog: null
+    required property AskToSaveDialog askToSaveDialog
 
     state: "none"
     states: [
@@ -150,14 +150,9 @@ StandardPage {
                             RootData.pageSelectionModel.gotoPageByName(null, "View")
                             manualUrlField.textField.text = ""
                         }
-                        if (page.askToSaveDialog) {
-                            page.askToSaveDialog.taskName = "opening a cloned repository"
-                            page.askToSaveDialog.afterSaveFunc = loadAndView
-                            page.askToSaveDialog.askToSave()
-                        } else {
-                            console.error("RemoteRepositoryPage: askToSaveDialog not set; opened cloned project without save prompt.")
-                            loadAndView()
-                        }
+                        page.askToSaveDialog.taskName = "opening a cloned repository"
+                        page.askToSaveDialog.afterSaveFunc = loadAndView
+                        page.askToSaveDialog.askToSave()
                     }
                 }
             }

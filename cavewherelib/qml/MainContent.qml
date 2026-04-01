@@ -92,6 +92,7 @@ QQ.Item {
         id: sourceComponent
         SourceListPage {
             anchors.fill: parent
+            askToSaveDialog: mainContentId.askToSaveDialog
         }
     }
 
