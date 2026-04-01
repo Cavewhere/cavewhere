@@ -22,6 +22,7 @@
 #include "cwSQLManager.h"
 #include "cwTaskManagerModel.h"
 #include "asyncfuture.h"
+#include "cwError.h"
 #include "cwErrorListModel.h"
 #include "cwPDFConverter.h"
 #include "cwPDFSettings.h"
@@ -1454,6 +1455,22 @@ cwProject::FileType cwProject::projectType(const QString& filename) const
 
     //V6 or lower
     return SqliteFileType;
+}
+
+void cwProject::safeCommitAll(const QString& subject, const QString& description)
+{
+    if (!repository()) {
+        errorModel()->append(cwError(QStringLiteral("Commit failed: no repository open"),
+                                     cwError::Fatal));
+        return;
+    }
+    try {
+        repository()->commitAll(subject, description);
+        repository()->checkStatus();
+    } catch (const std::exception& e) {
+        errorModel()->append(cwError(QString("Commit failed: %1").arg(e.what()),
+                                     cwError::Fatal));
+    }
 }
 
 cwResultDir cwProject::repositoryDir(const QUrl& localDir, const QString& name) const

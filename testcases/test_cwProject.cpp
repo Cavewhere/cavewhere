@@ -12642,3 +12642,63 @@ TEST_CASE("cwProject syncFinished and errorModel on failure", "[cwProject][sync]
         CHECK(project->errorModel()->last().message() != QStringLiteral("stale error"));
     }
 }
+
+TEST_CASE("safeCommitAll commits changes and refreshes status", "[cwProject][safeCommitAll]")
+{
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Test User"));
+    rootData->account()->setEmail(QStringLiteral("test@example.com"));
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    region->cave(0)->setName(QStringLiteral("Safe Commit Cave"));
+
+    QTemporaryDir saveDir;
+    REQUIRE(saveDir.isValid());
+    const QString savePath = QDir(saveDir.path()).filePath(QStringLiteral("safe-commit.cwproj"));
+    REQUIRE(project->saveAs(savePath));
+    project->waitSaveToFinish();
+
+    auto* repo = project->repository();
+    REQUIRE(repo != nullptr);
+
+    SECTION("successful commit creates a new HEAD and refreshes status")
+    {
+        // Create a dirty file so there is something to commit
+        const QDir repoDir = QFileInfo(project->filename()).absoluteDir();
+        QFile dirty(repoDir.filePath(QStringLiteral("dirty.txt")));
+        REQUIRE(dirty.open(QFile::WriteOnly));
+        dirty.write("uncommitted change");
+        dirty.close();
+
+        repo->checkStatus();
+        REQUIRE(repo->modifiedFileCount() > 0);
+
+        const auto beforeOid = QQuickGit::GitRepository::headCommitOid(repoDir.absolutePath());
+
+        project->errorModel()->clear();
+        project->safeCommitAll(QStringLiteral("Test subject"), QStringLiteral("Test body"));
+
+        CHECK(project->errorModel()->count() == 0);
+        CHECK(repo->modifiedFileCount() == 0);
+
+        const auto afterOid = QQuickGit::GitRepository::headCommitOid(repoDir.absolutePath());
+        REQUIRE(!afterOid.hasError());
+        CHECK(afterOid.value() != beforeOid.value());
+    }
+
+    SECTION("commit with no changes does not append an error")
+    {
+        // First commit everything so the repo is clean
+        project->safeCommitAll(QStringLiteral("Clean up"), QString());
+        repo->checkStatus();
+        REQUIRE(repo->modifiedFileCount() == 0);
+
+        project->errorModel()->clear();
+        project->safeCommitAll(QStringLiteral("Empty"), QString());
+
+        CHECK(project->errorModel()->count() == 0);
+    }
+}

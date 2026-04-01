@@ -106,6 +106,8 @@ public:
 
     static QString supportedImageFormats();
 
+    Q_INVOKABLE void safeCommitAll(const QString& subject, const QString& description);
+
     Q_INVOKABLE cwResultDir repositoryDir(const QUrl& localDir, const QString& name) const;
 
     Q_INVOKABLE void convertFromProjectV6(QString oldProjectFilename,
