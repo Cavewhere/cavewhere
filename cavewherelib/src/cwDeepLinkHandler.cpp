@@ -42,15 +42,15 @@ void cwDeepLinkHandler::handleUrl(const QUrl& url)
         return;
     }
 
-    const QString host = repoUrl.host().toLower();
-    if (!allowedHosts().contains(host)) {
+    const QString host = repoUrl.host();
+    if (!isHostAllowed(host)) {
         emit invalidLink(QStringLiteral("repo host '%1' is not on the allowlist").arg(host));
         return;
     }
 
     static const QRegularExpression ipPattern(
         QStringLiteral(R"(^\d{1,3}(\.\d{1,3}){3}$)"));
-    if (ipPattern.match(host).hasMatch()) {
+    if (ipPattern.match(host.toLower()).hasMatch()) {
         emit invalidLink(QStringLiteral("IP addresses are not allowed as repo host"));
         return;
     }
@@ -76,6 +76,11 @@ QUrl cwDeepLinkHandler::takePendingUrl()
     QUrl url = m_pendingUrl;
     m_pendingUrl.clear();
     return url;
+}
+
+bool cwDeepLinkHandler::isHostAllowed(const QString& host)
+{
+    return allowedHosts().contains(host.toLower());
 }
 
 const QStringList& cwDeepLinkHandler::allowedHosts()

@@ -28,6 +28,8 @@
 #include "cwConcurrent.h"
 #include "cwSaveLoad.h"
 #include "cwZip.h"
+#include "cwDeepLinkHandler.h"
+#include "GitUtilities.h"
 #include "cwNote.h"
 #include "cwNoteLiDAR.h"
 #include "cwProjectSyncHealth.h"
@@ -555,25 +557,40 @@ QQuickGit::GitRepository* cwProject::repository() const
     return m_saveLoad->repository();
 }
 
-QUrl cwProject::remoteUrl() const
+QString cwProject::rawRemoteUrlString() const
 {
     auto* repo = repository();
     if (!repo)
         return {};
-    QUrl url = repo->remoteUrl(QStringLiteral("origin"));
-    if (!url.isEmpty())
-        return url;
+    QString raw = repo->rawRemoteUrl(QStringLiteral("origin"));
+    if (!raw.isEmpty())
+        return raw;
     const auto remoteList = repo->remotes();
     if (!remoteList.isEmpty())
-        return remoteList.first().url();
+        return repo->rawRemoteUrl(remoteList.first().name());
     return {};
+}
+
+QUrl cwProject::remoteUrl() const
+{
+    const QString raw = rawRemoteUrlString();
+    return raw.isEmpty() ? QUrl() : QQuickGit::GitUtilities::fixGitUrl(raw);
 }
 
 QUrl cwProject::shareLink() const
 {
-    const QUrl repoUrl = remoteUrl();
+    const QString raw = rawRemoteUrlString();
+    if (raw.isEmpty())
+        return {};
+
+    // Normalize SSH/SCP/git remotes to HTTPS.
+    const QUrl repoUrl = QQuickGit::GitUtilities::httpsUrlFromRemoteUrl(raw);
     if (repoUrl.isEmpty())
         return {};
+
+    if (!cwDeepLinkHandler::isHostAllowed(repoUrl.host()))
+        return {};
+
     QUrl link;
     link.setScheme(QStringLiteral("https"));
     link.setHost(QStringLiteral("cavewhere.com"));

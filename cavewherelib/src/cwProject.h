@@ -213,6 +213,7 @@ public slots:
     void loadFile(QString filename);
 
 private:
+    QString rawRemoteUrlString() const;
     bool beginSyncOperation(const QFuture<Monad::ResultBase>& operationFuture);
     void setModified(bool modified);
 

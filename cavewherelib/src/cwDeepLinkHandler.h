@@ -43,6 +43,8 @@ public:
     Q_INVOKABLE void handleUrl(const QUrl& url);
     Q_INVOKABLE QUrl takePendingUrl();
 
+    static bool isHostAllowed(const QString& host);
+
 signals:
     void openRepoRequested(QUrl repoUrl);
     void invalidLink(QString reason);

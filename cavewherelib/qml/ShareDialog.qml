@@ -14,9 +14,14 @@ QC.Dialog {
 
     // Captured when the dialog opens so bindings see a stable value.
     property url _shareLink: Qt.url("")
+    property url _remoteUrl: Qt.url("")
     readonly property bool _hasShareLink: _shareLink.toString().length > 0
+    readonly property bool _hasUnsupportedRemote: !_hasShareLink && _remoteUrl.toString().length > 0
 
-    onOpened: { _shareLink = RootData.project.shareLink() }
+    onOpened: {
+        _shareLink = RootData.project.shareLink()
+        _remoteUrl = RootData.project.remoteUrl()
+    }
 
     contentItem: ColumnLayout {
         spacing: 8
@@ -32,15 +37,22 @@ QC.Dialog {
             Layout.fillWidth: true
             readOnly: true
             selectByMouse: true
-            text: rootId._shareLink.toString()
+            text: rootId._hasShareLink ? rootId._shareLink.toString() : ""
+            placeholderText: rootId._hasUnsupportedRemote
+                ? qsTr("Unsupported remote — only GitHub, GitLab, and Bitbucket HTTPS remotes are supported")
+                : qsTr("No remote configured")
         }
 
         QC.Label {
             objectName: "shareNoteLabel"
             Layout.fillWidth: true
-            text: qsTr("The recipient will need a GitHub account and repository access.")
+            text: rootId._hasShareLink
+                ? qsTr("The recipient will need a GitHub account and repository access.")
+                : rootId._hasUnsupportedRemote
+                    ? qsTr("The remote \"%1\" cannot be used for share links. Push to a GitHub, GitLab, or Bitbucket repository to enable sharing.").arg(rootId._remoteUrl)
+                    : qsTr("Add a remote repository to enable sharing.")
             wrapMode: QQ.Text.WordWrap
-            color: Theme.textSubtle
+            color: rootId._hasShareLink ? Theme.textSubtle : Theme.warning
         }
     }
 
