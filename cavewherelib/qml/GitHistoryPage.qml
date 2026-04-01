@@ -12,6 +12,9 @@ StandardPage {
         repository: RootData.project.repository
         laneColors: Theme.laneColors
         highlightColor: Theme.highlight
+        syntheticBackground: Theme.surfaceMuted
+        syntheticBorderColor: Theme.border
+        syntheticIconSource: "qrc:/twbs-icons/icons/pencil.svg"
         scrollBarSpacing: Theme.pageMargin
     }
 }

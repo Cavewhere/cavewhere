@@ -105,6 +105,7 @@ Uses Qt's RHI (Rendering Hardware Interface). Key classes: `cwRegionSceneManager
 - Prefer `id` selectors over `objectName`; keep bindings simple; avoid deep nesting
 - Register modules via `qt_add_qml_module` in CMakeLists.txt
 - Use `Loader` for deferred/conditional loading; avoid expensive operations in bindings
+- Use `QCanvasPainterItem` (C++) for custom painting; do not use QML `Canvas` or `Shapes`
 
 ### Commits
 - Short, capitalized, imperative subjects ("Fix", "Add", "Implement")
