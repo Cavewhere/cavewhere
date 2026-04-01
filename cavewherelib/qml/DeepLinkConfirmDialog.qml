@@ -8,6 +8,9 @@ import cavewherelib
 QQ.Item {
     id: rootId
 
+    // Emitted when a clone completes and the caller should ask-to-save then load the file.
+    signal openRequested(string filePath)
+
     function open(url) {
         dialogId.repoUrl = url
         dialogId._selectedUsername = ""
@@ -201,7 +204,7 @@ QQ.Item {
                 Layout.fillWidth: true
                 urlText: dialogId.repoUrl.toString()
                 authErrorMessage: qsTr("Sign in to GitHub above to retry.")
-                onCloneCompleted: rootId.close()
+                onReadyToOpen: function(filePath) { rootId.openRequested(filePath) }
             }
         }
 

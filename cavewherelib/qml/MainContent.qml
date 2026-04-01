@@ -8,6 +8,7 @@ QQ.Item {
 
     property GLTerrainRenderer renderer;
     property QC.Menu fileMenu
+    property AskToSaveDialog askToSaveDialog: null
 
     anchors.fill: parent
 
@@ -142,6 +143,7 @@ QQ.Item {
         id: remoteRepositoryPageComponent
         RemoteRepositoryPage {
             anchors.fill: parent
+            askToSaveDialog: mainContentId.askToSaveDialog
         }
     }
 

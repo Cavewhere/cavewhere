@@ -74,6 +74,7 @@ QC.ApplicationWindow {
         sourceComponent: MainContent {
             anchors.fill: parent
             fileMenu: windowsLinuxFileMenuLoader.item
+            askToSaveDialog: askToSaveDialogId
         }
     }
 
@@ -134,6 +135,19 @@ QC.ApplicationWindow {
         target: RootData.deepLinkHandler
         function onOpenRepoRequested(url) {
             deepLinkConfirmDialogId.open(url)
+        }
+    }
+
+    QQ.Connections {
+        target: deepLinkConfirmDialogId
+        function onOpenRequested(filePath) {
+            askToSaveDialogId.taskName = "opening a cloned repository"
+            askToSaveDialogId.afterSaveFunc = function() {
+                RootData.project.loadFile(filePath)
+                RootData.pageSelectionModel.gotoPageByName(null, "View")
+                deepLinkConfirmDialogId.close()
+            }
+            askToSaveDialogId.askToSave()
         }
     }
 

@@ -19,8 +19,9 @@ ColumnLayout {
     readonly property bool isCloning: cloneWatcherId.state === GitFutureWatcher.Loading
     readonly property bool cloneFailedDueToAuthError: clonerId.cloneFailedDueToAuthError
 
-    // Emitted after clone succeeds, project is opened, and page is navigated to View
-    signal cloneCompleted()
+    // Emitted after clone succeeds with the path of the cloned project file.
+    // The caller is responsible for asking to save the current project and then loading the file.
+    signal readyToOpen(string filePath)
 
     function clone() {
         clonerId.clone(urlText, _destinationParentFolder)
@@ -60,9 +61,7 @@ ColumnLayout {
                 console.warn("CloneArea: Failed to open cloned repository:", fileResult.errorMessage)
                 return
             }
-            RootData.project.loadFile(fileResult.value)
-            RootData.pageSelectionModel.gotoPageByName(null, "View")
-            root.cloneCompleted()
+            root.readyToOpen(fileResult.value)
         }
 
         onRepositoryClonedWithRemote: function(repositoryPath, remoteUrl) {

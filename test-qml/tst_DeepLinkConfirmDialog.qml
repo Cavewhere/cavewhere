@@ -12,12 +12,19 @@ Item {
         id: dialogId
     }
 
+    SignalSpy {
+        id: openRequestedSpy
+        target: dialogId
+        signalName: "openRequested"
+    }
+
     TestCase {
         name: "DeepLinkConfirmDialog"
         when: windowShown
 
         function cleanup() {
             dialogId.close()
+            openRequestedSpy.clear()
         }
 
         // Dialog opens and shows the host / owner/repo from the URL
@@ -124,6 +131,28 @@ Item {
             dialogId.close()
             dialogId.open(Qt.url("https://bitbucket.org/team/cave"))
             tryVerify(function() { return repoLabel.text === "bitbucket.org / team/cave" }, 1000)
+        }
+
+        // After a successful clone, openRequested is emitted with the project file path.
+        function test_clone_emitsOpenRequested() {
+            var fixture = TestHelper.createLocalBareRemoteForCloneTest()
+            compare(fixture.errorMessage, "")
+
+            RootData.recentProjectModel.defaultRepositoryDir = TestHelper.toLocalUrl(fixture.cloneParentPath)
+            dialogId.open(Qt.url(fixture.remoteUrl))
+            tryVerify(function() {
+                var dialog = findChild(rootId, "deepLinkConfirmDialog")
+                return dialog !== null && dialog.visible
+            }, 1000)
+
+            var cloneButton = findChild(rootId, "deepLinkCloneButton")
+            verify(cloneButton !== null)
+            mouseClick(cloneButton)
+
+            tryVerify(function() { return openRequestedSpy.count > 0 }, 20000,
+                      "openRequested should fire after clone succeeds")
+            verify(openRequestedSpy.signalArguments[0][0].indexOf(fixture.expectedClonePath) >= 0,
+                   "openRequested should carry the cloned project file path")
         }
     }
 }

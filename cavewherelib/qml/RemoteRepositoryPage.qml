@@ -12,6 +12,7 @@ StandardPage {
 
     property GitHubIntegration gitHub: RootData.remote.gitHubIntegration
     property RemoteAccountCoordinator remoteAccountCoordinator: RootData.remote.accountCoordinator
+    property AskToSaveDialog askToSaveDialog: null
 
     state: "none"
     states: [
@@ -143,6 +144,21 @@ StandardPage {
                     Layout.fillWidth: true
                     urlText: manualUrlField.textField.text
                     authErrorMessage: qsTr("Select a GitHub account below to clone from GitHub.")
+                    onReadyToOpen: function(filePath) {
+                        function loadAndView() {
+                            RootData.project.loadFile(filePath)
+                            RootData.pageSelectionModel.gotoPageByName(null, "View")
+                            manualUrlField.textField.text = ""
+                        }
+                        if (page.askToSaveDialog) {
+                            page.askToSaveDialog.taskName = "opening a cloned repository"
+                            page.askToSaveDialog.afterSaveFunc = loadAndView
+                            page.askToSaveDialog.askToSave()
+                        } else {
+                            console.error("RemoteRepositoryPage: askToSaveDialog not set; opened cloned project without save prompt.")
+                            loadAndView()
+                        }
+                    }
                 }
             }
         }
