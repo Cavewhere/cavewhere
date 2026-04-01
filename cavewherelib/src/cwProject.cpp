@@ -806,6 +806,12 @@ QFuture<ResultBase> cwProject::loadHelperImpl(const QString& filename, LoadParam
                         emit loaded();
                     }
 
+                    // Surface any load warnings/errors (e.g. newer-version entities)
+                    const auto loadErrors = m_saveLoad->lastLoadErrors();
+                    if (!loadErrors.isEmpty()) {
+                        ErrorModel->append(loadErrors);
+                    }
+
                     // Check for missing LFS files; notify the user if any are found.
                     const QDir projectDir = QFileInfo(this->filename()).absoluteDir();
                     auto missingFuture = QQuickGit::GitRepository::hasMissingLfsFiles(projectDir, this);

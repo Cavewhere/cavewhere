@@ -25,6 +25,11 @@
 #include "cwRegionIOTask.h"
 #include "cavewhereVersion.h"
 #include "ProjectFilenameTestHelper.h"
+#include "cwError.h"
+#include "cwErrorListModel.h"
+#include "cwFutureManagerModel.h"
+#include "LoadProjectHelper.h"
+#include <asyncfuture.h>
 
 //QQuickGit includes
 #include "GitRepository.h"
@@ -42,6 +47,8 @@
 #include <QDate>
 #include <QHash>
 #include <QTemporaryDir>
+#include <QJsonDocument>
+#include <QJsonObject>
 
 #include <set>
 
@@ -1899,4 +1906,199 @@ TEST_CASE("enqueueFlushAndCommit creates a new commit on each save() call", "[cw
 
     repo->checkStatus();
     CHECK(repo->modifiedFileCount() == 0);
+}
+
+namespace {
+bool bumpFileVersion(const QString& filePath, int newVersion)
+{
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return false;
+    }
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    file.close();
+
+    if (!doc.isObject()) {
+        return false;
+    }
+
+    QJsonObject root = doc.object();
+    QJsonObject fileVersion = root[QStringLiteral("fileVersion")].toObject();
+    if (fileVersion.isEmpty()) {
+        return false;
+    }
+    fileVersion[QStringLiteral("version")] = newVersion;
+    root[QStringLiteral("fileVersion")] = fileVersion;
+
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        return false;
+    }
+    file.write(QJsonDocument(root).toJson());
+    return true;
+}
+
+QStringList findEntityFiles(const QString& rootPath, const QStringList& suffixes)
+{
+    QStringList result;
+    QDirIterator it(rootPath, suffixes, QDir::Files, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        result.append(it.next());
+    }
+    result.sort();
+    return result;
+}
+}
+
+TEST_CASE("loadAll collects version warnings for newer entity files", "[cwSaveLoad]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    cave->setName(QStringLiteral("VersionTestCave"));
+    cave->addTrip();
+    auto trip = cave->trip(0);
+    trip->setName(QStringLiteral("VersionTestTrip"));
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("VersionTest.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    const QString savedProjectFile = project->filename();
+    REQUIRE(QFileInfo::exists(savedProjectFile));
+
+    const int futureVersion = cwRegionIOTask::protoVersion() + 1;
+
+    SECTION("No warnings when all entities at current version") {
+        auto loadFuture = cwSaveLoad::loadAll(savedProjectFile);
+        REQUIRE(AsyncFuture::waitForFinished(loadFuture, 10000));
+        REQUIRE_FALSE(loadFuture.result().hasError());
+        CHECK(loadFuture.result().value().errors.isEmpty());
+    }
+
+    SECTION("Warning when cave file has future version") {
+        auto caveFiles = findEntityFiles(QFileInfo(savedProjectFile).absolutePath(), {QStringLiteral("*.cwcave")});
+        REQUIRE(caveFiles.size() == 1);
+        REQUIRE(bumpFileVersion(caveFiles.first(), futureVersion));
+
+        auto loadFuture = cwSaveLoad::loadAll(savedProjectFile);
+        REQUIRE(AsyncFuture::waitForFinished(loadFuture, 10000));
+        REQUIRE_FALSE(loadFuture.result().hasError());
+
+        const auto& errors = loadFuture.result().value().errors;
+        REQUIRE(errors.size() == 1);
+        CHECK(errors.first().type() == cwError::Warning);
+        CHECK(errors.first().message().contains(QStringLiteral("newer version")));
+
+        // Data should still load (best-effort)
+        CHECK(loadFuture.result().value().region.caves.size() == 1);
+    }
+
+    SECTION("Warning when trip file has future version") {
+        auto tripFiles = findEntityFiles(QFileInfo(savedProjectFile).absolutePath(), {QStringLiteral("*.cwtrip")});
+        REQUIRE(tripFiles.size() == 1);
+        REQUIRE(bumpFileVersion(tripFiles.first(), futureVersion));
+
+        auto loadFuture = cwSaveLoad::loadAll(savedProjectFile);
+        REQUIRE(AsyncFuture::waitForFinished(loadFuture, 10000));
+        REQUIRE_FALSE(loadFuture.result().hasError());
+
+        const auto& errors = loadFuture.result().value().errors;
+        REQUIRE(errors.size() == 1);
+        CHECK(errors.first().type() == cwError::Warning);
+
+        // Data should still load (best-effort)
+        CHECK(loadFuture.result().value().region.caves.size() == 1);
+        CHECK(loadFuture.result().value().region.caves.first().trips.size() == 1);
+    }
+
+    SECTION("Warning when project file has future version") {
+        auto projFiles = findEntityFiles(QFileInfo(savedProjectFile).absolutePath(), {QStringLiteral("*.cwproj")});
+        REQUIRE(projFiles.size() == 1);
+        REQUIRE(bumpFileVersion(projFiles.first(), futureVersion));
+
+        auto loadFuture = cwSaveLoad::loadAll(savedProjectFile);
+        REQUIRE(AsyncFuture::waitForFinished(loadFuture, 10000));
+        REQUIRE_FALSE(loadFuture.result().hasError());
+
+        const auto& errors = loadFuture.result().value().errors;
+        REQUIRE(errors.size() == 1);
+        CHECK(errors.first().type() == cwError::Warning);
+        CHECK(errors.first().message().contains(QStringLiteral("newer version")));
+
+        // Data should still load (best-effort)
+        CHECK(loadFuture.result().value().region.caves.size() == 1);
+    }
+
+    SECTION("Multiple warnings when both cave and trip have future versions") {
+        auto caveFiles = findEntityFiles(QFileInfo(savedProjectFile).absolutePath(), {QStringLiteral("*.cwcave")});
+        auto tripFiles = findEntityFiles(QFileInfo(savedProjectFile).absolutePath(), {QStringLiteral("*.cwtrip")});
+        REQUIRE(caveFiles.size() == 1);
+        REQUIRE(tripFiles.size() == 1);
+        REQUIRE(bumpFileVersion(caveFiles.first(), futureVersion));
+        REQUIRE(bumpFileVersion(tripFiles.first(), futureVersion));
+
+        auto loadFuture = cwSaveLoad::loadAll(savedProjectFile);
+        REQUIRE(AsyncFuture::waitForFinished(loadFuture, 10000));
+        REQUIRE_FALSE(loadFuture.result().hasError());
+
+        const auto& errors = loadFuture.result().value().errors;
+        CHECK(errors.size() == 2);
+        for (const auto& error : errors) {
+            CHECK(error.type() == cwError::Warning);
+        }
+    }
+}
+
+TEST_CASE("cwProject surfaces load errors to errorModel for git projects", "[cwSaveLoad]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    cave->setName(QStringLiteral("ErrorModelCave"));
+    cave->addTrip();
+    cave->trip(0)->setName(QStringLiteral("ErrorModelTrip"));
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("ErrorModelTest.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    const QString savedProjectFile = project->filename();
+    REQUIRE(QFileInfo::exists(savedProjectFile));
+
+    // Bump cave version to future
+    auto caveFiles = findEntityFiles(QFileInfo(savedProjectFile).absolutePath(), {QStringLiteral("*.cwcave")});
+    REQUIRE(caveFiles.size() == 1);
+    const int futureVersion = cwRegionIOTask::protoVersion() + 1;
+    REQUIRE(bumpFileVersion(caveFiles.first(), futureVersion));
+
+    // Reload the project through cwProject (git path)
+    auto reloaded = std::make_unique<cwProject>();
+    addTokenManager(reloaded.get());
+    reloaded->loadOrConvert(savedProjectFile);
+    reloaded->waitLoadToFinish();
+
+    // errorModel should contain the version warning
+    REQUIRE(reloaded->errorModel()->count() >= 1);
+    bool foundVersionWarning = false;
+    for (int i = 0; i < reloaded->errorModel()->count(); ++i) {
+        const auto error = reloaded->errorModel()->at(i);
+        if (error.type() == cwError::Warning && error.message().contains(QStringLiteral("newer version"))) {
+            foundVersionWarning = true;
+            break;
+        }
+    }
+    CHECK(foundVersionWarning);
+
+    // Data should still be loaded (best-effort)
+    CHECK(reloaded->cavingRegion()->caveCount() == 1);
 }

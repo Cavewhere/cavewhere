@@ -34,6 +34,7 @@ class cwNoteLiDAR;
 class cwNoteLiDARData;
 #include "cwRemoteAuthProvider.h"
 #include "cwCavingRegionData.h"
+#include "cwError.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
 #include "cwFutureManagerToken.h"
 #include "cwResultDir.h"
@@ -140,6 +141,7 @@ public:
         cwCavingRegionData region;
         ProjectMetadataData metadata;
         IdentityRepairData identityRepair;
+        QList<cwError> errors;
     };
 
     struct SyncReport {
@@ -200,6 +202,8 @@ public:
     QFuture<Monad::ResultString> saveAllFromV6(const QDir& dir, const cwProject* region, const QString& projectFileName);
 
     static QFuture<Monad::Result<ProjectLoadData>> loadAll(const QString& filename);
+
+    QList<cwError> lastLoadErrors() const;
 
     static Monad::Result<ProjectLoadData> loadProject(const QString& filename);
     static Monad::Result<cwTripData> loadTrip(const QString& filename);
