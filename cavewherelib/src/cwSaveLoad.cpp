@@ -3973,6 +3973,7 @@ Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString
                             }
 
                             ProjectLoadData loadData;
+                            loadData.fileVersion = fileVersion;
 
                             if (fileVersion > cwRegionIOTask::protoVersion()) {
                                 loadData.errors.append(cwError(
@@ -5933,6 +5934,16 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
                         if (pulledProjectResult.hasError()) {
                             return AsyncFuture::completed(ResultBase(pulledProjectResult.errorMessage(),
                                                                      pulledProjectResult.errorCode()));
+                        }
+
+                        const int pulledVersion = pulledProjectResult.value().fileVersion;
+                        const int supportedVersion = cwRegionIOTask::protoVersion();
+                        if (pulledVersion > supportedVersion) {
+                            return AsyncFuture::completed(ResultBase(
+                                QStringLiteral("Project file version %1 is newer than supported version %2.")
+                                    .arg(pulledVersion)
+                                    .arg(supportedVersion),
+                                static_cast<int>(SyncErrorCode::IncompatibleProjectVersion)));
                         }
 
                         const auto afterHeadResult = QQuickGit::GitRepository::headCommitOid(repoPath);

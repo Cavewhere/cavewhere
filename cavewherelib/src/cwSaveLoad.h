@@ -142,6 +142,7 @@ public:
         ProjectMetadataData metadata;
         IdentityRepairData identityRepair;
         QList<cwError> errors;
+        int fileVersion = 0;
     };
 
     struct SyncReport {
