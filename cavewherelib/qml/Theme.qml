@@ -41,6 +41,15 @@ QtObject {
     readonly property color borderSubtle: dark ? "#353a42" : "#e4e4e4"
     readonly property color divider: "#141414" // dark ? #2c3138" : "#d8d8d8"
 
+    // Diff colors
+    readonly property color diffAddedBackground: dark ? "#1a3626" : "#dafbe1"
+    readonly property color diffDeletedBackground: dark ? "#3d1f1f" : "#ffebe9"
+    readonly property color diffHunkBackground: dark ? "#1c2d4d" : "#ddf4ff"
+    readonly property color diffAddedText: dark ? "#76e596" : "#1a7f37"
+    readonly property color diffDeletedText: dark ? "#f47067" : "#cf222e"
+    readonly property color diffHunkText: dark ? "#85c1f4" : "#0969da"
+    readonly property color diffContextBackground: "transparent"
+
     // Git graph lane colors (8-entry cycling palette)
     readonly property list<color> laneColors: [
         "#4dc9f6", "#f67019", "#f53794", "#537bc4",
