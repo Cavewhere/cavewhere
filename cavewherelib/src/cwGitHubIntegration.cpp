@@ -317,6 +317,7 @@ void cwGitHubIntegration::handleAccessToken(const cwGitHubDeviceAuth::AccessToke
     }
 
     m_accessToken = result.accessToken;
+    m_tokenLoadedFromKeychain = false;
     emit accessTokenChanged();
     setAuthState(AuthState::Authorized);
     emit authorizationSucceeded();
@@ -393,14 +394,11 @@ void cwGitHubIntegration::loadStoredAccessToken()
                                        [this, accountId](const cwRemoteCredentialStore::ReadResult& result) {
         m_loadingStoredToken = false;
         m_hasLoadedStoredToken = true;
-        emit credentialsLoaded();
 
-        if (accountId != resolveActiveGitHubAccountId()) {
-            return;
-        }
-
-        if (result.success && result.found && !result.value.isEmpty()) {
+        if (accountId == resolveActiveGitHubAccountId()
+            && result.success && result.found && !result.value.isEmpty()) {
             m_accessToken = result.value;
+            m_tokenLoadedFromKeychain = true;
             emit accessTokenChanged();
             setAuthState(AuthState::Authorized);
             emit authorizationSucceeded();
@@ -411,8 +409,9 @@ void cwGitHubIntegration::loadStoredAccessToken()
                 fetchUserProfile();
                 refreshRepositories();
             }
-            return;
         }
+
+        emit credentialsLoaded();
     });
 }
 

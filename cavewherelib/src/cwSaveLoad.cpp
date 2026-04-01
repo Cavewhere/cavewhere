@@ -28,6 +28,7 @@
 #include "cwUniqueConnectionChecker.h"
 #include "cwGlobals.h"
 #include "cwSyncMergeRegistry.h"
+#include "cwError.h"
 
 //Async future
 #include <asyncfuture.h>
@@ -1434,6 +1435,13 @@ struct cwSaveLoad::Data {
     RemoteApplyGuardState remoteApplyGuard;
     bool pendingIdentityRepairSave = false;
     std::optional<cwSaveLoad::SyncReport> lastSyncReport;
+    QList<cwError> lastLoadErrors;
+    int lastLoadMaxFileVersion = 0;
+    bool saveBlockedWarningEmitted = false;
+
+    bool saveWillCauseDataLoss() const {
+        return lastLoadMaxFileVersion > cwRegionIOTask::protoVersion();
+    }
 
     static QList<cwSurveyChunkData> fromProtoSurveyChunks(const google::protobuf::RepeatedPtrField<CavewhereProto::SurveyChunk> & protoList);
 
@@ -2282,6 +2290,13 @@ struct cwSaveLoad::Data {
     void saveObject(cwSaveLoad* context, const T* object) {
         if(saveEnabled) {
             const QString objectType = object ? object->metaObject()->className() : QStringLiteral("<null>");
+            if (saveWillCauseDataLoss()) {
+                if (!saveBlockedWarningEmitted) {
+                    saveBlockedWarningEmitted = true;
+                    emit context->saveBlockedByVersion(objectType);
+                }
+                return;
+            }
             if (!suppressLocalMutationTracking) {
                 ++localMutationEpoch;
                 remoteApplyGuard.noteMutation();
@@ -2709,6 +2724,9 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                                                             const auto& loadData = projectDataFuture.result().value();
                                                             d->projectMetadata = loadData.metadata;
                                                             d->pendingIdentityRepairSave = loadData.identityRepair.required;
+                                                            d->lastLoadErrors = loadData.errors;
+                                                            d->lastLoadMaxFileVersion = loadData.maxFileVersion;
+                                                            d->saveBlockedWarningEmitted = false;
                                                             emit dataRootChanged();
                                                             d->m_regionTreeModel->cavingRegion()->setData(loadData.region);
 
@@ -2726,21 +2744,11 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                                                     }).future();
                                             };
 
-                                            const QDir projectDir = QFileInfo(filename).absoluteDir();
-                                            if (!QQuickGit::GitRepository::isRepository(projectDir)) {
-                                                return continueLoad();
-                                            }
-
-                                            auto hydrateFuture = QQuickGit::GitRepository::hydrateLfsFiles(projectDir, this);
-
-                                            d->futureToken.addJob({QFuture<void>(hydrateFuture), QStringLiteral("Hydrating LFS")});
-
-                                            return AsyncFuture::observe(hydrateFuture)
-                                                .context(this, [hydrateFuture, continueLoad]() {
-                                                    return mbind(hydrateFuture, [continueLoad](const ResultBase&) {
-                                                        return continueLoad();
-                                                    });
-                                                }).future();
+                                            // LFS hydration is not attempted during load — it would
+                                            // trigger a keychain prompt before the user has interacted.
+                                            // Missing files are detected post-load and surfaced via
+                                            // cwProject::lfsFilesNeedSync; the user syncs explicitly.
+                                            return continueLoad();
                                         }).unwrap();
     return future;
 }
@@ -3091,6 +3099,13 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
 
 void cwSaveLoad::saveCavingRegion(const cwCavingRegion *region)
 {
+    if (d->saveWillCauseDataLoss()) {
+        if (!d->saveBlockedWarningEmitted) {
+            d->saveBlockedWarningEmitted = true;
+            emit saveBlockedByVersion(QStringLiteral("cwCavingRegion"));
+        }
+        return;
+    }
     saveProtoMessage(toProtoCavingRegion(region), region);
 }
 
@@ -3494,6 +3509,20 @@ QFuture<ResultBase> cwSaveLoad::saveBundledArchive(const QString& targetArchiveP
     });
 }
 
+QFuture<ResultBase> cwSaveLoad::enqueueFlushAndCommit()
+{
+    auto flushFuture = saveFlushImpl();
+    return AsyncFuture::observe(flushFuture)
+        .context(this, [this, flushFuture]() -> ResultBase {
+            const auto flushResult = flushFuture.result();
+            if (flushResult.hasError()) {
+                return flushResult;
+            }
+            return commitProjectChanges();
+        })
+        .future();
+}
+
 ResultBase cwSaveLoad::deleteTemporaryProject()
 {
     if (!isTemporaryProject()) {
@@ -3764,6 +3793,29 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
         .future();
 }
 
+template<typename ProtoType>
+static std::optional<cwError> checkEntityVersion(const ProtoType& proto, const QString& filename, int& maxFileVersion)
+{
+    if (!proto.has_fileversion() || !proto.fileversion().has_version()) {
+        return std::nullopt;
+    }
+    const int version = proto.fileversion().version();
+    maxFileVersion = std::max(maxFileVersion, version);
+    if (version > cwRegionIOTask::protoVersion()) {
+        return cwError(
+            QStringLiteral("\"%1\" was created by a newer version of CaveWhere (v%2, file version %3). "
+                           "This copy only supports file version %4. "
+                           "Saving is disabled because it would lose data added by the newer version. "
+                           "Please upgrade CaveWhere to save or sync this project.")
+                .arg(QFileInfo(filename).fileName())
+                .arg(cwRegionIOTask::toVersion(version))
+                .arg(version)
+                .arg(cwRegionIOTask::protoVersion()),
+            cwError::Warning);
+    }
+    return std::nullopt;
+}
+
 QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QString &filename)
 {
     return cwConcurrent::run([filename]() {
@@ -3795,14 +3847,29 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
             std::sort(caveFiles.begin(), caveFiles.end(), filePathLess);
 
             for (const QFileInfo &caveFileInfo : caveFiles) {
-                auto caveResult = loadCave(caveFileInfo.absoluteFilePath());
-                if (caveResult.hasError()) {
-                    // FIXME: log or collect the error
-                    qDebug() << "Cave result has errror:" << caveResult.errorMessage();
+                const QString cavePath = caveFileInfo.absoluteFilePath();
+                auto caveProtoResult = loadMessage<CavewhereProto::Cave>(cavePath);
+                if (caveProtoResult.hasError()) {
+                    loadData.errors.append(cwError(
+                        QStringLiteral("Could not load cave \"%1\": %2")
+                            .arg(caveFileInfo.fileName(), caveProtoResult.errorMessage()),
+                        cwError::Fatal));
                     continue;
                 }
 
-                cwCaveData cave = caveResult.value();
+                const auto& caveProto = caveProtoResult.value();
+                auto caveVersionWarning = checkEntityVersion(caveProto, cavePath, loadData.maxFileVersion);
+                if (caveVersionWarning) {
+                    loadData.errors.append(*caveVersionWarning);
+                }
+
+                cwCaveData cave;
+                if(caveProto.has_name()) {
+                    cave.name = QString::fromStdString(caveProto.name());
+                }
+                if (caveProto.has_id()) {
+                    cave.id = toUuid(caveProto.id());
+                }
 
                 // Load all trips for this cave
                 QDir caveDir = caveFileInfo.absoluteDir();
@@ -3823,19 +3890,30 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
                     std::sort(tripFiles.begin(), tripFiles.end(), filePathLess);
 
                     for (const QFileInfo &tripFileInfo : tripFiles) {
-                        auto tripResult = loadTrip(tripFileInfo.absoluteFilePath());
+                        const QString tripPath = tripFileInfo.absoluteFilePath();
+                        auto tripProtoResult = loadMessage<CavewhereProto::Trip>(tripPath);
 
-                        if (tripResult.hasError()) {
-                            // FIXME: log or collect the error
+                        if (tripProtoResult.hasError()) {
+                            loadData.errors.append(cwError(
+                                QStringLiteral("Could not load trip \"%1\": %2")
+                                    .arg(tripFileInfo.fileName(), tripProtoResult.errorMessage()),
+                                cwError::Fatal));
                             continue;
                         }
 
-                        cwTripData trip = tripResult.value();
+                        const auto& tripProto = tripProtoResult.value();
+                        auto tripVersionWarning = checkEntityVersion(tripProto, tripPath, loadData.maxFileVersion);
+                        if (tripVersionWarning) {
+                            loadData.errors.append(*tripVersionWarning);
+                        }
+
+                        cwTripData trip = cwSaveLoad::tripDataFromProtoTrip(tripProto);
 
                         QDir tripDir = tripFileInfo.absoluteDir();
 
-                        auto loadObjectsFromNotesDir = [tripDir, regionDir, &filePathLess](const QString& fileSuffix,
-                                                                                             auto&& loadFunc,
+                        auto loadObjectsFromNotesDir = [tripDir, &filePathLess, &loadData](const QString& fileSuffix,
+                                                                                             auto&& loadProtoFunc,
+                                                                                             auto&& convertFunc,
                                                                                              auto& destinationList)
                         {
                             QDir notesDir = tripDir.filePath("notes");
@@ -3848,27 +3926,42 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
                                                                          QDir::Name | QDir::IgnoreCase | QDir::LocaleAware);
                             std::sort(files.begin(), files.end(), filePathLess);
                             for (const QFileInfo& fileInfo : files) {
-                                auto result = loadFunc(fileInfo.absoluteFilePath(), regionDir);
-                                if (result.hasError()) {
-                                    // FIXME: log or collect the error
+                                const QString notePath = fileInfo.absoluteFilePath();
+                                auto protoResult = loadProtoFunc(notePath);
+                                if (protoResult.hasError()) {
+                                    loadData.errors.append(cwError(
+                                        QStringLiteral("Could not load \"%1\": %2")
+                                            .arg(fileInfo.fileName(), protoResult.errorMessage()),
+                                        cwError::Fatal));
                                     continue;
                                 }
 
-                                destinationList.append(result.value());
+                                auto versionWarning = checkEntityVersion(protoResult.value(), notePath, loadData.maxFileVersion);
+                                if (versionWarning) {
+                                    loadData.errors.append(*versionWarning);
+                                }
+
+                                destinationList.append(convertFunc(protoResult.value(), notePath));
                             }
                         };
 
                         //Load 2D notes
                         loadObjectsFromNotesDir(QStringLiteral("cwnote"),
-                                                [](const QString& filename, const QDir& regionDir) {
-                                                    return loadNote(filename, regionDir);
+                                                [](const QString& path) {
+                                                    return loadMessage<CavewhereProto::Note>(path);
+                                                },
+                                                [](const CavewhereProto::Note& proto, const QString& path) {
+                                                    return cwSaveLoad::noteDataFromProtoNote(proto, path);
                                                 },
                                                 trip.noteModel.notes);
 
                         //Load 3D lidar notes
                         loadObjectsFromNotesDir(QStringLiteral("cwnote3d"),
-                                                [](const QString& filename, const QDir& regionDir) {
-                                                    return loadNoteLiDAR(filename, regionDir);
+                                                [](const QString& path) {
+                                                    return loadMessage<CavewhereProto::NoteLiDAR>(path);
+                                                },
+                                                [](const CavewhereProto::NoteLiDAR& proto, const QString& path) {
+                                                    return cwSaveLoad::noteLiDARDataFromProtoNoteLiDAR(proto, path);
                                                 },
                                                 trip.noteLiDARModel.notes);
 
@@ -3884,20 +3977,6 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
             return Result(loadData);
         });
     });
-}
-
-Monad::Result<cwCavingRegionData> cwSaveLoad::loadCavingRegion(const QString &filename)
-{    
-    auto regionResult = loadMessage<CavewhereProto::CavingRegion>(filename);
-    return Monad::mbind(regionResult, [](const Result<CavewhereProto::CavingRegion>& result)
-                        {
-                            auto regionProto = result.value();
-                            cwCavingRegionData regionData;
-                            if(regionProto.has_name()) {
-                                regionData.name = QString::fromStdString(regionProto.name());
-                            }
-                            return Result(regionData);
-                        });
 }
 
 Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString &filename)
@@ -3916,15 +3995,20 @@ Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString
                                 return Result<ProjectLoadData>(QStringLiteral("Legacy CaveWhere v7 project files are not supported."));
                             }
 
+                            ProjectLoadData loadData;
+                            loadData.maxFileVersion = fileVersion;
+
                             if (fileVersion > cwRegionIOTask::protoVersion()) {
-                                return Result<ProjectLoadData>(
-                                    QStringLiteral("Project file version %1 is newer than supported version %2.")
+                                loadData.errors.append(cwError(
+                                    QStringLiteral("This project was created by a newer version of CaveWhere "
+                                                   "(v%1, file version %2). This copy only supports file version %3. "
+                                                   "Saving is disabled because it would lose data added by the newer version. "
+                                                   "Please upgrade CaveWhere to save or sync this project.")
+                                        .arg(cwRegionIOTask::toVersion(fileVersion))
                                         .arg(fileVersion)
                                         .arg(cwRegionIOTask::protoVersion()),
-                                    static_cast<int>(SyncErrorCode::IncompatibleProjectVersion));
+                                    cwError::Warning));
                             }
-
-                            ProjectLoadData loadData;
                             if (projectProto.has_name()) {
                                 loadData.region.name = QString::fromStdString(projectProto.name());
                             }
@@ -5875,6 +5959,16 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
                                                                      pulledProjectResult.errorCode()));
                         }
 
+                        const int pulledVersion = pulledProjectResult.value().maxFileVersion;
+                        const int supportedVersion = cwRegionIOTask::protoVersion();
+                        if (pulledVersion > supportedVersion) {
+                            return AsyncFuture::completed(ResultBase(
+                                QStringLiteral("Project file version %1 is newer than supported version %2.")
+                                    .arg(pulledVersion)
+                                    .arg(supportedVersion),
+                                static_cast<int>(SyncErrorCode::IncompatibleProjectVersion)));
+                        }
+
                         const auto afterHeadResult = QQuickGit::GitRepository::headCommitOid(repoPath);
                         if (afterHeadResult.hasError()) {
                             return AsyncFuture::completed(ResultBase(afterHeadResult.errorMessage()));
@@ -6141,6 +6235,16 @@ QFuture<Monad::ResultBase> cwSaveLoad::checkoutAndReconcile(const QString& refSp
 std::optional<cwSaveLoad::SyncReport> cwSaveLoad::lastSyncReport() const
 {
     return d->lastSyncReport;
+}
+
+QList<cwError> cwSaveLoad::lastLoadErrors() const
+{
+    return d->lastLoadErrors;
+}
+
+int cwSaveLoad::lastLoadMaxFileVersion() const
+{
+    return d->lastLoadMaxFileVersion;
 }
 
 QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcileExternalImpl(const SyncReport& report,

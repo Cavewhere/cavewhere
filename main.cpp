@@ -200,7 +200,10 @@ int main(int argc, char *argv[])
     //Creates image providers for the qml engine
     new cwQmlImageProviderBinder(context->engine(), rootData, applicationEngine);
 
-    auto quit = [&a, rootData, applicationEngine]() {
+    bool quitCalled = false;
+    auto quit = [&a, &quitCalled, applicationEngine]() {
+        if (quitCalled) { return; }
+        quitCalled = true;
         delete applicationEngine;
         QThreadPool::globalInstance()->waitForDone();
         cwTask::threadPool()->waitForDone();

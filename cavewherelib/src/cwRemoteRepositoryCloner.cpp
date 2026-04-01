@@ -56,9 +56,10 @@ void cwRemoteRepositoryCloner::setGitHubIntegration(cwGitHubIntegration* gh)
         const QString token = m_gitHubIntegration
                               ? m_gitHubIntegration->accessToken()
                               : QString{};
-        m_cloneRepository->setCredentials(QQuickGit::GitCredentials{token});
         if (m_cloneFailedDueToAuthError && !token.isEmpty() && !m_pendingCloneUrl.isEmpty()) {
             clone(m_pendingCloneUrl, m_pendingCloneParentDir);
+        } else {
+            m_cloneRepository->setCredentials(QQuickGit::GitCredentials{token});
         }
     };
     if (gh) {
@@ -118,6 +119,19 @@ QString cwRemoteRepositoryCloner::normalizeCloneUrl(const QString& urlText) cons
     }
 
     return trimmed;
+}
+
+void cwRemoteRepositoryCloner::resetCloneRepository()
+{
+    delete m_cloneRepository;
+    m_cloneRepository = new QQuickGit::GitRepository(this);
+    if (m_account) {
+        m_cloneRepository->setAccount(m_account);
+    }
+    if (m_gitHubIntegration) {
+        m_cloneRepository->setCredentials(
+            QQuickGit::GitCredentials{m_gitHubIntegration->accessToken()});
+    }
 }
 
 void cwRemoteRepositoryCloner::clone(const QString& urlText)
@@ -208,19 +222,6 @@ void cwRemoteRepositoryCloner::setCloneFailedDueToAuthError(bool value)
     }
     m_cloneFailedDueToAuthError = value;
     emit cloneFailedDueToAuthErrorChanged();
-}
-
-void cwRemoteRepositoryCloner::resetCloneRepository()
-{
-    delete m_cloneRepository;
-    m_cloneRepository = new QQuickGit::GitRepository(this);
-    if (m_account) {
-        m_cloneRepository->setAccount(m_account);
-    }
-    if (m_gitHubIntegration) {
-        m_cloneRepository->setCredentials(
-            QQuickGit::GitCredentials{m_gitHubIntegration->accessToken()});
-    }
 }
 
 void cwRemoteRepositoryCloner::handleCloneWatcherStateChanged()

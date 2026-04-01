@@ -63,13 +63,13 @@ signals:
     void repositoryClonedIndex(int index);
 
 private:
+    void resetCloneRepository();
     void setCloneErrorMessage(const QString& message);
     void setCloneStatusMessage(const QString& message);
     void setPendingCloneDir(const QString& dir);
     void setCloneFailedDueToAuthError(bool value);
     void handleCloneWatcherStateChanged();
     void handleCloneWatcherProgressTextChanged();
-    void resetCloneRepository();
 
     QPointer<cwRecentProjectModel> m_recentProjectModel;
     QPointer<QQuickGit::GitFutureWatcher> m_cloneWatcher;

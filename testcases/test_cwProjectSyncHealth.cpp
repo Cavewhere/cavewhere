@@ -75,7 +75,7 @@ TEST_CASE("cwProjectSyncHealth reports missing remote warning", "[cwProjectSyncH
     }));
     CHECK(syncStatus.status().stale());
     CHECK(syncStatus.status().syncBlocker() == cwSyncStatus::SyncBlocker::NoRemote);
-    CHECK(syncStatus.status().noRemote());
+    CHECK(!syncStatus.status().hasRemote());
     CHECK(!syncStatus.status().needsLogin());
     CHECK(!syncStatus.status().authExpired());
 }
@@ -98,7 +98,7 @@ TEST_CASE("cwProjectSyncHealth prefers missing remote warning for new repository
     }));
     CHECK(syncStatus.status().stale());
     CHECK(syncStatus.status().syncBlocker() == cwSyncStatus::SyncBlocker::NoRemote);
-    CHECK(syncStatus.status().noRemote());
+    CHECK(!syncStatus.status().hasRemote());
 }
 
 TEST_CASE("cwProjectSyncHealth updates status after initRepository on repo with existing remote",
@@ -244,7 +244,7 @@ TEST_CASE("cwProjectSyncHealth sets SyncBlocker::NoRemote when no remote configu
     REQUIRE(waitUntil([&syncHealth]() {
         return syncHealth.status().syncBlocker() == cwSyncStatus::SyncBlocker::NoRemote;
     }));
-    CHECK(syncHealth.status().noRemote());
+    CHECK(!syncHealth.status().hasRemote());
     CHECK(!syncHealth.status().needsLogin());
     CHECK(!syncHealth.status().authExpired());
 }
@@ -275,11 +275,11 @@ TEST_CASE("cwProjectSyncHealth clears NoRemote after remote is added", "[cwProje
     syncHealth.setRepository(&repo);
     syncHealth.refresh();
 
-    REQUIRE(waitUntil([&syncHealth]() { return syncHealth.status().noRemote(); }));
+    REQUIRE(waitUntil([&syncHealth]() { return !syncHealth.status().hasRemote(); }));
 
     REQUIRE(repo.addRemote(QStringLiteral("origin"), QUrl::fromLocalFile(remotePath)).isEmpty());
 
-    REQUIRE(waitUntil([&syncHealth]() { return !syncHealth.status().noRemote(); }));
+    REQUIRE(waitUntil([&syncHealth]() { return syncHealth.status().hasRemote(); }));
     CHECK(syncHealth.status().syncBlocker() != cwSyncStatus::SyncBlocker::NoRemote);
 }
 

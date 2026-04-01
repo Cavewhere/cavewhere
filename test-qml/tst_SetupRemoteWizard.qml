@@ -55,6 +55,22 @@ MainWindowTest {
             return openWizard()
         }
 
+        // ── GitHub active lifecycle (keychain-on-open regression) ─────────
+
+        function test_gitHubIntegration_activatedOnOpen_restoredOnClose() {
+            // Regression: before the fix, startDeviceLogin() called setActive(true)
+            // internally, causing a keychain read and OAuth to race.  The wizard must
+            // set active=true on open (so the keychain read happens eagerly and
+            // startDeviceLogin only starts OAuth) and restore it on close.
+            let wasActive = RootData.remote.gitHubIntegration.active
+            let w = openWizard()
+            verify(RootData.remote.gitHubIntegration.active, "active should be true while wizard is open")
+            w.close()
+            tryVerify(() => !w.visible, 2000)
+            compare(RootData.remote.gitHubIntegration.active, wasActive,
+                    "active should be restored to its pre-open value after close")
+        }
+
         // ── Screen navigation ──────────────────────────────────────────────
 
         function test_opensOnCreateRepoScreen() {
