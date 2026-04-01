@@ -11,10 +11,10 @@ Post-implementation issues found during testing of the Git Commit Detail Panel (
 
 **Independent** — Done: Added IsHeadRole to GitGraphModel, "Current" RefBadge, and bold commit message for HEAD.
 
-### 2. Default to main branch
-History should default to showing the main branch when the page is opened.
+### 2. ~~Default to main branch~~ ✅
+~~History should default to showing the main branch when the page is opened.~~
 
-**Independent**
+**Independent** — Done: `initRepository()` now uses `git_repository_init_ext` with `initial_head = "main"`.
 
 ### 3. History doesn't update after sync
 Pressing sync (pull or push) doesn't refresh the git history view. The new commits don't appear until navigating away and back.
