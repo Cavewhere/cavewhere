@@ -209,6 +209,16 @@ void cwProject::connectSaveLoad(cwSaveLoad* saveLoad)
         }
         setModified(true);
     });
+    connect(saveLoad, &cwSaveLoad::saveBlockedByVersion, this, [this, saveLoad](const QString& entityDescription) {
+        if (m_saveLoad != saveLoad) {
+            return;
+        }
+        ErrorModel->append(cwError(
+            QStringLiteral("Cannot save %1 because this project was created with a newer version of CaveWhere (v%2). "
+                           "Upgrade CaveWhere to save changes.")
+                .arg(entityDescription, requiredVersion()),
+            cwError::Warning));
+    });
 }
 
 void cwProject::disconnectSaveLoad(cwSaveLoad *saveLoad)
@@ -458,6 +468,8 @@ bool cwProject::sync()
         return false;
     }
 
+    if (emitVersionGuardError(QStringLiteral("sync"))) { return false; }
+
     // If auth is known-expired, skip the attempt and go straight to reconnect.
     if (m_syncHealth && m_syncHealth->status().authExpired()) {
         emit syncAuthFailed();
@@ -499,6 +511,8 @@ bool cwProject::resetBranchAndReconcile(const QString& refSpec, BranchResetMode 
     if (!m_saveLoad || syncInProgress()) {
         return false;
     }
+
+    if (emitVersionGuardError(QStringLiteral("reconcile"))) { return false; }
 
     return beginSyncOperation(m_saveLoad->resetBranchAndReconcile(refSpec, resetMode));
 }
@@ -544,8 +558,31 @@ bool cwProject::saveWillCauseDataLoss() const
     return FileVersion > cwRegionIOTask::protoVersion();
 }
 
+QString cwProject::requiredVersion() const
+{
+    if (saveWillCauseDataLoss()) {
+        return cwRegionIOTask::toVersion(FileVersion);
+    }
+    return QString();
+}
+
+bool cwProject::emitVersionGuardError(const QString& action)
+{
+    if (!saveWillCauseDataLoss()) {
+        return false;
+    }
+    ErrorModel->append(cwError(
+        QStringLiteral("Cannot %1 because this project was created with a newer version of CaveWhere (v%2). "
+                       "Upgrade CaveWhere to %1.")
+            .arg(action, requiredVersion()),
+        cwError::Warning));
+    return true;
+}
+
 bool cwProject::saveAs(QString newFilename)
 {
+    if (emitVersionGuardError(QStringLiteral("save"))) { return false; }
+
     newFilename = cwGlobals::convertFromURL(newFilename);
     if(newFilename.isEmpty()) {
         ErrorModel->append(cwError(QStringLiteral("Save location can't be empty."), cwError::Fatal));
@@ -639,6 +676,8 @@ bool cwProject::deleteTemporaryProject()
         ErrorModel->append(cwError(QStringLiteral("Current project is not temporary."), cwError::Warning));
         return false;
     }
+
+    if (emitVersionGuardError(QStringLiteral("delete this project"))) { return false; }
 
     auto result = m_saveLoad->deleteTemporaryProject();
     if(result.hasError()) {
@@ -800,7 +839,9 @@ QFuture<ResultBase> cwProject::loadHelperImpl(const QString& filename, LoadParam
                     LoadedFromBundledArchive = false;
                     ConvertedFromSqlite = false;
                     BundledArchivePath.clear();
-                    FileVersion = cwRegionIOTask::protoVersion();
+                    FileVersion = m_saveLoad->lastLoadMaxFileVersion() > 0
+                        ? m_saveLoad->lastLoadMaxFileVersion()
+                        : cwRegionIOTask::protoVersion();
                     emit fileTypeChanged();
                     if (!suppressLoadedEmit) {
                         emit loaded();
@@ -1290,6 +1331,7 @@ void cwProject::addImages(QList<QUrl> noteImagePaths,
                           std::function<QDir()> destinationDirResolver,
                           std::function<void (QList<cwImage>)> outputCallBackFunc)
 {
+    if (emitVersionGuardError(QStringLiteral("add images"))) { return; }
     m_saveLoad->addImages(noteImagePaths, std::move(destinationDirResolver), std::move(outputCallBackFunc));
 }
 
@@ -1302,6 +1344,7 @@ void cwProject::addFiles(QList<QUrl> filePath,
                          std::function<QDir()> destinationDirResolver,
                          std::function<void (QList<QString>)> outputCallBackFunc)
 {
+    if (emitVersionGuardError(QStringLiteral("add files"))) { return; }
     m_saveLoad->addFiles(filePath, std::move(destinationDirResolver), std::move(outputCallBackFunc));
 }
 
@@ -1549,7 +1592,7 @@ bool cwProject::isTemporaryProject() const {
     if (LoadedFromBundledArchive && !BundledArchivePath.isEmpty() && !ConvertedFromSqlite) {
         return false;
     }
-    return m_saveLoad->isTemporaryProject() || SQLiteTempProject || saveWillCauseDataLoss();
+    return m_saveLoad->isTemporaryProject() || SQLiteTempProject;
 }
 
 QString cwProject::filename() const {

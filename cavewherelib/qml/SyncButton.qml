@@ -10,6 +10,8 @@ RoundButton {
     required property ProjectSyncHealth syncHealth
     required property bool syncInProgress
     required property bool projectModified
+    required property bool saveWillCauseDataLoss
+    required property string requiredVersion
 
     signal syncRequested()
     signal remoteSettingsRequested()
@@ -24,6 +26,8 @@ RoundButton {
     readonly property bool hasLocalChanges: syncHealth.status.hasLocalChanges || projectModified
 
     readonly property string tooltipText: {
+        if (saveWillCauseDataLoss)
+            return qsTr("Sync disabled — upgrade CaveWhere to v%1").arg(requiredVersion)
         if (!hasRemote)
             return qsTr("No remote configured — click to set up sync")
         if (needsLogin)
@@ -54,7 +58,7 @@ RoundButton {
            : (authExpired
               ? "qrc:/twbs-icons/icons/exclamation-triangle.svg"
               : "qrc:/twbs-icons/icons/arrow-repeat.svg"))
-    enabled: !syncInProgress
+    enabled: !syncInProgress && !saveWillCauseDataLoss
 
     onClicked: {
         if (!hasRemote) {

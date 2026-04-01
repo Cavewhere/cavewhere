@@ -127,6 +127,13 @@ QC.ApplicationWindow {
         anchors.horizontalCenter: parent.horizontalCenter
     }
 
+    VersionIncompatibleBanner {
+        anchors.bottom: parent.bottom
+        anchors.right: parent.right
+        anchors.bottomMargin: 20
+        anchors.rightMargin: 20
+    }
+
     onClosing: (close) => {
         if (shutdownLoader.active) {
             close.accepted = true;

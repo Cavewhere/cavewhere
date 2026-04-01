@@ -75,6 +75,7 @@ QC.Menu {
         id: saveActionId
         text: "&Save"
         shortcut: "Ctrl+S"
+        enabled: !RootData.project.saveWillCauseDataLoss
         onTriggered: {
             if (RootData.project.canSaveDirectly) {
                 RootData.project.save();
@@ -87,6 +88,7 @@ QC.Menu {
     QC.MenuItem {
         id: saveAsMenuItem
         text: "Save As"
+        enabled: !RootData.project.saveWillCauseDataLoss
         onTriggered:{
             fileMenuId.saveAsFileDialog.open()
         }

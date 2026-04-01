@@ -142,7 +142,7 @@ public:
         ProjectMetadataData metadata;
         IdentityRepairData identityRepair;
         QList<cwError> errors;
-        int fileVersion = 0;
+        int maxFileVersion = 0; //!< Highest fileVersion seen across all entities during load
     };
 
     struct SyncReport {
@@ -205,6 +205,7 @@ public:
     static QFuture<Monad::Result<ProjectLoadData>> loadAll(const QString& filename);
 
     QList<cwError> lastLoadErrors() const;
+    int lastLoadMaxFileVersion() const;
 
     static Monad::Result<ProjectLoadData> loadProject(const QString& filename);
     static Monad::Result<cwTripData> loadTrip(const QString& filename);
@@ -325,6 +326,7 @@ signals:
     void objectPathReady(QObject* object);
     void localMutationOccurred(); //!< Emitted when user-visible data is mutated (save queued, tracking not suppressed)
     void discardCompleted();
+    void saveBlockedByVersion(const QString& entityDescription); //!< Emitted when a save is skipped because the project has newer-version entities
 
 private:
     void initializeRepositoryForCurrentFile();

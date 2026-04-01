@@ -1436,6 +1436,12 @@ struct cwSaveLoad::Data {
     bool pendingIdentityRepairSave = false;
     std::optional<cwSaveLoad::SyncReport> lastSyncReport;
     QList<cwError> lastLoadErrors;
+    int lastLoadMaxFileVersion = 0;
+    bool saveBlockedWarningEmitted = false;
+
+    bool saveWillCauseDataLoss() const {
+        return lastLoadMaxFileVersion > cwRegionIOTask::protoVersion();
+    }
 
     static QList<cwSurveyChunkData> fromProtoSurveyChunks(const google::protobuf::RepeatedPtrField<CavewhereProto::SurveyChunk> & protoList);
 
@@ -2284,6 +2290,13 @@ struct cwSaveLoad::Data {
     void saveObject(cwSaveLoad* context, const T* object) {
         if(saveEnabled) {
             const QString objectType = object ? object->metaObject()->className() : QStringLiteral("<null>");
+            if (saveWillCauseDataLoss()) {
+                if (!saveBlockedWarningEmitted) {
+                    saveBlockedWarningEmitted = true;
+                    emit context->saveBlockedByVersion(objectType);
+                }
+                return;
+            }
             if (!suppressLocalMutationTracking) {
                 ++localMutationEpoch;
                 remoteApplyGuard.noteMutation();
@@ -2712,6 +2725,8 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                                                             d->projectMetadata = loadData.metadata;
                                                             d->pendingIdentityRepairSave = loadData.identityRepair.required;
                                                             d->lastLoadErrors = loadData.errors;
+                                                            d->lastLoadMaxFileVersion = loadData.maxFileVersion;
+                                                            d->saveBlockedWarningEmitted = false;
                                                             emit dataRootChanged();
                                                             d->m_regionTreeModel->cavingRegion()->setData(loadData.region);
 
@@ -3084,6 +3099,13 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
 
 void cwSaveLoad::saveCavingRegion(const cwCavingRegion *region)
 {
+    if (d->saveWillCauseDataLoss()) {
+        if (!d->saveBlockedWarningEmitted) {
+            d->saveBlockedWarningEmitted = true;
+            emit saveBlockedByVersion(QStringLiteral("cwCavingRegion"));
+        }
+        return;
+    }
     saveProtoMessage(toProtoCavingRegion(region), region);
 }
 
@@ -3772,12 +3794,13 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
 }
 
 template<typename ProtoType>
-static std::optional<cwError> checkEntityVersion(const ProtoType& proto, const QString& filename)
+static std::optional<cwError> checkEntityVersion(const ProtoType& proto, const QString& filename, int& maxFileVersion)
 {
     if (!proto.has_fileversion() || !proto.fileversion().has_version()) {
         return std::nullopt;
     }
     const int version = proto.fileversion().version();
+    maxFileVersion = std::max(maxFileVersion, version);
     if (version > cwRegionIOTask::protoVersion()) {
         return cwError(
             QStringLiteral("\"%1\" was created by a newer version of CaveWhere (v%2, file version %3). "
@@ -3835,7 +3858,7 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
                 }
 
                 const auto& caveProto = caveProtoResult.value();
-                auto caveVersionWarning = checkEntityVersion(caveProto, cavePath);
+                auto caveVersionWarning = checkEntityVersion(caveProto, cavePath, loadData.maxFileVersion);
                 if (caveVersionWarning) {
                     loadData.errors.append(*caveVersionWarning);
                 }
@@ -3879,7 +3902,7 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
                         }
 
                         const auto& tripProto = tripProtoResult.value();
-                        auto tripVersionWarning = checkEntityVersion(tripProto, tripPath);
+                        auto tripVersionWarning = checkEntityVersion(tripProto, tripPath, loadData.maxFileVersion);
                         if (tripVersionWarning) {
                             loadData.errors.append(*tripVersionWarning);
                         }
@@ -3913,7 +3936,7 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
                                     continue;
                                 }
 
-                                auto versionWarning = checkEntityVersion(protoResult.value(), notePath);
+                                auto versionWarning = checkEntityVersion(protoResult.value(), notePath, loadData.maxFileVersion);
                                 if (versionWarning) {
                                     loadData.errors.append(*versionWarning);
                                 }
@@ -3973,7 +3996,7 @@ Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString
                             }
 
                             ProjectLoadData loadData;
-                            loadData.fileVersion = fileVersion;
+                            loadData.maxFileVersion = fileVersion;
 
                             if (fileVersion > cwRegionIOTask::protoVersion()) {
                                 loadData.errors.append(cwError(
@@ -5936,7 +5959,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
                                                                      pulledProjectResult.errorCode()));
                         }
 
-                        const int pulledVersion = pulledProjectResult.value().fileVersion;
+                        const int pulledVersion = pulledProjectResult.value().maxFileVersion;
                         const int supportedVersion = cwRegionIOTask::protoVersion();
                         if (pulledVersion > supportedVersion) {
                             return AsyncFuture::completed(ResultBase(
@@ -6217,6 +6240,11 @@ std::optional<cwSaveLoad::SyncReport> cwSaveLoad::lastSyncReport() const
 QList<cwError> cwSaveLoad::lastLoadErrors() const
 {
     return d->lastLoadErrors;
+}
+
+int cwSaveLoad::lastLoadMaxFileVersion() const
+{
+    return d->lastLoadMaxFileVersion;
 }
 
 QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcileExternalImpl(const SyncReport& report,

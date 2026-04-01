@@ -27,7 +27,8 @@ QQ.Loader {
 
     function askToSave() {
         loaderId._saveCompleted = false;
-        if (RootData.project.isNewEmptyProject()) {
+        if (RootData.project.isNewEmptyProject()
+                || RootData.project.saveWillCauseDataLoss) {
             afterSaveFunc();
             closeDialog();
             return;

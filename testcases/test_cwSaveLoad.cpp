@@ -2102,3 +2102,337 @@ TEST_CASE("cwProject surfaces load errors to errorModel for git projects", "[cwS
     // Data should still be loaded (best-effort)
     CHECK(reloaded->cavingRegion()->caveCount() == 1);
 }
+
+TEST_CASE("Entity saves blocked with errors when project has newer version entities", "[cwSaveLoad]") {
+    // Set up a project with cave, trip, note, and LiDAR note
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    cave->setName(QStringLiteral("SaveBlockCave"));
+    cave->addTrip();
+    auto trip = cave->trip(0);
+    trip->setName(QStringLiteral("SaveBlockTrip"));
+
+    // Add a note image and a LiDAR note
+    const QString noteImagePath = copyToTempFolder("://datasets/test_cwNote/testpage.png");
+    trip->notes()->addFromFiles({QUrl::fromLocalFile(noteImagePath)});
+
+    const QString glbPath = copyToTempFolder("://datasets/test_cwSurveyNotesConcatModel/bones.glb");
+    trip->notesLiDAR()->addFromFiles({QUrl::fromLocalFile(glbPath)});
+
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    REQUIRE(trip->notes()->notes().size() == 1);
+    REQUIRE(trip->notesLiDAR()->notes().size() == 1);
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("SaveBlockTest.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    const QString savedProjectFile = project->filename();
+    REQUIRE(QFileInfo::exists(savedProjectFile));
+
+    // Bump cave version to future
+    auto caveFiles = findEntityFiles(QFileInfo(savedProjectFile).absolutePath(), {QStringLiteral("*.cwcave")});
+    REQUIRE(caveFiles.size() == 1);
+    const int futureVersion = cwRegionIOTask::protoVersion() + 1;
+    REQUIRE(bumpFileVersion(caveFiles.first(), futureVersion));
+
+    // Reload the project through cwProject (git path)
+    auto reloaded = std::make_unique<cwProject>();
+    addTokenManager(reloaded.get());
+    reloaded->loadOrConvert(savedProjectFile);
+    reloaded->waitLoadToFinish();
+
+    REQUIRE(reloaded->cavingRegion()->caveCount() == 1);
+    auto* reloadedCave = reloaded->cavingRegion()->cave(0);
+    auto* reloadedTrip = reloadedCave->trip(0);
+    REQUIRE(reloadedTrip->notes()->notes().size() == 1);
+    REQUIRE(reloadedTrip->notesLiDAR()->notes().size() == 1);
+    auto* reloadedNote = reloadedTrip->notes()->notes().value(0);
+    auto* reloadedLiDAR = qobject_cast<cwNoteLiDAR*>(reloadedTrip->notesLiDAR()->notes().value(0));
+    REQUIRE(reloadedNote != nullptr);
+    REQUIRE(reloadedLiDAR != nullptr);
+
+    // Clear load errors so we can check for save-specific errors
+    reloaded->errorModel()->clear();
+
+    auto checkSaveBlocked = [&](const QString& entityType) {
+        INFO("Checking save blocked for " << entityType.toStdString());
+        REQUIRE(reloaded->errorModel()->count() >= 1);
+        const auto& lastError = reloaded->errorModel()->at(reloaded->errorModel()->count() - 1);
+        CHECK(lastError.type() == cwError::Warning);
+        CHECK(lastError.message().contains(QStringLiteral("Cannot save")));
+        CHECK(lastError.message().contains(QStringLiteral("newer version")));
+    };
+
+    SECTION("save(cwCave*) is blocked when cave name changes") {
+        reloadedCave->setName(QStringLiteral("ModifiedCaveName"));
+        reloaded->waitSaveToFinish();
+        checkSaveBlocked(QStringLiteral("cwCave"));
+    }
+
+    SECTION("save(cwTrip*) is blocked when trip date changes") {
+        reloadedTrip->setDate(QDateTime(QDate(2025, 6, 15), QTime()));
+        reloaded->waitSaveToFinish();
+        checkSaveBlocked(QStringLiteral("cwTrip"));
+    }
+
+    SECTION("save(cwNote*) is blocked when note rotation changes") {
+        reloadedNote->setRotate(45.0);
+        reloaded->waitSaveToFinish();
+        checkSaveBlocked(QStringLiteral("cwNote"));
+    }
+
+    SECTION("save(cwNoteLiDAR*) is blocked when LiDAR name changes") {
+        reloadedLiDAR->setName(QStringLiteral("ModifiedLiDARName"));
+        reloaded->waitSaveToFinish();
+        checkSaveBlocked(QStringLiteral("cwNoteLiDAR"));
+    }
+
+    // Note: saveCavingRegion() is guarded but not signal-connected in the current code.
+    // Region name changes trigger directory renames, not saveCavingRegion().
+    // The guard exists as defense-in-depth for future callers.
+}
+
+TEST_CASE("addImages and addFiles blocked when project has newer version entities", "[cwSaveLoad]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    cave->setName(QStringLiteral("BlockAddFilesCave"));
+    cave->addTrip();
+    cave->trip(0)->setName(QStringLiteral("BlockAddFilesTrip"));
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("BlockAddFilesTest.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    const QString savedProjectFile = project->filename();
+    REQUIRE(QFileInfo::exists(savedProjectFile));
+
+    // Bump cave version to future
+    auto caveFiles = findEntityFiles(QFileInfo(savedProjectFile).absolutePath(), {QStringLiteral("*.cwcave")});
+    REQUIRE(caveFiles.size() == 1);
+    const int futureVersion = cwRegionIOTask::protoVersion() + 1;
+    REQUIRE(bumpFileVersion(caveFiles.first(), futureVersion));
+
+    // Reload the project through cwProject (git path)
+    auto reloaded = std::make_unique<cwProject>();
+    addTokenManager(reloaded.get());
+    reloaded->loadOrConvert(savedProjectFile);
+    reloaded->waitLoadToFinish();
+
+    // Clear load errors so we can check for add-specific errors
+    reloaded->errorModel()->clear();
+
+    // Create a dummy image file to attempt to add
+    const QString dummyImagePath = QDir(tempDir.path()).filePath(QStringLiteral("dummy.png"));
+    {
+        QFile dummyFile(dummyImagePath);
+        REQUIRE(dummyFile.open(QIODevice::WriteOnly));
+        dummyFile.write("not a real image");
+    }
+
+    SECTION("addImages is blocked") {
+        bool callbackCalled = false;
+        reloaded->addImages(
+            { QUrl::fromLocalFile(dummyImagePath) },
+            QDir(tempDir.path()),
+            [&callbackCalled](QList<cwImage>) { callbackCalled = true; });
+        rootData->futureManagerModel()->waitForFinished();
+
+        CHECK_FALSE(callbackCalled);
+        REQUIRE(reloaded->errorModel()->count() >= 1);
+        CHECK(reloaded->errorModel()->at(0).type() == cwError::Warning);
+        CHECK(reloaded->errorModel()->at(0).message().contains(QStringLiteral("Cannot add images")));
+    }
+
+    SECTION("addFiles is blocked") {
+        bool callbackCalled = false;
+        reloaded->addFiles(
+            { QUrl::fromLocalFile(dummyImagePath) },
+            QDir(tempDir.path()),
+            [&callbackCalled](QList<QString>) { callbackCalled = true; });
+        rootData->futureManagerModel()->waitForFinished();
+
+        CHECK_FALSE(callbackCalled);
+        REQUIRE(reloaded->errorModel()->count() >= 1);
+        CHECK(reloaded->errorModel()->at(0).type() == cwError::Warning);
+        CHECK(reloaded->errorModel()->at(0).message().contains(QStringLiteral("Cannot add files")));
+    }
+}
+
+TEST_CASE("Version-incompatible project is not marked as temporary", "[cwSaveLoad]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    region->cave(0)->setName(QStringLiteral("NotTempCave"));
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("NotTempTest.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    const QString savedProjectFile = project->filename();
+
+    // Bump cave version to future
+    auto caveFiles = findEntityFiles(QFileInfo(savedProjectFile).absolutePath(), {QStringLiteral("*.cwcave")});
+    REQUIRE(caveFiles.size() == 1);
+    REQUIRE(bumpFileVersion(caveFiles.first(), cwRegionIOTask::protoVersion() + 1));
+
+    auto reloaded = std::make_unique<cwProject>();
+    addTokenManager(reloaded.get());
+    reloaded->loadOrConvert(savedProjectFile);
+    reloaded->waitLoadToFinish();
+
+    CHECK(reloaded->saveWillCauseDataLoss());
+    CHECK_FALSE(reloaded->isTemporaryProject());
+    CHECK_FALSE(reloaded->canSaveDirectly());
+}
+
+TEST_CASE("deleteTemporaryProject rejected for version-incompatible project", "[cwSaveLoad]") {
+    // A version-incompatible project loaded from a real path is not temporary,
+    // so deleteTemporaryProject should reject it as "not temporary".
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    region->cave(0)->setName(QStringLiteral("DeleteRejectCave"));
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("DeleteRejectTest.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    const QString savedProjectFile = project->filename();
+
+    auto caveFiles = findEntityFiles(QFileInfo(savedProjectFile).absolutePath(), {QStringLiteral("*.cwcave")});
+    REQUIRE(caveFiles.size() == 1);
+    REQUIRE(bumpFileVersion(caveFiles.first(), cwRegionIOTask::protoVersion() + 1));
+
+    auto reloaded = std::make_unique<cwProject>();
+    addTokenManager(reloaded.get());
+    reloaded->loadOrConvert(savedProjectFile);
+    reloaded->waitLoadToFinish();
+
+    reloaded->errorModel()->clear();
+
+    CHECK(reloaded->saveWillCauseDataLoss());
+    CHECK_FALSE(reloaded->isTemporaryProject());
+    CHECK_FALSE(reloaded->deleteTemporaryProject());
+    REQUIRE(reloaded->errorModel()->count() >= 1);
+    CHECK(reloaded->errorModel()->at(0).message().contains(QStringLiteral("not temporary")));
+}
+
+TEST_CASE("saveBlockedByVersion signal only emitted once per load", "[cwSaveLoad]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    cave->setName(QStringLiteral("SignalDedupCave"));
+    cave->addTrip();
+    cave->trip(0)->setName(QStringLiteral("SignalDedupTrip"));
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("SignalDedupTest.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    const QString savedProjectFile = project->filename();
+
+    auto caveFiles = findEntityFiles(QFileInfo(savedProjectFile).absolutePath(), {QStringLiteral("*.cwcave")});
+    REQUIRE(caveFiles.size() == 1);
+    REQUIRE(bumpFileVersion(caveFiles.first(), cwRegionIOTask::protoVersion() + 1));
+
+    auto reloaded = std::make_unique<cwProject>();
+    addTokenManager(reloaded.get());
+    reloaded->loadOrConvert(savedProjectFile);
+    reloaded->waitLoadToFinish();
+
+    reloaded->errorModel()->clear();
+
+    auto* reloadedCave = reloaded->cavingRegion()->cave(0);
+
+    // Multiple property changes should only produce one error
+    reloadedCave->setName(QStringLiteral("Change1"));
+    reloaded->waitSaveToFinish();
+    reloadedCave->setName(QStringLiteral("Change2"));
+    reloaded->waitSaveToFinish();
+    reloadedCave->setName(QStringLiteral("Change3"));
+    reloaded->waitSaveToFinish();
+
+    CHECK(reloaded->errorModel()->count() == 1);
+}
+
+TEST_CASE("saveAs, sync, and resetBranchAndReconcile blocked for version-incompatible project", "[cwSaveLoad]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    region->cave(0)->setName(QStringLiteral("GuardTestCave"));
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("GuardTest.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    const QString savedProjectFile = project->filename();
+
+    auto caveFiles = findEntityFiles(QFileInfo(savedProjectFile).absolutePath(), {QStringLiteral("*.cwcave")});
+    REQUIRE(caveFiles.size() == 1);
+    REQUIRE(bumpFileVersion(caveFiles.first(), cwRegionIOTask::protoVersion() + 1));
+
+    auto reloaded = std::make_unique<cwProject>();
+    addTokenManager(reloaded.get());
+    reloaded->loadOrConvert(savedProjectFile);
+    reloaded->waitLoadToFinish();
+
+    REQUIRE(reloaded->saveWillCauseDataLoss());
+    reloaded->errorModel()->clear();
+
+    SECTION("saveAs is blocked") {
+        const QString saveAsPath = QDir(tempDir.path()).filePath(QStringLiteral("GuardTestCopy.cwproj"));
+        CHECK_FALSE(reloaded->saveAs(saveAsPath));
+        REQUIRE(reloaded->errorModel()->count() >= 1);
+        CHECK(reloaded->errorModel()->at(0).message().contains(QStringLiteral("Cannot save")));
+    }
+
+    SECTION("sync is blocked") {
+        CHECK_FALSE(reloaded->sync());
+        REQUIRE(reloaded->errorModel()->count() >= 1);
+        CHECK(reloaded->errorModel()->at(0).message().contains(QStringLiteral("Cannot sync")));
+    }
+
+    SECTION("resetBranchAndReconcile is blocked") {
+        CHECK_FALSE(reloaded->resetBranchAndReconcile(QStringLiteral("origin/main")));
+        REQUIRE(reloaded->errorModel()->count() >= 1);
+        CHECK(reloaded->errorModel()->at(0).message().contains(QStringLiteral("Cannot reconcile")));
+    }
+}

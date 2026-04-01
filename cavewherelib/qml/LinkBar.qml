@@ -144,6 +144,8 @@ QQ.Item {
                     syncHealth: RootData.project.syncHealth
                     syncInProgress: RootData.project.syncInProgress
                     projectModified: RootData.project.modified
+                    saveWillCauseDataLoss: RootData.project.saveWillCauseDataLoss
+                    requiredVersion: RootData.project.requiredVersion
 
                     // Right-aligned popup positioning anchored below this button
                     readonly property int _popupRightEdge: QC.Overlay.overlay.width - 5
