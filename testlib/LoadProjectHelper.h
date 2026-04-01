@@ -105,6 +105,7 @@ public:
     Q_INVOKABLE bool directoryExists(const QUrl& directory) const;
     Q_INVOKABLE size_t fileSize(const QUrl& filename) const;
     Q_INVOKABLE void removeFile(const QUrl& filename) const;
+    Q_INVOKABLE void removeDirectory(const QUrl& directory) const;
     Q_INVOKABLE QString environmentVariable(const QString& name) const;
     Q_INVOKABLE QString repositoryRemoteUrl(const QUrl& repositoryDirectory,
                                             const QString& remoteName = QStringLiteral("origin")) const;

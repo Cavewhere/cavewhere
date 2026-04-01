@@ -202,7 +202,10 @@ int main(int argc, char *argv[])
     //Enables image://gitcommit/ URLs in QML for viewing images at any commit
     QQuickGit::GitCommitImageProvider::registerOn(context->engine());
 
-    auto quit = [&a, rootData, applicationEngine]() {
+    bool quitCalled = false;
+    auto quit = [&a, &quitCalled, applicationEngine]() {
+        if (quitCalled) { return; }
+        quitCalled = true;
         delete applicationEngine;
         QThreadPool::globalInstance()->waitForDone();
         cwTask::threadPool()->waitForDone();

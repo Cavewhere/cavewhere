@@ -190,6 +190,7 @@ StandardPage {
 
                     TableStaticView {
                         id: tableViewId
+                        objectName: "tripTableView"
                         model:  SortFilterProxyModel {
                             source: CavePageModel {
                                 cave: cavePageArea.currentCave
@@ -353,7 +354,9 @@ StandardPage {
     RemoveAskBox {
         id: removeChallengeId
         onRemove: {
-            cavePageArea.currentCave.removeTrip(indexToRemove)
+            let proxyIndex = tableViewId.model.index(indexToRemove, 0)
+            let sourceIndex = tableViewId.model.mapToSource(proxyIndex)
+            cavePageArea.currentCave.removeTrip(sourceIndex.row)
         }
     }
 

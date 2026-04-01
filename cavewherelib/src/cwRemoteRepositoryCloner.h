@@ -63,6 +63,7 @@ signals:
     void repositoryClonedIndex(int index);
 
 private:
+    void resetCloneRepository();
     void setCloneErrorMessage(const QString& message);
     void setCloneStatusMessage(const QString& message);
     void setPendingCloneDir(const QString& dir);

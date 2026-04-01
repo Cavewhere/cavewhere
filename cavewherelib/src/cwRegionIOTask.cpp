@@ -72,8 +72,8 @@ QString cwRegionIOTask::toVersion(int protoVersion)
         {4, "1.0-projectedProfile"},
         {5, "1.0-projectedProfile-v2"},
         {6, "2025.3"},
-        {7, "Set the version"},
-        {8, "Set the version"}
+        {7, "2025.3-dev"},
+        {8, "2026-dev"}
     };
 
     return protoToVersionString.value(protoVersion, "Unknown Version");

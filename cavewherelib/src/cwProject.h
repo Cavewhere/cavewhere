@@ -73,6 +73,8 @@ class CAVEWHERE_LIB_EXPORT cwProject :  public QObject{
     Q_PROPERTY(QString filename READ filename NOTIFY filenameChanged)
     Q_PROPERTY(FileType fileType READ fileType NOTIFY fileTypeChanged)
     Q_PROPERTY(bool canSaveDirectly READ canSaveDirectly NOTIFY canSaveDirectlyChanged)
+    Q_PROPERTY(bool saveWillCauseDataLoss READ saveWillCauseDataLoss NOTIFY canSaveDirectlyChanged)
+    Q_PROPERTY(QString requiredVersion READ requiredVersion NOTIFY canSaveDirectlyChanged)
     Q_PROPERTY(bool isTemporaryProject READ isTemporaryProject NOTIFY isTemporaryProjectChanged)
     Q_PROPERTY(bool modified READ modified NOTIFY modifiedChanged)
     Q_PROPERTY(cwProjectSyncHealth* syncHealth READ syncHealth CONSTANT)
@@ -160,6 +162,8 @@ public:
     static QSqlDatabase createDatabaseConnection(const QString& connectionName, const QString& databasePath);
 
     bool canSaveDirectly() const;
+    bool saveWillCauseDataLoss() const;
+    QString requiredVersion() const;
     bool isTemporaryProject() const;
     bool modified() const;
     QQuickGit::GitRepository* repository() const;
@@ -202,6 +206,7 @@ signals:
     void syncAuthFailed();
     void syncFinished();
     void authProviderCredentialsNeeded();
+    void lfsFilesNeedSync();
 
 public slots:
     void loadFile(QString filename);
@@ -263,7 +268,7 @@ private:
     void connectSaveLoad(cwSaveLoad* saveLoad);
     void disconnectSaveLoad(cwSaveLoad *saveLoad);
 
-    bool saveWillCauseDataLoss() const;
+    bool emitVersionGuardError(const QString& action);
     void setSqliteTemporaryProject(bool isTemp);
     void completeSyncOperation(const Monad::ResultBase& result);
 

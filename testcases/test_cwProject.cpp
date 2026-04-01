@@ -53,6 +53,7 @@ using namespace Catch;
 #include <QEventLoop>
 #include <QTimer>
 #include <QSignalSpy>
+#include <QTest>
 #include <QElapsedTimer>
 #include <QCoreApplication>
 #include <QProcess>
@@ -4699,6 +4700,9 @@ TEST_CASE("cwProject sync keeps repository clean for remote trip rename with loc
     REQUIRE(project->sync());
     rootData->futureManagerModel()->waitForFinished();
     project->waitSaveToFinish();
+    for (int i = 0; i < project->errorModel()->count(); ++i) {
+        UNSCOPED_INFO("Sync error[" << i << "]: " << project->errorModel()->at(i).message().toStdString());
+    }
     CHECK(project->errorModel()->count() == 0);
     requireCleanRepository(repository);
     requireNoUnmergedIndexEntries(repository);
@@ -4821,6 +4825,11 @@ TEST_CASE("cwProject sync keeps repository clean for remote trip rename with loc
     REQUIRE(QFileInfo::exists(verifyProjectPath));
     verifyProject->loadOrConvert(verifyProjectPath);
     verifyProject->waitLoadToFinish();
+    // loadOrConvert no longer auto-downloads LFS objects (to avoid early keychain prompts).
+    // Explicitly hydrate so the verify checks below see binary content, not pointer text.
+    auto verifyHydrateFuture = QQuickGit::GitRepository::hydrateLfsFiles(QDir(verifyClonePath), verifyProject.get());
+    REQUIRE(AsyncFuture::waitForFinished(verifyHydrateFuture, 10000));
+    REQUIRE_FALSE(verifyHydrateFuture.result().hasError());
 
     REQUIRE(verifyProject->cavingRegion()->caveCount() == 1);
     auto* verifyCave = verifyProject->cavingRegion()->cave(0);
@@ -4923,6 +4932,11 @@ TEST_CASE("cwProject sync keeps repository clean for remote trip rename with loc
     REQUIRE(QFileInfo::exists(verifyUnhydratedProjectPath));
     verifyUnhydratedProject->loadOrConvert(verifyUnhydratedProjectPath);
     verifyUnhydratedProject->waitLoadToFinish();
+    // Same explicit hydration as for verifyProject above; the LFS cache was cleared so
+    // objects must be re-downloaded from the configured LFS server.
+    auto unhydratedHydrateFuture = QQuickGit::GitRepository::hydrateLfsFiles(QDir(verifyUnhydratedClonePath), verifyUnhydratedProject.get());
+    REQUIRE(AsyncFuture::waitForFinished(unhydratedHydrateFuture, 10000));
+    REQUIRE_FALSE(unhydratedHydrateFuture.result().hasError());
 
     REQUIRE(verifyUnhydratedProject->cavingRegion()->caveCount() == 1);
     auto* verifyUnhydratedCave = verifyUnhydratedProject->cavingRegion()->cave(0);
@@ -5386,6 +5400,9 @@ TEST_CASE("cwProject sync keeps repository clean for remote cave rename with loc
     REQUIRE(project->sync());
     rootData->futureManagerModel()->waitForFinished();
     project->waitSaveToFinish();
+    for (int i = 0; i < project->errorModel()->count(); ++i) {
+        UNSCOPED_INFO("Sync error[" << i << "]: " << project->errorModel()->at(i).message().toStdString());
+    }
     CHECK(project->errorModel()->count() == 0);
     requireCleanRepository(repository);
     requireNoUnmergedIndexEntries(repository);
@@ -12640,6 +12657,70 @@ TEST_CASE("cwProject syncFinished and errorModel on failure", "[cwProject][sync]
         // the stale error was not cleared.
         CHECK(project->errorModel()->count() == 1);
         CHECK(project->errorModel()->last().message() != QStringLiteral("stale error"));
+    }
+}
+
+TEST_CASE("cwProject emits lfsFilesNeedSync when LFS pointers are unhydrated", "[cwProject][lfs][lfsFilesNeedSync]")
+{
+    auto rootData = std::make_unique<cwRootData>();
+    auto* project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("LFS Banner Tester"));
+    rootData->account()->setEmail(QStringLiteral("lfs.banner@example.com"));
+
+    project->cavingRegion()->addCave();
+
+    QTemporaryDir saveRoot;
+    REQUIRE(saveRoot.isValid());
+    const QString projectPath = QDir(saveRoot.path()).filePath(QStringLiteral("lfs-banner.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+
+    const QDir projectDir = QFileInfo(project->filename()).absoluteDir();
+
+    SECTION("signal is emitted when LFS pointer file exists without object") {
+        // Write a fake LFS pointer file into the project directory
+        const QString pointerFilePath = projectDir.filePath(QStringLiteral("notes/fake-image.png"));
+        QDir(projectDir).mkpath(QStringLiteral("notes"));
+        QFile pointerFile(pointerFilePath);
+        REQUIRE(pointerFile.open(QIODevice::WriteOnly));
+        pointerFile.write(
+            "version https://git-lfs.github.com/spec/v1\n"
+            "oid sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890\n"
+            "size 12345\n");
+        pointerFile.close();
+
+        // Load a fresh project from the same path
+        auto rootData2 = std::make_unique<cwRootData>();
+        auto* project2 = rootData2->project();
+        rootData2->account()->setName(QStringLiteral("LFS Banner Tester"));
+        rootData2->account()->setEmail(QStringLiteral("lfs.banner@example.com"));
+
+        QSignalSpy lfsSpy(project2, &cwProject::lfsFilesNeedSync);
+        project2->loadFile(QUrl::fromLocalFile(project->filename()).toString());
+        rootData2->futureManagerModel()->waitForFinished();
+        project2->waitLoadToFinish();
+
+        // Give async hasMissingLfsFiles check time to complete
+        REQUIRE(QTest::qWaitFor([&]() { return lfsSpy.count() > 0; }, 5000));
+        CHECK(lfsSpy.count() == 1);
+    }
+
+    SECTION("signal is not emitted when no LFS pointers are missing") {
+        // No LFS pointer files in the project — just load it cleanly
+        auto rootData2 = std::make_unique<cwRootData>();
+        auto* project2 = rootData2->project();
+        rootData2->account()->setName(QStringLiteral("LFS Banner Tester"));
+        rootData2->account()->setEmail(QStringLiteral("lfs.banner@example.com"));
+
+        QSignalSpy lfsSpy(project2, &cwProject::lfsFilesNeedSync);
+        project2->loadFile(QUrl::fromLocalFile(project->filename()).toString());
+        rootData2->futureManagerModel()->waitForFinished();
+        project2->waitLoadToFinish();
+
+        // Wait a short while to confirm the signal is NOT emitted
+        QTest::qWait(500);
+        CHECK(lfsSpy.count() == 0);
     }
 }
 

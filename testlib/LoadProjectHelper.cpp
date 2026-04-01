@@ -217,6 +217,11 @@ void TestHelper::removeFile(const QUrl &filename) const
     QFile::remove(filename.toLocalFile());
 }
 
+void TestHelper::removeDirectory(const QUrl &directory) const
+{
+    QDir(directory.toLocalFile()).removeRecursively();
+}
+
 QString TestHelper::environmentVariable(const QString& name) const
 {
     return QProcessEnvironment::systemEnvironment().value(name);

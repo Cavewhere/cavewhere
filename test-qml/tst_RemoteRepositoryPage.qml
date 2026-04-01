@@ -292,6 +292,43 @@ MainWindowTest {
                     TestHelper.normalizeFileGitUrl(fixture.remoteUrl))
         }
 
+        function test_clone_retryAfterFailure() {
+            // Use a bad URL first — should fail fast with a connection/protocol error.
+            let fixture = TestHelper.createLocalBareRemoteForCloneTest()
+            compare(fixture.errorMessage, "")
+
+            RootData.recentProjectModel.defaultRepositoryDir = TestHelper.toLocalUrl(fixture.cloneParentPath)
+
+            let manualUrlField = findChild(mainWindow, "remoteManualUrlField")
+            verify(manualUrlField !== null)
+            manualUrlField.textField.text = "https://localhost:0/nosuchrepo.git"
+
+            let cloneButton = findChild(mainWindow, "remoteCloneButton")
+            verify(cloneButton !== null)
+            mouseClick(cloneButton)
+
+            // Wait for the error to appear.
+            let cloneErrorArea = findChild(mainWindow, "remoteCloneErrorArea")
+            verify(cloneErrorArea !== null)
+            tryVerify(() => cloneErrorArea.visible, 20000)
+
+            // Clone button must be re-enabled so the user can retry.
+            verify(cloneButton.enabled)
+
+            // Retry with the valid local bare-remote URL.
+            manualUrlField.textField.text = fixture.remoteUrl
+            mouseClick(cloneButton)
+
+            // Second clone must succeed — no crash, project opens.
+            tryVerify(() => RootData.recentProjectModel.rowCount() === 1, 20000)
+
+            tryVerify(() => {
+                return RootData.project.filename !== ""
+                       && RootData.project.filename.indexOf(fixture.expectedClonePath) >= 0
+            }, 10000)
+            compare(RootData.pageSelectionModel.currentPageAddress, "View")
+        }
+
         function test_repro_cloneGithubPhakeCave3000() {
 
             testerAssistedGate.beginDecision(
@@ -480,28 +517,28 @@ MainWindowTest {
             tryVerify(() => !RootData.project.isTemporaryProject, 5000)
             let syncButton = findChild(mainWindow, "syncButton")
             verify(syncButton !== null)
-            tryVerify(() => syncButton.noRemote, 5000)
+            tryVerify(() => !syncButton.hasRemote, 5000)
             return syncButton
         }
 
-        function test_syncButton_noRemote_showsCloudUploadIcon() {
+        function test_syncButton_hasRemote_false_showsCloudUploadIcon() {
             let syncButton = saveProjectAndGetSyncButton("syncbutton-noremote-test")
             verify(syncButton.icon.source.toString().includes("cloud-arrow-up"))
         }
 
-        function test_syncButton_noRemote_tooltip() {
+        function test_syncButton_hasRemote_false_tooltip() {
             let syncButton = saveProjectAndGetSyncButton("syncbutton-noremote-tooltip-test")
             verify(syncButton.tooltipText.includes("No remote"))
         }
 
-        function test_syncButton_noRemote_badge_hidden() {
+        function test_syncButton_hasRemote_false_badge_hidden() {
             let syncButton = saveProjectAndGetSyncButton("syncbutton-noremote-badge-test")
             let badge = findChild(syncButton, "statusBadge")
             verify(badge !== null)
             verify(!badge.visible)
         }
 
-        function test_syncButton_noRemote_click_emitsSetupRemoteRequested() {
+        function test_syncButton_hasRemote_false_click_emitsSetupRemoteRequested() {
             let syncButton = saveProjectAndGetSyncButton("syncbutton-noremote-click-test")
             let spy = Qt.createQmlObject(
                 'import QtTest; SignalSpy { signalName: "setupRemoteRequested" }',
@@ -512,12 +549,90 @@ MainWindowTest {
             spy.destroy()
         }
 
-        function test_syncButton_noRemote_contextMenu_syncNowDisabled() {
+        function test_syncButton_hasRemote_false_contextMenu_syncNowDisabled() {
             let syncButton = saveProjectAndGetSyncButton("syncbutton-noremote-menu-test")
             mouseClick(syncButton, syncButton.width / 2, syncButton.height / 2, Qt.RightButton)
             let syncNowItem = findChild(syncButton, "syncNowMenuItem")
             verify(syncNowItem !== null)
             verify(!syncNowItem.enabled)
+        }
+
+        // Helper: load a project with a local remote configured.
+        function loadSyncFixtureAndGetSyncButton() {
+            const fixture = TestHelper.createLocalSyncFixtureWithLfsServer()
+            compare(fixture.errorMessage, "")
+            TestHelper.loadProjectFromPath(RootData.project, fixture.projectFilePath)
+            tryVerify(() => RootData.region.caveCount > 0, 10000,
+                      "fixture project should load with caves")
+            let syncButton = findChild(mainWindow, "syncButton")
+            verify(syncButton !== null)
+            tryVerify(() => syncButton.hasRemote, 5000,
+                      "sync button should have a remote configured")
+            return syncButton
+        }
+
+        function test_syncButton_withRemote_projectModified_badgeVisible() {
+            let syncButton = loadSyncFixtureAndGetSyncButton()
+            let badge = findChild(syncButton, "statusBadge")
+            verify(badge !== null)
+
+            // Wait for a clean, non-stale state so we know badge starts hidden
+            RootData.project.syncHealth.refresh()
+            tryVerify(() => !RootData.project.syncHealth.status.stale
+                          && !RootData.project.modified
+                          && syncButton.aheadCount === 0
+                          && syncButton.behindCount === 0,
+                      10000, "wait for clean sync state before testing badge")
+            verify(!badge.visible, "badge should be hidden in a clean state")
+
+            RootData.region.cave(0).name = "Modified Cave"
+            tryVerify(() => RootData.project.modified, 5000,
+                      "project should become modified after cave rename")
+            verify(badge.visible, "badge should be visible when project is modified")
+        }
+
+        function test_syncButton_withRemote_projectModified_tooltip() {
+            let syncButton = loadSyncFixtureAndGetSyncButton()
+
+            RootData.region.cave(0).name = "Modified For Tooltip"
+            tryVerify(() => RootData.project.modified, 5000,
+                      "project should become modified after cave rename")
+
+            verify(syncButton.tooltipText.includes("Unsaved changes"),
+                   "tooltip should mention unsaved changes when project is modified")
+        }
+
+        function test_syncButton_withRemote_upToDate_tooltip() {
+            let syncButton = loadSyncFixtureAndGetSyncButton()
+
+            RootData.project.syncHealth.refresh()
+            tryVerify(() => !RootData.project.syncHealth.status.stale
+                          && !RootData.project.modified
+                          && syncButton.aheadCount === 0
+                          && syncButton.behindCount === 0,
+                      10000, "wait for clean sync state")
+
+            verify(syncButton.tooltipText.includes("Up to date"),
+                   "tooltip should say 'Up to date' when synced and unmodified")
+        }
+
+        function test_syncButton_withRemote_modifiedClears_afterSync() {
+            let syncButton = loadSyncFixtureAndGetSyncButton()
+
+            RootData.region.cave(0).name = "Pre-Sync Cave"
+            tryVerify(() => RootData.project.modified, 5000,
+                      "project should become modified after cave rename")
+            verify(syncButton.projectModified,
+                   "syncButton.projectModified should reflect project.modified")
+
+            RootData.project.sync()
+            tryVerify(() => !RootData.project.syncInProgress, 30000,
+                      "sync should complete")
+
+            verify(!RootData.project.modified,
+                   "project.modified should be false after successful sync")
+            verify(!syncButton.projectModified,
+                   "syncButton.projectModified should be false after sync")
         }
 
         function test_testerAssisted_invalidGithubToken_revokesAccount() {

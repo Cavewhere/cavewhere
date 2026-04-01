@@ -17,7 +17,7 @@ StandardPage {
             implicitWidth: 200
 
             // model: ["Jobs", "Rendering", "PDF"]
-            model: ["Jobs", "Warping", "PDF / SVG"]
+            model: ["Jobs", "Warping", "PDF / SVG", "Git"]
         }
 
         QC.ScrollView {
@@ -41,6 +41,10 @@ StandardPage {
                 // }
 
                 PDFSettingsItem {
+
+                }
+
+                GitSettingsItem {
 
                 }
             }

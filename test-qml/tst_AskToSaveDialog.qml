@@ -196,6 +196,161 @@ Item {
             verify(rootId.afterSaveCalled, "afterSaveFunc should be called after save completes");
         }
 
+        // Temporary modified project: Save button must be within the dialog's geometry so
+        // the user can click it. Regression: two AcceptRole buttons (Save + Close anyway) in
+        // the same DialogButtonBox caused Qt Quick Controls to overflow the extra button
+        // outside the popup rect, where it was invisible but still responded to accepted().
+        function test_temporaryModifiedProject_saveButtonVisible() {
+            RootData.region.addCave();
+            tryVerify(function() { return !RootData.project.isNewEmptyProject(); });
+            tryVerify(function() { return RootData.project.isModified(); });
+            verify(RootData.project.isTemporaryProject,
+                   "project must still be temporary");
+
+            askToSaveDialogId.askToSave();
+
+            verify(askToSaveDialogId._dialog !== null);
+            verify(askToSaveDialogId._dialog.askToSaveDialog.visible,
+                   "dialog should be visible for a modified temporary project");
+            verify(askToSaveDialogId._dialog.isTemporaryProject,
+                   "dialog should be in temporary-project mode");
+
+            // Accepting a temporary project dialog must open SaveAsDialog, not close silently.
+            askToSaveDialogId._dialog.askToSaveDialog.accepted();
+            tryVerify(function() { return saveAsDialogId.visible; }, 2000,
+                      "SaveAsDialog should open when Save is accepted on a temporary project");
+        }
+
+        // Temporary project: cancelling the SaveAsDialog should dismiss the AskToSaveDialog too.
+        // There is no meaningful state to return to once the user has declined to save.
+        function test_askToSave_temporaryProject_cancelSaveDialog_closesBoth() {
+            RootData.region.addCave();
+            tryVerify(function() { return !RootData.project.isNewEmptyProject(); });
+            tryVerify(function() { return RootData.project.isModified(); });
+
+            askToSaveDialogId.askToSave();
+            verify(askToSaveDialogId._dialog !== null);
+            verify(askToSaveDialogId._dialog.askToSaveDialog.visible,
+                   "AskToSaveDialog should be visible for a modified temporary project");
+
+            // Accept the AskToSaveDialog "Save" button to open SaveAsDialog
+            askToSaveDialogId._dialog.askToSaveDialog.accepted();
+            tryVerify(function() { return saveAsDialogId.visible; }, 2000,
+                      "SaveAsDialog should open after accepting on a temporary project");
+
+            // Cancel the SaveAsDialog — AskToSaveDialog should close too
+            saveAsDialogId.rejected();
+
+            tryVerify(function() {
+                return askToSaveDialogId._dialog === null
+                    || !askToSaveDialogId._dialog.askToSaveDialog.visible;
+            }, 2000, "AskToSaveDialog should close when SaveAsDialog is cancelled");
+            verify(!rootId.afterSaveCalled,
+                   "afterSaveFunc must not be called when the user cancels");
+        }
+
+        // Regression: saving a temporary project as .cwproj must create a git commit.
+        // Without a commit all files are untracked; discardChanges() calls cleanUntracked()
+        // which deletes every untracked file — erasing the entire project from disk.
+        function test_saveAsDirectory_fromTemp_commitsData_survivesDiscard() {
+            RootData.region.addCave();
+            RootData.region.cave(0).name = "Committed Cave";
+            tryVerify(function() { return !RootData.project.isNewEmptyProject(); });
+
+            saveAsDirectory("discard-data-loss");
+            const savedPath = RootData.project.filename;
+
+            // A commit MUST exist. Without it cleanUntracked() nukes the whole project.
+            verify(TestHelper.projectHeadCommitOid(RootData.project) !== "",
+                   "saveAs to .cwproj must create a git commit");
+
+            // Simulate reopening and adding unsaved changes
+            TestHelper.loadProjectFromPath(RootData.project, savedPath);
+            tryVerify(function() { return RootData.region.caveCount > 0; });
+            compare(RootData.region.cave(0).name, "Committed Cave");
+
+            RootData.region.addCave();
+            RootData.region.cave(1).name = "Unsaved Cave";
+            tryVerify(function() { return RootData.project.isModified(); });
+            TestHelper.waitForProjectSaveToFinish(RootData.project);
+
+            // Discard the unsaved changes
+            RootData.project.discardChanges();
+            tryVerify(function() {
+                return TestHelper.projectModifiedFileCount(RootData.project) === 0;
+            }, 5000, "git working directory should be clean after discardChanges()");
+
+            // Reload and confirm committed data survived
+            TestHelper.loadProjectFromPath(RootData.project, savedPath);
+            tryVerify(function() { return RootData.region.caveCount > 0; });
+            compare(RootData.region.cave(0).name, "Committed Cave",
+                    "Committed cave data must survive discardChanges()");
+        }
+
+        // Saving a temporary project via SaveAsDialog must add it to the recent projects model.
+        function test_saveAsDirectory_fromTemp_addsToRecentProjects() {
+            const before = RootData.recentProjectModel.rowCount();
+
+            saveAsDirectory("recent-project-dir");
+
+            tryVerify(function() {
+                return RootData.recentProjectModel.rowCount() === before + 1;
+            }, 5000, "recent project model should gain one entry after saveAs to directory");
+        }
+
+        // Saving a temporary project as a bundle (.cw) must also add it to the recent projects model.
+        function test_saveAsBundle_fromTemp_addsToRecentProjects() {
+            const before = RootData.recentProjectModel.rowCount();
+
+            const tempDir = RootData.urlToLocal(TestHelper.tempDirectoryUrl());
+            const name = "recent-project-bundle";
+            const expectedPath = tempDir + "/" + name + ".cw";
+
+            saveAsDialogId.bundleFormat = true;
+            saveAsDialogId.destinationFolder = tempDir;
+            saveAsDialogId._pendingName = name;
+            saveAsDialogId.bundleFilePath = expectedPath;
+            saveAsDialogId.accepted();
+            TestHelper.waitForProjectSaveToFinish(RootData.project);
+            tryVerify(function() { return !RootData.project.isTemporaryProject; });
+
+            tryVerify(function() {
+                return RootData.recentProjectModel.rowCount() === before + 1;
+            }, 5000, "recent project model should gain one entry after saveAs to bundle");
+        }
+
+        // Saving via the AskToSaveDialog → SaveAsDialog path must also update the recent projects model.
+        // This is the actual quit flow: AskToSaveDialog "Save" → SaveAsDialog → fileSaved → addToRecents.
+        function test_askToSaveDialog_tempProject_addsToRecentProjects() {
+            RootData.region.addCave();
+            tryVerify(function() { return !RootData.project.isNewEmptyProject(); });
+            tryVerify(function() { return RootData.project.isModified(); });
+
+            const before = RootData.recentProjectModel.rowCount();
+            const tempDir = RootData.urlToLocal(TestHelper.tempDirectoryUrl());
+            const name = "ask-save-recent";
+            const expectedPath = tempDir + "/" + name + ".cw";
+
+            askToSaveDialogId.askToSave();
+            verify(askToSaveDialogId._dialog !== null);
+            verify(askToSaveDialogId._dialog.askToSaveDialog.visible);
+
+            // Accept AskToSaveDialog to open SaveAsDialog
+            askToSaveDialogId._dialog.askToSaveDialog.accepted();
+            saveAsDialogId.bundleFormat = true;
+            saveAsDialogId.destinationFolder = tempDir;
+            saveAsDialogId._pendingName = name;
+            saveAsDialogId.bundleFilePath = expectedPath;
+            saveAsDialogId.accepted();
+
+            TestHelper.waitForProjectSaveToFinish(RootData.project);
+            tryVerify(function() { return !RootData.project.isTemporaryProject; });
+
+            tryVerify(function() {
+                return RootData.recentProjectModel.rowCount() === before + 1;
+            }, 5000, "recent project model should gain one entry after saving via AskToSaveDialog");
+        }
+
         // Discard on a .cwproj directory project: discardChanges() reverts the git working dir
         function test_discard_revertsDirectoryProject() {
             TestHelper.loadProjectFromFile(RootData.project,
@@ -221,6 +376,152 @@ Item {
             tryVerify(function() {
                 return TestHelper.projectModifiedFileCount(RootData.project) === 0;
             }, 5000, "git working directory should be clean after discardChanges()");
+        }
+
+        // ── offerSync / Save & Sync tests ─────────────────────────────────────────
+
+        // Helper: load the local sync fixture into RootData.project.
+        // Returns the cwSyncFixtureInfo gadget.
+        function loadSyncFixture() {
+            const fixture = TestHelper.createLocalSyncFixtureWithLfsServer()
+            compare(fixture.errorMessage, "")
+            TestHelper.loadProjectFromPath(RootData.project, fixture.projectFilePath)
+            tryVerify(function() { return RootData.region.caveCount > 0 }, 10000,
+                      "fixture project should load with caves")
+            return fixture
+        }
+
+        // Project has a remote and the sync status is still stale (initial state after
+        // load, before any refresh) → the "Save & Sync" button set (idle-sync) is shown.
+        function test_offerSync_trueWhenStale() {
+            loadSyncFixture()
+
+            RootData.region.cave(0).name = "Stale Remote Cave"
+            tryVerify(function() { return RootData.project.isModified() }, 5000)
+
+            askToSaveDialogId.askToSave()
+            verify(askToSaveDialogId._dialog !== null)
+            verify(askToSaveDialogId._dialog.askToSaveDialog.visible)
+            verify(askToSaveDialogId.offerSync,
+                   "offerSync must be true when project has remote and status is stale")
+            compare(askToSaveDialogId._dialog.state, "idle-sync")
+
+            askToSaveDialogId.closeDialog()
+        }
+
+        // After refresh, the remote status is clean (aheadCount=0, stale=false), but
+        // the project is modified → "Save & Sync" is still shown because modified=true.
+        function test_offerSync_trueWhenModifiedAfterSync() {
+            loadSyncFixture()
+
+            RootData.project.syncHealth.refresh()
+            tryVerify(function() { return !RootData.project.syncHealth.status.stale }, 10000,
+                      "sync health should become non-stale after refresh")
+
+            // Rename a cave to make the project modified
+            RootData.region.cave(0).name = "Modified After Sync"
+            tryVerify(function() { return RootData.project.modified }, 5000,
+                      "project should become modified after cave rename")
+
+            askToSaveDialogId.askToSave()
+            verify(askToSaveDialogId._dialog !== null)
+            verify(askToSaveDialogId.offerSync,
+                   "offerSync must be true when project is modified even with clean remote")
+            compare(askToSaveDialogId._dialog.state, "idle-sync")
+
+            askToSaveDialogId.closeDialog()
+        }
+
+        // Project has no remote (plain directory save, no git remote added) →
+        // "Save & Sync" button is NOT shown; dialog is in idle-nosync state.
+        function test_offerSync_falseWithNoRemote() {
+            TestHelper.loadProjectFromFile(RootData.project,
+                                           "://datasets/test_cwProject/Phake Cave 3000.cw")
+            tryVerify(function() { return RootData.region.caveCount > 0 })
+            saveAsDirectory("offerSync-no-remote")
+
+            RootData.region.cave(0).name = "No Remote Cave"
+            tryVerify(function() { return RootData.project.isModified() }, 5000)
+
+            askToSaveDialogId.askToSave()
+            verify(askToSaveDialogId._dialog !== null)
+            verify(askToSaveDialogId._dialog.askToSaveDialog.visible)
+            verify(!askToSaveDialogId.offerSync,
+                   "offerSync must be false when project has no remote")
+            compare(askToSaveDialogId._dialog.state, "idle-nosync")
+
+            askToSaveDialogId.closeDialog()
+        }
+
+        // Project has a remote but is not modified → askToSave() calls afterSaveFunc()
+        // immediately without showing the dialog (isModified() is the gate, not offerSync).
+        function test_offerSync_falseWhenSyncedAndUnmodified() {
+            loadSyncFixture()
+
+            verify(!RootData.project.isModified(),
+                   "fixture project should not be modified right after load")
+
+            askToSaveDialogId.askToSave()
+            // isModified() is false but isNewEmptyProject() is also false,
+            // so askToSave() calls afterSaveFunc() directly and skips the dialog.
+            // Verify that: no dialog shown, afterSaveFunc called.
+            verify(rootId.afterSaveCalled,
+                   "afterSaveFunc should be called immediately when project is unmodified")
+            verify(askToSaveDialogId._dialog === null
+                   || !askToSaveDialogId._dialog.askToSaveDialog.visible,
+                   "dialog should not open for an unmodified project")
+        }
+
+        // "Save & Sync" full success path: project is modified, user clicks Save & Sync,
+        // the dialog saves, syncs to the local remote, and calls afterSaveFunc.
+        function test_saveAndSync_success() {
+            loadSyncFixture()
+
+            RootData.region.cave(0).name = "Synced Cave"
+            tryVerify(function() { return RootData.project.isModified() }, 5000)
+
+            askToSaveDialogId.askToSave()
+            verify(askToSaveDialogId._dialog !== null)
+            verify(askToSaveDialogId.offerSync)
+
+            // Click "Save & Sync"
+            askToSaveDialogId._dialog.askToSaveDialog.applied()
+
+            tryVerify(function() { return rootId.afterSaveCalled }, 30000,
+                      "afterSaveFunc should be called after a successful save + sync")
+        }
+
+        // "Save & Sync" with a broken remote: save succeeds but push fails →
+        // dialog enters syncError state, shows an error message, and "Close anyway"
+        // calls afterSaveFunc so the caller (e.g. quit handler) can proceed.
+        function test_saveAndSync_generalFailure_closeAnyway() {
+            const fixture = loadSyncFixture()
+
+            // Delete the remote bare repo to make the push fail
+            TestHelper.removeDirectory(TestHelper.toLocalUrl(fixture.remoteRepoPath))
+
+            RootData.region.cave(0).name = "Broken Remote Cave"
+            tryVerify(function() { return RootData.project.isModified() }, 5000)
+
+            askToSaveDialogId.askToSave()
+            verify(askToSaveDialogId._dialog !== null)
+            askToSaveDialogId._dialog.askToSaveDialog.applied()
+
+            tryVerify(function() {
+                return askToSaveDialogId._dialog !== null
+                    && askToSaveDialogId._dialog._phase === "syncError"
+            }, 30000, "dialog should reach syncError state after a failed push")
+
+            verify(askToSaveDialogId._dialog.syncErrorText.indexOf("Sync failed:") === 0,
+                   "syncErrorText should start with 'Sync failed:'")
+            verify(askToSaveDialogId._dialog.syncErrorText.indexOf("Your changes are saved locally.") >= 0,
+                   "syncErrorText should mention that changes are saved locally")
+
+            // Simulate "Close anyway" — calls _privateAfterSave() directly, same as the button
+            askToSaveDialogId._privateAfterSave()
+
+            verify(rootId.afterSaveCalled,
+                   "afterSaveFunc should be called after 'Close anyway'")
         }
     }
 }

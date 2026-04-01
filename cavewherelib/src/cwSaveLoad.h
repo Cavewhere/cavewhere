@@ -34,6 +34,7 @@ class cwNoteLiDAR;
 class cwNoteLiDARData;
 #include "cwRemoteAuthProvider.h"
 #include "cwCavingRegionData.h"
+#include "cwError.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
 #include "cwFutureManagerToken.h"
 #include "cwResultDir.h"
@@ -140,6 +141,8 @@ public:
         cwCavingRegionData region;
         ProjectMetadataData metadata;
         IdentityRepairData identityRepair;
+        QList<cwError> errors;
+        int maxFileVersion = 0; //!< Highest fileVersion seen across all entities during load
     };
 
     struct SyncReport {
@@ -201,7 +204,9 @@ public:
 
     static QFuture<Monad::Result<ProjectLoadData>> loadAll(const QString& filename);
 
-    static Monad::Result<cwCavingRegionData> loadCavingRegion(const QString& filename);
+    QList<cwError> lastLoadErrors() const;
+    int lastLoadMaxFileVersion() const;
+
     static Monad::Result<ProjectLoadData> loadProject(const QString& filename);
     static Monad::Result<cwTripData> loadTrip(const QString& filename);
     static Monad::Result<cwTripData> loadTrip(const QByteArray& content);
@@ -236,6 +241,7 @@ public:
     Monad::ResultBase moveProjectTo(const QString& destinationFileUrl);
     Monad::ResultBase copyProjectTo(const QString& destinationFileUrl);
     QFuture<Monad::ResultBase> saveBundledArchive(const QString& targetArchivePath);
+    QFuture<Monad::ResultBase> enqueueFlushAndCommit();
 
     // Queues the dataRoot directory rename and .cwproj descriptor file rename jobs, and
     // rebuilds internal object-state paths to reflect the new dataRoot. Called by the sync
@@ -301,8 +307,6 @@ public:
     QFuture<Monad::ResultBase> checkoutAndReconcile(const QString& refSpec,
                                                     int checkoutMode = 1);
     std::optional<SyncReport> lastSyncReport() const;
-    Monad::ResultBase commitProjectChanges(const QString& subject = QString(),
-                                           const QString& description = QString());
 
     QFuture<void> retire();
 
@@ -322,6 +326,7 @@ signals:
     void objectPathReady(QObject* object);
     void localMutationOccurred(); //!< Emitted when user-visible data is mutated (save queued, tracking not suppressed)
     void discardCompleted();
+    void saveBlockedByVersion(const QString& entityDescription); //!< Emitted when a save is skipped because the project has newer-version entities
 
 private:
     void initializeRepositoryForCurrentFile();
@@ -421,6 +426,8 @@ private:
 
     static QUuid toUuid(const std::string& uuidStr);
 
+    Monad::ResultBase commitProjectChanges(const QString& subject = QString(),
+                                           const QString& description = QString());
     QFuture<Monad::ResultBase> loadImpl(const QString& filename);
     QFuture<Monad::ResultBase> saveFlushImpl();
     QFuture<Monad::ResultBase> enqueueReconcilePhase(const QFuture<Monad::ResultBase>& prepareFuture,

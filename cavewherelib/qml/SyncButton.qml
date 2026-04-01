@@ -9,6 +9,9 @@ RoundButton {
 
     required property ProjectSyncHealth syncHealth
     required property bool syncInProgress
+    required property bool projectModified
+    required property bool saveWillCauseDataLoss
+    required property string requiredVersion
 
     signal syncRequested()
     signal remoteSettingsRequested()
@@ -16,32 +19,51 @@ RoundButton {
     signal reconnectRequested()
     signal setupRemoteRequested()
 
-    readonly property bool noRemote: syncHealth.status.noRemote
+    readonly property bool hasRemote: syncHealth.status.hasRemote
     readonly property bool authExpired: syncHealth.status.authExpired
     readonly property bool needsLogin: syncHealth.status.needsLogin
+    readonly property int aheadCount: syncHealth.status.aheadCount
+    readonly property int behindCount: syncHealth.status.behindCount
+    readonly property bool hasLocalChanges: syncHealth.status.hasLocalChanges || projectModified
 
-    readonly property string tooltipText: noRemote
-        ? qsTr("No remote configured — click to set up sync")
-        : (needsLogin
-           ? qsTr("Sign in to GitHub — click to sync")
-           : (authExpired
-              ? qsTr("GitHub access expired — click to reconnect")
-              : syncHealth.status.message))
+    readonly property string tooltipText: {
+        if (saveWillCauseDataLoss)
+            return qsTr("Sync disabled — upgrade CaveWhere to v%1").arg(requiredVersion)
+        if (!hasRemote)
+            return qsTr("No remote configured — click to set up sync")
+        if (needsLogin)
+            return qsTr("Sign in to GitHub — click to sync")
+        if (authExpired)
+            return qsTr("GitHub access expired — click to reconnect")
+        if (syncInProgress)
+            return qsTr("Syncing…")
+        if (projectModified)
+            return qsTr("Unsaved changes — click to save and sync")
+        if (syncHealth.status.hasLocalChanges && aheadCount === 0 && behindCount === 0)
+            return qsTr("Local edits pending — click to sync")
+        if (aheadCount > 0 && behindCount > 0)
+            return qsTr("Commits to push and pull — click to sync")
+        if (aheadCount > 0)
+            return qsTr("Commits ready to push — click to sync")
+        if (behindCount > 0)
+            return qsTr("Updates available — click to sync")
+        if (syncHealth.status.stale)
+            return qsTr("Sync status unavailable")
+        return qsTr("Up to date")
+    }
 
-    icon.source: noRemote
+    icon.source: !hasRemote
         ? "qrc:/twbs-icons/icons/cloud-arrow-up.svg"
         : (needsLogin
            ? "qrc:/twbs-icons/icons/lock.svg"
            : (authExpired
               ? "qrc:/twbs-icons/icons/exclamation-triangle.svg"
               : "qrc:/twbs-icons/icons/arrow-repeat.svg"))
-    enabled: !syncInProgress
+    enabled: !syncInProgress && !saveWillCauseDataLoss
 
     onClicked: {
-        if (noRemote) {
+        if (!hasRemote) {
             setupRemoteRequested()
-        } else if (authExpired) {
-            reconnectRequested()
         } else {
             syncRequested()
         }
@@ -65,11 +87,11 @@ RoundButton {
     QQ.Rectangle {
         id: syncBadgeId
         objectName: "statusBadge"
-        visible: !noRemote
+        visible: hasRemote
                  && (syncHealth.status.stale
-                     || syncHealth.status.hasLocalChanges
-                     || syncHealth.status.aheadCount > 0
-                     || syncHealth.status.behindCount > 0
+                     || hasLocalChanges
+                     || aheadCount > 0
+                     || behindCount > 0
                      || syncInProgress)
 
         anchors.right: parent.right
@@ -96,8 +118,12 @@ RoundButton {
                     return "!"
                 }
 
-                let suffix = syncHealth.status.hasLocalChanges ? " \u2022" : ""
-                return "\u2191" + syncHealth.status.aheadCount + " \u2193" + syncHealth.status.behindCount + suffix
+                if (aheadCount === 0 && behindCount === 0 && hasLocalChanges) {
+                    return ""
+                }
+
+                let suffix = hasLocalChanges ? " \u2022" : ""
+                return "\u2191" + aheadCount + " \u2193" + behindCount + suffix
             }
         }
     }
@@ -107,7 +133,7 @@ RoundButton {
 
         QC.MenuItem {
             text: "Set up remote…"
-            visible: noRemote
+            visible: !hasRemote
             onTriggered: {
                 setupRemoteRequested()
             }
@@ -116,7 +142,7 @@ RoundButton {
         QC.MenuItem {
             objectName: "syncNowMenuItem"
             text: "Sync now"
-            enabled: !syncInProgress && !noRemote
+            enabled: !syncInProgress && hasRemote
             onTriggered: {
                 syncRequested()
             }
