@@ -235,6 +235,8 @@ private:
     bool StationVisible = true; //!<
 
     int m_titleBarHeight;
+
+    void prepareForProjectSwitch();
 };
 
 /**

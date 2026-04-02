@@ -287,18 +287,13 @@ QUrl cwRootData::cavewhereImageUrl(const cwImage& image, const QString& absolute
 
 void cwRootData::newProject()
 {
-    PageSelectionModel->clearHistory();
-    PageSelectionModel->gotoPageByName(nullptr, "View");
+    prepareForProjectSwitch();
     Project->newProject();
 }
 
 /**
  * @brief cwRootData::loadProject
- * @param fileUrl - The URL of the project file to load
- *
- * Centralizes the project loading sequence: clears page history so stale
- * pages from the previous project aren't reachable, navigates to the View
- * page, and starts the async file load.
+ * @param filename - The path of the project file to load
  *
  * All code paths that load a project file should use this method to avoid
  * bugs like issue #369 where forgetting to clear history left old trip
@@ -306,9 +301,18 @@ void cwRootData::newProject()
  */
 void cwRootData::loadProject(const QString& filename)
 {
+    prepareForProjectSwitch();
+    Project->loadFile(filename);
+}
+
+/**
+ * Clears page history and navigates to the View page so stale pages from
+ * the previous project aren't reachable via sidebar or back/forward.
+ */
+void cwRootData::prepareForProjectSwitch()
+{
     PageSelectionModel->clearHistory();
     PageSelectionModel->gotoPageByName(nullptr, "View");
-    Project->loadFile(filename);
 }
 
 int cwRootData::titleBarHeight() const

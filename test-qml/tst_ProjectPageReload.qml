@@ -26,7 +26,7 @@ MainWindowTest {
             RootData.recentProjectModel.clear()
             TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
             RootData.futureManagerModel.waitForFinished();
-            tryVerify(() => { return RootData.region.caveCount > 0 }, 20000)
+            tryVerify(() => { return RootData.region.caveCount > 0 }, 5000)
 
             const tmpPath = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
             const projectPath = tmpPath + "/issue369-test.cwproj"
@@ -42,7 +42,6 @@ MainWindowTest {
                 return RootData.pageView.currentPageItem !== null
                        && RootData.pageView.currentPageItem.objectName === "tripPage"
             }, 10000, "Should navigate to the trip page")
-            waitForRendering(mainWindow)
 
             // Make the project modified so AskToSaveDialog appears
             RootData.region.addCave()
@@ -55,7 +54,6 @@ MainWindowTest {
 
             let repoListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->repositoryListView")
             tryVerify(() => repoListView.count > 0, 3000, "recent list should have an entry")
-            waitForRendering(repoListView)
 
             let linkText = findChild(mainWindow, "repoLinkText_0")
             verify(linkText !== null, "repoLinkText_0 not found")
