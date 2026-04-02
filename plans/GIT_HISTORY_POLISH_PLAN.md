@@ -62,10 +62,10 @@ Need test coverage for the GitHistoryPage and its subcomponents.
 
 **Independent** — can be written in parallel with bug fixes
 
-### 11. Selected commit needs more padding
-Visual spacing issue on the selected commit row in the history list.
+### 11. ~~Selected commit needs more padding~~ ✅
+~~Visual spacing issue on the selected commit row in the history list.~~
 
-**Independent**
+**Independent** — Done: Increased row height from 28→32px and added 4px horizontal margins to the RowLayout in GitHistoryRow.qml.
 
 ### 12. Merge tail rendering
 Merges show dangling tails when they are the last commit visible in the git history graph.
