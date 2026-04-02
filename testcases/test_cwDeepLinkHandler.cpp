@@ -137,3 +137,45 @@ TEST_CASE("cwDeepLinkHandler takePendingUrl", "[DeepLink]")
         CHECK(f.handler.takePendingUrl().isEmpty());
     }
 }
+
+TEST_CASE("cwDeepLinkHandler collaboratorSettingsUrl", "[DeepLink]")
+{
+    SECTION("GitHub repo returns /settings/access path")
+    {
+        const QUrl result = cwDeepLinkHandler::collaboratorSettingsUrl(
+            QUrl("https://github.com/User/Repo.git"));
+        CHECK(result.toString().toStdString() == "https://github.com/User/Repo/settings/access");
+    }
+
+    SECTION("GitLab repo returns /-/project_members path")
+    {
+        const QUrl result = cwDeepLinkHandler::collaboratorSettingsUrl(
+            QUrl("https://gitlab.com/org/project.git"));
+        CHECK(result.toString().toStdString() == "https://gitlab.com/org/project/-/project_members");
+    }
+
+    SECTION("Bitbucket repo returns /admin/access-keys path")
+    {
+        const QUrl result = cwDeepLinkHandler::collaboratorSettingsUrl(
+            QUrl("https://bitbucket.org/team/repo.git"));
+        CHECK(result.toString().toStdString() == "https://bitbucket.org/team/repo/admin/access-keys");
+    }
+
+    SECTION("URL without .git suffix works")
+    {
+        const QUrl result = cwDeepLinkHandler::collaboratorSettingsUrl(
+            QUrl("https://github.com/User/Repo"));
+        CHECK(result.toString().toStdString() == "https://github.com/User/Repo/settings/access");
+    }
+
+    SECTION("Unsupported host returns empty")
+    {
+        CHECK(cwDeepLinkHandler::collaboratorSettingsUrl(
+            QUrl("https://example.com/user/repo")).isEmpty());
+    }
+
+    SECTION("Empty URL returns empty")
+    {
+        CHECK(cwDeepLinkHandler::collaboratorSettingsUrl(QUrl()).isEmpty());
+    }
+}

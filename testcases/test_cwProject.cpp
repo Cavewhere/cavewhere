@@ -12851,6 +12851,39 @@ TEST_CASE("shareLink returns empty for local file remote", "[ShareLink]")
     CHECK(f.project->shareLink().isEmpty());
 }
 
+TEST_CASE("remoteBrowseUrl returns HTTPS for SSH remote", "[ShareLink]")
+{
+    ShareLinkFixture f(ShareLinkFixture::CustomRemote,
+                       QStringLiteral("ssh://git@github.com/TestUser/TestRepo.git"));
+    const QUrl url = f.project->remoteBrowseUrl();
+    CHECK(url.scheme() == QStringLiteral("https"));
+    CHECK(url.host() == QStringLiteral("github.com"));
+    CHECK(url.path() == QStringLiteral("/TestUser/TestRepo.git"));
+    CHECK(url.userName().isEmpty());
+}
+
+TEST_CASE("remoteBrowseUrl returns HTTPS for SCP-style remote", "[ShareLink]")
+{
+    ShareLinkFixture f(ShareLinkFixture::CustomRemote,
+                       QStringLiteral("git@github.com:TestUser/TestRepo.git"));
+    const QUrl url = f.project->remoteBrowseUrl();
+    CHECK(url.scheme() == QStringLiteral("https"));
+    CHECK(url.host() == QStringLiteral("github.com"));
+    CHECK(url.path() == QStringLiteral("/TestUser/TestRepo.git"));
+}
+
+TEST_CASE("remoteBrowseUrl returns empty for local file remote", "[ShareLink]")
+{
+    ShareLinkFixture f(ShareLinkFixture::LocalRemote);
+    CHECK(f.project->remoteBrowseUrl().isEmpty());
+}
+
+TEST_CASE("remoteBrowseUrl returns empty when no remote configured", "[ShareLink]")
+{
+    ShareLinkFixture f;
+    CHECK(f.project->remoteBrowseUrl().isEmpty());
+}
+
 TEST_CASE("shareLink round-trip: output parses back to original repo URL via cwDeepLinkHandler", "[ShareLink]")
 {
     // Use a synthetic HTTPS GitHub URL (no real remote needed) to test that

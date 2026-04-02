@@ -84,34 +84,7 @@ Item {
 
         // ── Dialog display ─────────────────────────────────────────────────
 
-        // Dialog opens and shows the share link from the project.
-        function test_dialog_showsShareLink() {
-            setupProjectWithRemote("share-dialog-link")
-
-            shareDialogId.open()
-            tryVerify(function() { return shareDialogId.visible }, 1000)
-
-            const field = findChild(rootId, "shareLinkField")
-            verify(field !== null, "shareLinkField not found")
-            verify(field.text.startsWith("https://cavewhere.com/open?repo="),
-                   "Expected link in field, got: " + field.text)
-        }
-
-        // Dialog shows an empty link when the project has no remote.
-        function test_dialog_showsEmptyLinkForNoRemote() {
-            const tempDir = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
-            verify(RootData.project.saveAs(tempDir + "/share-dialog-empty.cwproj"))
-            TestHelper.waitForProjectSaveToFinish(RootData.project)
-
-            shareDialogId.open()
-            tryVerify(function() { return shareDialogId.visible }, 1000)
-
-            const field = findChild(rootId, "shareLinkField")
-            verify(field !== null, "shareLinkField not found")
-            compare(field.text, "")
-        }
-
-        // Copy Link button is disabled when there is no share link.
+        // Copy link button is disabled when there is no share link.
         function test_copyLinkButton_disabledWhenNoLink() {
             shareDialogId.open()
             tryVerify(function() { return shareDialogId.visible }, 1000)
@@ -141,6 +114,29 @@ Item {
             const label = findChild(rootId, "shareNoteLabel")
             verify(label !== null, "shareNoteLabel not found")
             verify(label.text.length > 0)
+        }
+
+        // Invite link says "Invite collaborators on GitHub" for GitHub remotes.
+        function test_inviteLink_showsGitHubLabel() {
+            setupProjectWithRemote("share-invite-github")
+
+            shareDialogId.open()
+            tryVerify(function() { return shareDialogId.visible }, 1000)
+
+            const link = findChild(rootId, "inviteCollaboratorsLink")
+            verify(link !== null, "inviteCollaboratorsLink not found")
+            compare(link.text, "Invite collaborators on GitHub")
+            verify(link.visible, "Invite link should be visible")
+        }
+
+        // Invite link is hidden when there is no share link.
+        function test_inviteLink_hiddenWhenNoShareLink() {
+            shareDialogId.open()
+            tryVerify(function() { return shareDialogId.visible }, 1000)
+
+            const link = findChild(rootId, "inviteCollaboratorsLink")
+            verify(link !== null, "inviteCollaboratorsLink not found")
+            verify(!link.visible, "Invite link should be hidden when no share link")
         }
     }
 }

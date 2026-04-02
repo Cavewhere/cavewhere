@@ -44,6 +44,8 @@ public:
     Q_INVOKABLE QUrl takePendingUrl();
 
     static bool isHostAllowed(const QString& host);
+    Q_INVOKABLE static QString hostDisplayName(const QUrl& url);
+    Q_INVOKABLE static QUrl collaboratorSettingsUrl(const QUrl& repoUrl);
 
 signals:
     void openRepoRequested(QUrl repoUrl);

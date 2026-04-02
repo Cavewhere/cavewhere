@@ -15,39 +15,31 @@ QC.Dialog {
     // Captured when the dialog opens so bindings see a stable value.
     property url _shareLink: Qt.url("")
     property url _remoteUrl: Qt.url("")
+    property url _browseUrl: Qt.url("")
+    property string _hostDisplayName: ""
     readonly property bool _hasShareLink: _shareLink.toString().length > 0
+    readonly property bool _hasBrowseUrl: _browseUrl.toString().length > 0
     readonly property bool _hasUnsupportedRemote: !_hasShareLink && _remoteUrl.toString().length > 0
+
+    DeepLinkHandler { id: _deepLinkHelper }
 
     onOpened: {
         _shareLink = RootData.project.shareLink()
         _remoteUrl = RootData.project.remoteUrl()
+        _browseUrl = RootData.project.remoteBrowseUrl()
+        _hostDisplayName = _hasBrowseUrl
+            ? _deepLinkHelper.hostDisplayName(_browseUrl)
+            : ""
     }
 
     contentItem: ColumnLayout {
         spacing: 8
 
         QC.Label {
-            Layout.fillWidth: true
-            text: qsTr("Share link")
-            color: Theme.textSubtle
-        }
-
-        QC.TextField {
-            objectName: "shareLinkField"
-            Layout.fillWidth: true
-            readOnly: true
-            selectByMouse: true
-            text: rootId._hasShareLink ? rootId._shareLink.toString() : ""
-            placeholderText: rootId._hasUnsupportedRemote
-                ? qsTr("Unsupported remote — only GitHub, GitLab, and Bitbucket HTTPS remotes are supported")
-                : qsTr("No remote configured")
-        }
-
-        QC.Label {
             objectName: "shareNoteLabel"
             Layout.fillWidth: true
             text: rootId._hasShareLink
-                ? qsTr("The recipient will need a GitHub account and repository access.")
+                ? qsTr("Recipients need repository access for private repositories.")
                 : rootId._hasUnsupportedRemote
                     ? qsTr("The remote \"%1\" cannot be used for share links. Push to a GitHub, GitLab, or Bitbucket repository to enable sharing.").arg(rootId._remoteUrl)
                     : qsTr("Add a remote repository to enable sharing.")
@@ -70,19 +62,22 @@ QC.Dialog {
             }
             spacing: 8
 
-            QC.Button {
-                objectName: "manageCollaboratorsButton"
-                text: qsTr("Manage on GitHub")
-                flat: true
-                enabled: rootId._hasShareLink
-                onClicked: Qt.openUrlExternally(rootId._shareLink)
+            LinkText {
+                objectName: "inviteCollaboratorsLink"
+                text: rootId._hostDisplayName.length > 0
+                    ? qsTr("Invite collaborators on %1").arg(rootId._hostDisplayName)
+                    : qsTr("Invite collaborators")
+                visible: rootId._hasShareLink
+                Layout.alignment: Qt.AlignVCenter
+                onClicked: Qt.openUrlExternally(
+                    _deepLinkHelper.collaboratorSettingsUrl(rootId._browseUrl))
             }
 
             QQ.Item { Layout.fillWidth: true }
 
             QC.Button {
                 objectName: "copyLinkButton"
-                text: qsTr("Copy Link")
+                text: qsTr("Copy link")
                 font.bold: true
                 enabled: rootId._hasShareLink
                 onClicked: {

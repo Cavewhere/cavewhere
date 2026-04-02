@@ -577,14 +577,17 @@ QUrl cwProject::remoteUrl() const
     return raw.isEmpty() ? QUrl() : QQuickGit::GitUtilities::fixGitUrl(raw);
 }
 
-QUrl cwProject::shareLink() const
+QUrl cwProject::remoteBrowseUrl() const
 {
     const QString raw = rawRemoteUrlString();
     if (raw.isEmpty())
         return {};
+    return QQuickGit::GitUtilities::httpsUrlFromRemoteUrl(raw);
+}
 
-    // Normalize SSH/SCP/git remotes to HTTPS.
-    const QUrl repoUrl = QQuickGit::GitUtilities::httpsUrlFromRemoteUrl(raw);
+QUrl cwProject::shareLink() const
+{
+    const QUrl repoUrl = remoteBrowseUrl();
     if (repoUrl.isEmpty())
         return {};
 
