@@ -6,7 +6,7 @@ import QtQuick.Controls as QC
 QQ.Item {
     id: itemId
 
-    required property string fullPathRole
+    signal clicked()
     property alias nextArrowVisible: moreArrowId.visible
     property alias text: nameTextId.text
 
@@ -36,9 +36,7 @@ QQ.Item {
                 id: buttonId
                 anchors.fill: parent
                 hoverEnabled: true
-                onClicked:  {
-                    RootData.pageSelectionModel.currentPageAddress = itemId.fullPathRole;
-                }
+                onClicked: itemId.clicked()
             }
         }
 

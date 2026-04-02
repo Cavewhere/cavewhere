@@ -11,7 +11,7 @@ StandardPage {
                                 statusText: string, isWorkingTree: bool): void {
         if (isImage) {
             var imgPage = RootData.pageSelectionModel.registerPage(
-                page.PageView.page, "Diff=" + filePath,
+                page.PageView.page, "Diff",
                 imageComparePageComponent,
                 {
                     repository: RootData.project.repository,
@@ -24,7 +24,7 @@ StandardPage {
             RootData.pageSelectionModel.gotoPage(imgPage)
         } else if (!isBinary) {
             var diffPage = RootData.pageSelectionModel.registerPage(
-                page.PageView.page, "Diff=" + filePath,
+                page.PageView.page, "Diff",
                 diffPageComponent,
                 {
                     repository: RootData.project.repository,

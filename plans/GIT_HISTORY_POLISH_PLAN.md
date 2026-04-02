@@ -21,25 +21,25 @@ Post-implementation issues found during testing of the Git Commit Detail Panel (
 
 **Independent — but fix before verifying 5 and 13** — Done: Added `refsChanged()` signal to `GitRepository`, emitted from `commitAll`, `resetHard`, `createBranch`, `push`, `pull`, `pullRebaseOrMerge`, `checkout`, `reset`. `GitGraphModel` connects to it for auto-refresh.
 
-### 4. Remove SHA copy button, make metadata selectable
-Remove the dedicated SHA copy action. Make author, date, and SHA text selectable so native right-click copy works.
+### 4. ~~Remove SHA copy button, make metadata selectable~~ ✅
+~~Remove the dedicated SHA copy action. Make author, date, and SHA text selectable so native right-click copy works.~~
 
-**Independent**
+**Independent** — Done: Replaced copy button with full SHA in a selectable `TextEdit`. Author and date are also now selectable `TextEdit` fields.
 
 ### 5. Working tree not updated on file change
 Changing a file in the project doesn't cause the history to show uncommitted changes. The synthetic "Uncommitted Changes" row doesn't appear or update in response to file modifications.
 
 **Depends on 3** — both relate to the history view not reacting to repo state changes. May share a common fix (e.g., watching for ref/index changes).
 
-### 6. Add discard button
-Add a discard-all-changes button to the working tree panel. Must be heavily guarded with a confirmation dialog to prevent accidental data loss.
+### 6. ~~Add discard button~~ ✅
+~~Add a discard-all-changes button to the working tree panel. Must be heavily guarded with a confirmation dialog to prevent accidental data loss.~~
 
-**Independent**
+**Independent** — Done: Added "Discard All" button with modal confirmation dialog. Calls `resetHard("HEAD")` + `cleanUntracked()` + `checkStatus()`.
 
-### 7. LinkBar navigation broken
-History has a broken link setup in the LinkBar. The breadcrumb should be History -> Diff when viewing a file diff. Most other page links from within the history flow don't work.
+### 7. ~~LinkBar navigation broken~~ ✅
+~~History has a broken link setup in the LinkBar. The breadcrumb should be History -> Diff when viewing a file diff. Most other page links from within the history flow don't work.~~
 
-**Independent**
+**Independent** — Done: Made `fullPathRole` non-required in `LinkBarItem` (fixes delegate creation under `ComponentBehavior: Bound`), added `required property string fullPathRole` to the `LinkBar` delegate (enables model role injection), and simplified diff page names to "Diff" for clean breadcrumbs.
 
 ### 8. Image compare broken
 `image://gitcommit/` provider fails with "Invalid image provider". The `-1` parent index in the URL looks wrong.

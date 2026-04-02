@@ -70,7 +70,6 @@ QQ.Item {
                 id: sizeItemId
                 text: "Size of text"
                 visible: false
-                fullPathRole: ""
             }
 
             QQ.ListView {
@@ -90,9 +89,11 @@ QQ.Item {
 
                 delegate: LinkBarItem {
                     required property string nameRole
+                    required property string fullPathRole
                     required property int index
                     nextArrowVisible: linkBarListView.count - 1 !== index
                     text: nameRole
+                    onClicked: RootData.pageSelectionModel.currentPageAddress = fullPathRole
                 }
 
                 QQ.Rectangle {
