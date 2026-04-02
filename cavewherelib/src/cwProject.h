@@ -207,6 +207,8 @@ signals:
     void syncFinished();
     void authProviderCredentialsNeeded();
     void lfsFilesNeedSync();
+    void localMutationOccurred();
+    void saveFlushCompleted();
 
 public slots:
     void loadFile(QString filename);

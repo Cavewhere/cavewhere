@@ -26,10 +26,10 @@ Post-implementation issues found during testing of the Git Commit Detail Panel (
 
 **Independent** — Done: Replaced copy button with full SHA in a selectable `TextEdit`. Author and date are also now selectable `TextEdit` fields.
 
-### 5. Working tree not updated on file change
-Changing a file in the project doesn't cause the history to show uncommitted changes. The synthetic "Uncommitted Changes" row doesn't appear or update in response to file modifications.
+### 5. ~~Working tree not updated on file change~~ ✅
+~~Changing a file in the project doesn't cause the history to show uncommitted changes. The synthetic "Uncommitted Changes" row doesn't appear or update in response to file modifications.~~
 
-**Depends on 3** — both relate to the history view not reacting to repo state changes. May share a common fix (e.g., watching for ref/index changes).
+**Depends on 3** — Done: Connected `refsChanged` → `checkStatusAsync()` in `GitRepository` constructor so modified file count auto-updates after any ref-changing operation. The synthetic row now appears/disappears without explicit `checkStatus()` calls.
 
 ### 6. ~~Add discard button~~ ✅
 ~~Add a discard-all-changes button to the working tree panel. Must be heavily guarded with a confirmation dialog to prevent accidental data loss.~~
@@ -76,6 +76,21 @@ Merges show dangling tails when they are the last commit visible in the git hist
 Make sure history shows correctly for bundled `.cw` archives.
 
 **Depends on 3** — likely the same root cause as history not updating after sync. Fix 3 first, then verify.
+
+### 14. Uncommitted Changes lane visualization
+The synthetic "Uncommitted Changes" row copies the lanes from the HEAD commit verbatim. The lanes don't terminate, and the result looks wrong — especially when HEAD is a merge commit with multiple active lanes. The synthetic row should have its own lane rendering that cleanly connects to the HEAD commit's active lane without dangling tails from other branches.
+
+**Independent**
+
+### 15. Debounce checkStatusAsync on saveFlushCompleted
+Rapid-fire `saveFlushCompleted` signals (e.g., editing multiple scraps quickly) each trigger a full `checkStatusAsync()` call — opening a new `git_repository`, running `git_status_list`, and filtering LFS entries on the thread pool. Use `AsyncFuture::Restarter` to coalesce rapid calls — it already has event-loop debouncing built in (queues the first start via `Qt::QueuedConnection`, subsequent `restart()` calls in the same event loop cycle just update the run function without re-queuing). This would collapse N rapid signals into a single status scan without needing a QML Timer.
+
+**Independent**
+
+### 16. Extract shared git status helper
+`checkStatus()` and `checkStatusAsync()` in `GitRepository.cpp` duplicate the same status-options setup and `filteredStatusEntryCount` logic. Extract a shared helper that builds the status list and returns the filtered count, then have both functions delegate to it.
+
+**Independent**
 
 ---
 

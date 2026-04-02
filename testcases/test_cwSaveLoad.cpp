@@ -49,6 +49,7 @@
 #include <QTemporaryDir>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSignalSpy>
 
 #include <set>
 
@@ -2386,6 +2387,83 @@ TEST_CASE("saveBlockedByVersion signal only emitted once per load", "[cwSaveLoad
     reloaded->waitSaveToFinish();
 
     CHECK(reloaded->errorModel()->count() == 1);
+}
+
+TEST_CASE("saveFlushCompleted fires after adding a trip", "[cwSaveLoad]") {
+    auto root = std::make_unique<cwRootData>();
+    auto project = root->project();
+    auto region = project->cavingRegion();
+
+    region->addCave();
+    auto cave = region->cave(0);
+
+    root->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    // Listen for saveFlushCompleted on the project
+    QSignalSpy flushSpy(project, &cwProject::saveFlushCompleted);
+
+    // Add a trip — this queues a file write and schedules a flush
+    cave->addTrip();
+
+    project->waitSaveToFinish();
+
+    CHECK(flushSpy.count() >= 1);
+
+    // After the flush, the new trip file should exist on disk
+    auto trip = cave->trip(0);
+    const QString tripPath = ProjectFilenameTestHelper::absolutePath(trip);
+    CHECK(QFileInfo::exists(tripPath));
+}
+
+TEST_CASE("saveFlushCompleted fires after modifying a trip", "[cwSaveLoad]") {
+    auto root = std::make_unique<cwRootData>();
+    auto project = root->project();
+    auto region = project->cavingRegion();
+
+    region->addCave();
+    auto cave = region->cave(0);
+    cave->addTrip();
+
+    root->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    QSignalSpy flushSpy(project, &cwProject::saveFlushCompleted);
+
+    // Modify the trip — triggers a save and flush
+    auto trip = cave->trip(0);
+    trip->setDate(QDateTime(QDate(2025, 1, 1), QTime(), QTimeZone::utc()));
+
+    project->waitSaveToFinish();
+
+    CHECK(flushSpy.count() >= 1);
+}
+
+TEST_CASE("git working tree detects new file after saveFlushCompleted", "[cwSaveLoad]") {
+    auto root = std::make_unique<cwRootData>();
+    auto project = root->project();
+    auto region = project->cavingRegion();
+    auto* repo = project->repository();
+
+    region->addCave();
+    auto cave = region->cave(0);
+
+    root->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    // Ensure clean baseline
+    repo->checkStatus();
+    int baselineCount = repo->modifiedFileCount();
+
+    // Add a trip — queues file write
+    cave->addTrip();
+
+    // Wait for flush to complete
+    project->waitSaveToFinish();
+
+    // Now check git status — the new file should be visible
+    repo->checkStatus();
+    CHECK(repo->modifiedFileCount() > baselineCount);
 }
 
 TEST_CASE("saveAs, sync, and resetBranchAndReconcile blocked for version-incompatible project", "[cwSaveLoad]") {

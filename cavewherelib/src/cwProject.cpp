@@ -209,6 +209,13 @@ void cwProject::connectSaveLoad(cwSaveLoad* saveLoad)
             return;
         }
         setModified(true);
+        emit localMutationOccurred();
+    });
+    connect(saveLoad, &cwSaveLoad::saveFlushCompleted, this, [this, saveLoad]() {
+        if (m_saveLoad != saveLoad) {
+            return;
+        }
+        emit saveFlushCompleted();
     });
     connect(saveLoad, &cwSaveLoad::saveBlockedByVersion, this, [this, saveLoad](const QString& entityDescription) {
         if (m_saveLoad != saveLoad) {

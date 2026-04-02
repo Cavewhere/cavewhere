@@ -2758,6 +2758,7 @@ QFuture<ResultBase> cwSaveLoad::saveFlushImpl()
     return AsyncFuture::observe(completeSaveJobs())
         .context(this, [this]() {
             const QString pendingErrors = d->takePendingSaveJobErrors();
+            emit saveFlushCompleted();
             if (!pendingErrors.isEmpty()) {
                 return ResultBase(QStringLiteral("Save flush failed:\n%1").arg(pendingErrors));
             }

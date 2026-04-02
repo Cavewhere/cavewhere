@@ -39,6 +39,20 @@ StandardPage {
         }
     }
 
+    onVisibleChanged: {
+        if (visible) {
+            RootData.project.repository.checkStatusAsync()
+        }
+    }
+
+    QQ.Connections {
+        target: RootData.project
+        enabled: page.visible
+        function onSaveFlushCompleted() {
+            RootData.project.repository.checkStatusAsync()
+        }
+    }
+
     QC.SplitView {
         anchors.fill: parent
         anchors.margins: Theme.pageMargin
