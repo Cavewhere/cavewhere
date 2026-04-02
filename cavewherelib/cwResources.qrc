@@ -143,5 +143,6 @@
         <file>twbs-icons/icons/chevron-double-down.svg</file>
         <file>twbs-icons/icons/chevron-double-right.svg</file>
         <file>twbs-icons/icons/list.svg</file>
+        <file>twbs-icons/icons/pencil.svg</file>
     </qresource>
 </RCC>

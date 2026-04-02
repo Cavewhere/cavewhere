@@ -91,6 +91,11 @@ When viewing an image diff, the before image may be unavailable because LFS only
 
 **Independent**
 
+### 17. ~~Move/rename visualization in commit detail~~ ✅
+~~Investigate showing move/rename info in `GitCommitDetailPanel.qml` when files are renamed.~~
+
+**Independent** — Verified: already works correctly.
+
 ---
 
 ## Dependency Graph
