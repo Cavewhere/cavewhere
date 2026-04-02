@@ -24,17 +24,23 @@ Sets selectedItem
 void cwSelectionManager::setSelectedItem(QQuickItem* selectedItem) {
     if(SelectedItem != selectedItem) {
 
-        if(SelectedItem != nullptr) {
-            disconnect(SelectedItem, SIGNAL(destroyed()), this, SLOT(selectedItemDestroyed()));
-            SelectedItem->setProperty("selected", false);
-        }
+        QQuickItem* oldItem = SelectedItem;
 
+        // Update SelectedItem BEFORE deselecting the old item. When
+        // oldItem.selected=false triggers a re-entrant setSelectedItemIndex(-1),
+        // the point manager's m_items.contains() guard needs to see the new
+        // SelectedItem (not the old one) to avoid incorrectly clearing it.
         SelectedItem = selectedItem;
         m_cycleQueue.removeOne(selectedItem);
 
+        if(oldItem != nullptr) {
+            disconnect(oldItem, &QQuickItem::destroyed, this, &cwSelectionManager::selectedItemDestroyed);
+            oldItem->setProperty("selected", false);
+        }
+
         if(SelectedItem != nullptr) {
 
-            connect(SelectedItem, SIGNAL(destroyed()), this, SLOT(selectedItemDestroyed()));
+            connect(SelectedItem, &QQuickItem::destroyed, this, &cwSelectionManager::selectedItemDestroyed);
 
             if(!SelectedItem->property("selected").toBool()) {
                 SelectedItem->setProperty("selected", true);

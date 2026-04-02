@@ -15,8 +15,8 @@ PointItem {
     property ScrapItem scrapItem;
 
     function select() {
-        pointItem.selected = true
         scrapItem.selected = true
+        pointItem.selected = true
     }
 
     focus: selected
@@ -24,7 +24,6 @@ PointItem {
 
     onSelectedChanged: {
         if(selected) {
-            scrapItem.selected = true
             forceActiveFocus();
         }
     }
