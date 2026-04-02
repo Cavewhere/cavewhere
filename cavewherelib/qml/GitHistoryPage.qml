@@ -18,6 +18,7 @@ StandardPage {
                     commitSha: historyView.selectedSha,
                     parentIndex: 0,
                     filePath: filePath,
+                    statusText: statusText,
                     workingTree: isWorkingTree
                 }
             )

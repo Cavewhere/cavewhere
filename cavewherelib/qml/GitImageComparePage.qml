@@ -11,22 +11,23 @@ StandardPage {
     required property string commitSha
     required property int parentIndex
     required property string filePath
+    required property string statusText
     property bool workingTree: false
-    property int imageProviderRepoId: -1
 
     readonly property string _parentSha: commitInfo.parentShas.length > parentIndex
                                          ? commitInfo.parentShas[parentIndex] : ""
-    readonly property bool _isAdded: _parentSha === ""
+    readonly property bool _isAdded: page.statusText === "Added"
+    readonly property bool _isDeleted: page.statusText === "Deleted"
 
     // Divider position as a ratio (0.0–1.0) so it survives image/window resizes
     property real _dividerRatio: 0.5
 
     function _gitImageUrl(sha: string, path: string): string {
-        return "image://gitcommit/%1/%2/%3".arg(page.imageProviderRepoId).arg(sha).arg(path)
+        return "image://gitcommit/%1/%2/%3".arg(page.repository.imageProviderId).arg(sha).arg(path)
     }
 
     readonly property string _beforeSource: {
-        if (page._isAdded)
+        if (page._isAdded || page._parentSha === "")
             return ""
         if (page.workingTree)
             return page._gitImageUrl(commitInfo.commitSha, page.filePath)
@@ -34,6 +35,8 @@ StandardPage {
     }
 
     readonly property string _afterSource: {
+        if (page._isDeleted)
+            return ""
         if (page.workingTree)
             return "file://" + page.repository.directoryPath + "/" + page.filePath
         return page._gitImageUrl(page.commitSha, page.filePath)
@@ -65,9 +68,11 @@ StandardPage {
             }
 
             QC.Label {
+                objectName: "beforeLabel"
                 text: qsTr("Before")
                 font.pixelSize: 12
                 color: Theme.textSubtle
+                visible: !page._isAdded
             }
 
             QQ.Rectangle {
@@ -75,12 +80,15 @@ StandardPage {
                 height: 12
                 radius: 2
                 color: Theme.diffDeletedBackground
+                visible: !page._isAdded
             }
 
             QC.Label {
+                objectName: "afterLabel"
                 text: qsTr("After")
                 font.pixelSize: 12
                 color: Theme.textSubtle
+                visible: !page._isDeleted
             }
 
             QQ.Rectangle {
@@ -88,6 +96,7 @@ StandardPage {
                 height: 12
                 radius: 2
                 color: Theme.diffAddedBackground
+                visible: !page._isDeleted
             }
         }
 
@@ -98,51 +107,112 @@ StandardPage {
             clip: true
 
             QQ.Image {
-                id: afterImage
+                id: primaryImage
+                objectName: "primaryImage"
                 anchors.centerIn: parent
                 asynchronous: true
 
+                readonly property bool _failed: status === QQ.Image.Error
+                                                || status === QQ.Image.Null
                 readonly property real _scale: sourceSize.width > 0 && sourceSize.height > 0
                     ? Math.min(parent.width / sourceSize.width,
                                parent.height / sourceSize.height, 1.0)
                     : 1.0
-                width: sourceSize.width * _scale
-                height: sourceSize.height * _scale
+                width: _failed ? parent.width * 0.8 : sourceSize.width * _scale
+                height: _failed ? parent.height * 0.8 : sourceSize.height * _scale
 
                 fillMode: QQ.Image.PreserveAspectFit
-                source: page._afterSource
+                source: page._isDeleted ? page._beforeSource : page._afterSource
+            }
+
+            // Shown when the primary image (after for Added, before for Deleted) fails
+            QQ.Rectangle {
+                anchors.fill: primaryImage
+                visible: primaryImage._failed
+                color: Theme.surfaceMuted
+
+                QC.Label {
+                    anchors.centerIn: parent
+                    text: page._isDeleted
+                          ? qsTr("Previous version unavailable")
+                          : qsTr("Current version unavailable")
+                    font.pixelSize: 14
+                    color: Theme.textSubtle
+                }
             }
 
             QQ.Item {
                 id: beforeClip
-                anchors.top: afterImage.top
-                anchors.bottom: afterImage.bottom
-                x: afterImage.x
-                width: dividerHandle.x - afterImage.x
+                objectName: "beforeClip"
+                anchors.top: primaryImage.top
+                anchors.bottom: primaryImage.bottom
+                x: primaryImage.x
+                width: dividerHandle.x - primaryImage.x
                 clip: true
-                visible: !page._isAdded
 
                 QQ.Image {
                     id: beforeImage
-                    x: 0
-                    y: 0
-                    width: afterImage.width
-                    height: afterImage.height
+                    width: primaryImage.width
+                    height: primaryImage.height
                     asynchronous: true
                     fillMode: QQ.Image.PreserveAspectFit
                     source: page._beforeSource
+                    visible: !page._isAdded && status === QQ.Image.Ready
+                }
+
+                QQ.Rectangle {
+                    width: primaryImage.width
+                    height: primaryImage.height
+                    visible: page._isAdded
+                             || (beforeImage.status === QQ.Image.Error
+                                 && !page._isDeleted)
+                    color: Theme.surfaceMuted
+
+                    QC.Label {
+                        anchors.centerIn: parent
+                        text: page._isAdded
+                              ? qsTr("No previous version")
+                              : qsTr("Previous version unavailable")
+                        font.pixelSize: 14
+                        color: Theme.textSubtle
+                    }
+                }
+            }
+
+            QQ.Item {
+                id: afterClip
+                objectName: "afterClip"
+                anchors.top: primaryImage.top
+                anchors.bottom: primaryImage.bottom
+                x: dividerHandle.x + dividerHandle.width
+                width: (primaryImage.x + primaryImage.width) - x
+                clip: true
+                visible: page._isDeleted
+
+                QQ.Rectangle {
+                    x: primaryImage.x - afterClip.x
+                    width: primaryImage.width
+                    height: primaryImage.height
+                    color: Theme.surfaceMuted
+
+                    QC.Label {
+                        anchors.centerIn: parent
+                        text: qsTr("File was deleted")
+                        font.pixelSize: 14
+                        color: Theme.textSubtle
+                    }
                 }
             }
 
             QQ.Rectangle {
                 id: dividerHandle
-                x: afterImage.x + afterImage.width * page._dividerRatio - width * 0.5
-                anchors.top: afterImage.top
-                anchors.bottom: afterImage.bottom
+                objectName: "dividerHandle"
+                x: primaryImage.x + primaryImage.width * page._dividerRatio - width * 0.5
+                anchors.top: primaryImage.top
+                anchors.bottom: primaryImage.bottom
                 width: 3
                 color: Theme.text
                 opacity: 0.8
-                visible: !page._isAdded
 
                 QQ.Rectangle {
                     anchors.centerIn: parent
@@ -167,24 +237,16 @@ StandardPage {
                     cursorShape: Qt.SplitHCursor
                     drag.target: dividerHandle
                     drag.axis: QQ.Drag.XAxis
-                    drag.minimumX: afterImage.x
-                    drag.maximumX: afterImage.x + afterImage.width - dividerHandle.width
+                    drag.minimumX: primaryImage.x
+                    drag.maximumX: primaryImage.x + primaryImage.width - dividerHandle.width
 
                     onPositionChanged: {
-                        if (drag.active && afterImage.width > 0) {
-                            page._dividerRatio = (dividerHandle.x + dividerHandle.width * 0.5 - afterImage.x)
-                                                 / afterImage.width
+                        if (drag.active && primaryImage.width > 0) {
+                            page._dividerRatio = (dividerHandle.x + dividerHandle.width * 0.5 - primaryImage.x)
+                                                 / primaryImage.width
                         }
                     }
                 }
-            }
-
-            QC.Label {
-                anchors.centerIn: parent
-                text: qsTr("No previous version")
-                visible: page._isAdded
-                font.pixelSize: 14
-                color: Theme.textSubtle
             }
         }
     }

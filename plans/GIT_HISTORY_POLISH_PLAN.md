@@ -41,16 +41,10 @@ Post-implementation issues found during testing of the Git Commit Detail Panel (
 
 **Independent** — Done: Made `fullPathRole` non-required in `LinkBarItem` (fixes delegate creation under `ComponentBehavior: Bound`), added `required property string fullPathRole` to the `LinkBar` delegate (enables model role injection), and simplified diff page names to "Diff" for clean breadcrumbs.
 
-### 8. Image compare broken
-`image://gitcommit/` provider fails with "Invalid image provider". The `-1` parent index in the URL looks wrong.
+### 8. ~~Image compare broken~~ ✅
+~~`image://gitcommit/` provider fails with "Invalid image provider". The `-1` parent index in the URL looks wrong.~~
 
-Error:
-```
-Invalid image provider: image://gitcommit/-1/4b01cae.../path/to/image.jpg
-Invalid image provider: image://gitcommit/-1/9cfe853.../path/to/image.jpg
-```
-
-**Independent**
+**Independent** — Done: The `-1` was `imageProviderRepoId` never being set. Added `imageProviderId` Q_PROPERTY to `GitRepository` that auto-registers with `GitCommitImageProvider` when directory changes. `GitImageComparePage` now reads `repository.imageProviderId` directly.
 
 ### 9. Copy/open file path
 Add ability to copy the file path or open the file/asset from the commit detail file list.
@@ -92,6 +86,11 @@ Rapid-fire `saveFlushCompleted` signals (e.g., editing multiple scraps quickly) 
 
 **Independent**
 
+### 14. Download missing LFS objects for image diff
+When viewing an image diff, the before image may be unavailable because LFS only downloads objects for the currently checked-out files. Add a download button to the "Previous version unavailable" placeholder so users can fetch the missing LFS object on demand. Needs LFS server auth, progress indication, and error handling.
+
+**Independent**
+
 ---
 
 ## Dependency Graph
@@ -102,7 +101,7 @@ Rapid-fire `saveFlushCompleted` signals (e.g., editing multiple scraps quickly) 
   └── 13 (.cw bundle history)
 
   All others are independent:
-  1, 2, 4, 6, 7, 8, 9, 10, 11, 12
+  1, 2, 4, 6, 7, 8, 9, 10, 11, 12, 14
 ```
 
 ## Parallel Work Streams
@@ -110,5 +109,5 @@ Rapid-fire `saveFlushCompleted` signals (e.g., editing multiple scraps quickly) 
 Stream A: **History refresh** — 3, then verify 5 and 13
 Stream B: **History view visuals** — 1, 2, 11, 12
 Stream C: **Commit detail panel** — 4, 6, 9
-Stream D: **Navigation & pages** — 7, 8
+Stream D: **Navigation & pages** — 7, 8, 14
 Stream E: **Testing** — 10
