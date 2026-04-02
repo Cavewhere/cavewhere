@@ -86,7 +86,7 @@ Need test coverage for the GitHistoryPage and its subcomponents.
 
 **Independent** — Done: Extracted `computeModifiedFileCount()` free function that handles `ensureStandardLfsFilterConfig`, status options setup, list creation/cleanup, and `filteredStatusEntryCount`. Both `checkStatus()` and `checkStatusAsync()` now delegate to it.
 
-### 17. Download missing LFS objects for image diff
+### 18. Download missing LFS objects for image diff
 When viewing an image diff, the before image may be unavailable because LFS only downloads objects for the currently checked-out files. Add a download button to the "Previous version unavailable" placeholder so users can fetch the missing LFS object on demand. Needs LFS server auth, progress indication, and error handling.
 
 **Independent**
