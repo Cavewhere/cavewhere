@@ -106,6 +106,11 @@ QC.ApplicationWindow {
 
     ShareDialog {
         id: shareDialogId
+        onSetupRemoteRequested: shareSetupWizardLoaderId.open()
+    }
+
+    SetupRemoteWizardLoader {
+        id: shareSetupWizardLoaderId
     }
 
     ErrorDialog {

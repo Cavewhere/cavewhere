@@ -106,13 +106,26 @@ Item {
             verify(button.enabled, "Copy Link should be enabled when shareLink exists")
         }
 
-        // The explanatory note label is present.
-        function test_noteLabel_present() {
+        // The explanatory note label is hidden when there is no remote (replaced by add remote link).
+        function test_noteLabel_hiddenWhenNoRemote() {
             shareDialogId.open()
             tryVerify(function() { return shareDialogId.visible }, 1000)
 
             const label = findChild(rootId, "shareNoteLabel")
             verify(label !== null, "shareNoteLabel not found")
+            verify(!label.visible, "Note label should be hidden when no remote")
+        }
+
+        // The explanatory note label is visible when a share link exists.
+        function test_noteLabel_visibleWhenShareLinkExists() {
+            setupProjectWithRemote("share-note-label")
+
+            shareDialogId.open()
+            tryVerify(function() { return shareDialogId.visible }, 1000)
+
+            const label = findChild(rootId, "shareNoteLabel")
+            verify(label !== null, "shareNoteLabel not found")
+            verify(label.visible, "Note label should be visible when share link exists")
             verify(label.text.length > 0)
         }
 
@@ -127,6 +140,46 @@ Item {
             verify(link !== null, "inviteCollaboratorsLink not found")
             compare(link.text, "Invite collaborators on GitHub")
             verify(link.visible, "Invite link should be visible")
+        }
+
+        // "Add a remote" link is visible when there is no remote.
+        function test_addRemoteLink_visibleWhenNoRemote() {
+            shareDialogId.open()
+            tryVerify(function() { return shareDialogId.visible }, 1000)
+
+            const link = findChild(rootId, "addRemoteLink")
+            verify(link !== null, "addRemoteLink not found")
+            verify(link.visible, "Add remote link should be visible when no remote")
+        }
+
+        // "Add a remote" link is hidden when a share link exists.
+        function test_addRemoteLink_hiddenWhenShareLinkExists() {
+            setupProjectWithRemote("share-add-remote")
+
+            shareDialogId.open()
+            tryVerify(function() { return shareDialogId.visible }, 1000)
+
+            const link = findChild(rootId, "addRemoteLink")
+            verify(link !== null, "addRemoteLink not found")
+            verify(!link.visible, "Add remote link should be hidden when share link exists")
+        }
+
+        // Clicking "Add a remote" closes the dialog and emits setupRemoteRequested.
+        function test_addRemoteLink_closesDialogAndEmitsSignal() {
+            var signalEmitted = false
+            shareDialogId.setupRemoteRequested.connect(function() {
+                signalEmitted = true
+            })
+
+            shareDialogId.open()
+            tryVerify(function() { return shareDialogId.visible }, 1000)
+
+            const link = findChild(rootId, "addRemoteLink")
+            verify(link !== null, "addRemoteLink not found")
+            mouseClick(link)
+
+            tryVerify(function() { return !shareDialogId.visible }, 1000)
+            verify(signalEmitted, "setupRemoteRequested signal should have been emitted")
         }
 
         // Invite link is hidden when there is no share link.

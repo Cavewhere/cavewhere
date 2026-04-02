@@ -21,6 +21,8 @@ QC.Dialog {
     readonly property bool _hasBrowseUrl: _browseUrl.toString().length > 0
     readonly property bool _hasUnsupportedRemote: !_hasShareLink && _remoteUrl.toString().length > 0
 
+    signal setupRemoteRequested()
+
     DeepLinkHandler { id: _deepLinkHelper }
 
     onOpened: {
@@ -40,11 +42,20 @@ QC.Dialog {
             Layout.fillWidth: true
             text: rootId._hasShareLink
                 ? qsTr("Recipients need repository access for private repositories.")
-                : rootId._hasUnsupportedRemote
-                    ? qsTr("The remote \"%1\" cannot be used for share links. Push to a GitHub, GitLab, or Bitbucket repository to enable sharing.").arg(rootId._remoteUrl)
-                    : qsTr("Add a remote repository to enable sharing.")
+                : qsTr("The remote \"%1\" cannot be used for share links. Push to a GitHub, GitLab, or Bitbucket repository to enable sharing.").arg(rootId._remoteUrl)
+            visible: rootId._hasShareLink || rootId._hasUnsupportedRemote
             wrapMode: QQ.Text.WordWrap
             color: rootId._hasShareLink ? Theme.textSubtle : Theme.warning
+        }
+
+        LinkText {
+            objectName: "addRemoteLink"
+            text: qsTr("Add a remote repository to enable sharing.")
+            visible: !rootId._hasShareLink && !rootId._hasUnsupportedRemote
+            onClicked: {
+                rootId.close()
+                rootId.setupRemoteRequested()
+            }
         }
     }
 
