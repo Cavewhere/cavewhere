@@ -35,7 +35,7 @@ StandardPage {
 
     readonly property string _afterSource: {
         if (page.workingTree)
-            return "file://" + page.repository.directory.path + "/" + page.filePath
+            return "file://" + page.repository.directoryPath + "/" + page.filePath
         return page._gitImageUrl(page.commitSha, page.filePath)
     }
 

@@ -72,10 +72,10 @@ Merges show dangling tails when they are the last commit visible in the git hist
 
 **Independent**
 
-### 13. .cw bundle history
-Make sure history shows correctly for bundled `.cw` archives.
+### 13. ~~.cw bundle history~~ ✅
+~~Make sure history shows correctly for bundled `.cw` archives.~~
 
-**Depends on 3** — likely the same root cause as history not updating after sync. Fix 3 first, then verify.
+**Depends on 3** — Verified: works correctly after fix 3.
 
 ### 14. Uncommitted Changes lane visualization
 The synthetic "Uncommitted Changes" row copies the lanes from the HEAD commit verbatim. The lanes don't terminate, and the result looks wrong — especially when HEAD is a merge commit with multiple active lanes. The synthetic row should have its own lane rendering that cleanly connects to the HEAD commit's active lane without dangling tails from other branches.
