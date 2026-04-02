@@ -61,20 +61,20 @@ Need test coverage for the GitHistoryPage and its subcomponents.
 
 **Independent** — Done: Increased row height from 28→32px and added 4px horizontal margins to the RowLayout in GitHistoryRow.qml.
 
-### 12. Merge tail rendering
-Merges show dangling tails when they are the last commit visible in the git history graph.
+### 12. ~~Merge tail rendering~~ ✅
+~~Merges show dangling tails when they are the last commit visible in the git history graph.~~
 
-**Independent**
+**Independent** — Done: Added `isLastRow` property to `GitGraphLaneItem`. Renderer skips bottom lines and downward Head curves on the last row.
 
 ### 13. ~~.cw bundle history~~ ✅
 ~~Make sure history shows correctly for bundled `.cw` archives.~~
 
 **Depends on 3** — Verified: works correctly after fix 3.
 
-### 14. Uncommitted Changes lane visualization
-The synthetic "Uncommitted Changes" row copies the lanes from the HEAD commit verbatim. The lanes don't terminate, and the result looks wrong — especially when HEAD is a merge commit with multiple active lanes. The synthetic row should have its own lane rendering that cleanly connects to the HEAD commit's active lane without dangling tails from other branches.
+### 14. ~~Uncommitted Changes lane visualization~~ ✅
+~~The synthetic "Uncommitted Changes" row copies the lanes from the HEAD commit verbatim. The lanes don't terminate, and the result looks wrong — especially when HEAD is a merge commit with multiple active lanes. The synthetic row should have its own lane rendering that cleanly connects to the HEAD commit's active lane without dangling tails from other branches.~~
 
-**Independent**
+**Independent** — Done: Added `buildSyntheticLanes()` helper that reduces HEAD's lane types to simple `Active`/`NotActive`/`Empty`, eliminating merge curves and topology-specific artifacts from the synthetic row.
 
 ### 15. ~~Debounce checkStatusAsync on saveFlushCompleted~~ — Skipped
 ~~Rapid-fire `saveFlushCompleted` signals each trigger a full `checkStatusAsync()` call on the thread pool.~~
