@@ -76,15 +76,15 @@ The synthetic "Uncommitted Changes" row copies the lanes from the HEAD commit ve
 
 **Independent**
 
-### 15. Debounce checkStatusAsync on saveFlushCompleted
-Rapid-fire `saveFlushCompleted` signals (e.g., editing multiple scraps quickly) each trigger a full `checkStatusAsync()` call — opening a new `git_repository`, running `git_status_list`, and filtering LFS entries on the thread pool. Use `AsyncFuture::Restarter` to coalesce rapid calls — it already has event-loop debouncing built in (queues the first start via `Qt::QueuedConnection`, subsequent `restart()` calls in the same event loop cycle just update the run function without re-queuing). This would collapse N rapid signals into a single status scan without needing a QML Timer.
+### 15. ~~Debounce checkStatusAsync on saveFlushCompleted~~ — Skipped
+~~Rapid-fire `saveFlushCompleted` signals each trigger a full `checkStatusAsync()` call on the thread pool.~~
 
-**Independent**
+**Independent** — Skipped: Low severity — only fires when history page is visible, runs off the UI thread, and the save system already batches. Not worth adding timer/debounce complexity.
 
-### 16. Extract shared git status helper
-`checkStatus()` and `checkStatusAsync()` in `GitRepository.cpp` duplicate the same status-options setup and `filteredStatusEntryCount` logic. Extract a shared helper that builds the status list and returns the filtered count, then have both functions delegate to it.
+### 16. ~~Extract shared git status helper~~ ✅
+~~`checkStatus()` and `checkStatusAsync()` in `GitRepository.cpp` duplicate the same status-options setup and `filteredStatusEntryCount` logic. Extract a shared helper that builds the status list and returns the filtered count, then have both functions delegate to it.~~
 
-**Independent**
+**Independent** — Done: Extracted `computeModifiedFileCount()` free function that handles `ensureStandardLfsFilterConfig`, status options setup, list creation/cleanup, and `filteredStatusEntryCount`. Both `checkStatus()` and `checkStatusAsync()` now delegate to it.
 
 ### 14. Download missing LFS objects for image diff
 When viewing an image diff, the before image may be unavailable because LFS only downloads objects for the currently checked-out files. Add a download button to the "Previous version unavailable" placeholder so users can fetch the missing LFS object on demand. Needs LFS server auth, progress indication, and error handling.
