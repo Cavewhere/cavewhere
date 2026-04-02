@@ -148,8 +148,7 @@ QC.ApplicationWindow {
         function onOpenRequested(filePath) {
             askToSaveDialogId.taskName = "opening a cloned repository"
             askToSaveDialogId.afterSaveFunc = function() {
-                RootData.project.loadFile(filePath)
-                RootData.pageSelectionModel.gotoPageByName(null, "View")
+                RootData.loadProject(filePath)
                 deepLinkConfirmDialogId.close()
             }
             askToSaveDialogId.askToSave()

@@ -122,8 +122,7 @@ StandardPage {
                                 return;
                             }
                             function loadAndView() {
-                                RootData.project.loadFile(fileResult.value)
-                                RootData.pageSelectionModel.gotoPageByName(null, "View")
+                                RootData.loadProject(fileResult.value)
                             }
                             pageId.askToSaveDialog.taskName = "opening a recent project"
                             pageId.askToSaveDialog.afterSaveFunc = loadAndView

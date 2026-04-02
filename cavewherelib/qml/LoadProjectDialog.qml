@@ -9,9 +9,7 @@ Item {
 
     function handleSelectedFile(path) {
         RootData.lastDirectory = path
-        RootData.pageSelectionModel.clearHistory();
-        RootData.pageSelectionModel.gotoPageByName(null, "View")
-        RootData.project.loadFile(path);
+        RootData.loadProject(path);
         const repoResult = RootData.recentProjectModel.addRepositoryFromProjectFile(path);
         if (repoResult.hasError) {
             console.warn("Failed to add to recent list:", repoResult.errorMessage);

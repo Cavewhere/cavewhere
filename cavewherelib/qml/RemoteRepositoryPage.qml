@@ -146,8 +146,7 @@ StandardPage {
                     authErrorMessage: qsTr("Select a GitHub account below to clone from GitHub.")
                     onReadyToOpen: function(filePath) {
                         function loadAndView() {
-                            RootData.project.loadFile(filePath)
-                            RootData.pageSelectionModel.gotoPageByName(null, "View")
+                            RootData.loadProject(filePath)
                             manualUrlField.textField.text = ""
                         }
                         page.askToSaveDialog.taskName = "opening a cloned repository"

@@ -289,11 +289,26 @@ void cwRootData::newProject()
 {
     PageSelectionModel->clearHistory();
     PageSelectionModel->gotoPageByName(nullptr, "View");
-    // m_keywordItemModel->clear();
-    // if (m_keywordFilterPipelineModel) {
-    //     m_keywordFilterPipelineModel->clear();
-    // }
     Project->newProject();
+}
+
+/**
+ * @brief cwRootData::loadProject
+ * @param fileUrl - The URL of the project file to load
+ *
+ * Centralizes the project loading sequence: clears page history so stale
+ * pages from the previous project aren't reachable, navigates to the View
+ * page, and starts the async file load.
+ *
+ * All code paths that load a project file should use this method to avoid
+ * bugs like issue #369 where forgetting to clear history left old trip
+ * pages accessible after loading a new project.
+ */
+void cwRootData::loadProject(const QString& filename)
+{
+    PageSelectionModel->clearHistory();
+    PageSelectionModel->gotoPageByName(nullptr, "View");
+    Project->loadFile(filename);
 }
 
 int cwRootData::titleBarHeight() const
