@@ -459,15 +459,20 @@ void cwAbstractPointManager::setSelectedItemIndex(int selectedIndex) {
         m_selectedItemIndex = selectedIndex;
 
         //Select the new station item
-        if(selectedIndex >= 0) {
+        if(selectionManager() == nullptr) {
+            qDebug() << "Selection manager isn't set!!!" << LOCATION;
+        } else if(selectedIndex >= 0) {
             QQuickItem* newItem = m_items.at(selectedIndex);
-            if(selectionManager() != nullptr) {
-                selectionManager()->setSelectedItem(newItem);
-            } else {
-                qDebug() << "Selection manager isn't set!!!" << LOCATION;
-            }
+            selectionManager()->setSelectedItem(newItem);
         } else {
-            selectionManager()->setSelectedItem(nullptr); //deselect the current item
+            // Only clear the selection manager if it still points to one of
+            // our items. If the selection has already moved to an item from
+            // a different point manager (e.g. lead vs outline point),
+            // clearing would incorrectly deselect that item.
+            auto* current = selectionManager()->selectedItem();
+            if(current == nullptr || m_items.contains(current)) {
+                selectionManager()->setSelectedItem(nullptr);
+            }
         }
 
         emit selectedItemIndexChanged();
