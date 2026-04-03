@@ -2198,12 +2198,8 @@ TEST_CASE("Remote clone open edit save and sync workflow preserves LFS assets",
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("seed-remote.git"));
 
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
     git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
 
     const QString addRemoteError = sourceRepository->addRemote(QStringLiteral("origin"),
                                                                QUrl::fromLocalFile(remoteRepoPath));
@@ -2458,12 +2454,8 @@ TEST_CASE("cwProject sync pushes local changes to remote repository", "[cwProjec
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
     git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -2691,12 +2683,8 @@ TEST_CASE("cwProject sync succeeds after adding remote through project repositor
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
     git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -2766,12 +2754,8 @@ TEST_CASE("cwProject sync from unborn head creates first commit and pushes branc
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
     git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -3023,12 +3007,8 @@ TEST_CASE("cwProject sync uploads LFS objects through test LFS server", "[cwProj
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote-lfs.git"));
 
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
     git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
 
     auto* repository = project->repository();
     REQUIRE(repository != nullptr);
@@ -3156,12 +3136,7 @@ TEST_CASE("cwProject sync hydrates pulled LFS objects from test LFS server", "[c
     QTemporaryDir remoteRoot;
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("hydration-remote.git"));
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
     const QString addRemoteError = authorRepository->addRemote(QStringLiteral("origin"),
                                                                QUrl::fromLocalFile(remoteRepoPath));
@@ -3361,12 +3336,8 @@ TEST_CASE("cwProject sync pulls remote-only changes into a clean local repo", "[
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
     git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -3525,12 +3496,7 @@ TEST_CASE("cwProject sync reconciles pulled cave updates into memory", "[cwProje
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -3633,12 +3599,7 @@ TEST_CASE("cwProject sync incrementally reconciles pulled note updates without r
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -3768,12 +3729,7 @@ TEST_CASE("cwProject sync incrementally reconciles note updates after remote tri
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -3918,12 +3874,7 @@ TEST_CASE("cwProject sync incrementally reconciles trip rename without note chan
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -4063,12 +4014,7 @@ TEST_CASE("cwProject sync incrementally reconciles remote trip rename with local
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -4215,12 +4161,7 @@ TEST_CASE("cwProject sync incrementally reconciles local trip rename with remote
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -4378,12 +4319,7 @@ TEST_CASE("cwProject sync keeps repository clean for local trip rename with remo
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -4583,12 +4519,7 @@ TEST_CASE("cwProject sync keeps repository clean for remote trip rename with loc
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -5018,12 +4949,7 @@ TEST_CASE("cwProject sync keeps repository clean for local cave rename with remo
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -5281,12 +5207,7 @@ TEST_CASE("cwProject sync keeps repository clean for remote cave rename with loc
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -5537,12 +5458,7 @@ TEST_CASE("cwProject sync incrementally reconciles second fast-forward trip rena
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -5744,12 +5660,7 @@ TEST_CASE("cwProject sync incrementally reconciles remote cave rename with local
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -6061,12 +5972,7 @@ TEST_CASE("cwProject sync incrementally reconciles note asset updates after remo
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -6261,12 +6167,7 @@ TEST_CASE("cwProject sync structurally reconciles note scraps by id without repl
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -6415,12 +6316,7 @@ TEST_CASE("cwProject sync reconciles note order changes without full note-model 
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -6535,12 +6431,7 @@ TEST_CASE("cwProject sync preserves note QObject identity on reorder-only reconc
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -6644,12 +6535,7 @@ TEST_CASE("cwProject sync incrementally reconciles pulled scrap station updates"
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -6770,12 +6656,7 @@ TEST_CASE("cwProject sync incrementally reconciles pulled LiDAR note updates", "
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -6929,12 +6810,7 @@ TEST_CASE("cwProject sync incrementally reconciles LiDAR note updates after remo
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -7085,12 +6961,7 @@ TEST_CASE("cwProject sync incrementally reconciles LiDAR asset updates after rem
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -7277,12 +7148,7 @@ TEST_CASE("cwProject sync falls back to full reconcile for ambiguous scrap struc
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -7396,12 +7262,7 @@ TEST_CASE("cwProject sync handles local edit churn during reconcile apply window
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -7530,12 +7391,8 @@ TEST_CASE("cwProject sync reconciles pulled model changes before pushing local c
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
     git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -7685,12 +7542,7 @@ TEST_CASE("cwProject sync persists pulled id repairs before push", "[cwProject][
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -7848,12 +7700,8 @@ TEST_CASE("cwProject sync rebases and pushes diverged non-conflicting changes", 
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
     git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -8091,12 +7939,8 @@ TEST_CASE("cwProject sync rejects reentry and converges to deterministic head", 
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
     git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -8221,12 +8065,7 @@ TEST_CASE("cwProject sync stress under remote churn retries safely and converges
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -8390,12 +8229,8 @@ TEST_CASE("cwProject sync conflict keeps ours and push succeeds", "[cwProject]")
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
     git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -8538,12 +8373,7 @@ TEST_CASE("cwProject sync blocks pulled newer project version", "[cwProject]") {
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
     const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
                                                          QUrl::fromLocalFile(remoteRepoPath));
@@ -12597,9 +12427,7 @@ TEST_CASE("cwProject syncFinished is emitted on successful sync", "[cwProject][s
     QTemporaryDir remoteRoot;
     REQUIRE(remoteRoot.isValid());
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    git_repository_free(remoteRepo);
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
     REQUIRE(repository->addRemote(QStringLiteral("origin"), QUrl::fromLocalFile(remoteRepoPath)).isEmpty());
 
     project->cavingRegion()->cave(0)->setName(QStringLiteral("Finished Cave Updated"));
@@ -12820,9 +12648,7 @@ struct ShareLinkFixture
             REQUIRE(remoteDir->isValid());
             const QString remoteRepoPath = QDir(remoteDir->path()).filePath(QStringLiteral("remote.git"));
 
-            git_repository* bare = nullptr;
-            REQUIRE(git_repository_init(&bare, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-            git_repository_free(bare);
+            REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
             REQUIRE(project->repository() != nullptr);
             const QString err = project->repository()->addRemote(
@@ -12985,9 +12811,7 @@ TEST_CASE("shareLink prefers origin remote when multiple remotes present", "[Sha
     QTemporaryDir upstreamDir;
     REQUIRE(upstreamDir.isValid());
     const QString upstreamPath = QDir(upstreamDir.path()).filePath(QStringLiteral("upstream.git"));
-    git_repository* bare = nullptr;
-    REQUIRE(git_repository_init(&bare, upstreamPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    git_repository_free(bare);
+    REQUIRE(initBareRepo(upstreamPath) == GIT_OK);
 
     const QString err = f.project->repository()->addRemote(
         QStringLiteral("upstream"),
@@ -13007,9 +12831,7 @@ TEST_CASE("shareLink falls back to first remote when origin absent", "[ShareLink
     QTemporaryDir remoteDir;
     REQUIRE(remoteDir.isValid());
     const QString remotePath = QDir(remoteDir.path()).filePath(QStringLiteral("upstream.git"));
-    git_repository* bare = nullptr;
-    REQUIRE(git_repository_init(&bare, remotePath.toLocal8Bit().constData(), 1) == GIT_OK);
-    git_repository_free(bare);
+    REQUIRE(initBareRepo(remotePath) == GIT_OK);
 
     REQUIRE(f.project->repository() != nullptr);
     const QString err = f.project->repository()->addRemote(

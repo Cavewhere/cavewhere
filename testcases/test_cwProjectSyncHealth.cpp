@@ -117,9 +117,7 @@ TEST_CASE("cwProjectSyncHealth updates status after initRepository on repo with 
     const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("project"));
 
     // --- Phase 1: build a real on-disk git repo that has an origin remote ---
-    git_repository* bareRepo = nullptr;
-    REQUIRE(git_repository_init(&bareRepo, remotePath.toLocal8Bit().constData(), 1) == GIT_OK);
-    git_repository_free(bareRepo);
+    REQUIRE(initBareRepo(remotePath) == GIT_OK);
 
     REQUIRE(QDir().mkpath(projectPath));
 
@@ -180,10 +178,7 @@ TEST_CASE("cwProjectSyncHealth resolves remote ahead/behind asynchronously", "[c
     const QString authorPath = QDir(tempDir.path()).filePath(QStringLiteral("author"));
     const QString peerPath = QDir(tempDir.path()).filePath(QStringLiteral("peer"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remotePath.toLocal8Bit().constData(), 1) == GIT_OK);
-    REQUIRE(remoteRepo != nullptr);
-    git_repository_free(remoteRepo);
+    REQUIRE(initBareRepo(remotePath) == GIT_OK);
 
     REQUIRE(QDir().mkpath(authorPath));
 
@@ -255,9 +250,7 @@ TEST_CASE("cwProjectSyncHealth clears NoRemote after remote is added", "[cwProje
     REQUIRE(tempDir.isValid());
 
     const QString remotePath = QDir(tempDir.path()).filePath(QStringLiteral("remote.git"));
-    git_repository* bareRepo = nullptr;
-    REQUIRE(git_repository_init(&bareRepo, remotePath.toLocal8Bit().constData(), 1) == GIT_OK);
-    git_repository_free(bareRepo);
+    REQUIRE(initBareRepo(remotePath) == GIT_OK);
 
     Account account;
     account.setName(QStringLiteral("Tester"));

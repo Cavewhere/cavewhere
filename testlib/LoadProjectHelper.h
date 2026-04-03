@@ -37,6 +37,12 @@ QString CAVEWHERE_TESTLIB_EXPORT prependTempFolder(QString filename);
 void CAVEWHERE_TESTLIB_EXPORT addTokenManager(cwProject* project);
 
 /**
+ * Creates a bare git repository at \a path with default branch "main".
+ * Returns 0 on success, or a libgit2 error code on failure.
+ */
+int CAVEWHERE_TESTLIB_EXPORT initBareRepo(const QString& path);
+
+/**
  * @brief fileToProject
  * @param filename
  * @return A new project generate from filename

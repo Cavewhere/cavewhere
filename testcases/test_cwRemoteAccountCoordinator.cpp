@@ -25,9 +25,7 @@ TEST_CASE("cwRemoteAccountCoordinator::addRemoteToProject adds remote and skips 
     REQUIRE(tempDir.isValid());
 
     const QString remotePath = QDir(tempDir.path()).filePath(QStringLiteral("remote.git"));
-    git_repository* bare = nullptr;
-    REQUIRE(git_repository_init(&bare, remotePath.toLocal8Bit().constData(), 1) == GIT_OK);
-    git_repository_free(bare);
+    REQUIRE(initBareRepo(remotePath) == GIT_OK);
 
     GitRepository repo;
     repo.setDirectory(QDir(tempDir.path()));
@@ -58,9 +56,7 @@ TEST_CASE("cwRemoteAccountCoordinator::addRemoteToProject emits addRemoteFailed 
     REQUIRE(tempDir.isValid());
 
     const QString remotePath = QDir(tempDir.path()).filePath(QStringLiteral("remote.git"));
-    git_repository* bare = nullptr;
-    REQUIRE(git_repository_init(&bare, remotePath.toLocal8Bit().constData(), 1) == GIT_OK);
-    git_repository_free(bare);
+    REQUIRE(initBareRepo(remotePath) == GIT_OK);
 
     GitRepository repo;
     repo.setDirectory(QDir(tempDir.path()));
@@ -119,9 +115,7 @@ TEST_CASE("cwRemoteAccountCoordinator::addRemoteToProject stores binding when fl
     REQUIRE(tempDir.isValid());
 
     const QString remotePath = QDir(tempDir.path()).filePath(QStringLiteral("remote.git"));
-    git_repository* bare = nullptr;
-    REQUIRE(git_repository_init(&bare, remotePath.toLocal8Bit().constData(), 1) == GIT_OK);
-    git_repository_free(bare);
+    REQUIRE(initBareRepo(remotePath) == GIT_OK);
 
     GitRepository repo;
     repo.setDirectory(QDir(tempDir.path()));
