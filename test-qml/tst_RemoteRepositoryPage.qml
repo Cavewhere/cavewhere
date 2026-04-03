@@ -292,6 +292,45 @@ MainWindowTest {
                     TestHelper.normalizeFileGitUrl(fixture.remoteUrl))
         }
 
+        function test_clone_asksToSave_whenProjectModified() {
+            // Save a project and make it modified so ask-to-save is triggered.
+            const tmpPath = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
+            verify(RootData.project.saveAs(tmpPath + "/remote-ask-save.cwproj"))
+            TestHelper.waitForProjectSaveToFinish(RootData.project)
+            RootData.region.addCave()
+            tryVerify(() => RootData.project.modified, 3000,
+                      "project should become modified after adding a cave")
+
+            let fixture = TestHelper.createLocalBareRemoteForCloneTest()
+            compare(fixture.errorMessage, "")
+            RootData.recentProjectModel.defaultRepositoryDir = TestHelper.toLocalUrl(fixture.cloneParentPath)
+
+            let manualUrlField = findChild(mainWindow, "remoteManualUrlField")
+            verify(manualUrlField !== null)
+            manualUrlField.textField.text = fixture.remoteUrl
+
+            let cloneButton = findChild(mainWindow, "remoteCloneButton")
+            verify(cloneButton !== null)
+            mouseClick(cloneButton)
+
+            // Clone completes → AskToSaveDialog appears before loading.
+            // Access via the injected dialog instance in MainWindowTest.
+            let askToSaveDialog = findChild(rootId, "mainWindowTestAskToSaveDialog")
+            verify(askToSaveDialog !== null, "mainWindowTestAskToSaveDialog not found")
+            tryVerify(() => {
+                return askToSaveDialog._dialog !== null
+                       && askToSaveDialog._dialog.askToSaveDialog.visible
+            }, 20000, "AskToSaveDialog should appear after clone completes")
+
+            askToSaveDialog._dialog.askToSaveDialog.discarded()
+
+            // Cloned project should open in View.
+            tryVerify(() => {
+                return RootData.project.filename.indexOf(fixture.expectedClonePath) >= 0
+            }, 10000, "cloned project should be loaded")
+            compare(RootData.pageSelectionModel.currentPageAddress, "View")
+        }
+
         function test_clone_retryAfterFailure() {
             // Use a bad URL first — should fail fast with a connection/protocol error.
             let fixture = TestHelper.createLocalBareRemoteForCloneTest()

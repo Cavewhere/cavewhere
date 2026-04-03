@@ -27,6 +27,90 @@
 #include "cwTrip.h"
 #include "cwStationPositionLookup.h"
 #include "cwJobSettings.h"
+#include "cwFutureManagerModel.h"
+#include "cwLinePlotManager.h"
+#include "cwNoteLiDARStation.h"
+
+TEST_CASE("cwNoteLiDARManager no crash when caves cleared during triangulation", "[cwNoteLiDARManager][Issue371]")
+{
+    cwJobSettings::initialize();
+
+    auto root = std::make_unique<cwRootData>();
+    REQUIRE(root != nullptr);
+
+    TestHelper helper;
+    helper.loadProjectFromZip(root->project(), QStringLiteral(":/datasets/lidarProjects/jaws of the beast.zip"));
+    root->project()->waitLoadToFinish();
+    root->futureManagerModel()->waitForFinished();
+    root->linePlotManager()->waitToFinish();
+
+    auto* region = root->region();
+    REQUIRE(region != nullptr);
+    REQUIRE(region->caveCount() == 1);
+
+    auto* cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    REQUIRE(cave->tripCount() == 1);
+
+    auto* trip = cave->trip(0);
+    auto* lidarModel = trip->notesLiDAR();
+    REQUIRE(lidarModel != nullptr);
+    REQUIRE(cave->stationPositionLookup().positions().size() == 10);
+
+    const QString lidarFile = helper.copyToTempDir(QStringLiteral(":/datasets/lidarProjects/9_15_2025 3.glb"));
+    REQUIRE_FALSE(lidarFile.isEmpty());
+
+    QSignalSpy rowsInsertedSpy(lidarModel, &QAbstractItemModel::rowsInserted);
+    lidarModel->addFromFiles({ QUrl::fromLocalFile(lidarFile) });
+    root->futureManagerModel()->waitForFinished();
+    if (rowsInsertedSpy.isEmpty()) {
+        rowsInsertedSpy.wait(1000);
+    }
+
+    REQUIRE(lidarModel->rowCount() == 1);
+    const QModelIndex firstIndex = lidarModel->index(0, 0);
+    QObject* noteObject = lidarModel->data(firstIndex, cwSurveyNoteModelBase::NoteObjectRole).value<QObject*>();
+    auto* note = qobject_cast<cwNoteLiDAR*>(noteObject);
+    REQUIRE(note != nullptr);
+
+    // Add stations to trigger triangulation
+    const struct { const char* name; QVector3D pos; } stations[] = {
+        {"6", QVector3D(0.19147f, -0.720703f, -2.15723f)},
+        {"7", QVector3D(3.51028f, -0.0917969f, 5.39945f)},
+        {"5", QVector3D(-3.48475f, -1.92188f, -3.38263f)}
+    };
+
+    auto* manager = root->noteLiDARManager();
+    REQUIRE(manager != nullptr);
+
+    for (const auto& s : stations) {
+        cwNoteLiDARStation station;
+        station.setName(QString::fromUtf8(s.name));
+        station.setPositionOnNote(s.pos);
+        note->addStation(station);
+    }
+
+    // Dispatch queued startRun so triangulation begins on the thread pool
+    QCoreApplication::processEvents();
+
+    // Simulate opening a new file while triangulation is in flight.
+    // newProject() clears caves and the undo stack, which queues
+    // deleteLater on caves/trips/notes.
+    root->project()->newProject();
+
+    // Flush deferred deletes so the old notes are destroyed while
+    // the triangulation future is still in flight. Without the fix,
+    // the callback accesses the freed cwNoteLiDAR* pointers (ASan
+    // heap-buffer-overflow).
+    QCoreApplication::processEvents();
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+
+    manager->waitForFinish();
+    root->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+
+    CHECK(region->caveCount() == 0);
+}
 
 TEST_CASE("cwNoteLiDARManager applies declination for manual north", "[cwNoteLiDARManager]")
 {

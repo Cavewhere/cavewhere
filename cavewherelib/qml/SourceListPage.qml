@@ -9,6 +9,8 @@ import QQuickGit
 StandardPage {
     id: pageId
 
+    required property AskToSaveDialog askToSaveDialog
+
     ColumnLayout {
         width: listViewId.implicitWidth
         anchors.top: parent.top
@@ -48,14 +50,14 @@ StandardPage {
                     objectName: "addMenuOpen"
                     text: "Open"
                     onTriggered: {
-                        const openDialog = function() {
+                        function openDialog() {
                             RootData.pageSelectionModel.currentPageAddress = "Source";
                             loadProjectDialogId.loadFileDialog.open();
                         }
 
-                        askToSaveDialogId.taskName = "opening a project"
-                        askToSaveDialogId.afterSaveFunc = openDialog
-                        askToSaveDialogId.askToSave()
+                        pageId.askToSaveDialog.taskName = "opening a project"
+                        pageId.askToSaveDialog.afterSaveFunc = openDialog
+                        pageId.askToSaveDialog.askToSave()
                     }
                 }
 
@@ -109,6 +111,7 @@ StandardPage {
 
                     LinkText {
                         id: linkTextId
+                        objectName: "repoLinkText_" + delegateId.index
                         Layout.fillWidth: true
                         text: delegateId.nameRole
                         elide: Text.ElideRight
@@ -119,8 +122,12 @@ StandardPage {
                                 console.warn("Failed to open repository:", fileResult.errorMessage)
                                 return;
                             }
-                            RootData.project.loadFile(fileResult.value)
-                            RootData.pageSelectionModel.gotoPageByName(null, "View")
+                            function loadAndView() {
+                                RootData.loadProject(fileResult.value)
+                            }
+                            pageId.askToSaveDialog.taskName = "opening a recent project"
+                            pageId.askToSaveDialog.afterSaveFunc = loadAndView
+                            pageId.askToSaveDialog.askToSave()
                         }
                     }
 
@@ -166,16 +173,6 @@ StandardPage {
     SourceLocationDialog {
         id: whereDialogId
         anchors.fill: parent
-    }
-
-    SaveAsDialog {
-        id: saveAsDialogId
-    }
-
-    AskToSaveDialog {
-        id: askToSaveDialogId
-        saveAsDialog: saveAsDialogId
-        taskName: "opening a project"
     }
 
     LoadProjectDialog {

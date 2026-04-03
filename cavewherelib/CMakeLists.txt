@@ -157,13 +157,13 @@ file(GLOB cavewherelib_H_FILES CONFIGURE_DEPENDS "src/*.h" "src/utils/*.h" "src/
 
 # Make the file paths relative to the project directory
 set(cavewhere_RELATIVE_CPP_FILES "")
-foreach(file ${cavewhere_CPP_FILES})
+foreach(file ${cavewherelib_CPP_FILES})
     file(RELATIVE_PATH relFile "${CMAKE_CURRENT_SOURCE_DIR}" "${file}")
     list(APPEND cavewhere_RELATIVE_CPP_FILES "${relFile}")
 endforeach()
 
 set(cavewhere_RELATIVE_H_FILES "")
-foreach(file ${cavewhere_H_FILES})
+foreach(file ${cavewherelib_H_FILES})
     file(RELATIVE_PATH relFile "${CMAKE_CURRENT_SOURCE_DIR}" "${file}")
     list(APPEND cavewhere_RELATIVE_H_FILES "${relFile}")
 endforeach()

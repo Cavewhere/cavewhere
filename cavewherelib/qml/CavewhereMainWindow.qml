@@ -40,6 +40,7 @@ QC.ApplicationWindow {
         saveAsFileDialog: saveAsFileDialogId
         loadFileDialog: loadDialogId.loadFileDialog
         askToSaveDialog: askToSaveDialogId
+        onShareRequested: shareDialogId.open()
     }
 
     QQ.Loader {
@@ -73,6 +74,7 @@ QC.ApplicationWindow {
         sourceComponent: MainContent {
             anchors.fill: parent
             fileMenu: windowsLinuxFileMenuLoader.item
+            askToSaveDialog: askToSaveDialogId
         }
     }
 
@@ -102,6 +104,15 @@ QC.ApplicationWindow {
         id: saveAsFileDialogId
     }
 
+    ShareDialog {
+        id: shareDialogId
+        onSetupRemoteRequested: shareSetupWizardLoaderId.open()
+    }
+
+    SetupRemoteWizardLoader {
+        id: shareSetupWizardLoaderId
+    }
+
     ErrorDialog {
         id: projectErrorDialog
         model: RootData.project.errorModel
@@ -119,6 +130,29 @@ QC.ApplicationWindow {
 
     SaveFeedbackHelpBox {
         anchors.centerIn: parent
+    }
+
+    DeepLinkConfirmDialog {
+        id: deepLinkConfirmDialogId
+    }
+
+    QQ.Connections {
+        target: RootData.deepLinkHandler
+        function onOpenRepoRequested(url) {
+            deepLinkConfirmDialogId.open(url)
+        }
+    }
+
+    QQ.Connections {
+        target: deepLinkConfirmDialogId
+        function onOpenRequested(filePath) {
+            askToSaveDialogId.taskName = "opening a cloned repository"
+            askToSaveDialogId.afterSaveFunc = function() {
+                RootData.loadProject(filePath)
+                deepLinkConfirmDialogId.close()
+            }
+            askToSaveDialogId.askToSave()
+        }
     }
 
     LfsMissingFilesBanner {
@@ -163,5 +197,10 @@ QC.ApplicationWindow {
 
     QQ.Component.onCompleted: {
         screenSizeSaverId.resize();
+
+        // Drain any deep-link URL that arrived before QML was loaded (Windows cold start)
+        var pending = RootData.deepLinkHandler.takePendingUrl()
+        if (pending.toString() !== "")
+            deepLinkConfirmDialogId.open(pending)
     }
 }

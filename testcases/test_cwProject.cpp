@@ -12723,7 +12723,6 @@ TEST_CASE("cwProject emits lfsFilesNeedSync when LFS pointers are unhydrated", "
         CHECK(lfsSpy.count() == 0);
     }
 }
-
 TEST_CASE("safeCommitAll commits changes and refreshes status", "[cwProject][safeCommitAll]")
 {
     auto rootData = std::make_unique<cwRootData>();
@@ -12782,4 +12781,244 @@ TEST_CASE("safeCommitAll commits changes and refreshes status", "[cwProject][saf
 
         CHECK(project->errorModel()->count() == 0);
     }
+}
+
+// ---- Share Link Tests -------------------------------------------------------
+
+#include "cwDeepLinkHandler.h"
+#include <QUrlQuery>
+
+namespace {
+
+// Set up a cwProject saved as GitFileType with an optional local remote,
+// returns the project and a QTemporaryDir that must outlive the project.
+struct ShareLinkFixture
+{
+    std::unique_ptr<QTemporaryDir> saveDir = std::make_unique<QTemporaryDir>();
+    std::unique_ptr<QTemporaryDir> remoteDir;
+    QQuickGit::Account account;
+    std::unique_ptr<cwProject> project = std::make_unique<cwProject>();
+
+    enum RemoteType { NoRemote, LocalRemote, CustomRemote };
+
+    explicit ShareLinkFixture(RemoteType remoteType = NoRemote,
+                              const QString& customRemoteUrl = {})
+    {
+        REQUIRE(saveDir->isValid());
+        account.setName(QStringLiteral("ShareLink Tester"));
+        account.setEmail(QStringLiteral("sharelink@example.com"));
+        project->setGitAccount(&account);
+        addTokenManager(project.get());
+
+        const QString savePath = saveDir->filePath(QStringLiteral("sharelink-test.cwproj"));
+        REQUIRE(project->saveAs(savePath));
+        project->waitSaveToFinish();
+        REQUIRE(project->fileType() == cwProject::GitFileType);
+
+        if (remoteType == LocalRemote) {
+            remoteDir = std::make_unique<QTemporaryDir>();
+            REQUIRE(remoteDir->isValid());
+            const QString remoteRepoPath = QDir(remoteDir->path()).filePath(QStringLiteral("remote.git"));
+
+            git_repository* bare = nullptr;
+            REQUIRE(git_repository_init(&bare, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
+            git_repository_free(bare);
+
+            REQUIRE(project->repository() != nullptr);
+            const QString err = project->repository()->addRemote(
+                QStringLiteral("origin"),
+                QUrl::fromLocalFile(remoteRepoPath));
+            REQUIRE(err.isEmpty());
+        } else if (remoteType == CustomRemote) {
+            REQUIRE(project->repository() != nullptr);
+            const QString err = project->repository()->addRemote(
+                QStringLiteral("origin"),
+                customRemoteUrl);
+            REQUIRE(err.isEmpty());
+        }
+    }
+};
+
+} // namespace
+
+TEST_CASE("shareLink returns empty when project has no remote", "[ShareLink]")
+{
+    ShareLinkFixture f;
+    CHECK(f.project->remoteUrl().isEmpty());
+    CHECK(f.project->shareLink().isEmpty());
+}
+
+TEST_CASE("remoteUrl returns origin remote URL", "[ShareLink]")
+{
+    ShareLinkFixture f(ShareLinkFixture::LocalRemote);
+    const QUrl url = f.project->remoteUrl();
+    CHECK(!url.isEmpty());
+    CHECK(url.isLocalFile()); // local bare repo used in test
+}
+
+TEST_CASE("shareLink generates correct https://cavewhere.com/open?repo=... URL", "[ShareLink]")
+{
+    ShareLinkFixture f(ShareLinkFixture::CustomRemote,
+                       QStringLiteral("https://github.com/TestUser/TestRepo.git"));
+    const QUrl link = f.project->shareLink();
+    REQUIRE(!link.isEmpty());
+    CHECK(link.scheme() == QStringLiteral("https"));
+    CHECK(link.host() == QStringLiteral("cavewhere.com"));
+    CHECK(link.path() == QStringLiteral("/open"));
+
+    const QUrlQuery query(link);
+    CHECK(query.hasQueryItem(QStringLiteral("repo")));
+    const QString repoParam = query.queryItemValue(QStringLiteral("repo"), QUrl::FullyDecoded);
+    CHECK(repoParam == QStringLiteral("https://github.com/TestUser/TestRepo.git"));
+}
+
+TEST_CASE("shareLink converts SSH remote to HTTPS", "[ShareLink]")
+{
+    ShareLinkFixture f(ShareLinkFixture::CustomRemote,
+                       QStringLiteral("ssh://git@github.com/TestUser/TestRepo.git"));
+    const QUrl link = f.project->shareLink();
+    REQUIRE(!link.isEmpty());
+
+    const QUrlQuery query(link);
+    const QString repoParam = query.queryItemValue(QStringLiteral("repo"), QUrl::FullyDecoded);
+    CHECK(repoParam == QStringLiteral("https://github.com/TestUser/TestRepo.git"));
+}
+
+TEST_CASE("shareLink converts SCP-style remote to HTTPS", "[ShareLink]")
+{
+    ShareLinkFixture f(ShareLinkFixture::CustomRemote,
+                       QStringLiteral("git@github.com:TestUser/TestRepo.git"));
+    const QUrl link = f.project->shareLink();
+    REQUIRE(!link.isEmpty());
+
+    const QUrlQuery query(link);
+    const QString repoParam = query.queryItemValue(QStringLiteral("repo"), QUrl::FullyDecoded);
+    CHECK(repoParam == QStringLiteral("https://github.com/TestUser/TestRepo.git"));
+}
+
+TEST_CASE("shareLink returns empty for unsupported host", "[ShareLink]")
+{
+    ShareLinkFixture f(ShareLinkFixture::CustomRemote,
+                       QStringLiteral("https://example.com/user/repo.git"));
+    CHECK(!f.project->remoteUrl().isEmpty());
+    CHECK(f.project->shareLink().isEmpty());
+}
+
+TEST_CASE("shareLink returns empty for local file remote", "[ShareLink]")
+{
+    ShareLinkFixture f(ShareLinkFixture::LocalRemote);
+    CHECK(!f.project->remoteUrl().isEmpty());
+    CHECK(f.project->shareLink().isEmpty());
+}
+
+TEST_CASE("remoteBrowseUrl returns HTTPS for SSH remote", "[ShareLink]")
+{
+    ShareLinkFixture f(ShareLinkFixture::CustomRemote,
+                       QStringLiteral("ssh://git@github.com/TestUser/TestRepo.git"));
+    const QUrl url = f.project->remoteBrowseUrl();
+    CHECK(url.scheme() == QStringLiteral("https"));
+    CHECK(url.host() == QStringLiteral("github.com"));
+    CHECK(url.path() == QStringLiteral("/TestUser/TestRepo.git"));
+    CHECK(url.userName().isEmpty());
+}
+
+TEST_CASE("remoteBrowseUrl returns HTTPS for SCP-style remote", "[ShareLink]")
+{
+    ShareLinkFixture f(ShareLinkFixture::CustomRemote,
+                       QStringLiteral("git@github.com:TestUser/TestRepo.git"));
+    const QUrl url = f.project->remoteBrowseUrl();
+    CHECK(url.scheme() == QStringLiteral("https"));
+    CHECK(url.host() == QStringLiteral("github.com"));
+    CHECK(url.path() == QStringLiteral("/TestUser/TestRepo.git"));
+}
+
+TEST_CASE("remoteBrowseUrl returns empty for local file remote", "[ShareLink]")
+{
+    ShareLinkFixture f(ShareLinkFixture::LocalRemote);
+    CHECK(f.project->remoteBrowseUrl().isEmpty());
+}
+
+TEST_CASE("remoteBrowseUrl returns empty when no remote configured", "[ShareLink]")
+{
+    ShareLinkFixture f;
+    CHECK(f.project->remoteBrowseUrl().isEmpty());
+}
+
+TEST_CASE("shareLink round-trip: output parses back to original repo URL via cwDeepLinkHandler", "[ShareLink]")
+{
+    // Use a synthetic HTTPS GitHub URL (no real remote needed) to test that
+    // shareLink() encodes the repo URL in a form that cwDeepLinkHandler can decode.
+    const QUrl repoUrl(QStringLiteral("https://github.com/user/testrepo"));
+
+    // Build a shareLink the same way cwProject::shareLink() does
+    QUrl shareLink;
+    shareLink.setScheme(QStringLiteral("https"));
+    shareLink.setHost(QStringLiteral("cavewhere.com"));
+    shareLink.setPath(QStringLiteral("/open"));
+    {
+        QUrlQuery q;
+        q.addQueryItem(QStringLiteral("repo"), repoUrl.toString(QUrl::FullyEncoded));
+        shareLink.setQuery(q);
+    }
+
+    // Convert https://cavewhere.com/open?repo=... to cavewhere://open?repo=...
+    // which is what cwDeepLinkHandler::handleUrl() expects
+    QUrl handlerUrl;
+    handlerUrl.setScheme(QStringLiteral("cavewhere"));
+    handlerUrl.setHost(QStringLiteral("open"));
+    handlerUrl.setQuery(shareLink.query());
+
+    cwDeepLinkHandler handler;
+    QUrl receivedUrl;
+    QObject::connect(&handler, &cwDeepLinkHandler::openRepoRequested,
+                     [&](const QUrl& url) { receivedUrl = url; });
+
+    handler.handleUrl(handlerUrl);
+    CHECK(receivedUrl == repoUrl);
+}
+
+TEST_CASE("shareLink prefers origin remote when multiple remotes present", "[ShareLink]")
+{
+    ShareLinkFixture f(ShareLinkFixture::LocalRemote); // adds "origin"
+
+    // Add a second remote "upstream"
+    QTemporaryDir upstreamDir;
+    REQUIRE(upstreamDir.isValid());
+    const QString upstreamPath = QDir(upstreamDir.path()).filePath(QStringLiteral("upstream.git"));
+    git_repository* bare = nullptr;
+    REQUIRE(git_repository_init(&bare, upstreamPath.toLocal8Bit().constData(), 1) == GIT_OK);
+    git_repository_free(bare);
+
+    const QString err = f.project->repository()->addRemote(
+        QStringLiteral("upstream"),
+        QUrl::fromLocalFile(upstreamPath));
+    REQUIRE(err.isEmpty());
+
+    const QUrl originUrl = f.project->repository()->remoteUrl(QStringLiteral("origin"));
+    const QUrl remoteUrl = f.project->remoteUrl();
+    CHECK(remoteUrl == originUrl);
+}
+
+TEST_CASE("shareLink falls back to first remote when origin absent", "[ShareLink]")
+{
+    ShareLinkFixture f; // no remote yet
+
+    // Add a remote named "upstream" (not "origin")
+    QTemporaryDir remoteDir;
+    REQUIRE(remoteDir.isValid());
+    const QString remotePath = QDir(remoteDir.path()).filePath(QStringLiteral("upstream.git"));
+    git_repository* bare = nullptr;
+    REQUIRE(git_repository_init(&bare, remotePath.toLocal8Bit().constData(), 1) == GIT_OK);
+    git_repository_free(bare);
+
+    REQUIRE(f.project->repository() != nullptr);
+    const QString err = f.project->repository()->addRemote(
+        QStringLiteral("upstream"),
+        QUrl::fromLocalFile(remotePath));
+    REQUIRE(err.isEmpty());
+
+    // origin is absent — remoteUrl() should fall back to the first (only) remote
+    const QUrl url = f.project->remoteUrl();
+    CHECK(!url.isEmpty());
+    CHECK(url == QUrl::fromLocalFile(remotePath));
 }

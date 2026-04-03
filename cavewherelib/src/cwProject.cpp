@@ -29,12 +29,15 @@
 #include "cwConcurrent.h"
 #include "cwSaveLoad.h"
 #include "cwZip.h"
+#include "cwDeepLinkHandler.h"
+#include "GitUtilities.h"
 #include "cwNote.h"
 #include "cwNoteLiDAR.h"
 #include "cwProjectSyncHealth.h"
 
 //Quick Git
 #include <GitRepository.h>
+#include <GitRemoteInfo.h>
 
 //Qt includes
 #include <QDir>
@@ -55,6 +58,7 @@
 #include <QSqlRecord>
 #include <QTemporaryDir>
 #include <QDirIterator>
+#include <QUrlQuery>
 
 //Async Future
 #include <asyncfuture.h>
@@ -559,6 +563,53 @@ std::optional<cwSaveLoad::SyncReport> cwProject::lastSyncReport() const
 QQuickGit::GitRepository* cwProject::repository() const
 {
     return m_saveLoad->repository();
+}
+
+QString cwProject::rawRemoteUrlString() const
+{
+    auto* repo = repository();
+    if (!repo)
+        return {};
+    QString raw = repo->rawRemoteUrl(QStringLiteral("origin"));
+    if (!raw.isEmpty())
+        return raw;
+    const auto remoteList = repo->remotes();
+    if (!remoteList.isEmpty())
+        return repo->rawRemoteUrl(remoteList.first().name());
+    return {};
+}
+
+QUrl cwProject::remoteUrl() const
+{
+    const QString raw = rawRemoteUrlString();
+    return raw.isEmpty() ? QUrl() : QQuickGit::GitUtilities::fixGitUrl(raw);
+}
+
+QUrl cwProject::remoteBrowseUrl() const
+{
+    const QString raw = rawRemoteUrlString();
+    if (raw.isEmpty())
+        return {};
+    return QQuickGit::GitUtilities::httpsUrlFromRemoteUrl(raw);
+}
+
+QUrl cwProject::shareLink() const
+{
+    const QUrl repoUrl = remoteBrowseUrl();
+    if (repoUrl.isEmpty())
+        return {};
+
+    if (!cwDeepLinkHandler::isHostAllowed(repoUrl.host()))
+        return {};
+
+    QUrl link;
+    link.setScheme(QStringLiteral("https"));
+    link.setHost(QStringLiteral("cavewhere.com"));
+    link.setPath(QStringLiteral("/open"));
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("repo"), repoUrl.toString(QUrl::FullyEncoded));
+    link.setQuery(query);
+    return link;
 }
 
 bool cwProject::saveWillCauseDataLoss() const

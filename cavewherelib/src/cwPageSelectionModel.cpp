@@ -488,6 +488,7 @@ void cwPageSelectionModel::clearHistory()
 
     CurrentPage.clear();
     PageHistory.clear();
+    CurrentPageIndex = 0;
 }
 
 /**

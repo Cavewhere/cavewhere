@@ -128,6 +128,10 @@ public:
                                              BranchResetMode resetMode = BranchResetMode::Hard);
 
     std::optional<cwSaveLoad::SyncReport> lastSyncReport() const;
+
+    Q_INVOKABLE QUrl remoteUrl() const;
+    Q_INVOKABLE QUrl remoteBrowseUrl() const;
+    Q_INVOKABLE QUrl shareLink() const;
     Q_INVOKABLE bool saveAs(QString newFilename);
     Q_INVOKABLE bool deleteTemporaryProject();
     Q_INVOKABLE bool isNewEmptyProject() const;
@@ -214,6 +218,7 @@ public slots:
     void loadFile(QString filename);
 
 private:
+    QString rawRemoteUrlString() const;
     bool beginSyncOperation(const QFuture<Monad::ResultBase>& operationFuture);
     void setModified(bool modified);
 

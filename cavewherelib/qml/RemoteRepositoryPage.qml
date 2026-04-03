@@ -12,6 +12,7 @@ StandardPage {
 
     property GitHubIntegration gitHub: RootData.remote.gitHubIntegration
     property RemoteAccountCoordinator remoteAccountCoordinator: RootData.remote.accountCoordinator
+    required property AskToSaveDialog askToSaveDialog
 
     state: "none"
     states: [
@@ -87,56 +88,6 @@ StandardPage {
         }
     ]
 
-    readonly property url cloneDestinationParentFolder: {
-        if (cloneDestinationDialog.selectedFolder.toString() !== "") {
-            return cloneDestinationDialog.selectedFolder
-        }
-        if (cloneDestinationDialog.currentFolder.toString() !== "") {
-            return cloneDestinationDialog.currentFolder
-        }
-        return RootData.recentProjectModel.defaultRepositoryDir
-    }
-    readonly property string cloneDestinationRepoName: remoteRepositoryCloner.repositoryNameFromUrl(manualUrlField.textField.text)
-    readonly property string cloneDestinationPathText: {
-        const parentPath = RootData.urlToLocal(cloneDestinationParentFolder)
-        if (parentPath.length === 0) {
-            return repoName
-        }
-        if(cloneDestinationRepoName.length === 0) {
-            return parentPath
-        }
-
-        const separator = parentPath.endsWith("/") || parentPath.endsWith("\\") ? "" : "/"
-        return parentPath + separator + cloneDestinationRepoName
-    }
-
-    RemoteRepositoryCloner {
-        id: remoteRepositoryCloner
-        recentProjectModel: RootData.recentProjectModel
-        cloneWatcher: cloneWatcher
-        account: RootData.account
-        gitHubIntegration: RootData.remote.gitHubIntegration
-
-        onRepositoryClonedIndex: function(clonedIndex) {
-            if (clonedIndex < 0) {
-                console.warn("Cloned repository not found in model.")
-                return
-            }
-
-            const fileResult = RootData.recentProjectModel.repositoryProjectFile(clonedIndex)
-            if (fileResult.hasError) {
-                console.warn("Failed to open cloned repository:", fileResult.errorMessage)
-                return
-            }
-            RootData.project.loadFile(fileResult.value)
-
-            RootData.pageSelectionModel.gotoPageByName(null, "View")
-        }
-
-        onRepositoryClonedWithRemote: function(repositoryPath, remoteUrl) {
-            remoteAccountCoordinator.bindRemoteToActiveGitHubAccount(remoteUrl)
-        }
-    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -181,67 +132,28 @@ StandardPage {
                     QC.Button {
                         id: cloneButton
                         objectName: "remoteCloneButton"
-                        text: cloneWatcher.state === GitFutureWatcher.Loading ? "Cloning..." : "Clone"
-                        enabled: manualUrlField.textField.text.length > 0
-                                 && cloneWatcher.state !== GitFutureWatcher.Loading
+                        text: cloneAreaId.isCloning ? "Cloning..." : "Clone"
+                        enabled: manualUrlField.textField.text.length > 0 && !cloneAreaId.isCloning
                         transformOrigin: Item.Center
-                        onClicked: {
-                            remoteRepositoryCloner.clone(manualUrlField.textField.text, page.cloneDestinationParentFolder)
-                        }
+                        onClicked: cloneAreaId.clone()
                     }
                 }
 
-                RowLayout {
+                CloneArea {
+                    id: cloneAreaId
                     Layout.fillWidth: true
-
-                    Text {
-                        text: "Destination:"
-                        color: Theme.textSubtle
-                    }
-
-                    LinkText {
-                        Layout.fillWidth: true
-                        elide: Text.ElideLeft
-                        text: page.cloneDestinationPathText
-                        onClicked: {
-                            cloneDestinationDialog.open()
+                    urlText: manualUrlField.textField.text
+                    authErrorMessage: qsTr("Select a GitHub account below to clone from GitHub.")
+                    onReadyToOpen: function(filePath) {
+                        function loadAndView() {
+                            RootData.loadProject(filePath)
+                            manualUrlField.textField.text = ""
                         }
+                        page.askToSaveDialog.taskName = "opening a cloned repository"
+                        page.askToSaveDialog.afterSaveFunc = loadAndView
+                        page.askToSaveDialog.askToSave()
                     }
                 }
-            }
-        }
-
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 6
-            visible: cloneWatcher.state === GitFutureWatcher.Loading
-                     || remoteRepositoryCloner.cloneErrorMessage.length > 0
-                     || remoteRepositoryCloner.cloneStatusMessage.length > 0
-
-            QC.ProgressBar {
-                Layout.fillWidth: true
-                visible: cloneWatcher.state === GitFutureWatcher.Loading
-                from: 0
-                to: 1
-                value: cloneWatcher.progress
-            }
-
-            Text {
-                objectName: "remoteCloneStatusText"
-                Layout.fillWidth: true
-                visible: remoteRepositoryCloner.cloneStatusMessage.length > 0
-                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-                color: Theme.textSecondary
-                text: remoteRepositoryCloner.cloneStatusMessage
-            }
-
-            ErrorHelpArea {
-                objectName: "remoteCloneErrorArea"
-                Layout.fillWidth: true
-                text: remoteRepositoryCloner.cloneFailedDueToAuthError
-                      ? qsTr("Select a GitHub account below to clone from GitHub.")
-                      : remoteRepositoryCloner.cloneErrorMessage
-                visible: remoteRepositoryCloner.cloneErrorMessage.length > 0
             }
         }
 
@@ -592,12 +504,6 @@ StandardPage {
         // Item { Layout.fillHeight: true }
     }
 
-    FolderDialog {
-        id: cloneDestinationDialog
-        currentFolder: RootData.recentProjectModel.defaultRepositoryDir
-        selectedFolder: currentFolder
-    }
-
     SequentialAnimation {
         id: cloneButtonPulse
         loops: 2
@@ -621,9 +527,5 @@ StandardPage {
         onStopped: cloneButton.scale = 1.0
     }
 
-    GitFutureWatcher {
-        id: cloneWatcher
-        initialProgressText: "Cloning"
-    }
 
 }

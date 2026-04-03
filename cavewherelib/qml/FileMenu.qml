@@ -16,6 +16,8 @@ QC.Menu {
 
     title: "File"
 
+    signal shareRequested()
+
     // Resize the window to the provided aspect ratio and largest dimension without exceeding the screen.
     function resizeTo(widthRatio, heightRatio, largestDimPixels)
     {
@@ -92,6 +94,14 @@ QC.Menu {
         onTriggered:{
             fileMenuId.saveAsFileDialog.open()
         }
+    }
+
+    QC.MenuItem {
+        objectName: "shareMenuItem"
+        text: qsTr("Share...")
+        enabled: RootData.project.fileType === Project.GitFileType
+              && !RootData.project.syncHealth.status.noRemote
+        onTriggered: fileMenuId.shareRequested()
     }
 
     QC.MenuSeparator {}

@@ -721,6 +721,7 @@ void cwNoteLiDARManager::disconnectTrip(cwTrip* trip)
             disconnect(note, &QObject::destroyed, this, &cwNoteLiDARManager::noteDestroyed);
             disconnect(note->noteTransformation(), nullptr, this, nullptr);
             disconnect(note, nullptr, this, nullptr);
+            m_deletedNotes.insert(note);
             m_dirtyNotes.remove(note);
             removeKeywordItemForNote(note);
             m_noteToRender.remove(note);

@@ -26,6 +26,7 @@
 #include "cwPageSelectionModel.h"
 #include "cwSettings.h"
 #include "cwRemoteServices.h"
+#include "cwDeepLinkHandler.h"
 // #include "cwImageCompressionUpdater.h"
 #include "cwJobSettings.h"
 #include "cwSurveyNoteModel.h"
@@ -286,13 +287,32 @@ QUrl cwRootData::cavewhereImageUrl(const cwImage& image, const QString& absolute
 
 void cwRootData::newProject()
 {
+    prepareForProjectSwitch();
+    Project->newProject();
+}
+
+/**
+ * @brief cwRootData::loadProject
+ * @param filename - The path of the project file to load
+ *
+ * All code paths that load a project file should use this method to avoid
+ * bugs like issue #369 where forgetting to clear history left old trip
+ * pages accessible after loading a new project.
+ */
+void cwRootData::loadProject(const QString& filename)
+{
+    prepareForProjectSwitch();
+    Project->loadFile(filename);
+}
+
+/**
+ * Clears page history and navigates to the View page so stale pages from
+ * the previous project aren't reachable via sidebar or back/forward.
+ */
+void cwRootData::prepareForProjectSwitch()
+{
     PageSelectionModel->clearHistory();
     PageSelectionModel->gotoPageByName(nullptr, "View");
-    // m_keywordItemModel->clear();
-    // if (m_keywordFilterPipelineModel) {
-    //     m_keywordFilterPipelineModel->clear();
-    // }
-    Project->newProject();
 }
 
 int cwRootData::titleBarHeight() const
@@ -400,4 +420,12 @@ cwRemoteServices* cwRootData::remote() const
         m_remoteServices = new cwRemoteServices(const_cast<cwRootData*>(this));
     }
     return m_remoteServices;
+}
+
+cwDeepLinkHandler* cwRootData::deepLinkHandler() const
+{
+    if (!m_deepLinkHandler) {
+        m_deepLinkHandler = new cwDeepLinkHandler(const_cast<cwRootData*>(this));
+    }
+    return m_deepLinkHandler;
 }
