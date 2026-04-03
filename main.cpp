@@ -16,6 +16,7 @@
 #include <QCommandLineParser>
 #include <QFileInfo>
 #include <QtQml/qqml.h>
+#include <qpa/qplatformwindow.h>
 
 //Our includes
 //#include "cwMainWindow.h"
@@ -189,6 +190,20 @@ int main(int argc, char *argv[])
 
     //Handle command line args
     handleCommandline(a, rootData);
+
+    //QPlatformWindow is needed because QQuickWindow has no public windowModified API
+    if (!applicationEngine->rootObjects().isEmpty()) {
+        auto* mainWindow = qobject_cast<QQuickWindow*>(applicationEngine->rootObjects().first());
+        if (mainWindow) {
+            auto updateModified = [mainWindow, rootData]() {
+                if (auto* platformWindow = mainWindow->handle()) {
+                    platformWindow->setWindowModified(rootData->project()->modified());
+                }
+            };
+            QObject::connect(rootData->project(), &cwProject::modifiedChanged,
+                             mainWindow, updateModified);
+        }
+    }
 
     //Handles when the user clicks on a file in Finder(Mac OS X) or Explorer (Windows)
     cwOpenFileEventHandler* openFileHandler = new cwOpenFileEventHandler(&a);
