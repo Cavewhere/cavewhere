@@ -351,7 +351,10 @@ void cwRegionLoadTask::loadTripCalibration(const CavewhereProto::TripCalibration
     tripCalibration->setTapeCalibration(protoTripCalibration.tapecalibration());
     tripCalibration->setFrontCompassCalibration(protoTripCalibration.frontcompasscalibration());
     tripCalibration->setFrontClinoCalibration(protoTripCalibration.frontclinocalibration());
-    tripCalibration->setBackCompassCalibration(protoTripCalibration.backcompassscalibration());
+    tripCalibration->setBackCompassCalibration(
+        protoTripCalibration.has_backcompasscalibration()
+            ? protoTripCalibration.backcompasscalibration()
+            : protoTripCalibration.legacy_backcompassscalibration());
     tripCalibration->setBackClinoCalibration(protoTripCalibration.backclinocalibration());
     tripCalibration->setDeclination(protoTripCalibration.declination());
     tripCalibration->setDistanceUnit((cwUnits::LengthUnit)protoTripCalibration.distanceunit());
@@ -540,7 +543,7 @@ cwNoteStation cwRegionLoadTask::loadNoteStation(const CavewhereProto::NoteStatio
  * @param protoNoteTransformation
  * @param noteTransformation
  */
-void cwRegionLoadTask::loadNoteTranformation(const CavewhereProto::NoteTranformation& protoNoteTransformation, cwNoteTranformation *noteTransformation)
+void cwRegionLoadTask::loadNoteTranformation(const CavewhereProto::NoteTransformation& protoNoteTransformation, cwNoteTranformation *noteTransformation)
 {
     noteTransformation->setNorthUp(protoNoteTransformation.northup());
     loadLength(protoNoteTransformation.scalenumerator(), noteTransformation->scaleNumerator());

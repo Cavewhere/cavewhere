@@ -47,7 +47,7 @@ namespace CavewhereProto {
     class Scrap;
     class ImageResolution;
     class NoteStation;
-    class NoteTranformation;
+    class NoteTransformation;
     class TriangulatedData;
     class Length;
     class TeamMember;
@@ -139,7 +139,7 @@ private:
     void loadImageResolution(const CavewhereProto::ImageResolution& protoImageRes,
                              cwImageResolution* imageResolution);
     cwNoteStation loadNoteStation(const CavewhereProto::NoteStation& protoNoteStation);
-    void loadNoteTranformation(const CavewhereProto::NoteTranformation& protoNoteTransformation,
+    void loadNoteTranformation(const CavewhereProto::NoteTransformation& protoNoteTransformation,
                                cwNoteTranformation* noteTransformation);
     cwTriangulatedData loadTriangulatedData(const CavewhereProto::TriangulatedData& protoTriangulatedData);
     void loadLength(const CavewhereProto::Length& protoLength,

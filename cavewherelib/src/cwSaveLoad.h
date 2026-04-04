@@ -55,7 +55,7 @@ class Image;
 class Scrap;
 class ImageResolution;
 class NoteStation;
-class NoteTranformation;
+class NoteTransformation;
 class TriangulatedData;
 class Length;
 class TeamMember;
@@ -476,7 +476,7 @@ private:
     static cwScrapData fromProtoScrap(const CavewhereProto::Scrap& protoScrap);
     static cwNoteStation fromProtoNoteStation(const CavewhereProto::NoteStation& protoNoteStation);
     static cwLead fromProtoLead(const CavewhereProto::Lead& protoLead);
-    static cwNoteTransformationData fromProtoNoteTransformation(const CavewhereProto::NoteTranformation& protoNoteTransform);
+    static cwNoteTransformationData fromProtoNoteTransformation(const CavewhereProto::NoteTransformation& protoNoteTransform);
     static cwNoteLiDARTransformationData fromProtoLiDARNoteTransformation(const CavewhereProto::NoteLiDARTransformation& protoNoteTransform);
     static cwLength::Data fromProtoLength(const CavewhereProto::Length& protoLength);
     static std::unique_ptr<cwProjectedProfileScrapViewMatrix::Data> fromProtoProjectedScraptViewMatrix(const CavewhereProto::ProjectedProfileScrapViewMatrix protoViewMatrix);

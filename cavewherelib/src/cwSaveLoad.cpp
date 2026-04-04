@@ -4344,7 +4344,10 @@ cwTripCalibrationData cwSaveLoad::fromProtoTripCalibration(const CavewhereProto:
     tripCalibration.setTapeCalibration(proto.tapecalibration());
     tripCalibration.setFrontCompassCalibration(proto.frontcompasscalibration());
     tripCalibration.setFrontClinoCalibration(proto.frontclinocalibration());
-    tripCalibration.setBackCompassCalibration(proto.backcompassscalibration());
+    tripCalibration.setBackCompassCalibration(
+        proto.has_backcompasscalibration()
+            ? proto.backcompasscalibration()
+            : proto.legacy_backcompassscalibration());
     tripCalibration.setBackClinoCalibration(proto.backclinocalibration());
     tripCalibration.setDeclination(proto.declination());
     tripCalibration.setDistanceUnit((cwUnits::LengthUnit)proto.distanceunit());
@@ -4585,7 +4588,7 @@ cwLead cwSaveLoad::fromProtoLead(const CavewhereProto::Lead &protoLead)
     return lead;
 }
 
-cwNoteTransformationData cwSaveLoad::fromProtoNoteTransformation(const CavewhereProto::NoteTranformation &protoNoteTransform)
+cwNoteTransformationData cwSaveLoad::fromProtoNoteTransformation(const CavewhereProto::NoteTransformation &protoNoteTransform)
 {
     cwNoteTransformationData data;
 

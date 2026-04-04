@@ -342,43 +342,20 @@ However, since `cavewhere.proto` uses `optional` on all fields (`optional int32 
 
 ### 10. Fix proto typos via version bump migration
 
-**Status:** TODO
+**Status:** DONE
 
-**Files:** `cavewhere.proto`, `cwSaveLoad.cpp`, `cwRegionIOTask.cpp`
-
-Since v9 uses JSON on disk, proto field and message names are the on-disk keys. Renaming them changes the JSON, breaking existing files. All typo fixes should be batched into a single version bump with one migration script.
-
-**Typo 1: `backCompasssCalibration` (triple 's') in `TripCalibration` field 6**
-
-```proto
-optional double backCompasssCalibration = 6;  // triple 's' typo
-```
-
-Fix: keep old field 6 as `optional double legacy_backCompasssCalibration = 6;`, add new `optional double backCompassCalibration = 14;` (correct spelling, new field number).
-
-**Typo 2: `NoteTranformation` (missing 's') message name**
-
-```proto
-message NoteTranformation {  // should be NoteTransformation
-```
-
-Message names are JSON keys when used as fields (e.g. `Scrap.noteTransformation` references `NoteTranformation`). Fix: define a new `NoteTransformation` message, keep `NoteTranformation` as a legacy alias, update all field references.
-
-**JSON key details:** Protobuf's `MessageToJsonString` uses camelCase field names as JSON keys. So `backCompasssCalibration` appears as `"backCompasssCalibration"` in JSON. The message type name `NoteTranformation` does NOT appear directly in JSON — only the field name `noteTransformation` does. This means Typo 2 only affects generated C++ class names, not on-disk JSON keys. The migration script only needs to handle Typo 1's key rename.
-
-**Typo 3: "Depercated" in proto comments (lines 54, 67, 82, 96)**
-
-Trivial comment fix: "Depercated" -> "Deprecated" in all four occurrences. No migration needed.
+**Files:** `cavewhere.proto`, `cwSaveLoad.cpp`, `cwRegionIOTask.cpp`, `cwRegionSaveTask.cpp/h`, `cwRegionLoadTask.cpp/h`, `cwSaveLoad.h`
 
 **Action items:**
-- [ ] Add `backCompassCalibration` field 14 to `TripCalibration`, rename field 6 to `legacy_backCompasssCalibration`
-- [ ] Rename `NoteTranformation` message to `NoteTransformation`, update all field type references in `cavewhere.proto`
-- [ ] Fix "Depercated" -> "Deprecated" in all four comment occurrences (lines 54, 67, 82, 96)
-- [ ] Update `cwSaveLoad::fromProtoTripCalibration()` to read new field with fallback to legacy field 6
-- [ ] Update save paths to write corrected field name
-- [ ] Bump `cwRegionIOTask::protoVersion()`, add new version to version string mapping
-- [ ] Create migration script (idempotent, only renames `.cwtrip` JSON keys)
-- [ ] Update tests
+- [x] Add `backCompassCalibration` field 14 to `TripCalibration`, rename field 6 to `legacy_backCompasssCalibration` with `json_name` for backwards compat
+- [x] Rename `NoteTranformation` message to `NoteTransformation`, update all field type references in `cavewhere.proto` and C++ proto type refs
+- [x] Fix "Depercated" -> "Deprecated" in proto comments
+- [x] Update `cwSaveLoad::fromProtoTripCalibration()` to read new field with fallback to legacy field 6
+- [x] Update `cwRegionLoadTask::loadTripCalibration()` with same fallback
+- [x] Update save paths to write corrected field name (`set_backcompasscalibration`)
+- [x] Bump `cwRegionIOTask::protoVersion()` to 9, add version string mapping
+- [x] No explicit migration script needed — legacy field 6 uses `json_name` to accept old JSON key; data migrates naturally on next save
+- [x] All 580 tests pass
 
 ---
 

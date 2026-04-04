@@ -50,7 +50,7 @@ namespace CavewhereProto {
     class Scrap;
     class ImageResolution;
     class NoteStation;
-    class NoteTranformation;
+    class NoteTransformation;
     class TriangulatedData;
     class Length;
     class TeamMember;
@@ -116,7 +116,7 @@ public:
                              cwImageResolution* imageResolution);
     static void saveNoteStation(CavewhereProto::NoteStation* protoNoteStation,
                          const cwNoteStation& noteStation);
-    static void saveNoteTranformation(CavewhereProto::NoteTranformation* protoNoteTransformation,
+    static void saveNoteTranformation(CavewhereProto::NoteTransformation* protoNoteTransformation,
                                       cwAbstractNoteTransformation *noteTransformation);
     static void saveTriangulatedData(CavewhereProto::TriangulatedData* protoTriangulatedData,
                               const cwTriangulatedData& triangluatedData);

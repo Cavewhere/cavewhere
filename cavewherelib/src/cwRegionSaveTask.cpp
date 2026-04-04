@@ -182,7 +182,7 @@ void cwRegionSaveTask::saveTripCalibration(CavewhereProto::TripCalibration *prot
     proto->set_tapecalibration(tripCalibration->tapeCalibration());
     proto->set_frontcompasscalibration(tripCalibration->frontCompassCalibration());
     proto->set_frontclinocalibration(tripCalibration->frontClinoCalibration());
-    proto->set_backcompassscalibration(tripCalibration->backCompassCalibration());
+    proto->set_backcompasscalibration(tripCalibration->backCompassCalibration());
     proto->set_backclinocalibration(tripCalibration->backClinoCalibration());
     proto->set_declination(tripCalibration->declination());
     proto->set_distanceunit((CavewhereProto::Units_LengthUnit)tripCalibration->distanceUnit());
@@ -343,7 +343,7 @@ void cwRegionSaveTask::saveNoteStation(CavewhereProto::NoteStation* protoNoteSta
  * @param protoNoteTransformation
  * @param noteTransformation
  */
-void cwRegionSaveTask::saveNoteTranformation(CavewhereProto::NoteTranformation *protoNoteTransformation,
+void cwRegionSaveTask::saveNoteTranformation(CavewhereProto::NoteTransformation *protoNoteTransformation,
                                              cwAbstractNoteTransformation *noteTransformation)
 {
     protoNoteTransformation->set_northup(noteTransformation->northUp());

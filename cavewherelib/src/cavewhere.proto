@@ -51,7 +51,7 @@ message Cave {
     optional bool stationPositionLookupStale = 6;
     optional SurveyNetwork network = 7;
 
-    //Depercated types, don't use
+    //Deprecated types, don't use
     optional QtProto.QString legacy_name = 1;
 }
 
@@ -64,7 +64,7 @@ message Trip {
     repeated SurveyChunk chunks = 5;
     optional Team team = 6;
 
-    //Depercated types, don't use
+    //Deprecated types, don't use
     optional SurveyNoteModel noteModel = 3; //Notes are loaded independantly from files
     optional QtProto.QString legacy_name = 1;
 }
@@ -79,7 +79,7 @@ message Station {
     optional DistanceReading legacy_upReading = 12;
     optional DistanceReading legacy_downReading = 13;
 
-    //Depercated types, don't use
+    //Deprecated types, don't use
     optional QtProto.QString legacy_name = 1;
 
     //---- Version <= 5 attributes, don't use, legacy
@@ -135,7 +135,8 @@ message TripCalibration {
     optional double tapeCalibration = 3;
     optional double frontCompassCalibration = 4;
     optional double frontClinoCalibration = 5;
-    optional double backCompasssCalibration = 6;
+    optional double legacy_backCompasssCalibration = 6 [json_name = "backCompasssCalibration"];
+    optional double backCompassCalibration = 14;
     optional double backClinoCalibration= 7;
     optional double declination = 8;
     optional Units.LengthUnit distanceUnit = 9;
@@ -243,7 +244,7 @@ message Scrap {
     optional string id = 9; //Uuid
     repeated QtProto.QPointF outlinePoints = 1;
     repeated NoteStation noteStations = 2;
-    optional NoteTranformation noteTransformation = 3;
+    optional NoteTransformation noteTransformation = 3;
     optional bool calculateNoteTransform = 4;
     repeated Lead leads = 6;
     optional ScrapType type = 7;
@@ -272,7 +273,7 @@ message NoteStation {
     optional QtProto.QString legacy_name = 1;
 }
 
-message NoteTranformation {
+message NoteTransformation {
     optional double northUp = 1;
     optional Length scaleNumerator = 2;
     optional Length scaleDenominator = 3;
@@ -395,7 +396,7 @@ message NoteLiDARTransformation {
         ZisUp = 3;
     };
 
-    optional NoteTranformation planTransform = 1;
+    optional NoteTransformation planTransform = 1;
     optional UpMode upMode = 2;
     optional float upSign = 3;
     optional QtProto.QQuaternion upCustom = 4;
