@@ -58,6 +58,17 @@ QC.Dialog {
         }
     }
 
+    // Normalized save path for actual file I/O. In bundle mode this ensures the
+    // path always ends with exactly one ".cw" extension, even if the user typed
+    // no extension or ".cwproj".  In directory mode it equals resolvedSavePath.
+    readonly property string _effectiveSavePath: {
+        if (bundleFormat) {
+            return _normalizeBundleFilePath(resolvedSavePath)
+        } else {
+            return resolvedSavePath
+        }
+    }
+
     // ── Conflict detection ────────────────────────────────────────────────────
 
     // Sanitized pending name — cached so all downstream bindings share one evaluation.
@@ -145,10 +156,10 @@ QC.Dialog {
         if (RootData.project.isTemporaryProject) {
             RootData.region.name = _pendingName
         }
-        if (RootData.project.saveAs(resolvedSavePath)) {
+        if (RootData.project.saveAs(_effectiveSavePath)) {
             // Pass the saved file so setLastDirectory strips the filename and
             // stores the correct containing directory.
-            RootData.lastDirectory = Qt.resolvedUrl("file://" + resolvedSavePath)
+            RootData.lastDirectory = Qt.resolvedUrl("file://" + _effectiveSavePath)
         }
     }
 

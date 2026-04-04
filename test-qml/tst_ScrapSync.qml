@@ -13,6 +13,11 @@ MainWindowTest {
         name: "ScrapSync"
         when: windowShown
 
+        function init() {
+            RootData.account.name = "Scrap Sync Test"
+            RootData.account.email = "scrap.sync.test@example.com"
+        }
+
         function cleanup() {
             RootData.pageSelectionModel.gotoPageByName(null, "View")
             tryVerifyWithDiagnostics(() => {

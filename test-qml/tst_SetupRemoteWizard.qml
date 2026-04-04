@@ -136,6 +136,13 @@ MainWindowTest {
             tryVerify(() => findChild(w, "connectButton").enabled, 2000)
         }
 
+        function clickConnectButton(w) {
+            let btn = findChild(w, "connectButton")
+            verify(btn !== null)
+            tryVerify(() => btn.enabled, 2000)
+            btn.clicked()
+        }
+
         function test_pathC_connectLocalBareRepo_reachesDoneState() {
             let fixture = TestHelper.createLocalBareRemoteForCloneTest()
             compare(fixture.errorMessage, "")
@@ -145,8 +152,7 @@ MainWindowTest {
             tryVerify(() => w.currentState === "connectRepo", 2000)
             mouseClick(findChild(w, "customUrlTab"))
             findChild(w, "customUrlField").text = fixture.remoteUrl
-            tryVerify(() => findChild(w, "connectButton").enabled, 2000)
-            mouseClick(findChild(w, "connectButton"))
+            clickConnectButton(w)
 
             tryVerify(() => w.currentState === "done", 10000)
         }
@@ -160,8 +166,7 @@ MainWindowTest {
             tryVerify(() => w.currentState === "connectRepo", 2000)
             mouseClick(findChild(w, "customUrlTab"))
             findChild(w, "customUrlField").text = fixture.remoteUrl
-            tryVerify(() => findChild(w, "connectButton").enabled, 2000)
-            mouseClick(findChild(w, "connectButton"))
+            clickConnectButton(w)
             tryVerify(() => w.currentState === "done", 10000)
 
             let syncNowButton = findChild(w, "syncNowButton")
@@ -183,8 +188,7 @@ MainWindowTest {
             tryVerify(() => w.currentState === "connectRepo", 2000)
             mouseClick(findChild(w, "customUrlTab"))
             findChild(w, "customUrlField").text = fixture.remoteUrl
-            tryVerify(() => findChild(w, "connectButton").enabled, 2000)
-            mouseClick(findChild(w, "connectButton"))
+            clickConnectButton(w)
 
             tryVerify(() => w.connectForm.errorMessage !== "", 5000)
             compare(w.currentState, "connectRepo")

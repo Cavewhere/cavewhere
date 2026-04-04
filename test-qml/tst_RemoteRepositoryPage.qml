@@ -593,7 +593,7 @@ MainWindowTest {
             mouseClick(syncButton, syncButton.width / 2, syncButton.height / 2, Qt.RightButton)
             let syncNowItem = findChild(syncButton, "syncNowMenuItem")
             verify(syncNowItem !== null)
-            verify(!syncNowItem.enabled)
+            verify(!syncNowItem.visible)
         }
 
         // Helper: load a project with a local remote configured.

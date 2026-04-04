@@ -85,6 +85,7 @@ MainWindowTest {
             wait(200)
 
             let typeComboBox = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->noteTransformEditor->typeComboBox")
+            tryVerify(() => typeComboBox.model !== null)
             for(let i = 0; i < typeComboBox.model.length; i++) {
                 if(typeComboBox.model[i] === "Plan") {
                     typeComboBox.currentIndex = i

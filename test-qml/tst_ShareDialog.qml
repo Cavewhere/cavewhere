@@ -56,7 +56,7 @@ Item {
 
             // Wait for syncHealth to reflect the absence of a remote.
             tryVerify(function() {
-                return RootData.project.syncHealth.status.noRemote === true
+                return RootData.project.syncHealth.status.hasRemote === false
             }, 5000)
 
             compare(RootData.project.shareLink().toString(), "")
@@ -78,7 +78,7 @@ Item {
             setupProjectWithRemote("share-remote-health")
 
             tryVerify(function() {
-                return RootData.project.syncHealth.status.noRemote === false
+                return RootData.project.syncHealth.status.hasRemote === true
             }, 5000)
         }
 

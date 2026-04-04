@@ -13,6 +13,11 @@ MainWindowTest {
         name: "LiDARSync"
         when: windowShown
 
+        function init() {
+            RootData.account.name = "LiDAR Sync Test"
+            RootData.account.email = "lidar.sync.test@example.com"
+        }
+
         function cleanup() {
             RootData.pageSelectionModel.gotoPageByName(null, "View")
             tryVerifyWithDiagnostics(() => {
