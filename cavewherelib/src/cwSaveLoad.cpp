@@ -794,15 +794,18 @@ static Result<ProtoType> loadMessage(const QByteArray& content, const QString& s
     }
 
     ProtoType proto;
-    if (!proto.ParseFromArray(content.constData(), content.size())) {
-        const std::string jsonPayload(content.constData(),
-                                      static_cast<size_t>(content.size()));
-        const auto status = google::protobuf::util::JsonStringToMessage(jsonPayload, &proto);
-        if (!status.ok()) {
-            return Result<ProtoType>(
-                QStringLiteral("Failed to parse %1: %2")
-                    .arg(sourceLabel, QString::fromStdString(std::string(status.message()))));
-        }
+    const std::string jsonPayload(content.constData(),
+                                  static_cast<size_t>(content.size()));
+    static const auto parseOptions = [] {
+        google::protobuf::util::JsonParseOptions opts;
+        opts.ignore_unknown_fields = true;
+        return opts;
+    }();
+    const auto status = google::protobuf::util::JsonStringToMessage(jsonPayload, &proto, parseOptions);
+    if (!status.ok()) {
+        return Result<ProtoType>(
+            QStringLiteral("Failed to parse %1: %2")
+                .arg(sourceLabel, QString::fromStdString(std::string(status.message()))));
     }
 
     return Result<ProtoType>(proto);
@@ -1451,9 +1454,9 @@ struct cwSaveLoad::Data {
         if (!dir.exists()) {
             bool success = dir.mkpath(".");
             if(success) {
-                ResultBase();
+                return ResultBase();
             } else {
-                ResultBase(QStringLiteral("Couldn't create directory:") + dir.absolutePath());
+                return ResultBase(QStringLiteral("Couldn't create directory:") + dir.absolutePath());
             }
         }
         return ResultBase();
@@ -3149,6 +3152,8 @@ std::unique_ptr<CavewhereProto::Cave> cwSaveLoad::toProtoCave(const cwCave *cave
     if (!cave->id().isNull()) {
         *(protoCave->mutable_id()) = uuidToProtoString(cave->id()).toStdString();
     }
+    protoCave->set_lengthunit(static_cast<CavewhereProto::Units_LengthUnit>(cave->length()->unit()));
+    protoCave->set_depthunit(static_cast<CavewhereProto::Units_LengthUnit>(cave->depth()->unit()));
     return protoCave;
 }
 
@@ -3871,6 +3876,12 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
                 if (caveProto.has_id()) {
                     cave.id = toUuid(caveProto.id());
                 }
+                cave.lengthUnit = caveProto.has_lengthunit()
+                    ? static_cast<cwUnits::LengthUnit>(caveProto.lengthunit())
+                    : cwUnits::Meters;
+                cave.depthUnit = caveProto.has_depthunit()
+                    ? static_cast<cwUnits::LengthUnit>(caveProto.depthunit())
+                    : cwUnits::Meters;
 
                 // Load all trips for this cave
                 QDir caveDir = caveFileInfo.absoluteDir();
@@ -4214,8 +4225,8 @@ cwTripCalibrationData cwSaveLoad::fromProtoTripCalibration(const CavewhereProto:
     tripCalibration.setBackClinoCalibration(proto.backclinocalibration());
     tripCalibration.setDeclination(proto.declination());
     tripCalibration.setDistanceUnit((cwUnits::LengthUnit)proto.distanceunit());
-    tripCalibration.setFrontSights(proto.frontsights());
-    tripCalibration.setBackSights(proto.backsights());
+    tripCalibration.setFrontSights(proto.has_frontsights() ? proto.frontsights() : true);
+    tripCalibration.setBackSights(proto.has_backsights() ? proto.backsights() : false);
     return tripCalibration;
 }
 
@@ -5066,6 +5077,12 @@ void cwSaveLoad::connectCave(cwCave *cave)
     d->connectionChecker.add(cave);
 
     connect(cave, &cwCave::nameChanged, this, saveCaveName);
+
+    auto saveCaveUnits = [cave, this]() {
+        d->saveObject(this, cave);
+    };
+    connect(cave->length(), &cwUnitValue::unitChanged, this, saveCaveUnits);
+    connect(cave->depth(), &cwUnitValue::unitChanged, this, saveCaveUnits);
 }
 
 
@@ -5449,9 +5466,8 @@ QString cwSaveLoad::sanitizeFileName(QString input) {
     }
 
     input = input.trimmed();
-    while (input.startsWith('.') || input.endsWith('.')) {
-        input = input.mid(1).chopped(1);
-    }
+    while (input.startsWith('.')) input = input.mid(1);
+    while (input.endsWith('.'))  input.chop(1);
 
     if (input.isEmpty()) {
         input = "untitled";

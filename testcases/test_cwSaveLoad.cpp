@@ -2609,3 +2609,226 @@ TEST_CASE("cwProject restoreToCommit restores project data to a previous save", 
         CHECK(repo->modifiedFileCount() == 0);
     }
 }
+
+// ---------------------------------------------------------------------------
+// #1 forward-compat: unknown JSON fields must not cause parse failure
+// ---------------------------------------------------------------------------
+namespace {
+bool injectUnknownJsonField(const QString& filePath, const QString& key, const QJsonValue& value)
+{
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly)) return false;
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    file.close();
+
+    if (!doc.isObject()) return false;
+    QJsonObject root = doc.object();
+    root[key] = value;
+
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) return false;
+    file.write(QJsonDocument(root).toJson());
+    return true;
+}
+}
+
+TEST_CASE("loadAll succeeds when entity files contain unknown JSON fields", "[cwSaveLoad]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    cave->setName(QStringLiteral("ForwardCompatCave"));
+    cave->addTrip();
+    cave->trip(0)->setName(QStringLiteral("ForwardCompatTrip"));
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("ForwardCompat.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    const QString savedProjectFile = project->filename();
+
+    SECTION("Unknown field in cave file loads successfully") {
+        auto caveFiles = findEntityFiles(QFileInfo(savedProjectFile).absolutePath(), {QStringLiteral("*.cwcave")});
+        REQUIRE(caveFiles.size() == 1);
+        REQUIRE(injectUnknownJsonField(caveFiles.first(), QStringLiteral("futureFieldFromV10"), QStringLiteral("some value")));
+
+        auto loadFuture = cwSaveLoad::loadAll(savedProjectFile);
+        REQUIRE(AsyncFuture::waitForFinished(loadFuture, 10000));
+        REQUIRE_FALSE(loadFuture.result().hasError());
+
+        const auto& loadData = loadFuture.result().value();
+        CHECK(loadData.region.caves.size() == 1);
+        CHECK(loadData.region.caves.first().name == QStringLiteral("ForwardCompatCave"));
+    }
+
+    SECTION("Unknown field in trip file loads successfully") {
+        auto tripFiles = findEntityFiles(QFileInfo(savedProjectFile).absolutePath(), {QStringLiteral("*.cwtrip")});
+        REQUIRE(tripFiles.size() == 1);
+        REQUIRE(injectUnknownJsonField(tripFiles.first(), QStringLiteral("futureFieldFromV10"), 42));
+
+        auto loadFuture = cwSaveLoad::loadAll(savedProjectFile);
+        REQUIRE(AsyncFuture::waitForFinished(loadFuture, 10000));
+        REQUIRE_FALSE(loadFuture.result().hasError());
+
+        const auto& loadData = loadFuture.result().value();
+        CHECK(loadData.region.caves.first().trips.size() == 1);
+    }
+
+    SECTION("Unknown field in project file loads successfully") {
+        auto projFiles = findEntityFiles(QFileInfo(savedProjectFile).absolutePath(), {QStringLiteral("*.cwproj")});
+        REQUIRE(projFiles.size() == 1);
+        REQUIRE(injectUnknownJsonField(projFiles.first(), QStringLiteral("futureFieldFromV10"), true));
+
+        auto loadFuture = cwSaveLoad::loadAll(savedProjectFile);
+        REQUIRE(AsyncFuture::waitForFinished(loadFuture, 10000));
+        REQUIRE_FALSE(loadFuture.result().hasError());
+    }
+
+    SECTION("Unknown field combined with bumped version triggers warning but still loads") {
+        auto caveFiles = findEntityFiles(QFileInfo(savedProjectFile).absolutePath(), {QStringLiteral("*.cwcave")});
+        REQUIRE(caveFiles.size() == 1);
+        REQUIRE(injectUnknownJsonField(caveFiles.first(), QStringLiteral("futureFieldFromV10"), QStringLiteral("data")));
+        REQUIRE(bumpFileVersion(caveFiles.first(), cwRegionIOTask::protoVersion() + 1));
+
+        auto loadFuture = cwSaveLoad::loadAll(savedProjectFile);
+        REQUIRE(AsyncFuture::waitForFinished(loadFuture, 10000));
+        REQUIRE_FALSE(loadFuture.result().hasError());
+
+        const auto& loadData = loadFuture.result().value();
+        // Data loads despite unknown field
+        CHECK(loadData.region.caves.size() == 1);
+        // Version warning is present
+        REQUIRE(loadData.errors.size() == 1);
+        CHECK(loadData.errors.first().type() == cwError::Warning);
+        CHECK(loadData.errors.first().message().contains(QStringLiteral("newer version")));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// #3 sanitizeFileName: edge cases for the dot-stripping bug fix
+// ---------------------------------------------------------------------------
+TEST_CASE("sanitizeFileName dot-stripping edge cases", "[cwSaveLoad]") {
+    SECTION("Leading dot only: .X -> X") {
+        CHECK(cwSaveLoad::sanitizeFileName(QStringLiteral(".X")) == QStringLiteral("X"));
+    }
+
+    SECTION("Trailing dot only: X. -> X") {
+        CHECK(cwSaveLoad::sanitizeFileName(QStringLiteral("X.")) == QStringLiteral("X"));
+    }
+
+    SECTION("Both ends: ..foo.. -> foo") {
+        CHECK(cwSaveLoad::sanitizeFileName(QStringLiteral("..foo..")) == QStringLiteral("foo"));
+    }
+
+    SECTION("All dots: ... -> untitled") {
+        CHECK(cwSaveLoad::sanitizeFileName(QStringLiteral("...")) == QStringLiteral("untitled"));
+    }
+
+    SECTION("Single leading dot: .hidden -> hidden") {
+        CHECK(cwSaveLoad::sanitizeFileName(QStringLiteral(".hidden")) == QStringLiteral("hidden"));
+    }
+
+    SECTION("Interior dots preserved: a.b.c -> a.b.c") {
+        CHECK(cwSaveLoad::sanitizeFileName(QStringLiteral("a.b.c")) == QStringLiteral("a.b.c"));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// #4 cave unit round-trip and missing-field default
+// ---------------------------------------------------------------------------
+namespace {
+bool removeJsonField(const QString& filePath, const QString& key)
+{
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly)) return false;
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    file.close();
+
+    if (!doc.isObject()) return false;
+    QJsonObject root = doc.object();
+    root.remove(key);
+
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) return false;
+    file.write(QJsonDocument(root).toJson());
+    return true;
+}
+}
+
+TEST_CASE("Cave lengthUnit and depthUnit survive save-load round-trip", "[cwSaveLoad]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    cave->setName(QStringLiteral("UnitTestCave"));
+    cave->length()->setUnit(cwUnits::Meters);
+    cave->depth()->setUnit(cwUnits::Feet);
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("UnitRoundTrip.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    const QString savedProjectFile = project->filename();
+
+    SECTION("Units round-trip correctly") {
+        auto loadFuture = cwSaveLoad::loadAll(savedProjectFile);
+        REQUIRE(AsyncFuture::waitForFinished(loadFuture, 10000));
+        REQUIRE_FALSE(loadFuture.result().hasError());
+
+        const auto& caves = loadFuture.result().value().region.caves;
+        REQUIRE(caves.size() == 1);
+        CHECK(caves.first().lengthUnit == cwUnits::Meters);
+        CHECK(caves.first().depthUnit == cwUnits::Feet);
+    }
+
+    SECTION("Missing unit fields default to Meters, not Inches") {
+        auto caveFiles = findEntityFiles(QFileInfo(savedProjectFile).absolutePath(), {QStringLiteral("*.cwcave")});
+        REQUIRE(caveFiles.size() == 1);
+        REQUIRE(removeJsonField(caveFiles.first(), QStringLiteral("lengthUnit")));
+        REQUIRE(removeJsonField(caveFiles.first(), QStringLiteral("depthUnit")));
+
+        auto loadFuture = cwSaveLoad::loadAll(savedProjectFile);
+        REQUIRE(AsyncFuture::waitForFinished(loadFuture, 10000));
+        REQUIRE_FALSE(loadFuture.result().hasError());
+
+        const auto& caves = loadFuture.result().value().region.caves;
+        REQUIRE(caves.size() == 1);
+        CHECK(caves.first().lengthUnit == cwUnits::Meters);
+        CHECK(caves.first().depthUnit == cwUnits::Meters);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// #9 proto3 optional int32 page=0 survives JSON round-trip
+// ---------------------------------------------------------------------------
+TEST_CASE("Image page=0 preserved in proto3 JSON round-trip", "[cwSaveLoad]") {
+    CavewhereProto::Image protoImage;
+    protoImage.set_page(0);
+
+    CHECK(protoImage.has_page());
+    CHECK(protoImage.page() == 0);
+
+    google::protobuf::util::JsonPrintOptions printOpts;
+    printOpts.add_whitespace = true;
+    std::string json;
+    auto printStatus = google::protobuf::util::MessageToJsonString(protoImage, &json, printOpts);
+    REQUIRE(printStatus.ok());
+
+    // JSON must contain "page": 0 — not omit it
+    CHECK(json.find("\"page\"") != std::string::npos);
+
+    // Round-trip: parse the JSON back
+    CavewhereProto::Image reloaded;
+    auto parseStatus = google::protobuf::util::JsonStringToMessage(json, &reloaded);
+    REQUIRE(parseStatus.ok());
+    CHECK(reloaded.has_page());
+    CHECK(reloaded.page() == 0);
+}
