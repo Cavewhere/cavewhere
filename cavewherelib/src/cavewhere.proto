@@ -9,14 +9,8 @@ message FileVersion {
 }
 
 message ProjectMetadata {
-    enum GitMode {
-        ManagedNew = 0;
-        ExistingRepo = 1;
-        NoGit = 2;
-    }
-
     optional string dataRoot = 1;
-    optional GitMode gitMode = 2;
+    reserved 2; // Removed: GitMode enum (only ManagedNew was ever used)
     optional bool syncEnabled = 3;
 }
 

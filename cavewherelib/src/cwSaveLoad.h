@@ -117,16 +117,8 @@ class CAVEWHERE_LIB_EXPORT cwSaveLoad : public QObject
     Q_PROPERTY(bool isTemporaryProject READ isTemporaryProject NOTIFY isTemporaryProjectChanged)
 
 public:
-    enum class GitMode {
-        ManagedNew,
-        ExistingRepo,
-        NoGit
-    };
-    Q_ENUM(GitMode);
-
     struct ProjectMetadataData {
         QString dataRoot;
-        GitMode gitMode = GitMode::ManagedNew;
         bool syncEnabled = true;
         QString projectId; // UUID stable across renames; empty on legacy projects
     };
@@ -291,9 +283,6 @@ public:
     void setDataRoot(const QString& dataRoot);
 
     QString projectId() const;
-
-    GitMode gitMode() const;
-    void setGitMode(GitMode mode);
 
     bool syncEnabled() const;
     void setSyncEnabled(bool enabled);

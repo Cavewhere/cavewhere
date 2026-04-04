@@ -139,7 +139,6 @@ def convert_cw_file(cw_path: Path) -> bool:
         "name": name,
         "metadata": {
             "dataRoot": name,
-            "gitMode": "ManagedNew",
             "syncEnabled": True
         }
     }
@@ -168,7 +167,6 @@ def normalize_cwproj_file(cwproj_path: Path) -> bool:
     data["name"] = name
     metadata = data.setdefault("metadata", {})
     metadata["dataRoot"] = name
-    metadata.setdefault("gitMode", "ManagedNew")
     metadata.setdefault("syncEnabled", True)
 
     target_path = project_dir / f"{name}.cwproj"

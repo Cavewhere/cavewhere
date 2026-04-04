@@ -184,33 +184,6 @@ ResultBase saveBundledArchiveAtomic(const QString& projectRootPath,
     return ResultBase();
 }
 
-CavewhereProto::ProjectMetadata::GitMode toProtoGitMode(cwSaveLoad::GitMode mode)
-{
-    switch (mode) {
-    case cwSaveLoad::GitMode::ManagedNew:
-        return CavewhereProto::ProjectMetadata::GitMode::ProjectMetadata_GitMode_ManagedNew;
-    case cwSaveLoad::GitMode::ExistingRepo:
-        return CavewhereProto::ProjectMetadata::GitMode::ProjectMetadata_GitMode_ExistingRepo;
-    case cwSaveLoad::GitMode::NoGit:
-        return CavewhereProto::ProjectMetadata::GitMode::ProjectMetadata_GitMode_NoGit;
-    }
-
-    return CavewhereProto::ProjectMetadata::GitMode::ProjectMetadata_GitMode_ManagedNew;
-}
-
-cwSaveLoad::GitMode fromProtoGitMode(CavewhereProto::ProjectMetadata::GitMode mode)
-{
-    switch (mode) {
-    case CavewhereProto::ProjectMetadata::GitMode::ProjectMetadata_GitMode_ExistingRepo:
-        return cwSaveLoad::GitMode::ExistingRepo;
-    case CavewhereProto::ProjectMetadata::GitMode::ProjectMetadata_GitMode_NoGit:
-        return cwSaveLoad::GitMode::NoGit;
-    case CavewhereProto::ProjectMetadata::GitMode::ProjectMetadata_GitMode_ManagedNew:
-    default:
-        return cwSaveLoad::GitMode::ManagedNew;
-    }
-}
-
 cwImage::OriginalImageInfo imageInfo(const QString& path) {
     cwImage::OriginalImageInfo info;
     const QFileInfo fileInfo(path);
@@ -2673,9 +2646,7 @@ ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, Proj
     }
 
     setFileName(desiredFilePath);
-    if (d->projectMetadata.gitMode != GitMode::NoGit) {
-        initializeRepositoryForCurrentFile();
-    }
+    initializeRepositoryForCurrentFile();
     setTemporary(false);
     if (!isAlreadySavedCopy) {
         d->projectMetadata.dataRoot = newDataRootName;
@@ -2734,7 +2705,6 @@ void cwSaveLoad::newProject()
 
         //Save the project file
         d->projectMetadata.dataRoot = defaultDataRoot(region->name());
-        d->projectMetadata.gitMode = GitMode::ManagedNew;
         d->projectMetadata.syncEnabled = true;
         tempDir.mkpath(d->projectMetadata.dataRoot);
 
@@ -3217,7 +3187,6 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
 
     auto protoMetadata = protoProject->mutable_metadata();
     cwRegionSaveTask::saveString(protoMetadata->mutable_dataroot(), metadata.dataRoot);
-    protoMetadata->set_gitmode(toProtoGitMode(metadata.gitMode));
     protoMetadata->set_syncenabled(metadata.syncEnabled);
 
     return protoProject;
@@ -3808,7 +3777,6 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
 
     const QString projectName = QFileInfo(project->filename()).baseName();
     d->projectMetadata.dataRoot = defaultDataRoot(projectName);
-    d->projectMetadata.gitMode = GitMode::ManagedNew;
     d->projectMetadata.syncEnabled = true;
     emit dataRootChanged();
 
@@ -4156,9 +4124,6 @@ Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString
                                 const auto& metadataProto = projectProto.metadata();
                                 if (metadataProto.has_dataroot()) {
                                     loadData.metadata.dataRoot = QString::fromStdString(metadataProto.dataroot());
-                                }
-                                if (metadataProto.has_gitmode()) {
-                                    loadData.metadata.gitMode = fromProtoGitMode(metadataProto.gitmode());
                                 }
                                 if (metadataProto.has_syncenabled()) {
                                     loadData.metadata.syncEnabled = metadataProto.syncenabled();
@@ -5877,24 +5842,6 @@ void cwSaveLoad::setDataRoot(const QString &dataRoot)
     }
 }
 
-cwSaveLoad::GitMode cwSaveLoad::gitMode() const
-{
-    return d->projectMetadata.gitMode;
-}
-
-void cwSaveLoad::setGitMode(GitMode mode)
-{
-    if (d->projectMetadata.gitMode == mode) {
-        return;
-    }
-
-    d->projectMetadata.gitMode = mode;
-
-    if (d->saveEnabled && !d->projectFileName.isEmpty()) {
-        saveProject(projectRootDir(), d->m_regionTreeModel->cavingRegion());
-    }
-}
-
 bool cwSaveLoad::syncEnabled() const
 {
     return d->projectMetadata.syncEnabled;
@@ -5916,7 +5863,7 @@ void cwSaveLoad::setSyncEnabled(bool enabled)
 Monad::ResultBase cwSaveLoad::commitProjectChanges(const QString& subject,
                                                    const QString& description)
 {
-    if (gitMode() == GitMode::NoGit || d->projectFileName.isEmpty()) {
+    if (d->projectFileName.isEmpty()) {
         return ResultBase();
     }
 
@@ -5983,10 +5930,6 @@ void cwSaveLoad::setAuthProvider(cwRemoteAuthProvider* provider)
 QFuture<Monad::ResultBase> cwSaveLoad::sync()
 {
     d->lastSyncReport.reset();
-
-    if (gitMode() == GitMode::NoGit) {
-        return AsyncFuture::completed(ResultBase(QStringLiteral("Sync is disabled for this project.")));
-    }
 
     if (!syncEnabled()) {
         return AsyncFuture::completed(ResultBase(QStringLiteral("Project sync is disabled in metadata.")));
@@ -6190,10 +6133,6 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
 QFuture<Monad::ResultBase> cwSaveLoad::resetBranchAndReconcile(const QString& refSpec, BranchResetMode resetMode)
 {
     d->lastSyncReport.reset();
-
-    if (gitMode() == GitMode::NoGit) {
-        return AsyncFuture::completed(ResultBase(QStringLiteral("Checkout reconcile is disabled for this project.")));
-    }
 
     if (!syncEnabled()) {
         return AsyncFuture::completed(ResultBase(QStringLiteral("Project sync is disabled in metadata.")));
@@ -6524,7 +6463,6 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
             }
 
             if (previousMetadata.dataRoot != d->projectMetadata.dataRoot
-                || previousMetadata.gitMode != d->projectMetadata.gitMode
                 || previousMetadata.syncEnabled != d->projectMetadata.syncEnabled) {
                 emit dataRootChanged();
             }

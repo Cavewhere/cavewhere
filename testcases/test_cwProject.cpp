@@ -1313,7 +1313,6 @@ TEST_CASE("Loading a project preserves metadata dataRoot", "[cwProject]") {
         " \"name\": \"%1\",\n"
         " \"metadata\": {\n"
         "  \"dataRoot\": \"%2\",\n"
-        "  \"gitMode\": \"ManagedNew\",\n"
         "  \"syncEnabled\": true\n"
         " }\n"
         "}\n")

@@ -361,29 +361,22 @@ However, since `cavewhere.proto` uses `optional` on all fields (`optional int32 
 
 ### 11. Remove GitMode enum (NoGit, ExistingRepo are dead code)
 
-**Status:** TODO
+**Status:** DONE
 
-**Files:** `cwSaveLoad.h`, `cwSaveLoad.cpp`, `cavewhere.proto`
-
-Investigation confirmed:
-
-| Mode | Set anywhere? | Runtime checks? | Functional? |
-|------|--------------|-----------------|-------------|
-| ManagedNew | `newProject()`, V6 conversion, Python converter, struct default | Implicitly (default) | Only mode that runs |
-| NoGit | Never set | 4 checks (commit, sync, resetBranch, initRepo) | Unreachable |
-| ExistingRepo | Never set | Zero checks | Completely dead |
-
-`setGitMode()` is public but never called. No UI exposes mode selection. No tests exercise non-ManagedNew modes.
+**Files:** `cwSaveLoad.h`, `cwSaveLoad.cpp`, `cavewhere.proto`, `tools/convert_v7_zip_to_v8.py`, `testcases/test_cwProject.cpp`
 
 **Action items:**
-- [ ] Remove `GitMode` enum from `cwSaveLoad.h`
-- [ ] Remove `gitMode` field from `ProjectMetadataData`
-- [ ] Remove `setGitMode()` / `gitMode()` accessors
-- [ ] Remove 4 `NoGit` early-return checks in `commitProjectChanges()`, `sync()`, `resetBranchAndReconcile()`, `initializeRepositoryForCurrentFile()`
-- [ ] Remove `toProtoGitMode()` / `fromProtoGitMode()` converter functions
-- [ ] In `cavewhere.proto`: remove `GitMode` enum from `ProjectMetadata`, mark field 2 as `reserved`
-- [ ] In `fromProtoGitMode()` callers (e.g. project load path): remove the call entirely rather than mapping legacy values — git is always managed
-- [ ] Remove `gitMode` from Python converter (`tools/convert_v7_zip_to_v8.py`)
+- [x] Remove `GitMode` enum from `cwSaveLoad.h`
+- [x] Remove `gitMode` field from `ProjectMetadataData`
+- [x] Remove `setGitMode()` / `gitMode()` accessors
+- [x] Remove 3 `NoGit` early-return checks in `commitProjectChanges()`, `sync()`, `resetBranchAndReconcile()`
+- [x] Remove `NoGit` guard around `initializeRepositoryForCurrentFile()` call (always called now)
+- [x] Remove `toProtoGitMode()` / `fromProtoGitMode()` converter functions
+- [x] In `cavewhere.proto`: remove `GitMode` enum from `ProjectMetadata`, mark field 2 as `reserved`
+- [x] Remove `fromProtoGitMode()` call in project load path
+- [x] Remove `gitMode` from Python converter (`tools/convert_v7_zip_to_v8.py`)
+- [x] Remove `gitMode` from test fixture JSON in `test_cwProject.cpp`
+- [x] All 580 tests pass
 
 ---
 
