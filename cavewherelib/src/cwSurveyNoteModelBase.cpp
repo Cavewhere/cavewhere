@@ -4,6 +4,7 @@
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwProject.h"
+#include "cwNameUtils.h"
 
 // Qt
 #include <QDebug>
@@ -105,6 +106,10 @@ void cwSurveyNoteModelBase::removeNote(int index)
 
     beginRemoveRows(QModelIndex(), index, index);
     QObject* note = m_notes.at(index);
+    const QVariant nameVar = note->property("name");
+    if (nameVar.isValid()) {
+        m_noteNames.remove(nameVar.toString());
+    }
     m_notes.removeAt(index);
     note->deleteLater();
     endRemoveRows();
@@ -121,6 +126,21 @@ void cwSurveyNoteModelBase::addNotes(QList<QObject*> newNotes)
         return;
     }
 
+    // Auto-rename to avoid filesystem path collisions in .cwproj layout.
+    // Use a temporary set for batch dedup without modifying m_noteNames.
+    cwSanitizedNameSet batchSet = m_noteNames;
+    for (QObject* obj : std::as_const(newNotes)) {
+        const QVariant nameVar = obj->property("name");
+        if (!nameVar.isValid()) {
+            continue;
+        }
+        const QString currentName = nameVar.toString();
+        const QString deduped = batchSet.deduplicateName(currentName);
+        if (deduped != currentName) {
+            obj->setProperty("name", deduped);
+        }
+        batchSet.insert(obj->property("name").toString());
+    }
 
     const int first = m_notes.size();
     const int last = first + newNotes.size() - 1;
@@ -131,6 +151,12 @@ void cwSurveyNoteModelBase::addNotes(QList<QObject*> newNotes)
 
     beginInsertRows(QModelIndex(), first, last);
     m_notes.append(newNotes);
+    for (QObject* obj : std::as_const(newNotes)) {
+        const QVariant nameVar = obj->property("name");
+        if (nameVar.isValid()) {
+            m_noteNames.insert(nameVar.toString());
+        }
+    }
     endInsertRows();
 }
 
@@ -143,6 +169,7 @@ void cwSurveyNoteModelBase::clearNotes()
         }
     }
     m_notes.clear();
+    m_noteNames.clear();
     endResetModel();
 }
 

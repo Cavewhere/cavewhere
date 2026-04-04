@@ -23,6 +23,7 @@
 class cwCave;
 class cwProject;
 #include "cwCavingRegionData.h"
+#include "cwSanitizedNameSet.h"
 #include "cwUndoer.h"
 #include "cwGlobals.h"
 
@@ -69,6 +70,9 @@ public:
 
     int indexOf(cwCave* cave);
 
+    cwSanitizedNameSet& caveNameSet() { return m_caveNames; }
+    const cwSanitizedNameSet& caveNameSet() const { return m_caveNames; }
+
     cwProject* parentProject() const;
 
     void setData(const cwCavingRegionData &data);
@@ -94,6 +98,8 @@ protected:
 
 private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwCavingRegion, QString, m_name, QString(), &cwCavingRegion::nameChanged);
+
+    cwSanitizedNameSet m_caveNames;
 
     // cwCavingRegion& copy(const cwCavingRegion& object);
 

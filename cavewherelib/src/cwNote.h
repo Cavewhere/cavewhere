@@ -48,6 +48,7 @@ public:
 
     QString name() const { return m_name.value(); }
     void setName(const QString& name);
+    Q_INVOKABLE QString validateName(const QString& proposedName) const;
     QUuid id() const;
     void setId(const QUuid& id);
     QBindable<QString> bindableName() { return &m_name; }

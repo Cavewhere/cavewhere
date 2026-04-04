@@ -215,6 +215,11 @@ public:
 
     static QString sanitizeFileName(QString input);
 
+    // Load-time repair helpers (exposed for testing)
+    static void repairTopLevelIds(ProjectLoadData& loadData);
+    static void repairNestedScrapIds(ProjectLoadData& loadData);
+    static void repairNameCollisions(ProjectLoadData& loadData);
+
     // Returns the folder that should be stored as "last directory" for a given
     // project file path.  For .cwproj files the .cwproj lives one level inside
     // the project folder, so two components are stripped (filename + project

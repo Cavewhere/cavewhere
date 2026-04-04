@@ -1,4 +1,6 @@
 #include "cwSaveLoad.h"
+#include "cwNameUtils.h"
+#include "cwSanitizedNameSet.h"
 #include "cwRemoteAuthProvider.h"
 #include "cwDebug.h"
 #include "cwTrip.h"
@@ -619,28 +621,97 @@ QUuid repairedTopLevelId(const QUuid& candidateId,
     return repairedId;
 }
 
-void repairTopLevelIds(cwSaveLoad::ProjectLoadData& loadData)
+} // namespace (anonymous helpers above — repairedTopLevelId, etc.)
+
+void regenerateNoteSubtreeIds(cwNoteData& note)
+{
+    note.id = QUuid::createUuid();
+    for (cwScrapData& scrap : note.scraps) {
+        scrap.id = QUuid::createUuid();
+        for (cwNoteStation& station : scrap.stations) {
+            station.setId(QUuid::createUuid());
+        }
+        for (cwLead& lead : scrap.leads) {
+            lead.setId(QUuid::createUuid());
+        }
+    }
+}
+
+void regenerateNoteLiDARSubtreeIds(cwNoteLiDARData& noteLiDAR)
+{
+    noteLiDAR.id = QUuid::createUuid();
+    for (cwNoteLiDARStation& station : noteLiDAR.stations) {
+        station.setId(QUuid::createUuid());
+    }
+}
+
+void regenerateTripSubtreeIds(cwTripData& trip)
+{
+    trip.id = QUuid::createUuid();
+    for (cwNoteData& note : trip.noteModel.notes) {
+        regenerateNoteSubtreeIds(note);
+    }
+    for (cwNoteLiDARData& noteLiDAR : trip.noteLiDARModel.notes) {
+        regenerateNoteLiDARSubtreeIds(noteLiDAR);
+    }
+}
+
+void regenerateCaveSubtreeIds(cwCaveData& cave)
+{
+    cave.id = QUuid::createUuid();
+    for (cwTripData& trip : cave.trips) {
+        regenerateTripSubtreeIds(trip);
+    }
+}
+
+void cwSaveLoad::repairTopLevelIds(ProjectLoadData& loadData)
 {
     QSet<QUuid> seenCaveIds;
     QSet<QUuid> seenTripIds;
     QSet<QUuid> seenNoteIds;
     QSet<QUuid> seenNoteLiDARIds;
 
+    // Returns true (and regenerates the subtree) if id is a duplicate.
+    auto detectDuplicate = [&](QUuid& id, QSet<QUuid>& seenIds, auto regenerateFn) {
+        if (!id.isNull() && seenIds.contains(id)) {
+            loadData.identityRepair.required = true;
+            ++loadData.identityRepair.duplicateIds;
+            regenerateFn();
+            seenIds.insert(id);
+            return true;
+        }
+        return false;
+    };
+
     for (cwCaveData& cave : loadData.region.caves) {
+        if (detectDuplicate(cave.id, seenCaveIds, [&]{ regenerateCaveSubtreeIds(cave); })) {
+            continue;
+        }
+
         cave.id = repairedTopLevelId(cave.id, seenCaveIds, loadData.identityRepair);
         for (cwTripData& trip : cave.trips) {
+            if (detectDuplicate(trip.id, seenTripIds, [&]{ regenerateTripSubtreeIds(trip); })) {
+                continue;
+            }
+
             trip.id = repairedTopLevelId(trip.id, seenTripIds, loadData.identityRepair);
             for (cwNoteData& note : trip.noteModel.notes) {
+                if (detectDuplicate(note.id, seenNoteIds, [&]{ regenerateNoteSubtreeIds(note); })) {
+                    continue;
+                }
                 note.id = repairedTopLevelId(note.id, seenNoteIds, loadData.identityRepair);
             }
             for (cwNoteLiDARData& note : trip.noteLiDARModel.notes) {
+                if (detectDuplicate(note.id, seenNoteLiDARIds, [&]{ regenerateNoteLiDARSubtreeIds(note); })) {
+                    continue;
+                }
                 note.id = repairedTopLevelId(note.id, seenNoteLiDARIds, loadData.identityRepair);
             }
         }
     }
 }
 
-void repairNestedScrapIds(cwSaveLoad::ProjectLoadData& loadData)
+void cwSaveLoad::repairNestedScrapIds(ProjectLoadData& loadData)
 {
     for (cwCaveData& cave : loadData.region.caves) {
         for (cwTripData& trip : cave.trips) {
@@ -667,6 +738,58 @@ void repairNestedScrapIds(cwSaveLoad::ProjectLoadData& loadData)
         }
     }
 }
+
+void cwSaveLoad::repairNameCollisions(ProjectLoadData& loadData)
+{
+    // Dedup name in nameSet; if renamed, append a warning error.
+    auto dedup = [&](cwSanitizedNameSet& names, QString& name, auto makeWarning) {
+        const QString deduped = names.deduplicateName(name);
+        if (deduped != name) {
+            loadData.errors.append(cwError(makeWarning(name, deduped), cwError::Warning));
+            name = deduped;
+        }
+        names.insert(name);
+    };
+
+    // Caves within the region
+    {
+        cwSanitizedNameSet caveNames;
+        for (cwCaveData& cave : loadData.region.caves) {
+            dedup(caveNames, cave.name, [](const QString& old, const QString& fixed) {
+                return QStringLiteral("Cave \"%1\" renamed to \"%2\" to avoid a name collision on disk.").arg(old, fixed);
+            });
+        }
+    }
+
+    // Trips and notes within each cave
+    for (cwCaveData& cave : loadData.region.caves) {
+        cwSanitizedNameSet tripNames;
+        for (cwTripData& trip : cave.trips) {
+            dedup(tripNames, trip.name, [&](const QString& old, const QString& fixed) {
+                return QStringLiteral("Trip \"%1\" in cave \"%2\" renamed to \"%3\" to avoid a name collision on disk.").arg(old, cave.name, fixed);
+            });
+        }
+
+        for (cwTripData& trip : cave.trips) {
+            cwSanitizedNameSet noteNames;
+            for (cwNoteData& note : trip.noteModel.notes) {
+                dedup(noteNames, note.name, [&](const QString& old, const QString& fixed) {
+                    return QStringLiteral("Note \"%1\" in trip \"%2\" renamed to \"%3\" to avoid a name collision on disk.").arg(old, trip.name, fixed);
+                });
+            }
+
+            cwSanitizedNameSet lidarNames;
+            for (cwNoteLiDARData& note : trip.noteLiDARModel.notes) {
+                dedup(lidarNames, note.name, [&](const QString& old, const QString& fixed) {
+                    return QStringLiteral("LiDAR note \"%1\" in trip \"%2\" renamed to \"%3\" to avoid a name collision on disk.").arg(old, trip.name, fixed);
+                });
+            }
+        }
+    }
+}
+
+// Reopen for remaining file-local helpers (git exclude patterns, etc.)
+namespace {
 
 QStringList readGitExcludePatterns(const QDir& repoDir)
 {
@@ -3985,6 +4108,7 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
 
             repairTopLevelIds(loadData);
             repairNestedScrapIds(loadData);
+            repairNameCollisions(loadData);
             return Result(loadData);
         });
     });
@@ -5458,22 +5582,9 @@ QFuture<void> cwSaveLoad::completeSaveJobs()
 }
 
 QString cwSaveLoad::sanitizeFileName(QString input) {
-    // Modify the input string in-place
-    const QString forbiddenChars = R"(\/:*?"<>|)";
-    for (const QChar& ch : forbiddenChars) {
-        input.replace(ch, "_");
-    }
-
-    input = input.trimmed();
-    while (input.startsWith('.')) input = input.mid(1);
-    while (input.endsWith('.'))  input.chop(1);
-
-    if (input.isEmpty()) {
-        input = "untitled";
-    }
-
-    return input;
+    return cwNameUtils::sanitizeFileName(std::move(input));
 }
+
 
 QString cwSaveLoad::lastDirectoryForProjectFile(const QString& filePath)
 {

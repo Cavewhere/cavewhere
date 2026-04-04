@@ -99,7 +99,7 @@ Apply to all three call sites:
 
 ### 2. Name-based path collisions can cause data loss
 
-**Status:** TODO — **HIGH PRIORITY, fix before v9 ships**
+**Status:** DONE
 **Depends on:** 3 (fix sanitizer bug before adding collision detection)
 
 **Files:** `cwSaveLoad.cpp`, `cwCave.cpp`, `cwTrip.cpp`, `cwNote.cpp`
@@ -150,25 +150,25 @@ This is a correctness problem: two scraps in the same project sharing a UUID cou
 **Fix:** When `repairTopLevelIds()` regenerates a cave's UUID due to duplication, walk that cave's entire subtree and regenerate all child UUIDs — trips, notes, scraps, stations, leads, LiDAR stations. The trips and notes will already get new UUIDs from the global sets, but scraps and their children need explicit regeneration. This is a targeted "deep regenerate" only for detected copy subtrees — the existing per-scrap local set logic for normal loads remains unchanged.
 
 **Action items:**
-- [ ] Add sibling duplicate check in `cwCave::setName()`, `cwTrip::setName()`, `cwNote::setName()`, `cwLiDARNote` — reject rename if sanitized name collides with a sibling (with null-parent guard)
-- [ ] Add name deduplication in `cwCavingRegion::insertCave()` — if the new cave's sanitized name collides with an existing sibling, auto-rename (append " 2", " 3", etc.)
-- [ ] Add name deduplication in `cwCave::insertTrip()` — same pattern for trips within a cave
-- [ ] Add name deduplication in note addition paths — same pattern for notes within a trip
-- [ ] Add empty-string guard to `cwNote::setName()` to match `cwCave`/`cwTrip` behavior
-- [ ] Add `Q_INVOKABLE QString validateName(const QString& proposedName) const` to `cwCave`, `cwTrip`, `cwNote` — returns empty string if valid, human-readable rejection reason otherwise
-- [ ] Add load-time collision repair in `loadAll()` — detect and auto-rename duplicates, emit warning via `cwProject::errorModel()`
-- [ ] In `repairTopLevelIds()`, when a cave UUID is regenerated as a duplicate (not null), walk the entire cave subtree and regenerate all nested UUIDs: scraps, NoteStations, leads, LiDAR stations
-- [ ] Add test: `setName()` rejects a name that collides with a sibling's sanitized name
-- [ ] Add test: `insertCave()` auto-renames a cave whose sanitized name collides with an existing sibling
-- [ ] Add test: importing two caves with names that differ only in forbidden chars (e.g., "Big Cave!" and "Big Cave?") produces two caves with distinct sanitized names
-- [ ] Add test: `validateName()` returns correct rejection reason for collisions and sanitization changes
-- [ ] Add test: two caves with names that sanitize identically both survive round-trip via load repair
-- [ ] Add test: two trips within the same cave with colliding sanitized names
-- [ ] Add test: `setName()` allows the rename when no parent is set (construction/import path)
-- [ ] Add test: `setName()` after parenting rejects collision even when `insertCave()` previously accepted the entity (Layer 1 vs 1b interaction)
-- [ ] Add test: auto-rename suffix increments correctly — inserting 3 caves that all sanitize to `"Big Cave"` produces `"Big Cave"`, `"Big Cave 2"`, `"Big Cave 3"`
-- [ ] Add test: auto-rename skips already-taken suffixes — if `"Big Cave"` and `"Big Cave 2"` exist, next collision produces `"Big Cave 3"`
-- [ ] Add test: filesystem-copied cave has all nested UUIDs (scraps, stations, leads) regenerated
+- [x] Add sibling duplicate check in `cwCave::setName()`, `cwTrip::setName()`, `cwNote::setName()`, `cwLiDARNote` — reject rename if sanitized name collides with a sibling (with null-parent guard)
+- [x] Add name deduplication in `cwCavingRegion::insertCave()` — if the new cave's sanitized name collides with an existing sibling, auto-rename (append " 2", " 3", etc.)
+- [x] Add name deduplication in `cwCave::insertTrip()` — same pattern for trips within a cave
+- [x] Add name deduplication in note addition paths — same pattern for notes within a trip
+- [x] Add empty-string guard to `cwNote::setName()` to match `cwCave`/`cwTrip` behavior
+- [x] Add `Q_INVOKABLE QString validateName(const QString& proposedName) const` to `cwCave`, `cwTrip`, `cwNote` — returns empty string if valid, human-readable rejection reason otherwise
+- [x] Add load-time collision repair in `loadAll()` — detect and auto-rename duplicates, emit warning via `cwProject::errorModel()`
+- [x] In `repairTopLevelIds()`, when a cave UUID is regenerated as a duplicate (not null), walk the entire cave subtree and regenerate all nested UUIDs: scraps, NoteStations, leads, LiDAR stations
+- [x] Add test: `setName()` rejects a name that collides with a sibling's sanitized name
+- [x] Add test: `insertCave()` auto-renames a cave whose sanitized name collides with an existing sibling
+- [x] Add test: importing two caves with names that differ only in forbidden chars (e.g., "Big Cave!" and "Big Cave?") produces two caves with distinct sanitized names
+- [x] Add test: `validateName()` returns correct rejection reason for collisions and sanitization changes
+- [x] Add test: two caves with names that sanitize identically both survive round-trip via load repair
+- [x] Add test: two trips within the same cave with colliding sanitized names
+- [x] Add test: `setName()` allows the rename when no parent is set (construction/import path)
+- [x] Add test: `setName()` after parenting rejects collision even when `insertCave()` previously accepted the entity (Layer 1 vs 1b interaction)
+- [x] Add test: auto-rename suffix increments correctly — inserting 3 caves that all sanitize to `"Big Cave"` produces `"Big Cave"`, `"Big Cave 2"`, `"Big Cave 3"`
+- [x] Add test: auto-rename skips already-taken suffixes — if `"Big Cave"` and `"Big Cave 2"` exist, next collision produces `"Big Cave 3"`
+- [x] Add test: filesystem-copied cave has all nested UUIDs (scraps, stations, leads) regenerated
 
 ---
 

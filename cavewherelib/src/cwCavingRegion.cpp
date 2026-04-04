@@ -11,6 +11,7 @@
 #include "cwDebug.h"
 #include "cwProject.h"
 #include "cwData.h"
+#include "cwNameUtils.h"
 
 //Qt includes
 #include <QThread>
@@ -170,9 +171,18 @@ void cwCavingRegion::addCave(cwCave* cave) {
 }
 
 void cwCavingRegion::addCaves(QList<cwCave*> caves) {
+    // Use a temporary set for batch dedup without modifying m_caveNames
+    cwSanitizedNameSet batchSet = m_caveNames;
     foreach(cwCave* cave, caves) {
         unparentCave(cave);
         cave->setUndoStack(undoStack());
+
+        // Auto-rename to avoid filesystem path collisions in .cwproj layout
+        const QString deduped = batchSet.deduplicateName(cave->name());
+        if (deduped != cave->name()) {
+            cave->setName(deduped);
+        }
+        batchSet.insert(cave->name());
     }
 
     //Run the insert cave command
@@ -189,6 +199,13 @@ void cwCavingRegion::insertCave(int index, cwCave* cave) {
     if(index < 0 || index > m_caves.size()) { return; }
 
     unparentCave(cave);
+
+    // Auto-rename to avoid filesystem path collisions in .cwproj layout.
+    // The cave has no parent yet, so setName()'s guard won't fire.
+    const QString deduped = m_caveNames.deduplicateName(cave->name());
+    if (deduped != cave->name()) {
+        cave->setName(deduped);
+    }
 
     //Run the insert cave command
     pushUndo(new InsertCaveCommand(this, cave, index));
@@ -321,6 +338,7 @@ void cwCavingRegion::InsertRemoveCave::insertCaves() {
     for(int i = 0; i < Caves.size(); i++) {
         int index = BeginIndex + i;
         regionPtr->m_caves.insert(index, Caves[i]);
+        regionPtr->m_caveNames.insert(Caves[i]->name());
         Caves[i]->setParent(regionPtr);
     }
 
@@ -343,6 +361,7 @@ void cwCavingRegion::InsertRemoveCave::removeCaves() {
 
     for(int i = Caves.size() - 1; i >= 0; i--) {
         int index = BeginIndex + i;
+        regionPtr->m_caveNames.remove(regionPtr->m_caves.at(index)->name());
         regionPtr->m_caves.removeAt(index);
 
         //Do NOT uncomment, qml engine may garbage collect objects that aren't parented, and can cause double free problem

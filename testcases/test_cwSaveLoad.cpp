@@ -28,6 +28,13 @@
 #include "cwError.h"
 #include "cwErrorListModel.h"
 #include "cwFutureManagerModel.h"
+#include "cwCavingRegion.h"
+#include "cwScrap.h"
+#include "cwNoteStation.h"
+#include "cwLead.h"
+#include "cwNameUtils.h"
+#include "cwNoteLiDARData.h"
+#include "cwNoteLiDARStation.h"
 #include "LoadProjectHelper.h"
 #include <asyncfuture.h>
 
@@ -2658,4 +2665,580 @@ TEST_CASE("Image page=0 preserved in proto3 JSON round-trip", "[cwSaveLoad]") {
     REQUIRE(parseStatus.ok());
     CHECK(reloaded.has_page());
     CHECK(reloaded.page() == 0);
+}
+
+TEST_CASE("setName rejects name that collides with sibling sanitized name", "[NameCollision]")
+{
+    SECTION("cwCave: sibling collision rejected")
+    {
+        cwCavingRegion region;
+        auto* cave1 = new cwCave();
+        cave1->setName("Big Cave");
+        region.addCave(cave1);
+
+        auto* cave2 = new cwCave();
+        cave2->setName("Other Cave");
+        region.addCave(cave2);
+
+        // Exact same name should be rejected (sanitizes identically)
+        cave2->setName("Big Cave");
+        CHECK(cave2->name() == "Other Cave"); // rejected
+
+        // "Big Cave!" sanitizes to "Big Cave_" which differs from "Big Cave" — allowed
+        cave2->setName("Big Cave!");
+        CHECK(cave2->name() == "Big Cave!"); // accepted — different sanitized name
+    }
+
+    SECTION("cwTrip: sibling collision rejected")
+    {
+        cwCavingRegion region;
+        auto* cave = new cwCave();
+        cave->setName("Test Cave");
+        region.addCave(cave);
+
+        auto* trip1 = new cwTrip();
+        trip1->setName("Trip A");
+        cave->addTrip(trip1);
+
+        auto* trip2 = new cwTrip();
+        trip2->setName("Trip B");
+        cave->addTrip(trip2);
+
+        // Exact collision — rejected
+        trip2->setName("Trip A");
+        CHECK(trip2->name() == "Trip B"); // rejected — "Trip A" already exists
+    }
+
+    SECTION("cwNote: sibling collision rejected")
+    {
+        cwCavingRegion region;
+        auto* cave = new cwCave();
+        cave->setName("Test Cave");
+        region.addCave(cave);
+
+        auto* trip = new cwTrip();
+        trip->setName("Trip 1");
+        cave->addTrip(trip);
+
+        auto* note1 = new cwNote();
+        note1->setName("scan.png");
+        auto* note2 = new cwNote();
+        note2->setName("photo.png");
+        trip->notes()->addNotes({note1, note2});
+
+        note2->setName("scan.png");
+        CHECK(note2->name() == "photo.png"); // rejected
+    }
+
+    SECTION("cwNote: empty string rejected")
+    {
+        cwNote note;
+        note.setName("original");
+        note.setName("");
+        CHECK(note.name() == "original");
+    }
+}
+
+TEST_CASE("setName allows rename when no parent is set", "[NameCollision]")
+{
+    SECTION("cwCave without parent region")
+    {
+        cwCave cave;
+        cave.setName("First");
+        cave.setName("Second");
+        CHECK(cave.name() == "Second"); // no parent — always allowed
+    }
+
+    SECTION("cwTrip without parent cave")
+    {
+        cwTrip trip;
+        trip.setName("Trip A");
+        trip.setName("Trip B");
+        CHECK(trip.name() == "Trip B"); // no parent — always allowed
+    }
+}
+
+TEST_CASE("insertCave auto-renames when sanitized name collides", "[NameCollision]")
+{
+    cwCavingRegion region;
+
+    auto* cave1 = new cwCave();
+    cave1->setName("Big Cave");
+    region.addCave(cave1);
+
+    // Insert a cave whose name collides
+    auto* cave2 = new cwCave();
+    cave2->setName("Big Cave");
+    region.addCave(cave2);
+
+    CHECK(cave1->name() == "Big Cave");
+    CHECK(cave2->name() == "Big Cave 2"); // auto-renamed
+}
+
+TEST_CASE("auto-rename suffix increments correctly", "[NameCollision]")
+{
+    cwCavingRegion region;
+
+    auto* cave1 = new cwCave();
+    cave1->setName("Big Cave");
+    region.addCave(cave1);
+
+    auto* cave2 = new cwCave();
+    cave2->setName("Big Cave");
+    region.addCave(cave2);
+    CHECK(cave2->name() == "Big Cave 2");
+
+    auto* cave3 = new cwCave();
+    cave3->setName("Big Cave");
+    region.addCave(cave3);
+    CHECK(cave3->name() == "Big Cave 3");
+}
+
+TEST_CASE("auto-rename skips already-taken suffixes", "[NameCollision]")
+{
+    cwCavingRegion region;
+
+    auto* cave1 = new cwCave();
+    cave1->setName("Big Cave");
+    region.addCave(cave1);
+
+    auto* cave2 = new cwCave();
+    cave2->setName("Big Cave 2");
+    region.addCave(cave2);
+
+    // Now insert another "Big Cave" — should skip 2 and go to 3
+    auto* cave3 = new cwCave();
+    cave3->setName("Big Cave");
+    region.addCave(cave3);
+    CHECK(cave3->name() == "Big Cave 3");
+}
+
+TEST_CASE("importing caves with names that differ only in forbidden chars", "[NameCollision]")
+{
+    cwCavingRegion region;
+
+    auto* cave1 = new cwCave();
+    cave1->setName("Big Cave!");
+    auto* cave2 = new cwCave();
+    cave2->setName("Big Cave?");
+
+    // Both sanitize to "Big Cave_". When added together, second should be renamed.
+    region.addCaves({cave1, cave2});
+
+    CHECK(cwSaveLoad::sanitizeFileName(cave1->name()) != cwSaveLoad::sanitizeFileName(cave2->name()));
+    CHECK(region.caveCount() == 2);
+}
+
+TEST_CASE("insertTrip auto-renames when sanitized name collides", "[NameCollision]")
+{
+    cwCavingRegion region;
+    auto* cave = new cwCave();
+    cave->setName("Test Cave");
+    region.addCave(cave);
+
+    auto* trip1 = new cwTrip();
+    trip1->setName("Survey");
+    cave->addTrip(trip1);
+
+    auto* trip2 = new cwTrip();
+    trip2->setName("Survey");
+    cave->addTrip(trip2);
+
+    CHECK(trip1->name() == "Survey");
+    CHECK(trip2->name() == "Survey 2");
+}
+
+TEST_CASE("setName after parenting rejects collision even when insertCave accepted", "[NameCollision]")
+{
+    cwCavingRegion region;
+
+    auto* cave1 = new cwCave();
+    cave1->setName("Alpha");
+    region.addCave(cave1);
+
+    auto* cave2 = new cwCave();
+    cave2->setName("Beta");
+    region.addCave(cave2); // accepted — "Beta" is unique
+
+    // Now try to rename cave2 to "Alpha" via setName — should be rejected
+    cave2->setName("Alpha");
+    CHECK(cave2->name() == "Beta");
+}
+
+TEST_CASE("validateName returns correct rejection reasons", "[NameCollision]")
+{
+    SECTION("cwCave: empty name")
+    {
+        cwCave cave;
+        CHECK_FALSE(cave.validateName("").isEmpty());
+    }
+
+    SECTION("cwCave: name with forbidden chars")
+    {
+        cwCave cave;
+        const QString result = cave.validateName("Test?Name");
+        CHECK_FALSE(result.isEmpty());
+        CHECK(result.contains("Test_Name"));
+    }
+
+    SECTION("cwCave: collision with sibling")
+    {
+        cwCavingRegion region;
+        auto* cave1 = new cwCave();
+        cave1->setName("Existing Cave");
+        region.addCave(cave1);
+
+        auto* cave2 = new cwCave();
+        cave2->setName("Other");
+        region.addCave(cave2);
+
+        const QString result = cave2->validateName("Existing Cave");
+        CHECK_FALSE(result.isEmpty());
+        CHECK(result.contains("already exists"));
+    }
+
+    SECTION("cwCave: valid name returns empty")
+    {
+        cwCavingRegion region;
+        auto* cave = new cwCave();
+        cave->setName("Alpha");
+        region.addCave(cave);
+
+        CHECK(cave->validateName("Beta").isEmpty());
+    }
+
+    SECTION("cwTrip: collision with sibling")
+    {
+        cwCavingRegion region;
+        auto* cave = new cwCave();
+        cave->setName("Cave");
+        region.addCave(cave);
+
+        auto* trip1 = new cwTrip();
+        trip1->setName("Survey Day 1");
+        cave->addTrip(trip1);
+
+        auto* trip2 = new cwTrip();
+        trip2->setName("Other");
+        cave->addTrip(trip2);
+
+        CHECK_FALSE(trip2->validateName("Survey Day 1").isEmpty());
+    }
+
+    SECTION("cwNote: collision with sibling")
+    {
+        cwCavingRegion region;
+        auto* cave = new cwCave();
+        cave->setName("Cave");
+        region.addCave(cave);
+
+        auto* trip = new cwTrip();
+        trip->setName("Trip");
+        cave->addTrip(trip);
+
+        auto* note1 = new cwNote();
+        note1->setName("scan.png");
+        auto* note2 = new cwNote();
+        note2->setName("photo.png");
+        trip->notes()->addNotes({note1, note2});
+
+        CHECK_FALSE(note2->validateName("scan.png").isEmpty());
+        CHECK(note1->validateName("newname.png").isEmpty());
+    }
+}
+
+TEST_CASE("deduplicateName utility", "[NameCollision]")
+{
+    SECTION("no collision")
+    {
+        cwSanitizedNameSet names;
+        names.insert("Alpha");
+        names.insert("Beta");
+        CHECK(names.deduplicateName("Gamma") == "Gamma");
+    }
+
+    SECTION("collision produces suffix 2")
+    {
+        cwSanitizedNameSet names;
+        names.insert("Big Cave");
+        CHECK(names.deduplicateName("Big Cave") == "Big Cave 2");
+    }
+
+    SECTION("suffix 2 taken, produces suffix 3")
+    {
+        cwSanitizedNameSet names;
+        names.insert("Big Cave");
+        names.insert("Big Cave 2");
+        CHECK(names.deduplicateName("Big Cave") == "Big Cave 3");
+    }
+}
+
+TEST_CASE("load-time collision repair renames duplicates", "[NameCollision]")
+{
+    cwSaveLoad::ProjectLoadData loadData;
+
+    cwCaveData cave1;
+    cave1.name = "Big Cave";
+    cave1.id = QUuid::createUuid();
+
+    cwCaveData cave2;
+    cave2.name = "Big Cave";
+    cave2.id = QUuid::createUuid();
+
+    loadData.region.caves = {cave1, cave2};
+
+    cwSaveLoad::repairNameCollisions(loadData);
+
+    CHECK(loadData.region.caves[0].name == "Big Cave");
+    CHECK(loadData.region.caves[1].name == "Big Cave 2");
+}
+
+TEST_CASE("deep UUID regeneration for copied cave subtree", "[NameCollision]")
+{
+    cwSaveLoad::ProjectLoadData loadData;
+
+    QUuid sharedCaveId = QUuid::createUuid();
+    QUuid sharedTripId = QUuid::createUuid();
+    QUuid sharedNoteId = QUuid::createUuid();
+    QUuid sharedScrapId = QUuid::createUuid();
+    QUuid sharedStationId = QUuid::createUuid();
+    QUuid sharedLeadId = QUuid::createUuid();
+    QUuid sharedLiDARNoteId = QUuid::createUuid();
+    QUuid sharedLiDARStationId = QUuid::createUuid();
+
+    auto makeCave = [&]() {
+        cwCaveData cave;
+        cave.name = "Copied Cave";
+        cave.id = sharedCaveId;
+
+        cwTripData trip;
+        trip.name = "Trip 1";
+        trip.id = sharedTripId;
+
+        cwNoteData note;
+        note.name = "scan.png";
+        note.id = sharedNoteId;
+
+        cwScrapData scrap;
+        scrap.id = sharedScrapId;
+        cwNoteStation station;
+        station.setId(sharedStationId);
+        scrap.stations.append(station);
+        cwLead lead;
+        lead.setId(sharedLeadId);
+        scrap.leads.append(lead);
+
+        note.scraps.append(scrap);
+        trip.noteModel.notes.append(note);
+
+        cwNoteLiDARData lidarNote;
+        lidarNote.name = "scan.e57";
+        lidarNote.id = sharedLiDARNoteId;
+        cwNoteLiDARStation lidarStation;
+        lidarStation.setId(sharedLiDARStationId);
+        lidarNote.stations.append(lidarStation);
+        trip.noteLiDARModel.notes.append(lidarNote);
+
+        cave.trips.append(trip);
+        return cave;
+    };
+
+    loadData.region.caves.append(makeCave());
+    loadData.region.caves.append(makeCave()); // filesystem copy — same UUIDs
+
+    cwSaveLoad::repairTopLevelIds(loadData);
+
+    auto& caves = loadData.region.caves;
+
+    // First cave keeps original UUIDs
+    CHECK(caves[0].id == sharedCaveId);
+    CHECK(caves[0].trips[0].id == sharedTripId);
+    CHECK(caves[0].trips[0].noteModel.notes[0].id == sharedNoteId);
+    CHECK(caves[0].trips[0].noteModel.notes[0].scraps[0].id == sharedScrapId);
+    CHECK(caves[0].trips[0].noteModel.notes[0].scraps[0].stations[0].id() == sharedStationId);
+    CHECK(caves[0].trips[0].noteModel.notes[0].scraps[0].leads[0].id() == sharedLeadId);
+    CHECK(caves[0].trips[0].noteLiDARModel.notes[0].id == sharedLiDARNoteId);
+    CHECK(caves[0].trips[0].noteLiDARModel.notes[0].stations[0].id() == sharedLiDARStationId);
+
+    // Second cave has all new UUIDs
+    CHECK(caves[1].id != sharedCaveId);
+    CHECK(caves[1].trips[0].id != sharedTripId);
+    CHECK(caves[1].trips[0].noteModel.notes[0].id != sharedNoteId);
+    CHECK(caves[1].trips[0].noteModel.notes[0].scraps[0].id != sharedScrapId);
+    CHECK(caves[1].trips[0].noteModel.notes[0].scraps[0].stations[0].id() != sharedStationId);
+    CHECK(caves[1].trips[0].noteModel.notes[0].scraps[0].leads[0].id() != sharedLeadId);
+    CHECK(caves[1].trips[0].noteLiDARModel.notes[0].id != sharedLiDARNoteId);
+    CHECK(caves[1].trips[0].noteLiDARModel.notes[0].stations[0].id() != sharedLiDARStationId);
+
+    // All UUIDs differ between the two caves
+    CHECK(caves[0].id != caves[1].id);
+    CHECK(caves[0].trips[0].id != caves[1].trips[0].id);
+}
+
+TEST_CASE("deep UUID regeneration for copied trip subtree", "[NameCollision]")
+{
+    cwSaveLoad::ProjectLoadData loadData;
+
+    QUuid tripId = QUuid::createUuid();
+    QUuid noteId = QUuid::createUuid();
+    QUuid scrapId = QUuid::createUuid();
+    QUuid stationId = QUuid::createUuid();
+
+    auto makeTrip = [&]() {
+        cwTripData trip;
+        trip.name = "Survey";
+        trip.id = tripId;
+
+        cwNoteData note;
+        note.name = "scan.png";
+        note.id = noteId;
+
+        cwScrapData scrap;
+        scrap.id = scrapId;
+        cwNoteStation station;
+        station.setId(stationId);
+        scrap.stations.append(station);
+        note.scraps.append(scrap);
+
+        trip.noteModel.notes.append(note);
+        return trip;
+    };
+
+    cwCaveData cave1;
+    cave1.name = "Cave A";
+    cave1.id = QUuid::createUuid();
+    cave1.trips.append(makeTrip());
+
+    cwCaveData cave2;
+    cave2.name = "Cave B";
+    cave2.id = QUuid::createUuid();
+    cave2.trips.append(makeTrip()); // same trip UUID copied to another cave
+
+    loadData.region.caves = {cave1, cave2};
+
+    cwSaveLoad::repairTopLevelIds(loadData);
+
+    auto& caves = loadData.region.caves;
+
+    // First cave's trip keeps original UUIDs
+    CHECK(caves[0].trips[0].id == tripId);
+    CHECK(caves[0].trips[0].noteModel.notes[0].id == noteId);
+    CHECK(caves[0].trips[0].noteModel.notes[0].scraps[0].id == scrapId);
+    CHECK(caves[0].trips[0].noteModel.notes[0].scraps[0].stations[0].id() == stationId);
+
+    // Second cave's trip has all new UUIDs
+    CHECK(caves[1].trips[0].id != tripId);
+    CHECK(caves[1].trips[0].noteModel.notes[0].id != noteId);
+    CHECK(caves[1].trips[0].noteModel.notes[0].scraps[0].id != scrapId);
+    CHECK(caves[1].trips[0].noteModel.notes[0].scraps[0].stations[0].id() != stationId);
+}
+
+TEST_CASE("deep UUID regeneration for copied note subtree", "[NameCollision]")
+{
+    cwSaveLoad::ProjectLoadData loadData;
+
+    QUuid noteId = QUuid::createUuid();
+    QUuid scrapId = QUuid::createUuid();
+    QUuid stationId = QUuid::createUuid();
+    QUuid leadId = QUuid::createUuid();
+
+    auto makeNote = [&]() {
+        cwNoteData note;
+        note.name = "scan.png";
+        note.id = noteId;
+
+        cwScrapData scrap;
+        scrap.id = scrapId;
+        cwNoteStation station;
+        station.setId(stationId);
+        scrap.stations.append(station);
+        cwLead lead;
+        lead.setId(leadId);
+        scrap.leads.append(lead);
+        note.scraps.append(scrap);
+
+        return note;
+    };
+
+    cwCaveData cave;
+    cave.name = "Test Cave";
+    cave.id = QUuid::createUuid();
+
+    cwTripData trip1;
+    trip1.name = "Trip 1";
+    trip1.id = QUuid::createUuid();
+    trip1.noteModel.notes.append(makeNote());
+
+    cwTripData trip2;
+    trip2.name = "Trip 2";
+    trip2.id = QUuid::createUuid();
+    trip2.noteModel.notes.append(makeNote()); // same note UUID copied to another trip
+
+    cave.trips = {trip1, trip2};
+    loadData.region.caves.append(cave);
+
+    cwSaveLoad::repairTopLevelIds(loadData);
+
+    auto& trips = loadData.region.caves[0].trips;
+
+    // First trip's note keeps original UUIDs
+    CHECK(trips[0].noteModel.notes[0].id == noteId);
+    CHECK(trips[0].noteModel.notes[0].scraps[0].id == scrapId);
+    CHECK(trips[0].noteModel.notes[0].scraps[0].stations[0].id() == stationId);
+    CHECK(trips[0].noteModel.notes[0].scraps[0].leads[0].id() == leadId);
+
+    // Second trip's note has all new UUIDs
+    CHECK(trips[1].noteModel.notes[0].id != noteId);
+    CHECK(trips[1].noteModel.notes[0].scraps[0].id != scrapId);
+    CHECK(trips[1].noteModel.notes[0].scraps[0].stations[0].id() != stationId);
+    CHECK(trips[1].noteModel.notes[0].scraps[0].leads[0].id() != leadId);
+}
+
+TEST_CASE("deep UUID regeneration for copied LiDAR note", "[NameCollision]")
+{
+    cwSaveLoad::ProjectLoadData loadData;
+
+    QUuid lidarNoteId = QUuid::createUuid();
+    QUuid lidarStationId = QUuid::createUuid();
+
+    auto makeLiDARNote = [&]() {
+        cwNoteLiDARData note;
+        note.name = "scan.e57";
+        note.id = lidarNoteId;
+
+        cwNoteLiDARStation station;
+        station.setId(lidarStationId);
+        note.stations.append(station);
+
+        return note;
+    };
+
+    cwCaveData cave;
+    cave.name = "Test Cave";
+    cave.id = QUuid::createUuid();
+
+    cwTripData trip1;
+    trip1.name = "Trip 1";
+    trip1.id = QUuid::createUuid();
+    trip1.noteLiDARModel.notes.append(makeLiDARNote());
+
+    cwTripData trip2;
+    trip2.name = "Trip 2";
+    trip2.id = QUuid::createUuid();
+    trip2.noteLiDARModel.notes.append(makeLiDARNote()); // same LiDAR note UUID copied
+
+    cave.trips = {trip1, trip2};
+    loadData.region.caves.append(cave);
+
+    cwSaveLoad::repairTopLevelIds(loadData);
+
+    auto& trips = loadData.region.caves[0].trips;
+
+    // First trip's LiDAR note keeps original UUIDs
+    CHECK(trips[0].noteLiDARModel.notes[0].id == lidarNoteId);
+    CHECK(trips[0].noteLiDARModel.notes[0].stations[0].id() == lidarStationId);
+
+    // Second trip's LiDAR note has all new UUIDs
+    CHECK(trips[1].noteLiDARModel.notes[0].id != lidarNoteId);
+    CHECK(trips[1].noteLiDARModel.notes[0].stations[0].id() != lidarStationId);
 }
