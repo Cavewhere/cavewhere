@@ -2632,3 +2632,30 @@ TEST_CASE("Cave lengthUnit and depthUnit survive save-load round-trip", "[cwSave
         CHECK(caves.first().depthUnit == cwUnits::Meters);
     }
 }
+
+// ---------------------------------------------------------------------------
+// #9 proto3 optional int32 page=0 survives JSON round-trip
+// ---------------------------------------------------------------------------
+TEST_CASE("Image page=0 preserved in proto3 JSON round-trip", "[cwSaveLoad]") {
+    CavewhereProto::Image protoImage;
+    protoImage.set_page(0);
+
+    CHECK(protoImage.has_page());
+    CHECK(protoImage.page() == 0);
+
+    google::protobuf::util::JsonPrintOptions printOpts;
+    printOpts.add_whitespace = true;
+    std::string json;
+    auto printStatus = google::protobuf::util::MessageToJsonString(protoImage, &json, printOpts);
+    REQUIRE(printStatus.ok());
+
+    // JSON must contain "page": 0 — not omit it
+    CHECK(json.find("\"page\"") != std::string::npos);
+
+    // Round-trip: parse the JSON back
+    CavewhereProto::Image reloaded;
+    auto parseStatus = google::protobuf::util::JsonStringToMessage(json, &reloaded);
+    REQUIRE(parseStatus.ok());
+    CHECK(reloaded.has_page());
+    CHECK(reloaded.page() == 0);
+}

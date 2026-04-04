@@ -315,7 +315,7 @@ For `frontSights`, `false` is an incorrect default — most surveys have front s
 
 ### 9. `saveImage()` page=0 — verify proto3 `optional` preserves zero
 
-**Status:** TODO — **MEDIUM PRIORITY**
+**Status:** DONE — Verified via test (no fix needed, proto3 optional preserves zero)
 
 **File:** `cwRegionSaveTask.cpp:277-279`
 
