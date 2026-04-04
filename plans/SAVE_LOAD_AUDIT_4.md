@@ -436,21 +436,22 @@ The `Scrap` message contained `optional TriangulatedData triangleData = 5;` with
 
 ---
 
-### 15. Mark legacy serialization classes for eventual removal
+### 15. Remove cwRegionSaveTask, consolidate into cwSaveLoad
 
-**Status:** TODO
+**Status:** DONE
 
 **Files:** `cwRegionSaveTask.h`, `cwRegionLoadTask.h`, `cwRegionSaveTask.cpp`, `cwRegionLoadTask.cpp`
 
-Two parallel serialization stacks exist:
-- **Old:** `cwRegionSaveTask` / `cwRegionLoadTask` -- serialize full object graphs through `CavingRegion` monolith, handle V5/V6 legacy fields, used only for SQLite import
+Two parallel serialization stacks existed:
+- **Old:** `cwRegionSaveTask` / `cwRegionLoadTask` -- serialize full object graphs through `CavingRegion` monolith, handle V5/V6 legacy fields
 - **New:** `cwSaveLoad::toProto*` / `cwSaveLoad::fromProto*` -- serialize individual entities for v9 file-per-entity format
 
-Both are compiled. The old stack writes `legacy_` fields via `QtProto::QString` wrappers; the new stack writes native `std::string` fields. They have different logic and neither calls the other.
+**Resolution:** `cwRegionSaveTask` deleted. All actively-used static save helper functions (saveString, saveDate, saveTripCalibration, saveSurveyChunk, saveTeam, saveImage, saveScrap, etc.) moved into `cwSaveLoad` as private static methods. Dead functions (saveCave, saveTrip, saveCavingRegion, saveStation, saveShot, saveTriangulatedData, etc.) dropped. `cwRegionLoadTask` kept — it handles V5/V6 binary import which will always be supported.
 
 **Action items:**
-- [ ] Add deprecation comments to `cwRegionSaveTask.h` and `cwRegionLoadTask.h` ("Legacy V6 SQLite import only. Do not use for new code.")
-- [ ] After V6 import support is dropped, delete both classes and all V5/V6 migration code
+- [x] Move used cwRegionSaveTask functions into cwSaveLoad
+- [x] Delete cwRegionSaveTask.h and cwRegionSaveTask.cpp
+- [x] Clean up all includes and forward declarations
 
 ---
 

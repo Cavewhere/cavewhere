@@ -15,7 +15,6 @@
 #include "cwCavingRegion.h"
 #include "cwTaskProgressDialog.h"
 #include "cwImageData.h"
-#include "cwRegionSaveTask.h"
 #include "cwRegionLoadTask.h"
 #include "cwGlobals.h"
 #include "cwDebug.h"
@@ -391,17 +390,7 @@ void cwProject::privateSave() {
 
     qDebug() << "Private Save is broken, TODO fix!";
 
-    // auto region = QSharedPointer<cwCavingRegion>::create(*Region);
-    // QString filename = this->filename();
-    // region->moveToThread(nullptr);
-
-    // auto future = cwConcurrent::run([region, filename]() {
-    //     cwRegionSaveTask saveTask;
-    //     saveTask.setDatabaseFilename(filename);
-    //     return saveTask.save(region.get());
-    // });
-
-    // FutureToken.addJob({QFuture<void>(future), "Saving"});
+    // Legacy SQLite save path removed — saving is now handled by cwSaveLoad.
 
     // SaveFuture = AsyncFuture::observe(future).subscribe([future, this](){
     //     auto errors = future.result();

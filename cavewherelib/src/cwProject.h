@@ -26,7 +26,6 @@ class cwTrip;
 class cwScrapManager;
 class cwTaskManagerModel;
 class cwRegionLoadTask;
-class cwRegionSaveTask;
 class cwErrorListModel;
 class cwFutureManagerModel;
 class cwSaveLoad;

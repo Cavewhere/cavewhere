@@ -23,7 +23,6 @@
 #include "cwScrap.h"
 #include "cwRunningProfileScrapViewMatrix.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
-#include "cwRegionSaveTask.h"
 
 //std includes
 #include <memory>

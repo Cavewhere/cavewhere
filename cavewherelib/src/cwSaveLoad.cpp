@@ -4,7 +4,14 @@
 #include "cwRemoteAuthProvider.h"
 #include "cwDebug.h"
 #include "cwTrip.h"
-#include "cwRegionSaveTask.h"
+#include "cwTripCalibration.h"
+#include "cwSurveyChunk.h"
+#include "cwNoteStation.h"
+#include "cwNoteTranformation.h"
+#include "cwShot.h"
+#include "cwStation.h"
+#include "cwLength.h"
+#include "cwLead.h"
 #include "cwRegionLoadTask.h"
 #include "cwConcurrent.h"
 #include "cwFutureManagerModel.h"
@@ -3167,10 +3174,10 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
     auto protoProject = std::make_unique<CavewhereProto::Project>();
     auto fileVersion = protoProject->mutable_fileversion();
     fileVersion->set_version(cwRegionIOTask::protoVersion());
-    cwRegionSaveTask::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
+    saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
 
     if (region != nullptr) {
-        cwRegionSaveTask::saveString(protoProject->mutable_name(), region->name());
+        saveString(protoProject->mutable_name(), region->name());
     }
 
     // Write the UUID only if one has been assigned (new projects get one in newProject();
@@ -3186,7 +3193,7 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
     d->projectMetadata = metadata;
 
     auto protoMetadata = protoProject->mutable_metadata();
-    cwRegionSaveTask::saveString(protoMetadata->mutable_dataroot(), metadata.dataRoot);
+    saveString(protoMetadata->mutable_dataroot(), metadata.dataRoot);
     protoMetadata->set_syncenabled(metadata.syncEnabled);
 
     return protoProject;
@@ -3208,8 +3215,8 @@ std::unique_ptr<CavewhereProto::CavingRegion> cwSaveLoad::toProtoCavingRegion(co
 {
     auto protoRegion = std::make_unique<CavewhereProto::CavingRegion>();
     protoRegion->set_version(cwRegionIOTask::protoVersion());
-    cwRegionSaveTask::saveString(protoRegion->mutable_cavewhereversion(), CavewhereVersion);
-    cwRegionSaveTask::saveString(protoRegion->mutable_name(), region->name());
+    saveString(protoRegion->mutable_cavewhereversion(), CavewhereVersion);
+    saveString(protoRegion->mutable_name(), region->name());
     return protoRegion;
 }
 
@@ -3238,7 +3245,7 @@ std::unique_ptr<CavewhereProto::Cave> cwSaveLoad::toProtoCave(const cwCave *cave
     auto protoCave = std::make_unique<CavewhereProto::Cave>();
     auto fileVersion = protoCave->mutable_fileversion();
     fileVersion->set_version(cwRegionIOTask::protoVersion());
-    cwRegionSaveTask::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
+    saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
     *(protoCave->mutable_name()) = cave->name().toStdString();
     if (!cave->id().isNull()) {
         *(protoCave->mutable_id()) = uuidToProtoString(cave->id()).toStdString();
@@ -3254,24 +3261,24 @@ std::unique_ptr<CavewhereProto::Trip> cwSaveLoad::toProtoTrip(const cwTrip *trip
     auto protoTrip = std::make_unique<CavewhereProto::Trip>();
     auto fileVersion = protoTrip->mutable_fileversion();
     fileVersion->set_version(cwRegionIOTask::protoVersion());
-    cwRegionSaveTask::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
+    saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
 
     *(protoTrip->mutable_name()) = trip->name().toStdString();
     if (!trip->id().isNull()) {
         *(protoTrip->mutable_id()) = uuidToProtoString(trip->id()).toStdString();
     }
 
-    // cwRegionSaveTask::saveString(protoTrip->mutable_name(), trip->name());
-    cwRegionSaveTask::saveDate(protoTrip->mutable_date(), trip->date().date());
-    cwRegionSaveTask::saveTripCalibration(protoTrip->mutable_tripcalibration(), trip->calibrations());
+    // saveString(protoTrip->mutable_name(), trip->name());
+    saveDate(protoTrip->mutable_date(), trip->date().date());
+    saveTripCalibration(protoTrip->mutable_tripcalibration(), trip->calibrations());
 
     if(trip->team()->rowCount() > 0) {
-        cwRegionSaveTask::saveTeam(protoTrip->mutable_team(), trip->team());
+        saveTeam(protoTrip->mutable_team(), trip->team());
     }
 
     foreach(cwSurveyChunk* chunk, trip->chunks()) {
         CavewhereProto::SurveyChunk* protoChunk = protoTrip->add_chunks();
-        cwRegionSaveTask::saveSurveyChunk(protoChunk, chunk);
+        saveSurveyChunk(protoChunk, chunk);
     }
 
     return protoTrip;
@@ -3703,16 +3710,16 @@ std::unique_ptr<CavewhereProto::Note> cwSaveLoad::toProtoNote(const cwNote *note
     auto protoNote = std::make_unique<CavewhereProto::Note>();
     auto fileVersion = protoNote->mutable_fileversion();
     fileVersion->set_version(cwRegionIOTask::protoVersion());
-    cwRegionSaveTask::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
+    saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
 
-    cwRegionSaveTask::saveImage(protoNote->mutable_image(), note->image());
+    saveImage(protoNote->mutable_image(), note->image());
 
     protoNote->set_rotation(note->rotate());
-    cwRegionSaveTask::saveImageResolution(protoNote->mutable_imageresolution(), note->imageResolution());
+    saveImageResolution(protoNote->mutable_imageresolution(), note->imageResolution());
 
     foreach(cwScrap* scrap, note->scraps()) {
         CavewhereProto::Scrap* protoScrap = protoNote->add_scraps();
-        cwRegionSaveTask::saveScrap(protoScrap, scrap);
+        saveScrap(protoScrap, scrap);
     }
 
     *(protoNote->mutable_name()) = note->name().toStdString();
@@ -3734,7 +3741,7 @@ std::unique_ptr<CavewhereProto::NoteLiDAR> cwSaveLoad::toProtoNoteLiDAR(const cw
     auto protoNote = std::make_unique<CavewhereProto::NoteLiDAR>();
     auto fileVersion = protoNote->mutable_fileversion();
     fileVersion->set_version(cwRegionIOTask::protoVersion());
-    cwRegionSaveTask::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
+    saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
 
     *(protoNote->mutable_name()) = note->name().toStdString();
     *(protoNote->mutable_filename()) = note->filename().toStdString();
@@ -3748,7 +3755,7 @@ std::unique_ptr<CavewhereProto::NoteLiDAR> cwSaveLoad::toProtoNoteLiDAR(const cw
         //Save the note stations
         auto protoNoteStation = protoNote->add_notestations();
         *(protoNoteStation->mutable_name()) = noteStation.name().toStdString();
-        cwRegionSaveTask::saveVector3D(protoNoteStation->mutable_positiononnote(), noteStation.positionOnNote());
+        saveVector3D(protoNoteStation->mutable_positiononnote(), noteStation.positionOnNote());
         if (!noteStation.id().isNull()) {
             *(protoNoteStation->mutable_id()) = uuidToProtoString(noteStation.id()).toStdString();
         }
@@ -4622,7 +4629,7 @@ void cwSaveLoad::saveNoteLiDARTranformation(CavewhereProto::NoteLiDARTransformat
     if (!protoNoteTransformation || !noteTransformation) { return; }
 
     //Save the base class
-    cwRegionSaveTask::saveNoteTranformation(protoNoteTransformation->mutable_plantransform(), noteTransformation);
+    saveNoteTranformation(protoNoteTransformation->mutable_plantransform(), noteTransformation);
 
     // upMode (enum)
     // The enum values appear to align (Custom=0, XisUp=1, YisUp=2, ZisUp=3). If they differ,
@@ -6502,4 +6509,249 @@ QFuture<void> cwSaveLoad::retire()
         });
 
     return d->retireFuture;
+}
+
+// ---------------------------------------------------------------------------
+// Proto serialization helpers (moved from cwRegionSaveTask)
+// ---------------------------------------------------------------------------
+
+#include "cwReading.h"
+
+namespace {
+template<typename StringFunc, typename State>
+void saveReading(StringFunc getProtoString, const cwReading& reading, State emptyState) {
+    if(reading.state() != static_cast<int>(emptyState)) {
+        *getProtoString() = reading.value().toUtf8().toStdString();
+    }
+}
+} // anonymous namespace
+
+void cwSaveLoad::saveString(std::string *protoString, const QString& string)
+{
+    *protoString = string.toUtf8().toStdString();
+}
+
+void cwSaveLoad::saveDate(QtProto::QDate *protoDate, QDate date)
+{
+   protoDate->set_day(date.day());
+   protoDate->set_month(date.month());
+   protoDate->set_year(date.year());
+}
+
+void cwSaveLoad::saveSize(QtProto::QSize *protoSize, QSize size)
+{
+   protoSize->set_width(size.width());
+   protoSize->set_height(size.height());
+}
+
+void cwSaveLoad::saveSizeF(QtProto::QSizeF *protoSize, QSizeF size)
+{
+    protoSize->set_width(size.width());
+    protoSize->set_height(size.height());
+}
+
+void cwSaveLoad::savePointF(QtProto::QPointF *protoPointF, QPointF point)
+{
+    protoPointF->set_x(point.x());
+    protoPointF->set_y(point.y());
+}
+
+void cwSaveLoad::saveVector3D(QtProto::QVector3D *protoVector3D, QVector3D vector3D)
+{
+    protoVector3D->set_x(vector3D.x());
+    protoVector3D->set_y(vector3D.y());
+    protoVector3D->set_z(vector3D.z());
+}
+
+void cwSaveLoad::saveQUuid(std::string *protoString, const QUuid &id)
+{
+    saveString(protoString, id.toString(QUuid::WithoutBraces));
+}
+
+void cwSaveLoad::saveStringList(google::protobuf::RepeatedPtrField<std::string> *protoStringList, const QStringList &stringList)
+{
+    for(const auto& string : stringList) {
+        protoStringList->Add(string.toUtf8().toStdString());
+    }
+}
+
+void cwSaveLoad::saveLength(CavewhereProto::Length *protoLength, cwLength *length)
+{
+    protoLength->set_value(length->value());
+    protoLength->set_unit((CavewhereProto::Units_LengthUnit)length->unit());
+}
+
+void cwSaveLoad::saveImageResolution(CavewhereProto::ImageResolution *protoImageRes, cwImageResolution *imageResolution)
+{
+    protoImageRes->set_value(imageResolution->value());
+    protoImageRes->set_unit((CavewhereProto::Units_ImageResolutionUnit)imageResolution->unit());
+}
+
+void cwSaveLoad::saveImage(CavewhereProto::Image *protoImage, const cwImage &image)
+{
+    Q_ASSERT(image.mode() == cwImage::Mode::Path);
+
+    saveString(protoImage->mutable_path(), image.path());
+
+    protoImage->set_dotpermeter(image.originalDotsPerMeter());
+    saveSize(protoImage->mutable_size(), image.originalSize());
+    if (image.page() >= 0) {
+        protoImage->set_page(image.page());
+    }
+    if (image.unit() != cwImage::Unit::Pixels) {
+        protoImage->set_imageunit(
+            static_cast<CavewhereProto::Image_Unit>(static_cast<int>(image.unit())));
+    }
+}
+
+void cwSaveLoad::saveNoteStation(CavewhereProto::NoteStation* protoNoteStation, const cwNoteStation &noteStation)
+{
+    saveString(protoNoteStation->mutable_name(), noteStation.name());
+    savePointF(protoNoteStation->mutable_positiononnote(), noteStation.positionOnNote());
+    if (!noteStation.id().isNull()) {
+        saveQUuid(protoNoteStation->mutable_id(), noteStation.id());
+    }
+}
+
+void cwSaveLoad::saveTeamMember(CavewhereProto::TeamMember *protoTeamMember, const cwTeamMember& teamMember)
+{
+    saveQUuid(protoTeamMember->mutable_id(), teamMember.id());
+    saveString(protoTeamMember->mutable_name(), teamMember.name());
+    saveStringList(protoTeamMember->mutable_jobs(), teamMember.jobs());
+}
+
+void cwSaveLoad::saveLead(CavewhereProto::Lead *protoLead, const cwLead &lead)
+{
+    savePointF(protoLead->mutable_positiononnote(), lead.positionOnNote());
+
+    if(!lead.desciption().isEmpty()) {
+        saveString(protoLead->mutable_description(), lead.desciption());
+    }
+
+    if(lead.size().isValid()) {
+        saveSizeF(protoLead->mutable_size(), lead.size());
+    }
+
+    protoLead->set_completed(lead.completed());
+    if (!lead.id().isNull()) {
+        saveQUuid(protoLead->mutable_id(), lead.id());
+    }
+}
+
+void cwSaveLoad::saveProjectedScrapViewMatrix(CavewhereProto::ProjectedProfileScrapViewMatrix *protoViewMatrix, cwProjectedProfileScrapViewMatrix *viewMatrix)
+{
+    protoViewMatrix->set_azimuth(viewMatrix->azimuth());
+    protoViewMatrix->set_direction(static_cast<CavewhereProto::ProjectedProfileScrapViewMatrix::Direction >(viewMatrix->direction()));
+}
+
+void cwSaveLoad::saveNoteTranformation(CavewhereProto::NoteTransformation *protoNoteTransformation,
+                                       cwAbstractNoteTransformation *noteTransformation)
+{
+    protoNoteTransformation->set_northup(noteTransformation->northUp());
+    saveLength(protoNoteTransformation->mutable_scalenumerator(),
+               noteTransformation->scaleNumerator());
+    saveLength(protoNoteTransformation->mutable_scaledenominator(),
+               noteTransformation->scaleDenominator());
+}
+
+void cwSaveLoad::saveStationShot(CavewhereProto::StationShot *protoStation, const cwStation &station)
+{
+    saveQUuid(protoStation->mutable_id(), station.id());
+
+    if(!station.name().isEmpty()) {
+        saveString(protoStation->mutable_name(), station.name());
+    }
+
+    saveReading([&](){return protoStation->mutable_left();}, station.left(), cwDistanceReading::State::Empty);
+    saveReading([&](){return protoStation->mutable_right();}, station.right(), cwDistanceReading::State::Empty);
+    saveReading([&](){return protoStation->mutable_up();}, station.up(), cwDistanceReading::State::Empty);
+    saveReading([&](){return protoStation->mutable_down();}, station.down(), cwDistanceReading::State::Empty);
+}
+
+void cwSaveLoad::saveStationShot(CavewhereProto::StationShot *protoShot, const cwShot &shot)
+{
+    saveQUuid(protoShot->mutable_id(), shot.id());
+
+    if(!shot.isDistanceIncluded()) {
+        //By default distance is included, only write it if it's not include
+        protoShot->set_includedistance(shot.isDistanceIncluded());
+    }
+
+    saveReading([&](){ return protoShot->mutable_distance(); }, shot.distance(), cwDistanceReading::State::Empty);
+    saveReading([&](){ return protoShot->mutable_compass(); }, shot.compass(), cwCompassReading::State::Empty);
+    saveReading([&](){ return protoShot->mutable_backcompass(); }, shot.backCompass(), cwCompassReading::State::Empty);
+    saveReading([&](){ return protoShot->mutable_clino(); }, shot.clino(), cwClinoReading::State::Empty);
+    saveReading([&](){ return protoShot->mutable_backclino(); }, shot.backClino(), cwClinoReading::State::Empty);
+}
+
+void cwSaveLoad::saveTripCalibration(CavewhereProto::TripCalibration *proto, cwTripCalibration *tripCalibration)
+{
+    proto->set_correctedcompassbacksight(tripCalibration->hasCorrectedCompassBacksight());
+    proto->set_correctedclinobacksight(tripCalibration->hasCorrectedClinoBacksight());
+    proto->set_tapecalibration(tripCalibration->tapeCalibration());
+    proto->set_frontcompasscalibration(tripCalibration->frontCompassCalibration());
+    proto->set_frontclinocalibration(tripCalibration->frontClinoCalibration());
+    proto->set_backcompasscalibration(tripCalibration->backCompassCalibration());
+    proto->set_backclinocalibration(tripCalibration->backClinoCalibration());
+    proto->set_declination(tripCalibration->declination());
+    proto->set_distanceunit((CavewhereProto::Units_LengthUnit)tripCalibration->distanceUnit());
+    proto->set_frontsights(tripCalibration->hasFrontSights());
+    proto->set_backsights(tripCalibration->hasBackSights());
+    proto->set_correctedcompassfrontsight(tripCalibration->hasCorrectedCompassFrontsight());
+    proto->set_correctedclinofrontsight(tripCalibration->hasCorrectedClinoFrontsight());
+}
+
+void cwSaveLoad::saveSurveyChunk(CavewhereProto::SurveyChunk *protoChunk, cwSurveyChunk *chunk)
+{
+    Q_ASSERT(chunk->stationCount() - 1 == chunk->shotCount() || chunk->isStationAndShotsEmpty());
+
+    saveQUuid(protoChunk->mutable_id(), chunk->id());
+
+    for(int i = 0; i < chunk->stationCount(); ++i) {
+        auto station = protoChunk->add_leg();
+        saveStationShot(station, chunk->station(i));
+
+        if(i < chunk->shotCount()) {
+            auto shot = protoChunk->add_leg();
+            saveStationShot(shot, chunk->shot(i));
+        }
+    }
+}
+
+void cwSaveLoad::saveTeam(CavewhereProto::Team *protoTeam, cwTeam *team)
+{
+    foreach(const cwTeamMember& teamMember, team->teamMembers()) {
+        CavewhereProto::TeamMember* protoTeamMember = protoTeam->add_teammembers();
+        saveTeamMember(protoTeamMember, teamMember);
+    }
+}
+
+void cwSaveLoad::saveScrap(CavewhereProto::Scrap *protoScrap, cwScrap *scrap)
+{
+    saveQUuid(protoScrap->mutable_id(), scrap->id());
+
+    foreach(QPointF outlinePoint, scrap->points()) {
+        QtProto::QPointF* protoPoint = protoScrap->add_outlinepoints();
+        savePointF(protoPoint, outlinePoint);
+    }
+
+    foreach(cwNoteStation station, scrap->stations()) {
+        CavewhereProto::NoteStation* protoNoteStation = protoScrap->add_notestations();
+        saveNoteStation(protoNoteStation, station);
+    }
+
+    foreach(const cwLead& lead, scrap->leads()) {
+        CavewhereProto::Lead* protoLead = protoScrap->add_leads();
+        saveLead(protoLead, lead);
+    }
+
+    protoScrap->set_calculatenotetransform(scrap->calculateNoteTransform());
+    if(!scrap->calculateNoteTransform()) {
+        saveNoteTranformation(protoScrap->mutable_notetransformation(), scrap->noteTransformation());
+    }
+    protoScrap->set_type(static_cast<CavewhereProto::Scrap_ScrapType>(scrap->type()));
+
+    if(scrap->type() == cwScrap::ProjectedProfile && !scrap->calculateNoteTransform()) {
+        saveProjectedScrapViewMatrix(protoScrap->mutable_profileviewmatrix(), static_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix()));
+    }
 }
