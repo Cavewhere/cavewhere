@@ -408,15 +408,17 @@ Proto3 makes all fields optional by default. The wire format is compatible — e
 
 ### 13. Add `reserved` statements for deprecated proto field numbers
 
-**Status:** TODO
+**Status:** DONE
 
 **File:** `cavewherelib/src/cavewhere.proto`
 
 Many fields are marked `legacy_` but only one `reserved` statement exists (Image field 9). Accidental reuse of a legacy field number would cause silent data corruption in older clients.
 
+**Resolution:** Station fields 2-9 and Shot fields 1-10 cannot be replaced with `reserved` because `cwRegionLoadTask` still reads them for V5/V6 binary protobuf import from SQLite blobs. The existing `legacy_` field definitions already prevent accidental number reuse — `reserved` is only needed when a field definition is **removed entirely** (as was done for Image field 9, SurveyChunk field 3, and ProjectMetadata field 2).
+
 **Action items:**
-- [ ] Add `reserved` for V5-era fields in `Station` (fields 2-9) and `Shot` (fields 1-10) that will never be written again
-- [ ] Document field number allocation strategy in a comment at the top of `cavewhere.proto`
+- [x] ~~Add `reserved` for V5-era fields~~ — Not possible: fields are still read by `cwRegionLoadTask`; definitions themselves prevent reuse
+- [x] Document field number allocation strategy in a comment at the top of `cavewhere.proto`
 
 ---
 

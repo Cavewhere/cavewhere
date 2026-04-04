@@ -1,6 +1,16 @@
 syntax = "proto3";
 import "qt.proto";
 
+// Field-number allocation rules
+// ─────────────────────────────
+// • Fields prefixed `legacy_` exist only for loading old binary protobuf (V5/V6).
+//   They must keep their numbers so ParseFromString() still works on SQLite blobs.
+//   Never write to legacy_ fields in new code.
+// • When a field definition is removed entirely, add `reserved <N>;` on the same
+//   message to prevent accidental reuse (see Image field 9, SurveyChunk field 3,
+//   ProjectMetadata field 2).
+// • New fields should use the next available number in their message.
+
 package CavewhereProto;
 
 message FileVersion {
