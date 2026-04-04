@@ -223,12 +223,6 @@ void cwRegionSaveTask::saveSurveyChunk(CavewhereProto::SurveyChunk *protoChunk, 
         }
     }
 
-    auto calibrations = chunk->calibrations();
-    for(auto iter = calibrations.begin(); iter != calibrations.end(); ++iter) {
-        CavewhereProto::ChunkCalibration* protoCalibration = protoChunk->add_calibrations();
-        protoCalibration->set_shotindex(iter.key());
-        saveTripCalibration(protoCalibration->mutable_calibration(), iter.value());
-    }
 }
 
 /**

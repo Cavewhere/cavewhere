@@ -72,10 +72,6 @@ void cwCompassExportCaveTask::writeTrip(QTextStream& stream, cwTrip* trip) {
     cwTripCalibration* calibration = trip->calibrations();
     foreach(cwSurveyChunk* chunk, trip->chunks()) {
         writeChunk(stream, chunk, calibration);
-
-        if(chunk->lastCalibration() != nullptr) {
-            calibration = chunk->lastCalibration();
-        }
     }
 
     stream << (char)(0x0C); //0C is the ending char for the compass file
@@ -193,10 +189,6 @@ void cwCompassExportCaveTask::writeChunk(QTextStream& stream,
 
     //Go through all the shots
     for(int i = 0; i < chunk->shotCount(); i++) {
-        //Change the calibration
-        cwTripCalibration* overrideCalibration = chunk->calibrations().value(i, nullptr);
-        calibration = overrideCalibration == nullptr ? calibration : overrideCalibration;
-
         cwShot shot = chunk->shot(i);
         cwStation from = chunk->station(i);
         cwStation to = chunk->station(i + 1);

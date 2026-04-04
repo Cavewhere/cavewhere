@@ -26,7 +26,6 @@ std::unique_ptr<CavewhereProto::Trip> normalizedTripProtoForObject(const cwTrip*
         auto* chunk = protoTrip->mutable_chunks(i);
         chunk->clear_stations();
         chunk->clear_shots();
-        chunk->clear_calibrations();
         chunk->clear_leg();
     }
     return protoTrip;
@@ -45,7 +44,6 @@ std::unique_ptr<CavewhereProto::Trip> normalizedTripProtoForData(const cwTripDat
         auto* chunk = protoTrip->mutable_chunks(i);
         chunk->clear_stations();
         chunk->clear_shots();
-        chunk->clear_calibrations();
         chunk->clear_leg();
     }
     return protoTrip;

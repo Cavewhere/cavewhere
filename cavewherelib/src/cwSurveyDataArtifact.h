@@ -14,7 +14,6 @@ class cwSurveyChunkSignaler;
 class cwTeam;
 class cwCave;
 class cwTrip;
-class cwTripCalibration;
 class cwTeam;
 class cwSurveyChunk;
 #include "cwTripCalibration.h"
@@ -39,7 +38,6 @@ public:
     struct SurveyChunk {
         QVector<cwStation> stations;
         QVector<cwShot> shots;
-        QMap<int, cwTripCalibrationData> calibrations;
 
         SurveyChunk() = default;
 

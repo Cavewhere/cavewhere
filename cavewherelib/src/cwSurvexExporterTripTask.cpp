@@ -405,12 +405,6 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream,
                    .arg(backClino, TextPadding);
         }
 
-        //Add chunk calibrations
-        cwTripCalibration* calibration = chunk->calibrations().value(i, nullptr);
-        if(calibration != nullptr) {
-            writeCalibrations(stream, calibration);
-        }
-
         //Distance should be excluded, mark as duplicate
         if(!shot.isDistanceIncluded()) {
             stream << QStringLiteral("*flags duplicate") << Qt::endl;

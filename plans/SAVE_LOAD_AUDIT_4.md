@@ -224,20 +224,23 @@ When loading existing v9 files that lack `lengthUnit`/`depthUnit`, default to **
 
 ### 5. Remove per-shot calibration overrides (dead feature)
 
-**Status:** TODO — **HIGH PRIORITY**
+**Status:** DONE — Fixed in dev
 
-**Files:** `cwSurveyChunk.h`, `cwSurveyChunk.cpp`, `cwRegionSaveTask.cpp:226-231`, `cwRegionLoadTask.cpp:396-402`, `cwSaveLoad.cpp:5113`, `cavewhere.proto`
+**Files:** `cwSurveyChunk.h`, `cwSurveyChunk.cpp`, `cwRegionSaveTask.cpp`, `cwRegionLoadTask.cpp`, `cwSaveLoad.cpp`, `cavewhere.proto`, `cwSurveyChunkData.h`, `cwSurveyChunkSignaler.h/cpp`, `cwLinePlotManager.cpp`, `cwSurveyDataArtifact.h/cpp`, `cwSurvexImporter.cpp`, `cwSurvexExporterTripTask.cpp`, `cwSurvexExporterRule.cpp`, `cwCompassExporterCaveTask.cpp`, `cwSurveyEditorModel.cpp`, `cwTripMergeApplier.cpp`
 
 Per-shot calibration overrides (`SurveyChunk.calibrations`, proto field 3) were over-engineered for a Survex import path that never materialized. The feature was poorly designed, no UI exists to create or edit per-shot calibrations, and the v9 load path never reads them — so any overrides written to disk are silently dropped on reload and permanently lost on re-save. Rather than implementing the missing load code, remove the feature entirely.
 
 **Action items:**
-- [ ] Remove `cwSurveyChunk::calibrations()`, `addCalibration()`, `calibrationsChanged` signal, and related members
-- [ ] Remove calibration write loop in `cwRegionSaveTask::saveSurveyChunk()` (lines 226-231)
-- [ ] Remove calibration loading in `cwRegionLoadTask::loadSurveyChunk()` (lines 396-402)
-- [ ] Remove `calibrationsChanged` signal connection in `cwSaveLoad.cpp` (line 5113)
-- [ ] In `cavewhere.proto`: mark `SurveyChunk` field 3 (`calibrations`) as `reserved`; add comment "Removed: per-shot calibration overrides (unused feature)"
-- [ ] Remove `ChunkCalibration` message from `cavewhere.proto` (or mark legacy with comment)
-- [ ] Remove any related `cwSurveyChunkData` calibration members if they exist
+- [x] Remove `cwSurveyChunk::calibrations()`, `addCalibration()`, `calibrationsChanged` signal, and related members
+- [x] Remove calibration write loop in `cwRegionSaveTask::saveSurveyChunk()`
+- [x] Remove calibration loading in `cwRegionLoadTask::loadSurveyChunk()`
+- [x] Remove `calibrationsChanged` signal connection in `cwSaveLoad.cpp`
+- [x] In `cavewhere.proto`: mark `SurveyChunk` field 3 (`calibrations`) as `reserved`; add comment
+- [x] Remove `ChunkCalibration` message from `cavewhere.proto`
+- [x] Remove `cwSurveyChunkData::calibrations` member
+- [x] Remove chunk calibration support from all consumers: signaler, exporters, editor model, data artifact, merge applier
+- [x] Update survex importer to apply mid-survey calibrations to trip-level calibration
+- [x] Remove chunk calibration tests, update survex import test
 
 ---
 

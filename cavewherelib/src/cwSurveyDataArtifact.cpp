@@ -27,8 +27,6 @@ cwSurveyDataArtifact::cwSurveyDataArtifact(QObject *parent)
     m_surveySignaler->addConnectionToChunks(SIGNAL(stationsAdded(int,int)), this, SIGNAL(surveyDataChanged()));
     m_surveySignaler->addConnectionToChunks(SIGNAL(stationsRemoved(int,int)), this, SIGNAL(surveyDataChanged()));
     m_surveySignaler->addConnectionToChunks(SIGNAL(dataChanged(cwSurveyChunk::DataRole,int)), this, SIGNAL(surveyDataChanged()));
-    m_surveySignaler->addConnectionToChunks(SIGNAL(calibrationsChanged()), this, SIGNAL(surveyDataChanged()));
-    m_surveySignaler->addConnectionToChunkCalibrations(SIGNAL(calibrationsChanged()), this, SIGNAL(surveyDataChanged()));
 }
 
 cwSurveyDataArtifact::~cwSurveyDataArtifact()
@@ -64,19 +62,11 @@ void cwSurveyDataArtifact::setRegion(cwCavingRegion* region)
 }
 
 cwSurveyDataArtifact::SurveyChunk::SurveyChunk(const cwSurveyChunk *chunk) {
-    // Directly copy stations.
     stations = chunk->stations();
 
-    // Assume the number of shots is one less than the station count.
     int shotCount = chunk->stationCount() - 1;
     for (int i = 0; i < shotCount; ++i) {
         shots.append(chunk->shot(i));
-        // Assume calibrations() returns a QMap<int, cwTripCalibration*>
-        auto calMap = chunk->calibrations();
-        if (calMap.contains(i)) {
-            // Use the cwTripCalibrationData constructor.
-            calibrations.insert(i, calMap.value(i)->data());
-        }
     }
 }
 

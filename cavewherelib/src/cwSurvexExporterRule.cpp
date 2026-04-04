@@ -485,12 +485,6 @@ ResultBase cwSurvexExporterRule::writeChunk(QTextStream& stream,
                        .arg(backClino, textPadding);
         }
 
-        //Add chunk calibrations
-        if(chunk.calibrations.contains(i)) {
-            cwTripCalibrationData calibration = chunk.calibrations.value(i);
-            writeCalibrations(stream, calibration);
-        }
-
         //Distance should be excluded, mark as duplicate
         if(!shot.isDistanceIncluded()) {
             stream << "*flags duplicate" << Qt::endl;

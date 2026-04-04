@@ -99,7 +99,7 @@ TEST_CASE("Import LRUD data correctly", "[SurvexImport]") {
     delete importer;
 }
 
-TEST_CASE("Import chunk calibration", "[SurvexImport]") {
+TEST_CASE("Import chunk calibration applies to trip calibration", "[SurvexImport]") {
     cwSurvexImporter* importer = new cwSurvexImporter();
     importer->setInputFiles(QStringList() << "://datasets/survex/dakeng.svx");
     importer->start();
@@ -119,14 +119,9 @@ TEST_CASE("Import chunk calibration", "[SurvexImport]") {
     cwTrip* trip = caves.first()->trips().first();
     REQUIRE(trip->chunks().size() == 1);
 
-    auto calibrations = trip->chunks().at(0)->calibrations();
-    REQUIRE(calibrations.size() == 1);
-    REQUIRE(calibrations.contains(3));
-    cwTripCalibration* calibration = calibrations.value(3);
-
-    CHECK(calibration->tapeCalibration() == -1.0);
-
-    CHECK(trip->calibrations()->tapeCalibration() == -2.0);
+    // Per-shot calibration overrides were removed; mid-survey calibrations
+    // now apply to the trip-level calibration.
+    CHECK(trip->calibrations()->tapeCalibration() == -1.0);
     delete importer;
 }
 
