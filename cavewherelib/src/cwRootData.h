@@ -153,6 +153,7 @@ public:
     Q_INVOKABLE QUrl cavewhereImageUrl(const cwImage& image, const QString& absolutePath) const;
     Q_INVOKABLE void newProject();
     Q_INVOKABLE void loadProject(const QString& filename);
+    Q_INVOKABLE void discardChangesAndReload();
 
     int titleBarHeight() const;
 

@@ -922,6 +922,42 @@ TEST_CASE("discardChanges removes new untracked files (e.g. newly added trip)", 
     CHECK(modifiedPaths.isEmpty());
 }
 
+TEST_CASE("discardChangesAndReload reloads in-memory model from committed state", "[cwProject][discardChanges]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto* project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Discard Reload Tester"));
+    rootData->account()->setEmail(QStringLiteral("discard.reload@example.com"));
+
+    project->cavingRegion()->addCave();
+    project->cavingRegion()->cave(0)->setName(QStringLiteral("Committed Cave"));
+
+    QTemporaryDir saveDir;
+    REQUIRE(saveDir.isValid());
+    const QString savePath = saveDir.filePath(QStringLiteral("discard-reload-test.cwproj"));
+    REQUIRE(project->saveAs(savePath));
+    project->waitSaveToFinish();
+    REQUIRE(project->save());
+    project->waitSaveToFinish();
+    REQUIRE(project->isModified() == false);
+
+    // Modify the in-memory model after the baseline commit.
+    project->cavingRegion()->cave(0)->setName(QStringLiteral("Modified Cave"));
+    project->waitSaveToFinish();
+    REQUIRE(project->isModified());
+    CHECK(project->cavingRegion()->cave(0)->name() == QStringLiteral("Modified Cave"));
+
+    // discardChangesAndReload should reset git and reload the committed state.
+    QSignalSpy loadedSpy(project, &cwProject::loaded);
+    rootData->discardChangesAndReload();
+    REQUIRE(loadedSpy.wait(10000));
+
+    // The in-memory model should reflect the committed state.
+    REQUIRE(project->cavingRegion()->caveCount() == 1);
+    CHECK(project->cavingRegion()->cave(0)->name().toStdString() == "Committed Cave");
+}
+
+
 TEST_CASE("NewProject should not clear objects added after call", "[cwProject][newProject]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();

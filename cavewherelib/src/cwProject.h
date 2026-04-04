@@ -213,6 +213,7 @@ signals:
     void lfsFilesNeedSync();
     void localMutationOccurred();
     void saveFlushCompleted();
+    void discardCompleted();
 
 public slots:
     void loadFile(QString filename);

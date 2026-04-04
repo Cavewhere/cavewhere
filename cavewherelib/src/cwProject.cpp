@@ -184,6 +184,7 @@ void cwProject::connectSaveLoad(cwSaveLoad* saveLoad)
             return;
         }
         setModified(false);
+        emit discardCompleted();
     });
 
     connect(saveLoad, &cwSaveLoad::isTemporaryProjectChanged, this, [this, saveLoad]() {

@@ -128,6 +128,10 @@ StandardPage {
             onCommitRequested: (subject, description) => {
                 RootData.project.safeCommitAll(subject, description)
             }
+
+            onDiscardRequested: {
+                RootData.discardChangesAndReload()
+            }
         }
     }
 
