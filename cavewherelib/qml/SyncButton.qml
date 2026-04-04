@@ -134,6 +134,7 @@ RoundButton {
         QC.MenuItem {
             text: "Set up remote…"
             visible: !hasRemote
+            height: visible ? implicitHeight : 0
             onTriggered: {
                 setupRemoteRequested()
             }
@@ -142,21 +143,23 @@ RoundButton {
         QC.MenuItem {
             objectName: "syncNowMenuItem"
             text: "Sync now"
-            enabled: !syncInProgress && hasRemote
+            visible: hasRemote
+            height: visible ? implicitHeight : 0
+            enabled: !syncInProgress
             onTriggered: {
                 syncRequested()
             }
         }
 
         QC.MenuItem {
-            text: "Remote settings..."
+            text: "Remote settings…"
             onTriggered: {
                 remoteSettingsRequested()
             }
         }
 
         QC.MenuItem {
-            text: "History..."
+            text: "History…"
             onTriggered: {
                 historyRequested()
             }
