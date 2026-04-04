@@ -254,11 +254,12 @@ message Scrap {
     optional ScrapType type = 7;
     optional ProjectedProfileScrapViewMatrix profileViewMatrix = 8; //Only used if type == ProjectedProfile
 
-    //Should be cached, and not saved here, TODO: should be defined as legacy
-    optional TriangulatedData triangleData = 5;
+    reserved 5; // Removed: TriangulatedData triangleData — cached data, never saved/loaded
 }
 
-//This is used for data cacheing
+// Legacy — TriangulatedData was cached scrap geometry stored in the proto.
+// No save/load code reads or writes it. Kept only so the generated code compiles
+// for any transitive references; safe to delete once all references are removed.
 message TriangulatedData {
     optional Image croppedImage = 1;
     repeated QtProto.QVector3D points = 2;

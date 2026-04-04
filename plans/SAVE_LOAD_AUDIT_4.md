@@ -424,15 +424,15 @@ Many fields are marked `legacy_` but only one `reserved` statement exists (Image
 
 ### 14. Mark `TriangulatedData` as legacy
 
-**Status:** TODO — LOW PRIORITY
+**Status:** DONE
 
 **File:** `cavewhere.proto:255`
 
-The `Scrap` message contains `optional TriangulatedData triangleData = 5;` with the comment "Should be cached, and not saved here." This data will be cached outside of the save/load system in the future. It should be marked as legacy now to prevent new code from depending on it.
+The `Scrap` message contained `optional TriangulatedData triangleData = 5;` with the comment "Should be cached, and not saved here." No save/load code reads or writes this field.
 
 **Action items:**
-- [ ] Mark `triangleData` (field 5) in `Scrap` as legacy with a comment: `// Legacy — cached data, will be moved to external cache. Do not use for new code.`
-- [ ] Mark the `TriangulatedData` message itself with a similar legacy comment
+- [x] Replace `triangleData` (field 5) in `Scrap` with `reserved 5;` — no code reads/writes it
+- [x] Mark the `TriangulatedData` message itself with a legacy comment (kept for compile compat with cwRegionLoadTask/SaveTask signatures)
 
 ---
 
