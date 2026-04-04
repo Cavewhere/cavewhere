@@ -112,6 +112,7 @@ Uses Qt's RHI (Rendering Hardware Interface). Key classes: `cwRegionSceneManager
 - Body: what changed, why, build/test commands run
 - Attach screenshots for QML UI changes; link related issues
 - Note submodule or dependency changes explicitly
+- Do not mention Claude or add Co-Authored-By lines in commit messages
 
 ## Key Source Locations
 
