@@ -26,6 +26,7 @@
 #include "cavewhereVersion.h"
 #include "cwProject.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
+#include "cwSaveLoad.h"
 
 //Qt includes
 #include <QSqlQuery>
@@ -833,71 +834,13 @@ QString cwRegionLoadTask::fileNotReadableErrorMessage(const QString &filename)
     return QString("Couldn't open '%1' because you don't have permission to read it").arg(filename);
 }
 
-/**
- * @brief cwRegionLoadTask::loadDate
- * @param protoDate
- * @return
- */
-QDate cwRegionLoadTask::loadDate(const QtProto::QDate& protoDate)
-{
-    return QDate(protoDate.year(), protoDate.month(), protoDate.day());
-}
-
-/**
- * @brief cwRegionLoadTask::loadSize
- * @param protoSize
- * @return
- */
-QSize cwRegionLoadTask::loadSize(const QtProto::QSize &protoSize)
-{
-    QSize size;
-    size.setWidth(protoSize.width());
-    size.setHeight(protoSize.height());
-    return size;
-}
-
-/**
- * @brief cwRegionLoadTask::loadSizeF
- * @param protoSize
- * @return
- */
-QSizeF cwRegionLoadTask::loadSizeF(const QtProto::QSizeF &protoSize)
-{
-    QSizeF size;
-    size.setWidth(protoSize.width());
-    size.setHeight(protoSize.height());
-    return size;
-}
-
-/**
- * @brief cwRegionLoadTask::loadPointF
- * @param protoPointF
- * @return
- */
-QPointF cwRegionLoadTask::loadPointF(const QtProto::QPointF& protoPointF)
-{
-    return QPointF (protoPointF.x(), protoPointF.y());
-}
-
-/**
- * @brief cwRegionLoadTask::loadVector3D
- * @param protoVector3D
- * @return
- */
-QVector3D cwRegionLoadTask::loadVector3D(const QtProto::QVector3D &protoVector3D)
-{
-    return QVector3D(protoVector3D.x(), protoVector3D.y(), protoVector3D.z());
-}
-
-/**
- * @brief cwRegionLoadTask::loadVector2D
- * @param protoVector2D
- * @return
- */
-QVector2D cwRegionLoadTask::loadVector2D(const QtProto::QVector2D &protoVector2D)
-{
-    return QVector2D(protoVector2D.x(), protoVector2D.y());
-}
+// Delegating to cwSaveLoad — canonical implementations live there now.
+QDate cwRegionLoadTask::loadDate(const QtProto::QDate& protoDate) { return cwSaveLoad::loadDate(protoDate); }
+QSize cwRegionLoadTask::loadSize(const QtProto::QSize &protoSize) { return cwSaveLoad::loadSize(protoSize); }
+QSizeF cwRegionLoadTask::loadSizeF(const QtProto::QSizeF &protoSize) { return cwSaveLoad::loadSizeF(protoSize); }
+QPointF cwRegionLoadTask::loadPointF(const QtProto::QPointF& protoPointF) { return cwSaveLoad::loadPointF(protoPointF); }
+QVector3D cwRegionLoadTask::loadVector3D(const QtProto::QVector3D &protoVector3D) { return cwSaveLoad::loadVector3D(protoVector3D); }
+QVector2D cwRegionLoadTask::loadVector2D(const QtProto::QVector2D &protoVector2D) { return cwSaveLoad::loadVector2D(protoVector2D); }
 
 /**
  * @brief cwRegionLoadTask::loadStringList

@@ -12,7 +12,7 @@
 #include "cwStation.h"
 #include "cwLength.h"
 #include "cwLead.h"
-#include "cwRegionLoadTask.h"
+#include "cwRegionIOTask.h"
 #include "cwConcurrent.h"
 #include "cwFutureManagerModel.h"
 #include "cwTeam.h"
@@ -261,7 +261,7 @@ cwImage loadImage(const CavewhereProto::Image& protoImage, const QString& noteFi
 
     const bool hasSize = protoImage.has_size();
     if (hasSize) {
-        image.setOriginalSize(cwRegionLoadTask::loadSize(protoImage.size()));
+        image.setOriginalSize(cwSaveLoad::loadSize(protoImage.size()));
     }
 
     const bool hasDots = protoImage.has_dotpermeter();
@@ -4190,7 +4190,7 @@ cwTripData cwSaveLoad::tripDataFromProtoTrip(const CavewhereProto::Trip& tripPro
     }
 
     if (tripProto.has_date()) {
-        tripData.date = QDateTime(cwRegionLoadTask::loadDate(tripProto.date()), QTime());
+        tripData.date = QDateTime(loadDate(tripProto.date()), QTime());
     }
 
     if (tripProto.has_tripcalibration()) {
@@ -4284,7 +4284,7 @@ cwNoteLiDARData cwSaveLoad::noteLiDARDataFromProtoNoteLiDAR(const CavewhereProto
     noteData.stations.reserve(protoNote.notestations_size());
     for (const auto& protoNoteStation : protoNote.notestations()) {
         cwNoteLiDARStation newStation;
-        newStation.setPositionOnNote(cwRegionLoadTask::loadVector3D(protoNoteStation.positiononnote()));
+        newStation.setPositionOnNote(loadVector3D(protoNoteStation.positiononnote()));
         newStation.setName(QString::fromStdString(protoNoteStation.name()));
         if (protoNoteStation.has_id()) {
             newStation.setId(toUuid(protoNoteStation.id()));
@@ -4461,7 +4461,7 @@ cwScrapData cwSaveLoad::fromProtoScrap(const CavewhereProto::Scrap &protoScrap)
 
     // Load outline points
     for (const QtProto::QPointF& protoPoint : protoScrap.outlinepoints()) {
-        scrapData.outlinePoints.append(cwRegionLoadTask::loadPointF(protoPoint));
+        scrapData.outlinePoints.append(loadPointF(protoPoint));
     }
 
     // Load stations
@@ -4518,7 +4518,7 @@ cwNoteStation cwSaveLoad::fromProtoNoteStation(const CavewhereProto::NoteStation
     } else if (protoNoteStation.has_legacy_name()) {
         noteStation.setName(fromLegacyQtString(protoNoteStation.legacy_name()));
     }
-    noteStation.setPositionOnNote(cwRegionLoadTask::loadPointF(protoNoteStation.positiononnote()));
+    noteStation.setPositionOnNote(loadPointF(protoNoteStation.positiononnote()));
     if (protoNoteStation.has_id()) {
         noteStation.setId(toUuid(protoNoteStation.id()));
     } else {
@@ -4532,7 +4532,7 @@ cwLead cwSaveLoad::fromProtoLead(const CavewhereProto::Lead &protoLead)
     cwLead lead;
 
     // Load position on note
-    lead.setPositionOnNote(cwRegionLoadTask::loadPointF(protoLead.positiononnote()));
+    lead.setPositionOnNote(loadPointF(protoLead.positiononnote()));
 
     // Load description if present
     if (protoLead.has_description()) {
@@ -4543,7 +4543,7 @@ cwLead cwSaveLoad::fromProtoLead(const CavewhereProto::Lead &protoLead)
 
     // Load size if present and valid
     if (protoLead.has_size()) {
-        QSizeF size = cwRegionLoadTask::loadSizeF(protoLead.size());
+        QSizeF size = loadSizeF(protoLead.size());
         if (size.isValid()) {
             lead.setSize(size);
         }
@@ -6525,6 +6525,46 @@ void saveReading(StringFunc getProtoString, const cwReading& reading, State empt
     }
 }
 } // anonymous namespace
+
+// ---------------------------------------------------------------------------
+// Proto deserialization helpers (moved from cwRegionLoadTask)
+// ---------------------------------------------------------------------------
+
+QDate cwSaveLoad::loadDate(const QtProto::QDate& protoDate)
+{
+    return QDate(protoDate.year(), protoDate.month(), protoDate.day());
+}
+
+QSize cwSaveLoad::loadSize(const QtProto::QSize &protoSize)
+{
+    QSize size;
+    size.setWidth(protoSize.width());
+    size.setHeight(protoSize.height());
+    return size;
+}
+
+QSizeF cwSaveLoad::loadSizeF(const QtProto::QSizeF &protoSize)
+{
+    QSizeF size;
+    size.setWidth(protoSize.width());
+    size.setHeight(protoSize.height());
+    return size;
+}
+
+QPointF cwSaveLoad::loadPointF(const QtProto::QPointF& protoPointF)
+{
+    return QPointF(protoPointF.x(), protoPointF.y());
+}
+
+QVector3D cwSaveLoad::loadVector3D(const QtProto::QVector3D &protoVector3D)
+{
+    return QVector3D(protoVector3D.x(), protoVector3D.y(), protoVector3D.z());
+}
+
+QVector2D cwSaveLoad::loadVector2D(const QtProto::QVector2D &protoVector2D)
+{
+    return QVector2D(protoVector2D.x(), protoVector2D.y());
+}
 
 void cwSaveLoad::saveString(std::string *protoString, const QString& string)
 {

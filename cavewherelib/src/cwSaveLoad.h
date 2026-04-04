@@ -313,6 +313,22 @@ public:
     static cwNoteData noteDataFromProtoNote(const CavewhereProto::Note& protoNote, const QString& filename);
     static cwNoteLiDARData noteLiDARDataFromProtoNoteLiDAR(const CavewhereProto::NoteLiDAR& protoNote, const QString& filename);
 
+    // Proto primitive type helpers (shared by cwSaveLoad and cwRegionLoadTask)
+    static QDate loadDate(const QtProto::QDate& protoDate);
+    static QSize loadSize(const QtProto::QSize& protoSize);
+    static QSizeF loadSizeF(const QtProto::QSizeF& protoSize);
+    static QPointF loadPointF(const QtProto::QPointF& protoPointF);
+    static QVector3D loadVector3D(const QtProto::QVector3D& protoVector3D);
+    static QVector2D loadVector2D(const QtProto::QVector2D& protoVector2D);
+    static void saveString(std::string *protoString, const QString &string);
+    static void saveDate(QtProto::QDate* protoDate, QDate date);
+    static void saveSize(QtProto::QSize* protoSize, QSize size);
+    static void saveSizeF(QtProto::QSizeF* protoSize, QSizeF size);
+    static void savePointF(QtProto::QPointF* protoPointF, QPointF point);
+    static void saveVector3D(QtProto::QVector3D* protoVector3D, QVector3D vector3D);
+    static void saveQUuid(std::string *protoString, const QUuid& id);
+    static void saveStringList(google::protobuf::RepeatedPtrField<std::string>* protoStringList, const QStringList& stringList);
+
 signals:
     void fileNameChanged();
     void dataRootChanged();
@@ -478,14 +494,6 @@ private:
                                 const QQuaternion& quaternion);
 
     // Proto serialization helpers (moved from cwRegionSaveTask)
-    static void saveString(std::string *protoString, const QString &string);
-    static void saveDate(QtProto::QDate* protoDate, QDate date);
-    static void saveSize(QtProto::QSize* protoSize, QSize size);
-    static void saveSizeF(QtProto::QSizeF* protoSize, QSizeF size);
-    static void savePointF(QtProto::QPointF* protoPointF, QPointF point);
-    static void saveVector3D(QtProto::QVector3D* protoVector3D, QVector3D vector3D);
-    static void saveQUuid(std::string *protoString, const QUuid& id);
-    static void saveStringList(google::protobuf::RepeatedPtrField<std::string>* protoStringList, const QStringList& stringList);
     static void saveLength(CavewhereProto::Length* protoLength, cwLength* length);
     static void saveImageResolution(CavewhereProto::ImageResolution* protoImageRes, cwImageResolution* imageResolution);
     static void saveImage(CavewhereProto::Image* protoImage, const cwImage& image);
