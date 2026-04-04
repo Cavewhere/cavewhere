@@ -382,7 +382,7 @@ However, since `cavewhere.proto` uses `optional` on all fields (`optional int32 
 
 ### 12. Migrate `qt.proto` from proto2 to proto3
 
-**Status:** TODO
+**Status:** DONE (c3123919)
 
 **File:** `cavewherelib/src/qt.proto`
 
