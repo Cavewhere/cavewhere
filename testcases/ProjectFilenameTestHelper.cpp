@@ -8,6 +8,7 @@
 #include "ProjectFilenameTestHelper.h"
 
 #include "cwCave.h"
+#include "cwSaveLoad.h"
 #include "cwCavingRegion.h"
 #include "cwImage.h"
 #include "cwNote.h"
@@ -29,21 +30,7 @@ QDir projectRootDirForFile(const QString& projectFileName)
 
 QString ProjectFilenameTestHelper::sanitizeFileName(QString input)
 {
-    const QString forbiddenChars = R"(\/:*?"<>|)";
-    for (const QChar& ch : forbiddenChars) {
-        input.replace(ch, "_");
-    }
-
-    input = input.trimmed();
-    while (input.startsWith('.') || input.endsWith('.')) {
-        input = input.mid(1).chopped(1);
-    }
-
-    if (input.isEmpty()) {
-        input = "untitled";
-    }
-
-    return input;
+    return cwSaveLoad::sanitizeFileName(std::move(input));
 }
 
 QString ProjectFilenameTestHelper::defaultDataRoot(const QString& projectName)

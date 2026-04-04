@@ -46,7 +46,7 @@ All `.cwproj`, `.cwcave`, `.cwtrip`, `.cwnote`, `.cwnote3d` files are human-read
 
 ### 1. CRITICAL: `JsonStringToMessage` rejects unknown fields — forward compatibility broken
 
-**Status:** TODO — **CRITICAL, fix before release**
+**Status:** DONE — Fixed in dev
 
 **Files:** `cwSaveLoad.cpp:800`, `cwCaveSyncMergeHandler.cpp:48`, `cwCavingRegionSyncMergeHandler.cpp:26`
 
@@ -174,7 +174,7 @@ This is a correctness problem: two scraps in the same project sharing a UUID cou
 
 ### 3. `sanitizeFileName` strips both ends simultaneously
 
-**Status:** TODO — **HIGH PRIORITY, fix before v9 ships**
+**Status:** DONE — Fixed in dev
 
 **Files:** `cwSaveLoad.cpp` (`sanitizeFileName()`), `testcases/ProjectFilenameTestHelper.cpp` (duplicate implementation)
 
@@ -202,7 +202,7 @@ while (input.endsWith('.'))  input.chop(1);
 
 ### 4. Save `lengthUnit` / `depthUnit` in `toProtoCave()`
 
-**Status:** TODO — **HIGH PRIORITY** (absorb into v9 bump)
+**Status:** DONE — Fixed in dev
 
 **File:** `cwSaveLoad.cpp`, `toProtoCave()` and v9 load path
 
@@ -243,7 +243,7 @@ Per-shot calibration overrides (`SurveyChunk.calibrations`, proto field 3) were 
 
 ### 6. Remove binary protobuf loading from v9 path
 
-**Status:** TODO — **MEDIUM PRIORITY** (code clarity)
+**Status:** DONE — Fixed in dev (combined with #1)
 
 **Files:** `cwSaveLoad.cpp` (`loadMessage<T>()`), `cwCaveSyncMergeHandler.cpp` (`parseProtoCave()`), `cwCavingRegionSyncMergeHandler.cpp` (`parseProjectProto()`)
 
@@ -263,7 +263,7 @@ The same binary-before-JSON pattern exists in the sync merge handlers:
 
 ### 7. Fix `ensurePathForFile` silent-failure bug
 
-**Status:** TODO — **MEDIUM PRIORITY**
+**Status:** DONE — Fixed in dev
 
 **File:** `cwSaveLoad.cpp`, `Data::ensurePathForFile()` (~line 1448)
 
@@ -288,7 +288,7 @@ Both branches construct a `ResultBase` without returning it. The function always
 
 ### 8. `TripCalibration` boolean fields lack presence checks
 
-**Status:** TODO — **MEDIUM PRIORITY**
+**Status:** DONE — Fixed in dev
 
 **File:** `cwSaveLoad.cpp:4202-4218`
 

@@ -423,7 +423,9 @@ cwCaveData cwCave::data() const
         Name,
         cwData::toDataList<cwTripData>(Trips),
         StationPositionModel,
-        Id
+        Id,
+        static_cast<cwUnits::LengthUnit>(length()->unit()),
+        static_cast<cwUnits::LengthUnit>(depth()->unit())
     };
 }
 
@@ -431,6 +433,8 @@ void cwCave::setData(const cwCaveData &data)
 {
     setName(data.name);
     setId(data.id);
+    length()->setUnit(data.lengthUnit);
+    depth()->setUnit(data.depthUnit);
 
     clearTrips();
 
