@@ -2513,4 +2513,99 @@ TEST_CASE("saveAs, sync, and resetBranchAndReconcile blocked for version-incompa
         REQUIRE(reloaded->errorModel()->count() >= 1);
         CHECK(reloaded->errorModel()->at(0).message().contains(QStringLiteral("Cannot reconcile")));
     }
+
+    SECTION("restoreToCommit is blocked") {
+        CHECK_FALSE(reloaded->restoreToCommit(QStringLiteral("abcdef1234567890abcdef1234567890abcdef12")));
+        REQUIRE(reloaded->errorModel()->count() >= 1);
+        CHECK(reloaded->errorModel()->at(0).message().contains(QStringLiteral("Cannot restore")));
+    }
+}
+
+TEST_CASE("cwProject restoreToCommit restores project data to a previous save", "[cwSaveLoad][RestoreToCommit]")
+{
+    auto root = std::make_unique<cwRootData>();
+    auto project = root->project();
+    auto region = project->cavingRegion();
+
+    root->account()->setName(QStringLiteral("Test User"));
+    root->account()->setEmail(QStringLiteral("test@example.com"));
+
+    // Save 1: one cave, no trips
+    region->addCave();
+    region->cave(0)->setName(QStringLiteral("Restore Cave"));
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("restore-test/restore-test.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+
+    auto* repo = project->repository();
+    REQUIRE(repo != nullptr);
+    const QString repoPath = repo->directory().absolutePath();
+    const auto firstOid = QQuickGit::GitRepository::headCommitOid(repoPath);
+    REQUIRE_FALSE(firstOid.hasError());
+
+    // Save 2: add a trip
+    region->cave(0)->addTrip();
+    region->cave(0)->trip(0)->setName(QStringLiteral("Survey Trip 1"));
+    REQUIRE(project->save());
+    project->waitSaveToFinish();
+
+    const auto secondOid = QQuickGit::GitRepository::headCommitOid(repoPath);
+    REQUIRE_FALSE(secondOid.hasError());
+    REQUIRE(secondOid.value() != firstOid.value());
+
+    SECTION("Restore updates in-memory model to match first save") {
+        CHECK(project->restoreToCommit(firstOid.value()));
+        project->waitForSyncToFinish();
+
+        // After restore, the cave should exist but with no trips
+        REQUIRE(region->caveCount() == 1);
+        CHECK(region->cave(0)->name() == QStringLiteral("Restore Cave"));
+        CHECK(region->cave(0)->tripCount() == 0);
+    }
+
+    SECTION("Git history shows 3 commits after restore") {
+        CHECK(project->restoreToCommit(firstOid.value()));
+        project->waitForSyncToFinish();
+
+        const auto restoreOid = QQuickGit::GitRepository::headCommitOid(repoPath);
+        REQUIRE_FALSE(restoreOid.hasError());
+        CHECK(restoreOid.value() != firstOid.value());
+        CHECK(restoreOid.value() != secondOid.value());
+
+        // Restore commit's parent should be the second save
+        auto parentResult = QQuickGit::GitRepository::commitParentOids(repoPath, restoreOid.value());
+        REQUIRE_FALSE(parentResult.hasError());
+        REQUIRE(parentResult.value().size() == 1);
+        CHECK(parentResult.value().first() == secondOid.value());
+    }
+
+    SECTION("Invalid SHA propagates error to errorModel") {
+        CHECK(project->restoreToCommit(QStringLiteral("badc0ffeebadc0ffeebadc0ffeebadc0ffeebadc")));
+        project->waitForSyncToFinish();
+
+        REQUIRE(project->errorModel()->count() >= 1);
+
+        // HEAD unchanged
+        const auto afterOid = QQuickGit::GitRepository::headCommitOid(repoPath);
+        REQUIRE_FALSE(afterOid.hasError());
+        CHECK(afterOid.value() == secondOid.value());
+    }
+
+    SECTION("restoreToCommit returns false while sync is in progress") {
+        CHECK(project->restoreToCommit(firstOid.value()));
+        // While sync is running, a second call should be rejected
+        CHECK_FALSE(project->restoreToCommit(firstOid.value()));
+        project->waitForSyncToFinish();
+    }
+
+    SECTION("Working directory is clean after restore") {
+        CHECK(project->restoreToCommit(firstOid.value()));
+        project->waitForSyncToFinish();
+
+        repo->checkStatus();
+        CHECK(repo->modifiedFileCount() == 0);
+    }
 }

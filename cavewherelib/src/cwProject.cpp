@@ -530,6 +530,17 @@ bool cwProject::resetBranchAndReconcile(const QString& refSpec, BranchResetMode 
     return beginSyncOperation(m_saveLoad->resetBranchAndReconcile(refSpec, resetMode));
 }
 
+bool cwProject::restoreToCommit(const QString& targetSha)
+{
+    if (!m_saveLoad || syncInProgress()) {
+        return false;
+    }
+
+    if (emitVersionGuardError(QStringLiteral("restore"))) { return false; }
+
+    return beginSyncOperation(m_saveLoad->restoreToCommitAndReconcile(targetSha));
+}
+
 void cwProject::waitForSyncToFinish()
 {
     AsyncFuture::waitForFinished(SyncFuture);

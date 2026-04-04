@@ -306,6 +306,7 @@ public:
     // Compatibility wrapper; use resetBranchAndReconcile for branch-moving semantics.
     QFuture<Monad::ResultBase> checkoutAndReconcile(const QString& refSpec,
                                                     int checkoutMode = 1);
+    QFuture<Monad::ResultBase> restoreToCommitAndReconcile(const QString& targetSha);
     std::optional<SyncReport> lastSyncReport() const;
 
     QFuture<void> retire();
@@ -430,6 +431,9 @@ private:
     Monad::ResultBase commitProjectChanges(const QString& subject = QString(),
                                            const QString& description = QString());
     QFuture<Monad::ResultBase> loadImpl(const QString& filename);
+    using GitOperationFn = std::function<QFuture<Monad::ResultBase>(QQuickGit::GitRepository* repo)>;
+    QFuture<Monad::ResultBase> gitOperationAndReconcile(const QString& operationLabel,
+                                                        const GitOperationFn& gitOp);
     QFuture<Monad::ResultBase> saveFlushImpl();
     QFuture<Monad::ResultBase> enqueueReconcilePhase(const QFuture<Monad::ResultBase>& prepareFuture,
                                                      quint64 syncGeneration,

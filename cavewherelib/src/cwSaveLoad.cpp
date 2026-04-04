@@ -6060,7 +6060,8 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
     return syncDeferred->future();
 }
 
-QFuture<Monad::ResultBase> cwSaveLoad::resetBranchAndReconcile(const QString& refSpec, BranchResetMode resetMode)
+QFuture<Monad::ResultBase> cwSaveLoad::gitOperationAndReconcile(const QString& operationLabel,
+                                                                const GitOperationFn& gitOp)
 {
     d->lastSyncReport.reset();
 
@@ -6074,11 +6075,6 @@ QFuture<Monad::ResultBase> cwSaveLoad::resetBranchAndReconcile(const QString& re
 
     if (d->projectFileName.isEmpty()) {
         return AsyncFuture::completed(ResultBase(QStringLiteral("Project has no filename.")));
-    }
-
-    const QString normalizedRefSpec = refSpec.trimmed();
-    if (normalizedRefSpec.isEmpty()) {
-        return AsyncFuture::completed(ResultBase(QStringLiteral("Checkout ref is empty.")));
     }
 
     auto* repo = d->repository;
@@ -6097,7 +6093,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::resetBranchAndReconcile(const QString& re
     auto checkoutPrepareFuture = d->enqueueOperation(
         this,
         Data::Operation::Type::SyncProject,
-        [this, repo, repoPath, normalizedRefSpec, resetMode, syncGeneration, saveFlushFuture, attemptState]() -> QFuture<ResultBase> {
+        [this, repo, repoPath, operationLabel, gitOp, syncGeneration, saveFlushFuture, attemptState]() -> QFuture<ResultBase> {
             Q_ASSERT(saveFlushFuture.isFinished());
             const auto saveFlushResult = saveFlushFuture.result();
             if (saveFlushResult.hasError()) {
@@ -6114,12 +6110,6 @@ QFuture<Monad::ResultBase> cwSaveLoad::resetBranchAndReconcile(const QString& re
                     QStringLiteral("Working directory must be clean before checkout and reconcile.")));
             }
 
-            const QString currentBranch = repo->headBranchName();
-            if (currentBranch.isEmpty()) {
-                return AsyncFuture::completed(ResultBase(
-                    QStringLiteral("Cannot reset branch: HEAD is detached.")));
-            }
-
             const auto beforeHeadResult = QQuickGit::GitRepository::headCommitOid(repoPath);
             if (beforeHeadResult.hasError()) {
                 return AsyncFuture::completed(ResultBase(beforeHeadResult.errorMessage()));
@@ -6130,25 +6120,19 @@ QFuture<Monad::ResultBase> cwSaveLoad::resetBranchAndReconcile(const QString& re
                 return captureLfsSnapshot(repoPath);
             });
 
-            QQuickGit::GitRepository::ResetMode mode = QQuickGit::GitRepository::ResetMode::Hard;
-            if (resetMode == BranchResetMode::Soft) {
-                mode = QQuickGit::GitRepository::ResetMode::Soft;
-            } else if (resetMode == BranchResetMode::Mixed) {
-                mode = QQuickGit::GitRepository::ResetMode::Mixed;
-            }
-            auto checkoutFuture = repo->reset(normalizedRefSpec, mode);
-            return AsyncFuture::observe(checkoutFuture)
-                .context(this, [this, repoPath, normalizedRefSpec, beforeHead, beforeSnapshotFuture, checkoutFuture, syncGeneration, attemptState]() -> QFuture<ResultBase> {
+            auto gitFuture = gitOp(repo);
+            return AsyncFuture::observe(gitFuture)
+                .context(this, [this, repoPath, operationLabel, beforeHead, beforeSnapshotFuture, gitFuture, syncGeneration, attemptState]() -> QFuture<ResultBase> {
                     if (d->operationGeneration != syncGeneration || d->retiring) {
                         return AsyncFuture::completed(ResultBase(QStringLiteral("Operation canceled.")));
                     }
 
-                    const auto checkoutResult = checkoutFuture.result();
+                    const auto checkoutResult = gitFuture.result();
                     if (checkoutResult.hasError()) {
                         return AsyncFuture::completed(checkoutResult);
                     }
 
-                    // If the .cwproj descriptor was renamed by the reset, update the
+                    // If the .cwproj descriptor was renamed by the operation, update the
                     // in-memory filename before loading — otherwise loadProject will fail
                     // because the old filename no longer exists on disk.
                     updateFileNameFromSingleCwproj(repoPath);
@@ -6176,15 +6160,14 @@ QFuture<Monad::ResultBase> cwSaveLoad::resetBranchAndReconcile(const QString& re
                     });
 
                     return AsyncFuture::observe(reportFuture)
-                        .context(this, [this, normalizedRefSpec, reportFuture, attemptState, syncGeneration]() -> ResultBase {
+                        .context(this, [this, operationLabel, reportFuture, attemptState, syncGeneration]() -> ResultBase {
                             if (d->operationGeneration != syncGeneration || d->retiring) {
                                 return ResultBase(QStringLiteral("Operation canceled."));
                             }
 
                             attemptState->report = reportFuture.result();
                             if (attemptState->report.has_value()) {
-                                attemptState->report->diagnostics.append(
-                                    QStringLiteral("checkout reconcile target: %1").arg(normalizedRefSpec));
+                                attemptState->report->diagnostics.append(operationLabel);
                             }
                             d->lastSyncReport = attemptState->report;
                             if (!attemptState->report.has_value()) {
@@ -6217,10 +6200,36 @@ QFuture<Monad::ResultBase> cwSaveLoad::resetBranchAndReconcile(const QString& re
 
     if (d->futureToken.isValid()) {
         d->futureToken.addJob(cwFuture(QFuture<void>(checkoutDeferred->future()),
-                                       QStringLiteral("Checking out project")));
+                                       operationLabel));
     }
 
     return checkoutDeferred->future();
+}
+
+QFuture<Monad::ResultBase> cwSaveLoad::resetBranchAndReconcile(const QString& refSpec, BranchResetMode resetMode)
+{
+    const QString normalizedRefSpec = refSpec.trimmed();
+    if (normalizedRefSpec.isEmpty()) {
+        return AsyncFuture::completed(ResultBase(QStringLiteral("Checkout ref is empty.")));
+    }
+
+    return gitOperationAndReconcile(
+        QStringLiteral("checkout reconcile target: %1").arg(normalizedRefSpec),
+        [normalizedRefSpec, resetMode](QQuickGit::GitRepository* repo) -> QFuture<Monad::ResultBase> {
+            const QString currentBranch = repo->headBranchName();
+            if (currentBranch.isEmpty()) {
+                return AsyncFuture::completed(Monad::ResultBase(
+                    QStringLiteral("Cannot reset branch: HEAD is detached.")));
+            }
+
+            QQuickGit::GitRepository::ResetMode mode = QQuickGit::GitRepository::ResetMode::Hard;
+            if (resetMode == BranchResetMode::Soft) {
+                mode = QQuickGit::GitRepository::ResetMode::Soft;
+            } else if (resetMode == BranchResetMode::Mixed) {
+                mode = QQuickGit::GitRepository::ResetMode::Mixed;
+            }
+            return repo->reset(normalizedRefSpec, mode);
+        });
 }
 
 QFuture<Monad::ResultBase> cwSaveLoad::resetBranchAndReconcile(const QString& refSpec, int resetMode)
@@ -6231,6 +6240,20 @@ QFuture<Monad::ResultBase> cwSaveLoad::resetBranchAndReconcile(const QString& re
 QFuture<Monad::ResultBase> cwSaveLoad::checkoutAndReconcile(const QString& refSpec, int checkoutMode)
 {
     return resetBranchAndReconcile(refSpec, static_cast<BranchResetMode>(checkoutMode));
+}
+
+QFuture<Monad::ResultBase> cwSaveLoad::restoreToCommitAndReconcile(const QString& targetSha)
+{
+    const QString normalizedSha = targetSha.trimmed();
+    if (normalizedSha.isEmpty()) {
+        return AsyncFuture::completed(ResultBase(QStringLiteral("Restore target SHA is empty.")));
+    }
+
+    return gitOperationAndReconcile(
+        QStringLiteral("restore to commit: %1").arg(normalizedSha),
+        [normalizedSha](QQuickGit::GitRepository* repo) {
+            return repo->restoreToCommit(normalizedSha);
+        });
 }
 
 std::optional<cwSaveLoad::SyncReport> cwSaveLoad::lastSyncReport() const

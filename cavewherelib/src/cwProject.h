@@ -126,6 +126,7 @@ public:
 
     Q_INVOKABLE bool resetBranchAndReconcile(const QString& refSpec,
                                              BranchResetMode resetMode = BranchResetMode::Hard);
+    Q_INVOKABLE bool restoreToCommit(const QString& targetSha);
 
     std::optional<cwSaveLoad::SyncReport> lastSyncReport() const;
 

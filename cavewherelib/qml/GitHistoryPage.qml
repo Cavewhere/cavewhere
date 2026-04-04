@@ -7,6 +7,12 @@ StandardPage {
     id: page
     objectName: "gitHistoryPage"
 
+    function requestRestore(sha: string, subject: string): void {
+        restoreConfirmDialog.targetSha = sha
+        restoreConfirmDialog.targetSubject = subject
+        restoreConfirmDialog.open()
+    }
+
     function navigateToFileDiff(filePath: string, isBinary: bool, isImage: bool,
                                 statusText: string, isWorkingTree: bool): void {
         if (isImage) {
@@ -74,6 +80,14 @@ StandardPage {
                 syntheticBorderColor: Theme.border
                 syntheticIconSource: "qrc:/twbs-icons/icons/pencil.svg"
                 scrollBarSpacing: Theme.pageMargin
+
+                onRestoreRequested: (sha, subject) => {
+                    page.requestRestore(sha, subject)
+                }
+
+                onDiscardAllRequested: {
+                    discardConfirmDialog.open()
+                }
             }
         }
 
@@ -143,5 +157,32 @@ StandardPage {
     QQ.Component {
         id: imageComparePageComponent
         GitImageComparePage { }
+    }
+
+    QG.GitDiscardDialog {
+        id: discardConfirmDialog
+        dangerColor: Theme.danger
+        onDiscardConfirmed: RootData.discardChangesAndReload()
+    }
+
+    QC.Dialog {
+        id: restoreConfirmDialog
+        anchors.centerIn: parent
+        modal: true
+        title: qsTr("Restore to this version?")
+        standardButtons: QC.Dialog.Ok | QC.Dialog.Cancel
+
+        property string targetSha: ""
+        property string targetSubject: ""
+
+        contentItem: QC.Label {
+            text: qsTr("This will create a new save that restores the project to:\n\n\"%1\"\n\nAll history will be preserved.")
+                  .arg(restoreConfirmDialog.targetSubject)
+            wrapMode: QQ.Text.Wrap
+        }
+
+        onAccepted: {
+            RootData.project.restoreToCommit(restoreConfirmDialog.targetSha)
+        }
     }
 }
