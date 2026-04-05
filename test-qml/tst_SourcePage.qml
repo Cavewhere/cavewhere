@@ -260,6 +260,10 @@ MainWindowTest {
 
             tryVerify(() => { return RootData.region.caveCount > 0 }, 20000)
 
+            // loadProject() navigates to View page; go back to Source to access the list
+            RootData.pageSelectionModel.currentPageAddress = "Source"
+            waitForRendering(mainWindow);
+
             let repoListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->repositoryListView")
             tryVerify(() => { return repoListView.count === 1 })
             waitForRendering(repoListView)
