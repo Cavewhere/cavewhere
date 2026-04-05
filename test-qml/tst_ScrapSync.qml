@@ -330,16 +330,25 @@ MainWindowTest {
         }
 
         function selectNoteIndex(noteIndex, label, forceRebind) {
-            let gallery = noteGallery()
-            let galleryView = noteGalleryView()
+            // Re-lookup gallery objects each attempt since sync round trips
+            // destroy and recreate the trip page and its children.
+            function freshGallery() {
+                return ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery")
+            }
+            function freshGalleryView() {
+                return ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView")
+            }
 
             tryVerifyWithDiagnostics(() => {
+                let gv = freshGalleryView()
                 return RootData.pageView.currentPageItem !== null
                        && RootData.pageView.currentPageItem.objectName === "tripPage"
-                       && galleryView.count > noteIndex
+                       && gv !== null
+                       && gv.count > noteIndex
             }, 10000, label + " wait for gallery row")
 
             let shouldForceRebind = forceRebind === true
+            let galleryView = freshGalleryView()
 
             if (shouldForceRebind && galleryView.currentIndex === noteIndex) {
                 galleryView.currentIndex = -1
@@ -350,22 +359,40 @@ MainWindowTest {
             }
 
             tryVerifyWithDiagnostics(() => {
-                if (galleryView.currentIndex !== noteIndex) {
-                    galleryView.currentIndex = noteIndex
+                let gallery = freshGallery()
+                let gv = freshGalleryView()
+                if (gallery === null || gv === null) {
+                    return false
+                }
+
+                if (gv.currentIndex !== noteIndex) {
+                    gv.currentIndex = noteIndex
+                }
+
+                if (gv.currentItem == null
+                        && gv.currentIndex === noteIndex) {
+                    gv.positionViewAtIndex(noteIndex, ListView.Contain)
+                    gv.forceLayout()
+                }
+
+                if (gallery.currentNote == null
+                        && gv.currentIndex === noteIndex
+                        && gv.currentItem != null) {
+                    gv.updateCurrentNote()
                 }
 
                 if (shouldForceRebind
                         && gallery.currentNote == null
-                        && galleryView.currentIndex === noteIndex
+                        && gv.currentIndex === noteIndex
                         && gallery.state === "NO_NOTES") {
-                    galleryView.currentIndex = -1
+                    gv.currentIndex = -1
                     wait(50)
-                    galleryView.currentIndex = noteIndex
+                    gv.currentIndex = noteIndex
                 }
 
                 return gallery.state !== "NO_NOTES"
                        && gallery.currentNote != null
-                       && galleryView.currentIndex === noteIndex
+                       && gv.currentIndex === noteIndex
             }, 15000, label)
         }
 
