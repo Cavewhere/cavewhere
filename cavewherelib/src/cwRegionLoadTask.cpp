@@ -254,27 +254,27 @@ void cwRegionLoadTask::loadCave(const CavewhereProto::Cave& protoCave, cwCave *c
     cwUnits::LengthUnit depthUnit = static_cast<cwUnits::LengthUnit>(protoCave.depthunit());
 
     QList<cwTrip*> trips;
-    trips.reserve(protoCave.trips_size());
+    trips.reserve(protoCave.legacy_trips_size());
 
     cave->setName(name);
     cave->length()->setUnit(lengthUnit);
     cave->depth()->setUnit(depthUnit);
 
-    for(int i = 0; i < protoCave.trips_size(); i++) {
+    for(int i = 0; i < protoCave.legacy_trips_size(); i++) {
         cwTrip* trip = new cwTrip();
-        loadTrip(protoCave.trips(i), trip);
+        loadTrip(protoCave.legacy_trips(i), trip);
         cave->addTrip(trip);
     }
 
-    cwStationPositionLookup stationLookup = loadStationPositionLookup(protoCave.stationpositionlookup());
+    cwStationPositionLookup stationLookup = loadStationPositionLookup(protoCave.legacy_stationpositionlookup());
     cave->setStationPositionLookup(stationLookup);
 
-    if(protoCave.has_stationpositionlookup()) {
-        cave->setStationPositionLookupStale(protoCave.stationpositionlookupstale());
+    if(protoCave.has_legacy_stationpositionlookup()) {
+        cave->setStationPositionLookupStale(protoCave.legacy_stationpositionlookupstale());
     }
 
-    if(protoCave.has_network()) {
-        auto protoNetwork = protoCave.network();
+    if(protoCave.has_legacy_network()) {
+        auto protoNetwork = protoCave.legacy_network();
         cwSurveyNetwork network;
         for(int i = 0; i < protoNetwork.stations_size(); i++) {
             auto stationItem = protoNetwork.stations(i);
@@ -305,7 +305,7 @@ void cwRegionLoadTask::loadTrip(const CavewhereProto::Trip& protoTrip, cwTrip *t
     trip->setName(tripName);
     trip->setDate(QDateTime(tripDate, QTime()));
 
-    loadSurveyNoteModel(protoTrip.notemodel(), trip->notes());
+    loadSurveyNoteModel(protoTrip.legacy_notemodel(), trip->notes());
     loadTripCalibration(protoTrip.tripcalibration(), trip->calibrations());
     loadTeam(protoTrip.team(), trip->team());
 
