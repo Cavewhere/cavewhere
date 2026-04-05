@@ -4374,7 +4374,11 @@ cwSurveyChunkData cwSaveLoad::fromProtoSurveyChunk(const CavewhereProto::SurveyC
     chunkData.id = toUuid(protoChunk.id());
 
     const int legCount = protoChunk.leg_size();
-    // Q_ASSERT(legCount % 2 == 0); // Each shot has 2 legs: a station and a shot
+    if (legCount > 0 && legCount % 2 == 0) {
+        qWarning() << "Malformed SurveyChunk: even leg count" << legCount
+                    << "(expected odd: station, shot, station, shot, ..., station)";
+        return chunkData;
+    }
 
     for (int i = 0; i < legCount; i += 2) {
         const auto& protoStation = protoChunk.leg(i);

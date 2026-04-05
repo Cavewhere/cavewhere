@@ -367,6 +367,8 @@ void cwRegionLoadTask::loadTripCalibration(const CavewhereProto::TripCalibration
  * @brief cwRegionLoadTask::loadSurveyChunk
  * @param protoChunk
  * @param chunk
+ *
+ * Legacy V6 loader — reads the old stations + shots fields (not the v9 leg array).
  */
 void cwRegionLoadTask::loadSurveyChunk(const CavewhereProto::SurveyChunk& protoChunk, cwSurveyChunk *chunk)
 {
