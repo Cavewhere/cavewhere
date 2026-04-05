@@ -44,13 +44,13 @@ message Cave {
     optional FileVersion fileVersion = 9;
     optional string name = 8;
     optional string id = 10;
-    repeated Trip trips = 2;
+    repeated Trip trips = 2; // Legacy v6 only, not written in v9+
 
     //This probably should be in a settings file (global / local) somewhere
     optional Units.LengthUnit lengthUnit = 3;
     optional Units.LengthUnit depthUnit = 4;
 
-    //These should be put into a local cache
+    // Legacy v6 only, not written in v9+ (cached in local state)
     optional StationPositionLookup stationPositionLookup = 5;
     optional bool stationPositionLookupStale = 6;
     optional SurveyNetwork network = 7;
@@ -69,7 +69,7 @@ message Trip {
     optional Team team = 6;
 
     //Deprecated types, don't use
-    optional SurveyNoteModel noteModel = 3; //Notes are loaded independantly from files
+    optional SurveyNoteModel noteModel = 3; // Legacy v6 only, not written in v9+ (notes loaded from .cwnote files)
     optional QtProto.QString legacy_name = 1;
 }
 

@@ -457,33 +457,33 @@ Two parallel serialization stacks existed:
 
 ### 16. `SurveyChunk` dual representation (`stations`+`shots` vs `leg`)
 
-**Status:** TODO (low priority)
+**Status:** DONE
 
 `SurveyChunk` has both old-style `stations` (field 1) + `shots` (field 2) and new-style `leg` (field 4). The v9 save path only writes `leg`. The V6 load path only reads `stations`+`shots`. Neither checks for the other representation.
 
 The `leg` array also relies on positional convention (even index = station, odd = shot) with no discriminator field. A third-party tool or future developer could write the array incorrectly.
 
-Since v9 files are always JSON-only and always use `leg`, this is not a practical risk for normal v9 files. However, `fromProtoSurveyChunk()` has no fallback to the old `stations`+`shots` fields — if a converter produces the old representation, data loads as empty with no error. The old `cwRegionLoadTask` does handle both. Additionally, line ~4269 has a commented-out `// Q_ASSERT(legCount % 2 == 0)` — an odd-length `leg` array would silently drop the last station.
+Since v9 files are always JSON-only and always use `leg`, this is not a practical risk for normal v9 files. The old `stations`+`shots` fallback concern is moot — no third-party converter exists. Additionally, line ~4269 had a commented-out `// Q_ASSERT(legCount % 2 == 0)` — an even-length `leg` array would indicate corruption (valid arrays are always odd: station, shot, ..., station).
 
 **Action items:**
-- [ ] In `cwSaveLoad::fromProtoSurveyChunk()`, add a proper error return (not `Q_ASSERT`, which is stripped in release) if `protoChunk.stations_size() != 0` to catch accidental mixing of old and new representations
-- [ ] Replace the commented-out `Q_ASSERT(legCount % 2 == 0)` with a proper error return to catch malformed `leg` arrays in both debug and release builds
-- [ ] In `cwRegionLoadTask::loadSurveyChunk()`, add a comment noting it only handles legacy V6 data
-- [ ] Consider adding a discriminator field (e.g. `optional bool is_station = 2;`) to `StationShot` for robustness against malformed files
+- [x] Replace the commented-out `Q_ASSERT(legCount % 2 == 0)` with a `qWarning` + early return to catch malformed `leg` arrays in both debug and release builds
+- [x] In `cwRegionLoadTask::loadSurveyChunk()`, add a comment noting it only handles legacy V6 data
+- N/A: `stations_size() != 0` check — no third-party converter exists, zero practical risk
+- N/A: Discriminator field on `StationShot` — adds noise to human-readable format with no practical benefit
 
 ---
 
 ### 17. Annotate dead fields in Cave and Trip protos
 
-**Status:** TODO (low priority)
+**Status:** DONE
 
 **File:** `cavewhere.proto`, `Cave` and `Trip` messages
 
 The `Cave` message contains fields that are never written in v9: `trips` (field 2), `stationPositionLookup` (field 5), `stationPositionLookupStale` (field 6), `network` (field 7). The `Trip` message has `noteModel` (field 3) which is also V6-only (notes are loaded from `.cwnote` files in v9). Without annotation, a future developer may try to use them.
 
 **Action items:**
-- [ ] Add `// Legacy v6 only, not written in v9+` comments to Cave fields 2, 5, 6, 7
-- [ ] Similarly annotate `Trip.noteModel` (field 3)
+- [x] Add `// Legacy v6 only, not written in v9+` comments to Cave fields 2, 5, 6, 7
+- [x] Similarly annotate `Trip.noteModel` (field 3)
 
 ---
 
