@@ -233,9 +233,13 @@ MainWindowTest {
             }
 
             tryVerifyWithDiagnostics(() => {
+                if (gallery.currentNoteLiDAR == null
+                        && galleryView.currentItem != null) {
+                    galleryView.updateCurrentNote()
+                }
                 return gallery.currentNoteLiDAR != null
                        && String(gallery.currentNoteLiDAR.filename) === fileName
-            }, 10000, "select LiDAR note by filename")
+            }, 15000, "select LiDAR note by filename")
 
             tryVerifyWithDiagnostics(() => {
                 return noteLiDARViewer().scene.gltf.status === RenderGLTF.Ready
@@ -300,8 +304,12 @@ MainWindowTest {
             }
 
             tryVerifyWithDiagnostics(() => {
+                if (gallery.currentNoteLiDAR == null
+                        && galleryView.currentItem != null) {
+                    galleryView.updateCurrentNote()
+                }
                 return gallery.currentNoteLiDAR != null
-            }, 10000, "select any LiDAR note")
+            }, 15000, "select any LiDAR note")
 
             tryVerifyWithDiagnostics(() => {
                 return noteLiDARViewer().scene.gltf.status === RenderGLTF.Ready

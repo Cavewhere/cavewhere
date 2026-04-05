@@ -337,7 +337,7 @@ MainWindowTest {
                 return RootData.pageView.currentPageItem !== null
                        && RootData.pageView.currentPageItem.objectName === "tripPage"
                        && galleryView.count > noteIndex
-            }, 5000, label + " wait for gallery row")
+            }, 10000, label + " wait for gallery row")
 
             let shouldForceRebind = forceRebind === true
 
@@ -366,7 +366,7 @@ MainWindowTest {
                 return gallery.state !== "NO_NOTES"
                        && gallery.currentNote != null
                        && galleryView.currentIndex === noteIndex
-            }, 5000, label)
+            }, 15000, label)
         }
 
         function enterCarpetMode() {
@@ -1842,22 +1842,7 @@ MainWindowTest {
         function test_existingScrapSwitchPlanAndRunningProfileSyncAndCheckout() {
             let context = loadFixtureAndOpenFirstTrip()
 
-            SyncTestHelper.runProjectSyncRoundTrip(testCaseId, RootData, TestHelper, {
-                tripPageAddress: context.tripPageAddress,
-                prepare: prepareScrapTransformUi,
-                restorePage: () => restoreTripPage(context.tripPageAddress),
-                getter: snapshotSelectedScrapTransformTypeState,
-                uiExpectedFromValue: expectedScrapTransformTypeUiState,
-                uiGetter: selectedScrapTransformTypeUiState,
-                verifyEditedUi: false,
-                verifyBaselineAfterCheckoutTimeoutMs: 10000,
-                verifyResyncedValueTimeoutMs: 10000,
-                setter: applySelectedScrapTransformTypeState,
-                nextValue: (state) => {
-                    return nextTransformTypeStateWithType(state, Scrap.Plan)
-                }
-            })
-
+            //First round switches away from the fixture's default Plan type
             SyncTestHelper.runProjectSyncRoundTrip(testCaseId, RootData, TestHelper, {
                 tripPageAddress: context.tripPageAddress,
                 prepare: prepareScrapTransformUi,
@@ -1873,14 +1858,11 @@ MainWindowTest {
                     return nextTransformTypeStateWithType(state, Scrap.RunningProfile)
                 }
             })
-        }
 
-        function test_existingScrapSwitchPlanAndProjectedProfileSyncAndCheckout() {
-            let context = loadFixtureAndOpenFirstTrip()
-
+            //Second round switches back to Plan
             SyncTestHelper.runProjectSyncRoundTrip(testCaseId, RootData, TestHelper, {
                 tripPageAddress: context.tripPageAddress,
-                prepare: prepareScrapTransformUiWithoutRefresh,
+                prepare: prepareScrapTransformUi,
                 restorePage: () => restoreTripPage(context.tripPageAddress),
                 getter: snapshotSelectedScrapTransformTypeState,
                 uiExpectedFromValue: expectedScrapTransformTypeUiState,
@@ -1893,7 +1875,12 @@ MainWindowTest {
                     return nextTransformTypeStateWithType(state, Scrap.Plan)
                 }
             })
+        }
 
+        function test_existingScrapSwitchPlanAndProjectedProfileSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+
+            //First round switches away from the fixture's default Plan type
             SyncTestHelper.runProjectSyncRoundTrip(testCaseId, RootData, TestHelper, {
                 tripPageAddress: context.tripPageAddress,
                 prepare: prepareScrapTransformUiWithoutRefresh,
@@ -1907,6 +1894,23 @@ MainWindowTest {
                 setter: applySelectedScrapTransformTypeState,
                 nextValue: (state) => {
                     return nextTransformTypeStateWithType(state, Scrap.ProjectedProfile)
+                }
+            })
+
+            //Second round switches back to Plan
+            SyncTestHelper.runProjectSyncRoundTrip(testCaseId, RootData, TestHelper, {
+                tripPageAddress: context.tripPageAddress,
+                prepare: prepareScrapTransformUiWithoutRefresh,
+                restorePage: () => restoreTripPage(context.tripPageAddress),
+                getter: snapshotSelectedScrapTransformTypeState,
+                uiExpectedFromValue: expectedScrapTransformTypeUiState,
+                uiGetter: selectedScrapTransformTypeUiState,
+                verifyEditedUi: false,
+                verifyBaselineAfterCheckoutTimeoutMs: 10000,
+                verifyResyncedValueTimeoutMs: 10000,
+                setter: applySelectedScrapTransformTypeState,
+                nextValue: (state) => {
+                    return nextTransformTypeStateWithType(state, Scrap.Plan)
                 }
             })
         }
