@@ -43,13 +43,11 @@ QC.ScrollView {
             QC.Label {
                 text: model.name
                 font.bold: true
-                color: Theme.text
                 wrapMode: QC.Label.Wrap
             }
 
             QC.Label {
                 text: model.color
-                color: Theme.text
                 wrapMode: QC.Label.Wrap
             }
         }
@@ -66,7 +64,6 @@ QC.ScrollView {
             id: titleLabel
             font.pixelSize: Theme.fontSizeMedium
             font.bold: true
-            color: Theme.text
             Layout.leftMargin: 4
         }
 
@@ -136,7 +133,6 @@ QC.ScrollView {
             spacing: 8
             QC.Label {
                 text: "Sort by:"
-                color: Theme.text
             }
             QC.ComboBox {
                 id: sortBox

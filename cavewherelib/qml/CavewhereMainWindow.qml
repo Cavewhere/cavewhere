@@ -20,6 +20,12 @@ QC.ApplicationWindow {
     font.family: Theme.fontFamily
     font.pixelSize: Theme.fontSizeUI
 
+    Binding { target: GitFontScale; property: "fontSizeCaption"; value: Theme.fontSizeCaption }
+    Binding { target: GitFontScale; property: "fontSizeSmall";   value: Theme.fontSizeSmall }
+    Binding { target: GitFontScale; property: "fontSizeUI";      value: Theme.fontSizeBody }
+    Binding { target: GitFontScale; property: "fontSizeBase";    value: Theme.fontSizeUI }
+    Binding { target: GitFontScale; property: "fontSizeTitle";   value: Theme.fontSizeTitle }
+
     visible: false
     width: 1024
     height: 576

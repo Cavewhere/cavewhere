@@ -52,7 +52,6 @@ QQ.Rectangle {
                 text: card.remoteName
                 font.pixelSize: Theme.fontSizeBody
                 font.bold: true
-                color: Theme.text
                 Layout.fillWidth: true
                 elide: QC.Label.ElideRight
             }

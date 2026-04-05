@@ -72,7 +72,6 @@ QQ.Rectangle {
                 textFormat: QC.Label.RichText
                 wrapMode: QC.Label.WordWrap
                 font.pixelSize: Theme.fontSizeBody
-                color: Theme.text
 
                 text: "No documentation"
             }

@@ -94,7 +94,7 @@ StandardPage {
         anchors.margins: Theme.pageMargin
         spacing: 16
 
-        Text {
+        QC.Label {
             text: "Connect to a Remote Caving Area"
             font.pixelSize: Theme.fontSizeTitle
             Layout.fillWidth: true
@@ -160,7 +160,7 @@ StandardPage {
         RowLayout {
             Layout.fillWidth: true
 
-            Text {
+            QC.Label {
                 text: "Account:"
             }
 
@@ -324,7 +324,7 @@ StandardPage {
                 RowLayout {
                     Layout.fillWidth: true
 
-                    Text {
+                    QC.Label {
                         text: "Repositories"
                         font.bold: true
                         Layout.fillWidth: true
@@ -363,7 +363,7 @@ StandardPage {
                     modal: true
                     title: "Forget GitHub Account?"
 
-                    Text {
+                    QC.Label {
                         width: 320
                         wrapMode: Text.WordWrap
                         color: Theme.textSecondary
@@ -440,20 +440,20 @@ StandardPage {
                                 spacing: 4
 
                                 RowLayout {
-                                    Text {
+                                    QC.Label {
                                         text: name
                                         font.bold: true
                                         elide: Text.ElideRight
                                     }
 
-                                    Text {
+                                    QC.Label {
                                         text: isPrivate ? "Private" : "Public"
                                         color: isPrivate ? Theme.warning : Theme.success
                                         font.pixelSize: Theme.fontSizeSmall
                                     }
                                 }
 
-                                Text {
+                                QC.Label {
                                     text: description.length > 0 ? description : cloneUrl
                                     wrapMode: Text.WordWrap
                                     elide: Text.ElideRight
@@ -480,7 +480,7 @@ StandardPage {
                         width: repoList.width
                         height: repoList.count === 0 ? 40 : 0
 
-                        Text {
+                        QC.Label {
                             anchors.centerIn: parent
                             text: gitHub.busy ? "Refreshing repositories..." : "No repositories found."
                             visible: repoList.count === 0

@@ -28,7 +28,7 @@ ColumnLayout {
         return false
     }
 
-    Text {
+    QC.Label {
         Layout.fillWidth: true
         text: qsTr("Repository name")
         color: Theme.textSecondary
@@ -42,7 +42,7 @@ ColumnLayout {
         onTextChanged: root.errorMessage = ""
     }
 
-    Text {
+    QC.Label {
         text: qsTr("Visibility")
         color: Theme.textSecondary
     }
@@ -75,7 +75,7 @@ ColumnLayout {
         Item { Layout.fillWidth: true }
     }
 
-    Text {
+    QC.Label {
         Layout.fillWidth: true
         wrapMode: Text.WrapAtWordBoundaryOrAnywhere
         color: Theme.textSubtle
@@ -84,7 +84,7 @@ ColumnLayout {
             : qsTr("Anyone on the internet can view this repository and its survey data.")
     }
 
-    Text {
+    QC.Label {
         Layout.fillWidth: true
         visible: root.errorMessage.length > 0
         wrapMode: Text.WrapAtWordBoundaryOrAnywhere

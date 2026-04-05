@@ -95,7 +95,7 @@ QQ.Item {
 
             radius: 3
 
-            QQ.Text {
+            QC.Label {
                 id: textId
                 anchors.centerIn: parent
                 text: delegateId.name

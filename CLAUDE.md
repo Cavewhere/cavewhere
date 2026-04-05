@@ -110,10 +110,9 @@ Uses Qt's RHI (Rendering Hardware Interface). Key classes: `cwRegionSceneManager
 - Use `QCanvasPainterItem` (C++) for custom painting; do not use QML `Canvas` or `Shapes`
 
 #### Text and font conventions
-- Use **`QC.Label`** (`import QtQuick.Controls as QC`) for all standard UI text: labels, descriptions, headings, dialog content. It inherits `font.family` from `CavewhereMainWindow` and merges partial font overrides correctly.
-- Use **`QQ.Text`** (`import QtQuick as QQ`) only in performance-sensitive delegate rows (ListView/TableView/Repeater with many items) and in custom text wrapper components (`BodyText`, `SectionLabel`, `LinkText`, `LabelWithHelp`).
-- When `QQ.Text` must set any `font.*` sub-property (e.g. `font.pixelSize`, `font.bold`), also set `font.family: Theme.fontFamily` — Qt resets font inheritance when any sub-property is explicitly assigned.
-- Use **`BodyText`** for paragraph/body copy — it uses `Theme.fontFamilyBody` (Bitstream Vera Sans) for better readability at paragraph sizes.
+- Use **`QC.Label`** (`import QtQuick.Controls as QC`) for all text, including labels, descriptions, headings, dialog content, and list/table delegate cells. It inherits `font.family` from `CavewhereMainWindow` and tracks the application palette automatically for correct dark mode support.
+- Do **not** use bare `Text {}` or `QQ.Text {}` — they bypass the palette and render black text in dark mode.
+- Use **`BodyText`** for paragraph/body copy — it wraps `QC.Label` with `font.family: Theme.fontFamilyBody` (Bitstream Vera Sans) for better readability at paragraph sizes.
 - Font size tokens live in `Theme.qml`: `Theme.fontSizeCaption` (11), `Theme.fontSizeSmall` (12), `Theme.fontSizeBody` (14), `Theme.fontSizeUI` (16), `Theme.fontSizeMedium` (18), `Theme.fontSizeTitle` (20), `Theme.fontSizeLarge` (24), `Theme.fontSizeXLarge` (30). Prefer these over hardcoded pixel sizes.
 - Do not import `QtQuick as Q` — use `QQ` as the alias so it is easy to search for.
 

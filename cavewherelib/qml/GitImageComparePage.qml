@@ -227,7 +227,6 @@ StandardPage {
                         anchors.centerIn: parent
                         text: "\u2194"
                         font.pixelSize: Theme.fontSizeBody
-                        color: Theme.text
                     }
                 }
 

@@ -1,9 +1,8 @@
 import QtQuick as QQ
+import QtQuick.Controls as QC
 import cavewherelib
 
-QQ.Text {
-    color: Theme.text
-    font.family: Theme.fontFamily
+QC.Label {
     font.underline: true
     font.pixelSize: Theme.fontSizeTitle
     font.bold: true

@@ -48,7 +48,7 @@ QQ.ListView {
             anchors.left: parent.left
             anchors.right: parent.right
 
-            QQ.Text {
+            QC.Label {
                 id: nameText
                 text: delegateId.nameRole
                 Layout.fillWidth: true

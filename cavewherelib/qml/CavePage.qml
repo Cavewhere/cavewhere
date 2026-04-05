@@ -286,7 +286,7 @@ StandardPage {
                                     implicitWidth: dateColumn.columnWidth
                                     implicitHeight: dateId.implicitHeight
                                     clip: true
-                                    QQ.Text {
+                                    QC.Label {
                                         id: dateId
                                         elide: QQ.Text.ElideRight
                                         // anchors.fill: parent
@@ -299,7 +299,7 @@ StandardPage {
                                     implicitHeight: usedStationsId.implicitHeight
                                     clip: true
 
-                                    QQ.Text {
+                                    QC.Label {
                                         id: usedStationsId
                                         elide: QQ.Text.ElideRight
                                         // anchors.fill: parent
@@ -312,7 +312,7 @@ StandardPage {
                                     implicitHeight: lengthId.implicitHeight
                                     clip: true
 
-                                    QQ.Text {
+                                    QC.Label {
                                         id: lengthId
                                         elide: QQ.Text.ElideRight
                                         // anchors.fill: parent

@@ -40,7 +40,7 @@ QQ.Rectangle {
             sourceSize: Qt.size(16,16)
         }
 
-        QQ.Text {
+        QC.Label {
             id: textId
             objectName: "errorText"
             text: {

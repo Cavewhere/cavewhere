@@ -65,7 +65,6 @@ QQ.Rectangle {
             QC.Label {
                 id: textId
                 text: delegate.text
-                color: Theme.text
             }
         }
     }

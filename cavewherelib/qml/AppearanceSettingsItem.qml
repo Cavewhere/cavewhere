@@ -43,7 +43,6 @@ ColumnLayout {
                             text: "Aa"
                             font.family: modelData.family !== "" ? modelData.family : Qt.application.font.family
                             font.pixelSize: Theme.fontSizeTitle  // intentionally not scaled — always show at a readable preview size
-                            color: Theme.text
                         }
 
                         QC.RadioButton {
@@ -88,7 +87,6 @@ ColumnLayout {
                         text: "Aa"
                         font.family: RootData.settings.fontSettings.fontFamily
                         font.pixelSize: Math.max(10, RootData.settings.fontSettings.fontBaseSize - 2)
-                        color: Theme.text
                     }
 
                     QC.Button {
@@ -124,7 +122,6 @@ ColumnLayout {
                         text: "Aa"
                         font.family: RootData.settings.fontSettings.fontFamily
                         font.pixelSize: RootData.settings.fontSettings.defaultFontBaseSize
-                        color: Theme.text
                     }
 
                     QC.Button {
@@ -157,7 +154,6 @@ ColumnLayout {
                         text: "Aa"
                         font.family: RootData.settings.fontSettings.fontFamily
                         font.pixelSize: Math.min(28, RootData.settings.fontSettings.fontBaseSize + 2)
-                        color: Theme.text
                     }
 
                     QC.Button {

@@ -57,7 +57,6 @@ QQ.Item {
         anchors.leftMargin: 6
 
         font.bold: true
-        color: Theme.text
     }
 
 }

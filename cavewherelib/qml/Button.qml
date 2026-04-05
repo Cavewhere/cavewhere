@@ -55,7 +55,6 @@ QQ.Rectangle {
         QC.Label {
             id: buttonText
             visible: button.hasText
-            color: Theme.text
         }
 
         QQ.Image {

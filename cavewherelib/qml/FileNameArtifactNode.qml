@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls as QC
 import QuickQanava as Qan
 import cavewherelib
 
@@ -13,7 +14,7 @@ Qan.NodeItem {
         anchors.fill: parent;
         border.width: 1
 
-        Text {
+        QC.Label {
             id: textId
             anchors.centerIn: parent
             text: artifact.filename

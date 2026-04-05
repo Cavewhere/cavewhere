@@ -131,7 +131,7 @@ StandardPage {
                         }
                     }
 
-                    Text {
+                    QC.Label {
                         id: pathTextId
                         Layout.fillWidth: true
                         Layout.leftMargin: 16
@@ -160,7 +160,7 @@ StandardPage {
             }
         }
 
-        Text {
+        QC.Label {
             Layout.fillWidth: true
             Layout.fillHeight: true
             wrapMode: Text.WordWrap

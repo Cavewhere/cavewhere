@@ -92,7 +92,7 @@ ColumnLayout {
                     height: repoListId.count === 0 ? 36 : 0
                     visible: repoListId.count === 0
 
-                    Text {
+                    QC.Label {
                         anchors.centerIn: parent
                         text: root.gitHubIntegration.busy
                             ? qsTr("Refreshing repositories…")
@@ -118,14 +118,14 @@ ColumnLayout {
             onTextChanged: root.errorMessage = ""
         }
 
-        Text {
+        QC.Label {
             color: Theme.textSubtle
             font.pixelSize: Theme.fontSizeCaption
             text: qsTr("For SSH URLs, ensure your SSH key is already configured.")
         }
     }
 
-    Text {
+    QC.Label {
         Layout.fillWidth: true
         visible: root.errorMessage.length > 0
         wrapMode: Text.WrapAtWordBoundaryOrAnywhere

@@ -1,7 +1,6 @@
 import QtQuick as QQ
+import QtQuick.Controls as QC
 import cavewherelib
 
-QQ.Text {
-    color: Theme.text
-    font.family: Theme.fontFamilyBody
+QC.Label {
 }

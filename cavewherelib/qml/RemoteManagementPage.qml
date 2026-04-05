@@ -24,7 +24,6 @@ StandardPage {
             QC.Label {
                 text: qsTr("Remote Management")
                 font.pixelSize: Theme.fontSizeTitle
-                color: Theme.text
                 Layout.fillWidth: true
             }
 

@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
-import QtQuick.Controls
+import QtQuick.Controls as QC
 import QuickQanava as Qan
 import cavewherelib
 
@@ -23,7 +23,7 @@ Qan.NodeItem {
             y: 5
             width: 150
 
-            Text {
+            QC.Label {
                 text: "Temporary File:"
                 font.bold: true
             }

@@ -84,7 +84,6 @@ PanZoomInteraction {
             QC.Label {
                 id: lengthText
                 anchors.verticalCenter: parent.verticalCenter
-                color: Theme.text
             }
 
             UnitValueInput {

@@ -174,9 +174,8 @@ QQ.Rectangle {
                 spacing: 6
                 width: parent.width - 16
 
-                QQ.Text {
+                QC.Label {
                     text: container.fallbackFileExtension
-                    font.family: Theme.fontFamily
                     font.bold: true
                     font.pixelSize: 32
                     color: "#f2f4f8"
@@ -184,9 +183,8 @@ QQ.Rectangle {
                     width: parent.width
                 }
 
-                QQ.Text {
+                QC.Label {
                     text: container.fallbackFileName
-                    font.family: Theme.fontFamily
                     font.bold: true
                     font.pixelSize: Theme.fontSizeUI
                     color: "#cbd0da"
@@ -278,7 +276,7 @@ QQ.Rectangle {
                 anchors.left: parent.left
                 anchors.right: parent.right
 
-                QQ.Text {
+                QC.Label {
                     id: errorText
                     anchors.left: parent.left
                     anchors.right: parent.right

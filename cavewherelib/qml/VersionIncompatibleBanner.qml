@@ -34,14 +34,12 @@ QQ.Rectangle {
                 text: "Read-only"
                 font.bold: true
                 font.pixelSize: Theme.fontSizeBody
-                color: Theme.text
                 Layout.alignment: Qt.AlignHCenter
             }
 
             QC.Label {
                 text: "Upgrade to CaveWhere v" + RootData.project.requiredVersion + " to edit"
                 font.pixelSize: Theme.fontSizeCaption
-                color: Theme.text
                 Layout.alignment: Qt.AlignHCenter
             }
         }

@@ -16,7 +16,6 @@ QC.Label {
 
 //    font.bold: true
     font.underline: false
-    color: Theme.text
 
     QQ.MouseArea {
         id: textMouseArea

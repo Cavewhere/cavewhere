@@ -282,7 +282,7 @@ Item {
                                             }
                                         }
 
-                                        Text {
+                                        QC.Label {
                                             text: valueRole + " (" + objectCountRole + ")"
                                             elide: Text.ElideRight
                                             Layout.fillWidth: true

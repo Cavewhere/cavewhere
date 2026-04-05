@@ -96,7 +96,6 @@ DataBox {
         QC.Label {
             id: stationName
             anchors.horizontalCenter: parent.horizontalCenter
-            color: Theme.text
             //            font.pixelSize: Theme.fontSizeCaption
         }
     }

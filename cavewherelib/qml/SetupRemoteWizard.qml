@@ -175,7 +175,7 @@ QC.Dialog {
                 running: root.currentState === "working"
             }
 
-            Text {
+            QC.Label {
                 Layout.alignment: Qt.AlignHCenter
                 text: qsTr("Configuring remote…")
                 color: Theme.textSecondary
@@ -198,7 +198,7 @@ QC.Dialog {
             visible: root.currentState === "done"
             spacing: 8
 
-            Text {
+            QC.Label {
                 Layout.fillWidth: true
                 wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                 text: qsTr("Remote configured. Push your project to GitHub to back it up.")

@@ -30,7 +30,6 @@ QQ.Rectangle {
         QC.Label {
             text: "Some files haven't been downloaded yet."
             font.pixelSize: Theme.fontSizeBody
-            color: Theme.text
         }
 
         QC.Button {

@@ -63,7 +63,6 @@ QQ.Rectangle {
             text: "text"
             smooth: true
             style: QC.Label.Sunken
-            font.family: Theme.fontFamily
             font.bold: true
             font.pixelSize: Theme.fontSizeMedium
             Layout.alignment: Qt.AlignHCenter

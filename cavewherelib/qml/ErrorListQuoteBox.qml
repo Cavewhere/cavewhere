@@ -73,10 +73,9 @@ QQ.Loader {
                             visible: delegateId.errorType === CwError.Warning
                         }
 
-                        QQ.Text {
+                        QC.Label {
                             objectName: "errorText"
                             text: delegateId.message
-                            font.family: Theme.fontFamily
                             font.strikeout: delegateId.suppressed
                         }
                     }

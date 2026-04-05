@@ -65,7 +65,6 @@ StandardPage {
                 font.bold: true
                 elide: QC.Label.ElideMiddle
                 Layout.fillWidth: true
-                color: Theme.text
             }
 
             QQ.Rectangle {

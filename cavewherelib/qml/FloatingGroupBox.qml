@@ -28,7 +28,6 @@ QQ.Item {
         anchors.bottom: boxGroupId.top
         anchors.rightMargin: 5
         font.bold:  true
-        color: Theme.text
     }
 
     ShadowRectangle {
