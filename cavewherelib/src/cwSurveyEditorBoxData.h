@@ -5,6 +5,7 @@
 #include <QString>
 #include <QMetaType>
 #include <QQmlEngine>
+#include <QPointer>
 
 //Our includes
 #include "cwReading.h"
@@ -12,8 +13,7 @@
 #include "cwSurveyChunk.h"
 #include "cwSurveyEditorBoxIndex.h" // Include the header for cwSurveyEditorBoxIndex
 #include "CaveWhereLibExport.h"
-
-class cwErrorModel; // Forward declaration for cwErrorModel
+#include "cwErrorModel.h"
 
 class CAVEWHERE_LIB_EXPORT cwSurveyEditorBoxData {
     Q_GADGET
@@ -107,7 +107,7 @@ public:
     }
 
 private:
-    cwErrorModel* m_errorModel = nullptr;
+    QPointer<cwErrorModel> m_errorModel;
     cwReading m_reading;
     cwSurveyEditorBoxIndex m_boxIndex; // Contains rowIndex and chunkDataRole
 };

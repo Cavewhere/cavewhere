@@ -1009,6 +1009,7 @@ void cwSurveyChunk::checkForError(cwSurveyChunk::DataRole role, int index)
             cellModel->setParentModel(nullptr);
             cellModel->deleteLater();
             CellErrorModels.remove(cellIndex);
+            emit errorsChanged(role, index);
         }  else {
             //Clear the previous errors
             if(cellModel->errors()->toList() != errors) {
