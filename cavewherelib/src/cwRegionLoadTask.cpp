@@ -373,16 +373,16 @@ void cwRegionLoadTask::loadTripCalibration(const CavewhereProto::TripCalibration
 void cwRegionLoadTask::loadSurveyChunk(const CavewhereProto::SurveyChunk& protoChunk, cwSurveyChunk *chunk)
 {
     QList<cwStation> stations;
-    stations.reserve(protoChunk.stations_size());
-    for(int i = 0 ; i < protoChunk.stations_size(); i++) {
-        cwStation station = loadStation(protoChunk.stations(i));
+    stations.reserve(protoChunk.legacy_stations_size());
+    for(int i = 0 ; i < protoChunk.legacy_stations_size(); i++) {
+        cwStation station = loadStation(protoChunk.legacy_stations(i));
         stations.append(station);
     }
 
     QList<cwShot> shots;
-    shots.reserve(protoChunk.shots_size());
-    for(int i = 0; i < protoChunk.shots_size(); i++) {
-        cwShot shot = loadShot(protoChunk.shots(i));
+    shots.reserve(protoChunk.legacy_shots_size());
+    for(int i = 0; i < protoChunk.legacy_shots_size(); i++) {
+        cwShot shot = loadShot(protoChunk.legacy_shots(i));
         shots.append(shot);
     }
 

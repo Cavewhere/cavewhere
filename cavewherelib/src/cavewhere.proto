@@ -126,7 +126,7 @@ message Image {
     repeated int32 legacy_mipmapIds = 3;
     optional QtProto.QSize size = 4;
     optional int32 dotPerMeter = 5;
-    optional QtProto.QSizeF OBSOLETE_clipArea = 6; //Not need anymore
+    optional QtProto.QSizeF legacy_clipArea = 6; // Legacy, not used
     optional string path = 7;
     optional int32 page = 8;
     reserved 9;
@@ -154,8 +154,8 @@ message TripCalibration {
 // (no UI, silently dropped on v9 reload). Field 3 is reserved to prevent reuse.
 
 message SurveyChunk {
-    repeated Station stations = 1;
-    repeated Shot shots = 2;
+    repeated Station legacy_stations = 1; // Legacy v6 only, not written in v9+
+    repeated Shot legacy_shots = 2; // Legacy v6 only, not written in v9+
     reserved 3; // Removed: per-shot calibration overrides (unused feature)
     repeated StationShot leg = 4;
     optional string id = 5; //UUID

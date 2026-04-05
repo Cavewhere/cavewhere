@@ -24,8 +24,8 @@ std::unique_ptr<CavewhereProto::Trip> normalizedTripProtoForObject(const cwTrip*
     protoTrip->clear_tripcalibration();
     for (int i = 0; i < protoTrip->chunks_size(); ++i) {
         auto* chunk = protoTrip->mutable_chunks(i);
-        chunk->clear_stations();
-        chunk->clear_shots();
+        chunk->clear_legacy_stations();
+        chunk->clear_legacy_shots();
         chunk->clear_leg();
     }
     return protoTrip;
@@ -42,8 +42,8 @@ std::unique_ptr<CavewhereProto::Trip> normalizedTripProtoForData(const cwTripDat
     protoTrip->clear_tripcalibration();
     for (int i = 0; i < protoTrip->chunks_size(); ++i) {
         auto* chunk = protoTrip->mutable_chunks(i);
-        chunk->clear_stations();
-        chunk->clear_shots();
+        chunk->clear_legacy_stations();
+        chunk->clear_legacy_shots();
         chunk->clear_leg();
     }
     return protoTrip;
