@@ -109,7 +109,7 @@ StandardPage {
                 implicitWidth: tripNameVerticalText.implicitHeight
                 implicitHeight: tripNameVerticalText.implicitWidth
 
-                Text {
+                QC.Label {
                     id: tripNameVerticalText
                     rotation: 270
                     text: area.currentTrip.name

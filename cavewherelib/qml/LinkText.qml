@@ -1,7 +1,7 @@
 import QtQuick as QQ
 import cavewherelib
 import QtQuick.Controls as QC
-Text {
+QC.Label {
     id: linkTextId
 
     signal clicked();

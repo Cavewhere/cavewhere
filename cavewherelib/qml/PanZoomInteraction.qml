@@ -82,8 +82,9 @@ Interaction {
         QQ.State {
             name: "AUTO_FIT"
             QQ.PropertyChanges {
-                interactionId.target.parent.onWidthChanged: interactionId.refit()
-                interactionId.target.parent.onHeightChanged: interactionId.refit()
+                target: interactionId.target ? interactionId.target.parent : null
+                onWidthChanged: interactionId.refit()
+                onHeightChanged: interactionId.refit()
             }
         }
     ]

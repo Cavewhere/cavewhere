@@ -49,6 +49,7 @@ public:
     QQuickItem* currentPageItem() const;
 
     Q_INVOKABLE QQuickItem* pageItem(cwPage* page);
+    void clearPageCacheFor(const QSet<QQmlComponent*>& components);
 
     /**
      * @brief cwPageView::qmlAttachedProperties

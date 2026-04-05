@@ -7,7 +7,7 @@ StandardPage {
 
     RowLayout {
         anchors.fill: parent
-        anchors.margins: 5
+        anchors.margins: Theme.pageMargin
 
         TabViewVertical {
             id: tabBarId
@@ -17,7 +17,7 @@ StandardPage {
             implicitWidth: 200
 
             // model: ["Jobs", "Rendering", "PDF"]
-            model: ["Jobs", "Warping", "PDF / SVG", "Git"]
+            model: ["Jobs", "Warping", "PDF / SVG", "Git", "Appearance"]
         }
 
         QC.ScrollView {
@@ -45,6 +45,10 @@ StandardPage {
                 }
 
                 GitSettingsItem {
+
+                }
+
+                AppearanceSettingsItem {
 
                 }
             }

@@ -17,7 +17,7 @@ QQ.Row {
 
     spacing: 5
 
-    Text {
+    QC.Label {
         id: textId
     }
 

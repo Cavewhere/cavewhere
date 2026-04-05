@@ -22,10 +22,10 @@ QC.CheckBox {
     //     }
     // }
 
-    // contentItem: Text {
+    // contentItem: QC.Label {
     //     text: control.text
     //     opacity: enabled ? 1.0 : 0.3
-    //     verticalAlignment: Text.AlignVCenter
+    //     verticalAlignment: QC.Label.AlignVCenter
     //     leftPadding: control.indicator.width + control.spacing
     // }
 }

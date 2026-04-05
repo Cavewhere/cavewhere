@@ -20,7 +20,7 @@ QQ.Rectangle {
 
     color: Theme.surface
 
-    Text {
+    QC.Label {
         id: textArea
         anchors.centerIn: parent
     }

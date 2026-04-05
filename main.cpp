@@ -29,12 +29,17 @@
 #include "cwApplication.h"
 #include "cwGlobals.h"
 #include "cwMetaTypeSystem.h"
+#include "cwTask.h"
 
 //QuickQanave includes
 #include <QuickQanava>
 
 //std includes
 #include <memory>
+
+//QQuickGit includes
+#include "GitConcurrent.h"
+#include "GitCommitImageProvider.h"
 
 //MarkScope
 #include "MarkScope/FrameProfiler.h"
@@ -169,6 +174,9 @@ int main(int argc, char *argv[])
     //initilize cavewher lib, gitlib2
     cwRootData::initCavewherelib();
 
+    //Use a single shared thread pool to avoid over-subscribing CPU cores
+    QQuickGit::GitConcurrent::setThreadPool(cwTask::threadPool());
+
     // Add the macOS Resources directory to the QML import search path
     QString resourcePath = QCoreApplication::applicationDirPath() + "/../Resources/qml";
     applicationEngine->addImportPath(resourcePath);
@@ -214,6 +222,9 @@ int main(int argc, char *argv[])
 
     //Creates image providers for the qml engine
     new cwQmlImageProviderBinder(context->engine(), rootData, applicationEngine);
+
+    //Enables image://gitcommit/ URLs in QML for viewing images at any commit
+    QQuickGit::GitCommitImageProvider::registerOn(context->engine());
 
     bool quitCalled = false;
     auto quit = [&a, &quitCalled, applicationEngine]() {

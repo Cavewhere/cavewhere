@@ -26,7 +26,7 @@ QQ.Item {
                 showItemOnClick: projectionSliderHelpAreaId
             }
 
-            Text {
+            QC.Label {
                 text: "Orthognal"
             }
 
@@ -49,7 +49,7 @@ QQ.Item {
                 }
             }
 
-            Text {
+            QC.Label {
                 text: "Perspective"
             }
         }

@@ -38,9 +38,9 @@ QQ.Item {
         id: columnId
         anchors.centerIn: parent
 
-        Text {
+        QC.Label {
             text: "Finishing these jobs"
-            font.pixelSize: 30
+            font.pixelSize: Theme.fontSizeXLarge
             Layout.alignment: Qt.AlignHCenter
         }
 

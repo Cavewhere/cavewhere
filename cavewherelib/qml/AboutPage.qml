@@ -1,4 +1,6 @@
 import QtQuick.Layouts
+import QtQuick.Controls as QC
+import QtQuick as QQ
 import cavewherelib
 
 StandardPage {
@@ -13,12 +15,12 @@ StandardPage {
             Layout.alignment: Qt.AlignHCenter
         }
 
-        Text {
+        QC.Label {
             Layout.alignment: Qt.AlignHCenter
             text: "Version: " + RootData.version
         }
 
-        Text {
+        QC.Label {
             Layout.alignment: Qt.AlignHCenter
             text: {
                 return "Copyright 2025 Philip Schuchardt"

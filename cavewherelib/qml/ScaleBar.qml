@@ -76,7 +76,7 @@ QQ.Item {
             x: -width / 2 + index * privateData.smallCellWidth * 2
             radius: 3
 
-            Text {
+            QQ.Text {
                 text: rect2Id.index * privateData.meterPerCell / 2
                 anchors.centerIn: parent
 
@@ -106,7 +106,7 @@ QQ.Item {
             radius: 3
             color: Theme.background
 
-            Text {
+            QQ.Text {
                 text: {
                     var text = (rect1Id.index + 1) * privateData.meterPerCell;
                     if(rect1Id.index == 4) {

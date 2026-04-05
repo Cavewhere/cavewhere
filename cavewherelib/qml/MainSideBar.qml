@@ -216,10 +216,11 @@ QQ.Rectangle {
             anchors.left: parent.left
             anchors.right: parent.right
 
-            Text {
+            QC.Label {
                 text: "Automatic\nUpdate"
                 id: labelTextId
-                horizontalAlignment: Text.AlignHCenter
+                font.family: Theme.fontFamily
+                horizontalAlignment: QC.Label.AlignHCenter
                 Layout.fillWidth: true
             }
 

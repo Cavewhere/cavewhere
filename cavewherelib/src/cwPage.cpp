@@ -42,9 +42,10 @@ cwPage::cwPage(cwPage* parentPage,
 cwPage::~cwPage()
 {
     if(ParentPage != nullptr) {
-        Q_ASSERT(ParentPage->ChildPages.contains(Name));
-        Q_ASSERT(ParentPage->ChildPages.value(Name) == this);
-        ParentPage->ChildPages.remove(Name);
+        // clearChildren() may have already removed this entry from the parent's map.
+        if (ParentPage->ChildPages.value(Name) == this) {
+            ParentPage->ChildPages.remove(Name);
+        }
     }
 
     foreach(cwPage* childPage, ChildPages) {
@@ -113,6 +114,26 @@ void cwPage::removeChild(cwPage *page)
     ChildPages.remove(page->name());
     page->setParent(nullptr);
     page->ParentPage = nullptr;
+}
+
+/**
+ * Clears ChildPages immediately so in-flight stringToPage() lookups won't
+ * find deleted pages, then schedules each child for deferred deletion.
+ * Populates @p clearedComponents so callers can selectively evict items
+ * from the page view cache without destroying static-page rendering state.
+ */
+void cwPage::clearChildren(QSet<QQmlComponent*>& clearedComponents)
+{
+    const auto children = ChildPages;
+    ChildPages.clear();
+    for (cwPage* child : children) {
+        if (child->component()) {
+            clearedComponents.insert(child->component());
+        }
+        child->clearChildren(clearedComponents);
+        child->ParentPage = nullptr;
+        child->deleteLater();
+    }
 }
 
 /**

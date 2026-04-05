@@ -67,7 +67,7 @@ ColumnLayout {
                 id: doubleValidatorId
             }
 
-            Text {
+            QC.Label {
                 text: "°"
             }
         }
@@ -123,7 +123,7 @@ ColumnLayout {
                 Layout.fillWidth: true
             }
 
-            Text {
+            QC.Label {
                 text: "Duration"
             }
 
@@ -146,7 +146,7 @@ ColumnLayout {
                 }
             }
 
-            Text {
+            QC.Label {
                 text: "s"
             }
         }

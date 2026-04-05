@@ -78,7 +78,7 @@ QQ.Item {
                         }
                     }
 
-                    Text {
+                    QC.Label {
                         objectName: "description"
                         visible: text.length > 0
                         text: lead.description

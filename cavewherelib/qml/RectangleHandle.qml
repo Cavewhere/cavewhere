@@ -1,4 +1,5 @@
 import QtQuick as QQ
+import QtQuick.Controls as QC
 
 QQ.Item {
     id: handle
@@ -59,7 +60,7 @@ QQ.Item {
         }
     }
 
-    // Text {
+    // QC.Label {
     //     color: dragHandler.active ? "darkgreen" : "black"
     //     text: dragHandler.activeTranslation.x.toFixed(1) + "," + dragHandler.activeTranslation.y.toFixed(1)
     //     x: dragHandler.activeTranslation.x - width / 2

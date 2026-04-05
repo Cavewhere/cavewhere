@@ -91,12 +91,12 @@ StandardPage {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 16
+        anchors.margins: Theme.pageMargin
         spacing: 16
 
         Text {
             text: "Connect to a Remote Caving Area"
-            font.pixelSize: 20
+            font.pixelSize: Theme.fontSizeTitle
             Layout.fillWidth: true
         }
 
@@ -449,7 +449,7 @@ StandardPage {
                                     Text {
                                         text: isPrivate ? "Private" : "Public"
                                         color: isPrivate ? Theme.warning : Theme.success
-                                        font.pixelSize: 12
+                                        font.pixelSize: Theme.fontSizeSmall
                                     }
                                 }
 

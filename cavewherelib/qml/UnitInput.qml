@@ -21,7 +21,7 @@ UnitBaseItem {
         menuId.selectedIndex = unitInput.unit
     }
 
-    Text {
+    QC.Label {
         id: textArea
         color: unitInput.readOnly ? Theme.text : Theme.textLink
         text: unitInput.unitModel !== null && typeof(unitInput.unitModel) !== 'undefined' ? " " + unitInput.unitModel[menuId.selectedIndex] : "";

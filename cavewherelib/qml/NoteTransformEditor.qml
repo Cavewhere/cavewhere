@@ -217,7 +217,7 @@ QQ.Item {
                             }
                         }
 
-                        Text {
+                        QC.Label {
                             text: "°"
                         }
                     }

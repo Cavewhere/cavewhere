@@ -27,9 +27,9 @@ QQ.Rectangle {
         anchors.centerIn: parent
         spacing: 12
 
-        QQ.Text {
+        QC.Label {
             text: "Some files haven't been downloaded yet."
-            font.pixelSize: 14
+            font.pixelSize: Theme.fontSizeBody
             color: Theme.text
         }
 

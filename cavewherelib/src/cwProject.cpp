@@ -21,6 +21,7 @@
 #include "cwSQLManager.h"
 #include "cwTaskManagerModel.h"
 #include "asyncfuture.h"
+#include "cwError.h"
 #include "cwErrorListModel.h"
 #include "cwPDFConverter.h"
 #include "cwPDFSettings.h"
@@ -182,6 +183,7 @@ void cwProject::connectSaveLoad(cwSaveLoad* saveLoad)
             return;
         }
         setModified(false);
+        emit discardCompleted();
     });
 
     connect(saveLoad, &cwSaveLoad::isTemporaryProjectChanged, this, [this, saveLoad]() {
@@ -211,6 +213,13 @@ void cwProject::connectSaveLoad(cwSaveLoad* saveLoad)
             return;
         }
         setModified(true);
+        emit localMutationOccurred();
+    });
+    connect(saveLoad, &cwSaveLoad::saveFlushCompleted, this, [this, saveLoad]() {
+        if (m_saveLoad != saveLoad) {
+            return;
+        }
+        emit saveFlushCompleted();
     });
     connect(saveLoad, &cwSaveLoad::saveBlockedByVersion, this, [this, saveLoad](const QString& entityDescription) {
         if (m_saveLoad != saveLoad) {
@@ -508,6 +517,17 @@ bool cwProject::resetBranchAndReconcile(const QString& refSpec, BranchResetMode 
     if (emitVersionGuardError(QStringLiteral("reconcile"))) { return false; }
 
     return beginSyncOperation(m_saveLoad->resetBranchAndReconcile(refSpec, resetMode));
+}
+
+bool cwProject::restoreToCommit(const QString& targetSha)
+{
+    if (!m_saveLoad || syncInProgress()) {
+        return false;
+    }
+
+    if (emitVersionGuardError(QStringLiteral("restore"))) { return false; }
+
+    return beginSyncOperation(m_saveLoad->restoreToCommitAndReconcile(targetSha));
 }
 
 void cwProject::waitForSyncToFinish()
@@ -1582,6 +1602,22 @@ cwProject::FileType cwProject::projectType(const QString& filename) const
 
     //V6 or lower
     return SqliteFileType;
+}
+
+void cwProject::safeCommitAll(const QString& subject, const QString& description)
+{
+    if (!repository()) {
+        errorModel()->append(cwError(QStringLiteral("Commit failed: no repository open"),
+                                     cwError::Fatal));
+        return;
+    }
+    try {
+        repository()->commitAll(subject, description);
+        repository()->checkStatus();
+    } catch (const std::exception& e) {
+        errorModel()->append(cwError(QString("Commit failed: %1").arg(e.what()),
+                                     cwError::Fatal));
+    }
 }
 
 cwResultDir cwProject::repositoryDir(const QUrl& localDir, const QString& name) const

@@ -176,7 +176,6 @@ set(qml_singletons
     "qml/UnitDefaults.qml"
     "qml/GlobalShadowTextInput.qml"
     "qml/RootPopupItem.qml"
-    "qml/YanoneKaffeesatz.qml"
 	"qml/Theme.qml"
 )
 

@@ -197,6 +197,66 @@ TEST_CASE("cwPageSelectionModel clearHistory prevents stale pages in history aft
     REQUIRE(model.currentPage() == data);
 }
 
+TEST_CASE("cwPageSelectionModel clearHistory preserves static pages and only clears dynamic components", "[cwPageSelectionModel]")
+{
+    // Verifies that clearHistory() preserves the first two levels of the page
+    // tree (top-level and their direct children) while clearing depth-2+ pages.
+    // The returned component set must contain only dynamic page components,
+    // not those used by static pages — so cwPageView can selectively evict
+    // cached items without destroying the View page's rendering state.
+
+    QQmlEngine engine;
+    cwPageSelectionModel model;
+    auto* staticComponent = makePageComponent(engine, &model);
+    auto* dynamicComponent = makePageComponent(engine, &model);
+
+    // Static pages (registered once by MainContent.qml)
+    auto* view = model.registerPage(nullptr, QStringLiteral("View"), staticComponent);
+    auto* source = model.registerPage(nullptr, QStringLiteral("Source"), staticComponent);
+    auto* data = model.registerPage(source, QStringLiteral("Data"), staticComponent);
+
+    // Dynamic pages (registered by QML Repeaters in DataMainPage/CavePage)
+    auto* cave = model.registerPage(data, QStringLiteral("Cave=Alpha"), dynamicComponent);
+    auto* trip = model.registerPage(cave, QStringLiteral("Trip=Trip 1"), dynamicComponent);
+
+    model.gotoPage(trip);
+
+    auto clearedComponents = model.clearHistory();
+
+    // Static pages must survive
+    REQUIRE(model.rootPage()->childPage(QStringLiteral("View")) == view);
+    REQUIRE(model.rootPage()->childPage(QStringLiteral("Source")) == source);
+    REQUIRE(source->childPage(QStringLiteral("Data")) == data);
+
+    // Static pages must still be navigable
+    model.gotoPageByName(nullptr, "View");
+    REQUIRE(model.currentPage() == view);
+    model.setCurrentPageAddress(QStringLiteral("Source/Data"));
+    REQUIRE(model.currentPage() == data);
+
+    // Dynamic pages must be cleared from the tree
+    REQUIRE(data->childPage(QStringLiteral("Cave=Alpha")) == nullptr);
+
+    // Cleared components must contain the dynamic component, not the static one
+    REQUIRE(clearedComponents.contains(dynamicComponent));
+    REQUIRE(!clearedComponents.contains(staticComponent));
+}
+
+TEST_CASE("cwPageSelectionModel clearHistory returns empty set when no dynamic pages exist", "[cwPageSelectionModel]")
+{
+    QQmlEngine engine;
+    cwPageSelectionModel model;
+    auto* component = makePageComponent(engine, &model);
+
+    // Only static pages
+    model.registerPage(nullptr, QStringLiteral("View"), component);
+    auto* source = model.registerPage(nullptr, QStringLiteral("Source"), component);
+    model.registerPage(source, QStringLiteral("Data"), component);
+
+    auto clearedComponents = model.clearHistory();
+    REQUIRE(clearedComponents.isEmpty());
+}
+
 TEST_CASE("cwPageSelectionModel unregisterPage removes page from address resolution", "[cwPageSelectionModel]")
 {
     QQmlEngine engine;

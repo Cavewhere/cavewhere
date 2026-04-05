@@ -15,7 +15,7 @@ Text {
     color: Theme.textInverse
     style: Text.Outline;
     styleColor: Theme.text
-    font.pixelSize: 16
+    font.pixelSize: Theme.fontSizeUI
 
     opacity: 0.0
 

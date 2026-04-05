@@ -107,6 +107,8 @@ public:
 
     static QString supportedImageFormats();
 
+    Q_INVOKABLE void safeCommitAll(const QString& subject, const QString& description);
+
     Q_INVOKABLE cwResultDir repositoryDir(const QUrl& localDir, const QString& name) const;
 
     Q_INVOKABLE void convertFromProjectV6(QString oldProjectFilename,
@@ -123,6 +125,7 @@ public:
 
     Q_INVOKABLE bool resetBranchAndReconcile(const QString& refSpec,
                                              BranchResetMode resetMode = BranchResetMode::Hard);
+    Q_INVOKABLE bool restoreToCommit(const QString& targetSha);
 
     std::optional<cwSaveLoad::SyncReport> lastSyncReport() const;
 
@@ -208,6 +211,9 @@ signals:
     void syncFinished();
     void authProviderCredentialsNeeded();
     void lfsFilesNeedSync();
+    void localMutationOccurred();
+    void saveFlushCompleted();
+    void discardCompleted();
 
 public slots:
     void loadFile(QString filename);

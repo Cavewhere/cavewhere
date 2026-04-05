@@ -15,6 +15,7 @@ RoundButton {
 
     signal syncRequested()
     signal remoteSettingsRequested()
+    signal historyRequested()
     signal reconnectRequested()
     signal setupRemoteRequested()
 
@@ -102,7 +103,7 @@ RoundButton {
         implicitHeight: 14
         implicitWidth: Math.max(14, syncBadgeTextId.implicitWidth + 6)
 
-        Text {
+        QC.Label {
             id: syncBadgeTextId
             anchors.centerIn: parent
             color: "white"
@@ -133,6 +134,7 @@ RoundButton {
         QC.MenuItem {
             text: "Set up remote…"
             visible: !hasRemote
+            height: visible ? implicitHeight : 0
             onTriggered: {
                 setupRemoteRequested()
             }
@@ -141,16 +143,25 @@ RoundButton {
         QC.MenuItem {
             objectName: "syncNowMenuItem"
             text: "Sync now"
-            enabled: !syncInProgress && hasRemote
+            visible: hasRemote
+            height: visible ? implicitHeight : 0
+            enabled: !syncInProgress
             onTriggered: {
                 syncRequested()
             }
         }
 
         QC.MenuItem {
-            text: "Remote settings..."
+            text: "Remote settings…"
             onTriggered: {
                 remoteSettingsRequested()
+            }
+        }
+
+        QC.MenuItem {
+            text: "History…"
+            onTriggered: {
+                historyRequested()
             }
         }
     }

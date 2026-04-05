@@ -52,10 +52,10 @@ QQ.Item {
 
                 anchors.centerIn: parent
 
-                Text {
+                QC.Label {
                     id: noteTextId
                     text: "No notes found..."
-                    font.pixelSize: 18
+                    font.pixelSize: Theme.fontSizeMedium
                     font.bold: true
                     Layout.alignment: Qt.AlignHCenter
                 }
@@ -65,7 +65,7 @@ QQ.Item {
                     spacing: 5
                     Layout.alignment: Qt.AlignHCenter
 
-                    Text {
+                    QC.Label {
                         text: "Scanned notes\n3d Model"
                         Layout.alignment: Qt.AlignVCenter
                     }

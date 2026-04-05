@@ -311,8 +311,24 @@ void cwRootData::loadProject(const QString& filename)
  */
 void cwRootData::prepareForProjectSwitch()
 {
-    PageSelectionModel->clearHistory();
+    auto clearedComponents = PageSelectionModel->clearHistory();
+    if (m_pageView) {
+        m_pageView->clearPageCacheFor(clearedComponents);
+    }
     PageSelectionModel->gotoPageByName(nullptr, "View");
+}
+
+void cwRootData::discardChangesAndReload()
+{
+    auto currentFile = Project->filename();
+    if (currentFile.isEmpty()) {
+        return;
+    }
+    connect(Project, &cwProject::discardCompleted, this, [this, currentFile]() {
+        loadProject(currentFile);
+    }, Qt::SingleShotConnection);
+
+    Project->discardChanges();
 }
 
 int cwRootData::titleBarHeight() const

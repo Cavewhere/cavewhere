@@ -123,7 +123,7 @@ QQ.Item {
         GlobalShadowTextInput.coreClickInput = clickTextInput
     }
 
-    Text {
+    QC.Label {
         id: textAreaId
 
         //        anchors.left: parent.left
@@ -131,7 +131,7 @@ QQ.Item {
         //        anchors.margins: 3
         horizontalAlignment: Qt.AlignHCenter
         anchors.verticalCenter: parent.verticalCenter
-        elide: Text.ElideRight
+        elide: QC.Label.ElideRight
 
 
         //        anchors.centerIn: parent

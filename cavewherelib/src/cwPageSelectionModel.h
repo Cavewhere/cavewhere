@@ -62,7 +62,7 @@ public:
     cwPage* currentPage() const;
     cwPage *rootPage() const;
 
-    Q_INVOKABLE void clearHistory();
+    Q_INVOKABLE QSet<QQmlComponent*> clearHistory();
     QList<QObject*> history() const;
 
     bool hasForward() const;

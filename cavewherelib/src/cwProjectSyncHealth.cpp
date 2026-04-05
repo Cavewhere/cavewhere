@@ -72,6 +72,26 @@ cwSyncStatus cwProjectSyncHealth::status() const
     return m_status;
 }
 
+QString cwProjectSyncHealth::remoteName() const
+{
+    return m_remoteName;
+}
+
+void cwProjectSyncHealth::setRemoteName(const QString& name)
+{
+    if (m_remoteName == name) {
+        return;
+    }
+    m_remoteName = name;
+    emit remoteNameChanged();
+    refresh();
+}
+
+QQuickGit::GitRepository* cwProjectSyncHealth::repository() const
+{
+    return m_repository;
+}
+
 void cwProjectSyncHealth::setRepository(QQuickGit::GitRepository* repository)
 {
     if (m_repository == repository) {
@@ -92,6 +112,7 @@ void cwProjectSyncHealth::setRepository(QQuickGit::GitRepository* repository)
     }
 
     m_repository = repository;
+    emit repositoryChanged();
     if (m_repository) {
         m_modifiedCountConnection = connect(m_repository,
                                             &QQuickGit::GitRepository::modifiedFileCountChanged,
@@ -164,14 +185,34 @@ void cwProjectSyncHealth::refresh()
         return;
     }
 
-    QString remoteName = QStringLiteral("origin");
-    const bool hasOrigin = std::any_of(configuredRemotes.cbegin(),
+    QString remoteName;
+    if (!m_remoteName.isEmpty()) {
+        const bool found = std::any_of(configuredRemotes.cbegin(),
                                        configuredRemotes.cend(),
-                                       [](const QQuickGit::GitRemoteInfo& remoteInfo) {
-                                           return remoteInfo.name() == QStringLiteral("origin");
+                                       [this](const QQuickGit::GitRemoteInfo& remoteInfo) {
+                                           return remoteInfo.name() == m_remoteName;
                                        });
-    if (!hasOrigin) {
-        remoteName = configuredRemotes.constFirst().name();
+        if (!found) {
+            setStatus(cwSyncStatus{
+                .m_hasLocalChanges = localChanges,
+                .m_aheadCount = 0,
+                .m_behindCount = 0,
+                .m_stale = true,
+                .m_syncBlocker = cwSyncStatus::SyncBlocker::NoRemote,
+                .m_message = QStringLiteral("Remote '%1' is no longer configured.").arg(m_remoteName)});
+            return;
+        }
+        remoteName = m_remoteName;
+    } else {
+        remoteName = QStringLiteral("origin");
+        const bool hasOrigin = std::any_of(configuredRemotes.cbegin(),
+                                           configuredRemotes.cend(),
+                                           [](const QQuickGit::GitRemoteInfo& remoteInfo) {
+                                               return remoteInfo.name() == QStringLiteral("origin");
+                                           });
+        if (!hasOrigin) {
+            remoteName = configuredRemotes.constFirst().name();
+        }
     }
 
     scheduleRemoteStatusRefresh(localChanges, remoteName, currentBranch);

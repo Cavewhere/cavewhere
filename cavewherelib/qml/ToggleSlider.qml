@@ -77,7 +77,7 @@ QQ.Item {
 
         clip: true
 
-        Text {
+        QC.Label {
             id: leftTextId
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
@@ -95,7 +95,7 @@ QQ.Item {
 
         clip: true
 
-        Text {
+        QC.Label {
             id: rightTextId
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
