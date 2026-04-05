@@ -355,7 +355,7 @@ MainWindowTest {
                 }
 
                 if (shouldForceRebind
-                        && gallery.currentNote === null
+                        && gallery.currentNote == null
                         && galleryView.currentIndex === noteIndex
                         && gallery.state === "NO_NOTES") {
                     galleryView.currentIndex = -1
@@ -364,7 +364,7 @@ MainWindowTest {
                 }
 
                 return gallery.state !== "NO_NOTES"
-                       && gallery.currentNote !== null
+                       && gallery.currentNote != null
                        && galleryView.currentIndex === noteIndex
             }, 5000, label)
         }
@@ -390,7 +390,7 @@ MainWindowTest {
                 return RootData.pageView.currentPageItem !== null
                        && RootData.pageView.currentPageItem.objectName === "tripPage"
                        && gallery.state !== "NO_NOTES"
-                       && gallery.currentNote !== null
+                       && gallery.currentNote != null
                        && galleryView.currentIndex >= 0
                        && area.visible === true
                        && image.visible === true
@@ -524,7 +524,7 @@ MainWindowTest {
 
         function snapshotSelectedScrapOutlineState() {
             let gallery = noteGallery()
-            verify(gallery.currentNote !== null)
+            verify(gallery.currentNote != null)
             let state = TestHelper.scrapOutlineState(gallery.currentNote, 0)
             verify(state !== null && state !== undefined)
             return state
@@ -1587,7 +1587,7 @@ MainWindowTest {
             tryVerifyWithDiagnostics(() => {
                 return RootData.pageView.currentPageItem !== null
                        && RootData.pageView.currentPageItem.objectName === "tripPage"
-                       && gallery.currentNote !== null
+                       && gallery.currentNote != null
                        && gallery.mode === "CARPET"
                        && currentScrapView.note === gallery.currentNote
                        && currentScrapView.selectedScrapItem !== null

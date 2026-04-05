@@ -108,7 +108,7 @@ MainWindowTest {
 
         function currentLiDARNote() {
             let note = noteGallery().currentNoteLiDAR
-            verify(note !== null)
+            verify(note != null)
             return note
         }
 
@@ -226,14 +226,14 @@ MainWindowTest {
                 }
                 mouseClick(galleryItem)
                 wait(50)
-                if (gallery.currentNoteLiDAR !== null
+                if (gallery.currentNoteLiDAR != null
                         && String(gallery.currentNoteLiDAR.filename) === fileName) {
                     break
                 }
             }
 
             tryVerifyWithDiagnostics(() => {
-                return gallery.currentNoteLiDAR !== null
+                return gallery.currentNoteLiDAR != null
                        && String(gallery.currentNoteLiDAR.filename) === fileName
             }, 10000, "select LiDAR note by filename")
 
@@ -250,7 +250,7 @@ MainWindowTest {
             SyncTestHelper.waitForFutureManagerToFinish(testCaseId, RootData)
             tryVerifyWithDiagnostics(() => {
                 let note = noteGallery().currentNoteLiDAR
-                if (note === null || String(note.filename) !== fileName) {
+                if (note == null || String(note.filename) !== fileName) {
                     return false
                 }
 
@@ -261,6 +261,18 @@ MainWindowTest {
             }, 10000, "wait for LiDAR note ready", () => {
                 SyncTestHelper.waitForFutureManagerToFinish(testCaseId, RootData)
             })
+        }
+
+        function forceNorthRecalculation() {
+            // updateNoteTransformion() may have run before station positions
+            // were available and early-returned. Toggle autoCalculateNorth to
+            // re-trigger it now that the station lookup is populated.
+            let note = noteGallery().currentNoteLiDAR
+            if (note != null && note.autoCalculateNorth) {
+                note.autoCalculateNorth = false
+                note.autoCalculateNorth = true
+                TestHelper.waitForProjectSaveToFinish(RootData.project)
+            }
         }
 
         function selectAnyLiDARNote() {
@@ -282,13 +294,13 @@ MainWindowTest {
                 }
                 mouseClick(galleryItem)
                 wait(50)
-                if (gallery.currentNoteLiDAR !== null) {
+                if (gallery.currentNoteLiDAR != null) {
                     break
                 }
             }
 
             tryVerifyWithDiagnostics(() => {
-                return gallery.currentNoteLiDAR !== null
+                return gallery.currentNoteLiDAR != null
             }, 10000, "select any LiDAR note")
 
             tryVerifyWithDiagnostics(() => {
@@ -746,6 +758,7 @@ MainWindowTest {
             let targetFileName = selectAnyLiDARNote()
             verify(targetFileName.length > 0)
 
+            let northRecalculated = false
             SyncTestHelper.runProjectSyncRoundTrip(testCaseId, RootData, TestHelper, {
                 tripPageAddress: context.tripPageAddress,
                 getter: snapshotSelectedLiDARTransformState,
@@ -755,8 +768,12 @@ MainWindowTest {
                 verifyResyncedValueTimeoutMs: 10000,
                 nextValue: nextLiDARTransformStateWithManualNorthAndScale,
                 setter: applySelectedLiDARTransformState,
-                prepare: function() {
+                prepare: function(stage) {
                     prepareLiDARNoteUi(targetFileName)
+                    if (!northRecalculated) {
+                        forceNorthRecalculation()
+                        northRecalculated = true
+                    }
                     tryVerifyWithDiagnostics(() => {
                         return noteLiDARTransformEditor().visible === true
                     }, 5000, "wait for LiDAR transform editor visible")
@@ -769,6 +786,7 @@ MainWindowTest {
             let targetFileName = selectAnyLiDARNote()
             verify(targetFileName.length > 0)
 
+            let northRecalculated = false
             SyncTestHelper.runProjectSyncRoundTrip(testCaseId, RootData, TestHelper, {
                 tripPageAddress: context.tripPageAddress,
                 getter: snapshotSelectedLiDARTransformState,
@@ -778,8 +796,12 @@ MainWindowTest {
                 verifyResyncedValueTimeoutMs: 10000,
                 nextValue: nextLiDARTransformStateWithUpModeChange,
                 setter: applySelectedLiDARTransformState,
-                prepare: function() {
+                prepare: function(stage) {
                     prepareLiDARNoteUi(targetFileName)
+                    if (!northRecalculated) {
+                        forceNorthRecalculation()
+                        northRecalculated = true
+                    }
                     tryVerifyWithDiagnostics(() => {
                         return noteLiDARTransformEditor().visible === true
                     }, 5000, "wait for LiDAR transform editor visible")

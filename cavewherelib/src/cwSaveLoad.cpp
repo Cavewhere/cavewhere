@@ -1841,8 +1841,6 @@ struct cwSaveLoad::Data {
 
         m_pendingJobs.append(job);
 
-        // qDebug() << "Pushing job:" << this << m_pendingJobs.size() << job.toString();
-
         if (activeOperation != nullptr) {
             maybeStartPendingFileJobs(context);
         } else {
@@ -2409,7 +2407,6 @@ struct cwSaveLoad::Data {
                 emit context->localMutationOccurred();
             }
 
-            // qDebug() << "Saving object:" << object << object->name() << dir(object);
             if constexpr (std::is_same_v<T, cwCave>) {
                 saveProtoMessage(context, cwSaveLoad::toProtoCave(object), object);
             } else if constexpr (std::is_same_v<T, cwTrip>) {

@@ -90,6 +90,12 @@ MainWindowTest {
 
             let addCave = ObjectFinder.findObjectByChain(mainWindow, "rootId->dataMainPage->addButton")
             mouseClick(addCave)
+            wait(100)
+
+            if (RootData.pageView.currentPageItem.objectName !== "cavePage") {
+                // Retry the click if the first one didn't register
+                mouseClick(addCave)
+            }
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "cavePage" });
 

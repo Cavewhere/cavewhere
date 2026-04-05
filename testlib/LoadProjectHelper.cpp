@@ -729,9 +729,7 @@ cwSyncFixtureInfo TestHelper::createLocalLiDARSyncFixtureWithLfsServer()
     }
     project.waitSaveToFinish();
     const QString projectPath = project.filename();
-    const QString projectDataDirPath =
-        QFileInfo(projectPath).dir().filePath(QFileInfo(projectPath).completeBaseName());
-    const QString nestedGitDirPath = QDir(projectDataDirPath).filePath(QStringLiteral(".git"));
+    const QString nestedGitDirPath = QDir(project.dataRootDir()).filePath(QStringLiteral(".git"));
     if (QFileInfo::exists(nestedGitDirPath)) {
         QDir nestedGitDir(nestedGitDirPath);
         if (!nestedGitDir.removeRecursively()) {
