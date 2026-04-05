@@ -169,6 +169,7 @@ StandardPage {
         id: restoreConfirmDialog
         anchors.centerIn: parent
         modal: true
+        implicitWidth: 400
         title: qsTr("Restore to this version?")
         standardButtons: QC.Dialog.Ok | QC.Dialog.Cancel
 
@@ -176,6 +177,7 @@ StandardPage {
         property string targetSubject: ""
 
         contentItem: QC.Label {
+            width: restoreConfirmDialog.availableWidth
             text: qsTr("This will create a new save that restores the project to:\n\n\"%1\"\n\nAll history will be preserved.")
                   .arg(restoreConfirmDialog.targetSubject)
             wrapMode: QC.Label.Wrap

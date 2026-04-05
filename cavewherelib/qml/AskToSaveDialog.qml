@@ -71,13 +71,6 @@ QQ.Loader {
 
     anchors.centerIn: parent
 
-    component DangerButtonContent: QC.Label {
-        color: Theme.danger
-        horizontalAlignment: QC.Label.AlignHCenter
-        verticalAlignment: QC.Label.AlignVCenter
-        elide: QC.Label.ElideRight
-    }
-
     component AskToSaveInteralDialog :
     QQ.Item {
         id: itemId
@@ -308,7 +301,7 @@ QQ.Loader {
                     text: "Delete"
                     QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.NoRole
                     onClicked: loaderId.handleTemporaryDeleteRequest()
-                    contentItem: DangerButtonContent { text: parent.text; font: parent.font }
+                    palette.buttonText: Theme.danger
                 }
                 QC.Button {
                     text: "Cancel"
@@ -333,7 +326,7 @@ QQ.Loader {
                     text: "Discard"
                     QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.NoRole
                     onClicked: itemId.askToSaveDialog.discarded()
-                    contentItem: DangerButtonContent { text: parent.text; font: parent.font }
+                    palette.buttonText: Theme.danger
                 }
                 QC.Button {
                     text: "Cancel"
@@ -358,7 +351,7 @@ QQ.Loader {
                     text: "Discard"
                     QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.NoRole
                     onClicked: itemId.askToSaveDialog.discarded()
-                    contentItem: DangerButtonContent { text: parent.text; font: parent.font }
+                    palette.buttonText: Theme.danger
                 }
                 QC.Button {
                     text: "Cancel"

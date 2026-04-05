@@ -114,9 +114,6 @@ void cwQmlImageProviderBinder::updateFromProject()
 
     ensureProviders();
 
-    qDebug() << "project path:" << m_project->filename();
-    qDebug() << "data root directory:" << m_project->dataRootDir();
-
     if (m_imageProvider) {
         m_imageProvider->setDataRootDir(m_project->dataRootDir());
     }

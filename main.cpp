@@ -98,7 +98,6 @@ void handleCommandline(QCoreApplication& a, cwRootData* rootData) {
     const QStringList positionalArgs = parser.positionalArguments();
     if (!positionalArgs.isEmpty()) {
         QString filename = positionalArgs.first();
-        qDebug() << "Loading file:" << filename;
 
         const bool isDeepLink = filename.startsWith(QLatin1String("cavewhere://"));
         if (isDeepLink) {
