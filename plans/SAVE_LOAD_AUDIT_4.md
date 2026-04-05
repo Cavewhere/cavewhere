@@ -484,6 +484,10 @@ The `Cave` message contains fields that are never written in v9: `trips` (field 
 **Action items:**
 - [x] Add `// Legacy v6 only, not written in v9+` comments to Cave fields 2, 5, 6, 7
 - [x] Similarly annotate `Trip.noteModel` (field 3)
+- [x] Rename Cave fields 2, 5, 6, 7 and Trip field 3 with `legacy_` prefix; update cwRegionLoadTask accessors
+- [x] Rename SurveyChunk.stations/shots to `legacy_stations`/`legacy_shots`; update cwRegionLoadTask accessors
+- [x] Rename Image.OBSOLETE_clipArea to `legacy_clipArea`
+- [x] Remove no-op `clear_legacy_stations/shots/notemodel` calls from cwTripMergeApplier
 
 ---
 
