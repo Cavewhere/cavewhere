@@ -103,7 +103,7 @@ RoundButton {
         implicitHeight: 14
         implicitWidth: Math.max(14, syncBadgeTextId.implicitWidth + 6)
 
-        Text {
+        QC.Label {
             id: syncBadgeTextId
             anchors.centerIn: parent
             color: "white"

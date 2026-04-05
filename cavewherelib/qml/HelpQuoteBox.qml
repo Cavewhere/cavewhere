@@ -6,9 +6,9 @@ QuoteBox {
 
     color: Theme.warning
     triangleOffset: 0.0
-    Text {
+    QC.Label {
         id: textId
-        font.pixelSize: 24
+        font.pixelSize: Theme.fontSizeLarge
         text: "NO TEXT"
     }
 }

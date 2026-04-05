@@ -176,20 +176,22 @@ QQ.Rectangle {
 
                 QQ.Text {
                     text: container.fallbackFileExtension
+                    font.family: Theme.fontFamily
                     font.bold: true
                     font.pixelSize: 32
                     color: "#f2f4f8"
-                    horizontalAlignment: Text.AlignHCenter
+                    horizontalAlignment: QQ.Text.AlignHCenter
                     width: parent.width
                 }
 
                 QQ.Text {
                     text: container.fallbackFileName
+                    font.family: Theme.fontFamily
                     font.bold: true
-                    font.pixelSize: 16
+                    font.pixelSize: Theme.fontSizeUI
                     color: "#cbd0da"
-                    wrapMode: Text.WordWrap
-                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: QQ.Text.WordWrap
+                    horizontalAlignment: QQ.Text.AlignHCenter
                     width: parent.width
                 }
             }
@@ -276,13 +278,13 @@ QQ.Rectangle {
                 anchors.left: parent.left
                 anchors.right: parent.right
 
-                Text {
+                QQ.Text {
                     id: errorText
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.margins: 3
                     text: imageValidator.errorMessage
-                    wrapMode: Text.WordWrap
+                    wrapMode: QQ.Text.WordWrap
                 }
 
                 Button {

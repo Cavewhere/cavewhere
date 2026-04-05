@@ -27,16 +27,16 @@ QC.Popup {
         width: parent.width
         spacing: 10
 
-        Text {
+        QC.Label {
             Layout.fillWidth: true
             text: qsTr("GitHub Access Expired")
             font.bold: true
             color: Theme.textSecondary
         }
 
-        Text {
+        QC.Label {
             Layout.fillWidth: true
-            wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+            wrapMode: QC.Label.WrapAtWordBoundaryOrAnywhere
             color: Theme.textSubtle
             text: {
                 switch (root.gitHub.authState) {
@@ -62,7 +62,7 @@ QC.Popup {
                 Layout.fillWidth: true
                 text: root.gitHub.userCode
                 readOnly: true
-                horizontalAlignment: Text.AlignHCenter
+                horizontalAlignment: QC.Label.AlignHCenter
                 font.bold: true
             }
 
@@ -78,13 +78,13 @@ QC.Popup {
             }
         }
 
-        Text {
+        QC.Label {
             Layout.fillWidth: true
             visible: root.gitHub.authState === GitHubIntegration.AwaitingVerification
                      && root.gitHub.verificationOpened
                      && root.gitHub.secondsUntilNextPoll > 0
             color: Theme.textSubtle
-            font.pixelSize: 12
+            font.pixelSize: Theme.fontSizeSmall
             text: qsTr("Trying connection in %1 s").arg(root.gitHub.secondsUntilNextPoll)
         }
 

@@ -48,7 +48,7 @@ RowLayout {
                 id: columnOnPaper
                 x: 3
 
-                Text {
+                QC.Label {
                     id: onPaperId
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: "On Paper"
@@ -65,7 +65,7 @@ RowLayout {
             }
         }
 
-        Text {
+        QC.Label {
             Layout.alignment: Qt.AlignVCenter
             text: "="
         }
@@ -83,7 +83,7 @@ RowLayout {
                 id: columnInCave
                 x: 3
 
-                Text {
+                QC.Label {
                     id: inCaveId
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: "In Cave"
@@ -102,19 +102,19 @@ RowLayout {
     }
 
 
-    Text {
+    QC.Label {
         Layout.alignment: Qt.AlignVCenter
         text: "="
     }
 
-    Text {
+    QC.Label {
         id: scaleText
         Layout.alignment: Qt.AlignVCenter
         visible: !errorText.visible
         text: "1:" + Utils.fixed(1 / itemId.scaleValue, 1)
     }
 
-    Text {
+    QC.Label {
         id: errorText
         color: Theme.danger
         Layout.alignment: Qt.AlignVCenter

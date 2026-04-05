@@ -1,3 +1,4 @@
+import QtQuick as QQ
 import QtQuick.Controls as QC
 import cavewherelib
 /**************************************************************************
@@ -12,12 +13,12 @@ DataBox {
 
     property alias readingText: readingTextObj.text
 
-    Text {
+    QC.Label {
         id: readingTextObj
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.leftMargin: 3
         anchors.topMargin: 1
-        font.pixelSize: 12
+        font.pixelSize: Theme.fontSizeSmall
     }
 }

@@ -11,9 +11,9 @@ ColumnLayout {
 
     spacing: 8
 
-    QQ.Text {
+    QC.Label {
         Layout.fillWidth: true
-        wrapMode: QQ.Text.WrapAtWordBoundaryOrAnywhere
+        wrapMode: QC.Label.WrapAtWordBoundaryOrAnywhere
         color: Theme.textSecondary
         text: {
             switch (gitHubIntegration.authState) {
@@ -39,7 +39,7 @@ ColumnLayout {
             Layout.fillWidth: true
             text: gitHubIntegration.userCode
             readOnly: true
-            horizontalAlignment: QQ.Text.AlignHCenter
+            horizontalAlignment: QC.Label.AlignHCenter
             font.bold: true
         }
 
@@ -56,13 +56,13 @@ ColumnLayout {
         }
     }
 
-    QQ.Text {
+    QC.Label {
         Layout.fillWidth: true
         visible: gitHubIntegration.authState === GitHubIntegration.AwaitingVerification
                  && gitHubIntegration.verificationOpened
                  && gitHubIntegration.secondsUntilNextPoll > 0
         color: Theme.textSubtle
-        font.pixelSize: 12
+        font.pixelSize: Theme.fontSizeSmall
         text: qsTr("Trying connection in %1 s").arg(gitHubIntegration.secondsUntilNextPoll)
     }
 

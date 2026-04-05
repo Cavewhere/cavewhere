@@ -71,11 +71,11 @@ QQ.Loader {
 
     anchors.centerIn: parent
 
-    component DangerButtonContent: Text {
+    component DangerButtonContent: QC.Label {
         color: Theme.danger
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
-        elide: Text.ElideRight
+        horizontalAlignment: QC.Label.AlignHCenter
+        verticalAlignment: QC.Label.AlignVCenter
+        elide: QC.Label.ElideRight
     }
 
     component AskToSaveInteralDialog :
@@ -227,7 +227,7 @@ QQ.Loader {
                     text: itemId.isTemporaryProject
                           ? "This project lives in a <b>temporary folder</b>.<br>Save to move it somewhere permanent"
                           : "Do you want to save your changes before " + loaderId.taskName + "?"
-                    wrapMode: QQ.Text.WordWrap
+                    wrapMode: QC.Label.WordWrap
                 }
 
                 QC.BusyIndicator {
@@ -241,7 +241,7 @@ QQ.Loader {
                     visible: false
                     width: parent.width
                     text: "Saving\u2026"
-                    horizontalAlignment: QQ.Text.AlignHCenter
+                    horizontalAlignment: QC.Label.AlignHCenter
                 }
 
                 QC.Label {
@@ -249,7 +249,7 @@ QQ.Loader {
                     visible: false
                     width: parent.width
                     text: itemId.syncErrorText
-                    wrapMode: QQ.Text.WordWrap
+                    wrapMode: QC.Label.WordWrap
                 }
             }
 

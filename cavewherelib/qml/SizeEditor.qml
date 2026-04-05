@@ -35,7 +35,7 @@ RowLayout {
         }
     }
 
-    Text {
+    QC.Label {
         text: "x"
     }
 

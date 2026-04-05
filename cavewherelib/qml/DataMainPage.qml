@@ -35,7 +35,7 @@ StandardPage {
             DoubleClickTextInput {
                 objectName: "regionNameInput"
                 font.bold: true
-                font.pixelSize: 20
+                font.pixelSize: Theme.fontSizeTitle
                 text: RootData.region.name
 
                 onFinishedEditting: (newText) => {
@@ -126,7 +126,7 @@ StandardPage {
                         }
                         // }
 
-                        Text {
+                        QC.Label {
                             text: "is"
                         }
 
@@ -137,7 +137,7 @@ StandardPage {
                             valueReadOnly: true
                         }
 
-                        Text {
+                        QC.Label {
                             text: "long and"
                         }
 
@@ -148,7 +148,7 @@ StandardPage {
                             valueReadOnly: true
                         }
 
-                        Text {
+                        QC.Label {
                             text: "deep"
                         }
                     }

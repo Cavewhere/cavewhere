@@ -42,7 +42,7 @@ QQ.Item {
                 sourceSize: Qt.size(16, 16)
             }
 
-            Text {
+            QC.Label {
                 id: errorText
             }
         }

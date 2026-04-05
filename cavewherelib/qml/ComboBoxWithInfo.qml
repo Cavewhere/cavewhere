@@ -1,3 +1,4 @@
+import QtQuick as QQ
 import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
@@ -15,7 +16,7 @@ ColumnLayout {
             showItemOnClick: helpAreaId
         }
 
-        Text {
+        QC.Label {
             id: textId
             enabled: rootId.enabled
         }

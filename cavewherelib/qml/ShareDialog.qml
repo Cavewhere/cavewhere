@@ -44,7 +44,7 @@ QC.Dialog {
                 ? qsTr("Recipients need repository access for private repositories.")
                 : qsTr("The remote \"%1\" cannot be used for share links. Push to a GitHub, GitLab, or Bitbucket repository to enable sharing.").arg(rootId._remoteUrl)
             visible: rootId._hasShareLink || rootId._hasUnsupportedRemote
-            wrapMode: QQ.Text.WordWrap
+            wrapMode: QC.Label.WordWrap
             color: rootId._hasShareLink ? Theme.textSubtle : Theme.warning
         }
 

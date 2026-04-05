@@ -17,13 +17,13 @@ ScrollViewPage {
 
             anchors.centerIn: parent
 
-            Text {
+            QC.Label {
                 text: "Unknown page!"
-                font.pixelSize: 30
+                font.pixelSize: Theme.fontSizeXLarge
                 Layout.alignment: Qt.AlignHCenter
             }
 
-            Text {
+            QC.Label {
                 text: "\"" + RootData.pageSelectionModel.currentPageAddress + "\"" + " doesn't exist..."
                 font.italic: true
                 Layout.alignment: Qt.AlignCenter

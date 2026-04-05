@@ -22,7 +22,7 @@ ColumnLayout {
                     showItemOnClick: resolutionHelpId
                 }
 
-                Text {
+                QC.Label {
                     text: "PDF / SVG rasterization resolution (in pixels per inch)"
                 }
 

@@ -16,7 +16,7 @@ QQ.Row {
        height: 1
     }
 
-    Text {
+    QQ.Text {
         id: caveTextId
         QQ.FontLoader { id: fontBold; source: "qrc:/fonts/YanoneKaffeesatz-Bold.ttf"        }
 
@@ -28,7 +28,7 @@ QQ.Row {
 
     }
 
-    Text {
+    QQ.Text {
         QQ.FontLoader { id: fontThin; source: "qrc:/fonts/YanoneKaffeesatz-Thin.ttf" }
 
         text: "WHERE"

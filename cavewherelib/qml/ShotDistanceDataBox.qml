@@ -35,14 +35,14 @@ DataBox {
         height: textId.height - 2
 
         color: Theme.border
-        Text {
+        QC.Label {
             id: textId
 
             anchors.centerIn: parent
             anchors.verticalCenterOffset: 1
 
             // font.family: "monospace"
-            font.pixelSize: 14
+            font.pixelSize: Theme.fontSizeBody
             font.bold: true
             color: Theme.surfaceMuted
             text: "Excluded"

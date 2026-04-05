@@ -57,15 +57,16 @@ QQ.Rectangle {
             }
         }
 
-        Text {
+        QC.Label {
             id: textLabel
             color: Theme.sidebar.text
             text: "text"
             smooth: true
-            style: Text.Sunken
+            style: QC.Label.Sunken
+            font.family: Theme.fontFamily
             font.bold: true
+            font.pixelSize: Theme.fontSizeMedium
             Layout.alignment: Qt.AlignHCenter
-            font.pixelSize: 18
         }
     }
 
@@ -166,7 +167,7 @@ QQ.Rectangle {
             textLabel {
                 color: Theme.sidebar.textActive
                 styleColor: Theme.sidebar.textStroke
-                style: Text.Raised
+                style: QC.Label.Raised
             }
         }
 

@@ -18,7 +18,7 @@ QQ.Rectangle {
         x: 3
         spacing: 2
 
-        Text {
+        QC.Label {
             id: onPaperId
             Layout.alignment: Qt.AlignHCenter
         }

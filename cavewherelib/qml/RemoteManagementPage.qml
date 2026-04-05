@@ -21,9 +21,9 @@ StandardPage {
         RowLayout {
             Layout.fillWidth: true
 
-            QQ.Text {
+            QC.Label {
                 text: qsTr("Remote Management")
-                font.pixelSize: 20
+                font.pixelSize: Theme.fontSizeTitle
                 color: Theme.text
                 Layout.fillWidth: true
             }
@@ -69,10 +69,10 @@ StandardPage {
             }
         }
 
-        QQ.Text {
+        QC.Label {
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignHCenter
-            horizontalAlignment: QQ.Text.AlignHCenter
+            horizontalAlignment: QC.Label.AlignHCenter
             visible: page.remotes.length === 0
             text: qsTr("No remotes configured. Add a remote to sync your project.")
             color: Theme.textSubtle
@@ -104,9 +104,9 @@ StandardPage {
 
         property string remoteName
 
-        QQ.Text {
+        QC.Label {
             width: 320
-            wrapMode: QQ.Text.WordWrap
+            wrapMode: QC.Label.WordWrap
             color: Theme.textSecondary
             text: qsTr("Remove remote \"%1\"? This does not delete the remote repository — it only removes the link from this project.").arg(removeDialog.remoteName)
         }

@@ -31,7 +31,7 @@ QQ.Item {
             anchors.top: parent.top
             anchors.margins: 3
 
-            Text {
+            QC.Label {
                 id: sectionLabel
                 font.underline: true
             }

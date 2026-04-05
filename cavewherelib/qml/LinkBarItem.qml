@@ -25,7 +25,7 @@ QQ.Item {
             color: buttonId.containsMouse ? Theme.palette.highlight : Theme.tag
             radius: 3
 
-            Text {
+            QC.Label {
                 id: nameTextId
                 objectName: "linkBarItemText"
                 color: buttonId.containsMouse ? Theme.palette.highlightedText : Theme.palette.text

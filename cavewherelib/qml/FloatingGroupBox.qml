@@ -21,7 +21,7 @@ QQ.Item {
     implicitWidth: childrenRect.width
     implicitHeight: childrenRect.height
 
-    Text {
+    QC.Label {
         id: titleId
         z: 1
         anchors.right: boxGroupId.right

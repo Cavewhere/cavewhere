@@ -63,7 +63,7 @@ StandardPage {
             QC.Label {
                 text: diffPage.filePath
                 font.bold: true
-                elide: Text.ElideMiddle
+                elide: QC.Label.ElideMiddle
                 Layout.fillWidth: true
                 color: Theme.text
             }
@@ -91,8 +91,8 @@ StandardPage {
             visible: diffPage.displayState === GitFileDiffPage.DisplayState.Loading
             text: qsTr("Loading diff\u2026")
             color: Theme.textSubtle
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
+            horizontalAlignment: QC.Label.AlignHCenter
+            verticalAlignment: QC.Label.AlignVCenter
         }
 
         QC.Label {
@@ -102,9 +102,9 @@ StandardPage {
             visible: diffPage.displayState === GitFileDiffPage.DisplayState.Error
             text: filePatch.errorMessage
             color: Theme.danger
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            wrapMode: Text.Wrap
+            horizontalAlignment: QC.Label.AlignHCenter
+            verticalAlignment: QC.Label.AlignVCenter
+            wrapMode: QC.Label.Wrap
         }
 
         QC.Label {
@@ -114,8 +114,8 @@ StandardPage {
             visible: diffPage.displayState === GitFileDiffPage.DisplayState.Binary
             text: qsTr("Binary file")
             color: Theme.textSubtle
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
+            horizontalAlignment: QC.Label.AlignHCenter
+            verticalAlignment: QC.Label.AlignVCenter
         }
 
         QC.Label {
@@ -125,8 +125,8 @@ StandardPage {
             visible: diffPage.displayState === GitFileDiffPage.DisplayState.Lfs
             text: qsTr("LFS file")
             color: Theme.textSubtle
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
+            horizontalAlignment: QC.Label.AlignHCenter
+            verticalAlignment: QC.Label.AlignVCenter
         }
 
         QC.Label {
@@ -136,8 +136,8 @@ StandardPage {
             visible: diffPage.displayState === GitFileDiffPage.DisplayState.TooLarge
             text: qsTr("Diff too large to display")
             color: Theme.textSubtle
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
+            horizontalAlignment: QC.Label.AlignHCenter
+            verticalAlignment: QC.Label.AlignVCenter
         }
 
         QQ.ListView {
@@ -178,7 +178,7 @@ StandardPage {
 
                     QC.Label {
                         Layout.preferredWidth: 50
-                        horizontalAlignment: Text.AlignRight
+                        horizontalAlignment: QC.Label.AlignRight
                         rightPadding: 6
                         leftPadding: 4
                         text: lineDel.origin === "H" ? "" : (lineDel.oldLineNo >= 0 ? lineDel.oldLineNo : "")
@@ -189,7 +189,7 @@ StandardPage {
 
                     QC.Label {
                         Layout.preferredWidth: 50
-                        horizontalAlignment: Text.AlignRight
+                        horizontalAlignment: QC.Label.AlignRight
                         rightPadding: 6
                         text: lineDel.origin === "H" ? "" : (lineDel.newLineNo >= 0 ? lineDel.newLineNo : "")
                         font.family: "monospace"
@@ -210,7 +210,7 @@ StandardPage {
                         text: lineDel.text
                         font.family: "monospace"
                         font.pointSize: 11
-                        textFormat: Text.PlainText
+                        textFormat: QC.Label.PlainText
                         color: {
                             switch (lineDel.origin) {
                             case "+": return Theme.diffAddedText;

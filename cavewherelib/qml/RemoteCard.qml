@@ -48,13 +48,13 @@ QQ.Rectangle {
             Layout.fillWidth: true
             spacing: 8
 
-            QQ.Text {
+            QC.Label {
                 text: card.remoteName
-                font.pixelSize: 14
+                font.pixelSize: Theme.fontSizeBody
                 font.bold: true
                 color: Theme.text
                 Layout.fillWidth: true
-                elide: QQ.Text.ElideRight
+                elide: QC.Label.ElideRight
             }
 
             QQ.Rectangle {
@@ -64,7 +64,7 @@ QQ.Rectangle {
                 implicitWidth: blockerText.implicitWidth + 8
                 implicitHeight: blockerText.implicitHeight + 4
 
-                QQ.Text {
+                QC.Label {
                     id: blockerText
                     anchors.centerIn: parent
                     font.pixelSize: 10
@@ -74,9 +74,9 @@ QQ.Rectangle {
                 }
             }
 
-            QQ.Text {
+            QC.Label {
                 visible: !syncHealth.status.stale && card.syncReady
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeSmall
                 color: Theme.textSecondary
                 text: "\u2191" + syncHealth.status.aheadCount + " \u2193" + syncHealth.status.behindCount
             }
@@ -89,24 +89,24 @@ QQ.Rectangle {
             }
         }
 
-        QQ.Text {
+        QC.Label {
             Layout.fillWidth: true
             text: card.remoteUrl.toString()
-            font.pixelSize: 12
+            font.pixelSize: Theme.fontSizeSmall
             color: Theme.textSubtle
-            elide: QQ.Text.ElideMiddle
+            elide: QC.Label.ElideMiddle
         }
 
-        QQ.Text {
+        QC.Label {
             Layout.fillWidth: true
             visible: testConnection.state === GitTestConnection.Testing
                      || testConnection.errorMessage.length > 0
             text: testConnection.state === GitTestConnection.Testing
                   ? qsTr("Testing connection...")
                   : testConnection.errorMessage
-            font.pixelSize: 11
+            font.pixelSize: Theme.fontSizeCaption
             color: testConnection.errorMessage.length > 0 ? Theme.danger : Theme.textSubtle
-            wrapMode: QQ.Text.WrapAtWordBoundaryOrAnywhere
+            wrapMode: QC.Label.WrapAtWordBoundaryOrAnywhere
         }
 
         RowLayout {
@@ -118,7 +118,7 @@ QQ.Rectangle {
                 text: testConnection.state === GitTestConnection.Testing
                       ? qsTr("Testing...") : qsTr("Check access")
                 enabled: testConnection.state !== GitTestConnection.Testing
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeSmall
                 onClicked: {
                     testConnection.url = card.remoteUrl
                     testConnection.test()

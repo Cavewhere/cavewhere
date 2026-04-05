@@ -9,6 +9,6 @@
 import cavewherelib
 
 HelpBox {
-    font.pixelSize: 14
+    font.pixelSize: Theme.fontSizeBody
     color: Theme.errorBackground
 }

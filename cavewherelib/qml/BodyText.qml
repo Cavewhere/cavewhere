@@ -3,4 +3,5 @@ import cavewherelib
 
 QQ.Text {
     color: Theme.text
+    font.family: Theme.fontFamilyBody
 }

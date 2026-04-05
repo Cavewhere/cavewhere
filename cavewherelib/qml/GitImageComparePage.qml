@@ -62,15 +62,15 @@ StandardPage {
             QC.Label {
                 Layout.fillWidth: true
                 text: page.filePath
-                font.pixelSize: 14
+                font.pixelSize: Theme.fontSizeBody
                 font.weight: QQ.Font.DemiBold
-                elide: QQ.Text.ElideLeft
+                elide: QC.Label.ElideLeft
             }
 
             QC.Label {
                 objectName: "beforeLabel"
                 text: qsTr("Before")
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeSmall
                 color: Theme.textSubtle
                 visible: !page._isAdded
             }
@@ -86,7 +86,7 @@ StandardPage {
             QC.Label {
                 objectName: "afterLabel"
                 text: qsTr("After")
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeSmall
                 color: Theme.textSubtle
                 visible: !page._isDeleted
             }
@@ -136,7 +136,7 @@ StandardPage {
                     text: page._isDeleted
                           ? qsTr("Previous version unavailable")
                           : qsTr("Current version unavailable")
-                    font.pixelSize: 14
+                    font.pixelSize: Theme.fontSizeBody
                     color: Theme.textSubtle
                 }
             }
@@ -173,7 +173,7 @@ StandardPage {
                         text: page._isAdded
                               ? qsTr("No previous version")
                               : qsTr("Previous version unavailable")
-                        font.pixelSize: 14
+                        font.pixelSize: Theme.fontSizeBody
                         color: Theme.textSubtle
                     }
                 }
@@ -198,7 +198,7 @@ StandardPage {
                     QC.Label {
                         anchors.centerIn: parent
                         text: qsTr("File was deleted")
-                        font.pixelSize: 14
+                        font.pixelSize: Theme.fontSizeBody
                         color: Theme.textSubtle
                     }
                 }
@@ -226,7 +226,7 @@ StandardPage {
                     QC.Label {
                         anchors.centerIn: parent
                         text: "\u2194"
-                        font.pixelSize: 14
+                        font.pixelSize: Theme.fontSizeBody
                         color: Theme.text
                     }
                 }

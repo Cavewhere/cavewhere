@@ -56,6 +56,23 @@ QtObject {
         "#acc236", "#166a8f", "#00a950", "#58595b"
     ]
 
+    // Typography — driven by cwFontSettings; scale all sizes proportionally
+    readonly property real fontScale: RootData.settings.fontSettings.fontBaseSize / 16.0
+    readonly property string fontFamily: RootData.settings.fontSettings.fontFamily !== ""
+        ? RootData.settings.fontSettings.fontFamily
+        : Qt.application.font.family
+    readonly property string fontFamilyBody: Qt.application.font.family
+    readonly property string fontFamilyMono: "Courier Prime"
+
+    readonly property int fontSizeCaption: Math.round(11 * fontScale)
+    readonly property int fontSizeSmall:   Math.round(12 * fontScale)
+    readonly property int fontSizeBody:    Math.round(14 * fontScale)
+    readonly property int fontSizeUI:      RootData.settings.fontSettings.fontBaseSize
+    readonly property int fontSizeMedium:  Math.round(18 * fontScale)
+    readonly property int fontSizeTitle:   Math.round(20 * fontScale)
+    readonly property int fontSizeLarge:   Math.round(24 * fontScale)
+    readonly property int fontSizeXLarge:  Math.round(30 * fontScale)
+
     // Spacing
     readonly property int pageMargin: 8
 

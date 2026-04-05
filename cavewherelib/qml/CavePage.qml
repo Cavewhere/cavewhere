@@ -69,7 +69,7 @@ StandardPage {
                 id: caveNameText
                 text: cavePageArea.currentCave.name
                 font.bold: true
-                font.pixelSize: 20
+                font.pixelSize: Theme.fontSizeTitle
 
                 onFinishedEditting: (newText) => {
                                         cavePageArea.currentCave.name = newText
@@ -272,7 +272,7 @@ StandardPage {
 
                                         LinkText {
                                             text: rowDelegateId.tripNameRole
-                                            elide: Text.ElideRight
+                                            elide: QQ.Text.ElideRight
 
                                             onClicked: {
                                                 RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
@@ -286,9 +286,9 @@ StandardPage {
                                     implicitWidth: dateColumn.columnWidth
                                     implicitHeight: dateId.implicitHeight
                                     clip: true
-                                    Text {
+                                    QQ.Text {
                                         id: dateId
-                                        elide: Text.ElideRight
+                                        elide: QQ.Text.ElideRight
                                         // anchors.fill: parent
                                         text: Qt.formatDateTime(rowDelegateId.tripDateRole, "yyyy-MM-dd")
                                     }
@@ -299,9 +299,9 @@ StandardPage {
                                     implicitHeight: usedStationsId.implicitHeight
                                     clip: true
 
-                                    Text {
+                                    QQ.Text {
                                         id: usedStationsId
-                                        elide: Text.ElideRight
+                                        elide: QQ.Text.ElideRight
                                         // anchors.fill: parent
                                         text: usedStationsRole
                                     }
@@ -312,9 +312,9 @@ StandardPage {
                                     implicitHeight: lengthId.implicitHeight
                                     clip: true
 
-                                    Text {
+                                    QQ.Text {
                                         id: lengthId
-                                        elide: Text.ElideRight
+                                        elide: QQ.Text.ElideRight
                                         // anchors.fill: parent
                                         text: {
                                             var unit = ""

@@ -54,24 +54,26 @@ QQ.Item {
             visible: true
         }
 
-        Text {
+        QQ.Text {
             id: nameHeader
             anchors.left: parent.left
             anchors.right: parent.horizontalCenter
 
-            horizontalAlignment: Text.AlignHCenter
+            horizontalAlignment: QQ.Text.AlignHCenter
             text: "Name"
+            font.family: Theme.fontFamily
             font.bold: true
             visible: teamList.visible
         }
 
-        Text {
+        QQ.Text {
             id: jobHeader
             anchors.left: parent.horizontalCenter
             anchors.right: parent.right
 
-            horizontalAlignment: Text.AlignHCenter
+            horizontalAlignment: QQ.Text.AlignHCenter
             text: "Role"
+            font.family: Theme.fontFamily
             font.bold: true
             visible: teamList.visible
         }
@@ -294,7 +296,7 @@ QQ.Item {
                                 anchors.verticalCenter: parent.verticalCenter
                             }
 
-                            Text {
+                            QQ.Text {
                                 id: addText
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: "Role"

@@ -120,7 +120,7 @@ ColumnLayout {
 
         Text {
             color: Theme.textSubtle
-            font.pixelSize: 11
+            font.pixelSize: Theme.fontSizeCaption
             text: qsTr("For SSH URLs, ensure your SSH key is already configured.")
         }
     }

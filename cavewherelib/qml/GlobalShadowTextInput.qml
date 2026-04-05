@@ -7,6 +7,7 @@
 pragma Singleton
 
 import QtQuick as QQ
+import QtQuick.Controls as QC
 import cavewherelib
 
 QQ.MouseArea {
@@ -65,7 +66,7 @@ QQ.MouseArea {
             id: input
         }
 
-        // QQ.TextInput {
+        // QC.LabelInput {
         //     id: input
         //     visible: shadowEditor.visible
         //     anchors.centerIn: parent;

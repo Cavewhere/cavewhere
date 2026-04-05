@@ -270,8 +270,8 @@ QC.Dialog {
                 Layout.fillWidth: true
                 Layout.maximumWidth: _scrollView.width
                 text: rootId.resolvedSavePath
-                font.pixelSize: 11
-                elide: QQ.Text.ElideLeft
+                font.pixelSize: Theme.fontSizeCaption
+                elide: QC.Label.ElideLeft
                 objectName: "saveAsFullPathLabel"
             }
 
@@ -281,7 +281,7 @@ QC.Dialog {
                 visible: rootId._directoryConflict || rootId._bundleConflict || rootId._parentNotFound
                 Layout.fillWidth: true
                 Layout.maximumWidth: _scrollView.width
-                wrapMode: QQ.Text.WordWrap
+                wrapMode: QC.Label.WordWrap
                 color: (rootId._directoryConflict || rootId._parentNotFound) ? Theme.danger : Theme.warning
                 text: rootId._directoryConflict
                       ? "A folder \"%1\" already exists in this location. Choose a different name or location.".arg(rootId._sanitizedName)

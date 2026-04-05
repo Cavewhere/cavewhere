@@ -40,9 +40,9 @@ RoundButton {
         contentItem: ColumnLayout{
             id: popupContentId
 
-            Text {
+            QC.Label {
                 text: "Join the CaveWhere community"
-                font.pixelSize: 20
+                font.pixelSize: Theme.fontSizeTitle
             }
 
             RowLayout {
@@ -53,7 +53,7 @@ RoundButton {
                     visible: DiscordStatusChecker.devsOnlineCount == 0
                 }
 
-                Text {
+                QC.Label {
                     text: {
                         if(DiscordStatusChecker.devsOnlineCount) {
                             return "🌟 Support is online! 🌟"
@@ -71,7 +71,7 @@ RoundButton {
                     online: DiscordStatusChecker.userCount > 0
                 }
 
-                Text {
+                QC.Label {
                     id: onlineTextId
                     text: DiscordStatusChecker.userCount + " online"
                 }

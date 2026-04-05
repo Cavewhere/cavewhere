@@ -1,3 +1,4 @@
+import QtQuick as QQ
 import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
@@ -15,7 +16,7 @@ ColumnLayout {
                     showItemOnClick: threadHelpAreaId
                 }
 
-                Text {
+                QC.Label {
                     text: "Max Number of Threads"
                 }
 
@@ -35,7 +36,7 @@ ColumnLayout {
                 text: "By default and the recommend setting, CaveWhere uses all the usable threads provide by your system. Decreasing Max Number of Threads will limit the number concurrent jobs that CaveWhere execute and will reduce CaveWhere's performance. If your computer is experiencing over heating issues from CaveWhere, reducing the Max Number of Threads may help."
             }
 
-            Text {
+            QC.Label {
                 text: "Usable threads: " + settingsId.jobSettings.idleThreadCount
             }
         }

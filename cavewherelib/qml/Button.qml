@@ -52,7 +52,7 @@ QQ.Rectangle {
             visible: button.iconOnTheLeft
         }
 
-        Text {
+        QC.Label {
             id: buttonText
             visible: button.hasText
             color: Theme.text

@@ -28,12 +28,12 @@ ShadowRectangle {
 
     property bool _hiding: false
 
-    Text {
+    QC.Label {
         id: textId
         anchors.centerIn: parent
 
-        font.pixelSize: 16
-        horizontalAlignment: Text.AlignHCenter
+        font.pixelSize: Theme.fontSizeUI
+        horizontalAlignment: QC.Label.AlignHCenter
     }
 
     onVisibleChanged: {

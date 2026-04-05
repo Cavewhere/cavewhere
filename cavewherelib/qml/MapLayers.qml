@@ -82,7 +82,7 @@ ColumnLayout {
                     layerProperties.layerObject = layer;
                 }
 
-                delegate: Text {
+                delegate: QC.Label {
                     id: textDelegateId
                     objectName: "layerDelegate" + index
                     required property string layerNameRole
@@ -185,7 +185,7 @@ ColumnLayout {
     //                 //     model: mapLayersId.screenCaptureManager.groupModel
     //                 //     rootIndex: mapLayersId.screenCaptureManager.groupModel.index(index)
 
-    //                 //     delegate: Text {
+    //                 //     delegate: QC.Label {
     //                 //         text: captureNameRole
     //                 //     }
     //                 // }
@@ -194,7 +194,7 @@ ColumnLayout {
     //                     // model: visualModel
     //                     model: mapLayersId.screenCaptureManager.groupModel
     //                     anchors.fill: parent
-    //                     delegate: Text {
+    //                     delegate: QC.Label {
     //                         text: delegateId.captureNameRole
     //                     }
 
@@ -223,7 +223,7 @@ ColumnLayout {
             }
 
             RowLayout {
-                Text {
+                QC.Label {
                     text: "Size"
                 }
 
@@ -232,7 +232,7 @@ ColumnLayout {
                     text: "" //layerProperties.layerObject !== null ? layerProperties.layerObject.paperSizeOfItem.width : ""
                 }
 
-                Text {
+                QC.Label {
                     text: "x"
                 }
 
@@ -244,11 +244,11 @@ ColumnLayout {
             }
 
             RowLayout {
-                Text {
+                QC.Label {
                     text: "Position"
                 }
 
-                Text {
+                QC.Label {
                     text: "x:"
                 }
 
@@ -257,7 +257,7 @@ ColumnLayout {
                     text: ""
                 }
 
-                Text {
+                QC.Label {
                     text: "y:"
                 }
 
@@ -268,7 +268,7 @@ ColumnLayout {
             }
 
             RowLayout {
-                Text {
+                QC.Label {
                     text: "Rotation"
                 }
 

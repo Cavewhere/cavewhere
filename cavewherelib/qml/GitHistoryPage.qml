@@ -178,7 +178,7 @@ StandardPage {
         contentItem: QC.Label {
             text: qsTr("This will create a new save that restores the project to:\n\n\"%1\"\n\nAll history will be preserved.")
                   .arg(restoreConfirmDialog.targetSubject)
-            wrapMode: QQ.Text.Wrap
+            wrapMode: QC.Label.Wrap
         }
 
         onAccepted: {

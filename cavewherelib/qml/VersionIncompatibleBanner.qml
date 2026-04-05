@@ -30,17 +30,17 @@ QQ.Rectangle {
         ColumnLayout {
             spacing: 2
 
-            QQ.Text {
+            QC.Label {
                 text: "Read-only"
                 font.bold: true
-                font.pixelSize: 13
+                font.pixelSize: Theme.fontSizeBody
                 color: Theme.text
                 Layout.alignment: Qt.AlignHCenter
             }
 
-            QQ.Text {
+            QC.Label {
                 text: "Upgrade to CaveWhere v" + RootData.project.requiredVersion + " to edit"
-                font.pixelSize: 11
+                font.pixelSize: Theme.fontSizeCaption
                 color: Theme.text
                 Layout.alignment: Qt.AlignHCenter
             }

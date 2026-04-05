@@ -90,7 +90,7 @@ ColumnLayout {
 
         LinkText {
             Layout.fillWidth: true
-            elide: QQ.Text.ElideLeft
+            elide: QC.Label.ElideLeft
             text: root.destinationPathText
             onClicked: folderDialogId.open()
         }
@@ -116,7 +116,7 @@ ColumnLayout {
             Layout.fillWidth: true
             visible: clonerId.cloneStatusMessage.length > 0
             text: clonerId.cloneStatusMessage
-            wrapMode: QQ.Text.WrapAtWordBoundaryOrAnywhere
+            wrapMode: QC.Label.WrapAtWordBoundaryOrAnywhere
             color: Theme.textSecondary
         }
 

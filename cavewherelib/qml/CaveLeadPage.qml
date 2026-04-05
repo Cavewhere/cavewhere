@@ -69,7 +69,7 @@ StandardPage {
 
             QQ.Item { implicitWidth: 50 }
 
-            Text {
+            QQ.Text {
                 text: "Lead Distance from:"
             }
 
@@ -261,7 +261,7 @@ StandardPage {
                             clip: true
                             implicitWidth: nearestColumn.columnWidth
                             implicitHeight: nearestText.implicitHeight
-                            Text {
+                            QQ.Text {
                                 id: nearestText
                                 text: delegateId.leadNearestStation
                             }
@@ -271,7 +271,7 @@ StandardPage {
                             clip: true
                             implicitWidth: sizeColumn.columnWidth
                             implicitHeight: leadSize.implicitHeight
-                            Text {
+                            QQ.Text {
                                 id: leadSize
                                 text: delegateId.leadSizeAsString
                             }
@@ -281,7 +281,7 @@ StandardPage {
                             clip: true
                             implicitWidth: distanceColumn.columnWidth
                             implicitHeight: distanceId.implicitHeight
-                            Text {
+                            QQ.Text {
                                 id: distanceId
                                 text: Math.round(delegateId.leadDistanceToReferanceStation) + " m"
                             }
@@ -306,7 +306,7 @@ StandardPage {
                             clip: true
                             implicitWidth: descriptionColumn.columnWidth
                             implicitHeight: descriptionId.implicitHeight
-                            Text {
+                            QQ.Text {
                                 id: descriptionId
                                 text: delegateId.leadDescription
                             }

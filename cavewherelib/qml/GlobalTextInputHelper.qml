@@ -1,4 +1,5 @@
 import QtQuick as QQ
+import QtQuick.Controls as QC
 
 QQ.TextInput {
     id: input

@@ -17,6 +17,9 @@ QC.ApplicationWindow {
     id: applicationWindowId
     objectName: "applicationWindow"
 
+    font.family: Theme.fontFamily
+    font.pixelSize: Theme.fontSizeUI
+
     visible: false
     width: 1024
     height: 576

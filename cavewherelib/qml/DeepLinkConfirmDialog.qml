@@ -106,7 +106,7 @@ QQ.Item {
                 Layout.fillWidth: true
                 text: dialogId._repoDisplay
                 font.bold: true
-                wrapMode: QQ.Text.WordWrap
+                wrapMode: QC.Label.WordWrap
             }
 
             RowLayout {

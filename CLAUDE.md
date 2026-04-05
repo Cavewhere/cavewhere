@@ -103,11 +103,19 @@ Uses Qt's RHI (Rendering Hardware Interface). Key classes: `cwRegionSceneManager
 ### QML
 - Strict typed properties (no `property var`); lowerCamelCase property names
 - Capitalized component filenames (`MyComponent.qml`)
-- Use `Theme.qml` for all colors; no hardcoded hex values in component QML
+- Use `Theme.qml` for all colors and font tokens — never hardcode hex values or font sizes in component QML files
 - Prefer `id` selectors over `objectName`; keep bindings simple; avoid deep nesting
 - Register modules via `qt_add_qml_module` in CMakeLists.txt
 - Use `Loader` for deferred/conditional loading; avoid expensive operations in bindings
 - Use `QCanvasPainterItem` (C++) for custom painting; do not use QML `Canvas` or `Shapes`
+
+#### Text and font conventions
+- Use **`QC.Label`** (`import QtQuick.Controls as QC`) for all standard UI text: labels, descriptions, headings, dialog content. It inherits `font.family` from `CavewhereMainWindow` and merges partial font overrides correctly.
+- Use **`QQ.Text`** (`import QtQuick as QQ`) only in performance-sensitive delegate rows (ListView/TableView/Repeater with many items) and in custom text wrapper components (`BodyText`, `SectionLabel`, `LinkText`, `LabelWithHelp`).
+- When `QQ.Text` must set any `font.*` sub-property (e.g. `font.pixelSize`, `font.bold`), also set `font.family: Theme.fontFamily` — Qt resets font inheritance when any sub-property is explicitly assigned.
+- Use **`BodyText`** for paragraph/body copy — it uses `Theme.fontFamilyBody` (Bitstream Vera Sans) for better readability at paragraph sizes.
+- Font size tokens live in `Theme.qml`: `Theme.fontSizeCaption` (11), `Theme.fontSizeSmall` (12), `Theme.fontSizeBody` (14), `Theme.fontSizeUI` (16), `Theme.fontSizeMedium` (18), `Theme.fontSizeTitle` (20), `Theme.fontSizeLarge` (24), `Theme.fontSizeXLarge` (30). Prefer these over hardcoded pixel sizes.
+- Do not import `QtQuick as Q` — use `QQ` as the alias so it is easy to search for.
 
 ### Commits
 - Short, capitalized, imperative subjects ("Fix", "Add", "Implement")
