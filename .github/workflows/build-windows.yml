@@ -75,13 +75,17 @@ jobs:
             $outFile = "$env:TEMP\$archive"
             Write-Host "Downloading $archive..."
             Invoke-WebRequest -Uri $url -OutFile $outFile -UseBasicParsing
+            # List first archive contents to verify paths
+            if ($pkg -eq $packages[0]) {
+              7z l $outFile | Select-Object -First 30
+            }
             7z x $outFile -o"$qtRoot" -y | Out-Null
             Remove-Item $outFile
           }
 
-          # Archives extract to 6.11.0/msvc2022_64/ inside $qtRoot
-          Write-Host "Qt installed to $qtRoot\6.11.0\msvc2022_64"
-          Get-ChildItem "$qtRoot\6.11.0\msvc2022_64"
+          # Show what was extracted
+          Write-Host "Contents of $qtRoot :"
+          Get-ChildItem $qtRoot -Recurse -Depth 2
 
       - name: Install Locale::PO
         run: |
