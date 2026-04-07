@@ -699,4 +699,5 @@ test-qml/test.png
 cavewherelib/icons/Thumbs.db
 *.autosave
 test-qml/Thumbs.db
+.claude/settings.local.json
 clone-test/
