@@ -166,8 +166,6 @@ cwRootData::cwRootData(QObject *parent) :
     connect(cwJobSettings::instance(), &cwJobSettings::automaticUpdateChanged,
             this, updateAutomaticUpdate);
 
-    connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, [&]() { Project->waitSaveToFinish(); });
-
     connect(Project, &cwProject::filenameChanged, this, [this]() {
         // Reset the filter pipeline UI state when the project file changes.
         // Do NOT clear m_keywordItemModel here — scrap keyword items self-destruct
@@ -182,7 +180,7 @@ cwRootData::cwRootData(QObject *parent) :
 
 cwRootData::~cwRootData()
 {
-    shutdown();
+    shutdownBlocking();
 }
 
 /**
@@ -415,6 +413,31 @@ cwNoteLiDARManager *cwRootData::noteLiDARManager() const
 }
 
 void cwRootData::shutdown()
+{
+    if (m_shuttingDown) {
+        return;
+    }
+    m_shuttingDown = true;
+
+    auto checkComplete = [this]() {
+        if (!m_shutdownCompleted
+            && taskManagerModel()->isIdle()
+            && futureManagerModel()->isEmpty())
+        {
+            m_shutdownCompleted = true;
+            emit shutdownComplete();
+        }
+    };
+
+    connect(taskManagerModel(), &cwTaskManagerModel::becameIdle,
+            this, checkComplete);
+    connect(futureManagerModel(), &cwFutureManagerModel::allFinished,
+            this, checkComplete);
+
+    checkComplete();
+}
+
+void cwRootData::shutdownBlocking()
 {
     taskManagerModel()->waitForTasks();
     futureManagerModel()->waitForFinished();

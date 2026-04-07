@@ -126,14 +126,14 @@ void cwTaskManagerModel::removeTask(cwTask *task)
         Q_ASSERT(TaskToTimer.contains(task));
         QTimer* timer = TaskToTimer.value(task);
 
-        connect(task, nullptr, this, nullptr);
-        connect(task, nullptr, TaskStartedMapper, nullptr);
-        connect(task, nullptr, TaskStoppedMapper, nullptr);
-        connect(task, nullptr, TaskFinishedMapper, nullptr);
-        connect(task, nullptr, TaskProgressMapper, nullptr);
-        connect(task, nullptr, TaskNumberOfStepsMapper,nullptr);
-        connect(task, nullptr, TaskNameMapper, nullptr);
-        connect(timer, nullptr, TaskActiveMapper, nullptr);
+        disconnect(task, nullptr, this, nullptr);
+        disconnect(task, nullptr, TaskStartedMapper, nullptr);
+        disconnect(task, nullptr, TaskStoppedMapper, nullptr);
+        disconnect(task, nullptr, TaskFinishedMapper, nullptr);
+        disconnect(task, nullptr, TaskProgressMapper, nullptr);
+        disconnect(task, nullptr, TaskNumberOfStepsMapper, nullptr);
+        disconnect(task, nullptr, TaskNameMapper, nullptr);
+        disconnect(timer, nullptr, TaskActiveMapper, nullptr);
 
         TaskStartedMapper->removeMappings(task);
         TaskStoppedMapper->removeMappings(task);
@@ -154,6 +154,13 @@ void cwTaskManagerModel::waitForTasks()
     for(auto task : WatchingTasks) {
         task->waitToFinish();
     }
+}
+
+bool cwTaskManagerModel::isIdle() const
+{
+    return std::none_of(std::as_const(WatchingTasks).begin(),
+                        std::as_const(WatchingTasks).end(),
+                        [](const cwTask* task) { return task->isRunning(); });
 }
 
 /**
@@ -236,6 +243,10 @@ void cwTaskManagerModel::taskHasStopped(QObject *taskObject)
     timer->stop();
 
     removeActiveTask(task);
+
+    if (isIdle()) {
+        emit becameIdle();
+    }
 }
 
 /**
@@ -252,6 +263,10 @@ void cwTaskManagerModel::taskHasFinished(QObject *taskObject)
     timer->stop();
 
     removeActiveTask(task);
+
+    if (isIdle()) {
+        emit becameIdle();
+    }
 }
 
 /**

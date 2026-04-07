@@ -109,6 +109,16 @@ QC.ApplicationWindow {
         sourceComponent: ShutdownScreen {}
     }
 
+    // Single exit point: shutdown() drains all tasks/futures asynchronously,
+    // then emits shutdownComplete. Qt.quit() triggers the engine cleanup
+    // lambda in main.cpp which deletes the QML engine and calls a.quit().
+    QQ.Connections {
+        target: RootData
+        function onShutdownComplete() {
+            Qt.quit();
+        }
+    }
+
     SaveAsDialog {
         id: saveAsFileDialogId
     }
@@ -197,7 +207,6 @@ QC.ApplicationWindow {
             applicationWindowId.menuBar = null;
             shutdownLoader.active = true;
             RootData.shutdown();
-            Qt.quit();
         }
 
         askToSaveDialogId.askToSave();
