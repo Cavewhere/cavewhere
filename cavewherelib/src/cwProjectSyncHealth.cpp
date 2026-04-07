@@ -18,11 +18,12 @@ cwProjectSyncHealth::cwProjectSyncHealth(QObject* parent) :
         const auto future = m_remoteStatusRestarter.future();
         const int requestId = m_activeRequestId;
         const bool localChanges = m_pendingLocalChanges;
+        const bool usesTokenAuth = m_pendingUsesTokenAuth;
         const QString remoteName = m_pendingRemoteName;
         const QString branchName = m_pendingBranchName;
 
         AsyncFuture::observe(future)
-            .context(this, [this, future, requestId, localChanges, remoteName, branchName]() {
+            .context(this, [this, future, requestId, localChanges, usesTokenAuth, remoteName, branchName]() {
                 if (future.isCanceled() || requestId != m_activeRequestId) {
                     return;
                 }
@@ -42,6 +43,7 @@ cwProjectSyncHealth::cwProjectSyncHealth(QObject* parent) :
                         .m_aheadCount = 0,
                         .m_behindCount = 0,
                         .m_stale = true,
+                        .m_usesTokenAuth = usesTokenAuth,
                         .m_syncBlocker = syncBlocker,
                         .m_message = authFailed
                             ? (credsLoaded
@@ -58,6 +60,7 @@ cwProjectSyncHealth::cwProjectSyncHealth(QObject* parent) :
                     .m_aheadCount = static_cast<int>(aheadBehindResult.value().ahead),
                     .m_behindCount = static_cast<int>(aheadBehindResult.value().behind),
                     .m_stale = false,
+                    .m_usesTokenAuth = usesTokenAuth,
                     .m_message = QStringLiteral("%1/%2: %3 to push, %4 to pull%5")
                                      .arg(remoteName, branchName)
                                      .arg(static_cast<int>(aheadBehindResult.value().ahead))
@@ -215,12 +218,17 @@ void cwProjectSyncHealth::refresh()
         }
     }
 
-    scheduleRemoteStatusRefresh(localChanges, remoteName, currentBranch);
+    const QUrl remoteUrl = m_repository->remoteUrl(remoteName);
+    const bool usesTokenAuth =
+        remoteUrl.scheme().compare(QStringLiteral("https"), Qt::CaseInsensitive) == 0;
+
+    scheduleRemoteStatusRefresh(localChanges, remoteName, currentBranch, usesTokenAuth);
 }
 
 void cwProjectSyncHealth::scheduleRemoteStatusRefresh(bool hasLocalChanges,
                                                       const QString& remoteName,
-                                                      const QString& branchName)
+                                                      const QString& branchName,
+                                                      bool usesTokenAuth)
 {
     auto* repo = m_repository.data();
     if (repo == nullptr) {
@@ -236,6 +244,7 @@ void cwProjectSyncHealth::scheduleRemoteStatusRefresh(bool hasLocalChanges,
     m_pendingLocalChanges = hasLocalChanges;
     m_pendingRemoteName = remoteName;
     m_pendingBranchName = branchName;
+    m_pendingUsesTokenAuth = usesTokenAuth;
     ++m_activeRequestId;
 
     QPointer<QQuickGit::GitRepository> repoPtr = repo;

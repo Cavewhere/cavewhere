@@ -69,6 +69,24 @@ void cwRemoteAccountCoordinator::forgetGitHubAccount(const QString& username)
     }
 }
 
+void cwRemoteAccountCoordinator::loginGitHubAccount()
+{
+    if (!m_gitHubIntegration) {
+        emit loginGitHubAccountFinished(false);
+        return;
+    }
+
+    connect(m_gitHubIntegration, &cwGitHubIntegration::credentialsLoaded,
+            this, [this]() {
+                const bool authorized =
+                    m_gitHubIntegration &&
+                    m_gitHubIntegration->authState() == cwGitHubIntegration::AuthState::Authorized;
+                emit loginGitHubAccountFinished(authorized);
+            },
+            Qt::SingleShotConnection);
+    m_gitHubIntegration->reloadAccessTokenFromCredentialStore();
+}
+
 void cwRemoteAccountCoordinator::startAddGitHubAccount()
 {
     if (!m_gitHubIntegration) {

@@ -147,6 +147,8 @@ QQ.Item {
                     projectModified: RootData.project.modified
                     saveWillCauseDataLoss: RootData.project.saveWillCauseDataLoss
                     requiredVersion: RootData.project.requiredVersion
+                    loggedIn: RootData.remote.gitHubIntegration.authState === GitHubIntegration.Authorized
+                    usesTokenAuth: RootData.project.syncHealth.status.usesTokenAuth
 
                     // Right-aligned popup positioning anchored below this button
                     readonly property int _popupRightEdge: QC.Overlay.overlay.width - 5
@@ -166,6 +168,21 @@ QQ.Item {
                     }
                     onSetupRemoteRequested: {
                         setupRemoteWizardId.open()
+                    }
+                    onLoginRequested: {
+                        RootData.remote.accountCoordinator.loginGitHubAccount()
+                    }
+
+                    QQ.Connections {
+                        target: RootData.remote.accountCoordinator
+                        function onLoginGitHubAccountFinished(authorized) {
+                            if (!authorized) {
+                                reconnectPopupId.open()
+                            }
+                        }
+                    }
+                    onLogoutRequested: {
+                        RootData.remote.accountCoordinator.forgetGitHubAccount()
                     }
 
                     ReconnectPopup {

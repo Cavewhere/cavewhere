@@ -25,6 +25,7 @@ public:
 
     Q_INVOKABLE void forgetGitHubAccount();
     Q_INVOKABLE void forgetGitHubAccount(const QString& username);
+    Q_INVOKABLE void loginGitHubAccount();
     Q_INVOKABLE void startAddGitHubAccount();
     Q_INVOKABLE void selectGitHubAccount(const QString& username);
     Q_INVOKABLE void bindRemoteToActiveGitHubAccount(const QString& remoteUrl);
@@ -35,6 +36,7 @@ public:
 
 signals:
     void addRemoteFailed(const QString& errorMessage);
+    void loginGitHubAccountFinished(bool authorized);
 
 private:
     QString initialGitHubAccountId() const;
