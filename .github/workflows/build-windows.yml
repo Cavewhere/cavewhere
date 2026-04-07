@@ -75,17 +75,11 @@ jobs:
             $outFile = "$env:TEMP\$archive"
             Write-Host "Downloading $archive..."
             Invoke-WebRequest -Uri $url -OutFile $outFile -UseBasicParsing
-            # List first archive contents to verify paths
-            if ($pkg -eq $packages[0]) {
-              7z l $outFile | Select-Object -First 30
-            }
             7z x $outFile -o"$qtRoot" -y | Out-Null
             Remove-Item $outFile
           }
 
-          # Show what was extracted
-          Write-Host "Contents of $qtRoot :"
-          Get-ChildItem $qtRoot -Recurse -Depth 2
+          Write-Host "Qt installed to $qtRoot"
 
       - name: Install Locale::PO
         run: |
@@ -141,7 +135,7 @@ jobs:
 
       - name: Configure the Project with CMake
         run: |
-          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_PDF=OFF -DBUILD_TESTING=OFF -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Qt\6.11.0\msvc2022_64\lib" -DCMAKE_TOOLCHAIN_FILE="build/conan_toolchain.cmake" -S . -B build
+          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_PDF=OFF -DBUILD_TESTING=OFF -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Qt\lib" -DCMAKE_TOOLCHAIN_FILE="build/conan_toolchain.cmake" -S . -B build
 
       - name: Build Windows Installer
         run: cmake --build build --target windowsInstaller --parallel
