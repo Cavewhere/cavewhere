@@ -831,7 +831,9 @@ void cwSurveyChunk::setShotData(cwSurveyChunk::DataRole role, int index, const Q
 
 void cwSurveyChunk::checkForErrorOnDataChanged(cwSurveyChunk::DataRole role, int index)
 {
-    checkForError(role, index);
+    // Suppress errorsChanged for the primary cell: setData already emitted
+    // dataChanged(role, index) which triggers the same model refresh.
+    checkForError(role, index, false);
 
     //Check dependent boxes
     switch(role) {
@@ -920,7 +922,7 @@ void cwSurveyChunk::checkForErrorOnDataChanged(cwSurveyChunk::DataRole role, int
  * @param role - The role that will be checked
  * @param index - The index o
  */
-void cwSurveyChunk::checkForError(cwSurveyChunk::DataRole role, int index)
+void cwSurveyChunk::checkForError(cwSurveyChunk::DataRole role, int index, bool emitSignal)
 {
     Q_UNUSED(role)
     Q_UNUSED(index)
@@ -1009,13 +1011,17 @@ void cwSurveyChunk::checkForError(cwSurveyChunk::DataRole role, int index)
             cellModel->setParentModel(nullptr);
             cellModel->deleteLater();
             CellErrorModels.remove(cellIndex);
-            emit errorsChanged(role, index);
+            if(emitSignal) {
+                emit errorsChanged(role, index);
+            }
         }  else {
             //Clear the previous errors
             if(cellModel->errors()->toList() != errors) {
                 cellModel->errors()->clear();
                 cellModel->errors()->append(errors);
-                emit errorsChanged(role, index);
+                if(emitSignal) {
+                    emit errorsChanged(role, index);
+                }
             }
         }
     }
