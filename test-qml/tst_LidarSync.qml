@@ -208,12 +208,21 @@ MainWindowTest {
         }
 
         function selectLiDARNoteByFilename(fileName) {
-            let gallery = noteGallery()
-            let galleryView = noteGalleryView()
+            // Re-lookup gallery objects each attempt since sync round trips
+            // destroy and recreate the trip page and its children.
+            function freshGallery() {
+                return ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery")
+            }
+            function freshGalleryView() {
+                return ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView")
+            }
+
             tryVerifyWithDiagnostics(() => {
-                return galleryView.count > 0
+                let gv = freshGalleryView()
+                return gv !== null && gv.count > 0
             }, 10000, "wait for LiDAR note gallery items")
 
+            let galleryView = freshGalleryView()
             galleryView.currentIndex = -1
             wait(50)
 
@@ -226,16 +235,23 @@ MainWindowTest {
                 }
                 mouseClick(galleryItem)
                 wait(50)
-                if (gallery.currentNoteLiDAR != null
+                let gallery = freshGallery()
+                if (gallery != null
+                        && gallery.currentNoteLiDAR != null
                         && String(gallery.currentNoteLiDAR.filename) === fileName) {
                     break
                 }
             }
 
             tryVerifyWithDiagnostics(() => {
+                let gallery = freshGallery()
+                let gv = freshGalleryView()
+                if (gallery === null || gv === null) {
+                    return false
+                }
                 if (gallery.currentNoteLiDAR == null
-                        && galleryView.currentItem != null) {
-                    galleryView.updateCurrentNote()
+                        && gv.currentItem != null) {
+                    gv.updateCurrentNote()
                 }
                 return gallery.currentNoteLiDAR != null
                        && String(gallery.currentNoteLiDAR.filename) === fileName
@@ -280,12 +296,21 @@ MainWindowTest {
         }
 
         function selectAnyLiDARNote() {
-            let gallery = noteGallery()
-            let galleryView = noteGalleryView()
+            // Re-lookup gallery objects each attempt since sync round trips
+            // destroy and recreate the trip page and its children.
+            function freshGallery() {
+                return ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery")
+            }
+            function freshGalleryView() {
+                return ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView")
+            }
+
             tryVerifyWithDiagnostics(() => {
-                return galleryView.count > 0
+                let gv = freshGalleryView()
+                return gv !== null && gv.count > 0
             }, 10000, "wait for any LiDAR note gallery items")
 
+            let galleryView = freshGalleryView()
             galleryView.currentIndex = -1
             wait(50)
 
@@ -298,15 +323,21 @@ MainWindowTest {
                 }
                 mouseClick(galleryItem)
                 wait(50)
-                if (gallery.currentNoteLiDAR != null) {
+                let gallery = freshGallery()
+                if (gallery != null && gallery.currentNoteLiDAR != null) {
                     break
                 }
             }
 
             tryVerifyWithDiagnostics(() => {
+                let gallery = freshGallery()
+                let gv = freshGalleryView()
+                if (gallery === null || gv === null) {
+                    return false
+                }
                 if (gallery.currentNoteLiDAR == null
-                        && galleryView.currentItem != null) {
-                    galleryView.updateCurrentNote()
+                        && gv.currentItem != null) {
+                    gv.updateCurrentNote()
                 }
                 return gallery.currentNoteLiDAR != null
             }, 15000, "select any LiDAR note")
@@ -317,7 +348,7 @@ MainWindowTest {
                 SyncTestHelper.waitForFutureManagerToFinish(testCaseId, RootData)
             })
 
-            return String(gallery.currentNoteLiDAR.filename)
+            return String(freshGallery().currentNoteLiDAR.filename)
         }
 
         function snapshotSelectedLiDARStationState() {
