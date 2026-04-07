@@ -201,7 +201,7 @@ private:
     void setShotData(DataRole role, int index, const QVariant &data);
 
     void checkForErrorOnDataChanged(DataRole role, int index);
-    void checkForError(DataRole role, int index);
+    void checkForError(DataRole role, int index, bool emitSignal = true);
     void checkForStationError(int index);
     void checkForShotError(int index);
     QList<cwError> checkLRUDError(cwSurveyChunk::DataRole role, int index) const;

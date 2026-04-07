@@ -11,6 +11,15 @@ MainWindowTest {
         name: "NoteNorthInteraction"
         when: windowShown
 
+        function cleanup() {
+            RootData.pageSelectionModel.gotoPageByName(null, "View")
+            tryVerify(() => {
+                return RootData.pageView.currentPageItem !== null
+                       && RootData.pageView.currentPageItem.objectName === "viewPage"
+            }, 5000)
+            RootData.newProject()
+        }
+
         function test_arrowInteraction() {
 
             TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwScrapManager/ProjectProfile-test-v3.cw");

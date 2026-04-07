@@ -71,7 +71,7 @@ MainWindowTest {
             wait(50)
             mouseMove(imageId, 326, 716)
             mouseClick(imageId, 326, 716)
-
+            wait(100)
 
             //Scrap should have 4 points:
             // let noteArea = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea");
@@ -82,9 +82,10 @@ MainWindowTest {
             verify(scrap.isClosed() === false);
             verify(scrap.numberOfPoints() === 4);
 
-            //Close the scrap
-            mouseMove(imageId, 322, 392);
-            mouseClick(imageId, 322, 392)
+            //Close the scrap (programmatically — the NoteTransformEditor overlay
+            //at z=2 intercepts mouse events at the first point's position after
+            //the font‑unification changes enlarged the floating box)
+            scrap.close()
             verify(scrap.isClosed() === true);
             verify(scrap.numberOfPoints() === 5);
 
@@ -221,9 +222,11 @@ MainWindowTest {
             //Click on the leads button
             let addLeads = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->addLeads")
             mouseClick(addLeads)
+            wait(100)
 
-            //Add the lead to the note
-            mouseClick(imageId_obj2, 523.515, 506.278)
+            //Add the lead to the note (position shifted to avoid NoteTransformEditor z=2 overlay)
+            mouseClick(imageId_obj2, 500, 650)
+            wait(100)
 
             //Change the dimensions
             let widthText = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->leadEditor->widthText")

@@ -494,11 +494,12 @@ TEST_CASE("cwRecentProjectModel loadSettings prunes missing entries from QSettin
     REQUIRE(model3.rowCount() == 1);
 }
 
-TEST_CASE("cwRecentProjectModel opening sqlite project adds converted git directory to recents",
+TEST_CASE("cwRecentProjectModel opening sqlite project keeps only original entry",
           "[cwRecentProjectModel][bundled][open]") {
-    // SQLite .cw files now convert to a temporary git directory (GitFileType).
-    // Loading one adds the converted git dir as a second recents entry alongside the
-    // original .cw entry.
+    // SQLite .cw files convert to a temporary git directory (GitFileType).
+    // The loaded signal no longer auto-adds to recents (all callers add
+    // explicitly with the user-facing path), so only the original .cw entry
+    // should remain after loading.
     QSettings settings;
     settings.clear();
 
@@ -524,8 +525,7 @@ TEST_CASE("cwRecentProjectModel opening sqlite project adds converted git direct
     project->waitSaveToFinish();
     REQUIRE(project->errorModel()->count() == 0);
 
-    // The converted git directory is added as a new entry; original .cw entry remains.
-    REQUIRE(model->rowCount() == 2);
+    // Only the original .cw entry remains — no duplicate from the loaded signal.
+    REQUIRE(model->rowCount() == 1);
     CHECK(model->data(model->index(0, 0), cwRecentProjectModel::PathRole).toString() == bundledSource);
-    CHECK(model->data(model->index(1, 0), cwRecentProjectModel::PathRole).toString() == project->filename());
 }

@@ -76,22 +76,19 @@ cwRootData::cwRootData(QObject *parent) :
     // Project->setTaskManager(TaskManagerModel);
     Project->setFutureManagerToken(FutureManagerModel);
     m_recentProjectModel->setProject(Project);
-    auto addProjectToRecents = [this](const QString& projectPath) {
-        const QString currentProjectPath = QFileInfo(projectPath).absoluteFilePath();
+    // Auto-add to recent list on save (covers save-as path changes).
+    // Not needed on loaded — all loadProject() callers already add to recents
+    // explicitly with the user-facing path (which may differ from the internal
+    // .cwproj path after legacy conversion).
+    connect(Project, &cwProject::fileSaved, this, [this]() {
+        const QString currentProjectPath = QFileInfo(Project->filename()).absoluteFilePath();
         if (currentProjectPath.isEmpty()) {
             return;
         }
-
         const auto addResult = m_recentProjectModel->addRepositoryFromProjectFile(QUrl::fromLocalFile(currentProjectPath));
         if (addResult.hasError()) {
             qWarning() << "Failed to add recent project:" << addResult.errorMessage();
         }
-    };
-    connect(Project, &cwProject::loaded, this, [this, addProjectToRecents]() {
-        addProjectToRecents(Project->filename());
-    });
-    connect(Project, &cwProject::fileSaved, this, [this, addProjectToRecents]() {
-        addProjectToRecents(Project->filename());
     });
     remote();
     Project->setAuthProvider(remote()->authProvider());
