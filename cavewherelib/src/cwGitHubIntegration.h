@@ -67,6 +67,7 @@ class CAVEWHERE_LIB_EXPORT cwGitHubIntegration : public cwRemoteAuthProvider
     Q_PROPERTY(bool verificationOpened READ verificationOpened NOTIFY verificationOpenedChanged)
     Q_PROPERTY(QString username READ username NOTIFY usernameChanged)
     Q_PROPERTY(QString activeAccountId READ activeAccountId NOTIFY activeAccountIdChanged)
+    Q_PROPERTY(bool loggedIn READ loggedIn NOTIFY authStateChanged)
 
 public:
     enum class AuthState {
@@ -83,6 +84,7 @@ public:
     ~cwGitHubIntegration() override;
 
     AuthState authState() const { return m_authState; }
+    bool loggedIn() const { return m_authState == AuthState::Authorized; }
     QString userCode() const { return m_deviceInfo.userCode; }
     QUrl verificationUrl() const { return m_deviceInfo.verificationWebAddress; }
     QString errorMessage() const { return m_errorMessage; }

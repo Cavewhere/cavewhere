@@ -147,7 +147,7 @@ QQ.Item {
                     projectModified: RootData.project.modified
                     saveWillCauseDataLoss: RootData.project.saveWillCauseDataLoss
                     requiredVersion: RootData.project.requiredVersion
-                    loggedIn: RootData.remote.gitHubIntegration.authState === GitHubIntegration.Authorized
+                    loggedIn: RootData.remote.gitHubIntegration.loggedIn
                     usesTokenAuth: RootData.project.syncHealth.status.usesTokenAuth
 
                     // Right-aligned popup positioning anchored below this button
