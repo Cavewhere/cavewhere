@@ -41,7 +41,7 @@ jobs:
           host: 'windows'
           target: 'desktop'
           arch: 'win64_msvc2022_64'
-          modules: 'qtshadertools'
+          modules: 'qtshadertools qtcanvaspainter'
 
       - name: Install Locale::PO
         run: |
