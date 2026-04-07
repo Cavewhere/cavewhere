@@ -54,8 +54,8 @@ jobs:
         run: |
           $ver = "6.11.0-0-202603180535"
           $repoBase = "https://qt.mirror.constant.com/online/qtsdkrepository/windows_x86/desktop/qt6_6110/qt6_6110_msvc2022_64"
-          $qtDir = "${{ github.workspace }}\Qt\6.11.0\msvc2022_64"
-          New-Item -ItemType Directory -Force -Path $qtDir | Out-Null
+          $qtRoot = "${{ github.workspace }}\Qt"
+          New-Item -ItemType Directory -Force -Path $qtRoot | Out-Null
 
           # Each entry is: subdir-in-repo, archive-filename
           $packages = @(
@@ -75,19 +75,13 @@ jobs:
             $outFile = "$env:TEMP\$archive"
             Write-Host "Downloading $archive..."
             Invoke-WebRequest -Uri $url -OutFile $outFile -UseBasicParsing
-            7z x $outFile -o"$qtDir" -y | Out-Null
+            7z x $outFile -o"$qtRoot" -y | Out-Null
             Remove-Item $outFile
           }
 
-          # Qt archives extract into 6.11.0/msvc2022_64/ subdirectory
-          $innerDir = Join-Path $qtDir "6.11.0\msvc2022_64"
-          if (Test-Path $innerDir) {
-            Get-ChildItem -Path $innerDir -Force | Move-Item -Destination $qtDir -Force
-            Remove-Item -Path (Join-Path $qtDir "6.11.0") -Recurse -Force
-          }
-
-          Write-Host "Qt installed to $qtDir"
-          Get-ChildItem $qtDir
+          # Archives extract to 6.11.0/msvc2022_64/ inside $qtRoot
+          Write-Host "Qt installed to $qtRoot\6.11.0\msvc2022_64"
+          Get-ChildItem "$qtRoot\6.11.0\msvc2022_64"
 
       - name: Install Locale::PO
         run: |
