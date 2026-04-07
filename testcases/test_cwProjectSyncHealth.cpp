@@ -2,19 +2,16 @@
 #include <catch2/catch_test_macros.hpp>
 
 // Qt
-#include <QCoreApplication>
 #include <QDir>
-#include <QElapsedTimer>
-#include <QEventLoop>
 #include <QFile>
 #include <QTemporaryDir>
-#include <functional>
 
 // Ours
 #include "cwProjectSyncHealth.h"
 #include "GitRepository.h"
 #include "Account.h"
 #include "asyncfuture.h"
+#include "TestHelper.h"
 
 // libgit2
 #include "git2.h"
@@ -37,16 +34,6 @@ void writeFile(const QString& directoryPath, const QString& fileName, const QStr
     QFile file(QDir(directoryPath).filePath(fileName));
     REQUIRE(file.open(QFile::WriteOnly | QFile::Truncate | QFile::Text));
     file.write(contents.toUtf8());
-}
-
-bool waitUntil(const std::function<bool()>& condition, int timeoutMs = 3000)
-{
-    QElapsedTimer timer;
-    timer.start();
-    while (!condition() && timer.elapsed() < timeoutMs) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
-    }
-    return condition();
 }
 } // namespace
 
@@ -87,6 +74,10 @@ TEST_CASE("cwProjectSyncHealth reports missing remote warning", "[cwProjectSyncH
         return syncStatus.status().message() == QStringLiteral("No git remote is configured for this project.");
     }));
     CHECK(syncStatus.status().stale());
+    CHECK(syncStatus.status().syncBlocker() == cwSyncStatus::SyncBlocker::NoRemote);
+    CHECK(!syncStatus.status().hasRemote());
+    CHECK(!syncStatus.status().needsLogin());
+    CHECK(!syncStatus.status().authExpired());
 }
 
 TEST_CASE("cwProjectSyncHealth prefers missing remote warning for new repository", "[cwProjectSyncHealth]")
@@ -106,6 +97,8 @@ TEST_CASE("cwProjectSyncHealth prefers missing remote warning for new repository
         return syncStatus.status().message() == QStringLiteral("No git remote is configured for this project.");
     }));
     CHECK(syncStatus.status().stale());
+    CHECK(syncStatus.status().syncBlocker() == cwSyncStatus::SyncBlocker::NoRemote);
+    CHECK(!syncStatus.status().hasRemote());
 }
 
 TEST_CASE("cwProjectSyncHealth updates status after initRepository on repo with existing remote",
@@ -124,9 +117,7 @@ TEST_CASE("cwProjectSyncHealth updates status after initRepository on repo with 
     const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("project"));
 
     // --- Phase 1: build a real on-disk git repo that has an origin remote ---
-    git_repository* bareRepo = nullptr;
-    REQUIRE(git_repository_init(&bareRepo, remotePath.toLocal8Bit().constData(), 1) == GIT_OK);
-    git_repository_free(bareRepo);
+    REQUIRE(initBareRepo(remotePath) == GIT_OK);
 
     REQUIRE(QDir().mkpath(projectPath));
 
@@ -187,10 +178,7 @@ TEST_CASE("cwProjectSyncHealth resolves remote ahead/behind asynchronously", "[c
     const QString authorPath = QDir(tempDir.path()).filePath(QStringLiteral("author"));
     const QString peerPath = QDir(tempDir.path()).filePath(QStringLiteral("peer"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remotePath.toLocal8Bit().constData(), 1) == GIT_OK);
-    REQUIRE(remoteRepo != nullptr);
-    git_repository_free(remoteRepo);
+    REQUIRE(initBareRepo(remotePath) == GIT_OK);
 
     REQUIRE(QDir().mkpath(authorPath));
 
@@ -225,4 +213,77 @@ TEST_CASE("cwProjectSyncHealth resolves remote ahead/behind asynchronously", "[c
         return !syncStatus.status().stale();
     }, 6000));
     CHECK(syncStatus.status().behindCount() >= 1);
+}
+
+TEST_CASE("cwProjectSyncHealth sets SyncBlocker::NoRemote when no remote configured", "[cwProjectSyncHealth]")
+{
+    auto tempDir = QTemporaryDir();
+    REQUIRE(tempDir.isValid());
+
+    Account account;
+    account.setName(QStringLiteral("Tester"));
+    account.setEmail(QStringLiteral("tester@example.com"));
+
+    GitRepository repo;
+    repo.setDirectory(QDir(tempDir.path()));
+    repo.initRepository();
+    repo.setAccount(&account);
+
+    writeFile(tempDir.path(), QStringLiteral("state.txt"), QStringLiteral("initial\n"));
+    CHECK_NOTHROW(repo.commitAll(QStringLiteral("Initial"), QStringLiteral("initial commit")));
+
+    cwProjectSyncHealth syncHealth;
+    syncHealth.setRepository(&repo);
+    syncHealth.refresh();
+
+    REQUIRE(waitUntil([&syncHealth]() {
+        return syncHealth.status().syncBlocker() == cwSyncStatus::SyncBlocker::NoRemote;
+    }));
+    CHECK(!syncHealth.status().hasRemote());
+    CHECK(!syncHealth.status().needsLogin());
+    CHECK(!syncHealth.status().authExpired());
+}
+
+TEST_CASE("cwProjectSyncHealth clears NoRemote after remote is added", "[cwProjectSyncHealth]")
+{
+    auto tempDir = QTemporaryDir();
+    REQUIRE(tempDir.isValid());
+
+    const QString remotePath = QDir(tempDir.path()).filePath(QStringLiteral("remote.git"));
+    REQUIRE(initBareRepo(remotePath) == GIT_OK);
+
+    Account account;
+    account.setName(QStringLiteral("Tester"));
+    account.setEmail(QStringLiteral("tester@example.com"));
+
+    GitRepository repo;
+    repo.setDirectory(QDir(tempDir.path()));
+    repo.initRepository();
+    repo.setAccount(&account);
+
+    writeFile(tempDir.path(), QStringLiteral("state.txt"), QStringLiteral("initial\n"));
+    CHECK_NOTHROW(repo.commitAll(QStringLiteral("Initial"), QStringLiteral("initial commit")));
+
+    cwProjectSyncHealth syncHealth;
+    syncHealth.setRepository(&repo);
+    syncHealth.refresh();
+
+    REQUIRE(waitUntil([&syncHealth]() { return !syncHealth.status().hasRemote(); }));
+
+    REQUIRE(repo.addRemote(QStringLiteral("origin"), QUrl::fromLocalFile(remotePath)).isEmpty());
+
+    REQUIRE(waitUntil([&syncHealth]() { return syncHealth.status().hasRemote(); }));
+    CHECK(syncHealth.status().syncBlocker() != cwSyncStatus::SyncBlocker::NoRemote);
+}
+
+TEST_CASE("cwSyncStatus operator== compares syncBlocker", "[cwSyncStatus]")
+{
+    cwSyncStatus a, b;
+    CHECK(a == b);
+
+    a.m_syncBlocker = cwSyncStatus::SyncBlocker::NoRemote;
+    CHECK(a != b);
+
+    b.m_syncBlocker = cwSyncStatus::SyncBlocker::NoRemote;
+    CHECK(a == b);
 }

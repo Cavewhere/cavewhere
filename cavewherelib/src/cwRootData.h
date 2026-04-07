@@ -41,6 +41,7 @@
 class cwKeywordItemModel;
 class cwKeywordFilterPipelineModel;
 class cwRemoteServices;
+class cwDeepLinkHandler;
 
 //QQuickGit inculdes
 #include "Account.h"
@@ -75,6 +76,7 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
     Q_PROPERTY(QQuickGit::Account* account READ account CONSTANT)
     Q_PROPERTY(cwRecentProjectModel* recentProjectModel READ recentProjectModel CONSTANT)
     Q_PROPERTY(cwRemoteServices* remote READ remote CONSTANT)
+    Q_PROPERTY(cwDeepLinkHandler* deepLinkHandler READ deepLinkHandler CONSTANT)
 
     Q_PROPERTY(cwPageSelectionModel* pageSelectionModel READ pageSelectionModel CONSTANT)
     Q_PROPERTY(cwPageView* pageView READ pageView WRITE setPageView NOTIFY pageViewChanged)
@@ -124,6 +126,7 @@ public:
     QQuickGit::Account *account() const { return m_account; }
     cwRecentProjectModel* recentProjectModel() const { return m_recentProjectModel; }
     cwRemoteServices* remote() const;
+    cwDeepLinkHandler* deepLinkHandler() const;
 
     cwPageView* pageView() const { return m_pageView; }
     void setPageView(cwPageView* value);
@@ -149,6 +152,8 @@ public:
     Q_INVOKABLE cwImage emptyImage() const  { return cwImage(); }
     Q_INVOKABLE QUrl cavewhereImageUrl(const cwImage& image, const QString& absolutePath) const;
     Q_INVOKABLE void newProject();
+    Q_INVOKABLE void loadProject(const QString& filename);
+    Q_INVOKABLE void discardChangesAndReload();
 
     int titleBarHeight() const;
 
@@ -218,6 +223,7 @@ private:
     QQuickGit::Account* m_account;
     QQuickGit::AccountSettingWatcher* m_accountWatcher;
     mutable cwRemoteServices* m_remoteServices = nullptr; // mutable for lazy creation
+    mutable cwDeepLinkHandler* m_deepLinkHandler = nullptr;
 
     QPointer<cwPageView> m_pageView;
 
@@ -230,6 +236,8 @@ private:
     bool StationVisible = true; //!<
 
     int m_titleBarHeight;
+
+    void prepareForProjectSwitch();
 };
 
 /**

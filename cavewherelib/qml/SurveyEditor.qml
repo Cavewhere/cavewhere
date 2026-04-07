@@ -161,7 +161,7 @@ QQ.Item {
                             objectName: "tripNameText"
                             text: clipArea.currentTrip.name
                             font.bold: true
-                            font.pixelSize: 20
+                            font.pixelSize: Theme.fontSizeTitle
                             autoResize: true
                             Layout.fillWidth: true
                             Layout.minimumWidth: 0
@@ -254,7 +254,7 @@ QQ.Item {
             footer: ColumnLayout {
                 width: scrollAreaId.width - 30
 
-                Text {
+                QC.Label {
                     objectName: "totalLengthText"
                     text: {
                         if(clipArea.currentTrip === null) { return "" }

@@ -17,6 +17,15 @@ QC.ApplicationWindow {
     id: applicationWindowId
     objectName: "applicationWindow"
 
+    font.family: Theme.fontFamily
+    font.pixelSize: Theme.fontSizeUI
+
+    Binding { target: GitFontScale; property: "fontSizeCaption"; value: Theme.fontSizeCaption }
+    Binding { target: GitFontScale; property: "fontSizeSmall";   value: Theme.fontSizeSmall }
+    Binding { target: GitFontScale; property: "fontSizeUI";      value: Theme.fontSizeBody }
+    Binding { target: GitFontScale; property: "fontSizeBase";    value: Theme.fontSizeUI }
+    Binding { target: GitFontScale; property: "fontSizeTitle";   value: Theme.fontSizeTitle }
+
     visible: false
     width: 1024
     height: 576
@@ -40,6 +49,7 @@ QC.ApplicationWindow {
         saveAsFileDialog: saveAsFileDialogId
         loadFileDialog: loadDialogId.loadFileDialog
         askToSaveDialog: askToSaveDialogId
+        onShareRequested: shareDialogId.open()
     }
 
     QQ.Loader {
@@ -73,6 +83,7 @@ QC.ApplicationWindow {
         sourceComponent: MainContent {
             anchors.fill: parent
             fileMenu: windowsLinuxFileMenuLoader.item
+            askToSaveDialog: askToSaveDialogId
         }
     }
 
@@ -102,6 +113,15 @@ QC.ApplicationWindow {
         id: saveAsFileDialogId
     }
 
+    ShareDialog {
+        id: shareDialogId
+        onSetupRemoteRequested: shareSetupWizardLoaderId.open()
+    }
+
+    SetupRemoteWizardLoader {
+        id: shareSetupWizardLoaderId
+    }
+
     ErrorDialog {
         id: projectErrorDialog
         model: RootData.project.errorModel
@@ -121,6 +141,42 @@ QC.ApplicationWindow {
         anchors.centerIn: parent
     }
 
+    DeepLinkConfirmDialog {
+        id: deepLinkConfirmDialogId
+    }
+
+    QQ.Connections {
+        target: RootData.deepLinkHandler
+        function onOpenRepoRequested(url) {
+            deepLinkConfirmDialogId.open(url)
+        }
+    }
+
+    QQ.Connections {
+        target: deepLinkConfirmDialogId
+        function onOpenRequested(filePath) {
+            askToSaveDialogId.taskName = "opening a cloned repository"
+            askToSaveDialogId.afterSaveFunc = function() {
+                RootData.loadProject(filePath)
+                deepLinkConfirmDialogId.close()
+            }
+            askToSaveDialogId.askToSave()
+        }
+    }
+
+    LfsMissingFilesBanner {
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 20
+        anchors.horizontalCenter: parent.horizontalCenter
+    }
+
+    VersionIncompatibleBanner {
+        anchors.bottom: parent.bottom
+        anchors.right: parent.right
+        anchors.bottomMargin: 20
+        anchors.rightMargin: 20
+    }
+
     onClosing: (close) => {
         if (shutdownLoader.active) {
             close.accepted = true;
@@ -133,6 +189,13 @@ QC.ApplicationWindow {
             shutdownLoader.active = true;
         }
         askToSaveDialogId.afterSaveFunc = function() {
+            // Activate the shutdown screen before quitting. For non-temporary
+            // projects onSaveConfirmed already does this, but for temporary
+            // projects the user first saves via SaveAsDialog so onSaveConfirmed
+            // is never invoked — this ensures shutdown always runs.
+            mainContentId.enabled = false;
+            applicationWindowId.menuBar = null;
+            shutdownLoader.active = true;
             RootData.shutdown();
             Qt.quit();
         }
@@ -143,5 +206,10 @@ QC.ApplicationWindow {
 
     QQ.Component.onCompleted: {
         screenSizeSaverId.resize();
+
+        // Drain any deep-link URL that arrived before QML was loaded (Windows cold start)
+        var pending = RootData.deepLinkHandler.takePendingUrl()
+        if (pending.toString() !== "")
+            deepLinkConfirmDialogId.open(pending)
     }
 }

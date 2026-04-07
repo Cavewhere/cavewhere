@@ -18,7 +18,7 @@ QQ.Rectangle {
     ColumnLayout {
         id: topId
         anchors.centerIn: parent
-        Text {
+        QC.Label {
             id: textId
             Layout.alignment: Qt.AlignHCenter
             text: "Top"
@@ -34,7 +34,7 @@ QQ.Rectangle {
                 implicitWidth: 70
             }
 
-            Text {
+            QC.Label {
                 id: unitId
             }
         }

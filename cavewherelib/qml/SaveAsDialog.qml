@@ -58,6 +58,17 @@ QC.Dialog {
         }
     }
 
+    // Normalized save path for actual file I/O. In bundle mode this ensures the
+    // path always ends with exactly one ".cw" extension, even if the user typed
+    // no extension or ".cwproj".  In directory mode it equals resolvedSavePath.
+    readonly property string _effectiveSavePath: {
+        if (bundleFormat) {
+            return _normalizeBundleFilePath(resolvedSavePath)
+        } else {
+            return resolvedSavePath
+        }
+    }
+
     // ── Conflict detection ────────────────────────────────────────────────────
 
     // Sanitized pending name — cached so all downstream bindings share one evaluation.
@@ -145,10 +156,10 @@ QC.Dialog {
         if (RootData.project.isTemporaryProject) {
             RootData.region.name = _pendingName
         }
-        if (RootData.project.saveAs(resolvedSavePath)) {
+        if (RootData.project.saveAs(_effectiveSavePath)) {
             // Pass the saved file so setLastDirectory strips the filename and
             // stores the correct containing directory.
-            RootData.lastDirectory = Qt.resolvedUrl("file://" + resolvedSavePath)
+            RootData.lastDirectory = Qt.resolvedUrl("file://" + _effectiveSavePath)
         }
     }
 
@@ -270,8 +281,8 @@ QC.Dialog {
                 Layout.fillWidth: true
                 Layout.maximumWidth: _scrollView.width
                 text: rootId.resolvedSavePath
-                font.pixelSize: 11
-                elide: QQ.Text.ElideLeft
+                font.pixelSize: Theme.fontSizeCaption
+                elide: QC.Label.ElideLeft
                 objectName: "saveAsFullPathLabel"
             }
 
@@ -281,7 +292,7 @@ QC.Dialog {
                 visible: rootId._directoryConflict || rootId._bundleConflict || rootId._parentNotFound
                 Layout.fillWidth: true
                 Layout.maximumWidth: _scrollView.width
-                wrapMode: QQ.Text.WordWrap
+                wrapMode: QC.Label.WordWrap
                 color: (rootId._directoryConflict || rootId._parentNotFound) ? Theme.danger : Theme.warning
                 text: rootId._directoryConflict
                       ? "A folder \"%1\" already exists in this location. Choose a different name or location.".arg(rootId._sanitizedName)

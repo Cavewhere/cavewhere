@@ -15,6 +15,7 @@
 #include "cwKeywordModel.h"
 #include "cwPDFSettings.h"
 #include "cwUnits.h"
+#include "cwNameUtils.h"
 
 //Std includes
 #include "cwMath.h"
@@ -121,10 +122,25 @@ void cwNote::setName(const QString &name)
         return;
     }
 
+    if (!validateName(name).isEmpty()) {
+        return;
+    }
+
+    if (auto* trip = parentTrip()) {
+        trip->notes()->noteNameSet().rename(m_name.value(), name);
+    }
+
     m_name = name;
     if(KeywordModel) {
         KeywordModel->replace({cwKeywordModel::FileNameKey, name});
     }
+}
+
+QString cwNote::validateName(const QString& proposedName) const
+{
+    const auto* nameSet = parentTrip() ? &parentTrip()->notes()->noteNameSet() : nullptr;
+    return cwNameUtils::validateEntityName(m_name.value(), proposedName, nameSet,
+                                           QStringLiteral("note"));
 }
 
 void cwNote::setId(const QUuid& id)

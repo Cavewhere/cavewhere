@@ -1,3 +1,4 @@
+import QtQuick as QQ
 import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
@@ -32,7 +33,7 @@ StandardPage {
         triangleOffset: 0.8
         color: Theme.warning
         borderColor: "black"
-        Text {
+        QC.Label {
             text: "Click to run testcases"
         }
     }

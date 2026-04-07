@@ -48,6 +48,8 @@ public:
     Q_INVOKABLE cwPage* childPage(QString name) const { return ChildPages.value(name, nullptr); }
 
     void removeChild(cwPage* page);
+    void clearChildren(QSet<QQmlComponent*>& clearedComponents);
+    QList<cwPage*> childPages() const { return ChildPages.values(); }
 
     static QStringList splitLinkIntoParts(QString pageFullname);
 

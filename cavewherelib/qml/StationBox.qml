@@ -84,20 +84,19 @@ DataBox {
 
         visible: false
 
-        Text {
+        QC.Label {
             anchors.horizontalCenter: parent.horizontalCenter
             color: Theme.textSubtle
             text: "Press Tab"
-            font.pixelSize: 14
+            font.pixelSize: Theme.fontSizeBody
             font.bold: true
             horizontalAlignment: Qt.AlignHCenter
         }
 
-        Text {
+        QC.Label {
             id: stationName
             anchors.horizontalCenter: parent.horizontalCenter
-            color: Theme.text
-            //            font.pixelSize: 11
+            //            font.pixelSize: Theme.fontSizeCaption
         }
     }
 

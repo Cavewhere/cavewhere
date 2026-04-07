@@ -3,6 +3,7 @@
 using namespace Catch;
 
 // Our includes
+#include "LoadProjectHelper.h"
 #include "cwProject.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
@@ -82,12 +83,7 @@ void setupSyncRenameScenario(SyncRenameState& s)
     const QString remoteRepoPath =
         QDir(s.remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
     REQUIRE(repository->addRemote(QStringLiteral("origin"),
                                   QUrl::fromLocalFile(remoteRepoPath)).isEmpty());
@@ -270,12 +266,7 @@ TEST_CASE("Local project rename wins on concurrent conflict",
     const QString remoteRepoPath =
         QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
 
-    git_repository* remoteRepo = nullptr;
-    REQUIRE(git_repository_init(&remoteRepo, remoteRepoPath.toLocal8Bit().constData(), 1) == GIT_OK);
-    if (remoteRepo) {
-        git_repository_free(remoteRepo);
-        remoteRepo = nullptr;
-    }
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
 
     REQUIRE(repository->addRemote(QStringLiteral("origin"),
                                   QUrl::fromLocalFile(remoteRepoPath)).isEmpty());

@@ -16,6 +16,7 @@
 #include <QCommandLineParser>
 #include <QFileInfo>
 #include <QtQml/qqml.h>
+#include <qpa/qplatformwindow.h>
 
 //Our includes
 //#include "cwMainWindow.h"
@@ -24,15 +25,21 @@
 #include "cwProject.h"
 #include "cwQmlImageProviderBinder.h"
 #include "cwOpenFileEventHandler.h"
+#include "cwDeepLinkHandler.h"
 #include "cwApplication.h"
 #include "cwGlobals.h"
 #include "cwMetaTypeSystem.h"
+#include "cwTask.h"
 
 //QuickQanave includes
 #include <QuickQanava>
 
 //std includes
 #include <memory>
+
+//QQuickGit includes
+#include "GitConcurrent.h"
+#include "GitCommitImageProvider.h"
 
 //MarkScope
 #include "MarkScope/FrameProfiler.h"
@@ -91,10 +98,15 @@ void handleCommandline(QCoreApplication& a, cwRootData* rootData) {
     const QStringList positionalArgs = parser.positionalArguments();
     if (!positionalArgs.isEmpty()) {
         QString filename = positionalArgs.first();
-        qDebug() << "Loading file:" << filename;
-        rootData->project()->loadOrConvert(filename);
 
-        if(!pageUrl.isEmpty()) {
+        const bool isDeepLink = filename.startsWith(QLatin1String("cavewhere://"));
+        if (isDeepLink) {
+            rootData->deepLinkHandler()->handleUrl(QUrl(filename));
+        } else {
+            rootData->project()->loadOrConvert(filename);
+        }
+
+        if(!pageUrl.isEmpty() && !isDeepLink) {
             QObject* obj = new QObject();
 
             struct ShouldLoad {
@@ -161,6 +173,9 @@ int main(int argc, char *argv[])
     //initilize cavewher lib, gitlib2
     cwRootData::initCavewherelib();
 
+    //Use a single shared thread pool to avoid over-subscribing CPU cores
+    QQuickGit::GitConcurrent::setThreadPool(cwTask::threadPool());
+
     // Add the macOS Resources directory to the QML import search path
     QString resourcePath = QCoreApplication::applicationDirPath() + "/../Resources/qml";
     applicationEngine->addImportPath(resourcePath);
@@ -183,15 +198,37 @@ int main(int argc, char *argv[])
     //Handle command line args
     handleCommandline(a, rootData);
 
+    //QPlatformWindow is needed because QQuickWindow has no public windowModified API
+    if (!applicationEngine->rootObjects().isEmpty()) {
+        auto* mainWindow = qobject_cast<QQuickWindow*>(applicationEngine->rootObjects().first());
+        if (mainWindow) {
+            auto updateModified = [mainWindow, rootData]() {
+                if (auto* platformWindow = mainWindow->handle()) {
+                    platformWindow->setWindowModified(rootData->project()->modified());
+                }
+            };
+            QObject::connect(rootData->project(), &cwProject::modifiedChanged,
+                             mainWindow, updateModified);
+        }
+    }
+
     //Handles when the user clicks on a file in Finder(Mac OS X) or Explorer (Windows)
     cwOpenFileEventHandler* openFileHandler = new cwOpenFileEventHandler(&a);
     openFileHandler->setProject(rootData->project());
+    QObject::connect(openFileHandler, &cwOpenFileEventHandler::deepLinkReceived,
+                     rootData->deepLinkHandler(), &cwDeepLinkHandler::handleUrl);
     a.installEventFilter(openFileHandler);
 
     //Creates image providers for the qml engine
     new cwQmlImageProviderBinder(context->engine(), rootData, applicationEngine);
 
-    auto quit = [&a, rootData, applicationEngine]() {
+    //Enables image://gitcommit/ URLs in QML for viewing images at any commit
+    QQuickGit::GitCommitImageProvider::registerOn(context->engine());
+
+    bool quitCalled = false;
+    auto quit = [&a, &quitCalled, applicationEngine]() {
+        if (quitCalled) { return; }
+        quitCalled = true;
         delete applicationEngine;
         QThreadPool::globalInstance()->waitForDone();
         cwTask::threadPool()->waitForDone();

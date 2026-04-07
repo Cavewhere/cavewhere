@@ -53,8 +53,9 @@ void cwRegionIOTask::copyRegionTo(cwCavingRegion* region)
  */
 int cwRegionIOTask::protoVersion()
 {
-    //Version 8 adds project metadata and .cwproj project files
-    return 8;
+    //Version 9 fixes proto typos (backCompasssCalibration -> backCompassCalibration,
+    //NoteTranformation -> NoteTransformation, Depercated -> Deprecated)
+    return 9;
 }
 
 /**
@@ -72,8 +73,9 @@ QString cwRegionIOTask::toVersion(int protoVersion)
         {4, "1.0-projectedProfile"},
         {5, "1.0-projectedProfile-v2"},
         {6, "2025.3"},
-        {7, "Set the version"},
-        {8, "Set the version"}
+        {7, "2025.3-dev"},
+        {8, "2026-dev"},
+        {9, "2026-dev-v2"}
     };
 
     return protoToVersionString.value(protoVersion, "Unknown Version");

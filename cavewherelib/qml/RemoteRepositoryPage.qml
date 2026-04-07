@@ -12,6 +12,7 @@ StandardPage {
 
     property GitHubIntegration gitHub: RootData.remote.gitHubIntegration
     property RemoteAccountCoordinator remoteAccountCoordinator: RootData.remote.accountCoordinator
+    required property AskToSaveDialog askToSaveDialog
 
     state: "none"
     states: [
@@ -87,65 +88,15 @@ StandardPage {
         }
     ]
 
-    readonly property url cloneDestinationParentFolder: {
-        if (cloneDestinationDialog.selectedFolder.toString() !== "") {
-            return cloneDestinationDialog.selectedFolder
-        }
-        if (cloneDestinationDialog.currentFolder.toString() !== "") {
-            return cloneDestinationDialog.currentFolder
-        }
-        return RootData.recentProjectModel.defaultRepositoryDir
-    }
-    readonly property string cloneDestinationRepoName: remoteRepositoryCloner.repositoryNameFromUrl(manualUrlField.textField.text)
-    readonly property string cloneDestinationPathText: {
-        const parentPath = RootData.urlToLocal(cloneDestinationParentFolder)
-        if (parentPath.length === 0) {
-            return repoName
-        }
-        if(cloneDestinationRepoName.length === 0) {
-            return parentPath
-        }
-
-        const separator = parentPath.endsWith("/") || parentPath.endsWith("\\") ? "" : "/"
-        return parentPath + separator + cloneDestinationRepoName
-    }
-
-    RemoteRepositoryCloner {
-        id: remoteRepositoryCloner
-        recentProjectModel: RootData.recentProjectModel
-        cloneWatcher: cloneWatcher
-        account: RootData.account
-        gitHubIntegration: RootData.remote.gitHubIntegration
-
-        onRepositoryClonedIndex: function(clonedIndex) {
-            if (clonedIndex < 0) {
-                console.warn("Cloned repository not found in model.")
-                return
-            }
-
-            const fileResult = RootData.recentProjectModel.repositoryProjectFile(clonedIndex)
-            if (fileResult.hasError) {
-                console.warn("Failed to open cloned repository:", fileResult.errorMessage)
-                return
-            }
-            RootData.project.loadFile(fileResult.value)
-
-            RootData.pageSelectionModel.gotoPageByName(null, "View")
-        }
-
-        onRepositoryClonedWithRemote: function(repositoryPath, remoteUrl) {
-            remoteAccountCoordinator.bindRemoteToActiveGitHubAccount(remoteUrl)
-        }
-    }
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 16
+        anchors.margins: Theme.pageMargin
         spacing: 16
 
-        Text {
+        QC.Label {
             text: "Connect to a Remote Caving Area"
-            font.pixelSize: 20
+            font.pixelSize: Theme.fontSizeTitle
             Layout.fillWidth: true
         }
 
@@ -181,72 +132,35 @@ StandardPage {
                     QC.Button {
                         id: cloneButton
                         objectName: "remoteCloneButton"
-                        text: cloneWatcher.state === GitFutureWatcher.Loading ? "Cloning..." : "Clone"
-                        enabled: manualUrlField.textField.text.length > 0
-                                 && cloneWatcher.state !== GitFutureWatcher.Loading
+                        text: cloneAreaId.isCloning ? "Cloning..." : "Clone"
+                        enabled: manualUrlField.textField.text.length > 0 && !cloneAreaId.isCloning
                         transformOrigin: Item.Center
-                        onClicked: {
-                            remoteRepositoryCloner.clone(manualUrlField.textField.text, page.cloneDestinationParentFolder)
-                        }
+                        onClicked: cloneAreaId.clone()
                     }
                 }
 
-                RowLayout {
+                CloneArea {
+                    id: cloneAreaId
                     Layout.fillWidth: true
-
-                    Text {
-                        text: "Destination:"
-                        color: Theme.textSubtle
-                    }
-
-                    LinkText {
-                        Layout.fillWidth: true
-                        elide: Text.ElideLeft
-                        text: page.cloneDestinationPathText
-                        onClicked: {
-                            cloneDestinationDialog.open()
+                    urlText: manualUrlField.textField.text
+                    authErrorMessage: qsTr("Select a GitHub account below to clone from GitHub.")
+                    onReadyToOpen: function(filePath) {
+                        function loadAndView() {
+                            RootData.loadProject(filePath)
+                            manualUrlField.textField.text = ""
                         }
+                        page.askToSaveDialog.taskName = "opening a cloned repository"
+                        page.askToSaveDialog.afterSaveFunc = loadAndView
+                        page.askToSaveDialog.askToSave()
                     }
                 }
-            }
-        }
-
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 6
-            visible: cloneWatcher.state === GitFutureWatcher.Loading
-                     || remoteRepositoryCloner.cloneErrorMessage.length > 0
-                     || remoteRepositoryCloner.cloneStatusMessage.length > 0
-
-            QC.ProgressBar {
-                Layout.fillWidth: true
-                visible: cloneWatcher.state === GitFutureWatcher.Loading
-                from: 0
-                to: 1
-                value: cloneWatcher.progress
-            }
-
-            Text {
-                objectName: "remoteCloneStatusText"
-                Layout.fillWidth: true
-                visible: remoteRepositoryCloner.cloneStatusMessage.length > 0
-                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-                color: Theme.textSecondary
-                text: remoteRepositoryCloner.cloneStatusMessage
-            }
-
-            ErrorHelpArea {
-                objectName: "remoteCloneErrorArea"
-                Layout.fillWidth: true
-                text: remoteRepositoryCloner.cloneErrorMessage
-                visible: remoteRepositoryCloner.cloneErrorMessage.length > 0
             }
         }
 
         RowLayout {
             Layout.fillWidth: true
 
-            Text {
+            QC.Label {
                 text: "Account:"
             }
 
@@ -363,85 +277,11 @@ StandardPage {
             title: "GitHub"
             visible: false
 
-            ColumnLayout {
-                // anchors.fill: parent
+            GitHubAuthFlow {
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.margins: 12
-                spacing: 8
-
-                Text {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-                    color: Theme.textSecondary
-                    text: {
-                        switch (gitHub.authState) {
-                        case GitHubIntegration.RequestingCode:
-                            return "Requesting a sign-in code from GitHub…";
-                        case GitHubIntegration.AwaitingVerification:
-                            return "Enter the code below at GitHub to finish signing in.";
-                        case GitHubIntegration.Error:
-                            return gitHub.errorMessage.length > 0 ? gitHub.errorMessage : "Something went wrong.";
-                        default:
-                            return "Use your GitHub account to access remote repositories.";
-                        }
-                    }
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    visible: gitHub.authState === GitHubIntegration.AwaitingVerification
-
-                    QC.TextField {
-                        Layout.fillWidth: true
-                        text: gitHub.userCode
-                        readOnly: true
-                        horizontalAlignment: Text.AlignHCenter
-                        font.bold: true
-                    }
-
-                    QC.Button {
-                        objectName: "remoteGitHubCopyOpenButton"
-                        text: "Copy and Open GitHub"
-                        onClicked: {
-                            if (gitHub.userCode && gitHub.userCode.length > 0) {
-                                RootData.copyText(gitHub.userCode)
-                            }
-                            gitHub.markVerificationOpened()
-                            Qt.openUrlExternally(gitHub.verificationUrl)
-                        }
-                        // QC.ToolTip.visible: hovered
-                        // QC.ToolTip.text: "Copy the code and open github.com/device"
-                    }
-                }
-
-                Text {
-                    Layout.fillWidth: true
-                    visible: gitHub.authState === GitHubIntegration.AwaitingVerification
-                              && gitHub.verificationOpened
-                              && gitHub.secondsUntilNextPoll > 0
-                    color: Theme.textSubtle
-                    font.pixelSize: 12
-                    text: qsTr("Trying connection in %1 s").arg(gitHub.secondsUntilNextPoll)
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    visible: gitHub.authState !== GitHubIntegration.AwaitingVerification
-
-                    QC.Button {
-                        objectName: "remoteGitHubConnectButton"
-                        text: gitHub.authState === GitHubIntegration.Error ? "Reconnect to GitHub" : "Connect to GitHub"
-                        enabled: !gitHub.busy
-                        onClicked: gitHub.startDeviceLogin()
-                    }
-
-                    QC.Button {
-                        text: "Cancel"
-                        visible: gitHub.authState === GitHubIntegration.AwaitingVerification || gitHub.authState === GitHubIntegration.RequestingCode
-                        onClicked: gitHub.cancelLogin()
-                    }
-                }
+                gitHubIntegration: gitHub
+                contextMessage: qsTr("Sign in to GitHub to access your repositories")
             }
         }
 
@@ -484,7 +324,7 @@ StandardPage {
                 RowLayout {
                     Layout.fillWidth: true
 
-                    Text {
+                    QC.Label {
                         text: "Repositories"
                         font.bold: true
                         Layout.fillWidth: true
@@ -523,7 +363,7 @@ StandardPage {
                     modal: true
                     title: "Forget GitHub Account?"
 
-                    Text {
+                    QC.Label {
                         width: 320
                         wrapMode: Text.WordWrap
                         color: Theme.textSecondary
@@ -600,20 +440,20 @@ StandardPage {
                                 spacing: 4
 
                                 RowLayout {
-                                    Text {
+                                    QC.Label {
                                         text: name
                                         font.bold: true
                                         elide: Text.ElideRight
                                     }
 
-                                    Text {
+                                    QC.Label {
                                         text: isPrivate ? "Private" : "Public"
                                         color: isPrivate ? Theme.warning : Theme.success
-                                        font.pixelSize: 12
+                                        font.pixelSize: Theme.fontSizeSmall
                                     }
                                 }
 
-                                Text {
+                                QC.Label {
                                     text: description.length > 0 ? description : cloneUrl
                                     wrapMode: Text.WordWrap
                                     elide: Text.ElideRight
@@ -640,7 +480,7 @@ StandardPage {
                         width: repoList.width
                         height: repoList.count === 0 ? 40 : 0
 
-                        Text {
+                        QC.Label {
                             anchors.centerIn: parent
                             text: gitHub.busy ? "Refreshing repositories..." : "No repositories found."
                             visible: repoList.count === 0
@@ -662,12 +502,6 @@ StandardPage {
         // }
 
         // Item { Layout.fillHeight: true }
-    }
-
-    FolderDialog {
-        id: cloneDestinationDialog
-        currentFolder: RootData.recentProjectModel.defaultRepositoryDir
-        selectedFolder: currentFolder
     }
 
     SequentialAnimation {
@@ -693,9 +527,5 @@ StandardPage {
         onStopped: cloneButton.scale = 1.0
     }
 
-    GitFutureWatcher {
-        id: cloneWatcher
-        initialProgressText: "Cloning"
-    }
 
 }

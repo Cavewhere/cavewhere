@@ -29,6 +29,33 @@ cwPageView::~cwPageView()
 }
 
 /**
+ * @brief cwPageView::clearPageCacheFor
+ * @param components - The set of QQmlComponents whose cached page items
+ *                     should be destroyed.
+ *
+ * Selectively evicts cached page items for the given components so they
+ * are recreated fresh on the next navigation.  Static pages (View, Source,
+ * etc.) whose components are not in the set are preserved, keeping their
+ * rendering state (RHI context, scene graph) intact.
+ */
+void cwPageView::clearPageCacheFor(const QSet<QQmlComponent*>& components)
+{
+    bool evicted = false;
+    for (QQmlComponent* comp : components) {
+        QQuickItem* item = ComponentToItem.take(comp);
+        if (item) {
+            PageItems.removeOne(item);
+            item->deleteLater();
+            evicted = true;
+        }
+    }
+    if (evicted && !CurrentPage.isNull()) {
+        CurrentPage.clear();
+        emit currentPageItemChanged();
+    }
+}
+
+/**
 * @brief cwPageView::setPageSelectionModel
 * @param pageSelectionModel
 *

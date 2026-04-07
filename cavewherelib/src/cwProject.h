@@ -26,7 +26,6 @@ class cwTrip;
 class cwScrapManager;
 class cwTaskManagerModel;
 class cwRegionLoadTask;
-class cwRegionSaveTask;
 class cwErrorListModel;
 class cwFutureManagerModel;
 class cwSaveLoad;
@@ -73,10 +72,13 @@ class CAVEWHERE_LIB_EXPORT cwProject :  public QObject{
     Q_PROPERTY(QString filename READ filename NOTIFY filenameChanged)
     Q_PROPERTY(FileType fileType READ fileType NOTIFY fileTypeChanged)
     Q_PROPERTY(bool canSaveDirectly READ canSaveDirectly NOTIFY canSaveDirectlyChanged)
+    Q_PROPERTY(bool saveWillCauseDataLoss READ saveWillCauseDataLoss NOTIFY canSaveDirectlyChanged)
+    Q_PROPERTY(QString requiredVersion READ requiredVersion NOTIFY canSaveDirectlyChanged)
     Q_PROPERTY(bool isTemporaryProject READ isTemporaryProject NOTIFY isTemporaryProjectChanged)
     Q_PROPERTY(bool modified READ modified NOTIFY modifiedChanged)
     Q_PROPERTY(cwProjectSyncHealth* syncHealth READ syncHealth CONSTANT)
     Q_PROPERTY(bool syncInProgress READ syncInProgress NOTIFY syncInProgressChanged)
+    Q_PROPERTY(QQuickGit::GitRepository* repository READ repository NOTIFY filenameChanged)
 
 public:
     enum FileType {
@@ -105,6 +107,8 @@ public:
 
     static QString supportedImageFormats();
 
+    Q_INVOKABLE void safeCommitAll(const QString& subject, const QString& description);
+
     Q_INVOKABLE cwResultDir repositoryDir(const QUrl& localDir, const QString& name) const;
 
     Q_INVOKABLE void convertFromProjectV6(QString oldProjectFilename,
@@ -121,8 +125,13 @@ public:
 
     Q_INVOKABLE bool resetBranchAndReconcile(const QString& refSpec,
                                              BranchResetMode resetMode = BranchResetMode::Hard);
+    Q_INVOKABLE bool restoreToCommit(const QString& targetSha);
 
     std::optional<cwSaveLoad::SyncReport> lastSyncReport() const;
+
+    Q_INVOKABLE QUrl remoteUrl() const;
+    Q_INVOKABLE QUrl remoteBrowseUrl() const;
+    Q_INVOKABLE QUrl shareLink() const;
     Q_INVOKABLE bool saveAs(QString newFilename);
     Q_INVOKABLE bool deleteTemporaryProject();
     Q_INVOKABLE bool isNewEmptyProject() const;
@@ -157,6 +166,8 @@ public:
     static QSqlDatabase createDatabaseConnection(const QString& connectionName, const QString& databasePath);
 
     bool canSaveDirectly() const;
+    bool saveWillCauseDataLoss() const;
+    QString requiredVersion() const;
     bool isTemporaryProject() const;
     bool modified() const;
     QQuickGit::GitRepository* repository() const;
@@ -197,12 +208,18 @@ signals:
     void objectPathReady(QObject* object);
     void syncInProgressChanged();
     void syncAuthFailed();
+    void syncFinished();
     void authProviderCredentialsNeeded();
+    void lfsFilesNeedSync();
+    void localMutationOccurred();
+    void saveFlushCompleted();
+    void discardCompleted();
 
 public slots:
     void loadFile(QString filename);
 
 private:
+    QString rawRemoteUrlString() const;
     bool beginSyncOperation(const QFuture<Monad::ResultBase>& operationFuture);
     void setModified(bool modified);
 
@@ -259,7 +276,7 @@ private:
     void connectSaveLoad(cwSaveLoad* saveLoad);
     void disconnectSaveLoad(cwSaveLoad *saveLoad);
 
-    bool saveWillCauseDataLoss() const;
+    bool emitVersionGuardError(const QString& action);
     void setSqliteTemporaryProject(bool isTemp);
     void completeSyncOperation(const Monad::ResultBase& result);
 

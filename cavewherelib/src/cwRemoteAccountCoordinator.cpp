@@ -1,5 +1,6 @@
 #include "cwRemoteAccountCoordinator.h"
 #include "cwRemoteBindingStore.h"
+#include "GitRepository.h"
 
 cwRemoteAccountCoordinator::cwRemoteAccountCoordinator(cwGitHubIntegration* gitHubIntegration,
                                                        cwRemoteAccountModel* remoteAccountModel,
@@ -105,11 +106,39 @@ void cwRemoteAccountCoordinator::bindRemoteToActiveGitHubAccount(const QString& 
     m_remoteBindingStore->bindRemoteToAccount(remoteUrl, accountId);
 }
 
+void cwRemoteAccountCoordinator::addRemoteToProject(QQuickGit::GitRepository* repository,
+                                                    const QString& remoteUrl,
+                                                    bool bindToGitHubAccount)
+{
+    if (!repository) {
+        emit addRemoteFailed(tr("No repository available."));
+        return;
+    }
+
+    const QString error = repository->addRemote(QStringLiteral("origin"), remoteUrl);
+    if (!error.isEmpty()) {
+        emit addRemoteFailed(error);
+        return;
+    }
+
+    if (bindToGitHubAccount) {
+        bindRemoteToActiveGitHubAccount(remoteUrl);
+    }
+}
+
 void cwRemoteAccountCoordinator::handleGitHubLfsAuthFailure(const QUrl& remoteUrl,
                                                             int httpStatus,
                                                             const QString& message)
 {
     if (!m_gitHubIntegration) {
+        return;
+    }
+
+    // A 401 is only meaningful if credentials were loaded and a token was sent.
+    // Without a loaded, non-empty token we never sent auth — the stored keychain
+    // entry is not bad, so don't invalidate (and delete) it.
+    if (!m_gitHubIntegration->hasLoadedCredentials()
+            || m_gitHubIntegration->accessToken().isEmpty()) {
         return;
     }
 
@@ -154,13 +183,20 @@ void cwRemoteAccountCoordinator::syncAuthorizedGitHubAccount()
         return;
     }
 
+    // If the token was just loaded from the keychain, don't write it back.
+    // Re-persisting the same value is wasteful and creates a brief window
+    // where a concurrent CaveWhere instance could see an empty entry.
+    const bool tokenLoadedFromKeychain = m_gitHubIntegration->tokenLoadedFromKeychain();
+
     const QString accountId = m_remoteAccountModel->upsertAccount(cwRemoteAccountModel::Provider::GitHub, username);
     if (accountId.isEmpty()) {
         return;
     }
 
     m_gitHubIntegration->setActiveAccountId(accountId);
-    m_gitHubIntegration->persistCurrentAccessTokenForAccount(accountId);
+    if (!tokenLoadedFromKeychain) {
+        m_gitHubIntegration->persistCurrentAccessTokenForAccount(accountId);
+    }
     m_remoteAccountModel->setAuthState(accountId, cwRemoteAccountModel::AuthState::Authorized);
     m_remoteAccountModel->setActiveAccount(cwRemoteAccountModel::Provider::GitHub, accountId);
 }

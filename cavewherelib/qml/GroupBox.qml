@@ -51,13 +51,12 @@ QQ.Item {
         anchors.fill: titleText
     }
 
-    Text {
+    QC.Label {
         id: titleText
         anchors.left: checkBoxGroup.left
         anchors.leftMargin: 6
 
         font.bold: true
-        color: Theme.text
     }
 
 }

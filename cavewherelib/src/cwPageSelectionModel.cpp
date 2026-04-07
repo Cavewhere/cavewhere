@@ -131,8 +131,9 @@ void cwPageSelectionModel::unregisterPage(cwPage *page)
         // Q_ASSERT(page != currentPage());
         if(page != currentPage()) {
             if(!PageHistory.contains(page)) {
-                //Delay removing the page, because it's in the history.
-                page->parentPage()->removeChild(page);
+                if (page->parentPage()) {
+                    page->parentPage()->removeChild(page);
+                }
                 page->deleteLater();
             }
         }
@@ -479,7 +480,7 @@ cwPage *cwPageSelectionModel::currentPage() const
  *
  * This will clear the history for the page selection model
  */
-void cwPageSelectionModel::clearHistory()
+QSet<QQmlComponent*> cwPageSelectionModel::clearHistory()
 {
     for (const auto& connection : CurrentPageNameConnections) {
         disconnect(connection);
@@ -488,6 +489,17 @@ void cwPageSelectionModel::clearHistory()
 
     CurrentPage.clear();
     PageHistory.clear();
+    CurrentPageIndex = 0;
+
+    // Only depth-2+ pages are dynamic (Cave=…, Trip=… from QML Repeaters).
+    // Top-level pages and their direct children are static (MainContent.qml).
+    QSet<QQmlComponent*> clearedComponents;
+    for (cwPage* topLevel : RootPage->childPages()) {
+        for (cwPage* child : topLevel->childPages()) {
+            child->clearChildren(clearedComponents);
+        }
+    }
+    return clearedComponents;
 }
 
 /**

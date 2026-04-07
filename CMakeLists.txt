@@ -341,6 +341,7 @@ if(BUILD_TESTING)
     target_link_libraries(cavewhere-test
         PRIVATE
         Qt6::Test
+        Qt6::Network
         Catch2::Catch2
         cavewhere-testlib
         cavewherelib

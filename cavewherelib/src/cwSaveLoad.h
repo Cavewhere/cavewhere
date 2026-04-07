@@ -14,9 +14,9 @@ class cwImage;
 class cwScrap;
 class cwImageResolution;
 class cwNoteStation;
+class cwAbstractNoteTransformation;
 class cwNoteTranformation;
 class cwNoteLiDARTransformation;
-class cwTriangulatedData;
 class cwLength;
 class cwTeamMember;
 class cwStation;
@@ -34,6 +34,7 @@ class cwNoteLiDAR;
 class cwNoteLiDARData;
 #include "cwRemoteAuthProvider.h"
 #include "cwCavingRegionData.h"
+#include "cwError.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
 #include "cwFutureManagerToken.h"
 #include "cwResultDir.h"
@@ -54,8 +55,7 @@ class Image;
 class Scrap;
 class ImageResolution;
 class NoteStation;
-class NoteTranformation;
-class TriangulatedData;
+class NoteTransformation;
 class Length;
 class TeamMember;
 class Station;
@@ -88,6 +88,7 @@ class QQuaternion;
 
 namespace google::protobuf {
 class Message;
+template <typename T> class RepeatedPtrField;
 }
 
 namespace QQuickGit {
@@ -116,16 +117,8 @@ class CAVEWHERE_LIB_EXPORT cwSaveLoad : public QObject
     Q_PROPERTY(bool isTemporaryProject READ isTemporaryProject NOTIFY isTemporaryProjectChanged)
 
 public:
-    enum class GitMode {
-        ManagedNew,
-        ExistingRepo,
-        NoGit
-    };
-    Q_ENUM(GitMode);
-
     struct ProjectMetadataData {
         QString dataRoot;
-        GitMode gitMode = GitMode::ManagedNew;
         bool syncEnabled = true;
         QString projectId; // UUID stable across renames; empty on legacy projects
     };
@@ -140,6 +133,8 @@ public:
         cwCavingRegionData region;
         ProjectMetadataData metadata;
         IdentityRepairData identityRepair;
+        QList<cwError> errors;
+        int maxFileVersion = 0; //!< Highest fileVersion seen across all entities during load
     };
 
     struct SyncReport {
@@ -201,7 +196,9 @@ public:
 
     static QFuture<Monad::Result<ProjectLoadData>> loadAll(const QString& filename);
 
-    static Monad::Result<cwCavingRegionData> loadCavingRegion(const QString& filename);
+    QList<cwError> lastLoadErrors() const;
+    int lastLoadMaxFileVersion() const;
+
     static Monad::Result<ProjectLoadData> loadProject(const QString& filename);
     static Monad::Result<cwTripData> loadTrip(const QString& filename);
     static Monad::Result<cwTripData> loadTrip(const QByteArray& content);
@@ -209,6 +206,11 @@ public:
     static Monad::Result<cwNoteData> loadNote(const QByteArray& content, const QString& filename, const QDir& projectDir);
 
     static QString sanitizeFileName(QString input);
+
+    // Load-time repair helpers (exposed for testing)
+    static void repairTopLevelIds(ProjectLoadData& loadData);
+    static void repairNestedScrapIds(ProjectLoadData& loadData);
+    static void repairNameCollisions(ProjectLoadData& loadData);
 
     // Returns the folder that should be stored as "last directory" for a given
     // project file path.  For .cwproj files the .cwproj lives one level inside
@@ -236,6 +238,7 @@ public:
     Monad::ResultBase moveProjectTo(const QString& destinationFileUrl);
     Monad::ResultBase copyProjectTo(const QString& destinationFileUrl);
     QFuture<Monad::ResultBase> saveBundledArchive(const QString& targetArchivePath);
+    QFuture<Monad::ResultBase> enqueueFlushAndCommit();
 
     // Queues the dataRoot directory rename and .cwproj descriptor file rename jobs, and
     // rebuilds internal object-state paths to reflect the new dataRoot. Called by the sync
@@ -281,9 +284,6 @@ public:
 
     QString projectId() const;
 
-    GitMode gitMode() const;
-    void setGitMode(GitMode mode);
-
     bool syncEnabled() const;
     void setSyncEnabled(bool enabled);
 
@@ -300,9 +300,8 @@ public:
     // Compatibility wrapper; use resetBranchAndReconcile for branch-moving semantics.
     QFuture<Monad::ResultBase> checkoutAndReconcile(const QString& refSpec,
                                                     int checkoutMode = 1);
+    QFuture<Monad::ResultBase> restoreToCommitAndReconcile(const QString& targetSha);
     std::optional<SyncReport> lastSyncReport() const;
-    Monad::ResultBase commitProjectChanges(const QString& subject = QString(),
-                                           const QString& description = QString());
 
     QFuture<void> retire();
 
@@ -315,13 +314,31 @@ public:
     static cwNoteData noteDataFromProtoNote(const CavewhereProto::Note& protoNote, const QString& filename);
     static cwNoteLiDARData noteLiDARDataFromProtoNoteLiDAR(const CavewhereProto::NoteLiDAR& protoNote, const QString& filename);
 
+    // Proto primitive type helpers (shared by cwSaveLoad and cwRegionLoadTask)
+    static QDate loadDate(const QtProto::QDate& protoDate);
+    static QSize loadSize(const QtProto::QSize& protoSize);
+    static QSizeF loadSizeF(const QtProto::QSizeF& protoSize);
+    static QPointF loadPointF(const QtProto::QPointF& protoPointF);
+    static QVector3D loadVector3D(const QtProto::QVector3D& protoVector3D);
+    static QVector2D loadVector2D(const QtProto::QVector2D& protoVector2D);
+    static void saveString(std::string *protoString, const QString &string);
+    static void saveDate(QtProto::QDate* protoDate, QDate date);
+    static void saveSize(QtProto::QSize* protoSize, QSize size);
+    static void saveSizeF(QtProto::QSizeF* protoSize, QSizeF size);
+    static void savePointF(QtProto::QPointF* protoPointF, QPointF point);
+    static void saveVector3D(QtProto::QVector3D* protoVector3D, QVector3D vector3D);
+    static void saveQUuid(std::string *protoString, const QUuid& id);
+    static void saveStringList(google::protobuf::RepeatedPtrField<std::string>* protoStringList, const QStringList& stringList);
+
 signals:
     void fileNameChanged();
     void dataRootChanged();
     void isTemporaryProjectChanged();
     void objectPathReady(QObject* object);
     void localMutationOccurred(); //!< Emitted when user-visible data is mutated (save queued, tracking not suppressed)
+    void saveFlushCompleted(); //!< Emitted after pending file writes are flushed to disk
     void discardCompleted();
+    void saveBlockedByVersion(const QString& entityDescription); //!< Emitted when a save is skipped because the project has newer-version entities
 
 private:
     void initializeRepositoryForCurrentFile();
@@ -421,7 +438,12 @@ private:
 
     static QUuid toUuid(const std::string& uuidStr);
 
+    Monad::ResultBase commitProjectChanges(const QString& subject = QString(),
+                                           const QString& description = QString());
     QFuture<Monad::ResultBase> loadImpl(const QString& filename);
+    using GitOperationFn = std::function<QFuture<Monad::ResultBase>(QQuickGit::GitRepository* repo)>;
+    QFuture<Monad::ResultBase> gitOperationAndReconcile(const QString& operationLabel,
+                                                        const GitOperationFn& gitOp);
     QFuture<Monad::ResultBase> saveFlushImpl();
     QFuture<Monad::ResultBase> enqueueReconcilePhase(const QFuture<Monad::ResultBase>& prepareFuture,
                                                      quint64 syncGeneration,
@@ -464,7 +486,7 @@ private:
     static cwScrapData fromProtoScrap(const CavewhereProto::Scrap& protoScrap);
     static cwNoteStation fromProtoNoteStation(const CavewhereProto::NoteStation& protoNoteStation);
     static cwLead fromProtoLead(const CavewhereProto::Lead& protoLead);
-    static cwNoteTransformationData fromProtoNoteTransformation(const CavewhereProto::NoteTranformation& protoNoteTransform);
+    static cwNoteTransformationData fromProtoNoteTransformation(const CavewhereProto::NoteTransformation& protoNoteTransform);
     static cwNoteLiDARTransformationData fromProtoLiDARNoteTransformation(const CavewhereProto::NoteLiDARTransformation& protoNoteTransform);
     static cwLength::Data fromProtoLength(const CavewhereProto::Length& protoLength);
     static std::unique_ptr<cwProjectedProfileScrapViewMatrix::Data> fromProtoProjectedScraptViewMatrix(const CavewhereProto::ProjectedProfileScrapViewMatrix protoViewMatrix);
@@ -475,6 +497,25 @@ private:
                                            cwNoteLiDARTransformation *noteTransformation);
     static void saveQQuaternion(QtProto::QQuaternion* protoQuaternion,
                                 const QQuaternion& quaternion);
+
+    // Proto serialization helpers (moved from cwRegionSaveTask)
+    static void saveLength(CavewhereProto::Length* protoLength, cwLength* length);
+    static void saveImageResolution(CavewhereProto::ImageResolution* protoImageRes, cwImageResolution* imageResolution);
+    static void saveImage(CavewhereProto::Image* protoImage, const cwImage& image);
+    static void saveNoteStation(CavewhereProto::NoteStation* protoNoteStation, const cwNoteStation& noteStation);
+    static void saveTeamMember(CavewhereProto::TeamMember* protoTeamMember, const cwTeamMember& teamMember);
+    static void saveLead(CavewhereProto::Lead* protoLead, const cwLead& lead);
+    static void saveProjectedScrapViewMatrix(CavewhereProto::ProjectedProfileScrapViewMatrix* protoViewMatrix,
+                                             cwProjectedProfileScrapViewMatrix* viewMatrix);
+    static void saveNoteTranformation(CavewhereProto::NoteTransformation* protoNoteTransformation,
+                                      cwAbstractNoteTransformation *noteTransformation);
+    static void saveStationShot(CavewhereProto::StationShot* protoStation, const cwStation& station);
+    static void saveStationShot(CavewhereProto::StationShot* protoShot, const cwShot& shot);
+    static void saveTripCalibration(CavewhereProto::TripCalibration* protoTripCalibration, cwTripCalibration* tripCalibration);
+    static void saveSurveyChunk(CavewhereProto::SurveyChunk* protoChunk, cwSurveyChunk* chunk);
+    static void saveTeam(CavewhereProto::Team* protoTeam, cwTeam* team);
+    static void saveScrap(CavewhereProto::Scrap* protoScrap, cwScrap* scrap);
+
 
 
     template<typename ResultType, typename MakeResultFunc>

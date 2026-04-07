@@ -33,7 +33,7 @@ ColumnLayout {
 
                 InformationButton { showItemOnClick: gridResolutionHelp }
 
-                Text { text: "Grid resolution (m)" }
+                QC.Label { text: "Grid resolution (m)" }
 
                 ClickTextInput {
                     Layout.fillWidth: true

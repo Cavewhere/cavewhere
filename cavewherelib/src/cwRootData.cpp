@@ -26,6 +26,7 @@
 #include "cwPageSelectionModel.h"
 #include "cwSettings.h"
 #include "cwRemoteServices.h"
+#include "cwDeepLinkHandler.h"
 // #include "cwImageCompressionUpdater.h"
 #include "cwJobSettings.h"
 #include "cwSurveyNoteModel.h"
@@ -286,13 +287,48 @@ QUrl cwRootData::cavewhereImageUrl(const cwImage& image, const QString& absolute
 
 void cwRootData::newProject()
 {
-    PageSelectionModel->clearHistory();
-    PageSelectionModel->gotoPageByName(nullptr, "View");
-    // m_keywordItemModel->clear();
-    // if (m_keywordFilterPipelineModel) {
-    //     m_keywordFilterPipelineModel->clear();
-    // }
+    prepareForProjectSwitch();
     Project->newProject();
+}
+
+/**
+ * @brief cwRootData::loadProject
+ * @param filename - The path of the project file to load
+ *
+ * All code paths that load a project file should use this method to avoid
+ * bugs like issue #369 where forgetting to clear history left old trip
+ * pages accessible after loading a new project.
+ */
+void cwRootData::loadProject(const QString& filename)
+{
+    prepareForProjectSwitch();
+    Project->loadFile(filename);
+}
+
+/**
+ * Clears page history and navigates to the View page so stale pages from
+ * the previous project aren't reachable via sidebar or back/forward.
+ */
+void cwRootData::prepareForProjectSwitch()
+{
+    auto clearedComponents = PageSelectionModel->clearHistory();
+    if (m_pageView) {
+        m_pageView->clearPageCacheFor(clearedComponents);
+    }
+    PageSelectionModel->gotoPageByName(nullptr, "View");
+}
+
+void cwRootData::discardChangesAndReload()
+{
+    auto currentFile = Project->filename();
+    if (currentFile.isEmpty()) {
+        return;
+    }
+    connect(Project, &cwProject::discardCompleted, this, [this, currentFile]() {
+        loadProject(currentFile);
+    }, Qt::SingleShotConnection);
+
+    Project->discardChanges();
 }
 
 int cwRootData::titleBarHeight() const
@@ -400,4 +436,12 @@ cwRemoteServices* cwRootData::remote() const
         m_remoteServices = new cwRemoteServices(const_cast<cwRootData*>(this));
     }
     return m_remoteServices;
+}
+
+cwDeepLinkHandler* cwRootData::deepLinkHandler() const
+{
+    if (!m_deepLinkHandler) {
+        m_deepLinkHandler = new cwDeepLinkHandler(const_cast<cwRootData*>(this));
+    }
+    return m_deepLinkHandler;
 }

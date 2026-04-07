@@ -20,8 +20,21 @@ Rectangle {
         rootItemId: "mainWindow"
     }
 
+    SaveAsDialog {
+        id: testSaveAsDialogId
+    }
+
+    AskToSaveDialog {
+        id: testAskToSaveDialogId
+        objectName: "mainWindowTestAskToSaveDialog"
+        saveAsDialog: testSaveAsDialogId
+        taskName: "opening a cloned repository"
+        anchors.centerIn: parent
+    }
+
     MainContent {
         id: mainWindow
         anchors.fill: parent
+        askToSaveDialog: testAskToSaveDialogId
     }
 }

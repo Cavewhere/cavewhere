@@ -41,6 +41,41 @@ QtObject {
     readonly property color borderSubtle: dark ? "#353a42" : "#e4e4e4"
     readonly property color divider: "#141414" // dark ? #2c3138" : "#d8d8d8"
 
+    // Diff colors
+    readonly property color diffAddedBackground: dark ? "#1a3626" : "#dafbe1"
+    readonly property color diffDeletedBackground: dark ? "#3d1f1f" : "#ffebe9"
+    readonly property color diffHunkBackground: dark ? "#1c2d4d" : "#ddf4ff"
+    readonly property color diffAddedText: dark ? "#76e596" : "#1a7f37"
+    readonly property color diffDeletedText: dark ? "#f47067" : "#cf222e"
+    readonly property color diffHunkText: dark ? "#85c1f4" : "#0969da"
+    readonly property color diffContextBackground: "transparent"
+
+    // Git graph lane colors (8-entry cycling palette)
+    readonly property list<color> laneColors: [
+        "#4dc9f6", "#f67019", "#f53794", "#537bc4",
+        "#acc236", "#166a8f", "#00a950", "#58595b"
+    ]
+
+    // Typography — driven by cwFontSettings; scale all sizes proportionally
+    readonly property real fontScale: RootData.settings.fontSettings.fontBaseSize / 16.0
+    readonly property string fontFamily: RootData.settings.fontSettings.fontFamily !== ""
+        ? RootData.settings.fontSettings.fontFamily
+        : Qt.application.font.family
+    readonly property string fontFamilyBody: Qt.application.font.family
+    readonly property string fontFamilyMono: "Courier Prime"
+
+    readonly property int fontSizeCaption: Math.round(11 * fontScale)
+    readonly property int fontSizeSmall:   Math.round(12 * fontScale)
+    readonly property int fontSizeBody:    Math.round(14 * fontScale)
+    readonly property int fontSizeUI:      RootData.settings.fontSettings.fontBaseSize
+    readonly property int fontSizeMedium:  Math.round(18 * fontScale)
+    readonly property int fontSizeTitle:   Math.round(20 * fontScale)
+    readonly property int fontSizeLarge:   Math.round(24 * fontScale)
+    readonly property int fontSizeXLarge:  Math.round(30 * fontScale)
+
+    // Spacing
+    readonly property int pageMargin: 8
+
     // Utility
     readonly property color transparent: "#00000000"
     readonly property color shadow: dark ? "#33000000" : "#22000000"

@@ -9,24 +9,61 @@ RoundButton {
 
     required property ProjectSyncHealth syncHealth
     required property bool syncInProgress
+    required property bool projectModified
+    required property bool saveWillCauseDataLoss
+    required property string requiredVersion
 
     signal syncRequested()
     signal remoteSettingsRequested()
+    signal historyRequested()
     signal reconnectRequested()
+    signal setupRemoteRequested()
 
+    readonly property bool hasRemote: syncHealth.status.hasRemote
     readonly property bool authExpired: syncHealth.status.authExpired
     readonly property bool needsLogin: syncHealth.status.needsLogin
+    readonly property int aheadCount: syncHealth.status.aheadCount
+    readonly property int behindCount: syncHealth.status.behindCount
+    readonly property bool hasLocalChanges: syncHealth.status.hasLocalChanges || projectModified
 
-    icon.source: needsLogin
-        ? "qrc:/twbs-icons/icons/lock.svg"
-        : (authExpired
-           ? "qrc:/twbs-icons/icons/exclamation-triangle.svg"
-           : "qrc:/twbs-icons/icons/arrow-repeat.svg")
-    enabled: !syncInProgress
+    readonly property string tooltipText: {
+        if (saveWillCauseDataLoss)
+            return qsTr("Sync disabled — upgrade CaveWhere to v%1").arg(requiredVersion)
+        if (!hasRemote)
+            return qsTr("No remote configured — click to set up sync")
+        if (needsLogin)
+            return qsTr("Sign in to GitHub — click to sync")
+        if (authExpired)
+            return qsTr("GitHub access expired — click to reconnect")
+        if (syncInProgress)
+            return qsTr("Syncing…")
+        if (projectModified)
+            return qsTr("Unsaved changes — click to save and sync")
+        if (syncHealth.status.hasLocalChanges && aheadCount === 0 && behindCount === 0)
+            return qsTr("Local edits pending — click to sync")
+        if (aheadCount > 0 && behindCount > 0)
+            return qsTr("Commits to push and pull — click to sync")
+        if (aheadCount > 0)
+            return qsTr("Commits ready to push — click to sync")
+        if (behindCount > 0)
+            return qsTr("Updates available — click to sync")
+        if (syncHealth.status.stale)
+            return qsTr("Sync status unavailable")
+        return qsTr("Up to date")
+    }
+
+    icon.source: !hasRemote
+        ? "qrc:/twbs-icons/icons/cloud-arrow-up.svg"
+        : (needsLogin
+           ? "qrc:/twbs-icons/icons/lock.svg"
+           : (authExpired
+              ? "qrc:/twbs-icons/icons/exclamation-triangle.svg"
+              : "qrc:/twbs-icons/icons/arrow-repeat.svg"))
+    enabled: !syncInProgress && !saveWillCauseDataLoss
 
     onClicked: {
-        if (authExpired) {
-            reconnectRequested()
+        if (!hasRemote) {
+            setupRemoteRequested()
         } else {
             syncRequested()
         }
@@ -45,19 +82,17 @@ RoundButton {
     }
 
     QC.ToolTip.visible: hovered
-    QC.ToolTip.text: needsLogin
-        ? qsTr("Sign in to GitHub — click to sync")
-        : (authExpired
-           ? qsTr("GitHub access expired — click to reconnect")
-           : syncHealth.status.message)
+    QC.ToolTip.text: tooltipText
 
     QQ.Rectangle {
         id: syncBadgeId
-        visible: syncHealth.status.stale
-                 || syncHealth.status.hasLocalChanges
-                 || syncHealth.status.aheadCount > 0
-                 || syncHealth.status.behindCount > 0
-                 || syncInProgress
+        objectName: "statusBadge"
+        visible: hasRemote
+                 && (syncHealth.status.stale
+                     || hasLocalChanges
+                     || aheadCount > 0
+                     || behindCount > 0
+                     || syncInProgress)
 
         anchors.right: parent.right
         anchors.bottom: parent.bottom
@@ -68,7 +103,7 @@ RoundButton {
         implicitHeight: 14
         implicitWidth: Math.max(14, syncBadgeTextId.implicitWidth + 6)
 
-        Text {
+        QC.Label {
             id: syncBadgeTextId
             anchors.centerIn: parent
             color: "white"
@@ -83,8 +118,12 @@ RoundButton {
                     return "!"
                 }
 
-                let suffix = syncHealth.status.hasLocalChanges ? " \u2022" : ""
-                return "\u2191" + syncHealth.status.aheadCount + " \u2193" + syncHealth.status.behindCount + suffix
+                if (aheadCount === 0 && behindCount === 0 && hasLocalChanges) {
+                    return ""
+                }
+
+                let suffix = hasLocalChanges ? " \u2022" : ""
+                return "\u2191" + aheadCount + " \u2193" + behindCount + suffix
             }
         }
     }
@@ -93,7 +132,19 @@ RoundButton {
         id: syncMenu
 
         QC.MenuItem {
+            text: "Set up remote…"
+            visible: !hasRemote
+            height: visible ? implicitHeight : 0
+            onTriggered: {
+                setupRemoteRequested()
+            }
+        }
+
+        QC.MenuItem {
+            objectName: "syncNowMenuItem"
             text: "Sync now"
+            visible: hasRemote
+            height: visible ? implicitHeight : 0
             enabled: !syncInProgress
             onTriggered: {
                 syncRequested()
@@ -101,9 +152,16 @@ RoundButton {
         }
 
         QC.MenuItem {
-            text: "Remote settings..."
+            text: "Remote settings…"
             onTriggered: {
                 remoteSettingsRequested()
+            }
+        }
+
+        QC.MenuItem {
+            text: "History…"
+            onTriggered: {
+                historyRequested()
             }
         }
     }

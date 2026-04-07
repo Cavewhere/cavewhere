@@ -26,6 +26,7 @@
 #include "cavewhereVersion.h"
 #include "cwProject.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
+#include "cwSaveLoad.h"
 
 //Qt includes
 #include <QSqlQuery>
@@ -253,27 +254,27 @@ void cwRegionLoadTask::loadCave(const CavewhereProto::Cave& protoCave, cwCave *c
     cwUnits::LengthUnit depthUnit = static_cast<cwUnits::LengthUnit>(protoCave.depthunit());
 
     QList<cwTrip*> trips;
-    trips.reserve(protoCave.trips_size());
+    trips.reserve(protoCave.legacy_trips_size());
 
     cave->setName(name);
     cave->length()->setUnit(lengthUnit);
     cave->depth()->setUnit(depthUnit);
 
-    for(int i = 0; i < protoCave.trips_size(); i++) {
+    for(int i = 0; i < protoCave.legacy_trips_size(); i++) {
         cwTrip* trip = new cwTrip();
-        loadTrip(protoCave.trips(i), trip);
+        loadTrip(protoCave.legacy_trips(i), trip);
         cave->addTrip(trip);
     }
 
-    cwStationPositionLookup stationLookup = loadStationPositionLookup(protoCave.stationpositionlookup());
+    cwStationPositionLookup stationLookup = loadStationPositionLookup(protoCave.legacy_stationpositionlookup());
     cave->setStationPositionLookup(stationLookup);
 
-    if(protoCave.has_stationpositionlookup()) {
-        cave->setStationPositionLookupStale(protoCave.stationpositionlookupstale());
+    if(protoCave.has_legacy_stationpositionlookup()) {
+        cave->setStationPositionLookupStale(protoCave.legacy_stationpositionlookupstale());
     }
 
-    if(protoCave.has_network()) {
-        auto protoNetwork = protoCave.network();
+    if(protoCave.has_legacy_network()) {
+        auto protoNetwork = protoCave.legacy_network();
         cwSurveyNetwork network;
         for(int i = 0; i < protoNetwork.stations_size(); i++) {
             auto stationItem = protoNetwork.stations(i);
@@ -304,7 +305,7 @@ void cwRegionLoadTask::loadTrip(const CavewhereProto::Trip& protoTrip, cwTrip *t
     trip->setName(tripName);
     trip->setDate(QDateTime(tripDate, QTime()));
 
-    loadSurveyNoteModel(protoTrip.notemodel(), trip->notes());
+    loadSurveyNoteModel(protoTrip.legacy_notemodel(), trip->notes());
     loadTripCalibration(protoTrip.tripcalibration(), trip->calibrations());
     loadTeam(protoTrip.team(), trip->team());
 
@@ -351,7 +352,10 @@ void cwRegionLoadTask::loadTripCalibration(const CavewhereProto::TripCalibration
     tripCalibration->setTapeCalibration(protoTripCalibration.tapecalibration());
     tripCalibration->setFrontCompassCalibration(protoTripCalibration.frontcompasscalibration());
     tripCalibration->setFrontClinoCalibration(protoTripCalibration.frontclinocalibration());
-    tripCalibration->setBackCompassCalibration(protoTripCalibration.backcompassscalibration());
+    tripCalibration->setBackCompassCalibration(
+        protoTripCalibration.has_backcompasscalibration()
+            ? protoTripCalibration.backcompasscalibration()
+            : protoTripCalibration.legacy_backcompassscalibration());
     tripCalibration->setBackClinoCalibration(protoTripCalibration.backclinocalibration());
     tripCalibration->setDeclination(protoTripCalibration.declination());
     tripCalibration->setDistanceUnit((cwUnits::LengthUnit)protoTripCalibration.distanceunit());
@@ -363,20 +367,22 @@ void cwRegionLoadTask::loadTripCalibration(const CavewhereProto::TripCalibration
  * @brief cwRegionLoadTask::loadSurveyChunk
  * @param protoChunk
  * @param chunk
+ *
+ * Legacy V6 loader — reads the old stations + shots fields (not the v9 leg array).
  */
 void cwRegionLoadTask::loadSurveyChunk(const CavewhereProto::SurveyChunk& protoChunk, cwSurveyChunk *chunk)
 {
     QList<cwStation> stations;
-    stations.reserve(protoChunk.stations_size());
-    for(int i = 0 ; i < protoChunk.stations_size(); i++) {
-        cwStation station = loadStation(protoChunk.stations(i));
+    stations.reserve(protoChunk.legacy_stations_size());
+    for(int i = 0 ; i < protoChunk.legacy_stations_size(); i++) {
+        cwStation station = loadStation(protoChunk.legacy_stations(i));
         stations.append(station);
     }
 
     QList<cwShot> shots;
-    shots.reserve(protoChunk.shots_size());
-    for(int i = 0; i < protoChunk.shots_size(); i++) {
-        cwShot shot = loadShot(protoChunk.shots(i));
+    shots.reserve(protoChunk.legacy_shots_size());
+    for(int i = 0; i < protoChunk.legacy_shots_size(); i++) {
+        cwShot shot = loadShot(protoChunk.legacy_shots(i));
         shots.append(shot);
     }
 
@@ -393,13 +399,6 @@ void cwRegionLoadTask::loadSurveyChunk(const CavewhereProto::SurveyChunk& protoC
         chunk->appendShot(fromStation, toStation, shot);
     }
 
-    for(int i = 0; i < protoChunk.calibrations_size(); i++) {
-        const CavewhereProto::ChunkCalibration& protoCalibration = protoChunk.calibrations(i);
-        cwTripCalibration* calibration = new cwTripCalibration();
-        loadTripCalibration(protoCalibration.calibration(), calibration);
-
-        chunk->addCalibration(protoCalibration.shotindex(), calibration);
-    }
 }
 
 /**
@@ -547,7 +546,7 @@ cwNoteStation cwRegionLoadTask::loadNoteStation(const CavewhereProto::NoteStatio
  * @param protoNoteTransformation
  * @param noteTransformation
  */
-void cwRegionLoadTask::loadNoteTranformation(const CavewhereProto::NoteTranformation& protoNoteTransformation, cwNoteTranformation *noteTransformation)
+void cwRegionLoadTask::loadNoteTranformation(const CavewhereProto::NoteTransformation& protoNoteTransformation, cwNoteTranformation *noteTransformation)
 {
     noteTransformation->setNorthUp(protoNoteTransformation.northup());
     loadLength(protoNoteTransformation.scalenumerator(), noteTransformation->scaleNumerator());
@@ -837,71 +836,13 @@ QString cwRegionLoadTask::fileNotReadableErrorMessage(const QString &filename)
     return QString("Couldn't open '%1' because you don't have permission to read it").arg(filename);
 }
 
-/**
- * @brief cwRegionLoadTask::loadDate
- * @param protoDate
- * @return
- */
-QDate cwRegionLoadTask::loadDate(const QtProto::QDate& protoDate)
-{
-    return QDate(protoDate.year(), protoDate.month(), protoDate.day());
-}
-
-/**
- * @brief cwRegionLoadTask::loadSize
- * @param protoSize
- * @return
- */
-QSize cwRegionLoadTask::loadSize(const QtProto::QSize &protoSize)
-{
-    QSize size;
-    size.setWidth(protoSize.width());
-    size.setHeight(protoSize.height());
-    return size;
-}
-
-/**
- * @brief cwRegionLoadTask::loadSizeF
- * @param protoSize
- * @return
- */
-QSizeF cwRegionLoadTask::loadSizeF(const QtProto::QSizeF &protoSize)
-{
-    QSizeF size;
-    size.setWidth(protoSize.width());
-    size.setHeight(protoSize.height());
-    return size;
-}
-
-/**
- * @brief cwRegionLoadTask::loadPointF
- * @param protoPointF
- * @return
- */
-QPointF cwRegionLoadTask::loadPointF(const QtProto::QPointF& protoPointF)
-{
-    return QPointF (protoPointF.x(), protoPointF.y());
-}
-
-/**
- * @brief cwRegionLoadTask::loadVector3D
- * @param protoVector3D
- * @return
- */
-QVector3D cwRegionLoadTask::loadVector3D(const QtProto::QVector3D &protoVector3D)
-{
-    return QVector3D(protoVector3D.x(), protoVector3D.y(), protoVector3D.z());
-}
-
-/**
- * @brief cwRegionLoadTask::loadVector2D
- * @param protoVector2D
- * @return
- */
-QVector2D cwRegionLoadTask::loadVector2D(const QtProto::QVector2D &protoVector2D)
-{
-    return QVector2D(protoVector2D.x(), protoVector2D.y());
-}
+// Delegating to cwSaveLoad — canonical implementations live there now.
+QDate cwRegionLoadTask::loadDate(const QtProto::QDate& protoDate) { return cwSaveLoad::loadDate(protoDate); }
+QSize cwRegionLoadTask::loadSize(const QtProto::QSize &protoSize) { return cwSaveLoad::loadSize(protoSize); }
+QSizeF cwRegionLoadTask::loadSizeF(const QtProto::QSizeF &protoSize) { return cwSaveLoad::loadSizeF(protoSize); }
+QPointF cwRegionLoadTask::loadPointF(const QtProto::QPointF& protoPointF) { return cwSaveLoad::loadPointF(protoPointF); }
+QVector3D cwRegionLoadTask::loadVector3D(const QtProto::QVector3D &protoVector3D) { return cwSaveLoad::loadVector3D(protoVector3D); }
+QVector2D cwRegionLoadTask::loadVector2D(const QtProto::QVector2D &protoVector2D) { return cwSaveLoad::loadVector2D(protoVector2D); }
 
 /**
  * @brief cwRegionLoadTask::loadStringList

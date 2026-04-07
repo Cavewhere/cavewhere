@@ -64,12 +64,6 @@ cwSurveyChunk::cwSurveyChunk(QObject * parent) :
 {
 
 
-    //Handle updating chunk calibration indexing when stations are added
-    connect(this, &cwSurveyChunk::shotsAdded, this, &cwSurveyChunk::updateCalibrationsNewShots);
-
-    //Handle updating chunk calibration indexing when stations are removde
-    connect(this, &cwSurveyChunk::shotsRemoved, this, &cwSurveyChunk::updateCalibrationsRemoveShots);
-
     connect(this, &cwSurveyChunk::added, this,
             [this](int stationBegin, int stationEnd,int shotBegin, int shotEnd) {
                 emit stationsAdded(stationBegin, stationEnd);
@@ -124,92 +118,6 @@ bool cwSurveyChunk::isValid() const {
   */
 cwCave* cwSurveyChunk::parentCave() const {
     return parentTrip() != nullptr ? parentTrip()->parentCave() : nullptr;
-}
-
-/**
- * @brief cwSurveyChunk::addCalibration
- * @param shotIndex
- *
- * Create's a new calibration at shotIndex. If the shotIndex is invalid, this does nothing
- *
- * You can get the newly created calibration by calling calibrations().value(shotIndex). If
- * the shotIndex is invalid, this request should return nullptr. Valid shot index is from 0
- * to shots().size(). If the chunk is empty, there's no valid index.
- *
- * Chunk calibration are used to modify the calibration mid survey. This is useful, if the
- * instrument changes, or the survey tape breaks.
- *
- * Calibrations that already exist at shotIndex will not be overwritten if calibration isn't
- * nullptr. This function will do nothing in this case. If calibration isn't nullptr, this will
- * replace the current calibration. This object will take ownership of the calibration.
- *
- * Any shot (including the shot at shotIndex) and all shots in chunks listed below this chunk
- * in the trip will have this calibration applied to it, unless other chunks have other overriding
- * calibrations. If you want to set the calibration for the whole trip, see calibration in cwTrip.
- */
-void cwSurveyChunk::addCalibration(int shotIndex, cwTripCalibration* calibration)
-{
-    Q_ASSERT(shotIndex >= 0);
-    Q_ASSERT(shotIndex <= shotCount());
-
-    if(calibration == nullptr) {
-        if(!Calibrations.contains(shotIndex)) {
-            Calibrations.insert(shotIndex, new cwTripCalibration(this));
-            emit calibrationsChanged();
-        }
-    } else {
-        calibration->setParent(this);
-        if(!Calibrations.contains(shotIndex)) {
-            Calibrations.insert(shotIndex, calibration);
-            emit calibrationsChanged();
-        }
-    }
-}
-
-/**
- * @brief cwSurveyChunk::removeCalibration
- * @param shotIndex
- *
- * Removes the calibration at index. If no calibration exists at shotIndex, this does nothing.
- *
- * This will schedule the calibration for deletion.
- */
-void cwSurveyChunk::removeCalibration(int shotIndex)
-{
-    Q_ASSERT(shotIndex >= 0);
-    Q_ASSERT(shotIndex < shotCount());
-
-    if(Calibrations.contains(shotIndex)) {
-        Calibrations.value(shotIndex)->deleteLater();
-        Calibrations.remove(shotIndex);
-        emit calibrationsChanged();
-    }
-}
-
-/**
- * @brief cwSurveyChunk::calibrations
- * @return Returns the current chunk's calibrations
- *
- * By default, this will return an empty hash. The key in the hash is the shotIndex of
- * the survey chunk.
- */
-QMap<int, cwTripCalibration *> cwSurveyChunk::calibrations() const
-{
-    return Calibrations;
-}
-
-/**
- * @brief cwSurveyChunk::lastCalibration
- * @return calibrations().last();
- *
- * If calibrations is empty this returns nullptr
- */
-cwTripCalibration *cwSurveyChunk::lastCalibration() const
-{
-    if(Calibrations.isEmpty()) {
-        return nullptr;
-    }
-    return Calibrations.last();
 }
 
 /**
@@ -747,18 +655,7 @@ QVariant cwSurveyChunk::data(DataRole role, int index) const {
 
 cwSurveyChunkData cwSurveyChunk::data() const
 {
-    auto data = d;
-
-    data.calibrations.clear();
-
-    for(auto iter = Calibrations.constKeyValueBegin();
-         iter != Calibrations.constKeyValueEnd();
-         ++iter)
-    {
-        data.calibrations.insert(iter->first, iter->second->data());
-    }
-
-    return data;
+    return d;
 }
 
 void cwSurveyChunk::setData(const cwSurveyChunkData &data)
@@ -771,27 +668,10 @@ void cwSurveyChunk::setData(const cwSurveyChunkData &data)
     d.stations.clear();
     emit removed(0, lastStationIndex, 0, lastShotIndex);
 
-    //Removed all trip calibrations
-    for(auto value : std::as_const(Calibrations)) {
-        value->deleteLater();
-    }
-    Calibrations.clear();
-
-
     d = data;
 
     if(d.stations.size() > 0) {
         emit added(0, d.stations.size() - 1, 0, d.shots.size());
-    }
-
-    //Add all the calibrations
-    for(auto iter = d.calibrations.keyValueBegin();
-         iter != d.calibrations.keyValueEnd();
-         ++iter)
-    {
-        auto calibration = new cwTripCalibration(this);
-        calibration->setData(iter->second);
-        addCalibration(iter->first, calibration);
     }
 
     updateErrors();
@@ -1634,95 +1514,6 @@ void cwSurveyChunk::updateCompassClinoErrors()
        checkForError(ShotClinoRole, i);
        checkForError(ShotBackClinoRole, i);
    }
-}
-
-/**
- * @brief cwSurveyChunk::updateCalibrationsNewShots
- * @param beginIndex
- * @param endIndex
- *
- * Called when ever shots are added to the chunk. This updates the indexes in the
- * Calibrations in the chunk. Usually there's no calibrations to update.
- */
-void cwSurveyChunk::updateCalibrationsNewShots(int beginIndex, int endIndex)
-{
-    if(!Calibrations.isEmpty()) {
-        int distance = endIndex - beginIndex + 1;
-        QMap<int, cwTripCalibration*> newCalibration;
-        bool updated = false;
-        for(auto iter = Calibrations.begin(); iter != Calibrations.end(); iter++) {
-            //if the calibration at shot x is greater than or equal to the first
-            //index that was added and the beginIndex isn't the last shot in shots
-            if(beginIndex <= iter.key() && beginIndex != d.shots.size() - distance) {
-                //Update the key and shift the calibration down
-                Q_ASSERT(iter.value() != nullptr);
-                newCalibration.insert(iter.key() + distance, iter.value());
-                updated = true;
-            } else {
-                Q_ASSERT(iter.value() != nullptr);
-                newCalibration.insert(iter.key(), iter.value());
-            }
-        }
-
-        if(updated) {
-            Calibrations = newCalibration;
-            emit calibrationsChanged();
-        }
-    }
-}
-
-/**
- * @brief cwSurveyChunk::updateCalibrationsRemoveShots
- * @param beginIndex
- * @param endIndex
- *
- * Called when ever shots are added to the chunk. This updates the indexes in the
- * Calibrations in the chunk. Usually there's no calibrations to update.
- */
-void cwSurveyChunk::updateCalibrationsRemoveShots(int beginIndex, int endIndex)
-{
-    if(!Calibrations.isEmpty()) {
-        int distance = endIndex - beginIndex + 1;
-        QMap<int, cwTripCalibration*> newCalibration;
-        bool updated = false;
-
-        for(auto iter = Calibrations.begin(); iter != Calibrations.end(); iter++) {
-            int index = iter.key();
-
-            if(endIndex < iter.key()) {
-                int newIndex = index - distance;
-
-                //Update the key and shift the calibration down
-                Q_ASSERT(newIndex >= 0);
-                if(!newCalibration.contains(newIndex)) {
-                    newCalibration.insert(newIndex, iter.value());
-                    updated = true;
-                }
-            } else if(beginIndex <= iter.key() && endIndex >= iter.key()) {
-                //Deleting the index
-                if(beginIndex < d.shots.size()) {
-                    //There's a valid shot at beginIndex
-                    if(!newCalibration.contains(beginIndex)) {
-                        newCalibration.insert(beginIndex, iter.value());
-                        updated = true;
-                    } else {
-                        iter.value()->deleteLater();
-                    }
-                } else {
-                    //Delete the calibration
-                    iter.value()->deleteLater();
-                    updated = true;
-                }
-            } else {
-                newCalibration.insert(iter.key(), iter.value());
-            }
-        }
-
-        if(updated) {
-            Calibrations = newCalibration;
-            emit calibrationsChanged();
-        }
-    }
 }
 
 /**

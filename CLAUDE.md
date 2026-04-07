@@ -96,21 +96,32 @@ Uses Qt's RHI (Rendering Hardware Interface). Key classes: `cwRegionSceneManager
 - 4-space indentation, opening braces on the next line
 - `UpperCamelCase` for classes, `m_` prefix for members, `lowerCamelCase` for functions
 - Full `const` correctness; use Qt signal/slot patterns with `Q_OBJECT`
+- Use function pointer syntax for `connect`/`disconnect` (e.g. `connect(obj, &Class::signal, this, &Class::slot)`), not the `SIGNAL()`/`SLOT()` string macros
 - Address Sanitizer is enabled in macOS Debug builds
+- **`AsyncFuture::waitForFinished` is only for test code.** It spins a nested `QEventLoop`, which delivers queued signals and causes re-entrancy bugs (use-after-free, iterator invalidation). In production code, use `AsyncFuture::observe(future).context(this, callback)` instead — Qt automatically disconnects when `this` is destroyed, so destructors only need to call `future.cancel()`. Existing `waitForFinish()`/`waitToFinish()` methods on managers (e.g. `cwProject`, `cwScrapManager`) exist solely for test use.
 
 ### QML
 - Strict typed properties (no `property var`); lowerCamelCase property names
 - Capitalized component filenames (`MyComponent.qml`)
-- Use `Theme.qml` for all colors; no hardcoded hex values in component QML
+- Use `Theme.qml` for all colors and font tokens — never hardcode hex values or font sizes in component QML files
 - Prefer `id` selectors over `objectName`; keep bindings simple; avoid deep nesting
 - Register modules via `qt_add_qml_module` in CMakeLists.txt
 - Use `Loader` for deferred/conditional loading; avoid expensive operations in bindings
+- Use `QCanvasPainterItem` (C++) for custom painting; do not use QML `Canvas` or `Shapes`
+
+#### Text and font conventions
+- Use **`QC.Label`** (`import QtQuick.Controls as QC`) for all text, including labels, descriptions, headings, dialog content, and list/table delegate cells. It inherits `font.family` from `CavewhereMainWindow` and tracks the application palette automatically for correct dark mode support.
+- Do **not** use bare `Text {}` or `QQ.Text {}` — they bypass the palette and render black text in dark mode.
+- Use **`BodyText`** for paragraph/body copy — it wraps `QC.Label` with `font.family: Theme.fontFamilyBody` (Bitstream Vera Sans) for better readability at paragraph sizes.
+- Font size tokens live in `Theme.qml`: `Theme.fontSizeCaption` (11), `Theme.fontSizeSmall` (12), `Theme.fontSizeBody` (14), `Theme.fontSizeUI` (16), `Theme.fontSizeMedium` (18), `Theme.fontSizeTitle` (20), `Theme.fontSizeLarge` (24), `Theme.fontSizeXLarge` (30). Prefer these over hardcoded pixel sizes.
+- Do not import `QtQuick as Q` — use `QQ` as the alias so it is easy to search for.
 
 ### Commits
 - Short, capitalized, imperative subjects ("Fix", "Add", "Implement")
 - Body: what changed, why, build/test commands run
 - Attach screenshots for QML UI changes; link related issues
 - Note submodule or dependency changes explicitly
+- Do not mention Claude or add Co-Authored-By lines in commit messages
 
 ## Key Source Locations
 

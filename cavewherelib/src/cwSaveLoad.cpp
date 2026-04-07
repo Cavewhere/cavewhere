@@ -1,9 +1,18 @@
 #include "cwSaveLoad.h"
+#include "cwNameUtils.h"
+#include "cwSanitizedNameSet.h"
 #include "cwRemoteAuthProvider.h"
 #include "cwDebug.h"
 #include "cwTrip.h"
-#include "cwRegionSaveTask.h"
-#include "cwRegionLoadTask.h"
+#include "cwTripCalibration.h"
+#include "cwSurveyChunk.h"
+#include "cwNoteStation.h"
+#include "cwNoteTranformation.h"
+#include "cwShot.h"
+#include "cwStation.h"
+#include "cwLength.h"
+#include "cwLead.h"
+#include "cwRegionIOTask.h"
 #include "cwConcurrent.h"
 #include "cwFutureManagerModel.h"
 #include "cwTeam.h"
@@ -28,6 +37,7 @@
 #include "cwUniqueConnectionChecker.h"
 #include "cwGlobals.h"
 #include "cwSyncMergeRegistry.h"
+#include "cwError.h"
 
 //Async future
 #include <asyncfuture.h>
@@ -181,33 +191,6 @@ ResultBase saveBundledArchiveAtomic(const QString& projectRootPath,
     return ResultBase();
 }
 
-CavewhereProto::ProjectMetadata::GitMode toProtoGitMode(cwSaveLoad::GitMode mode)
-{
-    switch (mode) {
-    case cwSaveLoad::GitMode::ManagedNew:
-        return CavewhereProto::ProjectMetadata::GitMode::ProjectMetadata_GitMode_ManagedNew;
-    case cwSaveLoad::GitMode::ExistingRepo:
-        return CavewhereProto::ProjectMetadata::GitMode::ProjectMetadata_GitMode_ExistingRepo;
-    case cwSaveLoad::GitMode::NoGit:
-        return CavewhereProto::ProjectMetadata::GitMode::ProjectMetadata_GitMode_NoGit;
-    }
-
-    return CavewhereProto::ProjectMetadata::GitMode::ProjectMetadata_GitMode_ManagedNew;
-}
-
-cwSaveLoad::GitMode fromProtoGitMode(CavewhereProto::ProjectMetadata::GitMode mode)
-{
-    switch (mode) {
-    case CavewhereProto::ProjectMetadata::GitMode::ProjectMetadata_GitMode_ExistingRepo:
-        return cwSaveLoad::GitMode::ExistingRepo;
-    case CavewhereProto::ProjectMetadata::GitMode::ProjectMetadata_GitMode_NoGit:
-        return cwSaveLoad::GitMode::NoGit;
-    case CavewhereProto::ProjectMetadata::GitMode::ProjectMetadata_GitMode_ManagedNew:
-    default:
-        return cwSaveLoad::GitMode::ManagedNew;
-    }
-}
-
 cwImage::OriginalImageInfo imageInfo(const QString& path) {
     cwImage::OriginalImageInfo info;
     const QFileInfo fileInfo(path);
@@ -278,7 +261,7 @@ cwImage loadImage(const CavewhereProto::Image& protoImage, const QString& noteFi
 
     const bool hasSize = protoImage.has_size();
     if (hasSize) {
-        image.setOriginalSize(cwRegionLoadTask::loadSize(protoImage.size()));
+        image.setOriginalSize(cwSaveLoad::loadSize(protoImage.size()));
     }
 
     const bool hasDots = protoImage.has_dotpermeter();
@@ -618,28 +601,97 @@ QUuid repairedTopLevelId(const QUuid& candidateId,
     return repairedId;
 }
 
-void repairTopLevelIds(cwSaveLoad::ProjectLoadData& loadData)
+} // namespace (anonymous helpers above — repairedTopLevelId, etc.)
+
+void regenerateNoteSubtreeIds(cwNoteData& note)
+{
+    note.id = QUuid::createUuid();
+    for (cwScrapData& scrap : note.scraps) {
+        scrap.id = QUuid::createUuid();
+        for (cwNoteStation& station : scrap.stations) {
+            station.setId(QUuid::createUuid());
+        }
+        for (cwLead& lead : scrap.leads) {
+            lead.setId(QUuid::createUuid());
+        }
+    }
+}
+
+void regenerateNoteLiDARSubtreeIds(cwNoteLiDARData& noteLiDAR)
+{
+    noteLiDAR.id = QUuid::createUuid();
+    for (cwNoteLiDARStation& station : noteLiDAR.stations) {
+        station.setId(QUuid::createUuid());
+    }
+}
+
+void regenerateTripSubtreeIds(cwTripData& trip)
+{
+    trip.id = QUuid::createUuid();
+    for (cwNoteData& note : trip.noteModel.notes) {
+        regenerateNoteSubtreeIds(note);
+    }
+    for (cwNoteLiDARData& noteLiDAR : trip.noteLiDARModel.notes) {
+        regenerateNoteLiDARSubtreeIds(noteLiDAR);
+    }
+}
+
+void regenerateCaveSubtreeIds(cwCaveData& cave)
+{
+    cave.id = QUuid::createUuid();
+    for (cwTripData& trip : cave.trips) {
+        regenerateTripSubtreeIds(trip);
+    }
+}
+
+void cwSaveLoad::repairTopLevelIds(ProjectLoadData& loadData)
 {
     QSet<QUuid> seenCaveIds;
     QSet<QUuid> seenTripIds;
     QSet<QUuid> seenNoteIds;
     QSet<QUuid> seenNoteLiDARIds;
 
+    // Returns true (and regenerates the subtree) if id is a duplicate.
+    auto detectDuplicate = [&](QUuid& id, QSet<QUuid>& seenIds, auto regenerateFn) {
+        if (!id.isNull() && seenIds.contains(id)) {
+            loadData.identityRepair.required = true;
+            ++loadData.identityRepair.duplicateIds;
+            regenerateFn();
+            seenIds.insert(id);
+            return true;
+        }
+        return false;
+    };
+
     for (cwCaveData& cave : loadData.region.caves) {
+        if (detectDuplicate(cave.id, seenCaveIds, [&]{ regenerateCaveSubtreeIds(cave); })) {
+            continue;
+        }
+
         cave.id = repairedTopLevelId(cave.id, seenCaveIds, loadData.identityRepair);
         for (cwTripData& trip : cave.trips) {
+            if (detectDuplicate(trip.id, seenTripIds, [&]{ regenerateTripSubtreeIds(trip); })) {
+                continue;
+            }
+
             trip.id = repairedTopLevelId(trip.id, seenTripIds, loadData.identityRepair);
             for (cwNoteData& note : trip.noteModel.notes) {
+                if (detectDuplicate(note.id, seenNoteIds, [&]{ regenerateNoteSubtreeIds(note); })) {
+                    continue;
+                }
                 note.id = repairedTopLevelId(note.id, seenNoteIds, loadData.identityRepair);
             }
             for (cwNoteLiDARData& note : trip.noteLiDARModel.notes) {
+                if (detectDuplicate(note.id, seenNoteLiDARIds, [&]{ regenerateNoteLiDARSubtreeIds(note); })) {
+                    continue;
+                }
                 note.id = repairedTopLevelId(note.id, seenNoteLiDARIds, loadData.identityRepair);
             }
         }
     }
 }
 
-void repairNestedScrapIds(cwSaveLoad::ProjectLoadData& loadData)
+void cwSaveLoad::repairNestedScrapIds(ProjectLoadData& loadData)
 {
     for (cwCaveData& cave : loadData.region.caves) {
         for (cwTripData& trip : cave.trips) {
@@ -666,6 +718,58 @@ void repairNestedScrapIds(cwSaveLoad::ProjectLoadData& loadData)
         }
     }
 }
+
+void cwSaveLoad::repairNameCollisions(ProjectLoadData& loadData)
+{
+    // Dedup name in nameSet; if renamed, append a warning error.
+    auto dedup = [&](cwSanitizedNameSet& names, QString& name, auto makeWarning) {
+        const QString deduped = names.deduplicateName(name);
+        if (deduped != name) {
+            loadData.errors.append(cwError(makeWarning(name, deduped), cwError::Warning));
+            name = deduped;
+        }
+        names.insert(name);
+    };
+
+    // Caves within the region
+    {
+        cwSanitizedNameSet caveNames;
+        for (cwCaveData& cave : loadData.region.caves) {
+            dedup(caveNames, cave.name, [](const QString& old, const QString& fixed) {
+                return QStringLiteral("Cave \"%1\" renamed to \"%2\" to avoid a name collision on disk.").arg(old, fixed);
+            });
+        }
+    }
+
+    // Trips and notes within each cave
+    for (cwCaveData& cave : loadData.region.caves) {
+        cwSanitizedNameSet tripNames;
+        for (cwTripData& trip : cave.trips) {
+            dedup(tripNames, trip.name, [&](const QString& old, const QString& fixed) {
+                return QStringLiteral("Trip \"%1\" in cave \"%2\" renamed to \"%3\" to avoid a name collision on disk.").arg(old, cave.name, fixed);
+            });
+        }
+
+        for (cwTripData& trip : cave.trips) {
+            cwSanitizedNameSet noteNames;
+            for (cwNoteData& note : trip.noteModel.notes) {
+                dedup(noteNames, note.name, [&](const QString& old, const QString& fixed) {
+                    return QStringLiteral("Note \"%1\" in trip \"%2\" renamed to \"%3\" to avoid a name collision on disk.").arg(old, trip.name, fixed);
+                });
+            }
+
+            cwSanitizedNameSet lidarNames;
+            for (cwNoteLiDARData& note : trip.noteLiDARModel.notes) {
+                dedup(lidarNames, note.name, [&](const QString& old, const QString& fixed) {
+                    return QStringLiteral("LiDAR note \"%1\" in trip \"%2\" renamed to \"%3\" to avoid a name collision on disk.").arg(old, trip.name, fixed);
+                });
+            }
+        }
+    }
+}
+
+// Reopen for remaining file-local helpers (git exclude patterns, etc.)
+namespace {
 
 QStringList readGitExcludePatterns(const QDir& repoDir)
 {
@@ -793,15 +897,18 @@ static Result<ProtoType> loadMessage(const QByteArray& content, const QString& s
     }
 
     ProtoType proto;
-    if (!proto.ParseFromArray(content.constData(), content.size())) {
-        const std::string jsonPayload(content.constData(),
-                                      static_cast<size_t>(content.size()));
-        const auto status = google::protobuf::util::JsonStringToMessage(jsonPayload, &proto);
-        if (!status.ok()) {
-            return Result<ProtoType>(
-                QStringLiteral("Failed to parse %1: %2")
-                    .arg(sourceLabel, QString::fromStdString(std::string(status.message()))));
-        }
+    const std::string jsonPayload(content.constData(),
+                                  static_cast<size_t>(content.size()));
+    static const auto parseOptions = [] {
+        google::protobuf::util::JsonParseOptions opts;
+        opts.ignore_unknown_fields = true;
+        return opts;
+    }();
+    const auto status = google::protobuf::util::JsonStringToMessage(jsonPayload, &proto, parseOptions);
+    if (!status.ok()) {
+        return Result<ProtoType>(
+            QStringLiteral("Failed to parse %1: %2")
+                .arg(sourceLabel, QString::fromStdString(std::string(status.message()))));
     }
 
     return Result<ProtoType>(proto);
@@ -1434,6 +1541,13 @@ struct cwSaveLoad::Data {
     RemoteApplyGuardState remoteApplyGuard;
     bool pendingIdentityRepairSave = false;
     std::optional<cwSaveLoad::SyncReport> lastSyncReport;
+    QList<cwError> lastLoadErrors;
+    int lastLoadMaxFileVersion = 0;
+    bool saveBlockedWarningEmitted = false;
+
+    bool saveWillCauseDataLoss() const {
+        return lastLoadMaxFileVersion > cwRegionIOTask::protoVersion();
+    }
 
     static QList<cwSurveyChunkData> fromProtoSurveyChunks(const google::protobuf::RepeatedPtrField<CavewhereProto::SurveyChunk> & protoList);
 
@@ -1443,9 +1557,9 @@ struct cwSaveLoad::Data {
         if (!dir.exists()) {
             bool success = dir.mkpath(".");
             if(success) {
-                ResultBase();
+                return ResultBase();
             } else {
-                ResultBase(QStringLiteral("Couldn't create directory:") + dir.absolutePath());
+                return ResultBase(QStringLiteral("Couldn't create directory:") + dir.absolutePath());
             }
         }
         return ResultBase();
@@ -1726,8 +1840,6 @@ struct cwSaveLoad::Data {
         }
 
         m_pendingJobs.append(job);
-
-        // qDebug() << "Pushing job:" << this << m_pendingJobs.size() << job.toString();
 
         if (activeOperation != nullptr) {
             maybeStartPendingFileJobs(context);
@@ -2282,13 +2394,19 @@ struct cwSaveLoad::Data {
     void saveObject(cwSaveLoad* context, const T* object) {
         if(saveEnabled) {
             const QString objectType = object ? object->metaObject()->className() : QStringLiteral("<null>");
+            if (saveWillCauseDataLoss()) {
+                if (!saveBlockedWarningEmitted) {
+                    saveBlockedWarningEmitted = true;
+                    emit context->saveBlockedByVersion(objectType);
+                }
+                return;
+            }
             if (!suppressLocalMutationTracking) {
                 ++localMutationEpoch;
                 remoteApplyGuard.noteMutation();
                 emit context->localMutationOccurred();
             }
 
-            // qDebug() << "Saving object:" << object << object->name() << dir(object);
             if constexpr (std::is_same_v<T, cwCave>) {
                 saveProtoMessage(context, cwSaveLoad::toProtoCave(object), object);
             } else if constexpr (std::is_same_v<T, cwTrip>) {
@@ -2532,9 +2650,7 @@ ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, Proj
     }
 
     setFileName(desiredFilePath);
-    if (d->projectMetadata.gitMode != GitMode::NoGit) {
-        initializeRepositoryForCurrentFile();
-    }
+    initializeRepositoryForCurrentFile();
     setTemporary(false);
     if (!isAlreadySavedCopy) {
         d->projectMetadata.dataRoot = newDataRootName;
@@ -2593,7 +2709,6 @@ void cwSaveLoad::newProject()
 
         //Save the project file
         d->projectMetadata.dataRoot = defaultDataRoot(region->name());
-        d->projectMetadata.gitMode = GitMode::ManagedNew;
         d->projectMetadata.syncEnabled = true;
         tempDir.mkpath(d->projectMetadata.dataRoot);
 
@@ -2709,6 +2824,9 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                                                             const auto& loadData = projectDataFuture.result().value();
                                                             d->projectMetadata = loadData.metadata;
                                                             d->pendingIdentityRepairSave = loadData.identityRepair.required;
+                                                            d->lastLoadErrors = loadData.errors;
+                                                            d->lastLoadMaxFileVersion = loadData.maxFileVersion;
+                                                            d->saveBlockedWarningEmitted = false;
                                                             emit dataRootChanged();
                                                             d->m_regionTreeModel->cavingRegion()->setData(loadData.region);
 
@@ -2726,21 +2844,11 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                                                     }).future();
                                             };
 
-                                            const QDir projectDir = QFileInfo(filename).absoluteDir();
-                                            if (!QQuickGit::GitRepository::isRepository(projectDir)) {
-                                                return continueLoad();
-                                            }
-
-                                            auto hydrateFuture = QQuickGit::GitRepository::hydrateLfsFiles(projectDir, this);
-
-                                            d->futureToken.addJob({QFuture<void>(hydrateFuture), QStringLiteral("Hydrating LFS")});
-
-                                            return AsyncFuture::observe(hydrateFuture)
-                                                .context(this, [hydrateFuture, continueLoad]() {
-                                                    return mbind(hydrateFuture, [continueLoad](const ResultBase&) {
-                                                        return continueLoad();
-                                                    });
-                                                }).future();
+                                            // LFS hydration is not attempted during load — it would
+                                            // trigger a keychain prompt before the user has interacted.
+                                            // Missing files are detected post-load and surfaced via
+                                            // cwProject::lfsFilesNeedSync; the user syncs explicitly.
+                                            return continueLoad();
                                         }).unwrap();
     return future;
 }
@@ -2750,6 +2858,7 @@ QFuture<ResultBase> cwSaveLoad::saveFlushImpl()
     return AsyncFuture::observe(completeSaveJobs())
         .context(this, [this]() {
             const QString pendingErrors = d->takePendingSaveJobErrors();
+            emit saveFlushCompleted();
             if (!pendingErrors.isEmpty()) {
                 return ResultBase(QStringLiteral("Save flush failed:\n%1").arg(pendingErrors));
             }
@@ -3063,10 +3172,10 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
     auto protoProject = std::make_unique<CavewhereProto::Project>();
     auto fileVersion = protoProject->mutable_fileversion();
     fileVersion->set_version(cwRegionIOTask::protoVersion());
-    cwRegionSaveTask::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
+    saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
 
     if (region != nullptr) {
-        cwRegionSaveTask::saveString(protoProject->mutable_name(), region->name());
+        saveString(protoProject->mutable_name(), region->name());
     }
 
     // Write the UUID only if one has been assigned (new projects get one in newProject();
@@ -3082,8 +3191,7 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
     d->projectMetadata = metadata;
 
     auto protoMetadata = protoProject->mutable_metadata();
-    cwRegionSaveTask::saveString(protoMetadata->mutable_dataroot(), metadata.dataRoot);
-    protoMetadata->set_gitmode(toProtoGitMode(metadata.gitMode));
+    saveString(protoMetadata->mutable_dataroot(), metadata.dataRoot);
     protoMetadata->set_syncenabled(metadata.syncEnabled);
 
     return protoProject;
@@ -3091,6 +3199,13 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
 
 void cwSaveLoad::saveCavingRegion(const cwCavingRegion *region)
 {
+    if (d->saveWillCauseDataLoss()) {
+        if (!d->saveBlockedWarningEmitted) {
+            d->saveBlockedWarningEmitted = true;
+            emit saveBlockedByVersion(QStringLiteral("cwCavingRegion"));
+        }
+        return;
+    }
     saveProtoMessage(toProtoCavingRegion(region), region);
 }
 
@@ -3098,8 +3213,8 @@ std::unique_ptr<CavewhereProto::CavingRegion> cwSaveLoad::toProtoCavingRegion(co
 {
     auto protoRegion = std::make_unique<CavewhereProto::CavingRegion>();
     protoRegion->set_version(cwRegionIOTask::protoVersion());
-    cwRegionSaveTask::saveString(protoRegion->mutable_cavewhereversion(), CavewhereVersion);
-    cwRegionSaveTask::saveString(protoRegion->mutable_name(), region->name());
+    saveString(protoRegion->mutable_cavewhereversion(), CavewhereVersion);
+    saveString(protoRegion->mutable_name(), region->name());
     return protoRegion;
 }
 
@@ -3128,11 +3243,13 @@ std::unique_ptr<CavewhereProto::Cave> cwSaveLoad::toProtoCave(const cwCave *cave
     auto protoCave = std::make_unique<CavewhereProto::Cave>();
     auto fileVersion = protoCave->mutable_fileversion();
     fileVersion->set_version(cwRegionIOTask::protoVersion());
-    cwRegionSaveTask::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
+    saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
     *(protoCave->mutable_name()) = cave->name().toStdString();
     if (!cave->id().isNull()) {
         *(protoCave->mutable_id()) = uuidToProtoString(cave->id()).toStdString();
     }
+    protoCave->set_lengthunit(static_cast<CavewhereProto::Units_LengthUnit>(cave->length()->unit()));
+    protoCave->set_depthunit(static_cast<CavewhereProto::Units_LengthUnit>(cave->depth()->unit()));
     return protoCave;
 }
 
@@ -3142,24 +3259,24 @@ std::unique_ptr<CavewhereProto::Trip> cwSaveLoad::toProtoTrip(const cwTrip *trip
     auto protoTrip = std::make_unique<CavewhereProto::Trip>();
     auto fileVersion = protoTrip->mutable_fileversion();
     fileVersion->set_version(cwRegionIOTask::protoVersion());
-    cwRegionSaveTask::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
+    saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
 
     *(protoTrip->mutable_name()) = trip->name().toStdString();
     if (!trip->id().isNull()) {
         *(protoTrip->mutable_id()) = uuidToProtoString(trip->id()).toStdString();
     }
 
-    // cwRegionSaveTask::saveString(protoTrip->mutable_name(), trip->name());
-    cwRegionSaveTask::saveDate(protoTrip->mutable_date(), trip->date().date());
-    cwRegionSaveTask::saveTripCalibration(protoTrip->mutable_tripcalibration(), trip->calibrations());
+    // saveString(protoTrip->mutable_name(), trip->name());
+    saveDate(protoTrip->mutable_date(), trip->date().date());
+    saveTripCalibration(protoTrip->mutable_tripcalibration(), trip->calibrations());
 
     if(trip->team()->rowCount() > 0) {
-        cwRegionSaveTask::saveTeam(protoTrip->mutable_team(), trip->team());
+        saveTeam(protoTrip->mutable_team(), trip->team());
     }
 
     foreach(cwSurveyChunk* chunk, trip->chunks()) {
         CavewhereProto::SurveyChunk* protoChunk = protoTrip->add_chunks();
-        cwRegionSaveTask::saveSurveyChunk(protoChunk, chunk);
+        saveSurveyChunk(protoChunk, chunk);
     }
 
     return protoTrip;
@@ -3494,6 +3611,20 @@ QFuture<ResultBase> cwSaveLoad::saveBundledArchive(const QString& targetArchiveP
     });
 }
 
+QFuture<ResultBase> cwSaveLoad::enqueueFlushAndCommit()
+{
+    auto flushFuture = saveFlushImpl();
+    return AsyncFuture::observe(flushFuture)
+        .context(this, [this, flushFuture]() -> ResultBase {
+            const auto flushResult = flushFuture.result();
+            if (flushResult.hasError()) {
+                return flushResult;
+            }
+            return commitProjectChanges();
+        })
+        .future();
+}
+
 ResultBase cwSaveLoad::deleteTemporaryProject()
 {
     if (!isTemporaryProject()) {
@@ -3577,16 +3708,16 @@ std::unique_ptr<CavewhereProto::Note> cwSaveLoad::toProtoNote(const cwNote *note
     auto protoNote = std::make_unique<CavewhereProto::Note>();
     auto fileVersion = protoNote->mutable_fileversion();
     fileVersion->set_version(cwRegionIOTask::protoVersion());
-    cwRegionSaveTask::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
+    saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
 
-    cwRegionSaveTask::saveImage(protoNote->mutable_image(), note->image());
+    saveImage(protoNote->mutable_image(), note->image());
 
     protoNote->set_rotation(note->rotate());
-    cwRegionSaveTask::saveImageResolution(protoNote->mutable_imageresolution(), note->imageResolution());
+    saveImageResolution(protoNote->mutable_imageresolution(), note->imageResolution());
 
     foreach(cwScrap* scrap, note->scraps()) {
         CavewhereProto::Scrap* protoScrap = protoNote->add_scraps();
-        cwRegionSaveTask::saveScrap(protoScrap, scrap);
+        saveScrap(protoScrap, scrap);
     }
 
     *(protoNote->mutable_name()) = note->name().toStdString();
@@ -3608,7 +3739,7 @@ std::unique_ptr<CavewhereProto::NoteLiDAR> cwSaveLoad::toProtoNoteLiDAR(const cw
     auto protoNote = std::make_unique<CavewhereProto::NoteLiDAR>();
     auto fileVersion = protoNote->mutable_fileversion();
     fileVersion->set_version(cwRegionIOTask::protoVersion());
-    cwRegionSaveTask::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
+    saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
 
     *(protoNote->mutable_name()) = note->name().toStdString();
     *(protoNote->mutable_filename()) = note->filename().toStdString();
@@ -3622,7 +3753,7 @@ std::unique_ptr<CavewhereProto::NoteLiDAR> cwSaveLoad::toProtoNoteLiDAR(const cw
         //Save the note stations
         auto protoNoteStation = protoNote->add_notestations();
         *(protoNoteStation->mutable_name()) = noteStation.name().toStdString();
-        cwRegionSaveTask::saveVector3D(protoNoteStation->mutable_positiononnote(), noteStation.positionOnNote());
+        saveVector3D(protoNoteStation->mutable_positiononnote(), noteStation.positionOnNote());
         if (!noteStation.id().isNull()) {
             *(protoNoteStation->mutable_id()) = uuidToProtoString(noteStation.id()).toStdString();
         }
@@ -3651,7 +3782,6 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
 
     const QString projectName = QFileInfo(project->filename()).baseName();
     d->projectMetadata.dataRoot = defaultDataRoot(projectName);
-    d->projectMetadata.gitMode = GitMode::ManagedNew;
     d->projectMetadata.syncEnabled = true;
     emit dataRootChanged();
 
@@ -3764,6 +3894,29 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
         .future();
 }
 
+template<typename ProtoType>
+static std::optional<cwError> checkEntityVersion(const ProtoType& proto, const QString& filename, int& maxFileVersion)
+{
+    if (!proto.has_fileversion() || !proto.fileversion().has_version()) {
+        return std::nullopt;
+    }
+    const int version = proto.fileversion().version();
+    maxFileVersion = std::max(maxFileVersion, version);
+    if (version > cwRegionIOTask::protoVersion()) {
+        return cwError(
+            QStringLiteral("\"%1\" was created by a newer version of CaveWhere (v%2, file version %3). "
+                           "This copy only supports file version %4. "
+                           "Saving is disabled because it would lose data added by the newer version. "
+                           "Please upgrade CaveWhere to save or sync this project.")
+                .arg(QFileInfo(filename).fileName())
+                .arg(cwRegionIOTask::toVersion(version))
+                .arg(version)
+                .arg(cwRegionIOTask::protoVersion()),
+            cwError::Warning);
+    }
+    return std::nullopt;
+}
+
 QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QString &filename)
 {
     return cwConcurrent::run([filename]() {
@@ -3795,14 +3948,35 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
             std::sort(caveFiles.begin(), caveFiles.end(), filePathLess);
 
             for (const QFileInfo &caveFileInfo : caveFiles) {
-                auto caveResult = loadCave(caveFileInfo.absoluteFilePath());
-                if (caveResult.hasError()) {
-                    // FIXME: log or collect the error
-                    qDebug() << "Cave result has errror:" << caveResult.errorMessage();
+                const QString cavePath = caveFileInfo.absoluteFilePath();
+                auto caveProtoResult = loadMessage<CavewhereProto::Cave>(cavePath);
+                if (caveProtoResult.hasError()) {
+                    loadData.errors.append(cwError(
+                        QStringLiteral("Could not load cave \"%1\": %2")
+                            .arg(caveFileInfo.fileName(), caveProtoResult.errorMessage()),
+                        cwError::Fatal));
                     continue;
                 }
 
-                cwCaveData cave = caveResult.value();
+                const auto& caveProto = caveProtoResult.value();
+                auto caveVersionWarning = checkEntityVersion(caveProto, cavePath, loadData.maxFileVersion);
+                if (caveVersionWarning) {
+                    loadData.errors.append(*caveVersionWarning);
+                }
+
+                cwCaveData cave;
+                if(caveProto.has_name()) {
+                    cave.name = QString::fromStdString(caveProto.name());
+                }
+                if (caveProto.has_id()) {
+                    cave.id = toUuid(caveProto.id());
+                }
+                cave.lengthUnit = caveProto.has_lengthunit()
+                    ? static_cast<cwUnits::LengthUnit>(caveProto.lengthunit())
+                    : cwUnits::Meters;
+                cave.depthUnit = caveProto.has_depthunit()
+                    ? static_cast<cwUnits::LengthUnit>(caveProto.depthunit())
+                    : cwUnits::Meters;
 
                 // Load all trips for this cave
                 QDir caveDir = caveFileInfo.absoluteDir();
@@ -3823,19 +3997,30 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
                     std::sort(tripFiles.begin(), tripFiles.end(), filePathLess);
 
                     for (const QFileInfo &tripFileInfo : tripFiles) {
-                        auto tripResult = loadTrip(tripFileInfo.absoluteFilePath());
+                        const QString tripPath = tripFileInfo.absoluteFilePath();
+                        auto tripProtoResult = loadMessage<CavewhereProto::Trip>(tripPath);
 
-                        if (tripResult.hasError()) {
-                            // FIXME: log or collect the error
+                        if (tripProtoResult.hasError()) {
+                            loadData.errors.append(cwError(
+                                QStringLiteral("Could not load trip \"%1\": %2")
+                                    .arg(tripFileInfo.fileName(), tripProtoResult.errorMessage()),
+                                cwError::Fatal));
                             continue;
                         }
 
-                        cwTripData trip = tripResult.value();
+                        const auto& tripProto = tripProtoResult.value();
+                        auto tripVersionWarning = checkEntityVersion(tripProto, tripPath, loadData.maxFileVersion);
+                        if (tripVersionWarning) {
+                            loadData.errors.append(*tripVersionWarning);
+                        }
+
+                        cwTripData trip = cwSaveLoad::tripDataFromProtoTrip(tripProto);
 
                         QDir tripDir = tripFileInfo.absoluteDir();
 
-                        auto loadObjectsFromNotesDir = [tripDir, regionDir, &filePathLess](const QString& fileSuffix,
-                                                                                             auto&& loadFunc,
+                        auto loadObjectsFromNotesDir = [tripDir, &filePathLess, &loadData](const QString& fileSuffix,
+                                                                                             auto&& loadProtoFunc,
+                                                                                             auto&& convertFunc,
                                                                                              auto& destinationList)
                         {
                             QDir notesDir = tripDir.filePath("notes");
@@ -3848,27 +4033,42 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
                                                                          QDir::Name | QDir::IgnoreCase | QDir::LocaleAware);
                             std::sort(files.begin(), files.end(), filePathLess);
                             for (const QFileInfo& fileInfo : files) {
-                                auto result = loadFunc(fileInfo.absoluteFilePath(), regionDir);
-                                if (result.hasError()) {
-                                    // FIXME: log or collect the error
+                                const QString notePath = fileInfo.absoluteFilePath();
+                                auto protoResult = loadProtoFunc(notePath);
+                                if (protoResult.hasError()) {
+                                    loadData.errors.append(cwError(
+                                        QStringLiteral("Could not load \"%1\": %2")
+                                            .arg(fileInfo.fileName(), protoResult.errorMessage()),
+                                        cwError::Fatal));
                                     continue;
                                 }
 
-                                destinationList.append(result.value());
+                                auto versionWarning = checkEntityVersion(protoResult.value(), notePath, loadData.maxFileVersion);
+                                if (versionWarning) {
+                                    loadData.errors.append(*versionWarning);
+                                }
+
+                                destinationList.append(convertFunc(protoResult.value(), notePath));
                             }
                         };
 
                         //Load 2D notes
                         loadObjectsFromNotesDir(QStringLiteral("cwnote"),
-                                                [](const QString& filename, const QDir& regionDir) {
-                                                    return loadNote(filename, regionDir);
+                                                [](const QString& path) {
+                                                    return loadMessage<CavewhereProto::Note>(path);
+                                                },
+                                                [](const CavewhereProto::Note& proto, const QString& path) {
+                                                    return cwSaveLoad::noteDataFromProtoNote(proto, path);
                                                 },
                                                 trip.noteModel.notes);
 
                         //Load 3D lidar notes
                         loadObjectsFromNotesDir(QStringLiteral("cwnote3d"),
-                                                [](const QString& filename, const QDir& regionDir) {
-                                                    return loadNoteLiDAR(filename, regionDir);
+                                                [](const QString& path) {
+                                                    return loadMessage<CavewhereProto::NoteLiDAR>(path);
+                                                },
+                                                [](const CavewhereProto::NoteLiDAR& proto, const QString& path) {
+                                                    return cwSaveLoad::noteLiDARDataFromProtoNoteLiDAR(proto, path);
                                                 },
                                                 trip.noteLiDARModel.notes);
 
@@ -3881,23 +4081,10 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
 
             repairTopLevelIds(loadData);
             repairNestedScrapIds(loadData);
+            repairNameCollisions(loadData);
             return Result(loadData);
         });
     });
-}
-
-Monad::Result<cwCavingRegionData> cwSaveLoad::loadCavingRegion(const QString &filename)
-{    
-    auto regionResult = loadMessage<CavewhereProto::CavingRegion>(filename);
-    return Monad::mbind(regionResult, [](const Result<CavewhereProto::CavingRegion>& result)
-                        {
-                            auto regionProto = result.value();
-                            cwCavingRegionData regionData;
-                            if(regionProto.has_name()) {
-                                regionData.name = QString::fromStdString(regionProto.name());
-                            }
-                            return Result(regionData);
-                        });
 }
 
 Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString &filename)
@@ -3916,15 +4103,20 @@ Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString
                                 return Result<ProjectLoadData>(QStringLiteral("Legacy CaveWhere v7 project files are not supported."));
                             }
 
+                            ProjectLoadData loadData;
+                            loadData.maxFileVersion = fileVersion;
+
                             if (fileVersion > cwRegionIOTask::protoVersion()) {
-                                return Result<ProjectLoadData>(
-                                    QStringLiteral("Project file version %1 is newer than supported version %2.")
+                                loadData.errors.append(cwError(
+                                    QStringLiteral("This project was created by a newer version of CaveWhere "
+                                                   "(v%1, file version %2). This copy only supports file version %3. "
+                                                   "Saving is disabled because it would lose data added by the newer version. "
+                                                   "Please upgrade CaveWhere to save or sync this project.")
+                                        .arg(cwRegionIOTask::toVersion(fileVersion))
                                         .arg(fileVersion)
                                         .arg(cwRegionIOTask::protoVersion()),
-                                    static_cast<int>(SyncErrorCode::IncompatibleProjectVersion));
+                                    cwError::Warning));
                             }
-
-                            ProjectLoadData loadData;
                             if (projectProto.has_name()) {
                                 loadData.region.name = QString::fromStdString(projectProto.name());
                             }
@@ -3937,9 +4129,6 @@ Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString
                                 const auto& metadataProto = projectProto.metadata();
                                 if (metadataProto.has_dataroot()) {
                                     loadData.metadata.dataRoot = QString::fromStdString(metadataProto.dataroot());
-                                }
-                                if (metadataProto.has_gitmode()) {
-                                    loadData.metadata.gitMode = fromProtoGitMode(metadataProto.gitmode());
                                 }
                                 if (metadataProto.has_syncenabled()) {
                                     loadData.metadata.syncEnabled = metadataProto.syncenabled();
@@ -3999,7 +4188,7 @@ cwTripData cwSaveLoad::tripDataFromProtoTrip(const CavewhereProto::Trip& tripPro
     }
 
     if (tripProto.has_date()) {
-        tripData.date = QDateTime(cwRegionLoadTask::loadDate(tripProto.date()), QTime());
+        tripData.date = QDateTime(loadDate(tripProto.date()), QTime());
     }
 
     if (tripProto.has_tripcalibration()) {
@@ -4093,7 +4282,7 @@ cwNoteLiDARData cwSaveLoad::noteLiDARDataFromProtoNoteLiDAR(const CavewhereProto
     noteData.stations.reserve(protoNote.notestations_size());
     for (const auto& protoNoteStation : protoNote.notestations()) {
         cwNoteLiDARStation newStation;
-        newStation.setPositionOnNote(cwRegionLoadTask::loadVector3D(protoNoteStation.positiononnote()));
+        newStation.setPositionOnNote(loadVector3D(protoNoteStation.positiononnote()));
         newStation.setName(QString::fromStdString(protoNoteStation.name()));
         if (protoNoteStation.has_id()) {
             newStation.setId(toUuid(protoNoteStation.id()));
@@ -4125,12 +4314,15 @@ cwTripCalibrationData cwSaveLoad::fromProtoTripCalibration(const CavewhereProto:
     tripCalibration.setTapeCalibration(proto.tapecalibration());
     tripCalibration.setFrontCompassCalibration(proto.frontcompasscalibration());
     tripCalibration.setFrontClinoCalibration(proto.frontclinocalibration());
-    tripCalibration.setBackCompassCalibration(proto.backcompassscalibration());
+    tripCalibration.setBackCompassCalibration(
+        proto.has_backcompasscalibration()
+            ? proto.backcompasscalibration()
+            : proto.legacy_backcompassscalibration());
     tripCalibration.setBackClinoCalibration(proto.backclinocalibration());
     tripCalibration.setDeclination(proto.declination());
     tripCalibration.setDistanceUnit((cwUnits::LengthUnit)proto.distanceunit());
-    tripCalibration.setFrontSights(proto.frontsights());
-    tripCalibration.setBackSights(proto.backsights());
+    tripCalibration.setFrontSights(proto.has_frontsights() ? proto.frontsights() : true);
+    tripCalibration.setBackSights(proto.has_backsights() ? proto.backsights() : false);
     return tripCalibration;
 }
 
@@ -4180,7 +4372,11 @@ cwSurveyChunkData cwSaveLoad::fromProtoSurveyChunk(const CavewhereProto::SurveyC
     chunkData.id = toUuid(protoChunk.id());
 
     const int legCount = protoChunk.leg_size();
-    // Q_ASSERT(legCount % 2 == 0); // Each shot has 2 legs: a station and a shot
+    if (legCount > 0 && legCount % 2 == 0) {
+        qWarning() << "Malformed SurveyChunk: even leg count" << legCount
+                    << "(expected odd: station, shot, station, shot, ..., station)";
+        return chunkData;
+    }
 
     for (int i = 0; i < legCount; i += 2) {
         const auto& protoStation = protoChunk.leg(i);
@@ -4267,7 +4463,7 @@ cwScrapData cwSaveLoad::fromProtoScrap(const CavewhereProto::Scrap &protoScrap)
 
     // Load outline points
     for (const QtProto::QPointF& protoPoint : protoScrap.outlinepoints()) {
-        scrapData.outlinePoints.append(cwRegionLoadTask::loadPointF(protoPoint));
+        scrapData.outlinePoints.append(loadPointF(protoPoint));
     }
 
     // Load stations
@@ -4324,7 +4520,7 @@ cwNoteStation cwSaveLoad::fromProtoNoteStation(const CavewhereProto::NoteStation
     } else if (protoNoteStation.has_legacy_name()) {
         noteStation.setName(fromLegacyQtString(protoNoteStation.legacy_name()));
     }
-    noteStation.setPositionOnNote(cwRegionLoadTask::loadPointF(protoNoteStation.positiononnote()));
+    noteStation.setPositionOnNote(loadPointF(protoNoteStation.positiononnote()));
     if (protoNoteStation.has_id()) {
         noteStation.setId(toUuid(protoNoteStation.id()));
     } else {
@@ -4338,7 +4534,7 @@ cwLead cwSaveLoad::fromProtoLead(const CavewhereProto::Lead &protoLead)
     cwLead lead;
 
     // Load position on note
-    lead.setPositionOnNote(cwRegionLoadTask::loadPointF(protoLead.positiononnote()));
+    lead.setPositionOnNote(loadPointF(protoLead.positiononnote()));
 
     // Load description if present
     if (protoLead.has_description()) {
@@ -4349,7 +4545,7 @@ cwLead cwSaveLoad::fromProtoLead(const CavewhereProto::Lead &protoLead)
 
     // Load size if present and valid
     if (protoLead.has_size()) {
-        QSizeF size = cwRegionLoadTask::loadSizeF(protoLead.size());
+        QSizeF size = loadSizeF(protoLead.size());
         if (size.isValid()) {
             lead.setSize(size);
         }
@@ -4366,7 +4562,7 @@ cwLead cwSaveLoad::fromProtoLead(const CavewhereProto::Lead &protoLead)
     return lead;
 }
 
-cwNoteTransformationData cwSaveLoad::fromProtoNoteTransformation(const CavewhereProto::NoteTranformation &protoNoteTransform)
+cwNoteTransformationData cwSaveLoad::fromProtoNoteTransformation(const CavewhereProto::NoteTransformation &protoNoteTransform)
 {
     cwNoteTransformationData data;
 
@@ -4435,7 +4631,7 @@ void cwSaveLoad::saveNoteLiDARTranformation(CavewhereProto::NoteLiDARTransformat
     if (!protoNoteTransformation || !noteTransformation) { return; }
 
     //Save the base class
-    cwRegionSaveTask::saveNoteTranformation(protoNoteTransformation->mutable_plantransform(), noteTransformation);
+    saveNoteTranformation(protoNoteTransformation->mutable_plantransform(), noteTransformation);
 
     // upMode (enum)
     // The enum values appear to align (Custom=0, XisUp=1, YisUp=2, ZisUp=3). If they differ,
@@ -4981,6 +5177,12 @@ void cwSaveLoad::connectCave(cwCave *cave)
     d->connectionChecker.add(cave);
 
     connect(cave, &cwCave::nameChanged, this, saveCaveName);
+
+    auto saveCaveUnits = [cave, this]() {
+        d->saveObject(this, cave);
+    };
+    connect(cave->length(), &cwUnitValue::unitChanged, this, saveCaveUnits);
+    connect(cave->depth(), &cwUnitValue::unitChanged, this, saveCaveUnits);
 }
 
 
@@ -5025,8 +5227,6 @@ void cwSaveLoad::connectTrip(cwTrip* trip)
         connect(chunk, &cwSurveyChunk::added, this, saveTrip);
         connect(chunk, &cwSurveyChunk::aboutToRemove, this, saveTrip);
         connect(chunk, &cwSurveyChunk::removed, this, saveTrip);
-
-        connect(chunk, &cwSurveyChunk::calibrationsChanged, this, saveTrip);
 
         connect(chunk, &cwSurveyChunk::dataChanged, this, saveTrip);
     };
@@ -5357,23 +5557,9 @@ QFuture<void> cwSaveLoad::completeSaveJobs()
 }
 
 QString cwSaveLoad::sanitizeFileName(QString input) {
-    // Modify the input string in-place
-    const QString forbiddenChars = R"(\/:*?"<>|)";
-    for (const QChar& ch : forbiddenChars) {
-        input.replace(ch, "_");
-    }
-
-    input = input.trimmed();
-    while (input.startsWith('.') || input.endsWith('.')) {
-        input = input.mid(1).chopped(1);
-    }
-
-    if (input.isEmpty()) {
-        input = "untitled";
-    }
-
-    return input;
+    return cwNameUtils::sanitizeFileName(std::move(input));
 }
+
 
 QString cwSaveLoad::lastDirectoryForProjectFile(const QString& filePath)
 {
@@ -5665,24 +5851,6 @@ void cwSaveLoad::setDataRoot(const QString &dataRoot)
     }
 }
 
-cwSaveLoad::GitMode cwSaveLoad::gitMode() const
-{
-    return d->projectMetadata.gitMode;
-}
-
-void cwSaveLoad::setGitMode(GitMode mode)
-{
-    if (d->projectMetadata.gitMode == mode) {
-        return;
-    }
-
-    d->projectMetadata.gitMode = mode;
-
-    if (d->saveEnabled && !d->projectFileName.isEmpty()) {
-        saveProject(projectRootDir(), d->m_regionTreeModel->cavingRegion());
-    }
-}
-
 bool cwSaveLoad::syncEnabled() const
 {
     return d->projectMetadata.syncEnabled;
@@ -5704,7 +5872,7 @@ void cwSaveLoad::setSyncEnabled(bool enabled)
 Monad::ResultBase cwSaveLoad::commitProjectChanges(const QString& subject,
                                                    const QString& description)
 {
-    if (gitMode() == GitMode::NoGit || d->projectFileName.isEmpty()) {
+    if (d->projectFileName.isEmpty()) {
         return ResultBase();
     }
 
@@ -5771,10 +5939,6 @@ void cwSaveLoad::setAuthProvider(cwRemoteAuthProvider* provider)
 QFuture<Monad::ResultBase> cwSaveLoad::sync()
 {
     d->lastSyncReport.reset();
-
-    if (gitMode() == GitMode::NoGit) {
-        return AsyncFuture::completed(ResultBase(QStringLiteral("Sync is disabled for this project.")));
-    }
 
     if (!syncEnabled()) {
         return AsyncFuture::completed(ResultBase(QStringLiteral("Project sync is disabled in metadata.")));
@@ -5875,6 +6039,16 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
                                                                      pulledProjectResult.errorCode()));
                         }
 
+                        const int pulledVersion = pulledProjectResult.value().maxFileVersion;
+                        const int supportedVersion = cwRegionIOTask::protoVersion();
+                        if (pulledVersion > supportedVersion) {
+                            return AsyncFuture::completed(ResultBase(
+                                QStringLiteral("Project file version %1 is newer than supported version %2.")
+                                    .arg(pulledVersion)
+                                    .arg(supportedVersion),
+                                static_cast<int>(SyncErrorCode::IncompatibleProjectVersion)));
+                        }
+
                         const auto afterHeadResult = QQuickGit::GitRepository::headCommitOid(repoPath);
                         if (afterHeadResult.hasError()) {
                             return AsyncFuture::completed(ResultBase(afterHeadResult.errorMessage()));
@@ -5965,13 +6139,10 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
     return syncDeferred->future();
 }
 
-QFuture<Monad::ResultBase> cwSaveLoad::resetBranchAndReconcile(const QString& refSpec, BranchResetMode resetMode)
+QFuture<Monad::ResultBase> cwSaveLoad::gitOperationAndReconcile(const QString& operationLabel,
+                                                                const GitOperationFn& gitOp)
 {
     d->lastSyncReport.reset();
-
-    if (gitMode() == GitMode::NoGit) {
-        return AsyncFuture::completed(ResultBase(QStringLiteral("Checkout reconcile is disabled for this project.")));
-    }
 
     if (!syncEnabled()) {
         return AsyncFuture::completed(ResultBase(QStringLiteral("Project sync is disabled in metadata.")));
@@ -5979,11 +6150,6 @@ QFuture<Monad::ResultBase> cwSaveLoad::resetBranchAndReconcile(const QString& re
 
     if (d->projectFileName.isEmpty()) {
         return AsyncFuture::completed(ResultBase(QStringLiteral("Project has no filename.")));
-    }
-
-    const QString normalizedRefSpec = refSpec.trimmed();
-    if (normalizedRefSpec.isEmpty()) {
-        return AsyncFuture::completed(ResultBase(QStringLiteral("Checkout ref is empty.")));
     }
 
     auto* repo = d->repository;
@@ -6002,7 +6168,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::resetBranchAndReconcile(const QString& re
     auto checkoutPrepareFuture = d->enqueueOperation(
         this,
         Data::Operation::Type::SyncProject,
-        [this, repo, repoPath, normalizedRefSpec, resetMode, syncGeneration, saveFlushFuture, attemptState]() -> QFuture<ResultBase> {
+        [this, repo, repoPath, operationLabel, gitOp, syncGeneration, saveFlushFuture, attemptState]() -> QFuture<ResultBase> {
             Q_ASSERT(saveFlushFuture.isFinished());
             const auto saveFlushResult = saveFlushFuture.result();
             if (saveFlushResult.hasError()) {
@@ -6019,12 +6185,6 @@ QFuture<Monad::ResultBase> cwSaveLoad::resetBranchAndReconcile(const QString& re
                     QStringLiteral("Working directory must be clean before checkout and reconcile.")));
             }
 
-            const QString currentBranch = repo->headBranchName();
-            if (currentBranch.isEmpty()) {
-                return AsyncFuture::completed(ResultBase(
-                    QStringLiteral("Cannot reset branch: HEAD is detached.")));
-            }
-
             const auto beforeHeadResult = QQuickGit::GitRepository::headCommitOid(repoPath);
             if (beforeHeadResult.hasError()) {
                 return AsyncFuture::completed(ResultBase(beforeHeadResult.errorMessage()));
@@ -6035,25 +6195,19 @@ QFuture<Monad::ResultBase> cwSaveLoad::resetBranchAndReconcile(const QString& re
                 return captureLfsSnapshot(repoPath);
             });
 
-            QQuickGit::GitRepository::ResetMode mode = QQuickGit::GitRepository::ResetMode::Hard;
-            if (resetMode == BranchResetMode::Soft) {
-                mode = QQuickGit::GitRepository::ResetMode::Soft;
-            } else if (resetMode == BranchResetMode::Mixed) {
-                mode = QQuickGit::GitRepository::ResetMode::Mixed;
-            }
-            auto checkoutFuture = repo->reset(normalizedRefSpec, mode);
-            return AsyncFuture::observe(checkoutFuture)
-                .context(this, [this, repoPath, normalizedRefSpec, beforeHead, beforeSnapshotFuture, checkoutFuture, syncGeneration, attemptState]() -> QFuture<ResultBase> {
+            auto gitFuture = gitOp(repo);
+            return AsyncFuture::observe(gitFuture)
+                .context(this, [this, repoPath, operationLabel, beforeHead, beforeSnapshotFuture, gitFuture, syncGeneration, attemptState]() -> QFuture<ResultBase> {
                     if (d->operationGeneration != syncGeneration || d->retiring) {
                         return AsyncFuture::completed(ResultBase(QStringLiteral("Operation canceled.")));
                     }
 
-                    const auto checkoutResult = checkoutFuture.result();
+                    const auto checkoutResult = gitFuture.result();
                     if (checkoutResult.hasError()) {
                         return AsyncFuture::completed(checkoutResult);
                     }
 
-                    // If the .cwproj descriptor was renamed by the reset, update the
+                    // If the .cwproj descriptor was renamed by the operation, update the
                     // in-memory filename before loading — otherwise loadProject will fail
                     // because the old filename no longer exists on disk.
                     updateFileNameFromSingleCwproj(repoPath);
@@ -6081,15 +6235,14 @@ QFuture<Monad::ResultBase> cwSaveLoad::resetBranchAndReconcile(const QString& re
                     });
 
                     return AsyncFuture::observe(reportFuture)
-                        .context(this, [this, normalizedRefSpec, reportFuture, attemptState, syncGeneration]() -> ResultBase {
+                        .context(this, [this, operationLabel, reportFuture, attemptState, syncGeneration]() -> ResultBase {
                             if (d->operationGeneration != syncGeneration || d->retiring) {
                                 return ResultBase(QStringLiteral("Operation canceled."));
                             }
 
                             attemptState->report = reportFuture.result();
                             if (attemptState->report.has_value()) {
-                                attemptState->report->diagnostics.append(
-                                    QStringLiteral("checkout reconcile target: %1").arg(normalizedRefSpec));
+                                attemptState->report->diagnostics.append(operationLabel);
                             }
                             d->lastSyncReport = attemptState->report;
                             if (!attemptState->report.has_value()) {
@@ -6122,10 +6275,36 @@ QFuture<Monad::ResultBase> cwSaveLoad::resetBranchAndReconcile(const QString& re
 
     if (d->futureToken.isValid()) {
         d->futureToken.addJob(cwFuture(QFuture<void>(checkoutDeferred->future()),
-                                       QStringLiteral("Checking out project")));
+                                       operationLabel));
     }
 
     return checkoutDeferred->future();
+}
+
+QFuture<Monad::ResultBase> cwSaveLoad::resetBranchAndReconcile(const QString& refSpec, BranchResetMode resetMode)
+{
+    const QString normalizedRefSpec = refSpec.trimmed();
+    if (normalizedRefSpec.isEmpty()) {
+        return AsyncFuture::completed(ResultBase(QStringLiteral("Checkout ref is empty.")));
+    }
+
+    return gitOperationAndReconcile(
+        QStringLiteral("checkout reconcile target: %1").arg(normalizedRefSpec),
+        [normalizedRefSpec, resetMode](QQuickGit::GitRepository* repo) -> QFuture<Monad::ResultBase> {
+            const QString currentBranch = repo->headBranchName();
+            if (currentBranch.isEmpty()) {
+                return AsyncFuture::completed(Monad::ResultBase(
+                    QStringLiteral("Cannot reset branch: HEAD is detached.")));
+            }
+
+            QQuickGit::GitRepository::ResetMode mode = QQuickGit::GitRepository::ResetMode::Hard;
+            if (resetMode == BranchResetMode::Soft) {
+                mode = QQuickGit::GitRepository::ResetMode::Soft;
+            } else if (resetMode == BranchResetMode::Mixed) {
+                mode = QQuickGit::GitRepository::ResetMode::Mixed;
+            }
+            return repo->reset(normalizedRefSpec, mode);
+        });
 }
 
 QFuture<Monad::ResultBase> cwSaveLoad::resetBranchAndReconcile(const QString& refSpec, int resetMode)
@@ -6138,9 +6317,33 @@ QFuture<Monad::ResultBase> cwSaveLoad::checkoutAndReconcile(const QString& refSp
     return resetBranchAndReconcile(refSpec, static_cast<BranchResetMode>(checkoutMode));
 }
 
+QFuture<Monad::ResultBase> cwSaveLoad::restoreToCommitAndReconcile(const QString& targetSha)
+{
+    const QString normalizedSha = targetSha.trimmed();
+    if (normalizedSha.isEmpty()) {
+        return AsyncFuture::completed(ResultBase(QStringLiteral("Restore target SHA is empty.")));
+    }
+
+    return gitOperationAndReconcile(
+        QStringLiteral("restore to commit: %1").arg(normalizedSha),
+        [normalizedSha](QQuickGit::GitRepository* repo) {
+            return repo->restoreToCommit(normalizedSha);
+        });
+}
+
 std::optional<cwSaveLoad::SyncReport> cwSaveLoad::lastSyncReport() const
 {
     return d->lastSyncReport;
+}
+
+QList<cwError> cwSaveLoad::lastLoadErrors() const
+{
+    return d->lastLoadErrors;
+}
+
+int cwSaveLoad::lastLoadMaxFileVersion() const
+{
+    return d->lastLoadMaxFileVersion;
 }
 
 QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcileExternalImpl(const SyncReport& report,
@@ -6292,7 +6495,6 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
             }
 
             if (previousMetadata.dataRoot != d->projectMetadata.dataRoot
-                || previousMetadata.gitMode != d->projectMetadata.gitMode
                 || previousMetadata.syncEnabled != d->projectMetadata.syncEnabled) {
                 emit dataRootChanged();
             }
@@ -6332,4 +6534,289 @@ QFuture<void> cwSaveLoad::retire()
         });
 
     return d->retireFuture;
+}
+
+// ---------------------------------------------------------------------------
+// Proto serialization helpers (moved from cwRegionSaveTask)
+// ---------------------------------------------------------------------------
+
+#include "cwReading.h"
+
+namespace {
+template<typename StringFunc, typename State>
+void saveReading(StringFunc getProtoString, const cwReading& reading, State emptyState) {
+    if(reading.state() != static_cast<int>(emptyState)) {
+        *getProtoString() = reading.value().toUtf8().toStdString();
+    }
+}
+} // anonymous namespace
+
+// ---------------------------------------------------------------------------
+// Proto deserialization helpers (moved from cwRegionLoadTask)
+// ---------------------------------------------------------------------------
+
+QDate cwSaveLoad::loadDate(const QtProto::QDate& protoDate)
+{
+    return QDate(protoDate.year(), protoDate.month(), protoDate.day());
+}
+
+QSize cwSaveLoad::loadSize(const QtProto::QSize &protoSize)
+{
+    QSize size;
+    size.setWidth(protoSize.width());
+    size.setHeight(protoSize.height());
+    return size;
+}
+
+QSizeF cwSaveLoad::loadSizeF(const QtProto::QSizeF &protoSize)
+{
+    QSizeF size;
+    size.setWidth(protoSize.width());
+    size.setHeight(protoSize.height());
+    return size;
+}
+
+QPointF cwSaveLoad::loadPointF(const QtProto::QPointF& protoPointF)
+{
+    return QPointF(protoPointF.x(), protoPointF.y());
+}
+
+QVector3D cwSaveLoad::loadVector3D(const QtProto::QVector3D &protoVector3D)
+{
+    return QVector3D(protoVector3D.x(), protoVector3D.y(), protoVector3D.z());
+}
+
+QVector2D cwSaveLoad::loadVector2D(const QtProto::QVector2D &protoVector2D)
+{
+    return QVector2D(protoVector2D.x(), protoVector2D.y());
+}
+
+void cwSaveLoad::saveString(std::string *protoString, const QString& string)
+{
+    *protoString = string.toUtf8().toStdString();
+}
+
+void cwSaveLoad::saveDate(QtProto::QDate *protoDate, QDate date)
+{
+   protoDate->set_day(date.day());
+   protoDate->set_month(date.month());
+   protoDate->set_year(date.year());
+}
+
+void cwSaveLoad::saveSize(QtProto::QSize *protoSize, QSize size)
+{
+   protoSize->set_width(size.width());
+   protoSize->set_height(size.height());
+}
+
+void cwSaveLoad::saveSizeF(QtProto::QSizeF *protoSize, QSizeF size)
+{
+    protoSize->set_width(size.width());
+    protoSize->set_height(size.height());
+}
+
+void cwSaveLoad::savePointF(QtProto::QPointF *protoPointF, QPointF point)
+{
+    protoPointF->set_x(point.x());
+    protoPointF->set_y(point.y());
+}
+
+void cwSaveLoad::saveVector3D(QtProto::QVector3D *protoVector3D, QVector3D vector3D)
+{
+    protoVector3D->set_x(vector3D.x());
+    protoVector3D->set_y(vector3D.y());
+    protoVector3D->set_z(vector3D.z());
+}
+
+void cwSaveLoad::saveQUuid(std::string *protoString, const QUuid &id)
+{
+    saveString(protoString, id.toString(QUuid::WithoutBraces));
+}
+
+void cwSaveLoad::saveStringList(google::protobuf::RepeatedPtrField<std::string> *protoStringList, const QStringList &stringList)
+{
+    for(const auto& string : stringList) {
+        protoStringList->Add(string.toUtf8().toStdString());
+    }
+}
+
+void cwSaveLoad::saveLength(CavewhereProto::Length *protoLength, cwLength *length)
+{
+    protoLength->set_value(length->value());
+    protoLength->set_unit((CavewhereProto::Units_LengthUnit)length->unit());
+}
+
+void cwSaveLoad::saveImageResolution(CavewhereProto::ImageResolution *protoImageRes, cwImageResolution *imageResolution)
+{
+    protoImageRes->set_value(imageResolution->value());
+    protoImageRes->set_unit((CavewhereProto::Units_ImageResolutionUnit)imageResolution->unit());
+}
+
+void cwSaveLoad::saveImage(CavewhereProto::Image *protoImage, const cwImage &image)
+{
+    Q_ASSERT(image.mode() == cwImage::Mode::Path);
+
+    saveString(protoImage->mutable_path(), image.path());
+
+    protoImage->set_dotpermeter(image.originalDotsPerMeter());
+    saveSize(protoImage->mutable_size(), image.originalSize());
+    if (image.page() >= 0) {
+        protoImage->set_page(image.page());
+    }
+    if (image.unit() != cwImage::Unit::Pixels) {
+        protoImage->set_imageunit(
+            static_cast<CavewhereProto::Image_Unit>(static_cast<int>(image.unit())));
+    }
+}
+
+void cwSaveLoad::saveNoteStation(CavewhereProto::NoteStation* protoNoteStation, const cwNoteStation &noteStation)
+{
+    saveString(protoNoteStation->mutable_name(), noteStation.name());
+    savePointF(protoNoteStation->mutable_positiononnote(), noteStation.positionOnNote());
+    if (!noteStation.id().isNull()) {
+        saveQUuid(protoNoteStation->mutable_id(), noteStation.id());
+    }
+}
+
+void cwSaveLoad::saveTeamMember(CavewhereProto::TeamMember *protoTeamMember, const cwTeamMember& teamMember)
+{
+    saveQUuid(protoTeamMember->mutable_id(), teamMember.id());
+    saveString(protoTeamMember->mutable_name(), teamMember.name());
+    saveStringList(protoTeamMember->mutable_jobs(), teamMember.jobs());
+}
+
+void cwSaveLoad::saveLead(CavewhereProto::Lead *protoLead, const cwLead &lead)
+{
+    savePointF(protoLead->mutable_positiononnote(), lead.positionOnNote());
+
+    if(!lead.desciption().isEmpty()) {
+        saveString(protoLead->mutable_description(), lead.desciption());
+    }
+
+    if(lead.size().isValid()) {
+        saveSizeF(protoLead->mutable_size(), lead.size());
+    }
+
+    protoLead->set_completed(lead.completed());
+    if (!lead.id().isNull()) {
+        saveQUuid(protoLead->mutable_id(), lead.id());
+    }
+}
+
+void cwSaveLoad::saveProjectedScrapViewMatrix(CavewhereProto::ProjectedProfileScrapViewMatrix *protoViewMatrix, cwProjectedProfileScrapViewMatrix *viewMatrix)
+{
+    protoViewMatrix->set_azimuth(viewMatrix->azimuth());
+    protoViewMatrix->set_direction(static_cast<CavewhereProto::ProjectedProfileScrapViewMatrix::Direction >(viewMatrix->direction()));
+}
+
+void cwSaveLoad::saveNoteTranformation(CavewhereProto::NoteTransformation *protoNoteTransformation,
+                                       cwAbstractNoteTransformation *noteTransformation)
+{
+    protoNoteTransformation->set_northup(noteTransformation->northUp());
+    saveLength(protoNoteTransformation->mutable_scalenumerator(),
+               noteTransformation->scaleNumerator());
+    saveLength(protoNoteTransformation->mutable_scaledenominator(),
+               noteTransformation->scaleDenominator());
+}
+
+void cwSaveLoad::saveStationShot(CavewhereProto::StationShot *protoStation, const cwStation &station)
+{
+    saveQUuid(protoStation->mutable_id(), station.id());
+
+    if(!station.name().isEmpty()) {
+        saveString(protoStation->mutable_name(), station.name());
+    }
+
+    saveReading([&](){return protoStation->mutable_left();}, station.left(), cwDistanceReading::State::Empty);
+    saveReading([&](){return protoStation->mutable_right();}, station.right(), cwDistanceReading::State::Empty);
+    saveReading([&](){return protoStation->mutable_up();}, station.up(), cwDistanceReading::State::Empty);
+    saveReading([&](){return protoStation->mutable_down();}, station.down(), cwDistanceReading::State::Empty);
+}
+
+void cwSaveLoad::saveStationShot(CavewhereProto::StationShot *protoShot, const cwShot &shot)
+{
+    saveQUuid(protoShot->mutable_id(), shot.id());
+
+    if(!shot.isDistanceIncluded()) {
+        //By default distance is included, only write it if it's not include
+        protoShot->set_includedistance(shot.isDistanceIncluded());
+    }
+
+    saveReading([&](){ return protoShot->mutable_distance(); }, shot.distance(), cwDistanceReading::State::Empty);
+    saveReading([&](){ return protoShot->mutable_compass(); }, shot.compass(), cwCompassReading::State::Empty);
+    saveReading([&](){ return protoShot->mutable_backcompass(); }, shot.backCompass(), cwCompassReading::State::Empty);
+    saveReading([&](){ return protoShot->mutable_clino(); }, shot.clino(), cwClinoReading::State::Empty);
+    saveReading([&](){ return protoShot->mutable_backclino(); }, shot.backClino(), cwClinoReading::State::Empty);
+}
+
+void cwSaveLoad::saveTripCalibration(CavewhereProto::TripCalibration *proto, cwTripCalibration *tripCalibration)
+{
+    proto->set_correctedcompassbacksight(tripCalibration->hasCorrectedCompassBacksight());
+    proto->set_correctedclinobacksight(tripCalibration->hasCorrectedClinoBacksight());
+    proto->set_tapecalibration(tripCalibration->tapeCalibration());
+    proto->set_frontcompasscalibration(tripCalibration->frontCompassCalibration());
+    proto->set_frontclinocalibration(tripCalibration->frontClinoCalibration());
+    proto->set_backcompasscalibration(tripCalibration->backCompassCalibration());
+    proto->set_backclinocalibration(tripCalibration->backClinoCalibration());
+    proto->set_declination(tripCalibration->declination());
+    proto->set_distanceunit((CavewhereProto::Units_LengthUnit)tripCalibration->distanceUnit());
+    proto->set_frontsights(tripCalibration->hasFrontSights());
+    proto->set_backsights(tripCalibration->hasBackSights());
+    proto->set_correctedcompassfrontsight(tripCalibration->hasCorrectedCompassFrontsight());
+    proto->set_correctedclinofrontsight(tripCalibration->hasCorrectedClinoFrontsight());
+}
+
+void cwSaveLoad::saveSurveyChunk(CavewhereProto::SurveyChunk *protoChunk, cwSurveyChunk *chunk)
+{
+    Q_ASSERT(chunk->stationCount() - 1 == chunk->shotCount() || chunk->isStationAndShotsEmpty());
+
+    saveQUuid(protoChunk->mutable_id(), chunk->id());
+
+    for(int i = 0; i < chunk->stationCount(); ++i) {
+        auto station = protoChunk->add_leg();
+        saveStationShot(station, chunk->station(i));
+
+        if(i < chunk->shotCount()) {
+            auto shot = protoChunk->add_leg();
+            saveStationShot(shot, chunk->shot(i));
+        }
+    }
+}
+
+void cwSaveLoad::saveTeam(CavewhereProto::Team *protoTeam, cwTeam *team)
+{
+    foreach(const cwTeamMember& teamMember, team->teamMembers()) {
+        CavewhereProto::TeamMember* protoTeamMember = protoTeam->add_teammembers();
+        saveTeamMember(protoTeamMember, teamMember);
+    }
+}
+
+void cwSaveLoad::saveScrap(CavewhereProto::Scrap *protoScrap, cwScrap *scrap)
+{
+    saveQUuid(protoScrap->mutable_id(), scrap->id());
+
+    foreach(QPointF outlinePoint, scrap->points()) {
+        QtProto::QPointF* protoPoint = protoScrap->add_outlinepoints();
+        savePointF(protoPoint, outlinePoint);
+    }
+
+    foreach(cwNoteStation station, scrap->stations()) {
+        CavewhereProto::NoteStation* protoNoteStation = protoScrap->add_notestations();
+        saveNoteStation(protoNoteStation, station);
+    }
+
+    foreach(const cwLead& lead, scrap->leads()) {
+        CavewhereProto::Lead* protoLead = protoScrap->add_leads();
+        saveLead(protoLead, lead);
+    }
+
+    protoScrap->set_calculatenotetransform(scrap->calculateNoteTransform());
+    if(!scrap->calculateNoteTransform()) {
+        saveNoteTranformation(protoScrap->mutable_notetransformation(), scrap->noteTransformation());
+    }
+    protoScrap->set_type(static_cast<CavewhereProto::Scrap_ScrapType>(scrap->type()));
+
+    if(scrap->type() == cwScrap::ProjectedProfile && !scrap->calculateNoteTransform()) {
+        saveProjectedScrapViewMatrix(protoScrap->mutable_profileviewmatrix(), static_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix()));
+    }
 }

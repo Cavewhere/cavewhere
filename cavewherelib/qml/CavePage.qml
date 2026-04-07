@@ -60,7 +60,7 @@ StandardPage {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.left: parent.left
-        anchors.margins: 5
+        anchors.margins: Theme.pageMargin
 
         ColumnLayout {
             Layout.alignment: Qt.AlignTop
@@ -69,7 +69,7 @@ StandardPage {
                 id: caveNameText
                 text: cavePageArea.currentCave.name
                 font.bold: true
-                font.pixelSize: 20
+                font.pixelSize: Theme.fontSizeTitle
 
                 onFinishedEditting: (newText) => {
                                         cavePageArea.currentCave.name = newText
@@ -190,6 +190,7 @@ StandardPage {
 
                     TableStaticView {
                         id: tableViewId
+                        objectName: "tripTableView"
                         model:  SortFilterProxyModel {
                             source: CavePageModel {
                                 cave: cavePageArea.currentCave
@@ -271,7 +272,7 @@ StandardPage {
 
                                         LinkText {
                                             text: rowDelegateId.tripNameRole
-                                            elide: Text.ElideRight
+                                            elide: QQ.Text.ElideRight
 
                                             onClicked: {
                                                 RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
@@ -285,9 +286,9 @@ StandardPage {
                                     implicitWidth: dateColumn.columnWidth
                                     implicitHeight: dateId.implicitHeight
                                     clip: true
-                                    Text {
+                                    QC.Label {
                                         id: dateId
-                                        elide: Text.ElideRight
+                                        elide: QQ.Text.ElideRight
                                         // anchors.fill: parent
                                         text: Qt.formatDateTime(rowDelegateId.tripDateRole, "yyyy-MM-dd")
                                     }
@@ -298,9 +299,9 @@ StandardPage {
                                     implicitHeight: usedStationsId.implicitHeight
                                     clip: true
 
-                                    Text {
+                                    QC.Label {
                                         id: usedStationsId
-                                        elide: Text.ElideRight
+                                        elide: QQ.Text.ElideRight
                                         // anchors.fill: parent
                                         text: usedStationsRole
                                     }
@@ -311,9 +312,9 @@ StandardPage {
                                     implicitHeight: lengthId.implicitHeight
                                     clip: true
 
-                                    Text {
+                                    QC.Label {
                                         id: lengthId
-                                        elide: Text.ElideRight
+                                        elide: QQ.Text.ElideRight
                                         // anchors.fill: parent
                                         text: {
                                             var unit = ""
@@ -353,7 +354,9 @@ StandardPage {
     RemoveAskBox {
         id: removeChallengeId
         onRemove: {
-            cavePageArea.currentCave.removeTrip(indexToRemove)
+            let proxyIndex = tableViewId.model.index(indexToRemove, 0)
+            let sourceIndex = tableViewId.model.mapToSource(proxyIndex)
+            cavePageArea.currentCave.removeTrip(sourceIndex.row)
         }
     }
 

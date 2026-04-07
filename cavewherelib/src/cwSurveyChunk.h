@@ -18,8 +18,6 @@
 class cwErrorModel;
 class cwTrip;
 class cwCave;
-class cwTripCalibration;
-
 //Qt
 #include <QObject>
 #include <QList>
@@ -85,15 +83,6 @@ public:
     QList<cwStation> stations() const;
     QList<cwShot> shots() const;
 
-    // [[deprecated]]
-    void addCalibration(int shotIndex, cwTripCalibration *calibration = nullptr);
-    // [[deprecated]]
-    void removeCalibration(int shotIndex);
-    // [[deprecated]]
-    QMap<int, cwTripCalibration *> calibrations() const;
-    // [[deprecated]]
-    cwTripCalibration* lastCalibration() const;
-
     bool hasStation(QString stationName) const;
     QSet<cwStation> neighboringStations(QString stationName) const;
 
@@ -138,8 +127,6 @@ signals:
 
     void stationsRemoved(int beginIndex, int endIndex);
     void shotsRemoved(int beginIndex, int endIndex);
-
-    void calibrationsChanged();
 
     void dataChanged(cwSurveyChunk::DataRole mainRole, int index);
 
@@ -194,9 +181,6 @@ private:
     // QList<cwStation> Stations;
     // QList<cwShot> Shots;
 
-    // Deperate this?! currently not used?!
-    QMap<int, cwTripCalibration*> Calibrations;
-
     cwErrorModel* ErrorModel;
     QMap<CellIndex, cwErrorModel*> CellErrorModels;
 
@@ -236,8 +220,6 @@ private slots:
     void updateClinoErrors();
     void updateCompassClinoErrors();
 
-    void updateCalibrationsNewShots(int beginIndex, int endIndex);
-    void updateCalibrationsRemoveShots(int beginIndex, int endIndex);
 };
 
 Q_DECLARE_METATYPE(cwSurveyChunk*)

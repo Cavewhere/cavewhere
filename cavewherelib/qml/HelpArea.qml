@@ -64,15 +64,14 @@ QQ.Rectangle {
                 smooth: true
             }
 
-            QQ.Text {
+            QC.Label {
                 id: helpText
 
                 Layout.fillWidth: true
 
-                textFormat: QQ.Text.RichText
-                wrapMode: QQ.Text.WordWrap
-                font.pixelSize: 14
-                color: Theme.text
+                textFormat: QC.Label.RichText
+                wrapMode: QC.Label.WordWrap
+                font.pixelSize: Theme.fontSizeBody
 
                 text: "No documentation"
             }

@@ -71,6 +71,7 @@ void cwSurvexExporterCaveTask::fixFirstStation(QTextStream &stream, const cwCave
             const cwSurveyChunkData& firstChunk = firstTrip.chunks.first();
             if(!firstChunk.stations.isEmpty()) {
                 cwStation station = firstChunk.stations.first();
+                if(!station.isValid()) { return; }
 
                 stream << "*fix " << station.name() << " " << 0 << " " << 0 << " " << 0 << Qt::endl;
             }

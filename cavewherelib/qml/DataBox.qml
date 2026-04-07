@@ -71,7 +71,7 @@ QQ.Item {
     signal tabPressed();
 
     //Uncomment to visualize indexes for the box
-    // Text {
+    // QC.Label {
     //     color: "red"
     //     font.pixelSize: 10
     //     text: dataBox.objectName + "\nF:" + dataBox.focus + "\nEF:" + hasEditorFocus

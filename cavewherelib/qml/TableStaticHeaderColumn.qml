@@ -62,10 +62,9 @@ QQ.Rectangle {
                 implicitWidth: sortImageId.width
             }
 
-            Text {
+            QC.Label {
                 id: textId
                 text: delegate.text
-                color: Theme.text
             }
         }
     }

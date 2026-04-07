@@ -23,7 +23,6 @@
 #include "cwScrap.h"
 #include "cwRunningProfileScrapViewMatrix.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
-#include "cwRegionSaveTask.h"
 
 //std includes
 #include <memory>
@@ -161,28 +160,6 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
         CHECK(root->project()->isTemporaryProject());
     }
 
-    SECTION("New version should be detected propertly") {
-        CHECK(root->project()->cavingRegion()->caveCount() == 0);
-
-        fileToProject(root->project(), "://datasets/test_ProtoBufferSaveLoad/newerVersion.cw");
-        root->project()->waitLoadToFinish();
-
-        auto errorModel = root->project()->errorModel();
-
-        INFO("Model:" << errorModel->at(0));
-        REQUIRE(errorModel->size() == 1);
-
-        QString expectErrorMessage = QString("Upgrade CaveWhere to 0.08-70-g20d1d7c to load this file! Current file version is 10000. CaveWhere %1 supports up to file version %2. You are loading a newer CaveWhere file than this version supports. You will loss data if you save")
-                .arg(CavewhereVersion)
-                .arg(cwRegionIOTask::protoVersion());
-        CHECK(errorModel->at(0).message().toStdString() == expectErrorMessage.toStdString());
-        CHECK(errorModel->at(0) == cwError(expectErrorMessage, cwError::Warning));
-        errorModel->clear();
-
-        CHECK(root->project()->cavingRegion()->caveCount() == 1);
-        CHECK(root->project()->isTemporaryProject() == true); //All old testcase files are temporary because they need to be converted
-        CHECK(root->project()->canSaveDirectly() == false);
-    }
 
 #ifndef Q_OS_WIN
     //This testcase is broken on windows because removing the read permission still al

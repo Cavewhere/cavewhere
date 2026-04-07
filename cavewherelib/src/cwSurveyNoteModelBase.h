@@ -20,6 +20,7 @@ class cwProject;
 
 //Our includes
 #include "cwGlobals.h"
+#include "cwSanitizedNameSet.h"
 
 /**
  * @brief Base list model for survey note-like objects (QObject-derived).
@@ -52,6 +53,8 @@ public:
     bool reorderNotes(const QList<QObject*>& orderedNotes);
     Q_INVOKABLE void removeNote(int index);
     Q_INVOKABLE bool hasNotes() const;
+    cwSanitizedNameSet& noteNameSet() { return m_noteNames; }
+    const cwSanitizedNameSet& noteNameSet() const { return m_noteNames; }
 
     // Parent wiring
     void setParentTrip(cwTrip* trip);
@@ -116,6 +119,7 @@ protected:
 
 private:
     QList<QObject*> m_notes;
+    cwSanitizedNameSet m_noteNames;
     cwTrip* m_parentTrip;
     cwCave* m_parentCave;
 };

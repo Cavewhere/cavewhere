@@ -48,7 +48,7 @@ Loader {
             id: whereColumnId
             // width: Math.min(pageId.width - 50, 400)
 
-            Text {
+            QC.Label {
                 id: textId
                 visible: whereDialogId.description.length > 0
                 text: whereDialogId.description
@@ -68,7 +68,7 @@ Loader {
 
             RowLayout {
                 Layout.fillWidth: true
-                Text {
+                QC.Label {
                     text: "Path:"
                 }
 

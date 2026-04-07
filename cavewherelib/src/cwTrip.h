@@ -68,6 +68,7 @@ public:
 
     QString name() const;
     void setName(QString name);
+    Q_INVOKABLE QString validateName(const QString& proposedName) const;
     QUuid id() const;
     void setId(const QUuid& id);
 

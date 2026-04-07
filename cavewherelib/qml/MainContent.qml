@@ -8,6 +8,7 @@ QQ.Item {
 
     property GLTerrainRenderer renderer;
     property QC.Menu fileMenu
+    property AskToSaveDialog askToSaveDialog: null
 
     anchors.fill: parent
 
@@ -91,6 +92,7 @@ QQ.Item {
         id: sourceComponent
         SourceListPage {
             anchors.fill: parent
+            askToSaveDialog: mainContentId.askToSaveDialog
         }
     }
 
@@ -142,12 +144,27 @@ QQ.Item {
         id: remoteRepositoryPageComponent
         RemoteRepositoryPage {
             anchors.fill: parent
+            askToSaveDialog: mainContentId.askToSaveDialog
         }
     }
 
     QQ.Component {
         id: pipelinePageComponent
         PipelinePage {
+            anchors.fill: parent
+        }
+    }
+
+    QQ.Component {
+        id: remoteManagementPageComponent
+        RemoteManagementPage {
+            anchors.fill: parent
+        }
+    }
+
+    QQ.Component {
+        id: gitHistoryPageComponent
+        GitHistoryPage {
             anchors.fill: parent
         }
     }
@@ -167,6 +184,8 @@ QQ.Item {
         RootData.pageSelectionModel.registerPage(null, "Settings", settingsPageComponent)
         RootData.pageSelectionModel.registerPage(null, "Colors", colorsPageComponent)
         RootData.pageSelectionModel.registerPage(null, "Pipeline", pipelinePageComponent)
+        RootData.pageSelectionModel.registerPage(null, "Remote Settings", remoteManagementPageComponent)
+        RootData.pageSelectionModel.registerPage(null, "History", gitHistoryPageComponent)
 
         mainSideBar.viewPage = viewPage;
         mainSideBar.dataPage = dataPage;

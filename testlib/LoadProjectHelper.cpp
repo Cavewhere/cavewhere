@@ -217,6 +217,11 @@ void TestHelper::removeFile(const QUrl &filename) const
     QFile::remove(filename.toLocalFile());
 }
 
+void TestHelper::removeDirectory(const QUrl &directory) const
+{
+    QDir(directory.toLocalFile()).removeRecursively();
+}
+
 QString TestHelper::environmentVariable(const QString& name) const
 {
     return QProcessEnvironment::systemEnvironment().value(name);
@@ -518,15 +523,11 @@ cwSyncFixtureInfo TestHelper::createLocalSyncFixtureWithLfsServer()
     }
 
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("sync-fixture.git"));
-    git_repository* bareRepo = nullptr;
-    if (git_repository_init(&bareRepo, remoteRepoPath.toLocal8Bit().constData(), 1) != GIT_OK) {
+    if (initBareRepo(remoteRepoPath) != GIT_OK) {
         const git_error* error = git_error_last();
         result.errorMessage = error ? QString::fromUtf8(error->message)
                                     : QStringLiteral("Failed to initialize bare repository.");
         return result;
-    }
-    if (bareRepo) {
-        git_repository_free(bareRepo);
     }
 
     QQuickGit::Account account;
@@ -661,15 +662,11 @@ cwSyncFixtureInfo TestHelper::createLocalLiDARSyncFixtureWithLfsServer()
     }
 
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("sync-fixture.git"));
-    git_repository* bareRepo = nullptr;
-    if (git_repository_init(&bareRepo, remoteRepoPath.toLocal8Bit().constData(), 1) != GIT_OK) {
+    if (initBareRepo(remoteRepoPath) != GIT_OK) {
         const git_error* error = git_error_last();
         result.errorMessage = error ? QString::fromUtf8(error->message)
                                     : QStringLiteral("Failed to initialize bare repository.");
         return result;
-    }
-    if (bareRepo) {
-        git_repository_free(bareRepo);
     }
 
     QQuickGit::Account account;
@@ -732,9 +729,7 @@ cwSyncFixtureInfo TestHelper::createLocalLiDARSyncFixtureWithLfsServer()
     }
     project.waitSaveToFinish();
     const QString projectPath = project.filename();
-    const QString projectDataDirPath =
-        QFileInfo(projectPath).dir().filePath(QFileInfo(projectPath).completeBaseName());
-    const QString nestedGitDirPath = QDir(projectDataDirPath).filePath(QStringLiteral(".git"));
+    const QString nestedGitDirPath = QDir(project.dataRootDir()).filePath(QStringLiteral(".git"));
     if (QFileInfo::exists(nestedGitDirPath)) {
         QDir nestedGitDir(nestedGitDirPath);
         if (!nestedGitDir.removeRecursively()) {
@@ -867,15 +862,11 @@ cwCloneFixtureInfo TestHelper::createLocalBareRemoteForCloneTest()
     }
 
     const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("clone-fixture.git"));
-    git_repository* bareRepo = nullptr;
-    if (git_repository_init(&bareRepo, remoteRepoPath.toLocal8Bit().constData(), 1) != GIT_OK) {
+    if (initBareRepo(remoteRepoPath) != GIT_OK) {
         const git_error* error = git_error_last();
         result.errorMessage = error ? QString::fromUtf8(error->message)
                                     : QStringLiteral("Failed to initialize bare repository.");
         return result;
-    }
-    if (bareRepo) {
-        git_repository_free(bareRepo);
     }
 
     const QString authorRepoPath = QDir(authorRoot.path()).filePath(QStringLiteral("author"));
@@ -1045,4 +1036,17 @@ void addTokenManager(cwProject *project)
 {
     cwFutureManagerModel* model = new cwFutureManagerModel(project);
     project->setFutureManagerToken(model->token());
+}
+
+int initBareRepo(const QString& path)
+{
+    git_repository* repo = nullptr;
+    git_repository_init_options opts = GIT_REPOSITORY_INIT_OPTIONS_INIT;
+    opts.flags = GIT_REPOSITORY_INIT_BARE | GIT_REPOSITORY_INIT_MKPATH;
+    opts.initial_head = "main";
+    int err = git_repository_init_ext(&repo, path.toLocal8Bit().constData(), &opts);
+    if (repo) {
+        git_repository_free(repo);
+    }
+    return err;
 }

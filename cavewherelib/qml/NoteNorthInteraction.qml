@@ -108,7 +108,7 @@ PanZoomInteraction {
     //     }
     // }
 
-    Text {
+    QC.Label {
         id: northAngleTextId
 
         property int angle: 0
@@ -125,7 +125,7 @@ PanZoomInteraction {
         text: angle + "°"
         visible: false
 
-        style: Text.Outline
+        style: QC.Label.Outline
         styleColor: Theme.surfaceMuted
 
         // QQ.Connections {

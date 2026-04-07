@@ -16,6 +16,7 @@
 #include "cwErrorModel.h"
 #include "cwData.h"
 #include "cwKeywordModel.h"
+#include "cwNameUtils.h"
 
 //Qt includes
 #include <QDebug>
@@ -113,9 +114,20 @@ cwTrip::~cwTrip()
   \brief Set's the name of the survey trip
   */
 void cwTrip::setName(QString name) {
-    if(name != Name && !name.isEmpty()) {
-        pushUndo(new NameCommand(this, name));
+    if(name == Name) {
+        return;
     }
+    if (!validateName(name).isEmpty()) {
+        return;
+    }
+    pushUndo(new NameCommand(this, name));
+}
+
+QString cwTrip::validateName(const QString& proposedName) const
+{
+    const auto* nameSet = parentCave() ? &parentCave()->tripNameSet() : nullptr;
+    return cwNameUtils::validateEntityName(Name, proposedName, nameSet,
+                                           QStringLiteral("trip"));
 }
 
 void cwTrip::setId(const QUuid& id)
@@ -479,12 +491,22 @@ cwTrip::NameCommand::NameCommand(cwTrip* trip, QString name) {
 }
 
 void cwTrip::NameCommand::redo() {
+    if (auto* cave = Trip->parentCave()) {
+        if (cave->trips().contains(Trip)) {
+            cave->tripNameSet().rename(OldName, NewName);
+        }
+    }
     Trip->Name = NewName;
     Trip->updateKeywordMetadata();
     emit Trip->nameChanged();
 }
 
 void cwTrip::NameCommand::undo() {
+    if (auto* cave = Trip->parentCave()) {
+        if (cave->trips().contains(Trip)) {
+            cave->tripNameSet().rename(NewName, OldName);
+        }
+    }
     Trip->Name = OldName;
     Trip->updateKeywordMetadata();
     emit Trip->nameChanged();

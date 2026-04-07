@@ -15,25 +15,28 @@
 #include "cwCavingRegion.h"
 #include "cwTaskProgressDialog.h"
 #include "cwImageData.h"
-#include "cwRegionSaveTask.h"
 #include "cwRegionLoadTask.h"
 #include "cwGlobals.h"
 #include "cwDebug.h"
 #include "cwSQLManager.h"
 #include "cwTaskManagerModel.h"
 #include "asyncfuture.h"
+#include "cwError.h"
 #include "cwErrorListModel.h"
 #include "cwPDFConverter.h"
 #include "cwPDFSettings.h"
 #include "cwConcurrent.h"
 #include "cwSaveLoad.h"
 #include "cwZip.h"
+#include "cwDeepLinkHandler.h"
+#include "GitUtilities.h"
 #include "cwNote.h"
 #include "cwNoteLiDAR.h"
 #include "cwProjectSyncHealth.h"
 
 //Quick Git
 #include <GitRepository.h>
+#include <GitRemoteInfo.h>
 
 //Qt includes
 #include <QDir>
@@ -54,6 +57,7 @@
 #include <QSqlRecord>
 #include <QTemporaryDir>
 #include <QDirIterator>
+#include <QUrlQuery>
 
 //Async Future
 #include <asyncfuture.h>
@@ -179,6 +183,7 @@ void cwProject::connectSaveLoad(cwSaveLoad* saveLoad)
             return;
         }
         setModified(false);
+        emit discardCompleted();
     });
 
     connect(saveLoad, &cwSaveLoad::isTemporaryProjectChanged, this, [this, saveLoad]() {
@@ -208,6 +213,23 @@ void cwProject::connectSaveLoad(cwSaveLoad* saveLoad)
             return;
         }
         setModified(true);
+        emit localMutationOccurred();
+    });
+    connect(saveLoad, &cwSaveLoad::saveFlushCompleted, this, [this, saveLoad]() {
+        if (m_saveLoad != saveLoad) {
+            return;
+        }
+        emit saveFlushCompleted();
+    });
+    connect(saveLoad, &cwSaveLoad::saveBlockedByVersion, this, [this, saveLoad](const QString& entityDescription) {
+        if (m_saveLoad != saveLoad) {
+            return;
+        }
+        ErrorModel->append(cwError(
+            QStringLiteral("Cannot save %1 because this project was created with a newer version of CaveWhere (v%2). "
+                           "Upgrade CaveWhere to save changes.")
+                .arg(entityDescription, requiredVersion()),
+            cwError::Warning));
     });
 }
 
@@ -377,17 +399,7 @@ void cwProject::privateSave() {
 
     qDebug() << "Private Save is broken, TODO fix!";
 
-    // auto region = QSharedPointer<cwCavingRegion>::create(*Region);
-    // QString filename = this->filename();
-    // region->moveToThread(nullptr);
-
-    // auto future = cwConcurrent::run([region, filename]() {
-    //     cwRegionSaveTask saveTask;
-    //     saveTask.setDatabaseFilename(filename);
-    //     return saveTask.save(region.get());
-    // });
-
-    // FutureToken.addJob({QFuture<void>(future), "Saving"});
+    // Legacy SQLite save path removed — saving is now handled by cwSaveLoad.
 
     // SaveFuture = AsyncFuture::observe(future).subscribe([future, this](){
     //     auto errors = future.result();
@@ -417,20 +429,23 @@ bool cwProject::save()
                              ConvertedFromSqlite = false;
                              emit fileTypeChanged();
                              m_syncHealth->refresh();
-                             emit fileSaved();
+                             QMetaObject::invokeMethod(this, [this]() { emit fileSaved(); }, Qt::QueuedConnection);
                          })
                          .future();
         return true;
     }
 
-    m_saveLoad->waitForFinished();
-    const auto commitResult = m_saveLoad->commitProjectChanges();
-    if (commitResult.hasError()) {
-        ErrorModel->append(cwError(commitResult.errorMessage(), cwError::Fatal));
-    }
-
-    m_syncHealth->refresh();
-    emit fileSaved();
+    auto commitFuture = m_saveLoad->enqueueFlushAndCommit();
+    SaveFuture = AsyncFuture::observe(commitFuture)
+        .context(this, [this, commitFuture]() {
+            const auto result = commitFuture.result();
+            if (result.hasError()) {
+                ErrorModel->append(cwError(result.errorMessage(), cwError::Fatal));
+            }
+            m_syncHealth->refresh();
+            QMetaObject::invokeMethod(this, [this]() { emit fileSaved(); }, Qt::QueuedConnection);
+        })
+        .future();
     return true;
 }
 
@@ -455,17 +470,38 @@ bool cwProject::sync()
         return false;
     }
 
+    if (emitVersionGuardError(QStringLiteral("sync"))) { return false; }
+
+    // If auth is known-expired, skip the attempt and go straight to reconnect.
+    if (m_syncHealth && m_syncHealth->status().authExpired()) {
+        emit syncAuthFailed();
+        return false;
+    }
+
+    ErrorModel->clear();
+
     auto* provider = m_saveLoad->authProvider();
     const bool needsCreds = m_saveLoad->requiresProviderCredentials();
-    const bool credsLoaded = provider && provider->hasLoadedCredentials();
-    if (provider && needsCreds && !credsLoaded) {
-        emit authProviderCredentialsNeeded();
+    const bool credsLoaded = provider ? provider->hasLoadedCredentials() : true;
+    const QUrl remoteUrl = m_saveLoad->repository() ? m_saveLoad->repository()->remoteUrl() : QUrl();
+    const bool remoteUnknown = provider && remoteUrl.isEmpty();
+
+    // When the remote URL is empty (not yet known), we can't determine
+    // whether credentials are needed. Defer to be safe so the token is
+    // available for HTTPS push/LFS operations once the URL resolves.
+    if (provider && !credsLoaded && (needsCreds || remoteUnknown)) {
         auto* saveLoad = m_saveLoad;
         connect(provider, &cwRemoteAuthProvider::credentialsLoaded,
                 this, [this, saveLoad]() {
                     beginSyncOperation(saveLoad->sync());
                 },
                 Qt::SingleShotConnection);
+        // Emit authProviderCredentialsNeeded so cwRootData can bootstrap
+        // the account coordinator and trigger the keychain read. This must
+        // be emitted AFTER the connect above because the signal handler
+        // (ensureGitHubTokenLoaded) may cause credentialsLoaded to fire
+        // synchronously.
+        emit authProviderCredentialsNeeded();
         return true;
     }
 
@@ -478,7 +514,20 @@ bool cwProject::resetBranchAndReconcile(const QString& refSpec, BranchResetMode 
         return false;
     }
 
+    if (emitVersionGuardError(QStringLiteral("reconcile"))) { return false; }
+
     return beginSyncOperation(m_saveLoad->resetBranchAndReconcile(refSpec, resetMode));
+}
+
+bool cwProject::restoreToCommit(const QString& targetSha)
+{
+    if (!m_saveLoad || syncInProgress()) {
+        return false;
+    }
+
+    if (emitVersionGuardError(QStringLiteral("restore"))) { return false; }
+
+    return beginSyncOperation(m_saveLoad->restoreToCommitAndReconcile(targetSha));
 }
 
 void cwProject::waitForSyncToFinish()
@@ -491,17 +540,17 @@ void cwProject::completeSyncOperation(const Monad::ResultBase& result)
     if (result.hasError()) {
         if (result.errorCodeTo<cwSaveLoad::SyncErrorCode>() == cwSaveLoad::SyncErrorCode::HttpAuthFailed) {
             emit syncAuthFailed();
+            emit syncFinished();
             return;
         }
-        const QString message = result.errorMessage();
-        const bool alreadyReported = ErrorModel
-                                     && ErrorModel->count() > 0
-                                     && ErrorModel->last().message() == message;
-        if (!alreadyReported) {
-            ErrorModel->append(cwError(message, cwError::Warning));
-        }
+        ErrorModel->append(cwError(result.errorMessage(), cwError::Warning));
+        m_syncHealth->refresh();
+        emit syncFinished();
+        return;
     }
+    setModified(false);
     m_syncHealth->refresh();
+    emit syncFinished();
 }
 
 std::optional<cwSaveLoad::SyncReport> cwProject::lastSyncReport() const
@@ -517,13 +566,83 @@ QQuickGit::GitRepository* cwProject::repository() const
     return m_saveLoad->repository();
 }
 
+QString cwProject::rawRemoteUrlString() const
+{
+    auto* repo = repository();
+    if (!repo)
+        return {};
+    QString raw = repo->rawRemoteUrl(QStringLiteral("origin"));
+    if (!raw.isEmpty())
+        return raw;
+    const auto remoteList = repo->remotes();
+    if (!remoteList.isEmpty())
+        return repo->rawRemoteUrl(remoteList.first().name());
+    return {};
+}
+
+QUrl cwProject::remoteUrl() const
+{
+    const QString raw = rawRemoteUrlString();
+    return raw.isEmpty() ? QUrl() : QQuickGit::GitUtilities::fixGitUrl(raw);
+}
+
+QUrl cwProject::remoteBrowseUrl() const
+{
+    const QString raw = rawRemoteUrlString();
+    if (raw.isEmpty())
+        return {};
+    return QQuickGit::GitUtilities::httpsUrlFromRemoteUrl(raw);
+}
+
+QUrl cwProject::shareLink() const
+{
+    const QUrl repoUrl = remoteBrowseUrl();
+    if (repoUrl.isEmpty())
+        return {};
+
+    if (!cwDeepLinkHandler::isHostAllowed(repoUrl.host()))
+        return {};
+
+    QUrl link;
+    link.setScheme(QStringLiteral("https"));
+    link.setHost(QStringLiteral("cavewhere.com"));
+    link.setPath(QStringLiteral("/open"));
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("repo"), repoUrl.toString(QUrl::FullyEncoded));
+    link.setQuery(query);
+    return link;
+}
+
 bool cwProject::saveWillCauseDataLoss() const
 {
     return FileVersion > cwRegionIOTask::protoVersion();
 }
 
+QString cwProject::requiredVersion() const
+{
+    if (saveWillCauseDataLoss()) {
+        return cwRegionIOTask::toVersion(FileVersion);
+    }
+    return QString();
+}
+
+bool cwProject::emitVersionGuardError(const QString& action)
+{
+    if (!saveWillCauseDataLoss()) {
+        return false;
+    }
+    ErrorModel->append(cwError(
+        QStringLiteral("Cannot %1 because this project was created with a newer version of CaveWhere (v%2). "
+                       "Upgrade CaveWhere to %1.")
+            .arg(action, requiredVersion()),
+        cwError::Warning));
+    return true;
+}
+
 bool cwProject::saveAs(QString newFilename)
 {
+    if (emitVersionGuardError(QStringLiteral("save"))) { return false; }
+
     newFilename = cwGlobals::convertFromURL(newFilename);
     if(newFilename.isEmpty()) {
         ErrorModel->append(cwError(QStringLiteral("Save location can't be empty."), cwError::Fatal));
@@ -555,8 +674,8 @@ bool cwProject::saveAs(QString newFilename)
                              BundledArchivePath = newFilename;
                              emit filenameChanged(filename());
                              emit fileTypeChanged();
-                             emit fileSaved();
                              m_syncHealth->refresh();
+                             QMetaObject::invokeMethod(this, [this]() { emit fileSaved(); }, Qt::QueuedConnection);
                          })
                          .future();
         return true;
@@ -593,8 +712,21 @@ bool cwProject::saveAs(QString newFilename)
     emit filenameChanged(filename());
     emit fileTypeChanged();
 
-    emit fileSaved();
-    m_syncHealth->refresh();
+    // Flush pending file writes and commit asynchronously so all project data is tracked
+    // in git before fileSaved fires. Without a commit all files are untracked, and a later
+    // discardChanges() (git reset --hard HEAD + cleanUntracked) would erase the entire project.
+    // SaveFuture tracks the commit so waitSaveToFinish() / shutdown waits for it.
+    auto commitFuture = m_saveLoad->enqueueFlushAndCommit();
+    SaveFuture = AsyncFuture::observe(commitFuture)
+        .context(this, [this, commitFuture]() {
+            const auto result = commitFuture.result();
+            if (result.hasError()) {
+                ErrorModel->append(cwError(result.errorMessage(), cwError::Fatal));
+            }
+            m_syncHealth->refresh();
+            QMetaObject::invokeMethod(this, [this]() { emit fileSaved(); }, Qt::QueuedConnection);
+        })
+        .future();
     return true;
 }
 
@@ -604,6 +736,8 @@ bool cwProject::deleteTemporaryProject()
         ErrorModel->append(cwError(QStringLiteral("Current project is not temporary."), cwError::Warning));
         return false;
     }
+
+    if (emitVersionGuardError(QStringLiteral("delete this project"))) { return false; }
 
     auto result = m_saveLoad->deleteTemporaryProject();
     if(result.hasError()) {
@@ -765,11 +899,28 @@ QFuture<ResultBase> cwProject::loadHelperImpl(const QString& filename, LoadParam
                     LoadedFromBundledArchive = false;
                     ConvertedFromSqlite = false;
                     BundledArchivePath.clear();
-                    FileVersion = cwRegionIOTask::protoVersion();
+                    FileVersion = m_saveLoad->lastLoadMaxFileVersion() > 0
+                        ? m_saveLoad->lastLoadMaxFileVersion()
+                        : cwRegionIOTask::protoVersion();
                     emit fileTypeChanged();
                     if (!suppressLoadedEmit) {
                         emit loaded();
                     }
+
+                    // Surface any load warnings/errors (e.g. newer-version entities)
+                    const auto loadErrors = m_saveLoad->lastLoadErrors();
+                    if (!loadErrors.isEmpty()) {
+                        ErrorModel->append(loadErrors);
+                    }
+
+                    // Check for missing LFS files; notify the user if any are found.
+                    const QDir projectDir = QFileInfo(this->filename()).absoluteDir();
+                    auto missingFuture = QQuickGit::GitRepository::hasMissingLfsFiles(projectDir, this);
+                    AsyncFuture::observe(missingFuture).context(this, [this, missingFuture]() {
+                        if (missingFuture.result()) {
+                            emit lfsFilesNeedSync();
+                        }
+                    });
 
                     // After loading, check git status on a background thread.
                     // If uncommitted changes exist (e.g. from a prior force-quit
@@ -1162,14 +1313,10 @@ void cwProject::waitSaveToFinish()
 {
     waitForSyncToFinish();
     m_saveLoad->waitForFinished();
-    if (SaveFuture.isRunning() || !SaveFuture.isFinished()) {
-        AsyncFuture::waitForFinished(SaveFuture);
-    }
+    AsyncFuture::waitForFinished(SaveFuture);
 
     for (const auto& future : std::as_const(RetiringSaveFutures)) {
-        if (future.isRunning() || !future.isFinished()) {
-            AsyncFuture::waitForFinished(future);
-        }
+        AsyncFuture::waitForFinished(future);
     }
     RetiringSaveFutures.clear();
 }
@@ -1244,6 +1391,7 @@ void cwProject::addImages(QList<QUrl> noteImagePaths,
                           std::function<QDir()> destinationDirResolver,
                           std::function<void (QList<cwImage>)> outputCallBackFunc)
 {
+    if (emitVersionGuardError(QStringLiteral("add images"))) { return; }
     m_saveLoad->addImages(noteImagePaths, std::move(destinationDirResolver), std::move(outputCallBackFunc));
 }
 
@@ -1256,6 +1404,7 @@ void cwProject::addFiles(QList<QUrl> filePath,
                          std::function<QDir()> destinationDirResolver,
                          std::function<void (QList<QString>)> outputCallBackFunc)
 {
+    if (emitVersionGuardError(QStringLiteral("add files"))) { return; }
     m_saveLoad->addFiles(filePath, std::move(destinationDirResolver), std::move(outputCallBackFunc));
 }
 
@@ -1455,6 +1604,22 @@ cwProject::FileType cwProject::projectType(const QString& filename) const
     return SqliteFileType;
 }
 
+void cwProject::safeCommitAll(const QString& subject, const QString& description)
+{
+    if (!repository()) {
+        errorModel()->append(cwError(QStringLiteral("Commit failed: no repository open"),
+                                     cwError::Fatal));
+        return;
+    }
+    try {
+        repository()->commitAll(subject, description);
+        repository()->checkStatus();
+    } catch (const std::exception& e) {
+        errorModel()->append(cwError(QString("Commit failed: %1").arg(e.what()),
+                                     cwError::Fatal));
+    }
+}
+
 cwResultDir cwProject::repositoryDir(const QUrl& localDir, const QString& name) const
 {
     return cwSaveLoad::repositoryDir(localDir, name);
@@ -1503,7 +1668,7 @@ bool cwProject::isTemporaryProject() const {
     if (LoadedFromBundledArchive && !BundledArchivePath.isEmpty() && !ConvertedFromSqlite) {
         return false;
     }
-    return m_saveLoad->isTemporaryProject() || SQLiteTempProject || saveWillCauseDataLoss();
+    return m_saveLoad->isTemporaryProject() || SQLiteTempProject;
 }
 
 QString cwProject::filename() const {
@@ -1587,8 +1752,9 @@ QString cwProject::absolutePath(const cwNote* note) const
     }
 
     const auto image = note->image();
-    if(image.mode() == cwImage::Mode::Path && !image.path().isEmpty()) {
-        return m_saveLoad->absolutePath(note, image.path());
+    const QString imagePath = image.path();
+    if(image.mode() == cwImage::Mode::Path && !imagePath.isEmpty()) {
+        return m_saveLoad->absolutePath(note, imagePath);
     }
 
     return QString();
@@ -1600,12 +1766,14 @@ QString cwProject::absolutePath(const cwNoteLiDAR* noteLiDAR) const
         return QString();
     }
 
-    if(!noteLiDAR->filename().isEmpty()) {
-        return m_saveLoad->absolutePath(noteLiDAR, noteLiDAR->filename());
+    const QString lidarFilename = noteLiDAR->filename();
+    if(!lidarFilename.isEmpty()) {
+        return m_saveLoad->absolutePath(noteLiDAR, lidarFilename);
     }
 
-    if(!noteLiDAR->iconImagePath().isEmpty()) {
-        return m_saveLoad->absolutePath(noteLiDAR, noteLiDAR->iconImagePath());
+    const QString iconPath = noteLiDAR->iconImagePath();
+    if(!iconPath.isEmpty()) {
+        return m_saveLoad->absolutePath(noteLiDAR, iconPath);
     }
 
     return QString();

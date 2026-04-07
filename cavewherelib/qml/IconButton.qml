@@ -63,7 +63,7 @@ QQ.Rectangle {
         }
     }
 
-    Text {
+    QC.Label {
         id: label
 //        anchors.bottom: parent.bottom
         anchors.top: iconNormal.bottom

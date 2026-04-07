@@ -5,6 +5,8 @@
 #include "cwNoteLiDARTransformation.h"
 #include "cwNoteTransformCalculator.h"
 #include "cwKeywordModel.h"
+#include "cwNameUtils.h"
+#include "cwSurveyNoteLiDARModel.h"
 
 //Qt includes
 #include <QMetaType>
@@ -35,6 +37,30 @@ cwNoteLiDAR::cwNoteLiDAR(QObject* parent)
     connect(this, &cwNoteLiDAR::autoCalculateNorthChanged, this, [this]() {
         updateNoteTransformion();
     });
+}
+
+void cwNoteLiDAR::setName(const QString& name)
+{
+    if (m_name.value() == name) {
+        return;
+    }
+
+    if (!validateName(name).isEmpty()) {
+        return;
+    }
+
+    if (auto* trip = parentTrip()) {
+        trip->notesLiDAR()->noteNameSet().rename(m_name.value(), name);
+    }
+
+    m_name = name;
+}
+
+QString cwNoteLiDAR::validateName(const QString& proposedName) const
+{
+    const auto* nameSet = parentTrip() ? &parentTrip()->notesLiDAR()->noteNameSet() : nullptr;
+    return cwNameUtils::validateEntityName(m_name.value(), proposedName, nameSet,
+                                           QStringLiteral("LiDAR note"));
 }
 
 QString cwNoteLiDAR::filename() const {

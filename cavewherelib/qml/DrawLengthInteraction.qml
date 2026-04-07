@@ -81,10 +81,9 @@ PanZoomInteraction {
         content: QQ.Row {
             id: row
             spacing: 3
-            Text {
+            QC.Label {
                 id: lengthText
                 anchors.verticalCenter: parent.verticalCenter
-                color: Theme.text
             }
 
             UnitValueInput {

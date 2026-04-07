@@ -17,6 +17,7 @@ class cwCavingRegion;
 #include "cwUndoer.h"
 #include "cwStationPositionLookup.h"
 #include "cwGlobals.h"
+#include "cwSanitizedNameSet.h"
 #include "cwSurveyNetwork.h"
 #include "cwCaveData.h"
 
@@ -56,6 +57,7 @@ public:
 
     QString name() const;
     void setName(QString name);
+    Q_INVOKABLE QString validateName(const QString& proposedName) const;
     QUuid id() const;
     void setId(const QUuid& id);
 
@@ -74,6 +76,9 @@ public:
     Q_INVOKABLE void clearTrips();
     Q_INVOKABLE void addTrip(cwTrip* trip = nullptr);
     int indexOf(cwTrip* trip) const;
+
+    cwSanitizedNameSet& tripNameSet() { return m_tripNames; }
+    const cwSanitizedNameSet& tripNameSet() const { return m_tripNames; }
 
     cwCavingRegion* parentRegion() const;
 
@@ -123,6 +128,7 @@ private:
     QUuid Id;
 
     cwSurveyNetwork Network;
+    cwSanitizedNameSet m_tripNames;
 
     cwCave& Copy(const cwCave& object);
     void addTripNullHelper();

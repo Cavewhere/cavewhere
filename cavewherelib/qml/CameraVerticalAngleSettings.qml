@@ -28,7 +28,7 @@ ColumnLayout {
             }
         }
 
-        Text {
+        QC.Label {
             text: "°"
         }
 

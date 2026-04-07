@@ -48,11 +48,11 @@ QQ.ListView {
             anchors.left: parent.left
             anchors.right: parent.right
 
-            Text {
+            QC.Label {
                 id: nameText
                 text: delegateId.nameRole
                 Layout.fillWidth: true
-                elide: Text.ElideRight
+                elide: QQ.Text.ElideRight
             }
 
             QC.ProgressBar {

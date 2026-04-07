@@ -59,7 +59,7 @@ jobs:
         uses: jurplel/install-qt-action@v4
         with:
           aqtversion: '==3.1.*'
-          version: '6.10.1'
+          version: '6.11.0'
           host: 'linux'
           target: 'desktop'
           arch: ${{ matrix.qt_arch }}
@@ -99,7 +99,7 @@ jobs:
         run: |
           cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_PDF=OFF \
           -DBUILD_TESTING=OFF \
-          -DCMAKE_PREFIX_PATH=${{ github.workspace }}/Qt/6.10.1/${{ matrix.qt_dir }}/lib \
+          -DCMAKE_PREFIX_PATH=${{ github.workspace }}/Qt/6.11.0/${{ matrix.qt_dir }}/lib \
           -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake -S . -B build
 
       - name: Build AppImage

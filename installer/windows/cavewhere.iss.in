@@ -54,6 +54,9 @@ Root: HKLM; Subkey: "Software\Classes\.cw"; ValueType: string; ValueName: ""; Va
 Root: HKLM; Subkey: "Software\Classes\CaveWhereProjectFile"; ValueType: string; ValueName: ""; ValueData: "CaveWhere File"; Flags: uninsdeletekey
 Root: HKLM; Subkey: "Software\Classes\CaveWhereProjectFile\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\CaveWhere.EXE,0"
 Root: HKLM; Subkey: "Software\Classes\CaveWhereProjectFile\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\CaveWhere.EXE"" ""%1"""
+Root: HKCR; Subkey: "cavewhere";                         ValueType: string; ValueName: ""; ValueData: "URL:CaveWhere Protocol"; Flags: uninsdeletekey
+Root: HKCR; Subkey: "cavewhere";                         ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKCR; Subkey: "cavewhere\shell\open\command";      ValueType: string; ValueName: ""; ValueData: """{app}\CaveWhere.exe"" ""%1"""
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent

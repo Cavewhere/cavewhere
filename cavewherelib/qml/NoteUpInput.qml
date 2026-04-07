@@ -70,9 +70,9 @@ QQ.Item {
             onFinishedEditting: ( { } )
         }
 
-        Text {
+        QC.Label {
             id: unit
-            textFormat: Text.RichText
+            textFormat: QC.Label.RichText
             text: "&deg"
         }
     }

@@ -49,7 +49,7 @@ public:
     void remove(const cwError& error);
     void insert(int index, const cwError& error);
     void insert(int index, const QList<cwError>& errors);
-    cwError last() const { return m_errors.last(); }
+    Q_INVOKABLE cwError last() const { return m_errors.last(); }
 
     int rowCount(const QModelIndex &parent) const;
     QVariant data(const QModelIndex &index, int role) const;

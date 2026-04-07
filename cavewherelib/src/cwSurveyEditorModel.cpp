@@ -382,10 +382,8 @@ QVariant cwSurveyEditorModel::data(const QModelIndex& index, int role) const
             return data(cwSurveyChunk::ShotClinoRole, [&]() { return chunk->shot(shotIndex).clino(); });
         case ShotBackClinoRole:
             return data(cwSurveyChunk::ShotBackClinoRole, [&]() { return chunk->shot(shotIndex).backClino(); });
-        case ShotCalibrationRole: {
-            cwTripCalibration* calibration = chunk->calibrations().value(shotIndex);
-            return QVariant::fromValue(calibration);
-        }
+        case ShotCalibrationRole:
+            return QVariant::fromValue(static_cast<cwTripCalibration*>(nullptr));
         default:
             return QVariant();
         }

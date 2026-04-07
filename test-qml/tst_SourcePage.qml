@@ -268,6 +268,46 @@ MainWindowTest {
             compare(firstDelegate.pathRole, filename)
         }
 
+        function test_openRecentItem_asksToSave_whenProjectModified() {
+            // Save a project so it appears in the recent list.
+            const tmpPath = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
+            const projectPath = tmpPath + "/source-ask-save.cwproj"
+            verify(RootData.project.saveAs(projectPath))
+            TestHelper.waitForProjectSaveToFinish(RootData.project)
+
+            // Make the project modified.
+            RootData.region.addCave()
+            tryVerify(() => RootData.project.modified, 3000,
+                      "project should become modified after adding a cave")
+
+            RootData.pageSelectionModel.currentPageAddress = "Source"
+            waitForRendering(mainWindow)
+
+            let repoListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->repositoryListView")
+            tryVerify(() => repoListView.count > 0, 3000, "recent list should have an entry")
+            waitForRendering(repoListView)
+
+            // Click the recent item's name link.
+            let linkText = findChild(mainWindow, "repoLinkText_0")
+            verify(linkText !== null, "repoLinkText_0 not found")
+            mouseClick(linkText)
+
+            // AskToSaveDialog should appear.
+            let askToSaveDialog = findChild(rootId, "mainWindowTestAskToSaveDialog")
+            verify(askToSaveDialog !== null, "mainWindowTestAskToSaveDialog not found")
+            tryVerify(() => {
+                return askToSaveDialog._dialog !== null
+                       && askToSaveDialog._dialog.askToSaveDialog.visible
+            }, 5000, "AskToSaveDialog should appear when opening a recent item with unsaved changes")
+
+            // Discard and verify the project loads.
+            askToSaveDialog._dialog.askToSaveDialog.discarded()
+
+            tryVerify(() => {
+                return RootData.pageSelectionModel.currentPageAddress === "View"
+            }, 10000, "should navigate to View after discarding")
+        }
+
         function test_openSavedBundle_showsBundlePathInsteadOfTempDirectory() {
             RootData.pageSelectionModel.currentPageAddress = "Source"
             waitForRendering(mainWindow);

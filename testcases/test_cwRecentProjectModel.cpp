@@ -391,9 +391,10 @@ TEST_CASE("cwRecentProjectModel addRepositoryFromProjectFile stores saved projec
     settings.clear();
 
     cwRecentProjectModel model;
-    auto project = std::make_unique<cwProject>();
-    cwFutureManagerModel futureManagerModel;
-    project->setFutureManagerToken(futureManagerModel.token());
+    auto rootData = std::make_unique<cwRootData>();
+    rootData->account()->setName(QStringLiteral("Test User"));
+    rootData->account()->setEmail(QStringLiteral("test@example.com"));
+    auto* project = rootData->project();
 
     REQUIRE(model.rowCount() == 0);
 
@@ -404,7 +405,11 @@ TEST_CASE("cwRecentProjectModel addRepositoryFromProjectFile stores saved projec
     bool success = project->saveAs(destinationBase);
     CHECK(success);
     project->waitSaveToFinish();
+    rootData->futureManagerModel()->waitForFinished();
 
+    for (int i = 0; i < project->errorModel()->count(); ++i) {
+        UNSCOPED_INFO("SaveAs error[" << i << "]: " << project->errorModel()->at(i).message().toStdString());
+    }
     CHECK(project->errorModel()->count() == 0);
 
     const auto addResult = model.addRepositoryFromProjectFile(QUrl::fromLocalFile(project->filename()));

@@ -485,12 +485,6 @@ ResultBase cwSurvexExporterRule::writeChunk(QTextStream& stream,
                        .arg(backClino, textPadding);
         }
 
-        //Add chunk calibrations
-        if(chunk.calibrations.contains(i)) {
-            cwTripCalibrationData calibration = chunk.calibrations.value(i);
-            writeCalibrations(stream, calibration);
-        }
-
         //Distance should be excluded, mark as duplicate
         if(!shot.isDistanceIncluded()) {
             stream << "*flags duplicate" << Qt::endl;
@@ -530,6 +524,7 @@ void cwSurvexExporterRule::fixFirstStation(QTextStream &stream, const cwSurveyDa
             const cwSurveyDataArtifact::SurveyChunk& firstChunk = chunks.first();
             if(!firstChunk.stations.isEmpty()) {
                 const cwStation& station = firstChunk.stations.first();
+                if(!station.isValid()) { return; }
                 stream << "*fix " << station.name() << " " << 0 << " " << 0 << " " << 0 << Qt::endl;
             }
         }

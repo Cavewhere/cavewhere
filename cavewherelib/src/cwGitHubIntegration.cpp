@@ -24,7 +24,6 @@ using namespace Qt::StringLiterals;
 namespace {
 static constexpr auto GitHubDeviceClientIdEnv = "CAVEWHERE_GITHUB_CLIENT_ID";
 static constexpr auto DefaultGitHubClientId = "Ov23ctOCCgOdD9y2mSs9";
-static const QString GitHubApiBase = QStringLiteral("https://api.github.com");
 }
 
 cwGitHubIntegration::cwGitHubIntegration(cwRemoteCredentialStore* credentialStore,
@@ -155,7 +154,7 @@ void cwGitHubIntegration::refreshRepositories()
     }
 
     setBusy(true);
-    QUrl url(GitHubApiBase + QStringLiteral("/user/repos"));
+    QUrl url(m_apiBaseUrl + QStringLiteral("/user/repos"));
     QUrlQuery query;
     query.addQueryItem(QStringLiteral("per_page"), QStringLiteral("100"));
     url.setQuery(query);
@@ -318,6 +317,7 @@ void cwGitHubIntegration::handleAccessToken(const cwGitHubDeviceAuth::AccessToke
     }
 
     m_accessToken = result.accessToken;
+    m_tokenLoadedFromKeychain = false;
     emit accessTokenChanged();
     setAuthState(AuthState::Authorized);
     emit authorizationSucceeded();
@@ -394,14 +394,11 @@ void cwGitHubIntegration::loadStoredAccessToken()
                                        [this, accountId](const cwRemoteCredentialStore::ReadResult& result) {
         m_loadingStoredToken = false;
         m_hasLoadedStoredToken = true;
-        emit credentialsLoaded();
 
-        if (accountId != resolveActiveGitHubAccountId()) {
-            return;
-        }
-
-        if (result.success && result.found && !result.value.isEmpty()) {
+        if (accountId == resolveActiveGitHubAccountId()
+            && result.success && result.found && !result.value.isEmpty()) {
             m_accessToken = result.value;
+            m_tokenLoadedFromKeychain = true;
             emit accessTokenChanged();
             setAuthState(AuthState::Authorized);
             emit authorizationSucceeded();
@@ -412,8 +409,9 @@ void cwGitHubIntegration::loadStoredAccessToken()
                 fetchUserProfile();
                 refreshRepositories();
             }
-            return;
         }
+
+        emit credentialsLoaded();
     });
 }
 
@@ -423,7 +421,7 @@ void cwGitHubIntegration::fetchUserProfile()
         return;
     }
 
-    QNetworkRequest request(QUrl(GitHubApiBase + QStringLiteral("/user")));
+    QNetworkRequest request(QUrl(m_apiBaseUrl + QStringLiteral("/user")));
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
     request.setRawHeader("Accept", "application/vnd.github+json");
     request.setRawHeader("User-Agent", QByteArrayLiteral("CaveWhere"));
@@ -569,6 +567,83 @@ QByteArray cwGitHubIntegration::lfsAuthorizationHeader() const
 
     const QByteArray credentials = QByteArrayLiteral("x-access-token:") + m_accessToken.toUtf8();
     return QByteArrayLiteral("Basic ") + credentials.toBase64();
+}
+
+void cwGitHubIntegration::setApiBaseUrl(const QString& url)
+{
+    m_apiBaseUrl = url;
+}
+
+void cwGitHubIntegration::createRepository(const QString& name, bool isPrivate, const QString& org)
+{
+    const QUrl url(m_apiBaseUrl
+                   + (org.isEmpty()
+                      ? QStringLiteral("/user/repos")
+                      : QStringLiteral("/orgs/%1/repos").arg(org)));
+
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    request.setRawHeader("Accept", "application/vnd.github+json");
+    request.setRawHeader("User-Agent", QByteArrayLiteral("CaveWhere"));
+    request.setRawHeader("Authorization", authorizationHeader());
+
+    const QJsonObject body{
+        {QStringLiteral("name"), name},
+        {QStringLiteral("private"), isPrivate},
+        {QStringLiteral("auto_init"), false}
+    };
+    QNetworkReply* reply = m_network.post(request, QJsonDocument(body).toJson());
+    QObject::connect(reply, &QNetworkReply::finished, this, [this, reply, name]() {
+        handleCreateRepositoryReply(reply, name);
+    });
+}
+
+void cwGitHubIntegration::handleCreateRepositoryReply(QNetworkReply* reply, const QString& repoName)
+{
+    QScopedPointer<QNetworkReply, QScopedPointerDeleteLater> guard(reply);
+
+    const int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+
+    const QByteArray data = reply->readAll();
+    QJsonParseError parseError{};
+    const QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
+    const QJsonObject obj = (parseError.error == QJsonParseError::NoError && doc.isObject())
+                                ? doc.object()
+                                : QJsonObject{};
+    const QString githubMessage = obj.value(QStringLiteral("message")).toString();
+
+    if (statusCode == 401 || statusCode == 403) {
+        invalidateActiveAccountToken(githubMessage.isEmpty()
+                                         ? tr("GitHub session expired. Please sign in again.")
+                                         : githubMessage);
+        emit repositoryCreationFailed(m_errorMessage);
+        return;
+    }
+
+    if (statusCode == 422) {
+        const QJsonArray errors = obj.value(QStringLiteral("errors")).toArray();
+        const QString detail = errors.isEmpty()
+                                   ? githubMessage
+                                   : errors.first().toObject().value(QStringLiteral("message")).toString();
+        emit repositoryCreationFailed(
+            tr("Repository name '%1' is already taken or invalid: %2").arg(repoName, detail));
+        return;
+    }
+
+    if (statusCode < 200 || statusCode >= 300) {
+        emit repositoryCreationFailed(
+            tr("GitHub returned an error (%1): %2").arg(statusCode).arg(
+                githubMessage.isEmpty() ? reply->errorString() : githubMessage));
+        return;
+    }
+
+    cwGitHubRepositoryItem repo;
+    repo.name = obj.value(QStringLiteral("name")).toString();
+    repo.cloneUrl = obj.value(QStringLiteral("clone_url")).toString();
+    repo.sshUrl = obj.value(QStringLiteral("ssh_url")).toString();
+    repo.htmlUrl = obj.value(QStringLiteral("html_url")).toString();
+    repo.isPrivate = obj.value(QStringLiteral("private")).toBool();
+    emit repositoryCreated(repo);
 }
 
 QString cwGitHubIntegration::resolveActiveGitHubAccountId() const

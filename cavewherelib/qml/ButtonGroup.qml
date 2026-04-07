@@ -58,7 +58,7 @@ QQ.Item {
         color: Theme.surface
         border.width: 1
 
-        Text {
+        QC.Label {
             id: groupText
 
             anchors.horizontalCenter: parent.horizontalCenter

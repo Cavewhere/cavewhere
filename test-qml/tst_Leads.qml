@@ -90,6 +90,12 @@ MainWindowTest {
 
             let addCave = ObjectFinder.findObjectByChain(mainWindow, "rootId->dataMainPage->addButton")
             mouseClick(addCave)
+            wait(100)
+
+            if (RootData.pageView.currentPageItem.objectName !== "cavePage") {
+                // Retry the click if the first one didn't register
+                mouseClick(addCave)
+            }
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "cavePage" });
 
@@ -235,6 +241,77 @@ MainWindowTest {
             compare(widthDisplay.text, "3");
             compare(heightDisplay.text, "2");
             compare(descriptionDisplay.text, "New lead");
+        }
+
+        // Regression test for GitHub issue #368:
+        // When a lead and a scrap outline point overlap, clicking selects both
+        // via their TapHandlers. The outline point's deselection cascade
+        // (through cwSelectionManager) incorrectly clears the lead's selection,
+        // so the lead info editor never appears.
+        function test_clickingLeadInCarpetShowsInfo() {
+            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+            RootData.futureManagerModel.waitForFinished();
+
+            // Navigate to the trip page
+            let cave = RootData.region.cave(0);
+            let trip = cave.trip(0);
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + cave.name + "/Trip=" + trip.name;
+            tryVerify(() => RootData.pageView.currentPageItem.objectName === "tripPage");
+
+            // Enter carpet mode
+            let carpetButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId");
+            mouseClick(carpetButton);
+            wait(300);
+
+            let noteArea = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea");
+            let scrapView = findChild(noteArea, "scrapViewId");
+            verify(scrapView !== null);
+
+            // Find a scrap with leads
+            let scrapWithLeads = -1;
+            for (let i = 0; i < scrapView.count; i++) {
+                scrapView.selectScrapIndex = i;
+                let item = scrapView.selectedScrapItem;
+                if (item && item.scrap && item.scrap.numberOfLeads() > 0) {
+                    scrapWithLeads = i;
+                    break;
+                }
+            }
+            verify(scrapWithLeads >= 0, "Should find a scrap with leads");
+
+            let selectedScrap = scrapView.selectedScrapItem;
+            let leadView = selectedScrap.leadView;
+            let outlinePointView = selectedScrap.outlinePointView;
+            verify(leadView.count > 0);
+            verify(outlinePointView.count > 0);
+
+            // Get references to a lead and an outline point
+            leadView.selectedItemIndex = 0;
+            let noteLead = leadView.selectedItem();
+            verify(noteLead !== null);
+            leadView.selectedItemIndex = -1;
+
+            outlinePointView.selectedItemIndex = 0;
+            let outlinePoint = outlinePointView.selectedItem();
+            verify(outlinePoint !== null);
+            outlinePointView.selectedItemIndex = -1;
+            wait(50);
+
+            let editor = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->leadEditor");
+            verify(!editor.visible, "Lead editor should start hidden");
+
+            // Simulate overlapping click: both TapHandlers fire on the same click.
+            // The outline point's select() fires first, then the lead's select().
+            // Issue #368: the lead's selection is cleared by the outline point's
+            // deselection cascade through cwSelectionManager.
+            outlinePoint.select();
+            noteLead.select();
+
+            verify(noteLead.selected,
+                   "Lead should be selected after overlapping select (issue #368)");
+            verify(leadView.selectedItemIndex >= 0,
+                   "leadView.selectedItemIndex should be >= 0 after overlapping select (issue #368)");
+            tryVerify(() => editor.visible);
         }
     }
 }

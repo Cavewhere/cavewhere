@@ -10,6 +10,9 @@
 #define TEST_HELPER
 
 //Qt includes
+#include <QCoreApplication>
+#include <QElapsedTimer>
+#include <QEventLoop>
 #include <QVector3D>
 #include <QString>
 #include <QVariant>
@@ -38,9 +41,18 @@
 #include "ProjectFilenameTestHelper.h"
 
 //Std includes
+#include <functional>
 #include <iostream>
 
-
+inline bool waitUntil(const std::function<bool()>& condition, int timeoutMs = 5000)
+{
+    QElapsedTimer timer;
+    timer.start();
+    while (!condition() && timer.elapsed() < timeoutMs) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+    }
+    return condition();
+}
 
 inline std::ostream& operator << ( std::ostream& os, QVector3D const& value ) {
     os << "(" << value.x() << ", " << value.y() << ", " << value.z() << ")";

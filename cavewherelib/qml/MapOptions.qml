@@ -137,7 +137,7 @@ ColumnLayout {
 
     ColumnLayout {
         RowLayout {
-            Text {
+            QC.Label {
                 id: memoryRequiredId
 
                 function formatMemory(memoryMB) {
@@ -170,7 +170,7 @@ ColumnLayout {
             text: "The amout of RAM that CaveWhere requires to save image. Using more memory than what's on computer my cause your computer to hang! CaveWhere may temporarily use equal or double the amount of disk space required by the memory required";
         }
 
-        Text {
+        QC.Label {
             visible: mapOptionsId.screenCaptureManager.memoryLimit > 0.0
             text: "Memory Limit: " + memoryRequiredId.formatMemory(mapOptionsId.screenCaptureManager.memoryLimit);
         }
@@ -229,7 +229,7 @@ ColumnLayout {
                     }
 
                     RowLayout {
-                        Text {
+                        QC.Label {
                             text: "Width"
                         }
 
@@ -244,12 +244,12 @@ ColumnLayout {
                             }
                         }
 
-                        Text {
+                        QC.Label {
                             text: "in"
                             font.italic: true
                         }
 
-                        Text {
+                        QC.Label {
                             text: "Height"
                         }
 
@@ -263,14 +263,14 @@ ColumnLayout {
                             }
                         }
 
-                        Text {
+                        QC.Label {
                             text: "in"
                             font.italic: true
                         }
                     }
 
                     RowLayout {
-                        Text {
+                        QC.Label {
                             text: "Resolution"
                         }
 
@@ -293,7 +293,7 @@ ColumnLayout {
                             }
                         }
 
-                        Text {
+                        QC.Label {
                             text: "DPI"
                             font.italic: true
                         }
@@ -320,7 +320,7 @@ ColumnLayout {
 
                 RowLayout {
                     id: portraitLandscrapSwitch
-                    Text {
+                    QC.Label {
                         text: "Portrait"
                     }
 
@@ -333,7 +333,7 @@ ColumnLayout {
                         }
                     }
 
-                    Text {
+                    QC.Label {
                         text: "Landscape"
                     }
                 }

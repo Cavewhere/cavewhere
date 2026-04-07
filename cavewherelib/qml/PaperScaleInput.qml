@@ -71,7 +71,7 @@ QQ.Item {
                 }
             }
 
-            Text {
+            QC.Label {
                 text: "="
             }
 
@@ -91,17 +91,17 @@ QQ.Item {
         }
 
 
-        Text {
+        QC.Label {
             text: "="
         }
 
-        Text {
+        QC.Label {
             id: scaleText
             visible: !errorText.visible
             text: ""
         }
 
-        Text {
+        QC.Label {
             id: errorText
             color: Theme.danger
             visible: false

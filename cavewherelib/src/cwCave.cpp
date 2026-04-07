@@ -13,6 +13,7 @@
 #include "cwErrorModel.h"
 #include "cwCavingRegion.h"
 #include "cwData.h"
+#include "cwNameUtils.h"
 
 //Qt includes
 #include <QThread>
@@ -109,9 +110,20 @@ cwCave::~cwCave() {
   \brief Sets the name of the cwCave
   */
 void cwCave::setName(QString name) {
-    if(Name != name && !name.isEmpty()) {
-        pushUndo(new NameCommand(this, name));
+    if(Name == name) {
+        return;
     }
+    if (!validateName(name).isEmpty()) {
+        return;
+    }
+    pushUndo(new NameCommand(this, name));
+}
+
+QString cwCave::validateName(const QString& proposedName) const
+{
+    const auto* nameSet = parentRegion() ? &parentRegion()->caveNameSet() : nullptr;
+    return cwNameUtils::validateEntityName(Name, proposedName, nameSet,
+                                           QStringLiteral("cave"));
 }
 
 void cwCave::setId(const QUuid& id)
@@ -168,6 +180,13 @@ void cwCave::insertTrip(int i, cwTrip* trip) {
     if(parentCave != nullptr) {
         int index = parentCave->Trips.indexOf(trip);
         parentCave->removeTrip(index);
+    }
+
+    // Auto-rename to avoid filesystem path collisions in .cwproj layout.
+    // Trip has no parentCave yet, so setName()'s guard won't fire.
+    const QString deduped = m_tripNames.deduplicateName(trip->name());
+    if (deduped != trip->name()) {
+        trip->setName(deduped);
     }
 
     pushUndo(new InsertTripCommand(this, trip, i));
@@ -270,14 +289,24 @@ cwCave::NameCommand::NameCommand(cwCave* cave, QString name) {
 }
 
 void cwCave::NameCommand::redo() {
-    cwCave* cave = CavePtr; //.data();
+    cwCave* cave = CavePtr;
+    if (auto* region = cave->parentRegion()) {
+        if (region->caves().contains(cave)) {
+            region->caveNameSet().rename(oldName, newName);
+        }
+    }
     cave->Name = newName;
     emit cave->nameChanged();
 }
 
 
 void cwCave::NameCommand::undo() {
-    cwCave* cave = CavePtr; //.data();
+    cwCave* cave = CavePtr;
+    if (auto* region = cave->parentRegion()) {
+        if (region->caves().contains(cave)) {
+            region->caveNameSet().rename(newName, oldName);
+        }
+    }
     cave->Name = oldName;
     emit cave->nameChanged();
 }
@@ -307,6 +336,7 @@ void cwCave::InsertRemoveTrip::insertTrips() {
     for(int i = 0; i < Trips.size(); i++) {
         int index = BeginIndex + i;
         cave->Trips.insert(index, Trips[i]);
+        cave->m_tripNames.insert(Trips[i]->name());
         Trips[i]->setParentCave(cave);
         Trips[i]->errorModel()->setParentModel(cave->errorModel());
     }
@@ -325,6 +355,7 @@ void cwCave::InsertRemoveTrip::removeTrips() {
     //Remove all the trips from the back to the front
     for(int i = Trips.size() - 1; i >= 0; i--) {
         int index = BeginIndex + i;
+        cave->m_tripNames.remove(cave->Trips.at(index)->name());
         cave->Trips.removeAt(index);
 
         //Do NOT uncomment, qml engine may garbage collect objects that aren't parented, and can cause double free problem
@@ -423,7 +454,9 @@ cwCaveData cwCave::data() const
         Name,
         cwData::toDataList<cwTripData>(Trips),
         StationPositionModel,
-        Id
+        Id,
+        static_cast<cwUnits::LengthUnit>(length()->unit()),
+        static_cast<cwUnits::LengthUnit>(depth()->unit())
     };
 }
 
@@ -431,6 +464,8 @@ void cwCave::setData(const cwCaveData &data)
 {
     setName(data.name);
     setId(data.id);
+    length()->setUnit(data.lengthUnit);
+    depth()->setUnit(data.depthUnit);
 
     clearTrips();
 

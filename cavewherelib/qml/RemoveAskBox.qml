@@ -61,7 +61,7 @@ ShadowRectangle {
         y: 3
         spacing: 3
 
-        Text {
+        QC.Label {
             anchors.verticalCenter: parent.verticalCenter
             text: "Remove <b>" + removeChallenge.removeName + "</b>?"
             visible: removeChallenge.removeName.length !== 0

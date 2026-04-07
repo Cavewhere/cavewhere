@@ -9,14 +9,13 @@ import QtQuick as QQ
 import QtQuick.Controls as QC
 import cavewherelib
 
-Text {
+QC.Label {
     id: label
 
     property HelpArea helpArea
 
 //    font.bold: true
     font.underline: false
-    color: Theme.text
 
     QQ.MouseArea {
         id: textMouseArea

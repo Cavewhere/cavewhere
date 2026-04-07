@@ -2,8 +2,9 @@
 #include "cwSettings.h"
 #include "cwJobSettings.h"
 #include "cwPDFSettings.h"
+#include "cwFontSettings.h"
 
-//Our inculdes
+//Qt includes
 #include <QCoreApplication>
 #include <QLocale>
 
@@ -25,6 +26,7 @@ void cwSettings::initialize()
     //Keep these here because cwOpenGLSetting can be deallocated in cleanup()
     cwJobSettings::initialize();
     cwPDFSettings::initialize();
+    cwFontSettings::initialize();
 }
 
 cwSettings *cwSettings::instance()
@@ -38,4 +40,8 @@ cwJobSettings* cwSettings::jobSettings() const {
 
 cwPDFSettings* cwSettings::pdfSettings() const {
     return cwPDFSettings::instance();
+}
+
+cwFontSettings* cwSettings::fontSettings() const {
+    return cwFontSettings::instance();
 }

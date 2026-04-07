@@ -39,13 +39,14 @@ bool parseProtoCave(const QByteArray& content, CavewhereProto::Cave* cave)
         return false;
     }
 
-    if (cave->ParseFromArray(content.constData(), content.size())) {
-        return true;
-    }
-
     const std::string jsonPayload(content.constData(),
                                   static_cast<size_t>(content.size()));
-    const auto parseStatus = google::protobuf::util::JsonStringToMessage(jsonPayload, cave);
+    static const auto parseOptions = [] {
+        google::protobuf::util::JsonParseOptions opts;
+        opts.ignore_unknown_fields = true;
+        return opts;
+    }();
+    const auto parseStatus = google::protobuf::util::JsonStringToMessage(jsonPayload, cave, parseOptions);
     return parseStatus.ok();
 }
 

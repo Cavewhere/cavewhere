@@ -95,6 +95,7 @@ public:
     QString activeAccountId() const { return m_activeAccountId; }
     QString accessToken() const override { return m_accessToken; }
     bool hasLoadedCredentials() const override { return m_hasLoadedStoredToken; }
+    bool tokenLoadedFromKeychain() const { return m_tokenLoadedFromKeychain; }
     void ensureCredentialsLoaded() override;
 
     void setActive(bool active);
@@ -103,6 +104,9 @@ public:
     Q_INVOKABLE void cancelLogin();
     Q_INVOKABLE void cancelDeviceLoginFlow();
     Q_INVOKABLE void refreshRepositories();
+    Q_INVOKABLE void createRepository(const QString& name,
+                                      bool isPrivate,
+                                      const QString& org = QString());
     Q_INVOKABLE void reloadAccessTokenFromCredentialStore();
     void clearSession();
     Q_INVOKABLE void markVerificationOpened();
@@ -111,6 +115,7 @@ public:
     void persistCurrentAccessTokenForAccount(const QString& accountId);
     void invalidateAccountToken(const QString& accountId, const QString& message = QString());
     QByteArray lfsAuthorizationHeader() const;
+    void setApiBaseUrl(const QString& url);
 
 signals:
     void authStateChanged();
@@ -128,6 +133,8 @@ signals:
     void profileResolved(const QString& username);
     void loggedOut(const QString& accountId);
     void tokenInvalidated(const QString& accountId, const QString& message);
+    void repositoryCreated(const cwGitHubRepositoryItem& repo);
+    void repositoryCreationFailed(const QString& errorMessage);
 
 private:
     void setAuthState(AuthState state);
@@ -137,6 +144,7 @@ private:
     void handleAccessToken(const cwGitHubDeviceAuth::AccessTokenResult& result);
     void handleRepositoryReply(QNetworkReply* reply);
     void handleUserProfileReply(QNetworkReply* reply);
+    void handleCreateRepositoryReply(QNetworkReply* reply, const QString& repoName);
     bool isUnauthorizedReply(QNetworkReply* reply) const;
     void invalidateActiveAccountToken(const QString& message);
     QByteArray authorizationHeader() const;
@@ -152,6 +160,7 @@ private:
 private:
     cwGitHubDeviceAuth m_deviceAuth;
     AuthState m_authState = AuthState::Idle;
+    QString m_apiBaseUrl = QStringLiteral("https://api.github.com");
     bool m_busy = false;
     cwGitHubDeviceAuth::DeviceCodeInfo m_deviceInfo;
     QString m_accessToken;
@@ -161,6 +170,7 @@ private:
     bool m_active = false;
     bool m_hasLoadedStoredToken = false;
     bool m_loadingStoredToken = false;
+    bool m_tokenLoadedFromKeychain = false;
     QPointer<cwRemoteCredentialStore> m_credentialStore;
 
     int m_secondsUntilNextPoll = 0;

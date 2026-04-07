@@ -40,7 +40,7 @@ ScrollViewPage {
                 onClicked: openCSVFileDialogId.open()
             }
 
-            Text {
+            QC.Label {
                 id: filenameId
                 text: csvManagerId.filename.length == 0 ? "No file loaded" : csvManagerId.filename
             }
@@ -63,7 +63,7 @@ ScrollViewPage {
                             sourceSize: Qt.size(24, 24)
                         }
 
-                        Text {
+                        QC.Label {
                             text: "<b>Drag and drop</b> columns to add and remove them"
                         }
                     }
@@ -120,7 +120,7 @@ ScrollViewPage {
 
             GridLayout {
                 columns: 2
-                Text {
+                QC.Label {
                     text: "Skip header lines"
                 }
 
@@ -131,7 +131,7 @@ ScrollViewPage {
                     }
                 }
 
-                Text {
+                QC.Label {
                     text: "Seperator"
                 }
 
@@ -142,7 +142,7 @@ ScrollViewPage {
                     }
                 }
 
-                Text {
+                QC.Label {
                     text: "Length Unit"
                 }
 
@@ -160,7 +160,7 @@ ScrollViewPage {
                     }
                 }
 
-                Text {
+                QC.Label {
                     text: "Empty lines create new Trips"
                 }
 
@@ -172,7 +172,7 @@ ScrollViewPage {
                     }
                 }
 
-                Text {
+                QC.Label {
                     text: "Associate LRUDs with"
                 }
 
@@ -208,7 +208,7 @@ ScrollViewPage {
                             implicitWidth: 75
                             implicitHeight: csvTextAreaId.implicitHeight
                             model: csvTextAreaId.lineCount
-                            delegate: Text {
+                            delegate: QC.Label {
                                 property int index;
 
                                 // anchors.horizontalCenter: csvTextListViewId.horizontalCenter
@@ -264,7 +264,7 @@ ScrollViewPage {
                                 implicitHeight: textId.height + 6
                                 color: Theme.surfaceMuted
 
-                                Text {
+                                QC.Label {
                                     id: textId
                                     anchors.centerIn: parent
                                     text: delegateId.displayRole == undefined ? "" : delegateId.displayRole
@@ -318,7 +318,7 @@ ScrollViewPage {
                         QQ.Image {
                             source: "qrc:icons/good.png"
                         }
-                        Text {
+                        QC.Label {
                             text: "Success"
                         }
                     }
@@ -330,7 +330,7 @@ ScrollViewPage {
                                 source: "qrc:icons/svg/stopSignError.svg"
                                 sourceSize: Qt.size(20, 20)
                             }
-                            Text {
+                            QC.Label {
                                 text: csvManagerId.errorModel.fatalCount + " errors"
                             }
 
@@ -340,7 +340,7 @@ ScrollViewPage {
                                 source: "qrc:icons/svg/warning.svg"
                                 sourceSize: Qt.size(20, 20)
                             }
-                            Text {
+                            QC.Label {
                                 text: csvManagerId.errorModel.warningCount + " warnings"
                             }
                         }

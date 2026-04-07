@@ -54,23 +54,23 @@ QQ.Item {
             visible: true
         }
 
-        Text {
+        QC.Label {
             id: nameHeader
             anchors.left: parent.left
             anchors.right: parent.horizontalCenter
 
-            horizontalAlignment: Text.AlignHCenter
+            horizontalAlignment: QQ.Text.AlignHCenter
             text: "Name"
             font.bold: true
             visible: teamList.visible
         }
 
-        Text {
+        QC.Label {
             id: jobHeader
             anchors.left: parent.horizontalCenter
             anchors.right: parent.right
 
-            horizontalAlignment: Text.AlignHCenter
+            horizontalAlignment: QQ.Text.AlignHCenter
             text: "Role"
             font.bold: true
             visible: teamList.visible
@@ -294,7 +294,7 @@ QQ.Item {
                                 anchors.verticalCenter: parent.verticalCenter
                             }
 
-                            Text {
+                            QC.Label {
                                 id: addText
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: "Role"

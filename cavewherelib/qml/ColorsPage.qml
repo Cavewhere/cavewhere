@@ -6,7 +6,7 @@ import cavewherelib
 QC.ScrollView {
     id: root
 
-    anchors.margins: 5
+    anchors.margins: Theme.pageMargin
 
     // Reusable grid for color swatches
     component ColorDelegate: QQ.Item {
@@ -33,24 +33,22 @@ QC.ScrollView {
                 border.width: 1
                 border.color: Theme.border
 
-                Text {
+                QC.Label {
                     anchors.centerIn: parent
                     text: "Hello world!"
                 }
             }
 
 
-            Text {
+            QC.Label {
                 text: model.name
                 font.bold: true
-                color: Theme.text
-                wrapMode: Text.Wrap
+                wrapMode: QC.Label.Wrap
             }
 
-            Text {
+            QC.Label {
                 text: model.color
-                color: Theme.text
-                wrapMode: Text.Wrap
+                wrapMode: QC.Label.Wrap
             }
         }
 
@@ -62,11 +60,10 @@ QC.ScrollView {
 
         spacing: 6
 
-        Text {
+        QC.Label {
             id: titleLabel
-            font.pixelSize: 18
+            font.pixelSize: Theme.fontSizeMedium
             font.bold: true
-            color: Theme.text
             Layout.leftMargin: 4
         }
 
@@ -126,17 +123,16 @@ QC.ScrollView {
             }
         }
 
-        Text {
+        QC.Label {
             text: "Color Scheme is: " + (Theme.dark ? "Dark" : "Light")
-            font.pixelSize: 20
+            font.pixelSize: Theme.fontSizeTitle
             font.bold: true
         }
 
         RowLayout {
             spacing: 8
-            Text {
+            QC.Label {
                 text: "Sort by:"
-                color: Theme.text
             }
             QC.ComboBox {
                 id: sortBox

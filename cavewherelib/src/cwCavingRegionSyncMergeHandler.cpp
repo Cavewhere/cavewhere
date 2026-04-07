@@ -19,11 +19,13 @@ bool parseProjectProto(const QByteArray& content, CavewhereProto::Project& proto
     if (content.isEmpty()) {
         return false;
     }
-    if (protoProject.ParseFromArray(content.constData(), content.size())) {
-        return true;
-    }
     const std::string jsonPayload(content.constData(), static_cast<size_t>(content.size()));
-    return google::protobuf::util::JsonStringToMessage(jsonPayload, &protoProject).ok();
+    static const auto parseOptions = [] {
+        google::protobuf::util::JsonParseOptions opts;
+        opts.ignore_unknown_fields = true;
+        return opts;
+    }();
+    return google::protobuf::util::JsonStringToMessage(jsonPayload, &protoProject, parseOptions).ok();
 }
 
 std::optional<QString> loadBaseProjectName(const QDir& repoRoot,

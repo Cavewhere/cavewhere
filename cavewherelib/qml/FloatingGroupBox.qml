@@ -21,14 +21,13 @@ QQ.Item {
     implicitWidth: childrenRect.width
     implicitHeight: childrenRect.height
 
-    Text {
+    QC.Label {
         id: titleId
         z: 1
         anchors.right: boxGroupId.right
         anchors.bottom: boxGroupId.top
         anchors.rightMargin: 5
         font.bold:  true
-        color: Theme.text
     }
 
     ShadowRectangle {

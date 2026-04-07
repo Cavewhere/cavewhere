@@ -206,7 +206,7 @@ Interaction {
         id: valuePanel
         visible: false
 
-        Text {
+        QC.Label {
             text: twoPointInteraction.panelLabel
             Layout.alignment: Qt.AlignVCenter
         }

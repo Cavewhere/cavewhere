@@ -1,4 +1,4 @@
-import QtQuick as Q
+import QtQuick as QQ
 import QtQuick.Shapes
 import QtQuick.Controls as QC
 import QtQuick.Layouts
@@ -25,25 +25,25 @@ QC.ScrollView {
         width: Math.min(sketchPageId.width - 40, 500)
 
 
-        Text {
+        QC.Label {
             text: "Let's set you up!"
             Layout.alignment: Qt.AlignHCenter
-            font.pixelSize: 30
+            font.pixelSize: Theme.fontSizeXLarge
             font.bold: true
         }
 
-        Q.Item {
+        QQ.Item {
             implicitHeight: versionControlId.height
 
             BodyText {
                 id: versionControlId
                 width: columnLayoutId.width
-                text: "CaveWhere uses version control (Git) to keep track of changes to your cave data. Your name and email are used to record who made each change—just like signing your work. This information stays with your files and helps with collaboration, even if you’re working offline."
-                wrapMode: Text.WordWrap
+                text: "CaveWhere uses version control (Git) to keep track of changes to your cave data. Your name and email are used to record who made each change—just like signing your work. This information stays with your files and helps with collaboration, even if you're working offline."
+                wrapMode: QC.Label.WordWrap
             }
         }
 
-        Q.Item {
+        QQ.Item {
             implicitHeight: versionControlPrivacyId.height
 
             BodyText {
@@ -52,7 +52,7 @@ QC.ScrollView {
                 font.italic: true
                 font.pixelSize: versionControlId.font.pixelSize * 0.95
                 text: "This information is only used within your version history and is not shared online unless you choose to sync with a service like GitHub."
-                wrapMode: Text.WordWrap
+                wrapMode: QC.Label.WordWrap
             }
         }
 
@@ -83,12 +83,12 @@ QC.ScrollView {
             }
         }
 
-        Q.Item {
+        QQ.Item {
             Layout.fillHeight: true
         }
     }
 
-    Q.Component.onCompleted: {
+    QQ.Component.onCompleted: {
         update();
     }
 }

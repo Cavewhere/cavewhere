@@ -21,7 +21,7 @@ RowLayout {
         visible: rootId.supported
     }
 
-    Text {
+    QC.Label {
         id: textId
 
         text: {

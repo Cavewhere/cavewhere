@@ -34,7 +34,7 @@ QQ.Rectangle {
             clip: true
             model: usedStationsModel.usedStations;
 
-            delegate: Text {
+            delegate: QC.Label {
                 id: textId
 
                 required property string modelData
@@ -59,13 +59,13 @@ QQ.Rectangle {
         anchors.top: usedStationsLabel.bottom
     }
 
-    Text {
+    QC.Label {
         id: usedStationsLabel
         text: "Used Stations"
         font.bold: true
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
         anchors.topMargin: 4
-        font.pixelSize: 14
+        font.pixelSize: Theme.fontSizeBody
     }
 }
