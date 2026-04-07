@@ -11,7 +11,7 @@ StandardPage {
     objectName: "remoteManagementPage"
 
     readonly property QG.GitRepository repository: RootData.project.repository
-    readonly property var remotes: repository ? repository.remotes : []
+    readonly property list<QG.gitRemoteInfo> remotes: repository ? repository.remotes : []
 
     ColumnLayout {
         anchors.fill: parent
@@ -31,6 +31,7 @@ StandardPage {
                 objectName: "addRemoteButton"
                 text: qsTr("Add Remote")
                 icon.source: "qrc:/twbs-icons/icons/plus.svg"
+                enabled: page.remotes.length === 0
                 onClicked: addRemoteWizard.open()
             }
         }
@@ -58,11 +59,14 @@ StandardPage {
                         remoteName: modelData.name
                         remoteUrl: modelData.url
                         repository: page.repository
+                        loggedIn: RootData.remote.gitHubIntegration.loggedIn
 
                         onRemoveRequested: {
                             removeDialog.remoteName = remoteCard.remoteName
                             removeDialog.open()
                         }
+                        onLoginRequested: RootData.remote.accountCoordinator.loginGitHubAccount()
+                        onLogoutRequested: RootData.remote.accountCoordinator.forgetGitHubAccount()
                     }
                 }
             }
@@ -99,12 +103,12 @@ StandardPage {
         parent: QC.Overlay.overlay
         anchors.centerIn: parent
         modal: true
+        implicitWidth: 400
         title: qsTr("Remove Remote?")
 
         property string remoteName
 
         QC.Label {
-            width: 320
             wrapMode: QC.Label.WordWrap
             color: Theme.textSecondary
             text: qsTr("Remove remote \"%1\"? This does not delete the remote repository — it only removes the link from this project.").arg(removeDialog.remoteName)
