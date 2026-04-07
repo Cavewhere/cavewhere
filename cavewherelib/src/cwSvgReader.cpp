@@ -6,6 +6,7 @@
 **************************************************************************/
 
 #include "cwSvgReader.h"
+#include "cwImageUtils.h"
 #include "cwPDFSettings.h"
 #include "cwUnits.h"
 
@@ -18,8 +19,6 @@
 
 namespace {
 
-constexpr qint64 kMaxImageBytes = 256ll * 1024 * 1024;
-constexpr qint64 kBytesPerPixel = 4;
 
 enum class SvgUnit {
     Px,
@@ -169,24 +168,6 @@ SvgSize parseSvgSize(const QByteArray& data)
     return result;
 }
 
-QSize clampImageSize(const QSize& size)
-{
-    if (!size.isValid()) {
-        return size;
-    }
-
-    const qint64 maxPixels = kMaxImageBytes / kBytesPerPixel;
-    const qint64 pixelCount = static_cast<qint64>(size.width()) * size.height();
-    if (pixelCount <= maxPixels) {
-        return size;
-    }
-
-    const double scale = std::sqrt(static_cast<double>(maxPixels) / static_cast<double>(pixelCount));
-    const int width = std::max(1, static_cast<int>(std::floor(size.width() * scale)));
-    const int height = std::max(1, static_cast<int>(std::floor(size.height() * scale)));
-    return QSize(width, height);
-}
-
 std::optional<QSize> svgPixelSize(const QByteArray& data, const QSize& baseSize, double dpi)
 {
     if (dpi <= 0.0) {
@@ -255,7 +236,7 @@ QImage cwSvgReader::toImage(QByteArray& data, const QByteArray& format)
     if (resolutionPpi > 0) {
         const auto scaledSize = svgPixelSize(data, baseSize, resolutionPpi);
         if (scaledSize.has_value()) {
-            const QSize clampedSize = clampImageSize(*scaledSize);
+            const QSize clampedSize = cwImageUtils::clampImageSize(*scaledSize);
             imageReader.setScaledSize(clampedSize);
         }
     }

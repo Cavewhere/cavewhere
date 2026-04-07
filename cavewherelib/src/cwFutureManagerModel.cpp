@@ -143,6 +143,7 @@ void cwFutureManagerModel::removeWatcher(QFutureWatcher<void> *watcher)
 
     if(rowCount() == 0) {
         Timer->stop();
+        emit allFinished();
     }
 
     delete watcher;

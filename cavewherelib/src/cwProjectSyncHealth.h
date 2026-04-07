@@ -27,6 +27,7 @@ struct CAVEWHERE_LIB_EXPORT cwSyncStatus
     Q_PROPERTY(bool hasRemote READ hasRemote)
     Q_PROPERTY(bool authExpired READ authExpired)
     Q_PROPERTY(bool needsLogin READ needsLogin)
+    Q_PROPERTY(bool usesTokenAuth READ usesTokenAuth)
     Q_PROPERTY(QString message READ message)
     Q_PROPERTY(SyncBlocker syncBlocker READ syncBlocker)
 
@@ -46,6 +47,7 @@ public:
     bool hasRemote() const;
     bool authExpired() const;
     bool needsLogin() const;
+    bool usesTokenAuth() const;
     QString message() const;
     SyncBlocker syncBlocker() const;
     bool operator==(const cwSyncStatus& other) const;
@@ -55,6 +57,7 @@ public:
     int m_aheadCount = 0;
     int m_behindCount = 0;
     bool m_stale = true;
+    bool m_usesTokenAuth = false;
     SyncBlocker m_syncBlocker = SyncBlocker::None;
     QString m_message;
 };
@@ -93,7 +96,8 @@ private:
     void setStatus(cwSyncStatus status);
     void scheduleRemoteStatusRefresh(bool hasLocalChanges,
                                      const QString& remoteName,
-                                     const QString& branchName);
+                                     const QString& branchName,
+                                     bool usesTokenAuth);
 
     QPointer<QQuickGit::GitRepository> m_repository;
     QPointer<cwRemoteAuthProvider> m_authProvider;
@@ -105,6 +109,7 @@ private:
 
     int m_activeRequestId = 0;
     bool m_pendingLocalChanges = false;
+    bool m_pendingUsesTokenAuth = false;
     QString m_pendingRemoteName;
     QString m_pendingBranchName;
 
@@ -119,6 +124,7 @@ inline bool cwSyncStatus::stale() const { return m_stale; }
 inline bool cwSyncStatus::hasRemote() const { return m_syncBlocker != SyncBlocker::NoRemote; }
 inline bool cwSyncStatus::authExpired() const { return m_syncBlocker == SyncBlocker::Expired; }
 inline bool cwSyncStatus::needsLogin() const { return m_syncBlocker == SyncBlocker::NeedsLogin; }
+inline bool cwSyncStatus::usesTokenAuth() const { return m_usesTokenAuth; }
 inline QString cwSyncStatus::message() const { return m_message; }
 inline cwSyncStatus::SyncBlocker cwSyncStatus::syncBlocker() const { return m_syncBlocker; }
 inline bool cwSyncStatus::operator==(const cwSyncStatus& other) const
@@ -127,6 +133,7 @@ inline bool cwSyncStatus::operator==(const cwSyncStatus& other) const
            && m_aheadCount == other.m_aheadCount
            && m_behindCount == other.m_behindCount
            && m_stale == other.m_stale
+           && m_usesTokenAuth == other.m_usesTokenAuth
            && m_syncBlocker == other.m_syncBlocker
            && m_message == other.m_message;
 }

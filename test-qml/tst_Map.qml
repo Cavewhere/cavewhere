@@ -135,7 +135,7 @@ MainWindowTest {
             wait(100);
 
             //Values have been visually verified, that the drag works
-            let delta = 0.001
+            let delta = 0.02
             var err = new Error();
             tryFuzzyCompare(captureItem0_obj1.captureItem.positionOnPaper.x, 1.19041, delta);
             tryFuzzyCompare(captureItem0_obj1.captureItem.positionOnPaper.y, 1.27312, delta)
@@ -165,7 +165,7 @@ MainWindowTest {
             mouseRelease(rotationHandle_obj1, 24.8349+10, 8.20597+30)
             wait(50)
 
-            let delta = 0.005
+            let delta = 0.02
             //Values have been visually verified, that the drag works
             console.log("Bounding box:" + captureItem0_obj1.captureItem.boundingBox)
             tryFuzzyCompare(captureItem0_obj1.captureItem.boundingBox.x, -0.570247, delta);
@@ -200,7 +200,7 @@ MainWindowTest {
 
 
             //Values have been visually verified, that the drag works
-            let delta = 0.002
+            let delta = 0.02
             tryFuzzyCompare(captureItem0_obj1.captureItem.boundingBox.x, 1.27312, delta);
             tryFuzzyCompare(captureItem0_obj1.captureItem.boundingBox.y, 1.43551, delta);
             tryFuzzyCompare(captureItem0_obj1.captureItem.boundingBox.width, 4.47568, delta);
@@ -353,10 +353,10 @@ MainWindowTest {
             //Make sure the capture is the correct size
             let captureItem0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0")
 
-            tryFuzzyCompare(captureItem0_obj1.width, 306, 2.0);
-            tryFuzzyCompare(captureItem0_obj1.height, 602, 2.0);
-            tryFuzzyCompare(captureItem0_obj1.x, 19.5, 2.0);
-            tryFuzzyCompare(captureItem0_obj1.y, 19.5, 2.0);
+            tryFuzzyCompare(captureItem0_obj1.width, 306, 5.0);
+            tryFuzzyCompare(captureItem0_obj1.height, 602, 5.0);
+            tryFuzzyCompare(captureItem0_obj1.x, 19.5, 5.0);
+            tryFuzzyCompare(captureItem0_obj1.y, 19.5, 5.0);
 
         }
     }

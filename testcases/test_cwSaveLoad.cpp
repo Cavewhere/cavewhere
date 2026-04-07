@@ -3415,3 +3415,87 @@ TEST_CASE("deep UUID regeneration for copied LiDAR note", "[NameCollision]")
     CHECK(trips[1].noteLiDARModel.notes[0].id != lidarNoteId);
     CHECK(trips[1].noteLiDARModel.notes[0].stations[0].id() != lidarStationId);
 }
+
+TEST_CASE("save registers SaveFuture with futureManagerModel", "[cwSaveLoad]") {
+    auto root = std::make_unique<cwRootData>();
+    auto project = root->project();
+    auto region = project->cavingRegion();
+    auto* futureModel = root->futureManagerModel();
+
+    root->account()->setName(QStringLiteral("Test User"));
+    root->account()->setEmail(QStringLiteral("test@example.com"));
+
+    region->addCave();
+    region->cave(0)->addTrip();
+
+    futureModel->waitForFinished();
+    project->waitSaveToFinish();
+
+    QSignalSpy allFinishedSpy(futureModel, &cwFutureManagerModel::allFinished);
+
+    SECTION("saveAs registers the save future") {
+        QTemporaryDir tempDir;
+        REQUIRE(tempDir.isValid());
+        const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("future-test/future-test.cwproj"));
+
+        REQUIRE(project->saveAs(projectPath));
+
+        CHECK(futureModel->rowCount() > 0);
+
+        project->waitSaveToFinish();
+        futureModel->waitForFinished();
+
+        CHECK(futureModel->isEmpty());
+        CHECK(allFinishedSpy.count() >= 1);
+    }
+
+    SECTION("save registers the save future") {
+        QTemporaryDir tempDir;
+        REQUIRE(tempDir.isValid());
+        const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("future-test2/future-test2.cwproj"));
+
+        REQUIRE(project->saveAs(projectPath));
+        project->waitSaveToFinish();
+        futureModel->waitForFinished();
+
+        allFinishedSpy.clear();
+
+        region->cave(0)->setName("Modified Cave");
+        project->waitSaveToFinish();
+
+        REQUIRE(project->save());
+
+        CHECK(futureModel->rowCount() > 0);
+
+        project->waitSaveToFinish();
+        futureModel->waitForFinished();
+
+        CHECK(futureModel->isEmpty());
+        CHECK(allFinishedSpy.count() >= 1);
+    }
+
+    SECTION("saveAs bundled registers the save future") {
+        QTemporaryDir tempDir;
+        REQUIRE(tempDir.isValid());
+
+        // First save as cwproj so project is non-temporary
+        const QString cwprojPath = QDir(tempDir.path()).filePath(QStringLiteral("future-bundle/future-bundle.cwproj"));
+        REQUIRE(project->saveAs(cwprojPath));
+        project->waitSaveToFinish();
+        futureModel->waitForFinished();
+
+        allFinishedSpy.clear();
+
+        // Now saveAs bundled .cw
+        const QString bundlePath = QDir(tempDir.path()).filePath(QStringLiteral("future-bundle.cw"));
+        REQUIRE(project->saveAs(bundlePath));
+
+        CHECK(futureModel->rowCount() > 0);
+
+        project->waitSaveToFinish();
+        futureModel->waitForFinished();
+
+        CHECK(futureModel->isEmpty());
+        CHECK(allFinishedSpy.count() >= 1);
+    }
+}

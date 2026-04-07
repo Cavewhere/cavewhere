@@ -174,6 +174,7 @@ public:
     cwNoteLiDARManager *noteLiDARManager() const;
 
     Q_INVOKABLE void shutdown();
+    void shutdownBlocking();
 
     static void initCavewherelib();
 
@@ -197,6 +198,7 @@ signals:
     void pageViewChanged();
 
     void noteLiDARManagerChanged();
+    void shutdownComplete();
 
 public slots:
 
@@ -236,6 +238,8 @@ private:
     bool StationVisible = true; //!<
 
     int m_titleBarHeight;
+    bool m_shuttingDown = false;
+    bool m_shutdownCompleted = false;
 
     void prepareForProjectSwitch();
 };

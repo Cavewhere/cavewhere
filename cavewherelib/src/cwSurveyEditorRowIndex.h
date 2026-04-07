@@ -3,6 +3,7 @@
 
 //Qt includes
 #include <QObject>
+#include <QPointer>
 #include <QQmlEngine>
 
 //Our includes
@@ -71,7 +72,7 @@ public:
     }
 
 private:
-    cwSurveyChunk* m_chunk = nullptr;
+    QPointer<cwSurveyChunk> m_chunk;
     int m_indexInChunk = -1;
     RowType m_rowType = TitleRow;
 };

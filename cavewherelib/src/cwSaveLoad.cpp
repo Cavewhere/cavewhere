@@ -1441,6 +1441,13 @@ struct cwSaveLoad::Data {
     AsyncFuture::Deferred<void> m_pendingJobsDeferred;
     QStringList m_pendingSaveJobErrors;
 
+    // Dedicated single-thread pool for save/bundle I/O. Saves must not compete
+    // with compute-heavy tasks (scrap triangulation, line-plot geometry, etc.)
+    // on cwTask::threadPool(). When the user quits a large project whose
+    // threadpool is saturated, save jobs would be starved and the application
+    // would block on shutdown waiting for a thread to become available.
+    QThreadPool m_saveThreadPool;
+
     bool isTemporary = true;
     bool saveEnabled = true;
     bool newProjectCalled = false;
@@ -1567,6 +1574,7 @@ struct cwSaveLoad::Data {
 
     Data() {
         m_pendingJobsDeferred.complete();
+        m_saveThreadPool.setMaxThreadCount(1);
     }
 
     bool hasQueuedOperationType(Operation::Type type) const
@@ -2365,7 +2373,7 @@ struct cwSaveLoad::Data {
         Job job = m_pendingJobs.takeFirst();
 
         // qDebug() << "Starting job:" << this << job.toString();
-        auto future = cwConcurrent::run([job]() {
+        auto future = QtConcurrent::run(&m_saveThreadPool, [job]() {
             // qDebug() << "\tExecuting job:" << job.toString();
             return job.execute();
         });
@@ -3599,7 +3607,7 @@ QFuture<ResultBase> cwSaveLoad::saveBundledArchive(const QString& targetArchiveP
         const QString workingProjectFile = fileName();
         const QString projectRootPath = QFileInfo(workingProjectFile).absolutePath();
         const QStringList excludePatterns = readGitExcludePatterns(QDir(projectRootPath));
-        auto packageFuture = cwConcurrent::run([projectRootPath, normalizedTargetPath, excludePatterns]() {
+        auto packageFuture = QtConcurrent::run(&d->m_saveThreadPool, [projectRootPath, normalizedTargetPath, excludePatterns]() {
             return saveBundledArchiveAtomic(projectRootPath, normalizedTargetPath, excludePatterns);
         });
 

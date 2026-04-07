@@ -16,17 +16,6 @@ QQ.Item {
     TaskFutureCombineModel {
         id: taskModelId
         models: [RootData.taskManagerModel, RootData.futureManagerModel]
-        onCountChanged: {
-            if (count === 0) {
-                Qt.quit();
-            }
-        }
-    }
-
-    QQ.Component.onCompleted: {
-        if (taskModelId.count === 0) {
-            Qt.quit();
-        }
     }
 
     QQ.Rectangle {

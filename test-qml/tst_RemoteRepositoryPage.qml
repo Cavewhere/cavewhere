@@ -596,6 +596,86 @@ MainWindowTest {
             verify(!syncNowItem.visible)
         }
 
+        function test_syncButton_hasRemote_false_loginMenuItem_hidden() {
+            let syncButton = saveProjectAndGetSyncButton("syncbutton-noremote-login-test")
+            mouseClick(syncButton, syncButton.width / 2, syncButton.height / 2, Qt.RightButton)
+            let loginItem = findChild(syncButton, "loginMenuItem")
+            verify(loginItem !== null)
+            verify(!loginItem.visible,
+                   "login menu item should be hidden when no remote is configured")
+            let loginSep = findChild(syncButton, "loginSeparator")
+            verify(loginSep !== null)
+            verify(!loginSep.visible,
+                   "login separator should be hidden when no remote is configured")
+        }
+
+        function test_syncButton_noTokenAuth_loginMenuItem_hidden() {
+            let syncButton = saveProjectAndGetSyncButton("syncbutton-notokenauth-test")
+            // Manually set properties to simulate a non-HTTPS remote with a remote configured
+            syncButton.usesTokenAuth = false
+            mouseClick(syncButton, syncButton.width / 2, syncButton.height / 2, Qt.RightButton)
+            let loginItem = findChild(syncButton, "loginMenuItem")
+            verify(loginItem !== null)
+            verify(!loginItem.visible,
+                   "login menu item should be hidden for non-token (SSH/file) remotes")
+        }
+
+        function test_syncButton_loggedOut_loginMenuItem_showsLogIn() {
+            let syncButton = saveProjectAndGetSyncButton("syncbutton-login-text-test")
+            syncButton.loggedIn = false
+            let loginItem = findChild(syncButton, "loginMenuItem")
+            verify(loginItem !== null)
+            compare(loginItem.text, "Log in")
+        }
+
+        function test_syncButton_loggedIn_loginMenuItem_showsLogOut() {
+            let syncButton = saveProjectAndGetSyncButton("syncbutton-logout-text-test")
+            syncButton.loggedIn = true
+            let loginItem = findChild(syncButton, "loginMenuItem")
+            verify(loginItem !== null)
+            compare(loginItem.text, "Log out")
+        }
+
+        function test_syncButton_loginMenuItem_emitsLoginRequested() {
+            let syncButton = loadSyncFixtureAndGetSyncButton()
+            syncButton.usesTokenAuth = true
+            syncButton.loggedIn = false
+
+            mouseClick(syncButton, syncButton.width / 2, syncButton.height / 2, Qt.RightButton)
+            let loginItem = findChild(syncButton, "loginMenuItem")
+            verify(loginItem !== null)
+            verify(loginItem.visible, "login item should be visible for HTTPS remote")
+            compare(loginItem.text, "Log in")
+
+            let spy = Qt.createQmlObject(
+                'import QtTest; SignalSpy { signalName: "loginRequested" }',
+                rootId)
+            spy.target = syncButton
+            loginItem.triggered()
+            compare(spy.count, 1, "loginRequested signal should be emitted")
+            spy.destroy()
+        }
+
+        function test_syncButton_loginMenuItem_emitsLogoutRequested() {
+            let syncButton = loadSyncFixtureAndGetSyncButton()
+            syncButton.usesTokenAuth = true
+            syncButton.loggedIn = true
+
+            mouseClick(syncButton, syncButton.width / 2, syncButton.height / 2, Qt.RightButton)
+            let loginItem = findChild(syncButton, "loginMenuItem")
+            verify(loginItem !== null)
+            verify(loginItem.visible, "login item should be visible for HTTPS remote")
+            compare(loginItem.text, "Log out")
+
+            let spy = Qt.createQmlObject(
+                'import QtTest; SignalSpy { signalName: "logoutRequested" }',
+                rootId)
+            spy.target = syncButton
+            loginItem.triggered()
+            compare(spy.count, 1, "logoutRequested signal should be emitted")
+            spy.destroy()
+        }
+
         // Helper: load a project with a local remote configured.
         function loadSyncFixtureAndGetSyncButton() {
             const fixture = TestHelper.createLocalSyncFixtureWithLfsServer()
@@ -639,6 +719,17 @@ MainWindowTest {
 
             verify(syncButton.tooltipText.includes("Unsaved changes"),
                    "tooltip should mention unsaved changes when project is modified")
+        }
+
+        function test_syncButton_withRemote_fileRemote_loginMenuItem_hidden() {
+            let syncButton = loadSyncFixtureAndGetSyncButton()
+            verify(!syncButton.usesTokenAuth,
+                   "file:// remote should not use token auth")
+            mouseClick(syncButton, syncButton.width / 2, syncButton.height / 2, Qt.RightButton)
+            let loginItem = findChild(syncButton, "loginMenuItem")
+            verify(loginItem !== null)
+            verify(!loginItem.visible,
+                   "login menu item should be hidden for file:// remotes")
         }
 
         function test_syncButton_withRemote_upToDate_tooltip() {

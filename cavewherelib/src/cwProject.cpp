@@ -432,6 +432,7 @@ bool cwProject::save()
                              QMetaObject::invokeMethod(this, [this]() { emit fileSaved(); }, Qt::QueuedConnection);
                          })
                          .future();
+        FutureToken.addJob(cwFuture(QFuture<void>(SaveFuture), QStringLiteral("Saving")));
         return true;
     }
 
@@ -446,6 +447,7 @@ bool cwProject::save()
             QMetaObject::invokeMethod(this, [this]() { emit fileSaved(); }, Qt::QueuedConnection);
         })
         .future();
+    FutureToken.addJob(cwFuture(QFuture<void>(SaveFuture), QStringLiteral("Saving")));
     return true;
 }
 
@@ -678,6 +680,7 @@ bool cwProject::saveAs(QString newFilename)
                              QMetaObject::invokeMethod(this, [this]() { emit fileSaved(); }, Qt::QueuedConnection);
                          })
                          .future();
+        FutureToken.addJob(cwFuture(QFuture<void>(SaveFuture), QStringLiteral("Saving")));
         return true;
     }
 
@@ -727,6 +730,7 @@ bool cwProject::saveAs(QString newFilename)
             QMetaObject::invokeMethod(this, [this]() { emit fileSaved(); }, Qt::QueuedConnection);
         })
         .future();
+    FutureToken.addJob(cwFuture(QFuture<void>(SaveFuture), QStringLiteral("Saving")));
     return true;
 }
 

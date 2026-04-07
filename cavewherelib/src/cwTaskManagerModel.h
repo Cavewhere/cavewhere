@@ -45,8 +45,10 @@ public:
     void removeTask(cwTask* task);
 
     void waitForTasks();
+    bool isIdle() const;
 
 signals:
+    void becameIdle();
 
 public slots:
 

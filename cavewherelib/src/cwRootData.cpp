@@ -76,22 +76,19 @@ cwRootData::cwRootData(QObject *parent) :
     // Project->setTaskManager(TaskManagerModel);
     Project->setFutureManagerToken(FutureManagerModel);
     m_recentProjectModel->setProject(Project);
-    auto addProjectToRecents = [this](const QString& projectPath) {
-        const QString currentProjectPath = QFileInfo(projectPath).absoluteFilePath();
+    // Auto-add to recent list on save (covers save-as path changes).
+    // Not needed on loaded — all loadProject() callers already add to recents
+    // explicitly with the user-facing path (which may differ from the internal
+    // .cwproj path after legacy conversion).
+    connect(Project, &cwProject::fileSaved, this, [this]() {
+        const QString currentProjectPath = QFileInfo(Project->filename()).absoluteFilePath();
         if (currentProjectPath.isEmpty()) {
             return;
         }
-
         const auto addResult = m_recentProjectModel->addRepositoryFromProjectFile(QUrl::fromLocalFile(currentProjectPath));
         if (addResult.hasError()) {
             qWarning() << "Failed to add recent project:" << addResult.errorMessage();
         }
-    };
-    connect(Project, &cwProject::loaded, this, [this, addProjectToRecents]() {
-        addProjectToRecents(Project->filename());
-    });
-    connect(Project, &cwProject::fileSaved, this, [this, addProjectToRecents]() {
-        addProjectToRecents(Project->filename());
     });
     remote();
     Project->setAuthProvider(remote()->authProvider());
@@ -169,8 +166,6 @@ cwRootData::cwRootData(QObject *parent) :
     connect(cwJobSettings::instance(), &cwJobSettings::automaticUpdateChanged,
             this, updateAutomaticUpdate);
 
-    connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, [&]() { Project->waitSaveToFinish(); });
-
     connect(Project, &cwProject::filenameChanged, this, [this]() {
         // Reset the filter pipeline UI state when the project file changes.
         // Do NOT clear m_keywordItemModel here — scrap keyword items self-destruct
@@ -185,7 +180,7 @@ cwRootData::cwRootData(QObject *parent) :
 
 cwRootData::~cwRootData()
 {
-    shutdown();
+    shutdownBlocking();
 }
 
 /**
@@ -418,6 +413,31 @@ cwNoteLiDARManager *cwRootData::noteLiDARManager() const
 }
 
 void cwRootData::shutdown()
+{
+    if (m_shuttingDown) {
+        return;
+    }
+    m_shuttingDown = true;
+
+    auto checkComplete = [this]() {
+        if (!m_shutdownCompleted
+            && taskManagerModel()->isIdle()
+            && futureManagerModel()->isEmpty())
+        {
+            m_shutdownCompleted = true;
+            emit shutdownComplete();
+        }
+    };
+
+    connect(taskManagerModel(), &cwTaskManagerModel::becameIdle,
+            this, checkComplete);
+    connect(futureManagerModel(), &cwFutureManagerModel::allFinished,
+            this, checkComplete);
+
+    checkComplete();
+}
+
+void cwRootData::shutdownBlocking()
 {
     taskManagerModel()->waitForTasks();
     futureManagerModel()->waitForFinished();

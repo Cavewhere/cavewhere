@@ -47,8 +47,11 @@ public:
 
     cwFutureManagerToken token();
 
+    bool isEmpty() const;
+
 signals:
     void intervalChanged();
+    void allFinished();
 
 private:
     class WatcherContainer {
@@ -69,6 +72,10 @@ private:
 
 inline int cwFutureManagerModel::interval() const {
     return Timer->interval();
+}
+
+inline bool cwFutureManagerModel::isEmpty() const {
+    return Watchers.isEmpty();
 }
 
 /**

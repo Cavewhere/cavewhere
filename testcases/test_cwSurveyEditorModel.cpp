@@ -953,16 +953,16 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
     checkData(idx1, cwSurveyEditorModel::StationNameRole, 4); //Added 4 LRUD warning
 
     newChunk->setData(cwSurveyChunk::StationLeftRole, 0, "1.0");
-    checkData(idx1, cwSurveyEditorModel::StationLeftRole);
+    checkData(idx1, cwSurveyEditorModel::StationLeftRole, 1); //Clears LRUD warning (error model deleted)
 
     newChunk->setData(cwSurveyChunk::StationRightRole, 0, "2.0");
-    checkData(idx1, cwSurveyEditorModel::StationRightRole);
+    checkData(idx1, cwSurveyEditorModel::StationRightRole, 1); //Clears LRUD warning (error model deleted)
 
     newChunk->setData(cwSurveyChunk::StationUpRole, 0, "3.0");
-    checkData(idx1, cwSurveyEditorModel::StationUpRole);
+    checkData(idx1, cwSurveyEditorModel::StationUpRole, 1); //Clears LRUD warning (error model deleted)
 
     newChunk->setData(cwSurveyChunk::StationDownRole, 0, "4.0");
-    checkData(idx1, cwSurveyEditorModel::StationDownRole);
+    checkData(idx1, cwSurveyEditorModel::StationDownRole, 1); //Clears LRUD warning (error model deleted)
 
     // Update shot at index 0.
     newChunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "10.0");
@@ -982,19 +982,19 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
 
     // Update station at index 1.
     newChunk->setData(cwSurveyChunk::StationNameRole, 1, "A2");
-    checkData(idx3, cwSurveyEditorModel::StationNameRole, 4); //Adds warning for empty LRUDs, removes 1 warning from the station name
+    checkData(idx3, cwSurveyEditorModel::StationNameRole, 5); //Adds 4 LRUD warnings, deletes 1 station name error on dependent
 
     newChunk->setData(cwSurveyChunk::StationLeftRole, 1, "1.1");
-    checkData(idx3, cwSurveyEditorModel::StationLeftRole);
+    checkData(idx3, cwSurveyEditorModel::StationLeftRole, 1); //Clears LRUD warning (error model deleted)
 
     newChunk->setData(cwSurveyChunk::StationRightRole, 1, "2.1");
-    checkData(idx3, cwSurveyEditorModel::StationRightRole);
+    checkData(idx3, cwSurveyEditorModel::StationRightRole, 1); //Clears LRUD warning (error model deleted)
 
     newChunk->setData(cwSurveyChunk::StationUpRole, 1, "3.1");
-    checkData(idx3, cwSurveyEditorModel::StationUpRole);
+    checkData(idx3, cwSurveyEditorModel::StationUpRole, 1); //Clears LRUD warning (error model deleted)
 
     newChunk->setData(cwSurveyChunk::StationDownRole, 1, "4.1");
-    checkData(idx3, cwSurveyEditorModel::StationDownRole);
+    checkData(idx3, cwSurveyEditorModel::StationDownRole, 1); //Clears LRUD warning (error model deleted)
 
     // Since signals are delivered directly, we can now check that the model reflects the updated data.
     CHECK(model.data(idx1, cwSurveyEditorModel::StationNameRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "A1");
@@ -1049,32 +1049,32 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
         checkData(idx4, cwSurveyEditorModel::StationNameRole, 4 + 5);
 
         newChunk->setData(cwSurveyChunk::StationLeftRole, 2, "1.02");
-        checkData(idx4, cwSurveyEditorModel::StationLeftRole);
+        checkData(idx4, cwSurveyEditorModel::StationLeftRole, 1); //Clears LRUD warning (error model deleted)
 
         newChunk->setData(cwSurveyChunk::StationRightRole, 2, "2.02");
-        checkData(idx4, cwSurveyEditorModel::StationRightRole);
+        checkData(idx4, cwSurveyEditorModel::StationRightRole, 1); //Clears LRUD warning (error model deleted)
 
         newChunk->setData(cwSurveyChunk::StationUpRole, 2, "3.02");
-        checkData(idx4, cwSurveyEditorModel::StationUpRole);
+        checkData(idx4, cwSurveyEditorModel::StationUpRole, 1); //Clears LRUD warning (error model deleted)
 
         newChunk->setData(cwSurveyChunk::StationDownRole, 2, "4.02");
-        checkData(idx4, cwSurveyEditorModel::StationDownRole);
+        checkData(idx4, cwSurveyEditorModel::StationDownRole, 1); //Clears LRUD warning (error model deleted)
 
         // Update shot at index 1.
         newChunk->setData(cwSurveyChunk::ShotDistanceRole, 1, "10.02");
-        checkData(idx3, cwSurveyEditorModel::ShotDistanceRole);
+        checkData(idx3, cwSurveyEditorModel::ShotDistanceRole, 1); //Clears distance fatal (error model deleted)
 
-        newChunk->setData(cwSurveyChunk::ShotCompassRole, 1, "100.02"); //Fatal error removed?
-        checkData(idx3, cwSurveyEditorModel::ShotCompassRole, 1);
+        newChunk->setData(cwSurveyChunk::ShotCompassRole, 1, "100.02"); //Fatal deleted, dependent error changes
+        checkData(idx3, cwSurveyEditorModel::ShotCompassRole, 2);
 
-        newChunk->setData(cwSurveyChunk::ShotBackCompassRole, 1, "200.02"); //Warning added 2 deg off
-        checkData(idx3, cwSurveyEditorModel::ShotBackCompassRole, 1);
+        newChunk->setData(cwSurveyChunk::ShotBackCompassRole, 1, "200.02"); //Warning added 2 deg off, fatal deleted
+        checkData(idx3, cwSurveyEditorModel::ShotBackCompassRole, 2);
 
-        newChunk->setData(cwSurveyChunk::ShotClinoRole, 1, "30.02"); //Fatal error removed
-        checkData(idx3, cwSurveyEditorModel::ShotClinoRole, 1);
+        newChunk->setData(cwSurveyChunk::ShotClinoRole, 1, "30.02"); //Fatal deleted, dependent error changes
+        checkData(idx3, cwSurveyEditorModel::ShotClinoRole, 2);
 
-        newChunk->setData(cwSurveyChunk::ShotBackClinoRole, 1, "40.02"); //Warning added, 2 deg off
-        checkData(idx3, cwSurveyEditorModel::ShotBackClinoRole, 1);
+        newChunk->setData(cwSurveyChunk::ShotBackClinoRole, 1, "40.02"); //Warning added, 2 deg off, fatal deleted
+        checkData(idx3, cwSurveyEditorModel::ShotBackClinoRole, 2);
 
 
         CHECK(model.data(idx3, cwSurveyEditorModel::ShotDistanceRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "10.02");
@@ -1142,16 +1142,16 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
             checkData(stationIdx1, cwSurveyEditorModel::StationNameRole, 4);
 
             secondChunk->setData(cwSurveyChunk::StationLeftRole, 0, "1.5");
-            checkData(stationIdx1, cwSurveyEditorModel::StationLeftRole);
+            checkData(stationIdx1, cwSurveyEditorModel::StationLeftRole, 1); //Clears LRUD warning (error model deleted)
 
             secondChunk->setData(cwSurveyChunk::StationRightRole, 0, "2.5");
-            checkData(stationIdx1, cwSurveyEditorModel::StationRightRole);
+            checkData(stationIdx1, cwSurveyEditorModel::StationRightRole, 1); //Clears LRUD warning (error model deleted)
 
             secondChunk->setData(cwSurveyChunk::StationUpRole, 0, "3.5");
-            checkData(stationIdx1, cwSurveyEditorModel::StationUpRole);
+            checkData(stationIdx1, cwSurveyEditorModel::StationUpRole, 1); //Clears LRUD warning (error model deleted)
 
             secondChunk->setData(cwSurveyChunk::StationDownRole, 0, "4.5");
-            checkData(stationIdx1, cwSurveyEditorModel::StationDownRole);
+            checkData(stationIdx1, cwSurveyEditorModel::StationDownRole, 1); //Clears LRUD warning (error model deleted)
 
             // Update shot data for station 0 in the new chunk.
             secondChunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "15.0"); //Fatal for station name
@@ -1170,20 +1170,20 @@ TEST_CASE("cwSurveyEditorModel should update when survey data changes", "[cwSurv
             checkData(shotIdx1, cwSurveyEditorModel::ShotBackClinoRole, 1);
 
             //--- Update station 1 data in the new chunk.
-            secondChunk->setData(cwSurveyChunk::StationNameRole, 1, "B2"); //4 warning for LRUD
-            checkData(stationIdx2, cwSurveyEditorModel::StationNameRole, 4);
+            secondChunk->setData(cwSurveyChunk::StationNameRole, 1, "B2"); //4 LRUD warnings, deletes 1 station name error on dependent
+            checkData(stationIdx2, cwSurveyEditorModel::StationNameRole, 5);
 
             secondChunk->setData(cwSurveyChunk::StationLeftRole, 1, "1.6");
-            checkData(stationIdx2, cwSurveyEditorModel::StationLeftRole);
+            checkData(stationIdx2, cwSurveyEditorModel::StationLeftRole, 1); //Clears LRUD warning (error model deleted)
 
             secondChunk->setData(cwSurveyChunk::StationRightRole, 1, "2.6");
-            checkData(stationIdx2, cwSurveyEditorModel::StationRightRole);
+            checkData(stationIdx2, cwSurveyEditorModel::StationRightRole, 1); //Clears LRUD warning (error model deleted)
 
             secondChunk->setData(cwSurveyChunk::StationUpRole, 1, "3.6");
-            checkData(stationIdx2, cwSurveyEditorModel::StationUpRole);
+            checkData(stationIdx2, cwSurveyEditorModel::StationUpRole, 1); //Clears LRUD warning (error model deleted)
 
             secondChunk->setData(cwSurveyChunk::StationDownRole, 1, "4.6");
-            checkData(stationIdx2, cwSurveyEditorModel::StationDownRole);
+            checkData(stationIdx2, cwSurveyEditorModel::StationDownRole, 1); //Clears LRUD warning (error model deleted)
 
             //--- Verify that the model reflects the updated data for the second chunk.
             CHECK(model.data(stationIdx1, cwSurveyEditorModel::StationNameRole).value<cwSurveyEditorBoxData>().reading().value().toStdString() == "B1");

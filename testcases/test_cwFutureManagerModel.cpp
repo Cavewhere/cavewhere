@@ -4,7 +4,6 @@
 //Our includes
 #include "cwFutureManagerModel.h"
 #include "SpyChecker.h"
-#include "asyncfuture.h"
 
 //Qt includes
 #include <QtConcurrent>
@@ -271,4 +270,53 @@ TEST_CASE("cwFutureManagerModel waitForFinished should work correctly with Async
     int finalCount = *(count.get());
     CHECK(finalCount <= 2);
     CHECK(finalCount >= 1);
+}
+
+TEST_CASE("cwFutureManagerModel isEmpty and allFinished signal", "[cwFutureManagerModel]") {
+
+    cwFutureManagerModel model;
+    cwSignalSpy allFinishedSpy(&model, &cwFutureManagerModel::allFinished);
+
+    SECTION("isEmpty returns true when no jobs are added") {
+        CHECK(model.isEmpty() == true);
+    }
+
+    SECTION("isEmpty returns false when a job is running") {
+        auto future = QtConcurrent::run([]() { QThread::msleep(100); });
+        model.addJob({QFuture<void>(future), "TestJob"});
+
+        CHECK(model.isEmpty() == false);
+        CHECK(allFinishedSpy.size() == 0);
+
+        REQUIRE(AsyncFuture::waitForFinished(future, 5000));
+
+        CHECK(model.isEmpty() == true);
+        CHECK(allFinishedSpy.size() == 1);
+    }
+
+    SECTION("allFinished emits once when multiple jobs complete") {
+        auto future1 = QtConcurrent::run([]() { QThread::msleep(50); });
+        auto future2 = QtConcurrent::run([]() { QThread::msleep(100); });
+
+        model.addJob({QFuture<void>(future1), "Job1"});
+        model.addJob({QFuture<void>(future2), "Job2"});
+
+        CHECK(model.isEmpty() == false);
+        CHECK(model.rowCount() == 2);
+
+        auto combined = AsyncFuture::combine();
+        combined << future1 << future2;
+        REQUIRE(AsyncFuture::waitForFinished(combined.future(), 5000));
+
+        CHECK(model.isEmpty() == true);
+        CHECK(allFinishedSpy.size() == 1);
+    }
+
+    SECTION("allFinished does not emit for canceled or finished futures that are never added") {
+        model.addJob(cwFuture(QFuture<void>(), "Canceled"));
+        model.addJob(cwFuture(AsyncFuture::completed(), "Finished"));
+
+        CHECK(model.isEmpty() == true);
+        CHECK(allFinishedSpy.size() == 0);
+    }
 }

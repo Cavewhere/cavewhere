@@ -7,6 +7,7 @@
 
 //Our include
 #include "cwNote.h"
+#include "cwImageUtils.h"
 #include "cwTrip.h"
 #include "cwScrap.h"
 #include "cwDebug.h"
@@ -248,8 +249,9 @@ QSize cwNote::renderSize() const
     if (ImageIds.unit() == cwImage::Unit::SvgUnits) {
         pixelsPerUnit = resolutionPpi / cwUnits::SvgCssDpi;
     }
-    return QSize(qRound(nativeSize.width() * pixelsPerUnit),
-                 qRound(nativeSize.height() * pixelsPerUnit));
+    const QSize unclamped(qRound(nativeSize.width() * pixelsPerUnit),
+                          qRound(nativeSize.height() * pixelsPerUnit));
+    return cwImageUtils::clampImageSize(unclamped);
 }
 
 

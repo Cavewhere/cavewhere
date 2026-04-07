@@ -16,8 +16,12 @@ RoundButton {
     signal syncRequested()
     signal remoteSettingsRequested()
     signal historyRequested()
-    signal reconnectRequested()
     signal setupRemoteRequested()
+    signal loginRequested()
+    signal logoutRequested()
+
+    required property bool loggedIn
+    required property bool usesTokenAuth
 
     readonly property bool hasRemote: syncHealth.status.hasRemote
     readonly property bool authExpired: syncHealth.status.authExpired
@@ -162,6 +166,26 @@ RoundButton {
             text: "History…"
             onTriggered: {
                 historyRequested()
+            }
+        }
+
+        QC.MenuSeparator {
+            objectName: "loginSeparator"
+            visible: hasRemote && usesTokenAuth
+            height: visible ? implicitHeight : 0
+        }
+
+        QC.MenuItem {
+            objectName: "loginMenuItem"
+            text: loggedIn ? qsTr("Log out") : qsTr("Log in")
+            visible: hasRemote && usesTokenAuth
+            height: visible ? implicitHeight : 0
+            onTriggered: {
+                if (loggedIn) {
+                    logoutRequested()
+                } else {
+                    loginRequested()
+                }
             }
         }
     }

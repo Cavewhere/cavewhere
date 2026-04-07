@@ -15,6 +15,8 @@ QQ.Rectangle {
     required property GitRepository repository
 
     signal removeRequested()
+    signal loginRequested()
+    signal logoutRequested()
 
     implicitHeight: cardLayout.implicitHeight + 24
     radius: 6
@@ -22,9 +24,12 @@ QQ.Rectangle {
     border.width: 1
     border.color: Theme.borderSubtle
 
-    readonly property bool syncReady: !syncHealth.status.noRemote
+    readonly property bool syncReady: syncHealth.status.hasRemote
                                       && !syncHealth.status.needsLogin
                                       && !syncHealth.status.authExpired
+
+    readonly property bool usesTokenAuth: syncHealth.status.usesTokenAuth
+    required property bool loggedIn
 
     ProjectSyncHealth {
         id: syncHealth
@@ -50,32 +55,31 @@ QQ.Rectangle {
 
             QC.Label {
                 text: card.remoteName
-                font.pixelSize: Theme.fontSizeBody
+                font.pixelSize: Theme.fontSizeUI
                 font.bold: true
                 Layout.fillWidth: true
                 elide: QC.Label.ElideRight
             }
 
             QQ.Rectangle {
-                visible: syncHealth.status.needsLogin || syncHealth.status.authExpired
+                visible: card.usesTokenAuth
                 radius: 3
-                color: syncHealth.status.needsLogin ? Theme.warning : Theme.danger
+                color: card.loggedIn ? Theme.success : Theme.warning
                 implicitWidth: blockerText.implicitWidth + 8
                 implicitHeight: blockerText.implicitHeight + 4
 
                 QC.Label {
                     id: blockerText
                     anchors.centerIn: parent
-                    font.pixelSize: 10
+                    font.pixelSize: Theme.fontSizeUI
                     color: Theme.textInverse
-                    text: syncHealth.status.needsLogin ? qsTr("Needs Login")
-                        : qsTr("Expired")
+                    text: card.loggedIn ? qsTr("Logged In") : qsTr("Needs Login")
                 }
             }
 
             QC.Label {
                 visible: !syncHealth.status.stale && card.syncReady
-                font.pixelSize: Theme.fontSizeSmall
+                font.pixelSize: Theme.fontSizeUI
                 color: Theme.textSecondary
                 text: "\u2191" + syncHealth.status.aheadCount + " \u2193" + syncHealth.status.behindCount
             }
@@ -91,21 +95,35 @@ QQ.Rectangle {
         QC.Label {
             Layout.fillWidth: true
             text: card.remoteUrl.toString()
-            font.pixelSize: Theme.fontSizeSmall
+            font.pixelSize: Theme.fontSizeUI
             color: Theme.textSubtle
             elide: QC.Label.ElideMiddle
         }
 
         QC.Label {
+            id: testResultLabel
             Layout.fillWidth: true
-            visible: testConnection.state === GitTestConnection.Testing
-                     || testConnection.errorMessage.length > 0
-            text: testConnection.state === GitTestConnection.Testing
-                  ? qsTr("Testing connection...")
-                  : testConnection.errorMessage
-            font.pixelSize: Theme.fontSizeCaption
-            color: testConnection.errorMessage.length > 0 ? Theme.danger : Theme.textSubtle
+            visible: !card.usesTokenAuth && testResultLabel.text.length > 0
+            font.pixelSize: Theme.fontSizeUI
             wrapMode: QC.Label.WrapAtWordBoundaryOrAnywhere
+
+            property bool hasError: testConnection.errorMessage.length > 0
+            property bool succeeded: false
+
+            color: testConnection.state === GitTestConnection.Testing ? Theme.textSubtle
+                 : testResultLabel.hasError ? Theme.danger
+                 : Theme.success
+            text: testConnection.state === GitTestConnection.Testing ? qsTr("Testing connection...")
+                : testResultLabel.hasError ? testConnection.errorMessage
+                : testResultLabel.succeeded ? qsTr("Connection successful")
+                : ""
+
+            QQ.Connections {
+                target: testConnection
+                function onFinished() {
+                    testResultLabel.succeeded = !testResultLabel.hasError
+                }
+            }
         }
 
         RowLayout {
@@ -114,13 +132,27 @@ QQ.Rectangle {
 
             QC.Button {
                 objectName: "checkAccessButton_" + card.remoteName
+                visible: !card.usesTokenAuth
                 text: testConnection.state === GitTestConnection.Testing
                       ? qsTr("Testing...") : qsTr("Check access")
                 enabled: testConnection.state !== GitTestConnection.Testing
-                font.pixelSize: Theme.fontSizeSmall
                 onClicked: {
+                    testResultLabel.succeeded = false
                     testConnection.url = card.remoteUrl
                     testConnection.test()
+                }
+            }
+
+            QC.Button {
+                objectName: "loginButton_" + card.remoteName
+                visible: card.usesTokenAuth
+                text: card.loggedIn ? qsTr("Log out") : qsTr("Log in")
+                onClicked: {
+                    if (card.loggedIn) {
+                        card.logoutRequested()
+                    } else {
+                        card.loginRequested()
+                    }
                 }
             }
 
