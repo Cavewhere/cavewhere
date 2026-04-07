@@ -22,7 +22,7 @@
 
 class cwRemoteCredentialStore;
 
-struct cwGitHubRepositoryItem
+struct CAVEWHERE_LIB_EXPORT cwGitHubRepositoryItem
 {
     Q_GADGET
     Q_PROPERTY(QString name MEMBER name)
