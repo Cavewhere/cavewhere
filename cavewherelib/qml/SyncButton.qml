@@ -16,7 +16,6 @@ RoundButton {
     signal syncRequested()
     signal remoteSettingsRequested()
     signal historyRequested()
-    signal reconnectRequested()
     signal setupRemoteRequested()
     signal loginRequested()
     signal logoutRequested()
