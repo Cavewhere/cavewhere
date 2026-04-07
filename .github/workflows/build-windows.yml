@@ -37,7 +37,7 @@ jobs:
         uses: jurplel/install-qt-action@v4
         with:
           aqtversion: '==3.1.*'
-          version: '6.10.1'
+          version: '6.11.0'
           host: 'windows'
           target: 'desktop'
           arch: 'win64_msvc2022_64'
@@ -97,7 +97,7 @@ jobs:
 
       - name: Configure the Project with CMake
         run: |
-          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_PDF=OFF -DBUILD_TESTING=OFF -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Qt\6.8.1\msvc2022_64\lib" -DCMAKE_TOOLCHAIN_FILE="build/conan_toolchain.cmake" -S . -B build
+          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_PDF=OFF -DBUILD_TESTING=OFF -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Qt\6.11.0\msvc2022_64\lib" -DCMAKE_TOOLCHAIN_FILE="build/conan_toolchain.cmake" -S . -B build
 
       - name: Build Windows Installer
         run: cmake --build build --target windowsInstaller --parallel
