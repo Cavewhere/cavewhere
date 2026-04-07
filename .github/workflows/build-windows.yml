@@ -8,6 +8,9 @@ on:
   #   branches:
   #     - dev
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: windows-2022
@@ -16,7 +19,7 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
 
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
           fetch-depth: 0 # Fetch the tags for the versions to work correctly
@@ -77,7 +80,7 @@ jobs:
 
       - name: Cache Conan Packages
         id: cache-conan
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: C:/Users/runneradmin/.conan2
           key: ${{ runner.os }}-conan-win3-${{ hashFiles('conanfile.*') }}
@@ -107,7 +110,7 @@ jobs:
         run: echo "tag=$(git describe --tags --always)" >> "$GITHUB_OUTPUT"
 
       - name: Upload Windows Installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cavewhere-windows-installer-${{ steps.git_tag.outputs.tag }}
           path: build/Cavewhere *.exe #Needs the space to grab the just the installer
