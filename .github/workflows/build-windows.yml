@@ -148,7 +148,7 @@ jobs:
 
       - name: Configure the Project with CMake
         run: |
-          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_PDF=OFF -DBUILD_TESTING=OFF -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Qt\lib" -S . -B build
+          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_PDF=OFF -DBUILD_TESTING=OFF -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Qt" -S . -B build
 
       # - name: Build Windows Installer
       #   run: cmake --build build --target windowsInstaller --parallel
