@@ -820,7 +820,7 @@ void cwSurveyChunk::setShotData(cwSurveyChunk::DataRole role, int index, const Q
         break;
     case ShotBackClinoRole:
         shot.setBackClino(data.toString());
-        emit  dataChanged(role, index);
+        emit dataChanged(role, index);
         break;
     default:
         qDebug() << "Can't find role:" << role << LOCATION;
@@ -831,8 +831,11 @@ void cwSurveyChunk::setShotData(cwSurveyChunk::DataRole role, int index, const Q
 
 void cwSurveyChunk::checkForErrorOnDataChanged(cwSurveyChunk::DataRole role, int index)
 {
-    // Suppress errorsChanged for the primary cell: setData already emitted
-    // dataChanged(role, index) which triggers the same model refresh.
+    // For the primary cell, setData already emitted dataChanged(role, index).
+    // Suppress redundant errorsChanged when an existing error model is just
+    // updated — QML already holds the pointer, and the model's own property
+    // signals handle the content change. New models and deletions still emit
+    // because the error model pointer itself changes.
     checkForError(role, index, false);
 
     //Check dependent boxes
@@ -997,10 +1000,12 @@ void cwSurveyChunk::checkForError(cwSurveyChunk::DataRole role, int index, bool 
 
     CellIndex cellIndex = CellIndex(index, role);
     cwErrorModel* cellModel = nullptr;
+    bool isNewModel = false;
     if(!CellErrorModels.contains(cellIndex) && !errors.isEmpty()) {
         cellModel = new cwErrorModel(ErrorModel);
         cellModel->setParentModel(ErrorModel);
         CellErrorModels.insert(cellIndex, cellModel);
+        isNewModel = true;
     } else {
         cellModel = CellErrorModels.value(cellIndex, nullptr);
     }
@@ -1011,15 +1016,17 @@ void cwSurveyChunk::checkForError(cwSurveyChunk::DataRole role, int index, bool 
             cellModel->setParentModel(nullptr);
             cellModel->deleteLater();
             CellErrorModels.remove(cellIndex);
-            if(emitSignal) {
-                emit errorsChanged(role, index);
-            }
+            emit errorsChanged(role, index);
         }  else {
             //Clear the previous errors
             if(cellModel->errors()->toList() != errors) {
                 cellModel->errors()->clear();
                 cellModel->errors()->append(errors);
-                if(emitSignal) {
+                // New models and deletions always emit because the pointer
+                // changed. Existing model updates are redundant when the
+                // caller already emitted dataChanged for this cell — the
+                // model's own property signals handle the content change.
+                if(isNewModel || emitSignal) {
                     emit errorsChanged(role, index);
                 }
             }
