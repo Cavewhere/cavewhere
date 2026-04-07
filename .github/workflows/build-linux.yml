@@ -60,6 +60,8 @@ jobs:
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
+        env:
+          AQT_CONFIG: ${{ github.workspace }}/.github/aqt.ini
         with:
           aqtversion: '==3.3.*'
           version: '6.11.0'
