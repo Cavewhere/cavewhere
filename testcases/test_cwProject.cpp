@@ -12989,3 +12989,127 @@ TEST_CASE("cwProject sync succeeds when remote advances during push", "[cwProjec
     CHECK(project->errorModel()->count() == 0);
     CHECK(project->isModified() == false);
 }
+
+namespace {
+struct BundleSyncFixture {
+    std::unique_ptr<cwRootData> rootData = std::make_unique<cwRootData>();
+    cwProject* project = rootData->project();
+    QTemporaryDir projectDir;
+    QTemporaryDir remoteRoot;
+    QTemporaryDir bundleDir;
+    QString remoteRepoPath;
+
+    void setup(const QString& caveName)
+    {
+        rootData->account()->setName(QStringLiteral("Bundle Sync Tester"));
+        rootData->account()->setEmail(QStringLiteral("bundle.sync.tester@example.com"));
+
+        auto region = project->cavingRegion();
+        region->addCave();
+        auto cave = region->cave(0);
+        REQUIRE(cave != nullptr);
+        cave->setName(caveName);
+
+        REQUIRE(projectDir.isValid());
+        const QString cwprojPath = QDir(projectDir.path()).filePath(QStringLiteral("bundle-sync.cwproj"));
+        REQUIRE(project->saveAs(cwprojPath));
+        project->waitSaveToFinish();
+
+        auto* repository = project->repository();
+        REQUIRE(repository != nullptr);
+
+        REQUIRE(remoteRoot.isValid());
+        remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
+        REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
+
+        const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
+                                                             QUrl::fromLocalFile(remoteRepoPath));
+        REQUIRE(addRemoteError.isEmpty());
+
+        cave->setName(caveName + QStringLiteral(" Baseline"));
+        project->waitSaveToFinish();
+        REQUIRE(project->isModified());
+
+        project->errorModel()->clear();
+        REQUIRE(project->sync());
+        rootData->futureManagerModel()->waitForFinished();
+        project->waitSaveToFinish();
+        REQUIRE(project->errorModel()->count() == 0);
+        REQUIRE(project->isModified() == false);
+
+        REQUIRE(bundleDir.isValid());
+        const QString bundlePath = bundleDir.filePath(QStringLiteral("bundle-sync.cw"));
+        REQUIRE(project->saveAs(bundlePath));
+        project->waitSaveToFinish();
+        REQUIRE(project->fileType() == cwProject::BundledGitFileType);
+        REQUIRE(project->isModified() == false);
+    }
+
+    void pushRemoteCommit()
+    {
+        QTemporaryDir cloneDir;
+        REQUIRE(cloneDir.isValid());
+        const QString clonePath = QDir(cloneDir.path()).filePath(QStringLiteral("clone-bundle"));
+
+        QQuickGit::GitRepository cloneRepository;
+        cloneRepository.setDirectory(QDir(clonePath));
+        cloneRepository.setAccount(rootData->account());
+
+        auto cloneFuture = cloneRepository.clone(QUrl::fromLocalFile(remoteRepoPath));
+        REQUIRE(AsyncFuture::waitForFinished(cloneFuture, 10000));
+        REQUIRE(!cloneFuture.result().hasError());
+
+        QFile cloneFile(QDir(clonePath).filePath(QStringLiteral("remote-bundle-change.txt")));
+        REQUIRE(cloneFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        REQUIRE(cloneFile.write("remote content for bundle test\n") > 0);
+        cloneFile.close();
+
+        REQUIRE_NOTHROW(cloneRepository.commitAll(QStringLiteral("Remote change for bundle"),
+                                                  QStringLiteral("bundle-sync")));
+        auto pushFuture = cloneRepository.push();
+        REQUIRE(AsyncFuture::waitForFinished(pushFuture, 10000));
+        REQUIRE(!pushFuture.result().hasError());
+    }
+
+    void syncAndExpectSuccess()
+    {
+        project->errorModel()->clear();
+        REQUIRE(project->sync());
+        rootData->futureManagerModel()->waitForFinished();
+        project->waitSaveToFinish();
+        REQUIRE(project->errorModel()->count() == 0);
+    }
+};
+} // namespace
+
+TEST_CASE("cwProject bundled sync with remote changes marks project as modified", "[cwProject][sync][bundleSync]") {
+    BundleSyncFixture f;
+    f.setup(QStringLiteral("Bundle Sync Cave"));
+    f.pushRemoteCommit();
+    f.syncAndExpectSuccess();
+
+    const auto syncReport = f.project->lastSyncReport();
+    REQUIRE(syncReport.has_value());
+    const bool pulled =
+        syncReport->pullState == cwSaveLoad::SyncReport::PullState::FastForward
+        || syncReport->pullState == cwSaveLoad::SyncReport::PullState::Rebased
+        || syncReport->pullState == cwSaveLoad::SyncReport::PullState::MergeCommitCreated;
+    REQUIRE(pulled);
+
+    // The bundle on disk is now stale — the project should be marked modified
+    // so the user is prompted to save (re-zip the bundle).
+    CHECK(f.project->isModified() == true);
+}
+
+TEST_CASE("cwProject bundled sync already up to date does not mark project as modified", "[cwProject][sync][bundleSync]") {
+    BundleSyncFixture f;
+    f.setup(QStringLiteral("Bundle No-Op Cave"));
+    f.syncAndExpectSuccess();
+
+    const auto syncReport = f.project->lastSyncReport();
+    REQUIRE(syncReport.has_value());
+    CHECK(syncReport->pullState == cwSaveLoad::SyncReport::PullState::AlreadyUpToDate);
+
+    // No changes pulled — bundle is still in sync, should NOT be modified.
+    CHECK(f.project->isModified() == false);
+}
