@@ -31,7 +31,7 @@ private:
 
     static cwPDFSettings* SettingsSingleton;
 
-    int ResolutionImport = 300; //!<
+    int ResolutionImport = 96; //!<
 
     static QString importResolutionKey() { return QLatin1String("importResolutionInPPI"); }
 
