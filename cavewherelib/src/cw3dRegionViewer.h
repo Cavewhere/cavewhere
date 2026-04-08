@@ -13,6 +13,9 @@
 class cwGeometryItersecter;
 #include "cwOrthogonalProjection.h"
 #include "cwPerspectiveProjection.h"
+class cwHeadCoupledPerspectiveProjection;
+class cwAbstractHeadTracker;
+class cwViewMatrixComposer;
 
 class cw3dRegionViewer : public cwRhiViewer
 {
@@ -20,6 +23,9 @@ class cw3dRegionViewer : public cwRhiViewer
     QML_NAMED_ELEMENT(RegionViewer)
     Q_PROPERTY(cwOrthogonalProjection* orthoProjection READ orthoProjection CONSTANT)
     Q_PROPERTY(cwPerspectiveProjection* perspectiveProjection READ perspectiveProjection CONSTANT)
+    Q_PROPERTY(cwHeadCoupledPerspectiveProjection* headCoupledProjection READ headCoupledProjection CONSTANT)
+    Q_PROPERTY(cwAbstractHeadTracker* headTracker READ headTracker CONSTANT)
+    Q_PROPERTY(cwViewMatrixComposer* viewMatrixComposer READ viewMatrixComposer CONSTANT)
 
 public:
 
@@ -33,6 +39,9 @@ public:
 
     cwOrthogonalProjection* orthoProjection() const;
     cwPerspectiveProjection* perspectiveProjection() const;
+    cwHeadCoupledPerspectiveProjection* headCoupledProjection() const;
+    cwAbstractHeadTracker* headTracker() const;
+    cwViewMatrixComposer* viewMatrixComposer() const;
 
 signals:
     void resized();
@@ -46,12 +55,16 @@ protected:
 private:
     cwOrthogonalProjection* OrthognalProjection; //!<
     cwPerspectiveProjection* PerspectiveProjection; //!<
+    cwHeadCoupledPerspectiveProjection* HeadCoupledProjection; //!<
+    cwAbstractHeadTracker* HeadTracker; //!<
+    cwViewMatrixComposer* ViewMatrixComposer; //!<
 
 };
 
-// Q_DECLARE_METATYPE(cw3dRegionViewer*)
-
-
-
+// Include full type definitions after class declaration (needed by moc for Q_PROPERTY).
+// Forward declarations above break the circular dependency during class definition.
+#include "cwHeadCoupledPerspectiveProjection.h"
+#include "cwAbstractHeadTracker.h"
+#include "cwViewMatrixComposer.h"
 
 #endif // CW3DREGIONVIEWER_H

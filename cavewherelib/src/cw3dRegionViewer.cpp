@@ -10,8 +10,15 @@
 #include "cw3dRegionViewer.h"
 #include "cwOrthogonalProjection.h"
 #include "cwPerspectiveProjection.h"
+#include "cwHeadCoupledPerspectiveProjection.h"
+#include "cwViewMatrixComposer.h"
+#include "cwAbstractHeadTracker.h"
+#include "cwDlibHeadTracker.h"
+#include "cwCamera.h"
 
 //Qt includes
+#include <QGuiApplication>
+#include <QScreen>
 #include <QPainter>
 #include <QString>
 #include <QVector3D>
@@ -39,6 +46,65 @@ cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
     PerspectiveProjection = new cwPerspectiveProjection(this);
     PerspectiveProjection->setViewer(this);
     PerspectiveProjection->setEnabled(false);
+
+    HeadTracker = nullptr; // Created lazily on first enable to avoid loading dlib model at startup
+
+    ViewMatrixComposer = new cwViewMatrixComposer(this);
+    ViewMatrixComposer->setCamera(camera());
+
+    HeadCoupledProjection = new cwHeadCoupledPerspectiveProjection(this);
+    HeadCoupledProjection->setViewer(this);
+    HeadCoupledProjection->setEnabled(false);
+    HeadCoupledProjection->setViewMatrixComposer(ViewMatrixComposer);
+
+    connect(HeadCoupledProjection, &cwAbstractProjection::enabledChanged, this, [this]() {
+        if (HeadCoupledProjection->enabled())
+        {
+            // Create the tracker lazily to avoid loading dlib model at startup
+            if (!HeadTracker)
+            {
+                HeadTracker = new cwDlibHeadTracker(this);
+                HeadCoupledProjection->setTracker(HeadTracker);
+            }
+
+            // Copy FOV/near/far from the perspective projection
+            HeadCoupledProjection->setFieldOfView(PerspectiveProjection->fieldOfView());
+            HeadCoupledProjection->setNearPlane(PerspectiveProjection->nearPlane());
+            HeadCoupledProjection->setFarPlane(PerspectiveProjection->farPlane());
+
+            // Disable other projections
+            OrthognalProjection->setEnabled(false);
+            PerspectiveProjection->setEnabled(false);
+
+            HeadTracker->start();
+        }
+        else
+        {
+            if (HeadTracker)
+            {
+                HeadTracker->stop();
+            }
+
+            // Reset head offset to identity
+            ViewMatrixComposer->setHeadOffset(QMatrix4x4());
+
+            // Re-enable perspective projection
+            PerspectiveProjection->setFieldOfView(HeadCoupledProjection->fieldOfView());
+            PerspectiveProjection->setEnabled(true);
+        }
+    });
+
+    // Auto-detect screen dimensions
+    auto* screen = QGuiApplication::primaryScreen();
+    if (screen)
+    {
+        QSizeF physicalSize = screen->physicalSize(); // millimeters
+        if (physicalSize.width() > 0 && physicalSize.height() > 0)
+        {
+            HeadCoupledProjection->setScreenWidthMeters(physicalSize.width() / 1000.0);
+            HeadCoupledProjection->setScreenHeightMeters(physicalSize.height() / 1000.0);
+        }
+    }
 }
 
 /**
@@ -66,6 +132,14 @@ void cw3dRegionViewer::resizeGL() {
     return PerspectiveProjection;
 }
 
+cwHeadCoupledPerspectiveProjection* cw3dRegionViewer::headCoupledProjection() const {
+    return HeadCoupledProjection;
+}
 
+cwAbstractHeadTracker* cw3dRegionViewer::headTracker() const {
+    return HeadTracker;
+}
 
-//}
+cwViewMatrixComposer* cw3dRegionViewer::viewMatrixComposer() const {
+    return ViewMatrixComposer;
+}

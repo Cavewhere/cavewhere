@@ -56,7 +56,9 @@ public:
     double near() const;
 
     double fieldOfView() const;
+    void setFieldOfView(double fov);
     double aspectRatio() const;
+    void setAspectRatio(double aspect);
 
     bool isNull() const;
 

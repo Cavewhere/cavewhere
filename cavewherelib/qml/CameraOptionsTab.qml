@@ -60,6 +60,16 @@ QQ.Item {
                     viewer: itemId.viewer.renderer
                 }
             }
+
+            QC.GroupBox {
+                title: "Head Tracking"
+                Layout.fillWidth: true
+
+                HeadTrackingSettings {
+                    headProjection: itemId.viewer.renderer.headCoupledProjection
+                    headTracker: itemId.viewer.renderer.headTracker
+                }
+            }
         }
     }
 }

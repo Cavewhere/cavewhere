@@ -13,6 +13,7 @@
 #include "cwGeometryItersecter.h"
 #include "cwMatrix4x4Animation.h"
 #include "cwMath.h"
+#include "cwViewMatrixComposer.h"
 
 //Std includes
 #include "math.h"
@@ -63,17 +64,17 @@ void cwBaseTurnTableInteraction::centerOn(QVector3D point, bool animate)
 
     QVector3D translation = worldScreenCenter - point;
 
-    QMatrix4x4 viewMatrix = Camera->viewMatrix();
+    QMatrix4x4 viewMatrix = currentViewMatrix();
     viewMatrix.translate(translation);
 
     if(animate) {
         stopAnimation();
 
-        ViewMatrixAnimation->setStartValue(Camera->viewMatrix());
+        ViewMatrixAnimation->setStartValue(currentViewMatrix());
         ViewMatrixAnimation->setEndValue(viewMatrix);
         ViewMatrixAnimation->start();
     } else {
-        Camera->setViewMatrix(viewMatrix);
+        applyViewMatrix(viewMatrix);
     }
 }
 
@@ -137,7 +138,7 @@ void cwBaseTurnTableInteraction::bindPerspectiveIntersection()
  */
 void cwBaseTurnTableInteraction::updateViewMatrixFromAnimation(QVariant matrix)
 {
-    Camera->setViewMatrix(matrix.value<QMatrix4x4>());
+    applyViewMatrix(matrix.value<QMatrix4x4>());
 }
 
 /**
@@ -219,7 +220,7 @@ void cwBaseTurnTableInteraction::resetView() {
     if(Camera) {
         QMatrix4x4 viewMatrix;
         viewMatrix.translate(QVector3D(0.0, 0.0, -50));
-        Camera->setViewMatrix(viewMatrix);
+        applyViewMatrix(viewMatrix);
 
         if(Camera->projection().type() == cwProjection::Ortho) {
             Camera->setZoomScale(Camera->defaultZoomScale());
@@ -320,9 +321,9 @@ void cwBaseTurnTableInteraction::translateLastPosition()
     QVector3D intersection = ray.point(t);
     QVector3D translateAmount = intersection - LastMouseGlobalPosition;
 
-    QMatrix4x4 viewMatrix = Camera->viewMatrix();
+    QMatrix4x4 viewMatrix = currentViewMatrix();
     viewMatrix.translate(translateAmount);
-    Camera->setViewMatrix(viewMatrix);
+    applyViewMatrix(viewMatrix);
 }
 
 ///**
@@ -389,12 +390,12 @@ void cwBaseTurnTableInteraction::updateRotationMatrix()
     QQuaternion rotationDifferance = CurrentRotation.conjugated() * newQuat;
     setCurrentRotation(newQuat);
 
-    QMatrix4x4 viewMatrix = Camera->viewMatrix();
+    QMatrix4x4 viewMatrix = currentViewMatrix();
     viewMatrix.translate(LastMouseGlobalPosition);
     viewMatrix.rotate(rotationDifferance);
     viewMatrix.translate(-LastMouseGlobalPosition);
 
-    Camera->setViewMatrix(viewMatrix);
+    applyViewMatrix(viewMatrix);
 }
 
 /**
@@ -451,9 +452,9 @@ void cwBaseTurnTableInteraction::zoomPerspective()
 
     QVector3D newPositionDelta = ray * t;
 
-    QMatrix4x4 viewMatrix = Camera->viewMatrix();
+    QMatrix4x4 viewMatrix = currentViewMatrix();
     viewMatrix.translate(newPositionDelta);
-    Camera->setViewMatrix(viewMatrix);
+    applyViewMatrix(viewMatrix);
 }
 
 /**
@@ -481,9 +482,9 @@ void cwBaseTurnTableInteraction::zoomOrtho()
     QVector3D after = Camera->unProject(mappedPos, 1.0);
 
     QVector3D changeInPosition = after - before;
-    QMatrix4x4 newTranslationMatrix = Camera->viewMatrix();
+    QMatrix4x4 newTranslationMatrix = currentViewMatrix();
     newTranslationMatrix.translate(changeInPosition);
-    Camera->setViewMatrix(newTranslationMatrix);
+    applyViewMatrix(newTranslationMatrix);
 }
 
 /**
@@ -566,6 +567,32 @@ cwScene* cwBaseTurnTableInteraction::scene() const {
     return Scene;
 }
 
+cwViewMatrixComposer* cwBaseTurnTableInteraction::viewMatrixComposer() const {
+    return m_viewMatrixComposer;
+}
+
+void cwBaseTurnTableInteraction::setViewMatrixComposer(cwViewMatrixComposer* composer) {
+    if (m_viewMatrixComposer != composer) {
+        m_viewMatrixComposer = composer;
+        emit viewMatrixComposerChanged();
+    }
+}
+
+QMatrix4x4 cwBaseTurnTableInteraction::currentViewMatrix() const {
+    if (m_viewMatrixComposer) {
+        return m_viewMatrixComposer->baseViewMatrix();
+    }
+    return Camera->viewMatrix();
+}
+
+void cwBaseTurnTableInteraction::applyViewMatrix(const QMatrix4x4& matrix) {
+    if (m_viewMatrixComposer) {
+        m_viewMatrixComposer->setBaseViewMatrix(matrix);
+    } else {
+        Camera->setViewMatrix(matrix);
+    }
+}
+
 /**
 * @brief cwBaseTurnTableInteraction::startDragDistance
 * @return QStyleHints::startDragDistance
@@ -598,9 +625,9 @@ void cwBaseTurnTableInteraction::zoomTo(const QBox3D &box)
 
     // 2) Re-center the target box at the origin so zoom occurs “from the origin”
     const QVector3D c = box.center();
-    QMatrix4x4 view = Camera->viewMatrix();
+    QMatrix4x4 view = currentViewMatrix();
     view.translate(-c);                    // shift world so that box center is at origin
-    Camera->setViewMatrix(view);
+    applyViewMatrix(view);
 
     // Padding so the box isn’t touching the frame
     constexpr float pad = 1.08f;          // ~8% margin
@@ -674,9 +701,9 @@ void cwBaseTurnTableInteraction::zoomTo(const QBox3D &box)
         if (canInvert) { /* extremely unlikely; just bail gracefully */ return; }
 
         const QVector3D forwardWorld = (invView * QVector4D(0.f, 0.f, -1.0f, 0.f)).toVector3D().normalized();
-        QMatrix4x4 newView = Camera->viewMatrix();
+        QMatrix4x4 newView = currentViewMatrix();
         newView.translate(-forwardWorld * dist);
-        Camera->setViewMatrix(newView);
+        applyViewMatrix(newView);
         return;
     }
     default:

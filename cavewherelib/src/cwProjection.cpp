@@ -99,6 +99,16 @@ cwProjection::PrivateData::PrivateData() :
 }
 
 
+void cwProjection::setFieldOfView(double fov)
+{
+    Data->FieldOfView = fov;
+}
+
+void cwProjection::setAspectRatio(double aspect)
+{
+    Data->AspectRatio = aspect;
+}
+
 void cwProjection::setMatrix(QMatrix4x4 matrix)
 {
     Data->Type = cwProjection::Unknown;
