@@ -116,6 +116,16 @@ target_link_libraries(cavewherelib
     # surveximg
 )
 
+# Link Apple frameworks for Vision-based head tracking on macOS
+if(APPLE AND NOT IOS)
+    target_link_libraries(cavewherelib PRIVATE
+        "-framework AVFoundation"
+        "-framework Vision"
+        "-framework CoreMedia"
+        "-framework CoreVideo"
+    )
+endif()
+
 cw_link_absl_static(cavewherelib)
 
 # Conditionally find the package and include directories
@@ -155,6 +165,15 @@ target_include_directories(cavewherelib
 # Collect source files cavewhereLib
 file(GLOB cavewherelib_CPP_FILES CONFIGURE_DEPENDS "src/*.cpp" "src/utils/*.cpp" "src/rendering/*.cpp")
 file(GLOB cavewherelib_H_FILES CONFIGURE_DEPENDS "src/*.h" "src/utils/*.h" "src/rendering/*.h")
+
+# Add Objective-C++ sources on macOS (e.g. Vision framework head tracker)
+if(APPLE AND NOT IOS)
+    file(GLOB cavewherelib_OBJCPP_FILES CONFIGURE_DEPENDS "src/*.mm")
+    list(APPEND cavewherelib_CPP_FILES ${cavewherelib_OBJCPP_FILES})
+    set_source_files_properties(${cavewherelib_OBJCPP_FILES} PROPERTIES
+        COMPILE_FLAGS "-fobjc-arc"
+    )
+endif()
 
 # file(GLOB cavewhere_QML_FILES "qml/*.qml" "qml/*.js")
 # target_sources(CaveWhere PRIVATE ${cavewhere_QML_FILES})

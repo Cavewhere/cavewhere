@@ -91,4 +91,12 @@ ColumnLayout {
         onToggled: itemId.headProjection.viewMatrixOffsetEnabled = checked
         visible: itemId.headProjection.enabled
     }
+
+    QC.CheckBox {
+        text: "Debug Preview"
+        checked: itemId.headTracker && itemId.headTracker.debugPreview ? true : false
+        onToggled: if (itemId.headTracker) itemId.headTracker.debugPreview = checked
+        visible: itemId.headProjection.enabled && itemId.headTracker
+                 && itemId.headTracker.debugPreview !== undefined
+    }
 }

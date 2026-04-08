@@ -13,7 +13,11 @@
 #include "cwHeadCoupledPerspectiveProjection.h"
 #include "cwViewMatrixComposer.h"
 #include "cwAbstractHeadTracker.h"
+#ifdef Q_OS_MACOS
+#include "cwVisionHeadTracker.h"
+#else
 #include "cwDlibHeadTracker.h"
+#endif
 #include "cwCamera.h"
 
 //Qt includes
@@ -60,10 +64,14 @@ cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
     connect(HeadCoupledProjection, &cwAbstractProjection::enabledChanged, this, [this]() {
         if (HeadCoupledProjection->enabled())
         {
-            // Create the tracker lazily to avoid loading dlib model at startup
+            // Create the tracker lazily
             if (!HeadTracker)
             {
+#ifdef Q_OS_MACOS
+                HeadTracker = new cwVisionHeadTracker(this);
+#else
                 HeadTracker = new cwDlibHeadTracker(this);
+#endif
                 HeadCoupledProjection->setTracker(HeadTracker);
                 emit headTrackerChanged();
             }
