@@ -113,6 +113,20 @@ void cwHeadCoupledPerspectiveProjection::setTranslationScale(double scale)
     }
 }
 
+void cwHeadCoupledPerspectiveProjection::setSceneDistance(double distance)
+{
+    if (distance < 0.01)
+    {
+        distance = 0.01;
+    }
+    if (!qFuzzyCompare(m_sceneDistance, distance))
+    {
+        m_sceneDistance = distance;
+        updateProjection();
+        emit sceneDistanceChanged();
+    }
+}
+
 void cwHeadCoupledPerspectiveProjection::setViewMatrixOffsetEnabled(bool enabled)
 {
     if (m_viewMatrixOffsetEnabled != enabled)
@@ -213,11 +227,9 @@ cwProjection cwHeadCoupledPerspectiveProjection::calculateProjection()
                 deltaZ = (m_referenceEz - ez) * m_sensitivity;
             }
 
-            // Scale translation by camera distance so the effect is
-            // proportional to the scene (farther = more amplification)
-            float cameraDistance = std::abs(
-                m_viewMatrixComposer->baseViewMatrix().column(3).z());
-            float scale = cameraDistance * static_cast<float>(m_translationScale);
+            // Scale translation by distance to scene interaction point
+            // so the effect is proportional (farther = more amplification)
+            float scale = static_cast<float>(m_sceneDistance * m_translationScale);
 
             QMatrix4x4 headOffset;
             headOffset.translate(static_cast<float>(-ex) * scale,

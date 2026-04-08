@@ -23,6 +23,7 @@ class CAVEWHERE_LIB_EXPORT cwHeadCoupledPerspectiveProjection : public cwAbstrac
     Q_PROPERTY(bool viewMatrixOffsetEnabled READ viewMatrixOffsetEnabled WRITE setViewMatrixOffsetEnabled NOTIFY viewMatrixOffsetEnabledChanged)
     Q_PROPERTY(double parallaxStrength READ parallaxStrength WRITE setParallaxStrength NOTIFY parallaxStrengthChanged)
     Q_PROPERTY(double translationScale READ translationScale WRITE setTranslationScale NOTIFY translationScaleChanged)
+    Q_PROPERTY(double sceneDistance READ sceneDistance WRITE setSceneDistance NOTIFY sceneDistanceChanged)
 
 public:
     explicit cwHeadCoupledPerspectiveProjection(QObject* parent = nullptr);
@@ -51,6 +52,9 @@ public:
     double translationScale() const;
     void setTranslationScale(double scale);
 
+    double sceneDistance() const;
+    void setSceneDistance(double distance);
+
     cwViewMatrixComposer* viewMatrixComposer() const;
     void setViewMatrixComposer(cwViewMatrixComposer* composer);
 
@@ -63,6 +67,7 @@ signals:
     void viewMatrixOffsetEnabledChanged();
     void parallaxStrengthChanged();
     void translationScaleChanged();
+    void sceneDistanceChanged();
 
 protected:
     cwProjection calculateProjection() override;
@@ -80,6 +85,7 @@ private:
     bool m_viewMatrixOffsetEnabled = true;
     double m_parallaxStrength = 0.3;
     double m_translationScale = 1.0;
+    double m_sceneDistance = 50.0;
     double m_cachedDefaultEz = 0.0;
     double m_referenceEz = 0.0;
     QVector3D m_lastEyePos;
@@ -125,6 +131,11 @@ inline double cwHeadCoupledPerspectiveProjection::parallaxStrength() const
 inline double cwHeadCoupledPerspectiveProjection::translationScale() const
 {
     return m_translationScale;
+}
+
+inline double cwHeadCoupledPerspectiveProjection::sceneDistance() const
+{
+    return m_sceneDistance;
 }
 
 inline cwViewMatrixComposer* cwHeadCoupledPerspectiveProjection::viewMatrixComposer() const

@@ -34,6 +34,7 @@ Item {
         scene: rendererId.scene
         gridPlane: RootData.regionSceneManager.gridPlane.plane
         viewMatrixComposer: rendererId.viewMatrixComposer
+        headCoupledProjection: rendererId.headCoupledProjection
     }
 
     InteractionManager {

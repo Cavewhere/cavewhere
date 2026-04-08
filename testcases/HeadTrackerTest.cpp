@@ -44,7 +44,7 @@ TEST_CASE("cwAbstractHeadTracker initial state", "[HeadTracker]")
     MockHeadTracker tracker;
 
     CHECK(tracker.isRunning() == false);
-    CHECK(tracker.smoothing() == 0.5);
+    CHECK(tracker.smoothing() == 0.7);
     CHECK(tracker.eyePosition() == QVector3D());
     CHECK(tracker.headRotation() == QQuaternion());
 }
@@ -116,7 +116,7 @@ TEST_CASE("cwAbstractHeadTracker smoothing property", "[HeadTracker]")
 
     SECTION("Same value does not emit")
     {
-        tracker.setSmoothing(0.5); // already 0.5
+        tracker.setSmoothing(0.7); // already 0.7
         CHECK(smoothingSpy.count() == 0);
     }
 }

@@ -15,6 +15,7 @@
 #include "cwRayTriangleHit.h"
 #include "cwScene.h"
 class cwMatrix4x4Animation;
+class cwHeadCoupledPerspectiveProjection;
 #include "cwViewMatrixComposer.h"
 
 //Qt 3D
@@ -39,6 +40,7 @@ class cwBaseTurnTableInteraction : public cwInteraction
     Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)
     Q_PROPERTY(cwScene* scene READ scene WRITE setScene NOTIFY sceneChanged)
     Q_PROPERTY(cwViewMatrixComposer* viewMatrixComposer READ viewMatrixComposer WRITE setViewMatrixComposer NOTIFY viewMatrixComposerChanged)
+    Q_PROPERTY(cwHeadCoupledPerspectiveProjection* headCoupledProjection READ headCoupledProjection WRITE setHeadCoupledProjection NOTIFY headCoupledProjectionChanged)
     Q_PROPERTY(int startDragDistance READ startDragDistance CONSTANT)
 
     Q_PROPERTY(bool azimuthLocked READ isAzimuthLocked WRITE setAzimuthLocked BINDABLE azimuthLockedBinding)
@@ -74,6 +76,9 @@ public:
     cwViewMatrixComposer* viewMatrixComposer() const;
     void setViewMatrixComposer(cwViewMatrixComposer* composer);
 
+    cwHeadCoupledPerspectiveProjection* headCoupledProjection() const;
+    void setHeadCoupledProjection(cwHeadCoupledPerspectiveProjection* projection);
+
     Q_INVOKABLE void centerOn(QVector3D point, bool animate = false);
 
     int startDragDistance() const;
@@ -94,6 +99,7 @@ signals:
     void sceneChanged();
     void gridPlaneChanged();
     void viewMatrixComposerChanged();
+    void headCoupledProjectionChanged();
 
 public slots:
 
@@ -150,10 +156,12 @@ private:
     QPointer<cwCamera> Camera; //!<
     QPointer<cwScene> Scene; //!<
     cwViewMatrixComposer* m_viewMatrixComposer = nullptr;
+    cwHeadCoupledPerspectiveProjection* m_headCoupledProjection = nullptr;
 
     // View matrix helpers: route through composer when available
     QMatrix4x4 currentViewMatrix() const;
     void applyViewMatrix(const QMatrix4x4& matrix);
+    void updateSceneDistance();
 
     cwMatrix4x4Animation* ViewMatrixAnimation;
 

@@ -14,6 +14,7 @@
 #include "cwMatrix4x4Animation.h"
 #include "cwMath.h"
 #include "cwViewMatrixComposer.h"
+#include "cwHeadCoupledPerspectiveProjection.h"
 
 //Std includes
 #include "math.h"
@@ -591,6 +592,38 @@ void cwBaseTurnTableInteraction::applyViewMatrix(const QMatrix4x4& matrix) {
     } else {
         Camera->setViewMatrix(matrix);
     }
+
+    updateSceneDistance();
+}
+
+cwHeadCoupledPerspectiveProjection* cwBaseTurnTableInteraction::headCoupledProjection() const {
+    return m_headCoupledProjection;
+}
+
+void cwBaseTurnTableInteraction::setHeadCoupledProjection(cwHeadCoupledPerspectiveProjection* projection) {
+    if (m_headCoupledProjection != projection) {
+        m_headCoupledProjection = projection;
+        emit headCoupledProjectionChanged();
+    }
+}
+
+void cwBaseTurnTableInteraction::updateSceneDistance() {
+    if (!m_headCoupledProjection || !Camera) return;
+
+    // Compute camera position in world space from the view matrix
+    bool ok = false;
+    QMatrix4x4 invView = Camera->viewMatrix().inverted(&ok);
+    if (!ok) return;
+
+    QVector3D cameraPos = invView.column(3).toVector3D();
+
+    // Use the last interaction point as the reference, or origin if none
+    double distance = (cameraPos - LastMouseGlobalPosition).length();
+    if (distance < 0.01) {
+        distance = cameraPos.length(); // fallback: distance to origin
+    }
+
+    m_headCoupledProjection->setSceneDistance(distance);
 }
 
 /**
