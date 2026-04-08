@@ -1927,6 +1927,9 @@ TEST_CASE("Loading a project repairs duplicate LiDAR station ids", "[cwProject][
 }
 
 TEST_CASE("Loading a project surfaces repair save failures", "[cwProject][repair]") {
+#ifdef Q_OS_WIN
+    SKIP("Directory permission enforcement is not supported on Windows NTFS");
+#endif
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
     auto* region = project->cavingRegion();
@@ -2561,6 +2564,9 @@ TEST_CASE("cwProject sync fails without remotes after saving survey and notes", 
 }
 
 TEST_CASE("cwProject sync surfaces save flush failures before git sync", "[cwProject][sync]") {
+#ifdef Q_OS_WIN
+    SKIP("Directory permission enforcement is not supported on Windows NTFS");
+#endif
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
 

@@ -66,6 +66,9 @@
 #include <QtCore/qscopeguard.h>
 #include <QFileInfo>
 #include <QThread>
+#ifdef Q_OS_WIN
+#include <qt_windows.h>
+#endif
 #include <QDebug>
 
 //QQuickGit
@@ -974,6 +977,78 @@ static Result<ProtoType> loadMessage(const QString& filename)
 //     return projectDir.relativeFilePath(absolutePath);
 // }
 
+#ifdef Q_OS_WIN
+// Qt's QDir/QFile operations fail when paths exceed MAX_PATH (260 chars).
+// These helpers prepend the \\?\ long-path prefix and call the Win32 API.
+namespace WinLongPath {
+
+static QString prefixed(const QString& path)
+{
+    QString native = QDir::toNativeSeparators(QDir::cleanPath(path));
+    if (!native.startsWith(QStringLiteral("\\\\?\\"))) {
+        native.prepend(QStringLiteral("\\\\?\\"));
+    }
+    return native;
+}
+
+static bool renameDir(const QString& src, const QString& dst)
+{
+    if (QDir().rename(src, dst)) {
+        return true;
+    }
+    return MoveFileW(reinterpret_cast<LPCWSTR>(prefixed(src).utf16()),
+                     reinterpret_cast<LPCWSTR>(prefixed(dst).utf16())) != 0;
+}
+
+static bool renameFile(const QString& src, const QString& dst)
+{
+    if (QFile::rename(src, dst)) {
+        return true;
+    }
+    return MoveFileW(reinterpret_cast<LPCWSTR>(prefixed(src).utf16()),
+                     reinterpret_cast<LPCWSTR>(prefixed(dst).utf16())) != 0;
+}
+
+static bool removeFile(const QString& path)
+{
+    if (QFile::remove(path)) {
+        return true;
+    }
+    return DeleteFileW(reinterpret_cast<LPCWSTR>(prefixed(path).utf16())) != 0;
+}
+
+static bool removeDirRecursive(const QString& path)
+{
+    if (QDir(path).removeRecursively()) {
+        return true;
+    }
+    // QDir failed — iterate with long-path aware removal
+    QDirIterator it(path, QDir::Files | QDir::Hidden | QDir::System,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        it.next();
+        SetFileAttributesW(reinterpret_cast<LPCWSTR>(prefixed(it.filePath()).utf16()),
+                           FILE_ATTRIBUTE_NORMAL);
+        DeleteFileW(reinterpret_cast<LPCWSTR>(prefixed(it.filePath()).utf16()));
+    }
+    // Remove empty directories bottom-up
+    QStringList dirs;
+    QDirIterator dirIt(path, QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden,
+                       QDirIterator::Subdirectories);
+    while (dirIt.hasNext()) {
+        dirIt.next();
+        dirs.prepend(dirIt.filePath());
+    }
+    for (const QString& d : dirs) {
+        RemoveDirectoryW(reinterpret_cast<LPCWSTR>(prefixed(d).utf16()));
+    }
+    RemoveDirectoryW(reinterpret_cast<LPCWSTR>(prefixed(path).utf16()));
+    return !QFileInfo::exists(path);
+}
+
+} // namespace WinLongPath
+#endif
+
 struct cwSaveLoad::Data {
 
     struct Job {
@@ -1101,7 +1176,11 @@ struct cwSaveLoad::Data {
                     return Monad::ResultBase(QStringLiteral("Failed to move %1 -> %2 (destination is a directory)")
                                                  .arg(sourcePath, destinationPath));
                 }
+#ifdef Q_OS_WIN
+                if (!WinLongPath::removeFile(destinationPath)) {
+#else
                 if (!QFile::remove(destinationPath)) {
+#endif
                     return Monad::ResultBase(QStringLiteral("Failed to replace file: %1").arg(destinationPath));
                 }
             } else {
@@ -1112,7 +1191,11 @@ struct cwSaveLoad::Data {
                 }
             }
 
+#ifdef Q_OS_WIN
+            if (!WinLongPath::renameFile(sourcePath, destinationPath)) {
+#else
             if (!QFile::rename(sourcePath, destinationPath)) {
+#endif
                 return Monad::ResultBase(QStringLiteral("Failed to move file %1 -> %2").arg(sourcePath, destinationPath));
             }
 
@@ -1176,7 +1259,11 @@ struct cwSaveLoad::Data {
             }
 
             if (!QFileInfo::exists(destinationPath)) {
+#ifdef Q_OS_WIN
+                if (!WinLongPath::renameDir(sourcePath, destinationPath)) {
+#else
                 if (!QDir().rename(sourcePath, destinationPath)) {
+#endif
                     return Monad::ResultBase(QStringLiteral("Failed to move %1 -> %2").arg(sourcePath, destinationPath));
                 }
                 return Monad::ResultBase();
@@ -1187,7 +1274,11 @@ struct cwSaveLoad::Data {
                 return mergeResult;
             }
 
+#ifdef Q_OS_WIN
+            if (!WinLongPath::removeDirRecursive(sourcePath)) {
+#else
             if (!QDir(sourcePath).removeRecursively()) {
+#endif
                 return Monad::ResultBase(QStringLiteral("Failed to remove directory after merge: %1").arg(sourcePath));
             }
 
@@ -5114,11 +5205,37 @@ void cwSaveLoad::enqueueOrphanDirectoryCleanup(const QString& orphanDirRelPath)
                 if (!QFileInfo::exists(orphanDirAbsPath)) {
                     return Monad::ResultBase();
                 }
+#ifdef Q_OS_WIN
+                // On Windows, git and other tools may mark files as
+                // read-only, which prevents QDir::removeRecursively()
+                // from deleting them. Clear the read-only attribute on
+                // all files before attempting removal.
+                QDirIterator it(orphanDirAbsPath,
+                                QDir::Files | QDir::Hidden | QDir::System,
+                                QDirIterator::Subdirectories);
+                while (it.hasNext()) {
+                    it.next();
+                    QFile::setPermissions(it.filePath(),
+                                          QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+                }
+#endif
+#ifdef Q_OS_WIN
+                if (!WinLongPath::removeDirRecursive(orphanDirAbsPath)) {
+                    // On Windows, files checked out by the rebase may still
+                    // be held open by the LFS filter or git index.  Log a
+                    // warning and continue — the orphan files are inert and
+                    // will be cleaned up on the next save or sync once the
+                    // handles are released.
+                    qWarning() << "Orphan directory could not be removed (file handles still open):"
+                               << orphanDirAbsPath;
+                }
+#else
                 if (!QDir(orphanDirAbsPath).removeRecursively()) {
                     return Monad::ResultBase(
                         QStringLiteral("Failed to remove orphan directory: %1")
                             .arg(orphanDirAbsPath));
                 }
+#endif
                 return Monad::ResultBase();
             }),
         this);
