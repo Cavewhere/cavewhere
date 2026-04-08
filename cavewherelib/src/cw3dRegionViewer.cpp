@@ -65,6 +65,7 @@ cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
             {
                 HeadTracker = new cwDlibHeadTracker(this);
                 HeadCoupledProjection->setTracker(HeadTracker);
+                emit headTrackerChanged();
             }
 
             // Copy FOV/near/far from the perspective projection

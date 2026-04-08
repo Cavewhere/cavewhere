@@ -60,6 +60,11 @@ struct cwDlibHeadTrackerWorker::Impl
             return false;
         }
 
+        // Request a low resolution — 640x480 is plenty for head tracking
+        // and keeps dlib's HOG face detector fast (~30fps vs ~2fps at 1080p).
+        capture.set(cv::CAP_PROP_FRAME_WIDTH, 640);
+        capture.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
+
         frameWidth = static_cast<int>(capture.get(cv::CAP_PROP_FRAME_WIDTH));
         frameHeight = static_cast<int>(capture.get(cv::CAP_PROP_FRAME_HEIGHT));
 

@@ -24,7 +24,7 @@ class cw3dRegionViewer : public cwRhiViewer
     Q_PROPERTY(cwOrthogonalProjection* orthoProjection READ orthoProjection CONSTANT)
     Q_PROPERTY(cwPerspectiveProjection* perspectiveProjection READ perspectiveProjection CONSTANT)
     Q_PROPERTY(cwHeadCoupledPerspectiveProjection* headCoupledProjection READ headCoupledProjection CONSTANT)
-    Q_PROPERTY(cwAbstractHeadTracker* headTracker READ headTracker CONSTANT)
+    Q_PROPERTY(cwAbstractHeadTracker* headTracker READ headTracker NOTIFY headTrackerChanged)
     Q_PROPERTY(cwViewMatrixComposer* viewMatrixComposer READ viewMatrixComposer CONSTANT)
 
 public:
@@ -45,6 +45,7 @@ public:
 
 signals:
     void resized();
+    void headTrackerChanged();
 
 private slots:
     virtual void resizeGL();

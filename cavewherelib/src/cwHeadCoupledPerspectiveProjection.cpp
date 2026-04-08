@@ -88,6 +88,27 @@ void cwHeadCoupledPerspectiveProjection::setSensitivity(double sensitivity)
     }
 }
 
+void cwHeadCoupledPerspectiveProjection::setParallaxStrength(double strength)
+{
+    strength = qBound(0.0, strength, 2.0);
+    if (!qFuzzyCompare(m_parallaxStrength, strength))
+    {
+        m_parallaxStrength = strength;
+        updateProjection();
+        emit parallaxStrengthChanged();
+    }
+}
+
+void cwHeadCoupledPerspectiveProjection::setViewMatrixOffsetEnabled(bool enabled)
+{
+    if (m_viewMatrixOffsetEnabled != enabled)
+    {
+        m_viewMatrixOffsetEnabled = enabled;
+        updateProjection();
+        emit viewMatrixOffsetEnabledChanged();
+    }
+}
+
 void cwHeadCoupledPerspectiveProjection::setViewMatrixComposer(cwViewMatrixComposer* composer)
 {
     m_viewMatrixComposer = composer;
@@ -112,9 +133,6 @@ cwProjection cwHeadCoupledPerspectiveProjection::calculateProjection()
     double ex = m_lastEyePos.x() * m_sensitivity;
     double ey = m_lastEyePos.y() * m_sensitivity;
     double ez = m_lastEyePos.z();
-
-    double sh = m_screenHeightMeters / 2.0;
-    double sw = m_screenWidthMeters / 2.0;
 
     // If no tracker data yet (eye at origin), use the cached default distance
     if (qFuzzyIsNull(ez))
@@ -141,29 +159,43 @@ cwProjection cwHeadCoupledPerspectiveProjection::calculateProjection()
         setPrivateFarPlane(fp);
     }
 
-    // Off-axis frustum computation
-    double scale = np / ez;
-    double left   = (-sw - ex) * scale;
-    double right  = ( sw - ex) * scale;
-    double bottom = (-sh - ey) * scale;
-    double top    = ( sh - ey) * scale;
+    // Build a standard symmetric perspective frustum from FOV and viewport aspect
+    double halfH = np * qTan(qDegreesToRadians(m_fieldOfView) / 2.0);
+    double aspect = static_cast<double>(viewer()->width()) / viewer()->height();
+    double halfW = halfH * aspect;
+
+    // Head angle: how far the head is offset from screen center (in radians-ish)
+    // ex/ez ≈ tan(angle), so multiplying by np gives the shift at the near plane
+    // parallaxStrength amplifies this to make the effect visible
+    double shiftX = -(ex / ez) * np * m_parallaxStrength;
+    double shiftY = -(ey / ez) * np * m_parallaxStrength;
+
+    double left   = -halfW + shiftX;
+    double right  =  halfW + shiftX;
+    double bottom = -halfH + shiftY;
+    double top    =  halfH + shiftY;
 
     proj.setFrustum(left, right, bottom, top, np, fp);
 
-    // Derive and store FOV and aspect ratio so zoomTo() works
-    double verticalFov = 2.0 * qAtan((top - bottom) / (2.0 * np)) * (180.0 / M_PI);
-    double aspectRatio = (right - left) / (top - bottom);
-    proj.setFieldOfView(verticalFov);
-    proj.setAspectRatio(aspectRatio);
+    // Store FOV and aspect ratio so zoomTo() works
+    proj.setFieldOfView(m_fieldOfView);
+    proj.setAspectRatio(aspect);
 
     // Update head offset on the view matrix composer
     if (m_viewMatrixComposer)
     {
-        QMatrix4x4 headOffset;
-        headOffset.translate(static_cast<float>(-ex),
-                             static_cast<float>(-ey),
-                             0.0f);
-        m_viewMatrixComposer->setHeadOffset(headOffset);
+        if (m_viewMatrixOffsetEnabled)
+        {
+            QMatrix4x4 headOffset;
+            headOffset.translate(static_cast<float>(-ex),
+                                 static_cast<float>(-ey),
+                                 0.0f);
+            m_viewMatrixComposer->setHeadOffset(headOffset);
+        }
+        else
+        {
+            m_viewMatrixComposer->setHeadOffset(QMatrix4x4());
+        }
     }
 
     return proj;

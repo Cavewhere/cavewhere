@@ -2,6 +2,7 @@
 #include "cwViewMatrixComposer.h"
 #include "cwCamera.h"
 
+
 cwViewMatrixComposer::cwViewMatrixComposer(QObject* parent)
     : QObject(parent)
 {

@@ -20,6 +20,8 @@ class CAVEWHERE_LIB_EXPORT cwHeadCoupledPerspectiveProjection : public cwAbstrac
     Q_PROPERTY(double screenWidthMeters READ screenWidthMeters WRITE setScreenWidthMeters NOTIFY screenWidthMetersChanged)
     Q_PROPERTY(double screenHeightMeters READ screenHeightMeters WRITE setScreenHeightMeters NOTIFY screenHeightMetersChanged)
     Q_PROPERTY(double sensitivity READ sensitivity WRITE setSensitivity NOTIFY sensitivityChanged)
+    Q_PROPERTY(bool viewMatrixOffsetEnabled READ viewMatrixOffsetEnabled WRITE setViewMatrixOffsetEnabled NOTIFY viewMatrixOffsetEnabledChanged)
+    Q_PROPERTY(double parallaxStrength READ parallaxStrength WRITE setParallaxStrength NOTIFY parallaxStrengthChanged)
 
 public:
     explicit cwHeadCoupledPerspectiveProjection(QObject* parent = nullptr);
@@ -39,6 +41,12 @@ public:
     double sensitivity() const;
     void setSensitivity(double sensitivity);
 
+    bool viewMatrixOffsetEnabled() const;
+    void setViewMatrixOffsetEnabled(bool enabled);
+
+    double parallaxStrength() const;
+    void setParallaxStrength(double strength);
+
     cwViewMatrixComposer* viewMatrixComposer() const;
     void setViewMatrixComposer(cwViewMatrixComposer* composer);
 
@@ -48,6 +56,8 @@ signals:
     void screenWidthMetersChanged();
     void screenHeightMetersChanged();
     void sensitivityChanged();
+    void viewMatrixOffsetEnabledChanged();
+    void parallaxStrengthChanged();
 
 protected:
     cwProjection calculateProjection() override;
@@ -62,6 +72,8 @@ private:
     double m_screenWidthMeters = 0.30;
     double m_screenHeightMeters = 0.19;
     double m_sensitivity = 1.0;
+    bool m_viewMatrixOffsetEnabled = true;
+    double m_parallaxStrength = 1.0;
     double m_cachedDefaultEz = 0.0;
     QVector3D m_lastEyePos;
 
@@ -91,6 +103,16 @@ inline double cwHeadCoupledPerspectiveProjection::screenHeightMeters() const
 inline double cwHeadCoupledPerspectiveProjection::sensitivity() const
 {
     return m_sensitivity;
+}
+
+inline bool cwHeadCoupledPerspectiveProjection::viewMatrixOffsetEnabled() const
+{
+    return m_viewMatrixOffsetEnabled;
+}
+
+inline double cwHeadCoupledPerspectiveProjection::parallaxStrength() const
+{
+    return m_parallaxStrength;
 }
 
 inline cwViewMatrixComposer* cwHeadCoupledPerspectiveProjection::viewMatrixComposer() const

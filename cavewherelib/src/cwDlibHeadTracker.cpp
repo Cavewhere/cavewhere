@@ -128,24 +128,11 @@ void cwDlibHeadTracker::onWorkerError(QString message)
 void cwDlibHeadTracker::onFaceLostTimeout()
 {
     emit trackingLost();
-    // Start animating back to center
-    m_faceLostAnimationTimer.start();
+    // Snap back to default position immediately
+    setRawEyePosition(m_defaultEyePosition);
 }
 
 void cwDlibHeadTracker::onFaceLostAnimationTick()
 {
-    QVector3D current = eyePosition();
-    QVector3D target = m_defaultEyePosition;
-
-    QVector3D next = current + (target - current) * FaceLostAnimationAlpha;
-
-    // Check if close enough to stop
-    if ((next - target).length() < 0.001f)
-    {
-        setRawEyePosition(target);
-        m_faceLostAnimationTimer.stop();
-        return;
-    }
-
-    setRawEyePosition(next);
+    // No longer used — kept for binary compatibility
 }
