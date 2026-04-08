@@ -161,6 +161,7 @@ MainWindowTest {
             verify(cavingAreaNameTextEdit.errorMessage.includes("exists, use a different name"))
             compare(errorArea.visible, false)
 
+            mouseClick(nameTextEdit)
             keyClick("2")
 
             compare(cavingAreaNameTextEdit.hasError, false)
