@@ -3,7 +3,7 @@
 layout(location = 0) in vec2 v_uv;
 layout(location = 0) out vec4 outColor;
 
-layout(binding = 1) uniform sampler2D Texture;
+layout(binding = 2) uniform sampler2D Texture;
 // layout(set = 1, binding = 0) uniform sampler2D u_baseColor;   // sampler is okay outside a block
 
 // layout(set = 1, binding = 1) uniform MaterialUBO {
