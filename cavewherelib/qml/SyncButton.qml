@@ -73,16 +73,21 @@ RoundButton {
         }
     }
 
-    QQ.Component.onCompleted: {
-        syncHealth.refresh()
+    // Overlay item so the TapHandler receives right-click events on Windows,
+    // where the button's internal pointer handling would otherwise grab them.
+    QQ.Item {
+        anchors.fill: parent
+        QQ.TapHandler {
+            acceptedButtons: Qt.RightButton
+            gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
+            onTapped: {
+                syncMenu.popup()
+            }
+        }
     }
 
-    QQ.TapHandler {
-        acceptedButtons: Qt.RightButton
-        gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
-        onTapped: {
-            syncMenu.popup()
-        }
+    QQ.Component.onCompleted: {
+        syncHealth.refresh()
     }
 
     QC.ToolTip.visible: hovered
