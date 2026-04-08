@@ -116,7 +116,7 @@ TEST_CASE("Local cave rename wins on concurrent rename-rename conflict",
     REQUIRE(peerProject->cavingRegion()->caveCount() == 1);
     peerProject->cavingRegion()->cave(0)->setName(kPeerCave);
     peerProject->waitSaveToFinish();
-    REQUIRE(peerProject->isModified());
+    REQUIRE(isProjectModified(peerProject));
 
     peerProject->errorModel()->clear();
     REQUIRE(peerProject->sync());
@@ -130,7 +130,7 @@ TEST_CASE("Local cave rename wins on concurrent rename-rename conflict",
     REQUIRE(authorCavePtr != nullptr);
     authorCavePtr->setName(kAuthorCave);
     authorProject->waitSaveToFinish();
-    REQUIRE(authorProject->isModified());
+    REQUIRE(isProjectModified(authorProject));
 
     // --- Author syncs: commits local rename, pulls peer rename, ours wins ---
     authorProject->errorModel()->clear();
@@ -261,7 +261,7 @@ TEST_CASE("Local trip rename wins on concurrent rename-rename conflict",
     REQUIRE(peerProject->cavingRegion()->cave(0)->tripCount() == 1);
     peerProject->cavingRegion()->cave(0)->trip(0)->setName(kPeerTrip);
     peerProject->waitSaveToFinish();
-    REQUIRE(peerProject->isModified());
+    REQUIRE(isProjectModified(peerProject));
 
     peerProject->errorModel()->clear();
     REQUIRE(peerProject->sync());
@@ -276,7 +276,7 @@ TEST_CASE("Local trip rename wins on concurrent rename-rename conflict",
     REQUIRE(authorTripPtr != nullptr);
     authorTripPtr->setName(kAuthorTrip);
     authorProject->waitSaveToFinish();
-    REQUIRE(authorProject->isModified());
+    REQUIRE(isProjectModified(authorProject));
 
     // --- Author syncs: commits local rename, pulls peer rename, ours wins ---
     authorProject->errorModel()->clear();

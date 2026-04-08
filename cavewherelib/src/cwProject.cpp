@@ -1332,23 +1332,6 @@ void cwProject::waitSaveToFinish()
     RetiringSaveFutures.clear();
 }
 
-/**
- * Returns true if the user has modified the file, and false if haven't
- */
-bool cwProject::isModified()
-{
-    m_saveLoad->waitForFinished();
-    if (m_modified) {
-        return true;
-    }
-    auto* repo = m_saveLoad->repository();
-    if (repo == nullptr) {
-        return false;
-    }
-    repo->checkStatus();
-    return repo->modifiedFileCount() > 0;
-}
-
 bool cwProject::isNewEmptyProject() const
 {
     if(!isTemporaryProject()) {
