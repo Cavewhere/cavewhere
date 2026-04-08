@@ -1465,6 +1465,7 @@ MainWindowTest {
 
             let trip = currentTrip()
             trip.calibration.backSights = true
+            TestHelper.waitForProjectSaveToFinish(RootData.project)
 
             let chunk = currentChunk()
             let baselineSummary = chunkSummary(chunk)
