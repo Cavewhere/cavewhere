@@ -544,6 +544,17 @@ ResultBase syncRetryLimitResult(const QString& reason)
                           .arg(reason));
 }
 
+// Compile-time guard: SyncErrorCode and GitErrorCode share the same
+// ResultBase int transport, so their numeric values must never overlap.
+using GitErr = QQuickGit::GitRepository::GitErrorCode;
+using SyncErr = cwSaveLoad::SyncErrorCode;
+static_assert(static_cast<int>(SyncErr::RetryEpochChanged) != static_cast<int>(GitErr::PushRejectedByRemoteAdvance));
+static_assert(static_cast<int>(SyncErr::RetryEpochChanged) != static_cast<int>(GitErr::PushWildcardRefSpecUnsupported));
+static_assert(static_cast<int>(SyncErr::RetryEpochChanged) != static_cast<int>(GitErr::PushFailed));
+static_assert(static_cast<int>(SyncErr::RetryEpochChanged) != static_cast<int>(GitErr::HttpAuthFailed));
+static_assert(static_cast<int>(SyncErr::IncompatibleProjectVersion) != static_cast<int>(GitErr::PushRejectedByRemoteAdvance));
+static_assert(static_cast<int>(SyncErr::HttpAuthFailed) != static_cast<int>(GitErr::HttpAuthFailed));
+
 bool isPushRejectedByRemoteAdvance(const ResultBase& pushResult)
 {
     if (!pushResult.hasError()) {
@@ -6112,10 +6123,10 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
                 }
 
                 QString retryReason;
-                if (attemptResult.errorCodeTo<SyncErrorCode>() == SyncErrorCode::RetryEpochChanged) {
-                    retryReason = QStringLiteral("model changed before reconcile apply");
-                } else if (isPushRejectedByRemoteAdvance(attemptResult)) {
+                if (isPushRejectedByRemoteAdvance(attemptResult)) {
                     retryReason = QStringLiteral("remote advanced during push");
+                } else if (attemptResult.errorCodeTo<SyncErrorCode>() == SyncErrorCode::RetryEpochChanged) {
+                    retryReason = QStringLiteral("model changed before reconcile apply");
                 }
 
                 if (retryReason.isEmpty()) {

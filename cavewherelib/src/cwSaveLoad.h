@@ -162,9 +162,11 @@ public:
     };
 
     enum class SyncErrorCode : int {
-        RetryEpochChanged = Monad::ResultBase::CustomError + 1,
-        IncompatibleProjectVersion = Monad::ResultBase::CustomError + 2,
-        HttpAuthFailed = Monad::ResultBase::CustomError + 3
+        // Offset by 100 to avoid collisions with GitErrorCode which also
+        // starts at CustomError + 1 and shares the same ResultBase transport.
+        RetryEpochChanged = Monad::ResultBase::CustomError + 100,
+        IncompatibleProjectVersion = Monad::ResultBase::CustomError + 101,
+        HttpAuthFailed = Monad::ResultBase::CustomError + 102
     };
 
     using BranchResetMode = cwSyncTypes::BranchResetMode;

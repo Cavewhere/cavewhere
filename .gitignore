@@ -699,3 +699,4 @@ test-qml/test.png
 cavewherelib/icons/Thumbs.db
 *.autosave
 test-qml/Thumbs.db
+clone-test/

@@ -12879,3 +12879,113 @@ TEST_CASE("shareLink falls back to first remote when origin absent", "[ShareLink
     CHECK(!url.isEmpty());
     CHECK(url == QUrl::fromLocalFile(remotePath));
 }
+
+TEST_CASE("SyncErrorCode values do not collide with GitErrorCode values", "[cwProject][sync]") {
+    // Bug: SyncErrorCode::RetryEpochChanged and
+    // GitErrorCode::PushRejectedByRemoteAdvance both equalled
+    // CustomError + 1 = 1025.  Push rejections were misinterpreted as
+    // epoch staleness, causing wrong retry behavior.
+    const int retryEpoch = static_cast<int>(cwSaveLoad::SyncErrorCode::RetryEpochChanged);
+    const int incompatible = static_cast<int>(cwSaveLoad::SyncErrorCode::IncompatibleProjectVersion);
+    const int syncHttpAuth = static_cast<int>(cwSaveLoad::SyncErrorCode::HttpAuthFailed);
+
+    const int pushRejected = static_cast<int>(QQuickGit::GitRepository::GitErrorCode::PushRejectedByRemoteAdvance);
+    const int pushWildcard = static_cast<int>(QQuickGit::GitRepository::GitErrorCode::PushWildcardRefSpecUnsupported);
+    const int pushFailed = static_cast<int>(QQuickGit::GitRepository::GitErrorCode::PushFailed);
+    const int gitHttpAuth = static_cast<int>(QQuickGit::GitRepository::GitErrorCode::HttpAuthFailed);
+
+    CHECK(retryEpoch != pushRejected);
+    CHECK(retryEpoch != pushWildcard);
+    CHECK(retryEpoch != pushFailed);
+    CHECK(retryEpoch != gitHttpAuth);
+
+    CHECK(incompatible != pushRejected);
+    CHECK(incompatible != pushWildcard);
+    CHECK(incompatible != pushFailed);
+    CHECK(incompatible != gitHttpAuth);
+
+    CHECK(syncHttpAuth != pushRejected);
+    CHECK(syncHttpAuth != pushWildcard);
+    CHECK(syncHttpAuth != pushFailed);
+    CHECK(syncHttpAuth != gitHttpAuth);
+}
+
+TEST_CASE("cwProject sync succeeds when remote advances during push", "[cwProject][sync]") {
+    // Regression: when the remote advanced between fetch and push,
+    // the push returned PushRejectedByRemoteAdvance (1025).  Before
+    // the fix, the retry logic misidentified this as
+    // RetryEpochChanged (also 1025) and retried without re-pulling,
+    // guaranteeing repeated failure.
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Sync Tester"));
+    rootData->account()->setEmail(QStringLiteral("sync.tester@example.com"));
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Push Retry Cave"));
+
+    QTemporaryDir projectDir;
+    REQUIRE(projectDir.isValid());
+    const QString projectPath = QDir(projectDir.path()).filePath(QStringLiteral("push-retry.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+
+    auto* repository = project->repository();
+    REQUIRE(repository != nullptr);
+
+    QTemporaryDir remoteRoot;
+    REQUIRE(remoteRoot.isValid());
+    const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
+
+    const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
+                                                         QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(addRemoteError.isEmpty());
+
+    // Initial sync to push baseline.
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+
+    // Advance the remote from a separate clone.
+    const QString clonePath = QDir(remoteRoot.path()).filePath(QStringLiteral("peer"));
+    QQuickGit::GitRepository peer;
+    peer.setDirectory(QDir(clonePath));
+    peer.setAccount(rootData->account());
+    auto cloneFuture = peer.clone(QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(AsyncFuture::waitForFinished(cloneFuture, 10000));
+    REQUIRE(!cloneFuture.result().hasError());
+
+    {
+        QFile f(QDir(clonePath).filePath(QStringLiteral("remote.txt")));
+        REQUIRE(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write("remote advance\n");
+    }
+    REQUIRE_NOTHROW(peer.commitAll(QStringLiteral("Remote advance"),
+                                   QStringLiteral("advance remote tip")));
+    auto peerPush = peer.push();
+    REQUIRE(AsyncFuture::waitForFinished(peerPush, 10000));
+    REQUIRE(!peerPush.result().hasError());
+
+    // Make a local change and sync.  The first push attempt will be
+    // rejected (remote advanced).  The retry must re-pull and succeed.
+    cave->setName(QStringLiteral("Push Retry Cave Updated"));
+    project->waitSaveToFinish();
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    // Sync should succeed — previously it failed after 3 retries with
+    // "model changed before reconcile apply" due to the error code
+    // collision.
+    CHECK(project->errorModel()->count() == 0);
+    CHECK(project->isModified() == false);
+}
