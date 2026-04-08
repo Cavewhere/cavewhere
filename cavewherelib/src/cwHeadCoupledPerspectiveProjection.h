@@ -22,6 +22,7 @@ class CAVEWHERE_LIB_EXPORT cwHeadCoupledPerspectiveProjection : public cwAbstrac
     Q_PROPERTY(double sensitivity READ sensitivity WRITE setSensitivity NOTIFY sensitivityChanged)
     Q_PROPERTY(bool viewMatrixOffsetEnabled READ viewMatrixOffsetEnabled WRITE setViewMatrixOffsetEnabled NOTIFY viewMatrixOffsetEnabledChanged)
     Q_PROPERTY(double parallaxStrength READ parallaxStrength WRITE setParallaxStrength NOTIFY parallaxStrengthChanged)
+    Q_PROPERTY(double translationScale READ translationScale WRITE setTranslationScale NOTIFY translationScaleChanged)
 
 public:
     explicit cwHeadCoupledPerspectiveProjection(QObject* parent = nullptr);
@@ -47,6 +48,9 @@ public:
     double parallaxStrength() const;
     void setParallaxStrength(double strength);
 
+    double translationScale() const;
+    void setTranslationScale(double scale);
+
     cwViewMatrixComposer* viewMatrixComposer() const;
     void setViewMatrixComposer(cwViewMatrixComposer* composer);
 
@@ -58,6 +62,7 @@ signals:
     void sensitivityChanged();
     void viewMatrixOffsetEnabledChanged();
     void parallaxStrengthChanged();
+    void translationScaleChanged();
 
 protected:
     cwProjection calculateProjection() override;
@@ -71,9 +76,10 @@ private:
     double m_fieldOfView = 55.0;
     double m_screenWidthMeters = 0.30;
     double m_screenHeightMeters = 0.19;
-    double m_sensitivity = 1.0;
+    double m_sensitivity = 0.65;
     bool m_viewMatrixOffsetEnabled = true;
-    double m_parallaxStrength = 1.0;
+    double m_parallaxStrength = 0.3;
+    double m_translationScale = 1.0;
     double m_cachedDefaultEz = 0.0;
     double m_referenceEz = 0.0;
     QVector3D m_lastEyePos;
@@ -114,6 +120,11 @@ inline bool cwHeadCoupledPerspectiveProjection::viewMatrixOffsetEnabled() const
 inline double cwHeadCoupledPerspectiveProjection::parallaxStrength() const
 {
     return m_parallaxStrength;
+}
+
+inline double cwHeadCoupledPerspectiveProjection::translationScale() const
+{
+    return m_translationScale;
 }
 
 inline cwViewMatrixComposer* cwHeadCoupledPerspectiveProjection::viewMatrixComposer() const

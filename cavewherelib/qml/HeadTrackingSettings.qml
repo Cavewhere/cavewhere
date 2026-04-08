@@ -23,7 +23,7 @@ ColumnLayout {
     QC.Slider {
         id: smoothingSliderId
         from: 0.0; to: 1.0
-        value: itemId.headTracker ? itemId.headTracker.smoothing : 0.5
+        value: itemId.headTracker ? itemId.headTracker.smoothing : 0.7
         onMoved: if (itemId.headTracker) itemId.headTracker.smoothing = value
         visible: itemId.headProjection.enabled
         Layout.fillWidth: true
@@ -44,34 +44,6 @@ ColumnLayout {
     }
 
     QC.Label {
-        text: "Screen Width (m): " + screenWidthSliderId.value.toFixed(3)
-        font.pixelSize: Theme.fontSizeBody
-        visible: itemId.headProjection.enabled
-    }
-    QC.Slider {
-        id: screenWidthSliderId
-        from: 0.05; to: 1.0
-        value: itemId.headProjection.screenWidthMeters
-        onMoved: itemId.headProjection.screenWidthMeters = value
-        visible: itemId.headProjection.enabled
-        Layout.fillWidth: true
-    }
-
-    QC.Label {
-        text: "Screen Height (m): " + screenHeightSliderId.value.toFixed(3)
-        font.pixelSize: Theme.fontSizeBody
-        visible: itemId.headProjection.enabled
-    }
-    QC.Slider {
-        id: screenHeightSliderId
-        from: 0.05; to: 1.0
-        value: itemId.headProjection.screenHeightMeters
-        onMoved: itemId.headProjection.screenHeightMeters = value
-        visible: itemId.headProjection.enabled
-        Layout.fillWidth: true
-    }
-
-    QC.Label {
         text: "Parallax Strength: " + parallaxStrengthSliderId.value.toFixed(1)
         font.pixelSize: Theme.fontSizeBody
         visible: itemId.headProjection.enabled
@@ -81,6 +53,20 @@ ColumnLayout {
         from: 0.0; to: 2.0
         value: itemId.headProjection.parallaxStrength
         onMoved: itemId.headProjection.parallaxStrength = value
+        visible: itemId.headProjection.enabled
+        Layout.fillWidth: true
+    }
+
+    QC.Label {
+        text: "Translation Scale: " + translationScaleSliderId.value.toFixed(2)
+        font.pixelSize: Theme.fontSizeBody
+        visible: itemId.headProjection.enabled
+    }
+    QC.Slider {
+        id: translationScaleSliderId
+        from: 0.0; to: 3.0
+        value: itemId.headProjection.translationScale
+        onMoved: itemId.headProjection.translationScale = value
         visible: itemId.headProjection.enabled
         Layout.fillWidth: true
     }

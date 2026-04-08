@@ -60,7 +60,7 @@ private:
     QQuaternion applyRotationSmoothing(QQuaternion raw) const;
 
     bool m_running = false;
-    double m_smoothing = 0.5;
+    double m_smoothing = 0.7;
     QVector3D m_eyePosition;
     QQuaternion m_headRotation;
 };

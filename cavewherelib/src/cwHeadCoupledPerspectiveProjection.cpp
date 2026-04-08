@@ -8,6 +8,9 @@
 //Qt includes
 #include <QtMath>
 
+//Std includes
+#include <cmath>
+
 cwHeadCoupledPerspectiveProjection::cwHeadCoupledPerspectiveProjection(QObject* parent)
     : cwAbstractProjection(parent)
 {
@@ -96,6 +99,17 @@ void cwHeadCoupledPerspectiveProjection::setParallaxStrength(double strength)
         m_parallaxStrength = strength;
         updateProjection();
         emit parallaxStrengthChanged();
+    }
+}
+
+void cwHeadCoupledPerspectiveProjection::setTranslationScale(double scale)
+{
+    scale = qBound(0.0, scale, 3.0);
+    if (!qFuzzyCompare(m_translationScale, scale))
+    {
+        m_translationScale = scale;
+        updateProjection();
+        emit translationScaleChanged();
     }
 }
 
@@ -199,10 +213,16 @@ cwProjection cwHeadCoupledPerspectiveProjection::calculateProjection()
                 deltaZ = (m_referenceEz - ez) * m_sensitivity;
             }
 
+            // Scale translation by camera distance so the effect is
+            // proportional to the scene (farther = more amplification)
+            float cameraDistance = std::abs(
+                m_viewMatrixComposer->baseViewMatrix().column(3).z());
+            float scale = cameraDistance * static_cast<float>(m_translationScale);
+
             QMatrix4x4 headOffset;
-            headOffset.translate(static_cast<float>(-ex),
-                                 static_cast<float>(-ey),
-                                 static_cast<float>(deltaZ));
+            headOffset.translate(static_cast<float>(-ex) * scale,
+                                 static_cast<float>(-ey) * scale,
+                                 static_cast<float>(deltaZ) * scale);
             m_viewMatrixComposer->setHeadOffset(headOffset);
         }
         else

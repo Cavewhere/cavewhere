@@ -30,6 +30,7 @@ void cwViewMatrixComposer::setHeadOffset(const QMatrix4x4& offset)
     compose();
 }
 
+
 void cwViewMatrixComposer::compose()
 {
     if (m_camera)
