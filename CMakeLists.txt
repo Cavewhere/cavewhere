@@ -414,6 +414,50 @@ if(BUILD_TESTING)
     qt_import_qml_plugins(cavewhere-qml-test)
 endif()
 
+#### Dlib shape predictor model (downloaded once at configure time) ####
+set(DLIB_MODEL_DIR "${CMAKE_BINARY_DIR}/models")
+set(DLIB_MODEL_FILE "${DLIB_MODEL_DIR}/shape_predictor_68_face_landmarks.dat")
+set(DLIB_MODEL_ARCHIVE "${DLIB_MODEL_DIR}/shape_predictor_68_face_landmarks.dat.bz2")
+
+if(NOT EXISTS "${DLIB_MODEL_FILE}")
+    file(MAKE_DIRECTORY "${DLIB_MODEL_DIR}")
+
+    if(NOT EXISTS "${DLIB_MODEL_ARCHIVE}")
+        message(STATUS "Downloading dlib shape predictor model...")
+        file(DOWNLOAD
+            "http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2"
+            "${DLIB_MODEL_ARCHIVE}"
+            SHOW_PROGRESS
+            STATUS DLIB_DOWNLOAD_STATUS
+        )
+        list(GET DLIB_DOWNLOAD_STATUS 0 DLIB_DOWNLOAD_ERROR)
+        if(DLIB_DOWNLOAD_ERROR)
+            message(WARNING "Failed to download dlib shape predictor model: ${DLIB_DOWNLOAD_STATUS}")
+        endif()
+    endif()
+
+    if(EXISTS "${DLIB_MODEL_ARCHIVE}")
+        message(STATUS "Extracting dlib shape predictor model...")
+        find_program(BUNZIP2_EXECUTABLE bunzip2)
+        if(BUNZIP2_EXECUTABLE)
+            execute_process(
+                COMMAND ${BUNZIP2_EXECUTABLE} -k "${DLIB_MODEL_ARCHIVE}"
+                RESULT_VARIABLE DLIB_EXTRACT_RESULT
+            )
+        else()
+            # Fallback: cmake -E tar handles bz2 on most platforms
+            execute_process(
+                COMMAND ${CMAKE_COMMAND} -E tar xjf "${DLIB_MODEL_ARCHIVE}"
+                WORKING_DIRECTORY "${DLIB_MODEL_DIR}"
+                RESULT_VARIABLE DLIB_EXTRACT_RESULT
+            )
+        endif()
+        if(NOT DLIB_EXTRACT_RESULT EQUAL 0)
+            message(WARNING "Failed to extract dlib shape predictor model")
+        endif()
+    endif()
+endif()
+
 #### CaveWhere ####
 # if(APPLE)
 #     set(MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/Info.plist.in)
@@ -703,6 +747,17 @@ if(APPLE)
             COMMENT "Copying CaveWhere.icns into the app bundle..."
         )
 
+        # Copy dlib shape predictor model into app bundle
+        if(EXISTS "${DLIB_MODEL_FILE}")
+            add_custom_command(TARGET CaveWhere POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/Resources/models"
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${DLIB_MODEL_FILE}"
+                    "$<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/Resources/models/shape_predictor_68_face_landmarks.dat"
+                COMMENT "Copying dlib shape predictor model into app bundle..."
+            )
+        endif()
+
         # Ensure installMac.sh is copied whenever it changes
         add_custom_command(
             OUTPUT ${CMAKE_BINARY_DIR}/installMac.sh
@@ -754,8 +809,16 @@ if(APPLE)
 
 endif()
 
-
-
+# Copy dlib model next to executable for non-bundle builds (Windows/Linux)
+if(NOT APPLE AND EXISTS "${DLIB_MODEL_FILE}")
+    add_custom_command(TARGET CaveWhere POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:CaveWhere>/models"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${DLIB_MODEL_FILE}"
+            "$<TARGET_FILE_DIR:CaveWhere>/models/shape_predictor_68_face_landmarks.dat"
+        COMMENT "Copying dlib shape predictor model next to executable..."
+    )
+endif()
 
 if(WIN32 OR APPLE OR UNIX)
 	#### Building Installer for Windows, Mac, and Linux ####
