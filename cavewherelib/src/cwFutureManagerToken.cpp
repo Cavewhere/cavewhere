@@ -16,7 +16,9 @@ void cwFutureManagerToken::addJob(const cwFuture &job)
 {
     auto model = Model;
 
-    Q_ASSERT(!model.isNull());
+    if (model.isNull()) {
+        return;
+    }
 
     QMetaObject::invokeMethod(model, [model, job]()
     {

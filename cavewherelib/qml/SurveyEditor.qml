@@ -42,7 +42,6 @@ QQ.Item {
 
         onLastChunkAdded: {
             editorModel.focusOnLastChunk()
-            Qt.callLater(() => viewId.syncFocusedCellInView())
         }
     }
 
@@ -109,10 +108,10 @@ QQ.Item {
             QQ.Connections {
                 target: editorModel
                 function onFocusedRowChanged() {
-                    viewId.syncFocusedCellInView()
+                    Qt.callLater(viewId.syncFocusedCellInView)
                 }
                 function onFocusedRoleChanged() {
-                    viewId.syncFocusedCellInView()
+                    Qt.callLater(viewId.syncFocusedCellInView)
                 }
             }
 
