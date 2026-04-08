@@ -241,12 +241,12 @@ MainWindowTest {
 
             //Make we have all the data
             tryVerify(() => { return RootData.region.caveCount > 0 }, 20000)
-            compare(RootData.project.fileType, Project.BundledGitFileType)
+            tryCompare(RootData.project, "fileType", Project.GitFileType, 5000)
 
             verify(RootData.project.save())
             TestHelper.waitForProjectSaveToFinish(RootData.project)
 
-            compare(RootData.project.fileType, Project.BundledGitFileType)
+            compare(RootData.project.fileType, Project.GitFileType)
 
         }
 

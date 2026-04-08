@@ -1732,6 +1732,10 @@ struct cwSaveLoad::Data {
     }
 
     void addFileSystemJob(Job job, cwSaveLoad* context) {
+        if (retiring) {
+            return;
+        }
+
         Q_ASSERT(job.path.isEmpty());
         Q_ASSERT(job.oldPath.isEmpty());
 
@@ -1868,6 +1872,10 @@ struct cwSaveLoad::Data {
     }
 
     void addExplicitFileSystemJob(Job job, cwSaveLoad* context) {
+        if (retiring) {
+            return;
+        }
+
         // Explicit jobs are already path-resolved and don't track object state; move jobs here
         // can race with path updates and break path-ready notifications. Use addFileSystemJob for moves.
         Q_ASSERT(job.action != Job::Action::Move);
@@ -2471,9 +2479,13 @@ struct cwSaveLoad::Data {
 
 // cwSaveLoad::~cwSaveLoad() = default;
 cwSaveLoad::~cwSaveLoad() {
-    // qDebug() << "SaveLoad destroyed:" << this << d->m_pendingJobs.size();
-    Q_ASSERT(d->m_pendingJobs.isEmpty());
-    Q_ASSERT(d->m_pendingJobsDeferred.future().isFinished());
+    // Discard any queued-but-not-yet-dispatched filesystem jobs. This handles
+    // abnormal destruction (e.g. the owning async chain was cancelled) where
+    // retire() was never called. Complete the deferred so observers don't hang.
+    d->m_pendingJobs.clear();
+    if (!d->m_pendingJobsDeferred.future().isFinished()) {
+        d->m_pendingJobsDeferred.complete();
+    }
 }
 
 namespace {
