@@ -21,7 +21,9 @@ class CaveWhereConan(ConanFile):
     ("openssl/3.5.0"),
     ("xxhash/[>=0.8.3]"),
     ("tinygltf/[>=2.9.0]"),
-    ("minizip-ng/[>=4.0.7]")
+    ("minizip-ng/[>=4.0.7]"),
+    ("opencv/4.10.0"),
+    ("dlib/19.24.2"),
     ]
 
     options = {
@@ -64,7 +66,7 @@ class CaveWhereConan(ConanFile):
             self.requires("xkbcommon/[>=1.6.0]", override=True)
             self.requires("sqlite3/[>=3.45.0]") #, override=True) #override seems to use system's sqlite3 and causes issues
         else:
-            self.requires("sqlite3/[>=3.44.2]")
+            self.requires("sqlite3/[>=3.48.0]", override=True)
 
     def build_requirements(self):
         self.tool_requires("protobuf/<host_version>")
@@ -83,6 +85,18 @@ class CaveWhereConan(ConanFile):
             # macOS/Linux desktop + mobile: keep protobuf/abseil static.
             self.options["protobuf"].shared = True
             self.options["abseil"].shared = False
+
+        # dlib: disable BLAS/LAPACK (only need HOG + shape predictor)
+        self.options["dlib"].with_gif = False
+        self.options["dlib"].with_png = False
+        self.options["dlib"].with_jpeg = False
+
+        # OpenCV: minimize modules, we only need core + video capture + imgproc + calib3d
+        self.options["opencv"].with_ffmpeg = False
+        self.options["opencv"].with_eigen = False
+        self.options["opencv"].with_tesseract = False
+        self.options["opencv"].with_quirc = False
+        self.options["opencv"].dnn = False
 
         self.options["openssl"].shared = True
 

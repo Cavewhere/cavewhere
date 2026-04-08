@@ -36,6 +36,9 @@
   <key>LSMinimumSystemVersion</key>
   <string>10.14</string>
 
+  <key>NSCameraUsageDescription</key>
+  <string>CaveWhere uses the camera for head tracking to create an immersive 3D parallax effect.</string>
+
   <key>CFBundleDocumentTypes</key>
   <array>
     <dict>

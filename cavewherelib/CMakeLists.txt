@@ -23,6 +23,8 @@ find_package(Qt6
 find_package(xxHash REQUIRED)
 find_package(TinyGLTF REQUIRED)
 find_package(minizip REQUIRED)
+find_package(OpenCV REQUIRED)
+find_package(dlib REQUIRED)
 
 set(BUILD_WITH_QT6 ON CACHE BOOL "Build qtkeychain with Qt 6" FORCE)
 set(BUILD_TRANSLATIONS OFF CACHE BOOL "Disable qtkeychain translations" FORCE)
@@ -109,6 +111,8 @@ target_link_libraries(cavewherelib
     abseil::abseil
     xxHash::xxhash
     MINIZIP::minizip
+    opencv::opencv
+    dlib::dlib
     # surveximg
 )
 
