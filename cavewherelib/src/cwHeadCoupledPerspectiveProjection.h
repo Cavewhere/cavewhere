@@ -75,6 +75,7 @@ private:
     bool m_viewMatrixOffsetEnabled = true;
     double m_parallaxStrength = 1.0;
     double m_cachedDefaultEz = 0.0;
+    double m_referenceEz = 0.0;
     QVector3D m_lastEyePos;
 
     void updateCachedDefaultEz();

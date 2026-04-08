@@ -138,6 +138,12 @@ cwProjection cwHeadCoupledPerspectiveProjection::calculateProjection()
     if (qFuzzyIsNull(ez))
     {
         ez = m_cachedDefaultEz;
+        m_referenceEz = 0.0; // Reset so it recalibrates on next real data
+    }
+    else if (qFuzzyIsNull(m_referenceEz))
+    {
+        // Capture the first real distance as the reference for Z delta
+        m_referenceEz = ez;
     }
 
     // Guard against zero/negative distance
@@ -186,10 +192,17 @@ cwProjection cwHeadCoupledPerspectiveProjection::calculateProjection()
     {
         if (m_viewMatrixOffsetEnabled)
         {
+            // Z delta: leaning forward (smaller ez) moves camera into scene
+            double deltaZ = 0.0;
+            if (!qFuzzyIsNull(m_referenceEz))
+            {
+                deltaZ = (m_referenceEz - ez) * m_sensitivity;
+            }
+
             QMatrix4x4 headOffset;
             headOffset.translate(static_cast<float>(-ex),
                                  static_cast<float>(-ey),
-                                 0.0f);
+                                 static_cast<float>(deltaZ));
             m_viewMatrixComposer->setHeadOffset(headOffset);
         }
         else
