@@ -4322,12 +4322,14 @@ TEST_CASE("cwProject sync keeps repository clean for local trip rename with remo
     QFile firstSeedImageFile(firstSeedImagePath);
     REQUIRE(firstSeedImageFile.open(QIODevice::ReadOnly));
     const QByteArray firstSeedBytes = firstSeedImageFile.readAll();
+    firstSeedImageFile.close();
     REQUIRE_FALSE(firstSeedBytes.isEmpty());
     const QString firstSeedOid = QString::fromLatin1(QCryptographicHash::hash(firstSeedBytes, QCryptographicHash::Sha256).toHex());
 
     QFile secondSeedImageFile(secondSeedImagePath);
     REQUIRE(secondSeedImageFile.open(QIODevice::ReadOnly));
     const QByteArray secondSeedBytes = secondSeedImageFile.readAll();
+    secondSeedImageFile.close();
     REQUIRE_FALSE(secondSeedBytes.isEmpty());
     const QString secondSeedOid = QString::fromLatin1(QCryptographicHash::hash(secondSeedBytes, QCryptographicHash::Sha256).toHex());
 
@@ -4522,12 +4524,14 @@ TEST_CASE("cwProject sync keeps repository clean for remote trip rename with loc
     QFile firstSeedImageFile(firstSeedImagePath);
     REQUIRE(firstSeedImageFile.open(QIODevice::ReadOnly));
     const QByteArray firstSeedBytes = firstSeedImageFile.readAll();
+    firstSeedImageFile.close();
     REQUIRE_FALSE(firstSeedBytes.isEmpty());
     const QString firstSeedOid = QString::fromLatin1(QCryptographicHash::hash(firstSeedBytes, QCryptographicHash::Sha256).toHex());
 
     QFile secondSeedImageFile(secondSeedImagePath);
     REQUIRE(secondSeedImageFile.open(QIODevice::ReadOnly));
     const QByteArray secondSeedBytes = secondSeedImageFile.readAll();
+    secondSeedImageFile.close();
     REQUIRE_FALSE(secondSeedBytes.isEmpty());
     const QString secondSeedOid = QString::fromLatin1(QCryptographicHash::hash(secondSeedBytes, QCryptographicHash::Sha256).toHex());
 
@@ -4952,12 +4956,14 @@ TEST_CASE("cwProject sync keeps repository clean for local cave rename with remo
     QFile firstSeedImageFile(firstSeedImagePath);
     REQUIRE(firstSeedImageFile.open(QIODevice::ReadOnly));
     const QByteArray firstSeedBytes = firstSeedImageFile.readAll();
+    firstSeedImageFile.close();
     REQUIRE_FALSE(firstSeedBytes.isEmpty());
     const QString firstSeedOid = QString::fromLatin1(QCryptographicHash::hash(firstSeedBytes, QCryptographicHash::Sha256).toHex());
 
     QFile secondSeedImageFile(secondSeedImagePath);
     REQUIRE(secondSeedImageFile.open(QIODevice::ReadOnly));
     const QByteArray secondSeedBytes = secondSeedImageFile.readAll();
+    secondSeedImageFile.close();
     REQUIRE_FALSE(secondSeedBytes.isEmpty());
     const QString secondSeedOid = QString::fromLatin1(QCryptographicHash::hash(secondSeedBytes, QCryptographicHash::Sha256).toHex());
 
@@ -5210,12 +5216,14 @@ TEST_CASE("cwProject sync keeps repository clean for remote cave rename with loc
     QFile firstSeedImageFile(firstSeedImagePath);
     REQUIRE(firstSeedImageFile.open(QIODevice::ReadOnly));
     const QByteArray firstSeedBytes = firstSeedImageFile.readAll();
+    firstSeedImageFile.close();
     REQUIRE_FALSE(firstSeedBytes.isEmpty());
     const QString firstSeedOid = QString::fromLatin1(QCryptographicHash::hash(firstSeedBytes, QCryptographicHash::Sha256).toHex());
 
     QFile secondSeedImageFile(secondSeedImagePath);
     REQUIRE(secondSeedImageFile.open(QIODevice::ReadOnly));
     const QByteArray secondSeedBytes = secondSeedImageFile.readAll();
+    secondSeedImageFile.close();
     REQUIRE_FALSE(secondSeedBytes.isEmpty());
     const QString secondSeedOid = QString::fromLatin1(QCryptographicHash::hash(secondSeedBytes, QCryptographicHash::Sha256).toHex());
 
