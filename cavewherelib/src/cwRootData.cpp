@@ -181,6 +181,7 @@ cwRootData::cwRootData(QObject *parent) :
 cwRootData::~cwRootData()
 {
     shutdownBlocking();
+    QQuickGit::GitRepository::shutdownGitEngine();
 }
 
 /**

@@ -84,7 +84,9 @@ int main(int argc, char **argv) \
     Setup setup;
     const char* qmlSourceDirectory = QUICK_TEST_SOURCE_DIR; //The source directory where the qml tests are located
     qDebug() << "qmlSourceDirectory:" << qmlSourceDirectory;
-    return quick_test_main_with_setup(argc, argv, "CaveWhere-qml-tests", qmlSourceDirectory, &setup); \
+    int result = quick_test_main_with_setup(argc, argv, "CaveWhere-qml-tests", qmlSourceDirectory, &setup);
+    QQuickGit::GitRepository::shutdownGitEngine();
+    return result;
 }
 
 
