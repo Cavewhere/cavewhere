@@ -57,6 +57,18 @@ public slots:
 //QUICK_TEST_MAIN_WITH_SETUP(mapWhere-qml-tests, Setup)
 int main(int argc, char **argv) \
 {
+#ifdef Q_OS_WIN
+    // Force Basic style when running offscreen to avoid Windows native style
+    // crashes (OpenThemeData fails → unit_width assertion in qquickwindowsstyle.cpp)
+    for (int i = 1; i < argc - 1; ++i) {
+        if ((qstrcmp(argv[i], "-platform") == 0 || qstrcmp(argv[i], "--platform") == 0)
+            && qstrcmp(argv[i + 1], "offscreen") == 0) {
+            qputenv("QT_QUICK_CONTROLS_STYLE", "Basic");
+            break;
+        }
+    }
+#endif
+
     //This allows use to create a QGraphicsScene, without QApplication, this crashes
     QApplication app(argc, argv);
 
