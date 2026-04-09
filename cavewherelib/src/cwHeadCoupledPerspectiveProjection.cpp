@@ -232,8 +232,8 @@ cwProjection cwHeadCoupledPerspectiveProjection::calculateProjection()
             float scale = static_cast<float>(m_sceneDistance * m_translationScale);
 
             QMatrix4x4 headOffset;
-            headOffset.translate(static_cast<float>(-ex) * scale,
-                                 static_cast<float>(-ey) * scale,
+            headOffset.translate(static_cast<float>(ex) * scale,
+                                 static_cast<float>(ey) * scale,
                                  static_cast<float>(deltaZ) * scale);
             m_viewMatrixComposer->setHeadOffset(headOffset);
         }
