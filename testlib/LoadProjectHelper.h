@@ -113,6 +113,7 @@ public:
     Q_INVOKABLE void loadProjectFromZip(cwProject* project, const QString& filename);
 
     Q_INVOKABLE QString copyToTempDir(const QString& filename);
+    Q_INVOKABLE QUrl copyToTempDirUrl(const QString& filename);
 
     Q_INVOKABLE bool fileExists(const QUrl& filename) const;
     Q_INVOKABLE bool directoryExists(const QUrl& directory) const;

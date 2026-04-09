@@ -200,6 +200,11 @@ QString TestHelper::copyToTempDir(const QString &filename)
     return copyToTempFolder(filename);
 }
 
+QUrl TestHelper::copyToTempDirUrl(const QString &filename)
+{
+    return QUrl::fromLocalFile(copyToTempFolder(filename));
+}
+
 bool TestHelper::fileExists(const QUrl &filename) const
 {
     QFileInfo info(filename.toLocalFile());

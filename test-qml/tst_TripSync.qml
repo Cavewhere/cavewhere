@@ -1903,9 +1903,7 @@ MainWindowTest {
             editedState.noteCount += 1
             let expectedEditedState = JSON.stringify(editedState)
 
-            let copiedImagePath = TestHelper.copyToTempDir("://datasets/test_cwTextureUploadTask/PhakeCave.PNG")
-            verify(copiedImagePath !== "")
-            let copiedImageUrl = Qt.url("file://" + copiedImagePath)
+            let copiedImageUrl = TestHelper.copyToTempDirUrl("://datasets/test_cwTextureUploadTask/PhakeCave.PNG")
 
             let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery")
             verify(noteGallery !== null)
@@ -2047,9 +2045,7 @@ MainWindowTest {
             let commitA = TestHelper.projectHeadCommitOid(RootData.project)
             verify(commitA !== "")
 
-            let copiedLiDARPath = TestHelper.copyToTempDir("://datasets/lidarProjects/9_15_2025 3.glb")
-            verify(copiedLiDARPath !== "")
-            let copiedLiDARUrl = Qt.url("file://" + copiedLiDARPath)
+            let copiedLiDARUrl = TestHelper.copyToTempDirUrl("://datasets/lidarProjects/9_15_2025 3.glb")
             let expectedFileName = "9_15_2025 3.glb"
 
             let editedState = JSON.parse(baselineModelState)
@@ -2191,9 +2187,8 @@ MainWindowTest {
                     return
                 }
 
-                let copiedLiDARPath = TestHelper.copyToTempDir("://datasets/lidarProjects/9_15_2025 3.glb")
-                verify(copiedLiDARPath !== "")
-                let copiedLiDARUrl = Qt.url("file://" + copiedLiDARPath)
+                let copiedLiDARUrl = TestHelper.copyToTempDirUrl("://datasets/lidarProjects/9_15_2025 3.glb")
+                verify(copiedLiDARUrl.toString() !== "")
                 let expectedFileName = "9_15_2025 3.glb"
 
                 noteGallery().imagesAdded([copiedLiDARUrl])
@@ -2334,9 +2329,8 @@ MainWindowTest {
                     return
                 }
 
-                let copiedImagePath = TestHelper.copyToTempDir("://datasets/test_cwTextureUploadTask/PhakeCave.PNG")
-                verify(copiedImagePath !== "")
-                let copiedImageUrl = Qt.url("file://" + copiedImagePath)
+                let copiedImageUrl = TestHelper.copyToTempDirUrl("://datasets/test_cwTextureUploadTask/PhakeCave.PNG")
+                verify(copiedImageUrl.toString() !== "")
 
                 let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery")
                 verify(noteGallery !== null)

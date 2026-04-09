@@ -22,13 +22,9 @@ MainWindowTest {
 
                     tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
-                    function toUrl(filePath) {
-                                return Qt.url("file://" + filePath)
-                    }
-
                     // //Copy test data to another
-                    let phakeCavePath = toUrl(TestHelper.copyToTempDir("://datasets/test_cwTextureUploadTask/PhakeCave.PNG"));
-                    let bonesPath = toUrl(TestHelper.copyToTempDir("://datasets/lidarProjects/9_15_2025 3.glb"));
+                    let phakeCavePath = TestHelper.copyToTempDirUrl("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+                    let bonesPath = TestHelper.copyToTempDirUrl("://datasets/lidarProjects/9_15_2025 3.glb");
 
                     let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery");
                     noteGallery.imagesAdded([phakeCavePath, bonesPath]);
@@ -104,12 +100,8 @@ MainWindowTest {
             tryVerify(() => { return RootData.pageView.currentPageItem !== null })
                     tryVerify(() => {return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
-            function toUrl(filePath) {
-                return Qt.url("file://" + filePath)
-            }
-
-            let phakeCavePath = toUrl(TestHelper.copyToTempDir("://datasets/test_cwTextureUploadTask/PhakeCave.PNG"));
-            let bonesPath = toUrl(TestHelper.copyToTempDir("://datasets/lidarProjects/9_15_2025 3.glb"));
+            let phakeCavePath = TestHelper.copyToTempDirUrl("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+            let bonesPath = TestHelper.copyToTempDirUrl("://datasets/lidarProjects/9_15_2025 3.glb");
 
             let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery");
             noteGallery.imagesAdded([phakeCavePath, bonesPath]);
