@@ -672,61 +672,6 @@ void swapFirstTwoNoteProtos(const QString& clonePath)
 }
 } // namespace
 
-// TEST_CASE("cwProject isModified should work correctly", "[cwProject]") {
-//     cwProject project;
-//     CHECK(project.isModified() == false);
-
-//     cwCave* cave1 = new cwCave();
-//     cave1->setName("cave1");
-//     project.cavingRegion()->addCave(cave1);
-
-//     CHECK(project.isModified() == true);
-
-//     QString testFile = prependTempFolder("test_cwProject.cw");
-//     QFile::remove(testFile);
-
-//     //Fixme: this was calling save as
-//     REQUIRE(false);
-
-//     // project.saveAs(testFile);
-//     project.waitSaveToFinish();
-
-//     CHECK(project.isModified() == false);
-
-//     project.newProject();
-//     CHECK(project.isModified() == false);
-
-//     project.loadOrConvert(testFile);
-//     project.waitLoadToFinish();
-//     CHECK(project.isModified() == false);
-
-//     REQUIRE(project.cavingRegion()->caveCount() == 1);
-
-//     project.cavingRegion()->cave(0)->addTrip();
-//     CHECK(project.isModified() == true);
-
-//     //Fixme: this was calling save
-//     REQUIRE(false);
-
-//     // project.save();
-//     project.waitSaveToFinish();
-//     CHECK(project.isModified() == false);
-
-//     SECTION("Load file") {
-//         //If this fails, this is probably because of a version change, or other save changes
-//         fileToProject(&project, "://datasets/network.cw");
-//         project.waitLoadToFinish();
-//         CHECK(project.isModified() == false);
-
-//         REQUIRE(project.cavingRegion()->caveCount() == 1);
-//         REQUIRE(project.cavingRegion()->cave(0)->tripCount() == 1);
-
-//         cwTrip* firstTrip = project.cavingRegion()->cave(0)->trip(0);
-//         firstTrip->setName("Sauce!");
-//         CHECK(project.isModified() == true);
-//     }
-// }
-
 TEST_CASE("Image data should save and load correctly", "[cwProject]") {
 
     qRegisterMetaType<QList <cwImage> >("QList<cwImage>");
@@ -749,7 +694,7 @@ TEST_CASE("Image data should save and load correctly", "[cwProject]") {
 
     SECTION("Is Modifed shouldn't effect the save and load") {
         //Make sure is modified doesn't modify the underlying file
-        CHECK(project->isModified() == true);
+        CHECK(isProjectModified(project) == true);
     }
 
     REQUIRE(trip->notes()->notes().size() == 1);
@@ -802,12 +747,12 @@ TEST_CASE("discardChanges resets modified git directory project to HEAD", "[cwPr
     project->waitSaveToFinish();
 
     REQUIRE(project->fileType() == cwProject::GitFileType);
-    REQUIRE(project->isModified() == false);
+    REQUIRE(isProjectModified(project.get()) == false);
 
     project->cavingRegion()->cave(0)->setName(QStringLiteral("Cave After Discard"));
     project->waitSaveToFinish();
 
-    REQUIRE(project->isModified());
+    REQUIRE(isProjectModified(project.get()));
 
     // Capture the repo path before discarding (project->filename() is inside the repo dir).
     const QString repoPath = QFileInfo(project->filename()).absoluteDir().absolutePath();
@@ -845,10 +790,10 @@ TEST_CASE("discardChanges is a no-op for bundled projects", "[cwProject][discard
     // discardChanges is a no-op for bundled projects — the temp dir is simply
     // abandoned on close without re-bundling. Verify it does not crash and
     // does not change the modified state.
-    const bool modifiedBefore = project->isModified();
+    const bool modifiedBefore = isProjectModified(project);
     project->discardChanges();
     project->waitForDiscardToFinish();
-    CHECK(project->isModified() == modifiedBefore);
+    CHECK(isProjectModified(project) == modifiedBefore);
 }
 
 TEST_CASE("discardChanges removes new untracked files (e.g. newly added trip)", "[cwProject][discardChanges]") {
@@ -873,7 +818,7 @@ TEST_CASE("discardChanges removes new untracked files (e.g. newly added trip)", 
     project->waitSaveToFinish();
     REQUIRE(project->save());
     project->waitSaveToFinish();
-    REQUIRE(project->isModified() == false);
+    REQUIRE(isProjectModified(project.get()) == false);
 
     // Snapshot the data root directory so we can verify file counts after discard.
     const QDir dataRoot = project->dataRootDir();
@@ -899,7 +844,7 @@ TEST_CASE("discardChanges removes new untracked files (e.g. newly added trip)", 
     cave->addTrip();
     cave->trip(1)->setName(QStringLiteral("New Uncommitted Trip"));
     project->waitSaveToFinish();
-    REQUIRE(project->isModified() == true);
+    REQUIRE(isProjectModified(project.get()) == true);
 
     // The trips directory should now have 2 subdirectories.
     const QStringList tripSubdirsBefore = tripsDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
@@ -939,12 +884,12 @@ TEST_CASE("discardChangesAndReload reloads in-memory model from committed state"
     project->waitSaveToFinish();
     REQUIRE(project->save());
     project->waitSaveToFinish();
-    REQUIRE(project->isModified() == false);
+    REQUIRE(isProjectModified(project) == false);
 
     // Modify the in-memory model after the baseline commit.
     project->cavingRegion()->cave(0)->setName(QStringLiteral("Modified Cave"));
     project->waitSaveToFinish();
-    REQUIRE(project->isModified());
+    REQUIRE(isProjectModified(project));
     CHECK(project->cavingRegion()->cave(0)->name() == QStringLiteral("Modified Cave"));
 
     // discardChangesAndReload should reset git and reload the committed state.
@@ -2098,7 +2043,7 @@ TEST_CASE("Saving commits local git changes when account is configured", "[cwPro
 
     cave->setName(QStringLiteral("Cave B"));
     project->waitSaveToFinish();
-    REQUIRE(project->isModified());
+    REQUIRE(isProjectModified(project));
 
     const std::optional<git_oid> beforeSaveCommit = tryHeadOid(repo);
 
@@ -2126,7 +2071,7 @@ TEST_CASE("Saving commits local git changes when account is configured", "[cwPro
 
     const QString commitMessage = QString::fromUtf8(git_commit_message(commit));
     CHECK(commitMessage.startsWith(QStringLiteral("Save from CaveWhere")));
-    CHECK(project->isModified() == false);
+    CHECK(isProjectModified(project) == false);
 }
 
 TEST_CASE("commit-on-save is idempotent when no changes exist", "[cwProject]") {
@@ -2174,18 +2119,18 @@ TEST_CASE("commit-on-save is idempotent when no changes exist", "[cwProject]") {
 
     cave->setName(QStringLiteral("Cave B"));
     project->waitSaveToFinish();
-    REQUIRE(project->isModified());
+    REQUIRE(isProjectModified(project));
 
     REQUIRE(project->save());
     project->waitSaveToFinish();
     const git_oid firstSaveHead = headOid(repo);
-    CHECK(project->isModified() == false);
+    CHECK(isProjectModified(project) == false);
 
     REQUIRE(project->save());
     project->waitSaveToFinish();
     const git_oid secondSaveHead = headOid(repo);
     CHECK(git_oid_cmp(&firstSaveHead, &secondSaveHead) == 0);
-    CHECK(project->isModified() == false);
+    CHECK(isProjectModified(project) == false);
 }
 
 TEST_CASE("Project repository includes LFS attributes for glb assets", "[cwProject]") {
@@ -2368,10 +2313,10 @@ TEST_CASE("Remote clone open edit save and sync workflow preserves LFS assets",
     const QString noteImagePath = ProjectFilenameTestHelper::absolutePath(newNote, newNote->image().path());
     REQUIRE(QFileInfo::exists(noteImagePath));
 
-    REQUIRE(project->isModified());
+    REQUIRE(isProjectModified(project));
     REQUIRE(project->save());
     project->waitSaveToFinish();
-    CHECK(project->isModified() == false);
+    CHECK(isProjectModified(project) == false);
 
     QStringList syncJobsSeen;
     QMetaObject::Connection rowsInsertedConnection = QObject::connect(
@@ -2498,7 +2443,7 @@ TEST_CASE("cwProject sync pushes local changes to remote repository", "[cwProjec
 
     cave->setName(QStringLiteral("Sync Cave Updated"));
     project->waitSaveToFinish();
-    REQUIRE(project->isModified());
+    REQUIRE(isProjectModified(project));
 
     REQUIRE(project->sync());
     rootData->futureManagerModel()->waitForFinished();
@@ -2551,7 +2496,7 @@ TEST_CASE("cwProject sync pushes local changes to remote repository", "[cwProjec
     const git_oid* remoteHeadOid = git_reference_target(remoteBranch);
     REQUIRE(remoteHeadOid != nullptr);
     CHECK(git_oid_cmp(localHeadOid, remoteHeadOid) == 0);
-    CHECK(project->isModified() == false);
+    CHECK(isProjectModified(project) == false);
 }
 
 TEST_CASE("cwProject sync fails without remotes after saving survey and notes", "[cwProject]") {
@@ -2728,7 +2673,7 @@ TEST_CASE("cwProject sync succeeds after adding remote through project repositor
 
     cave->setName(QStringLiteral("Remote Cave Updated"));
     project->waitSaveToFinish();
-    REQUIRE(project->isModified());
+    REQUIRE(isProjectModified(project));
 
     project->errorModel()->clear();
     REQUIRE(project->sync());
@@ -3380,14 +3325,14 @@ TEST_CASE("cwProject sync pulls remote-only changes into a clean local repo", "[
 
     cave->setName(QStringLiteral("Pull Only Cave Baseline"));
     project->waitSaveToFinish();
-    REQUIRE(project->isModified());
+    REQUIRE(isProjectModified(project));
 
     project->errorModel()->clear();
     REQUIRE(project->sync());
     rootData->futureManagerModel()->waitForFinished();
     project->waitSaveToFinish();
     CHECK(project->errorModel()->count() == 0);
-    CHECK(project->isModified() == false);
+    CHECK(isProjectModified(project) == false);
 
     const QString localRepoPath = QFileInfo(project->filename()).absoluteDir().absolutePath();
     git_repository* localRepo = nullptr;
@@ -3576,7 +3521,7 @@ TEST_CASE("cwProject sync reconciles pulled cave updates into memory", "[cwProje
     const QString remoteCaveName = QStringLiteral("Reconcile Updated Cave");
     remoteCave->setName(remoteCaveName);
     remoteProject->waitSaveToFinish();
-    REQUIRE(remoteProject->isModified());
+    REQUIRE(isProjectModified(remoteProject));
 
     remoteProject->errorModel()->clear();
     REQUIRE(remoteProject->sync());
@@ -3691,7 +3636,7 @@ TEST_CASE("cwProject sync incrementally reconciles pulled note updates without r
     remoteNote->setName(remoteNoteName);
     remoteNote->setRotate(remoteNoteRotation);
     remoteProject->waitSaveToFinish();
-    REQUIRE(remoteProject->isModified());
+    REQUIRE(isProjectModified(remoteProject));
 
     remoteProject->errorModel()->clear();
     REQUIRE(remoteProject->sync());
@@ -3827,7 +3772,7 @@ TEST_CASE("cwProject sync incrementally reconciles note updates after remote tri
     remoteNote->setName(remoteNoteName);
     remoteNote->setRotate(remoteNoteRotation);
     remoteProject->waitSaveToFinish();
-    REQUIRE(remoteProject->isModified());
+    REQUIRE(isProjectModified(remoteProject));
 
     remoteProject->errorModel()->clear();
     REQUIRE(remoteProject->sync());
@@ -3970,7 +3915,7 @@ TEST_CASE("cwProject sync incrementally reconciles trip rename without note chan
     const QString remoteTripName = QStringLiteral("Incremental Trip Rename Only Trip Remote");
     remoteTrip->setName(remoteTripName);
     remoteProject->waitSaveToFinish();
-    REQUIRE(remoteProject->isModified());
+    REQUIRE(isProjectModified(remoteProject));
 
     remoteProject->errorModel()->clear();
     REQUIRE(remoteProject->sync());
@@ -4109,13 +4054,13 @@ TEST_CASE("cwProject sync incrementally reconciles remote trip rename with local
     const QString remoteTripName = QStringLiteral("Incremental Trip Rename Date Trip Remote");
     remoteTrip->setName(remoteTripName);
     remoteProject->waitSaveToFinish();
-    REQUIRE(remoteProject->isModified());
+    REQUIRE(isProjectModified(remoteProject));
 
     const QDate localDateOnly(2024, 7, 15);
     const QDateTime localDateTime(localDateOnly, QTime());
     localTripPtr->setDate(localDateTime);
     project->waitSaveToFinish();
-    REQUIRE(project->isModified());
+    REQUIRE(isProjectModified(project));
     REQUIRE(localTripPtr->date().date() == localDateOnly);
 
     remoteProject->errorModel()->clear();
@@ -6900,7 +6845,7 @@ TEST_CASE("cwProject sync incrementally reconciles LiDAR note updates after remo
     remoteLidarNote->noteTransformation()->setUpMode(cwNoteLiDARTransformation::UpMode::XisUp);
     remoteLidarNote->noteTransformation()->setUpSign(-1.0f);
     remoteProject->waitSaveToFinish();
-    REQUIRE(remoteProject->isModified());
+    REQUIRE(isProjectModified(remoteProject));
 
     remoteProject->errorModel()->clear();
     REQUIRE(remoteProject->sync());
@@ -7344,7 +7289,7 @@ TEST_CASE("cwProject sync handles local edit churn during reconcile apply window
     const QString remoteCaveName = QStringLiteral("Remote Apply Guard Cave Updated");
     remoteCave->setName(remoteCaveName);
     remoteProject->waitSaveToFinish();
-    REQUIRE(remoteProject->isModified());
+    REQUIRE(isProjectModified(remoteProject));
 
     remoteProject->errorModel()->clear();
     REQUIRE(remoteProject->sync());
@@ -7472,7 +7417,7 @@ TEST_CASE("cwProject sync reconciles pulled model changes before pushing local c
     const QString remoteCaveName = QStringLiteral("Reconcile Push Updated Cave");
     remoteCave->setName(remoteCaveName);
     remoteProject->waitSaveToFinish();
-    REQUIRE(remoteProject->isModified());
+    REQUIRE(isProjectModified(remoteProject));
 
     remoteProject->errorModel()->clear();
     REQUIRE(remoteProject->sync());
@@ -7488,14 +7433,14 @@ TEST_CASE("cwProject sync reconciles pulled model changes before pushing local c
     REQUIRE(localOnlyFile.write("local change after remote rename\n") > 0);
     localOnlyFile.close();
     project->waitSaveToFinish();
-    REQUIRE(project->isModified());
+    REQUIRE(isProjectModified(project));
 
     project->errorModel()->clear();
     REQUIRE(project->sync());
     rootData->futureManagerModel()->waitForFinished();
     project->waitSaveToFinish();
     CHECK(project->errorModel()->count() == 0);
-    CHECK(project->isModified() == false);
+    CHECK(isProjectModified(project) == false);
 
     auto* localCave = project->cavingRegion()->cave(0);
     REQUIRE(localCave != nullptr);
@@ -7744,7 +7689,7 @@ TEST_CASE("cwProject sync rebases and pushes diverged non-conflicting changes", 
 
     cave->setName(QStringLiteral("Merge Cave Baseline"));
     project->waitSaveToFinish();
-    REQUIRE(project->isModified());
+    REQUIRE(isProjectModified(project));
 
     project->errorModel()->clear();
     REQUIRE(project->sync());
@@ -7808,7 +7753,7 @@ TEST_CASE("cwProject sync rebases and pushes diverged non-conflicting changes", 
     REQUIRE(localOnlyFile.write("local side change\n") == 18);
     localOnlyFile.close();
     project->waitSaveToFinish();
-    REQUIRE(project->isModified());
+    REQUIRE(isProjectModified(project));
 
     project->errorModel()->clear();
     REQUIRE(project->sync());
@@ -7915,7 +7860,7 @@ TEST_CASE("cwProject sync surfaces remote access failure and preserves local com
 
     cave->setName(QStringLiteral("Offline Sync Cave Local Change"));
     project->waitSaveToFinish();
-    REQUIRE(project->isModified());
+    REQUIRE(isProjectModified(project));
 
     const std::optional<git_oid> beforeSyncHead = tryHeadOid(localRepo);
 
@@ -7945,7 +7890,7 @@ TEST_CASE("cwProject sync surfaces remote access failure and preserves local com
     });
     const QString commitMessage = QString::fromUtf8(git_commit_message(commit));
     CHECK(commitMessage.startsWith(QStringLiteral("Sync from CaveWhere")));
-    CHECK(project->isModified() == false);
+    CHECK(isProjectModified(project) == false);
 }
 
 TEST_CASE("cwProject sync rejects reentry and converges to deterministic head", "[cwProject]") {
@@ -7983,14 +7928,14 @@ TEST_CASE("cwProject sync rejects reentry and converges to deterministic head", 
 
     cave->setName(QStringLiteral("Reentrant Sync Baseline"));
     project->waitSaveToFinish();
-    REQUIRE(project->isModified());
+    REQUIRE(isProjectModified(project));
 
     project->errorModel()->clear();
     REQUIRE(project->sync());
     rootData->futureManagerModel()->waitForFinished();
     project->waitSaveToFinish();
     CHECK(project->errorModel()->count() == 0);
-    CHECK(project->isModified() == false);
+    CHECK(isProjectModified(project) == false);
 
     const QString localRepoPath = QFileInfo(project->filename()).absoluteDir().absolutePath();
     git_repository* localRepo = nullptr;
@@ -8022,7 +7967,7 @@ TEST_CASE("cwProject sync rejects reentry and converges to deterministic head", 
     REQUIRE(localFile.write("sync called twice\n") == 18);
     localFile.close();
     project->waitSaveToFinish();
-    REQUIRE(project->isModified());
+    REQUIRE(isProjectModified(project));
 
     project->errorModel()->clear();
     REQUIRE(project->sync());
@@ -8031,7 +7976,7 @@ TEST_CASE("cwProject sync rejects reentry and converges to deterministic head", 
     project->waitSaveToFinish();
 
     CHECK(project->errorModel()->count() == 0);
-    CHECK(project->isModified() == false);
+    CHECK(isProjectModified(project) == false);
 
     const git_oid finalHead = headOid(localRepo);
     CHECK(git_oid_cmp(&baselineHead, &finalHead) != 0);
@@ -8491,7 +8436,7 @@ TEST_CASE("cwProject sync blocks pulled newer project version", "[cwProject]") {
     REQUIRE(localFile.write("local change before incompatible sync\n") > 0);
     localFile.close();
     project->waitSaveToFinish();
-    REQUIRE(project->isModified());
+    REQUIRE(isProjectModified(project));
 
     project->errorModel()->clear();
     REQUIRE(project->sync());
@@ -8549,7 +8494,7 @@ TEST_CASE("cwProject save skips commit and sync fails when account is invalid", 
     project->waitSaveToFinish();
     REQUIRE(project->save());
     project->waitSaveToFinish();
-    CHECK(project->isModified() == false);
+    CHECK(isProjectModified(project) == false);
 
     git_repository* repo = nullptr;
     REQUIRE(git_repository_open(&repo,
@@ -8582,7 +8527,7 @@ TEST_CASE("cwProject save skips commit and sync fails when account is invalid", 
 
     cave->setName(QStringLiteral("InvalidAccount Cave Updated"));
     project->waitSaveToFinish();
-    REQUIRE(project->isModified());
+    REQUIRE(isProjectModified(project));
 
     REQUIRE(project->save());
     project->waitSaveToFinish();
@@ -8594,7 +8539,7 @@ TEST_CASE("cwProject save skips commit and sync fails when account is invalid", 
 
     const git_oid afterSave = headOid(repo);
     CHECK(git_oid_cmp(&beforeSave, &afterSave) == 0);
-    CHECK(project->isModified());
+    CHECK(isProjectModified(project));
 
     project->errorModel()->clear();
     REQUIRE(project->sync());
@@ -12878,4 +12823,238 @@ TEST_CASE("shareLink falls back to first remote when origin absent", "[ShareLink
     const QUrl url = f.project->remoteUrl();
     CHECK(!url.isEmpty());
     CHECK(url == QUrl::fromLocalFile(remotePath));
+}
+
+TEST_CASE("SyncErrorCode values do not collide with GitErrorCode values", "[cwProject][sync]") {
+    // Bug: SyncErrorCode::RetryEpochChanged and
+    // GitErrorCode::PushRejectedByRemoteAdvance both equalled
+    // CustomError + 1 = 1025.  Push rejections were misinterpreted as
+    // epoch staleness, causing wrong retry behavior.
+    const int retryEpoch = static_cast<int>(cwSaveLoad::SyncErrorCode::RetryEpochChanged);
+    const int incompatible = static_cast<int>(cwSaveLoad::SyncErrorCode::IncompatibleProjectVersion);
+    const int syncHttpAuth = static_cast<int>(cwSaveLoad::SyncErrorCode::HttpAuthFailed);
+
+    const int pushRejected = static_cast<int>(QQuickGit::GitRepository::GitErrorCode::PushRejectedByRemoteAdvance);
+    const int pushWildcard = static_cast<int>(QQuickGit::GitRepository::GitErrorCode::PushWildcardRefSpecUnsupported);
+    const int pushFailed = static_cast<int>(QQuickGit::GitRepository::GitErrorCode::PushFailed);
+    const int gitHttpAuth = static_cast<int>(QQuickGit::GitRepository::GitErrorCode::HttpAuthFailed);
+
+    CHECK(retryEpoch != pushRejected);
+    CHECK(retryEpoch != pushWildcard);
+    CHECK(retryEpoch != pushFailed);
+    CHECK(retryEpoch != gitHttpAuth);
+
+    CHECK(incompatible != pushRejected);
+    CHECK(incompatible != pushWildcard);
+    CHECK(incompatible != pushFailed);
+    CHECK(incompatible != gitHttpAuth);
+
+    CHECK(syncHttpAuth != pushRejected);
+    CHECK(syncHttpAuth != pushWildcard);
+    CHECK(syncHttpAuth != pushFailed);
+    CHECK(syncHttpAuth != gitHttpAuth);
+}
+
+TEST_CASE("cwProject sync succeeds when remote advances during push", "[cwProject][sync]") {
+    // Regression: when the remote advanced between fetch and push,
+    // the push returned PushRejectedByRemoteAdvance (1025).  Before
+    // the fix, the retry logic misidentified this as
+    // RetryEpochChanged (also 1025) and retried without re-pulling,
+    // guaranteeing repeated failure.
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Sync Tester"));
+    rootData->account()->setEmail(QStringLiteral("sync.tester@example.com"));
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Push Retry Cave"));
+
+    QTemporaryDir projectDir;
+    REQUIRE(projectDir.isValid());
+    const QString projectPath = QDir(projectDir.path()).filePath(QStringLiteral("push-retry.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+
+    auto* repository = project->repository();
+    REQUIRE(repository != nullptr);
+
+    QTemporaryDir remoteRoot;
+    REQUIRE(remoteRoot.isValid());
+    const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
+
+    const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
+                                                         QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(addRemoteError.isEmpty());
+
+    // Initial sync to push baseline.
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+
+    // Advance the remote from a separate clone.
+    const QString clonePath = QDir(remoteRoot.path()).filePath(QStringLiteral("peer"));
+    QQuickGit::GitRepository peer;
+    peer.setDirectory(QDir(clonePath));
+    peer.setAccount(rootData->account());
+    auto cloneFuture = peer.clone(QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(AsyncFuture::waitForFinished(cloneFuture, 10000));
+    REQUIRE(!cloneFuture.result().hasError());
+
+    {
+        QFile f(QDir(clonePath).filePath(QStringLiteral("remote.txt")));
+        REQUIRE(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write("remote advance\n");
+    }
+    REQUIRE_NOTHROW(peer.commitAll(QStringLiteral("Remote advance"),
+                                   QStringLiteral("advance remote tip")));
+    auto peerPush = peer.push();
+    REQUIRE(AsyncFuture::waitForFinished(peerPush, 10000));
+    REQUIRE(!peerPush.result().hasError());
+
+    // Make a local change and sync.  The first push attempt will be
+    // rejected (remote advanced).  The retry must re-pull and succeed.
+    cave->setName(QStringLiteral("Push Retry Cave Updated"));
+    project->waitSaveToFinish();
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    // Sync should succeed — previously it failed after 3 retries with
+    // "model changed before reconcile apply" due to the error code
+    // collision.
+    CHECK(project->errorModel()->count() == 0);
+    CHECK(isProjectModified(project) == false);
+}
+
+namespace {
+struct BundleSyncFixture {
+    std::unique_ptr<cwRootData> rootData = std::make_unique<cwRootData>();
+    cwProject* project = rootData->project();
+    QTemporaryDir projectDir;
+    QTemporaryDir remoteRoot;
+    QTemporaryDir bundleDir;
+    QString remoteRepoPath;
+
+    void setup(const QString& caveName)
+    {
+        rootData->account()->setName(QStringLiteral("Bundle Sync Tester"));
+        rootData->account()->setEmail(QStringLiteral("bundle.sync.tester@example.com"));
+
+        auto region = project->cavingRegion();
+        region->addCave();
+        auto cave = region->cave(0);
+        REQUIRE(cave != nullptr);
+        cave->setName(caveName);
+
+        REQUIRE(projectDir.isValid());
+        const QString cwprojPath = QDir(projectDir.path()).filePath(QStringLiteral("bundle-sync.cwproj"));
+        REQUIRE(project->saveAs(cwprojPath));
+        project->waitSaveToFinish();
+
+        auto* repository = project->repository();
+        REQUIRE(repository != nullptr);
+
+        REQUIRE(remoteRoot.isValid());
+        remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
+        REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
+
+        const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
+                                                             QUrl::fromLocalFile(remoteRepoPath));
+        REQUIRE(addRemoteError.isEmpty());
+
+        cave->setName(caveName + QStringLiteral(" Baseline"));
+        project->waitSaveToFinish();
+        REQUIRE(isProjectModified(project));
+
+        project->errorModel()->clear();
+        REQUIRE(project->sync());
+        rootData->futureManagerModel()->waitForFinished();
+        project->waitSaveToFinish();
+        REQUIRE(project->errorModel()->count() == 0);
+        REQUIRE(isProjectModified(project) == false);
+
+        REQUIRE(bundleDir.isValid());
+        const QString bundlePath = bundleDir.filePath(QStringLiteral("bundle-sync.cw"));
+        REQUIRE(project->saveAs(bundlePath));
+        project->waitSaveToFinish();
+        REQUIRE(project->fileType() == cwProject::BundledGitFileType);
+        REQUIRE(isProjectModified(project) == false);
+    }
+
+    void pushRemoteCommit()
+    {
+        QTemporaryDir cloneDir;
+        REQUIRE(cloneDir.isValid());
+        const QString clonePath = QDir(cloneDir.path()).filePath(QStringLiteral("clone-bundle"));
+
+        QQuickGit::GitRepository cloneRepository;
+        cloneRepository.setDirectory(QDir(clonePath));
+        cloneRepository.setAccount(rootData->account());
+
+        auto cloneFuture = cloneRepository.clone(QUrl::fromLocalFile(remoteRepoPath));
+        REQUIRE(AsyncFuture::waitForFinished(cloneFuture, 10000));
+        REQUIRE(!cloneFuture.result().hasError());
+
+        QFile cloneFile(QDir(clonePath).filePath(QStringLiteral("remote-bundle-change.txt")));
+        REQUIRE(cloneFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        REQUIRE(cloneFile.write("remote content for bundle test\n") > 0);
+        cloneFile.close();
+
+        REQUIRE_NOTHROW(cloneRepository.commitAll(QStringLiteral("Remote change for bundle"),
+                                                  QStringLiteral("bundle-sync")));
+        auto pushFuture = cloneRepository.push();
+        REQUIRE(AsyncFuture::waitForFinished(pushFuture, 10000));
+        REQUIRE(!pushFuture.result().hasError());
+    }
+
+    void syncAndExpectSuccess()
+    {
+        project->errorModel()->clear();
+        REQUIRE(project->sync());
+        rootData->futureManagerModel()->waitForFinished();
+        project->waitSaveToFinish();
+        REQUIRE(project->errorModel()->count() == 0);
+    }
+};
+} // namespace
+
+TEST_CASE("cwProject bundled sync with remote changes marks project as modified", "[cwProject][sync][bundleSync]") {
+    BundleSyncFixture f;
+    f.setup(QStringLiteral("Bundle Sync Cave"));
+    f.pushRemoteCommit();
+    f.syncAndExpectSuccess();
+
+    const auto syncReport = f.project->lastSyncReport();
+    REQUIRE(syncReport.has_value());
+    const bool pulled =
+        syncReport->pullState == cwSaveLoad::SyncReport::PullState::FastForward
+        || syncReport->pullState == cwSaveLoad::SyncReport::PullState::Rebased
+        || syncReport->pullState == cwSaveLoad::SyncReport::PullState::MergeCommitCreated;
+    REQUIRE(pulled);
+
+    // The bundle on disk is now stale — the project should be marked modified
+    // so the user is prompted to save (re-zip the bundle).
+    CHECK(isProjectModified(f.project) == true);
+}
+
+TEST_CASE("cwProject bundled sync already up to date does not mark project as modified", "[cwProject][sync][bundleSync]") {
+    BundleSyncFixture f;
+    f.setup(QStringLiteral("Bundle No-Op Cave"));
+    f.syncAndExpectSuccess();
+
+    const auto syncReport = f.project->lastSyncReport();
+    REQUIRE(syncReport.has_value());
+    CHECK(syncReport->pullState == cwSaveLoad::SyncReport::PullState::AlreadyUpToDate);
+
+    // No changes pulled — bundle is still in sync, should NOT be modified.
+    CHECK(isProjectModified(f.project) == false);
 }

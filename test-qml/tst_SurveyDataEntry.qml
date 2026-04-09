@@ -883,7 +883,7 @@ MainWindowTest {
             let secondStation1Box = ObjectFinder.findObjectByChain(
                         mainWindow, "rootId->tripPage->view->dataBox." + secondStation1Row + "." + SurveyChunk.StationNameRole + "->coreTextInput")
             verify(secondStation1Box !== null)
-            mouseClick(secondStation1Box)
+            secondStation1Box.openEditor()
 
             keyClick("z")
             keyClick("z")

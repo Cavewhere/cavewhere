@@ -69,7 +69,7 @@ Item {
             // Commit any untracked initialization files (e.g., .gitattributes for LFS)
             RootData.project.save();
             TestHelper.waitForProjectSaveToFinish(RootData.project);
-            tryVerify(function() { return !RootData.project.isModified(); }, 5000);
+            tryVerify(function() { return !RootData.project.modified; }, 5000);
 
             askToSaveDialogId.askToSave();
 
@@ -85,7 +85,7 @@ Item {
             saveAsDirectory("askToSave-modified");
 
             RootData.region.cave(0).name = "Modified Cave";
-            tryVerify(function() { return RootData.project.isModified(); });
+            tryVerify(function() { return RootData.project.modified; });
 
             askToSaveDialogId.askToSave();
 
@@ -165,7 +165,7 @@ Item {
             // which causes askToSave() to show the dialog instead of skipping it.
             RootData.region.addCave();
             tryVerify(function() { return !RootData.project.isNewEmptyProject(); });
-            tryVerify(function() { return RootData.project.isModified(); });
+            tryVerify(function() { return RootData.project.modified; });
 
             const tempDir = RootData.urlToLocal(TestHelper.tempDirectoryUrl());
             const name = "ask-save-temp-bundle";
@@ -203,7 +203,7 @@ Item {
         function test_temporaryModifiedProject_saveButtonVisible() {
             RootData.region.addCave();
             tryVerify(function() { return !RootData.project.isNewEmptyProject(); });
-            tryVerify(function() { return RootData.project.isModified(); });
+            tryVerify(function() { return RootData.project.modified; });
             verify(RootData.project.isTemporaryProject,
                    "project must still be temporary");
 
@@ -226,7 +226,7 @@ Item {
         function test_askToSave_temporaryProject_cancelSaveDialog_closesBoth() {
             RootData.region.addCave();
             tryVerify(function() { return !RootData.project.isNewEmptyProject(); });
-            tryVerify(function() { return RootData.project.isModified(); });
+            tryVerify(function() { return RootData.project.modified; });
 
             askToSaveDialogId.askToSave();
             verify(askToSaveDialogId._dialog !== null);
@@ -271,7 +271,7 @@ Item {
 
             RootData.region.addCave();
             RootData.region.cave(1).name = "Unsaved Cave";
-            tryVerify(function() { return RootData.project.isModified(); });
+            tryVerify(function() { return RootData.project.modified; });
             TestHelper.waitForProjectSaveToFinish(RootData.project);
 
             // Discard the unsaved changes
@@ -324,7 +324,7 @@ Item {
         function test_askToSaveDialog_tempProject_addsToRecentProjects() {
             RootData.region.addCave();
             tryVerify(function() { return !RootData.project.isNewEmptyProject(); });
-            tryVerify(function() { return RootData.project.isModified(); });
+            tryVerify(function() { return RootData.project.modified; });
 
             const before = RootData.recentProjectModel.rowCount();
             const tempDir = RootData.urlToLocal(TestHelper.tempDirectoryUrl());
@@ -360,7 +360,7 @@ Item {
 
             // Rename a cave to make the project modified
             RootData.region.cave(0).name = "Cave After Discard";
-            tryVerify(function() { return RootData.project.isModified(); });
+            tryVerify(function() { return RootData.project.modified; });
             // Flush the rename save so the file exists on disk before we reset
             TestHelper.waitForProjectSaveToFinish(RootData.project);
 
@@ -397,7 +397,7 @@ Item {
             loadSyncFixture()
 
             RootData.region.cave(0).name = "Stale Remote Cave"
-            tryVerify(function() { return RootData.project.isModified() }, 5000)
+            tryVerify(function() { return RootData.project.modified }, 5000)
 
             askToSaveDialogId.askToSave()
             verify(askToSaveDialogId._dialog !== null)
@@ -441,7 +441,7 @@ Item {
             saveAsDirectory("offerSync-no-remote")
 
             RootData.region.cave(0).name = "No Remote Cave"
-            tryVerify(function() { return RootData.project.isModified() }, 5000)
+            tryVerify(function() { return RootData.project.modified }, 5000)
 
             askToSaveDialogId.askToSave()
             verify(askToSaveDialogId._dialog !== null)
@@ -454,15 +454,15 @@ Item {
         }
 
         // Project has a remote but is not modified → askToSave() calls afterSaveFunc()
-        // immediately without showing the dialog (isModified() is the gate, not offerSync).
+        // immediately without showing the dialog (modified is the gate, not offerSync).
         function test_offerSync_falseWhenSyncedAndUnmodified() {
             loadSyncFixture()
 
-            verify(!RootData.project.isModified(),
+            verify(!RootData.project.modified,
                    "fixture project should not be modified right after load")
 
             askToSaveDialogId.askToSave()
-            // isModified() is false but isNewEmptyProject() is also false,
+            // modified is false but isNewEmptyProject() is also false,
             // so askToSave() calls afterSaveFunc() directly and skips the dialog.
             // Verify that: no dialog shown, afterSaveFunc called.
             verify(rootId.afterSaveCalled,
@@ -478,7 +478,7 @@ Item {
             loadSyncFixture()
 
             RootData.region.cave(0).name = "Synced Cave"
-            tryVerify(function() { return RootData.project.isModified() }, 5000)
+            tryVerify(function() { return RootData.project.modified }, 5000)
 
             askToSaveDialogId.askToSave()
             verify(askToSaveDialogId._dialog !== null)
@@ -501,7 +501,7 @@ Item {
             TestHelper.removeDirectory(TestHelper.toLocalUrl(fixture.remoteRepoPath))
 
             RootData.region.cave(0).name = "Broken Remote Cave"
-            tryVerify(function() { return RootData.project.isModified() }, 5000)
+            tryVerify(function() { return RootData.project.modified }, 5000)
 
             askToSaveDialogId.askToSave()
             verify(askToSaveDialogId._dialog !== null)

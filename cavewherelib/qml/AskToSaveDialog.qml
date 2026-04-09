@@ -34,7 +34,7 @@ QQ.Loader {
             return;
         }
 
-        if(RootData.project.isModified()) {
+        if(RootData.project.modified) {
             loaderId.sourceComponent = null;
             loaderId._dialog = null;
             loaderId.sourceComponent = askToSaveDialogComponent;
@@ -165,7 +165,7 @@ QQ.Loader {
                         + RootData.project.errorModel.last().message
                         + "\nYour changes are saved locally.";
                     itemId._phase = "syncError";
-                } else if (RootData.project.isModified()) {
+                } else if (RootData.project.modified) {
                     // An in-flight sync finished but the project still has unsaved changes;
                     // save them and sync again so they are also pushed.
                     itemId.syncAfterSave = true;

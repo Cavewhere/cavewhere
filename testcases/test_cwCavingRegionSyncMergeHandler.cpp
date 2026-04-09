@@ -125,7 +125,7 @@ void setupSyncRenameScenario(SyncRenameState& s)
     // Peer renames the project
     peerProject->cavingRegion()->setName(kRenamedName);
     peerProject->waitSaveToFinish();
-    REQUIRE(peerProject->isModified());
+    REQUIRE(isProjectModified(peerProject));
 
     peerProject->errorModel()->clear();
     REQUIRE(peerProject->sync());
@@ -307,7 +307,7 @@ TEST_CASE("Local project rename wins on concurrent conflict",
 
     peerProject->cavingRegion()->setName(kPeerRename);
     peerProject->waitSaveToFinish();
-    REQUIRE(peerProject->isModified());
+    REQUIRE(isProjectModified(peerProject));
 
     peerProject->errorModel()->clear();
     REQUIRE(peerProject->sync());
@@ -321,7 +321,7 @@ TEST_CASE("Local project rename wins on concurrent conflict",
     // resolves the conflict with "ours wins", keeping kAuthorRename.
     authorProject->cavingRegion()->setName(kAuthorRename);
     authorProject->waitSaveToFinish();
-    REQUIRE(authorProject->isModified());
+    REQUIRE(isProjectModified(authorProject));
 
     // --- Author syncs: commits local rename, pulls peer's rename, ours wins ---
     authorProject->errorModel()->clear();

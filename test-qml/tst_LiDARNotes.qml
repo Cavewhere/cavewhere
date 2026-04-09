@@ -177,7 +177,7 @@ MainWindowTest {
 
             let azimuth = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARNorthInteraction->valueInput")
 
-            mouseClick(azimuth)
+            azimuth.openEditor()
 
             wait(100)
 

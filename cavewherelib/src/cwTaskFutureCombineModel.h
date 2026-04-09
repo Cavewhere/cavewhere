@@ -5,7 +5,9 @@
 #include <QConcatenateTablesProxyModel>
 #include <QQmlEngine>
 
-class cwTaskFutureCombineModel : public QConcatenateTablesProxyModel
+#include "CaveWhereLibExport.h"
+
+class CAVEWHERE_LIB_EXPORT cwTaskFutureCombineModel : public QConcatenateTablesProxyModel
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(TaskFutureCombineModel)

@@ -15,7 +15,9 @@
 #include <QPointer>
 #include <QQmlEngine>
 
-class cwPage : public QObject
+#include "CaveWhereLibExport.h"
+
+class CAVEWHERE_LIB_EXPORT cwPage : public QObject
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(Page)

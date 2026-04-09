@@ -103,16 +103,19 @@ StandardPage {
         parent: QC.Overlay.overlay
         anchors.centerIn: parent
         modal: true
-        implicitWidth: 400
+        implicitWidth: labelId.width
         title: qsTr("Remove Remote?")
 
         property string remoteName
 
         QC.Label {
+            id: labelId
+            width: 400
             wrapMode: QC.Label.WordWrap
             color: Theme.textSecondary
             text: qsTr("Remove remote \"%1\"? This does not delete the remote repository — it only removes the link from this project.").arg(removeDialog.remoteName)
         }
+
 
         footer: QC.DialogButtonBox {
             standardButtons: QC.DialogButtonBox.Cancel

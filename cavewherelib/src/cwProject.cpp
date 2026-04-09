@@ -547,10 +547,17 @@ void cwProject::completeSyncOperation(const Monad::ResultBase& result)
         }
         ErrorModel->append(cwError(result.errorMessage(), cwError::Warning));
         m_syncHealth->refresh();
+        // Sync flushes and commits before pushing, so the working tree may be
+        // clean even on push failure.
+        setModified(false);
         emit syncFinished();
         return;
     }
-    setModified(false);
+    auto report = m_saveLoad->lastSyncReport();
+    bool bundleNeedsResave = LoadedFromBundledArchive
+        && report
+        && report->pullState != cwSaveLoad::SyncReport::PullState::AlreadyUpToDate;
+    setModified(bundleNeedsResave);
     m_syncHealth->refresh();
     emit syncFinished();
 }
@@ -1323,20 +1330,6 @@ void cwProject::waitSaveToFinish()
         AsyncFuture::waitForFinished(future);
     }
     RetiringSaveFutures.clear();
-}
-
-/**
- * Returns true if the user has modified the file, and false if haven't
- */
-bool cwProject::isModified()
-{
-    m_saveLoad->waitForFinished();
-    auto* repo = m_saveLoad->repository();
-    if (repo == nullptr) {
-        return false;
-    }
-    repo->checkStatus();
-    return repo->modifiedFileCount() > 0;
 }
 
 bool cwProject::isNewEmptyProject() const

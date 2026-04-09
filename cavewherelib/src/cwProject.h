@@ -135,7 +135,6 @@ public:
     Q_INVOKABLE bool saveAs(QString newFilename);
     Q_INVOKABLE bool deleteTemporaryProject();
     Q_INVOKABLE bool isNewEmptyProject() const;
-    Q_INVOKABLE bool isModified();
     Q_INVOKABLE void discardChanges();
 
     QString filename() const;

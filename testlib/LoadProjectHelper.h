@@ -43,6 +43,13 @@ void CAVEWHERE_TESTLIB_EXPORT addTokenManager(cwProject* project);
 int CAVEWHERE_TESTLIB_EXPORT initBareRepo(const QString& path);
 
 /**
+ * Blocks until pending saves complete, then returns true if the project has
+ * local modifications or uncommitted git changes. Test-only — spins a nested
+ * event loop.
+ */
+bool CAVEWHERE_TESTLIB_EXPORT isProjectModified(cwProject* project);
+
+/**
  * @brief fileToProject
  * @param filename
  * @return A new project generate from filename

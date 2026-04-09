@@ -1038,6 +1038,20 @@ void addTokenManager(cwProject *project)
     project->setFutureManagerToken(model->token());
 }
 
+bool isProjectModified(cwProject* project)
+{
+    project->waitSaveToFinish();
+    if (project->modified()) {
+        return true;
+    }
+    auto* repo = project->repository();
+    if (repo == nullptr) {
+        return false;
+    }
+    repo->checkStatus();
+    return repo->modifiedFileCount() > 0;
+}
+
 int initBareRepo(const QString& path)
 {
     git_repository* repo = nullptr;
