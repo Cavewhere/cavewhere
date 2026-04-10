@@ -25,6 +25,7 @@ QC.ApplicationWindow {
     Binding { target: GitFontScale; property: "fontSizeUI";      value: Theme.fontSizeBody }
     Binding { target: GitFontScale; property: "fontSizeBase";    value: Theme.fontSizeUI }
     Binding { target: GitFontScale; property: "fontSizeTitle";   value: Theme.fontSizeTitle }
+    Binding { target: GitFontScale; property: "fontFamilyMono"; value: Theme.fontFamilyMono }
 
     visible: false
     width: 1024

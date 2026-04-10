@@ -181,7 +181,7 @@ StandardPage {
                         rightPadding: 6
                         leftPadding: 4
                         text: lineDel.origin === "H" ? "" : (lineDel.oldLineNo >= 0 ? lineDel.oldLineNo : "")
-                        font.family: "monospace"
+                        font.family: Theme.fontFamilyMono
                         font.pointSize: 11
                         color: Theme.textSubtle
                     }
@@ -191,7 +191,7 @@ StandardPage {
                         horizontalAlignment: QC.Label.AlignRight
                         rightPadding: 6
                         text: lineDel.origin === "H" ? "" : (lineDel.newLineNo >= 0 ? lineDel.newLineNo : "")
-                        font.family: "monospace"
+                        font.family: Theme.fontFamilyMono
                         font.pointSize: 11
                         color: Theme.textSubtle
                     }
@@ -207,7 +207,7 @@ StandardPage {
                         leftPadding: 6
                         rightPadding: 4
                         text: lineDel.text
-                        font.family: "monospace"
+                        font.family: Theme.fontFamilyMono
                         font.pointSize: 11
                         textFormat: QC.Label.PlainText
                         color: {
