@@ -138,6 +138,93 @@ TEST_CASE("cwDeepLinkHandler takePendingUrl", "[DeepLink]")
     }
 }
 
+TEST_CASE("cwDeepLinkHandler handleShareLink valid links", "[DeepLink]")
+{
+    SECTION("https://cavewhere.com/open share link emits openRepoRequested")
+    {
+        DeepLinkFixture f;
+        f.handler.handleShareLink(QUrl("https://cavewhere.com/open?repo=https%3A//github.com/user/repo"));
+        REQUIRE(f.openSpy.count() == 1);
+        CHECK(f.invalidSpy.count() == 0);
+        CHECK(f.openSpy.first().first().toUrl() == QUrl("https://github.com/user/repo"));
+    }
+
+    SECTION("cavewhere:// scheme delegates to handleUrl")
+    {
+        DeepLinkFixture f;
+        f.handler.handleShareLink(QUrl("cavewhere://open?repo=https://github.com/user/repo"));
+        REQUIRE(f.openSpy.count() == 1);
+        CHECK(f.invalidSpy.count() == 0);
+        CHECK(f.openSpy.first().first().toUrl() == QUrl("https://github.com/user/repo"));
+    }
+
+    SECTION("Percent-encoded repo param decoded correctly")
+    {
+        DeepLinkFixture f;
+        f.handler.handleShareLink(QUrl("https://cavewhere.com/open?repo=https%3A%2F%2Fgitlab.com%2Forg%2Fproject"));
+        REQUIRE(f.openSpy.count() == 1);
+        CHECK(f.openSpy.first().first().toUrl() == QUrl("https://gitlab.com/org/project"));
+    }
+
+    SECTION("Sets pending URL on success")
+    {
+        DeepLinkFixture f;
+        f.handler.handleShareLink(QUrl("https://cavewhere.com/open?repo=https%3A//github.com/user/repo"));
+        CHECK(f.handler.takePendingUrl() == QUrl("https://github.com/user/repo"));
+    }
+}
+
+TEST_CASE("cwDeepLinkHandler handleShareLink invalid links", "[DeepLink]")
+{
+    SECTION("Non-cavewhere.com HTTPS URL emits invalidLink")
+    {
+        DeepLinkFixture f;
+        f.handler.handleShareLink(QUrl("https://example.com/open?repo=https://github.com/user/repo"));
+        CHECK(f.openSpy.count() == 0);
+        REQUIRE(f.invalidSpy.count() == 1);
+    }
+
+    SECTION("HTTP cavewhere.com URL emits invalidLink")
+    {
+        DeepLinkFixture f;
+        f.handler.handleShareLink(QUrl("http://cavewhere.com/open?repo=https://github.com/user/repo"));
+        CHECK(f.openSpy.count() == 0);
+        REQUIRE(f.invalidSpy.count() == 1);
+    }
+
+    SECTION("Wrong path emits invalidLink")
+    {
+        DeepLinkFixture f;
+        f.handler.handleShareLink(QUrl("https://cavewhere.com/notopen?repo=https://github.com/user/repo"));
+        CHECK(f.openSpy.count() == 0);
+        REQUIRE(f.invalidSpy.count() == 1);
+    }
+
+    SECTION("Missing repo param emits invalidLink")
+    {
+        DeepLinkFixture f;
+        f.handler.handleShareLink(QUrl("https://cavewhere.com/open"));
+        CHECK(f.openSpy.count() == 0);
+        REQUIRE(f.invalidSpy.count() == 1);
+    }
+
+    SECTION("Disallowed repo host emits invalidLink")
+    {
+        DeepLinkFixture f;
+        f.handler.handleShareLink(QUrl("https://cavewhere.com/open?repo=https%3A//evil.com/bad/repo"));
+        CHECK(f.openSpy.count() == 0);
+        REQUIRE(f.invalidSpy.count() == 1);
+    }
+
+    SECTION("Bogus URL emits invalidLink")
+    {
+        DeepLinkFixture f;
+        f.handler.handleShareLink(QUrl("not-a-url-at-all"));
+        CHECK(f.openSpy.count() == 0);
+        REQUIRE(f.invalidSpy.count() == 1);
+    }
+}
+
 TEST_CASE("cwDeepLinkHandler collaboratorSettingsUrl", "[DeepLink]")
 {
     SECTION("GitHub repo returns /settings/access path")

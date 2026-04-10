@@ -30,39 +30,82 @@ void cwDeepLinkHandler::handleUrl(const QUrl& url)
     }
 
     const QUrlQuery query(url);
-    if (!query.hasQueryItem(QStringLiteral("repo"))) {
-        emit invalidLink(QStringLiteral("Missing 'repo' parameter"));
+    QString error;
+    QUrl repoUrl = validateAndExtractRepo(query, &error);
+    if (repoUrl.isEmpty()) {
+        emit invalidLink(error);
         return;
+    }
+
+    acceptRepoUrl(repoUrl);
+}
+
+void cwDeepLinkHandler::handleShareLink(const QUrl& url)
+{
+    if (url.scheme() == QLatin1String("cavewhere")) {
+        handleUrl(url);
+        return;
+    }
+
+    if (url.scheme() == QLatin1String("https")
+        && url.host().toLower() == QLatin1String("cavewhere.com")
+        && url.path() == QLatin1String("/open")) {
+        const QUrlQuery query(url);
+        QString error;
+        QUrl repoUrl = validateAndExtractRepo(query, &error);
+        if (repoUrl.isEmpty()) {
+            emit invalidLink(error);
+            return;
+        }
+        acceptRepoUrl(repoUrl);
+        return;
+    }
+
+    emit invalidLink(QStringLiteral(
+        "Please paste a CaveWhere share link "
+        "(https://cavewhere.com/open?repo=... or cavewhere://open?repo=...)"));
+}
+
+void cwDeepLinkHandler::acceptRepoUrl(const QUrl& repoUrl)
+{
+    m_pendingUrl = repoUrl;
+    emit openRepoRequested(repoUrl);
+}
+
+QUrl cwDeepLinkHandler::validateAndExtractRepo(const QUrlQuery& query, QString* errorOut)
+{
+    if (!query.hasQueryItem(QStringLiteral("repo"))) {
+        if (errorOut) { *errorOut = QStringLiteral("Missing 'repo' parameter"); }
+        return {};
     }
 
     const QString repoStr = query.queryItemValue(QStringLiteral("repo"), QUrl::FullyDecoded);
     const QUrl repoUrl(repoStr);
 
     if (repoUrl.scheme() != QLatin1String("https")) {
-        emit invalidLink(QStringLiteral("repo URL must use https:// scheme"));
-        return;
+        if (errorOut) { *errorOut = QStringLiteral("repo URL must use https:// scheme"); }
+        return {};
     }
 
     const QString host = repoUrl.host();
     if (!isHostAllowed(host)) {
-        emit invalidLink(QStringLiteral("repo host '%1' is not on the allowlist").arg(host));
-        return;
+        if (errorOut) { *errorOut = QStringLiteral("repo host '%1' is not on the allowlist").arg(host); }
+        return {};
     }
 
     static const QRegularExpression ipPattern(
         QStringLiteral(R"(^\d{1,3}(\.\d{1,3}){3}$)"));
-    if (ipPattern.match(host.toLower()).hasMatch()) {
-        emit invalidLink(QStringLiteral("IP addresses are not allowed as repo host"));
-        return;
+    if (ipPattern.match(host).hasMatch()) {
+        if (errorOut) { *errorOut = QStringLiteral("IP addresses are not allowed as repo host"); }
+        return {};
     }
 
     if (repoUrl.path().contains(QLatin1String(".."))) {
-        emit invalidLink(QStringLiteral("Path traversal detected in repo URL"));
-        return;
+        if (errorOut) { *errorOut = QStringLiteral("Path traversal detected in repo URL"); }
+        return {};
     }
 
-    m_pendingUrl = repoUrl;
-    emit openRepoRequested(repoUrl);
+    return repoUrl;
 }
 
 /**

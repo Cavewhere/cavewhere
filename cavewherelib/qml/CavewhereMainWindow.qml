@@ -51,6 +51,7 @@ QC.ApplicationWindow {
         loadFileDialog: loadDialogId.loadFileDialog
         askToSaveDialog: askToSaveDialogId
         onShareRequested: shareDialogId.open()
+        onOpenSharedLinkRequested: openSharedLinkDialogId.open()
     }
 
     QQ.Loader {
@@ -154,6 +155,10 @@ QC.ApplicationWindow {
 
     DeepLinkConfirmDialog {
         id: deepLinkConfirmDialogId
+    }
+
+    OpenSharedLinkDialog {
+        id: openSharedLinkDialogId
     }
 
     QQ.Connections {

@@ -11,6 +11,7 @@
 //Qt includes
 #include <QObject>
 #include <QUrl>
+#include <QUrlQuery>
 #include <QtQml/qqmlregistration.h>
 
 //Our includes
@@ -41,6 +42,7 @@ public:
     explicit cwDeepLinkHandler(QObject* parent = nullptr);
 
     Q_INVOKABLE void handleUrl(const QUrl& url);
+    Q_INVOKABLE void handleShareLink(const QUrl& url);
     Q_INVOKABLE QUrl takePendingUrl();
 
     static bool isHostAllowed(const QString& host);
@@ -52,6 +54,9 @@ signals:
     void invalidLink(QString reason);
 
 private:
+    QUrl validateAndExtractRepo(const QUrlQuery& query, QString* errorOut);
+    void acceptRepoUrl(const QUrl& repoUrl);
+
     QUrl m_pendingUrl;
 
     static const QStringList& allowedHosts();
