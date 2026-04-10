@@ -13,6 +13,8 @@ Loader {
     property string repositoryName;
     property string description
 
+    property url selectedDestinationFolder: ""
+
     signal accepted(var dir)
 
     active: false
@@ -36,7 +38,7 @@ Loader {
         id: popupId
 
         property cwResultDir resultDir: {
-            let folderUrl = folderDialogId.selectedFolder.toString() !== "" ? folderDialogId.selectedFolder : folderDialogId.currentFolder
+            let folderUrl = whereDialogId.selectedDestinationFolder.toString() !== "" ? whereDialogId.selectedDestinationFolder : RootData.recentProjectModel.defaultRepositoryDir
             let resultDir = RootData.project.repositoryDir(folderUrl, repositoryNameId.textField.text);
             return resultDir;
         }
@@ -77,8 +79,7 @@ Loader {
                     Layout.fillWidth: true
                     elide: Text.ElideLeft
                     objectName: "repositoryParentDir"
-                    // text: RootData.urlToLocal(folderDialogId.selectedFolder)
-                    text: folderDialogId.selectedFolder.toString() !== "" ? RootData.urlToLocal(folderDialogId.selectedFolder) : RootData.urlToLocal(folderDialogId.currentFolder)
+                    text: whereDialogId.selectedDestinationFolder.toString() !== "" ? RootData.urlToLocal(whereDialogId.selectedDestinationFolder) : RootData.urlToLocal(RootData.recentProjectModel.defaultRepositoryDir)
                     onClicked: {
                         folderDialogId.open();
                     }
@@ -107,7 +108,7 @@ Loader {
                     Layout.alignment: Qt.AlignRight
                     button.text: "Open"
                     button.onClicked: {
-                        let folderUrl = folderDialogId.selectedFolder.toString() !== "" ? folderDialogId.selectedFolder : folderDialogId.currentFolder
+                        let folderUrl = whereDialogId.selectedDestinationFolder.toString() !== "" ? whereDialogId.selectedDestinationFolder : RootData.recentProjectModel.defaultRepositoryDir
                         let resultDir = RootData.project.repositoryDir(folderUrl, repositoryNameId.textField.text);
                         if(popupId.resultDir.hasError) {
                             repositoryNameId.ignoreErrorUntilNextFocus = false;
@@ -154,5 +155,9 @@ Loader {
         objectName: "folderDialog"
         currentFolder: RootData.recentProjectModel.defaultRepositoryDir
         selectedFolder: currentFolder
+
+        onAccepted: {
+            whereDialogId.selectedDestinationFolder = folderDialogId.selectedFolder
+        }
     }
 }

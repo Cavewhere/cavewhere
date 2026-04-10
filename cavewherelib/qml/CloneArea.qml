@@ -16,6 +16,8 @@ ColumnLayout {
     // Auth-error message — callers can override for their context
     property string authErrorMessage: qsTr("Select a GitHub account to clone from GitHub.")
 
+    property url selectedDestinationFolder: ""
+
     readonly property bool isCloning: cloneWatcherId.state === GitFutureWatcher.Loading
     readonly property bool cloneFailedDueToAuthError: clonerId.cloneFailedDueToAuthError
 
@@ -28,10 +30,8 @@ ColumnLayout {
     }
 
     readonly property url _destinationParentFolder: {
-        if (folderDialogId.selectedFolder.toString() !== "")
-            return folderDialogId.selectedFolder
-        if (folderDialogId.currentFolder.toString() !== "")
-            return folderDialogId.currentFolder
+        if (root.selectedDestinationFolder.toString() !== "")
+            return root.selectedDestinationFolder
         return RootData.recentProjectModel.defaultRepositoryDir
     }
 
@@ -78,6 +78,10 @@ ColumnLayout {
         id: folderDialogId
         currentFolder: RootData.recentProjectModel.defaultRepositoryDir
         selectedFolder: currentFolder
+
+        onAccepted: {
+            root.selectedDestinationFolder = folderDialogId.selectedFolder
+        }
     }
 
     RowLayout {
