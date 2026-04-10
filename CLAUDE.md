@@ -112,7 +112,7 @@ Uses Qt's RHI (Rendering Hardware Interface). Key classes: `cwRegionSceneManager
 #### Text and font conventions
 - Use **`QC.Label`** (`import QtQuick.Controls as QC`) for all text, including labels, descriptions, headings, dialog content, and list/table delegate cells. It inherits `font.family` from `CavewhereMainWindow` and tracks the application palette automatically for correct dark mode support.
 - Do **not** use bare `Text {}` or `QQ.Text {}` — they bypass the palette and render black text in dark mode.
-- Use **`BodyText`** for paragraph/body copy — it wraps `QC.Label` with `font.family: Theme.fontFamilyBody` (Bitstream Vera Sans) for better readability at paragraph sizes.
+- Use **`BodyText`** for paragraph/body copy — it wraps `QC.Label` with `font.family: Theme.fontFamilyBody` for better readability at paragraph sizes.
 - Font size tokens live in `Theme.qml`: `Theme.fontSizeCaption` (11), `Theme.fontSizeSmall` (12), `Theme.fontSizeBody` (14), `Theme.fontSizeUI` (16), `Theme.fontSizeMedium` (18), `Theme.fontSizeTitle` (20), `Theme.fontSizeLarge` (24), `Theme.fontSizeXLarge` (30). Prefer these over hardcoded pixel sizes.
 - Do not import `QtQuick as Q` — use `QQ` as the alias so it is easy to search for.
 
