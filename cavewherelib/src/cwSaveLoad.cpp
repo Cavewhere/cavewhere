@@ -53,7 +53,6 @@
 #include <QtConcurrent>
 #include <QSaveFile>
 #include <QSet>
-#include <QImageReader>
 #include <QFile>
 #include <QDateTime>
 #include <QQueue>
@@ -323,18 +322,33 @@ cwImage loadImage(const CavewhereProto::Image& protoImage, const QString& noteFi
 
 QSet<QString> cavewhereTrackedExtensions()
 {
-    QSet<QString> trackedExtensions;
-    const QList<QByteArray> supportedFormats = QImageReader::supportedImageFormats();
-    for (const QByteArray& format : supportedFormats) {
-        const QString extension = QString::fromLatin1(format).trimmed().toLower();
-        if (!extension.isEmpty()) {
-            trackedExtensions.insert(extension);
-        }
-    }
-
-    trackedExtensions.insert(QStringLiteral("svg"));
-    trackedExtensions.insert(QStringLiteral("pdf"));
-    trackedExtensions.insert(QStringLiteral("glb"));
+    static const QSet<QString> trackedExtensions = {
+        // Raster image formats
+        QStringLiteral("bmp"),
+        QStringLiteral("gif"),
+        QStringLiteral("ico"),
+        QStringLiteral("cur"),
+        QStringLiteral("jpg"),
+        QStringLiteral("jpeg"),
+        QStringLiteral("jp2"),
+        QStringLiteral("png"),
+        QStringLiteral("pbm"),
+        QStringLiteral("pgm"),
+        QStringLiteral("ppm"),
+        QStringLiteral("tif"),
+        QStringLiteral("tiff"),
+        QStringLiteral("webp"),
+        QStringLiteral("xbm"),
+        QStringLiteral("xpm"),
+        QStringLiteral("heic"),
+        QStringLiteral("heif"),
+        QStringLiteral("avif"),
+        // Vector / document formats
+        QStringLiteral("svg"),
+        QStringLiteral("pdf"),
+        // 3D assets
+        QStringLiteral("glb"),
+    };
     return trackedExtensions;
 }
 
