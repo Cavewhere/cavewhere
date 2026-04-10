@@ -17,11 +17,7 @@ ColumnLayout {
             spacing: 12
 
             QQ.Repeater {
-                model: [
-                    { label: "CaveWhere",   family: "Yanone Kaffeesatz" },
-                    { label: "Vera Sans",   family: "Bitstream Vera Sans" },
-                    { label: "System",      family: "" }
-                ]
+                model: RootData.settings.fontSettings.fontEntries
 
                 delegate: QQ.Rectangle {
                     required property var modelData
@@ -86,14 +82,14 @@ ColumnLayout {
                         Layout.alignment: Qt.AlignHCenter
                         text: "Aa"
                         font.family: RootData.settings.fontSettings.fontFamily
-                        font.pixelSize: Math.max(10, RootData.settings.fontSettings.fontBaseSize - 2)
+                        font.pixelSize: Math.max(RootData.settings.fontSettings.minFontBaseSize, RootData.settings.fontSettings.fontBaseSize - 2)
                     }
 
                     QC.Button {
                         objectName: "smallerButton"
                         Layout.alignment: Qt.AlignHCenter
                         text: "Smaller"
-                        enabled: RootData.settings.fontSettings.fontBaseSize > 10
+                        enabled: RootData.settings.fontSettings.fontBaseSize > RootData.settings.fontSettings.minFontBaseSize
                         onClicked: RootData.settings.fontSettings.fontBaseSize -= 2
                     }
                 }
@@ -153,14 +149,14 @@ ColumnLayout {
                         Layout.alignment: Qt.AlignHCenter
                         text: "Aa"
                         font.family: RootData.settings.fontSettings.fontFamily
-                        font.pixelSize: Math.min(28, RootData.settings.fontSettings.fontBaseSize + 2)
+                        font.pixelSize: Math.min(RootData.settings.fontSettings.maxFontBaseSize, RootData.settings.fontSettings.fontBaseSize + 2)
                     }
 
                     QC.Button {
                         objectName: "largerButton"
                         Layout.alignment: Qt.AlignHCenter
                         text: "Larger"
-                        enabled: RootData.settings.fontSettings.fontBaseSize < 28
+                        enabled: RootData.settings.fontSettings.fontBaseSize < RootData.settings.fontSettings.maxFontBaseSize
                         onClicked: RootData.settings.fontSettings.fontBaseSize += 2
                     }
                 }

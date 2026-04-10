@@ -40,11 +40,13 @@ MainWindowTest {
             verify(btn.checked)
         }
 
-        function test_selectVeraSansFont() {
-            let btn = ObjectFinder.findObjectByChain(rootId, "rootId->appearanceSettings->GroupBox->VeraSansRadioButton")
-            verify(btn !== null, "VeraSansRadioButton not found")
+        function test_selectFiraSansFont() {
+            let btn = ObjectFinder.findObjectByChain(rootId, "rootId->appearanceSettings->GroupBox->FiraSansRadioButton")
+            verify(btn !== null, "FiraSansRadioButton not found")
             mouseClick(btn)
-            compare(RootData.settings.fontSettings.fontFamily, "Bitstream Vera Sans")
+            compare(RootData.settings.fontSettings.fontFamily, "Fira Sans")
+            compare(RootData.settings.fontSettings.defaultFontBaseSize, 14)
+            compare(RootData.settings.fontSettings.fontBaseSize, 14)
         }
 
         function test_selectSystemFont() {
