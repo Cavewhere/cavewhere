@@ -89,9 +89,11 @@ MainWindowTest {
             verify(scrap.isClosed() === true);
             verify(scrap.numberOfPoints() === 5);
 
-            //Add a point in the line
-            mouseMove(imageId, 451, 396);
-            mouseClick(imageId, 451, 396);
+            //Add a point in the line (use the right edge to avoid the
+            //NoteTransformEditor z=2 overlay, which is larger on Windows
+            //due to different system font metrics)
+            mouseMove(imageId, 592, 566);
+            mouseClick(imageId, 592, 566);
             verify(scrap.isClosed() === true);
             verify(scrap.numberOfPoints() === 6);
 
