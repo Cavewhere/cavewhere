@@ -38,9 +38,9 @@ Run a single C++ test (Catch2 tag syntax):
 ./build/<preset>/cavewhere-test "[TagName]"
 ```
 
-Run a single QML test:
+Run a single QML test file:
 ```bash
-./build/<preset>/cavewhere-qml-test --platform offscreen -testall tst_YourTest
+./build/<preset>/cavewhere-qml-test --platform offscreen -input test-qml/tst_YourTest.qml
 ```
 
 Always run both suites before pushing.

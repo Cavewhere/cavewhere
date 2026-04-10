@@ -125,14 +125,21 @@ MainWindowTest {
             let imageId_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
             mouseClick(imageId_obj1, 1854.2, 1091.57)
 
+            // Wait for the scrap selection to settle before clicking the
+            // toolbar button — on Windows the click misses without this.
+            wait(200)
+
             let addLeads = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->addLeads")
             mouseClick(addLeads)
+
+            let noteArea = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea")
+            tryVerify(() => noteArea.state === "ADD-LEAD", 5000,
+                      "noteArea should be in ADD-LEAD state")
 
             let imageId_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
             mouseClick(imageId_obj2, 2429.22, 732.923)
             wait(200)
 
-            let noteArea = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea")
             let scrapView = findChild(noteArea, "scrapViewId");
             verify(scrapView)
             tryVerify(() => scrapView.selectedScrapItem !== null);
