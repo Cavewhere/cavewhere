@@ -46,7 +46,13 @@ MainWindowTest {
             //Make sure we're on the map page
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "mapPage" });
 
-            //Make sure all the margins are displayed correctly
+            //Reset margins to known state and verify
+            let paperMargin = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->mapOptions->paperMargin")
+            paperMargin.setDefaultLeft(1.0)
+            paperMargin.setDefaultRight(1.0)
+            paperMargin.setDefaultTop(1.0)
+            paperMargin.setDefaultBottom(1.0)
+
             let topMargin = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->mapOptions->paperMargin->PaperMarginGroupBox->topMarginSpinBox->spinBox")
             let bottomMargin = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->mapOptions->paperMargin->PaperMarginGroupBox->bottomMarginSpinBox->spinBox")
             let rightMargin = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->mapOptions->paperMargin->PaperMarginGroupBox->rightMarginSpinBox->spinBox")
