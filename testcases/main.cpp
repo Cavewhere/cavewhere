@@ -19,6 +19,7 @@
 
 //Our includes
 #include "cwRootData.h"
+#include "GitRepository.h"
 #include "cwSettings.h"
 #include "cwTask.h"
 #include "cwMetaTypeSystem.h"
@@ -60,6 +61,8 @@ int main( int argc, char* argv[] )
   }, Qt::QueuedConnection);
 
   app.exec();
+
+  QQuickGit::GitRepository::shutdownGitEngine();
 
   return result;
 }

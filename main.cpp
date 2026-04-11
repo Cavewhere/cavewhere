@@ -40,6 +40,7 @@
 //QQuickGit includes
 #include "GitConcurrent.h"
 #include "GitCommitImageProvider.h"
+#include "GitRepository.h"
 
 //MarkScope
 #include "MarkScope/FrameProfiler.h"
@@ -238,5 +239,7 @@ int main(int argc, char *argv[])
     //Allow the engine to quit the application
     QObject::connect(context->engine(), &QQmlEngine::quit, &a, quit, Qt::QueuedConnection);
 
-    return a.exec();
+    int result = a.exec();
+    QQuickGit::GitRepository::shutdownGitEngine();
+    return result;
 }
