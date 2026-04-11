@@ -12,14 +12,17 @@ PanZoomInteraction {
 
     property alias scrapView: handler.scrapView
 
+    BaseNoteStationInteraction {
+        id: stationInteraction
+        scrapView: handler.scrapView
+    }
+
     NotePointAddHandler {
         id: handler
-        target: panZoomInteraction.target
+        tapTarget: panZoomInteraction.target
         parent: panZoomInteraction.target
         enabled: panZoomInteraction.enabled
-        notePointInteraction: BaseNoteStationInteraction {
-            scrapView: handler.scrapView
-        }
+        notePointInteraction: stationInteraction
     }
 
     HelpBox {

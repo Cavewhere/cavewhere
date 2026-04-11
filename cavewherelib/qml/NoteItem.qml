@@ -75,6 +75,7 @@ ImageItem {
 
     NoteLeadInteraction {
         id: addLeadInteraction
+        objectName: "addLeadInteraction"
         anchors.fill: parent
         scrapView: scrapViewId
         target: noteArea.targetItem

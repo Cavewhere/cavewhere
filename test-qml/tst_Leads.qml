@@ -11,8 +11,37 @@ MainWindowTest {
         name: "Leads"
         when: windowShown
 
+        function init() {
+            // Dismiss any leftover text editor from a previous test
+            if (GlobalShadowTextInput.coreClickInput !== null) {
+                GlobalShadowTextInput.coreClickInput.closeEditor()
+            }
+            GlobalShadowTextInput.enabled = false
+
+            RootData.futureManagerModel.waitForFinished()
+            RootData.project.newProject()
+            RootData.pageSelectionModel.currentPageAddress = "View"
+            tryVerify(() => {
+                return RootData.pageView.currentPageItem !== null
+                       && RootData.pageView.currentPageItem.objectName === "viewPage"
+            }, 5000, "should be on view page at start of test")
+        }
+
         function cleanup() {
+            RootData.pageSelectionModel.currentPageAddress = "View"
             RootData.newProject();
+        }
+
+        function setNoteOverlaysCollapsed(collapse) {
+            let noteRes = ObjectFinder.findObjectByChain(
+                mainWindow,
+                "rootId->tripPage->noteGallery->noteArea->noteResolution")
+            if(noteRes) noteRes.collapsed = collapse
+
+            let transformEditor = ObjectFinder.findObjectByChain(
+                mainWindow,
+                "rootId->tripPage->noteGallery->noteArea->noteTransformEditor")
+            if(transformEditor) transformEditor.collapsed = collapse
         }
 
         function test_leads() {
@@ -43,10 +72,10 @@ MainWindowTest {
             tryVerify(() => {return description_obj1.text === "Walking"})
 
             let width = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_1->leadQuoteBox->widthText")
-            compare(width.text, "2.5")
+            tryCompare(width, "text", "2.5")
 
             let height = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_1->leadQuoteBox->heightText")
-            compare(height.text, "2")
+            tryCompare(height, "text", "2")
 
             //Make sure there's leads in the lead table
             let dataButton_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mainSideBar->dataButton")
@@ -122,19 +151,38 @@ MainWindowTest {
             mouseClick(carpetButton);
             wait(300)
 
+            setNoteOverlaysCollapsed(true)
+
             let imageId_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
             mouseClick(imageId_obj1, 1854.2, 1091.57)
 
-            // Wait for the scrap selection to settle before clicking the
-            // toolbar button — on Windows the click misses without this.
-            wait(200)
+            // Verify the scrap is actually selected before proceeding
+            let noteArea = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea")
+            let scrapViewEarly = findChild(noteArea, "scrapViewId")
+            tryVerify(() => scrapViewEarly.selectedScrapItem !== null, 5000,
+                      "scrap should be selected after image click")
 
+            // Click addLeads — retry if the click doesn't register
+            // (can happen when QML is still processing the SELECT state transition)
             let addLeads = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->addLeads")
             mouseClick(addLeads)
+            tryVerify(() => {
+                if (noteArea.state !== "ADD-LEAD") {
+                    mouseClick(addLeads)
+                    return false
+                }
+                return true
+            }, 5000, "noteArea should be in ADD-LEAD state")
 
-            let noteArea = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea")
-            tryVerify(() => noteArea.state === "ADD-LEAD", 5000,
-                      "noteArea should be in ADD-LEAD state")
+            // The ADD-LEAD transition uses ScriptAction which is async (fires
+            // next frame after the state changes). Wait for the lead
+            // interaction to be fully ready — enabled with a valid scrapView
+            // on the handler — before clicking.
+            let addLeadInteraction = findChild(noteArea, "addLeadInteraction")
+            tryVerify(() => addLeadInteraction !== null
+                            && addLeadInteraction.enabled
+                            && addLeadInteraction.scrapView !== null,
+                      5000, "lead interaction should be enabled with valid scrapView")
 
             let imageId_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
             mouseClick(imageId_obj2, 2429.22, 732.923)

@@ -109,6 +109,10 @@ Uses Qt's RHI (Rendering Hardware Interface). Key classes: `cwRegionSceneManager
 - Use `Loader` for deferred/conditional loading; avoid expensive operations in bindings
 - Use `QCanvasPainterItem` (C++) for custom painting; do not use QML `Canvas` or `Shapes`
 
+#### QML testing conventions
+- Prefer `tryVerify()` / `tryCompare()` over `wait()`. Fixed waits are flaky — poll for the condition you actually need (e.g. a property becoming true, an object appearing). `QQ.Transition` with `QQ.ScriptAction` is async (fires next frame after the state changes), so always `tryVerify` the resulting side-effect (e.g. `interaction.enabled`) rather than assuming the state change is enough.
+- Collapse note overlays (`setNoteOverlaysCollapsed(true)`) before clicking on the note image in tests. The NoteTransformEditor overlay sits at z=2 and can intercept clicks, especially on Windows where different fonts make it larger.
+
 #### Text and font conventions
 - Use **`QC.Label`** (`import QtQuick.Controls as QC`) for all text, including labels, descriptions, headings, dialog content, and list/table delegate cells. It inherits `font.family` from `CavewhereMainWindow` and tracks the application palette automatically for correct dark mode support.
 - Do **not** use bare `Text {}` or `QQ.Text {}` — they bypass the palette and render black text in dark mode.
