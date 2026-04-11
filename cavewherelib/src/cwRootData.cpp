@@ -311,6 +311,14 @@ void cwRootData::prepareForProjectSwitch()
         m_pageView->clearPageCacheFor(clearedComponents);
     }
     PageSelectionModel->gotoPageByName(nullptr, "View");
+
+    // Clear the undo stack so old cave/trip/note/scrap objects held
+    // alive by undo commands are destroyed before the new project is
+    // loaded.  Without this, QML can find stale objects from the
+    // previous project.
+    if (auto* stack = undoStack()) {
+        stack->clear();
+    }
 }
 
 void cwRootData::discardChangesAndReload()

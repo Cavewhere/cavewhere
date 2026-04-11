@@ -340,6 +340,7 @@ signals:
     void localMutationOccurred(); //!< Emitted when user-visible data is mutated (save queued, tracking not suppressed)
     void saveFlushCompleted(); //!< Emitted after pending file writes are flushed to disk
     void discardCompleted();
+    void discardFailed(const QString& errorMessage);
     void saveBlockedByVersion(const QString& entityDescription); //!< Emitted when a save is skipped because the project has newer-version entities
 
 private:

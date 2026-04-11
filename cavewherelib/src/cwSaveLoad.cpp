@@ -2961,6 +2961,7 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                                                             setTemporary(false);
 
                                                             setSaveEnabled(false);
+
                                                             const auto& loadData = projectDataFuture.result().value();
                                                             d->projectMetadata = loadData.metadata;
                                                             d->pendingIdentityRepairSave = loadData.identityRepair.required;
@@ -2968,14 +2969,20 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                                                             d->lastLoadMaxFileVersion = loadData.maxFileVersion;
                                                             d->saveBlockedWarningEmitted = false;
                                                             emit dataRootChanged();
+
                                                             d->m_regionTreeModel->cavingRegion()->setData(loadData.region);
+
+                                                            // Clear the undo stack so old objects from
+                                                            // clearCaves()/addCaves() commands are freed.
+                                                            if (auto* undoStack = d->m_regionTreeModel->cavingRegion()->undoStack()) {
+                                                                undoStack->clear();
+                                                            }
 
                                                             // d->projectFileName = filename;
 
                                                             d->resetObjectStates(this);
 
                                                             setSaveEnabled(true);
-
                                                             connectTreeModel();
                                                             ++d->modelMutationEpoch;
 
@@ -4843,7 +4850,15 @@ void cwSaveLoad::discardChanges()
     d->futureToken.addJob(cwFuture(QFuture<void>(resetFuture),
                                    QStringLiteral("Discarding changes")));
 
-    AsyncFuture::observe(resetFuture).context(this, [this, repo]() {
+    AsyncFuture::observe(resetFuture).context(this, [this, repo, resetFuture]() {
+        const auto result = resetFuture.result();
+        if (result.hasError()) {
+            qWarning() << "discardChanges: git reset --hard HEAD failed:"
+                       << result.errorMessage();
+            d->m_pendingJobsDeferred.complete();
+            emit discardFailed(result.errorMessage());
+            return;
+        }
         repo->cleanUntracked();
         d->m_pendingJobsDeferred.complete();
         emit discardCompleted();

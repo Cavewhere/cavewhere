@@ -186,6 +186,15 @@ void cwProject::connectSaveLoad(cwSaveLoad* saveLoad)
         emit discardCompleted();
     });
 
+    connect(saveLoad, &cwSaveLoad::discardFailed, this, [this, saveLoad](const QString& errorMessage) {
+        if (m_saveLoad != saveLoad) {
+            return;
+        }
+        ErrorModel->append(cwError(
+            QStringLiteral("Failed to discard changes: %1").arg(errorMessage),
+            cwError::Warning));
+    });
+
     connect(saveLoad, &cwSaveLoad::isTemporaryProjectChanged, this, [this, saveLoad]() {
         if (m_saveLoad != saveLoad) {
             return;

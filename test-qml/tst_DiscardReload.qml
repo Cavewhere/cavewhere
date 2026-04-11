@@ -146,13 +146,19 @@ MainWindowTest {
             wait(300)
 
             // -- 7. Verify the station is back to its original position --
-            noteArea = ObjectFinder.findObjectByChain(
-                mainWindow, "rootId->tripPage->noteGallery->noteArea")
-            scrapView = findChild(noteArea, "scrapViewId")
-            verify(scrapView !== null, "scrapView must exist after reload")
+            // Re-query noteArea and scrapView inside tryVerify so we
+            // pick up the fresh objects once carpet mode finishes.
+            tryVerify(() => {
+                noteArea = ObjectFinder.findObjectByChain(
+                    mainWindow, "rootId->tripPage->noteGallery->noteArea")
+                scrapView = findChild(noteArea, "scrapViewId")
+                return scrapView !== null && scrapView.count > 0
+            }, 5000, "scrapView should have scraps after reload")
             scrapView.selectScrapIndex = 0
-            tryVerify(() => scrapView.selectedScrapItem !== null, 3000,
-                      "first scrap should be selected after reload")
+            tryVerify(() => {
+                          return scrapView.selectedScrapItem !== null
+                                 && scrapView.selectedScrapItem.scrap !== null
+                      }, 5000, "first scrap should be selected after reload")
 
             let reloadedScrap = scrapView.selectedScrapItem.scrap
             verify(reloadedScrap !== null, "scrap data object must exist after reload")
