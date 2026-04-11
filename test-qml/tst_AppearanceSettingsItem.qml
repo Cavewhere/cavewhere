@@ -16,20 +16,20 @@ MainWindowTest {
         name: "AppearanceSettingsItem"
         when: windowShown
 
-        property int savedFontBaseSize
-        property string savedFontFamily
+        readonly property string defaultFontFamily: RootData.settings.fontSettings.fontEntries[0].family
+
+        function resetToDefaults() {
+            RootData.settings.fontSettings.fontFamily  = defaultFontFamily
+            RootData.settings.fontSettings.fontBaseSize = RootData.settings.fontSettings.defaultFontBaseSize
+        }
 
         function init() {
-            savedFontBaseSize = RootData.settings.fontSettings.fontBaseSize
-            savedFontFamily   = RootData.settings.fontSettings.fontFamily
-            RootData.settings.fontSettings.fontBaseSize = RootData.settings.fontSettings.defaultFontBaseSize
-            RootData.settings.fontSettings.fontFamily   = "Yanone Kaffeesatz"
+            resetToDefaults()
             waitForRendering(rootId)
         }
 
         function cleanup() {
-            RootData.settings.fontSettings.fontBaseSize = savedFontBaseSize
-            RootData.settings.fontSettings.fontFamily   = savedFontFamily
+            resetToDefaults()
         }
 
         // ── Font family ──────────────────────────────────────────────────────

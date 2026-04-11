@@ -6,9 +6,11 @@
 #include <QQmlContext>
 #include <QGuiApplication>
 #include <QApplication>
+#include <QFont>
 
 //Our inculdes
 #include "cwQmlImageProviderBinder.h"
+#include "cwFontSettings.h"
 #include "cwRootData.h"
 #include "cwGlobals.h"
 #include "cwMetaTypeSystem.h"
@@ -75,6 +77,13 @@ int main(int argc, char **argv) \
     cwMetaTypeSystem::registerTypes();
 
     cwGlobals::loadFonts();
+
+    // Set the default application font to match CavewhereMainWindow.qml
+    // so test layout is consistent across platforms regardless of system fonts.
+    const auto& entry = cwFontSettings::fontEntries().first();
+    QFont defaultFont(entry.family);
+    defaultFont.setPixelSize(entry.defaultSize);
+    QApplication::setFont(defaultFont);
 
     QSurfaceFormat format;
     format.setSamples(4); // Adjust the sample count as needed
