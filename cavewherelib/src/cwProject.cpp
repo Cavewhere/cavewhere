@@ -467,6 +467,8 @@ bool cwProject::beginSyncOperation(const QFuture<Monad::ResultBase>& operationFu
             completeSyncOperation(operationFuture.result());
         }).future();
 
+    FutureToken.addJob(cwFuture(QFuture<void>(SyncFuture), QStringLiteral("Syncing")));
+
     AsyncFuture::observe(SyncFuture).context(this, [this]() {
         emit syncInProgressChanged();
     });
@@ -502,9 +504,16 @@ bool cwProject::sync()
     // available for HTTPS push/LFS operations once the URL resolves.
     if (provider && !credsLoaded && (needsCreds || remoteUnknown)) {
         auto* saveLoad = m_saveLoad;
+        auto deferredSync = std::make_shared<AsyncFuture::Deferred<void>>();
+        SyncFuture = deferredSync->future();
+        FutureToken.addJob(cwFuture(QFuture<void>(SyncFuture), QStringLiteral("Syncing")));
+        emit syncInProgressChanged();
         connect(provider, &cwRemoteAuthProvider::credentialsLoaded,
-                this, [this, saveLoad]() {
+                this, [this, saveLoad, deferredSync]() {
                     beginSyncOperation(saveLoad->sync());
+                    AsyncFuture::observe(SyncFuture).context(this, [deferredSync]() {
+                        deferredSync->complete();
+                    });
                 },
                 Qt::SingleShotConnection);
         // Emit authProviderCredentialsNeeded so cwRootData can bootstrap
