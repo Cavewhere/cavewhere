@@ -948,12 +948,11 @@ QFuture<ResultBase> cwProject::loadHelperImpl(const QString& filename, LoadParam
                     // modified=true so the user is prompted to save or discard.
                     if (auto* repo = m_saveLoad->repository()) {
                         auto statusFuture = repo->checkStatusAsync();
-                        m_gitStatusCheckFuture = statusFuture;
-                        AsyncFuture::observe(statusFuture).context(this, [this, statusFuture]() {
+                        m_gitStatusCheckFuture = AsyncFuture::observe(statusFuture).context(this, [this, statusFuture]() {
                             if (statusFuture.result()) {
                                 setModified(true);
                             }
-                        });
+                        }).future();
                     }
                 }
 

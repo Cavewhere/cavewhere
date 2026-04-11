@@ -300,7 +300,7 @@ private:
 
     QList<QFuture<void>> RetiringSaveFutures;
     cwProjectSyncHealth* m_syncHealth = nullptr;
-    QFuture<bool> m_gitStatusCheckFuture;
+    QFuture<void> m_gitStatusCheckFuture;
 };
 
 /**
