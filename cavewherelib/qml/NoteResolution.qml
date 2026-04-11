@@ -13,6 +13,7 @@ import QtQuick.Controls as QC
 
 FloatingGroupBox {
     id: floatingGroup
+    objectName: "noteResolution"
 
     property Note note;
     property ImageResolution resolution: {

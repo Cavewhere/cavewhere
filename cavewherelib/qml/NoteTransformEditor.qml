@@ -16,6 +16,7 @@ QQ.Item {
     objectName: "noteTransformEditor"
 
     required property Scrap scrap
+    property alias collapsed: floatingBox.collapsed
     property NoteTranformation noteTransform
     required property NoteNorthInteraction northInteraction
     property NoteScaleInteraction scaleInteraction

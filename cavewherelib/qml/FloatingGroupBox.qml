@@ -5,7 +5,6 @@
 **
 **************************************************************************/
 
-// import QtQuick as QQ // to target S60 5th Edition or Maemo 5
 import QtQuick as QQ
 import QtQuick.Controls as QC
 import cavewherelib
@@ -16,18 +15,42 @@ QQ.Item {
     property int margin: 3
     property alias title: titleId.text
     property real borderWidth: 0
+    property bool collapsed: false
     default property alias boxGroupChildren: container.children
 
-    implicitWidth: childrenRect.width
-    implicitHeight: childrenRect.height
+    implicitWidth: backgroundRect.width
+    implicitHeight: backgroundRect.height
 
-    QC.Label {
-        id: titleId
+    QQ.Row {
+        id: titleRow
         z: 1
-        anchors.right: boxGroupId.right
-        anchors.bottom: boxGroupId.top
-        anchors.rightMargin: 5
-        font.bold:  true
+        spacing: 2
+
+        QQ.Item {
+            id: collapseButtonId
+            objectName: "collapseButton"
+            width: 16
+            height: 16
+            anchors.verticalCenter: titleId.verticalCenter
+
+            Icon {
+                anchors.centerIn: parent
+                source: floatingGroupBoxId.collapsed
+                    ? "qrc:/twbs-icons/icons/chevron-right.svg"
+                    : "qrc:/twbs-icons/icons/chevron-down.svg"
+                sourceSize: Qt.size(12, 12)
+            }
+
+            QQ.MouseArea {
+                anchors.fill: parent
+                onClicked: floatingGroupBoxId.collapsed = !floatingGroupBoxId.collapsed
+            }
+        }
+
+        QC.Label {
+            id: titleId
+            font.bold: true
+        }
     }
 
     ShadowRectangle {
@@ -35,24 +58,27 @@ QQ.Item {
 
         color: Theme.floatingWidgetColor
         radius: Theme.floatingWidgetRadius
-        height: boxGroupId.height + titleId.height + floatingGroupBoxId.margin
-        width: boxGroupId.width + floatingGroupBoxId.margin * 2
-        //        y: groupAreaRect.height / 2.0
+        height: floatingGroupBoxId.collapsed
+            ? titleRow.height + floatingGroupBoxId.margin
+            : boxGroupId.height + titleRow.height + floatingGroupBoxId.margin
+        width: floatingGroupBoxId.collapsed
+            ? titleRow.width + floatingGroupBoxId.margin * 2
+            : Math.max(titleRow.width, boxGroupId.width) + floatingGroupBoxId.margin * 2
     }
-
 
     QQ.Rectangle {
         id: boxGroupId
 
+        visible: !floatingGroupBoxId.collapsed
         x: floatingGroupBoxId.margin
-        y: titleId.height
+        y: titleRow.height
 
         border.width: floatingGroupBoxId.borderWidth
         radius: Theme.floatingWidgetRadius
         color: Theme.transparent
 
-        width: container.width + floatingGroupBoxId.margin * 2;
-        height: container.height + floatingGroupBoxId.margin * 2;
+        width: container.width + floatingGroupBoxId.margin * 2
+        height: container.height + floatingGroupBoxId.margin * 2
 
         QQ.Item {
             id: container

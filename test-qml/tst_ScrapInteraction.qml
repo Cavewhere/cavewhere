@@ -18,6 +18,18 @@ MainWindowTest {
             wait(1000)
         }
 
+        function setNoteOverlaysCollapsed(collapse) {
+            let noteRes = ObjectFinder.findObjectByChain(
+                rootId.mainWindow,
+                "rootId->tripPage->noteGallery->noteArea->noteResolution")
+            if(noteRes) noteRes.collapsed = collapse
+
+            let transformEditor = ObjectFinder.findObjectByChain(
+                rootId.mainWindow,
+                "rootId->tripPage->noteGallery->noteArea->noteTransformEditor")
+            if(transformEditor) transformEditor.collapsed = collapse
+        }
+
         function addScrapOutline() {
             // RootData.futureManagerModel.waitForFinished()
             TestHelper.loadProjectFromFile(RootData.project, "://datasets/tst_ScrapInteraction/projectedProfile.cw");
@@ -60,8 +72,12 @@ MainWindowTest {
             mouseClick(imageId, 322, 392)
             wait(50);
 
+            //Expand overlays so the checkbox is clickable, then collapse
+            //to prevent the overlay from intercepting scrap outline clicks
+            setNoteOverlaysCollapsed(false)
             let autoCalculateScrap = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteTransformEditor->autoCalculate->checkBox")
             mouseClick(autoCalculateScrap)
+            setNoteOverlaysCollapsed(true)
 
             mouseMove(imageId, 596, 402);
             mouseClick(imageId, 596, 402);
@@ -73,27 +89,22 @@ MainWindowTest {
             mouseClick(imageId, 326, 716)
             wait(100)
 
-            //Scrap should have 4 points:
-            // let noteArea = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea");
-            // let scrapView = findChild(noteArea, "scrapViewId")
+            //Scrap should have 4 points
             let scrap = scrapView.selectedScrapItem.scrap as Scrap
             console.log("Scrap:" + scrap)
             verify(scrap !== null)
             verify(scrap.isClosed() === false);
             verify(scrap.numberOfPoints() === 4);
 
-            //Close the scrap (programmatically — the NoteTransformEditor overlay
-            //at z=2 intercepts mouse events at the first point's position after
-            //the font‑unification changes enlarged the floating box)
-            scrap.close()
-            verify(scrap.isClosed() === true);
+            //Close the scrap by clicking at the first point
+            mouseMove(imageId, 322, 392);
+            mouseClick(imageId, 322, 392);
+            tryVerify(() => { return scrap.isClosed() === true; });
             verify(scrap.numberOfPoints() === 5);
 
-            //Add a point on the bottom edge of the closed scrap (the
-            //right edge overlaps the NoteTransformEditor z=2 overlay
-            //in window coordinates after zoom, across all platforms)
-            mouseMove(imageId, 458, 724);
-            mouseClick(imageId, 458, 724);
+            //Add a point on the right edge of the closed scrap
+            mouseMove(imageId, 592, 566);
+            mouseClick(imageId, 592, 566);
             verify(scrap.numberOfPoints() === 6);
 
             // let pointItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId->scrapPointItem1")
@@ -132,6 +143,9 @@ MainWindowTest {
 
             let addScrapStationButton = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->addScrapStation")
             mouseClick(addScrapStationButton)
+
+            //Collapse overlays so station clicks aren't intercepted
+            setNoteOverlaysCollapsed(true)
 
             let imageId = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
             mouseClick(imageId, 391.749, 650.222)
@@ -202,6 +216,9 @@ MainWindowTest {
             let _obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->addScrapStation")
             mousePress(_obj1, 28.5313, 28.1914)
             mouseRelease(_obj1, 28.5313, 28.1914)
+
+            //Collapse overlays so station clicks aren't intercepted
+            setNoteOverlaysCollapsed(true)
 
             let imageId_obj2 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
             mouseClick(imageId_obj2, 391.974, 651.705)

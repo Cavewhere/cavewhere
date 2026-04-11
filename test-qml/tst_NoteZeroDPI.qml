@@ -41,7 +41,7 @@ MainWindowTest {
             wait(500);
 
             //Text DPI should be correct
-            let text = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteDPI->coreTextInput")
+            let text = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteResolution->noteDPI->coreTextInput")
             tryCompare(text, "text", "300.96", 100);
             mouseClick(text)
             wait(100);
@@ -64,7 +64,7 @@ MainWindowTest {
             tryCompare(text, "text", "500", 100);
 
             //Use the DPI tool, and prevent the user from accepting invalid DPI
-            let setResolution_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->setResolution")
+            let setResolution_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteResolution->setResolution")
             mouseClick(setResolution_obj1)
 
             let imageId_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
