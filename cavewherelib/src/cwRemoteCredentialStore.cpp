@@ -27,7 +27,7 @@ void cwRemoteCredentialStore::writeAccessToken(cwRemoteAccountModel::Provider pr
         return;
     }
 
-    auto* job = new QKeychain::WritePasswordJob(keychainService(), this);
+    auto* job = new QKeychain::WritePasswordJob(keychainService());
     job->setAutoDelete(true);
     job->setKey(key);
     job->setTextData(token);
@@ -49,7 +49,7 @@ void cwRemoteCredentialStore::deleteAccessToken(cwRemoteAccountModel::Provider p
         return;
     }
 
-    auto* job = new QKeychain::DeletePasswordJob(keychainService(), this);
+    auto* job = new QKeychain::DeletePasswordJob(keychainService());
     job->setAutoDelete(true);
     job->setKey(key);
     QObject* receiver = context ? context : this;
@@ -71,7 +71,7 @@ void cwRemoteCredentialStore::readAccessToken(cwRemoteAccountModel::Provider pro
         return;
     }
 
-    auto* job = new QKeychain::ReadPasswordJob(keychainService(), const_cast<cwRemoteCredentialStore*>(this));
+    auto* job = new QKeychain::ReadPasswordJob(keychainService());
     job->setAutoDelete(true);
     job->setKey(key);
     QObject* receiver = context ? context : const_cast<cwRemoteCredentialStore*>(this);
