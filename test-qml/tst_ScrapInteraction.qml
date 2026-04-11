@@ -89,12 +89,11 @@ MainWindowTest {
             verify(scrap.isClosed() === true);
             verify(scrap.numberOfPoints() === 5);
 
-            //Add a point in the line (use the right edge to avoid the
-            //NoteTransformEditor z=2 overlay, which is larger on Windows
-            //due to different system font metrics)
-            mouseMove(imageId, 592, 566);
-            mouseClick(imageId, 592, 566);
-            verify(scrap.isClosed() === true);
+            //Add a point on the bottom edge of the closed scrap (the
+            //right edge overlaps the NoteTransformEditor z=2 overlay
+            //in window coordinates after zoom, across all platforms)
+            mouseMove(imageId, 458, 724);
+            mouseClick(imageId, 458, 724);
             verify(scrap.numberOfPoints() === 6);
 
             // let pointItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId->scrapPointItem1")
