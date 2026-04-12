@@ -150,7 +150,11 @@ TEST_CASE("cwProject::sync defers and emits authProviderCredentialsNeeded for HT
 
     CHECK(accepted);
     CHECK(spy.count() == 1);
-    CHECK(!project.syncInProgress()); // sync hasn't started yet — waiting for creds
+    CHECK(project.syncInProgress()); // deferred sync is in-progress (waiting for creds)
+
+    // Complete the credential load so the deferred future resolves and
+    // waitForSyncToFinish() does not deadlock.
+    mock.completeLoad(QStringLiteral("ghp_testtoken"));
 
     project.waitForSyncToFinish();
 }
@@ -214,14 +218,15 @@ TEST_CASE("cwProject::sync starts after credentialsLoaded fires following deferr
     // Trigger the deferred path.
     const bool accepted = project.sync();
     REQUIRE(accepted);
-    REQUIRE(!project.syncInProgress());
+    REQUIRE(project.syncInProgress()); // deferred sync is in-progress (waiting for creds)
 
     QSignalSpy syncProgressSpy(&project, &cwProject::syncInProgressChanged);
 
-    // Supplying credentials should kick off the sync.
+    // Supplying credentials should kick off the sync (the real operation replaces the deferred future).
     mock.completeLoad(QStringLiteral("ghp_testtoken"));
+    CHECK(project.syncInProgress());
 
-    // syncInProgress should transition to true (sync started against the fake remote).
+    // syncInProgress should remain true (sync now running against the fake remote).
     REQUIRE(waitUntil([&syncProgressSpy]() { return syncProgressSpy.count() >= 1; }));
 
     project.waitForSyncToFinish();
