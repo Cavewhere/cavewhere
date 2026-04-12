@@ -97,6 +97,7 @@ Item {
                     : parentDir + "/" + name + "/" + name + ".cwproj";
 
             TestHelper.waitForProjectSaveToFinish(RootData.project);
+            TestHelper.waitForFutureManagerToFinish(RootData.futureManagerModel);
             tryVerify(function() {
                 return TestHelper.fileExists(TestHelper.toLocalUrl(expectedPath));
             });
@@ -445,6 +446,7 @@ Item {
 
             saveAsDialogId.accepted();
             TestHelper.waitForProjectSaveToFinish(RootData.project);
+            TestHelper.waitForFutureManagerToFinish(RootData.futureManagerModel);
 
             const expectedPath = tempDir + "/" + projectName + ".cw";
             tryVerify(function() {

@@ -23,6 +23,7 @@
 #include "cwNote.h"
 #include "cwNoteLiDAR.h"
 #include "CaveWhereTestLibExport.h"
+#include "cwFutureManagerModel.h"
 
 //Std includes
 #include <iostream>
@@ -128,6 +129,7 @@ public:
     Q_INVOKABLE QString projectHeadCommitMessage(cwProject* project) const;
     Q_INVOKABLE int projectModifiedFileCount(cwProject* project) const;
     Q_INVOKABLE void waitForProjectSaveToFinish(cwProject* project) const;
+    Q_INVOKABLE void waitForFutureManagerToFinish(cwFutureManagerModel* model) const;
     Q_INVOKABLE QString checkoutProjectRef(cwProject* project,
                                            const QString& refSpec,
                                            bool force = true) const;

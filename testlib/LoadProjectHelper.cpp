@@ -325,6 +325,15 @@ void TestHelper::waitForProjectSaveToFinish(cwProject* project) const
     project->waitSaveToFinish();
 }
 
+void TestHelper::waitForFutureManagerToFinish(cwFutureManagerModel* model) const
+{
+    if (model == nullptr) {
+        return;
+    }
+
+    model->waitForFinished();
+}
+
 QString TestHelper::checkoutProjectRef(cwProject* project,
                                        const QString& refSpec,
                                        bool force) const
