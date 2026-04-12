@@ -32,6 +32,12 @@ MainWindowTest {
             RootData.newProject();
         }
 
+        function clickToEdit(item) {
+            mouseClick(item)
+            tryVerify(() => GlobalShadowTextInput.textInput.activeFocus, 1000,
+                      "Shadow text input should have focus after clicking " + item.objectName)
+        }
+
         function setNoteOverlaysCollapsed(collapse) {
             let noteRes = ObjectFinder.findObjectByChain(
                 mainWindow,
@@ -206,7 +212,7 @@ MainWindowTest {
             compare(widthText.text, "?")
 
             // Click "?" and commit without changing anything
-            mouseClick(widthText, 2, 2);
+            clickToEdit(widthText);
             keyClick(Qt.Key_Return);
 
             compare(widthText.text, "?")
@@ -223,7 +229,7 @@ MainWindowTest {
             // Try typing "-2": the '-' character is Invalid on its own so the TextInput
             // blocks it; '2' then replaces the selected "?". Either way, no negative
             // value should be committed.
-            mouseClick(widthText, 2, 2);
+            clickToEdit(widthText);
             keyClick(Qt.Key_Minus);
             keyClick(Qt.Key_2);
             keyClick(Qt.Key_Return);
@@ -239,13 +245,13 @@ MainWindowTest {
             let {scrap, leadIndex, widthText, heightText} = addNewLeadToScrap();
 
             // First set a valid width
-            mouseClick(widthText, 2, 2);
+            clickToEdit(widthText);
             keyClick(51, 0); // '3'
             keyClick(Qt.Key_Return);
             compare(widthText.text, "3")
 
             // Clear the width field — should revert to "?" not "" or "0"
-            mouseClick(widthText, 2, 2);
+            clickToEdit(widthText);
             keyClick(Qt.Key_A, Qt.ControlModifier); // select all
             keyClick(Qt.Key_Delete);
             keyClick(Qt.Key_Return);
@@ -258,14 +264,16 @@ MainWindowTest {
             let {widthText, heightText} = addNewLeadToScrap();
 
             // Fill in lead details
-            mouseClick(widthText, 2, 2);
+            clickToEdit(widthText);
             keyClick(51, 0); // '3'
 
-            mouseClick(heightText, 2, 2);
+            clickToEdit(heightText);
             keyClick(50, 0); // '2'
 
             let description = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->leadEditor->description");
-            mouseClick(description, 2, 2);
+            mouseClick(description);
+            tryVerify(() => description.activeFocus, 1000,
+                      "Description should have focus after click");
             keyClick("N");
             keyClick("e");
             keyClick("w");

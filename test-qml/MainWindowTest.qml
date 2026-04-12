@@ -8,6 +8,7 @@ Rectangle {
     objectName: "rootId"
 
     property alias mainWindow: mainWindow
+    property alias recorder: recorderId
 
     color: Theme.background
 
@@ -18,6 +19,10 @@ Rectangle {
         id: recorderId
         rootItem: mainWindow
         rootItemId: "mainWindow"
+        // Hidden by default so it does not steal OS-level focus from the
+        // test window on real compositors (Wayland ignores raise/activate
+        // requests from other windows). Show manually when needed.
+        visible: false
     }
 
     SaveAsDialog {
