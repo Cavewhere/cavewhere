@@ -105,9 +105,9 @@ The `wait(50)` on line 76 is inside `tryVerifyWithDiagnostics()` — a custom po
 
 ## Verification
 
-After each file is modified, run it 5 times with `--platform offscreen` in Release mode:
+After each file is modified, run it 10 times with `--platform offscreen` in Release mode:
 ```bash
-for i in $(seq 1 5); do ./build/<preset>/cavewhere-qml-test --platform offscreen -input test-qml/tst_FILE.qml && echo "Run $i: PASS" || echo "Run $i: FAIL"; done
+for i in $(seq 1 10); do ./build/<preset>/cavewhere-qml-test --platform offscreen -input test-qml/tst_FILE.qml && echo "Run $i: PASS" || echo "Run $i: FAIL"; done
 ```
 
 ## Completed files
