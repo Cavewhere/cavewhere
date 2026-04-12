@@ -125,14 +125,13 @@ MainWindowTest {
 
             let addCave = ObjectFinder.findObjectByChain(mainWindow, "rootId->dataMainPage->addButton")
             mouseClick(addCave)
-            wait(100)
-
-            if (RootData.pageView.currentPageItem.objectName !== "cavePage") {
-                // Retry the click if the first one didn't register
-                mouseClick(addCave)
-            }
-
-            tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "cavePage" });
+            tryVerify(() => {
+                          if (RootData.pageView.currentPageItem.objectName !== "cavePage") {
+                              mouseClick(addCave)
+                              return false
+                          }
+                          return true
+                      }, 5000, "should navigate to cavePage after clicking addButton")
 
             let leadsButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->cavePage->leadsButton")
             mouseClick(leadsButton)
@@ -155,6 +154,9 @@ MainWindowTest {
 
             let carpetButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId");
             mouseClick(carpetButton);
+
+            // wait() needed — the "" → "SELECT" transition includes PropertyAnimations
+            // that reposition the toolbar; clicks miss during the animation
             wait(300)
 
             setNoteOverlaysCollapsed(true)
@@ -192,7 +194,6 @@ MainWindowTest {
 
             let imageId_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
             mouseClick(imageId_obj2, 2429.22, 732.923)
-            wait(200)
 
             let scrapView = findChild(noteArea, "scrapViewId");
             verify(scrapView)
@@ -288,15 +289,18 @@ MainWindowTest {
             mouseClick(viewButton);
             tryVerify(() => RootData.pageView.currentPageItem.objectName === "viewPage");
 
-            wait(300)
-            let leadObj = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint1_2")
-            tryVerify(() => leadObj !== null)
+            let leadObj = null
+            tryVerify(() => {
+                          leadObj = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint1_2")
+                          return leadObj !== null
+                      })
             mouseClick(leadObj)
 
-            wait(100);
-
-            let quoteBox = findChild(leadObj, "leadQuoteBox");
-            verify(quoteBox)
+            let quoteBox = null
+            tryVerify(() => {
+                          quoteBox = findChild(leadObj, "leadQuoteBox")
+                          return quoteBox !== null
+                      })
             let widthDisplay = findChild(quoteBox, "widthText");
             let heightDisplay = findChild(quoteBox, "heightText");
             let descriptionDisplay = findChild(quoteBox, "description");
@@ -324,6 +328,9 @@ MainWindowTest {
             // Enter carpet mode
             let carpetButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId");
             mouseClick(carpetButton);
+
+            // wait() needed — the "" → "SELECT" transition includes PropertyAnimations
+            // that reposition the toolbar; clicks miss during the animation
             wait(300);
 
             let noteArea = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea");
@@ -358,7 +365,6 @@ MainWindowTest {
             let outlinePoint = outlinePointView.selectedItem();
             verify(outlinePoint !== null);
             outlinePointView.selectedItemIndex = -1;
-            wait(50);
 
             let editor = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->leadEditor");
             verify(!editor.visible, "Lead editor should start hidden");

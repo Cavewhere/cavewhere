@@ -165,6 +165,15 @@ for i in $(seq 1 10); do ./build/<preset>/cavewhere-qml-test --platform offscree
 - Added explanatory comments to all retained waits
 - Verified 10/10 passes
 
+### tst_Leads.qml — 7 → 2 wait() (5 replaced)
+- Category A: wait(100) + retry after addCave click → tryVerify with retry in polling loop
+- Category A: wait(200) after image click to add lead → removed (followed by existing tryVerify)
+- Category A: wait(300) after view page switch → tryVerify for leadObj existence
+- Category A: wait(100) after clicking lead → tryVerify for quoteBox existence
+- Category E: wait(50) after deselection removed — direct method calls are synchronous
+- 2x wait(300) after carpet button retained — animation repositions toolbar
+- Verified 10/10 passes
+
 ## Execution approach
 
 Work through files in priority order. For each file:
