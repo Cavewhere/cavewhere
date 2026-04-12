@@ -127,6 +127,15 @@ for i in $(seq 1 10); do ./build/<preset>/cavewhere-qml-test --platform offscree
 - 6x triggerMenuItemFromLoader + 1x menuItemEnabled updated to tryVerify for async Loader
 - Verified 10/10 passes
 
+### tst_Map.qml — 19 → 7 wait() (12 replaced)
+- Category B: 5x wait(50) retained between mousePress/mouseMove/mouseRelease — rotation interaction uses timers to distinguish click from drag
+- Category A: wait(100) after Done click retained — capture viewport geometry computed asynchronously with no observable completion signal
+- Category A: wait(100) before landscape toggle retained — paper layout must settle after paper type switch
+- Replaced: wait → tryVerify(exists) for captureItem0 and 4 resize handles; wait → tryVerify(selected) after click; wait → tryVerify(position converged) after drag/rotation (workaround for tryFuzzyCompare capturing actual by value)
+- Removed stale console.log debug output and unused `var err = new Error()`
+- Note: tryFuzzyCompare captures `actual` by value — needs preceding tryVerify to poll for convergence. Framework fix tracked as follow-up.
+- Verified 10/10 passes
+
 ## Execution approach
 
 Work through files in priority order. For each file:
