@@ -109,6 +109,9 @@ Uses Qt's RHI (Rendering Hardware Interface). Key classes: `cwRegionSceneManager
 - Use `Loader` for deferred/conditional loading; avoid expensive operations in bindings
 - Use `QCanvasPainterItem` (C++) for custom painting; do not use QML `Canvas` or `Shapes`
 
+#### C++ testing conventions
+- Tests must be safe to run as **multiple concurrent processes** (the nightly CI runs several `cavewhere-test` instances in parallel). Never use hardcoded temp file paths — include `QCoreApplication::applicationPid()` in the name or use `QTemporaryFile`/`QTemporaryDir` so parallel processes don't collide.
+
 #### QML testing conventions
 - Prefer `tryVerify()` / `tryCompare()` over `wait()`. Fixed waits are flaky — poll for the condition you actually need (e.g. a property becoming true, an object appearing). `QQ.Transition` with `QQ.ScriptAction` is async (fires next frame after the state changes), so always `tryVerify` the resulting side-effect (e.g. `interaction.enabled`) rather than assuming the state change is enough.
 - Collapse note overlays (`setNoteOverlaysCollapsed(true)`) before clicking on the note image in tests. The NoteTransformEditor overlay sits at z=2 and can intercept clicks, especially on Windows where different fonts make it larger.

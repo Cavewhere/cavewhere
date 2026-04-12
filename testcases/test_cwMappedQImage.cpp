@@ -3,6 +3,7 @@
 
 //Qt includes
 #include <QFile>
+#include <QCoreApplication>
 
 //Our includes
 #include "cwMappedQImage.h"
@@ -11,7 +12,7 @@ TEST_CASE("cwMappedQImage should create mapped QImage", "[cwMappedQImage]") {
 
     QImage refImage("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
 
-    QString tempFile = QDir::tempPath() + "/cwMappedQImage.bitmap";
+    QString tempFile = QDir::tempPath() + QStringLiteral("/cwMappedQImage-%1.bitmap").arg(QCoreApplication::applicationPid());
     if(QFile::exists(tempFile)) {
         REQUIRE(QFile::remove(tempFile));
     }
@@ -63,7 +64,7 @@ TEST_CASE("cwMappedQImage should create mapped QImage", "[cwMappedQImage]") {
 }
 
 TEST_CASE("CreateDiskImageWithTempFile should work correctly with QImage", "[cwMappedQImage]") {
-    QString templateName = "cwMappedQImage-test";
+    QString templateName = QStringLiteral("cwMappedQImage-test-%1").arg(QCoreApplication::applicationPid());
     QStringList filter = {"*.qimage"};
 
     //Clear the previous test image, if any
@@ -116,7 +117,7 @@ TEST_CASE("CreateDiskImageWithTempFile should work correctly with QImage", "[cwM
 }
 
 TEST_CASE("CreateDiskImageWithTempFile should work correctly with QSize", "[cwMappedQImage]") {
-    QString templateName = "cwMappedQImage-test";
+    QString templateName = QStringLiteral("cwMappedQImage-test-%1").arg(QCoreApplication::applicationPid());
     QStringList filter = {"*.qimage"};
 
     //Clear the previous test image, if any
