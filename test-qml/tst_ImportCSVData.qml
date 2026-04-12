@@ -42,6 +42,8 @@ MainWindowTest {
             mouseDrag(length, 1, 5, -delta.x, -delta.y, Qt.LeftButton, Qt.NoModifier, 100)
             tryVerify(()=>{ return usedColumns.model.get(0).name === "Length" });
 
+            // wait() needed — ListView delegate layout must settle after model reorder
+            // before mapToItem returns correct coordinates for the next drag
             wait(100)
 
             let compassBack = ObjectFinder.findObjectByChain(mainWindow, "rootId->csvImporterPage->GroupBox->GroupBox->availableColumns->columnNameDelegate_Compass Backsight")
@@ -49,6 +51,7 @@ MainWindowTest {
             mouseDrag(compassBack, 1, 10, -delta.x, -delta.y, Qt.LeftButton, Qt.NoModifier, 50)
             tryVerify(()=>{ return usedColumns.model.get(1).name === "Compass Backsight" });
 
+            // wait() needed — ListView delegate layout settle for mapToItem
             wait(100)
 
             let clinoBack = ObjectFinder.findObjectByChain(mainWindow, "rootId->csvImporterPage->GroupBox->GroupBox->availableColumns->columnNameDelegate_Clino Backsight")
@@ -56,6 +59,7 @@ MainWindowTest {
             mouseDrag(clinoBack, 1, 10, -delta.x, -delta.y, Qt.LeftButton, Qt.NoModifier, 50)
             tryVerify(()=>{ return usedColumns.model.get(2).name === "Clino Backsight" });
 
+            // wait() needed — ListView delegate layout settle for mapToItem
             wait(100)
 
             let left = ObjectFinder.findObjectByChain(mainWindow, "rootId->csvImporterPage->GroupBox->GroupBox->availableColumns->columnNameDelegate_Left")
@@ -63,6 +67,7 @@ MainWindowTest {
             mouseDrag(left, 1, 10, -delta.x, -delta.y, Qt.LeftButton, Qt.NoModifier, 50)
             tryVerify(()=>{ return usedColumns.model.get(7).name === "Left" });
 
+            // wait() needed — ListView delegate layout settle for mapToItem
             wait(100)
 
             left = ObjectFinder.findObjectByChain(mainWindow, "rootId->csvImporterPage->GroupBox->GroupBox->usedColumns->columnNameDelegate_Left")
@@ -71,6 +76,7 @@ MainWindowTest {
             mouseDrag(right, 1, 10, -delta.x, -delta.y, Qt.LeftButton, Qt.NoModifier, 50)
             tryVerify(()=>{ return usedColumns.model.get(8).name === "Right" });
 
+            // wait() needed — ListView delegate layout settle for mapToItem
             wait(100)
 
             right = ObjectFinder.findObjectByChain(mainWindow, "rootId->csvImporterPage->GroupBox->GroupBox->usedColumns->columnNameDelegate_Right")
@@ -79,6 +85,7 @@ MainWindowTest {
             mouseDrag(up, 1, 10, -delta.x, -delta.y, Qt.LeftButton, Qt.NoModifier, 50)
             tryVerify(()=>{ return usedColumns.model.get(9).name === "Up" });
 
+            // wait() needed — ListView delegate layout settle for mapToItem
             wait(100)
 
             up = ObjectFinder.findObjectByChain(mainWindow, "rootId->csvImporterPage->GroupBox->GroupBox->usedColumns->columnNameDelegate_Up")
@@ -95,7 +102,9 @@ MainWindowTest {
             let importPageScrollBar = ObjectFinder.findObjectByChain(mainWindow, "rootId->csvImporterPage->verticalScrollBar")
             importPageScrollBar.position = 1.0
 
-            wait(50);
+            // wait() needed — ScrollBar.position is applied asynchronously;
+            // the import button's visual position hasn't updated yet for mouseClick
+            wait(50)
 
             //Import
             let importButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->csvImporterPage->import")
@@ -103,9 +112,11 @@ MainWindowTest {
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "dataMainPage" });
 
-            wait(200);
-
-            let caveLength = ObjectFinder.findObjectByChain(mainWindow, "rootId->dataMainPage->caveDelegate0->length->coreTextInput");
+            let caveLength = null
+            tryVerify(() => {
+                          caveLength = ObjectFinder.findObjectByChain(mainWindow, "rootId->dataMainPage->caveDelegate0->length->coreTextInput")
+                          return caveLength !== null
+                      })
             tryCompare(caveLength, "text", "55.6")
             let caveDepth = ObjectFinder.findObjectByChain(mainWindow, "rootId->dataMainPage->caveDelegate0->depth->coreTextInput");
             tryCompare(caveDepth, "text", "19.54")

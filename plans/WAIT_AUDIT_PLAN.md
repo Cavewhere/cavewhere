@@ -158,6 +158,13 @@ for i in $(seq 1 10); do ./build/<preset>/cavewhere-qml-test --platform offscree
 - Replaced: wait(100) after mapButton → tryVerify(mapPage) + retained wait; wait(50) after addLayerButton → tryVerify(viewPage transition) + tryVerify(selectionButton visible); wait(100) after area selection → tryVerify(selectionButton enabled); wait(50) after selectionButton click removed; 5x wait(50) cycle selection → tryVerify(selection state change); wait(100) after last Done → tryVerify(captureItem exists); wait(100) at end of test removed
 - Verified 10/10 passes
 
+### tst_ImportCSVData.qml — 9 → 8 wait() (1 replaced)
+- Category A: wait(200) after import click → tryVerify(caveDelegate0 exists) for async page transition + data load
+- 6x wait(100) between drag operations retained — ListView delegate layout must settle after model reorder before mapToItem returns correct coordinates for the next drag
+- 1x wait(50) after scrollbar position retained — ScrollBar.position is applied asynchronously; import button's visual position not updated yet for mouseClick
+- Added explanatory comments to all retained waits
+- Verified 10/10 passes
+
 ## Execution approach
 
 Work through files in priority order. For each file:
