@@ -174,6 +174,10 @@ for i in $(seq 1 10); do ./build/<preset>/cavewhere-qml-test --platform offscree
 - 2x wait(300) after carpet button retained — animation repositions toolbar
 - Verified 10/10 passes
 
+### tst_CameraOptions.qml — 6 → 0 wait() (6 removed)
+- Category B: 6x wait(50) between mouseWheel/mouseDrag interactions removed — events are fully synchronous in test mode; existing tryVerify blocks handle async property updates
+- Verified 10/10 passes
+
 ## Execution approach
 
 Work through files in priority order. For each file:
