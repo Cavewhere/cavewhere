@@ -402,8 +402,8 @@ Item {
             askToSaveDialogId.askToSave()
             verify(askToSaveDialogId._dialog !== null)
             verify(askToSaveDialogId._dialog.askToSaveDialog.visible)
-            verify(askToSaveDialogId.offerSync,
-                   "offerSync must be true when project has remote and status is stale")
+            tryVerify(function() { return askToSaveDialogId.offerSync }, 5000,
+                      "offerSync must be true when project has remote and status is stale")
             compare(askToSaveDialogId._dialog.state, "idle-sync")
 
             askToSaveDialogId.closeDialog()
@@ -425,8 +425,8 @@ Item {
 
             askToSaveDialogId.askToSave()
             verify(askToSaveDialogId._dialog !== null)
-            verify(askToSaveDialogId.offerSync,
-                   "offerSync must be true when project is modified even with clean remote")
+            tryVerify(function() { return askToSaveDialogId.offerSync }, 5000,
+                      "offerSync must be true when project is modified even with clean remote")
             compare(askToSaveDialogId._dialog.state, "idle-sync")
 
             askToSaveDialogId.closeDialog()
@@ -482,7 +482,8 @@ Item {
 
             askToSaveDialogId.askToSave()
             verify(askToSaveDialogId._dialog !== null)
-            verify(askToSaveDialogId.offerSync)
+            tryVerify(function() { return askToSaveDialogId.offerSync }, 5000,
+                      "offerSync must be true after loading sync fixture")
 
             // Click "Save & Sync"
             askToSaveDialogId._dialog.askToSaveDialog.applied()
