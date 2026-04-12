@@ -178,6 +178,11 @@ for i in $(seq 1 10); do ./build/<preset>/cavewhere-qml-test --platform offscree
 - Category B: 6x wait(50) between mouseWheel/mouseDrag interactions removed — events are fully synchronous in test mode; existing tryVerify blocks handle async property updates
 - Verified 10/10 passes
 
+### tst_TripSync.qml — 2 → 0 wait() (2 replaced)
+- Manual polling loop (while+wait(50)+snapshotTeamState) → single tryVerify with 3s timeout
+- wait(50) after waitForFinished() removed — no async dependency before save()
+- Verified 10/10 passes
+
 ## Execution approach
 
 Work through files in priority order. For each file:

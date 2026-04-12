@@ -753,13 +753,9 @@ MainWindowTest {
             verify(commitC === commitB)
 
             verifyStillOnTripPage(context.tripPageAddress)
-            let finalTeamState = snapshotTeamState(currentTeamModel())
-            let deadline = Date.now() + 3000
-            while (Date.now() < deadline && finalTeamState !== expectedAfterRemovalState) {
-                wait(50)
-                finalTeamState = snapshotTeamState(currentTeamModel())
-            }
-            compare(finalTeamState, expectedAfterRemovalState)
+            tryVerify(() => {
+                          return snapshotTeamState(currentTeamModel()) === expectedAfterRemovalState
+                      }, 3000)
         }
 
         function test_tripChunkDataSyncAndCheckout() {
@@ -2222,7 +2218,6 @@ MainWindowTest {
             }, 5000, "verify removed LiDAR note no longer selected")
 
             RootData.futureManagerModel.waitForFinished()
-            wait(50)
 
             let saveResult = RootData.project.save()
             verify(saveResult)
