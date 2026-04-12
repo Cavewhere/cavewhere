@@ -79,8 +79,12 @@ class CaveWhereConan(ConanFile):
         if not is_mobile and is_windows:
             self.options["protobuf"].shared = True
             self.options["abseil"].shared = True
+        elif is_mobile:
+            # Mobile (iOS/Android): everything must be static.
+            self.options["protobuf"].shared = False
+            self.options["abseil"].shared = False
         else:
-            # macOS/Linux desktop + mobile: keep protobuf/abseil static.
+            # macOS/Linux desktop: shared protobuf, static abseil.
             self.options["protobuf"].shared = True
             self.options["abseil"].shared = False
 
