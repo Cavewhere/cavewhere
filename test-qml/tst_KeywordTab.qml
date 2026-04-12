@@ -14,6 +14,11 @@ MainWindowTest {
         function cleanup() {
             RootData.newProject();
 
+            // Delegate recycling: ListView reuses delegates in-place after model
+            // changes. Recycled delegates keep valid window/parent refs but their
+            // bound properties (sourceRow, index) haven't updated yet, so clicks
+            // on recycled buttons trigger actions on the wrong model row.
+            // tryVerify can't detect this — the item looks valid. wait() is needed.
             wait(100);
 
             // After new project, keyword filter should be at defaults: 1 group, 1 row
@@ -26,13 +31,10 @@ MainWindowTest {
             console.log("Count:" + andListView0.count)
             tryVerify(() => andListView0.count === 1);
 
-                    let viewTab = findChild(rootId.mainWindow, "viewTabButton");
-                    verify(viewTab !== null);
-
-                    mouseClick(viewTab);
-
-                    wait(100)
-
+            let viewTab = findChild(rootId.mainWindow, "viewTabButton");
+            verify(viewTab !== null);
+            mouseClick(viewTab);
+            wait(100)
         }
 
         function test_addremovefirst() {
@@ -46,30 +48,35 @@ MainWindowTest {
 
             mouseClick(layersTab);
 
-            wait(100);
-
             console.log("------ About to Add -------")
 
-            let addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton")
+            let addButton0_0_obj1;
+            tryVerify(function() {
+                addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton");
+                return addButton0_0_obj1 !== null;
+            });
             mouseClick(addButton0_0_obj1)
 
             console.log("------ Added -------")
 
-            wait(100);
-
             console.log("------ About to remove -------")
 
-            let removeButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->removeButton")
+            let removeButton0_0_obj1;
+            tryVerify(function() {
+                removeButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->removeButton");
+                return removeButton0_0_obj1 !== null;
+            });
             mouseClick(removeButton0_0_obj1)
 
             console.log("------ Removed -------")
 
-            wait(100)
-
             console.log("------ About to add 2 -------")
 
             //Add it back again
-            addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton")
+            tryVerify(function() {
+                addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton");
+                return addButton0_0_obj1 !== null;
+            });
             mouseClick(addButton0_0_obj1)
 
             console.log("------ Added 2 -------")
@@ -87,10 +94,11 @@ MainWindowTest {
 
             mouseClick(layersTab);
 
-            wait(150);
-
-
-            let addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton")
+            let addButton0_0_obj1;
+            tryVerify(function() {
+                addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton");
+                return addButton0_0_obj1 !== null;
+            });
             mouseClick(addButton0_0_obj1)
 
                     let scrollbar = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->groupScrollBar")
@@ -121,30 +129,35 @@ MainWindowTest {
 
             mouseClick(layersTab);
 
-            wait(100);
-
             console.log("------ About to Add -------")
 
-            let addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton")
+            let addButton0_0_obj1;
+            tryVerify(function() {
+                addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton");
+                return addButton0_0_obj1 !== null;
+            });
             mouseClick(addButton0_0_obj1)
 
             console.log("------ Added -------")
 
-            wait(100);
-
             console.log("------ About to remove -------")
 
-            let removeButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_1->removeButton")
+            let removeButton0_0_obj1;
+            tryVerify(function() {
+                removeButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_1->removeButton");
+                return removeButton0_0_obj1 !== null;
+            });
             mouseClick(removeButton0_0_obj1)
 
             console.log("------ Removed -------")
 
-            wait(100)
-
             console.log("------ About to add 2 -------")
 
             //Add it back again
-            addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton")
+            tryVerify(function() {
+                addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton");
+                return addButton0_0_obj1 !== null;
+            });
             mouseClick(addButton0_0_obj1)
 
             console.log("------ Added 2 -------")
@@ -160,7 +173,7 @@ MainWindowTest {
                     verify(layersTab !== null);
 
                     mouseClick(layersTab);
-
+                    // Delegate recycling: see cleanup() comment
                     wait(100);
 
                     let scrollbar = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->groupScrollBar")
@@ -173,12 +186,20 @@ MainWindowTest {
 
                     tryVerify( ()=> { return scrollbarAtEnd(scrollbar); });
 
-                    let addButton0_1_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_1->addButton")
+                    let addButton0_1_obj1;
+                    tryVerify(function() {
+                        addButton0_1_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_1->addButton");
+                        return addButton0_1_obj1 !== null;
+                    });
                     mouseClick(addButton0_1_obj1)
 
                     tryVerify( ()=> { return scrollbarAtEnd(scrollbar); });
 
-                    let removeButton0_2_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_2->removeButton")
+                    let removeButton0_2_obj1;
+                    tryVerify(function() {
+                        removeButton0_2_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_2->removeButton");
+                        return removeButton0_2_obj1 !== null;
+                    });
                     mouseClick(removeButton0_2_obj1)
         }
 
@@ -192,6 +213,7 @@ MainWindowTest {
             verify(layersTab !== null);
 
             mouseClick(layersTab);
+            // Delegate recycling: see cleanup() comment
             wait(150);
 
                     let scrollbar = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->vScrollBar")
@@ -213,6 +235,7 @@ MainWindowTest {
             mouseClick(removeButtonLast);
 
             tryVerify( ()=> { return scrollbarAtEnd(scrollbar); });
+            // Delegate recycling: see cleanup() comment
             wait(300);
 
             // Remove last row again
@@ -230,6 +253,7 @@ MainWindowTest {
             verify(andListView0);
             tryVerify(() => andListView0.count === 1);
 
+            // Delegate recycling: see cleanup() comment
             wait(300)
 
             // Press add button to append another row
@@ -248,6 +272,7 @@ MainWindowTest {
             let layersTab = findChild(rootId.mainWindow, "layersTabButton");
             verify(layersTab !== null);
             mouseClick(layersTab);
+            // Delegate recycling: see cleanup() comment
             wait(150);
 
                     let scrollbar = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->vScrollBar")
@@ -292,11 +317,12 @@ MainWindowTest {
             verify(layersTab !== null);
             mouseClick(layersTab);
 
-            wait(150)
-
             // Set key combo to "orientation" on the first AND row
-            let keyCombo = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->keyCombo");
-            verify(keyCombo);
+            let keyCombo;
+            tryVerify(function() {
+                keyCombo = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->keyCombo");
+                return keyCombo !== null;
+            });
             keyCombo.currentIndex = keyCombo.model.indexOf("Orientation");
             verify(keyCombo.currentIndex > 0)
 
@@ -347,17 +373,15 @@ MainWindowTest {
                         mouseClick(firstCheckbox);
                         verify(firstCheckbox.checked === false);
 
-                        wait(10)
-
                         mouseClick(firstCheckbox);
                         verify(firstCheckbox.checked === true);
 
-
-                        wait(100)
-
                         // The objectCountRole should be unchanged
-                        let row0SecondAfter = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_1->keywordList->row0");
-                        verify(row0SecondAfter);
+                        let row0SecondAfter;
+                        tryVerify(function() {
+                            row0SecondAfter = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_1->keywordList->row0");
+                            return row0SecondAfter !== null;
+                        });
                         verify(row0SecondAfter === row0);
                         console.log("objectCountRole:" + row0SecondAfter.objectCountRole + " " + originalText)
                         compare(row0SecondAfter.objectCountRole, originalText);
@@ -372,10 +396,11 @@ MainWindowTest {
             verify(layersTab !== null);
             mouseClick(layersTab);
 
-            wait(150)
-
-            let groupListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView");
-            verify(groupListView);
+            let groupListView;
+            tryVerify(function() {
+                groupListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView");
+                return groupListView !== null;
+            });
 
             // Create two OR boundaries
             let alsoButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->alsoButton");
@@ -427,10 +452,12 @@ MainWindowTest {
             let layersTab = findChild(rootId.mainWindow, "layersTabButton");
             verify(layersTab !== null);
             mouseClick(layersTab);
-            wait(150);
 
-            let delegate = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0");
-            verify(delegate);
+            let delegate;
+            tryVerify(function() {
+                delegate = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0");
+                return delegate !== null;
+            });
 
             let keyCombo = findChild(delegate, "keyCombo");
             verify(keyCombo);
@@ -489,10 +516,12 @@ MainWindowTest {
             let layersTab = findChild(rootId.mainWindow, "layersTabButton");
             verify(layersTab !== null);
             mouseClick(layersTab);
-            wait(150);
 
-            let andListView0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0");
-            verify(andListView0);
+            let andListView0;
+            tryVerify(function() {
+                andListView0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0");
+                return andListView0 !== null;
+            });
             tryVerify(() => andListView0.count > 0);
 
                     let delegate = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0");
@@ -518,9 +547,7 @@ MainWindowTest {
             let checkbox2 = findChild(row2, "checkbox");
             verify(checkbox0 && checkbox1 && checkbox2);
 
-            wait(100)
-
-                    // Select first row (no modifier)
+            // Select first row (no modifier)
             mouseClick(row2);
             verify(row2.isSelected)
 
